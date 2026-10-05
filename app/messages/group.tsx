@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { Avatar, EmptyState, Screen, Toggle } from '@/components/ui';
@@ -59,6 +59,7 @@ export default function ChatDetails() {
   const { id, add } = useLocalSearchParams<{ id?: string; add?: string }>();
   const { conversations, users, currentUserId, currentUser, blockedIds, followingIds, hitRequests, actions } = useApp();
   const conversation = conversations.find((c) => c.id === id);
+  const navigation = useNavigation();
   // The add-people page (see above); only ever for a group.
   const addOnly = add === '1' && !!conversation && isGroupChat(conversation);
   const [title, setTitle] = useState(conversation?.title ?? '');
@@ -91,6 +92,23 @@ export default function ChatDetails() {
   const group = isGroupChat(conversation);
   const muted = isMuted(conversation);
   const back = () => goBack(`/messages/${conversation.id}`);
+  // Left or blocked: back to the inbox, with this chat's own screens (Details,
+  // the chat under it) taken off too. With no inbox further back (the chat
+  // was opened from an alert, a profile, a hit…), it is opened fresh.
+  const toInbox = () => {
+    const routes = navigation.getState()?.routes ?? [];
+    if (routes.some((r) => r.name === 'messages/index')) { router.dismissTo('/messages'); return; }
+    let ours = 0;
+    while (ours < routes.length) {
+      const r = routes[routes.length - 1 - ours];
+      if ((r.name !== 'messages/group' && r.name !== 'messages/[id]') || (r.params as { id?: string } | undefined)?.id !== conversation.id) break;
+      ours += 1;
+    }
+    if (ours < routes.length) { if (ours) router.dismiss(ours); router.push('/messages'); return; }
+    // Nothing else under them: the bottom one becomes the inbox.
+    if (ours > 1) router.dismiss(ours - 1);
+    router.replace('/messages');
+  };
   // Mute, the group photo, removing people and admins need a database that
   // has them (migration 54). A group from one that does not has no admin
   // list at all, and those controls are left out rather than refused.
@@ -191,7 +209,7 @@ export default function ChatDetails() {
               <Pressable
                 accessibilityRole="button"
                 // Blocking takes the one-to-one chat away, so this page goes back to the inbox.
-                onPress={() => (blocked ? actions.toggleBlock(other.id) : confirmBlock(other, () => { actions.toggleBlock(other.id); router.dismissTo('/messages'); }))}
+                onPress={() => (blocked ? actions.toggleBlock(other.id) : confirmBlock(other, () => { actions.toggleBlock(other.id); toInbox(); }))}
                 style={({ pressed }) => [styles.row, styles.line, pressed && styles.pressed]}
               >
                 <View style={styles.lead}><Ionicons name={blocked ? 'checkmark-circle-outline' : 'ban-outline'} size={20} color={colors.danger} /></View>
@@ -305,7 +323,7 @@ export default function ChatDetails() {
     destructive: true,
     onConfirm: () => {
       actions.leaveGroup(conversation.id);
-      router.dismissTo('/messages');
+      toInbox();
     },
   });
   const report = () => confirm({

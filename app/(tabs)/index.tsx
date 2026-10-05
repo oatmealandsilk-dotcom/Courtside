@@ -599,9 +599,13 @@ function Home({ scope, topRow, paused, onChrome }: {
   useEffect(() => {
     if (scope || !ready) return;
     if (!order.length || active < order.length - 5) return;
-    let dropped = false;
+    // Kept even when you swipe on (or back up) meanwhile: the store has moved
+    // past this page, so dropping it would skip it. Asks while it loads get
+    // the same page, and what is already in the feed is not added twice.
+    // Only another account signed in meanwhile lets it go.
+    const asker = latest.current.currentUserId;
     void latest.current.actions.loadMorePosts().then((fresh) => {
-      if (dropped || !fresh.length) return;
+      if (latest.current.currentUserId !== asker || !fresh.length) return;
       const hidden = new Set([...latest.current.blockedIds, ...latest.current.mutedIds]);
       // The new page is ranked on its own and added to the end; nothing
       // already in the feed moves.
@@ -614,7 +618,6 @@ function Home({ scope, topRow, paused, onChrome }: {
         return keys.length ? [...prev, ...keys] : prev;
       });
     });
-    return () => { dropped = true; };
     // The feed's own actions never change; asking for them by name here would
     // re-run this on every render for nothing.
   }, [active, order.length, scope, ready]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -764,16 +767,19 @@ function Home({ scope, topRow, paused, onChrome }: {
   useEffect(() => { setFollowedHere([]); }, [visit]);
   const suggestions = useSuggestedPlayers({ keep: followedHere });
 
-  // Blocked and muted players disappear from the feed entirely. A feed opened
-  // on one person's posts or a set of posts (a profile tile, a link) still
-  // shows a muted player's: mute only keeps them out of the feeds you scroll.
-  const keepMuted = !!(scope?.userId || scope?.ids);
+  // Blocked and muted players disappear from the feed entirely. A muted
+  // player's own posts, opened from their profile, still show: mute only
+  // keeps them out of the feeds you scroll (a court's reel is one of those).
+  const keepMuted = scope?.userId;
   const feedItems = useMemo<FeedItem[]>(() => {
-    const hidden = new Set([...blockedIds, ...(keepMuted ? [] : mutedIds)]);
+    const hidden = new Set([...blockedIds, ...mutedIds.filter((id) => id !== keepMuted)]);
     const following = new Set(followingIds);
     // A private account is only in your feed once they have let you follow.
     // In a group's feed the server has already decided (migration 74): a private member's posts come only to members who follow them, or shared to the group only.
-    if (!scope?.groupId) for (const u of users) if (u.isPrivate && u.id !== currentUserId && !following.has(u.id)) hidden.add(u.id);
+    const unfollowedPrivate = new Set<string>();
+    if (!scope?.groupId) for (const u of users) if (u.isPrivate && u.id !== currentUserId && !following.has(u.id)) unfollowedPrivate.add(u.id);
+    // The group-only post that was tapped (Saved, search, a message) still opens: the server sent it because you are in that group.
+    const away = (authorId: string, post?: { id: string; groupId?: string | null }) => hidden.has(authorId) || (unfollowedPrivate.has(authorId) && !(post?.groupId && post.id === scope?.start));
     // Found by id in one step each, not by scanning every post for every page.
     const postById = new Map(posts.map((p) => [p.id, p]));
     const storyById = new Map(stories.map((st) => [st.id, st]));
@@ -788,17 +794,17 @@ function Home({ scope, topRow, paused, onChrome }: {
         // whatever else asked for it; a group's feed also holds its members'
         // posts to everyone.
         if (post && post.groupId && post.groupId !== scope?.groupId && !scope?.userId && !scope?.ids) return [];
-        return post && !hidden.has(post.authorId) && (!post.archived || scope?.set === 'archived') ? [{ type: 'post' as const, post }] : [];
+        return post && !away(post.authorId, post) && (!post.archived || scope?.set === 'archived') ? [{ type: 'post' as const, post }] : [];
       }
       if (key.startsWith('h:')) {
         // A hit leaves the feed the moment it expires or is put away.
         const story = storyById.get(id);
-        return story && !hidden.has(story.authorId) && isLive(story) ? [{ type: 'hit' as const, story }] : [];
+        return story && !away(story.authorId) && isLive(story) ? [{ type: 'hit' as const, story }] : [];
       }
       const question = questionById.get(id);
-      return question && !hidden.has(question.authorId) ? [{ type: 'question' as const, question }] : [];
+      return question && !away(question.authorId) ? [{ type: 'question' as const, question }] : [];
     });
-  }, [order, posts, questions, stories, blockedIds, mutedIds, users, currentUserId, followingIds, scope?.set, scope?.groupId, keepMuted]);
+  }, [order, posts, questions, stories, blockedIds, mutedIds, users, currentUserId, followingIds, scope?.set, scope?.groupId, scope?.start, keepMuted]);
   // This week's challenge, and its top clips so far. They are settled once
   // per visit: a like arriving mid-scroll must not reshuffle the pages.
   const challenge = useMemo(() => challengeFor(), []);

@@ -17,7 +17,7 @@ import { TERMS_VERSION } from '@/lib/legal';
 
 import { fetchBootstrap, searchPosts as apiSearchPosts, signIn as apiSignIn, type Bootstrap } from '@/data/api';
 import * as demoApi from '@/data/api';
-import { CHAT_PHOTO_UNREADABLE, auth as remoteAuth, fetchRemote, isLocalMedia, queueFeedSignal, remote, uploadChatPhoto, uploadMedia, emptyProfile, type GroupRefusal, type AdminReport, type ReportedChat, type FeedSignal, type SiteFeedback, type WaitlistEntry, type BetaInviteStatus, type FirstDayStats, type FirstMove, type HandleStatus, type InviteCodeResult, type MyInviter, type RemoteData } from '@/data/remote';
+import { CHAT_PHOTO_UNREADABLE, auth as remoteAuth, fetchRemote, isLocalMedia, queueFeedSignal, remote, uploadChatPhoto, uploadMedia, emptyProfile, type GroupRefusal, type AdminReport, type ReportedChat, type FeedSignal, type SiteFeedback, type WaitlistEntry, type BetaInviteStatus, type FirstDayStats, type FirstMove, type HandleStatus, type InviteCodeResult, type MyInviter, type RemoteData, type UserState } from '@/data/remote';
 import { clearSnapshot, markSnapshotOpened, markSnapshotOpening, readSnapshot, saveSnapshot, snapshotFailedBefore } from '@/data/snapshot';
 import { forgetAccount, listSavedAccounts, rememberAccount, type SavedAccount } from '@/features/accounts/savedAccounts';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
@@ -464,6 +464,36 @@ interface AppState extends Bootstrap, CourtLifeState, FeedGroupsState {
 /** Your own settings as they are saved to the account (see the settings sync in AppProvider), for telling a change apart. */
 const settingsJson = (s: Pick<AppState, 'mutedIds' | 'blockedIds' | 'saved' | 'paymentMethods' | 'defaultPaymentId' | 'prefs'>) =>
   JSON.stringify({ m: s.mutedIds, b: s.blockedIds, s: s.saved.questionIds, p: s.paymentMethods, d: s.defaultPaymentId, f: s.prefs });
+
+/**
+ * Your settings as the server has them (`got`), with what was changed on
+ * this phone since `base` (what it had before, as settingsJson wrote it) put
+ * back on top: someone blocked, muted or saved here, or taken off here, a
+ * switch flipped here, a card added here. Everything else is the server's.
+ * No row on the server (null): what is here is all there is.
+ */
+function withServerSettings(s: AppState, base: string, got: UserState | null): Pick<AppState, 'mutedIds' | 'blockedIds' | 'saved' | 'paymentMethods' | 'defaultPaymentId' | 'prefs'> {
+  const here = { mutedIds: s.mutedIds, blockedIds: s.blockedIds, saved: s.saved, paymentMethods: s.paymentMethods, defaultPaymentId: s.defaultPaymentId, prefs: s.prefs };
+  if (!got) return here;
+  const was = JSON.parse(base) as { m: ID[]; b: ID[]; s: ID[]; p: PaymentMethod[]; d: ID | null; f: Prefs };
+  // The server's list, less what was taken off here, plus what was added here.
+  const list = (theirs: ID[], mine: ID[], before: ID[]) => [...theirs.filter((id) => mine.includes(id) || !before.includes(id)), ...mine.filter((id) => !before.includes(id) && !theirs.includes(id))];
+  const prefs: Prefs = {
+    showActivity: got.showActivity, pushLikes: got.pushLikes, pushCoach: got.pushCoach, pushMessages: got.pushMessages ?? true, pushActivity: got.pushActivity ?? true,
+    pushMapFriends: got.pushMapFriends ?? true, pushMapHits: got.pushMapHits ?? true, pushMapPlayers: got.pushMapPlayers ?? true, pushCourts: got.pushCourts ?? true,
+    contactsFindable: got.contactsFindable ?? true,
+  };
+  for (const k of Object.keys(prefs) as PrefKey[]) if (s.prefs[k] !== was.f[k]) prefs[k] = s.prefs[k];
+  const cardsChanged = JSON.stringify(s.paymentMethods) !== JSON.stringify(was.p);
+  return {
+    mutedIds: list(got.mutedIds, s.mutedIds, was.m),
+    blockedIds: list(got.blockedIds, s.blockedIds, was.b),
+    saved: { ...s.saved, questionIds: list(got.savedQuestionIds, s.saved.questionIds, was.s) },
+    paymentMethods: cardsChanged || !got.paymentMethods.length ? s.paymentMethods : got.paymentMethods,
+    defaultPaymentId: s.defaultPaymentId !== was.d ? s.defaultPaymentId : got.defaultPaymentId ?? s.defaultPaymentId,
+    prefs,
+  };
+}
 
 /**
  * An account's own settings as a new account starts with them: what logging
@@ -1032,14 +1062,20 @@ function mergeFetchedMessages(prev: AppState, fetched: Message[], me: ID, openCh
       changed = true;
     }
   }
-  if (!changed) return prev;
-  const messages = prev.messages.map((m) => byId.get(m.id)!).concat(added);
+  // Each chat's share of what came. One already here only for a reply's
+  // quote, and in this run of messages, joins its chat now too.
+  const cameIn = new Map<ID, ID[]>();
+  for (const m of fetched) cameIn.set(m.conversationId, [...(cameIn.get(m.conversationId) ?? []), m.id]);
   const touched = new Set(added.map((m) => m.conversationId));
+  for (const c of prev.conversations) if (cameIn.get(c.id)?.some((id) => !c.messageIds.includes(id))) touched.add(c.id);
+  if (!changed && !touched.size) return prev;
+  const messages = prev.messages.map((m) => byId.get(m.id)!).concat(added);
   const conversations = prev.conversations.map((c) => {
     if (!touched.has(c.id)) return c;
-    // What the chat had loaded and what just came: never a message that is
-    // here only for a reply's quote, from further back (it would leave a gap above it).
-    const inChat = inOrder([...c.messageIds, ...added.filter((m) => m.conversationId === c.id).map((m) => m.id)], byId);
+    // What the chat had loaded and what just came (a run with no gaps): never
+    // a message that is here only for a reply's quote from further back,
+    // outside that run (it would leave a gap above it).
+    const inChat = inOrder([...c.messageIds, ...(cameIn.get(c.id) ?? [])], byId);
     // An event line ("Mira added Dev") is news, but never unread.
     const newFromOthers = added.filter((m) => m.conversationId === c.id && m.senderId !== me && m.kind !== 'system').length;
     const last = inChat[inChat.length - 1];
@@ -1917,10 +1953,43 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const settingsSeen = useRef<{ who: ID; json: string } | null>(null);
   // Changes made here, and how many of them have been saved: equal when nothing is on its way up.
   const settingsCount = useRef({ made: 0, saved: 0 });
+  // The account whose settings row has been read from the server since it
+  // signed in here. Until it has, the lists on screen may be empty only
+  // because the read failed, so they are never sent up as they are: that
+  // would wipe the account's blocks, mutes and saved threads on the server.
+  const settingsRead = useRef<ID | null>(null);
+  /**
+   * Your settings row as just read (`got`; null: there is none), taken as
+   * what the server has, with any change made here meanwhile kept on top
+   * (and then sent up by the effect below).
+   */
+  const takeServerSettings = useCallback((me: ID, got: UserState | null) => {
+    const s = stateRef.current;
+    if (s.currentUserId !== me) return;
+    const base = settingsSeen.current?.who === me && settingsSeen.current.json ? settingsSeen.current.json : settingsJson(s);
+    const changedHere = settingsJson(s) !== base;
+    const merged = withServerSettings(s, base, got);
+    settingsRead.current = me;
+    // Nothing changed here: taken as already saved. A change made here goes up, on top of the server's.
+    settingsSeen.current = { who: me, json: changedHere ? '' : settingsJson({ ...s, ...merged }) };
+    setState((prev) => (prev.currentUserId === me ? { ...prev, ...merged } : prev));
+  }, []);
   useEffect(() => {
-    if (!isSupabaseConfigured || !remoteLoaded || !currentUserForLive || !UUID.test(currentUserForLive)) return;
-    if (settingsSeen.current?.who !== currentUserForLive) { settingsSeen.current = { who: currentUserForLive, json: settingsNow }; return; }
-    if (settingsSeen.current.json === settingsNow) return;
+    // Signed out: whoever signs in next (the same account too) starts from what it loads, not from this.
+    if (!currentUserForLive) { settingsSeen.current = null; settingsRead.current = null; return undefined; }
+    if (!isSupabaseConfigured || !remoteLoaded || !UUID.test(currentUserForLive)) return undefined;
+    if (settingsSeen.current?.who !== currentUserForLive) { settingsSeen.current = { who: currentUserForLive, json: settingsNow }; return undefined; }
+    if (settingsSeen.current.json === settingsNow) return undefined;
+    if (settingsRead.current !== currentUserForLive) {
+      // A change made before your settings could be read: read them now,
+      // and the change goes up on top of them (takeServerSettings).
+      const me = currentUserForLive;
+      let on = true;
+      const t = setTimeout(() => {
+        void remote.fetchUserState(me).then((got) => { if (on && settingsRead.current !== me) takeServerSettings(me, got); }).catch(() => undefined);
+      }, 400);
+      return () => { on = false; clearTimeout(t); };
+    }
     settingsSeen.current = { who: currentUserForLive, json: settingsNow };
     const made = ++settingsCount.current.made;
     const settled = () => { settingsCount.current.saved = Math.max(settingsCount.current.saved, made); };
@@ -1939,7 +2008,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }, 400);
     // Never sent (a newer change took its place, or the account changed): nothing of it is on its way up.
     return () => { clearTimeout(t); if (!sent) settled(); };
-  }, [settingsNow, remoteLoaded, currentUserForLive]);
+  }, [settingsNow, remoteLoaded, currentUserForLive, takeServerSettings]);
   // Back to the front: your mutes, blocks and saved threads as the server has
   // them now. The save above sends whole lists, so a phone left open since
   // before a block made on another device would otherwise undo it with its
@@ -1953,7 +2022,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     let on = true;
     void remote.fetchUserState(me).then((got) => {
       const s = stateRef.current;
-      if (!on || !got || s.currentUserId !== me || settingsCount.current.made !== asked) return;
+      if (!on || s.currentUserId !== me || settingsCount.current.made !== asked) return;
+      // Not read since signing in (that read failed): this is the first good one.
+      if (settingsRead.current !== me) { takeServerSettings(me, got); return; }
+      if (!got) return;
       if (settingsSeen.current?.who !== me || settingsSeen.current.json !== settingsJson(s)) return;
       const lists = { mutedIds: got.mutedIds, blockedIds: got.blockedIds, saved: { ...s.saved, questionIds: got.savedQuestionIds } };
       // Taken as already saved, so it is not sent straight back.
@@ -1961,18 +2033,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setState((prev) => (prev.currentUserId === me ? { ...prev, mutedIds: got.mutedIds, blockedIds: got.blockedIds, saved: { ...prev.saved, questionIds: got.savedQuestionIds } } : prev));
     }).catch(() => undefined);
     return () => { on = false; };
-  }, [remoteLoaded, currentUserForLive, liveEpoch]);
+  }, [remoteLoaded, currentUserForLive, liveEpoch, takeServerSettings]);
 
+  // The newest notification time the server itself gave (the open's load and
+  // the catch-ups below), for catching up from. Never one this phone filed for
+  // itself ("Your post is live", an ask to follow at the open): those carry
+  // this phone's clock, which may run ahead and would skip what came meanwhile.
+  const notesHeard = useRef<{ me: ID; at: string } | null>(null);
+  const heardNotes = (me: ID, list: Notification[]) => {
+    let at = notesHeard.current?.me === me ? notesHeard.current.at : '';
+    for (const n of list) if (n.userId === me && n.createdAt > at) at = n.createdAt;
+    if (at) notesHeard.current = { me, at };
+  };
   // Notifications filed while the app was in the background (a like, a
   // follow, "Tennis detected" from WHOOP's own alert), in one small ask:
-  // every one newer than the newest held. Asked whenever the app comes back
-  // to the front, and when Notifications opens.
+  // every one newer than the newest the server has given. Asked whenever the
+  // app comes back to the front, and when Notifications opens.
   const catchUpNotifications = useCallback(async () => {
     const me = stateRef.current.currentUserId;
     if (!live(me) || !stateRef.current.remoteLoaded) return;
-    const newest = stateRef.current.notifications.reduce((t, n) => (n.userId === me && UUID.test(n.id) && n.createdAt > t ? n.createdAt : t), '');
+    const newest = notesHeard.current?.me === me ? notesHeard.current.at : '';
     const since = new Date((newest ? Date.parse(newest) : Date.now() - 31 * 86_400_000) - 5000).toISOString();
     const fresh = await remote.fetchNotificationsSince(me!, since).catch(() => [] as Notification[]);
+    heardNotes(me!, fresh);
     if (!fresh.length || stateRef.current.currentUserId !== me) return;
     setState((prev) => {
       const add = fresh.filter((n) => !prev.notifications.some((x) => x.id === n.id));
@@ -2007,9 +2090,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const hidden = hiddenFor(me);
       for (const id of data.hiddenMessageIds ?? []) hidden.add(id);
       heardUpTo(me, data.messages);
+      heardNotes(me, data.notifications);
       // One deleted for yourself a moment ago, before the server had it, stays gone too.
       const shown = { ...data, messages: unhidden(me, data.messages) };
       setState((prev) => mergeRemote(prev, shown, me, email, snap, false));
+      // Your settings row came down (or there is none): what is on screen may be saved from now on.
+      if (!data.userStateFailed) settingsRead.current = me;
       // The next open starts from this, straight after the logo.
       setTimeout(() => { const s = stateRef.current; if (s.currentUserId === me && s.remoteLoaded) void saveSnapshot(me, snapshotOf(s, me)); }, 2500);
       // An ask that arrived while the app was closed gets its notification now.
@@ -5528,7 +5614,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const cameBack = result.type === 'success' ? result.url : '';
     if (/[?&]cancelled=1/.test(cameBack)) { await refreshCoaching(); return { outcome: 'cancelled' as const, requestId }; }
     // Paid on the way back, or closed early: Stripe itself is asked either way.
-    const paid = /[?&]paid=1/.test(cameBack) || (await confirmBooking(requestId));
+    let paid = /[?&]paid=1/.test(cameBack) || (await confirmBooking(requestId));
+    // Closed by the player before Stripe sent them back: a payment may still
+    // be settling, so Stripe is asked once more a moment later before the
+    // form is kept for another go.
+    if (!paid && result.type !== 'success') paid = await new Promise((r) => setTimeout(r, 3000)).then(() => confirmBooking(requestId));
     await refreshCoaching();
     if (paid) haptics.commit();
     // Not paid yet is not the same as cancelled: the sheet may have been
@@ -6256,7 +6346,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!n) throw new Error(/tracker=expired/.test(result.url) ? 'That sign-in took too long. Try again.' : `${label} was not connected.`);
     await remote.trackers('finish', { n });
     // The sign-in itself looks back three days; this goes back a week (as Sync now does), so tennis from before connecting is there to log.
-    void remote.trackers('sync', { provider, days: 7 }).catch(() => undefined);
+    // Waited for, so the check that follows connecting already finds those sessions.
+    await remote.trackers('sync', { provider, days: 7 }).catch(() => undefined);
   }, []);
 
   /**

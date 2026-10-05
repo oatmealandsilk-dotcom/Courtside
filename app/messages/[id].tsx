@@ -528,7 +528,8 @@ export default function Thread() {
   // The add-people page for a group (Add, then back here).
   const openAddPeople = () => router.push({ pathname: '/messages/group', params: { id: conversation.id, add: '1' } });
   // Holding a message opens its menu; a group you were taken out of offers none.
-  const openMenu = (target: MenuTarget) => { if (!removed) setMenu(target); };
+  // A court card of yours on its way has nothing to offer until it lands (see onItsWay).
+  const openMenu = (target: MenuTarget) => { if (!removed && !(target.message.kind === 'court' && onItsWay(target))) setMenu(target); };
   const leaveGroup = () => confirm({
     title: 'Leave this group?',
     message: leaveGroupMessage(conversation, hitRequests, currentUserId),
@@ -902,6 +903,7 @@ export default function Thread() {
           canReply={canWrite}
           canReact={canWrite && !menuPending}
           pending={menuPending}
+          canDelete={!onItsWay(menu)}
           onClose={() => setMenu(null)}
           onReact={(emoji) => react(menuMessage.id, emoji)}
           onMoreEmoji={() => { const m = menuMessage; afterMenu(() => setAnyEmojiFor(m)); }}
@@ -1977,6 +1979,12 @@ function ComposerTool({ label, onPress, disabled = false, styles, children }: { 
 interface Rect { x: number; y: number; w: number; h: number }
 /** A held message: where it sits, and (for photos and court cards) the copy the menu lifts in its place. */
 interface MenuTarget { message: Message; mine: boolean; rect: Rect; copy?: React.ReactNode }
+/**
+ * Your words or court card still "Sending…": its save is already on its way
+ * and lands whatever happens here, with an alert on the other phone, so it
+ * can't be deleted unseen. Delete comes back if it is not sent.
+ */
+const onItsWay = ({ message, mine }: MenuTarget) => mine && !!message.sending && !message.failed && (message.kind === 'text' || message.kind === 'court');
 /** On a computer, the small bar beside a message under the pointer: React (your double-tap reaction), Reply, More. */
 interface HoverTools { mine: boolean; styles: Styles; reaction: string; onReact?: () => void; onReply?: () => void }
 
@@ -2062,8 +2070,8 @@ function HoverBar({ tools, onMore }: { tools: HoverTools; onMore: () => void }) 
  * reactions: an answer, an edit or an unsend could otherwise reach the
  * server before it and be lost.
  */
-function MessageMenu({ target, me, styles, canReply, canReact, pending, onClose, onReact, onMoreEmoji, onReply, onInfo, onCopy, onCopyLink, onEdit, onForward, onUnsend, onDelete, doubleTap, onDoubleTap }: {
-  target: MenuTarget; me: string | null; styles: Styles; canReply: boolean; canReact: boolean; pending: boolean;
+function MessageMenu({ target, me, styles, canReply, canReact, pending, canDelete, onClose, onReact, onMoreEmoji, onReply, onInfo, onCopy, onCopyLink, onEdit, onForward, onUnsend, onDelete, doubleTap, onDoubleTap }: {
+  target: MenuTarget; me: string | null; styles: Styles; canReply: boolean; canReact: boolean; pending: boolean; canDelete: boolean;
   onClose: () => void; onReact: (emoji: string) => void; onMoreEmoji: () => void; onReply: () => void; onInfo: () => void; onCopy: () => void; onCopyLink: (url: string) => void; onEdit: () => void; onForward: () => void; onUnsend: () => void; onDelete: () => void;
   /** The reaction a double tap leaves, and how to change it: the last row turns the reactions above into that choice. */
   doubleTap: string; onDoubleTap: (emoji: string) => void;
@@ -2113,7 +2121,7 @@ function MessageMenu({ target, me, styles, canReply, canReact, pending, onClose,
     ...(!pending && message.kind !== 'system' && message.kind !== 'photo' ? [{ key: 'forward', label: 'Forward', icon: 'arrow-redo-outline' as const, run: onForward }] : []),
     ...(!pending ? [{ key: 'info', label: 'Info', icon: 'information-circle-outline' as const, run: onInfo }] : []),
     ...(!pending && mine ? [{ key: 'unsend', label: 'Unsend', icon: 'arrow-undo-circle-outline' as const, run: onUnsend }] : []),
-    { key: 'delete', label: mine && !pending ? 'Delete for you' : 'Delete', icon: 'trash-outline' as const, run: onDelete, danger: true },
+    ...(canDelete ? [{ key: 'delete', label: mine && !pending ? 'Delete for you' : 'Delete', icon: 'trash-outline' as const, run: onDelete, danger: true }] : []),
   ];
   // The "Double tap" row only where a reaction can be left.
   const rows = actionRows.length + (canReact ? 1 : 0);

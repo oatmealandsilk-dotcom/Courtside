@@ -111,7 +111,7 @@ function LogSession() {
   const next = useRef<string | null>(null);
   // Posting is offered only while the server has tennis sessions switched on for its source.
   const flags = useTennisFlags();
-  const postable = (x: DetectedActivity) => sourceOn(x, flags);
+  const postable = (x: DetectedActivity) => (x.source === 'whoop' ? flags.whoop : x.source === 'apple-health' ? flags.apple : false);
 
   // The tracker session it was opened for. A copy of one already waiting
   // (the same game from the watch and from WHOOP) opens that one instead.

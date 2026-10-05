@@ -323,8 +323,11 @@ export default function Notifications() {
   };
 
   // Anything that came in since the app last asked shows first (as new), then all of it counts as seen.
+  // A slow connection never holds up the badge: after a moment it is all marked seen anyway, and again once the ask lands.
   useEffect(() => {
-    void actions.catchUpNotifications().finally(() => actions.markNotificationsRead());
+    const t = setTimeout(() => actions.markNotificationsRead(), 1500);
+    void actions.catchUpNotifications().finally(() => { clearTimeout(t); actions.markNotificationsRead(); });
+    return () => clearTimeout(t);
   }, [actions]);
 
   const nameOf = (id: string) => users.find((u) => u.id === id)?.name ?? 'Someone';

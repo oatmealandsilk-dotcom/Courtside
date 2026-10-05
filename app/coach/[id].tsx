@@ -73,9 +73,9 @@ export default function CoachDetail() {
       if (outcome === 'left') return; // The page went to Stripe.
       if (outcome === 'cancelled') { setNote('Payment cancelled. Nothing was charged.'); return; }
       // The pay sheet was closed before Stripe took a payment: what they wrote stays, to try again.
-      if (outcome === 'closed') { setNote('Payment not finished, so nothing is booked yet. If you did pay, the booking will show under Coaching shortly.'); return; }
-      // Only a paid booking clears the form; one Stripe has not confirmed yet keeps it here, in case it needs another go.
-      if (outcome === 'paid') {
+      if (outcome === 'closed') { setNote('Payment not finished, so nothing is booked yet. If you did pay, the booking will show under Coaching shortly, so check there before paying again.'); return; }
+      // A booking paid, or one Stripe sent you back from but has not confirmed yet (it usually went through), clears the form, so it is never booked twice.
+      if (outcome === 'paid' || outcome === 'pending') {
         setQuestion('');
         setVideo(null);
         setSelected(null);

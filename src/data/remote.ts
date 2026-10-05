@@ -353,6 +353,8 @@ export interface RemoteData {
   contactsFindableReady?: boolean;
   /** Messages you deleted for yourself, so a chat fetched again later leaves them out too. Missing in saved copies. */
   hiddenMessageIds?: ID[];
+  /** Your settings row could not be read this time (not the same as having none): `userState` is null for that reason. */
+  userStateFailed?: boolean;
 }
 
 interface SessionRow { id: string; user_id: string; day: string; minutes: number; kind: PracticeSession['kind']; won: boolean | null; opponent: string | null; note: string | null; created_at: string; activity_id?: string | null; from_session_id?: string | null; sets?: unknown }
@@ -971,6 +973,7 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
     activities: activityRows.error ? [] : ((activityRows.data ?? []) as ActivityRow[]).map(toActivity),
     ...(tagsReady === null ? {} : { sessionTagsReady: tagsReady }),
     hiddenMessageIds: [...hidden],
+    ...(ustate.error ? { userStateFailed: true } : {}),
     ...coaching,
   };
 }
@@ -1172,11 +1175,11 @@ export const remote = {
     const { error } = await need().from('reports').insert({ reporter_id: me, target_user_id: targetUserId, target, reason });
     if (error) fail('report')(error);
   },
-  /** Your settings row as the server has it now (blocks, mutes, saved threads made on another device included). Null when there is none or it could not be read. */
+  /** Your settings row as the server has it now (blocks, mutes, saved threads made on another device included). Null when there is none; throws when it could not be read. */
   async fetchUserState(me: ID): Promise<UserState | null> {
     const { data, error } = await need().from('user_state').select('*').eq('user_id', me).maybeSingle();
-    if (error || !data) return null;
-    return toUserState(data as UserStateRow);
+    if (error) throw error;
+    return data ? toUserState(data as UserStateRow) : null;
   },
   async saveUserState(me: ID, s: UserState) {
     const row: Record<string, unknown> = {
