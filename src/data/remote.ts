@@ -523,8 +523,8 @@ const toCoach = (r: CoachRow, services: CoachServiceRow[], me: ID): Coach => ({
   services: services.filter((s) => s.coach_id === r.id && (s.active || r.user_id === me)).sort((a, b) => a.position - b.position).map(toService),
   listed: r.listed, payoutsReady: r.payouts_ready, payoutsStarted: r.payouts_started,
 });
-/** One pin from map_players (migration 63). */
-interface MapPlayerRow { user_id: ID; lat: number; lng: number; place: MapPlace | string; court_id: string | null; court_name: string | null; city: string | null; seen_at: string | null; open_until: string | null }
+/** One pin from map_players (migration 63; `mutual` since 98). */
+interface MapPlayerRow { user_id: ID; lat: number; lng: number; place: MapPlace | string; court_id: string | null; court_name: string | null; city: string | null; seen_at: string | null; open_until: string | null; mutual?: boolean | null }
 interface NotificationRow { id: string; user_id: string; actor_id: string; kind: string; target_id: string; target_kind: string; preview: string | null; read: boolean; created_at: string }
 interface UserStateRow { muted_ids: string[]; blocked_ids: string[]; saved_question_ids: string[]; payment_methods: PaymentMethod[]; default_payment_id: string | null; show_activity: boolean; push_likes: boolean; push_coach: boolean; push_messages?: boolean | null; push_activity?: boolean | null; push_map_friends?: boolean | null; push_map_hits?: boolean | null; push_map_players?: boolean | null; push_courts?: boolean | null; contacts_findable?: boolean | null; private_profile?: { constraints?: PlayerProfile['constraints'] } | null; map_visibility?: string | null;
   /** Your own age group, readable only by you (migration 64). Absent before it. */
@@ -2597,13 +2597,17 @@ export const remote = {
       .map((r) => ({ userId: r.user_id, lat: r.lat, lng: r.lng, city: r.city ?? undefined, seenAt: r.show_activity ? r.seen_at : undefined }));
   },
   /**
-   * Everyone the map may show you in one part of the map, each where you
-   * may see them (migration 63's map_players): on their court, exactly (you,
-   * and people who follow each other with you) or about a kilometre out;
-   * with until when they are up for a hit today. The server answers for at
-   * most 2° each way round the middle of `view`, and with no view only for
-   * you. 'missing' on a database without it (the app reads last_seen
-   * instead); null when the ask failed.
+   * Everyone the map may show you, each where you may see them (migration
+   * 63's map_players): on their court, exactly (you, and people who follow
+   * each other with you) or about a kilometre out; with until when they are
+   * up for a hit today. Since migration 98 every answer carries all your
+   * friends who follow each other with you, wherever they are (`mutual`),
+   * and anyone else only inside `view` (at most 2° each way round its
+   * middle) and within about 50 miles of your own shared spot: the server
+   * decides "near you", whatever view is asked for, and with Location off
+   * or on Only me nobody is near you (nearbyLock). With no view: you and
+   * your friends. 'missing' on a database without it (the app reads
+   * last_seen instead); null when the ask failed.
    */
   async fetchMapPlayers(view?: { minLat: number; minLng: number; maxLat: number; maxLng: number } | null): Promise<LastSeen[] | null | 'missing'> {
     const area = view ? { min_lat: view.minLat, min_lng: view.minLng, max_lat: view.maxLat, max_lng: view.maxLng } : {};
@@ -2613,6 +2617,7 @@ export const remote = {
       userId: r.user_id, lat: r.lat, lng: r.lng, city: r.city ?? undefined, seenAt: r.seen_at ?? undefined,
       place: r.place === 'court' || r.place === 'exact' ? r.place : 'approx',
       courtId: r.court_id ?? undefined, courtName: r.court_name ?? undefined, openUntil: r.open_until ?? undefined,
+      ...(r.mutual ? { mutual: true } : {}),
     }));
   },
   /** "Who can see you on the map?" (migration 63). Resolves false when it could not be saved. */
@@ -2636,9 +2641,11 @@ export const remote = {
     const { error } = await need().rpc('mark_last_seen', { p_lat: lat, p_lng: lng, p_city: city ?? null });
     if (error) fail('mark last seen')(error);
   },
-  async forgetLastSeen() {
+  /** Location off: the server drops your spots. Resolves false when it could not. */
+  async forgetLastSeen(): Promise<boolean> {
     const { error } = await need().rpc('forget_last_seen');
     if (error) fail('forget last seen')(error);
+    return !error;
   },
   /*
    * Courts (migration 60). Every read here answers null on a database

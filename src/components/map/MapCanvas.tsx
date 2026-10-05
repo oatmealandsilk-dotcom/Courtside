@@ -36,6 +36,10 @@ interface Props {
   onMove?: (center: LatLng, zoom: number, bounds: ViewBounds) => void;
   /** Once, the first time everything in view has drawn (streets, names, pins). */
   onPainted?: () => void;
+  /** With `onFar`: the zoom below which the map counts as far out (courts hide there: COURTS_MIN_ZOOM). Read once, when the page is made. */
+  farBelow?: number;
+  /** The map crossed `farBelow`, either way (and once as it starts): told the moment it happens, not only when it comes to rest. */
+  onFar?: (far: boolean) => void;
   style?: StyleProp<ViewStyle>;
 }
 
@@ -45,11 +49,11 @@ interface Props {
  * Apple's stock map with its shields and yellow motorways. Nothing native
  * to build — Expo Go has the web view — and one look everywhere.
  */
-export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas({ center, zoom, look, interactive, markers, tpl, popIn = false, holdPins = false, pad, onTap, onMapTap, onMove, onPainted, style }, ref) {
+export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas({ center, zoom, look, interactive, markers, tpl, popIn = false, holdPins = false, pad, onTap, onMapTap, onMove, onPainted, farBelow, onFar, style }, ref) {
   const web = useRef<WebView | null>(null);
   const ready = useRef(false);
-  const latest = useRef({ onTap, onMapTap, onMove, onPainted });
-  latest.current = { onTap, onMapTap, onMove, onPainted };
+  const latest = useRef({ onTap, onMapTap, onMove, onPainted, onFar });
+  latest.current = { onTap, onMapTap, onMove, onPainted, onFar };
   const send = (js: string) => { if (ready.current) web.current?.injectJavaScript(`${js};true;`); };
   // The page takes a moment to start. A move asked for before then (your
   // location arriving) is kept and made the instant it is ready; dropping
@@ -102,7 +106,7 @@ map.on('style.load',function(){look(LOOK)});
 map.on('idle',function(){if(LOOK!==APPLIED){APPLIED=LOOK;look(LOOK)}});
 map.on('load',function(){look(LOOK);post({type:'ready'})});
 map.once('idle',function(){post({type:'painted'})});
-var box=document.getElementById('m');${interactive ? '' : "box.classList.add('cs-quiet');"}function zoomClass(){var z=map.getZoom();box.classList.toggle('cs-close',z>=${CLOSE_ZOOM_NAMES});box.classList.toggle('cs-far',z<${FAR_ZOOM});box.classList.toggle('cs-short',z<${SHORT_ZOOM})}zoomClass();map.on('zoom',zoomClass);
+var box=document.getElementById('m');${interactive ? '' : "box.classList.add('cs-quiet');"}var FAR=null;function zoomClass(){var z=map.getZoom();box.classList.toggle('cs-close',z>=${CLOSE_ZOOM_NAMES});box.classList.toggle('cs-far',z<${FAR_ZOOM});box.classList.toggle('cs-short',z<${SHORT_ZOOM});${farBelow === undefined ? '' : `var f=z<${farBelow};if(f!==FAR){FAR=f;post({type:'far',far:f})}`}}zoomClass();map.on('zoom',zoomClass);
 map.on('click',function(){post({type:'maptap'})});
 map.on('moveend',function(){var c=map.getCenter(),b=map.getBounds();post({type:'move',lat:c.lat,lng:c.lng,zoom:map.getZoom(),s:b.getSouth(),w:b.getWest(),n:b.getNorth(),e:b.getEast()})});
 // The pins: one engine with the browser's map (pinEngine), so both gather, split and cascade alike.
@@ -130,7 +134,7 @@ window.__cs={
         allowsInlineMediaPlayback
         setBuiltInZoomControls={false}
         onMessage={(e) => {
-          let msg: { type: string; id?: string; lat?: number; lng?: number; zoom?: number; s?: number; w?: number; n?: number; e?: number };
+          let msg: { type: string; id?: string; lat?: number; lng?: number; zoom?: number; s?: number; w?: number; n?: number; e?: number; far?: boolean };
           try { msg = JSON.parse(e.nativeEvent.data); } catch { return; }
           if (msg.type === 'ready') {
             ready.current = true;
@@ -147,6 +151,7 @@ window.__cs={
           else if (msg.type === 'tap' && msg.id) latest.current.onTap?.(msg.id);
           else if (msg.type === 'gathered') haptics.tap();
           else if (msg.type === 'maptap') latest.current.onMapTap?.();
+          else if (msg.type === 'far') latest.current.onFar?.(!!msg.far);
           else if (msg.type === 'move' && msg.lat !== undefined && msg.lng !== undefined && msg.zoom !== undefined) {
             latest.current.onMove?.({ lat: msg.lat, lng: msg.lng }, msg.zoom, { minLat: msg.s ?? msg.lat, minLng: msg.w ?? msg.lng, maxLat: msg.n ?? msg.lat, maxLng: msg.e ?? msg.lng });
           }

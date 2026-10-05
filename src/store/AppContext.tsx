@@ -2465,14 +2465,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // What the map's two kinds of load last brought (migration 63 answers for
   // one part of the map at a time): round where you are, which Find Players,
   // Near you and Who's up today read, and the part of the full map in view.
-  // The map shows both; a new load of a kind replaces only its own.
+  // The map shows both; a new load of a kind replaces only its own. Since
+  // migration 98 every load also carries all your friends who follow each
+  // other with you, wherever they are (so a load of either kind keeps them),
+  // and the server sends anyone else only near your own shared spot.
   const seenAround = useRef<Record<ID, LastSeen>>({});
   const seenInView = useRef<Record<ID, LastSeen>>({});
   const seenFor = useRef<ID | null>(null);
+  // Goes up once the server has forgotten your spot (Location off): a load
+  // asked for before then may still carry strangers near it, and is dropped.
+  const spotGen = useRef(0);
   const loadLastSeen = useCallback(async (view?: { minLat: number; minLng: number; maxLat: number; maxLng: number } | null) => {
     const me = stateRef.current.currentUserId;
     if (!live(me)) return;
     if (seenFor.current !== me) { seenFor.current = me; seenAround.current = {}; seenInView.current = {}; }
+    const gen = spotGen.current;
     // The map's own function first (migration 63): each pin where you may see
     // it. A database without it yet answers 'missing', and the map reads the
     // old table (everyone about a kilometre out) the way it always has.
@@ -2481,7 +2488,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (mapLive !== false) {
       // Round you: about 80 km each way (the tray lists people up to 50
       // miles out), from the phone's fix or else your own last spot. Without
-      // either, the server answers only for you, which still says whether it is there.
+      // either, the server answers only for you (and, since migration 98,
+      // your friends), which still says whether it is there.
       const s = stateRef.current;
       const from = s.detectedCoords ?? (s.lastSeen[me!] ? { lat: s.lastSeen[me!].lat, lng: s.lastSeen[me!].lng } : null);
       const around = from ? { minLat: from.lat - 0.75, maxLat: from.lat + 0.75, minLng: from.lng - Math.min(1, 0.75 / Math.max(0.2, Math.cos((from.lat * Math.PI) / 180))), maxLng: from.lng + Math.min(1, 0.75 / Math.max(0.2, Math.cos((from.lat * Math.PI) / 180))) } : null;
@@ -2490,7 +2498,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       else { if (got) mapLive = true; rows = got; }
     }
     if (mapLive === false) rows = await remote.fetchLastSeen();
-    if (stateRef.current.currentUserId !== me) return;
+    if (stateRef.current.currentUserId !== me || spotGen.current !== gen) return;
     // Live, and the settings row said nothing (an account with no settings saved yet): never chosen.
     if (mapLive !== stateRef.current.mapLive || (mapLive && stateRef.current.mapVisibility === undefined && stateRef.current.remoteLoaded)) {
       setState((prev) => ({ ...prev, mapLive, mapVisibility: mapLive && prev.mapVisibility === undefined && prev.remoteLoaded ? null : prev.mapVisibility }));
@@ -5346,7 +5354,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
         courtNow: Object.fromEntries(Object.entries(prev.courtNow).map(([id, row]) => [id, { ...row, youHere: false }])),
         followedCourts: prev.followedCourts?.map((c) => ({ ...c, youHere: false })) ?? null,
       }));
-      if (live(stateRef.current.currentUserId)) void remote.forgetLastSeen();
+      if (live(self)) {
+        // Since migration 98 nobody counts as near someone with no spot of
+        // their own: once the server has forgotten yours, the map is asked
+        // again (you and your friends), and what the full map last brought
+        // for its view keeps only your friends, so strangers loaded a moment
+        // ago do not stay on the pins and in the tray until the next pan. A
+        // load asked for before the server forgot is dropped when it lands.
+        void remote.forgetLastSeen().then((ok) => {
+          if (!ok || stateRef.current.currentUserId !== self) return;
+          spotGen.current += 1;
+          seenInView.current = Object.fromEntries(Object.entries(seenInView.current).filter(([, r]) => r.mutual));
+          return loadLastSeen();
+        }).catch(() => undefined);
+      }
       markedAt.current = null;
       return null;
     }
@@ -5366,7 +5387,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     remember(true);
     setState((prev) => ({ ...prev, locationEnabled: true, locationAsked: true, detectedLocation: place.name, detectedCoords: { lat: result.lat, lng: result.lng } }));
     return null;
-  }, []);
+  }, [loadLastSeen]);
 
   // Where you are, for other players' maps: the database keeps the exact spot
   // to itself and shows each player only what they may see (about a kilometre
@@ -5382,9 +5403,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const step = stateRef.current.mapLive ? 0.0015 : 0.01;
     const moved = !last || Math.abs(last.lat - at.lat) > step || Math.abs(last.lng - at.lng) > step;
     if (!moved && Date.now() - last!.at < 15 * 60 * 1000) return;
+    // "Players nearby" are the ones near the spot the database has for you
+    // (migration 98), so the first spot sent in a session, or one far from
+    // the last (about 20 km, a trip to another town), asks the map again
+    // once it is in: the first load may have run before it, from yesterday's
+    // spot or from none at all (friends only).
+    const refresh = !last || Math.abs(last.lat - at.lat) > 0.2 || Math.abs(last.lng - at.lng) > 0.2;
     markedAt.current = { lat: at.lat, lng: at.lng, at: Date.now() };
-    void remote.markLastSeen(at.lat, at.lng, state.detectedLocation ?? undefined);
-  }, [state.currentUserId, state.detectedCoords, state.detectedLocation, state.locationEnabled]);
+    const marked = remote.markLastSeen(at.lat, at.lng, state.detectedLocation ?? undefined);
+    if (refresh) void marked.then(() => loadLastSeen()).catch(() => undefined);
+  }, [state.currentUserId, state.detectedCoords, state.detectedLocation, state.locationEnabled, loadLastSeen]);
 
   // The phone keeps the Location switch too (the browser reads it at start),
   // so the map opens where you are instead of forgetting on every launch.

@@ -21,9 +21,11 @@ export type MapFilter = 'all' | 'following' | 'open' | 'near' | 'level' | 'coach
  * A player set down on the map, with how far that is from you, and when
  * they were last there. `rough`: the pin is only about a kilometre out, so
  * distances to it are never said finer than that; `court`: the court they
- * were at, when the server put them on it (migration 63).
+ * were at, when the server put them on it (migration 63); `mutual`: a
+ * friend who follows each other with you (migration 98), on the map at
+ * any distance.
  */
-export interface Placed { user: User; at: LatLng; miles: number; seenAt?: string; seenCity?: string; rough: boolean; court?: { id: string; name: string } }
+export interface Placed { user: User; at: LatLng; miles: number; seenAt?: string; seenCity?: string; rough: boolean; court?: { id: string; name: string }; mutual?: boolean }
 /** An open hit with a spot, for a flag on the map. */
 export interface PlacedHit { hit: HitRequest; at: { id?: string; name: string; lat: number; lng: number } }
 
@@ -33,8 +35,9 @@ const CARD_COURTS = 15;
 const CARD_FLAGS = 3;
 /**
  * Courts load for where the map comes to rest only this close in (a city or
- * nearer). Zoomed out on a country, a few dozen pins would say nothing, and
- * every pan there would ask again.
+ * nearer), and court pins show only this close in too (pinList): zoomed out
+ * on a country, a few dozen pins would say nothing, every pan there would
+ * ask again, and the map says "Zoom in to see courts" instead.
  */
 export const COURTS_MIN_ZOOM = 10;
 
@@ -138,7 +141,11 @@ export function useMapModel(me: User, players: User[], fix?: LatLng | null, focu
   // The full map also asks for who is in view as it comes to rest (migration
   // 63 answers for one part of the map at a time): the view and half of it
   // again all round, at most 2° each way, and only once the view has left
-  // the part last asked for.
+  // the part last asked for. Since migration 98 the server sends only
+  // players near you from it, whatever part is asked for, and your friends
+  // who follow each other with you in every answer, wherever they are: so
+  // friends stay on the map at every zoom, and zooming out never shows
+  // strangers further away.
   const lastArea = useRef<ViewBounds | null>(null);
   const loadPlayersIn = useCallback((b: ViewBounds) => {
     if (card) return;
@@ -159,7 +166,7 @@ export function useMapModel(me: User, players: User[], fix?: LatLng | null, focu
         const at = positionFor(user, seen);
         if (!at) return [];
         const court = seen?.place === 'court' && seen.courtId ? { id: seen.courtId, name: seen.courtName || 'Tennis courts' } : undefined;
-        return [{ user, at, miles: milesBetween(home, at), seenAt: seen?.seenAt, seenCity: seen?.city, rough: isRoughSpot(seen), court }];
+        return [{ user, at, miles: milesBetween(home, at), seenAt: seen?.seenAt, seenCity: seen?.city, rough: isRoughSpot(seen), court, mutual: !!seen?.mutual }];
       })
       .sort((a, b) => a.miles - b.miles),
     [players, home, lastSeen],

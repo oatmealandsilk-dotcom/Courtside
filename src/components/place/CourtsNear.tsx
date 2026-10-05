@@ -11,7 +11,7 @@ import { countLabel, sameCourt } from '@/features/places/court';
 import { labelOf, looksPublic } from '@/features/places/courtName';
 import { canSeeAtCourt, courtSeeing } from '@/features/places/useCourtPosts';
 import { openCourt } from '@/features/players/courtLink';
-import { courtRows, fetchCourts, isClosedCourt, peekCourts, type Court, type CourtRow } from '@/features/players/courts';
+import { biggerFirst, courtRows, fetchCourts, isClosedCourt, peekCourts, type Court, type CourtRow } from '@/features/players/courts';
 import { formatMiles } from '@/features/players/geo';
 import { IN_TOWN_MILES } from '@/features/players/mapModel';
 import type { LatLng } from '@/features/players/positions';
@@ -27,9 +27,12 @@ const MOST = 8;
  * hits prompt: the same area (and the same cached answer) as the still map
  * above them, so the numbers agree and courts load once. `rows` lists the
  * public-looking ones (parks, rec centres, schools) first, then the other
- * named ones, nearest first within each, at most eight; unnamed courts say
- * too little to list. `nearest` is the nearest named court of all; `all`
- * is every court loaded there, for a search box to look through first.
+ * named ones, at most eight; within each, bigger parks first among places
+ * about as far, but never a big park far away before a close court
+ * (biggerFirst in courts.ts has the rule and examples). Unnamed courts say
+ * too little to list. `nearest` is the nearest named court of all, by
+ * distance alone; `all` is every court loaded there, for a search box to
+ * look through first.
  */
 export function useNearCourts(center: LatLng | null): { rows: CourtRow[]; nearest: CourtRow | null; all: Court[] } {
   const lat = center?.lat;
@@ -49,7 +52,7 @@ export function useNearCourts(center: LatLng | null): { rows: CourtRow[]; neares
     // Members-only and private courts are never suggested: not listed, and never "the nearest" named for a first hit.
     // Only courts in town: after a move to another city, the last city's list (kept while the new one loads, or if it fails) is never listed as near.
     const named = courtRows(list.filter((c) => !isClosedCourt(c)), { lat, lng }).filter((r) => r.c.name !== 'Tennis courts' && r.miles <= IN_TOWN_MILES);
-    const rows = [...named.filter((r) => looksPublic(r.c.name)), ...named.filter((r) => !looksPublic(r.c.name))].slice(0, MOST);
+    const rows = [...biggerFirst(named.filter((r) => looksPublic(r.c.name))), ...biggerFirst(named.filter((r) => !looksPublic(r.c.name)))].slice(0, MOST);
     return { rows, nearest: named[0] ?? null, all: list };
   }, [list, lat, lng]);
 }

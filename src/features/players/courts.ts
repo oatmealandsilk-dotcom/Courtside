@@ -177,6 +177,24 @@ export function courtRows(courts: Court[], from: LatLng | null): CourtRow[] {
   return out;
 }
 
+/**
+ * Bigger parks first, with a limit (the owner, Oct 4): each court past the
+ * first counts as a quarter of a mile closer, a mile closer at most. So of
+ * two places about as far, the one with more courts leads (more chance one
+ * is free), but a big park far away never jumps a close court:
+ *   4 courts at 1.6 mi (counts as 0.85) comes before 1 court at 1 mi;
+ *   2 courts at 1.2 mi (0.95) comes before 1 court at 1 mi;
+ *   6 courts at 3 mi (2) comes after 1 court at 1 mi;
+ *   8 courts at 15 mi (14) comes after 1 court at 1 mi.
+ * The miles shown on each row stay the real ones.
+ */
+export const sizeBonusMiles = (count: number) => Math.min(1, 0.25 * (Math.max(1, count) - 1));
+
+/** Rows in that order: by distance less the size bonus, then nearest on a tie. */
+export function biggerFirst(rows: CourtRow[]): CourtRow[] {
+  return [...rows].sort((a, b) => (a.miles - sizeBonusMiles(a.c.count)) - (b.miles - sizeBonusMiles(b.c.count)) || a.miles - b.miles);
+}
+
 const named = new Map<string, Court[]>();
 const BASE_COLUMNS = 'id,name,lat,lng,lit,surface';
 const ACCESS_COLUMNS = 'access,fee,indoor,book_url';
