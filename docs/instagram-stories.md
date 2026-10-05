@@ -58,12 +58,27 @@ If Instagram opens but the story is empty, the Facebook App ID is the first
 thing to check: on developers.facebook.com → My Apps → CourtSide, the App ID at
 the top must read 1407829631564079.
 
+## Android (from its first build, Oct 5)
+
+Stories on Android goes straight into Instagram's "add to story" screen too,
+the same sticker-over-two-colours or whole-picture looks as on iPhone. Two
+pieces make it work, both in the first Android build:
+
+- `plugins/withInstagramQueries.js` names Instagram in the Android manifest
+  (`<queries>`), which Android 11 and later need before an app may ask
+  whether another app is installed. Without it the answer was always "no".
+- The picture is written to the app's private cache (`useInternalStorage`),
+  the one place react-native-share can hand Instagram a link to.
+
+No Instagram on the phone: the share sheet opens instead. Copy is not offered
+on Android (Instagram there has no paste-a-sticker), and neither is Save
+(Android's share sheet cannot save to the gallery; see docs/android-setup.md).
+
+To check on the first Android test build: Share → Stories on each design, on
+a phone with Instagram and on one without.
+
 ## Not done yet
 
-- **Android straight into Stories.** It needs Android to be allowed to see
-  Instagram (a `<queries>` line for `com.instagram.android` in the Android
-  manifest, which takes a native build) and the picture passed as a file. Until
-  then Android uses the share sheet, which already offers Instagram Stories.
 - **A tighter sticker.** Sticker and Overlay are handed over as the whole
   9:16 picture with a see-through ground, so they arrive in Instagram the size
   the preview shows. If Instagram shows them smaller than wanted on build 14,

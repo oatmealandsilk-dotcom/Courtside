@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import type { TrainingPlan } from '@/data/types';
 import { duration } from '@/lib/format';
+import { CHANNEL, setUpNotificationChannels } from '@/features/push/channels';
 
 const KEY = 'courtside-plan-reminders';
 const id = (n: number) => `courtside-plan-${n}`;
@@ -27,6 +28,8 @@ async function cancelAll() {
 export async function setPlanReminders(on: boolean): Promise<'on' | 'off' | 'denied'> {
   try {
     if (on) {
+      // Android 13 asks about alerts only once a channel exists.
+      await setUpNotificationChannels();
       let { status, canAskAgain } = await Notifications.getPermissionsAsync();
       if (status !== 'granted' && canAskAgain) status = (await Notifications.requestPermissionsAsync()).status;
       if (status !== 'granted') return 'denied';
@@ -76,7 +79,8 @@ export async function schedulePlanReminders(plan: TrainingPlan): Promise<void> {
             body: also ? `Today’s session, with ${also}. Tap for the drills.` : 'Today’s session from your plan. Tap for the drills.',
             data: { href: `/ai-coach?section=plan&day=${day.dayIndex}` },
           },
-          trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: at },
+          // Android files it under Reminders (see push/channels); an iPhone ignores the channel.
+          trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: at, channelId: CHANNEL.reminders },
         });
       }
     }

@@ -10,6 +10,8 @@ import { pickFromDevice } from '@/components/MediaPicker';
 import type { Answer } from '@/data/types';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, radius, spacing } from '@/theme';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { useLightStatusWhile } from '@/lib/statusBarStyle';
 
 export type ReplyAttachment = NonNullable<Answer['media']>;
 
@@ -59,6 +61,8 @@ export function ReplyMediaView({ media, onLongPress }: { media: ReplyAttachment;
   const insets = useSafeAreaInsets();
   const [playing, setPlaying] = useState(false);
   const [full, setFull] = useState(false);
+  // Full screen is black: light status-bar icons over it.
+  const fullShown = useLightStatusWhile(full);
   const [home, setHome] = useState<HomeRect | undefined>(undefined);
   const frame = useRef<View>(null);
   const zoom = useRef<ZoomableMediaHandle>(null);
@@ -74,15 +78,16 @@ export function ReplyMediaView({ media, onLongPress }: { media: ReplyAttachment;
         <Pressable ref={frame} accessibilityRole="imagebutton" accessibilityLabel="Photo in this reply. Tap to see it full screen." onPress={open} onLongPress={onLongPress} delayLongPress={350} style={styles.media}>
           <ExpoImage source={{ uri: media.url }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" />
         </Pressable>
-        <Modal visible={full} transparent animationType="none" statusBarTranslucent onRequestClose={close}>
-          <View style={{ flex: 1 }}>
+        <Modal visible={fullShown} transparent animationType="none" statusBarTranslucent onRequestClose={close}>
+          {/* Its own gesture root: on Android a Modal's pinch and swipe need one (see PostVideo). */}
+          <GestureHandlerRootView style={{ flex: 1 }}>
             <ZoomableMedia ref={zoom} home={home} onDismiss={() => { setFull(false); setHome(undefined); }}>
               <ExpoImage source={{ uri: media.url }} style={StyleSheet.absoluteFill} contentFit="contain" cachePolicy="memory-disk" />
             </ZoomableMedia>
             <Pressable accessibilityRole="button" accessibilityLabel="Close full screen" onPress={close} style={[styles.fullClose, { top: insets.top + 12 }]}>
               <Ionicons name="close" size={22} color="white" />
             </Pressable>
-          </View>
+          </GestureHandlerRootView>
         </Modal>
       </>
     );

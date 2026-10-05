@@ -7,6 +7,7 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import * as haptics from '@/lib/haptics';
+import { useLightStatusWhileFocused } from '@/lib/statusBarStyle';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing, typography, font } from '@/theme';
 
@@ -42,6 +43,8 @@ export default function Hit() {
   const styles = useThemedStyles(styleDefinitions);
   const insets = useSafeAreaInsets();
   const { actions } = useApp();
+  // The camera is black: the clock and battery go light over it.
+  useLightStatusWhileFocused();
   const [permission, requestPermission] = useCameraPermissions();
   const camera = useRef<CameraView>(null);
   const [ready, setReady] = useState(false);
@@ -82,7 +85,10 @@ export default function Hit() {
         Animated.timing(flash, { toValue: 0, duration: 260, useNativeDriver: true }),
       ]).start();
       haptics.reward();
-      const photo = await camera.current?.takePictureAsync({ quality: 0.85, skipProcessing: Platform.OS === 'android' });
+      // Android too lets the camera finish the photo (Oct 5): skipping that step
+      // handed back the raw shot, un-mirrored and, on some front cameras
+      // (Samsung, Sony), lying on its side. A touch slower, and right.
+      const photo = await camera.current?.takePictureAsync({ quality: 0.85 });
       if (!photo?.uri) throw new Error('The camera did not return a photo.');
       // What you saw is what you get: the preview is a mirror, so the saved
       // photo is mirrored the same way. The phone does this itself; the
@@ -142,7 +148,7 @@ export default function Hit() {
 
   if (shot) {
     return (
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.root}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'web' ? undefined : 'padding'} style={styles.root}>
         <Image source={{ uri: shot }} style={StyleSheet.absoluteFill} resizeMode="cover" accessibilityLabel="Your instant" />
         <View pointerEvents="none" style={styles.scrimTop} />
         <View pointerEvents="none" style={styles.scrimBottom} />

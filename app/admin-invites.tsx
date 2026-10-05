@@ -9,6 +9,7 @@ import { remote, type InviteSummaryRow, type InviteeRow } from '@/data/remote';
 import { inviteLink } from '@/features/invite/referral';
 import { confirm } from '@/lib/confirm';
 import { goBack } from '@/lib/goBack';
+import { useAndroidBack } from '@/lib/androidBack';
 import * as haptics from '@/lib/haptics';
 import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
@@ -34,6 +35,8 @@ export default function AdminInvites() {
   const [busy, setBusy] = useState<string | null>(null);
   const [open, setOpen] = useState<InviteSummaryRow | null>(null);
   const [people, setPeople] = useState<InviteeRow[] | null>(null);
+  // Android's Back: from one person's people back to the list, as the page's back does.
+  useAndroidBack(() => { if (!open) return false; setOpen(null); setPeople(null); return true; });
 
   const load = useCallback(async () => {
     setError('');

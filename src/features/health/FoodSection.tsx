@@ -104,7 +104,10 @@ export function FoodSection({ userId }: { userId: string | null }) {
     </View>
   );
 
-  // The website, Android, and an iPhone build without HealthKit (Expo Go).
+  // Android (Oct 5): no Apple Health there, and the Cronometer and MyFitnessPal
+  // import rows on the Health page already cover food, so no "iPhone app" note.
+  if (!healthHere && Platform.OS === 'android') return null;
+  // The website, and an iPhone build without HealthKit (Expo Go).
   if (!healthHere) {
     // Expo Go can never have HealthKit; an App Store build without it needs the next app update, not a different app.
     const line = Platform.OS !== 'ios'

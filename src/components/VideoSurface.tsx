@@ -1,5 +1,5 @@
 import React, { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from 'react';
-import { AppState, StyleSheet, View } from 'react-native';
+import { AppState, Platform, StyleSheet, View } from 'react-native';
 import { VideoView, createVideoPlayer } from 'expo-video';
 import { videoSource } from '@/lib/videoSource';
 
@@ -125,7 +125,8 @@ export const VideoSurface = forwardRef<VideoSurfaceHandle, {
   }), [player]);
   return (
     <View style={StyleSheet.absoluteFill}>
-      <VideoView player={player} style={StyleSheet.absoluteFill} contentFit={fit} nativeControls={false} allowsPictureInPicture={false} />
+      {/* Android: on a texture, so the editor's zoom, its crop and the rounded frames apply to the picture (Oct 5). */}
+      <VideoView player={player} style={StyleSheet.absoluteFill} contentFit={fit} nativeControls={false} allowsPictureInPicture={false} surfaceType={Platform.OS === 'android' ? 'textureView' : undefined} />
     </View>
   );
 });

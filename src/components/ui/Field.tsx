@@ -51,6 +51,14 @@ interface Props {
   bare?: boolean;
   /** A quiet filled box with no outline, for a field sitting inside a card's grouped list (a settings page). */
   well?: boolean;
+  /**
+   * What the box holds, for the phone's password manager and autofill
+   * ('email', 'password', 'new-password', 'name', 'username-new'). Passed on
+   * Android only by its callers: on an iPhone React Native turns it into
+   * iOS's own content type, which would change its autofill and strong
+   * password suggestions.
+   */
+  autoComplete?: React.ComponentProps<typeof TextInput>['autoComplete'];
 }
 
 /**
@@ -84,6 +92,7 @@ export function Field({
   compact = false,
   bare = false,
   well = false,
+  autoComplete,
 }: Props) {
   const styles = useThemedStyles(styleDefinitions);
   const submits = Boolean(onSubmitEditing) && (submitOnEnter || !multiline);
@@ -148,6 +157,7 @@ export function Field({
         autoCapitalize={autoCapitalize}
         keyboardType={keyboardType}
         secureTextEntry={secureTextEntry}
+        autoComplete={autoComplete}
         selectTextOnFocus={selectTextOnFocus}
         onFocus={() => { setFocused(true); reveal(box()); onFocus?.(); }}
         onBlur={() => { setFocused(false); onBlur?.(); }}

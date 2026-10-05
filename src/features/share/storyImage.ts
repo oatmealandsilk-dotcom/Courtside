@@ -11,10 +11,11 @@ import * as Clipboard from 'expo-clipboard';
  * from that copy rather than from the small preview, so the words stay sharp.
  *
  * "Instagram Stories" hands the picture straight to Instagram's story editor
- * on an iPhone build that carries react-native-share (see straightToStories
- * and docs/instagram-stories.md). Elsewhere: older iPhone builds put it on the
- * clipboard and open Instagram's story camera, and Android, or a phone with
- * no Instagram, opens the share sheet, where Instagram is one of the apps.
+ * on an iPhone build that carries react-native-share, and on Android (from
+ * its first build, Oct 5; see straightToStories and docs/instagram-stories.md).
+ * Elsewhere: older iPhone builds put it on the clipboard and open Instagram's
+ * story camera, and a phone with no Instagram opens the share sheet, where
+ * Instagram is one of the apps.
  */
 
 export const STORY_PX = { width: 1080, height: 1920 };
@@ -40,6 +41,16 @@ export function canSaveStory(): boolean {
 
 export type StoryAction = 'instagram' | 'save' | 'more' | 'copy';
 
+/**
+ * "Copy" puts the picture on the clipboard for Instagram's paste-a-sticker,
+ * which is how an iPhone's Instagram takes it. Android's Instagram has no such
+ * paste, and Stories there goes straight into the story editor, so Android
+ * leaves Copy out.
+ */
+export function canCopyStory(): boolean {
+  return Platform.OS !== 'android';
+}
+
 /** Said once Instagram has opened with the picture ready to paste. */
 export const INSTAGRAM_NOTE = 'In Instagram, pick your photo or video first, then tap Add sticker (or tap and hold, then Paste).';
 
@@ -55,7 +66,7 @@ const STORIES_URL = 'instagram-stories://share';
 /**
  * Where the picture went: into Instagram ('sent'), nowhere because this phone
  * has no Instagram ('no-instagram'), or not tried because this build cannot
- * ('unavailable': no react-native-share, Android, or the hand-over failed).
+ * ('unavailable': no react-native-share, or the hand-over failed).
  */
 type Handoff = 'sent' | 'no-instagram' | 'unavailable';
 
@@ -73,6 +84,7 @@ type Handoff = 'sent' | 'no-instagram' | 'unavailable';
  * question truthfully here.
  */
 async function straightToStories(b64: string, look: StoryLook): Promise<Handoff> {
+  if (Platform.OS === 'android') return androidToStories(b64, look);
   if (Platform.OS !== 'ios' || !TurboModuleRegistry.get('RNShare')) return 'unavailable';
   try {
     if (!(await Linking.canOpenURL(STORIES_URL))) return 'no-instagram';
@@ -85,6 +97,33 @@ async function straightToStories(b64: string, look: StoryLook): Promise<Handoff>
     await Share_.shareSingle({
       social: 'instagramstories' as never,
       appId: FACEBOOK_APP_ID,
+      ...(look.sticker ? { stickerImage: image, backgroundTopColor: look.top, backgroundBottomColor: look.bottom } : { backgroundImage: image }),
+    } as never);
+    return 'sent';
+  } catch {
+    return 'unavailable';
+  }
+}
+
+/**
+ * Android (Oct 5): the same hand-over, through Instagram's "add to story"
+ * screen. Android only lets the app ask whether Instagram is installed
+ * because the app names it in its manifest (plugins/withInstagramQueries.js);
+ * without that the answer was always no. The picture is written to the app's
+ * own private cache (useInternalStorage), the one place react-native-share
+ * can hand Instagram a link to; its default spot gave Instagram nothing.
+ */
+async function androidToStories(b64: string, look: StoryLook): Promise<Handoff> {
+  if (!TurboModuleRegistry.get('RNShare')) return 'unavailable';
+  try {
+    const Share_ = (require('react-native-share') as typeof import('react-native-share')).default;
+    const { isInstalled } = await Share_.isPackageInstalled('com.instagram.android');
+    if (!isInstalled) return 'no-instagram';
+    const image = `data:image/png;base64,${b64}`;
+    await Share_.shareSingle({
+      social: 'instagramstories' as never,
+      appId: FACEBOOK_APP_ID,
+      useInternalStorage: true,
       ...(look.sticker ? { stickerImage: image, backgroundTopColor: look.top, backgroundBottomColor: look.bottom } : { backgroundImage: image }),
     } as never);
     return 'sent';
@@ -108,6 +147,12 @@ export async function exportStory(view: View | null, action: StoryAction, title:
     const b64 = await captureRef(view, { format: 'png', quality: 1, result: 'base64', ...size });
     await Clipboard.setImageAsync(b64);
     return COPIED_NOTE;
+  }
+  if (action === 'instagram' && Platform.OS === 'android') {
+    // Straight into Instagram's story editor (Oct 5). No Instagram, or a hand-over
+    // that failed: the share sheet below, where any app can take it.
+    const b64 = await captureRef(view, { format: 'png', quality: 1, result: 'base64', ...size });
+    if (look && (await straightToStories(b64, look)) === 'sent') return null;
   }
   if (action === 'instagram' && Platform.OS === 'ios') {
     // Straight into Instagram's story editor where the build can (Oct 4). Where it

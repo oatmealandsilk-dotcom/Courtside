@@ -1,5 +1,5 @@
-import React, { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from 'react';
-import { AppState, StyleSheet, View } from 'react-native';
+import React, { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import { AppState, Platform, StyleSheet, View } from 'react-native';
 import { VideoView, createVideoPlayer, type SurfaceType, type VideoPlayer } from 'expo-video';
 import { videoSource } from '@/lib/videoSource';
 import { noteClipLoad } from '@/lib/netSpeed';
@@ -14,7 +14,17 @@ const PRELOAD_SECONDS = 3;
  * `active` is the only control the page has over it. A trimmed clip loops
  * over the part its author kept.
  */
-export interface ClipVideoHandle { seek: (seconds: number) => void; /** The native player, for a second view of the same stream (full screen). */ player: VideoPlayer | null }
+export interface ClipVideoHandle {
+  seek: (seconds: number) => void;
+  /** The native player, for a second view of the same stream (full screen). */
+  player: VideoPlayer | null;
+  /**
+   * Shows the player here again after a second view of it has gone (Android):
+   * there a player is drawn in one view at a time, and the full-screen view
+   * took it away from this one without handing it back.
+   */
+  reattach: () => void;
+}
 
 /**
  * Every live player on the phone. Only one clip may make sound at a time,
@@ -32,6 +42,9 @@ const livePlayers = new Set<VideoPlayer>();
  * first instant of a launch) counts as in front, so nothing waits on it.
  */
 const away = () => AppState.currentState === 'background' || AppState.currentState === 'inactive';
+
+/** Android's default drawing surface for a clip (an iPhone ignores it). */
+const ANDROID_SURFACE: SurfaceType | undefined = Platform.OS === 'android' ? 'textureView' : undefined;
 
 export const ClipVideo = forwardRef<ClipVideoHandle, {
   uri: string; poster?: string; active?: boolean; muted?: boolean; paused?: boolean; fit?: 'cover' | 'contain';
@@ -244,12 +257,15 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
     });
     return () => sub.remove();
   }, [player, trimStart, trimEnd]);
+  // Android: a new view takes the player back (see reattach).
+  const [viewKey, setViewKey] = useState(0);
   useImperativeHandle(ref, () => ({
     seek: (seconds) => {
       safely(() => { player.currentTime = seconds; });
       if (!started.current) playFromHere.current = true;
     },
     player,
+    reattach: () => { if (Platform.OS === 'android') setViewKey((k) => k + 1); },
   }), [player]); // eslint-disable-line react-hooks/exhaustive-deps
   begin.current = () => {
     // Not while the app is out of the front: the wish is kept, and coming
@@ -320,7 +336,9 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
   }, [player]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <View style={StyleSheet.absoluteFill}>
-      <VideoView player={player} style={StyleSheet.absoluteFill} contentFit={fit} nativeControls={false} allowsPictureInPicture={false} surfaceType={surfaceType} />
+      {/* Android draws on a texture unless told otherwise: a "surface" is punched through the
+          window, so rounded corners, a crop's zoom and fades would not apply to it (Oct 5). */}
+      <VideoView key={viewKey} player={player} style={StyleSheet.absoluteFill} contentFit={fit} nativeControls={false} allowsPictureInPicture={false} surfaceType={surfaceType ?? ANDROID_SURFACE} />
     </View>
   );
 });

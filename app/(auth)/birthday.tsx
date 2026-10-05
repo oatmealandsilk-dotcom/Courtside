@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { router } from 'expo-router';
+import { BackHandler, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { router, useLocalSearchParams } from 'expo-router';
 
 import { BrandMark } from '@/components/BrandMark';
 import { BirthDateField } from '@/components/BirthDateField';
@@ -9,6 +9,7 @@ import { isDeviceBlocked, toBirthDate } from '@/features/age/ageCheck';
 import { useLeave } from '@/components/LeaveCurtain';
 import { useApp } from '@/store/AppContext';
 import { useGateSpace } from '@/lib/useGateSpace';
+import { useAndroidBack } from '@/lib/androidBack';
 import { StatusShade } from '@/components/StatusShade';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, spacing, typography } from '@/theme';
@@ -28,6 +29,12 @@ export default function Birthday() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [blocked, setBlocked] = useState(false);
+  // Android's Back leaves the app, as on any first page (see agree.tsx), when
+  // this is the age check every account is sent to. Opened from the group
+  // form's "Add your birthday" (from=group) it sits on top of where the person
+  // was, so Back simply goes back there.
+  const { from } = useLocalSearchParams<{ from?: string }>();
+  useAndroidBack(() => { BackHandler.exitApp(); return true; }, from !== 'group');
   useEffect(() => { void isDeviceBlocked().then((b) => { if (b) setBlocked(true); }); }, []);
   // The age is on file after all (the sign-up form's birthday was saved a
   // moment after this page opened): carry on into the app rather than ask again.
@@ -62,7 +69,7 @@ export default function Birthday() {
   }
 
   return (
-    <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'web' ? undefined : 'padding'}>
       <ScrollView contentContainerStyle={[styles.scroll, { paddingTop: space.top, paddingBottom: space.bottom }]} keyboardShouldPersistTaps="handled">
         <BrandMark size={44} />
         <Text style={styles.title}>When's your birthday?</Text>

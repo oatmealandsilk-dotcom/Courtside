@@ -54,6 +54,11 @@ import { firstLink, isOnlyLink } from '@/lib/links';
 import { LINK_CARD_W, LinkCard, linkCardShows } from '@/features/messages/LinkCard';
 import { useLinkPreview } from '@/features/messages/linkPreview';
 import { useDragDownDismiss, useKeyboardLift } from '@/features/messages/keyboardLift';
+import { useAndroidBack } from '@/lib/androidBack';
+import { phoneSaysCopied } from '@/lib/copied';
+import { useModalOpenWhile } from '@/lib/modalOpen';
+import * as Notifications from 'expo-notifications';
+import { clearChatPick, noteChatPick, takeRecoveredPick } from '@/features/messages/pendingPick';
 import { GroupInviteCard } from '@/features/groups/GroupInviteCard';
 import { readGroupInvite } from '@/features/groups/inviteMessage';
 import { Slide, TimeAnchor, TimeSwipeArea } from '@/features/messages/MessageTimes';
@@ -208,7 +213,9 @@ export default function Thread() {
   useEffect(() => {
     if (Platform.OS === 'web') return;
     const sub = Keyboard.addListener('keyboardDidShow', (e) => {
-      keyboardHeight.current = Math.max(220, e.endCoordinates.height - insets.bottom);
+      // An iPhone's keyboard height takes in the home-indicator strip; Android's
+      // already leaves out the navigation bar under it, so nothing comes off there.
+      keyboardHeight.current = Math.max(220, e.endCoordinates.height - (Platform.OS === 'ios' ? insets.bottom : 0));
     });
     return () => sub.remove();
   }, [insets.bottom]);
@@ -244,10 +251,26 @@ export default function Thread() {
   const blockedInGroup = group ? people.filter((u) => blockedIds.includes(u.id)) : [];
   // Folded messages you chose to see, by id, for as long as the chat is open.
   const [shownIds, setShownIds] = useState<string[]>([]);
-  useEffect(() => { setShownIds([]); setPicked([]); setViewing(null); setReplyTo(null); setFlash(null); }, [id]);
+  useEffect(() => {
+    setShownIds([]); setViewing(null); setReplyTo(null); setFlash(null);
+    // Android: photos taken or chosen here just before the phone closed the app come back to the tray (see pendingPick).
+    const recovered = id ? takeRecoveredPick(id) : null;
+    setPicked(recovered ? recovered.slice(0, MAX_CHAT_PHOTOS) : []);
+  }, [id]);
 
   // Opening a chat fetches it fresh, so it never sits on an old copy waiting for the next refresh.
   useEffect(() => { if (id) void actions.syncConversation(id); }, [id, actions]);
+  // Android: this chat's alerts leave the notification shade once it is open and read
+  // (they stayed, stacking up, after being read here). An iPhone is left as it was.
+  useEffect(() => {
+    if (Platform.OS !== 'android' || !focused || !id) return;
+    const here = `/messages/${id}`;
+    void Notifications.getPresentedNotificationsAsync()
+      .then((shown) => Promise.all(shown
+        .filter((n) => n.request.content.data?.href === here)
+        .map((n) => Notifications.dismissNotificationAsync(n.request.identifier))))
+      .catch(() => undefined);
+  }, [focused, id]);
 
   useEffect(() => {
     const mark = () => {
@@ -591,22 +614,26 @@ export default function Thread() {
     const left = MAX_CHAT_PHOTOS - picked.length;
     if (left <= 0) { showToast({ title: `Up to ${MAX_CHAT_PHOTOS} photos at a time`, icon: 'images-outline' }); return; }
     letGo();
+    if (id) noteChatPick(id);
     // Straight from the tap: a browser only opens its file box from one.
     pickPhotos(left)
       .then((got) => { if (got?.length) setPicked((now) => [...now, ...got].slice(0, MAX_CHAT_PHOTOS)); })
-      .catch((e: unknown) => showToast({ title: 'Couldn’t open your photos', body: e instanceof Error ? e.message : undefined, icon: 'alert-circle-outline' }));
+      .catch((e: unknown) => showToast({ title: 'Couldn’t open your photos', body: e instanceof Error ? e.message : undefined, icon: 'alert-circle-outline' }))
+      .finally(clearChatPick);
   };
   // The camera button (Instagram's, at the start of the box): one photo, straight into the tray to send.
   const openCamera = () => {
     composer.current?.closePlus();
     if (picked.length >= MAX_CHAT_PHOTOS) { showToast({ title: `Up to ${MAX_CHAT_PHOTOS} photos at a time`, icon: 'images-outline' }); return; }
     letGo();
+    if (id) noteChatPick(id);
     takePhoto()
       .then((got) => {
         if (got === 'denied') showToast({ title: 'Camera is off for CourtSide', body: 'Turn it on in your phone’s Settings to take photos here.', icon: 'camera-outline' });
         else if (got) setPicked((now) => [...now, got].slice(0, MAX_CHAT_PHOTOS));
       })
-      .catch((e: unknown) => showToast({ title: 'Couldn’t open the camera', body: e instanceof Error ? e.message : undefined, icon: 'alert-circle-outline' }));
+      .catch((e: unknown) => showToast({ title: 'Couldn’t open the camera', body: e instanceof Error ? e.message : undefined, icon: 'alert-circle-outline' }))
+      .finally(clearChatPick);
   };
 
   // Editing a message of yours: its words go in the box, and whatever you were writing waits for the edit to end.
@@ -623,6 +650,16 @@ export default function Thread() {
     composer.current?.setText(draftBeforeEdit.current ?? '');
     draftBeforeEdit.current = null;
   };
+  // Android's Back closes what is open over the typing bar before it leaves
+  // the chat: the emoji keyboard, the "+" tray, then an edit or a reply (as
+  // Escape does on a computer). With none of them open, the chat closes.
+  useAndroidBack(() => {
+    if (emojiOpen) { setEmojiOpen(false); return true; }
+    if (composer.current?.plusIsOpen()) { composer.current.closePlus(); return true; }
+    if (editing) { endEditing(); return true; }
+    if (replyTo) { setReplyTo(null); return true; }
+    return false;
+  });
 
   const send = (text: string) => {
     if (draftNow.current.trim()) { draftNow.current = ''; lastPing.current = 0; typingLink.current?.stop(); }
@@ -702,7 +739,7 @@ export default function Thread() {
     startReply,
     react,
     anyEmoji: (m) => setAnyEmojiFor(m),
-    copy: (text) => { void Clipboard.setStringAsync(text); haptics.tap(); showToast({ title: 'Copied', icon: 'copy-outline' }); },
+    copy: (text) => { void Clipboard.setStringAsync(text); haptics.tap(); if (!phoneSaysCopied) showToast({ title: 'Copied', icon: 'copy-outline' }); },
     retry: (messageId) => actions.retryMessage(messageId),
     openReactions: (m) => setReactionsOf(m),
     jumpTo: (messageId) => { void jumpTo(messageId); },
@@ -909,8 +946,8 @@ export default function Thread() {
           onMoreEmoji={() => { const m = menuMessage; afterMenu(() => setAnyEmojiFor(m)); }}
           onReply={() => startReply(menuMessage)}
           onInfo={() => { const m = menuMessage; afterMenu(() => setInfoOf(m)); }}
-          onCopy={() => { void Clipboard.setStringAsync(menuMessage.body); haptics.tap(); showToast({ title: 'Copied', icon: 'copy-outline' }); }}
-          onCopyLink={(url) => { void Clipboard.setStringAsync(url); haptics.tap(); showToast({ title: 'Link copied', icon: 'link-outline' }); }}
+          onCopy={() => { void Clipboard.setStringAsync(menuMessage.body); haptics.tap(); if (!phoneSaysCopied) showToast({ title: 'Copied', icon: 'copy-outline' }); }}
+          onCopyLink={(url) => { void Clipboard.setStringAsync(url); haptics.tap(); if (!phoneSaysCopied) showToast({ title: 'Link copied', icon: 'link-outline' }); }}
           onEdit={() => startEditing(menuMessage)}
           // Both ask first; the card comes over the closing menu.
           onUnsend={() => { const messageId = menuMessage.id; confirmAfterMenu({ title: 'Unsend message?', message: "It's removed for everyone in the chat.", confirmLabel: 'Unsend', destructive: true, onConfirm: () => actions.unsendMessage(messageId) }); }}
@@ -1031,6 +1068,8 @@ interface ComposerHandle {
   /** The emoji keyboard's delete key: the last character before the cursor (a whole emoji). */
   deleteBack: () => void;
   closePlus: () => void;
+  /** Whether the "+" tray (photos and courts) is open. */
+  plusIsOpen: () => boolean;
 }
 
 /**
@@ -1060,6 +1099,8 @@ const Composer = memo(function Composer({ ref, styles, pickedCount, editingBody,
   const [caret, setCaret] = useState(0);
   // The "+": photos and courts, one tap away.
   const [plusOpen, setPlusOpen] = useState(false);
+  const plusNow = useRef(plusOpen);
+  plusNow.current = plusOpen;
   const now = useRef({ draft, caret });
   now.current = { draft, caret };
   const inputRef = useRef<TextInput>(null);
@@ -1094,6 +1135,7 @@ const Composer = memo(function Composer({ ref, styles, pickedCount, editingBody,
       placeCaret(before.length);
     },
     closePlus: () => setPlusOpen(false),
+    plusIsOpen: () => plusNow.current,
   }), []);
 
   const sendRecording = async () => {
@@ -2076,6 +2118,8 @@ function MessageMenu({ target, me, styles, canReply, canReact, pending, canDelet
   /** The reaction a double tap leaves, and how to change it: the last row turns the reactions above into that choice. */
   doubleTap: string; onDoubleTap: (emoji: string) => void;
 }) {
+  // A Modal: on Android the message banner stands aside while it is up (see modalOpen).
+  useModalOpenWhile(true);
   const [choosing, setChoosing] = useState(false);
   const { width: W, height: H } = useWindowDimensions();
   const insets = useSafeAreaInsets();

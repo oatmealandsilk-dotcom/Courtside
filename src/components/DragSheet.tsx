@@ -8,6 +8,7 @@ import Animated, { Easing, ReduceMotion, runOnJS, useAnimatedKeyboard, useAnimat
 import { colors, radius } from '@/theme';
 import { Wash } from '@/components/Wash';
 import { CLOSE_MS, OPEN_SPRING, STAGE_EASING, getStage, setFull, stageDip, stageTop, subscribe as onStageChange, type StageGeo } from '@/features/feed/commentStage';
+import { useAndroidBack } from '@/lib/androidBack';
 
 const EASE = Easing.bezier(0.22, 0.61, 0.36, 1);
 /** Out of the way fast: a quick ease-in, the way a card is tossed down. */
@@ -76,6 +77,12 @@ export function DragSheet(props: {
    * close from closeSignal is never asked. The comments stage ignores it.
    */
   beforeClose?: () => boolean;
+  /**
+   * The page handles Android's Back itself (a step back in a form, say), so
+   * the sheet leaves it alone. Without it, Back closes the sheet the way a
+   * drag down does: it slides away, and beforeClose is asked first.
+   */
+  ownBack?: boolean;
 }) {
   return props.stage ? <StageSheet {...props} geo={props.stage} /> : <PlainSheet {...props} />;
 }
@@ -89,6 +96,7 @@ function PlainSheet({
   onSettled,
   contentHeight,
   beforeClose,
+  ownBack = false,
 }: {
   header: React.ReactNode;
   children: React.ReactNode;
@@ -98,6 +106,7 @@ function PlainSheet({
   onSettled?: () => void;
   contentHeight?: number;
   beforeClose?: () => boolean;
+  ownBack?: boolean;
 }) {
   const styles = useThemedStyles(styleDefinitions);
   const { height: windowHeight } = useWindowDimensions();
@@ -175,6 +184,10 @@ function PlainSheet({
     }
     dismiss();
   };
+  // Android's Back, while this sheet's page is in front: the same close as a
+  // drag down (it slides away, the page's own question first, and onDismissed
+  // then leaves the page), rather than the page vanishing in one frame.
+  useAndroidBack(() => { if (!dismissedRef.current) userDismiss(); return true; }, !ownBack);
   // The keyboard: the sheet opens all the way, and its bottom rides up with
   // the keyboard frame by frame (the phone reports its height as it moves),
   // so a box at the bottom stays right on top of it, never jumping after it.

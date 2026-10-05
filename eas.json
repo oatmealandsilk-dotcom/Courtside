@@ -13,7 +13,14 @@
     },
     "preview": {
       "distribution": "internal",
-      "channel": "preview"
+      "channel": "preview",
+      "android": {
+        "buildType": "apk",
+        "env": {
+          "EXPO_PUBLIC_SUPABASE_URL": "https://auth.courtsidebase.com",
+          "EXPO_PUBLIC_SUPABASE_KEY": "sb_publishable_8PesptF4vNXClY9w2cit-A_LiSY4Zjj"
+        }
+      }
     },
     "production": {
       "autoIncrement": true,
@@ -21,7 +28,10 @@
         "EXPO_PUBLIC_SUPABASE_URL": "https://auth.courtsidebase.com",
         "EXPO_PUBLIC_SUPABASE_KEY": "sb_publishable_8PesptF4vNXClY9w2cit-A_LiSY4Zjj"
       },
-      "channel": "production"
+      "channel": "production",
+      "android": {
+        "buildType": "app-bundle"
+      }
     }
   },
   "submit": {
@@ -31,7 +41,8 @@
       },
       "android": {
         "serviceAccountKeyPath": "./google-play-service-account.json",
-        "track": "internal"
+        "track": "alpha",
+        "releaseStatus": "draft"
       }
     }
   }

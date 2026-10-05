@@ -18,7 +18,7 @@ import { plainLook } from '@/features/groups/look';
 import { openGroupFeed } from '@/features/groups/openGroupFeed';
 import { confirm } from '@/lib/confirm';
 import * as haptics from '@/lib/haptics';
-import { KeyboardScrollContext, afterKeyboard, currentKeyboardHeight, type Measurable } from '@/lib/keyboardScroll';
+import { KeyboardScrollContext, afterKeyboard, visibleAboveKeyboard, type Measurable } from '@/lib/keyboardScroll';
 import { show as showToast } from '@/lib/toast';
 import { useReducedMotion } from '@/lib/useReducedMotion';
 import { useApp } from '@/store/AppContext';
@@ -217,7 +217,7 @@ export default function GroupForm() {
     if (!node?.measureInWindow) { node?.scrollIntoView?.({ block: 'center', behavior: 'smooth' }); return; }
     afterKeyboard(() => {
       node.measureInWindow?.((_x, y, _w, h) => {
-        const visibleBottom = Dimensions.get('window').height - currentKeyboardHeight() - 96;
+        const visibleBottom = visibleAboveKeyboard() - 96;
         const overflow = y + h - visibleBottom;
         if (overflow > 0) scroller.current?.scrollTo({ y: offset.current + overflow, animated: true });
       });
@@ -320,7 +320,7 @@ export default function GroupForm() {
   // ---------------------------------------------------------------- the button
   let primary: { label: string; busyLabel?: string; waiting?: string; disabled: boolean; onPress: () => void } | null = null;
   if (gate === 'young' || gate === 'gone') primary = { label: 'OK', disabled: false, onPress: dismiss };
-  else if (gate === 'birthday') primary = { label: 'Add your birthday', disabled: false, onPress: () => { landing.current = { href: '/birthday' }; dismiss(); } };
+  else if (gate === 'birthday') primary = { label: 'Add your birthday', disabled: false, onPress: () => { landing.current = { href: '/birthday?from=group' }; dismiss(); } };
   else if (gate === 'off') primary = { label: retrying ? 'Trying again…' : 'Try again', disabled: retrying, onPress: () => { void retry(); } };
   else if (gate === 'full') primary = { label: 'See your groups', disabled: false, onPress: () => { landing.current = { href: '/groups' }; dismiss(); } };
   else if (gate === 'loading') primary = null;
@@ -442,6 +442,7 @@ export default function GroupForm() {
 
   return (
     <DragSheet
+      ownBack
       closeSignal={closeSignal}
       onDismissed={done}
       beforeClose={() => guard.current()}

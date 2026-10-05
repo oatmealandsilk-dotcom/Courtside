@@ -18,13 +18,21 @@ export const PERMISSION_META: Record<DevicePermission, { label: string; why: str
   // (error 3164), so the wording says "All Photos" specifically, not just "on".
   // Each reason is one short line: the answer (On, Off, Not asked) is shown
   // beside the name, so it no longer has to ride on the end of this sentence.
-  photos: { label: 'Photos', why: 'To post clips and photos. Pick All Photos so videos open.', icon: 'images-outline' },
+  // Android has no "All Photos" (and from Oct 5 no Photos row at all: its picker needs no permission).
+  photos: { label: 'Photos', why: Platform.OS === 'android' ? 'To post clips and photos.' : 'To post clips and photos. Pick All Photos so videos open.', icon: 'images-outline' },
   microphone: { label: 'Microphone', why: 'For voice notes in chats.', icon: 'mic-outline' },
   // A map pin rather than the compass arrow, since this is about where you are, not directions.
   location: { label: 'Location', why: 'For the map and players near you.', icon: 'location-outline' },
 };
 
-export const ALL_PERMISSIONS: DevicePermission[] = ['camera', 'photos', 'microphone', 'location'];
+/**
+ * The ones listed in Settings → Permissions and the setup steps. Android
+ * leaves Photos out: its own Photo Picker hands over only what you choose
+ * and needs no permission, so there is nothing there to allow or refuse.
+ */
+export const ALL_PERMISSIONS: DevicePermission[] = Platform.OS === 'android'
+  ? ['camera', 'microphone', 'location']
+  : ['camera', 'photos', 'microphone', 'location'];
 
 const fold = (p: { granted: boolean; canAskAgain?: boolean; accessPrivileges?: string } | null): PermissionState => {
   if (!p) return 'unavailable';
@@ -73,6 +81,8 @@ export async function getPermission(kind: DevicePermission): Promise<PermissionS
     if (typeof navigator === 'undefined' || !navigator.mediaDevices) return 'unavailable';
     return webQuery(kind);
   }
+  // Android's Photo Picker needs no permission (see ALL_PERMISSIONS).
+  if (kind === 'photos' && Platform.OS === 'android') return 'granted';
   try {
     if (kind === 'camera') return fold(await Camera.getCameraPermissionsAsync());
     if (kind === 'microphone') return fold(await Camera.getMicrophonePermissionsAsync());
@@ -86,6 +96,7 @@ export async function getPermission(kind: DevicePermission): Promise<PermissionS
 /** Asks the phone. If it has already been refused for good, opens Settings instead. */
 export async function requestPermission(kind: DevicePermission): Promise<PermissionState> {
   if (Platform.OS === 'web') return webRequest(kind);
+  if (kind === 'photos' && Platform.OS === 'android') return 'granted';
   const current = await getPermission(kind);
   if (current === 'denied') {
     await Linking.openSettings().catch(() => undefined);
@@ -117,6 +128,6 @@ export const OFF_HINT = Platform.OS === 'web'
   : 'Turning one off, or back on after a no, opens your phone’s Settings.';
 
 export async function getAllPermissions(): Promise<Record<DevicePermission, PermissionState>> {
-  const [camera, photos, microphone, location] = await Promise.all(ALL_PERMISSIONS.map(getPermission));
+  const [camera, photos, microphone, location] = await Promise.all((['camera', 'photos', 'microphone', 'location'] as const).map(getPermission));
   return { camera, photos, microphone, location };
 }

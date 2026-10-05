@@ -1,6 +1,7 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, Keyboard, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useModalOpenWhile } from '@/lib/modalOpen';
 import Animated, { Easing, ReduceMotion, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { FullWindowOverlay } from 'react-native-screens';
 
@@ -66,6 +67,8 @@ export function ConfirmHost() {
   const [request, setRequest] = useState<ConfirmOptions | null>(null);
   // The tutorial never starts under a question; it waits until the card has gone.
   useHoldTour(request !== null);
+  // Android draws the card in a Modal: the message banner stands aside meanwhile (see modalOpen).
+  useModalOpenWhile(request !== null);
   // The question still waiting for an answer: null once answered, even mid-fade.
   const live = useRef<ConfirmOptions | null>(null);
   // Anything asked while a card was up waits its turn.

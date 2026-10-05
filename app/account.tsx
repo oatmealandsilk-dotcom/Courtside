@@ -12,6 +12,8 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Avatar, Button, Field, Screen } from '@/components/ui';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { shareOutside } from '@/lib/shareOutside';
+import { File, Paths } from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 import { formatDate } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
 import * as toast from '@/lib/toast';
@@ -19,6 +21,7 @@ import { confirm } from '@/lib/confirm';
 import { useAiCoachOn } from '@/features/aiCoach/switch';
 import { useGateSpace } from '@/lib/useGateSpace';
 import { KeyboardScrollContext, useKeyboardReveal } from '@/lib/keyboardScroll';
+import { KEYBOARD_ROOM, useKeyboardRoom } from '@/lib/keyboardRoom';
 import { StatusShade } from '@/components/StatusShade';
 import { colors, radius, spacing, typography, lift } from '@/theme';
 
@@ -81,6 +84,21 @@ export default function AccountCentre() {
       say('Your data is downloading.');
       return;
     }
+    if (Platform.OS === 'android') {
+      // Android's plain share sends only words: the whole file pasted into a
+      // message, and for a big account too long for Android to hand over at
+      // all. So it goes as a file, the way a post's original does (Oct 5).
+      try {
+        const file = new File(Paths.cache, `courtside-${currentUser?.handle ?? 'me'}.json`);
+        if (file.exists) file.delete();
+        file.create();
+        file.write(data);
+        await Sharing.shareAsync(file.uri, { mimeType: 'application/json', dialogTitle: 'My CourtSide data' });
+      } catch {
+        setError('Your data could not be prepared. Try again in a moment.');
+      }
+      return;
+    }
     await shareOutside('My CourtSide data', data);
   };
 
@@ -130,7 +148,9 @@ export default function AccountCentre() {
       <Text style={styles.sectionTitle}>Sign-in</Text>
       <View style={styles.card}>
         {row('key-outline', hasEmail ? 'Change password' : 'Set a password', undefined, isSupabaseConfigured ? () => { setPassword(''); setPassword2(''); setSheet('password'); } : undefined, false, 0)}
-        {row('logo-google', 'Google', hasGoogle ? 'Connected' : 'Link', !hasGoogle && isSupabaseConfigured ? () => run(() => actions.linkGoogle(), 'Follow the Google prompt to finish linking.') : undefined, false, 1)}
+        {/* Android (Oct 5): linking Google there would bring the login back in an address any
+            Android app can claim, so the row only shows once it is linked (on an iPhone or the website). */}
+        {Platform.OS !== 'android' || hasGoogle ? row('logo-google', 'Google', hasGoogle ? 'Connected' : 'Link', !hasGoogle && isSupabaseConfigured ? () => run(() => actions.linkGoogle(), 'Follow the Google prompt to finish linking.') : undefined, false, 1) : null}
         {row('time-outline', 'Last sign-in', info?.lastSignInAt ? formatDate(info.lastSignInAt) : undefined, undefined, false, 2)}
         {row('log-out-outline', 'Log out everywhere', undefined, () => confirm({ title: 'Log out everywhere?', message: "You'll be logged out on every phone and computer, this one included.", confirmLabel: 'Log out', destructive: true, onConfirm: () => run(async () => { await actions.signOutEverywhere(); router.replace('/sign-in'); }, 'Signed out everywhere.') }), false, 3)}
       </View>
@@ -151,7 +171,8 @@ export default function AccountCentre() {
       <Modal visible={sheet !== null} transparent animationType="fade" onRequestClose={() => setSheet(null)}>
         {/* The dimmed page behind is its own button, beside the sheet rather than around it:
             wrapped around it, a click in a password box also counted as a click on the page and closed the sheet. */}
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.backdrop}>
+        {/* Android (edge to edge) does not shrink the sheet's window for the keyboard either, so it is lifted the same way. */}
+        <KeyboardAvoidingView behavior={Platform.OS === 'web' ? undefined : 'padding'} style={styles.backdrop}>
           <Pressable accessibilityLabel="Close" onPress={() => !busy && setSheet(null)} style={StyleSheet.absoluteFill} />
           <View style={styles.sheet}>
             <Wash height={240} strength={0.8} />
@@ -233,6 +254,8 @@ function ResetPage({ email, onSave }: { email?: string; onSave: (password: strin
   const space = useGateSpace();
   // The phone scrolls the box you tapped above the keyboard, as every Screen does.
   const keyboard = useKeyboardReveal();
+  // Android: room under the fields for the keyboard (see keyboardRoom).
+  const keyboardRoom = useKeyboardRoom(space.bottom);
   const [password, setPassword] = useState('');
   const [again, setAgain] = useState('');
   const [busy, setBusy] = useState(false);
@@ -260,7 +283,7 @@ function ResetPage({ email, onSave }: { email?: string; onSave: (password: strin
         // The keyboard adds room below the fields, so the box you tapped and the
         // Update button can be scrolled clear of it; a drag down puts it away.
         automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
-        keyboardDismissMode="interactive"
+        keyboardDismissMode={Platform.OS === 'android' ? 'on-drag' : 'interactive'}
       >
         <Animated.View key={done ? 'done' : 'form'} entering={FadeIn.duration(320)} style={styles.column}>
           {done ? (
@@ -292,6 +315,7 @@ function ResetPage({ email, onSave }: { email?: string; onSave: (password: strin
             </>
           )}
         </Animated.View>
+        {KEYBOARD_ROOM ? <Animated.View pointerEvents="none" style={keyboardRoom} /> : null}
       </ScrollView>
       <StatusShade wash={{ height: 420, strength: 0.85 }} />
     </View>

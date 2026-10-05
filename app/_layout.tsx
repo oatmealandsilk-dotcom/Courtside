@@ -15,6 +15,8 @@ import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_7
 import { AppProvider } from '@/store/AppContext';
 import { AppShell } from '@/components/AppShell';
 import { ThemeProvider, useTheme } from '@/theme/ThemeProvider';
+import { Platform } from 'react-native';
+import { noteThemedStatusStyle } from '@/lib/statusBarStyle';
 import { colors, font, lightColors } from '@/theme';
 import { BrandMark } from '@/components/BrandMark';
 import { installCrashReporting, reportError } from '@/lib/crashReporting';
@@ -131,4 +133,28 @@ export default function RootLayout() {
   );
 }
 
-function ThemedStatusBar() { const { night } = useTheme(); return <StatusBar style={night ? "light" : "dark"}/>; }
+/**
+ * The status bar's icons follow the page: light on the dark pages (Night and,
+ * from Oct 5, New York's navy, where dark icons were lost), dark elsewhere.
+ * On Android the window behind the app takes the theme's ground too, so
+ * nothing cream shows round the edges in a dark theme.
+ */
+function ThemedStatusBar() {
+  const { dark, theme } = useTheme();
+  const style = dark ? 'light' : 'dark';
+  noteThemedStatusStyle(style);
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    // Loaded here, on Android only, never at the top of the file: iPhone
+    // builds 7 to 11 share this update channel but were made before
+    // expo-system-ui was installed, and loading it there would stop them at
+    // launch. Every Android build has it.
+    try {
+      const SystemUI = require('expo-system-ui') as typeof import('expo-system-ui');
+      void SystemUI.setBackgroundColorAsync(colors.bg).catch(() => undefined);
+    } catch {
+      // Not in this build: the window keeps its launch colour.
+    }
+  }, [theme]);
+  return <StatusBar style={style} />;
+}

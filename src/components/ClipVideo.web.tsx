@@ -2,7 +2,7 @@ import React, { forwardRef, useEffect, useImperativeHandle, useRef } from 'react
 import { useIsFocused } from '@/lib/useIsFocused';
 import { forgetHeld, holdUntilBack, pageAway } from '@/features/feed/pauseWhenHidden';
 
-export interface ClipVideoHandle { seek: (seconds: number) => void; player: null }
+export interface ClipVideoHandle { seek: (seconds: number) => void; player: null; reattach: () => void }
 
 /** A clip in the browser, filling whatever holds it; `active` plays it, muted or not. */
 export const ClipVideo = forwardRef<ClipVideoHandle, {
@@ -38,7 +38,7 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
     video.volume = tuning.current.volume ?? 1;
   };
   useEffect(() => { if (el.current) applyTuning(el.current); }, [speed, volume]);
-  useImperativeHandle(ref, () => ({ seek: (seconds) => { if (el.current) el.current.currentTime = seconds; }, player: null }), []);
+  useImperativeHandle(ref, () => ({ seek: (seconds) => { if (el.current) el.current.currentTime = seconds; }, player: null, reattach: () => undefined }), []);
   // A trimmed clip starts on its first kept frame. Moved there before it plays
   // (and as soon as the file's length is known), so it never shows a moment
   // of the part that was cut and then jumps back.

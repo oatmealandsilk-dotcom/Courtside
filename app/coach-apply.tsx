@@ -7,6 +7,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import * as DocumentPicker from 'expo-document-picker';
 
 import { goBack } from '@/lib/goBack';
+import { useAndroidBack } from '@/lib/androidBack';
 import { Button, Field, Screen } from '@/components/ui';
 import { ApplicationStatus } from '@/components/ApplicationStatus';
 import { useApp } from '@/store/AppContext';
@@ -136,6 +137,8 @@ export default function CoachApply() {
     setStep((s) => Math.min(STEPS.length - 1, s + 1));
   };
   const back = () => (step === 0 ? goBack() : setStep((s) => s - 1));
+  // Android's Back steps back through the application rather than losing it.
+  useAndroidBack(() => { if (step === 0) return false; back(); return true; });
 
   const submit = async () => {
     if (busy) return;
@@ -190,7 +193,7 @@ export default function CoachApply() {
   const error = (key: string) => (now[key] ? <Text style={styles.fieldError}>{now[key]}</Text> : null);
 
   return (
-    <KeyboardAvoidingView style={[styles.root, { paddingTop: insets.top + spacing.sm }]} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardAvoidingView style={[styles.root, { paddingTop: insets.top + spacing.sm }]} behavior={Platform.OS === 'web' ? undefined : 'padding'}>
       <View style={styles.head}>
         <View style={styles.topRow}>
           <Pressable accessibilityRole="button" accessibilityLabel={step === 0 ? 'Close' : 'Back'} onPress={back} hitSlop={10}>

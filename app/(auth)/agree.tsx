@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { BackHandler, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Redirect, router } from 'expo-router';
 import Animated, { Easing, FadeInDown } from 'react-native-reanimated';
 
@@ -10,6 +10,7 @@ import { Wash } from '@/components/Wash';
 import { openLegal, TERMS_VERSION } from '@/lib/legal';
 import { useApp } from '@/store/AppContext';
 import { useGateSpace } from '@/lib/useGateSpace';
+import { useAndroidBack } from '@/lib/androidBack';
 import { StatusShade } from '@/components/StatusShade';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, spacing, typography, font, lift } from '@/theme';
@@ -42,6 +43,9 @@ export default function Agree() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const { leave, curtain } = useLeave();
+  // Android's Back leaves the app, as on any first page: popping this gate only
+  // showed the page under it for a moment before the gate came back.
+  useAndroidBack(() => { BackHandler.exitApp(); return true; });
 
   // Already agreed (a stale link, or the back button): nothing to do here.
   if (termsVersion === TERMS_VERSION && !busy) return <Redirect href="/" />;

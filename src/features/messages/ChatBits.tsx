@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { useModalOpenWhile } from '@/lib/modalOpen';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Reanimated, { Easing, FadeIn, FadeOut, ZoomIn, ZoomOut, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming } from 'react-native-reanimated';
@@ -226,6 +227,7 @@ export function SeenFaces({ people, align, style }: { people: User[]; align: 'le
 function Sheet({ visible, title, onClose, children }: { visible: boolean; title?: string; onClose: () => void; children: React.ReactNode }) {
   const styles = useThemedStyles(styleDefinitions);
   const insets = useSafeAreaInsets();
+  useModalOpenWhile(visible);
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable accessibilityLabel="Close" onPress={onClose} style={styles.backdrop}>
@@ -287,6 +289,7 @@ export function ReactionsSheet({ message, users, me, onRemove, onClose }: {
 export function EmojiReactSheet({ visible, onPick, onClose }: { visible: boolean; onPick: (emoji: string) => void; onClose: () => void }) {
   const styles = useThemedStyles(styleDefinitions);
   const insets = useSafeAreaInsets();
+  useModalOpenWhile(visible);
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable accessibilityLabel="Close" onPress={onClose} style={styles.backdropClear}>

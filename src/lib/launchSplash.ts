@@ -9,6 +9,8 @@ import * as SplashScreen from 'expo-splash-screen';
  * and the calls below quietly do nothing there.
  */
 let done = false;
+/** Told once, the moment the phone's own launch picture starts to go. */
+const onHidden = new Set<() => void>();
 
 /** The longest the phone's picture (or the app's copy of it) is ever waited on. */
 export const LAUNCH_MAX_MS = 2500;
@@ -19,6 +21,15 @@ export function hideLaunch() {
   if (done) return;
   done = true;
   SplashScreen.hideAsync().catch(() => undefined);
+  for (const told of [...onHidden]) told();
+  onHidden.clear();
+}
+
+/** Runs `then` once the phone's launch picture starts to go (at once if it already has). Gives back a way to stop waiting. */
+export function whenLaunchHidden(then: () => void): () => void {
+  if (done || Platform.OS === 'web') { then(); return () => undefined; }
+  onHidden.add(then);
+  return () => { onHidden.delete(then); };
 }
 
 /** Whether the phone's picture is still up, as on a real launch (on a phone; a browser has none). */

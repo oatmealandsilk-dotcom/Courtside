@@ -112,7 +112,7 @@ export function CoverPage({ visible, uri, from, to, start, photo, ratio, fit, cr
     <Modal visible={visible} transparent statusBarTranslucent animationType={reduce ? 'fade' : 'slide'} onRequestClose={onCancel}>
       <View style={styles.page}>
         <View style={styles.column}>
-          <View style={[styles.bar, { paddingTop: isPhone ? insets.top + spacing.xl : spacing.sm + spacing.xxl }]}>
+          <View style={[styles.bar, { paddingTop: isPhone ? insets.top + spacing.xl : Platform.OS !== 'web' ? Math.max(insets.top + spacing.xl, spacing.sm + spacing.xxl) : spacing.sm + spacing.xxl }]}>
             <View style={styles.barLeft}>
               <Pressable accessibilityRole="button" accessibilityLabel="Cancel" onPress={onCancel} hitSlop={10} style={({ pressed }) => [styles.close, pressed && { opacity: 0.6 }]}>
                 <Ionicons name="close" size={26} color={colors.text} />

@@ -6,6 +6,7 @@ import { Image as ExpoImage } from 'expo-image';
 import { goBack } from '@/lib/goBack';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as haptics from '@/lib/haptics';
+import { useLightStatusWhileFocused } from '@/lib/statusBarStyle';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -30,6 +31,8 @@ const VIDEO_MS = 12000;
  */
 export default function StoryViewer() {
   const focused = useIsFocused();
+  // Stories are shown on black: the clock and battery go light over them.
+  useLightStatusWhileFocused();
   const styles = useThemedStyles(styleDefinitions);
   const insets = useSafeAreaInsets();
   const { id, story: only } = useLocalSearchParams<{ id: string; story?: string }>();

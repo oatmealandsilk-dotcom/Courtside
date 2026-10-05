@@ -1,12 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Image, Modal, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, { useAnimatedStyle, useSharedValue, withDecay, withSpring, withTiming } from 'react-native-reanimated';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { measureForEdit } from '@/features/compose/photoEdit';
 import * as haptics from '@/lib/haptics';
+import { useLightStatusWhile } from '@/lib/statusBarStyle';
 import { spacing, typography, font } from '@/theme';
 
 /** How far past the edge a drag or a pinch may stretch before it resists, as a share of the overshoot. */
@@ -29,6 +30,8 @@ export function CircleCrop({ uri, onDone, onCancel, corner = 0.5 }: {
 }) {
   const { width: screenW, height: screenH } = useWindowDimensions();
   const insets = useSafeAreaInsets();
+  // Always on black: light status-bar icons while it is up (on Android it opens a frame later for that).
+  const cropShown = useLightStatusWhile(true);
   const D = Math.min(screenW, screenH) - 32;
   const [size, setSize] = useState<{ width: number; height: number } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -183,8 +186,10 @@ export function CircleCrop({ uri, onDone, onCancel, corner = 0.5 }: {
   // The dark surround: a ring whose hole is exactly the circle, as wide as it needs to be to cover the screen.
   const ring = Math.max(screenW, screenH) * 1.5;
   return (
-    <Modal visible animationType="fade" statusBarTranslucent onRequestClose={onCancel}>
-      <View style={styles.root}>
+    <Modal visible={cropShown} animationType="fade" statusBarTranslucent onRequestClose={onCancel}>
+      {/* Its own gesture root: a Modal is drawn apart from the app, and on Android the
+          photo could not be moved or pinched without one (as in ChatPhotoViews). */}
+      <GestureHandlerRootView style={styles.root}>
         <GestureDetector gesture={gesture}>
           <View
             style={styles.stage}
@@ -212,7 +217,7 @@ export function CircleCrop({ uri, onDone, onCancel, corner = 0.5 }: {
             <Text style={[styles.button, styles.choose, (busy || !size) && { opacity: 0.45 }]}>{busy ? 'Saving…' : 'Choose'}</Text>
           </Pressable>
         </View>
-      </View>
+      </GestureHandlerRootView>
     </Modal>
   );
 }

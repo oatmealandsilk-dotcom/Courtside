@@ -23,6 +23,8 @@ import { useLeave } from '@/components/LeaveCurtain';
 import { useApp } from '@/store/AppContext';
 import { useGateSpace } from '@/lib/useGateSpace';
 import { KeyboardScrollContext, useKeyboardReveal } from '@/lib/keyboardScroll';
+import { KEYBOARD_ROOM, useKeyboardRoom } from '@/lib/keyboardRoom';
+import { useAndroidBack } from '@/lib/androidBack';
 import { StatusShade } from '@/components/StatusShade';
 import { colors, lift, radius, spacing, typography, font } from '@/theme';
 
@@ -55,6 +57,8 @@ export default function SignIn() {
   const cardScale = Math.max(0.8, Math.min(1, previewHeight / 330));
   // The phone scrolls the box you tapped above the keyboard, as every Screen does.
   const keyboard = useKeyboardReveal();
+  // Android: room under the form for the keyboard, so the lowest box can be scrolled clear of it.
+  const keyboardRoom = useKeyboardRoom(space.bottom);
   const [useAnother, setUseAnother] = useState(false);
   const remembered = isSupabaseConfigured && !add && !useAnother && mode === 'sign-in' ? savedAccounts.filter((a) => a.id !== currentUserId) : [];
   const [switching, setSwitching] = useState<string | null>(null);
@@ -249,6 +253,20 @@ export default function SignIn() {
 
   const chooser = remembered.length > 0 && !sent;
   const welcome = !add && !started && !sent && !chooser && !useAnother;
+  // Android's Back goes back a step on this page, the same as its own back
+  // buttons: from "Check your inbox" to the form, from "another account" to
+  // the saved ones, from the form to the welcome. From there it leaves the app.
+  const backToForm = () => { setSent(null); setError(null); };
+  const backToWelcome = () => { setStarted(false); setError(null); setProviderError(null); };
+  useAndroidBack(() => {
+    if (busy || via || switching) return true;
+    if (sent) { backToForm(); return true; }
+    if (useAnother) { setUseAnother(false); setError(null); setProviderError(null); return true; }
+    if (started && !chooser) { backToWelcome(); return true; }
+    return false;
+  });
+  // Autofill hints for Android's password manager (an iPhone keeps its own way; see Field).
+  const fill = (hint: NonNullable<React.ComponentProps<typeof Field>['autoComplete']>) => (Platform.OS === 'android' ? hint : undefined);
   const begin = (next: Mode) => { setMode(next); setStarted(true); setError(null); setProviderError(null); };
   const title = chooser ? 'Welcome back' : mode === 'sign-up' ? 'Create your account' : 'Sign in';
   const line = chooser ? 'Pick an account to carry on.' : mode === 'sign-up' ? 'Free, and it takes a minute.' : 'Tennis clips, people to hit with, and real coaches.';
@@ -266,8 +284,9 @@ export default function SignIn() {
         // The keyboard adds room below the form instead of squashing the page,
         // so the box you tapped can be scrolled clear of it (the line above
         // does the scrolling); a drag down the page puts the keyboard away.
+        // Android's room is the empty box at the end (keyboardRoom).
         automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
-        keyboardDismissMode="interactive"
+        keyboardDismissMode={Platform.OS === 'android' ? 'on-drag' : 'interactive'}
       >
         <Animated.View entering={FadeIn.duration(360)} style={styles.column}>
           {sent ? (
@@ -282,7 +301,7 @@ export default function SignIn() {
               <Text style={styles.inboxHint}>Didn’t get it? Check your spam folder{sent.kind === 'reset' ? ', or resend the email.' : '.'}</Text>
               {error ? <Text style={styles.error}>{error}</Text> : null}
               <View style={styles.inboxActions}>
-                <Pressable accessibilityRole="button" onPress={() => { setSent(null); setError(null); }} style={({ pressed }) => [styles.secondary, pressed && styles.pressed]}>
+                <Pressable accessibilityRole="button" onPress={backToForm} style={({ pressed }) => [styles.secondary, pressed && styles.pressed]}>
                   <Text style={styles.secondaryText}>Back to sign in</Text>
                 </Pressable>
                 {sent.kind === 'reset' ? (
@@ -334,7 +353,7 @@ export default function SignIn() {
           ) : (
             <>
               {started && !chooser ? (
-                <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => { setStarted(false); setError(null); setProviderError(null); }} hitSlop={12} style={styles.back}>
+                <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={backToWelcome} hitSlop={12} style={styles.back}>
                   <Ionicons name="chevron-back" size={22} color={colors.text} />
                 </Pressable>
               ) : null}
@@ -404,6 +423,11 @@ export default function SignIn() {
                         <Text style={styles.secondaryText}>{mode === 'sign-up' ? 'Sign up with Google' : 'Continue with Google'}</Text>
                       </Pressable>
                       {providerError ? <Text style={styles.error}>{providerError}</Text> : null}
+                      {/* Android has no Sign in with Apple. Someone who made their account with
+                          Apple on an iPhone gets in here with the email and a password set there. */}
+                      {Platform.OS === 'android' && mode === 'sign-in' ? (
+                        <Text style={styles.appleNote}>Made your account with Apple on an iPhone? On the iPhone, open Settings, then Account center, then Set a password. Then sign in here with that email and password.</Text>
+                      ) : null}
                       <View style={styles.divider}>
                         <View style={styles.rule} />
                         <Text style={styles.dividerText}>or {mode === 'sign-up' ? 'sign up' : 'sign in'} with email</Text>
@@ -411,13 +435,14 @@ export default function SignIn() {
                       </View>
               {mode === 'sign-up' ? (
                 <>
-                  <Field soft value={name} onChangeText={setName} placeholder="Name" autoCapitalize="words" />
+                  <Field soft value={name} onChangeText={setName} placeholder="Name" autoCapitalize="words" autoComplete={fill('name')} />
                   <Field
                     soft
                     value={handle}
                     onChangeText={setHandle}
                     placeholder="Username"
                     autoCapitalize="none"
+                    autoComplete={fill('username-new')}
                     hint={handleGone ? `@${cleanHandle} is taken. Try another.`
                       : cleanHandle.length > 20 || handleStatus === 'invalid' ? 'Use 3 to 20 letters, numbers or underscores.'
                       : handleStatus === 'ok' ? `@${cleanHandle} is free`
@@ -427,8 +452,8 @@ export default function SignIn() {
                   {ageBlocked ? <Text style={styles.ageNote}>Sorry, you can't create a CourtSide account.</Text> : null}
                 </>
               ) : null}
-                      <Field soft value={email} onChangeText={setEmail} placeholder="Email" autoCapitalize="none" keyboardType="email-address" />
-                      <Field soft value={password} onChangeText={setPassword} placeholder={mode === 'sign-up' ? 'Password, at least 6 characters' : 'Password'} autoCapitalize="none" secureTextEntry onSubmitEditing={submit} />
+                      <Field soft value={email} onChangeText={setEmail} placeholder="Email" autoCapitalize="none" keyboardType="email-address" autoComplete={fill('email')} />
+                      <Field soft value={password} onChangeText={setPassword} placeholder={mode === 'sign-up' ? 'Password, at least 6 characters' : 'Password'} autoCapitalize="none" secureTextEntry onSubmitEditing={submit} autoComplete={fill(mode === 'sign-up' ? 'new-password' : 'password')} />
                       {mode === 'sign-in' ? (
                         <Pressable accessibilityRole="button" accessibilityLabel="Forgot password" onPress={forgot} hitSlop={8} style={styles.forgot}>
                           <Text style={styles.link}>Forgot password?</Text>
@@ -470,6 +495,7 @@ export default function SignIn() {
             </>
           )}
         </Animated.View>
+        {KEYBOARD_ROOM ? <Animated.View pointerEvents="none" style={keyboardRoom} /> : null}
       </ScrollView>
       <StatusShade wash={{ height: 420, strength: 0.85 }} />
       {via ? <SigningInWith provider={via} /> : null}
@@ -531,6 +557,7 @@ const styleDefinitions = StyleSheet.create({
   divider: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginVertical: spacing.xs },
   rule: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: colors.borderStrong },
   dividerText: { ...typography.small, color: colors.textMuted },
+  appleNote: { ...typography.small, lineHeight: 19, color: colors.textMuted, textAlign: 'center' },
   switch: { alignSelf: 'center', paddingVertical: spacing.sm },
   switchText: { ...typography.small, fontSize: 14, color: colors.textMuted },
   switchLink: { ...typography.smallStrong, fontSize: 14, color: colors.brand },

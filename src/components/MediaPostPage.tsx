@@ -19,6 +19,8 @@ import { isDesktopBrowser } from '@/lib/browserDevice';
 import { lockPageSwipe } from '@/features/navigation/swipeLock';
 import { useHoldTour } from '@/features/tour/tourHold';
 import { BAR_OVERLAY_PX } from '@/features/navigation/barInset';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { useLightStatusWhile } from '@/lib/statusBarStyle';
 import { allowTurning, stayUpright } from '@/lib/orientation';
 import { Tappable } from '@/components/Tappable';
 import { NewHereTag } from '@/components/NewHereTag';
@@ -116,6 +118,8 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
   const [full, setFull] = useState(false);
   // The tutorial never starts under a photo opened full screen.
   useHoldTour(full);
+  // Full screen is black: light status-bar icons over it.
+  const fullShown = useLightStatusWhile(full);
   const frameRef = useRef<View>(null);
   const zoom = useRef<ZoomableMediaHandle>(null);
   const [home, setHome] = useState<HomeRect | undefined>(undefined);
@@ -274,15 +278,16 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
         {burst}
       </View>
       {!post.videoUrl ? (
-        <Modal visible={full} transparent animationType="none" statusBarTranslucent supportedOrientations={['portrait', 'landscape', 'landscape-left', 'landscape-right']} onRequestClose={closeFull}>
-          <View style={styles.fullRoot}>
+        <Modal visible={fullShown} transparent animationType="none" statusBarTranslucent supportedOrientations={['portrait', 'landscape', 'landscape-left', 'landscape-right']} onRequestClose={closeFull}>
+          {/* Its own gesture root: on Android a Modal's pinch and swipe need one (see PostVideo). */}
+          <GestureHandlerRootView style={styles.fullRoot}>
             <ZoomableMedia ref={zoom} home={home} onDismiss={() => { setFull(false); setHome(undefined); }}>
               <ExpoImage accessibilityIgnoresInvertColors source={{ uri: post.imageUrl ?? post.thumbnailUrl }} style={StyleSheet.absoluteFill} contentFit="contain" cachePolicy="memory-disk" />
             </ZoomableMedia>
             <Pressable accessibilityRole="button" accessibilityLabel="Close full screen" onPress={closeFull} style={[styles.fullClose, { top: insets.top + 12 }]}>
               <Ionicons name="close" size={22} color="white" />
             </Pressable>
-          </View>
+          </GestureHandlerRootView>
         </Modal>
       ) : null}
 

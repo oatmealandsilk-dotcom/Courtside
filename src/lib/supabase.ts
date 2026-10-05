@@ -34,3 +34,36 @@ export const supabase: SupabaseClient | null =
     : null;
 
 export const isSupabaseConfigured = supabase !== null;
+
+/** Where the Android Google sign-in helper keeps its one-time secret (and nothing else for long). */
+export const ANDROID_OAUTH_KEY = 'courtside-android-oauth';
+let androidOAuth: SupabaseClient | null | undefined;
+
+/**
+ * Android only (Oct 5): a second, short-lived client used for one thing,
+ * Continue with Google, so that sign-in uses PKCE. With it, the address
+ * Google sends the phone back to carries only a one-time code, useless
+ * without a secret kept on this phone; the usual way carried the login
+ * itself, and on Android any app can claim the courtside:// address. The
+ * session it gets is handed straight to the main client (setSession) and its
+ * own copy is wiped. The main client stays as it is: password reset,
+ * sign-up confirmation and email change open the website, which could not
+ * know this phone's secret. Never signs out (that would end the shared login).
+ */
+export function androidOAuthClient(): SupabaseClient | null {
+  if (Platform.OS !== 'android' || !url || !key) return null;
+  if (androidOAuth === undefined) {
+    androidOAuth = createClient(url, key, {
+      auth: {
+        flowType: 'pkce',
+        storage: AsyncStorage,
+        storageKey: ANDROID_OAUTH_KEY,
+        // Kept on the phone, so a sign-in finishes even if Android closed the app while Google was open.
+        persistSession: true,
+        autoRefreshToken: false,
+        detectSessionInUrl: false,
+      },
+    });
+  }
+  return androidOAuth;
+}
