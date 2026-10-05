@@ -4,7 +4,7 @@
 //   status — whether the coach is switched on (the key is set); free, no model call
 //   plan   — a week of training from the player's profile (Opus 5.5), cached
 //            per week and per profile so it is built once, not on every open
-//   chat   — a coaching reply with memory of past sessions (Sonnet 5), a
+//   chat   — a coaching reply with memory of past sessions (Sonnet 5.5), a
 //            daily cap, and a possible handoff to a human coach
 //   memory — read what the coach remembers (the app clears it directly)
 //
@@ -17,15 +17,24 @@
 // agree in the app, even from an older copy of the app that never asked
 // (Apple 5.1.2(i) and 5.1.3, Oct 5). So run migration 115 before adding the key.
 // (SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY / SUPABASE_ANON_KEY are provided.)
-import Anthropic from 'npm:@anthropic-ai/sdk@0.128.0';
+import Anthropic from 'npm:@anthropic-ai/sdk@0.129.0'; // 0.129.0 is the first with Sonnet 5.5's between_tools thinking
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { takeRate } from '../_shared/rateLimit.ts';
 
 const PLAN_MODEL = 'claude-opus-5-5';
-const CHAT_MODEL = 'claude-sonnet-5';
+// Sonnet 5.5 (Sept 2026): Sonnet 5's price, and it caches prompts from 512
+// tokens (Sonnet 5 needed 1,024). The chat also ends on a system note in the
+// conversation itself, which Sonnet 5.5 takes and Sonnet 5 does not: going
+// back to Sonnet 5 means moving that note into the user's message.
+// Chat and notes calls send thinking 'between_tools': no thinking before the
+// reply (there are no tools, so the reply is plain text and no thinking is
+// billed). It is Sonnet 5.5's lowest setting and works at 'high' effort or
+// below; Sonnet 5 would need 'disabled' instead, which Sonnet 5.5 refuses.
+const CHAT_MODEL = 'claude-sonnet-5-5';
 const DAILY_CAP = 20;
-const REMEMBERED = 10;          // exchanges fed into every chat request
-const SUMMARISE_EVERY = 10;     // exchanges between summary refreshes
+const REMEMBERED = 10;          // recent entries (5 questions) checked for a repeated topic
+const SUMMARISE_EVERY = 10;     // questions between refreshes of the coach's notes
+const KEPT_BEFORE_NOTES = 4;    // entries from before the last refresh still shown word for word
 const HANDOFF_COOLDOWN_DAYS = 7;
 const PLAN_CAP_PER_WEEK = 3;    // regenerations a player gets for one week
 const LIMITS = { prompt: 2000, context: 6000, coaches: 12 };
@@ -64,7 +73,8 @@ How to answer:
 
 /* ------------------------------------------------------------------ types */
 
-interface Exchange { role: 'user' | 'coach'; body: string; topic?: string; created_at: string }
+// `folded` marks the answer after which the coach's notes were last refreshed.
+interface Exchange { role: 'user' | 'coach'; body: string; topic?: string; created_at: string; folded?: true }
 interface CoachOption { id: string; name: string; specialties: string[]; fromCents: number }
 
 type Handoff = { coachId: string; reason: 'repeat-topic' | 'needs-eyes' | 'injury'; topic: string; line: string };
@@ -98,6 +108,16 @@ function thisMonday(): string {
 }
 
 /**
+ * One line per model call in the function log: the tokens it used, and how
+ * many were read back from the prompt cache (cache_read) or newly stored in it
+ * (cache_write). That is how to check the cache is working. No player data.
+ */
+function logUsage(kind: 'plan' | 'chat' | 'notes', r: Anthropic.Message) {
+  const u = r.usage;
+  console.log(`[ai-coach] ${kind} ${r.model} in=${u.input_tokens} cache_read=${u.cache_read_input_tokens ?? 0} cache_write=${u.cache_creation_input_tokens ?? 0} out=${u.output_tokens} stop=${r.stop_reason}`);
+}
+
+/**
  * The request body, trimmed to what the function actually uses and to sizes
  * that keep one call's cost bounded. Anything else in the body is dropped.
  */
@@ -108,7 +128,7 @@ function clean(raw: unknown) {
     ? (b.coaches as unknown[]).slice(0, LIMITS.coaches).flatMap((c) => {
         const o = c as Record<string, unknown>;
         if (!o || typeof o.id !== 'string' || typeof o.name !== 'string' || !Array.isArray(o.specialties) || !Number.isFinite(o.fromCents)) return [];
-        return [{ id: o.id.slice(0, 64), name: o.name.slice(0, 80), specialties: (o.specialties as unknown[]).filter((x) => typeof x === 'string').slice(0, 6) as string[], fromCents: Number(o.fromCents) }];
+        return [{ id: o.id.slice(0, 64), name: o.name.slice(0, 80), specialties: ((o.specialties as unknown[]).filter((x) => typeof x === 'string') as string[]).slice(0, 6).map((s) => s.slice(0, 40)), fromCents: Number(o.fromCents) }];
       })
     : [];
   const mode = ['status', 'plan', 'chat', 'memory'].includes(String(b.mode)) ? (String(b.mode) as 'status' | 'plan' | 'chat' | 'memory') : 'chat';
@@ -204,12 +224,16 @@ async function buildPlan(userId: string, body: { context: string; profileHash: s
       effort: 'medium',
       format: { type: 'json_schema', schema: PLAN_SCHEMA },
     },
+    // The same for everyone first (VOICE + rules, cached along with the
+    // schema), then this player. It only pays when two weeks are written
+    // within five minutes of each other, as on a busy Monday morning.
     system: [
       { type: 'text', text: `${VOICE}\n\nYou are writing one week of training. Rules:\n- Exactly the number of on-court sessions the player can commit to; the rest are rest or light days.\n- Never two hard days back to back. Rest days have at most one recovery block.\n- Any injury note caps that area's volume and removes back-to-back loading of it; say so in a caution.\n- If a tournament is within 7 days, taper. Within 30 days, sharpen with match patterns. Otherwise build.\n- Recovery below 65% drops intensity across the week.\n- Every block's rationale is one sentence a player can understand, naming what about them made you choose it.`, cache_control: { type: 'ephemeral' } },
       { type: 'text', text: `About this player:\n${body.context}\n\nThe week starts ${weekOf} (a Monday).` },
     ],
     messages: [{ role: 'user', content: 'Write this week.' }],
   });
+  logUsage('plan', response);
   if (response.stop_reason === 'refusal') throw new Error('The model declined to write a plan.');
   const text = response.content.filter((b) => b.type === 'text').map((b) => b.text).join('');
   const plan = settleWeek(JSON.parse(text));
@@ -243,6 +267,36 @@ const CHAT_SCHEMA = {
   },
 } as const;
 
+// The same for every player and every question, so it goes right after VOICE
+// and both are cached once for everyone (the API adds the reply schema too).
+// What changes per question (which coaches, which topics have repeated,
+// whether a suggestion is allowed at all) comes last, in a note from
+// CourtSide at the end of the conversation, so it never breaks the cache.
+const CHAT_RULES = `Suggesting a human coach (the handoff field):
+- The last message in the conversation is a note from CourtSide, not from the player. It says whether you may suggest a coach in this reply, lists the human coaches on CourtSide who could take this player, and names any topic the player has already raised twice.
+- Suggest one ONLY when the note allows it and: the player has now raised the same topic three times, or the question cannot be answered well without watching them play, or an injury needs a person to look at it.
+- Pick the coach whose specialty fits and use their id from the note. The line is one sentence in your voice: why this coach, and what they would look at.
+- Otherwise handoff is null.`;
+
+/**
+ * The conversation the model sees word for word: everything since the coach's
+ * notes were last refreshed, plus the two exchanges just before that. Between
+ * refreshes it only grows, so each question's history starts exactly like the
+ * last one's and is read back from the cache rather than paid for in full.
+ * (A sliding "last 10" changed its first message every time, so it never could.)
+ */
+function shownHistory(exchanges: Exchange[]): Exchange[] {
+  const fold = exchanges.findLastIndex((e) => e.folded);
+  let shown = fold >= 0
+    ? exchanges.slice(Math.max(0, fold + 1 - KEPT_BEFORE_NOTES))
+    : exchanges.length <= 2 * SUMMARISE_EVERY
+      ? exchanges                      // before the first refresh: all of it
+      : exchanges.slice(-REMEMBERED);  // a long history from before the marks existed
+  shown = shown.filter((e) => e.body?.trim());
+  while (shown[0]?.role === 'coach') shown = shown.slice(1); // the conversation opens on the player
+  return shown;
+}
+
 async function chat(userId: string, body: { prompt: string; context: string; coaches: CoachOption[] }) {
   // The question takes its place in today's count before the model is
   // called, in one step the database does atomically: a burst of questions
@@ -271,22 +325,38 @@ async function chat(userId: string, body: { prompt: string; context: string; coa
   }, {});
   const repeated = Object.entries(topicCounts).filter(([, n]) => n >= 2).map(([t]) => t);
 
+  // Cached, in order: VOICE + rules (everyone), this player's profile and
+  // notes (stable between refreshes), then the conversation up to its last
+  // answer. Only the new question and CourtSide's note are read fresh.
+  const history = shownHistory(exchanges);
+  const messages: Anthropic.MessageParam[] = history.map((e, i) => ({
+    role: e.role === 'coach' ? 'assistant' as const : 'user' as const,
+    content: [i === history.length - 1
+      ? { type: 'text' as const, text: e.body, cache_control: { type: 'ephemeral' as const } }
+      : { type: 'text' as const, text: e.body }],
+  }));
+  messages.push({ role: 'user', content: [{ type: 'text', text: body.prompt.trim() }] });
+  messages.push({
+    role: 'system',
+    content: handoffAllowed
+      ? `Human coaches on CourtSide who could take this player:\n${body.coaches.map((c) => `- id ${c.id}: ${c.name}, ${c.specialties.join(' & ')}${c.fromCents > 0 ? `, from $${(c.fromCents / 100).toFixed(0)}` : ''}`).join('\n')}\n\nTopics the player has already raised twice: ${repeated.length ? repeated.join(', ') : 'none yet'}. You may suggest one of these coaches in this reply if the rules call for it.`
+      : 'You may not suggest a human coach in this reply: handoff must be null.',
+  });
+
   const response = await anthropic.messages.create({
     model: CHAT_MODEL,
-    max_tokens: 1500,
+    max_tokens: 2000,
+    thinking: { type: 'between_tools' },
     output_config: { effort: 'low', format: { type: 'json_schema', schema: CHAT_SCHEMA } },
     system: [
-      { type: 'text', text: VOICE, cache_control: { type: 'ephemeral' } },
-      { type: 'text', text: `About this player:\n${body.context}\n\nWhat you remember from earlier sessions:\n${summary || '(first conversations — nothing yet)'}` },
-      { type: 'text', text: handoffAllowed
-        ? `Human coaches on CourtSide who could take this player:\n${body.coaches.map((c) => `- id ${c.id}: ${c.name}, ${c.specialties.join(' & ')}${c.fromCents > 0 ? `, from $${(c.fromCents / 100).toFixed(0)}` : ''}`).join('\n')}\n\nSuggest one ONLY if: the player has now raised the same topic three times (${repeated.length ? `already twice: ${repeated.join(', ')}` : 'no topic has repeated yet'}), or the question cannot be answered well without watching them play, or an injury needs a person to look at it. Pick the coach whose specialty fits. Otherwise handoff is null.`
-        : 'Do not suggest a human coach in this reply; handoff must be null.' },
+      { type: 'text', text: `${VOICE}\n\n${CHAT_RULES}`, cache_control: { type: 'ephemeral' } },
+      { type: 'text', text: `About this player:\n${body.context}\n\nWhat you remember from earlier sessions:\n${summary || '(first conversations — nothing yet)'}`, cache_control: { type: 'ephemeral' } },
     ],
-    messages: [
-      ...recent.map((e) => ({ role: e.role === 'coach' ? 'assistant' as const : 'user' as const, content: e.body })),
-      { role: 'user', content: body.prompt.trim() },
-    ],
+    messages,
   });
+  logUsage('chat', response);
+  // Cut off mid-answer, the reply is not whole JSON: say so plainly rather than fail on parsing it.
+  if (response.stop_reason === 'max_tokens') throw new Error('Chat reply ran past max_tokens.');
 
   let reply = 'I would rather not answer that one. Ask me about your game and I am all in.';
   let topic = 'other';
@@ -305,25 +375,43 @@ async function chat(userId: string, body: { prompt: string; context: string; coa
   const now = new Date().toISOString();
   const asked: Exchange = { role: 'user', body: body.prompt.trim(), topic, created_at: now };
   const answered: Exchange = { role: 'coach', body: reply, topic, created_at: now };
-  const nextExchanges: Exchange[] = [...exchanges, asked, answered].slice(-40);
+  const all: Exchange[] = [...exchanges, asked, answered];
 
-  // Every so often, fold the older exchanges into the running summary.
+  // Every SUMMARISE_EVERY questions, fold what was said since the last refresh
+  // into the coach's notes, and mark this answer as the new starting point.
+  // Counting from the mark is the fix for Oct 5: the stored history keeps only
+  // the last 40 entries (20 questions), so counting every question in it stuck
+  // at 20 and refreshed the notes on every single question after the 20th.
+  // The mark is set whenever the notes call comes back, even when its answer
+  // is not usable (a refusal or a cut-off would fail the same way again, and
+  // retrying would bring that every-question refresh back). Only a call that
+  // never came back (network or server error) is tried again next question.
   let nextSummary = summary;
-  const userTurns = nextExchanges.filter((e) => e.role === 'user').length;
-  if (userTurns > 0 && userTurns % SUMMARISE_EVERY === 0) {
-    const folded = await anthropic.messages.create({
-      model: CHAT_MODEL,
-      max_tokens: 400,
-      output_config: { effort: 'low' },
-      system: 'You keep a coach\'s private notes on one player. Update the notes from the transcript. One paragraph, under 120 words, plain sentences: what they are working on, what was advised, what they said helped or did not, anything to watch (injury, schedule). Drop what is no longer relevant. Output only the paragraph.',
-      messages: [{ role: 'user', content: `Current notes:\n${summary || '(none)'}\n\nTranscript since:\n${nextExchanges.slice(-2 * SUMMARISE_EVERY).map((e) => `${e.role}: ${e.body}`).join('\n')}` }],
-    });
-    nextSummary = folded.content.filter((b) => b.type === 'text').map((b) => b.text).join('').trim() || summary;
+  const unfolded = all.slice(all.findLastIndex((e) => e.folded) + 1);
+  if (unfolded.filter((e) => e.role === 'user').length >= SUMMARISE_EVERY) {
+    try {
+      const folded = await anthropic.messages.create({
+        model: CHAT_MODEL,
+        max_tokens: 2000,
+        thinking: { type: 'between_tools' },
+        output_config: { effort: 'low' },
+        system: 'You keep a coach\'s private notes on one player. Update the notes from the transcript. One paragraph, under 120 words, plain sentences: what they are working on, what was advised, what they said helped or did not, anything to watch (injury, schedule). Drop what is no longer relevant. Output only the paragraph.',
+        messages: [{ role: 'user', content: `Current notes:\n${summary || '(none)'}\n\nTranscript since:\n${unfolded.map((e) => `${e.role}: ${e.body}`).join('\n')}` }],
+      });
+      logUsage('notes', folded);
+      const text = folded.content.filter((b) => b.type === 'text').map((b) => b.text).join('').trim();
+      // Only a finished paragraph replaces the notes; otherwise the old notes stay
+      // and the next try is 10 questions on.
+      if (folded.stop_reason === 'end_turn' && text) nextSummary = text;
+      answered.folded = true;
+    } catch (err) {
+      // The call never came back. The player still gets this answer; the notes are tried again on the next question.
+      console.error('[ai-coach] notes', err);
+    }
   }
+  const nextExchanges = all.slice(-40);
 
-  await Promise.all([
-    admin.from('coach_memory').upsert({ user_id: userId, summary: nextSummary, exchanges: nextExchanges, updated_at: now }),
-  ]);
+  await admin.from('coach_memory').upsert({ user_id: userId, summary: nextSummary, exchanges: nextExchanges, updated_at: now });
 
   let handoffId: string | null = null;
   if (handoff) {
