@@ -62,8 +62,6 @@ export default function Index() {
   // picture to match, and the picture would land a few frames after the drawn copy, a tiny jump of
   // its own: the drawn copy stays, and fades as soon as it is laid out, as before (Oct 5).
   const [fromLaunch] = useState(launchShowing);
-  // Whether the cover's copy of the picture has drawn (until then the drawn logo sits under it).
-  const [coverDrawn, setCoverDrawn] = useState(false);
   const fadeStarted = useRef(false);
   const startCoverFade = () => {
     if (fadeStarted.current) return;
@@ -194,16 +192,20 @@ export default function Index() {
           {/* The phone's own launch picture itself, drawn the same way (cover is the same sums as the phone's
               fill), so the hand-over is pixel for pixel (Oct 4, owner: "smooth like Instagram"; then "should not
               be misalignment even if it's a tiny bit"). The drawn copy that stood here never quite matched the
-              picture (its name is not set in Inter there), which showed as a tiny jump at the cut. Until the
-              picture has drawn, and should it ever fail to load, the drawn copy waits underneath. */}
-          {coverDrawn ? null : <LaunchMark ink={lightColors.brand} faint={lightColors.textFaint} />}
+              picture (its name is not set in Inter there), which showed as a tiny jump at the cut. The drawn
+              copy stays underneath the whole time (Oct 5, owner: "it flashes and logos disappear while it fades"):
+              a phone can report the picture loaded a frame or two before it is on screen, and taking the drawn
+              copy away at that report left bare cream, with no logo, through the fade. The picture is opaque, so
+              once it is up the copy under it never shows; if it is late, or never comes, the copy is there. */}
+          <LaunchMark ink={lightColors.brand} faint={lightColors.textFaint} />
           {fromLaunch ? (
             <Image
               source={require('../assets/splash.png')}
               resizeMode="cover"
               fadeDuration={0}
               style={StyleSheet.absoluteFill}
-              onLoad={() => { setCoverDrawn(true); startCoverFade(); }}
+              // Two frames after "loaded", so the picture is on screen before the phone's own one is taken away.
+              onLoad={() => requestAnimationFrame(() => requestAnimationFrame(startCoverFade))}
               onError={startCoverFade}
             />
           ) : null}
