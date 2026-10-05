@@ -49,19 +49,34 @@ export default function StoryViewer() {
   const current = list[Math.min(index, list.length - 1)];
   const progress = useRef(new Animated.Value(0)).current;
 
-  // Count the view, then run the bar; when it fills, move along.
+  // Count the view and start the bar afresh only when the Instant itself changes.
   useEffect(() => {
     if (!current) return;
     actions.markStoryViewed(current.id);
     progress.setValue(0);
-    const run = Animated.timing(progress, { toValue: 1, duration: current.videoUrl ? VIDEO_MS : PHOTO_MS, useNativeDriver: false });
-    run.start(({ finished }) => {
-      if (!finished) return;
-      if (index < list.length - 1) setIndex(index + 1);
-      else goBack('/');
+  }, [current?.id, index, actions, progress]);
+  // Run the bar while this viewer is the page on screen; when it fills, move
+  // along. A page opened on top (comments, a profile, likes) pauses it where it
+  // is, and it carries on from there on the way back. It never moves on while
+  // covered, or its goBack would close that page instead of the viewer.
+  const focusedRef = useRef(focused);
+  focusedRef.current = focused;
+  useEffect(() => {
+    if (!current || !focused) return;
+    let stopped = false;
+    let run: Animated.CompositeAnimation | undefined;
+    progress.stopAnimation((value) => {
+      if (stopped) return;
+      const total = current.videoUrl ? VIDEO_MS : PHOTO_MS;
+      run = Animated.timing(progress, { toValue: 1, duration: Math.max(0, (1 - value) * total), useNativeDriver: false });
+      run.start(({ finished }) => {
+        if (!finished || !focusedRef.current) return;
+        if (index < list.length - 1) setIndex(index + 1);
+        else goBack('/');
+      });
     });
-    return () => run.stop();
-  }, [current?.id, index, list.length, actions, progress]);
+    return () => { stopped = true; run?.stop(); };
+  }, [current?.id, index, list.length, focused, progress]);
 
   if (!user || !current) {
     return (
