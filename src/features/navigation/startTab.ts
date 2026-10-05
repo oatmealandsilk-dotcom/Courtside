@@ -1,7 +1,7 @@
 import { Platform } from 'react-native';
 import { router, type Href } from 'expo-router';
 
-import { HOME } from '@/lib/goBack';
+import { HOME, mustCloseToReachTabs } from '@/lib/goBack';
 import { setInstantExit } from '@/features/navigation/instantExit';
 import { requestScrollToTop } from '@/features/navigation/scrollToTop';
 import { askedSection, requestSection } from '@/features/navigation/swipeOrder';
@@ -68,7 +68,8 @@ export function askForCommunityMap() {
  */
 export function goToStart() {
   requestSection(START_TAB, START_SECTION);
-  if (router.canDismiss()) router.dismissTo(START_HREF);
+  // On a tab already, the tabs move across (see mustCloseToReachTabs).
+  if (mustCloseToReachTabs()) router.dismissTo(START_HREF);
   else router.navigate(START_HREF);
 }
 
@@ -85,7 +86,7 @@ export function goToStart() {
  */
 export function goToTab(pathname: TabPath, instant = false) {
   const href: Href = pathname === '/' ? HOME : pathname;
-  if (!router.canDismiss()) { router.navigate(href); return; }
+  if (!mustCloseToReachTabs()) { router.navigate(href); return; }
   if (!instant || Platform.OS === 'web') { router.dismissTo(href); return; }
   setInstantExit(true);
   // One frame for the stack to take the "no slide" setting before the page is dismissed (as the bar does).

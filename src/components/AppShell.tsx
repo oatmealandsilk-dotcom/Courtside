@@ -1,8 +1,8 @@
 import { useTheme } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { AppState, Platform, View } from 'react-native';
-import { goBack, goHome } from '@/lib/goBack';
-import { router, useGlobalSearchParams, usePathname, useSegments } from 'expo-router';
+import { goBack, goHome, setRootNavigation } from '@/lib/goBack';
+import { router, useGlobalSearchParams, useNavigationContainerRef, usePathname, useSegments } from 'expo-router';
 import { NavBar } from './NavBar';
 import { setInstantExit } from '@/features/navigation/instantExit';
 import { UploadBar } from '@/components/UploadBar';
@@ -90,6 +90,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [pathname]);
+  // The going-home helpers look at which page is on show (see tabsOnShow in goBack).
+  const rootNavigation = useNavigationContainerRef();
+  useEffect(() => { setRootNavigation(rootNavigation); return () => setRootNavigation(null); }, [rootNavigation]);
   const { currentUserId, currentUser, ready, authResolved, remoteLoaded, onboardingComplete, termsVersion, healthIsReal, actions } = useApp();
   // Crash reports say which screen they happened on.
   useEffect(() => { setCrashScreen(pathname); }, [pathname]);
