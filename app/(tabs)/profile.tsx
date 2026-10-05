@@ -3,7 +3,7 @@ import { isDesktopBrowser } from '@/lib/browserDevice';
 import { PlayerName } from '@/components/PlayerName';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { readSkipped, type SetupStep } from '@/features/onboarding/setupProgress';
+import { onSkippedSaved, readSkipped, type SetupStep } from '@/features/onboarding/setupProgress';
 import { Image, Pressable, Share, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -55,7 +55,14 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
  const [shareError, setShareError] = useState('');
  // Steps skipped during setup; the card below offers to finish them.
  const [skipped, setSkipped] = useState<SetupStep[]>([]);
- useEffect(() => { if (user?.id) readSkipped(user.id).then(setSkipped); }, [user?.id]);
+ useEffect(() => {
+  if (!user?.id) return undefined;
+  const id = user.id;
+  const read = () => { void readSkipped(id).then(setSkipped); };
+  read();
+  // Finishing setup from the card comes back to this same page: the card follows.
+  return onSkippedSaved(read);
+ }, [user?.id]);
  const SETUP_STEP_INDEX: Record<SetupStep, number> = { permissions: 2, body: 3, calendar: 4 };
  // The underline under Posts / Clips / Tagged travels with the finger during a
  // swipe and glides on a tap, instead of jumping once the page changes.

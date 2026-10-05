@@ -17,9 +17,18 @@ export async function readSkipped(userId: string): Promise<SetupStep[]> {
   }
 }
 
+const listeners = new Set<() => void>();
+
+/** Hears each save of the skipped steps, so a profile already open updates its "Finish setting up" card. Returns the way to stop. */
+export function onSkippedSaved(fn: () => void): () => void {
+  listeners.add(fn);
+  return () => { listeners.delete(fn); };
+}
+
 export async function writeSkipped(userId: string, steps: SetupStep[]): Promise<void> {
   try {
     if (steps.length) await AsyncStorage.setItem(key(userId), JSON.stringify(steps));
     else await AsyncStorage.removeItem(key(userId));
   } catch { /* A device that refuses storage just loses the reminder. */ }
+  listeners.forEach((fn) => fn());
 }

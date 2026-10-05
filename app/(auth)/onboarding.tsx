@@ -305,12 +305,12 @@ export default function Onboarding() {
     }
     actions.completeOnboarding(profile);
     if (currentUserId) void writeSkipped(currentUserId, [...skipped.current]);
-    // Came here from the profile's "finish setting up"? Back to the profile, not to where the app opens.
+    // Came here from the profile's "finish setting up"? Back down to the profile underneath (never a second copy of the tabs on top), not to where the app opens.
     // A new player with nothing posted yet goes on to their first move; anyone
     // else into the app on its start page (Community, on the map: see startTab).
     const hasPosted = !!currentUserId && (posts.some((p) => p.authorId === currentUserId) || questions.some((q) => q.authorId === currentUserId) || answers.some((a) => a.authorId === currentUserId));
     // Joined from a shared link: straight on to what they opened (see useShareLanding), not the first-move page.
-    if (params.from === 'profile') router.replace('/(tabs)/profile');
+    if (params.from === 'profile') goBack('/(tabs)/profile');
     else if (hasPosted || peekShareTarget()) replaceWithStart();
     else router.replace('/first-move');
   };
