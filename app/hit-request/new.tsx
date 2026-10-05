@@ -13,6 +13,8 @@ import { opensAtFor } from '@/features/hits/audience';
 import { AudienceCards, GroupsCard, InviteRow } from '@/features/hits/WhoSeesFirst';
 import { isMapCourtId } from '@/features/places/courtName';
 import { fetchCourts, isClosedCourt, type Court } from '@/features/players/courts';
+import { milesBetween } from '@/features/players/geo';
+import { hitsWithinLine } from '@/features/players/openToHit';
 import { homeFor } from '@/features/players/positions';
 import { useMyCity } from '@/features/players/useMyCity';
 import { show as showToast } from '@/lib/toast';
@@ -46,7 +48,7 @@ const FORMAT_LABEL: Record<HitRequest['format'], string> = { singles: 'Singles',
  */
 export default function NewHit() {
   const styles = useThemedStyles(styleDefinitions);
-  const { currentUser, detectedCoords, users, openness, feedGroups, actions } = useApp();
+  const { currentUser, detectedCoords, users, openness, feedGroups, lastSeen, actions } = useApp();
   const [closeSignal, setCloseSignal] = useState(0);
   const days = useMemo(() => Array.from({ length: 7 }, (_, i) => { const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() + i); return d; }), []);
   // Late in the evening there is no hour left today: start on tomorrow.
@@ -99,6 +101,13 @@ export default function NewHit() {
     fetchCourts(home).then((list) => { if (on) setCourts(list.filter((c) => !isClosedCourt(c))); }).catch(() => { if (on) setCourts([]); });
     return () => { on = false; };
   }, [home]);
+  // Asking one player who'd rather hit nearer than you are (migration 120): the same friendly line as their card, where you pick the court.
+  const farLine = useMemo(() => {
+    const them = asked.length === 1 ? asked[0] : null;
+    const spot = them ? lastSeen[them.id] : undefined;
+    if (!them || !spot || !home) return null;
+    return hitsWithinLine(them, milesBetween(home, spot), spot.city || them.location);
+  }, [asked, lastSeen, home]);
   const rating = currentUser?.profile.rating;
   const [level, setLevel] = useState<'any' | 'mine'>(rating ? 'mine' : 'any');
   // The rating may arrive a moment after the sheet: default to your level once it does.
@@ -201,7 +210,7 @@ export default function NewHit() {
           </Animated.View>
         </Section>
 
-        <Section title="Where">
+        <Section title="Where" hint={farLine ?? undefined}>
           <CourtSearch home={home} nearby={courts} chosen={place} onChoose={setPlace} typed={typed} onType={(t) => { setTyped(t); setPlace(null); }} />
         </Section>
 

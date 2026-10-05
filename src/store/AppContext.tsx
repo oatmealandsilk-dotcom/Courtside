@@ -37,7 +37,7 @@ import { postShare, reshare, sameShare } from '@/features/activity/healthShare';
 import { REFUSALS, maxTagsFor, canTagKind, firstName, isActive, localRefusal, mirrorCopy, nameFor, patchWith, reconcileWith, refusalWords, roleOn, tagsOnSession, withEntry, withOnNewPost } from '@/features/activity/sessionTags';
 import { duration } from '@/lib/format';
 import { forgetReferrer, peekReferrer } from '@/features/invite/referral';
-import { endOfToday } from '@/features/players/openToHit';
+import { asHitMiles, endOfToday } from '@/features/players/openToHit';
 import { pickNutritionExport } from '@/features/health/cronometer';
 import { nearestPlace } from '@/data/locations';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -568,6 +568,12 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
   setPrivateAccount: (enabled: boolean) => void;
   /** Up for a hit today: a green ring around you on the map until midnight. */
   setOpenToHit: (on: boolean) => void;
+  /**
+   * Holding your own ring (Oct 5, owner): open until a time you picked, and
+   * how far you'd like to go for a hit (5, 10 or 25 miles; null: any). The
+   * distance is shown to others, never a filter.
+   */
+  editOpenToHit: (until: string, miles: number | null) => void;
   /** Live check while typing a new handle: ok, yours, invalid, taken or held. Null if the check is not available. */
   checkHandle: (handle: string) => Promise<HandleStatus | null>;
   /** Changes your handle. Throws with a plain-English reason when it cannot. */
@@ -1245,16 +1251,20 @@ const cleanTitle = (title?: string) => (title ?? '').replace(/\s+/g, ' ').trim()
 function withMapRings(users: User[], seen: Record<ID, LastSeen>, me: ID | null, fresh: Record<ID, LastSeen> | null = null): User[] {
   let changed = false;
   const next = users.map((u) => {
+    // How far they'd like to go for a hit (migration 120) comes with the ring, and goes with it.
     const now = u.id === me ? undefined : fresh?.[u.id];
     if (now) {
-      if (u.openToHitUntil === now.openUntil) return u;
+      if (u.openToHitUntil === now.openUntil && u.openToHitMiles === now.openMiles) return u;
       changed = true;
-      return { ...u, openToHitUntil: now.openUntil };
+      return { ...u, openToHitUntil: now.openUntil, openToHitMiles: now.openMiles };
     }
-    const until = u.id === me ? undefined : seen[u.id]?.openUntil;
-    if (!until || (u.openToHitUntil && u.openToHitUntil >= until)) return u;
+    const row = u.id === me ? undefined : seen[u.id];
+    const until = row?.openUntil;
+    if (!until) return u;
+    if (u.openToHitUntil && u.openToHitUntil > until) return u;
+    if (u.openToHitUntil === until && (row?.openMiles === undefined || u.openToHitMiles === row.openMiles)) return u;
     changed = true;
-    return { ...u, openToHitUntil: until };
+    return { ...u, openToHitUntil: until, openToHitMiles: row?.openMiles ?? u.openToHitMiles };
   });
   return changed ? next : users;
 }
@@ -2977,6 +2987,39 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Each view asked for gets the next number: only the newest view's answer is kept,
   // so a slow answer for where the map was cannot replace the one for where it is.
   const viewSeq = useRef(0);
+  /**
+   * The distances for the rings just loaded (migration 120), laid on in the
+   * background so the pins never wait for them. Each lands only on a ring
+   * still open until the same time it was asked about; a failed ask keeps
+   * what was known.
+   */
+  const addOpenMiles = useCallback(async (loaded: Record<ID, LastSeen>, me: ID) => {
+    const now = Date.now();
+    const asked = new Map(Object.values(loaded).filter((r) => r.userId !== me && !!r.openUntil && Date.parse(r.openUntil) > now).map((r) => [r.userId, r.openUntil]));
+    if (!asked.size) return;
+    const miles = await remote.fetchOpenToHitMiles([...asked.keys()]);
+    if (!miles || stateRef.current.currentUserId !== me) return;
+    const withMiles = (rec: Record<ID, LastSeen>) => {
+      let changed = false;
+      const out = { ...rec };
+      for (const [id, until] of asked) {
+        const r = out[id];
+        if (!r || r.openUntil !== until || r.openMiles === miles[id]) continue;
+        const { openMiles: _was, ...rest } = r;
+        out[id] = miles[id] ? { ...rest, openMiles: miles[id] } : rest;
+        changed = true;
+      }
+      return changed ? out : rec;
+    };
+    const around = withMiles(seenAround.current);
+    const inView = withMiles(seenInView.current);
+    if (around === seenAround.current && inView === seenInView.current) return;
+    seenAround.current = around;
+    seenInView.current = inView;
+    const merged = { ...around, ...inView };
+    const fresh = Object.fromEntries([...asked.keys()].filter((id) => merged[id]).map((id) => [id, merged[id]]));
+    setState((prev) => ({ ...prev, lastSeen: merged, users: withMapRings(prev.users, merged, me, fresh) }));
+  }, []);
   const loadLastSeen = useCallback(async (view?: { minLat: number; minLng: number; maxLat: number; maxLng: number } | null): Promise<boolean> => {
     const me = stateRef.current.currentUserId;
     if (!live(me)) return true;
@@ -3020,15 +3063,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // A failed load keeps what was there and is not "loaded": an error must
     // never read as nobody near you (the "You're early" card waits on this).
     if (!rows) return false;
-    const loaded = Object.fromEntries(rows.filter((r) => !(stillShown && r.userId === me)).map((r) => [r.userId, r]));
+    // How far each ring would like to go for a hit (migration 120) is asked after
+    // the pins are up, never before; until it answers, a ring that has not
+    // changed keeps the distance it had, so a card never blinks its line.
+    const known = stateRef.current.lastSeen;
+    const loaded = Object.fromEntries(rows.filter((r) => !(stillShown && r.userId === me)).map((r) => {
+      const was = known[r.userId];
+      return [r.userId, r.openUntil && was?.openMiles && was.openUntil === r.openUntil ? { ...r, openMiles: was.openMiles } : r];
+    }));
     // The old table answers for everywhere at once: it replaces both.
     if (mapLive === false) { seenAround.current = loaded; seenInView.current = {}; }
     else if (view) seenInView.current = loaded;
     else seenAround.current = loaded;
     const merged = { ...seenAround.current, ...seenInView.current };
     setState((prev) => ({ ...prev, lastSeen: merged, lastSeenLoaded: true, users: withMapRings(prev.users, merged, me, mapLive === true ? loaded : null) }));
+    if (mapLive === true && me) void addOpenMiles(loaded, me);
     return true;
-  }, []);
+  }, [addOpenMiles]);
 
   const setMapVisibility = useCallback(async (v: MapVisibility): Promise<boolean> => {
     const me = stateRef.current.currentUserId;
@@ -6343,6 +6394,32 @@ export function AppProvider({ children }: { children: ReactNode }) {
     });
   }, [requireUser, patchCurrentUser]);
 
+  const editOpenToHit = useCallback((until: string, miles: number | null) => {
+    const me = requireUser();
+    const before = stateRef.current.users.find((u) => u.id === me);
+    const wasUntil = before?.openToHitUntil;
+    const wasMiles = before?.openToHitMiles;
+    const nextMiles = asHitMiles(miles);
+    haptics.commit();
+    patchCurrentUser((u) => ({ ...u, openToHitUntil: until, openToHitMiles: nextMiles }));
+    if (!live(me)) return;
+    const untilSaved = remote.updateProfile(me, { openToHitUntil: until }).catch(() => false);
+    // The distance only when it changed. Before migration 120 ('missing') it stays on this phone, and others read any distance.
+    const milesSaved: Promise<boolean | 'missing'> = nextMiles === wasMiles ? Promise.resolve(true) : remote.setOpenToHitMiles(nextMiles ?? null).catch(() => false);
+    void Promise.all([untilSaved, milesSaved]).then(([okUntil, okMiles]) => {
+      if ((okUntil && okMiles !== false) || stateRef.current.currentUserId !== me) return;
+      // Not saved: put back what the server still has (unless a later change has replaced it since), and say so.
+      const now = stateRef.current.users.find((u) => u.id === me);
+      patchCurrentUser((u) => ({
+        ...u,
+        ...(!okUntil && now?.openToHitUntil === until ? { openToHitUntil: wasUntil } : {}),
+        ...(okMiles === false && now?.openToHitMiles === nextMiles ? { openToHitMiles: wasMiles } : {}),
+      }));
+      haptics.untap();
+      showToast({ title: 'Couldn’t save Open to hit', body: 'Check your connection and try again.', icon: 'cloud-offline-outline' });
+    });
+  }, [requireUser, patchCurrentUser]);
+
   const toggleMute = useCallback((userId: ID, quiet?: boolean) => {
     const muting = !stateRef.current.mutedIds.includes(userId);
     // You can't mute yourself (unmuting stays open, so a self-mute saved before this can be undone).
@@ -6961,6 +7038,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       declineFollowRequest,
       setPrivateAccount,
       setOpenToHit,
+      editOpenToHit,
       checkHandle,
       changeHandle,
       toggleMute,
@@ -7168,6 +7246,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       declineFollowRequest,
       setPrivateAccount,
       setOpenToHit,
+      editOpenToHit,
       checkHandle,
       changeHandle,
       toggleMute,

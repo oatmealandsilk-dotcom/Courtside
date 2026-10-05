@@ -73,19 +73,24 @@ export function useLocationToggle(where: TipSpot = 'card') {
 }
 
 /**
- * The "Open to hit today" switch (Who's up today, your card on the map).
+ * The "Open to hit today" switch (the Open to hit row, your card on the map).
  * Someone not known to be an adult who has never said who can see them on
  * the map (migration 78) gets the same question first, with its short
  * notice, so their ring is never shared before they choose; closed without
  * an answer, the switch stays off. Everyone else: straight through.
+ * `edit`: Save in the hold-to-edit sheet, which turns the ring on until the
+ * time picked, with the distance picked (the same question first). Resolves
+ * false when the ring did not go on.
  */
 export function useOpenToHitToggle() {
   const { actions, mapLive, mapVisibility, currentUser, teenMap } = useApp();
-  return async (on: boolean) => {
+  return async (on: boolean, edit?: { until: string; miles: number | null }): Promise<boolean> => {
     if (on && mapLive === true && mapVisibility === null && onTeenMap(currentUser, teenMap)) {
       const chose = await askWhoSeesYou('first');
-      if (!chose) return;
+      if (!chose) return false;
     }
-    actions.setOpenToHit(on);
+    if (on && edit) actions.editOpenToHit(edit.until, edit.miles);
+    else actions.setOpenToHit(on);
+    return true;
   };
 }

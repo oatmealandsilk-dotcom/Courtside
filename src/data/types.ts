@@ -94,8 +94,14 @@ export interface User {
   readReceiptsEnabled?: boolean;
   /** Only followers see their posts, hits and stats; following needs a request they accept. */
   isPrivate?: boolean;
-  /** Up for a hit: shown as a green ring on the map until this moment (the end of the day they set it). */
+  /** Up for a hit: shown as a green ring on the map until this moment (midnight with one tap, or a time they picked). */
   openToHitUntil?: string;
+  /**
+   * How far they'd like to go for a hit while their ring is on: 5, 10 or 25
+   * miles (migration 120). A preference shown on their card, never a filter.
+   * Absent: any distance (and always, before migration 120).
+   */
+  openToHitMiles?: number;
   /** When the handle last changed; it can change again 30 days after. */
   handleChangedAt?: string;
   /** From the age check: a teen account (13 to 17) or an adult one. The date of birth itself is never shown. */
@@ -1178,6 +1184,8 @@ export interface LastSeen {
   courtName?: string;
   /** Up for a hit until then (today); absent when not, or before migration 63. */
   openUntil?: string;
+  /** While they are up for a hit: how far they'd like to go (5, 10 or 25 miles; migration 120). Absent: any distance. */
+  openMiles?: number;
   /**
    * A friend who follows each other with you (map_players, migration 98).
    * Friends come back from anywhere in the world; everyone else only near

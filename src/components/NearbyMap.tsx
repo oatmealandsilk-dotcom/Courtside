@@ -20,6 +20,7 @@ import { askWhoSeesYou, canChooseVisibility, nearbyLock, onTeenMap } from '@/fea
 import { useOpenToHitToggle } from '@/features/players/useLocationToggle';
 import { askToHit } from '@/features/players/courtLink';
 import { isOpenToHit } from '@/features/players/openToHit';
+import { useOpenClock } from '@/features/players/useOpenClock';
 import { useBarInset } from '@/features/navigation/barInset';
 import { useWeather } from '@/features/players/useWeather';
 import { show as showToast } from '@/lib/toast';
@@ -85,6 +86,8 @@ export function NearbyMap(props: NearbyMapProps) {
   const toggleOpen = useOpenToHitToggle();
   // Your own pin, tapped: the card with your open-to-hit switch.
   const [meOpen, setMeOpen] = useState(false);
+  // Your ring (and your card's switch) go out by themselves at the time you picked.
+  useOpenClock([me.openToHitUntil]);
   const openToHit = isOpenToHit(me);
   const model = useMapModel(me, players, at, focusCourt, !expanded, focusHit, focusUser, focusSpot, !!locationOn, focusPlace);
   // The still card on the start page holds the opening curtain until its streets are drawn (see warmup).

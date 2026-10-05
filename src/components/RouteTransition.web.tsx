@@ -19,6 +19,8 @@ SHEETS.add('/court-report');
 SHEETS.add('/court-now');
 // "Who can see you on the map?" sits over the map or Find Players the same way.
 SHEETS.add('/map-visibility');
+// So does Open to hit's hold-to-edit sheet, over Find Players.
+SHEETS.add('/open-to-hit');
 
 /**
  * Animate the content without remounting the router or moving navigation.
