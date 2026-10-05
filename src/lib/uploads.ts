@@ -143,6 +143,25 @@ export function useTagPosting(tag: string): boolean {
   return useSyncExternalStore(subscribe, get, get);
 }
 
+/**
+ * Runs `fn` once the post with this id has landed: straight away if nothing
+ * of it is going up (words only, or it has landed already), else when its
+ * upload is done. A failed or cancelled upload never calls it, so nothing
+ * says "Posted" about a post that did not go up.
+ */
+export function whenLanded(id: string | undefined, fn: () => void): void {
+  const job = () => jobs.find((j) => j.id === id);
+  const now = job();
+  if (!now || now.state === 'done') { fn(); return; }
+  if (now.state === 'failed') return;
+  const off = subscribe(() => {
+    const j = job();
+    if (j?.state === 'uploading') return;
+    off();
+    if (j?.state === 'done') fn();
+  });
+}
+
 /** Milliseconds since a post from this phone last started or finished going up this session (Infinity if never). */
 export function sinceLastPost(): number {
   return lastStartedAt ? Date.now() - lastStartedAt : Infinity;
