@@ -1,83 +1,72 @@
 # Sharing a session straight into Instagram Stories
 
-## What works today (no new App Store build needed)
-
 The **Share** page for a session (`app/share-session.tsx`) makes a
-1080 × 1920 picture in one of three designs: your photo with the session card
-on it, the card filling the story, or the card alone as a see-through sticker.
+1080 × 1920 picture in one of four designs: **Photo** (your photo with the
+session card on it), **Card** (the card filling the story), **Sticker** (the
+card alone on a see-through ground) and **Overlay** (just the numbers and the
+mark in white, see-through).
 
-- **Instagram Stories** opens the iPhone's share sheet with the picture.
-  Instagram is one of the apps in it; tapping it offers Stories, Feed or
-  Messages. That is one more tap than Strava, and Instagram treats the picture
-  as the story's background, so a see-through sticker cannot be dragged
-  around on top of a photo this way.
-- **Save image** puts it in Photos (builds 11 and later, which carry the
-  "add to your photo library" permission). From there, Instagram's own photo
-  sticker can lay the see-through sticker over any story.
-- **More…** is the same share sheet for any other app.
-- On the website the picture is shared as a file where the browser can (most
+## What the Stories button does, by build (Oct 4)
+
+- **iPhone, a build that carries react-native-share (build 14 for certain),
+  Instagram installed**: Instagram opens on its story editor with the picture already
+  in it, the way Strava does. Photo and Card go in as the whole story. Sticker
+  goes in as a sticker you can move and resize, over the court's brand and
+  page colours; Overlay as a sticker over the court colour, deepened so the
+  white numbers read.
+- **Same build, no Instagram on the phone**: the phone's share sheet opens
+  with the picture (the app checks first, so the button never does nothing).
+- **Older iPhone builds** (no react-native-share): the picture goes on the
+  clipboard and Instagram opens on its story camera; the app says to pick a
+  photo first, then tap Add sticker (or tap and hold, then Paste). Without
+  Instagram, the share sheet.
+- **Android**: the share sheet, where Instagram offers Stories, Feed and Chats.
+- **Website**: the picture is shared as a file where the browser can (most
   phones) and saved to downloads where it cannot.
 
-## Why the direct route has to wait for build 12
+**Copy** puts the picture on the clipboard (to paste onto a story of your own
+as a sticker), **Save** puts it in Photos (builds 11 on), **More** is the share
+sheet for any other app.
 
-Strava's button opens Instagram already on the Stories editor, with the stats
-as a sticker you can move and resize over your own photo. Instagram's way of
-doing that ("Sharing to Stories") is:
+## How the hand-over works (for reference)
 
-1. Put the picture on the iPhone's pasteboard (its copy-and-paste clipboard)
-   under Instagram's own item names: `com.instagram.sharedSticker.stickerImage`
-   (the sticker) and/or `com.instagram.sharedSticker.backgroundImage`, plus
-   `com.instagram.sharedSticker.backgroundTopColor` / `BottomColor`, with a
-   five-minute expiry.
-2. Open `instagram-stories://share?source_application=<Facebook App ID>`.
+Instagram's "Sharing to Stories" on iPhone, which `react-native-share` does
+for us in `src/features/share/storyImage.ts`:
 
-Neither step is possible with what the current build has:
+1. The picture goes on the iPhone's pasteboard (its copy-and-paste clipboard)
+   under Instagram's own item names, `com.instagram.sharedSticker.stickerImage`
+   or `com.instagram.sharedSticker.backgroundImage`, plus
+   `com.instagram.sharedSticker.backgroundTopColor` / `backgroundBottomColor`,
+   kept for five minutes.
+2. The app opens `instagram-stories://share?source_application=1407829631564079`
+   (CourtSide's Facebook App ID; Instagram ignores the share without one).
 
-- **Custom pasteboard items.** `expo-clipboard` can only put plain text, an
-  image or a link on the clipboard, under the standard names. Instagram looks
-  only at its own names, so it would open with an empty story. Writing those
-  names needs a few lines of native (Swift / Objective-C) code, and native
-  code only reaches phones through a new App Store build.
-- **Asking whether Instagram is installed.** iPhone only answers
-  `canOpenURL("instagram-stories://")` for addresses the app lists in its
-  settings (`LSApplicationQueriesSchemes`). That list is fixed when the app is
-  built.
-- **A Facebook App ID.** Since 2023 Instagram ignores the share without one.
+`app.config.js` lists `instagram-stories` and `instagram` under
+`LSApplicationQueriesSchemes`, which is what lets the app ask the phone whether
+Instagram is installed. The JS only loads react-native-share where the build
+carries it, so the same code is safe on older builds after an instant update.
 
-## What build 12 needs
+## Testing it on build 14
 
-1. **A Facebook App ID** (free). William: create an app at
-   developers.facebook.com → My Apps → Create App ("Other" → "Consumer"), and
-   copy the App ID number from the app's dashboard. No review is needed for
-   Stories sharing.
-2. **In `app.config.js`**, under `ios.infoPlist`:
+On an iPhone with Instagram installed and signed in, open a session → Share,
+and tap Stories once on each of the four designs. Each should open Instagram's
+story editor with the picture in it. Then delete Instagram (or try a phone
+without it) and tap Stories: the share sheet should open.
 
-   ```js
-   LSApplicationQueriesSchemes: ['instagram-stories', 'instagram'],
-   ```
+If Instagram opens but the story is empty, the Facebook App ID is the first
+thing to check: on developers.facebook.com → My Apps → CourtSide, the App ID at
+the top must read 1407829631564079.
 
-   and the App ID under `extra` (for example `extra.facebookAppId`), so the
-   code can read it.
-3. **The native piece**, either of:
-   - **`react-native-share`** (an existing, widely used package): its
-     `Share.shareSingle({ social: Share.Social.INSTAGRAM_STORIES, appId,
-     stickerImage, backgroundImage, backgroundTopColor, backgroundBottomColor })`
-     does both steps. Add it with `npx expo install react-native-share`; it
-     needs the same `LSApplicationQueriesSchemes` entry above. On Android it
-     uses Instagram's `com.instagram.share.ADD_TO_STORY` intent.
-   - or **a small Expo module of our own** (`modules/instagram-stories`, about
-     40 lines of Swift) that writes the pasteboard items and opens the
-     address. Smaller, but ours to maintain.
-4. **In `src/features/share/storyImage.ts`**, for the "Instagram Stories"
-   button: when Instagram is installed, send
-   - the **Sticker** design as `stickerImage` over the theme's two colours
-     (`backgroundTopColor` / `backgroundBottomColor`), or over the post's
-     photo as `backgroundImage`;
-   - the **Photo** and **Card** designs as `backgroundImage`.
-   Keep today's share sheet as the fallback when Instagram is not installed
-   or the native piece is missing (an older build reading the same code).
-5. Bump `version` in `app.config.js` (native code changed), make the build,
-   and test on a phone with Instagram installed.
+## Not done yet
+
+- **Android straight into Stories.** It needs Android to be allowed to see
+  Instagram (a `<queries>` line for `com.instagram.android` in the Android
+  manifest, which takes a native build) and the picture passed as a file. Until
+  then Android uses the share sheet, which already offers Instagram Stories.
+- **A tighter sticker.** Sticker and Overlay are handed over as the whole
+  9:16 picture with a see-through ground, so they arrive in Instagram the size
+  the preview shows. If Instagram shows them smaller than wanted on build 14,
+  the fix is to photograph only the card for those two designs.
 
 ## Privacy rules the pictures already follow
 

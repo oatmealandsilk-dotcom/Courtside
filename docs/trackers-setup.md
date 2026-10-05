@@ -4,7 +4,8 @@ CourtSide can now pick up tennis sessions from Fitbit, Oura and Polar the way
 it already does from WHOOP: you record tennis on your tracker, and it shows up
 in CourtSide as "Tennis detected", ready to log in one tap.
 
-Until a tracker has its keys, the app shows it as **Coming soon**. Nothing
+Until a tracker has its keys and its switch is on, the app does not list it
+at all (since Oct 4, so Apple's review sees nothing half-built). Nothing
 breaks. You can set up one, two or all three, in any order.
 
 ## Words used here
@@ -130,7 +131,7 @@ never be inside the app itself.
 | Polar   | `POLAR_CLIENT_ID`      | Polar's Client ID        |
 | Polar   | `POLAR_CLIENT_SECRET`  | Polar's Client Secret    |
 
-Leave out any tracker you have not set up: it simply stays "Coming soon".
+Leave out any tracker you have not set up: it simply stays hidden.
 
 Then tell Claude "trackers keys are in".
 

@@ -11,12 +11,13 @@ import { EmptyState, Screen } from '@/components/ui';
 import { postedIndex, sourceOn } from '@/features/activity/recent';
 import { useTennisFlags } from '@/features/activity/useTennisFlags';
 import { storyFromLog, storyFromPost, type SessionStory } from '@/features/share/sessionStory';
-import { canSaveStory, exportStory, stageSize, warmStory, type StoryAction } from '@/features/share/storyImage';
+import { canSaveStory, exportStory, stageSize, warmStory, type StoryAction, type StoryLook } from '@/features/share/storyImage';
+import { mixHex } from '@/features/activity/zones';
 import { goBack } from '@/lib/goBack';
 import * as haptics from '@/lib/haptics';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import { colors, font, radius, spacing, typography, withAlpha } from '@/theme';
+import { colors, font, pageIsDark, radius, spacing, typography, withAlpha } from '@/theme';
 
 /**
  * Share a session to Instagram, the way Strava does: three pictures to swipe
@@ -38,6 +39,22 @@ const ACTIONS: { key: StoryAction; label: string; spoken: string; icon: React.Co
   { key: 'save', label: 'Save', spoken: 'Save the picture', icon: 'download-outline' },
   { key: 'more', label: 'More', spoken: 'More ways to share', icon: 'share-outline' },
 ];
+
+/**
+ * How Instagram's story editor gets each design: Photo and Card as the whole
+ * story; Sticker and Overlay as a sticker over two colours. The stamp sits on
+ * the court's own brand and page colours. The Overlay is white numbers, so it
+ * goes over the court colour deepened toward the court's darkest (Oct 4
+ * audit): on brand-to-page it faded into the cream at the bottom on the
+ * default court. Read when tapped, so a court changed meanwhile is used.
+ */
+function storyLook(design: StoryDesign): StoryLook {
+  if (design === 'overlay') {
+    const deep = pageIsDark() ? colors.bg : colors.text;
+    return { sticker: true, top: mixHex(colors.court, deep, 0.3), bottom: mixHex(colors.court, deep, 0.6) };
+  }
+  return { sticker: design === 'sticker', top: colors.brand.slice(0, 7), bottom: colors.bg.slice(0, 7) };
+}
 
 export default function ShareSession() {
   const styles = useThemedStyles(styleDefinitions);
@@ -116,7 +133,7 @@ export default function ShareSession() {
       if (design === 'photo') {
         for (let t = 0; t < 50 && waitFor.current === 'loading'; t += 1) await new Promise((r) => setTimeout(r, 100));
       }
-      const said = await exportStory(stage.current, action, 'My session on CourtSide', { sticker: design === 'sticker' || design === 'overlay', top: colors.brand.slice(0, 7), bottom: colors.bg.slice(0, 7) });
+      const said = await exportStory(stage.current, action, 'My session on CourtSide', storyLook(design));
       if (said) setNote(said);
       else haptics.commit();
     } catch (error) {

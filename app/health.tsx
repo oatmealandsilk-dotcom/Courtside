@@ -79,10 +79,23 @@ export default function Health() {
   // Tennis sessions, per source, once the server's switch for it is on. Off, this page is as it always was.
   const flags = useTennisFlags();
   const tennisOn = (provider: Integration['provider']) => (provider === 'apple-health' ? flags.apple : provider === 'whoop' || isTracker(provider) ? flags[provider] : false);
-  // Fitbit, Oura and Polar: open once the server has their keys and their switch is on; until then "Coming soon".
+  // Fitbit, Oura and Polar: open once the server has their keys and their switch is on.
   const trackers = useTrackerStatus();
   const open = (provider: Integration['provider']) => !isTracker(provider) || (trackers[provider] && flags[provider]);
   const apple = integrations.find((i) => i.provider === 'apple-health');
+  /*
+   * Only what works is listed (Oct 4, owner: Apple must see nothing half-built
+   * at review): a tracker the server is not set up for has no row at all,
+   * where it used to show "Coming soon". One already connected keeps its row,
+   * so it can still be synced or disconnected. Garmin has no sign-in of its
+   * own; its tennis comes in through Apple Health's workouts, so it shows on
+   * an iPhone once those are on (flag:tennis-apple), as before.
+   */
+  const shown = (i: Integration) => (i.provider === 'garmin' ? Platform.OS === 'ios' && flags.apple : i.connected || open(i.provider));
+  const trackerRows = TRACKER_ROWS.map((p) => integrations.find((i) => i.provider === p)).filter((i): i is Integration => !!i && !!ABOUT[i.provider] && shown(i));
+  // The footer names only the trackers listed, WHOOP first: "WHOOP, Fitbit or Polar".
+  const removers = ['WHOOP', ...trackerRows.filter((i) => isTracker(i.provider)).map((i) => i.label)];
+  const removersText = removers.length > 1 ? `${removers.slice(0, -1).join(', ')} or ${removers[removers.length - 1]}` : removers[0];
 
   const run = async (provider: Integration['provider'], what: 'toggle' | 'sync' | 'tennis' | 'tennis-off') => {
     setBusy(provider);
@@ -143,7 +156,6 @@ export default function Health() {
     const garmin = i.provider === 'garmin';
     const viaHealth = garmin && Platform.OS === 'ios';
     const linked = garmin ? viaHealth && !!apple?.connected && !!apple.readsWorkouts : i.connected;
-    const soon = (garmin && !viaHealth) || (!i.connected && !open(i.provider));
     // A tracker is connected for its tennis sessions, so "on" needs no card of its own; only "off" (its sign-in ran out) does.
     const tennisCard = i.connected && tennis && !(isTracker(i.provider) && i.readsWorkouts);
     return (
@@ -157,12 +169,9 @@ export default function Health() {
             {linked ? <View style={styles.dot} /> : null}
           </View>
           <Text style={styles.line}>{about.line}</Text>
-          {/* A tracker that is coming soon says only what it will bring; the badge says the rest. */}
-          {soon && !garmin && !i.connected ? null : (
-            <Text style={styles.how}>
-              {i.connected && i.lastSyncedAt ? `Synced ${relativeTime(i.lastSyncedAt)}.` : blocked ? (wrongPhone ? 'iPhone only.' : inExpoGo() ? 'Available in the App Store version of CourtSide.' : 'Coming in the next app update.') : about.how}
-            </Text>
-          )}
+          <Text style={styles.how}>
+            {i.connected && i.lastSyncedAt ? `Synced ${relativeTime(i.lastSyncedAt)}.` : blocked ? (wrongPhone ? 'iPhone only.' : inExpoGo() ? 'Available in the App Store version of CourtSide.' : 'Coming in the next app update.') : about.how}
+          </Text>
           {i.connected ? (
             <View style={styles.actions}>
               <Pressable accessibilityRole="button" accessibilityLabel={`Sync ${i.label}`} disabled={loading} onPress={() => run(i.provider, 'sync')} style={styles.small}>
@@ -207,9 +216,9 @@ export default function Health() {
         {/* The tennis pill shows its own "Turning on…"; a second spinner beside it would be one too many. */}
         {loading && !(tennisCard && !i.readsWorkouts) ? (
           <CourtSpinner size={26} />
-        ) : soon || viaHealth ? (
+        ) : viaHealth ? (
           // Not something to press: a quiet label in the button's place.
-          <View style={styles.badge}><Text style={styles.badgeText}>{viaHealth ? 'Via Apple Health' : 'Coming soon'}</Text></View>
+          <View style={styles.badge}><Text style={styles.badgeText}>Via Apple Health</Text></View>
         ) : i.connected || loading ? null : (
           <Pressable accessibilityRole="button" accessibilityLabel={`Connect ${i.label}`} accessibilityState={{ disabled: blocked }} disabled={blocked} onPress={() => (tennis && i.provider === 'apple-health' ? askApple('toggle') : run(i.provider, 'toggle'))} style={[styles.connect, blocked && styles.connectOff]}>
             <Text style={[styles.connectText, blocked && styles.connectTextOff]}>{(i.provider === 'cronometer' || i.provider === 'myfitnesspal') && !appleHealthAvailable() ? 'Import' : 'Connect'}</Text>
@@ -243,7 +252,7 @@ export default function Health() {
 
       <Text style={styles.sectionTitle}>Your trackers</Text>
       <View style={styles.list}>
-        {TRACKER_ROWS.map((p) => integrations.find((i) => i.provider === p)).filter((i): i is Integration => !!i && !!ABOUT[i.provider]).map(row)}
+        {trackerRows.map(row)}
       </View>
 
       {/* Food: the card that reads Cronometer or MyFitnessPal through Apple Health
@@ -260,7 +269,7 @@ export default function Health() {
       {/* Says what the server does: WHOOP's numbers go on disconnect only once its switch is on. */}
       <Text style={styles.foot}>
         {flags.whoop
-          ? 'Only you and the AI coach see these, and WHOOP’s numbers never go to the coach. Tennis sessions stay private until you post one. Disconnecting WHOOP, Fitbit, Oura or Polar removes what it sent; other sources stay until you delete your account.'
+          ? `Only you and the AI coach see these, and WHOOP’s numbers never go to the coach. Tennis sessions stay private until you post one. Disconnecting ${removersText} removes what it sent; other sources stay until you delete your account.`
           : flags.apple
             ? 'Only you and the AI coach see these. Tennis sessions stay private until you post one. Disconnecting stops new numbers; what was already read stays until you delete your account.'
             : 'Only you and the coach see these. Disconnecting stops new numbers; what was already read stays until you delete your account.'}
