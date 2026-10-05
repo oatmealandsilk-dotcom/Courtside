@@ -5997,6 +5997,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const n = /[?&]n=([0-9a-f-]{36})/i.exec(result.url)?.[1];
     if (!n) throw new Error(/tracker=expired/.test(result.url) ? 'That sign-in took too long. Try again.' : `${label} was not connected.`);
     await remote.trackers('finish', { n });
+    // The sign-in itself looks back three days; this goes back a week (as Sync now does), so tennis from before connecting is there to log.
+    void remote.trackers('sync', { provider, days: 7 }).catch(() => undefined);
   }, []);
 
   /**
