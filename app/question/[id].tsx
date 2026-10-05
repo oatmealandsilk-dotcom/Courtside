@@ -12,6 +12,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Linking, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { goBack } from '@/lib/goBack';
+import { confirmReport } from '@/lib/confirm';
+import { show as showToast } from '@/lib/toast';
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { ThreadSkeleton } from '@/components/Skeleton';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -84,6 +86,14 @@ function QuestionDetail() {
       router.push({ pathname: '/take-down', params: { kind: 'question', id: question.id } });
     }
   } : undefined;
+  // Someone else's thread can be reported from the flag at the top (App Review 1.2, Oct 5).
+  // It leaves your screens at once, so the page goes back.
+  const theirs = !!currentUserId && question.authorId !== currentUserId;
+  const report = () => confirmReport('thread', () => {
+    actions.reportUser(question.authorId, `question:${question.id}`);
+    showToast({ title: 'Thanks — a person will review this', icon: 'flag-outline' });
+    goBack('/discuss');
+  });
 
   const submit = () => {
     const text = draft.trim();
@@ -95,7 +105,7 @@ function QuestionDetail() {
   };
 
   return (
-    <SwipeSurface onSwipe={direction=>{if(direction===-1) { requestSection('/discuss', 'discussions'); goToTab('/discuss', true); }}} renderPreview={direction=>direction===-1 ? <Discuss previewSection="discussions"/> : null}><Screen title="Thread" compactTitle onBack={() => goBack()} onRefresh={isDesktopBrowser() ? undefined : () => loadThread(String(id))} right={<View style={{ flexDirection: 'row', alignItems: 'center', gap: 18 }}>{moderate ? <Pressable accessibilityRole="button" accessibilityLabel={removed ? 'Restore this thread' : 'Take down this thread'} hitSlop={10} onPress={moderate}><Ionicons name={removed ? 'eye-outline' : 'eye-off-outline'} size={23} color={removed ? colors.text : colors.danger} /></Pressable> : null}{question.authorId === currentUserId && !removed ? <Pressable accessibilityRole="button" accessibilityLabel="Edit this thread" hitSlop={10} onPress={() => router.push({ pathname: '/edit-post', params: { id: question.id, kind: 'question' } })}><Ionicons name="create-outline" size={23} color={colors.text} /></Pressable> : null}{removed ? null : <Pressable accessibilityRole="button" accessibilityLabel="Share this thread" hitSlop={10} onPress={() => router.push(`/share?kind=question&id=${question.id}`)}><Ionicons name="arrow-redo-outline" size={23} color={colors.text} /></Pressable>}</View>}>
+    <SwipeSurface onSwipe={direction=>{if(direction===-1) { requestSection('/discuss', 'discussions'); goToTab('/discuss', true); }}} renderPreview={direction=>direction===-1 ? <Discuss previewSection="discussions"/> : null}><Screen title="Thread" compactTitle onBack={() => goBack()} onRefresh={isDesktopBrowser() ? undefined : () => loadThread(String(id))} right={<View style={{ flexDirection: 'row', alignItems: 'center', gap: 18 }}>{moderate ? <Pressable accessibilityRole="button" accessibilityLabel={removed ? 'Restore this thread' : 'Take down this thread'} hitSlop={10} onPress={moderate}><Ionicons name={removed ? 'eye-outline' : 'eye-off-outline'} size={23} color={removed ? colors.text : colors.danger} /></Pressable> : null}{question.authorId === currentUserId && !removed ? <Pressable accessibilityRole="button" accessibilityLabel="Edit this thread" hitSlop={10} onPress={() => router.push({ pathname: '/edit-post', params: { id: question.id, kind: 'question' } })}><Ionicons name="create-outline" size={23} color={colors.text} /></Pressable> : null}{removed ? null : <Pressable accessibilityRole="button" accessibilityLabel="Share this thread" hitSlop={10} onPress={() => router.push(`/share?kind=question&id=${question.id}`)}><Ionicons name="arrow-redo-outline" size={23} color={colors.text} /></Pressable>}{theirs && !removed ? <Pressable accessibilityRole="button" accessibilityLabel="Report this thread" hitSlop={10} onPress={report}><Ionicons name="flag-outline" size={22} color={colors.text} /></Pressable> : null}</View>}>
       <Card style={styles.questionCard}>
         {removed ? <RemovedNote removed={removed} style={styles.removed} /> : null}
         {/* Who asked, up top and at full size — the way a reply shows its author. */}

@@ -4,6 +4,7 @@ import { WebView } from 'react-native-webview';
 import { Directory, File, Paths } from 'expo-file-system';
 
 import { STYLE, lookFor, thumbLook } from '@/components/map/look';
+import { ENGINE_CSS, ENGINE_JS } from '@/components/map/engineLoader';
 import { THUMB_ZOOM, ThumbStandIn, keyName, makeQueue, thumbKey } from '@/components/map/thumbShared';
 import { themes, useTheme } from '@/theme/ThemeProvider';
 import { colors } from '@/theme';
@@ -128,16 +129,17 @@ function SnapshotView({ lat, lng, width, height, lookJson, ground, onShot, onFai
     return () => clearTimeout(t);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const html = useMemo(() => `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+${ENGINE_CSS}
 <style>html,body,#m{margin:0;width:${width}px;height:${height}px;background:${ground ?? colors.bgElevated};overflow:hidden}.maplibregl-ctrl{display:none}</style></head>
-<body><div id="m"></div><script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script><script>
+<body><div id="m"></div><script>
 var post=function(o){window.ReactNativeWebView&&window.ReactNativeWebView.postMessage(JSON.stringify(o))};
 var LOOK=${lookJson};
 function look(map,l){for(var id in l){if(!map.getLayer(id))continue;var r=l[id];try{if(r.hide){map.setLayoutProperty(id,'visibility','none');continue}if(r.minZoom!=null)map.setLayerZoomRange(id,r.minZoom,24);if(r.fill)map.setPaintProperty(id,id==='background'?'background-color':'fill-color',r.fill);if(r.fill&&id!=='background')map.setPaintProperty(id,'fill-outline-color',r.fill);if(r.line)map.setPaintProperty(id,'line-color',r.line);if(r.opacity!=null)map.setPaintProperty(id,'line-opacity',r.opacity);if(r.text)map.setPaintProperty(id,'text-color',r.text);if(r.halo)map.setPaintProperty(id,'text-halo-color',r.halo)}catch(e){}}}
-try{
+function start(){
 var map=new maplibregl.Map({container:'m',style:'${STYLE}',center:[${lng},${lat}],zoom:${THUMB_ZOOM},interactive:false,attributionControl:false,preserveDrawingBuffer:true,fadeDuration:0,pixelRatio:2});
 map.on('load',function(){try{map.style.stylesheet.transition={duration:0,delay:0}}catch(e){}look(map,LOOK);map.once('idle',function(){try{post({type:'shot',data:map.getCanvas().toDataURL('image/jpeg',0.86)})}catch(e){post({type:'fail'})}})});
-}catch(e){post({type:'fail'})}
+}
+${ENGINE_JS}
 </script></body></html>`, []); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <View style={[StyleSheet.absoluteFill, { width, height }]} pointerEvents="none">
@@ -156,6 +158,8 @@ map.on('load',function(){try{map.style.stylesheet.transition={duration:0,delay:0
           else if (msg.type === 'fail') onFail();
         }}
         onError={onFail}
+        onContentProcessDidTerminate={onFail}
+        onRenderProcessGone={onFail}
       />
     </View>
   );

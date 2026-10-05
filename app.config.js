@@ -51,8 +51,10 @@ module.exports = {
         ITSAppUsesNonExemptEncryption: false,
         // Instagram Stories straight from Share (build 13, Facebook App ID in storyImage.ts).
         LSApplicationQueriesSchemes: ['instagram-stories', 'instagram'],
-        NSCameraUsageDescription: 'CourtSide uses the camera to take an instant — one photo right after your session.',
-        NSPhotoLibraryUsageDescription: 'CourtSide needs your photo library to choose clips and photos to post.',
+        // The camera is used for instants and for photos sent in chats; both are named (Oct 5, App Review 5.1.1).
+        // Purpose-string changes like these reach phones only with the next App Store build.
+        NSCameraUsageDescription: 'CourtSide uses the camera to take an instant after you play, and to take photos you send in chats.',
+        NSPhotoLibraryUsageDescription: 'CourtSide uses your photo library to choose clips and photos to post or send in chats.',
         NSLocationWhenInUseUsageDescription: 'CourtSide uses your location while the app is open to show courts and players near you. You choose who can see you.',
         // Saving a chat photo to your camera roll from the share sheet (from build 11).
         NSPhotoLibraryAddUsageDescription: 'CourtSide saves the photos you choose to your library.',
@@ -108,12 +110,21 @@ module.exports = {
       ['expo-splash-screen', { image: './assets/splash.png', backgroundColor: '#F8F7F2', resizeMode: 'cover', enableFullScreenImage_legacy: true, android: { image: './assets/android-icon-foreground.png', imageWidth: 288, resizeMode: 'contain', backgroundColor: '#F8F7F2' } }],
       'expo-router',
       // The microphone is only for voice notes in chats (expo-audio, below); the camera itself never records sound.
-      ['expo-camera', { cameraPermission: 'CourtSide uses the camera to take an instant — one photo right after your session.', microphonePermission: 'CourtSide uses the microphone for voice notes you send in chats.', recordAudioAndroid: false }],
-      ['expo-image-picker', { photosPermission: 'CourtSide needs your photo library to choose clips and photos to post.', microphonePermission: 'CourtSide uses the microphone for voice notes you send in chats.' }],
+      ['expo-camera', { cameraPermission: 'CourtSide uses the camera to take an instant after you play, and to take photos you send in chats.', microphonePermission: 'CourtSide uses the microphone for voice notes you send in chats.', recordAudioAndroid: false }],
+      // The same camera words as above, so the build never falls back to Apple's generic text.
+      ['expo-image-picker', { photosPermission: 'CourtSide uses your photo library to choose clips and photos to post or send in chats.', cameraPermission: 'CourtSide uses the camera to take an instant after you play, and to take photos you send in chats.', microphonePermission: 'CourtSide uses the microphone for voice notes you send in chats.' }],
       'expo-video',
       // Build 14 (Oct 4): find friends from your contacts. Only phone numbers and emails are checked, and nothing is kept.
       ['expo-contacts', { contactsPermission: 'CourtSide checks your contacts’ phone numbers and emails to show which friends are already on CourtSide. Nothing from your contacts is saved.' }],
-      ['expo-location', { locationWhenInUsePermission: 'CourtSide uses your location while the app is open to show courts and players near you. You choose who can see you.' }],
+      // The add-on fills in Apple's generic "Allow CourtSide to access your location" and motion texts for any it is not
+      // given (they stay in the app even though CourtSide never asks for them), so each gets honest words instead.
+      // None can be left out: the add-on's own code still mentions them. Next App Store build (Oct 5).
+      ['expo-location', {
+        locationWhenInUsePermission: 'CourtSide uses your location while the app is open to show courts and players near you. You choose who can see you.',
+        locationAlwaysAndWhenInUsePermission: 'CourtSide uses your location only while the app is open, to show courts and players near you. It never tracks you in the background.',
+        locationAlwaysPermission: 'CourtSide uses your location only while the app is open, to show courts and players near you. It never tracks you in the background.',
+        motionUsagePermission: 'CourtSide does not use motion data.',
+      }],
       // Android draws the status-bar alert icon in white from the picture's shape alone, so
       // it gets the mark as a white cut-out (Oct 4); the full-colour app icon would be a blank square.
       ['expo-notifications', { color: '#3F7049', icon: './assets/notification-icon.png', defaultChannel: 'activity' }],

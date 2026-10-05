@@ -6,6 +6,7 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useState } from 'react';
 import { AppState, Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import * as Notifications from 'expo-notifications';
+import Constants from 'expo-constants';
 import { registerForPush } from '@/features/push/push';
 import { router } from 'expo-router';
 import { goBack } from '@/lib/goBack';
@@ -247,7 +248,7 @@ export default function Settings() {
       <Pressable accessibilityRole="button" accessibilityLabel="Log out" onPress={() => confirm({ title: 'Log out?', message: 'You can log back in any time.', confirmLabel: 'Log out', destructive: true, onConfirm: () => leaveGently(() => { actions.signOut(); router.replace('/sign-in'); }) })} style={({ pressed }) => [styles.card, styles.logout, pressed && styles.rowPressed]}>
         <Text style={styles.logoutText}>Log out</Text>
       </Pressable>
-      <Text style={styles.version}>CourtSide · early access</Text>
+      <Text style={styles.version}>CourtSide · Version {Constants.expoConfig?.version ?? '1.0.0'}</Text>
     </Screen>
   );
 }

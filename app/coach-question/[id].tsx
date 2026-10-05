@@ -12,7 +12,7 @@ import { CourtSpinner } from '@/components/CourtSpinner';
 import { Tappable } from '@/components/Tappable';
 import { Avatar, Button, Chip, EmptyState, Field, Screen } from '@/components/ui';
 import { relativeTime } from '@/lib/format';
-import { afterMenu, confirm, confirmAfterMenu } from '@/lib/confirm';
+import { afterMenu, confirm, confirmAfterMenu, confirmReport } from '@/lib/confirm';
 import { RemovedNote } from '@/features/moderation/RemovedNote';
 import * as haptics from '@/lib/haptics';
 import { show as showToast } from '@/lib/toast';
@@ -102,12 +102,26 @@ export default function CoachQuestionDetail() {
     },
   });
 
+  // Anyone else's question, and any coach's reply, can be reported (App Review 1.2, Oct 5).
+  // Either leaves your screens at once; a reported question takes the page back with it.
+  const signedIn = !!currentUserId;
+  const reportQuestion = () => confirmReport('question', () => {
+    leaving.current = true;
+    actions.reportUser(question.authorId, `coach-question:${question.id}`);
+    goBack('/coaches');
+    showToast({ title: 'Thanks — a person will review this', icon: 'flag-outline' });
+  }, true);
+  const reportReply = (reply: CoachReply) => confirmReport('reply', () => {
+    actions.reportUser(reply.coachUserId, `coach-reply:${reply.id}`);
+    showToast({ title: 'Thanks — a person will review this', icon: 'flag-outline' });
+  });
+
   return (
     <Screen
       title="Ask a coach"
       compactTitle
       onBack={() => goBack()}
-      right={mine || admin ? (
+      right={mine || signedIn ? (
         <Tappable accessibilityRole="button" accessibilityLabel="More options" onPress={() => setMenuOpen(true)} hitSlop={10} style={styles.more}>
           <Ionicons name="ellipsis-horizontal" size={24} color={colors.text} />
         </Tappable>
@@ -212,8 +226,14 @@ export default function CoachQuestionDetail() {
                   onPress={() => router.push(`/coach/${coach.id}`)}
                   style={styles.helpful}
                 >
-                  <Ionicons name="calendar-outline" size={16} color={colors.info} />
-                  <Text style={[styles.meta, { color: colors.info }]}>Book a session</Text>
+                  <Ionicons name="person-circle-outline" size={16} color={colors.info} />
+                  <Text style={[styles.meta, { color: colors.info }]}>Coach’s page</Text>
+                </Pressable>
+              ) : null}
+              {signedIn && reply.coachUserId !== currentUserId ? (
+                <Pressable accessibilityRole="button" accessibilityLabel="Report this reply" onPress={() => reportReply(reply)} hitSlop={8} style={[styles.helpful, { marginLeft: 'auto' }]}>
+                  <Ionicons name="flag-outline" size={15} color={colors.textMuted} />
+                  <Text style={styles.meta}>Report</Text>
                 </Pressable>
               ) : null}
             </View>
@@ -263,7 +283,7 @@ export default function CoachQuestionDetail() {
         </Pressable>
       )}
 
-      {/* The asker's own menu, the same sheet a profile's "…" opens. */}
+      {/* The question's menu, the same sheet a profile's "…" opens: Delete for the asker, Report for anyone else. */}
       <Modal visible={menuOpen} transparent animationType="fade" onRequestClose={() => setMenuOpen(false)}>
         {/* The backdrop is a plain surface, not a button: a button here would
             wrap the menu's button, which the web refuses to nest. */}
@@ -279,7 +299,16 @@ export default function CoachQuestionDetail() {
                 <Ionicons name="trash-outline" size={21} color={colors.danger} />
                 <Text style={[styles.menuLabel, { color: colors.danger }]}>Delete question</Text>
               </Pressable>
-            ) : null}
+            ) : (
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => { setMenuOpen(false); reportQuestion(); }}
+                style={({ pressed }) => [styles.menuRow, pressed && { backgroundColor: colors.surfaceAlt }]}
+              >
+                <Ionicons name="flag-outline" size={21} color={colors.danger} />
+                <Text style={[styles.menuLabel, { color: colors.danger }]}>Report question</Text>
+              </Pressable>
+            )}
             {/* Admins only (the database refuses anyone else). */}
             {admin ? (
               <Pressable

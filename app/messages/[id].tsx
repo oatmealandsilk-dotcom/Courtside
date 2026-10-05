@@ -75,7 +75,7 @@ import { useMentionCandidates } from '@/features/mentions/useMentionCandidates';
 import { activeMention, applyMention } from '@/lib/mentions';
 import { show as showToast } from '@/lib/toast';
 import { useReducedMotion } from '@/lib/useReducedMotion';
-import { afterMenu, confirm, confirmAfterMenu } from '@/lib/confirm';
+import { afterMenu, confirm, confirmAfterMenu, confirmReport } from '@/lib/confirm';
 import * as haptics from '@/lib/haptics';
 import type { HitRequest, ID, Message, Post, Question, User } from '@/data/types';
 import Reanimated, { Easing, FadeIn, FadeInDown, FadeInUp, FadeOut, ZoomIn, cancelAnimation, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming, type SharedValue } from 'react-native-reanimated';
@@ -951,6 +951,9 @@ export default function Thread() {
           onEdit={() => startEditing(menuMessage)}
           // Both ask first; the card comes over the closing menu.
           onUnsend={() => { const messageId = menuMessage.id; confirmAfterMenu({ title: 'Unsend message?', message: "It's removed for everyone in the chat.", confirmLabel: 'Unsend', destructive: true, onConfirm: () => actions.unsendMessage(messageId) }); }}
+          // Someone else's message: reported as the chat, naming them and pointing at this one message,
+          // so an admin can read it in place and act on it (App Review 1.2, Oct 5).
+          onReport={conversation ? () => { const m = menuMessage; const chatId = conversation.id; confirmReport('message', () => { actions.reportChat(chatId, 'message', m.senderId, m.id); showToast({ title: 'Thanks — a person will review this', icon: 'flag-outline' }); }, true); } : undefined}
           onDelete={() => { const messageId = menuMessage.id; confirmAfterMenu({ title: 'Delete message?', message: menuPending ? 'It hasn’t been sent, so it’s simply removed.' : menu.mine ? "It's removed for you. Others in the chat still see it." : "It's removed for you only.", confirmLabel: 'Delete', destructive: true, onConfirm: () => actions.deleteMessageForMe(messageId) }); }}
           // The Send-to sheet, once the menu has gone: pick chats (groups too) and it goes to each as it is.
           onForward={() => { const messageId = menuMessage.id; afterMenu(() => router.push({ pathname: '/share', params: { kind: 'message', id: messageId } })); }}
@@ -2106,15 +2109,17 @@ function HoverBar({ tools, onMore }: { tools: HoverTools; onMore: () => void }) 
  * chat dims, the message stays lifted where it was, the reactions sit above
  * it (with a "+" for any emoji) and the actions below. Reply comes first.
  * Your own message: Reply, Copy, Edit, Forward, Info, Unsend, Delete.
- * Theirs: Reply, Copy, Forward, Info and Delete. Delete only takes it out of
+ * Theirs: Reply, Copy, Forward, Info, Report and Delete. Delete only takes it out of
  * your own view; Forward opens the Send-to sheet. One not on the server yet
  * (`pending`: on its way, or not sent) offers only Copy and Delete, and no
  * reactions: an answer, an edit or an unsend could otherwise reach the
  * server before it and be lost.
  */
-function MessageMenu({ target, me, styles, canReply, canReact, pending, canDelete, onClose, onReact, onMoreEmoji, onReply, onInfo, onCopy, onCopyLink, onEdit, onForward, onUnsend, onDelete, doubleTap, onDoubleTap }: {
+function MessageMenu({ target, me, styles, canReply, canReact, pending, canDelete, onClose, onReact, onMoreEmoji, onReply, onInfo, onCopy, onCopyLink, onEdit, onForward, onUnsend, onReport, onDelete, doubleTap, onDoubleTap }: {
   target: MenuTarget; me: string | null; styles: Styles; canReply: boolean; canReact: boolean; pending: boolean; canDelete: boolean;
   onClose: () => void; onReact: (emoji: string) => void; onMoreEmoji: () => void; onReply: () => void; onInfo: () => void; onCopy: () => void; onCopyLink: (url: string) => void; onEdit: () => void; onForward: () => void; onUnsend: () => void; onDelete: () => void;
+  /** Someone else's message, sent: report it. */
+  onReport?: () => void;
   /** The reaction a double tap leaves, and how to change it: the last row turns the reactions above into that choice. */
   doubleTap: string; onDoubleTap: (emoji: string) => void;
 }) {
@@ -2165,6 +2170,7 @@ function MessageMenu({ target, me, styles, canReply, canReact, pending, canDelet
     ...(!pending && message.kind !== 'system' && message.kind !== 'photo' ? [{ key: 'forward', label: 'Forward', icon: 'arrow-redo-outline' as const, run: onForward }] : []),
     ...(!pending ? [{ key: 'info', label: 'Info', icon: 'information-circle-outline' as const, run: onInfo }] : []),
     ...(!pending && mine ? [{ key: 'unsend', label: 'Unsend', icon: 'arrow-undo-circle-outline' as const, run: onUnsend }] : []),
+    ...(!pending && !mine && message.kind !== 'system' && onReport ? [{ key: 'report', label: 'Report', icon: 'flag-outline' as const, run: onReport, danger: true }] : []),
     ...(canDelete ? [{ key: 'delete', label: mine && !pending ? 'Delete for you' : 'Delete', icon: 'trash-outline' as const, run: onDelete, danger: true }] : []),
   ];
   // The "Double tap" row only where a reaction can be left.

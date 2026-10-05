@@ -7,6 +7,7 @@ import { goBack } from '@/lib/goBack';
 import { Button, EmptyState, Screen } from '@/components/ui';
 import { fetchCoachMemory, clearCoachMemory, type CoachMemory } from '@/data/api';
 import { useAiCoachOn } from '@/features/aiCoach/switch';
+import { useAiCoachConsent } from '@/features/aiCoach/consent';
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { relativeTime } from '@/lib/format';
 import { confirm } from '@/lib/confirm';
@@ -35,6 +36,19 @@ function CoachMemoryScreen() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [failed, setFailed] = useState(false);
+  const consent = useAiCoachConsent();
+  const [stopping, setStopping] = useState(false);
+
+  // Takes back the yes given before first use: nothing more goes to Anthropic until it is given again.
+  const stop = () => {
+    confirm({ title: 'Stop using the AI coach?', message: 'Nothing more is sent to Anthropic. The coach asks again before you next use it.', confirmLabel: 'Stop', destructive: true, onConfirm: async () => {
+      setStopping(true);
+      setError('');
+      const ok = await consent.withdraw().catch(() => false);
+      setStopping(false);
+      if (!ok) setError('That did not go through. Check your connection and try again.');
+    } });
+  };
 
   useEffect(() => {
     fetchCoachMemory().then(setMemory).catch(() => { setMemory(null); setFailed(true); });
@@ -60,7 +74,7 @@ function CoachMemoryScreen() {
   return (
     <Screen title="Coach memory" compactTitle onBack={() => goBack()}>
       <Text style={styles.lead}>
-        The coach keeps short notes so it does not start from zero each time: what you are working on, what it told you, and whether you said it helped. Only you and the coach can see this.
+        The coach keeps short notes so it does not start from zero each time: what you are working on, what it told you, and whether you said it helped. Only you can see this here; the coach is powered by Anthropic, which receives what it needs to answer you.
       </Text>
       {memory === undefined ? <View style={{ paddingVertical: 48, alignItems: 'center' }}><CourtSpinner size={28} /></View> : failed ? (
         <EmptyState icon="cloud-offline-outline" title="Couldn’t load the notes" body="Check your connection and open this again." />
@@ -87,6 +101,11 @@ function CoachMemoryScreen() {
           <Button label="Clear everything the coach remembers" variant="danger" loading={busy} onPress={clear} full />
         </>
       )}
+      {consent.agreed ? (
+        <View style={{ paddingTop: spacing.lg }}>
+          <Button label="Stop using the AI coach" variant="secondary" loading={stopping} onPress={stop} full />
+        </View>
+      ) : null}
     </Screen>
   );
 }

@@ -17,7 +17,7 @@ import { TERMS_VERSION } from '@/lib/legal';
 
 import { fetchBootstrap, searchPosts as apiSearchPosts, signIn as apiSignIn, type Bootstrap } from '@/data/api';
 import * as demoApi from '@/data/api';
-import { CHAT_PHOTO_UNREADABLE, auth as remoteAuth, fetchRemote, isLocalMedia, queueFeedSignal, remote, uploadChatPhoto, uploadMedia, emptyProfile, type GroupRefusal, type AdminReport, type ModerationResult, type ReportedChat, type ReportedItem, type FeedSignal, type SiteFeedback, type WaitlistEntry, type BetaInviteStatus, type FirstDayStats, type FirstMove, type HandleStatus, type InviteCodeResult, type MyInviter, type RemoteData, type UserState } from '@/data/remote';
+import { CHAT_PHOTO_UNREADABLE, auth as remoteAuth, fetchRemote, isLocalMedia, queueFeedSignal, remote, uploadChatPhoto, uploadMedia, emptyProfile, type GroupRefusal, type AdminReport, type ModerationResult, type ReportedChat, type ReportedItem, type ReportedItemKind, type ReportEvidence, type FeedSignal, type SiteFeedback, type WaitlistEntry, type BetaInviteStatus, type FirstDayStats, type FirstMove, type HandleStatus, type InviteCodeResult, type MyInviter, type RemoteData, type UserState } from '@/data/remote';
 import { clearSnapshot, markSnapshotOpened, markSnapshotOpening, readSnapshot, saveSnapshot, snapshotFailedBefore } from '@/data/snapshot';
 import { forgetAccount, listSavedAccounts, rememberAccount, type SavedAccount } from '@/features/accounts/savedAccounts';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
@@ -373,7 +373,7 @@ interface AppState extends Bootstrap, CourtLifeState, FeedGroupsState {
   followRequests: { fromId: ID; toId: ID; createdAt: string }[];
   /** People whose posts you have muted — still followed, just quiet. */
   mutedIds: ID[];
-  /** Posts and hits you have reported: gone from everything you see (Oct 3). */
+  /** Posts, hits, threads, replies, comments and coach questions you have reported: gone from everything you see (Oct 3, Oct 5). */
   reportedIds: ID[];
   /** People you have blocked. Their posts and messages are hidden. */
   blockedIds: ID[];
@@ -564,6 +564,12 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
   /** Blocking is asked first, so only unblocking offers Undo. */
   toggleBlock: (userId: ID, quiet?: boolean) => void;
   toggleAlerts: (userId: ID, quiet?: boolean) => void;
+  /**
+   * Reports someone to CourtSide, about one thing of theirs when `reason`
+   * names it ("post:<id>", "hit:<id>", "question:<id>", "answer:<id>",
+   * "comment:<id>", "coach-question:<id>", "coach-reply:<id>"). That thing
+   * leaves your screens at once; the server works out whose it is.
+   */
   reportUser: (userId: ID, reason: string) => void;
   /** A suggestion from an early user, on the board for everyone to vote on. */
   submitTip: (body: string) => Promise<void>;
@@ -890,9 +896,17 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
   loadSiteFeedback: () => Promise<SiteFeedback[]>;
   /** Admins only: take someone off the waitlist (they asked), or clear a feedback note. */
   removeFromWaitlistPage: (table: 'waitlist' | 'site_feedback', id: ID) => Promise<boolean>;
-  loadReportedItem: (kind: 'post' | 'hit', id: ID) => Promise<ReportedItem | null>;
+  loadReportedItem: (kind: ReportedItemKind, id: ID) => Promise<ReportedItem | null>;
+  /**
+   * Admins only: suspends someone seen in a reported chat (a group has no one
+   * person behind its report). Files it as the admin's own report about them,
+   * decided at once, so it shows under Done with an Unsuspend button.
+   */
+  suspendFromChat: (userId: ID, conversationId: ID) => Promise<boolean>;
   /** Admins only: a reported chat's name, people and last 30 messages (admins cannot otherwise read a chat they are not in). */
   loadReportedChat: (conversationId: ID) => Promise<ReportedChat | null>;
+  /** Admins only: the copy of a reported chat kept for its report, unsent and edited messages included (migration 115). */
+  loadReportEvidence: (reportId: ID) => Promise<ReportEvidence[]>;
   decideReport: (reportId: ID, decision: 'remove' | 'restore' | 'suspend' | 'unsuspend' | 'dismiss') => Promise<boolean>;
   /** Admins only: takes one message (a photo, say) out of a reported chat, for everyone in it, and its photos off the shelf. */
   removeReportedMessage: (messageId: ID) => Promise<boolean>;
@@ -967,8 +981,12 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
    * someone @mentions you, and off the unread badge. `quiet`: no Undo toast.
    */
   muteChat: (conversationId: ID, until: string | null, quiet?: boolean) => void;
-  /** Reports a chat to CourtSide for a person to review. */
-  reportChat: (conversationId: ID, reason: string) => void;
+  /**
+   * Reports a chat to CourtSide for a person to review: the admin can then
+   * read it. `aboutUserId` is the person reported (the other person in a
+   * one-to-one chat, or a message's sender); `messageId`, one message in it.
+   */
+  reportChat: (conversationId: ID, reason: string, aboutUserId?: ID, messageId?: ID) => void;
   /** Send a court in a chat: where to meet (with how many courts stand there, when known). */
   sendCourt: (conversationId: ID, place: { id?: string; name: string; lat: number; lng: number; count?: number }, replyToId?: ID) => void;
   /** Send a voice note recorded on this device (uploaded first). */
@@ -1281,6 +1299,8 @@ const nextId = (prefix: string): string => {
 };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** A report about one thing: what it is and its id. The same list the server reads (stamp_report, migration 115). */
+const REPORTED_TARGET = /^(?:post|hit|question|answer|comment|coach-question|coach-reply):(.+)$/;
 
 /**
  * The made-up players, posts and threads the app ships with so a demo is
@@ -2684,7 +2704,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const deleteAccount = useCallback(async () => {
     const me = stateRef.current.currentUserId;
     void forgetLinkPreviews();
-    if (isSupabaseConfigured) await remoteAuth.deleteAccount();
+    // An account made with Apple: Apple's sheet confirms once more, so the server can revoke
+    // the Sign in with Apple link too (best effort: closing the sheet still deletes the account).
+    if (isSupabaseConfigured) await remoteAuth.deleteAccount(await remoteAuth.appleCodeForDelete());
     // A deleted account has no business in the remembered-logins list.
     const savedAccounts = me ? await forgetAccount(me) : stateRef.current.savedAccounts;
     // Nor anything of it on the device (see signOut), its saved copy included.
@@ -4397,8 +4419,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
   const loadSiteFeedback = useCallback(async () => (live(stateRef.current.currentUserId) ? remote.fetchSiteFeedback() : []), []);
   const removeFromWaitlistPage = useCallback(async (table: 'waitlist' | 'site_feedback', id: ID) => (live(stateRef.current.currentUserId, id) ? remote.removeFromWaitlistPage(table, id) : false), []);
-  const loadReportedItem = useCallback(async (kind: 'post' | 'hit', id: ID) => (live(stateRef.current.currentUserId, id) ? remote.fetchReportedItem(kind, id) : null), []);
+  const loadReportedItem = useCallback(async (kind: ReportedItemKind, id: ID) => (live(stateRef.current.currentUserId, id) ? remote.fetchReportedItem(kind, id) : null), []);
+  const suspendFromChat = useCallback(async (userId: ID, conversationId: ID) => {
+    const me = stateRef.current.currentUserId;
+    if (!me || !live(me, conversationId) || !UUID.test(userId)) return false;
+    const reportId = await remote.insertReport(me, userId, 'profile', `from a reported chat (${conversationId})`, true).catch(() => null);
+    if (!reportId) return false;
+    const ok = await remote.moderateReport(reportId, 'suspend');
+    if (ok) haptics.commit();
+    return ok;
+  }, []);
   const loadReportedChat = useCallback(async (conversationId: ID) => (live(stateRef.current.currentUserId, conversationId) ? remote.fetchReportedChat(conversationId).catch(() => null) : null), []);
+  const loadReportEvidence = useCallback(async (reportId: ID) => (live(stateRef.current.currentUserId, reportId) ? remote.fetchReportEvidence(reportId).catch(() => []) : []), []);
   const decideReport = useCallback(async (reportId: ID, decision: 'remove' | 'restore' | 'suspend' | 'unsuspend' | 'dismiss') => {
     if (!live(stateRef.current.currentUserId, reportId)) return false;
     const ok = await remote.moderateReport(reportId, decision);
@@ -5317,11 +5349,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
     });
   }, [requireUser]);
 
-  /** Reports a chat (a group, usually) to CourtSide; a person reviews it. */
-  const reportChat = useCallback((conversationId: ID, reason: string) => {
+  /**
+   * Reports a chat to CourtSide; a person reviews it. Always as the chat
+   * ("conversation:<id>"), so the admin can read it (report_chat_context)
+   * and act on it, with the person it is about when there is one: the other
+   * person in a one-to-one chat, or a reported message's sender (the server
+   * keeps that name only if they are in the chat). A single message goes in
+   * the reason as "message:<id>", so the admin card can point at it.
+   */
+  const reportChat = useCallback((conversationId: ID, reason: string, aboutUserId?: ID, messageId?: ID) => {
     haptics.commit();
     const me = stateRef.current.currentUserId;
-    if (me && live(me, conversationId)) void remote.insertReport(me, null, `conversation:${conversationId}`, reason);
+    if (!me || !live(me, conversationId)) return;
+    const about = aboutUserId && aboutUserId !== me && UUID.test(aboutUserId) ? aboutUserId : null;
+    const why = messageId && UUID.test(messageId) ? `message:${messageId}` : reason;
+    void remote.insertReport(me, about, `conversation:${conversationId}`, why).catch(() => undefined);
   }, []);
 
   /** Sends a message that did not go through, again. */
@@ -6328,8 +6370,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // Nobody reports themselves (toggleBlock has the same check).
     if (userId === stateRef.current.currentUserId) return;
     haptics.commit();
-    // A reported post or hit leaves your screens at once.
-    const target = /^(?:post|hit):(.+)$/.exec(reason)?.[1];
+    // What was reported leaves your screens at once: a post, hit, thread, reply, comment or coach question or reply.
+    const target = REPORTED_TARGET.exec(reason)?.[1];
     if (target) setState((prev) => (prev.reportedIds.includes(target) ? prev : { ...prev, reportedIds: [...prev.reportedIds, target] }));
     const me = stateRef.current.currentUserId;
     if (me && live(me)) void remote.insertReport(me, UUID.test(userId) ? userId : null, reason, '');
@@ -6952,7 +6994,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       loadSiteFeedback,
       removeFromWaitlistPage,
       loadReportedItem,
+      suspendFromChat,
       loadReportedChat,
+      loadReportEvidence,
       decideReport,
       removeReportedMessage,
       takeDown,
@@ -7149,7 +7193,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       loadSiteFeedback,
       removeFromWaitlistPage,
       loadReportedItem,
+      suspendFromChat,
       loadReportedChat,
+      loadReportEvidence,
       decideReport,
       removeReportedMessage,
       takeDown,
@@ -7192,23 +7238,37 @@ export function AppProvider({ children }: { children: ReactNode }) {
     ],
   );
 
-  // Reported posts and hits are left out of everything the screens read. So
-  // is anything taken down (migration 108) that is neither yours nor seen by
-  // an admin: the database already keeps those away, so this only catches a
-  // copy held from before (an account that stopped being an admin, say).
+  // What you reported is left out of everything the screens read: posts, hits,
+  // threads, replies, comments and coach questions and replies. Ask a coach and
+  // the tips board also leave out anyone you blocked, at once (Oct 5; the
+  // database does the same from the next load, migration 115), the way posts,
+  // threads and comments already do. So is anything taken down (migration 108)
+  // that is neither yours nor seen by an admin: the database already keeps
+  // those away, so this only catches a copy held from before (an account that
+  // stopped being an admin, say).
   const amAdminNow = !!currentUser?.isAdmin;
   const unreported = useMemo(() => {
     const me = state.currentUserId;
+    const out = new Set(state.reportedIds);
+    const blocked = new Set(state.blockedIds);
     const shut = (x: { authorId: ID; removed?: Removed }) => !!x.removed && x.authorId !== me && !amAdminNow;
     const strays = state.posts.some(shut) || state.stories.some(shut);
-    if (!state.reportedIds.length && !strays) return null;
-    const out = new Set(state.reportedIds);
-    return {
-      posts: state.posts.filter((p) => !out.has(p.id) && !shut(p)),
-      stories: state.stories.filter((s) => !out.has(s.id) && !shut(s)),
-      hitRequests: out.size ? state.hitRequests.filter((h) => !out.has(h.id)) : state.hitRequests,
+    if (!out.size && !blocked.size && !strays) return null;
+    const patch: Partial<Pick<AppState, 'posts' | 'stories' | 'hitRequests' | 'questions' | 'answers' | 'comments' | 'coachQuestions' | 'coachReplies' | 'tips'>> = {
+      coachQuestions: state.coachQuestions.filter((q) => !out.has(q.id) && !blocked.has(q.authorId)),
+      coachReplies: state.coachReplies.filter((r) => !out.has(r.id) && !blocked.has(r.coachUserId)),
+      tips: state.tips.filter((t) => !blocked.has(t.authorId)),
     };
-  }, [state.reportedIds, state.posts, state.stories, state.hitRequests, state.currentUserId, amAdminNow]);
+    if (out.size || strays) {
+      patch.posts = state.posts.filter((p) => !out.has(p.id) && !shut(p));
+      patch.stories = state.stories.filter((s) => !out.has(s.id) && !shut(s));
+      patch.hitRequests = out.size ? state.hitRequests.filter((h) => !out.has(h.id)) : state.hitRequests;
+      patch.questions = state.questions.filter((q) => !out.has(q.id));
+      patch.answers = state.answers.filter((a) => !out.has(a.id));
+      patch.comments = state.comments.filter((c) => !out.has(c.id));
+    }
+    return patch;
+  }, [state.reportedIds, state.blockedIds, state.posts, state.stories, state.hitRequests, state.questions, state.answers, state.comments, state.coachQuestions, state.coachReplies, state.tips, state.currentUserId, amAdminNow]);
   const value = useMemo<AppContextValue>(
     () => ({ ...state, ...unreported, ready: state.ready && state.authResolved, currentUser, actions, seeing, shownAtCourt, ageSaysAdult }),
     [state, unreported, currentUser, actions, seeing, shownAtCourt, ageSaysAdult],

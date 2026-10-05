@@ -11,7 +11,9 @@ import type { Comment, TakedownKind } from '@/data/types';
 import { RemovedNote } from '@/features/moderation/RemovedNote';
 import { confirm } from '@/lib/confirm';
 import { relativeTime } from '@/lib/format';
+import { confirmReport } from '@/lib/confirm';
 import * as haptics from '@/lib/haptics';
+import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
 import { colors, spacing, typography } from '@/theme';
 
@@ -27,6 +29,7 @@ export const replyIndent = (big: boolean) => (big ? 40 : 32) + spacing.md;
  * admins, and says so under its words ("Removed: Hate"), with no Reply. For
  * an admin, holding the words offers Take down (or Restore); nobody else
  * gets anything on a hold.
+ * Holding someone else's comment reports it (App Review 1.2, Oct 5).
  */
 export function CommentRow({ comment, big = false, reply = false, onPressBody, onReply, onLayout }: {
   comment: Comment;
@@ -57,13 +60,22 @@ export function CommentRow({ comment, big = false, reply = false, onPressBody, o
   const openProfile = () => { if (who) router.push(who.id === currentUserId ? '/profile' : `/user/${who.id}`); };
   // A photo in the comment opens to the whole screen; a tap anywhere puts it away.
   const [viewing, setViewing] = useState(false);
+  // Someone else's comment: hold it to report it. It leaves your screens at once.
+  const canReport = !!currentUserId && comment.authorId !== currentUserId;
+  const report = canReport ? () => {
+    haptics.tap();
+    confirmReport('comment', () => {
+      actions.reportUser(comment.authorId, `comment:${comment.id}`);
+      showToast({ title: 'Thanks — a person will review this', icon: 'flag-outline' });
+    });
+  } : undefined;
   return (
     <View style={[styles.row, reply && { marginLeft: replyIndent(big) }]} onLayout={onLayout ? (e) => onLayout(e.nativeEvent.layout.y) : undefined}>
       <Pressable accessibilityRole="link" accessibilityLabel={who ? `Open ${who.name}'s profile` : undefined} onPress={openProfile}>
         <Avatar name={who?.name ?? '?'} seed={who?.avatarSeed ?? comment.authorId} uri={who?.avatarUrl} size={reply ? (big ? 30 : 24) : big ? 40 : 32} />
       </Pressable>
       <View style={styles.body}>
-        <Pressable accessibilityRole={onPressBody || moderate ? 'button' : undefined} accessibilityHint={moderate ? (comment.removed ? 'Hold to restore it' : 'Hold to take it down') : undefined} onPress={onPressBody} onLongPress={moderate} delayLongPress={400} disabled={!onPressBody && !moderate} style={styles.bodyPress}>
+        <Pressable accessibilityRole={onPressBody || moderate ? 'button' : undefined} accessibilityHint={moderate ? (comment.removed ? 'Hold to restore it' : 'Hold to take it down') : report ? 'Hold to report' : undefined} onPress={onPressBody} onLongPress={moderate ?? report} delayLongPress={400} disabled={!onPressBody && !moderate && !report} style={styles.bodyPress}>
           <Text style={[styles.meta, big && styles.metaBig]}>
             <Text style={[styles.name, big && styles.nameBig]} onPress={openProfile}>{who?.name ?? 'Unknown'}</Text>
             {'  '}{relativeTime(comment.createdAt)}

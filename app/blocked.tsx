@@ -16,7 +16,7 @@ export default function Blocked() {
   return (
     <Screen title="Blocked" compactTitle onBack={() => goBack()}>
       <Text style={styles.note}>
-        Blocked players cannot see your posts, message you, or find your profile. They are not told.
+        Blocked players can’t message you one-to-one or see your posts, hits, threads or replies, and you won’t see theirs. They can still see your profile. They are not told.
       </Text>
       {blocked.length === 0 ? (
         <EmptyState icon="shield-checkmark-outline" title="Nobody blocked" body="Block someone from the menu on their profile." />

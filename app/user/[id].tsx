@@ -42,7 +42,7 @@ const TABS = ['Posts', 'Clips', 'Tagged'] as const;
 function UserProfile() {
   const styles = useThemedStyles(styleDefinitions);
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { users, posts, coaches, currentUserId, followingIds, followRequests, mutedIds, blockedIds, alertIds, actions } = useApp();
+  const { users, posts, coaches, currentUser, currentUserId, followingIds, followRequests, mutedIds, blockedIds, alertIds, actions } = useApp();
   const loading = useStillLoading();
   // Their posts come in when their profile is opened, so the grid and the
   // counts are whole however old the posts are.
@@ -66,6 +66,15 @@ function UserProfile() {
   }
 
   const isMe = currentUserId === user.id;
+  // A suspended account shows nothing but that it is unavailable (its posts are hidden by the
+  // database too, migration 115). Admins still see it whole, to review and lift the suspension.
+  if (user.suspended && !isMe && !currentUser?.isAdmin) {
+    return (
+      <Screen title="Player" compactTitle onBack={() => goBack()}>
+        <EmptyState icon="person-outline" title="This account is unavailable" body="You can’t see this account right now." />
+      </Screen>
+    );
+  }
   const following = followingIds.includes(user.id);
   const requested = !!currentUserId && followRequests.some((r) => r.fromId === currentUserId && r.toId === user.id);
   const muted = mutedIds.includes(user.id);

@@ -19,8 +19,10 @@ import { colors, radius, spacing, typography } from '@/theme';
  * their first post and from their profile. A friend who joins through it
  * follows them (and can be followed back). It says only that: whether
  * someone shows on a map depends on their age and their Location switch.
- * Below, the people who joined through them: who has counted ($1), and for
- * the rest the next thing they still have to do (migration 85).
+ * Below, the people who joined through them: who has counted, and for the
+ * rest the next thing they still have to do (migration 85). No money is shown:
+ * only named ambassadors are paid, by hand (Admin → Invites), so nobody else
+ * is promised a dollar they will never get (Oct 5).
  */
 const NEXT: Record<InviteeMissing, string> = {
   setup: 'Needs to finish signing up',
@@ -86,7 +88,7 @@ export default function Invite() {
         </Pressable>
         {people && people.length > 0 ? (
           <View style={styles.people}>
-            {counted.length > 0 ? <Text style={styles.groupLabel}>{`Counted · $${counted.length}`}</Text> : null}
+            {counted.length > 0 ? <Text style={styles.groupLabel}>{`Counted · ${counted.length}`}</Text> : null}
             {counted.map((p) => <Person key={p.id} p={p} note="Counted" good onPress={() => open(p.id)} />)}
             {waiting.length > 0 ? <Text style={styles.groupLabel}>Almost there</Text> : null}
             {waiting.map((p) => <Person key={p.id} p={p} note={p.missing?.[0] ? NEXT[p.missing[0]] : 'Checking…'} onPress={() => open(p.id)} />)}

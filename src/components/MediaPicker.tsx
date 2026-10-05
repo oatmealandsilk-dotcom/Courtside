@@ -72,7 +72,9 @@ const ANDROID_PICKER = Platform.OS === 'android';
 export async function pickFromDevice(selection: 'video' | 'photo' | 'all'): Promise<PickedMedia | null> {
   const kinds: ImagePicker.MediaType[] = selection === 'video' ? ['videos'] : selection === 'photo' ? ['images'] : ['images', 'videos'];
   const perm = ANDROID_PICKER ? null : await ImagePicker.requestMediaLibraryPermissionsAsync().catch(() => null);
-  if (perm && !perm.granted && !perm.canAskAgain) throw new Error('Photo access is off. Turn it on in Settings → CourtSide → Photos.');
+  // Photo access refused ("Don't Allow") or limited: Apple's current picker needs none and
+  // hands over only what was chosen, so it opens instead of refusing (App Review 2.1 and
+  // 5.1.1(iv), Oct 5). Full access only picks the older picker, the reliable one for video.
   const full = !!perm?.granted && perm.accessPrivileges !== 'limited';
   // One picker, once. A failed pick used to open the library a second time
   // with the other picker, which read as the app losing your choice.
@@ -258,7 +260,7 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
     const kinds: ImagePicker.MediaType[] = selection === 'video' ? ['videos'] : selection === 'photo' ? ['images'] : ['images', 'videos'];
     // Android asks nothing first: its Photo Picker needs no permission (see pickFromDevice).
     const perm = ANDROID_PICKER ? null : await ImagePicker.requestMediaLibraryPermissionsAsync().catch(() => null);
-    if (perm && !perm.granted && !perm.canAskAgain) throw new Error('Photo access is off. Turn it on in Settings → CourtSide → Photos.');
+    // Refused or limited access opens Apple's current picker, which needs none (see pickFromDevice).
     const full = !!perm?.granted && perm.accessPrivileges !== 'limited';
     // Apple's older picker copies the file itself and has proved the reliable
     // one for video; it needs full photo access, which is why that is checked.
@@ -282,10 +284,11 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
         orientation: asset.width && asset.height && asset.width > asset.height ? 'landscape' : 'portrait',
       });
     } catch (err) {
-      // Limited photo access is the usual cause of iOS's 3164; name the fix. (Android's picker needs no access, so it has no such fix.)
+      // iOS's 3164 (a video it could not hand over) is what full access fixes; name the fix
+      // only for that, and only when access is not full. (Android's picker needs no access.)
       const perm = ANDROID_PICKER ? null : await ImagePicker.getMediaLibraryPermissionsAsync().catch(() => null);
-      if (perm && (perm.accessPrivileges === 'limited' || !perm.granted)) {
-        setError('Photo access is limited. On your phone: Settings → CourtSide → Photos → All Photos, then try again.');
+      if (/3164/.test(String(err)) && perm && (perm.accessPrivileges === 'limited' || !perm.granted)) {
+        setError('That video couldn’t be opened. To fix it: Settings → CourtSide → Photos → Full Access, then try again.');
         return;
       }
       setError(explainPickError(err));
