@@ -1069,6 +1069,19 @@ export const remote = {
     });
     if (error) fail('thread save')(error);
   },
+  /**
+   * A change to a thread already up (an edit, an accepted answer): those
+   * columns only, never its date. The upsert above re-dated it to "now",
+   * because the server stamps the date on the insert half (migration 36).
+   * Not on the server yet (its first save still going): the full save.
+   */
+  async updateQuestion(q: Question) {
+    const { data, error } = await need().from('questions').update({
+      title: q.title, body: q.body, tags: q.tags, accepted_answer_id: q.acceptedAnswerId ?? null, edited_at: q.editedAt ?? null,
+    }).eq('id', q.id).select('id');
+    if (error) { fail('thread save')(error); return; }
+    if (!(data ?? []).length) await remote.upsertQuestion(q);
+  },
   async upsertAnswer(a: Answer) {
     const { error } = await need().from('answers').upsert({
       id: a.id, question_id: a.questionId, author_id: a.authorId, parent_answer_id: a.parentAnswerId ?? null, body: a.body, from_coach: a.fromCoach, created_at: a.createdAt,
@@ -1084,6 +1097,12 @@ export const remote = {
       id: q.id, author_id: q.authorId, title: q.title, body: q.body, specialty: q.specialty, video_url: q.videoUrl ?? null, media_label: q.mediaLabel ?? null, resolved: q.resolved, created_at: q.createdAt,
     });
     if (error) fail('coach question save')(error);
+  },
+  /** "This answered it" / "Reopen": just that, so the question keeps its date (see updateQuestion). */
+  async setCoachQuestionResolved(q: CoachQuestion) {
+    const { data, error } = await need().from('coach_questions').update({ resolved: q.resolved }).eq('id', q.id).select('id');
+    if (error) { fail('coach question save')(error); return; }
+    if (!(data ?? []).length) await remote.upsertCoachQuestion(q);
   },
   /**
    * Deletes your own public coach question; the coaches' answers go with it

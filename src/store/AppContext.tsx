@@ -3194,7 +3194,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       questions: prev.questions.map((q) => (q.id === questionId && q.authorId === me ? { ...q, title: patch.title, body: patch.body, tags, editedAt: new Date().toISOString() } : q)),
     }));
     const saved = stateRef.current.questions.find((q) => q.id === questionId);
-    if (saved && live(me, questionId)) void remote.upsertQuestion({ ...saved, title: patch.title, body: patch.body, tags, editedAt: new Date().toISOString() });
+    if (saved && live(me, questionId)) void remote.updateQuestion({ ...saved, title: patch.title, body: patch.body, tags, editedAt: new Date().toISOString() });
   }, [requireUser]);
   const acceptAnswer = useCallback((questionId: ID, answerId: ID) => {
     const me = requireUser();
@@ -3203,7 +3203,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const next = question.acceptedAnswerId === answerId ? undefined : answerId;
     haptics.commit();
     setState((prev) => ({ ...prev, questions: prev.questions.map((q) => (q.id === questionId ? { ...q, acceptedAnswerId: next } : q)) }));
-    if (live(me, questionId)) void remote.upsertQuestion({ ...question, acceptedAnswerId: next });
+    if (live(me, questionId)) void remote.updateQuestion({ ...question, acceptedAnswerId: next });
   }, [requireUser]);
 
   // A caller that reads the store the moment an action resolves (the feed
@@ -5710,7 +5710,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!question || question.authorId !== me) return;
     haptics.commit();
     setState((prev) => ({ ...prev, coachQuestions: prev.coachQuestions.map((q) => (q.id === questionId ? { ...q, resolved: !q.resolved } : q)) }));
-    if (live(me, questionId)) void remote.upsertCoachQuestion({ ...question, resolved: !question.resolved });
+    if (live(me, questionId)) void remote.setCoachQuestionResolved({ ...question, resolved: !question.resolved });
   }, [requireUser]);
   /**
    * Your own public coach question, gone for everyone along with the coaches'
