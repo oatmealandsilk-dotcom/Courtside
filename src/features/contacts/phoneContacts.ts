@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import { requireOptionalNativeModule } from 'expo-modules-core';
 
 /** One person from the phone's contacts, with only what matching needs. */
@@ -17,13 +18,18 @@ export function canReadContacts(): boolean {
   return !!requireOptionalNativeModule('ExpoContacts');
 }
 
-/** Asks once, then reads names, numbers and emails. Nothing else is read. */
-export async function readContacts(): Promise<PhoneContact[] | 'denied' | 'unavailable'> {
+/**
+ * Asks once, then reads names, numbers and emails. Nothing else is read.
+ * 'ask-again': refused, but the phone lets the app ask once more (Android
+ * after a first "Don't allow"; an iPhone never does), so a Try again button
+ * can ask rather than sending the person to Settings.
+ */
+export async function readContacts(): Promise<PhoneContact[] | 'denied' | 'ask-again' | 'unavailable'> {
   if (!canReadContacts()) return 'unavailable';
   // Loaded only now, on a build known to have it.
   const Contacts = require('expo-contacts/legacy') as typeof import('expo-contacts/legacy');
   const permission = await Contacts.requestPermissionsAsync();
-  if (permission.status !== 'granted') return 'denied';
+  if (permission.status !== 'granted') return Platform.OS === 'android' && permission.canAskAgain ? 'ask-again' : 'denied';
   const { data } = await Contacts.getContactsAsync({ fields: [Contacts.Fields.Name, Contacts.Fields.FirstName, Contacts.Fields.LastName, Contacts.Fields.PhoneNumbers, Contacts.Fields.Emails] });
   return data
     .map((c, i) => ({

@@ -13,7 +13,8 @@ import * as WebBrowser from 'expo-web-browser';
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { supabase } from '@/lib/supabase';
+import Constants, { ExecutionEnvironment } from 'expo-constants';
+import { ANDROID_OAUTH_KEY, androidOAuthClient, supabase } from '@/lib/supabase';
 import { shrinkCover, shrinkPhoto, shrinkPhotoSized } from '@/lib/shrinkPhoto';
 import { COVER_MARK, smallName } from '@/lib/smallCover';
 import { canShrinkVideo, shrinkVideo } from '@/lib/shrinkVideo';
@@ -3460,10 +3461,52 @@ export async function uploadChatPhoto(me: ID, conversationId: ID, picked: ChatPh
  * is the Mac's Wi-Fi IP — so on iPhone the app's scheme is used instead. The
  * sign-in sheet catches that address itself, whether or not the phone has an
  * app registered for it, which is why it works in Expo Go too.
+ *
+ * An Android build uses the very same address (Oct 5), the one Supabase
+ * already allows for the iPhone, so nothing needs adding there; it was
+ * courtside:///, which Supabase would have refused. Only Expo Go on Android
+ * keeps its own exp:// address. app/+native-intent.tsx keeps the app's pages
+ * from also trying to open courtside://auth when it comes back.
  */
 function nativeReturnAddress() {
-  if (Platform.OS === 'ios') return 'courtside://auth';
+  if (Platform.OS === 'ios' || Constants.executionEnvironment !== ExecutionEnvironment.StoreClient) return 'courtside://auth';
   return Linking.createURL('/');
+}
+
+/** Wipes the Android Google helper's own copy of a login, and any leftover one-time secret. */
+async function clearAndroidOAuth() {
+  try {
+    const keys = await AsyncStorage.getAllKeys();
+    const ours = keys.filter((k) => k.startsWith(ANDROID_OAUTH_KEY));
+    if (ours.length) await AsyncStorage.multiRemove(ours);
+  } catch { /* nothing kept */ }
+}
+
+/**
+ * Android: Google's one-time code (PKCE, see androidOAuthClient) turned into
+ * the login, which then becomes the app's own (the main client's), so the
+ * app opens signed in. Also used when Android closed the app while Google was
+ * open and the return opened it afresh (app/+native-intent.tsx).
+ */
+export async function finishAndroidGoogle(returnUrl: string) {
+  const helper = androidOAuthClient();
+  const client = need();
+  if (!helper) throw new Error('Google sign-in is not available here.');
+  const back = new URL(returnUrl);
+  const params = new URLSearchParams(back.hash.startsWith('#') ? back.hash.slice(1) : back.search.slice(1));
+  const code = back.searchParams.get('code');
+  if (!code) throw new Error(params.get('error_description') ?? 'Google did not return a session.');
+  const flowId = back.searchParams.get('sb_flow_id');
+  try {
+    const exchanged = await helper.auth.exchangeCodeForSession(code, flowId ? { flowId } : undefined);
+    if (exchanged.error || !exchanged.data.session) throw new Error(exchanged.error?.message ?? 'Google did not return a session.');
+    const { access_token, refresh_token } = exchanged.data.session;
+    const set = await client.auth.setSession({ access_token, refresh_token });
+    if (set.error) throw new Error(set.error.message);
+    return set.data.session;
+  } finally {
+    await clearAndroidOAuth();
+  }
 }
 
 export const auth = {
@@ -3523,6 +3566,19 @@ export const auth = {
       return null;
     }
     const redirectTo = nativeReturnAddress();
+    // Android: the PKCE way, through its helper client (see androidOAuthClient).
+    const helper = androidOAuthClient();
+    if (helper) {
+      await clearAndroidOAuth();
+      const started = await helper.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo, skipBrowserRedirect: true, queryParams: { prompt: 'select_account' } },
+      });
+      if (started.error || !started.data.url) throw new Error(started.error?.message ?? 'Google sign-in could not start.');
+      const back = await WebBrowser.openAuthSessionAsync(started.data.url, redirectTo);
+      if (back.type !== 'success') { await clearAndroidOAuth(); return null; }
+      return finishAndroidGoogle(back.url);
+    }
     const { data, error } = await client.auth.signInWithOAuth({
       provider: 'google',
       options: { redirectTo, skipBrowserRedirect: true, queryParams: { prompt: 'select_account' } },

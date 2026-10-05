@@ -148,7 +148,9 @@ export default function AccountCentre() {
       <Text style={styles.sectionTitle}>Sign-in</Text>
       <View style={styles.card}>
         {row('key-outline', hasEmail ? 'Change password' : 'Set a password', undefined, isSupabaseConfigured ? () => { setPassword(''); setPassword2(''); setSheet('password'); } : undefined, false, 0)}
-        {row('logo-google', 'Google', hasGoogle ? 'Connected' : 'Link', !hasGoogle && isSupabaseConfigured ? () => run(() => actions.linkGoogle(), 'Follow the Google prompt to finish linking.') : undefined, false, 1)}
+        {/* Android (Oct 5): linking Google there would bring the login back in an address any
+            Android app can claim, so the row only shows once it is linked (on an iPhone or the website). */}
+        {Platform.OS !== 'android' || hasGoogle ? row('logo-google', 'Google', hasGoogle ? 'Connected' : 'Link', !hasGoogle && isSupabaseConfigured ? () => run(() => actions.linkGoogle(), 'Follow the Google prompt to finish linking.') : undefined, false, 1) : null}
         {row('time-outline', 'Last sign-in', info?.lastSignInAt ? formatDate(info.lastSignInAt) : undefined, undefined, false, 2)}
         {row('log-out-outline', 'Log out everywhere', undefined, () => confirm({ title: 'Log out everywhere?', message: "You'll be logged out on every phone and computer, this one included.", confirmLabel: 'Log out', destructive: true, onConfirm: () => run(async () => { await actions.signOutEverywhere(); router.replace('/sign-in'); }, 'Signed out everywhere.') }), false, 3)}
       </View>
