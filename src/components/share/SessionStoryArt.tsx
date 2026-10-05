@@ -6,6 +6,7 @@ import { BrandMark } from '@/components/BrandMark';
 import { SessionCard } from '@/components/session/SessionCard';
 import { SessionStamp } from '@/components/share/SessionStamp';
 import { duration } from '@/lib/format';
+import { formatDistance } from '@/features/activity/workouts';
 import type { ID } from '@/data/types';
 import type { SessionStory } from '@/features/share/sessionStory';
 import { useTheme } from '@/theme/ThemeProvider';
@@ -69,6 +70,8 @@ export function SessionStoryArt({ design, story, width, photo, hidden = [], onPh
     const stats = [
       score ? { label: 'Score', value: score } : null,
       { label: 'Time', value: duration(s.minutes) },
+      // A workout's distance (migration 107); tennis never has one.
+      s.workout && formatDistance(s.distanceM) ? { label: 'Distance', value: formatDistance(s.distanceM)! } : null,
       s.kcal ? { label: 'Calories', value: `${s.kcal}` } : null,
       s.maxHr != null && s.avgHr ? { label: 'Avg HR', value: `${s.avgHr} bpm` } : null,
       s.maxHr != null ? { label: 'Max HR', value: `${s.maxHr} bpm` } : null,

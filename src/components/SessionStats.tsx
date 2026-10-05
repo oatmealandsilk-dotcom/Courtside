@@ -5,6 +5,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import type { SessionDetail } from '@/data/types';
 import { KIND_LABEL, hasSessionStats, peopleBits, sourceLabel, statsChunks, statsLine, type StatsBit } from '@/features/activity/format';
+import { formatDistance, workoutName } from '@/features/activity/workouts';
 import { duration } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
@@ -75,17 +76,21 @@ export function SessionStats({ session, compact = false }: { session: SessionDet
   if (!hasSessionStats(session)) return null;
   const tracker = !!session.activityId;
   const source = tracker ? sourceLabel(session.source ?? 'apple-health') : null;
+  // A workout from a tracker (a run, a lift: migration 107): its time is not time on court, and a run has its distance.
+  const workout = tracker && session.workout ? workoutName(session.workout) : null;
+  const far = workout ? formatDistance(session.distanceM) : null;
+  const timeWords = workout ? `${workout}, ${duration(session.minutes)}` : `${duration(session.minutes)} on court`;
   const kind = session.kind ?? 'practice';
   const people = peopleBits(session, blockedIds);
   const peopleText = [people.vs, people.with].filter(Boolean).map((c) => c!.map((b) => b.text).join('')).join(' · ');
   // One sentence for a screen reader, rather than a tile at a time. The handles stay links of their own.
   const spoken = (tracker
-    ? [`${duration(session.minutes)} on court`, peopleText || null, session.maxHr ? `max heart rate ${session.maxHr} bpm` : null, session.avgHr ? `average ${session.avgHr} bpm` : null, session.strain != null ? `Strain ${session.strain.toFixed(1)}` : null, session.kcal ? `${session.kcal} calories` : null, source]
+    ? [timeWords, far, peopleText || null, session.maxHr ? `max heart rate ${session.maxHr} bpm` : null, session.avgHr ? `average ${session.avgHr} bpm` : null, session.strain != null ? `Strain ${session.strain.toFixed(1)}` : null, session.kcal ? `${session.kcal} calories` : null, source]
     : [statsLine(session, blockedIds)]
   ).filter(Boolean).join(', ');
   // The tiles alone (the people line under them is read on its own, each handle a link).
   const tilesSpoken = tracker
-    ? [`${duration(session.minutes)} on court`, session.maxHr ? `max heart rate ${session.maxHr} bpm` : null, session.avgHr ? `average ${session.avgHr} bpm` : null, session.strain != null ? `Strain ${session.strain.toFixed(1)}` : null, session.kcal ? `${session.kcal} calories` : null].filter(Boolean).join(', ')
+    ? [timeWords, far, session.maxHr ? `max heart rate ${session.maxHr} bpm` : null, session.avgHr ? `average ${session.avgHr} bpm` : null, session.strain != null ? `Strain ${session.strain.toFixed(1)}` : null, session.kcal ? `${session.kcal} calories` : null].filter(Boolean).join(', ')
     : statsLine({ ...session, with: undefined });
 
   if (compact) {
@@ -102,7 +107,8 @@ export function SessionStats({ session, compact = false }: { session: SessionDet
   type Tile = { label: string; value: string };
   const tiles = ((tracker
     ? [
-        { label: 'Time on court', value: duration(session.minutes) },
+        { label: workout ?? 'Time on court', value: duration(session.minutes) },
+        far ? { label: 'Distance', value: far } : null,
         session.maxHr ? { label: 'Max bpm', value: String(session.maxHr) } : null,
         session.avgHr ? { label: 'Avg bpm', value: String(session.avgHr) } : null,
         // Shared on the post (migration 72): Strain is WHOOP's own score, always called Strain.

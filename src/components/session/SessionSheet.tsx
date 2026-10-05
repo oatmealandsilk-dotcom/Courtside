@@ -13,6 +13,7 @@ import { flipSets, spokenScore } from '@/features/activity/score';
 import { isActive, sessionPeople, tagsOnSession } from '@/features/activity/sessionTags';
 import { overUsual } from '@/features/activity/usual';
 import { cleanZones, hardMinutes, postZones } from '@/features/activity/zones';
+import { distanceFigure } from '@/features/activity/workouts';
 import { openCourt } from '@/features/players/courtLink';
 import { TipBubble } from '@/components/TipBubble';
 import { learned, useTip } from '@/features/tips/tips';
@@ -95,6 +96,8 @@ export function SessionSheet({ post, me, users, sessions, sessionTags, activitie
   // Shared on the post (migration 72); Strain is WHOOP's alone.
   const strain = s.strain != null ? s.strain : null;
   const kcal = s.kcal ? s.kcal : null;
+  // A workout's distance (migration 107): only ever on a workout's post, never on tennis.
+  const far = s.workout ? distanceFigure(s.distanceM) : null;
   const over = mine ? overUsual(sessions, me, s.minutes, { exclude: log?.id }) : null;
 
   // Who played: those who accepted, for everyone; to the author, those still waiting too, faded.
@@ -121,7 +124,7 @@ export function SessionSheet({ post, me, users, sessions, sessionTags, activitie
   const rivalName = rival ? users.find((u) => u.id === rival.id)?.name.trim().split(/\s+/)[0] : undefined;
   const court = post.court;
   const tracker = !!s.activityId;
-  const sparse = !hr && !zones && strain == null && !kcal;
+  const sparse = !hr && !zones && strain == null && !kcal && !far;
 
   // The author's own numbers that are not on the post.
   const privateHr = activity && !hr && activity.maxHr ? activity : undefined;
@@ -187,6 +190,11 @@ export function SessionSheet({ post, me, users, sessions, sessionTags, activitie
       {!sparse ? (
         <>
           <View style={styles.rule} />
+          {far ? (
+            <View style={styles.columns}>
+              <Column label="DISTANCE"><Figure value={far.value} part={far.value < 10 ? 'dec1' : 'int'} unit={far.unit} size={34} color={colors.text} unitColor={colors.textMuted} play={play} delay={160} /></Column>
+            </View>
+          ) : null}
           {hr || zones ? (
             <View style={styles.columns}>
               {hr && s.avgHr ? <Column label="AVG HEART RATE"><Figure value={s.avgHr} unit="bpm" size={34} color={colors.text} unitColor={colors.textMuted} play={play} delay={200} /></Column> : null}

@@ -4,11 +4,13 @@ import { sessionPeople } from './sessionTags';
 import { withShare } from './healthShare';
 import { duration } from '@/lib/format';
 import { scoreText } from './score';
+import { formatDistance, inSentence, isTennisActivity, workoutName } from './workouts';
 
 /*
- * How a tracker's tennis session is put into words: its name, its day, its
- * times, where it came from, and the private line of numbers only its owner
- * sees. Plain functions, so the store and the screens say it the same way.
+ * How a tracker's tennis session (or, from Apple Health, any workout:
+ * migration 107) is put into words: its name, its day, its times, where it
+ * came from, and the private line of numbers only its owner sees. Plain
+ * functions, so the store and the screens say it the same way.
  */
 
 /**
@@ -24,8 +26,8 @@ export function sportName(sport: string | undefined | null): string {
   return words ? words[0].toUpperCase() + words.slice(1) : 'Activity';
 }
 
-/** "Tennis". */
-export const activityTitle = (a: Pick<DetectedActivity, 'sport'>) => sportName(a.sport);
+/** "Tennis", or a workout's name: "Run", "Strength training" (workouts.ts). */
+export const activityTitle = (a: Pick<DetectedActivity, 'sport'>) => (isTennisActivity(a) ? sportName(a.sport || 'tennis') : workoutName(a.sport));
 
 /** The calendar day it was played where it was played, when the tracker said where; otherwise on this phone's clock. */
 export function activityDay(a: DetectedActivity): string {
@@ -41,7 +43,7 @@ function clock(at: Date): { time: string; mark: string } {
 }
 
 /** "Today, 6:12–7:36 pm", "Yesterday, …" or "Mon Sep 29, …". `sep` goes between the day and the times. */
-export function activityWhen(a: DetectedActivity, now = new Date(), sep = ', '): string {
+export function activityWhen(a: Pick<DetectedActivity, 'startedAt' | 'endedAt'>, now = new Date(), sep = ', '): string {
   const start = new Date(a.startedAt);
   const from = clock(start);
   const to = clock(new Date(a.endedAt));
@@ -57,7 +59,7 @@ export function activityWhen(a: DetectedActivity, now = new Date(), sep = ', '):
 }
 
 /** Which label a session's numbers carry: an Apple Watch only when the workout says it was saved by one. */
-export function statsSourceOf(a: DetectedActivity): StatsSource {
+export function statsSourceOf(a: Pick<DetectedActivity, 'source' | 'device'>): StatsSource {
   if (a.source === 'whoop' || a.source === 'fitbit' || a.source === 'oura' || a.source === 'polar') return a.source;
   if (a.source === 'apple-health') return /^Watch[0-9]+,[0-9]+$/.test(a.device ?? '') ? 'apple-watch' : 'apple-health';
   return 'health-connect';
@@ -93,9 +95,10 @@ export function fromWho(a: DetectedActivity): string {
   }
 }
 
-/** "171 max bpm · 141 avg · 612 kcal · Strain 14.2": what only the player sees. Missing numbers are left out; Strain is WHOOP's alone. */
+/** "171 max bpm · 141 avg · 612 kcal · Strain 14.2" ("3.1 mi · …" first for a run): what only the player sees. Missing numbers are left out; Strain is WHOOP's alone. */
 export function privateLine(a: DetectedActivity): string {
   return [
+    isTennisActivity(a) ? null : formatDistance(a.distanceM),
     a.maxHr ? `${a.maxHr} max bpm` : null,
     a.avgHr ? `${a.avgHr} avg` : null,
     a.kcal ? `${a.kcal} kcal` : null,
@@ -112,13 +115,15 @@ export function privateLine(a: DetectedActivity): string {
  */
 export function sessionFromActivity(a: DetectedActivity, share: HealthShareKey[]): SessionDetail {
   return withShare({
-    focus: 'Tennis',
+    focus: isTennisActivity(a) ? 'Tennis' : workoutName(a.sport),
     minutes: a.minutes,
     drills: [],
     activityId: a.id,
     source: statsSourceOf(a),
     // The day it was played where it was played (never the time), as the server writes it (migration 65).
     ...(a.tzOffsetMin != null ? { day: activityDay(a) } : {}),
+    // A workout says what it was and how far, as the server writes them from the same row (migration 107). Tennis carries neither.
+    ...(isTennisActivity(a) ? {} : { kind: 'fitness' as const, workout: a.sport, ...(a.distanceM ? { distanceM: a.distanceM } : {}) }),
   }, a, share);
 }
 
@@ -164,13 +169,17 @@ export function statsChunks(s: SessionDetail, hidden: ID[] = []): StatsBit[][] {
       else chunks.push([{ text: 'Match' }, ...(people.vs ? [{ text: ' ' }, ...people.vs] : [])]);
       if (people.with) chunks.push(people.with);
     } else {
-      chunks.push([{ text: s.kind ? KIND_LABEL[s.kind] : s.focus }, ...(people.with ? [{ text: ' ' }, ...people.with] : [])]);
+      chunks.push([{ text: whatWord(s, s.focus) }, ...(people.with ? [{ text: ' ' }, ...people.with] : [])]);
     }
     chunks.push([{ text: duration(s.minutes) }]);
     return chunks;
   }
+  // A workout from a tracker says what it was and how far ("Run · 32 min · 3.1 mi"); tennis is as it was.
+  const far = s.workout ? formatDistance(s.distanceM) : null;
   return [
+    s.workout ? [{ text: workoutName(s.workout) }] : null,
     [{ text: duration(s.minutes) }],
+    far ? [{ text: far }] : null,
     people.vs,
     people.with,
     s.maxHr ? [{ text: `${s.maxHr} max bpm` }] : null,
@@ -223,18 +232,20 @@ export const hasSessionStats = (s: SessionDetail | undefined): boolean => !!s &&
 
 export const KIND_LABEL: Record<PracticeSession['kind'], string> = { practice: 'Practice', match: 'Match', drills: 'Drills', fitness: 'Fitness' };
 
-/** "Practice", "Match · Won", "Match · Lost", "Drills"; with a score, "Match · Won 6–4 3–6 10–7" (migration 91). */
-export function loggedLabel(s: Pick<PracticeSession, 'kind' | 'won' | 'sets'>): string {
+/** "Practice", "Match · Won", "Match · Lost", "Drills", "Run" (a fitness session logged from a run); with a score, "Match · Won 6–4 3–6 10–7" (migration 91). */
+export function loggedLabel(s: Pick<PracticeSession, 'kind' | 'won' | 'sets'> & { workout?: string }): string {
   const score = s.kind === 'match' ? scoreText(s.sets) : '';
   if (s.kind === 'match' && s.won !== undefined) return `Match · ${s.won ? 'Won' : 'Lost'}${score ? ` ${score}` : ''}`;
   if (score) return `Match · ${score}`;
+  if (s.kind === 'fitness' && s.workout) return workoutName(s.workout);
   return KIND_LABEL[s.kind];
 }
 
-/** "Tuesday practice", "Sunday match": what a post from your log says when you leave the caption empty. */
-export function loggedTitle(s: Pick<PracticeSession, 'kind' | 'day'>): string {
+/** "Tuesday practice", "Sunday match", "Saturday run": what a post from your log says when you leave the caption empty. */
+export function loggedTitle(s: Pick<PracticeSession, 'kind' | 'day'> & { workout?: string }): string {
   const weekday = new Date(`${s.day}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long' });
-  return `${weekday} ${KIND_LABEL[s.kind].toLowerCase()}`;
+  const what = s.kind === 'fitness' && s.workout ? workoutName(s.workout) : KIND_LABEL[s.kind];
+  return `${weekday} ${inSentence(what)}`;
 }
 
 /** "Today", "Yesterday" or "Mon Sep 29", for a day in your log. */
@@ -258,12 +269,14 @@ export function shortDay(day: string, now = new Date()): string {
  */
 export function sessionFromLogged(s: PracticeSession): SessionDetail {
   return {
-    focus: loggedLabel({ kind: s.kind, won: s.won }),
+    focus: loggedLabel({ kind: s.kind, won: s.won, workout: s.workout }),
     minutes: s.minutes,
     drills: [],
     sessionId: s.id,
     kind: s.kind,
     day: s.day,
+    // A fitness session logged from a workout says what it was ("Run"), as the server writes it from the log (migration 107).
+    ...(s.kind === 'fitness' && s.workout ? { workout: s.workout } : {}),
     ...(s.kind === 'match' && s.won !== undefined ? { won: s.won } : {}),
     // The score goes too; the server puts the log's own on the post either way (migration 91).
     ...(s.kind === 'match' && s.sets?.length ? { sets: s.sets } : {}),
@@ -292,6 +305,13 @@ export function spokenDuration(min: number): string {
 /** What it was in a word: "Match", "Practice", or "Tennis" when the post does not say (a tracker's session not logged, a post from before migration 65). */
 export const kindWord = (s: Pick<SessionDetail, 'kind'>) => (s.kind ? KIND_LABEL[s.kind] : 'Tennis');
 
+/**
+ * kindWord, but a workout says its own name: "Run", "Strength training"
+ * (migration 107). Tennis and everything logged by hand read exactly as
+ * kindWord. (The pill over a clip keeps kindWord: see pillPieces.)
+ */
+export const whatWord = (s: Pick<SessionDetail, 'kind' | 'workout'>, fallback?: string) => (s.workout ? workoutName(s.workout) : s.kind ? KIND_LABEL[s.kind] : fallback ?? 'Tennis');
+
 /** "Won", "Lost", or null when it was not a match with a result. */
 export const resultWord = (s: Pick<SessionDetail, 'kind' | 'won'>) => (s.kind === 'match' && s.won !== undefined ? (s.won ? 'Won' : 'Lost') : null);
 
@@ -306,10 +326,10 @@ export function resultWithScore(s: Pick<SessionDetail, 'kind' | 'won' | 'sets'>)
 
 /**
  * The small line over a session's numbers: "MATCH · FRI OCT 2", "PRACTICE ·
- * TODAY". Just "TENNIS" when the post says neither what it was nor which day.
+ * TODAY", "RUN · TODAY". Just "TENNIS" when the post says neither what it was nor which day.
  */
-export function sessionEyebrow(s: Pick<SessionDetail, 'kind' | 'day'>, now = new Date()): string {
-  const kind = kindWord(s);
+export function sessionEyebrow(s: Pick<SessionDetail, 'kind' | 'day' | 'workout'>, now = new Date()): string {
+  const kind = whatWord(s);
   return (s.day ? `${kind} · ${dayWords(s.day, now)}` : kind).toUpperCase();
 }
 

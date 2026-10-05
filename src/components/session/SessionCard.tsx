@@ -11,6 +11,7 @@ import { onCourtWord, resultWord, scoreLine, sessionEyebrow, sourceLabel, spoken
 import { spokenScore } from '@/features/activity/score';
 import { sessionPeople } from '@/features/activity/sessionTags';
 import { postZones, zoneColors } from '@/features/activity/zones';
+import { distanceFigure } from '@/features/activity/workouts';
 import { useTheme } from '@/theme/ThemeProvider';
 import { colors, font, pageIsDark, withAlpha } from '@/theme';
 import { Duration, Figure } from './Duration';
@@ -129,6 +130,8 @@ export function SessionCard({ session, width, play = false, people, hidden = [],
   const result = resultWord(session);
   // A match's score from the author's log (migration 91), under the time; on a share picture, the one typed there.
   const score = typedScore !== undefined ? typedScore.trim() || null : scoreLine(session);
+  // A workout's distance (a run, a ride: migration 107), under the time. Tennis never has one.
+  const far = session.workout ? distanceFigure(session.distanceM) : null;
   const list: CardPerson[] = people ?? (() => { const p = sessionPeople(session, hidden); return [...p.opponents, ...p.partners]; })();
   const lead = list[0];
   const vs = lead ? (lead.role === 'opponent' && session.kind !== 'practice' ? 'vs' : 'with') : '';
@@ -138,6 +141,7 @@ export function SessionCard({ session, width, play = false, people, hidden = [],
     `${spokenDuration(session.minutes)} ${onCourtWord(session)}`,
     result,
     score ? (typedScore !== undefined ? score : spokenScore(session.sets)) : null,
+    far ? `${far.value} miles` : null,
     hr ? `max heart rate ${session.maxHr}${session.avgHr ? `, average ${session.avgHr}` : ''}` : null,
     strain != null ? `Strain ${strain.toFixed(1)}` : null,
     kcal ? `${kcal} calories` : null,
@@ -164,6 +168,11 @@ export function SessionCard({ session, width, play = false, people, hidden = [],
         <Text style={{ ...font('500'), fontSize: small(14, 10), color: look.muted, marginTop: 2 * k }} maxFontSizeMultiplier={1.2}>{onCourtWord(session)}</Text>
         {score ? (
           <Text style={{ ...font('700'), fontSize: 26 * k, letterSpacing: -0.4 * k, color: look.figure, fontVariant: ['tabular-nums'], marginTop: 8 * k }} numberOfLines={1} maxFontSizeMultiplier={1.2}>{score}</Text>
+        ) : null}
+        {far ? (
+          <View style={{ marginTop: 8 * k }}>
+            <Figure value={far.value} part={far.value < 10 ? 'dec1' : 'int'} unit={far.unit} baseline size={30 * k} color={look.figure} unitColor={look.muted} unitScale={0.46} play={play} delay={160} />
+          </View>
         ) : null}
         {place ? (
           <View style={[styles.place, { gap: 4 * k, marginTop: 8 * k }]}>

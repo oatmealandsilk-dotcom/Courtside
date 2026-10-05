@@ -9,6 +9,7 @@ import { Duration, Figure } from '@/components/session/Duration';
 import type { ID, SessionDetail } from '@/data/types';
 import { resultWord } from '@/features/activity/format';
 import { sessionPeople } from '@/features/activity/sessionTags';
+import { distanceFigure } from '@/features/activity/workouts';
 import { font } from '@/theme';
 
 /*
@@ -32,11 +33,14 @@ export function SessionStamp({ session, width, eyebrow, place, hidden = [], scor
   const look = cardLook();
   const u = width / 300;
   const result = resultWord(session);
+  // A workout's distance first (migration 107); tennis never has one.
+  const far = session.workout ? distanceFigure(session.distanceM) : null;
   const stats = [
+    far ? { label: 'Distance', value: far.value, unit: far.unit, dec: far.value < 10 } : null,
     session.kcal ? { label: 'Calories', value: session.kcal, unit: 'cal' } : null,
     session.maxHr != null && session.avgHr ? { label: 'Avg HR', value: session.avgHr, unit: 'bpm' } : null,
     session.maxHr != null ? { label: 'Max HR', value: session.maxHr, unit: 'bpm' } : null,
-  ].filter((x): x is { label: string; value: number; unit: string } => !!x);
+  ].filter((x): x is { label: string; value: number; unit: string; dec?: boolean } => !!x);
   const { opponents, partners } = sessionPeople(session, hidden);
   const lead = [...opponents, ...partners][0];
   const others = opponents.length + partners.length - 1;
@@ -67,7 +71,7 @@ export function SessionStamp({ session, width, eyebrow, place, hidden = [], scor
             {stats.map((st) => (
               <View key={st.label} style={{ gap: 2 * u }}>
                 <Text style={{ ...font('500'), fontSize: 10.5 * u, color: look.muted }}>{st.label}</Text>
-                <Figure value={st.value} unit={st.unit} baseline size={21 * u} unitScale={0.5} color={look.figure} unitColor={look.muted} />
+                <Figure value={st.value} part={st.dec ? 'dec1' : 'int'} unit={st.unit} baseline size={21 * u} unitScale={0.5} color={look.figure} unitColor={look.muted} />
               </View>
             ))}
           </View>

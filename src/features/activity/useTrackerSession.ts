@@ -12,6 +12,7 @@ import { isSupabaseConfigured } from '@/lib/supabase';
 import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
 import { loggedLabel } from './format';
+import { isTennisActivity } from './workouts';
 
 /** What logging a session takes: what it was, a match's result, who you played (tagged, or a name typed). */
 export interface LogInput {
@@ -27,7 +28,8 @@ export interface LogInput {
 }
 
 /**
- * A tracker's session opened by its id (a "Tennis detected" alert, Log it,
+ * A tracker's session (tennis, or since Oct 5 any workout) opened by its id
+ * (a "Tennis detected" or "Workout detected" alert, Log it,
  * a link from the lock screen): found among yours, or waited for when the
  * app was opened cold. Asks the server once more if it is still not there,
  * and gives up after ten seconds rather than spinning for ever. A copy of
@@ -101,6 +103,8 @@ export function useTrackerSession(activityId: ID | undefined) {
         day: activityDay(activity),
         activityId: activity.id,
         ...(input.note ? { note: input.note } : {}),
+        // A workout logged as fitness keeps what it was ("Run"), so the log says so after the workout's own row goes (migration 107).
+        ...(!isTennisActivity(activity) && input.kind === 'fitness' ? { workout: activity.sport } : {}),
       });
       if (tagging.length) {
         const refused = await actions.setSessionPlayers(id, tagging).catch(() => []);
@@ -130,7 +134,7 @@ export function useTrackerSession(activityId: ID | undefined) {
  * session's id, it carries an "Instagram" button: the session as a story
  * picture (share-session), the way Strava offers it once you save.
  */
-export function showLogged(minutes: number, s: Pick<PracticeSession, 'kind' | 'won' | 'sets'>, streak: number, sessionId?: string) {
+export function showLogged(minutes: number, s: Pick<PracticeSession, 'kind' | 'won' | 'sets'> & { workout?: string }, streak: number, sessionId?: string) {
   showToast({
     title: 'Logged',
     body: `${duration(minutes)} · ${loggedLabel(s)}`,

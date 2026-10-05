@@ -166,17 +166,32 @@ const SECTIONS = ['New', 'Today', 'This week', 'This month', 'Earlier'];
  * The server writes a session's length the long way ("1 hr 24 min · from
  * your WHOOP", migration 58, also the lock-screen alert's words); the row
  * says it the way the rest of the app does now ("1h 24m · from your WHOOP").
+ * Since migration 107 the length can come after a workout's name or a day
+ * ("Run · 32 min · …", "Tue · 1 hr 24 min · …"), so it is found anywhere.
  */
 function shortLength(preview: string): string {
   return preview
-    .replace(/^(\d+) hr (\d+) min\b/, '$1h $2m')
-    .replace(/^(\d+) hr\b/, '$1h')
-    .replace(/^(\d+) min\b/, '$1m');
+    .replace(/\b(\d+) hr (\d+) min\b/, '$1h $2m')
+    .replace(/\b(\d+) hr\b/, '$1h')
+    .replace(/\b(\d+) min\b/, '$1m');
+}
+
+/**
+ * "Tennis detected." or "Workout detected." for a row about a session a
+ * tracker picked up. The session itself says, when the app holds it;
+ * otherwise the row's own words do: a workout's start with its name ("Run ·
+ * 32 min · …", migration 107), tennis's with its length or a weekday.
+ */
+function detectedWho(preview: string | undefined, sport: string | undefined): string {
+  if (sport) return sport === 'tennis' ? 'Tennis detected.' : 'Workout detected.';
+  const first = (preview ?? '').split(' · ')[0]?.trim() ?? '';
+  if (!first || /^\d/.test(first) || /^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)$/.test(first)) return 'Tennis detected.';
+  return 'Workout detected.';
 }
 
 export default function Notifications() {
   const styles = useThemedStyles(styleDefinitions);
-  const { notifications, users, posts, stories, comments, hitRequests, conversations, questions, currentUserId, followRequests, followingIds, followedCourts, sessionTags, actions } = useApp();
+  const { notifications, users, posts, stories, comments, hitRequests, conversations, questions, currentUserId, followRequests, followingIds, followedCourts, sessionTags, detectedActivities, actions } = useApp();
   // "New hit at Alder Park" opens the map on that court: where it is comes from the courts you follow.
   const courtRows = notifications.some((n) => n.kind === 'court-activity');
   useEffect(() => { if (courtRows && followedCourts === null) void actions.loadFollowedCourts(); }, [courtRows, followedCourts, actions]);
@@ -355,7 +370,7 @@ export default function Notifications() {
                 : group.kind === 'posted'
                 ? (group.preview?.startsWith('Instant') || group.preview?.startsWith('Hit')) ? 'Your instant' : group.targetKind === 'question' ? 'Your question' : 'Your post'
                 : group.kind === 'coach-application' || group.kind === 'refund' ? 'CourtSide'
-                : group.kind === 'activity' ? 'Tennis detected.'
+                : group.kind === 'activity' ? detectedWho(group.preview, detectedActivities.find((a) => a.id === group.targetId)?.sport)
                 : rest.length === 0
                 ? nameOf(first)
                 : rest.length === 1

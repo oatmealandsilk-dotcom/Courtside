@@ -12,6 +12,7 @@ import { canTagKind, firstName, peopleText, peopleWords, yourResult } from '@/fe
 import { show as showToast } from '@/lib/toast';
 import { ATTACH_DAYS, pickSource, postOf, postedIndex, sourceOn, type SessionPick } from '@/features/activity/recent';
 import { useTennisFlags } from '@/features/activity/useTennisFlags';
+import { formatDistance, isTennisActivity, workoutIcon } from '@/features/activity/workouts';
 import { localDay } from '@/features/practice/stats';
 import { goBack } from '@/lib/goBack';
 import { duration } from '@/lib/format';
@@ -71,8 +72,10 @@ function weekLabel(start: string, now = new Date()): string {
  */
 export default function YourSessions() {
   const styles = useThemedStyles(styleDefinitions);
-  const { currentUserId, sessions, detectedActivities, posts, sessionTags, users, actions } = useApp();
+  const { currentUserId, sessions, detectedActivities, posts, sessionTags, users, actions, integrations } = useApp();
   const flags = useTennisFlags();
+  // Past workouts (Oct 5): once every workout is switched on and Apple Health reads them (or something already came in).
+  const pastOn = flags.workoutsApple && (integrations.some((i) => i.provider === 'apple-health' && i.connected && i.readsWorkouts) || detectedActivities.some((a) => a.userId === currentUserId));
   // Opened from a tag's phone alert: its sheet opens over this page, once.
   const { tag: tagParam } = useLocalSearchParams<{ tag?: string }>();
   const opened = useRef<string | null>(null);
@@ -129,6 +132,16 @@ export default function YourSessions() {
 
   return (
     <Screen title="Your sessions" subtitle="Only you see this." compactTitle onBack={() => goBack('/profile')} right={logButton}>
+      {pastOn ? (
+        <Pressable accessibilityRole="button" accessibilityLabel="Past workouts: the last 30 days from Apple Health" onPress={() => router.push('/workouts')} style={({ pressed }) => [styles.group, styles.pastRow, pressed && styles.pressed]}>
+          <View style={styles.pastIcon}><Ionicons name="fitness-outline" size={18} color={colors.court} /></View>
+          <View style={styles.words}>
+            <Text style={styles.title}>Past workouts</Text>
+            <Text style={styles.when}>The last 30 days, from Apple Health</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
+        </Pressable>
+      ) : null}
       {!waiting.length && !groups.length && !taggedYou.length ? (
         <EmptyState
           icon="stopwatch-outline"
@@ -234,16 +247,18 @@ function SourceTag({ label }: { label: string }) {
 function Waiting({ activity, line }: { activity: DetectedActivity; line: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
   const source = pickSource({ type: 'tracker', activity });
+  // A workout's distance beside its name: "Run · 3.1 mi".
+  const far = isTennisActivity(activity) ? null : formatDistance(activity.distanceM);
   return (
     <View style={[styles.row, line && styles.line]}>
       <View style={styles.rowMain}>
-        <View style={styles.icon}><Ionicons name="stopwatch-outline" size={18} color={colors.court} /></View>
+        <View style={styles.icon}><Ionicons name={isTennisActivity(activity) ? 'stopwatch-outline' : workoutIcon(activity.sport)} size={18} color={colors.court} /></View>
         <View style={styles.words}>
           <View style={styles.heroLine}>
             <Text style={styles.hero}>{duration(activity.minutes)}</Text>
             <SourceTag label={source} />
           </View>
-          <Text style={styles.title} numberOfLines={2}>{activityTitle(activity)}</Text>
+          <Text style={styles.title} numberOfLines={2}>{far ? `${activityTitle(activity)} · ${far}` : activityTitle(activity)}</Text>
           <Text style={styles.when}>{activityWhen(activity, new Date(), ' · ')}</Text>
         </View>
       </View>
@@ -340,7 +355,7 @@ function Logged({ session: s, people, onOpen, hideNote = false, source, postId, 
       >
         <View style={styles.icon}>
           {s.kind === 'match' ? <Ionicons name="trophy-outline" size={18} color={colors.textMuted} />
-            : s.kind === 'fitness' ? <Ionicons name="barbell-outline" size={18} color={colors.textMuted} />
+            : s.kind === 'fitness' ? <Ionicons name={s.workout ? workoutIcon(s.workout) : 'barbell-outline'} size={18} color={colors.textMuted} />
             : <CourtGlyph size={15} color={colors.textMuted} />}
         </View>
         <View style={styles.words}>
@@ -430,6 +445,9 @@ const styleDefinitions = StyleSheet.create({
   log: { flexDirection: 'row', alignItems: 'center', gap: 2, paddingLeft: 10, paddingRight: 14, paddingVertical: 7, borderRadius: radius.pill, backgroundColor: colors.surface, ...lift },
   logText: { ...typography.smallStrong, color: colors.text },
   more: { alignSelf: 'center', marginTop: spacing.lg, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
+  // Past workouts: one row of its own, the list's card look, above everything else.
+  pastRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: 14, marginTop: spacing.sm },
+  pastIcon: { width: 22, alignItems: 'center', justifyContent: 'center' },
   moreText: { ...typography.smallStrong, color: colors.brand },
   pressed: { opacity: 0.6 },
 });

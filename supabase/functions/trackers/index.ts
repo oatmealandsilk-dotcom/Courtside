@@ -18,12 +18,13 @@
 //   /finish             — (signed-in) {n}: that phone collects the sign-in, as the
 //                         same player. Only then is the tracker put on the account
 //                         (so a sign-in link sent to someone else can never put
-//                         their tracker on the sender's account), and the last
-//                         three days are looked through for tennis
+//                         their tracker on the sender's account), and the past
+//                         week is looked through for tennis (Oct 5; was three days)
 //   /sync               — (signed-in) {provider, days?}: tennis in the last 36
-//                         hours (or `days`, at most 7). Answers {fresh}: the
-//                         sessions it just filed. The app asks when it opens,
-//                         at most hourly, and on "Sync now"
+//                         hours (or `days`, at most 7). Answers {fresh, days}:
+//                         the sessions it just filed and how many days it
+//                         looked back. The app asks when it opens, at most
+//                         hourly, and on "Sync now"
 //   /disconnect         — (signed-in) {provider}: tells the tracker, removes what
 //                         it sent (forget_tracker_data), forgets the keys
 //
@@ -306,7 +307,7 @@ async function syncTennis(uid: string, p: ProviderId, hours: number): Promise<st
   return fresh;
 }
 
-/** Puts a collected sign-in on this account, turns tennis sessions on, and looks through the last three days. */
+/** Puts a collected sign-in on this account, turns tennis sessions on, and looks through the past week (each one lands in Notifications to log). */
 async function link(uid: string, p: ProviderId, a: Answer): Promise<{ error?: string; fresh: string[] }> {
   const { error } = await admin.from('tracker_tokens').upsert({
     user_id: uid, provider: p, access_token: a.access_token, refresh_token: a.refresh_token, expires_at: a.expires_at,
@@ -316,7 +317,7 @@ async function link(uid: string, p: ProviderId, a: Answer): Promise<{ error?: st
   const { error: e2 } = await admin.from('health_connections').upsert({ user_id: uid, provider: p, connected_at: new Date().toISOString(), reads_workouts: true });
   if (e2) return { error: e2.message, fresh: [] };
   let fresh: string[] = [];
-  try { fresh = await syncTennis(uid, p, 72); } catch (e) { console.error(`[trackers] ${p} first sync`, e); }
+  try { fresh = await syncTennis(uid, p, 168); } catch (e) { console.error(`[trackers] ${p} first sync`, e); }
   return { fresh };
 }
 
@@ -418,7 +419,7 @@ Deno.serve(async (req) => {
   if (path === '/sync') {
     if (!(await tokenRow(uid, p))) return json({ error: `${NAME[p]} is not connected.` }, 400);
     const days = typeof posted.days === 'number' && posted.days > 0 ? Math.min(posted.days, 7) : 1.5;
-    try { return json({ fresh: await syncTennis(uid, p, days * 24) }); } catch (e) { console.error(`[trackers] ${p} sync`, e); return json({ error: 'sync failed' }, 500); }
+    try { return json({ fresh: await syncTennis(uid, p, days * 24), days }); } catch (e) { console.error(`[trackers] ${p} sync`, e); return json({ error: 'sync failed' }, 500); }
   }
 
   if (path === '/disconnect') {

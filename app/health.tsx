@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import Reanimated, { FadeIn, FadeOut, ZoomIn } from 'react-native-reanimated';
 import { goBack } from '@/lib/goBack';
+import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { CourtSpinner } from '@/components/CourtSpinner';
@@ -46,6 +47,12 @@ const NAME: Partial<Record<Integration['provider'], string>> = { 'apple-health':
 /** The trackers list, in this order; everything else (food) goes below it. */
 const TRACKER_ROWS: Integration['provider'][] = ['whoop', 'apple-health', 'fitbit', 'oura', 'polar', 'garmin'];
 
+/** Apple Health once every workout is switched on for it on the server (migration 107; owner, Oct 5). */
+const ABOUT_WORKOUTS = {
+  line: 'Through Apple Health: your workouts (tennis, runs, rides, the gym and more) and their heart rate, plus sleep, HRV, resting heart rate, steps.',
+  how: 'Reads the Health app on this phone. Record a workout on your Apple Watch or iPhone; CourtSide picks it up when you open the app.',
+};
+
 /** The same two, once tennis sessions are switched on for them on the server (migration 58). */
 const ABOUT_TENNIS: Partial<Record<Integration['provider'], { line: string; how: string }>> = {
   'apple-health': { line: 'Through Apple Health: tennis workouts and their heart rate, plus sleep, HRV, resting heart rate, steps.', how: 'Reads the Health app on this phone. Start a Tennis workout on your Apple Watch; CourtSide picks it up when you open the app.' },
@@ -78,7 +85,11 @@ export default function Health() {
   const connected = integrations.filter((i) => i.connected).length;
   // Tennis sessions, per source, once the server's switch for it is on. Off, this page is as it always was.
   const flags = useTennisFlags();
-  const tennisOn = (provider: Integration['provider']) => (provider === 'apple-health' ? flags.apple : provider === 'whoop' || isTracker(provider) ? flags[provider] : false);
+  const tennisOn = (provider: Integration['provider']) => (provider === 'apple-health' ? flags.apple || flags.workoutsApple : provider === 'whoop' || isTracker(provider) ? flags[provider] : false);
+  // Apple Health reads every workout, not only tennis (migration 107): its words say so.
+  const workouts = (provider: Integration['provider']) => provider === 'apple-health' && flags.workoutsApple;
+  /** "tennis sessions", or "workouts" for Apple Health once it reads every workout. */
+  const what = (provider: Integration['provider']) => (workouts(provider) ? 'workouts' : 'tennis sessions');
   // Fitbit, Oura and Polar: open once the server has their keys and their switch is on.
   const trackers = useTrackerStatus();
   const open = (provider: Integration['provider']) => !isTracker(provider) || (trackers[provider] && flags[provider]);
@@ -116,11 +127,16 @@ export default function Health() {
   };
 
   // Apple Health's own permission sheet comes next, so CourtSide says why first.
-  const askApple = (what: 'toggle' | 'tennis') => confirm({
+  const askApple = (step: 'toggle' | 'tennis') => confirm(flags.workoutsApple ? {
+    title: 'Workouts from Apple Health',
+    message: 'CourtSide reads your workouts (tennis, runs, rides, the gym and more) and your heart rate during them, so you can log and post them, plus sleep, HRV, resting heart rate and steps. Nothing is posted unless you choose to.',
+    confirmLabel: 'Continue',
+    onConfirm: () => run('apple-health', step),
+  } : {
     title: 'Tennis sessions from Apple Health',
     message: 'CourtSide reads your Tennis workouts and your heart rate during them, so you can log and post them, plus sleep, HRV, resting heart rate and steps. Nothing is posted unless you choose to.',
     confirmLabel: 'Continue',
-    onConfirm: () => run('apple-health', what),
+    onConfirm: () => run('apple-health', step),
   });
 
   // Once WHOOP's switch is on, disconnecting it also removes what it sent (the server does), so ask first.
@@ -151,7 +167,7 @@ export default function Health() {
     const base = ABOUT[i.provider];
     if (!base) return null;
     const tennis = tennisOn(i.provider);
-    const about = tennis ? { ...base, ...ABOUT_TENNIS[i.provider] } : base;
+    const about = tennis ? { ...base, ...(workouts(i.provider) ? ABOUT_WORKOUTS : ABOUT_TENNIS[i.provider]) } : base;
     const loading = busy === i.provider;
     const needsBuild = i.provider === 'apple-health' && Platform.OS === 'ios' && !appleHealthAvailable();
     const wrongPhone = i.provider === 'apple-health' && Platform.OS !== 'ios';
@@ -200,9 +216,13 @@ export default function Health() {
                   <Ionicons name="checkmark" size={14} color={colors.brandInk} />
                 </Reanimated.View>
                 <View style={styles.tennisWords}>
-                  <Text style={styles.tennisTitle}>Tennis sessions on</Text>
+                  <Text style={styles.tennisTitle}>{workouts(i.provider) ? 'Workouts on' : 'Tennis sessions on'}</Text>
+                  {/* The last 30 days of them, with Log it on any not logged (Oct 5). */}
+                  {workouts(i.provider) ? (
+                    <Text accessibilityRole="link" onPress={() => router.push('/workouts')} style={styles.pastLink}>See past workouts</Text>
+                  ) : null}
                 </View>
-                <Pressable accessibilityRole="button" accessibilityLabel={`Turn off tennis sessions from ${i.label}`} disabled={loading} onPress={() => { haptics.untap(); run(i.provider, 'tennis-off'); }} hitSlop={8} style={({ pressed }) => [styles.smallGhost, pressed && styles.pressedDim]}>
+                <Pressable accessibilityRole="button" accessibilityLabel={`Turn off ${what(i.provider)} from ${i.label}`} disabled={loading} onPress={() => { haptics.untap(); run(i.provider, 'tennis-off'); }} hitSlop={8} style={({ pressed }) => [styles.smallGhost, pressed && styles.pressedDim]}>
                   <Text style={styles.smallGhostText}>Turn off</Text>
                 </Pressable>
               </Reanimated.View>
@@ -212,10 +232,10 @@ export default function Health() {
                 {/* WHOOP's (and each tracker's) own sign-in says what it shares; Apple Health is explained here first.
                     The app's own filled pill (with its soft wash) dips under the finger; while it
                     works, the pill itself says so rather than the row going quiet. */}
-                <Tappable accessibilityRole="button" accessibilityLabel={`Turn on tennis sessions from ${i.label}`} disabled={loading} scaleTo={0.96} onPress={() => { haptics.tap(); if (i.provider === 'apple-health') askApple('tennis'); else run(i.provider, 'tennis'); }} style={styles.turnOn}>
+                <Tappable accessibilityRole="button" accessibilityLabel={`Turn on ${what(i.provider)} from ${i.label}`} disabled={loading} scaleTo={0.96} onPress={() => { haptics.tap(); if (i.provider === 'apple-health') askApple('tennis'); else run(i.provider, 'tennis'); }} style={styles.turnOn}>
                   <BrandWash />
                   {loading ? <ActivityIndicator size="small" color={colors.brandInk} /> : null}
-                  <Text style={styles.turnOnText}>{loading ? 'Turning on…' : 'Turn on tennis sessions'}</Text>
+                  <Text style={styles.turnOnText}>{loading ? 'Turning on…' : `Turn on ${what(i.provider)}`}</Text>
                 </Tappable>
               </Reanimated.View>
             )
@@ -277,7 +297,9 @@ export default function Health() {
       {/* Says what the server does: WHOOP's numbers go on disconnect only once its switch is on. */}
       <Text style={styles.foot}>
         {flags.whoop
-          ? `Only you and the AI coach see these, and WHOOP’s numbers never go to the coach. Tennis sessions stay private until you post one. Disconnecting ${removersText} removes what it sent; other sources stay until you delete your account.`
+          ? `Only you and the AI coach see these, and WHOOP’s numbers never go to the coach. ${flags.workoutsApple ? 'Tennis sessions and workouts stay' : 'Tennis sessions stay'} private until you post one. Disconnecting ${removersText} removes what it sent; other sources stay until you delete your account.`
+          : flags.workoutsApple
+            ? 'Only you and the AI coach see these. Tennis sessions and workouts stay private until you post one. Disconnecting stops new numbers; what was already read stays until you delete your account.'
           : flags.apple
             ? 'Only you and the AI coach see these. Tennis sessions stay private until you post one. Disconnecting stops new numbers; what was already read stays until you delete your account.'
             : 'Only you and the coach see these. Disconnecting stops new numbers; what was already read stays until you delete your account.'}
@@ -317,6 +339,7 @@ const styleDefinitions = StyleSheet.create({
   tennisTick: { width: 24, height: 24, borderRadius: 12, marginLeft: 4, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
   tennisWords: { flex: 1, gap: 1 },
   tennisTitle: { ...typography.smallStrong, color: colors.text },
+  pastLink: { ...typography.smallStrong, color: colors.brand, alignSelf: 'flex-start' },
   pressedDim: { opacity: 0.55 },
   sectionTitle: { ...typography.smallStrong, color: colors.textMuted, paddingHorizontal: spacing.sm, paddingBottom: spacing.sm },
   sectionGap: { paddingTop: spacing.xl },

@@ -5,7 +5,8 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { router } from 'expo-router';
 
 import type { ID, SessionDetail } from '@/data/types';
-import { kindWord, resultWithScore, sourceLabel, spokenDuration } from '@/features/activity/format';
+import { resultWithScore, sourceLabel, spokenDuration, whatWord } from '@/features/activity/format';
+import { distanceFigure } from '@/features/activity/workouts';
 import { sessionPeople } from '@/features/activity/sessionTags';
 import { colors, font, withAlpha } from '@/theme';
 import { Duration, Figure } from './Duration';
@@ -36,21 +37,24 @@ export function SessionStrip({ session, hidden = [], play = false, scale = 1, on
   const hr = session.maxHr != null;
   const strain = session.strain != null ? session.strain : null;
   const kcal = session.kcal ? session.kcal : null;
+  // A workout's distance (migration 107): tennis never has one.
+  const far = session.workout ? distanceFigure(session.distanceM) : null;
   const shared = [hr, strain != null, kcal != null].filter(Boolean).length;
   // "Match · Won 6–4 3–6 10–7" when the log has a score (migration 91).
   const result = resultWithScore(session);
-  const what = [kindWord(session), result].filter(Boolean).join(' · ');
+  const what = [whatWord(session), result].filter(Boolean).join(' · ');
   const { opponents, partners } = sessionPeople(session, hidden);
   const all = [...opponents, ...partners];
   const lead = all[0];
   const vs = lead ? (opponents.length ? 'vs' : 'with') : '';
   const tracker = !!session.activityId;
   const source = tracker ? sourceLabel(session.source ?? 'apple-health') : null;
-  const spoken = [`${spokenDuration(session.minutes)}, ${what.toLowerCase()}`, hr && session.avgHr ? `average heart rate ${session.avgHr}` : null, hr ? `max ${session.maxHr}` : null, kcal ? `${kcal} calories` : null, lead ? `${vs} @${lead.handle}` : null, source].filter(Boolean).join(', ');
+  const spoken = [`${spokenDuration(session.minutes)}, ${what.toLowerCase()}`, far ? `${far.value} miles` : null, hr && session.avgHr ? `average heart rate ${session.avgHr}` : null, hr ? `max ${session.maxHr}` : null, kcal ? `${kcal} calories` : null, lead ? `${vs} @${lead.handle}` : null, source].filter(Boolean).join(', ');
   const small = { fontSize: 13 * k, lineHeight: Math.round(17 * k) };
   // The session card's own look (Oct 4, owner: "looks a bit flat"): the theme's colour and its wash, white numbers; glass-dark on dark themes.
   const look = cardLook();
   const stats = [
+    far ? { key: 'far', label: 'Distance', node: <Figure value={far.value} part={far.value < 10 ? 'dec1' : 'int'} unit={far.unit} baseline unitScale={0.62} size={19 * k} color={look.figure} unitColor={look.muted} play={play} delay={160} duration={600} /> } : null,
     kcal != null ? { key: 'kcal', label: 'Calories', node: <Figure value={kcal} baseline size={19 * k} color={look.figure} unitColor={look.muted} play={play} delay={200} duration={600} /> } : null,
     hr && session.avgHr ? { key: 'avg', label: 'Avg HR', node: <Figure value={session.avgHr} unit="bpm" baseline unitScale={0.62} size={19 * k} color={look.figure} unitColor={look.muted} play={play} delay={200} duration={600} /> } : null,
     hr ? { key: 'max', label: 'Max HR', node: <Figure value={session.maxHr!} unit="bpm" baseline unitScale={0.62} size={19 * k} color={look.figure} unitColor={look.muted} play={play} delay={200} duration={600} /> } : null,

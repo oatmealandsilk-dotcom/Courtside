@@ -12,6 +12,7 @@ import { pendingNote, tagsOnSession, withOnNewPost } from '@/features/activity/s
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, spacing, typography } from '@/theme';
+import { isTennisActivity } from '@/features/activity/workouts';
 
 /**
  * A session's stats on a new post: the stats exactly as the post will show
@@ -58,7 +59,10 @@ export function AttachSessionStats({ pick, attached, onAttach, health, onHealth,
     .map((t) => users.find((u) => u.id === t.taggedId)?.name.trim().split(/\s+/)[0])
     .filter((n): n is string => !!n) : [];
   const waitingNote = pendingNote(waitingOn);
-  const hint = !activity ? 'Shows on the post. The rest of your log stays private.' : 'Time on court shows on the post.';
+  // A workout (migration 107) puts its time, and its distance when it has one, on the post.
+  const hint = !activity ? 'Shows on the post. The rest of your log stays private.'
+    : isTennisActivity(activity) ? 'Time on court shows on the post.'
+    : activity.distanceM ? 'Its time and distance show on the post.' : 'Its time shows on the post.';
 
   return (
     <View style={styles.wrap}>
