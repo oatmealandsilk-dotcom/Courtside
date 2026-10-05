@@ -3965,7 +3965,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const watchInboxTyping = useCallback((onTyping: (conversationId: ID, userId: ID, stopped?: boolean) => void) => {
     const me = stateRef.current.currentUserId;
     if (!me || !live(me)) return () => undefined;
-    try { return remote.inboxTyping(me, onTyping); } catch { return () => undefined; }
+    // Only a chat of yours, and only someone in it: anyone who shares any one
+    // chat with you may send to this channel, and could otherwise claim to be
+    // typing in a different chat, or to be someone else.
+    const inChat = (conversationId: ID, userId: ID) =>
+      !!stateRef.current.conversations.find((c) => c.id === conversationId)?.participantIds.includes(userId);
+    try {
+      return remote.inboxTyping(me, (conversationId, userId, stopped) => {
+        if (inChat(conversationId, userId)) onTyping(conversationId, userId, stopped);
+      });
+    } catch { return () => undefined; }
   }, []);
   // Scrolling up in a chat: the page of messages before the oldest one here.
   const loadOlderMessages = useCallback(async (conversationId: ID) => {
@@ -5881,12 +5890,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const { url } = await remote.whoop<{ url: string }>('start', tennis ? { back, tennis: true } : { back });
     const result = await WebBrowser.openAuthSessionAsync(url, back);
     if (result.type !== 'success') throw new Error('WHOOP was not connected.');
-    if (!tennis) return;
-    // A tennis sign-in waits on the server until this phone, signed in as
-    // you, collects it, so a WHOOP link sent to someone else can never put
-    // their WHOOP on the sender's account.
+    // A sign-in waits on the server until this phone, signed in as you,
+    // collects it, so a WHOOP link sent to someone else can never put their
+    // WHOOP on the sender's account. Every sign-in since the security review
+    // (Oct 5); before that, only a tennis one (a plain one came back done).
     const n = /[?&]n=([0-9a-f-]{36})/i.exec(result.url)?.[1];
-    if (!n) throw new Error('WHOOP was not connected.');
+    if (!n) {
+      if (!tennis) return;
+      throw new Error('WHOOP was not connected.');
+    }
     await remote.whoop('finish', { n });
   }, []);
 

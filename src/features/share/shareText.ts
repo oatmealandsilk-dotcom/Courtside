@@ -1,4 +1,5 @@
 import type { HitRequest, Post, Question, User } from '@/data/types';
+import { joinedCount } from '@/features/hits/audience';
 import { hitShort } from '@/features/hits/format';
 
 /*
@@ -21,7 +22,7 @@ export function postShareText(post: Post, author: User | undefined, me: string |
 }
 
 export function hitShareText(hit: HitRequest, author: User | undefined, me: string | null): string {
-  const left = Math.max(0, hit.spots - hit.joinedIds.length);
+  const left = Math.max(0, hit.spots - joinedCount(hit));
   const need = left > 1 ? `${left} players` : 'a hitting partner';
   const when = hitShort(hit.startsAt);
   return author?.id === me

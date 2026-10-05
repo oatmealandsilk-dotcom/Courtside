@@ -101,8 +101,16 @@ const verifierFor = (n: string) => mac('pkce:' + n);
 const challengeOf = async (verifier: string) => b64(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)));
 
 const SIGN_IN_MS = 10 * 60_000;
-/** Only the app's own addresses may be returned to. */
-const safeBack = (back: string) => /^(courtside:\/\/|exps?:\/\/[a-z0-9-]+\.exp\.direct\/|exps?:\/\/(localhost|\d{1,3}(\.\d{1,3}){3}):\d+\/|https:\/\/app\.courtsidebase\.com\/)/.test(back) ? back : 'courtside://health';
+/**
+ * Only the app's own addresses may be returned to. Expo Go's addresses only
+ * while ALLOW_DEV_RETURN=1 is set (testing): anyone can open one of those, so
+ * in production a sign-in's pick-up code could otherwise be sent to a stranger.
+ */
+const DEV_RETURN = Deno.env.get('ALLOW_DEV_RETURN') === '1';
+const safeBack = (back: string) =>
+  /^(courtside:\/\/|https:\/\/app\.courtsidebase\.com\/)/.test(back)
+  || (DEV_RETURN && /^(exps?:\/\/[a-z0-9-]+\.exp\.direct\/|exps?:\/\/(localhost|\d{1,3}(\.\d{1,3}){3}):\d+\/)/.test(back))
+    ? back : 'courtside://health';
 
 // --------------------------------------------------------------------- keys
 /** What a sign-in gave: kept in tracker_pending until collected, then in tracker_tokens. */

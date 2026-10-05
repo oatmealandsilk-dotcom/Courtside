@@ -34,6 +34,7 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { Avatar, BrandWash, EmptyState } from '@/components/ui';
 import { GROUP_CAP, GroupAvatar, eventText, groupName, isGroupChat, isMuted, leaveGroupMessage, othersIn } from '@/features/messages/groups';
 import { HitGlyph } from '@/components/HitGlyph';
+import { joinedCount } from '@/features/hits/audience';
 import { hitWhen } from '@/features/hits/format';
 import { goBack } from '@/lib/goBack';
 import { VoiceNote } from '@/components/VoiceNote';
@@ -1481,7 +1482,7 @@ const MessageRow = memo(function MessageRow({ item, ctx, original, originalBlock
     // many spots are left; it opens the hit. Once it is gone (called
     // off, or over), the card says so.
     const hit = ctx.hitRequests.find((h) => h.id === message.sharedId && !h.cancelled);
-    const left = hit ? Math.max(0, hit.spots - hit.joinedIds.length) : 0;
+    const left = hit ? Math.max(0, hit.spots - joinedCount(hit)) : 0;
     body = (
       <Row {...rowProps}>
         <HoldArea hover={hover} onHold={(rect) => openMenu({ message, mine, rect })} style={styles.sharedCardArea}>

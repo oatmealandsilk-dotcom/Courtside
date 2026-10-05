@@ -16,6 +16,7 @@ import { isClosedCourt, type Court, type CourtRow } from '@/features/players/cou
 import { HitCard } from '@/components/HitCard';
 import { HitGlyph } from '@/components/HitGlyph';
 import type { HitRequest } from '@/data/types';
+import { joinedCount } from '@/features/hits/audience';
 import { FORMAT_LABEL, hitShort } from '@/features/hits/format';
 import { isMapCourtId, labelOf } from '@/features/places/courtName';
 import { useCourtHits } from '@/features/places/useCourtHits';
@@ -704,7 +705,7 @@ export function CourtSheet({ court, miles, ringed = false, onClose }: { court: C
   // Open hits here, the same ones the court's page lists: one beside the clips, two without them.
   const hits = useCourtHits(place).slice(0, strip.length ? 1 : 2);
   const hitLine = (h: HitRequest) => {
-    const left = Math.max(0, h.spots - h.joinedIds.length);
+    const left = Math.max(0, h.spots - joinedCount(h));
     const who = h.authorId === currentUserId ? 'You' : users.find((u) => u.id === h.authorId)?.name.split(' ')[0];
     return [hitShort(h.startsAt), FORMAT_LABEL[h.format], left ? `${left} ${left === 1 ? 'spot' : 'spots'} left` : 'Full', who].filter(Boolean).join(' · ');
   };

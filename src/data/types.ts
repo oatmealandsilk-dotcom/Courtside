@@ -1250,6 +1250,12 @@ export interface HitRequest {
   createdAt: string;
   joinedIds: ID[];
   /**
+   * People in it that this account may not see (a teen who joined, to
+   * someone they do not follow: migration 95). They still take a spot, so
+   * spots left and "2 in" count them (joinedCount). Left out: none.
+   */
+  hiddenJoins?: number;
+  /**
    * Who sees it first (migration 76). Left out: everyone, as every hit was
    * before. 'invite_first': only the players invited (and, with
    * includeGroups, the people in the poster's groups) until opensAt, then

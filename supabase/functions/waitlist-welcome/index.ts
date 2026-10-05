@@ -1,9 +1,15 @@
 // CourtSide — the waitlist welcome email, sent the moment someone joins.
 //
 // The waitlist page calls this right after a successful join with just the
-// email address. The function only ever writes to someone who is actually on
-// the list and has not been welcomed yet, so it cannot be used to email
-// strangers or to send anyone the same note twice.
+// email address. The function only ever writes to someone who joined the list
+// in the last few minutes and has not been welcomed yet, so nobody is sent
+// the same note twice. Joining needs no proof that the address is yours, so
+// on its own that would let a script put strangers' addresses on the list and
+// have CourtSide email them; two server-side limits keep that small (security
+// review, Oct 5): a few welcomes an hour from one internet address, and a
+// ceiling on welcomes a day for everyone together (WAITLIST_DAILY_CAP).
+// Someone held back by the daily ceiling stays on the list unwelcomed, so the
+// catch-up below can welcome them later.
 //
 // Deploy:   supabase functions deploy waitlist-welcome --no-verify-jwt
 // Secrets:  RESEND_API_KEY            (required — nothing sends without it)
@@ -16,6 +22,8 @@
 //                                      get the beta email instead of the welcome, and an
 //                                      admin can send it to everyone already waiting)
 //           BETA_LINK                 (optional, default the TestFlight public link)
+//           WAITLIST_DAILY_CAP        (optional, default 150: welcomes a day, everyone together;
+//                                      Resend's free plan sends 100 a day in all)
 //
 // Beta invites: an admin's app POSTs {"invite": true, "dry": true} for the
 // counts, or {"invite": true} to send the beta email to everyone who has not
@@ -26,6 +34,7 @@
 // "limit" of them (oldest first, at most 80 a call to stay inside the daily
 // sending allowance) and says how many are left.
 import { createClient } from 'npm:@supabase/supabase-js@2';
+import { callerKey, takeRate } from '../_shared/rateLimit.ts';
 
 const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
 const RESEND = Deno.env.get('RESEND_API_KEY') ?? '';
@@ -41,6 +50,10 @@ const FONT = "Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,
 const SHARE_BASE = 'https://courtsidebase.com/';
 const BETA_LINK = Deno.env.get('BETA_LINK') ?? 'https://testflight.apple.com/join/21UJPuny';
 const BETA_LIVE = Deno.env.get('BETA_LIVE') === 'on';
+/** Welcome emails a day, everyone together. */
+const DAILY_CAP = Math.max(1, Number(Deno.env.get('WAITLIST_DAILY_CAP')) || 150);
+/** Welcome emails an hour asked for from one internet address. */
+const PER_ADDRESS_HOURLY = 5;
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -271,6 +284,14 @@ Deno.serve(async (req) => {
   if (body.invite) return betaInvites(req, body);
   const email = String(body.email ?? '').trim().toLowerCase();
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) || email.length > 254) return json({ sent: false });
+
+  // A few an hour from one internet address: a person joining sends one.
+  if (!(await takeRate(admin, 'welcome-ip', await callerKey(req), PER_ADDRESS_HOURLY, 3600))) return json({ sent: false });
+  // And a ceiling for the day. Whoever is held back here stays unwelcomed,
+  // for the catch-up to welcome later.
+  const day = new Date(Date.now() - 86_400_000).toISOString();
+  const { count: today } = await admin.from('waitlist').select('id', { count: 'exact', head: true }).gt('welcomed_at', day);
+  if ((today ?? 0) >= DAILY_CAP) return json({ sent: false, reason: 'later' });
 
   // Claim the send first, so two calls in the same second cannot both send.
   // Only someone who joined in the last few minutes is welcomed: this is

@@ -6,7 +6,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Avatar } from '@/components/ui';
 import { CourtGlyph } from '@/components/map/CourtGlyph';
 import type { HitRequest } from '@/data/types';
-import { audienceLine, isHitOpen } from '@/features/hits/audience';
+import { audienceLine, isHitOpen, joinedCount } from '@/features/hits/audience';
 import { FORMAT_LABEL, hitWhen, levelText } from '@/features/hits/format';
 import { openCourt } from '@/features/players/courtLink';
 import { formatMiles } from '@/features/players/geo';
@@ -39,7 +39,9 @@ export function HitCard({ hit, miles }: { hit: HitRequest; miles?: number }) {
   const joined = hit.joinedIds.map((id) => users.find((u) => u.id === id)).filter((u): u is NonNullable<typeof u> => !!u);
   const mine = hit.authorId === currentUserId;
   const inIt = !!currentUserId && hit.joinedIds.includes(currentUserId);
-  const left = Math.max(0, hit.spots - hit.joinedIds.length);
+  // Everyone in takes a spot, those this account is not shown included (joinedCount).
+  const total = joinedCount(hit);
+  const left = Math.max(0, hit.spots - total);
   const open = isHitOpen(hit);
   const line = audienceLine(hit, currentUserId);
   const invited = mine ? (hit.invitedIds ?? []).map((id) => users.find((u) => u.id === id)).filter((u): u is NonNullable<typeof u> => !!u) : [];
@@ -99,7 +101,7 @@ export function HitCard({ hit, miles }: { hit: HitRequest; miles?: number }) {
       <View style={styles.foot}>
         <View style={styles.joined}>
           {joined.slice(0, 4).map((u, i) => <Avatar key={u.id} name={u.name} seed={u.avatarSeed} uri={u.avatarUrl} size={24} style={[styles.face, { marginLeft: i ? -8 : 0 }]} />)}
-          <Text style={styles.joinedText}>{joined.length ? `${joined.length} in` : 'No one in yet'}</Text>
+          <Text style={styles.joinedText}>{total ? `${total} in` : 'No one in yet'}</Text>
         </View>
         {mine ? (
           <View style={styles.actions}>
