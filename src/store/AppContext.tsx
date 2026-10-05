@@ -1713,8 +1713,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
       });
       // Someone read your messages: "Read" shows under them straight away.
       offReads = remote.onReads((conversationId, userId, readAt) => {
-        if (userId === me) return;
         const upTo = Date.parse(readAt);
+        // You read it on another device (the web app, say): what you read there stops counting as unread here.
+        if (userId === me) {
+          setState((prev) => {
+            const chat = prev.conversations.find((c) => c.id === conversationId);
+            if (!chat || !chat.unreadCount) return prev;
+            const left = prev.messages.filter((m) => m.conversationId === conversationId && m.senderId !== me && m.kind !== 'system' && Date.parse(m.createdAt) > upTo).length;
+            // Only ever lower: a late or out-of-order update never puts back a count already cleared here.
+            if (left >= chat.unreadCount) return prev;
+            return { ...prev, conversations: prev.conversations.map((c) => (c.id === conversationId ? { ...c, unreadCount: left } : c)) };
+          });
+          return;
+        }
         setState((prev) => ({
           ...prev,
           // Event lines are never "read by" anyone.
