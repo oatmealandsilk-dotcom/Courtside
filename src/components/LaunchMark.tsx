@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
-import { Platform, StyleSheet, Text, View, useWindowDimensions, type TextLayoutEvent } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { Animated, Platform, StyleSheet, Text, View, useWindowDimensions, type TextLayoutEvent } from 'react-native';
+import Svg, { G, Rect } from 'react-native-svg';
 
 import { font } from '@/theme';
+import { LAUNCH_FADE_MS, launchShowing, whenLaunchHidden } from '@/lib/launchSplash';
 
 /*
  * The launch picture's logo, name and line, drawn (not a picture) at exactly
@@ -98,7 +100,7 @@ function typeAt(spec: { size: number; tracking: number; baseline: number; centre
   };
 }
 
-export function LaunchMark({ ink, faint, line = 'Growing the game' }: { ink: string; faint: string; line?: string }) {
+function PictureLaunchMark({ ink, faint, line = 'Growing the game' }: { ink: string; faint: string; line?: string }) {
   const { width: W, height: H } = useWindowDimensions();
   const s = Math.max(W / PIC_W, H / PIC_H);
   const ox = (W - PIC_W * s) / 2;
@@ -118,7 +120,59 @@ export function LaunchMark({ ink, faint, line = 'Growing the game' }: { ink: str
   );
 }
 
+/*
+ * Android (Oct 5). Android's own launch screen is not a full picture: it is
+ * the icon's mark alone, 288 points square in the middle of the cream, with
+ * no name and no line (assets/android-icon-foreground.png, see the
+ * expo-splash-screen plugin in app.config.js). So on Android the app's first
+ * screen draws that same mark at that same size, in the middle of the screen,
+ * and the launch screen dissolves into it with nothing moving. The name and
+ * the line then fade in under it, rather than appearing in the dissolve.
+ *
+ * The mark, measured from the icon file (1024 pixels square, drawn at 288
+ * points) with Python + PIL, in its pixels: the frame 270 wide and 377 tall
+ * round the middle row (512), its sides and bars 50.9 thick, the bar across
+ * 38.6 tall on the middle; the sideline 51 wide, 41 to the right of the
+ * frame; everything leaning 14° about the middle row. Android's shapes cannot
+ * lean (a skew is dropped), so it is drawn as a picture.
+ */
+const ICON_PT = 288;
+const ICON_PX = 1024;
+const MARK = { left: 330.5, top: 323.5, width: 270, height: 377, side: 50.9, bar: 38.6, slashLeft: 641.5, slashWidth: 51 };
+/** How far below the middle of the screen the mark's lowest point sits, in points. */
+const MARK_BELOW = ((MARK.top + MARK.height) - ICON_PX / 2) * (ICON_PT / ICON_PX);
+
+function AndroidLaunchMark({ ink, faint, line = 'Growing the game' }: { ink: string; faint: string; line?: string }) {
+  // The name and line wait for the launch screen to go (they are not on it);
+  // drawn later on (the curtain, a sign-in), they are simply there.
+  const words = useRef(new Animated.Value(launchShowing() ? 0 : 1)).current;
+  useEffect(() => whenLaunchHidden(() => {
+    Animated.timing(words, { toValue: 1, duration: 420, delay: Math.round(LAUNCH_FADE_MS * 0.6), useNativeDriver: true }).start();
+  }), [words]);
+  const half = ICON_PX / 2;
+  return (
+    <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.centre]}>
+      <Svg width={ICON_PT} height={ICON_PT} viewBox={`0 0 ${ICON_PX} ${ICON_PX}`}>
+        <G transform={`translate(${half} ${half}) skewX(-14) translate(${-half} ${-half})`}>
+          <Rect x={MARK.left + MARK.side / 2} y={MARK.top + MARK.side / 2} width={MARK.width - MARK.side} height={MARK.height - MARK.side} fill="none" stroke={ink} strokeWidth={MARK.side} />
+          <Rect x={MARK.left} y={half - MARK.bar / 2} width={MARK.width} height={MARK.bar} fill={ink} />
+          <Rect x={MARK.slashLeft} y={MARK.top} width={MARK.slashWidth} height={MARK.height} fill={ink} />
+        </G>
+      </Svg>
+      <Animated.Text allowFontScaling={false} style={[styles.androidName, { color: ink, opacity: words, transform: [{ translateY: MARK_BELOW + 26 }] }]}>CourtSide</Animated.Text>
+      <Animated.Text allowFontScaling={false} style={[styles.androidLine, { color: faint, opacity: words }]}>{line}</Animated.Text>
+    </View>
+  );
+}
+
+/** The launch screen's logo, name and line, drawn in the given colours (see above for each phone). */
+export const LaunchMark = Platform.OS === 'android' ? AndroidLaunchMark : PictureLaunchMark;
+
 const styles = StyleSheet.create({
+  centre: { alignItems: 'center', justifyContent: 'center' },
+  // Just under the mark: laid out from the middle of the screen, so the mark itself never moves.
+  androidName: { position: 'absolute', top: '50%', left: 0, right: 0, textAlign: 'center', fontSize: 30, lineHeight: 36, letterSpacing: -0.9, ...font('700') },
+  androidLine: { position: 'absolute', bottom: '10.5%', left: 0, right: 0, textAlign: 'center', fontSize: 11.5, letterSpacing: 1, textTransform: 'uppercase', ...font('700') },
   lean: { position: 'absolute', transform: [{ skewX: '-14deg' }] },
   name: { position: 'absolute', textAlign: 'center', ...font('700') },
   line: { position: 'absolute', textAlign: 'center', ...font('700'), textTransform: 'uppercase' },
