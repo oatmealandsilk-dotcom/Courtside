@@ -4,7 +4,7 @@ import { WebView } from 'react-native-webview';
 import { Directory, File, Paths } from 'expo-file-system';
 
 import { STYLE, lookFor, thumbLook } from '@/components/map/look';
-import { ENGINE_CSS, ENGINE_JS } from '@/components/map/engineLoader';
+import { ENGINE_JS } from '@/components/map/engineLoader';
 import { THUMB_ZOOM, ThumbStandIn, keyName, makeQueue, thumbKey } from '@/components/map/thumbShared';
 import { themes, useTheme } from '@/theme/ThemeProvider';
 import { colors } from '@/theme';
@@ -118,18 +118,18 @@ export function CourtMapSnapshots() {
 
 /**
  * The web view that draws one spot and photographs it, gone again as soon
- * as it answers, or after 15 seconds.
+ * as it answers, or after 30 seconds (time for the map's code to come from
+ * a second or third host when the first stalls: engineLoader).
  */
 function SnapshotView({ lat, lng, width, height, lookJson, ground, onShot, onFail }: {
   lat: number; lng: number; width: number; height: number; lookJson: string; ground?: string;
   onShot: (dataUrl: string) => void; onFail: () => void;
 }) {
   useEffect(() => {
-    const t = setTimeout(onFail, 15_000);
+    const t = setTimeout(onFail, 30_000);
     return () => clearTimeout(t);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const html = useMemo(() => `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-${ENGINE_CSS}
 <style>html,body,#m{margin:0;width:${width}px;height:${height}px;background:${ground ?? colors.bgElevated};overflow:hidden}.maplibregl-ctrl{display:none}</style></head>
 <body><div id="m"></div><script>
 var post=function(o){window.ReactNativeWebView&&window.ReactNativeWebView.postMessage(JSON.stringify(o))};

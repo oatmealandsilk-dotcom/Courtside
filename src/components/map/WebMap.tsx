@@ -7,7 +7,6 @@ import * as maplibregl from 'maplibre-gl';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { CitylessCard, CourtSheet, CourtsZoomNote, FilterChips, HitSheet, MapCredit, YouSheet, MapButtons, MapTopBar, NearbyRail, PlaceSheet, PlayerSheet, PreviewOverlay, WhereCard } from '@/components/map/MapChrome';
-import { CourtSpinner } from '@/components/CourtSpinner';
 import { CardStage } from '@/components/map/CardStage';
 import type { NearbyMapProps } from '@/components/NearbyMap.types';
 import { placeZoom } from '@/features/places/geocode';
@@ -29,6 +28,9 @@ import { STYLE, applyLook, cardLook, lookFor } from '@/components/map/look';
 import { CLOSE_ZOOM_NAMES, FAR_ZOOM, MAP_PIN_CSS, SHORT_ZOOM, clusterTemplates, courtLift, youLift } from '@/components/map/markers';
 import { CARD_BOX, FULL_MAP_BOX, PIN_ENGINE_JS, type PinEngine, type PinEngineFactory } from '@/components/map/pinEngine';
 import { mapMarkers } from '@/components/map/pinList';
+import { PAINT_WATCH_JS } from '@/components/map/engineLoader';
+import { MapCardFailed, MapCardLoading, MapLoadPill } from '@/components/map/MapLoadState';
+import { useMapLoad } from '@/components/map/useMapLoad';
 import { useStartMapHold } from '@/features/feed/warmup';
 
 const HEIGHT = 330;
@@ -41,6 +43,8 @@ const CARD_ZOOM = 10.4;
  * gather, split and cascade their pins the same way.
  */
 const makePins = new Function(`return ${PIN_ENGINE_JS}`)() as PinEngineFactory;
+/** When a map is up and has first drawn, fetching again any streets that failed: the very text the phone's page runs (engineLoader). */
+const watchPaint = new Function(`return ${PAINT_WATCH_JS}`)() as (map: maplibregl.Map, tell: (what: 'up' | 'painted' | 'fail' | 'tiles' | 'retry', why?: string) => void) => { stop: () => void };
 /** Close enough to read street names, when the map goes to someone. */
 const CLOSE_ZOOM = 13.5;
 // MapLibre does its heavy lifting in a background worker script. The bundler
@@ -82,9 +86,16 @@ export function NearbyMap(props: NearbyMapProps) {
   const model = useMapModel(me, players, at, focusCourt, !expanded, focusHit, focusUser, focusSpot, !!locationOn, focusPlace);
   // The still card on the start page holds the opening curtain until its streets are drawn (see warmup).
   const painted = useStartMapHold(!expanded && (!!model.city || model.cityPending));
-  // The still card fades in whole once its map has drawn (Oct 4, owner), never waiting past 2.5 s.
+  // The still card fades in whole once its map has drawn (Oct 4, owner). Until
+  // then it shows only its loading look, however long that takes, and if the
+  // map never comes after every retry, only "Map didn't load · Tap to try
+  // again" (Oct 5, owner): never the city and its players over a blank map.
   const [cardShown, setCardShown] = useState(false);
-  useEffect(() => { const t = setTimeout(() => setCardShown(true), 2500); return () => clearTimeout(t); }, []);
+  // The loading look underneath goes once the map's fade-in has finished.
+  const [loaderGone, setLoaderGone] = useState(false);
+  useEffect(() => { if (!cardShown) return undefined; const t = setTimeout(() => setLoaderGone(true), 450); return () => clearTimeout(t); }, [cardShown]);
+  // Getting the map going, and again if its style never arrives (useMapLoad): each try is a new map.
+  const load = useMapLoad(expanded ? 'full map' : 'map card');
   // Anything else picked (a search result, a pin) takes the place of your own card.
   useEffect(() => { if (model.selected || model.selectedCourt || model.selectedHit) setMeOpen(false); }, [model.selected, model.selectedCourt, model.selectedHit]);
   const { home, start } = model;
@@ -128,18 +139,34 @@ export function NearbyMap(props: NearbyMapProps) {
     const el = host.current;
     if (!el) return;
     const opening = (expanded && camera.current) || { center: [view.center.lng, view.center.lat] as [number, number], zoom: view.zoom };
-    const instance = new maplibregl.Map({
-      container: el,
-      style: STYLE,
-      center: opening.center,
-      zoom: opening.zoom,
-      interactive: expanded,
-      attributionControl: false,
-      // Handled below, so a two-finger scroll pans and a pinch zooms.
-      scrollZoom: false,
-      dragRotate: false,
-      pitchWithRotate: false,
-      touchPitch: false,
+    let instance: maplibregl.Map;
+    try {
+      instance = new maplibregl.Map({
+        container: el,
+        style: STYLE,
+        center: opening.center,
+        zoom: opening.zoom,
+        interactive: expanded,
+        attributionControl: false,
+        // Handled below, so a two-finger scroll pans and a pinch zooms.
+        scrollZoom: false,
+        dragRotate: false,
+        pitchWithRotate: false,
+        touchPitch: false,
+      });
+    } catch (error) {
+      load.failed(`start: ${error instanceof Error ? error.message : String(error)}`);
+      return undefined;
+    }
+    load.heard('boot');
+    // First of all, before anything else listens: when the map is up, when it has drawn
+    // (the curtain over the start page may lift onto it, and the card fades in), or that it failed.
+    const watch = watchPaint(instance, (what, why) => {
+      if (what === 'fail') { load.failed(why ?? 'failed'); return; }
+      if (what === 'up') { load.heard('up'); return; }
+      // Streets arriving, or failed ones being fetched again: still alive.
+      if (what !== 'painted') { load.heard('other'); return; }
+      requestAnimationFrame(() => { load.heard('painted'); if (!expanded) { painted(); setCardShown(true); } });
     });
     instance.touchZoomRotate.disableRotation();
     // The theme's colours go on as soon as the style's layers exist, before
@@ -148,8 +175,6 @@ export function NearbyMap(props: NearbyMapProps) {
     // with every street name, for a moment each time a map was made: a white
     // flash on a dark theme.
     instance.on('style.load', () => applyLook(instance, expanded ? lookFor(themes[theme]) : cardLook(lookFor(themes[theme]))));
-    // First time everything in view has drawn: the curtain over the start page may lift onto it.
-    if (!expanded) instance.once('idle', () => requestAnimationFrame(() => { painted(); setCardShown(true); }));
     // The pins' shared styles, once per page, and the zoom classes they answer to.
     if (!document.getElementById('cs-pin-css')) { const css = document.createElement('style'); css.id = 'cs-pin-css'; css.textContent = MAP_PIN_CSS; document.head.appendChild(css); }
     const zoomClass = () => {
@@ -245,10 +270,13 @@ export function NearbyMap(props: NearbyMapProps) {
       el.removeEventListener('wheel', onWheel);
       pinsOn.current?.destroy();
       pinsOn.current = null;
+      watch.stop();
       instance.remove();
       map.current = null;
     };
-  }, [expanded, theme, !expanded && !model.city]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [expanded, theme, !expanded && !model.city, load.attempt]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Given up on: the opening curtain stops waiting for the card's map, and the card says so.
+  useEffect(() => { if (!expanded && load.status === 'failed') painted(); }, [load.status]); // eslint-disable-line react-hooks/exhaustive-deps
   // The sheet over the map has gone: the first pins come in.
   useEffect(() => { pinsOn.current?.hold(expanded && holdPins); }, [expanded, holdPins, mapGen]);
   // A fix arriving after the map is up moves the map to it (as on the phone);
@@ -306,13 +334,25 @@ export function NearbyMap(props: NearbyMapProps) {
   const canvas = <div ref={host} aria-hidden={expanded ? undefined : true} style={{ position: 'absolute', inset: 0, background: colors.bg }} />;
 
   if (!expanded && !model.city) {
-    // A city still being looked up holds the card's place; no city at all asks for one.
-    return model.cityPending ? <View style={[styles.card, styles.waiting]}><CourtSpinner size={24} /></View> : <CitylessCard onOpenMap={onExpand} />;
+    // A city still being looked up holds the card's place, looking as the map will while it loads; no city at all asks for one.
+    return model.cityPending ? <View style={styles.card}><MapCardLoading /></View> : <CitylessCard onOpenMap={onExpand} />;
   }
   if (!expanded) {
+    const failed = load.status === 'failed' && !cardShown;
     return (
       <View style={styles.card}>
-        <View style={[StyleSheet.absoluteFill, { opacity: cardShown ? 1 : 0, transform: [{ scale: cardShown ? 1 : 0.985 }], transition: 'opacity 420ms cubic-bezier(0.33, 1, 0.68, 1), transform 420ms cubic-bezier(0.33, 1, 0.68, 1)' } as object]}>
+        {/* Under the map, until it has drawn and faded in over it. Given up on, a tap tries again; still loading, it opens the full map. */}
+        {!loaderGone ? (failed ? <MapCardFailed /> : <MapCardLoading />) : null}
+        {!cardShown ? (
+          <Pressable
+            accessibilityRole={failed || onExpand ? 'button' : undefined}
+            accessibilityLabel={failed ? "The map didn't load. Tap to try again" : 'Map of players, courts and hits near you'}
+            onPress={failed ? load.restart : onExpand}
+            disabled={!failed && !onExpand}
+            style={StyleSheet.absoluteFill}
+          />
+        ) : null}
+        <View aria-hidden={!cardShown} style={[StyleSheet.absoluteFill, !cardShown && styles.noTaps, { opacity: cardShown ? 1 : 0, transform: [{ scale: cardShown ? 1 : 0.985 }], transition: 'opacity 420ms cubic-bezier(0.33, 1, 0.68, 1), transform 420ms cubic-bezier(0.33, 1, 0.68, 1)' } as object]}>
           {canvas}
           {/* A still card: the tap goes to the full map, not to the tiles. */}
           <Pressable accessibilityRole={onExpand ? 'button' : undefined} accessibilityLabel="Map of players, courts and hits near you" onPress={onExpand} disabled={!onExpand} style={StyleSheet.absoluteFill} />
@@ -345,6 +385,8 @@ export function NearbyMap(props: NearbyMapProps) {
         <MapTopBar onBack={onBack} query={model.query} onQuery={model.setQuery} locationOn={locationOn} locating={locating} onToggleLocation={onToggleLocation} results={model.courtResults} onPickCourt={model.pickCourt} places={model.placeSearch} onPickPlace={model.pickPlace} players={model.query.trim() ? model.tray.length : 0} locationMenu={choosing} />
         <FilterChips filter={model.filter} onFilter={model.setFilter} courtsOn={model.courtsOn} onCourts={model.toggleCourts} courtsLoading={model.courtsLoading} />
         {model.courtsOn && far && !model.selectedCourt && !model.query.trim() ? <CourtsZoomNote /> : null}
+        {/* Slow to come, or didn't: a small pill under the chips, clear of the pins around you (as on the phone). */}
+        <MapLoadPill status={load.status} onRetry={load.restart} />
       </View>
       <View pointerEvents="box-none" style={styles.bottom}>
         {/* What is up along the bottom (the tray or a card) glides in and out, the map's buttons riding on top of it: CardStage. */}
@@ -378,7 +420,8 @@ export function NearbyMap(props: NearbyMapProps) {
 
 const styleDefinitions = StyleSheet.create({
   card: { height: HEIGHT, borderRadius: radius.xl, overflow: 'hidden', backgroundColor: colors.bgElevated, borderWidth: 1, borderColor: colors.border },
-  waiting: { alignItems: 'center', justifyContent: 'center' },
+  // The map still on its way: taps go to the card under it (a compiled style: react-native-web ignores an inline pointerEvents).
+  noTaps: { pointerEvents: 'none' },
   fill: { flex: 1, backgroundColor: colors.bgElevated, overflow: 'hidden' },
   top: { position: 'absolute', left: 0, right: 0, top: 0, gap: 2, zIndex: 10 },
   // The map's buttons, riding on whatever is up along the bottom.
