@@ -30,6 +30,10 @@ module.exports = {
     scheme: 'courtside',
     userInterfaceStyle: 'dark',
     backgroundColor: '#F8F7F2',
+    // Android only reads this (its "primary" colour: the app's card in the recent-apps
+    // view, and the edge glow on older phones), which was Expo's default navy. The
+    // brand's green, as on the icon (Oct 5). The iPhone app and the website ignore it.
+    primaryColor: '#3F7049',
     // Shown by Expo Go and native builds while the JS loads; matches app/index.tsx
     // so the loader fades straight into the in-app splash.
     icon: green ? './assets/icon.png' : './assets/icon-glow.png',
@@ -84,6 +88,13 @@ module.exports = {
       // No app links yet: the iPhone app has no associated domains either, so links to
       // app.courtsidebase.com open the website on both. Add the two together when wanted.
       ...(googleServicesFile ? { googleServicesFile } : {}),
+      // Android's own parts of the app (its dialogs, its navigation-bar buttons) in their
+      // light look (Oct 5). The 'dark' above is for the iPhone; on Android it forced the
+      // whole window into night mode, so phones with three-button navigation had a dark
+      // band with white buttons along the bottom of every cream page. The app's own
+      // pages follow its theme either way. (Buttons that follow the Night and New York
+      // themes need expo-navigation-bar, a later build: see docs/android-setup.md.)
+      userInterfaceStyle: 'light',
     },
     web: { bundler: 'metro', output: 'single', name: 'CourtSide' },
     plugins: [
@@ -102,7 +113,16 @@ module.exports = {
       ['expo-location', { locationWhenInUsePermission: 'CourtSide uses your location while the app is open to show courts and players near you. You choose who can see you.' }],
       // Android draws the status-bar alert icon in white from the picture's shape alone, so
       // it gets the mark as a white cut-out (Oct 4); the full-colour app icon would be a blank square.
-      ['expo-notifications', { color: '#3F7049', icon: './assets/notification-icon.png' }],
+      ['expo-notifications', { color: '#3F7049', icon: './assets/notification-icon.png', defaultChannel: 'activity' }],
+      // Android's alert channels are made by the app (src/features/push/channels.ts); an alert that
+      // names none goes to "Likes, replies and follows" (defaultChannel above), never "Miscellaneous".
+      // Logins kept in the phone's secure storage stay out of Android's backup to Google Drive and
+      // phone-to-phone copies (Oct 5): a copied phone opened signed in on the same login as the old
+      // one, and one of the two was then signed out at random. faceIDPermission: false keeps the
+      // iPhone's Info.plist exactly as it is (the app never uses Face ID).
+      ['expo-secure-store', { faceIDPermission: false }],
+      // Android only: lets the app see Instagram, for Share to Instagram Stories (plugins/withInstagramQueries.js).
+      './plugins/withInstagramQueries',
       'expo-apple-authentication',
       // No playing on in the background: nothing in the app is meant to be
       // heard once you leave it (clips and voice notes both stop), and without
@@ -121,6 +141,12 @@ module.exports = {
     // uses it from the next launch. A build only takes code made for the same
     // version, so bump `version` above whenever something native changes (a new
     // package with phone code, a permission, a plugin) and make a new build.
+    // The iPhone and Android builds share it (1.0.0), and `npm run update` sends
+    // both the same code (Oct 5). So: make the first Android build from main
+    // once this Android work is merged (an update from main would otherwise take
+    // its Android fixes away), and if a package with phone code is ever added for
+    // one platform only (Health Connect, say), bump `version` and build both, or
+    // the other platform's older build would be sent code that needs it.
     runtimeVersion: { policy: 'appVersion' },
     // The phone waits up to 3 s while opening for a newer version and opens straight into it,
     // so testers don't need to close and reopen twice (from build 11, Oct 2).

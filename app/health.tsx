@@ -91,7 +91,11 @@ export default function Health() {
    * own; its tennis comes in through Apple Health's workouts, so it shows on
    * an iPhone once those are on (flag:tennis-apple), as before.
    */
-  const shown = (i: Integration) => (i.provider === 'garmin' ? Platform.OS === 'ios' && flags.apple : i.connected || open(i.provider));
+  // Android (Oct 5): Apple Health lives on iPhones only, so its row shows there only once
+  // connected on an iPhone, and says so (no dead Connect, no Sync that does nothing).
+  const shown = (i: Integration) => (i.provider === 'garmin' ? Platform.OS === 'ios' && flags.apple
+    : i.provider === 'apple-health' && Platform.OS === 'android' ? i.connected
+    : i.connected || open(i.provider));
   const trackerRows = TRACKER_ROWS.map((p) => integrations.find((i) => i.provider === p)).filter((i): i is Integration => !!i && !!ABOUT[i.provider] && shown(i));
   // The footer names only the trackers listed, WHOOP first: "WHOOP, Fitbit or Polar".
   const removers = ['WHOOP', ...trackerRows.filter((i) => isTracker(i.provider)).map((i) => i.label)];
@@ -170,13 +174,17 @@ export default function Health() {
           </View>
           <Text style={styles.line}>{about.line}</Text>
           <Text style={styles.how}>
-            {i.connected && i.lastSyncedAt ? `Synced ${relativeTime(i.lastSyncedAt)}.` : blocked ? (wrongPhone ? 'iPhone only.' : inExpoGo() ? 'Available in the App Store version of CourtSide.' : 'Coming in the next app update.') : about.how}
+            {wrongPhone && i.connected && Platform.OS === 'android' ? 'Connected on your iPhone. It syncs from there.'
+              : i.connected && i.lastSyncedAt ? `Synced ${relativeTime(i.lastSyncedAt)}.` : blocked ? (wrongPhone ? 'iPhone only.' : inExpoGo() ? 'Available in the App Store version of CourtSide.' : 'Coming in the next app update.') : about.how}
           </Text>
           {i.connected ? (
             <View style={styles.actions}>
-              <Pressable accessibilityRole="button" accessibilityLabel={`Sync ${i.label}`} disabled={loading} onPress={() => run(i.provider, 'sync')} style={styles.small}>
-                <Ionicons name="refresh" size={14} color={colors.text} /><Text style={styles.smallText}>{(i.provider === 'cronometer' || i.provider === 'myfitnesspal') && !appleHealthAvailable() ? 'Import again' : 'Sync now'}</Text>
-              </Pressable>
+              {/* Android cannot read Apple Health: syncing it is the iPhone's job. */}
+              {wrongPhone && Platform.OS === 'android' ? null : (
+                <Pressable accessibilityRole="button" accessibilityLabel={`Sync ${i.label}`} disabled={loading} onPress={() => run(i.provider, 'sync')} style={styles.small}>
+                  <Ionicons name="refresh" size={14} color={colors.text} /><Text style={styles.smallText}>{(i.provider === 'cronometer' || i.provider === 'myfitnesspal') && !appleHealthAvailable() ? 'Import again' : 'Sync now'}</Text>
+                </Pressable>
+              )}
               <Pressable accessibilityRole="button" accessibilityLabel={`Disconnect ${i.label}`} disabled={loading} onPress={() => disconnect(i.provider)} style={styles.smallGhost}>
                 <Text style={styles.smallGhostText}>Disconnect</Text>
               </Pressable>
