@@ -1058,6 +1058,12 @@ export interface LastSeen {
   courtName?: string;
   /** Up for a hit until then (today); absent when not, or before migration 63. */
   openUntil?: string;
+  /**
+   * A friend who follows each other with you (map_players, migration 98).
+   * Friends come back from anywhere in the world; everyone else only near
+   * you. Absent for yourself, for anyone else, and before migration 98.
+   */
+  mutual?: boolean;
 }
 
 /** How exact a player's pin is. */

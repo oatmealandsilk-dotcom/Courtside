@@ -5,7 +5,7 @@ import Reanimated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { CitylessCard, CourtSheet, FilterChips, HitSheet, MapCredit, YouSheet, MapButtons, MapTopBar, NearbyRail, PlayerSheet, PreviewOverlay, WhereCard } from '@/components/map/MapChrome';
+import { CitylessCard, CourtSheet, CourtsZoomNote, FilterChips, HitSheet, MapCredit, YouSheet, MapButtons, MapTopBar, NearbyRail, PlayerSheet, PreviewOverlay, WhereCard } from '@/components/map/MapChrome';
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { CardStage } from '@/components/map/CardStage';
 import { MapCanvas, type CanvasMarker, type MapCanvasHandle } from '@/components/map/MapCanvas';
@@ -14,7 +14,7 @@ import { clusterTemplates, courtLift, youLift } from '@/components/map/markers';
 import { mapMarkers } from '@/components/map/pinList';
 import type { NearbyMapProps } from '@/components/NearbyMap.types';
 import { milesBetween } from '@/features/players/geo';
-import { useMapModel } from '@/features/players/mapModel';
+import { COURTS_MIN_ZOOM, useMapModel } from '@/features/players/mapModel';
 import { askWhoSeesYou, canChooseVisibility, onTeenMap } from '@/features/players/mapPrivacy';
 import { useOpenToHitToggle } from '@/features/players/useLocationToggle';
 import { askToHit } from '@/features/players/courtLink';
@@ -94,6 +94,8 @@ export function NearbyMap(props: NearbyMapProps) {
   const { home, start } = model;
   // The full map opens where you are; the still card on your town (location on) or your profile's city.
   const view = expanded ? { center: start.center, zoom: start.zoom ?? CITY_ZOOM } : { center: model.city ?? start.center, zoom: CARD_ZOOM };
+  // Zoomed out past about a city: the court pins step aside (pinList), and a note says so.
+  const [far, setFar] = useState(() => view.zoom < COURTS_MIN_ZOOM);
   const weather = useWeather(home);
   const cityName = model.cityName;
   const canvas = useRef<MapCanvasHandle | null>(null);
@@ -154,6 +156,8 @@ export function NearbyMap(props: NearbyMapProps) {
       onMapTap={() => { model.select(null); model.selectCourt(null); model.selectHit(null); setMeOpen(false); }}
       // Courts and their rings for where the map came to rest, zoomed in on a town (both check the zoom); and who is in view.
       onMove={(c, zoom, bounds) => { if (!expanded) return; model.loadRings(c, zoom); if (model.courtsOn) void model.loadCourts(c, zoom); model.loadPlayersIn(bounds); }}
+      farBelow={COURTS_MIN_ZOOM}
+      onFar={expanded ? setFar : undefined}
     />
   );
 
@@ -193,6 +197,7 @@ export function NearbyMap(props: NearbyMapProps) {
       <View pointerEvents="box-none" style={[styles.top, { paddingTop: insets.top + spacing.sm }]}>
         <MapTopBar onBack={onBack} query={model.query} onQuery={model.setQuery} locationOn={locationOn} locating={locating} onToggleLocation={onToggleLocation} results={model.courtResults} onPickCourt={model.pickCourt} locationMenu={choosing} />
         <FilterChips filter={model.filter} onFilter={model.setFilter} courtsOn={model.courtsOn} onCourts={model.toggleCourts} courtsLoading={model.courtsLoading} />
+        {model.courtsOn && far && !model.selectedCourt && !model.query.trim() ? <CourtsZoomNote /> : null}
       </View>
       <View pointerEvents="box-none" style={styles.bottom}>
         {/* What is up along the bottom (the tray or a card) glides in and out, the map's buttons riding on top of it: CardStage. */}

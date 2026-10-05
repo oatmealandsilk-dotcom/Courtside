@@ -2443,7 +2443,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // What the map's two kinds of load last brought (migration 63 answers for
   // one part of the map at a time): round where you are, which Find Players,
   // Near you and Who's up today read, and the part of the full map in view.
-  // The map shows both; a new load of a kind replaces only its own.
+  // The map shows both; a new load of a kind replaces only its own. Since
+  // migration 98 every load also carries all your friends who follow each
+  // other with you, wherever they are (so a load of either kind keeps them),
+  // and the server sends anyone else only near your own shared spot.
   const seenAround = useRef<Record<ID, LastSeen>>({});
   const seenInView = useRef<Record<ID, LastSeen>>({});
   const seenFor = useRef<ID | null>(null);
@@ -2459,7 +2462,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (mapLive !== false) {
       // Round you: about 80 km each way (the tray lists people up to 50
       // miles out), from the phone's fix or else your own last spot. Without
-      // either, the server answers only for you, which still says whether it is there.
+      // either, the server answers only for you (and, since migration 98,
+      // your friends), which still says whether it is there.
       const s = stateRef.current;
       const from = s.detectedCoords ?? (s.lastSeen[me!] ? { lat: s.lastSeen[me!].lat, lng: s.lastSeen[me!].lng } : null);
       const around = from ? { minLat: from.lat - 0.75, maxLat: from.lat + 0.75, minLng: from.lng - Math.min(1, 0.75 / Math.max(0.2, Math.cos((from.lat * Math.PI) / 180))), maxLng: from.lng + Math.min(1, 0.75 / Math.max(0.2, Math.cos((from.lat * Math.PI) / 180))) } : null;
@@ -5308,9 +5312,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const step = stateRef.current.mapLive ? 0.0015 : 0.01;
     const moved = !last || Math.abs(last.lat - at.lat) > step || Math.abs(last.lng - at.lng) > step;
     if (!moved && Date.now() - last!.at < 15 * 60 * 1000) return;
+    // "Players nearby" are the ones near the spot the database has for you
+    // (migration 98), so the first spot sent in a session, or one far from
+    // the last (about 20 km, a trip to another town), asks the map again
+    // once it is in: the first load may have run before it, from yesterday's
+    // spot or from none at all (friends only).
+    const refresh = !last || Math.abs(last.lat - at.lat) > 0.2 || Math.abs(last.lng - at.lng) > 0.2;
     markedAt.current = { lat: at.lat, lng: at.lng, at: Date.now() };
-    void remote.markLastSeen(at.lat, at.lng, state.detectedLocation ?? undefined);
-  }, [state.currentUserId, state.detectedCoords, state.detectedLocation, state.locationEnabled]);
+    const marked = remote.markLastSeen(at.lat, at.lng, state.detectedLocation ?? undefined);
+    if (refresh) void marked.then(() => loadLastSeen()).catch(() => undefined);
+  }, [state.currentUserId, state.detectedCoords, state.detectedLocation, state.locationEnabled, loadLastSeen]);
 
   // The phone keeps the Location switch too (the browser reads it at start),
   // so the map opens where you are instead of forgetting on every launch.

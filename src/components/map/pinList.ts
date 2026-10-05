@@ -1,7 +1,7 @@
 import type { User } from '@/data/types';
 import type { CanvasMarker } from '@/components/map/pinEngine';
 import { HIT_LIFT, agoShort, courtPinHtml, discSize, hitPinHtml, mePinHtml, playerPinClass, playerPinHtml } from '@/components/map/markers';
-import type { MapModel, Placed } from '@/features/players/mapModel';
+import { COURTS_MIN_ZOOM, type MapModel, type Placed } from '@/features/players/mapModel';
 import { isOpenToHit } from '@/features/players/openToHit';
 
 /** Your face on your own pin, a touch bigger than everyone else's. */
@@ -21,11 +21,13 @@ function nameWidths(first: string, { ago, open, court }: { ago?: string; open?: 
 
 /**
  * Who leads a crowd of players gathered into "+N": someone up for a hit
- * first (their green ring then rings the gathered pin), then whoever was
- * there most recently; anyone who hides when they were last seen after.
+ * first (their green ring then rings the gathered pin), then a friend who
+ * follows each other with you (Snapchat style: zoomed out, your town's pin
+ * wears a friend's face), then whoever was there most recently; anyone who
+ * hides when they were last seen after.
  */
 const playerRank = (p: Placed, now: number) =>
-  (isOpenToHit(p.user) ? 0 : 1e9) + (p.seenAt ? Math.max(0, now - Date.parse(p.seenAt)) / 60_000 : 1e8);
+  (isOpenToHit(p.user) ? 0 : 2e9) + (p.mutual ? 0 : 1e9) + (p.seenAt ? Math.max(0, now - Date.parse(p.seenAt)) / 60_000 : 1e8);
 
 /**
  * Everything the map draws, as one list for the pin engine (pinEngine): the
@@ -43,10 +45,13 @@ export function mapMarkers({ model, expanded, me, shown, selectedId, selectedCou
   const now = Date.now();
   // Full court pins only on the full map (the model draws none on the card either).
   // A court played on this week wears the green story ring (courts only, never a random spot).
+  // Courts show only from about a city in (COURTS_MIN_ZOOM, the same zoom they load from):
+  // zoomed out on a country they fade away (the map says "Zoom in to see courts"), and
+  // none of them is drawn there. The picked court stays with its card.
   const list: CanvasMarker[] = (expanded ? model.courts : []).map((c, i) => {
     const on = c.id === selectedCourtId;
     const ringed = model.ringed.has(c.id);
-    return { id: `c:${c.id}`, lat: c.lat, lng: c.lng, html: courtPinHtml(c, on, ringed), z: on ? 4 : 1, k: 'c' as const, r: (ringed ? 0 : 1e6) - c.count * 1000 + i, sel: on, g: 'c' as const, role: 'button', label: c.name };
+    return { id: `c:${c.id}`, lat: c.lat, lng: c.lng, html: courtPinHtml(c, on, ringed), z: on ? 4 : 1, k: 'c' as const, r: (ringed ? 0 : 1e6) - c.count * 1000 + i, sel: on, g: 'c' as const, role: 'button', label: c.name, mz: on ? undefined : COURTS_MIN_ZOOM };
   });
   // The still card: your city's courts as quiet dots, under everything.
   // The still card shows people and hits only; courts live on the full map (Oct 3, owner).

@@ -201,6 +201,22 @@ export function FilterChips({ filter, onFilter, courtsOn, onCourts, courtsLoadin
   );
 }
 
+/**
+ * Zoomed out past about a city, the court pins step aside (thousands of
+ * them would say nothing at that size). This small note, under the chips,
+ * says where they went. Not a button: the map under it still takes the
+ * pinch and the drag.
+ */
+export function CourtsZoomNote() {
+  const styles = useThemedStyles(styleDefinitions);
+  return (
+    <Animated.View entering={FadeIn.duration(180)} exiting={FadeOut.duration(140)} pointerEvents="none" style={styles.zoomNote}>
+      <CourtGlyph size={12} color={colors.textMuted} />
+      <Text style={styles.zoomNoteText}>Zoom in to see courts</Text>
+    </Animated.View>
+  );
+}
+
 export function WeatherChip({ weather }: { weather: Weather | null }) {
   const styles = useThemedStyles(styleDefinitions);
   if (!weather) return null;
@@ -972,6 +988,9 @@ const styleDefinitions = StyleSheet.create({
   chipPill: { position: 'absolute', left: 0, top: 0, height: 32, borderRadius: radius.pill, backgroundColor: colors.brand },
   chipText: { ...typography.smallStrong, color: colors.text },
   chipTextOn: { color: colors.brandInk },
+  // "Zoom in to see courts": a quiet pill under the chips, never in the way.
+  zoomNote: { alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: radius.pill, backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
+  zoomNoteText: { ...typography.small, color: colors.textMuted },
   weather: { marginLeft: 6, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
   weatherText: { ...typography.smallStrong, color: colors.text, fontVariant: ['tabular-nums'] },
   buttonsRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', paddingHorizontal: spacing.md },

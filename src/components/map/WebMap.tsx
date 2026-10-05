@@ -6,12 +6,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as maplibregl from 'maplibre-gl';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
-import { CitylessCard, CourtSheet, FilterChips, HitSheet, MapCredit, YouSheet, MapButtons, MapTopBar, NearbyRail, PlayerSheet, PreviewOverlay, WhereCard } from '@/components/map/MapChrome';
+import { CitylessCard, CourtSheet, CourtsZoomNote, FilterChips, HitSheet, MapCredit, YouSheet, MapButtons, MapTopBar, NearbyRail, PlayerSheet, PreviewOverlay, WhereCard } from '@/components/map/MapChrome';
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { CardStage } from '@/components/map/CardStage';
 import type { NearbyMapProps } from '@/components/NearbyMap.types';
 import { milesBetween } from '@/features/players/geo';
-import { useMapModel } from '@/features/players/mapModel';
+import { COURTS_MIN_ZOOM, useMapModel } from '@/features/players/mapModel';
 import { askWhoSeesYou, canChooseVisibility, onTeenMap } from '@/features/players/mapPrivacy';
 import { useOpenToHitToggle } from '@/features/players/useLocationToggle';
 import { askToHit } from '@/features/players/courtLink';
@@ -82,6 +82,10 @@ export function NearbyMap(props: NearbyMapProps) {
   const { home, start } = model;
   // The full map opens where you are; the still card on your town (location on) or your profile's city.
   const view = expanded ? { center: start.center, zoom: start.zoom ?? START_ZOOM } : { center: model.city ?? start.center, zoom: CARD_ZOOM };
+  // Zoomed out past about a city: the court pins step aside (pinList), and a note says so.
+  // Told the moment the zoom crosses it (as on the phone), kept in a ref so a pinch only sets it on the crossing.
+  const [far, setFar] = useState(() => view.zoom < COURTS_MIN_ZOOM);
+  const farNow = useRef(far);
   const weather = useWeather(home);
   const cityName = model.cityName;
   const host = useRef<HTMLDivElement | null>(null);
@@ -140,7 +144,12 @@ export function NearbyMap(props: NearbyMapProps) {
     if (!expanded) instance.once('idle', () => requestAnimationFrame(() => { painted(); setCardShown(true); }));
     // The pins' shared styles, once per page, and the zoom classes they answer to.
     if (!document.getElementById('cs-pin-css')) { const css = document.createElement('style'); css.id = 'cs-pin-css'; css.textContent = MAP_PIN_CSS; document.head.appendChild(css); }
-    const zoomClass = () => { const z = instance.getZoom(); el.classList.toggle('cs-close', z >= CLOSE_ZOOM_NAMES); el.classList.toggle('cs-far', z < FAR_ZOOM); el.classList.toggle('cs-short', z < SHORT_ZOOM); };
+    const zoomClass = () => {
+      const z = instance.getZoom();
+      el.classList.toggle('cs-close', z >= CLOSE_ZOOM_NAMES); el.classList.toggle('cs-far', z < FAR_ZOOM); el.classList.toggle('cs-short', z < SHORT_ZOOM);
+      const isFar = z < COURTS_MIN_ZOOM;
+      if (expanded && isFar !== farNow.current) { farNow.current = isFar; setFar(isFar); }
+    };
     // The still card: its pins only show who is there; the card itself takes the tap.
     el.classList.toggle('cs-quiet', !expanded);
     zoomClass();
@@ -317,6 +326,7 @@ export function NearbyMap(props: NearbyMapProps) {
       <View pointerEvents="box-none" style={[styles.top, { paddingTop: insets.top + spacing.sm }]}>
         <MapTopBar onBack={onBack} query={model.query} onQuery={model.setQuery} locationOn={locationOn} locating={locating} onToggleLocation={onToggleLocation} results={model.courtResults} onPickCourt={model.pickCourt} locationMenu={choosing} />
         <FilterChips filter={model.filter} onFilter={model.setFilter} courtsOn={model.courtsOn} onCourts={model.toggleCourts} courtsLoading={model.courtsLoading} />
+        {model.courtsOn && far && !model.selectedCourt && !model.query.trim() ? <CourtsZoomNote /> : null}
       </View>
       <View pointerEvents="box-none" style={styles.bottom}>
         {/* What is up along the bottom (the tray or a card) glides in and out, the map's buttons riding on top of it: CardStage. */}

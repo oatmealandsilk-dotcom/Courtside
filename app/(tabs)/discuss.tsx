@@ -276,8 +276,9 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   const early = !!currentUser && !notKnownAdult(currentUser) && !!nearFrom && (lastSeenLoaded || !isSupabaseConfigured) && nearPlayers.length === 0;
   const myCityName = (currentUser?.location ?? '').split(',')[0].trim() || null;
   // The court the invite carries: one you follow in town, else the nearest
-  // that reads as public (never a club or someone's own court, and none
-  // that is members only). Never for a teen: a poster or link naming where
+  // that reads as public, else the first public one Courts near you lists
+  // (a bigger park when two are about as near; never a club or someone's
+  // own court, and none that is members only). Never for a teen: a poster or link naming where
   // a teen plays would put their court in front of strangers.
   const inviteCourt = useMemo(() => {
     if (!currentUser || notKnownAdult(currentUser)) return null;

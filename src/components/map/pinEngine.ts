@@ -73,6 +73,8 @@ export interface CanvasMarker {
   fws?: number;
   /** Which first wave it joins on the full map: players, courts or hits. */
   g?: 'p' | 'c' | 'h';
+  /** Shown only from this zoom in (courts: about a city); further out it fades away and is never made. Absent: at every zoom. */
+  mz?: number;
   /** For screen readers. */
   role?: string;
   label?: string;
@@ -181,15 +183,17 @@ return function(map,ml,o){
   function lp(lat,lng){var s=Math.pow(2,zoomOf(lvl));return {x:wx(lng)*s,y:wy(lat)*s}}
   // What shows at this level: every pin on its own, gathered, or fanned round its spot; then room made for players.
   function desired(){
-    var out={},own={},inFan={};
-    if(fan){var live=fan.m.filter(function(id){return !!items[id]});
+    var out={},own={},inFan={},zl=zoomOf(lvl);
+    // Too far out for it (its mz): left out at this level, so it fades away and nothing is made for it.
+    function off(id){var it=items[id];return !!it&&it.mz!=null&&zl<it.mz}
+    if(fan){var live=fan.m.filter(function(id){return !!items[id]&&!off(id)});
       var n=live.length,cols=Math.min(FAN_COLS,n),lead=fan.lead&&items[fan.lead],top=lead?((lead.ds||48)/2+24+10+24):46;
       // In rows just under the spot (under the picked player, if there is one), a name's width apart: the court's badge stays in sight on the spot.
       live.forEach(function(id,i){var row=Math.floor(i/cols),inRow=Math.min(cols,n-row*cols),col=i-row*cols;inFan[id]=1;
         out[id]=ext(items[id],{lat:fan.lat,lng:fan.lng,fx:Math.round((col-(inRow-1)/2)*FAN_W),fy:top+row*FAN_H,z:(items[id].z||0)+1});own[id]=id})}
-    for(var id in items){var it=items[id];if(inFan[id])continue;if(!it.k||!tree[it.k]||(it.sel&&it.k!=='p')){out[id]=it;own[id]=id}}
+    for(var id in items){var it=items[id];if(inFan[id]||off(id))continue;if(!it.k||!tree[it.k]||(it.sel&&it.k!=='p')){out[id]=it;own[id]=id}}
     ['p','c','h'].forEach(function(k){var per=tree[k];if(!per)return;per[lvl].forEach(function(g){
-      var m=g.m.filter(function(id){return !inFan[id]});if(!m.length)return;
+      var m=g.m.filter(function(id){return !inFan[id]&&!off(id)});if(!m.length)return;
       if(m.length===1){out[m[0]]=items[m[0]];own[m[0]]=m[0];return}
       var lead=items[g.lead],cid='k:'+k+':'+g.lead,rest,html;
       if(g.fx){
@@ -199,7 +203,7 @@ return function(map,ml,o){
           role:o.quiet?undefined:'button',label:o.quiet?undefined:rest.length+(rest.length===1?' more player':' more players')+' here. Show them',cl:{k:k,m:rest,lead:g.lead}};
         rest.forEach(function(id){own[id]=cid});return;
       }
-      if(!lead||inFan[g.lead])lead=items[m[0]];
+      if(!lead||inFan[g.lead]||off(g.lead))lead=items[m[0]];
       if(k==='p'||k==='h')html=lead.html.replace(BADGE,tpl.badge.replace('{n}','+'+(m.length-1))).replace(STACK,k==='p'?tpl.stack:'');
       else html=tpl.court.replace('{n}',String(m.length));
       out[cid]={id:cid,lat:lead.lat,lng:lead.lng,html:html,anchor:lead.anchor,offsetY:lead.offsetY,z:lead.z,cls:k==='p'?lead.cls:'',g:lead.g,k:k,ds:lead.ds,
