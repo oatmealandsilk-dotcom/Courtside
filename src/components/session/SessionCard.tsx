@@ -5,14 +5,14 @@ import Reanimated, { FadeIn, FadeOut, LinearTransition } from 'react-native-rean
 import Svg, { Line } from 'react-native-svg';
 
 import { BrandMark } from '@/components/BrandMark';
-import { Avatar, BrandWash } from '@/components/ui';
+import { Avatar, BrandWash, CreamWash } from '@/components/ui';
 import type { ID, SessionDetail } from '@/data/types';
 import { onCourtWord, resultWord, scoreLine, sessionEyebrow, sourceLabel, spokenDuration } from '@/features/activity/format';
 import { spokenScore } from '@/features/activity/score';
 import { sessionPeople } from '@/features/activity/sessionTags';
-import { postZones, zoneColors } from '@/features/activity/zones';
+import { mixHex, postZones, zoneColors } from '@/features/activity/zones';
 import { distanceFigure } from '@/features/activity/workouts';
-import { useTheme } from '@/theme/ThemeProvider';
+import { useTheme, type ThemeName } from '@/theme/ThemeProvider';
 import { colors, font, pageIsDark, withAlpha } from '@/theme';
 import { Duration, Figure } from './Duration';
 import { Pop } from './Pop';
@@ -21,18 +21,50 @@ import { ZoneBar } from './ZoneBar';
 /** Someone on the session as the card shows them; `pending` only ever on the author's own preview. */
 export type CardPerson = { id: ID; handle: string; name: string; role: 'opponent' | 'partner'; pending?: boolean };
 
+/** The colours of a session box (the card, the tile, the photo post's stats panel, the share stamp). */
+export type CardLook = {
+  dark: boolean;
+  /** The fade laid inside the box: the brand's own on a green box, the shirt's on a cream one, none on a dark page. */
+  wash: 'brand' | 'cream' | null;
+  fill: string;
+  border: string;
+  /** A hairline just inside the edge, drawn over the box so nothing moves: only the cream box has one. */
+  rim: string | null;
+  figure: string;
+  ink: string;
+  muted: string;
+  faint: string;
+  eyebrow: string;
+  pillFill: string;
+  pillInk: string;
+  lines: string;
+  zones: string[];
+};
+
 /**
- * How a session card is coloured on this court. On a light page it is the
+ * How a session box is coloured on this court. On a light page it is the
  * brand colour, with the brand's ink on it. On a dark page (New York, Night)
  * a full brand fill is too loud, so it is the page's raised surface with the
  * figures in the brand colour (owner, Oct 2).
+ *
+ * On the CourtSide court itself it is cream, not green (Oct 5, owner: "more
+ * like our banner and our shirt"): the Classic shirt's cream with its soft
+ * sage and clay fade, the figures and the CourtSide mark in the brand green
+ * as on the banner, the eyebrow and other small green words a shade deeper so
+ * they stay easy to read over the fade, the grey words in the page's muted
+ * ink (the banner's "Growing the game"), and the result pill green with cream
+ * words. The cream is the page's raised ground warmed with a touch of gold
+ * (about #EAE3D2), so it holds as a box on the page with only a hairline
+ * round it.
  */
-export function cardLook() {
+export function cardLook(theme: ThemeName): CardLook {
   if (pageIsDark()) {
     return {
       dark: true,
+      wash: null,
       fill: colors.surface,
       border: colors.border,
+      rim: null,
       figure: colors.brand,
       ink: colors.text,
       muted: colors.textMuted,
@@ -44,10 +76,39 @@ export function cardLook() {
       zones: zoneColors('page'),
     };
   }
+  if (theme === 'default') {
+    // The small green words (the eyebrow, "vs @handle", the CourtSide word) a
+    // fifth of the way toward the text colour: still the shirt's green, and
+    // 4.5:1 or more even where the fade is strongest under them (the brand
+    // green itself drops to about 3.8:1 there, fine only for the big numbers).
+    const smallGreen = mixHex(colors.brand, colors.text, 0.2);
+    return {
+      dark: false,
+      wash: 'cream',
+      fill: mixHex(colors.bgElevated, colors.sun, 0.1),
+      border: 'transparent',
+      rim: withAlpha(colors.brand, 0.2),
+      figure: colors.brand,
+      ink: smallGreen,
+      muted: colors.textMuted,
+      // The page's faint ink is under 4.5:1 on the cream, so the source line and the address take the muted one.
+      faint: colors.textMuted,
+      eyebrow: smallGreen,
+      pillFill: colors.brand,
+      pillInk: colors.brandInk,
+      lines: withAlpha(colors.brand, 0.14),
+      // Faint ink for the easy zones rising to the full green, in even steps on
+      // the cream (the page's own set has Light and Moderate almost the same
+      // here; the page and the stats sheet keep theirs).
+      zones: [withAlpha(colors.text, 0.13), withAlpha(colors.text, 0.24), withAlpha(colors.brand, 0.6), withAlpha(colors.brand, 0.8), colors.brand],
+    };
+  }
   return {
     dark: false,
+    wash: 'brand',
     fill: colors.brand,
     border: 'transparent',
+    rim: null,
     figure: colors.brandInk,
     ink: colors.brandInk,
     muted: withAlpha(colors.brandInk, 0.7),
@@ -58,6 +119,17 @@ export function cardLook() {
     lines: withAlpha(colors.brandInk, 0.1),
     zones: zoneColors('brand'),
   };
+}
+
+/**
+ * The fade inside a session box, laid as its first child: the brand's wash in
+ * a green box, the shirt's in a cream one (with its hairline, unless `edge` is
+ * off for a picture drawn edge to edge), nothing on a dark page.
+ */
+export function CardWash({ look, radius, edge = true }: { look: CardLook; radius: number; edge?: boolean }) {
+  if (look.wash === 'brand') return <BrandWash radius={radius} />;
+  if (look.wash === 'cream') return <CreamWash radius={radius} rim={edge ? look.rim : null} />;
+  return null;
 }
 
 
@@ -109,8 +181,8 @@ export function SessionCard({ session, width, play = false, people, hidden = [],
   showSource?: boolean;
   accessibilityHint?: string;
 }) {
-  useTheme();
-  const look = cardLook();
+  const { theme } = useTheme();
+  const look = cardLook(theme);
   const k = (width / 358) * scale;
   const pad = Math.round(22 * k);
   const round = radius ?? Math.round(20 * k);
@@ -151,7 +223,7 @@ export function SessionCard({ session, width, play = false, people, hidden = [],
 
   const body = (
     <View collapsable={false} style={[styles.card, { width, aspectRatio: aspect, borderRadius: round, padding: pad, paddingTop: inset ? inset.top : pad, paddingBottom: inset ? inset.bottom : pad, backgroundColor: look.fill, borderColor: look.border, borderWidth: look.dark && round > 0 ? 1 : 0 }]}>
-      {look.dark ? null : <BrandWash radius={round} />}
+      <CardWash look={look} radius={round} edge={round > 0} />
       <CourtLines color={look.lines} />
       <View style={styles.top}>
         <Reanimated.Text key={shownTop} entering={picture ? undefined : FadeIn.duration(160)} style={{ ...font('600'), fontSize: small(11.5, 9), letterSpacing: Math.max(0.8, 1.1 * k), color: look.eyebrow, flex: 1 }} numberOfLines={1} maxFontSizeMultiplier={1.2}>

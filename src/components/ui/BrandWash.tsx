@@ -77,3 +77,43 @@ export function BrandWash({ radius = 999 }: { radius?: number }) {
     </View>
   );
 }
+
+/**
+ * The Classic shirt's fade, for a cream box (the session boxes on the
+ * CourtSide court, Oct 5): a faint sage green breathing in from the top
+ * right corner and a soft clay peach from the bottom left, as on the shirt's
+ * front, both falling away well before the middle so the cream carries the
+ * box. Both are the court's own colours lifted toward its surface (the green,
+ * and the clay warmed with a little gold), so nothing here is a new colour.
+ * `rim`, when given, is a hairline just inside the edge, drawn over the box
+ * so the box's own size never changes. Lay it as the first child, as
+ * BrandWash.
+ */
+export function CreamWash({ radius = 999, rim }: { radius?: number; rim?: string | null }) {
+  const { theme } = useTheme();
+  // The court's name in the ids, as above: iOS would not repaint a gradient kept under the same name.
+  const id = `${useId().replace(/[^a-zA-Z0-9]/g, '')}cream${theme.replace(/-/g, '')}`;
+  const sage = mix(colors.brand, colors.surface, 0.55);
+  const peach = mix(mix(colors.clay, colors.sun, 0.35), colors.surface, 0.5);
+  return (
+    <View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderRadius: radius, overflow: 'hidden' }]}>
+      <Svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
+        <Defs>
+          <RadialGradient id={`s${id}`} {...ellipse(106, -6, 96, 84)} gradientUnits="userSpaceOnUse">
+            <Stop offset="0" stopColor={sage} stopOpacity={0.4} />
+            <Stop offset="0.5" stopColor={sage} stopOpacity={0.16} />
+            <Stop offset="1" stopColor={sage} stopOpacity={0} />
+          </RadialGradient>
+          <RadialGradient id={`p${id}`} {...ellipse(-6, 106, 96, 84)} gradientUnits="userSpaceOnUse">
+            <Stop offset="0" stopColor={peach} stopOpacity={0.44} />
+            <Stop offset="0.5" stopColor={peach} stopOpacity={0.17} />
+            <Stop offset="1" stopColor={peach} stopOpacity={0} />
+          </RadialGradient>
+        </Defs>
+        <Rect x="0" y="0" width="100" height="100" fill={`url(#s${id})`} />
+        <Rect x="0" y="0" width="100" height="100" fill={`url(#p${id})`} />
+      </Svg>
+      {rim ? <View style={[StyleSheet.absoluteFill, { borderRadius: radius, borderWidth: StyleSheet.hairlineWidth, borderColor: rim }]} /> : null}
+    </View>
+  );
+}

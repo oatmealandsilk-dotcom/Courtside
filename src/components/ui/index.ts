@@ -1,5 +1,5 @@
 export { Avatar, tintFor } from './Avatar';
-export { BrandWash } from './BrandWash';
+export { BrandWash, CreamWash } from './BrandWash';
 export { Button } from './Button';
 export { Card } from './Card';
 export { Chip } from './Chip';

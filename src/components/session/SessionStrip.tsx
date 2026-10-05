@@ -1,4 +1,4 @@
-import { useThemedStyles } from '@/theme/ThemeProvider';
+import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -10,9 +10,8 @@ import { distanceFigure, formatDistance } from '@/features/activity/workouts';
 import { sessionPeople } from '@/features/activity/sessionTags';
 import { colors, font, withAlpha } from '@/theme';
 import { Duration, Figure } from './Duration';
-import { cardLook } from './SessionCard';
+import { CardWash, cardLook } from './SessionCard';
 import { ZoneGlyph } from './ZoneGlyph';
-import { BrandWash } from '@/components/ui';
 
 /**
  * A photo post's session, straight under the picture (the picture stays
@@ -33,6 +32,7 @@ export function SessionStrip({ session, hidden = [], play = false, scale = 1, on
   onPress?: () => void;
 }) {
   const styles = useThemedStyles(styleDefinitions);
+  const { theme } = useTheme();
   const k = scale;
   const hr = session.maxHr != null;
   const strain = session.strain != null ? session.strain : null;
@@ -53,8 +53,9 @@ export function SessionStrip({ session, hidden = [], play = false, scale = 1, on
   const source = tracker ? sourceLabel(session.source ?? 'apple-health') : null;
   const spoken = [`${spokenDuration(session.minutes)}, ${what.toLowerCase()}`, far ? `${far.value} miles` : null, hr && session.avgHr ? `average heart rate ${session.avgHr}` : null, hr ? `max ${session.maxHr}` : null, kcal ? `${kcal} calories` : null, lead ? `${vs} @${lead.handle}` : null, source].filter(Boolean).join(', ');
   const small = { fontSize: 13 * k, lineHeight: Math.round(17 * k) };
-  // The session card's own look (Oct 4, owner: "looks a bit flat"): the theme's colour and its wash, white numbers; glass-dark on dark themes.
-  const look = cardLook();
+  // The session card's own look (Oct 4, owner: "looks a bit flat"): the theme's colour and its wash, white numbers; glass-dark on dark themes;
+  // the shirt's cream with green numbers on the CourtSide court (Oct 5).
+  const look = cardLook(theme);
   const stats = [
     kcal != null ? { key: 'kcal', label: 'Calories', node: <Figure value={kcal} baseline size={19 * k} color={look.figure} unitColor={look.muted} play={play} delay={200} duration={600} /> } : null,
     hr && session.avgHr ? { key: 'avg', label: 'Avg HR', node: <Figure value={session.avgHr} unit="bpm" baseline unitScale={0.62} size={19 * k} color={look.figure} unitColor={look.muted} play={play} delay={200} duration={600} /> } : null,
@@ -72,7 +73,7 @@ export function SessionStrip({ session, hidden = [], play = false, scale = 1, on
       onPress={onPress}
       style={({ pressed }) => [styles.panel, { backgroundColor: look.fill, borderColor: look.border, borderRadius: 18 * k, paddingHorizontal: 16 * k, paddingVertical: 14 * k, gap: 12 * k }, pressed && onPress ? styles.pressed : null]}
     >
-      {look.dark ? null : <BrandWash radius={18 * k} />}
+      <CardWash look={look} radius={18 * k} />
       <View style={[styles.row, { gap: 8 * k }]}>
         <View style={[styles.badge, { width: 28 * k, height: 28 * k, borderRadius: 14 * k, backgroundColor: withAlpha(look.ink, 0.16) }]}>
           <ZoneGlyph size={14 * k} color={look.ink} />
