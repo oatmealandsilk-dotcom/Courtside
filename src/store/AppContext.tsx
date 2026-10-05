@@ -1805,7 +1805,7 @@ const demoHandle: string | null = (() => {
 
 /**
  * Demo build in a browser: `?toast=tennis` puts up the "Tennis detected"
- * note for your waiting session, `?toast=workout` the "Workout detected"
+ * note for your waiting session, `?toast=workout` the "Activity detected"
  * one for your waiting run, so the Log it flow can be seen.
  */
 const demoActivityToast: 'tennis' | 'workout' | null = (() => {
@@ -1818,9 +1818,9 @@ const demoActivityToast: 'tennis' | 'workout' | null = (() => {
 
 /**
  * The note when a check files sessions. One: "Tennis detected" with its
- * time, heart rate and source, as always, or "Workout detected" ("Run · 32
- * min · 3.1 mi"), each with Log it, which opens the composer with it on
- * (Oct 2): post it, or just log it. More than one at once (the past week,
+ * time, heart rate and source, as always, or "Activity detected" ("Run · 32
+ * min · 3.1 mi"; owner, Oct 5), each with Log it, which opens the composer
+ * with it on (Oct 2): post it, or just log it. More than one at once (the past week,
  * picked up once after the Oct 5 update, or a few since the app was last
  * open): how many, and See them, which opens Notifications, where each one
  * waits with its own row. Your own numbers, for you only: the lock-screen
@@ -1843,7 +1843,7 @@ function activityToast(count: number, newestFirst: DetectedActivity[], holdMs?: 
   if (!a) return;
   const href = `/compose?activity=${a.id}`;
   showToast({
-    title: isTennisActivity(a) ? 'Tennis detected' : 'Workout detected',
+    title: isTennisActivity(a) ? 'Tennis detected' : 'Activity detected',
     body: isTennisActivity(a)
       ? [duration(a.minutes), a.maxHr ? `${a.maxHr} max bpm` : null, pickSource({ type: 'tracker', activity: a })].filter(Boolean).join(' · ')
       : workoutLine(a),
