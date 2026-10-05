@@ -31,8 +31,8 @@ const ICON: Record<MapVisibility, keyof typeof Ionicons.glyphMap> = { nearby: 'p
  * Friends who follow you back (their rough area, just for them) or Only me,
  * under a short notice: only friends who follow them back can see where
  * they are, and turning Location off on the map hides them. Nothing of
- * theirs is shared until they answer here. (Under 16 never gets this
- * screen: they stay off the map.)
+ * theirs is shared until they answer here. Under 16s get exactly this too
+ * (migration 119): the same two answers, off until they choose.
  */
 export default function MapVisibilitySheet() {
   const styles = useThemedStyles(styleDefinitions);
@@ -92,7 +92,7 @@ export default function MapVisibilitySheet() {
             <Ionicons name="shield-checkmark-outline" size={18} color={colors.brand} />
             <View style={styles.noticeWords}>
               <Text style={styles.noticeText}>{TEEN_NOTICE}</Text>
-              <Text style={styles.noticeSmall}>Under 18, the map is only between friends who follow each other: strangers never see you, and you only see friends. Under 16s stay off the map.</Text>
+              <Text style={styles.noticeSmall}>Under 18, only people you follow who follow you back can see you, and you only see them. Strangers never see you.</Text>
             </View>
           </View>
         ) : null}
