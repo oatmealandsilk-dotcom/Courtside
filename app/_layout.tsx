@@ -104,6 +104,8 @@ export default function RootLayout() {
           <Stack.Screen name="map-visibility" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
           {/* Holding your own ring in Community's Open to hit row: until when, and how far (DragSheet). */}
           <Stack.Screen name="open-to-hit" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
+          {/* The Tennis profile's small sheets: an injury or limit, a goal, every achievement (DragSheet). */}
+          <Stack.Screen name="tennis-sheet" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
           <Stack.Screen name="hit-request/new" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
           <Stack.Screen name="edit-post" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
           <Stack.Screen

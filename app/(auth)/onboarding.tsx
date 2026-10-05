@@ -83,7 +83,7 @@ const STEPS: { title: string; lead?: string; skip?: SetupStep }[] = [
   { title: 'Review', lead: 'What the coach works from.' },
 ];
 
-/** Opened from Game details to change your answers: the steps about you and your game, with Save on each. */
+/** Opened from the Tennis profile to change your answers: the steps about you and your game, with Save on each. */
 const EDIT_STEPS = [0, 1, 3, 4];
 /**
  * Joining asks only who you are and how you play. Body, goals and calendar
@@ -251,19 +251,22 @@ export default function Onboarding() {
       .map((label) => label.trim())
       .filter(Boolean)
       .map((label, i) => (i === 0 && keptGoal && keptGoal.label === label ? keptGoal : { id: `g-onboard-${i}`, label, done: false }));
+    // Only the first tournament is asked here: changing or clearing it leaves the others
+    // (added before, or shown on the Tennis profile) as they were, as the goals do.
+    const otherTournaments = existing?.tournaments.slice(1) ?? [];
     const sameTournament = savedTournament && savedTournament.name === tournamentName.trim()
       && Math.abs(Math.round((Date.parse(savedTournament.startsAt) - Date.now()) / 86_400_000) - tournamentDays) <= 1;
-    const tournaments = sameTournament ? [savedTournament!, ...(existing?.tournaments.slice(1) ?? [])] : tournamentName.trim()
+    const tournaments = sameTournament ? [savedTournament!, ...otherTournaments] : tournamentName.trim()
       ? [{
-          id: 't-onboard',
+          id: otherTournaments.some((t) => t.id === 't-onboard') ? `t-onboard-${Date.now().toString(36)}` : 't-onboard',
           name: tournamentName.trim(),
           startsAt: new Date(Date.now() + Math.max(1, tournamentDays) * 86_400_000).toISOString(),
           surface,
           level: `${skillSystem} ${rating}`,
           location: location.trim(),
           registered: true,
-        }]
-      : [];
+        }, ...otherTournaments]
+      : otherTournaments;
     return {
       skillSystem: skillSystem as SkillSystem, rating, playStyle, handedness, backhand, fitnessLevel,
       preferredSurface: surface, sessionsPerWeek, yearsPlaying,

@@ -49,13 +49,24 @@ const ellipse = (cx: number, cy: number, rx: number, ry: number) => (Platform.OS
   ? { cx: 0, cy: 0, r: 1, gradientTransform: `translate(${cx} ${cy}) scale(${rx} ${ry})` }
   : { cx, cy, rx, ry });
 
-export function BrandWash({ radius = 999 }: { radius?: number }) {
+export function BrandWash({ radius = 999, strength = 1, base }: {
+  radius?: number;
+  /**
+   * How much of the glow and sheen to draw, 0 to 1. A surface with small
+   * words across all of it (the player card) takes a whisper of it, so the
+   * words read wherever they fall.
+   */
+  strength?: number;
+  /** The fill it is laid on, when that is not the brand colour itself (a deepened brand). */
+  base?: string;
+}) {
   const { theme } = useTheme();
   // The court's name is in the ids: iOS keeps a gradient by id and would not
   // repaint one whose colours changed under the same name.
   const id = `${useId().replace(/[^a-zA-Z0-9]/g, '')}${theme.replace(/-/g, '')}`;
-  const look = LOOKS[theme] ?? LOOKS.default;
-  const light = mix(colors.brand, look.toward, look.t);
+  const base0 = LOOKS[theme] ?? LOOKS.default;
+  const look = strength === 1 ? base0 : { ...base0, glow: base0.glow * strength, sheenAt: base0.sheenAt * strength };
+  const light = mix(base ?? colors.brand, look.toward, look.t);
   return (
     <View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderRadius: radius, overflow: 'hidden' }]}>
       <Svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
