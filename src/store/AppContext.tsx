@@ -4335,6 +4335,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
     });
   }, [makeMessage, appendMessage]);
 
+  // Your messages deleted while still "Sending…": the save already on its way
+  // can't be stopped, so each is unsent the moment the server has it (see
+  // calledBack), and it never reaches anyone.
+  const withdrawn = useRef(new Set<ID>());
+  /** After a message's save: true when it was deleted meanwhile, and it is then taken back off the server (its photos too). */
+  const calledBack = (messageId: ID, result: 'refused' | 'failed' | void, photos: ChatPhoto[] = []) => {
+    if (!withdrawn.current.delete(messageId)) return false;
+    // Refused: it never got there. Failed: it may have got there all the same, so it is unsent anyway.
+    if (result !== 'refused') {
+      const hosted = photos.map((p) => p.path).filter((path) => !isLocalMedia(path));
+      void remote.unsendMessage(messageId).then(() => { if (hosted.length) void remote.removeChatPhotos(hosted); });
+    }
+    return true;
+  };
+
   const sendMessage = useCallback(
     (conversationId: ID, body: string, replyToId?: ID) => {
       haptics.commit();
@@ -4346,6 +4361,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const message: Message = { ...makeMessage(conversationId, me, trimmed), ...(replyToId ? { replyToId } : null), ...(sending ? { sending: true } : null) };
       setState((prev) => appendMessage(prev, message));
       if (sending) void remote.insertMessage(message).catch(() => 'failed' as const).then((result) => {
+        if (calledBack(message.id, result)) return;
         setState((prev) => ({ ...prev, messages: prev.messages.map((m) => (m.id === message.id ? { ...m, sending: undefined, ...(result === 'failed' ? { failed: true } : null) } : m)) }));
         if (result === 'failed') return;
         if (result !== 'refused') return;
@@ -4382,6 +4398,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const message: Message = { ...makeMessage(conversationId, me, place.name), kind: 'court', place, ...(replyToId ? { replyToId } : null), ...(sending ? { sending: true } : null) };
     setState((prev) => appendMessage(prev, message));
     if (sending) void remote.insertMessage({ ...message, sending: undefined }).catch(() => 'failed' as const).then((result) => {
+      if (calledBack(message.id, result)) return;
       patchMessage(message.id, { sending: undefined, ...(result === 'failed' || result === 'refused' ? { failed: true } : null) });
       if (result === 'refused') void refreshChat(conversationId);
     });
@@ -4408,8 +4425,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       patchMessage(message.id, { audio: { url, ms: audio.ms } });
     }
     // Unsent while it went up: nothing is saved.
-    if (!stillThere()) return;
+    if (!stillThere()) { withdrawn.current.delete(message.id); return; }
     const result = await remote.insertMessage({ ...message, audio: { url, ms: audio.ms }, sending: undefined, failed: undefined }).catch(() => 'failed' as const);
+    if (calledBack(message.id, result)) return;
     patchMessage(message.id, { sending: undefined, ...(result === 'failed' || result === 'refused' ? { failed: true } : null) });
     if (result === 'refused') void refreshChat(message.conversationId);
   }, [refreshChat, patchMessage]);
@@ -4459,6 +4477,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return;
     }
     if (!stillThere()) {
+      withdrawn.current.delete(message.id);
       clearSendProgress(message.id);
       const hosted = sent.map((p) => p.path).filter((path) => !isLocalMedia(path));
       if (hosted.length) void remote.removeChatPhotos(hosted);
@@ -4467,6 +4486,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const hosted: Message = { ...message, photos: sent, failed: undefined, sending: undefined };
     const result = await remote.insertMessage(hosted).catch(() => 'failed' as const);
     clearSendProgress(message.id);
+    if (calledBack(message.id, result, sent)) return;
     if (result === 'failed' || result === 'refused') setFailed();
     else patchMessage(message.id, { sending: undefined });
     if (result === 'refused') void refreshChat(message.conversationId);
@@ -4826,6 +4846,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // A voice note's recording too, when it never got up.
     if (message.kind === 'voice') { void deliverVoice({ ...message, failed: undefined, sending: true }); return; }
     void remote.insertMessage({ ...message, failed: undefined, sending: undefined }).catch(() => 'failed' as const).then((result) => {
+      if (calledBack(messageId, result)) return;
       patchMessage(messageId, { sending: undefined, ...(result === 'failed' || result === 'refused' ? { failed: true } : null) });
     });
   }, [requireUser, deliverPhotos, deliverVoice, patchMessage]);
@@ -4873,6 +4894,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     hiddenFor(me).add(messageId);
     setState((prev) => dropMessage(prev, messageId));
     if (!live(me, messageId)) return;
+    // Your own message still "Sending…": nothing to hide yet. It is taken
+    // back off the server as soon as it lands (see calledBack), so it is
+    // simply removed, as the note says.
+    if (message?.sending && message.senderId === me) {
+      withdrawn.current.add(messageId);
+      return;
+    }
     // Your own photo message that never went (it shows "Not sent"): only this
     // phone has it, so its photos already up are simply taken back down.
     if (message?.failed && message.senderId === me && message.kind === 'photo') {
@@ -5081,7 +5109,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
           if (refused.has(message.conversationId)) continue;
           const conversationId = movedTo.get(message.conversationId) ?? message.conversationId;
           if (!UUID.test(conversationId)) { patchMessage(message.id, { sending: undefined }); continue; }
+          // Deleted before its turn came: it is simply not sent.
+          if (withdrawn.current.delete(message.id)) continue;
           const result = await remote.insertMessage({ ...message, conversationId, sending: undefined }).catch(() => 'failed' as const);
+          if (calledBack(message.id, result)) continue;
           patchMessage(message.id, { sending: undefined, ...(result === 'failed' || result === 'refused' ? { failed: true } : null) });
         }
       })();
