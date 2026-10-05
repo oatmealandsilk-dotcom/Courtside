@@ -4977,10 +4977,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (item.kind === 'group') return makeMessage(conversationId, me, groupInviteText(item.name, item.id));
         return makeMessage(conversationId, me, '', item.kind, item.id);
       };
+      // "Sending…" under them until the server has them, as any message.
+      const saving = isSupabaseConfigured && UUID.test(me);
+      const pending = (m: Message): Message => (saving ? { ...m, sending: true } : m);
       const outgoing: Message[] = [];
       for (const chat of chats) {
-        outgoing.push(itemIn(chat.id));
-        if (note?.trim()) outgoing.push(makeMessage(chat.id, me, note.trim()));
+        outgoing.push(pending(itemIn(chat.id)));
+        if (note?.trim()) outgoing.push(pending(makeMessage(chat.id, me, note.trim())));
       }
 
       // A post or thread counts one share per chat it went to (a forward of one too).
@@ -5004,7 +5007,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // Saved after they show: new one-to-one chats are opened first (the
       // server may already have one with that person, or say no), then the
       // messages go up. One that does not go through shows its retry.
-      if (!isSupabaseConfigured || !UUID.test(me)) return;
+      if (!saving) return;
       void (async () => {
         const movedTo = new Map<ID, ID>();
         const refused = new Set<ID>();
@@ -5030,15 +5033,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
         for (const message of outgoing) {
           if (refused.has(message.conversationId)) continue;
           const conversationId = movedTo.get(message.conversationId) ?? message.conversationId;
-          if (!UUID.test(conversationId)) continue;
-          const result = await remote.insertMessage({ ...message, conversationId }).catch(() => 'failed' as const);
-          if (result === 'failed' || result === 'refused') {
-            setState((prev) => ({ ...prev, messages: prev.messages.map((m) => (m.id === message.id ? { ...m, failed: true } : m)) }));
-          }
+          if (!UUID.test(conversationId)) { patchMessage(message.id, { sending: undefined }); continue; }
+          const result = await remote.insertMessage({ ...message, conversationId, sending: undefined }).catch(() => 'failed' as const);
+          patchMessage(message.id, { sending: undefined, ...(result === 'failed' || result === 'refused' ? { failed: true } : null) });
         }
       })();
     },
-    [requireUser, appendMessage, makeMessage],
+    [requireUser, appendMessage, makeMessage, patchMessage],
   );
 
   const markConversationRead = useCallback((conversationId: ID) => {
