@@ -17,6 +17,8 @@ import type { MediaCrop } from '@/data/types';
 import { onSpaceBar } from '@/features/feed/keyboard';
 import { allowTurning, stayUpright } from '@/lib/orientation';
 import { useHoldTour } from '@/features/tour/tourHold';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { useLightStatusWhile } from '@/lib/statusBarStyle';
 
 const HIDE_AFTER_MS = 3000;
 // On a computer, how long the mouse rests before the controls (and in full screen the pointer) go.
@@ -56,6 +58,18 @@ export function PostVideo({ uri, poster, active, preload = false, trimStart, tri
   const [full, setFull] = useState(false);
   // The tutorial never starts under a video opened full screen.
   useHoldTour(full);
+  // Full screen is black: light status-bar icons over it (on Android the Modal opens a frame later for that).
+  const fullShown = useLightStatusWhile(full);
+  // Android shows a player in one view at a time: once full screen has gone, the
+  // clip on the page takes its player back, or it stays black with the sound on.
+  const wasFull = useRef(false);
+  useEffect(() => {
+    if (full) { wasFull.current = true; return undefined; }
+    if (!wasFull.current || Platform.OS !== 'android') return undefined;
+    wasFull.current = false;
+    const frame = requestAnimationFrame(() => player.current?.reattach());
+    return () => cancelAnimationFrame(frame);
+  }, [full]);
   // Full screen shows the very same player (no second download, no pause):
   // it grows out of the frame on the page and travels back into it on close.
   const rootRef = useRef<View>(null);
@@ -270,14 +284,17 @@ export function PostVideo({ uri, poster, active, preload = false, trimStart, tri
 
       {/* Full screen: the same player, the whole screen (turns with the phone),
           the same buttons — a tap brings them up, a tap puts them away. */}
-      <Modal visible={full} transparent animationType="none" statusBarTranslucent supportedOrientations={['portrait', 'landscape', 'landscape-left', 'landscape-right']} onRequestClose={closeFull}>
+      <Modal visible={fullShown} transparent animationType="none" statusBarTranslucent supportedOrientations={['portrait', 'landscape', 'landscape-left', 'landscape-right']} onRequestClose={closeFull}>
+        {/* A gesture root of its own: a Modal is drawn apart from the app, and on Android
+            the pinch, the double tap and the swipe down hear nothing without one. */}
+        <GestureHandlerRootView style={styles.fullRoot}>
         {/* Full screen sits in its own layer, so it listens for the mouse itself. */}
         <View style={[styles.fullRoot, idleCursor]} onPointerMove={desktopWeb ? nudge : undefined}>
           <ZoomableMedia ref={zoom} home={home} onDismiss={() => { setFull(false); setHome(undefined); }}>
             {/* The zoom layer keeps mouse moves to itself (it drags), so the controls listen from inside it. */}
             <View style={StyleSheet.absoluteFill} onPointerMove={desktopWeb ? nudge : undefined}>
               {shared ? (
-                <View style={cropLayer(crop)}><VideoView player={shared} style={StyleSheet.absoluteFill} contentFit="contain" nativeControls={false} allowsPictureInPicture={false} /></View>
+                <View style={cropLayer(crop)}><VideoView player={shared} style={StyleSheet.absoluteFill} contentFit="contain" nativeControls={false} allowsPictureInPicture={false} surfaceType={Platform.OS === 'android' ? 'textureView' : undefined} /></View>
               ) : (
                 // In a browser full screen plays its own copy, so the line and the clock follow that copy.
                 <View style={cropLayer(crop)}><ClipVideo uri={uri} poster={poster} active={full} muted={silent || muted} paused={paused} fit="contain" trimStart={trimStart} trimEnd={trimEnd} speed={speed} volume={volume} onProgress={onProgress} /></View>
@@ -295,6 +312,7 @@ export function PostVideo({ uri, poster, active, preload = false, trimStart, tri
             </Pressable>
           </Animated.View>
         </View>
+        </GestureHandlerRootView>
       </Modal>
     </View>
   );

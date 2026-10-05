@@ -13,7 +13,7 @@ import { CourtSpinner } from './CourtSpinner';
 import { TOP_SHADE } from './ReelCaption';
 import { cropLayer } from '@/lib/crop';
 import type { MediaCrop } from '@/data/types';
-import { colors } from '@/theme';
+import { colors, font } from '@/theme';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { onSpaceBar } from '@/features/feed/keyboard';
 import { STAGE_ON_ANDROID } from '@/features/feed/commentStage';
@@ -122,7 +122,8 @@ function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, 
   }));
   // Android draws the feed's videos on a texture, the one surface that can
   // shrink and move smoothly onto the comments stage (a slight battery cost).
-  const surfaceType = Platform.OS === 'android' && STAGE_ON_ANDROID && discInk ? 'textureView' as const : undefined;
+  // A plain full-screen clip (a story, a hit) keeps the lighter surface: nothing clips or scales it.
+  const surfaceType = Platform.OS === 'android' ? (STAGE_ON_ANDROID && discInk ? 'textureView' as const : 'surfaceView' as const) : undefined;
 
   const tap = () => {
     // One tap plays or pauses, two likes. The pause waits out the double-tap
@@ -196,7 +197,7 @@ function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, 
 const styleDefinitions = StyleSheet.create({
   fastWrap: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },
   fastPill: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, backgroundColor: 'rgba(0,0,0,0.55)' },
-  fastText: { color: 'white', fontSize: 14, fontWeight: '700' },
+  fastText: { color: 'white', fontSize: 14, ...font('700') },
   centre: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' },
   wideFrame: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#000' },
   playBadge: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#0008', alignItems: 'center', justifyContent: 'center', paddingLeft: 4 },

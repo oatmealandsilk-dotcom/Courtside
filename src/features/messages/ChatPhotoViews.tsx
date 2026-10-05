@@ -16,6 +16,7 @@ import type { ChatPhoto } from '@/data/types';
 import { DemoPhoto } from '@/features/messages/DemoPhoto';
 import { isDemoPhoto, photoCacheKey, useChatPhotoSource } from '@/features/messages/chatPhotos';
 import { show as showToast } from '@/lib/toast';
+import { useLightStatusWhile } from '@/lib/statusBarStyle';
 import { colors, font, radius, spacing, typography } from '@/theme';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 
@@ -246,6 +247,8 @@ export function PhotoViewer({ photos, start, homes, caption, who, onClose }: {
 }) {
   const styles = useThemedStyles(styleDefinitions);
   const insets = useSafeAreaInsets();
+  // On black: light status-bar icons while it is up (on Android the Modal opens a frame later for that).
+  const viewerShown = useLightStatusWhile(true);
   const { width: W, height: H } = useWindowDimensions();
   const first = Math.max(0, Math.min(start, photos.length - 1));
   const [index, setIndex] = useState(first);
@@ -306,7 +309,7 @@ export function PhotoViewer({ photos, start, homes, caption, who, onClose }: {
     }
   };
   return (
-    <Modal visible transparent animationType="none" statusBarTranslucent onRequestClose={close} supportedOrientations={['portrait', 'landscape', 'landscape-left', 'landscape-right']}>
+    <Modal visible={viewerShown} transparent animationType="none" statusBarTranslucent onRequestClose={close} supportedOrientations={['portrait', 'landscape', 'landscape-left', 'landscape-right']}>
       {/* A root of its own: a Modal is drawn apart from the app, and the row's swipe and the photo's swipe down must hear each other. */}
       <GestureHandlerRootView style={styles.viewer}>
         <Pager

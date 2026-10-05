@@ -7,6 +7,7 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import * as haptics from '@/lib/haptics';
+import { useLightStatusWhileFocused } from '@/lib/statusBarStyle';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing, typography, font } from '@/theme';
 
@@ -42,6 +43,8 @@ export default function Hit() {
   const styles = useThemedStyles(styleDefinitions);
   const insets = useSafeAreaInsets();
   const { actions } = useApp();
+  // The camera is black: the clock and battery go light over it.
+  useLightStatusWhileFocused();
   const [permission, requestPermission] = useCameraPermissions();
   const camera = useRef<CameraView>(null);
   const [ready, setReady] = useState(false);

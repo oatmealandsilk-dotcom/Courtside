@@ -11,6 +11,9 @@ import { framesAt } from '@/features/compose/frames';
 import { CoverPage } from '@/components/CoverPage';
 import { colors, font } from '@/theme';
 import { canShrinkVideo } from '@/lib/shrinkVideo';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useLightStatusWhile } from '@/lib/statusBarStyle';
 
 export interface PickedMedia {
   uri?: string;
@@ -170,6 +173,9 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
   const { height: screenHeight } = useWindowDimensions();
   const [error, setError] = useState('');
   const [expanded, setExpanded] = useState(false);
+  // The larger preview is dark: light status-bar icons over it.
+  const expandedShown = useLightStatusWhile(expanded);
+  const insets = useSafeAreaInsets();
   // The Cover page, opened from the Edit cover pill on the preview. It keeps
   // the moment the cover came from, and whether the cover is a photo of
   // your own rather than a frame; ✕ there puts all of it back as it was.
@@ -344,17 +350,19 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
         />
       ) : null}
       {/* Full screen, the clip playing with sound. One tap anywhere brings it back. */}
-      <Modal visible={expanded} transparent animationType="none" statusBarTranslucent onRequestClose={() => setExpanded(false)}>
-        <View style={{ flex: 1, backgroundColor: 'transparent' }}>
+      <Modal visible={expandedShown} transparent animationType="none" statusBarTranslucent onRequestClose={() => setExpanded(false)}>
+        {/* Its own gesture root: on Android a Modal's pinch and swipe need one (see PostVideo). */}
+        <GestureHandlerRootView style={{ flex: 1, backgroundColor: 'transparent' }}>
           <ZoomableMedia onDismiss={() => setExpanded(false)}>
             {value.kind === 'video' && value.uri
               ? <View style={cropLayer(trim?.crop)}><ClipVideo uri={value.uri} poster={value.thumbnailUrl} active={expanded} muted={!!trim?.muted} fit={orientation === 'landscape' ? 'contain' : 'cover'} trimStart={trim?.trimStart} trimEnd={trim?.trimEnd} speed={trim?.speed} volume={trim?.volume} /></View>
               : poster ? <Image source={{ uri: poster }} resizeMode="contain" style={{ width: '100%', height: '100%' }}/> : null}
           </ZoomableMedia>
-          <Pressable accessibilityRole="button" accessibilityLabel="Close preview" onPress={() => setExpanded(false)} style={{ position: 'absolute', top: 54, right: 16, width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center' }}>
+          {/* Under the status bar or the camera cut-out whatever its height, as PostVideo's close button is. */}
+          <Pressable accessibilityRole="button" accessibilityLabel="Close preview" onPress={() => setExpanded(false)} style={{ position: 'absolute', top: insets.top + 12, right: 16, width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center' }}>
             <Ionicons name="close" size={22} color="white" />
           </Pressable>
-        </View>
+        </GestureHandlerRootView>
       </Modal>
       {!!error && <Text style={{ color: colors.danger }}>{error}</Text>}
     </View>;
@@ -391,7 +399,7 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
         </Pressable>
       )}
 
-      <Modal visible={expanded} transparent animationType="none" onRequestClose={() => setExpanded(false)}>
+      <Modal visible={expandedShown} transparent animationType="none" onRequestClose={() => setExpanded(false)}>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Close preview"
