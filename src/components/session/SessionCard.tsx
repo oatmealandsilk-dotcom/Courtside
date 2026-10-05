@@ -131,7 +131,7 @@ export function SessionCard({ session, width, play = false, people, hidden = [],
     hr ? `max heart rate ${session.maxHr}${session.avgHr ? `, average ${session.avgHr}` : ''}` : null,
     strain != null ? `Strain ${strain.toFixed(1)}` : null,
     kcal ? `${kcal} calories` : null,
-    lead ? `${vs} @${lead.handle}${list.length > 1 ? ` and ${list.length - 1} more` : ''}` : null,
+    lead ? `${vs} @${lead.handle}${lead.pending ? ', waiting to accept' : ''}${list.length > 1 ? ` and ${list.length - 1} more` : ''}` : null,
     tracker && showSource ? sourceLabel(session.source ?? 'apple-health') : null,
   ].filter(Boolean).join('. ');
 
@@ -183,7 +183,13 @@ export function SessionCard({ session, width, play = false, people, hidden = [],
             <Text style={{ ...font('600'), fontSize: small(14, 10), color: look.ink, flexShrink: 1 }} numberOfLines={1} maxFontSizeMultiplier={1.2}>
               {vs} @{lead.handle}{list.length > 1 ? ` +${list.length - 1}` : ''}
             </Text>
-            {lead.pending ? <Ionicons name="time-outline" size={13 * k} color={look.muted} /> : null}
+            {/* The clock alone didn't say what it meant: a quiet word after it (Oct 4, owner). */}
+            {lead.pending ? (
+              <View style={[styles.waiting, { gap: 3 * k }]}>
+                <Ionicons name="time-outline" size={13 * k} color={look.muted} />
+                <Text style={{ ...font('500'), fontSize: small(12, 9), color: look.muted }} maxFontSizeMultiplier={1.2}>waiting</Text>
+              </View>
+            ) : null}
           </View>
         ) : <View style={{ flex: 1 }} />}
         {tracker && showSource ? <Text style={{ ...font('600'), fontSize: small(11, 9), color: look.faint }} maxFontSizeMultiplier={1.2}>{sourceLabel(session.source ?? 'apple-health')}</Text> : null}
@@ -228,6 +234,7 @@ const styles = StyleSheet.create({
   foot: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   who: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, minWidth: 0 },
   pending: { opacity: 0.6 },
+  waiting: { flexDirection: 'row', alignItems: 'center' },
   lines: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '24%' },
   place: { flexDirection: 'row', alignItems: 'center', alignSelf: 'stretch' },
   brand: { flexDirection: 'row', alignItems: 'center', borderTopWidth: 1 },

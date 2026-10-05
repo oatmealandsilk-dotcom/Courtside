@@ -6,6 +6,7 @@ import { ProfilePhotoPicker } from '@/components/ProfilePhotoPicker';
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { Button, Field, Screen } from '@/components/ui';
 import { LocationField } from '@/components/LocationField';
+import { levelBadge } from '@/lib/badges';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, radius, spacing, typography } from '@/theme';
@@ -29,6 +30,22 @@ export default function EditProfile() {
     setBio(currentUser.bio);
     setLocation(currentUser.location);
   }, [currentUser]);
+  // The rating step (the Rating row below) also has your name and city. Changed
+  // there, they show here on the way back, so Save changes never puts the old
+  // ones back; anything you had typed here yourself stays.
+  const seen = useRef({ name: currentUser?.name ?? '', location: currentUser?.location ?? '' });
+  useEffect(() => {
+    if (!currentUser) return;
+    const was = seen.current;
+    seen.current = { name: currentUser.name, location: currentUser.location };
+    if (currentUser.name !== was.name && name === was.name) setName(currentUser.name);
+    if (currentUser.location !== was.location && location === was.location) {
+      setLocation(currentUser.location);
+      setCityAt(currentUser.cityAt ?? null);
+    }
+  }, [currentUser?.name, currentUser?.location]); // eslint-disable-line react-hooks/exhaustive-deps
+  // "UTR 8.5", "NTRP 4.0"; nothing when no rating was ever picked.
+  const rating = currentUser?.profile?.rating ? levelBadge(currentUser.profile).label : null;
 
   return (
     <Screen title="Edit Profile" onBack={() => router.back()}>
@@ -51,6 +68,14 @@ export default function EditProfile() {
               <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
             </Pressable>
           </View>
+          {/* Your UTR or NTRP, where you'd look for it (Oct 4, owner): it opens the same rating step as Your game → Edit. */}
+          <View style={styles.wrap}>
+            <Text style={styles.label}>Rating</Text>
+            <Pressable accessibilityRole="button" accessibilityLabel={rating ? `Rating, ${rating}. Change it` : 'Rating. Add your rating'} onPress={() => router.push({ pathname: '/onboarding', params: { from: 'edit', step: '0' } })} style={({ pressed }) => [styles.box, pressed && { opacity: 0.7 }]}>
+              <Text style={[styles.value, !rating && styles.empty]} numberOfLines={1}>{rating ?? 'Add your rating'}</Text>
+              <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
+            </Pressable>
+          </View>
           <Field label="Bio" value={bio} onChangeText={setBio} multiline />
           <LocationField value={location} onChange={(next, at) => { setLocation(next); setCityAt(at); }} />
           <Button label="Save changes" disabled={!name.trim()} onPress={() => { actions.updateIdentity({ name: name.trim(), bio: bio.trim(), location: location.trim(), cityAt: location.trim() ? cityAt : null }); router.back(); }} />
@@ -66,4 +91,5 @@ const styleDefinitions = StyleSheet.create({
   label: { ...typography.smallStrong, color: colors.textMuted },
   box: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
   value: { flex: 1, fontSize: 15, color: colors.text },
+  empty: { color: colors.textMuted },
 });
