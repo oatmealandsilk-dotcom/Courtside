@@ -15,6 +15,7 @@ import { courtRows, fetchCourts, type Court } from '@/features/players/courts';
 import { formatMiles } from '@/features/players/geo';
 import { plain } from '@/features/search/words';
 import { homeFor } from '@/features/players/positions';
+import { useMyCity } from '@/features/players/useMyCity';
 import { goBack } from '@/lib/goBack';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
@@ -33,7 +34,9 @@ export default function PickCourt() {
   // `reply`: the message being answered in the chat when the court was picked; the court goes as its answer.
   const { conversation, reply } = useLocalSearchParams<{ conversation?: string; reply?: string }>();
   const { currentUser, currentUserId, conversations, users, detectedCoords, actions } = useApp();
-  const home = useMemo(() => (currentUser ? homeFor(currentUser, detectedCoords) : null), [currentUser, detectedCoords]);
+  // A typed town ("Cary, NC") is looked up first, as the map does, so the courts are never another city's in the same state.
+  const { town, pending: townPending } = useMyCity(currentUser);
+  const home = useMemo(() => (currentUser && !(townPending && !detectedCoords) ? homeFor(currentUser, detectedCoords, town) : null), [currentUser, detectedCoords, town, townPending]);
   const [courts, setCourts] = useState<Court[] | null>(null);
   const [failed, setFailed] = useState(false);
   const [query, setQuery] = useState('');

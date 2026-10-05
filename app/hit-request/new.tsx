@@ -14,6 +14,7 @@ import { AudienceCards, GroupsCard, InviteRow } from '@/features/hits/WhoSeesFir
 import { isMapCourtId } from '@/features/places/courtName';
 import { fetchCourts, isClosedCourt, type Court } from '@/features/players/courts';
 import { homeFor } from '@/features/players/positions';
+import { useMyCity } from '@/features/players/useMyCity';
 import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
@@ -88,9 +89,16 @@ export default function NewHit() {
   });
   const [typed, setTyped] = useState('');
   const [courts, setCourts] = useState<Court[]>([]);
-  const home = useMemo(() => (currentUser ? homeFor(currentUser, detectedCoords) : null), [currentUser, detectedCoords]);
+  // A typed town ("Cary, NC") is looked up first, as the map does, so the courts are never another city's in the same state.
+  const { town, pending: townPending } = useMyCity(currentUser);
+  const home = useMemo(() => (currentUser && !(townPending && !detectedCoords) ? homeFor(currentUser, detectedCoords, town) : null), [currentUser, detectedCoords, town, townPending]);
   // Members-only and private courts are never suggested for a hit (a search by name still finds them).
-  useEffect(() => { if (home) fetchCourts(home).then((list) => setCourts(list.filter((c) => !isClosedCourt(c)))).catch(() => setCourts([])); }, [home]);
+  useEffect(() => {
+    if (!home) return undefined;
+    let on = true;
+    fetchCourts(home).then((list) => { if (on) setCourts(list.filter((c) => !isClosedCourt(c))); }).catch(() => { if (on) setCourts([]); });
+    return () => { on = false; };
+  }, [home]);
   const rating = currentUser?.profile.rating;
   const [level, setLevel] = useState<'any' | 'mine'>(rating ? 'mine' : 'any');
   // The rating may arrive a moment after the sheet: default to your level once it does.
