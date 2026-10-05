@@ -97,7 +97,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => listenForPushTaps(), []);
   const pushAskedFor = useRef<string | null>(null);
   useEffect(() => {
-    if (!isSupabaseConfigured || !currentUserId || !remoteLoaded || !onboardingComplete || !currentUser?.ageGroup) return;
+    // Logging out takes this phone's push address off the account, so the
+    // next sign-in (the same account too) puts it back.
+    if (!currentUserId) { pushAskedFor.current = null; return; }
+    if (!isSupabaseConfigured || !remoteLoaded || !onboardingComplete || !currentUser?.ageGroup) return;
     if (pushAskedFor.current === currentUserId) return;
     pushAskedFor.current = currentUserId;
     void registerForPush();
