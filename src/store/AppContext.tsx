@@ -4096,14 +4096,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const found = await remote.fetchQuestion(questionId);
       if (found) setState((prev) => (prev.questions.some((q) => q.id === questionId) ? prev : { ...prev, questions: [found, ...prev.questions] }));
     }
+    // Replies of yours still being saved as this goes out may not be in what comes back.
+    const saving = new Set(answerSaves.current.keys());
+    const asked = Date.now();
     const replies = await remote.fetchThreadAnswers(questionId);
     if (!replies) return;
     setState((prev) => {
-      const byId = new Map(prev.answers.map((a) => [a.id, a]));
-      for (const r of replies) if (!byId.has(r.id)) byId.set(r.id, r);
-      const answers = [...byId.values()];
+      // What the server sends is the thread now: its votes and pictures, and
+      // no replies deleted since. Kept as well: replies of yours not saved
+      // yet, or written after this went out. (Past the 1,000 a fetch brings,
+      // the rest stay as they were.)
+      const fresh = new Map(replies.map((r) => [r.id, r]));
+      const whole = replies.length < 1000;
+      const keep = (a: Answer) => !whole || saving.has(a.id) || answerSaves.current.has(a.id) || Date.parse(a.createdAt) >= asked;
+      const kept = prev.answers.flatMap((a) => (a.questionId !== questionId ? [a] : fresh.has(a.id) ? [fresh.get(a.id)!] : keep(a) ? [a] : []));
+      const known = new Set(kept.map((a) => a.id));
+      const answers = [...kept, ...replies.filter((r) => !known.has(r.id))];
       const inThread = answers.filter((a) => a.questionId === questionId).sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1)).map((a) => a.id);
-      return { ...prev, answers, questions: prev.questions.map((q) => (q.id === questionId ? { ...q, answerIds: inThread } : q)) };
+      return { ...prev, answers, questions: prev.questions.map((q) => (q.id === questionId ? { ...q, answerIds: inThread, acceptedAnswerId: q.acceptedAnswerId && !inThread.includes(q.acceptedAnswerId) ? undefined : q.acceptedAnswerId } : q)) };
     });
   }, []);
   // Only real accounts and real posts are recorded; the demo records nothing.
@@ -5752,15 +5762,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (saving) answersDeleted.current.add(answerId);
     void (saving ?? Promise.resolve(true)).then((saved) => {
       if (!saved) return;
-      remote.deleteAnswer(answerId).catch((err: unknown) => {
-        void reportError(err, { where: 'answer delete' });
-        setState((prev) => prev.answers.some((a) => a.id === answerId) ? prev : {
-          ...prev,
-          answers: [...prev.answers, answer],
-          questions: prev.questions.map((q) => q.id === answer.questionId && !q.answerIds.includes(answerId) ? { ...q, answerIds: [...q.answerIds, answerId] } : q),
-        });
-        showToast({ title: 'Couldn’t delete your reply. Try again.', icon: 'alert-circle-outline' });
-      });
+      remote.deleteAnswer(answerId).then(
+        // A thread refresh that went out before the delete may have brought it back meanwhile.
+        () => setState((prev) => (prev.answers.some((a) => a.id === answerId) ? takeOff(prev) : prev)),
+        (err: unknown) => {
+          void reportError(err, { where: 'answer delete' });
+          setState((prev) => prev.answers.some((a) => a.id === answerId) ? prev : {
+            ...prev,
+            answers: [...prev.answers, answer],
+            questions: prev.questions.map((q) => q.id === answer.questionId && !q.answerIds.includes(answerId) ? { ...q, answerIds: [...q.answerIds, answerId] } : q),
+          });
+          showToast({ title: 'Couldn’t delete your reply. Try again.', icon: 'alert-circle-outline' });
+        },
+      );
     });
   }, [requireUser]);
   const deleteCoachQuestion = useCallback((questionId: ID) => {
