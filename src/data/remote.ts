@@ -343,6 +343,12 @@ export interface RemoteData {
    * own reaches the app). Missing in saved copies.
    */
   agesOnProfiles?: boolean;
+  /**
+   * No settings row yet, and the database has "Let people find me from
+   * their contacts" (migration 89). Missing otherwise: a settings row says
+   * so itself.
+   */
+  contactsFindableReady?: boolean;
 }
 
 interface SessionRow { id: string; user_id: string; day: string; minutes: number; kind: PracticeSession['kind']; won: boolean | null; opponent: string | null; note: string | null; created_at: string; activity_id?: string | null; from_session_id?: string | null }
@@ -419,6 +425,8 @@ export interface UserState {
   pushActivity?: boolean;
   /** The four map alert switches (migration 60). Undefined on a database without them, which means on. */
   pushMapFriends?: boolean; pushMapHits?: boolean; pushMapPlayers?: boolean; pushCourts?: boolean;
+  /** "Let people find me from their contacts" (migration 89). Undefined on a database without it, which means on. */
+  contactsFindable?: boolean;
   /** What the coach works around (injuries, schedule, gear): kept in this private row, never on the public profile. Undefined on a database without migration 19. */
   constraints?: PlayerProfile['constraints'];
   /**
@@ -509,7 +517,7 @@ const toCoach = (r: CoachRow, services: CoachServiceRow[], me: ID): Coach => ({
 /** One pin from map_players (migration 63). */
 interface MapPlayerRow { user_id: ID; lat: number; lng: number; place: MapPlace | string; court_id: string | null; court_name: string | null; city: string | null; seen_at: string | null; open_until: string | null }
 interface NotificationRow { id: string; user_id: string; actor_id: string; kind: string; target_id: string; target_kind: string; preview: string | null; read: boolean; created_at: string }
-interface UserStateRow { muted_ids: string[]; blocked_ids: string[]; saved_question_ids: string[]; payment_methods: PaymentMethod[]; default_payment_id: string | null; show_activity: boolean; push_likes: boolean; push_coach: boolean; push_messages?: boolean | null; push_activity?: boolean | null; push_map_friends?: boolean | null; push_map_hits?: boolean | null; push_map_players?: boolean | null; push_courts?: boolean | null; private_profile?: { constraints?: PlayerProfile['constraints'] } | null; map_visibility?: string | null;
+interface UserStateRow { muted_ids: string[]; blocked_ids: string[]; saved_question_ids: string[]; payment_methods: PaymentMethod[]; default_payment_id: string | null; show_activity: boolean; push_likes: boolean; push_coach: boolean; push_messages?: boolean | null; push_activity?: boolean | null; push_map_friends?: boolean | null; push_map_hits?: boolean | null; push_map_players?: boolean | null; push_courts?: boolean | null; contacts_findable?: boolean | null; private_profile?: { constraints?: PlayerProfile['constraints'] } | null; map_visibility?: string | null;
   /** Your own age group, readable only by you (migration 64). Absent before it. */
   age_group?: string | null;
   /** Your birthday, readable only by you (migration 13). */
@@ -563,6 +571,7 @@ const toUserState = (r: UserStateRow): UserState => ({
   pushMapHits: typeof r.push_map_hits === 'boolean' ? r.push_map_hits : undefined,
   pushMapPlayers: typeof r.push_map_players === 'boolean' ? r.push_map_players : undefined,
   pushCourts: typeof r.push_courts === 'boolean' ? r.push_courts : undefined,
+  contactsFindable: typeof r.contacts_findable === 'boolean' ? r.contacts_findable : undefined,
   constraints: Array.isArray(r.private_profile?.constraints) ? r.private_profile!.constraints : undefined,
   // The key is there only once migration 63 has run; null means never chosen.
   mapVisibility: 'map_visibility' in r ? asVisibility(r.map_visibility) : undefined,
@@ -881,8 +890,14 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
   const ownAge = ownState?.age_group ?? profileRows.find((row) => row.id === me)?.age_group ?? null;
   // Which database this is: a profile row has an age_group column only before 64.
   const agesOnProfiles = profileRows.some((row) => 'age_group' in row);
+  // A new Apple or Google account has no settings row until its age check,
+  // so whether the database has "Let people find me from their contacts"
+  // (migration 89) is asked on its own: the switch shows from the first visit.
+  const contactsFindableReady = ustate.data || ustate.error ? false
+    : await db.from('user_state').select('contacts_findable').limit(0).then(({ error }) => !error, () => false);
   return {
     agesOnProfiles,
+    ...(contactsFindableReady ? { contactsFindableReady: true } : {}),
     // Your own "up for a hit" when it is kept privately (migration 78: not a known adult) comes from your settings row.
     users: profileRows.map((row) => toUser(row.id === me ? { ...row, age_group: ownAge, open_to_hit_until: row.open_to_hit_until ?? ownState?.open_to_hit_until ?? null } : row, followers.get(row.id) ?? 0, following.get(row.id) ?? 0)),
     posts: postRows.map(toPost),
@@ -988,6 +1003,8 @@ let userStateLacksPushMessages = false;
 let userStateLacksPushActivity = false;
 /** Set once a settings save finds no map alert columns (a database before migration 60). */
 let userStateLacksMapAlerts = false;
+/** Set once a settings save finds no contacts_findable column (a database before migration 89). */
+let userStateLacksContactsFindable = false;
 
 /** A note for whoever reads the logs: this needs the group chat update in Supabase first. */
 const needs75 = (what: string) => console.warn(`[remote] ${what} needs the messaging update. Open Supabase → SQL Editor → New query, paste the file supabase/migrations/20261003000075_messaging.sql and press Run. It is safe to run more than once.`);
@@ -1096,7 +1113,8 @@ export const remote = {
       default_payment_id: s.defaultPaymentId, show_activity: s.showActivity, push_likes: s.pushLikes, push_coach: s.pushCoach, updated_at: new Date().toISOString(),
     };
     // The "Message alerts" switch (migration 54), the "Tennis sessions" one
-    // (migration 58) and the four map alerts (migration 60) each have their
+    // (migration 58), the four map alerts (migration 60) and "Let people find
+    // me from their contacts" (migration 89) each have their
     // own columns. A database without one
     // refuses the whole save, so the rest is saved without it, and it is not
     // sent again this session.
@@ -1107,10 +1125,12 @@ export const remote = {
       ...(s.pushMapFriends !== undefined && !userStateLacksMapAlerts
         ? { push_map_friends: s.pushMapFriends, push_map_hits: s.pushMapHits ?? true, push_map_players: s.pushMapPlayers ?? true, push_courts: s.pushCourts ?? true }
         : {}),
+      ...(s.contactsFindable !== undefined && !userStateLacksContactsFindable ? { contacts_findable: s.contactsFindable } : {}),
     });
     let { error } = await send();
-    for (let tries = 0; error && tries < 3; tries += 1) {
-      if (/push_map_|push_courts/.test(error.message) && !userStateLacksMapAlerts) userStateLacksMapAlerts = true;
+    for (let tries = 0; error && tries < 4; tries += 1) {
+      if (/contacts_findable/.test(error.message) && !userStateLacksContactsFindable) userStateLacksContactsFindable = true;
+      else if (/push_map_|push_courts/.test(error.message) && !userStateLacksMapAlerts) userStateLacksMapAlerts = true;
       else if (/push_activity/.test(error.message) && !userStateLacksPushActivity) userStateLacksPushActivity = true;
       else if (/push_messages/.test(error.message) && !userStateLacksPushMessages) { userStateLacksPushMessages = true; needs54('The Message alerts switch'); }
       else break;

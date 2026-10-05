@@ -43,7 +43,7 @@ interface Row {
  */
 export default function Settings() {
   const styles = useThemedStyles(styleDefinitions);
-  const { currentUser, currentUserId, locationEnabled, detectedLocation, actions, prefs, courtExtras, mapLive, mapVisibility, teenMap } = useApp();
+  const { currentUser, currentUserId, locationEnabled, detectedLocation, actions, prefs, courtExtras, mapLive, mapVisibility, teenMap, contactsFindableLive } = useApp();
   const [locationNote, setLocationNote] = useState('');
   const toggleLocation = async (next: boolean) => {
     // Never said who can see you on the map (migration 63): that comes first, the same as on the map.
@@ -74,6 +74,9 @@ export default function Settings() {
         // Oct 4 (owner): link a number so friends can find you, and find friends from your contacts.
         { icon: 'call-outline', label: 'Phone number', detail: 'So friends can find you', onPress: () => router.push('/link-phone') },
         ...(Platform.OS === 'web' ? [] : [{ icon: 'people-outline' as const, label: 'Find friends from contacts', onPress: () => router.push('/find-contacts') }]),
+        // Oct 4: the way out of being found that way (migration 89). In a browser too: it is about other people's phones.
+        // Shown only once the database has it; before that it would do nothing.
+        ...(contactsFindableLive ? [{ icon: 'person-add-outline' as const, label: 'Let people find me from their contacts', detail: 'By your phone number or email', toggle: { value: prefs.contactsFindable, onChange: (v: boolean) => actions.setPref('contactsFindable', v) } }] : []),
         { icon: 'bulb-outline', label: 'Show tips again', onPress: () => { resetTips(); showToast({ title: 'Tips will show again', icon: 'bulb-outline' }); } },
       ],
     },
@@ -179,7 +182,8 @@ export default function Settings() {
                 <View style={styles.lead}>{row.leading ?? <Ionicons name={row.icon} size={20} color={colors.textMuted} />}</View>
                 <View style={[styles.rowBody, index > 0 && styles.rowLine]}>
                   <View style={styles.rowText}>
-                    <Text style={styles.rowLabel} numberOfLines={1}>{row.label}</Text>
+                    {/* A switch's label may take a second line rather than be cut off: it says what the switch does. */}
+                    <Text style={styles.rowLabel} numberOfLines={row.toggle ? 2 : 1}>{row.label}</Text>
                     {row.detail ? <Text style={styles.rowDetail}>{row.detail}</Text> : null}
                   </View>
                   {row.value ? <Text style={styles.rowValue} numberOfLines={1}>{row.value}</Text> : null}

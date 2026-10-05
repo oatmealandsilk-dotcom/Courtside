@@ -15,7 +15,7 @@ import { colors, spacing, typography } from '@/theme';
 
 export default function PrivacyCentre() {
   const styles = useThemedStyles(styleDefinitions);
-  const { currentUser, blockedIds, mutedIds, actions, mapLive, mapVisibility, teenMap } = useApp();
+  const { currentUser, blockedIds, mutedIds, actions, mapLive, mapVisibility, teenMap, prefs, contactsFindableLive } = useApp();
   const receipts = currentUser?.readReceiptsEnabled !== false;
   const link = (icon: keyof typeof Ionicons.glyphMap, label: string, value: string | undefined, onPress: () => void) => (
     <Pressable key={label} accessibilityRole="link" onPress={onPress} style={({ pressed }) => [styles.row, styles.rowBorder, pressed && { backgroundColor: colors.surfaceAlt }]}>
@@ -43,6 +43,17 @@ export default function PrivacyCentre() {
           <Text style={styles.rowLabel}>Read receipts</Text>
           <Toggle value={receipts} onChange={actions.setReadReceiptsEnabled} accessibilityLabel="Read receipts" />
         </View>
+        {/* Oct 4: the same switch as in Settings (migration 89), shown once the database has it. */}
+        {contactsFindableLive ? (
+          <View style={[styles.row, styles.rowBorder]}>
+            <Ionicons name="person-add-outline" size={19} color={colors.textMuted} />
+            <View style={{ flex: 1, gap: 1 }}>
+              <Text style={styles.rowLabel}>Let people find me from their contacts</Text>
+              <Text style={styles.rowDetail}>By your phone number or email</Text>
+            </View>
+            <Toggle value={prefs.contactsFindable} onChange={(v) => actions.setPref('contactsFindable', v)} accessibilityLabel="Let people find me from their contacts" />
+          </View>
+        ) : null}
         {/* Who sees you on the map (migration 63): the same screen as the map's own location button.
             A teen (migration 78) sees it too: friends who follow them back, or only them. */}
         {canChooseVisibility(mapLive, currentUser, teenMap) ? link('location-outline', 'Who can see you on the map', visibilityLabel(mapVisibility, onTeenMap(currentUser, teenMap)), () => { void askWhoSeesYou(onTeenMap(currentUser, teenMap) && mapVisibility === null ? 'first' : 'manage'); }) : null}
