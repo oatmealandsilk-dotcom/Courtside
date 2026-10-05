@@ -49,12 +49,24 @@ export const IN_TOWN_MILES = 30;
 
 /**
  * The still card's centre with Location on (Oct 3): the big city you are
- * near, else where you are. Find Players' lists under the card measure from
- * it too, so the card's count and the lists agree.
+ * near, else where you are. It only frames the picture (and the city its
+ * players are counted in): no distance is ever measured from it. That is
+ * measureFrom's job.
  */
 export function liveCentre(fix: LatLng): LatLng {
   const place = nearestPlace(fix.lat, fix.lng);
   return milesBetween(fix, place) <= IN_TOWN_MILES ? { lat: place.lat, lng: place.lng } : fix;
+}
+
+/**
+ * Where every "x mi" on Find Players is measured from, and what counts as a
+ * hit or court "near you": where you are when Location is on (the phone's
+ * own fix), else the city on your profile. Never the card's centre: from
+ * Cary, a hit 1.6 miles away read "12 mi" when it was measured from
+ * Raleigh's (Oct 5). `fix` is the phone's spot only while Location is on.
+ */
+export function measureFrom(fix: LatLng | null | undefined, profileCity: LatLng | null): LatLng | null {
+  return fix ?? profileCity ?? null;
 }
 /** The tray lists people only this close (about 50 miles), unless you searched for someone or somewhere, or picked Following. */
 const TRAY_MILES = 50;
@@ -372,8 +384,10 @@ export function useMapModel(me: User, players: User[], fix?: LatLng | null, focu
   // The still card in Find Players shows the town you are in when location is
   // on (see `live`), else the city on your profile. Never a guess. No city, no map.
   const inCity = useMemo(() => (city ? ranked.filter((p) => milesBetween(city, p.at) <= IN_TOWN_MILES) : []), [city, ranked]);
-  // Its courts, as dots: the same area (and the same cached answer) as Courts
-  // near you under it, so the two agree and load once.
+  // Its courts, as dots, around the card's centre. Location off, that is
+  // the same area (and the same cached answer) as Courts near you under it;
+  // Location on near a big city, Courts near you loads around you instead,
+  // since its distances are how far from you.
   const [cardCourtList, setCardCourtList] = useState<Court[]>(() => (card && city ? peekCourts(city) ?? [] : []));
   const cityLat = city?.lat;
   const cityLng = city?.lng;
@@ -406,10 +420,12 @@ export function useMapModel(me: User, players: User[], fix?: LatLng | null, focu
     const pool = named.length ? named : rows;
     return [...pool.filter((r) => looksPublic(r.c.name)), ...pool.filter((r) => !looksPublic(r.c.name))].slice(0, 3);
   }, [courts, home]);
-  // The hits near your city: the same distance as the Open hits list under
-  // it, so the count there agrees with the list. Flags for the soonest few
-  // only; a busy city's dozen would pile up over the card and its name.
-  const cardHits = useMemo(() => (city ? hits.filter((h) => milesBetween(city, h.at) <= NEAR_HIT_MILES) : []), [city, hits]);
+  // The hits near you: measured from the same spot as the Open hits list
+  // under the card (measureFrom: where you are with Location on, not the
+  // card's centre), so "2 open hits nearby" agrees with the list. Flags for
+  // the soonest few only; a busy city's dozen would pile up over the card and its name.
+  const nearYou = useMemo(() => measureFrom(fixLat === undefined || fixLng === undefined ? null : { lat: fixLat, lng: fixLng }, profileCity), [fixLat, fixLng, profileCity]);
+  const cardHits = useMemo(() => (nearYou ? hits.filter((h) => milesBetween(nearYou, h.at) <= NEAR_HIT_MILES) : []), [nearYou, hits]);
   const cardFlags = useMemo(() => cardHits.slice(0, CARD_FLAGS), [cardHits]);
   return {
     home, homeKnown, homeView, mePos, city, cityName, cityPending, inCity, start, ranked, inTown, filter, setFilter, query, setQuery, shown, tray, selected, select, loadPlayersIn,

@@ -29,7 +29,7 @@ import { takeInviteCourt } from '@/features/invite/referral';
 import { notKnownAdult } from '@/features/players/age';
 import { askWhoSeesYouOnLaunch, canChooseVisibility, onTeenMap } from '@/features/players/mapPrivacy';
 import { isTourOpen, useTourOpen } from '@/features/tour/tourStore';
-import { IN_TOWN_MILES, liveCentre } from '@/features/players/mapModel';
+import { IN_TOWN_MILES, measureFrom } from '@/features/players/mapModel';
 import { isClosedCourt } from '@/features/players/courts';
 import { agoLabel } from '@/components/map/markers';
 import { confirmUnfollow } from '@/lib/confirm';
@@ -213,16 +213,15 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
 
   // How the list is ordered, the way Reddit offers it. New stays the default.
   const [sort, setSort] = useState<'new' | 'hot' | 'top' | 'unanswered'>('new');
-  // One centre for everything on Find Players (the map card's dots and count,
-  // Courts near you, which hits are near, the court search), so their numbers
-  // agree and courts load once: the card's own (liveCentre) with Location on,
-  // else your profile's city, else where the phone is.
+  // One spot for every distance on Find Players (Courts near you, which hits
+  // are near and how far, Your courts, the court search): where you are with
+  // Location on, else your profile's city (measureFrom). The map card above
+  // may be centred on the big city you are near, but "1.6 mi" here always
+  // means 1.6 miles from you; the card's "open hits nearby" counts from this
+  // same spot, so the two agree.
   const { city: myCityAt } = useMyCity(currentUser);
-  const liveLat = location.locationOn ? detectedCoords?.lat : undefined;
-  const liveLng = location.locationOn ? detectedCoords?.lng : undefined;
-  const liveAt = useMemo(() => (liveLat === undefined || liveLng === undefined ? null : liveCentre({ lat: liveLat, lng: liveLng })), [liveLat, liveLng]);
-  const firstCentre = liveAt ?? myCityAt ?? detectedCoords ?? null;
-  const nearCourts = useNearCourts(firstCentre);
+  const youAt = measureFrom(location.locationOn ? detectedCoords : null, myCityAt);
+  const nearCourts = useNearCourts(youAt);
   // Hits still ahead (or just started), not called off, not from anyone blocked
   // or muted, and only those the teen rule lets you see (as on court pages and the map).
   const seenHits = useMemo(() => {
@@ -234,7 +233,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   // A place only typed has no spot, so it follows by time when its poster is near (their shared spot,
   // else the same city on their profile; yours always); a typed place from another city waits under "Further away".
   const { openHits, furtherHits } = useMemo(() => {
-    if (!firstCentre) return { openHits: seenHits.map((hit) => ({ hit, miles: undefined as number | undefined })), furtherHits: [] };
+    if (!youAt) return { openHits: seenHits.map((hit) => ({ hit, miles: undefined as number | undefined })), furtherHits: [] };
     const near: { hit: (typeof seenHits)[number]; miles: number | undefined }[] = [];
     const typed: typeof near = [];
     const far: typeof near = [];
@@ -247,15 +246,15 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
         const author = usersById.get(hit.authorId);
         // Nothing to tell by (no shared spot, no city on either profile): kept with the near ones, as before.
         const local = hit.authorId === currentUserId
-          || (seen ? milesBetween(firstCentre, seen) <= NEAR_HIT_MILES : !author || !myCity || !author.location?.trim() || sameCity(author));
+          || (seen ? milesBetween(youAt, seen) <= NEAR_HIT_MILES : !author || !myCity || !author.location?.trim() || sameCity(author));
         (local ? typed : farTyped).push({ hit, miles: undefined });
         continue;
       }
-      const miles = milesBetween(firstCentre, spot);
+      const miles = milesBetween(youAt, spot);
       (miles <= NEAR_HIT_MILES ? near : far).push({ hit, miles });
     }
     return { openHits: [...near, ...typed], furtherHits: [...far, ...farTyped] };
-  }, [seenHits, firstCentre?.lat, firstCentre?.lng, lastSeen, users, currentUserId, myCity]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [seenHits, youAt?.lat, youAt?.lng, lastSeen, users, currentUserId, myCity]); // eslint-disable-line react-hooks/exhaustive-deps
   const [furtherOpen, setFurtherOpen] = useState(false);
   const [moreHitsOpen, setMoreHitsOpen] = useState(false);
   const moreHits = Math.max(0, openHits.length - HITS_SHOWN);
@@ -323,11 +322,11 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   const inviteCourt = useMemo(() => {
     if (!currentUser || notKnownAdult(currentUser)) return null;
     // A court with a name only: "Hit with me at Tennis courts" tells a friend nothing.
-    const mine = followedCourts?.find((c) => !isClosedCourt(c) && !!c.name && c.name !== 'Tennis courts' && (!firstCentre || milesBetween(firstCentre, c) <= IN_TOWN_MILES));
+    const mine = followedCourts?.find((c) => !isClosedCourt(c) && !!c.name && c.name !== 'Tennis courts' && (!youAt || milesBetween(youAt, c) <= IN_TOWN_MILES));
     if (mine?.name) return { id: mine.courtId, name: mine.name, lat: mine.lat, lng: mine.lng };
     const c = promptCourt ?? nearCourts.rows.find((r) => looksPublic(r.c.name) && r.miles <= IN_TOWN_MILES)?.c ?? null;
     return c ? { id: c.id, name: labelOf(c), lat: c.lat, lng: c.lng } : null;
-  }, [currentUser, followedCourts, promptCourt, nearCourts.rows, firstCentre?.lat, firstCentre?.lng]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [currentUser, followedCourts, promptCourt, nearCourts.rows, youAt?.lat, youAt?.lng]); // eslint-disable-line react-hooks/exhaustive-deps
   // Joined through a link that carried a court: its page, once, as soon as you are in.
   useEffect(() => {
     if (previewSection || !currentUserId || !onboardingComplete) return;
@@ -341,11 +340,11 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
     else actions.toggleFollow(id);
   };
   // Typing two letters or more finds courts too, above the players.
-  const courtMatches = useCourtSearch(search, firstCentre, nearCourts.all, 4);
+  const courtMatches = useCourtSearch(search, youAt, nearCourts.all, 4);
   // And places (a city, a neighbourhood, an address, a park), leaning toward
   // your town (only ever a rough area is sent): a tap opens the full map
   // there, with that place's courts listed best first.
-  const placeSearch = usePlaceSearch(search, firstCentre, 3);
+  const placeSearch = usePlaceSearch(search, youAt, 3);
   const placeMatches = useMemo(() => {
     // A place that is one of the courts listed is already there, as the court.
     const courtNames = new Set(courtMatches.map(({ c }) => plain(labelOf(c))));
@@ -388,8 +387,8 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   const slice = visible.slice(0, shownCount);
 
   // Where to play: the courts you follow, with what is new at each, then the others in town, each a tap from its page.
-  const yourCourts = <YourCourts from={firstCentre} />;
-  const courtsBlock = <CourtsNear center={firstCentre} />;
+  const yourCourts = <YourCourts from={youAt} />;
+  const courtsBlock = <CourtsNear center={youAt} />;
   const content = (section:string) => (section === 'players' ? <View style={{ gap: 16 }}>
         {/* Cancel beside the box while you search, the way iPhone search boxes do: one tap clears it, puts the keyboard away and brings the map back (Oct 5, owner: "there should be an easier way to exit here"). */}
         <View style={styles.searchRow}>
@@ -477,7 +476,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
               <Text style={styles.playersBody}>{`${courtMatches.length} ${courtMatches.length === 1 ? 'match' : 'matches'}`}</Text>
             </View>
             {courtMatches.map(({ c, miles }, index) => {
-              const meta = [firstCentre ? formatMiles(miles) : null, c.count > 1 ? `${c.count} courts` : null, c.lit ? 'lights' : null].filter(Boolean).join(' · ');
+              const meta = [youAt ? formatMiles(miles) : null, c.count > 1 ? `${c.count} courts` : null, c.lit ? 'lights' : null].filter(Boolean).join(' · ');
               return (
                 <Pressable key={c.id} accessibilityRole="link" accessibilityLabel={`${labelOf(c)}${meta ? `, ${meta}` : ''}, open the court`} onPress={() => openCourt({ id: c.id, name: labelOf(c), lat: c.lat, lng: c.lng })} style={({ pressed }) => [styles.player, pressed && styles.playerPressed]}>
                   <View style={styles.courtTile}><CourtGlyph size={20} color={colors.brand} /></View>
