@@ -382,6 +382,12 @@ interface AppState extends Bootstrap, CourtLifeState, FeedGroupsState {
   reportedIds: ID[];
   /** People you have blocked. Their posts and messages are hidden. */
   blockedIds: ID[];
+  /**
+   * People who have blocked you, as the server says (migration 118; empty
+   * without it). Search, the @ list and suggestions leave them out, the way
+   * they leave out people you blocked.
+   */
+  blockedMeIds: ID[];
   /** People whose new posts you have asked to be told about. */
   alertIds: ID[];
   /** Ways to pay a coach, and which one is used unless you say otherwise. */
@@ -513,7 +519,7 @@ function withServerSettings(s: AppState, base: string, got: UserState | null): P
 function freshAccountSettings(): Partial<AppState> {
   if (!isSupabaseConfigured) return {};
   return {
-    mutedIds: [], blockedIds: [], reportedIds: [], alertIds: [], saved: { postIds: [], questionIds: [] },
+    mutedIds: [], blockedIds: [], blockedMeIds: [], reportedIds: [], alertIds: [], saved: { postIds: [], questionIds: [] },
     paymentMethods: [], defaultPaymentId: null, prefs: DEFAULT_PREFS,
   };
 }
@@ -1441,6 +1447,8 @@ function snapshotOf(s: AppState, me: ID): RemoteData {
     tips: s.tips, coachApplications: s.coachApplications, coaches: s.coaches, coachReviews: s.coachReviews, coachResults: s.coachResults,
     sessions: s.sessions,
     hitRequests: s.hitRequests,
+    // Who blocked you, so a cold start from this copy leaves them out of search before the fresh load.
+    blockedMeIds: s.blockedMeIds,
     // Tracker sessions are left out: private health numbers stay off the saved copy on the device.
   };
 }
@@ -1536,6 +1544,7 @@ function mergeRemote(prev: AppState, data: RemoteData, me: ID, email: string | n
       coachApplications: [...data.coachApplications, ...prev.coachApplications.filter((a) => !data.coachApplications.some((x) => x.id === a.id))],
       mutedIds: data.userState ? data.userState.mutedIds : prev.mutedIds,
       blockedIds: data.userState ? data.userState.blockedIds : prev.blockedIds,
+      blockedMeIds: data.blockedMeIds ?? prev.blockedMeIds,
       paymentMethods: data.userState && data.userState.paymentMethods.length ? data.userState.paymentMethods : prev.paymentMethods,
       defaultPaymentId: data.userState?.defaultPaymentId ?? prev.defaultPaymentId,
       // The settings row carries map_visibility only once migration 63 has run: its key says the map's round 2 is live.
@@ -1792,6 +1801,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     mutedIds: [],
     reportedIds: [],
     blockedIds: [],
+    blockedMeIds: [],
     alertIds: [],
     paymentMethods: STARTER_PAYMENTS,
     defaultPaymentId: readDefaultPayment(),

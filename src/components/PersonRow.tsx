@@ -18,13 +18,13 @@ import { colors, font, spacing, typography } from '@/theme';
  * (with the coach badge), name and level, then their handle and why they
  * came up, and Follow on the right. The hairline runs from the words, not
  * the picture. Given `words`, the matched letters of the name and handle
- * are bold. Found only through their town, bio or coaching (`via`), the
+ * are bold. A coach found only through their coaching listing (`via`): the
  * second line shows those words, with the match in bold, so the row says
- * why it is there.
+ * why it is there. No row shows a town.
  */
 export function PersonRow({ user, reason, via, words = [], first = false, onPress, follow = true, onFollowed }: {
   user: User;
-  /** Why they are here: "2 mutual", "Coach", "Near you". Their town follows only when there is no other reason, or it is "Coach". */
+  /** Why they are here: "2 mutual", "Coach", "Near you". Never their town. */
   reason?: string;
   /** The words of theirs that matched, when it was not their name or handle. */
   via?: string;
@@ -39,9 +39,9 @@ export function PersonRow({ user, reason, via, words = [], first = false, onPres
   const styles = useThemedStyles(styleDefinitions);
   const { followingIds, actions } = useApp();
   const following = followingIds.includes(user.id);
-  const town = user.location.split(',')[0].trim();
-  // "Interacted with you · Raleigh" ran off the row; a town adds to nothing or to "Coach" only.
-  const why = [reason, !reason || reason === 'Coach' ? town : ''].filter(Boolean).join(' · ');
+  // The reason only, never their town: a search row says nothing about where
+  // anyone is (the same for every account, so it says nothing about age).
+  const why = reason ?? '';
   const bold = (parts: { s: string; on: boolean }[]) => parts.map((p, i) => (p.on ? <Text key={i} style={styles.handleMatch}>{p.s}</Text> : p.s));
   const label = `${user.name}, @${user.handle}, ${levelBadge(user.profile).label}${user.isCoach ? ', coach' : ''}`;
   return (
