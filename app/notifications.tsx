@@ -315,8 +315,9 @@ export default function Notifications() {
     return null;
   };
 
+  // Anything that came in since the app last asked shows first (as new), then all of it counts as seen.
   useEffect(() => {
-    actions.markNotificationsRead();
+    void actions.catchUpNotifications().finally(() => actions.markNotificationsRead());
   }, [actions]);
 
   const nameOf = (id: string) => users.find((u) => u.id === id)?.name ?? 'Someone';

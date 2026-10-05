@@ -23,8 +23,8 @@ export type SessionPick =
   | { type: 'tracker'; activity: DetectedActivity; session?: PracticeSession }
   | { type: 'logged'; session: PracticeSession };
 
-/** Whether the server has tennis sessions switched on for a tracker's source (migration 58). */
-export const sourceOn = (a: DetectedActivity, flags: TennisFlags) => (a.source === 'whoop' ? flags.whoop : a.source === 'apple-health' ? flags.apple : false);
+/** Whether the server has tennis sessions switched on for a tracker's source (migrations 58 and 69: WHOOP, Apple Health, Fitbit, Oura, Polar). */
+export const sourceOn = (a: DetectedActivity, flags: TennisFlags) => (a.source === 'apple-health' ? flags.apple : a.source === 'health-connect' ? false : flags[a.source]);
 
 /** Posts of yours that carry a session, by what they carry: 'a:<tracker id>' or 's:<log id>' → the post. */
 export function postedIndex(posts: Post[], me: ID | null): Map<string, ID> {

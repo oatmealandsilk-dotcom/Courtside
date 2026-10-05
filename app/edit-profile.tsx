@@ -57,7 +57,7 @@ export default function EditProfile() {
               Only the photo: anything typed above still waits for Save changes. */}
           <ProfilePhotoPicker name={name} value={avatarUrl} onChange={(uri) => {
             setAvatarUrl(uri);
-            if (currentUser) actions.updateIdentity({ avatarUrl: uri, name: currentUser.name, bio: currentUser.bio, location: currentUser.location });
+            if (currentUser) actions.updateIdentity({ avatarUrl: uri });
           }} />
           <Field label="Name" value={name} onChangeText={setName} />
           {/* The handle has its own page: it has rules (once a month) and a live check. */}

@@ -1153,6 +1153,12 @@ export const remote = {
     const { error } = await need().from('reports').insert({ reporter_id: me, target_user_id: targetUserId, target, reason });
     if (error) fail('report')(error);
   },
+  /** Your settings row as the server has it now (blocks, mutes, saved threads made on another device included). Null when there is none or it could not be read. */
+  async fetchUserState(me: ID): Promise<UserState | null> {
+    const { data, error } = await need().from('user_state').select('*').eq('user_id', me).maybeSingle();
+    if (error || !data) return null;
+    return toUserState(data as UserStateRow);
+  },
   async saveUserState(me: ID, s: UserState) {
     const row: Record<string, unknown> = {
       user_id: me, muted_ids: s.mutedIds, blocked_ids: s.blockedIds, saved_question_ids: s.savedQuestionIds, payment_methods: s.paymentMethods,
@@ -2651,6 +2657,12 @@ export const remote = {
   async dismissActivity(id: ID) {
     const { error } = await need().rpc('dismiss_activity', { a: id });
     if (error) fail('dismiss activity')(error);
+  },
+  /** Your notifications newer than `since`, newest first: what came in while the app was in the background. Empty when they could not be read. */
+  async fetchNotificationsSince(me: ID, since: string): Promise<Notification[]> {
+    const { data, error } = await need().from('notifications').select('*').eq('user_id', me).gt('created_at', since).order('created_at', { ascending: false }).limit(200);
+    if (error) return [];
+    return ((data ?? []) as NotificationRow[]).map(toNotification);
   },
   /** The "Tennis detected" rows from the last two weeks, for a check that just filed some. */
   async fetchActivityNotes(me: ID): Promise<Notification[]> {

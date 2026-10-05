@@ -52,7 +52,7 @@ import { knownOpen, notKnownAdult, type AgeSource, type Openness, type OpennessM
 import type { TeenMap } from '@/features/players/mapPrivacy';
 import { show as showToast } from '@/lib/toast';
 import { opensAtFor } from '@/features/hits/audience';
-import { forgetPushToken } from '@/features/push/push';
+import { forgetPushToken, registerForPush } from '@/features/push/push';
 import { framesAt } from '@/features/compose/frames';
 import { noteStep, reportError } from '@/lib/crashReporting';
 import { learned as learnedTip } from '@/features/tips/tips';
@@ -461,6 +461,41 @@ interface AppState extends Bootstrap, CourtLifeState, FeedGroupsState {
   detectedCoords: { lat: number; lng: number } | null;
 }
 
+/** Your own settings as they are saved to the account (see the settings sync in AppProvider), for telling a change apart. */
+const settingsJson = (s: Pick<AppState, 'mutedIds' | 'blockedIds' | 'saved' | 'paymentMethods' | 'defaultPaymentId' | 'prefs'>) =>
+  JSON.stringify({ m: s.mutedIds, b: s.blockedIds, s: s.saved.questionIds, p: s.paymentMethods, d: s.defaultPaymentId, f: s.prefs });
+
+/**
+ * An account's own settings as a new account starts with them: what logging
+ * out, deleting the account or switching leaves on this device, so the next
+ * account signed in here never starts with the last one's blocks, mutes,
+ * reports, alert switches or saved threads, nor saves them to itself. The
+ * demo, which has no accounts, keeps its own.
+ */
+function freshAccountSettings(): Partial<AppState> {
+  if (!isSupabaseConfigured) return {};
+  return {
+    mutedIds: [], blockedIds: [], reportedIds: [], alertIds: [], saved: { postIds: [], questionIds: [] },
+    paymentMethods: [], defaultPaymentId: null, prefs: DEFAULT_PREFS,
+  };
+}
+
+/**
+ * What an account leaving this device (logged out, logged out everywhere,
+ * deleted) leaves on screen: nothing of its own for whoever signs in next.
+ * Its health (its tracker sessions too), its courts (who it follows, what it
+ * said, where it checked in), its groups and map settings, and its own
+ * settings all go with it.
+ */
+function signedOut(prev: AppState): AppState {
+  return {
+    ...prev, currentUserId: null, onboardingComplete: false, healthIsReal: false, healthHistory: [], detectedActivities: [],
+    ...emptyCourtLife, ...emptyFeedGroups, lastSeenLoaded: false, sessionTags: [], newOnCourtside: null,
+    mapVisibility: isSupabaseConfigured ? undefined : prev.mapVisibility, teenMap: isSupabaseConfigured ? 'off' : prev.teenMap,
+    ...freshAccountSettings(),
+  };
+}
+
 interface AppActions extends CourtLifeActions, FeedGroupsActions {
   /* Location */
   setLocationEnabled: (enabled: boolean) => Promise<string | null>;
@@ -529,7 +564,8 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
   /** Everything of yours, as one object, for "download your data". */
   exportData: () => Record<string, unknown>;
   completeOnboarding: (profile: PlayerProfile) => void;
-  updateIdentity: (patch: Pick<User, 'name' | 'bio' | 'location'> & { avatarUrl?: string; cityAt?: { lat: number; lng: number } | null }) => void;
+  /** Only the fields given change: a new photo on its own leaves the name, bio and city as they are. */
+  updateIdentity: (patch: Partial<Pick<User, 'name' | 'bio' | 'location'>> & { avatarUrl?: string; cityAt?: { lat: number; lng: number } | null }) => void;
   updateProfile: (patch: Partial<PlayerProfile>) => void;
   /** Log a session you played (today unless a day is given). Throws a plain sentence when it cannot be saved. */
   /**
@@ -745,6 +781,8 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
   setDefaultReaction: (emoji: string) => void;
 
   /* Notifications */
+  /** Fetches what came into Notifications since the newest one held (a like, a follow, "Tennis detected" filed by the server). */
+  catchUpNotifications: () => Promise<void>;
   markNotificationsRead: () => void;
   markNotificationRead: (notificationId: ID) => void;
 
@@ -1873,15 +1911,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // here (withNotification) only keep this screen up to date, and run the
   // demo, where there is no database.
   // Your own settings (mutes, blocks, saved threads, payment methods, switches) follow the account.
-  const settingsNow = JSON.stringify({ m: state.mutedIds, b: state.blockedIds, s: state.saved.questionIds, p: state.paymentMethods, d: state.defaultPaymentId, f: state.prefs });
-  const settingsSeen = useRef<string | null>(null);
+  const settingsNow = settingsJson(state);
+  // Kept with whose they were: a different account signed in starts from what it loaded, never from the last one's.
+  const settingsSeen = useRef<{ who: ID; json: string } | null>(null);
+  // Changes made here, and how many of them have been saved: equal when nothing is on its way up.
+  const settingsCount = useRef({ made: 0, saved: 0 });
   useEffect(() => {
     if (!isSupabaseConfigured || !remoteLoaded || !currentUserForLive || !UUID.test(currentUserForLive)) return;
-    if (settingsSeen.current === null) { settingsSeen.current = settingsNow; return; }
-    if (settingsSeen.current === settingsNow) return;
-    settingsSeen.current = settingsNow;
+    if (settingsSeen.current?.who !== currentUserForLive) { settingsSeen.current = { who: currentUserForLive, json: settingsNow }; return; }
+    if (settingsSeen.current.json === settingsNow) return;
+    settingsSeen.current = { who: currentUserForLive, json: settingsNow };
+    const made = ++settingsCount.current.made;
+    const settled = () => { settingsCount.current.saved = Math.max(settingsCount.current.saved, made); };
+    let sent = false;
     const s = stateRef.current;
     const t = setTimeout(() => {
+      sent = true;
       void remote.saveUserState(currentUserForLive, {
         mutedIds: s.mutedIds, blockedIds: s.blockedIds, savedQuestionIds: s.saved.questionIds, paymentMethods: s.paymentMethods,
         defaultPaymentId: s.defaultPaymentId, showActivity: s.prefs.showActivity, pushLikes: s.prefs.pushLikes, pushCoach: s.prefs.pushCoach,
@@ -1889,10 +1934,54 @@ export function AppProvider({ children }: { children: ReactNode }) {
         pushMapFriends: s.prefs.pushMapFriends, pushMapHits: s.prefs.pushMapHits, pushMapPlayers: s.prefs.pushMapPlayers, pushCourts: s.prefs.pushCourts,
         // Sent only once the database is known to have it (migration 89).
         contactsFindable: s.contactsFindableLive ? s.prefs.contactsFindable : undefined,
-      });
+      }).finally(settled);
     }, 400);
-    return () => clearTimeout(t);
+    // Never sent (a newer change took its place, or the account changed): nothing of it is on its way up.
+    return () => { clearTimeout(t); if (!sent) settled(); };
   }, [settingsNow, remoteLoaded, currentUserForLive]);
+  // Back to the front: your mutes, blocks and saved threads as the server has
+  // them now. The save above sends whole lists, so a phone left open since
+  // before a block made on another device would otherwise undo it with its
+  // next change. A change made here and not saved yet is left to go up as it is.
+  useEffect(() => {
+    if (!liveEpoch || !isSupabaseConfigured || !remoteLoaded || !currentUserForLive || !UUID.test(currentUserForLive)) return undefined;
+    const me = currentUserForLive;
+    // Read only once every change made here is saved, and used only if none was made meanwhile.
+    const asked = settingsCount.current.made;
+    if (settingsCount.current.saved !== asked) return undefined;
+    let on = true;
+    void remote.fetchUserState(me).then((got) => {
+      const s = stateRef.current;
+      if (!on || !got || s.currentUserId !== me || settingsCount.current.made !== asked) return;
+      if (settingsSeen.current?.who !== me || settingsSeen.current.json !== settingsJson(s)) return;
+      const lists = { mutedIds: got.mutedIds, blockedIds: got.blockedIds, saved: { ...s.saved, questionIds: got.savedQuestionIds } };
+      // Taken as already saved, so it is not sent straight back.
+      settingsSeen.current = { who: me, json: settingsJson({ ...s, ...lists }) };
+      setState((prev) => (prev.currentUserId === me ? { ...prev, mutedIds: got.mutedIds, blockedIds: got.blockedIds, saved: { ...prev.saved, questionIds: got.savedQuestionIds } } : prev));
+    }).catch(() => undefined);
+    return () => { on = false; };
+  }, [remoteLoaded, currentUserForLive, liveEpoch]);
+
+  // Notifications filed while the app was in the background (a like, a
+  // follow, "Tennis detected" from WHOOP's own alert), in one small ask:
+  // every one newer than the newest held. Asked whenever the app comes back
+  // to the front, and when Notifications opens.
+  const catchUpNotifications = useCallback(async () => {
+    const me = stateRef.current.currentUserId;
+    if (!live(me) || !stateRef.current.remoteLoaded) return;
+    const newest = stateRef.current.notifications.reduce((t, n) => (n.userId === me && UUID.test(n.id) && n.createdAt > t ? n.createdAt : t), '');
+    const since = new Date((newest ? Date.parse(newest) : Date.now() - 31 * 86_400_000) - 5000).toISOString();
+    const fresh = await remote.fetchNotificationsSince(me!, since).catch(() => [] as Notification[]);
+    if (!fresh.length || stateRef.current.currentUserId !== me) return;
+    setState((prev) => {
+      const add = fresh.filter((n) => !prev.notifications.some((x) => x.id === n.id));
+      return add.length ? { ...prev, notifications: [...add, ...prev.notifications] } : prev;
+    });
+  }, []);
+  useEffect(() => {
+    if (!liveEpoch || !isSupabaseConfigured || !remoteLoaded || !currentUserForLive || !UUID.test(currentUserForLive)) return;
+    void catchUpNotifications();
+  }, [remoteLoaded, currentUserForLive, liveEpoch, catchUpNotifications]);
 
   // What the saved copy put on screen, so the fresh load can take back off anything the server no longer has.
   const snapshotIds = React.useRef<Set<string> | null>(null);
@@ -2054,7 +2143,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const { id, email } = session.user;
         void loadRemote(id, email).then((ok) => { if (!ok && !cancelled && !stateRef.current.remoteLoaded && stateRef.current.currentUserId === id) void loadRemote(id, email); });
       }
-      if (event === 'SIGNED_OUT') setState((prev) => ({ ...prev, currentUserId: null, onboardingComplete: false, termsVersion: undefined }));
+      if (event === 'SIGNED_OUT') setState((prev) => ({ ...prev, currentUserId: null, onboardingComplete: false, termsVersion: undefined, ...freshAccountSettings() }));
     });
     // Tokens only refresh while the app is in front.
     const sub = DeviceState.addEventListener('change', (status) => {
@@ -2335,10 +2424,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const signOutEverywhere = useCallback(async () => {
     const me = stateRef.current.currentUserId;
     void forgetLinkPreviews();
-    if (isSupabaseConfigured) await remoteAuth.signOutEverywhere();
+    if (isSupabaseConfigured) {
+      // This phone stops getting the account's alerts while the session can still take its address off (as Log out does).
+      await forgetPushToken();
+      try { await remoteAuth.signOutEverywhere(); } catch (err) { void registerForPush(); throw err; }
+    }
     // Everywhere includes this device: the remembered login is gone too.
     const savedAccounts = me ? await forgetAccount(me) : stateRef.current.savedAccounts;
-    setState((prev) => ({ ...prev, currentUserId: null, onboardingComplete: false, savedAccounts }));
+    // Nothing of the account stays on the device (see signOut), its saved copy included.
+    setState((prev) => ({ ...signedOut(prev), savedAccounts }));
+    if (me) void clearSnapshot(me);
   }, []);
 
   const switchAccount = useCallback(async (id: ID) => {
@@ -2354,7 +2449,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setState((prev) => ({ ...prev, savedAccounts }));
       throw err;
     }
-    setState((prev) => ({ ...prev, currentUserId: session.user.id, remoteLoaded: false, onboardingComplete: false, error: null, detectedActivities: [], sessionTags: [] }));
+    setState((prev) => ({ ...prev, currentUserId: session.user.id, remoteLoaded: false, onboardingComplete: false, error: null, detectedActivities: [], sessionTags: [], ...freshAccountSettings() }));
     await loadRemote(session.user.id, session.user.email);
   }, [loadRemote]);
 
@@ -2368,7 +2463,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (isSupabaseConfigured) await remoteAuth.deleteAccount();
     // A deleted account has no business in the remembered-logins list.
     const savedAccounts = me ? await forgetAccount(me) : stateRef.current.savedAccounts;
-    setState((prev) => ({ ...prev, currentUserId: null, onboardingComplete: false, savedAccounts }));
+    // Nor anything of it on the device (see signOut), its saved copy included.
+    setState((prev) => ({ ...signedOut(prev), savedAccounts }));
+    if (me) void clearSnapshot(me);
   }, []);
   const retryLoad = useCallback(async () => {
     const me = stateRef.current.currentUserId;
@@ -2412,9 +2509,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     void forgetLinkPreviews();
     // This phone stops getting the account's alerts before the session ends (the removal needs it).
     if (isSupabaseConfigured) void forgetPushToken().finally(() => remoteAuth.signOut());
-    // One account's health (its tracker sessions too) never carries over to the next one signed in.
-    // Nor do its courts: who it follows, what it said, where it checked in.
-    setState((prev) => ({ ...prev, currentUserId: null, onboardingComplete: false, healthIsReal: false, healthHistory: [], detectedActivities: [], ...emptyCourtLife, ...emptyFeedGroups, lastSeenLoaded: false, sessionTags: [], newOnCourtside: null, mapVisibility: isSupabaseConfigured ? undefined : prev.mapVisibility, teenMap: isSupabaseConfigured ? 'off' : prev.teenMap }));
+    // One account's health, courts and settings never carry over to the next one signed in.
+    setState(signedOut);
   }, []);
 
   const patchCurrentUser = useCallback(
@@ -2439,7 +2535,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [patchCurrentUser],
   );
 
-  const updateIdentity = useCallback((patch: Pick<User, 'name' | 'bio' | 'location'> & { avatarUrl?: string; cityAt?: { lat: number; lng: number } | null }) => {
+  const updateIdentity = useCallback((patch: Partial<Pick<User, 'name' | 'bio' | 'location'>> & { avatarUrl?: string; cityAt?: { lat: number; lng: number } | null }) => {
     const before = stateRef.current.users.find((u) => u.id === stateRef.current.currentUserId)?.avatarUrl;
     patchCurrentUser(u => ({ ...u, ...patch, cityAt: patch.cityAt === null ? undefined : patch.cityAt ?? u.cityAt }));
     const me = stateRef.current.currentUserId;
@@ -2447,6 +2543,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     (async () => {
       let avatarUrl = patch.avatarUrl;
       if (isLocalMedia(patch.avatarUrl)) {
+        // Any words in the same change go now, and the photo on its own once it is up: a slow
+        // upload never carries older words over newer ones saved meanwhile (Save changes).
+        const { avatarUrl: _photo, ...rest } = patch;
+        if (Object.values(rest).some((v) => v !== undefined)) void remote.updateProfile(me!, rest).catch(() => undefined);
         // A new photo is shown at once but only exists on this phone until it uploads. If the
         // upload fails, say so and put the old photo back: before, the failure was silent, the
         // owner kept seeing the new photo and everyone else saw their initials.
@@ -2459,15 +2559,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
           void reportError(err, { where: 'avatar upload' });
           patchCurrentUser(u => ({ ...u, avatarUrl: before }));
           showToast({ title: 'Couldn’t save your photo', body: 'Check your connection and try again.', icon: 'cloud-offline-outline' });
-          const { avatarUrl: _skip, ...rest } = patch;
-          await remote.updateProfile(me!, rest).catch(() => undefined);
           return;
         }
         release();
         if (avatarUrl && avatarUrl !== patch.avatarUrl) patchCurrentUser(u => ({ ...u, avatarUrl }));
         showToast({ title: 'Profile photo updated', icon: 'checkmark-circle-outline' });
+        await remote.updateProfile(me!, { avatarUrl });
+        return;
       }
-      await remote.updateProfile(me!, { ...patch, avatarUrl });
+      await remote.updateProfile(me!, patch);
     })();
   }, [patchCurrentUser]);
   const checkHandle = useCallback(async (raw: string): Promise<HandleStatus | null> => {
@@ -5000,7 +5100,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (isSupabaseConfigured) await remoteAuth.deleteAccount();
       } catch { /* the sign-out below still takes it off this phone */ }
       const savedAccounts = await forgetAccount(me).catch(() => stateRef.current.savedAccounts);
-      setState((prev) => ({ ...prev, currentUserId: null, onboardingComplete: false, savedAccounts }));
+      setState((prev) => ({ ...signedOut(prev), savedAccounts }));
+      void clearSnapshot(me);
       return 'under13' as const;
     };
     const years = yearsOld(birthDate);
@@ -6117,6 +6218,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const n = /[?&]n=([0-9a-f-]{36})/i.exec(result.url)?.[1];
     if (!n) throw new Error(/tracker=expired/.test(result.url) ? 'That sign-in took too long. Try again.' : `${label} was not connected.`);
     await remote.trackers('finish', { n });
+    // The sign-in itself looks back three days; this goes back a week (as Sync now does), so tennis from before connecting is there to log.
+    void remote.trackers('sync', { provider, days: 7 }).catch(() => undefined);
   }, []);
 
   /**
@@ -6161,11 +6264,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const list = await remote.fetchActivities(me!);
     if (stateRef.current.currentUserId !== me) return;
     if (list) setState((prev) => ({ ...prev, detectedActivities: list }));
-    if (!filed.length) return;
-    // The "Tennis detected" rows the server just filed, into Notifications.
+    // The "Tennis detected" rows the server filed, into Notifications: after
+    // every check, as some are filed quietly (WHOOP's own alert, or while
+    // WHOOP was being connected) and never come back from the check itself.
     const notes = await remote.fetchActivityNotes(me!);
     if (stateRef.current.currentUserId !== me) return;
     if (notes.length) setState((prev) => ({ ...prev, notifications: [...notes.filter((n) => !prev.notifications.some((x) => x.id === n.id)), ...prev.notifications] }));
+    if (!filed.length) return;
     // The newest one gets a banner; the rest wait in Notifications.
     const a = (list ?? stateRef.current.detectedActivities).filter((x) => filed.includes(x.id)).sort((x, y) => (x.startedAt < y.startedAt ? 1 : -1))[0];
     // Your own numbers, for you only: the lock-screen push never carries them (migration 58).
@@ -6445,6 +6550,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       toggleSaveQuestion,
       reactToMessage,
       setDefaultReaction,
+      catchUpNotifications,
       markNotificationsRead,
       markNotificationRead,
       recordView,
@@ -6636,6 +6742,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       toggleSaveQuestion,
       reactToMessage,
       setDefaultReaction,
+      catchUpNotifications,
       markNotificationsRead,
       markNotificationRead,
       recordView,
