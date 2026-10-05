@@ -247,25 +247,26 @@ export default function Onboarding() {
   const profile = useMemo<PlayerProfile>(() => {
     // A goal or tournament that did not change keeps everything it had (done, a target date, its id).
     const keptGoal = existing?.goals[0];
-    // Only the first goal is asked here; any others (added on the Tennis profile) stay as they were, as the tournaments do.
     const goals = [goalOne]
       .map((label) => label.trim())
       .filter(Boolean)
-      .map((label, i) => (i === 0 && keptGoal && keptGoal.label === label ? keptGoal : { id: `g-onboard-${i}`, label, done: false }))
-      .concat(existing?.goals.slice(1) ?? []);
+      .map((label, i) => (i === 0 && keptGoal && keptGoal.label === label ? keptGoal : { id: `g-onboard-${i}`, label, done: false }));
+    // Only the first tournament is asked here: changing or clearing it leaves the others
+    // (added before, or shown on the Tennis profile) as they were, as the goals do.
+    const otherTournaments = existing?.tournaments.slice(1) ?? [];
     const sameTournament = savedTournament && savedTournament.name === tournamentName.trim()
       && Math.abs(Math.round((Date.parse(savedTournament.startsAt) - Date.now()) / 86_400_000) - tournamentDays) <= 1;
-    const tournaments = sameTournament ? [savedTournament!, ...(existing?.tournaments.slice(1) ?? [])] : tournamentName.trim()
+    const tournaments = sameTournament ? [savedTournament!, ...otherTournaments] : tournamentName.trim()
       ? [{
-          id: 't-onboard',
+          id: otherTournaments.some((t) => t.id === 't-onboard') ? `t-onboard-${Date.now().toString(36)}` : 't-onboard',
           name: tournamentName.trim(),
           startsAt: new Date(Date.now() + Math.max(1, tournamentDays) * 86_400_000).toISOString(),
           surface,
           level: `${skillSystem} ${rating}`,
           location: location.trim(),
           registered: true,
-        }]
-      : [];
+        }, ...otherTournaments]
+      : otherTournaments;
     return {
       skillSystem: skillSystem as SkillSystem, rating, playStyle, handedness, backhand, fitnessLevel,
       preferredSurface: surface, sessionsPerWeek, yearsPlaying,

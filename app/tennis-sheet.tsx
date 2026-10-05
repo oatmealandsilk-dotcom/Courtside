@@ -41,17 +41,27 @@ function dateFor(when: When, kept?: string): string | undefined {
  * - `kind=achievements`: every achievement, with how far along the locked ones are.
  *
  * Everything saves through updateProfile, as the setup steps do.
+ *
+ * Opened before your account has come down (a browser refresh, a link
+ * straight to it), it waits for it: the form below fills from the item once,
+ * when it first draws, so it must first have the item to fill from.
  */
 export default function TennisSheet() {
-  const styles = useThemedStyles(styleDefinitions);
   const params = useLocalSearchParams<{ kind?: string; id?: string }>();
   const kind: Kind = params.kind === 'goal' || params.kind === 'achievements' ? params.kind : 'limit';
+  const { currentUser } = useApp();
+  if (!currentUser) return null;
+  return <Sheet key={`${kind}:${params.id ?? 'new'}`} kind={kind} id={params.id} />;
+}
+
+function Sheet({ kind, id }: { kind: Kind; id?: string }) {
+  const styles = useThemedStyles(styleDefinitions);
   const { currentUser, actions } = useApp();
   const [closeSignal, setCloseSignal] = useState(0);
   const close = () => setCloseSignal((n) => n + 1);
   const profile = currentUser?.profile;
-  const limit = kind === 'limit' && params.id ? profile?.constraints.find((c) => c.id === params.id) : undefined;
-  const goal = kind === 'goal' && params.id ? profile?.goals.find((g) => g.id === params.id) : undefined;
+  const limit = kind === 'limit' && id ? profile?.constraints.find((c) => c.id === id) : undefined;
+  const goal = kind === 'goal' && id ? profile?.goals.find((g) => g.id === id) : undefined;
   const existing = limit ?? goal;
   // An item opens on what to do with it; Edit (or a new one) opens the form.
   const [editing, setEditing] = useState(!existing);

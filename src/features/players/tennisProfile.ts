@@ -72,8 +72,8 @@ export function yearsFigure(years: number): string {
   return words.replace(/ years?$/, '');
 }
 
-/** Years playing in a sentence: "11 years in", "10+ years in", "First year playing". */
-export const yearsWords = (years: number) => (years === 0 ? 'First year playing' : `${experienceLabel(years)} in`);
+/** Years playing in a sentence: "Playing 11 years", "Playing 4–9 years", "First year playing". */
+export const yearsWords = (years: number) => (years === 0 ? 'First year playing' : `Playing ${experienceLabel(years)}`);
 
 /** One number in the card's strip. `word` figures ("Elite") are set a little smaller than numbers. */
 export interface StripItem {
@@ -87,11 +87,12 @@ export interface StripItem {
 
 /**
  * The few numbers a player card leads with, most telling first: the record
- * (only once a match is logged), hours on court, sessions, and a streak of two
- * days or more. Never a row of zeros: when fewer than two of those are real
- * (a new player, or anyone whose log is private), the facts they gave fill in
- * instead (sessions a week, years playing, fitness). Empty when there is
- * nothing at all.
+ * (only once a match is logged), hours on court (once there is a whole one),
+ * sessions, and a streak of two days or more. Never a zero, and never a half
+ * empty strip: whatever room the real numbers leave is topped up from the
+ * facts they gave (sessions a week, years playing, fitness), which then come
+ * off the facts line under it. Labels are singular for a one ("1 Session").
+ * Empty when there is nothing at all.
  */
 export function stripItems(user: Pick<User, 'stats' | 'profile'>, max: number, lead: StripItem[] = []): StripItem[] {
   const s = user.stats;
@@ -99,32 +100,37 @@ export function stripItems(user: Pick<User, 'stats' | 'profile'>, max: number, l
   const real: StripItem[] = [];
   if (s.matchesPlayed > 0) {
     const lost = Math.max(0, s.matchesPlayed - s.matchesWon);
-    real.push({ key: 'record', figure: `${s.matchesWon}–${lost}`, label: 'Record', spoken: `Record ${s.matchesWon} wins ${lost} losses` });
+    real.push({ key: 'record', figure: `${s.matchesWon}–${lost}`, label: 'Record', spoken: `Record ${s.matchesWon} ${s.matchesWon === 1 ? 'win' : 'wins'} ${lost} ${lost === 1 ? 'loss' : 'losses'}` });
   }
-  if (s.hoursOnCourt > 0) real.push({ key: 'hours', figure: String(Math.round(s.hoursOnCourt)), label: 'Hours', spoken: `${Math.round(s.hoursOnCourt)} hours on court` });
-  if (s.sessionsLogged > 0) real.push({ key: 'sessions', figure: String(s.sessionsLogged), label: 'Sessions', spoken: `${s.sessionsLogged} sessions` });
+  const hours = Math.round(s.hoursOnCourt);
+  if (hours >= 1) real.push({ key: 'hours', figure: String(hours), label: hours === 1 ? 'Hour' : 'Hours', spoken: `${hours} ${hours === 1 ? 'hour' : 'hours'} on court` });
+  if (s.sessionsLogged > 0) real.push({ key: 'sessions', figure: String(s.sessionsLogged), label: s.sessionsLogged === 1 ? 'Session' : 'Sessions', spoken: `${s.sessionsLogged} ${s.sessionsLogged === 1 ? 'session' : 'sessions'}` });
   if (s.currentStreakDays >= 2) real.push({ key: 'streak', figure: String(s.currentStreakDays), label: 'Day streak', spoken: `${s.currentStreakDays}-day streak` });
   const facts: StripItem[] = [];
-  if (p.sessionsPerWeek !== undefined && p.sessionsPerWeek > 0) facts.push({ key: 'week', figure: `${p.sessionsPerWeek}×`, label: 'A week', spoken: `Plays ${p.sessionsPerWeek} times a week` });
-  if (p.yearsPlaying !== undefined) facts.push({ key: 'years', figure: yearsFigure(p.yearsPlaying), label: 'Years playing', spoken: `${experienceLabel(p.yearsPlaying)} playing` });
+  if (p.sessionsPerWeek !== undefined && p.sessionsPerWeek > 0) facts.push({ key: 'week', figure: `${p.sessionsPerWeek}×`, label: 'A week', spoken: `Plays ${p.sessionsPerWeek} ${p.sessionsPerWeek === 1 ? 'time' : 'times'} a week` });
+  if (p.yearsPlaying !== undefined) facts.push({ key: 'years', figure: yearsFigure(p.yearsPlaying), label: p.yearsPlaying <= 1 ? 'Year playing' : 'Years playing', spoken: `${experienceLabel(p.yearsPlaying)} playing` });
   if (p.fitnessLevel) facts.push({ key: 'fitness', figure: fitnessLabel[p.fitnessLevel], label: 'Fitness', word: true, spoken: `${fitnessLabel[p.fitnessLevel]} fitness` });
-  const pool = real.length >= 2 ? real : [...real, ...facts];
   const out = [...lead];
-  for (const item of pool) {
+  for (const item of [...real, ...facts]) {
     if (out.length >= max) break;
     if (!out.some((o) => o.key === item.key)) out.push(item);
   }
   return out;
 }
 
-/** The facts line under how someone plays, leaving out whatever the strip already shows and whatever they skipped. */
-export function factsLine(p: PlayerProfile, shown: StripItem[]): string {
+/**
+ * The facts under how someone plays, one phrase each, leaving out whatever the
+ * strip already shows and whatever they skipped: "On court 4× a week",
+ * "Playing 11 years", "Fitness: competitive". Kept apart so a line only ever
+ * breaks between two of them.
+ */
+export function factsList(p: PlayerProfile, shown: StripItem[]): string[] {
   const has = (k: StripItem['key']) => shown.some((s) => s.key === k);
   return [
-    p.sessionsPerWeek !== undefined && p.sessionsPerWeek > 0 && !has('week') ? `Plays ${p.sessionsPerWeek}× a week` : '',
+    p.sessionsPerWeek !== undefined && p.sessionsPerWeek > 0 && !has('week') ? `On court ${p.sessionsPerWeek}× a week` : '',
     p.yearsPlaying !== undefined && !has('years') ? yearsWords(p.yearsPlaying) : '',
-    p.fitnessLevel && !has('fitness') ? `${fitnessLabel[p.fitnessLevel]} fitness` : '',
-  ].filter(Boolean).join(' · ');
+    p.fitnessLevel && !has('fitness') ? `Fitness: ${fitnessLabel[p.fitnessLevel].toLowerCase()}` : '',
+  ].filter(Boolean);
 }
 
 /** A length in the page's short form: "45m", "1h 30m", "2h". */

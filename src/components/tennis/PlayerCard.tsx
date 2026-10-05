@@ -1,19 +1,19 @@
 import React, { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
 
 import { BrandMark } from '@/components/BrandMark';
-import { SYSTEM_INK } from '@/components/LevelPill';
-import { Avatar } from '@/components/ui';
+import { Avatar, BrandWash } from '@/components/ui';
 import { CardWash, cardLook, type CardLook } from '@/components/session/SessionCard';
 import { CountUp } from '@/components/session/CountUp';
 import type { SurfacePreference, User } from '@/data/types';
+import type { ThemeName } from '@/theme/ThemeProvider';
 import { mixHex } from '@/features/activity/zones';
 import { playStyleLabel } from '@/lib/badges';
 import { useReducedMotion } from '@/lib/useReducedMotion';
 import {
-  bandWords, cityOf, daysUntil, factsLine, handsLine, nextBand, ratingText, rulerAt, rulerScale, shortDate, stripItems, surfaceSlot, surfaceWord, type StripItem,
+  bandWords, cityOf, daysUntil, factsList, handsLine, nextBand, ratingText, rulerAt, rulerScale, shortDate, stripItems, surfaceSlot, surfaceWord, type StripItem,
 } from '@/features/players/tennisProfile';
 import { useTheme } from '@/theme/ThemeProvider';
 import { colors, font, withAlpha } from '@/theme';
@@ -21,6 +21,53 @@ import { colors, font, withAlpha } from '@/theme';
 /** The ruler's draw and the rating's count: once per player per time the app is open, never on every visit. */
 const played = new Set<string>();
 const EASE = Easing.bezier(0.22, 1, 0.36, 1);
+
+/** The contrast between two #RRGGBB colours, as WCAG counts it (1 to 21). */
+function contrast(a: string, b: string): number {
+  const lum = (hex: string) => {
+    const [r, g, bl] = [1, 3, 5].map((i) => {
+      const v = parseInt(hex.slice(i, i + 2), 16) / 255;
+      return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * r + 0.7152 * g + 0.0722 * bl;
+  };
+  const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x);
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+/**
+ * A fill deepened a twentieth at a time toward the page's text colour until
+ * `ink` on it reaches `target`: unchanged where it already does. Melbourne's
+ * light blue takes the most (white on it is only 4:1), London's green none.
+ */
+export function deepenFor(fill: string, ink: string, target: number): string {
+  if (!/^#[0-9a-f]{6}$/i.test(fill) || !/^#[0-9a-f]{6}$/i.test(ink)) return fill;
+  let out = fill;
+  for (let step = 1; contrast(ink, out) < target && step <= 12; step++) out = mixHex(fill, colors.text, step * 0.05);
+  return out;
+}
+
+/**
+ * The card's colours: the session box's look (cardLook), except on the
+ * light city courts. There the brand fill carries small words across the
+ * whole card, so it is deepened until the court's ink on it reads at 6:1,
+ * the small words are that ink at 90% (a step down by size and weight, not
+ * by fading), and its glow is a whisper (PlayerWash), so every word stays
+ * at 4.5:1 or better wherever it falls.
+ */
+export function playerCardLook(theme: ThemeName): CardLook {
+  const look = cardLook(theme);
+  if (look.wash !== 'brand') return look;
+  const ink = colors.brandInk;
+  const soft = withAlpha(ink, 0.9);
+  return { ...look, fill: deepenFor(colors.brand, ink, 6), figure: ink, ink, muted: soft, faint: soft, eyebrow: ink, lines: withAlpha(ink, 0.16) };
+}
+
+/** The card's fade: the cream box's own on the CourtSide court; on a filled card, a quarter of the brand glow, over the deepened fill. */
+export function PlayerWash({ look, radius }: { look: CardLook; radius: number }) {
+  if (look.wash === 'brand') return <BrandWash radius={radius} strength={0.25} base={look.fill} />;
+  return <CardWash look={look} radius={radius} />;
+}
 
 /**
  * A player's card: the sibling of the cream session box (same fill, fade and
@@ -40,7 +87,7 @@ export function PlayerCard({ user, variant, isMe = false, onPress }: {
   onPress?: () => void;
 }) {
   const { theme } = useTheme();
-  const look = cardLook(theme);
+  const look = playerCardLook(theme);
   const reduced = useReducedMotion();
   const key = `${variant}:${user.id}`;
   // Decided once, on the first draw: a later redraw never starts it over.
@@ -49,8 +96,9 @@ export function PlayerCard({ user, variant, isMe = false, onPress }: {
   const p = user.profile;
   const band = bandWords(p);
   const system = p.skillSystem;
-  // The system's own colour (UTR blue, NTRP green, ITF clay) on cream and dark cards; on a filled one, the card's own small ink.
-  const systemInk = look.wash === 'brand' ? look.eyebrow : (look.dark ? SYSTEM_INK[system]?.dark : SYSTEM_INK[system]?.light) ?? look.eyebrow;
+  // The system's name in the card's small ink (the deeper green on cream, the muted ink on a dark page): the level pill
+  // beside the name already wears the system's own colour, and NTRP green beside New York's yellow figures fought them.
+  const systemInk = look.eyebrow;
   const filled = look.wash === 'brand';
 
   if (variant === 'banner') {
@@ -60,7 +108,7 @@ export function PlayerCard({ user, variant, isMe = false, onPress }: {
     const spoken = `${user.name}'s tennis profile. ${system} ${ratingText(p)}${band ? `, ${band}` : ''}. ${playStyleLabel[p.playStyle]}, ${surfaceWord[p.preferredSurface]}. ${items.map((i) => i.spoken).join(', ')}`;
     return (
       <Pressable accessibilityRole="link" accessibilityLabel={spoken} onPress={onPress} style={({ pressed }) => [styles.banner, { backgroundColor: look.fill, borderColor: look.border }, look.border !== 'transparent' && styles.bordered, pressed && styles.pressed]}>
-        <CardWash look={look} radius={16} />
+        <PlayerWash look={look} radius={16} />
         <View style={styles.headRow}>
           <Text style={[styles.bannerTitle, { color: look.ink }]}>Tennis profile</Text>
           <Ionicons name="chevron-forward" size={15} color={look.muted} />
@@ -83,21 +131,22 @@ export function PlayerCard({ user, variant, isMe = false, onPress }: {
   }
 
   const items = stripItems(user, 4);
-  const facts = factsLine(p, items);
+  const facts = factsList(p, items);
   const up = isMe ? nextBand(p) : null;
   const spoken = [
     `${user.name}, ${system} ${ratingText(p)}${band ? `, ${band.toLowerCase()}` : ''}.`,
     `${playStyleLabel[p.playStyle]}, ${surfaceWord[p.preferredSurface].toLowerCase()}, ${handsLine(p).replace(' · ', ', ').toLowerCase()}.`,
-    facts ? `${facts.replace(/ · /g, ', ')}.` : '',
+    facts.length ? `${facts.join(', ')}.` : '',
     items.length ? `${items.map((i) => i.spoken).join(', ')}.` : '',
     up ? `Next band at ${up.at}, ${up.label.toLowerCase()}.` : '',
   ].filter(Boolean).join(' ');
   return (
     <View accessible accessibilityRole="summary" accessibilityLabel={spoken} style={[styles.card, { backgroundColor: look.fill, borderColor: look.border }, look.border !== 'transparent' && styles.bordered]}>
-      <CardWash look={look} radius={20} />
+      <PlayerWash look={look} radius={20} />
       <View style={styles.identity}>
-        {/* On a filled card the initials sit on a deeper shade of the card (a blue disc vanished on Melbourne's blue). */}
-        <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={52} ring={user.isCoach} style={filled ? { backgroundColor: mixHex(look.fill, colors.text, 0.35) } : undefined} />
+        {/* The brand disc their profile page gives them, so the same person wears one colour; on a filled card,
+            a deeper shade of the card instead (a brand disc would vanish into it). */}
+        <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={52} ring={user.isCoach} style={{ backgroundColor: filled ? mixHex(look.fill, colors.text, 0.35) : colors.brand }} />
         <View style={styles.identityWords}>
           <Text numberOfLines={1} style={[styles.name, { color: look.ink }]}>{user.name}</Text>
           <Text numberOfLines={1} style={[styles.small, { color: look.muted }]}>@{user.handle}{user.location ? ` · ${cityOf(user.location)}` : ''}{user.isCoach ? ' · Coach' : ''}</Text>
@@ -123,7 +172,12 @@ export function PlayerCard({ user, variant, isMe = false, onPress }: {
           <Text numberOfLines={1} style={[styles.style, styles.surface, styles.shrink, { color: look.ink }]}>{surfaceWord[p.preferredSurface]}</Text>
         </View>
         <Text style={[styles.small, { color: look.muted }]}>{handsLine(p)}</Text>
-        {facts ? <Text style={[styles.small, { color: look.muted }]}>{facts}</Text> : null}
+        {/* One phrase to a piece, so a line only breaks between two of them, never inside one. */}
+        {facts.length ? (
+          <View style={styles.facts}>
+            {facts.map((f, i) => <Text key={f} style={[styles.small, { color: look.muted }]}>{f}{i < facts.length - 1 ? ' · ' : ''}</Text>)}
+          </View>
+        ) : null}
       </View>
 
       {items.length ? <Strip items={items} look={look} size={24} filled={filled} /> : null}
@@ -193,19 +247,28 @@ function RatingRuler({ user, look, play }: { user: User; look: CardLook; play: b
   );
 }
 
-/** The card's numbers, side by side on hairlines: figures in the card's figure colour, labels small under them. */
+/**
+ * The card's numbers, side by side on hairlines: figures in the card's figure
+ * colour, labels small under them. With text set very large (past 1.3×) four
+ * no longer fit across, so they sit two by two.
+ */
 function Strip({ items, look, size, filled }: { items: StripItem[]; look: CardLook; size: number; filled: boolean }) {
+  const { fontScale } = useWindowDimensions();
+  const grid = items.length >= 4 && fontScale > 1.3;
   return (
-    <View style={[styles.strip, size < 24 && styles.stripSmall, { borderTopColor: look.lines }]}>
-      {items.map((item, i) => (
-        <View key={item.key} style={[styles.cell, i > 0 && { borderLeftWidth: StyleSheet.hairlineWidth, borderLeftColor: look.lines, paddingLeft: 12 }]}>
-          <Text numberOfLines={1} maxFontSizeMultiplier={1.25} style={[item.word ? { ...font('600'), fontSize: size - 4, lineHeight: Math.round(size * 1.15), letterSpacing: -0.4 } : { ...font('600'), fontSize: size, lineHeight: Math.round(size * 1.15), letterSpacing: -0.055 * size }, styles.tabular, { color: look.figure }]}>{item.figure}</Text>
-          <View style={styles.cellLabel}>
-            {item.key === 'streak' ? <Ionicons name="flame" size={11} color={filled ? look.ink : colors.clay} /> : null}
-            <Text numberOfLines={1} style={[styles.label, styles.shrink, { color: look.muted }]}>{item.label}</Text>
+    <View style={[styles.strip, size < 24 && styles.stripSmall, grid && styles.stripGrid, { borderTopColor: look.lines }]}>
+      {items.map((item, i) => {
+        const divided = grid ? i % 2 === 1 : i > 0;
+        return (
+          <View key={item.key} style={[styles.cell, grid && styles.cellGrid, grid && i >= 2 && styles.cellLower, divided && { borderLeftWidth: StyleSheet.hairlineWidth, borderLeftColor: look.lines, paddingLeft: 12 }]}>
+            <Text numberOfLines={1} maxFontSizeMultiplier={1.25} style={[item.word ? { ...font('600'), fontSize: size - 4, lineHeight: Math.round(size * 1.15), letterSpacing: -0.4 } : { ...font('600'), fontSize: size, lineHeight: Math.round(size * 1.15), letterSpacing: -0.055 * size }, styles.tabular, { color: look.figure }]}>{item.figure}</Text>
+            <View style={styles.cellLabel}>
+              {item.key === 'streak' ? <Ionicons name="flame" size={11} color={filled ? look.ink : colors.clay} /> : null}
+              <Text numberOfLines={1} maxFontSizeMultiplier={1.3} style={[styles.label, styles.shrink, { color: look.muted }]}>{item.label}</Text>
+            </View>
           </View>
-        </View>
-      ))}
+        );
+      })}
     </View>
   );
 }
@@ -244,6 +307,7 @@ const styles = StyleSheet.create({
   endText: { ...font('400'), fontSize: 11, lineHeight: 14, fontVariant: ['tabular-nums'] },
   next: { marginTop: 8 },
   play: { marginTop: 16, gap: 2 },
+  facts: { flexDirection: 'row', flexWrap: 'wrap' },
   inline: { flexDirection: 'row', alignItems: 'center', marginTop: 4, minWidth: 0 },
   style: { ...font('600'), fontSize: 15, lineHeight: 21, letterSpacing: -0.15 },
   surface: { ...font('500') },
@@ -253,6 +317,9 @@ const styles = StyleSheet.create({
   // Columns share the width by what they hold (a record is wider than a streak), so none is cut short.
   cell: { flexGrow: 1, flexShrink: 1, flexBasis: 'auto', minWidth: 0, gap: 2 },
   cellLabel: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  stripGrid: { flexWrap: 'wrap' },
+  cellGrid: { flexGrow: 0, flexBasis: '50%', width: '50%' },
+  cellLower: { marginTop: 12 },
   label: { ...font('400'), fontSize: 12, lineHeight: 16 },
   tabular: { fontVariant: ['tabular-nums'] },
 });

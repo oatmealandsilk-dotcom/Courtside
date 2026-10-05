@@ -47,6 +47,11 @@ function UserProfile() {
   // Their posts come in when their profile is opened, so the grid and the
   // counts are whole however old the posts are.
   useEffect(() => { if (id) void actions.loadPostsOf(id); }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Their next tournament shows on the banner only while you follow each other (migration 123): asked again on
+  // opening, as their Tennis profile does, so an unfollow since the app opened hides it.
+  const otherId = id && id !== currentUserId ? id : null;
+  const { loadTournamentPlans } = actions;
+  useEffect(() => { if (otherId) void loadTournamentPlans(); }, [otherId, loadTournamentPlans]);
   const [menuOpen, setMenuOpen] = useState(false);
   const [notice, setNotice] = useState('');
   const [tab, setTab] = useState<typeof TABS[number]>('Posts');

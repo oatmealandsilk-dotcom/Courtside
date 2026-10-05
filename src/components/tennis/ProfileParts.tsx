@@ -7,6 +7,7 @@ import { tierColor } from '@/lib/badges';
 import { show as showToast } from '@/lib/toast';
 import { mixHex } from '@/features/activity/zones';
 import { daysUntil } from '@/features/players/tennisProfile';
+import { deepenFor } from '@/components/tennis/PlayerCard';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, pageIsDark, spacing, typography, withAlpha } from '@/theme';
 
@@ -60,7 +61,7 @@ export function Tile({ icon, brand = false, children }: { icon?: IconName; brand
  * with the hairline over the words only. At least 56 tall; pressable when
  * given `onPress`.
  */
-export function Row({ lead, leadWidth, first = false, title, titleStyle, sub, subLines = 1, right, onPress, accessibilityLabel, accessibilityRole = 'button', minHeight = 56, chevron = false }: {
+export function Row({ lead, leadWidth, first = false, title, titleStyle, sub, subLines = 1, right, onPress, onLongPress, accessibilityLabel, accessibilityRole = 'button', minHeight = 56, chevron = false }: {
   lead?: React.ReactNode;
   /** The lead's column width, when it is not a 40 tile (a 56 countdown). */
   leadWidth?: number;
@@ -71,6 +72,8 @@ export function Row({ lead, leadWidth, first = false, title, titleStyle, sub, su
   subLines?: number;
   right?: React.ReactNode;
   onPress?: () => void;
+  /** A hold on the row (Remove, for a logged session), offered to a screen reader as an action of its own. */
+  onLongPress?: { label: string; run: () => void };
   accessibilityLabel?: string;
   accessibilityRole?: 'button' | 'link';
   minHeight?: number;
@@ -90,9 +93,18 @@ export function Row({ lead, leadWidth, first = false, title, titleStyle, sub, su
       </View>
     </>
   );
-  if (!onPress) return <View style={styles.row} accessible={!!accessibilityLabel} accessibilityLabel={accessibilityLabel}>{body}</View>;
+  if (!onPress && !onLongPress) return <View style={styles.row} accessible={!!accessibilityLabel} accessibilityLabel={accessibilityLabel}>{body}</View>;
   return (
-    <Pressable accessibilityRole={accessibilityRole} accessibilityLabel={accessibilityLabel} onPress={onPress} style={({ pressed }) => [styles.row, pressed && styles.pressed]}>
+    <Pressable
+      accessibilityRole={onPress ? accessibilityRole : undefined}
+      accessibilityLabel={accessibilityLabel}
+      accessibilityActions={onLongPress ? [{ name: 'longpress', label: onLongPress.label }] : undefined}
+      onAccessibilityAction={onLongPress ? (e) => { if (e.nativeEvent.actionName === 'longpress') onLongPress.run(); } : undefined}
+      onPress={onPress}
+      onLongPress={onLongPress?.run}
+      delayLongPress={450}
+      style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+    >
       {body}
     </Pressable>
   );
@@ -109,7 +121,8 @@ export function AddRow({ icon, title, sub, onPress, first = true }: { icon: Icon
 /** A small tag on a row ("Entered", "Watching"): radius 6, since a pill would read as something to press. */
 export function Tag({ label, on = false }: { label: string; on?: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
-  return <View style={[styles.tag, on && styles.tagOn]}><Text style={[styles.tagText, on && styles.tagTextOn]}>{label}</Text></View>;
+  // An "on" tag is the brand colour, deepened where its ink on it fell short of 4.5:1 (white on Melbourne's blue is 4:1).
+  return <View style={[styles.tag, on && { backgroundColor: deepenFor(colors.brand, colors.brandInk, 4.5) }]}><Text style={[styles.tagText, on && styles.tagTextOn]}>{label}</Text></View>;
 }
 
 /**
@@ -119,16 +132,20 @@ export function Tag({ label, on = false }: { label: string; on?: boolean }) {
 export function CountdownTile({ iso, slot }: { iso: string; slot: 'hard' | 'clay' | 'grass' | 'court' }) {
   const styles = useThemedStyles(styleDefinitions);
   useTheme();
-  const ink = colors[slot];
-  // The small word a step toward the text, so it reads at 11 on its tint as well as the big number does.
-  const small = mixHex(ink, colors.text, pageIsDark() ? 0.25 : 0.3);
+  const tint = colors[slot];
+  const dark = pageIsDark();
+  // On a light page both the number and its word are a step toward the text, so they read on the tint as well
+  // as on the page: the light clay courts' own colour was under 3:1 there (Paris 2.8:1). A dark page keeps the
+  // court's colour for the number, which already reads.
+  const ink = dark ? tint : mixHex(tint, colors.text, 0.25);
+  const small = mixHex(tint, colors.text, dark ? 0.25 : 0.4);
   const days = daysUntil(iso);
   const d = new Date(iso);
   const [big, word] = days <= 0 ? ['Today', ''] : days >= 100 ? [String(d.getDate()), d.toLocaleDateString(undefined, { month: 'short' })] : [String(days), days === 1 ? 'day' : 'days'];
   return (
-    <View style={[styles.countdown, { backgroundColor: withAlpha(ink, 0.12) }]}>
+    <View style={[styles.countdown, { backgroundColor: withAlpha(tint, 0.12) }]}>
       {days >= 100 ? <Text style={[styles.countWord, { color: small }]}>{word}</Text> : null}
-      <Text maxFontSizeMultiplier={1.2} style={[days <= 0 ? styles.countToday : styles.countBig, { color: ink }]}>{big}</Text>
+      <Text maxFontSizeMultiplier={1.2} style={[days <= 0 ? styles.countToday : styles.countBig, { color: days <= 0 ? small : ink }]}>{big}</Text>
       {days > 0 && days < 100 ? <Text maxFontSizeMultiplier={1.2} style={[styles.countWord, { color: small }]}>{word}</Text> : null}
     </View>
   );
@@ -136,7 +153,15 @@ export function CountdownTile({ iso, slot }: { iso: string; slot: 'hard' | 'clay
 
 const TIER_ORDER = { platinum: 0, gold: 1, silver: 2, bronze: 3 } as const;
 
-/** Unlocked medals in one row that scrolls sideways, gold first; a tap names the medal in a toast. */
+/**
+ * A won medal's colour on this row: the tier's own, except silver, which is
+ * the page's grey everywhere else (the locked look in the full grid). Here it
+ * is a cool metal, the grey a third of the way to the court's blue, so a
+ * silver medal reads as won beside the gold ones.
+ */
+const medalTint = (tier: AchievementProgress['achievement']['tier']) => (tier === 'silver' ? mixHex(colors.textMuted, colors.hard, 0.35) : tierColor(tier));
+
+/** Unlocked medals in one row that scrolls sideways, gold first; a tap names the medal in a toast. Every disc is ringed in its metal, so none reads as locked. */
 export function MedalRow({ items }: { items: AchievementProgress[] }) {
   const styles = useThemedStyles(styleDefinitions);
   useTheme();
@@ -144,11 +169,11 @@ export function MedalRow({ items }: { items: AchievementProgress[] }) {
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.medalStrip} contentContainerStyle={styles.medals}>
       {shown.map(({ achievement: a }) => {
-        const tint = tierColor(a.tier);
+        const tint = medalTint(a.tier);
         const tier = a.tier.charAt(0).toUpperCase() + a.tier.slice(1);
         return (
           <Pressable key={a.id} accessibilityRole="button" accessibilityLabel={`${a.name}, ${tier}. ${a.description}`} onPress={() => showToast({ title: a.name, body: `${tier} · ${a.description}`, icon: a.icon })} style={({ pressed }) => [styles.medal, pressed && styles.pressed]}>
-            <View style={[styles.disc, { backgroundColor: withAlpha(tint, 0.14) }]}>
+            <View style={[styles.disc, { backgroundColor: withAlpha(tint, 0.18), borderColor: withAlpha(tint, 0.45) }]}>
               <Ionicons name={a.icon as IconName} size={22} color={tint} />
             </View>
             <Text style={styles.medalName} numberOfLines={2}>{a.name}</Text>
@@ -181,7 +206,6 @@ const styleDefinitions = StyleSheet.create({
   tile: { width: 40, height: 40, borderRadius: 12, backgroundColor: colors.bgElevated, alignItems: 'center', justifyContent: 'center' },
   tileBrand: { backgroundColor: colors.brandDim },
   tag: { paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6, backgroundColor: colors.bgElevated },
-  tagOn: { backgroundColor: colors.brand },
   tagText: { ...typography.caption, letterSpacing: 0.2, color: colors.textMuted },
   tagTextOn: { color: colors.brandInk },
   countdown: { width: 56, height: 56, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
@@ -189,8 +213,9 @@ const styleDefinitions = StyleSheet.create({
   countToday: { ...font('600'), fontSize: 14, lineHeight: 18, letterSpacing: -0.2 },
   countWord: { ...font('600'), fontSize: 11, lineHeight: 13 },
   medalStrip: { marginHorizontal: -spacing.lg },
-  medals: { paddingHorizontal: spacing.lg - 8, paddingTop: 4, paddingBottom: 2 },
-  medal: { width: 70, alignItems: 'center', gap: 6, paddingVertical: 4 },
-  disc: { width: 54, height: 54, borderRadius: 27, alignItems: 'center', justifyContent: 'center' },
-  medalName: { ...typography.caption, letterSpacing: 0, lineHeight: 14, color: colors.text, textAlign: 'center' },
+  // The first medal's name starts on the page's 16-point gutter, and each name wraps inside its own column.
+  medals: { paddingHorizontal: spacing.lg, gap: 10, paddingTop: 4, paddingBottom: 2 },
+  medal: { width: 72, alignItems: 'center', gap: 6, paddingVertical: 4 },
+  disc: { width: 54, height: 54, borderRadius: 27, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
+  medalName: { ...typography.caption, letterSpacing: 0, lineHeight: 14, maxWidth: 72, color: colors.text, textAlign: 'center' },
 });

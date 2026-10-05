@@ -1,7 +1,7 @@
 import { asTabRoute } from '@/features/navigation/tabFocus';
 import { isDesktopBrowser } from '@/lib/browserDevice';
 import { PlayerName } from '@/components/PlayerName';
-import { useThemedStyles } from '@/theme/ThemeProvider';
+import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { onSkippedSaved, readSkipped, type SetupStep } from '@/features/onboarding/setupProgress';
 import { Modal, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
@@ -19,12 +19,12 @@ import { reportSection, requestSection, subscribeSectionRequest, swipeDestinatio
 import { LevelPill } from '@/components/LevelPill';
 import { useApp } from '@/store/AppContext';
 import { InboxButton, UnreadBadge } from '@/components/InboxButton';
-import { PlayerCard } from '@/components/tennis/PlayerCard';
+import { PlayerCard, PlayerWash, playerCardLook } from '@/components/tennis/PlayerCard';
 import { compactNumber } from '@/lib/format';
 import { TileViews } from '@/components/TileViews';
 import { TilePin } from '@/components/TilePin';
 import { TileRemoved } from '@/features/moderation/RemovedNote';
-import { colors, spacing, typography, font, lift } from '@/theme';
+import { colors, spacing, typography, font, lift, withAlpha } from '@/theme';
 import { useTourTarget } from '@/features/tour/tourStore';
 import { isTaggedIn } from '@/features/activity/sessionTags';
 import { studioLine } from '@/features/coaching/studioSummary';
@@ -245,13 +245,17 @@ function ProfileMenu({ groupsAsking, groupCount }: { groupsAsking: number; group
  */
 function ProfileSkeleton({ name, avatarUrl, seed }: { name?: string; avatarUrl?: string; seed: string }) {
   const styles = useThemedStyles(styleDefinitions);
+  const { theme } = useTheme();
+  // The banner's own colours (cream here, the deepened court colour on the city courts), so it fades into the real one in place.
+  const look = playerCardLook(theme);
   const breathe = useSharedValue(0);
   useEffect(() => {
     breathe.value = withRepeat(withTiming(1, { duration: 900, easing: Easing.inOut(Easing.quad) }), -1, true);
     return () => cancelAnimation(breathe);
   }, [breathe]);
   const pulse = useAnimatedStyle(() => ({ opacity: 0.5 + 0.3 * breathe.value }));
-  const Blank = ({ w, h = 12 }: { w: number; h?: number }) => <Reanimated.View style={[{ width: w, height: h, borderRadius: h / 2, backgroundColor: colors.surfaceAlt }, pulse]} />;
+  const Blank = ({ w, h = 12, on }: { w: number; h?: number; on?: string }) => <Reanimated.View style={[{ width: w, height: h, borderRadius: h / 2, backgroundColor: on ?? colors.surfaceAlt }, pulse]} />;
+  const ink = withAlpha(look.ink, 0.12);
   return <>
    <View style={styles.identity}>
      <View style={styles.identityRow}>
@@ -265,11 +269,12 @@ function ProfileSkeleton({ name, avatarUrl, seed }: { name?: string; avatarUrl?:
      <View style={styles.buttons}><View style={{ flex: 1 }}><Button label="Edit Profile" variant="secondary" disabled onPress={() => undefined} full/></View><View style={{ flex: 1 }}><Button label="Share" variant="secondary" disabled onPress={() => undefined} full/></View></View>
    </View>
    {/* The Tennis profile banner's shape: its heading, the rating, the line under it and three numbers. */}
-   <View style={styles.bannerBlank}>
-     <Blank w={120} h={17} />
-     <View style={styles.bannerBlankHero}><Blank w={64} h={36} /></View>
-     <Blank w={140} h={14} />
-     <View style={styles.bannerBlankStrip}>{[0, 1, 2].map((i) => <View key={i} style={{ flex: 1 }}><Blank w={48} h={20} /></View>)}</View>
+   <View style={[styles.bannerBlank, { backgroundColor: look.fill }]}>
+     <PlayerWash look={look} radius={16} />
+     <Blank w={120} h={17} on={ink} />
+     <View style={styles.bannerBlankHero}><Blank w={64} h={36} on={ink} /></View>
+     <Blank w={140} h={14} on={ink} />
+     <View style={styles.bannerBlankStrip}>{[0, 1, 2].map((i) => <View key={i} style={{ flex: 1 }}><Blank w={48} h={20} on={ink} /></View>)}</View>
    </View>
    <View style={styles.links}>
      <View style={styles.linkRow}><Ionicons name="bookmark-outline" size={20} color={colors.text}/><Text style={styles.linkText}>Saved</Text></View>
@@ -288,7 +293,7 @@ const styleDefinitions = StyleSheet.create({
  menuTagText:{...typography.caption,letterSpacing:0.2,color:colors.brand},
  menuDot:{position:'absolute',top:5,right:3,width:9,height:9,borderRadius:5,backgroundColor:colors.brand,borderWidth:1.5,borderColor:colors.bg},
  // The banner's shape while the account loads.
- bannerBlank:{padding:16,borderRadius:16,backgroundColor:colors.surface,gap:10},
+ bannerBlank:{padding:16,borderRadius:16,gap:10,overflow:'hidden'},
  bannerBlankHero:{paddingVertical:2},
  bannerBlankStrip:{flexDirection:'row',marginTop:6},
  setup:{marginTop:16,marginHorizontal:0,padding:14,borderRadius:16,backgroundColor:colors.brandDim,flexDirection:'row',alignItems:'center',gap:12},setupTitle:{...typography.smallStrong,fontSize:14,color:colors.text},identity:{gap:12,paddingTop:16,paddingBottom:20,alignItems:'stretch'},identityRow:{flexDirection:'row',alignItems:'center',gap:16},identityWords:{flex:1,gap:6,minWidth:0},meta:{fontSize:12,color:colors.textMuted,lineHeight:19},nameRow:{flexDirection:'row',gap:10,alignItems:'center',flexWrap:'wrap'},name:{...typography.title,fontSize:22,color:colors.text},bio:{...typography.body,lineHeight:22,color:colors.text},followRow:{flexDirection:'row',alignItems:'center',gap:10},follow:{flexDirection:'row',alignItems:'baseline'},followCount:{...typography.bodyStrong,color:colors.text},followDot:{color:colors.textFaint,fontSize:14},tabCount:{...typography.smallStrong,fontSize:12,color:colors.textFaint},buttons:{flexDirection:'row',gap:8,alignSelf:'stretch',marginTop:6},settings:{borderWidth:1,borderColor:colors.border,borderRadius:10,padding:10,justifyContent:'center'},streak:{flexDirection:'row',alignItems:'center',gap:3,paddingHorizontal:8,paddingVertical:2,borderRadius:999,backgroundColor:colors.bgElevated},streakText:{...typography.caption,letterSpacing:0,fontWeight:'600',color:colors.clay},
