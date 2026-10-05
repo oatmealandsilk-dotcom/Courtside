@@ -1680,6 +1680,30 @@ function addPosts(prev: AppState, got: { posts: Post[]; comments: Comment[] }): 
 }
 
 /**
+ * A profile's posts as fetched, onto the copies already held: any player on
+ * a session's list there that the held copy lacks is added (never taken
+ * off). Since migration 124 a player not known to be an adult is named on
+ * someone else's post only for the people allowed to see them, through the
+ * profile's own fetch, so the copy from the feed may not have them.
+ */
+function addSessionNames(prev: AppState, fetched: Post[]): AppState {
+  const byId = new Map(fetched.filter((p) => p.session?.with?.length).map((p) => [p.id, p]));
+  if (!byId.size) return prev;
+  let changed = false;
+  const posts = prev.posts.map((p) => {
+    const got = byId.get(p.id);
+    if (!got || !p.session || !got.session?.with) return p;
+    const had = p.session.with ?? [];
+    const extra = got.session.with.filter((w) => !had.some((h) => h.id === w.id));
+    if (!extra.length) return p;
+    changed = true;
+    const list = [...had, ...extra];
+    return { ...p, session: { ...p.session, with: [...list.filter((w) => w.role === 'opponent'), ...list.filter((w) => w.role !== 'opponent')] } };
+  });
+  return changed ? { ...prev, posts } : prev;
+}
+
+/**
  * Where a reply goes: under the top comment of the thread it answers (one
  * level, the way Instagram keeps it), answering the comment that was tapped.
  * Nothing when there is no such comment on this post or Instant.
@@ -4853,7 +4877,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     loadedProfiles.current.add(userId);
     const got = await remote.fetchUserPosts(userId);
     if (!got) return;
-    setState((prev) => addPosts(prev, got));
+    setState((prev) => addSessionNames(addPosts(prev, got), got.posts));
   }, []);
   /**
    * Search looking past the posts the app happens to hold (the newest page,
