@@ -71,7 +71,7 @@ export default function EditProfile() {
           {/* Your UTR or NTRP, where you'd look for it (Oct 4, owner): it opens the same rating step as Your game → Edit. */}
           <View style={styles.wrap}>
             <Text style={styles.label}>Rating</Text>
-            <Pressable accessibilityRole="button" accessibilityLabel={rating ? `Rating, ${rating}. Change it` : 'Rating. Add your rating'} onPress={() => router.push({ pathname: '/onboarding', params: { from: 'edit', step: '0' } })} style={({ pressed }) => [styles.box, pressed && { opacity: 0.7 }]}>
+            <Pressable accessibilityRole="button" accessibilityLabel={rating ? `Rating, ${rating}. Change it` : 'Rating. Add your rating'} onPress={() => router.push({ pathname: '/onboarding', params: { from: 'edit', step: '0', only: 'rating' } })} style={({ pressed }) => [styles.box, pressed && { opacity: 0.7 }]}>
               <Text style={[styles.value, !rating && styles.empty]} numberOfLines={1}>{rating ?? 'Add your rating'}</Text>
               <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
             </Pressable>

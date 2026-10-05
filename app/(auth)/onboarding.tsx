@@ -138,11 +138,14 @@ export default function Onboarding() {
   // The progress bar sits a calm step below the status bar; the buttons clear the home bar.
   const space = useGateSpace();
   // The profile's "finish setting up" card lands straight on the step it names.
-  const params = useLocalSearchParams<{ step?: string; from?: string }>();
+  const params = useLocalSearchParams<{ step?: string; from?: string; only?: string }>();
   const editing = params.from === 'edit';
+  // Edit Profile's Rating row: the rating alone, nothing else from the first step (Oct 5, owner:
+  // "when I click edit rating it takes me to a page where it's not just edit rating").
+  const ratingOnly = editing && params.only === 'rating';
   const forCoach = params.from === 'coach';
   // Finishing a skipped step from the profile's reminder card: the old full list, so that step is reachable.
-  const order = editing ? EDIT_STEPS : forCoach ? COACH_STEPS : params.from === 'profile' ? STEPS.map((_, i) => i) : JOIN_STEPS;
+  const order = ratingOnly ? [0] : editing ? EDIT_STEPS : forCoach ? COACH_STEPS : params.from === 'profile' ? STEPS.map((_, i) => i) : JOIN_STEPS;
   const startAt = Math.min(STEPS.length - 1, Math.max(0, Number(params.step) || 0));
   const [step, setStep] = useState(order.includes(startAt) ? startAt : order[0]);
   const position = Math.max(0, order.indexOf(step));
@@ -291,7 +294,7 @@ export default function Onboarding() {
     if (editing) {
       // Changing answers later: keep when you first joined, leave the setup reminders alone, and go back.
       actions.completeOnboarding({ ...profile, onboardedAt: existing?.onboardedAt });
-      goBack('/profile-details');
+      goBack(ratingOnly ? '/edit-profile' : '/profile-details');
       return;
     }
     if (forCoach) {
@@ -326,25 +329,29 @@ export default function Onboarding() {
   const back = () => setStep(order[position - 1] ?? step - 1);
 
   const last = position === order.length - 1;
-  const canContinue = step === 0 ? name.trim().length > 0 && ratingValid && !claiming : true;
+  const canContinue = step === 0 ? (ratingOnly ? ratingValid : name.trim().length > 0 && ratingValid && !claiming) : true;
 
   return (
     <View style={[styles.root, { paddingTop: space.header }]}>
       <View style={styles.head}>
-        <View style={styles.track}>
-          <Animated.View style={[styles.fill, { width: progress.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }) }]} />
-        </View>
+        {ratingOnly ? null : (
+          <View style={styles.track}>
+            <Animated.View style={[styles.fill, { width: progress.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }) }]} />
+          </View>
+        )}
         <View style={styles.headRow}>
-          <Text style={styles.title}>{STEPS[step].title}</Text>
-          <Text style={styles.stepLabel}>{position + 1} / {order.length}</Text>
+          <Text style={styles.title}>{ratingOnly ? 'Your rating' : STEPS[step].title}</Text>
+          {ratingOnly ? null : <Text style={styles.stepLabel}>{position + 1} / {order.length}</Text>}
         </View>
-        {STEPS[step].lead ? <Text style={styles.lead}>{STEPS[step].lead}</Text> : null}
+        {ratingOnly ? <Text style={styles.lead}>NTRP or UTR, whichever you know. It shows on your profile.</Text>
+          : STEPS[step].lead ? <Text style={styles.lead}>{STEPS[step].lead}</Text> : null}
       </View>
 
       <ScrollView ref={scrollRef} contentContainerStyle={styles.body} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <Animated.View style={{ gap: spacing.lg, opacity: fade }}>
           {step === 0 ? (
             <>
+              {ratingOnly ? null : <>
               <Field label="Name" value={name} onChangeText={setName} autoCapitalize="words" />
               {/* The box carries its own "Location" label; a second heading over it said the same thing twice. */}
               <LocationField value={location} onChange={(next, at) => { setLocation(next); setCityAt(at); }} />
@@ -358,6 +365,7 @@ export default function Onboarding() {
                   <Toggle value={!!currentUser.isPrivate} onChange={actions.setPrivateAccount} accessibilityLabel="Private account" />
                 </View>
               ) : null}
+              </>}
               <View style={styles.twoCol}>
                 <View style={{ flex: 1 }}>
                   <Group label="Rating system">
@@ -379,6 +387,7 @@ export default function Onboarding() {
                 </View>
               </View>
               <Text style={styles.note}>{ratingValid ? band.label : `Enter ${scale.min.toFixed(1)}–${scale.max.toFixed(1)}`}</Text>
+              {ratingOnly ? null : <>
               <Group label="Years playing">
                 <SegmentedControl<string>
                   value={yearsPlaying === undefined ? '' : String(yearsPlaying)}
@@ -405,6 +414,7 @@ export default function Onboarding() {
                   onSubmitEditing={() => void claimCode()}
                 />
               ) : null}
+              </>}
             </>
           ) : null}
 
@@ -531,7 +541,7 @@ export default function Onboarding() {
 
       <View style={[styles.footer, { paddingBottom: space.footer }]}>
         {position > 0 ? <Button label="Back" variant="ghost" onPress={back} />
-          : editing ? <Button label="Cancel" variant="ghost" onPress={() => goBack('/profile-details')} /> : <View />}
+          : editing ? <Button label="Cancel" variant="ghost" onPress={() => goBack(ratingOnly ? '/edit-profile' : '/profile-details')} /> : <View />}
         <View style={styles.footerRight}>
           {editing ? (
             <>

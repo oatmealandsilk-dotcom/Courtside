@@ -149,6 +149,15 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   const [tabWidth, setTabWidth] = useState(0);
   const underline = useTabUnderline(sectionIndex, 2, tabWidth);
   const [search, setSearch] = useState('');
+  const [searching, setSearching] = useState(false);
+  const searchInput = useRef<TextInput | null>(null);
+  /** Out of the search: the box cleared, the keyboard away, the page back at the top (the map). */
+  const cancelSearch = () => {
+    setSearch('');
+    searchInput.current?.blur();
+    setSearching(false);
+    pageRef.current?.scrollTo({ y: 0, animated: true });
+  };
   const location = useLocationToggle();
   // Already sharing your location but never asked who can see you on the
   // map (migration 63; from before it, or an older version of the app): the
@@ -342,9 +351,22 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   const yourCourts = <YourCourts from={firstCentre} />;
   const courtsBlock = <CourtsNear center={firstCentre} />;
   const content = (section:string) => (section === 'players' ? <View style={{ gap: 16 }}>
-        <View style={styles.searchWrap}>
-          <Ionicons name="search" size={17} color={colors.textFaint} style={styles.searchIcon} />
-          <TextInput accessibilityLabel="Search players, courts or places" placeholder="Search players, courts or places" placeholderTextColor={colors.textFaint} value={search} onChangeText={setSearch} style={styles.search} />
+        {/* Cancel beside the box while you search, the way iPhone search boxes do: one tap clears it, puts the keyboard away and brings the map back (Oct 5, owner: "there should be an easier way to exit here"). */}
+        <View style={styles.searchRow}>
+          <View style={styles.searchWrap}>
+            <Ionicons name="search" size={17} color={colors.textFaint} style={styles.searchIcon} />
+            <TextInput ref={searchInput} accessibilityLabel="Search players, courts or places" placeholder="Search players, courts or places" placeholderTextColor={colors.textFaint} value={search} onChangeText={setSearch} onFocus={() => setSearching(true)} onBlur={() => setSearching(false)} returnKeyType="search" style={[styles.search, search ? styles.searchWithClear : null]} />
+            {search ? (
+              <Pressable accessibilityRole="button" accessibilityLabel="Clear search" hitSlop={10} onPress={() => setSearch('')} style={styles.searchClear}>
+                <Ionicons name="close-circle" size={18} color={colors.textFaint} />
+              </Pressable>
+            ) : null}
+          </View>
+          {searching || search ? (
+            <Pressable accessibilityRole="button" accessibilityLabel="Cancel search" hitSlop={8} onPress={cancelSearch}>
+              <Text style={styles.searchCancel}>Cancel</Text>
+            </Pressable>
+          ) : null}
         </View>
         {currentUser && !search ? (section === 'players'
           ? <NearbyMap me={currentUser} players={players} at={detectedCoords} locationOn={location.locationOn} locating={location.locating} onToggleLocation={location.toggle} onOpen={id => router.push(`/user/${id}`)} onExpand={() => router.push('/map')} />
@@ -663,7 +685,11 @@ const styleDefinitions = StyleSheet.create({
   moreText: { ...typography.smallStrong, color: colors.text },
   section: { flex: 1, alignItems: 'center', paddingVertical: 18 },
   sectionUnderline: { position: 'absolute', left: 0, bottom: -1, height: 2, backgroundColor: colors.brand, borderRadius: 1 },
-  searchWrap: { position: 'relative', justifyContent: 'center' },
+  searchRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  searchWrap: { flex: 1, position: 'relative', justifyContent: 'center' },
+  searchWithClear: { paddingRight: 40 },
+  searchClear: { position: 'absolute', right: 14 },
+  searchCancel: { fontSize: 16, ...font('600'), color: colors.brand },
   searchIcon: { position: 'absolute', left: 16, zIndex: 1 },
   search: { ...typography.body, fontSize: 16, color: colors.text, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: radius.pill, paddingLeft: 42, paddingRight: spacing.lg, paddingVertical: 12, ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : {}) },
   mapStandIn: { height: 330, borderRadius: radius.xl, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
