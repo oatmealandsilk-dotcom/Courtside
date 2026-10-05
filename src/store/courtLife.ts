@@ -272,12 +272,26 @@ export function useCourtLife<S extends CourtLifeState & Reads>(
     const me = stateRef.current.currentUserId;
     if (!me) return;
     haptics.tap();
+    // Where you were, so a check-out that does not go through can put you back there.
+    const wasNow = Object.keys(stateRef.current.courtNow).filter((id) => stateRef.current.courtNow[id]?.youHere);
+    const wasFollowed = (stateRef.current.followedCourts ?? []).filter((c) => c.youHere).map((c) => c.courtId);
     setState((prev) => ({
       ...prev,
       courtNow: Object.fromEntries(Object.entries(prev.courtNow).map(([id, row]) => [id, { ...row, youHere: false }])),
       followedCourts: prev.followedCourts?.map((c) => ({ ...c, youHere: false })) ?? null,
     }));
-    if (live(me)) await remote.checkOutOfCourt();
+    if (!live(me)) return;
+    const ok = await remote.checkOutOfCourt().catch(() => false);
+    if (ok || stateRef.current.currentUserId !== me) return;
+    const s = stateRef.current;
+    // Checked in somewhere since: that stands.
+    if (Object.values(s.courtNow).some((r) => r.youHere) || s.followedCourts?.some((c) => c.youHere)) return;
+    setState((prev) => ({
+      ...prev,
+      courtNow: Object.fromEntries(Object.entries(prev.courtNow).map(([id, row]) => [id, wasNow.includes(id) ? { ...row, youHere: true } : row])),
+      followedCourts: prev.followedCourts?.map((c) => (wasFollowed.includes(c.courtId) ? { ...c, youHere: true } : c)) ?? null,
+    }));
+    showToast({ title: 'You’re still checked in', body: 'Checking out didn’t go through. Try again.', icon: 'alert-circle-outline' });
   }, [stateRef, setState, live]);
 
   const loadCourtRings = useCallback(async (box: MapBox) => {

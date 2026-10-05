@@ -2753,9 +2753,11 @@ export const remote = {
     return { error: /adults_only/.test(said) ? 'adults_only' : /location_off/.test(said) ? 'location_off' : /too_far/.test(said) ? 'too_far'
       : /closed_court/.test(said) ? 'closed_court' : /slow down/.test(said) ? 'slow_down' : /hidden/.test(said) ? 'hidden' : 'failed' };
   },
-  async checkOutOfCourt() {
+  /** False when it did not go through (you still show as playing there). */
+  async checkOutOfCourt(): Promise<boolean> {
     const { error } = await need().rpc('check_out_of_court');
     if (error) fail('check out')(error);
+    return !error;
   },
   /** Court rings in a box of the map: real courts with a post or hit there this week that you may see. */
   async fetchCourtRings(box: { minLat: number; minLng: number; maxLat: number; maxLng: number }): Promise<CourtRing[] | null> {
