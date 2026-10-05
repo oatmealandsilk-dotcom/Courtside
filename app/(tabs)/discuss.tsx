@@ -291,7 +291,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   const ownSpot = detectedCoords ?? (currentUserId && lastSeen[currentUserId] ? { lat: lastSeen[currentUserId].lat, lng: lastSeen[currentUserId].lng } : null);
   const upToday = useUpToday({ users, lastSeen, me: currentUserId, from: ownSpot, blockedIds });
   // A teen (migration 78) has it too: only friends who follow each other with
-  // them are in it, and only those friends see theirs. Never under 16.
+  // them are in it, and only those friends see theirs. Under 16s too (migration 119), the same way.
   const teen = onTeenMap(currentUser, teenMap);
   const showUpToday = !!currentUser && (!notKnownAdult(currentUser) || teen);
   const toggleOpen = useOpenToHitToggle();

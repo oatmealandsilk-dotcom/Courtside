@@ -10,7 +10,6 @@ import { useApp } from '@/store/AppContext';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { openLegal } from '@/lib/legal';
 import { askWhoSeesYou, canChooseVisibility, onTeenMap, visibilityLabel } from '@/features/players/mapPrivacy';
-import { notKnownAdult } from '@/features/players/age';
 import { colors, spacing, typography } from '@/theme';
 
 export default function PrivacyCentre() {
@@ -55,17 +54,8 @@ export default function PrivacyCentre() {
           </View>
         ) : null}
         {/* Who sees you on the map (migration 63): the same screen as the map's own location button.
-            A teen (migration 78) sees it too: friends who follow them back, or only them. */}
+            A teen (migration 78), under 16 too since 119, sees it as well: friends who follow them back, or only them. */}
         {canChooseVisibility(mapLive, currentUser, teenMap) ? link('location-outline', 'Who can see you on the map', visibilityLabel(mapVisibility, onTeenMap(currentUser, teenMap)), () => { void askWhoSeesYou(onTeenMap(currentUser, teenMap) && mapVisibility === null ? 'first' : 'manage'); }) : null}
-        {currentUser && teenMap === 'under16' && notKnownAdult(currentUser) ? (
-          <View style={[styles.row, styles.rowBorder]}>
-            <Ionicons name="location-outline" size={19} color={colors.textMuted} />
-            <View style={{ flex: 1, gap: 1 }}>
-              <Text style={styles.rowLabel}>Players map</Text>
-              <Text style={styles.rowDetail}>Off until you turn 16. No one sees where you are.</Text>
-            </View>
-          </View>
-        ) : null}
         {link('close-circle-outline', 'Blocked', String(blockedIds.length || 'None'), () => router.push('/blocked'))}
         {link('volume-mute-outline', 'Muted', String(mutedIds.length || 'None'), () => router.push('/muted'))}
         {link('time-outline', 'Your activity', undefined, () => router.push('/activity'))}

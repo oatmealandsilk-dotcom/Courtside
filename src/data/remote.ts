@@ -490,9 +490,10 @@ export interface UserState {
   /**
    * The map's teen rule (migration 78): undefined on a database without it.
    * 'on': you may share with friends who follow you back (if you are not a
-   * known adult); 'under16': your birthday says under 16, so never on the map.
+   * known adult). Since migration 119 that includes under 16s, the same
+   * rule as 16 and 17 year olds.
    */
-  teenMap?: 'on' | 'under16';
+  teenMap?: 'on';
   /** Your own "up for a hit today" when it is kept privately (not a known adult; migration 78). */
   ownOpenUntil?: string | null;
 }
@@ -627,18 +628,10 @@ const toUserState = (r: UserStateRow): UserState => ({
   constraints: Array.isArray(r.private_profile?.constraints) ? r.private_profile!.constraints : undefined,
   // The key is there only once migration 63 has run; null means never chosen.
   mapVisibility: 'map_visibility' in r ? asVisibility(r.map_visibility) : undefined,
-  // The key is there only once migration 78 has run.
-  teenMap: 'map_answered_at' in r ? (under16(r.birth_date) ? 'under16' : 'on') : undefined,
+  // The key is there only once migration 78 has run. Under 16s too (migration 119): the same rule as 16 and 17 year olds.
+  teenMap: 'map_answered_at' in r ? 'on' : undefined,
   ownOpenUntil: 'open_to_hit_until' in r ? r.open_to_hit_until ?? null : undefined,
 });
-/** A birthday (yyyy-mm-dd) less than 16 years ago. */
-function under16(dob: string | null | undefined): boolean {
-  if (!dob || !/^\d{4}-\d{2}-\d{2}/.test(dob)) return false;
-  const [y, m, d] = dob.slice(0, 10).split('-').map(Number);
-  const now = new Date();
-  const sixteenth = new Date(y + 16, m - 1, d);
-  return sixteenth.getTime() > new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-}
 const asVisibility = (v: unknown): MapVisibility | null => (v === 'nearby' || v === 'mutuals' || v === 'none' ? v : null);
 
 interface CoachApplicationRow {

@@ -439,8 +439,8 @@ interface AppState extends Bootstrap, CourtLifeState, FeedGroupsState {
   /**
    * The map's teen rule (migration 78), for an account not known to be an
    * adult: 'off' until the database has it (on the map only adults, as
-   * before), 'on' (shared only between friends who follow each other), or
-   * 'under16' (never on the map).
+   * before), or 'on' (shared only between friends who follow each other;
+   * under 16s too since migration 119).
    */
   teenMap: TeenMap;
   /** New on CourtSide as the server lists it for you (migration 63), newest first; null until asked, or before 63. */
