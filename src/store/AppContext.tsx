@@ -1588,6 +1588,26 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // is open on screen when it happens (see removedChat). Kept with who you
   // were, so another account on this phone never sees them.
   const removedChats = useRef(new Map<ID, { me: ID; chat: { conversation: Conversation; messages: Message[] } }>());
+  // Messages you deleted for yourself, by account: every later fetch (a chat
+  // opened, a catch-up, a reply's original) leaves them out, not only the
+  // first load. Filled by that load, and added to the moment you delete one,
+  // before the server has it.
+  const hiddenMessages = useRef(new Map<ID, Set<ID>>());
+  const hiddenFor = (me: ID) => {
+    let set = hiddenMessages.current.get(me);
+    if (!set) { set = new Set(); hiddenMessages.current.set(me, set); }
+    return set;
+  };
+  const isHidden = (me: ID, messageId: ID) => !!hiddenMessages.current.get(me)?.has(messageId);
+  const unhidden = (me: ID, list: Message[]) => {
+    const set = hiddenMessages.current.get(me);
+    return set?.size ? list.filter((m) => !set.has(m.id)) : list;
+  };
+  const chatUnhidden = (me: ID, got: { conversation: Conversation; messages: Message[] }) => {
+    const set = hiddenMessages.current.get(me);
+    if (!set?.size) return got;
+    return { conversation: { ...got.conversation, messageIds: got.conversation.messageIds.filter((id) => !set.has(id)) }, messages: got.messages.filter((m) => !set.has(m.id)) };
+  };
   /**
    * One chat fetched as it stands now and laid over what is here: who is in
    * it, its name, photo, admins and your mute, and its newest messages. A
@@ -1612,7 +1632,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       showToast({ title: `You’re no longer in ${groupName(had, stateRef.current.users, me)}`, icon: 'people-outline' });
       return;
     }
-    setState((prev) => applyFetchedChat(prev, got, me, open ? conversationId : undefined));
+    const kept = chatUnhidden(me, got);
+    setState((prev) => applyFetchedChat(prev, kept, me, open ? conversationId : undefined));
   }, []);
   // Whatever was sent while the phone slept or the connection was down, in one small ask:
   // every message newer than the newest one here.
@@ -1621,12 +1642,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!me || !UUID.test(me) || !isSupabaseConfigured) return;
     const newest = stateRef.current.messages.reduce((t, m) => (m.createdAt > t ? m.createdAt : t), '');
     const since = new Date((newest ? Date.parse(newest) : Date.now() - 86_400_000) - 5000).toISOString();
-    const fresh = await remote.fetchMessagesSince(since).catch(() => [] as Message[]);
+    const fresh = unhidden(me, await remote.fetchMessagesSince(since).catch(() => [] as Message[]));
     if (!fresh.length) return;
     const known = new Set(stateRef.current.conversations.map((c) => c.id));
     const strangers = [...new Set(fresh.map((m) => m.conversationId).filter((cid) => !known.has(cid)))];
     // A chat someone else started (or a group you were added to) while you were away arrives whole.
-    const started = (await Promise.all(strangers.map((cid) => remote.fetchConversation(me, cid).catch(() => null)))).filter(Boolean) as { conversation: Conversation; messages: Message[] }[];
+    const started = (await Promise.all(strangers.map((cid) => remote.fetchConversation(me, cid).catch(() => null)))).filter(Boolean).map((got) => chatUnhidden(me, got!));
     setState((prev) => {
       let next = started.reduce((acc, got) => (acc.conversations.some((c) => c.id === got.conversation.id) ? acc : { ...acc, conversations: [got.conversation, ...acc.conversations], messages: [...acc.messages, ...got.messages.filter((m) => !acc.messages.some((p) => p.id === m.id))] }), prev);
       next = mergeFetchedMessages(next, fresh.filter((m) => next.conversations.some((c) => c.id === m.conversationId)), me);
@@ -1665,7 +1686,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           retry = setTimeout(() => setLiveEpoch((n) => n + 1), wait);
         },
         added: (message) => {
-          if (stateRef.current.messages.some((m) => m.id === message.id)) return;
+          if (stateRef.current.messages.some((m) => m.id === message.id) || isHidden(me, message.id)) return;
           const known = stateRef.current.conversations.some((c) => c.id === message.conversationId);
           if (known) {
             // An event line ("Mira added Dev", "Dev named the group…") is never unread.
@@ -1684,8 +1705,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
             else if (message.senderId !== me) heardMessage(message);
             return;
           }
-          void remote.fetchConversation(me, message.conversationId).then((got) => {
-            if (!got) return;
+          void remote.fetchConversation(me, message.conversationId).then((fetched) => {
+            if (!fetched) return;
+            const got = chatUnhidden(me, fetched);
             setState((prev) => prev.conversations.some((c) => c.id === got.conversation.id) ? prev : {
               ...prev,
               conversations: [got.conversation, ...prev.conversations],
@@ -1833,7 +1855,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
       const snap = snapshotIds.current;
       snapshotIds.current = null;
-      setState((prev) => mergeRemote(prev, data, me, email, snap, false));
+      const hidden = hiddenFor(me);
+      for (const id of data.hiddenMessageIds ?? []) hidden.add(id);
+      // One deleted for yourself a moment ago, before the server had it, stays gone too.
+      const shown = { ...data, messages: unhidden(me, data.messages) };
+      setState((prev) => mergeRemote(prev, shown, me, email, snap, false));
       // The next open starts from this, straight after the logo.
       setTimeout(() => { const s = stateRef.current; if (s.currentUserId === me && s.remoteLoaded) void saveSnapshot(me, snapshotOf(s, me)); }, 2500);
       // An ask that arrived while the app was closed gets its notification now.
@@ -2656,7 +2682,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (conversationId) {
       setState((prev) => ({ ...prev, hitRequests: prev.hitRequests.map((h) => (h.id === hitId ? { ...h, conversationId } : h)) }));
       // The hit's chat was just made (or joined) on the server: bring it in so it can open.
-      const got = await remote.fetchConversation(me, conversationId);
+      const fetched = await remote.fetchConversation(me, conversationId);
+      const got = fetched && chatUnhidden(me, fetched);
       if (got) setState((prev) => ({
         ...prev,
         conversations: [got.conversation, ...prev.conversations.filter((c) => c.id !== conversationId)],
@@ -4004,9 +4031,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const oldest = have.reduce((a, b) => (a.createdAt < b.createdAt ? a : b));
     const got = await remote.fetchOlderMessages(me, conversationId, oldest.createdAt);
     if (!got || !got.messages.length) return 0;
+    const page = unhidden(me, got.messages);
     setState((prev) => {
       const known = new Set(prev.messages.map((m) => m.id));
-      const fresh = got.messages.filter((m) => !known.has(m.id));
+      const fresh = page.filter((m) => !known.has(m.id));
       if (!fresh.length) return prev;
       const messages = [...fresh, ...prev.messages];
       const inChat = messages.filter((m) => m.conversationId === conversationId).sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1)).map((m) => m.id);
@@ -4824,6 +4852,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const me = requireUser();
     const message = stateRef.current.messages.find((m) => m.id === messageId);
     haptics.untap();
+    // Kept out of every fetch from now on, even one that lands before the server has it.
+    hiddenFor(me).add(messageId);
     setState((prev) => dropMessage(prev, messageId));
     if (!live(me, messageId)) return;
     // Your own photo message that never went (it shows "Not sent"): only this
@@ -5141,7 +5171,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const s = stateRef.current;
     if (s.messages.some((m) => m.id === messageId)) return true;
     const me = s.currentUserId;
-    if (!me || !isSupabaseConfigured || !UUID.test(messageId)) return false;
+    // One you deleted for yourself stays gone: its quote says it is no longer available.
+    if (!me || !isSupabaseConfigured || !UUID.test(messageId) || isHidden(me, messageId)) return false;
     const got = await remote.fetchMessage(me, messageId).catch(() => null);
     if (!got) return false;
     setState((prev) => (prev.messages.some((m) => m.id === got.id) ? prev : { ...prev, messages: [...prev.messages, got] }));

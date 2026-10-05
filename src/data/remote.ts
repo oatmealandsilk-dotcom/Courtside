@@ -351,6 +351,8 @@ export interface RemoteData {
    * so itself.
    */
   contactsFindableReady?: boolean;
+  /** Messages you deleted for yourself, so a chat fetched again later leaves them out too. Missing in saved copies. */
+  hiddenMessageIds?: ID[];
 }
 
 interface SessionRow { id: string; user_id: string; day: string; minutes: number; kind: PracticeSession['kind']; won: boolean | null; opponent: string | null; note: string | null; created_at: string; activity_id?: string | null; from_session_id?: string | null; sets?: unknown }
@@ -940,6 +942,7 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
     hitRequests: withInvites(((hitRows.data ?? []) as HitRow[]).map(toHit), hitInviteRows.error ? null : (hitInviteRows.data as { hit_id: string; user_id: string }[])),
     activities: activityRows.error ? [] : ((activityRows.data ?? []) as ActivityRow[]).map(toActivity),
     ...(tagsReady === null ? {} : { sessionTagsReady: tagsReady }),
+    hiddenMessageIds: [...hidden],
     ...coaching,
   };
 }
