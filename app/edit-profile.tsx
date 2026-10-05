@@ -4,9 +4,10 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { router } from 'expo-router';
 import { ProfilePhotoPicker } from '@/components/ProfilePhotoPicker';
 import { CourtSpinner } from '@/components/CourtSpinner';
-import { Button, Field, Screen } from '@/components/ui';
+import { Button, Field, Screen, SegmentedControl } from '@/components/ui';
+import { SCALES, ratingBand, roundRating } from '@/features/players/ratingScales';
+import * as haptics from '@/lib/haptics';
 import { LocationField } from '@/components/LocationField';
-import { levelBadge } from '@/lib/badges';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, radius, spacing, typography } from '@/theme';
@@ -44,8 +45,27 @@ export default function EditProfile() {
       setCityAt(currentUser.cityAt ?? null);
     }
   }, [currentUser?.name, currentUser?.location]); // eslint-disable-line react-hooks/exhaustive-deps
-  // "UTR 8.5", "NTRP 4.0"; nothing when no rating was ever picked.
-  const rating = currentUser?.profile?.rating ? levelBadge(currentUser.profile).label : null;
+  // Your rating, edited right here (Oct 5, owner: no separate page for it). Saved with the rest by Save changes.
+  const prof = currentUser?.profile;
+  const hadRating = !!prof?.rating && prof.skillSystem !== 'ITF';
+  const [system, setSystem] = useState<'NTRP' | 'UTR'>(prof?.skillSystem === 'UTR' ? 'UTR' : 'NTRP');
+  const [ratingText, setRatingText] = useState(hadRating ? prof!.rating!.toFixed(1) : '');
+  const scale = SCALES[system];
+  const typed = Number(ratingText.replace(',', '.'));
+  const ratingEmpty = ratingText.trim() === '';
+  const ratingOk = !ratingEmpty && Number.isFinite(typed) && typed >= scale.min && typed <= scale.max;
+  const changeSystem = (next: 'NTRP' | 'UTR') => {
+    if (next === system) return;
+    haptics.tap();
+    setSystem(next);
+    // A number on one scale means nothing on the other: start from the middle of the new one.
+    setRatingText((next === 'UTR' ? 6 : 3.5).toFixed(1));
+  };
+  const saveRating = () => {
+    if (!prof || !ratingOk) return;
+    const next = roundRating(typed, scale.decimals);
+    if (next !== prof.rating || system !== prof.skillSystem) actions.completeOnboarding({ ...prof, skillSystem: system, rating: next });
+  };
 
   return (
     <Screen title="Edit Profile" onBack={() => router.back()}>
@@ -68,17 +88,26 @@ export default function EditProfile() {
               <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
             </Pressable>
           </View>
-          {/* Your UTR or NTRP, where you'd look for it (Oct 4, owner): it opens the same rating step as Your game → Edit. */}
-          <View style={styles.wrap}>
-            <Text style={styles.label}>Rating</Text>
-            <Pressable accessibilityRole="button" accessibilityLabel={rating ? `Rating, ${rating}. Change it` : 'Rating. Add your rating'} onPress={() => router.push({ pathname: '/onboarding', params: { from: 'edit', step: '0', only: 'rating' } })} style={({ pressed }) => [styles.box, pressed && { opacity: 0.7 }]}>
-              <Text style={[styles.value, !rating && styles.empty]} numberOfLines={1}>{rating ?? 'Add your rating'}</Text>
-              <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
-            </Pressable>
-          </View>
+          {/* Your UTR or NTRP, right here: the scale, the number, and what it means. */}
+          {prof ? (
+            <View style={styles.wrap}>
+              <Text style={styles.label}>Rating</Text>
+              <View style={styles.ratingRow}>
+                <View style={{ flex: 1 }}>
+                  <SegmentedControl<'NTRP' | 'UTR'> value={system} onChange={changeSystem} segments={[{ value: 'NTRP', label: 'NTRP' }, { value: 'UTR', label: 'UTR' }]} />
+                </View>
+                <View style={styles.ratingBox}>
+                  <Field label="" accessibilityLabel={`${system} rating`} value={ratingText} onChangeText={setRatingText} placeholder={system === 'UTR' ? '6.0' : '3.5'} keyboardType="decimal-pad" />
+                </View>
+              </View>
+              <Text style={[styles.ratingNote, !ratingEmpty && !ratingOk && styles.ratingBad]}>
+                {ratingOk ? ratingBand(system, roundRating(typed, scale.decimals)) : ratingEmpty ? 'Add yours: it shows on your profile.' : `Enter ${scale.min.toFixed(1)}–${scale.max.toFixed(1)}`}
+              </Text>
+            </View>
+          ) : null}
           <Field label="Bio" value={bio} onChangeText={setBio} multiline />
           <LocationField value={location} onChange={(next, at) => { setLocation(next); setCityAt(at); }} />
-          <Button label="Save changes" disabled={!name.trim()} onPress={() => { actions.updateIdentity({ name: name.trim(), bio: bio.trim(), location: location.trim(), cityAt: location.trim() ? cityAt : null }); router.back(); }} />
+          <Button label="Save changes" disabled={!name.trim() || (!ratingEmpty && !ratingOk)} onPress={() => { actions.updateIdentity({ name: name.trim(), bio: bio.trim(), location: location.trim(), cityAt: location.trim() ? cityAt : null }); saveRating(); router.back(); }} />
         </View>
       )}
     </Screen>
@@ -92,4 +121,8 @@ const styleDefinitions = StyleSheet.create({
   box: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
   value: { flex: 1, fontSize: 15, color: colors.text },
   empty: { color: colors.textMuted },
+  ratingRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  ratingBox: { width: 96 },
+  ratingNote: { ...typography.small, color: colors.textMuted },
+  ratingBad: { color: colors.danger },
 });

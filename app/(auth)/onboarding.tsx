@@ -8,6 +8,7 @@ import { useAndroidBack } from '@/lib/androidBack';
 import { LocationField } from '@/components/LocationField';
 import { PermissionRows } from '@/components/PermissionRows';
 import { Button, Collapse, Field, SegmentedControl, Toggle } from '@/components/ui';
+import { SCALES } from '@/features/players/ratingScales';
 import { writeSkipped, type SetupStep } from '@/features/onboarding/setupProgress';
 import { replaceWithStart } from '@/features/navigation/startTab';
 import { peekShareTarget } from '@/features/invite/referral';
@@ -28,48 +29,6 @@ import type {
   SurfacePreference,
 } from '@/data/types';
 import { colors, radius, spacing, typography } from '@/theme';
-
-/* ------------------------------ Rating scales ----------------------------- */
-
-interface Scale {
-  min: number;
-  max: number;
-  decimals: number;
-  note: string;
-  /** Sorted low to high: the first band the rating fits under describes it. */
-  bands: { upTo: number; label: string }[];
-}
-
-const SCALES: Record<'NTRP' | 'UTR', Scale> = {
-  NTRP: {
-    min: 1.5, max: 7.0, decimals: 1,
-    note: 'USTA scale, 1.5–7.0 in half points.',
-    bands: [
-      { upTo: 2.5, label: 'Learning to rally' },
-      { upTo: 3.0, label: 'Consistent at medium pace' },
-      { upTo: 3.5, label: 'Dependable strokes' },
-      { upTo: 4.0, label: 'Constructing points' },
-      { upTo: 4.5, label: 'Pace and spin on demand' },
-      { upTo: 5.0, label: 'A weapon and a plan' },
-      { upTo: 5.5, label: 'Tournament standard' },
-      { upTo: 7.0, label: 'Sectional and above' },
-    ],
-  },
-  UTR: {
-    min: 1.0, max: 16.5, decimals: 1,
-    note: 'Universal Tennis Rating, to one decimal, as shown on your UTR profile.',
-    bands: [
-      { upTo: 2.0, label: 'Starting out' },
-      { upTo: 4.0, label: 'Developing' },
-      { upTo: 6.0, label: 'Club level' },
-      { upTo: 8.0, label: 'Strong club / varsity' },
-      { upTo: 10.0, label: 'Advanced junior / D3' },
-      { upTo: 12.0, label: 'Division I' },
-      { upTo: 14.0, label: 'Professional pathway' },
-      { upTo: 16.5, label: 'Tour level' },
-    ],
-  },
-};
 
 const YEARS = [
   { label: '< 1', value: 0 },

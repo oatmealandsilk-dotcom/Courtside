@@ -78,6 +78,9 @@ export default function RootLayout() {
           <Stack.Screen name="index" options={{ animation: 'fade' }} />
           <Stack.Screen name="(auth)" options={{ animation: 'fade' }} />
           <Stack.Screen name="(tabs)" options={{ animation: 'none' }} />
+          {/* Edit Profile always slides away to the right, however you leave it (Oct 5, owner: it sometimes just vanished
+              when a tab was tapped, and slid when Back or Save was used). */}
+          <Stack.Screen name="edit-profile" options={{ animation: 'slide_from_right' }} />
           {/* The Create box brings its own entrance (see compose.tsx); the page itself just fades. */}
           <Stack.Screen name="compose" options={{ presentation: 'transparentModal', animation: 'fade', contentStyle: { backgroundColor: 'transparent' } }} />
           <Stack.Screen name="ask" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
