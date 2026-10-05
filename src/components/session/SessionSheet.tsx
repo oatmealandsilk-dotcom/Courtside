@@ -260,7 +260,7 @@ const styleDefinitions = StyleSheet.create({
   pending: { opacity: 0.6 },
   waiting: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   waitingText: { ...font('500'), fontSize: 13, color: colors.textMuted },
-  vs:{ ...font('400'), fontSize: 15, color: colors.textMuted },
+  vs: { ...font('400'), fontSize: 15, color: colors.textMuted },
   handle: { ...font('600'), fontSize: 15, color: colors.text, flexShrink: 1 },
   court: { flexDirection: 'row', alignItems: 'center', gap: 4, maxWidth: 130 },
   courtText: { ...font('500'), fontSize: 13, color: colors.textMuted, flexShrink: 1 },
