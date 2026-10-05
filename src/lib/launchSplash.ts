@@ -10,6 +10,9 @@ import * as SplashScreen from 'expo-splash-screen';
  */
 let done = false;
 
+/** The longest the phone's picture (or the app's copy of it) is ever waited on. */
+export const LAUNCH_MAX_MS = 2500;
+
 export function hideLaunch() {
   if (done) return;
   done = true;
@@ -20,5 +23,5 @@ export function hideLaunch() {
 if (Platform.OS !== 'web') {
   SplashScreen.preventAutoHideAsync().catch(() => undefined);
   // Never longer than this, whatever happens (a link that opens elsewhere, a slow phone).
-  setTimeout(hideLaunch, 2500);
+  setTimeout(hideLaunch, LAUNCH_MAX_MS);
 }

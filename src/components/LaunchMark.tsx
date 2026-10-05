@@ -1,7 +1,6 @@
 import React from 'react';
-import { StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Platform, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 
-import { BrandMark } from '@/components/BrandMark';
 import { font } from '@/theme';
 
 /*
@@ -12,41 +11,80 @@ import { font } from '@/theme';
  * phone draws it to cover the screen; every number below is a measurement of
  * it (assets/splash.png) carried through that same cover fit. Drawn shapes and
  * text appear on the first frame, where a picture loads a moment later.
+ *
+ * Measured again with Python + PIL (Oct 4, owner: "should not be misalignment
+ * even if it's a tiny bit"), in picture pixels:
+ * - Mark: rows 1229–1411, leaning 14°. Halfway down (row 1320) the frame spans
+ *   556.0–683.0, sides 18.9 wide, bars 19 tall, the bar across on rows 1312–1327;
+ *   the sideline spans 710.0–729.0. BrandMark's proportions are a touch off this
+ *   (the old fit was 2 px short, the bar 1 px thin), so it is drawn from these.
+ * - Name: ink 414–870, flat bottoms on 1575.0. The picture sets it in an
+ *   Arial-like bold, not Inter, so no Inter size matches every letter; the
+ *   closest overlay (least squares, whole word) is Inter Bold 99 px, tracking
+ *   −0.0285 em, baseline 1575.1, 1.2 px right of the middle.
+ * - Line: Inter Bold, not SemiBold (ink within 1% of Bold, 9% over SemiBold),
+ *   caps 2461.0–2487.0: 35.6 px, tracking 0.09 em, on the middle (the old fit
+ *   sat 1 px high).
+ * iOS adds the letter spacing after the last letter too, which put a centred
+ * line half a spacing off (the line 1.7 px left); typeAt puts that half back.
  */
 const PIC_W = 1284;
 const PIC_H = 2778;
-const MARK_TOP = 1230; // the mark's frame, top
-const MARK_H = 180; // the mark's frame, height
-const NAME_CAP_TOP = 1502; // top of the capital C
-const NAME_CAP_H = 72;
-const LINE_CAP_TOP = 2460; // top of GROWING THE GAME
-const LINE_CAP_H = 26;
-const CAP = 0.727; // Inter's capital height, as a share of its size
-const ASCENT = 0.96875; // Inter's ascent, as a share of its size
+// The mark, in picture pixels, as it stands halfway down (the lean pivots there).
+const MARK_TOP = 1229;
+const MARK_H = 182;
+const FRAME_LEFT = 556.04;
+const FRAME_W = 126.92;
+const FRAME_SIDE = 18.95; // sides 18.93, bars 19: one width for both
+const BAR_TOP = 1312;
+const BAR_H = 15;
+const SLASH_LEFT = 710.04;
+const SLASH_W = 18.92;
+// The two lines of type: size and baseline in picture pixels, tracking in ems,
+// and where the middle of the line sits (the picture's own middle is 642).
+const NAME = { size: 99, tracking: -0.0285, baseline: 1575.1, centre: 643.2 };
+const LINE = { size: 35.6, tracking: 0.09, baseline: 2486.95, centre: 642.1 };
+// Inter's ascent and descent (2048 units to the em) and the line height used. iOS
+// centres the letters in a line taller than the font's own, half the extra above.
+const ASCENT = 1984 / 2048;
+const DESCENT = 494 / 2048;
+const LINE_HEIGHT = 1.2105;
+
+/** The style that puts one line of the picture's type on its measured baseline and middle. */
+function typeAt(spec: { size: number; tracking: number; baseline: number; centre: number }, s: number, oy: number) {
+  const fontSize = spec.size * s;
+  const letterSpacing = spec.tracking * fontSize;
+  const shift = (spec.centre - PIC_W / 2) * s + (Platform.OS === 'ios' ? letterSpacing / 2 : 0);
+  return {
+    top: oy + spec.baseline * s - (ASCENT + (LINE_HEIGHT - ASCENT - DESCENT) / 2) * fontSize,
+    left: shift,
+    right: -shift,
+    fontSize,
+    lineHeight: fontSize * LINE_HEIGHT,
+    letterSpacing,
+  };
+}
 
 export function LaunchMark({ ink, faint, line = 'Growing the game' }: { ink: string; faint: string; line?: string }) {
   const { width: W, height: H } = useWindowDimensions();
   const s = Math.max(W / PIC_W, H / PIC_H);
+  const ox = (W - PIC_W * s) / 2;
   const oy = (H - PIC_H * s) / 2;
-  // BrandMark draws its frame 0.72 of its size tall, starting 0.14 down.
-  const mark = (MARK_H * s) / 0.72;
-  const markTop = oy + MARK_TOP * s - 0.14 * mark;
-  const nameSize = (NAME_CAP_H * s) / CAP;
-  const nameTop = oy + NAME_CAP_TOP * s - (ASCENT - CAP) * nameSize;
-  const lineSize = (LINE_CAP_H * s) / CAP;
-  const lineTop = oy + LINE_CAP_TOP * s - (ASCENT - CAP) * lineSize;
+  const top = oy + MARK_TOP * s;
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-      <View style={{ position: 'absolute', top: markTop, left: (W - mark) / 2 }}>
-        <BrandMark size={mark} color={ink} />
+      <View style={[styles.lean, { top, height: MARK_H * s, left: ox + FRAME_LEFT * s, width: FRAME_W * s, borderWidth: FRAME_SIDE * s, borderColor: ink }]}>
+        <View style={{ position: 'absolute', left: 0, right: 0, top: (BAR_TOP - MARK_TOP - FRAME_SIDE) * s, height: BAR_H * s, backgroundColor: ink }} />
       </View>
-      <Text allowFontScaling={false} style={[styles.name, { top: nameTop + 0.012 * nameSize, fontSize: nameSize, lineHeight: nameSize * 1.2105, letterSpacing: -nameSize / 34, color: ink }]}>CourtSide</Text>
-      <Text allowFontScaling={false} style={[styles.line, { top: lineTop, fontSize: lineSize, lineHeight: lineSize * 1.2105, letterSpacing: lineSize * 0.095, color: faint }]}>{line}</Text>
+      <View style={[styles.lean, { top, height: MARK_H * s, left: ox + SLASH_LEFT * s, width: SLASH_W * s, backgroundColor: ink }]} />
+      <Text allowFontScaling={false} style={[styles.name, typeAt(NAME, s, oy), { color: ink }]}>CourtSide</Text>
+      <Text allowFontScaling={false} style={[styles.line, typeAt(LINE, s, oy), { color: faint }]}>{line}</Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  name: { position: 'absolute', left: 0, right: 0, textAlign: 'center', ...font('700') },
-  line: { position: 'absolute', left: 0, right: 0, textAlign: 'center', ...font('600'), textTransform: 'uppercase' },
+  lean: { position: 'absolute', transform: [{ skewX: '-14deg' }] },
+  name: { position: 'absolute', textAlign: 'center', ...font('700') },
+  line: { position: 'absolute', textAlign: 'center', ...font('700'), textTransform: 'uppercase' },
 });

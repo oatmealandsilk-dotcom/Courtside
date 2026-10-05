@@ -9,7 +9,7 @@ import { raiseCurtain } from '@/features/feed/warmup';
 import { preloadNearbyMap } from '@/components/NearbyMap';
 import { useLaunchUpdate } from '@/lib/instantUpdates';
 
-import { hideLaunch } from '@/lib/launchSplash';
+import { LAUNCH_MAX_MS, hideLaunch } from '@/lib/launchSplash';
 import { LaunchMark } from '@/components/LaunchMark';
 import { BrandMark } from '@/components/BrandMark';
 import { useApp } from '@/store/AppContext';
@@ -57,14 +57,8 @@ export default function Index() {
   // cream melts into, say, New York's navy instead of snapping (Oct 2).
   const cover = useRef(new Animated.Value(1)).current;
   const [launchCover, setLaunchCover] = useState(Platform.OS !== 'web');
-  useEffect(() => {
-    if (!launchCover) return;
-    // A beat on the cream first, then a slow, even fade: it reads as the app
-    // settling into your colours rather than a cut (Oct 2, William: "wait a
-    // bit before fading, don't have to do it super fast").
-    // The fade starts once the phone's own picture has gone (startCoverFade, below), never on a
-    // timer from mount: that ran the fade under the phone's picture, which then cut to the theme.
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // Whether the cover's copy of the picture has drawn (until then the drawn logo sits under it).
+  const [coverDrawn, setCoverDrawn] = useState(false);
   const fadeStarted = useRef(false);
   const startCoverFade = () => {
     if (fadeStarted.current) return;
@@ -72,6 +66,18 @@ export default function Index() {
     hideLaunch();
     Animated.timing(cover, { toValue: 0, duration: 700, delay: 350, easing: Easing.inOut(Easing.cubic), useNativeDriver: true }).start(() => setLaunchCover(false));
   };
+  useEffect(() => {
+    if (!launchCover) return;
+    // A beat on the cream first, then a slow, even fade: it reads as the app
+    // settling into your colours rather than a cut (Oct 2, William: "wait a
+    // bit before fading, don't have to do it super fast").
+    // The fade starts once the cover's own copy of the picture has drawn (its onLoad, below), so the phone's
+    // picture hands over to an identical one, never on a timer from mount: that ran the fade under the
+    // phone's picture, which then cut to the theme. A picture that never reports holds no one, though:
+    // after the same longest wait as the phone's picture, the fade starts anyway (Oct 4).
+    const timer = setTimeout(startCoverFade, LAUNCH_MAX_MS);
+    return () => clearTimeout(timer);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Opened on top of the app that is already running: something went to '/'
   // (this splash's address, which Home shares) from a page over the tabs.
@@ -178,10 +184,22 @@ export default function Index() {
         </>
       )}
       {launchCover ? (
-        <Animated.View pointerEvents="none" onLayout={startCoverFade} style={[StyleSheet.absoluteFill, styles.splash, launchStyles.launch, { opacity: cover }]}>
+        <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.splash, launchStyles.launch, { opacity: cover }]}>
           <StatusBar style="dark" />
-          {/* The phone's own launch picture, drawn the same way (cover), so the hand-over is invisible (Oct 4, owner: "smooth like Instagram"). */}
-          <LaunchMark ink={lightColors.brand} faint={lightColors.textFaint} />
+          {/* The phone's own launch picture itself, drawn the same way (cover is the same sums as the phone's
+              fill), so the hand-over is pixel for pixel (Oct 4, owner: "smooth like Instagram"; then "should not
+              be misalignment even if it's a tiny bit"). The drawn copy that stood here never quite matched the
+              picture (its name is not set in Inter there), which showed as a tiny jump at the cut. Until the
+              picture has drawn, and should it ever fail to load, the drawn copy waits underneath. */}
+          {coverDrawn ? null : <LaunchMark ink={lightColors.brand} faint={lightColors.textFaint} />}
+          <Image
+            source={require('../assets/splash.png')}
+            resizeMode="cover"
+            fadeDuration={0}
+            style={StyleSheet.absoluteFill}
+            onLoad={() => { setCoverDrawn(true); startCoverFade(); }}
+            onError={startCoverFade}
+          />
         </Animated.View>
       ) : null}
     </Animated.View>
