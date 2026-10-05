@@ -43,28 +43,41 @@ interface Element { id: number; type: string; lat?: number; lon?: number; center
 const cache = new Map<string, Court[]>();
 const inFlight = new Map<string, Promise<Court[]>>();
 
+/** One area per hundredth of a degree (about a kilometre) and reach: the cache's key. */
+const areaKey = (center: LatLng, radiusMeters: number) => `${center.lat.toFixed(2)},${center.lng.toFixed(2)},${radiusMeters}`;
+
+/**
+ * The middle of that area, which is all that is ever sent for it: never
+ * the exact spot asked about (often where you are standing), least of all
+ * to OpenStreetMap's public service. Taken from the key itself, so the
+ * answer kept under a key is always the one for its own middle.
+ */
+const areaMiddle = (center: LatLng): LatLng => ({ lat: Number(center.lat.toFixed(2)), lng: Number(center.lng.toFixed(2)) });
+
 /**
  * Courts around a spot. Signed in, they come from our own database through
  * the "courts" function, which fetches an area from OpenStreetMap the first
  * time anyone looks there and keeps it (migration 47). Otherwise, or if the
  * function cannot be reached, straight from OpenStreetMap's free query
- * service. Cached per area for the session.
+ * service. Cached per area for the session. Both are asked about the area's
+ * middle only (areaMiddle); how far each court is from you is worked out
+ * on the phone (courtRows).
  */
 export function fetchCourts(center: LatLng, radiusMeters = 9000): Promise<Court[]> {
-  const key = `${center.lat.toFixed(2)},${center.lng.toFixed(2)},${radiusMeters}`;
+  const key = areaKey(center, radiusMeters);
   const hit = cache.get(key);
   if (hit) return Promise.resolve(hit);
   // Two screens asking for the same area at once share one request.
   const asked = inFlight.get(key);
   if (asked) return asked;
-  const ask = loadCourts(center, radiusMeters, key).finally(() => inFlight.delete(key));
+  const ask = loadCourts(areaMiddle(center), radiusMeters, key).finally(() => inFlight.delete(key));
   inFlight.set(key, ask);
   return ask;
 }
 
 /** The courts around a spot if they are already on the phone, without waiting: a page can open on a full list. */
 export function peekCourts(center: LatLng, radiusMeters = 9000): Court[] | undefined {
-  return cache.get(`${center.lat.toFixed(2)},${center.lng.toFixed(2)},${radiusMeters}`);
+  return cache.get(areaKey(center, radiusMeters));
 }
 
 async function loadCourts(center: LatLng, radiusMeters: number, key: string): Promise<Court[]> {

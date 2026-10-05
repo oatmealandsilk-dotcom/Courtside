@@ -25,8 +25,8 @@ const MOST = 8;
 /**
  * The named courts around a spot, for Courts near you and the empty Open
  * hits prompt: around where you are (mapModel's measureFrom), so every
- * distance says how far from you. Location off, that is your profile's
- * city, the still map's own area and cached answer. `rows` lists the
+ * distance says how far from you. Knowing no more than your profile's
+ * city, that is the still map's own area and cached answer. `rows` lists the
  * public-looking ones (parks, rec centres, schools) first, then the other
  * named ones, at most eight; within each, bigger parks first among places
  * about as far, but never a big park far away before a close court

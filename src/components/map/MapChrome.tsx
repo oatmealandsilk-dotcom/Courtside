@@ -897,14 +897,21 @@ export function CourtSheet({ court, miles, ringed = false, onClose }: { court: C
   );
 }
 
+/** A court's distance from a searched place, naming the place: "0.4 mi from Durham", or "central Durham" / "at Pullen Park" when it is right there. */
+function milesFromPlace(miles: number, place: FoundPlace): string {
+  if (miles < 0.15) return place.kind === 'area' ? `central ${place.title}` : `at ${place.title}`;
+  return `${formatMiles(miles)} from ${place.title}`;
+}
+
 /**
  * A place picked from the map's search: its courts, best first (rankForPlace
  * in courts.ts). A city or neighbourhood lists the bigger and busier places
  * to play nearer the middle first; an address, a street or a park simply
- * the nearest. Each row says how far from the place, how many courts and
- * whether there are lights, and opens that court's card; closing the card
- * comes back here. Close (or a swipe down) puts the list away and the
- * players tray comes back; the map stays where it is.
+ * the nearest. Each row says how far from the place (naming it, since the
+ * court's card says how far from you), how many courts and whether there
+ * are lights, and opens that court's card; closing the card comes back
+ * here. Close (or a swipe down) puts the list away and the players tray
+ * comes back; the map stays where it is.
  */
 export function PlaceSheet({ place, rows, loading, failed, onPickCourt, onRetry, onClose, played }: { place: FoundPlace; rows: CourtRow[]; loading: boolean; failed: boolean; onPickCourt: (c: Court) => void; onRetry: () => void; onClose: () => void; /** Whether a court was played on this week (the map's ring). */ played: (c: Court) => boolean }) {
   const styles = useThemedStyles(styleDefinitions);
@@ -934,13 +941,14 @@ export function PlaceSheet({ place, rows, loading, failed, onPickCourt, onRetry,
           {rows.map(({ c, miles }, i) => {
             const busy = played(c);
             // "N courts" always shows here: how big a place is, is half of why it is where it is in this list.
-            const meta = [formatMiles(miles), `${c.count} ${c.count === 1 ? 'court' : 'courts'}`, c.lit ? 'lights' : null, busy ? 'played this week' : null].filter(Boolean).join(' · ');
+            // How far from the place, said so ("0.4 mi from Durham"): every other "x mi" in the app is from you, and the court's card one tap on is too.
+            const meta = [milesFromPlace(miles, place), `${c.count} ${c.count === 1 ? 'court' : 'courts'}`, c.lit ? 'lights' : null, busy ? 'played this week' : null].filter(Boolean).join(' · ');
             return (
               <Pressable key={c.id} accessibilityRole="button" accessibilityLabel={`${labelOf(c)}, ${meta}. Show on the map`} onPress={() => { haptics.tap(); onPickCourt(c); }} style={({ pressed }) => [styles.resultRow, i > 0 && styles.listRule, pressed && styles.listPressed]}>
                 <View style={styles.resultTile}><CourtGlyph size={13} color={colors.brand} /></View>
                 <View style={styles.listWords}>
                   <Text style={styles.listName} numberOfLines={1}>{labelOf(c)}</Text>
-                  <Text style={styles.personMeta} numberOfLines={1}>{meta}</Text>
+                  <Text style={styles.personMeta} numberOfLines={2}>{meta}</Text>
                 </View>
                 <Ionicons name="chevron-forward" size={14} color={colors.textFaint} />
               </Pressable>

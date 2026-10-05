@@ -17,13 +17,17 @@ export type GeoResult =
  * get a fix in time falls back on the last place it knew, however old (fine
  * for a city); with it, an older one counts as no answer (for "where are you
  * standing right now").
+ *
+ * `quiet`: never shows the device's own prompt. Only a device that already
+ * allows it answers; one that would have to ask counts as 'unavailable'
+ * (for checking again in the background, which must never pop a question).
  */
-interface Ask { recentMs?: number }
+interface Ask { recentMs?: number; quiet?: boolean }
 
-async function fromDevice({ recentMs }: Ask): Promise<GeoResult> {
+async function fromDevice({ recentMs, quiet }: Ask): Promise<GeoResult> {
   try {
-    const perm = await Location.requestForegroundPermissionsAsync();
-    if (!perm.granted) return { ok: false, reason: 'denied' };
+    const perm = quiet ? await Location.getForegroundPermissionsAsync() : await Location.requestForegroundPermissionsAsync();
+    if (!perm.granted) return { ok: false, reason: quiet && perm.canAskAgain ? 'unavailable' : 'denied' };
     const fix = await Promise.race<Location.LocationObject | null>([
       Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
       new Promise((resolve) => setTimeout(() => resolve(null), 9000)),
@@ -39,7 +43,19 @@ async function fromDevice({ recentMs }: Ask): Promise<GeoResult> {
   }
 }
 
-function fromBrowser({ recentMs }: Ask): Promise<GeoResult> {
+/** Whether this browser already lets the page know where it is, without asking (`quiet`). Unknown counts as no. */
+async function browserAllows(): Promise<boolean> {
+  try {
+    const perms = typeof navigator !== 'undefined' ? navigator.permissions : undefined;
+    if (!perms || typeof perms.query !== 'function') return false;
+    return (await perms.query({ name: 'geolocation' as PermissionName })).state === 'granted';
+  } catch {
+    return false;
+  }
+}
+
+async function fromBrowser({ recentMs, quiet }: Ask): Promise<GeoResult> {
+  if (quiet && !(await browserAllows())) return { ok: false, reason: 'unavailable' };
   return new Promise((resolve) => {
     const geo = typeof navigator !== 'undefined' ? navigator.geolocation : undefined;
     if (!geo || typeof geo.getCurrentPosition !== 'function') {

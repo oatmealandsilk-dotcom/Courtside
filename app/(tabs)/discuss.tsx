@@ -40,7 +40,7 @@ import { handPlace, type FoundPlace } from '@/features/places/geocode';
 import { usePlaceSearch } from '@/features/places/usePlaceSearch';
 import { openCourt, playHere } from '@/features/players/courtLink';
 import { formatMiles, formatSpotMiles, milesBetween } from '@/features/players/geo';
-import { isRoughSpot } from '@/features/players/positions';
+import { isRoughSpot, placeFor } from '@/features/players/positions';
 import { useMyCity } from '@/features/players/useMyCity';
 import { useFindable } from '@/features/people/findable';
 import { isOpenToHit as isOpenToHitNow } from '@/features/players/openToHit';
@@ -214,13 +214,20 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   // How the list is ordered, the way Reddit offers it. New stays the default.
   const [sort, setSort] = useState<'new' | 'hot' | 'top' | 'unanswered'>('new');
   // One spot for every distance on Find Players (Courts near you, which hits
-  // are near and how far, Your courts, the court search): where you are with
-  // Location on, else your profile's city (measureFrom). The map card above
-  // may be centred on the big city you are near, but "1.6 mi" here always
-  // means 1.6 miles from you; the card's "open hits nearby" counts from this
-  // same spot, so the two agree.
+  // are near and how far, Your courts, the court search): where you are
+  // (this phone's fix with Location on, else the spot you last shared from
+  // any device), else your profile's city (measureFrom). The same chain as
+  // Near you, Who's up today and the full map's cards, so a hit never says
+  // 9.5 mi while its poster, a row above, says 1.6. The map card above may
+  // be centred on the big city you are near, but "1.6 mi" here always means
+  // 1.6 miles from you; the card's "open hits nearby" counts from this same
+  // spot, so the two agree.
   const { city: myCityAt } = useMyCity(currentUser);
-  const youAt = measureFrom(location.locationOn ? detectedCoords : null, myCityAt);
+  const mineSeen = currentUserId ? lastSeen[currentUserId] : undefined;
+  const ownLastLat = mineSeen?.lat;
+  const ownLastLng = mineSeen?.lng;
+  const ownLastSpot = useMemo(() => (ownLastLat === undefined || ownLastLng === undefined ? null : { lat: ownLastLat, lng: ownLastLng }), [ownLastLat, ownLastLng]);
+  const youAt = measureFrom((location.locationOn ? detectedCoords : null) ?? ownLastSpot, myCityAt);
   const nearCourts = useNearCourts(youAt);
   // Hits still ahead (or just started), not called off, not from anyone blocked
   // or muted, and only those the teen rule lets you see (as on court pages and the map).
@@ -231,7 +238,9 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   // Near first (within 25 km, the reach of hit matches), soonest first, with how far:
   // everything that close is near, so today's game beats next week's a mile closer.
   // A place only typed has no spot, so it follows by time when its poster is near (their shared spot,
-  // else the same city on their profile; yours always); a typed place from another city waits under "Further away".
+  // else their profile's town within 30 miles of you, else the same city on their profile; yours always);
+  // a typed place from another city waits under "Further away". Measured from you, so a player away
+  // from home with Location on sees the local players' hits near, not their home town's.
   const { openHits, furtherHits } = useMemo(() => {
     if (!youAt) return { openHits: seenHits.map((hit) => ({ hit, miles: undefined as number | undefined })), furtherHits: [] };
     const near: { hit: (typeof seenHits)[number]; miles: number | undefined }[] = [];
@@ -244,9 +253,14 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
       if (!spot) {
         const seen = lastSeen[hit.authorId];
         const author = usersById.get(hit.authorId);
+        // Their profile's town as a spot (picked from the search, or a city the app knows by name): a town, never where they are.
+        const known = author && !author.cityAt && author.location?.trim() ? placeFor(author.location) : undefined;
+        const town = author?.cityAt ?? (known ? { lat: known.lat, lng: known.lng } : null);
         // Nothing to tell by (no shared spot, no city on either profile): kept with the near ones, as before.
         const local = hit.authorId === currentUserId
-          || (seen ? milesBetween(youAt, seen) <= NEAR_HIT_MILES : !author || !myCity || !author.location?.trim() || sameCity(author));
+          || (seen ? milesBetween(youAt, seen) <= NEAR_HIT_MILES
+            : town ? milesBetween(youAt, town) <= IN_TOWN_MILES
+              : !author || !myCity || !author.location?.trim() || sameCity(author));
         (local ? typed : farTyped).push({ hit, miles: undefined });
         continue;
       }
@@ -263,7 +277,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   // "Near you" is one thing on this tab and on the map: people who shared a
   // spot within 30 miles of you (where the phone is, your own last spot, or
   // your profile's city), nearest first, never placed by a typed city.
-  const nearFrom = detectedCoords ?? (currentUserId && lastSeen[currentUserId] ? { lat: lastSeen[currentUserId].lat, lng: lastSeen[currentUserId].lng } : null) ?? myCityAt ?? null;
+  const nearFrom = detectedCoords ?? ownLastSpot ?? myCityAt ?? null;
   const nearPlayers = useMemo(() => {
     if (!nearFrom) return [];
     return users
@@ -300,7 +314,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   }, [users, currentUser, currentUserId, blockedIds, followingIds, nearPlayers, newOnCourtside, ageSaysAdult]);
   // "Who's up today": from the map's own pins only, measured from where you
   // are (the phone's fix, or your own last spot), never from a profile's city.
-  const ownSpot = detectedCoords ?? (currentUserId && lastSeen[currentUserId] ? { lat: lastSeen[currentUserId].lat, lng: lastSeen[currentUserId].lng } : null);
+  const ownSpot = detectedCoords ?? ownLastSpot;
   const upToday = useUpToday({ users, lastSeen, me: currentUserId, from: ownSpot, blockedIds });
   // A teen (migration 78) has it too: only friends who follow each other with
   // them are in it, and only those friends see theirs. Under 16s too (migration 119), the same way.
