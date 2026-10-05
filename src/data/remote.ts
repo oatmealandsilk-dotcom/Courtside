@@ -22,7 +22,7 @@ import { blankVideoLocation } from '@/lib/videoLocation';
 import { noteStep } from '@/lib/crashReporting';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
-import type { Answer, ChatEvent, ChatPhoto, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, DetectedActivity, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, CourtNote, LastSeen, MapPlace, MapVisibility, TaggedCourt, Question, Removed, RemovedItem, Story, SurfacePreference, TakedownKind, TakedownReason, Tip, TournamentEntry, User, CoachApplication, CourtAccess, CourtAccessSource, CourtDayPart, CourtFacts, CourtFollowCount, CourtNow, CourtRegulars, CourtReview, CourtRightNow, CourtRing, FollowedCourt, SessionTag, SessionTagRefusal, SessionTagRole, FeedGroup, FeedGroupCard, DiscoverGroup, GroupLook, Invitee, ContactMatch, HeadToHead, MatchSet } from './types';
+import type { Answer, ChatEvent, ChatPhoto, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, DetectedActivity, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, CourtNote, LastSeen, MapPlace, MapVisibility, TaggedCourt, Question, Removed, RemovedItem, SessionWith, Story, SurfacePreference, TakedownKind, TakedownReason, Tip, TournamentEntry, User, CoachApplication, CourtAccess, CourtAccessSource, CourtDayPart, CourtFacts, CourtFollowCount, CourtNow, CourtRegulars, CourtReview, CourtRightNow, CourtRing, FollowedCourt, SessionTag, SessionTagRefusal, SessionTagRole, FeedGroup, FeedGroupCard, DiscoverGroup, GroupLook, Invitee, ContactMatch, HeadToHead, MatchSet } from './types';
 import { validSets } from '@/features/activity/score';
 import { TERMS_VERSION } from '@/lib/legal';
 import { readinessOf, sessionTagNamesLive, sessionToSend, setSessionTagNamesLive, trustedSession } from './sessionTagGate';
@@ -224,6 +224,28 @@ type FullPostRow = PostRow & { comments?: CommentRow[] };
  */
 function toPosts(rows: FullPostRow[]): { posts: Post[]; comments: Comment[] } {
   return { posts: rows.map(toPost), comments: rows.flatMap((row) => (row.comments ?? []).map(toComment)) };
+}
+
+/** session_minor_posts' answer (migration 124): which post, and the player's entry on it. Anything malformed is left out. */
+function sessionEntries(data: unknown): { postId: ID; entry: SessionWith }[] {
+  if (!Array.isArray(data)) return [];
+  return data.flatMap((raw) => {
+    const r = raw as { post_id?: unknown; entry?: { id?: unknown; handle?: unknown; name?: unknown; role?: unknown } | null };
+    const e = r?.entry;
+    if (typeof r?.post_id !== 'string' || !UUID_RE.test(r.post_id) || !e || typeof e.id !== 'string' || !UUID_RE.test(e.id)) return [];
+    if (e.role !== 'opponent' && e.role !== 'partner') return [];
+    return [{ postId: r.post_id, entry: { id: e.id, handle: typeof e.handle === 'string' ? e.handle : '', name: typeof e.name === 'string' ? e.name : '', role: e.role } }];
+  });
+}
+
+/** A post row with one more player on its session's list (opponents first, as the server orders it), unless they are on it already. */
+function withSessionPlayer(row: FullPostRow, entry: SessionWith): FullPostRow {
+  const session = row.session;
+  if (!session || typeof session !== 'object') return row;
+  const had = Array.isArray(session.with) ? session.with : [];
+  if (had.some((w) => w.id === entry.id)) return row;
+  const list = [...had, entry];
+  return { ...row, session: { ...session, with: [...list.filter((w) => w.role === 'opponent'), ...list.filter((w) => w.role !== 'opponent')] } };
 }
 
 const toPost = (row: PostRow): Post => withRemoved<Post>({
@@ -2524,7 +2546,7 @@ export const remote = {
   async fetchUserPosts(userId: ID): Promise<{ posts: Post[]; comments: Comment[] } | null> {
     if (!UUID_RE.test(userId)) return null;
     const db = need();
-    const [own, tagged, played] = await Promise.all([
+    const [own, tagged, played, unlisted] = await Promise.all([
       allRows<FullPostRow>((from, to) => db.from('posts').select(POST_SELECT).eq('author_id', userId).order('created_at', { ascending: false }).range(from, to), 3000),
       db.from('posts').select(POST_SELECT).contains('tagged_user_ids', [userId]).order('created_at', { ascending: false }).limit(300),
       // Posts whose session they accepted a tag on (migration 62). The value
@@ -2535,12 +2557,31 @@ export const remote = {
       sessionTagNamesLive()
         ? db.from('posts').select(POST_SELECT).contains('session->with', JSON.stringify([{ id: userId }])).order('created_at', { ascending: false }).limit(300)
         : Promise.resolve({ data: [] as FullPostRow[], error: null }),
+      // Since migration 124 a player not known to be an adult is no longer
+      // named on other people's posts themselves: the server says which posts
+      // carry a session they played, and only to them, the post's author and
+      // the people they follow. Nothing (an error) on a database without it.
+      sessionTagNamesLive()
+        ? db.rpc('session_minor_posts', { who: userId })
+        : Promise.resolve({ data: null, error: null }),
     ]);
     if (own.error) { fail('their posts')(own.error); return null; }
     if (tagged.error) fail('tagged posts')(tagged.error);
     if (played.error) fail('session-tagged posts')(played.error);
     const rows = [...own.data, ...((tagged.data ?? []) as FullPostRow[]), ...((played.data ?? []) as FullPostRow[])];
     const byId = new Map(rows.map((row) => [row.id, row]));
+    const entries = unlisted.error ? [] : sessionEntries(unlisted.data);
+    // The posts not already here, a handful at a time (one long list of ids makes a web address the database refuses).
+    const missing = [...new Set(entries.map((e) => e.postId))].filter((id) => !byId.has(id));
+    for (let at = 0; at < missing.length; at += 100) {
+      const { data, error } = await db.from('posts').select(POST_SELECT).in('id', missing.slice(at, at + 100));
+      if (error) { fail('session-tagged posts')(error); break; }
+      for (const row of (data ?? []) as FullPostRow[]) byId.set(row.id, row);
+    }
+    for (const { postId, entry } of entries) {
+      const row = byId.get(postId);
+      if (row) byId.set(postId, withSessionPlayer(row, entry));
+    }
     return toPosts([...byId.values()]);
   },
   /**
