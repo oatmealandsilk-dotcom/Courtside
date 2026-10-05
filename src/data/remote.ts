@@ -1418,10 +1418,15 @@ export const remote = {
     if (error) throw new Error(/relation|schema cache/i.test(error.message) ? 'Applications are not switched on yet. Try again soon.' : error.message);
   },
 
-  /** New words for a message of yours; the database stamps it as edited. */
-  async editMessage(messageId: ID, body: string) {
-    const { error } = await need().from('messages').update({ body }).eq('id', messageId);
-    if (error) fail('message edit')(error);
+  /**
+   * New words for a message of yours; the database stamps it as edited.
+   * Resolves whether it was saved: an update the database quietly turned
+   * down changes no row, so that counts as not saved too.
+   */
+  async editMessage(messageId: ID, body: string): Promise<boolean> {
+    const { data, error } = await need().from('messages').update({ body }).eq('id', messageId).select('id');
+    if (error) { fail('message edit')(error); return false; }
+    return !!data?.length;
   },
 
   /** Unsend: gone for everyone in the chat. */

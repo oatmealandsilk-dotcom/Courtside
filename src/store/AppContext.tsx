@@ -4793,7 +4793,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     haptics.tap();
     const editedAt = new Date().toISOString();
     setState((prev) => ({ ...prev, messages: prev.messages.map((m) => (m.id === messageId ? { ...m, body: words, editedAt } : m)) }));
-    if (live(me, messageId)) void remote.editMessage(messageId, words);
+    if (!live(me, messageId)) return;
+    void remote.editMessage(messageId, words).catch(() => false).then((saved) => {
+      if (saved) return;
+      // Not saved: the words go back to what they were, unless they have been changed again since.
+      setState((prev) => ({ ...prev, messages: prev.messages.map((m) => (m.id === messageId && m.body === words && m.editedAt === editedAt ? { ...m, body: message.body, editedAt: message.editedAt } : m)) }));
+      showToast({ title: 'Your edit didn’t save', body: 'Try again in a moment.', icon: 'alert-circle-outline' });
+    });
   }, [requireUser]);
 
   /** Out of this phone's chat either way; unsending also removes it from the database, so it leaves theirs. */
