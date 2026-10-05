@@ -185,15 +185,19 @@ export function PostVideo({ uri, poster, active, preload = false, trimStart, tri
   const scrubTo = (x: number) => {
     const fraction = Math.max(0, Math.min(1, x / trackWidth.current));
     progress.value = fraction;
-    player.current?.seek((trimStart ?? 0) + fraction * time.length);
+    player.current?.seek((trimStart ?? 0) + fraction * timeRef.current.length);
     setTime((t) => ({ ...t, fraction, at: fraction * t.length }));
     reveal();
   };
+  // The drag handler is made once, so it calls the latest scrubTo through a
+  // ref: the first render's one only knew a length of 0 and seeked to the start.
+  const scrubToRef = useRef(scrubTo);
+  scrubToRef.current = scrubTo;
   const scrub = useRef(PanResponder.create({
     onStartShouldSetPanResponder: () => true,
     onMoveShouldSetPanResponder: () => true,
-    onPanResponderGrant: (e) => scrubTo(e.nativeEvent.locationX),
-    onPanResponderMove: (e) => scrubTo(e.nativeEvent.locationX),
+    onPanResponderGrant: (e) => scrubToRef.current(e.nativeEvent.locationX),
+    onPanResponderMove: (e) => scrubToRef.current(e.nativeEvent.locationX),
   })).current;
 
   // Only the round button itself takes the tap; around it the tap reaches the picture.
