@@ -92,8 +92,9 @@ export function InboxButton({ variant = 'plain', size = 24, ink, style, coaching
  */
 export function NotificationButton({ size = 24 }: { size?: number }) {
   const styles = useThemedStyles(styleDefinitions);
-  const { notifications, currentUserId } = useApp();
-  const unseen = notifications.filter((n) => n.userId === currentUserId && !n.read).length;
+  const { notifications, currentUserId, blockedIds } = useApp();
+  // Never anything from someone you blocked (the Notifications page leaves those out too).
+  const unseen = notifications.filter((n) => n.userId === currentUserId && !n.read && !blockedIds.includes(n.actorId)).length;
   const slop = Math.max(8, Math.ceil((44 - (size + 8)) / 2));
   return (
     <Tappable accessibilityRole="link" accessibilityLabel={unseen ? `Notifications, ${unseen} new` : 'Notifications'} onPress={() => router.push('/notifications')} hitSlop={slop} style={styles.plain}>

@@ -253,11 +253,13 @@ function snippet(text: string, max = 80): string {
   return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
 }
 
-/** What a double tap leaves, remembered between visits on web. */
+/** What a double tap leaves, remembered on this device. */
+const DEFAULT_REACTION_KEY = 'courtside-default-reaction';
+/** At start: a browser has it at once; a phone reads it a moment later (see the effect in the provider). */
 function readDefaultReaction(): string {
   try {
     if (Platform.OS !== 'web') return '❤️';
-    return localStorage.getItem('courtside-default-reaction') || '❤️';
+    return localStorage.getItem(DEFAULT_REACTION_KEY) || '❤️';
   } catch {
     return '❤️';
   }
@@ -4620,8 +4622,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const setDefaultReaction = useCallback((emoji: string) => {
     setState((prev) => ({ ...prev, defaultReaction: emoji }));
     try {
-      if (Platform.OS === 'web') localStorage.setItem('courtside-default-reaction', emoji);
+      if (Platform.OS === 'web') localStorage.setItem(DEFAULT_REACTION_KEY, emoji);
+      else void AsyncStorage.setItem(DEFAULT_REACTION_KEY, emoji).catch(() => {});
     } catch {}
+  }, []);
+  // A phone keeps it too, read once at start (a browser's is read straight away, above).
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    AsyncStorage.getItem(DEFAULT_REACTION_KEY)
+      .then((emoji) => { if (emoji) setState((prev) => (prev.defaultReaction === emoji ? prev : { ...prev, defaultReaction: emoji })); })
+      .catch(() => {});
   }, []);
 
   const markNotificationsRead = useCallback(() => {

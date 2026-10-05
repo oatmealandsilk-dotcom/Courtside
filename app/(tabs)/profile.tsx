@@ -31,7 +31,7 @@ import { studioLine } from '@/features/coaching/studioSummary';
 
 function Profile({ previewSection }: { previewSection?: string } = {}) {
   const styles = useThemedStyles(styleDefinitions);
- const { currentUser: user, posts, questions, answers, saved, notifications, currentUserId, savedAccounts, coaches, coachingRequests, coachQuestions, actions, feedGroups } = useApp();
+ const { currentUser: user, posts, questions, answers, saved, notifications, currentUserId, savedAccounts, coaches, coachingRequests, coachQuestions, actions, feedGroups, blockedIds } = useApp();
  // A coach's studio, first of your links: what is waiting there, or how far setup has got.
  const myCoach = coaches.find((c) => c.userId === currentUserId);
  const studio = myCoach ? studioLine(myCoach, coachingRequests, coachQuestions, currentUserId) : null;
@@ -81,7 +81,8 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
  };
  // People asking to join the groups you run.
  const groupsAsking = feedGroups.reduce((n, g) => n + (g.members.some((m) => m.id === currentUserId && m.admin) ? g.requests.length : 0), 0);
- const unseen = notifications.filter(n => n.userId === currentUserId && !n.read).length;
+ // Never anything from someone you blocked (the Notifications page leaves those out too).
+ const unseen = notifications.filter(n => n.userId === currentUserId && !n.read && !blockedIds.includes(n.actorId)).length;
  const savedCount = saved.postIds.length + saved.questionIds.length;
  const swipe = (direction: 1 | -1) => {
    const next = swipeDestination('/profile', tab, direction);
