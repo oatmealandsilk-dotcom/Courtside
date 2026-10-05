@@ -453,7 +453,8 @@ function Home({ scope, topRow, paused, onChrome }: {
             // Archived posts only ever in your own archive's set, opened from the Archive page.
             .filter((p) => (set === 'archived'
               ? p.archived && p.authorId === userId && userId === data.currentUserId
-              : !p.archived && !p.groupId && (set === 'tagged' ? isTaggedIn(p, userId) : p.authorId === userId && (set !== 'clips' || p.kind === 'clip'))))
+              // A group-only post is let in only when it is the one that was tapped (a notification, Saved, a link), so it opens in place.
+              : !p.archived && (!p.groupId || p.id === scope.start) && (set === 'tagged' ? isTaggedIn(p, userId) : p.authorId === userId && (set !== 'clips' || p.kind === 'clip'))))
             .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
         setOrder(mine.map((p) => `p:${p.id}`));
         setActive(Math.max(0, mine.findIndex((p) => p.id === scope.start)));
