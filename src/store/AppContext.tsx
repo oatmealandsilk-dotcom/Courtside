@@ -442,6 +442,21 @@ interface AppState extends Bootstrap, CourtLifeState, FeedGroupsState {
   detectedCoords: { lat: number; lng: number } | null;
 }
 
+/**
+ * An account's own settings as a new account starts with them: what logging
+ * out, deleting the account or switching leaves on this device, so the next
+ * account signed in here never starts with the last one's blocks, mutes,
+ * reports, alert switches or saved threads, nor saves them to itself. The
+ * demo, which has no accounts, keeps its own.
+ */
+function freshAccountSettings(): Partial<AppState> {
+  if (!isSupabaseConfigured) return {};
+  return {
+    mutedIds: [], blockedIds: [], reportedIds: [], alertIds: [], saved: { postIds: [], questionIds: [] },
+    paymentMethods: [], defaultPaymentId: null, prefs: DEFAULT_PREFS,
+  };
+}
+
 interface AppActions extends CourtLifeActions, FeedGroupsActions {
   /* Location */
   setLocationEnabled: (enabled: boolean) => Promise<string | null>;
@@ -1783,12 +1798,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // demo, where there is no database.
   // Your own settings (mutes, blocks, saved threads, payment methods, switches) follow the account.
   const settingsNow = JSON.stringify({ m: state.mutedIds, b: state.blockedIds, s: state.saved.questionIds, p: state.paymentMethods, d: state.defaultPaymentId, f: state.prefs });
-  const settingsSeen = useRef<string | null>(null);
+  // Kept with whose they were: a different account signed in starts from what it loaded, never from the last one's.
+  const settingsSeen = useRef<{ who: ID; json: string } | null>(null);
   useEffect(() => {
     if (!isSupabaseConfigured || !remoteLoaded || !currentUserForLive || !UUID.test(currentUserForLive)) return;
-    if (settingsSeen.current === null) { settingsSeen.current = settingsNow; return; }
-    if (settingsSeen.current === settingsNow) return;
-    settingsSeen.current = settingsNow;
+    if (settingsSeen.current?.who !== currentUserForLive) { settingsSeen.current = { who: currentUserForLive, json: settingsNow }; return; }
+    if (settingsSeen.current.json === settingsNow) return;
+    settingsSeen.current = { who: currentUserForLive, json: settingsNow };
     const s = stateRef.current;
     const t = setTimeout(() => {
       void remote.saveUserState(currentUserForLive, {
@@ -1958,7 +1974,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const { id, email } = session.user;
         void loadRemote(id, email).then((ok) => { if (!ok && !cancelled && !stateRef.current.remoteLoaded && stateRef.current.currentUserId === id) void loadRemote(id, email); });
       }
-      if (event === 'SIGNED_OUT') setState((prev) => ({ ...prev, currentUserId: null, onboardingComplete: false, termsVersion: undefined }));
+      if (event === 'SIGNED_OUT') setState((prev) => ({ ...prev, currentUserId: null, onboardingComplete: false, termsVersion: undefined, ...freshAccountSettings() }));
     });
     // Tokens only refresh while the app is in front.
     const sub = DeviceState.addEventListener('change', (status) => {
@@ -2242,7 +2258,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (isSupabaseConfigured) await remoteAuth.signOutEverywhere();
     // Everywhere includes this device: the remembered login is gone too.
     const savedAccounts = me ? await forgetAccount(me) : stateRef.current.savedAccounts;
-    setState((prev) => ({ ...prev, currentUserId: null, onboardingComplete: false, savedAccounts }));
+    setState((prev) => ({ ...prev, currentUserId: null, onboardingComplete: false, savedAccounts, ...freshAccountSettings() }));
   }, []);
 
   const switchAccount = useCallback(async (id: ID) => {
@@ -2258,7 +2274,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setState((prev) => ({ ...prev, savedAccounts }));
       throw err;
     }
-    setState((prev) => ({ ...prev, currentUserId: session.user.id, remoteLoaded: false, onboardingComplete: false, error: null, detectedActivities: [], sessionTags: [] }));
+    setState((prev) => ({ ...prev, currentUserId: session.user.id, remoteLoaded: false, onboardingComplete: false, error: null, detectedActivities: [], sessionTags: [], ...freshAccountSettings() }));
     await loadRemote(session.user.id, session.user.email);
   }, [loadRemote]);
 
@@ -2272,7 +2288,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (isSupabaseConfigured) await remoteAuth.deleteAccount();
     // A deleted account has no business in the remembered-logins list.
     const savedAccounts = me ? await forgetAccount(me) : stateRef.current.savedAccounts;
-    setState((prev) => ({ ...prev, currentUserId: null, onboardingComplete: false, savedAccounts }));
+    setState((prev) => ({ ...prev, currentUserId: null, onboardingComplete: false, savedAccounts, ...freshAccountSettings() }));
   }, []);
   const retryLoad = useCallback(async () => {
     const me = stateRef.current.currentUserId;
@@ -2318,7 +2334,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (isSupabaseConfigured) void forgetPushToken().finally(() => remoteAuth.signOut());
     // One account's health (its tracker sessions too) never carries over to the next one signed in.
     // Nor do its courts: who it follows, what it said, where it checked in.
-    setState((prev) => ({ ...prev, currentUserId: null, onboardingComplete: false, healthIsReal: false, healthHistory: [], detectedActivities: [], ...emptyCourtLife, ...emptyFeedGroups, lastSeenLoaded: false, sessionTags: [], newOnCourtside: null, mapVisibility: isSupabaseConfigured ? undefined : prev.mapVisibility, teenMap: isSupabaseConfigured ? 'off' : prev.teenMap }));
+    // Nor its own settings (blocks, mutes, switches, saved threads).
+    setState((prev) => ({ ...prev, currentUserId: null, onboardingComplete: false, healthIsReal: false, healthHistory: [], detectedActivities: [], ...emptyCourtLife, ...emptyFeedGroups, lastSeenLoaded: false, sessionTags: [], newOnCourtside: null, mapVisibility: isSupabaseConfigured ? undefined : prev.mapVisibility, teenMap: isSupabaseConfigured ? 'off' : prev.teenMap, ...freshAccountSettings() }));
   }, []);
 
   const patchCurrentUser = useCallback(
@@ -4833,7 +4850,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (isSupabaseConfigured) await remoteAuth.deleteAccount();
       } catch { /* the sign-out below still takes it off this phone */ }
       const savedAccounts = await forgetAccount(me).catch(() => stateRef.current.savedAccounts);
-      setState((prev) => ({ ...prev, currentUserId: null, onboardingComplete: false, savedAccounts }));
+      setState((prev) => ({ ...prev, currentUserId: null, onboardingComplete: false, savedAccounts, ...freshAccountSettings() }));
       return 'under13' as const;
     };
     const years = yearsOld(birthDate);
