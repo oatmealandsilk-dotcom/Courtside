@@ -1511,20 +1511,31 @@ export const remote = {
 
   /**
    * The page of messages just before `before` in one chat, oldest first, for
-   * scrolling up. `more` says whether there are older ones still.
+   * scrolling up. `more` says whether there are older ones still. Messages
+   * you deleted for yourself are left out, so a page can come short; a page
+   * of nothing else is passed over for the one before it.
    */
   async fetchOlderMessages(me: ID, conversationId: ID, before: string): Promise<{ messages: Message[]; more: boolean } | null> {
     const db = need();
-    const [members, msgs, hiddenRows] = await Promise.all([
+    const page = (until: string) => db.from('messages').select('*').eq('conversation_id', conversationId).lt('created_at', until).order('created_at', { ascending: false }).limit(MESSAGE_PAGE);
+    const [members, first, hiddenRows] = await Promise.all([
       db.from('conversation_members').select('user_id, last_read_at').eq('conversation_id', conversationId),
-      db.from('messages').select('*').eq('conversation_id', conversationId).lt('created_at', before).order('created_at', { ascending: false }).limit(MESSAGE_PAGE),
+      page(before),
       db.from('hidden_messages').select('message_id').eq('user_id', me),
     ]);
-    if (msgs.error) { fail('older messages')(msgs.error); return null; }
-    const rows = (msgs.data ?? []) as MessageRow[];
     const hidden = new Set(((hiddenRows.data ?? []) as { message_id: string }[]).map((r) => r.message_id));
+    let msgs = first;
+    let rows: MessageRow[] = [];
+    let shown: MessageRow[] = [];
+    for (let tries = 0; ; tries += 1) {
+      if (msgs.error) { fail('older messages')(msgs.error); return null; }
+      rows = (msgs.data ?? []) as MessageRow[];
+      shown = rows.filter((m) => !hidden.has(m.id));
+      if (shown.length || rows.length < MESSAGE_PAGE || tries >= 4) break;
+      msgs = await page(rows[rows.length - 1].created_at);
+    }
     const conv: ConversationRow = { id: conversationId, updated_at: before, conversation_members: (members.data ?? []) as ConversationRow['conversation_members'] };
-    const dm = toConversations(me, [conv], rows.filter((m) => !hidden.has(m.id)).reverse());
+    const dm = toConversations(me, [conv], shown.reverse());
     return { messages: dm.messages, more: rows.length === MESSAGE_PAGE };
   },
 

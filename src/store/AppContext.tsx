@@ -732,8 +732,13 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
   recordView: (targetKind: 'post' | 'question', targetId: ID) => void;
   /** What you did with a post in the feed (saw it, how long, skipped, tapped its author), saved for a smarter feed later. */
   noteFeedSignal: (signal: FeedSignal) => void;
-  /** The next older page of a chat, for scrolling up. Resolves to how many older messages came (fewer than a page: that was the last). */
-  loadOlderMessages: (conversationId: ID) => Promise<number>;
+  /**
+   * The next older page of a chat, for scrolling up. Resolves to how many
+   * older messages came and whether there are older ones still (null: no
+   * answer, which says nothing either way). A page can come short and still
+   * not be the last: messages you deleted for yourself are left out of it.
+   */
+  loadOlderMessages: (conversationId: ID) => Promise<{ added: number; more: boolean | null }>;
   /** One chat fetched fresh as it opens, so it never shows an old copy for long. */
   syncConversation: (conversationId: ID) => Promise<void>;
   /** "Typing…" in a chat: `ping` while you type; `onTyping` hears the others. No-op in the demo. */
@@ -4032,15 +4037,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Scrolling up in a chat: the page of messages before the oldest one here.
   const loadOlderMessages = useCallback(async (conversationId: ID) => {
     const me = stateRef.current.currentUserId;
-    if (!me || !live(me, conversationId)) return 0;
+    if (!me || !live(me, conversationId)) return { added: 0, more: false };
     // From the oldest the chat has loaded: a reply's original fetched from further back is not part of it.
     const byId = new Map(stateRef.current.messages.map((m) => [m.id, m]));
     const have = inOrder(stateRef.current.conversations.find((c) => c.id === conversationId)?.messageIds ?? [], byId);
-    if (!have.length) return 0;
+    if (!have.length) return { added: 0, more: false };
     const oldest = have[0];
-    const got = await remote.fetchOlderMessages(me, conversationId, oldest.createdAt);
-    if (!got || !got.messages.length) return 0;
+    const got = await remote.fetchOlderMessages(me, conversationId, oldest.createdAt).catch(() => null);
+    if (!got) return { added: 0, more: null };
     const page = unhidden(me, got.messages);
+    if (!page.length) return { added: 0, more: got.more };
     setState((prev) => {
       const known = new Set(prev.messages.map((m) => m.id));
       const fresh = page.filter((m) => !known.has(m.id));
@@ -4051,7 +4057,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const inChat = inOrder([...page.map((m) => m.id), ...chat.messageIds], new Map(messages.map((m) => [m.id, m]))).map((m) => m.id);
       return { ...prev, messages, conversations: prev.conversations.map((c) => (c.id === conversationId ? { ...c, messageIds: inChat } : c)) };
     });
-    return got.messages.length;
+    return { added: page.length, more: got.more };
   }, []);
   /**
    * The feed nearing the end of what it holds: the page of posts older than

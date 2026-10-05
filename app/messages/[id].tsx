@@ -346,8 +346,9 @@ export default function Thread() {
     if (loadingOlder.current || noMoreOlder.current || !conversation || removed) return;
     loadingOlder.current = true;
     setOlderLoading(true);
-    const came = await actions.loadOlderMessages(conversation.id);
-    if (came < MESSAGE_PAGE) noMoreOlder.current = true;
+    // The end only when the server says so: a page can come short because of messages you deleted for yourself.
+    const { more } = await actions.loadOlderMessages(conversation.id);
+    if (more === false) noMoreOlder.current = true;
     loadingOlder.current = false;
     setOlderLoading(false);
   }, [conversation, removed, actions]);
