@@ -1,5 +1,5 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import Reanimated, { FadeIn, FadeOut, ZoomIn } from 'react-native-reanimated';
 import { goBack } from '@/lib/goBack';
@@ -13,6 +13,7 @@ import * as haptics from '@/lib/haptics';
 import { Screen } from '@/components/ui';
 import { appleHealthAvailable, inExpoGo } from '@/features/health/appleHealth';
 import { FoodSection } from '@/features/health/FoodSection';
+import { alertsAllowed } from '@/features/health/workoutWatch';
 import { useTennisFlags } from '@/features/activity/useTennisFlags';
 import { WORKOUTS_ASK } from '@/features/activity/workouts';
 import { isTracker, useTrackerStatus } from '@/features/activity/trackers';
@@ -102,6 +103,16 @@ export default function Health() {
   const trackers = useTrackerStatus();
   const open = (provider: Integration['provider']) => !isTracker(provider) || (trackers[provider] && flags[provider]);
   const apple = integrations.find((i) => i.provider === 'apple-health');
+  // The phone's own "Workout detected" alert (from build 15, features/health/workoutWatch): the card
+  // says so only when it will come (this build has it, Settings' alert switch is on, and the phone allows alerts).
+  const pushActivity = app.prefs.pushActivity;
+  const [alertsOn, setAlertsOn] = useState(false);
+  useEffect(() => {
+    let stale = false;
+    if (!pushActivity) setAlertsOn(false);
+    else void alertsAllowed().then((ok) => { if (!stale) setAlertsOn(ok); });
+    return () => { stale = true; };
+  }, [pushActivity]);
   /*
    * Only what works is listed (Oct 4, owner: Apple must see nothing half-built
    * at review): a tracker the server is not set up for has no row at all,
@@ -233,6 +244,9 @@ export default function Health() {
                   </Reanimated.View>
                   <View style={styles.tennisWords}>
                     <Text style={styles.tennisTitle}>{allOn(i) ? 'Workouts on' : 'Tennis sessions on'}</Text>
+                    {i.provider === 'apple-health' && alertsOn && (allOn(i) || flags.apple) ? (
+                      <Text style={styles.line}>{allOn(i) ? 'You’ll get a notification after each workout.' : 'You’ll get a notification after each tennis session.'}</Text>
+                    ) : null}
                     {/* The last 30 days of them, with Log it on any not logged (Oct 5). */}
                     {allOn(i) ? (
                       <Text accessibilityRole="link" onPress={() => router.push('/workouts')} style={styles.pastLink}>See past workouts</Text>

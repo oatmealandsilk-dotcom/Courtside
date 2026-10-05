@@ -21,6 +21,7 @@ import { launchSettle, useCurtainDown } from '@/features/feed/warmup';
 import { useApp } from '@/store/AppContext';
 import { isPublicPath } from '@/features/share/publicPaths';
 import { useShareLanding } from '@/features/share/useShareLanding';
+import { useWorkoutWatch } from '@/features/activity/useWorkoutWatch';
 import { claimCarriedBirthDate, isDeviceBlocked, recallAnswered } from '@/features/age/ageCheck';
 import { auth as remoteAuth } from '@/data/remote';
 import { setCrashScreen } from '@/lib/crashReporting';
@@ -267,6 +268,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const detour = mustSignIn ? '/sign-in' : needsBirthday ? '/birthday' : needsTerms ? '/agree' : null;
   // Signed up from a shared link: once in, the app opens on what they were looking at.
   useShareLanding({ pathname, held: !!detour });
+  // The phone's own "Workout detected" alert (build 15): kept in step with the switches, and its tap opens Log it.
+  useWorkoutWatch({ settled: !detour && !onSplash });
   const sentTo = useRef<string | null>(null);
   useEffect(() => {
     if (!detour) { sentTo.current = null; return; }

@@ -1,0 +1,15 @@
+/*
+ * The browser's twin of workoutWatch.ts: Apple Health never reaches a
+ * browser, so there is nothing to watch and no alert to tap. Every call does
+ * nothing, and the phone's notification module is never loaded here.
+ */
+
+export type WatchPrefs = { tennis: boolean; workouts: boolean; skipWhoopTennis: boolean; alerts: boolean };
+export type WatchedWorkout = { id: string; startedAt: string; endedAt: string; tennis: boolean };
+
+export const workoutWatchAvailable = () => false;
+export async function alertsAllowed(): Promise<boolean> { return false; }
+export async function startWorkoutWatch(_p: WatchPrefs): Promise<void> { /* nothing to watch in a browser */ }
+export async function stopWorkoutWatch(): Promise<void> { /* nothing to stop */ }
+export function onWorkoutInFront(_listener: (w: WatchedWorkout) => void): () => void { return () => undefined; }
+export function listenForWorkoutAlertTaps(_listener: (w: WatchedWorkout) => void): () => void { return () => undefined; }
