@@ -3534,6 +3534,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [requireUser],
   );
 
+  // A reply is saved in the background, its picture or clip going up first.
+  // These let it be deleted meanwhile: the delete waits for that save (true
+  // once it reached the server), and one deleted before then is never saved.
+  const answerSaves = useRef(new Map<ID, Promise<boolean>>());
+  const answersDeleted = useRef(new Set<ID>());
+
   const addAnswer = useCallback(
     (questionId: ID, body: string, parentAnswerId?: ID, media?: Answer['media']) => {
       haptics.commit();
@@ -3588,7 +3594,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       });
       if (made && live(me, questionId)) {
         const answer: Answer = made;
-        void (async () => {
+        const deleted = () => answersDeleted.current.has(answer.id);
+        const saving = (async () => {
           // A picture or clip from this device goes up first; the reply is saved with its web address.
           let hosted = answer.media;
           if (hosted && isLocalMedia(hosted.url)) {
@@ -3598,15 +3605,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
               hosted = { ...hosted, url, thumb };
             } catch {
               hosted = undefined;
-              showToast({ title: 'The photo or video didn’t upload', body: 'Your reply was posted without it.', icon: 'alert-circle-outline' });
+              if (!deleted()) showToast({ title: 'The photo or video didn’t upload', body: 'Your reply was posted without it.', icon: 'alert-circle-outline' });
             }
             const settled = hosted;
-            setState((prev) => ({ ...prev, answers: prev.answers.map((a) => (a.id === answer.id ? { ...a, media: settled } : a)) }));
+            if (!deleted()) setState((prev) => ({ ...prev, answers: prev.answers.map((a) => (a.id === answer.id ? { ...a, media: settled } : a)) }));
           }
+          // Deleted while it went up: never saved.
+          if (deleted()) return false;
           // A reply that was only a picture, which did not upload, is not saved empty.
-          if (!hosted && !answer.body.trim()) return;
+          if (!hosted && !answer.body.trim()) return false;
           await remote.upsertAnswer({ ...answer, media: hosted });
-        })();
+          return true;
+        })().catch(() => false);
+        answerSaves.current.set(answer.id, saving);
+        void saving.then(() => answerSaves.current.delete(answer.id));
       }
       setState((prev) => notifyMentions(prev, body, me, questionId, 'question', prev.questions.find((q) => q.id === questionId)?.authorId));
     },
@@ -5734,14 +5746,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
     haptics.commit();
     setState(takeOff);
     if (!live(me, answer.questionId)) return;
-    remote.deleteAnswer(answerId).catch((err: unknown) => {
-      void reportError(err, { where: 'answer delete' });
-      setState((prev) => prev.answers.some((a) => a.id === answerId) ? prev : {
-        ...prev,
-        answers: [...prev.answers, answer],
-        questions: prev.questions.map((q) => q.id === answer.questionId && !q.answerIds.includes(answerId) ? { ...q, answerIds: [...q.answerIds, answerId] } : q),
+    // Still being saved (its picture or clip going up): the save stops, or,
+    // if it gets there first, the delete follows it. Never saved: nothing to delete.
+    const saving = answerSaves.current.get(answerId);
+    if (saving) answersDeleted.current.add(answerId);
+    void (saving ?? Promise.resolve(true)).then((saved) => {
+      if (!saved) return;
+      remote.deleteAnswer(answerId).catch((err: unknown) => {
+        void reportError(err, { where: 'answer delete' });
+        setState((prev) => prev.answers.some((a) => a.id === answerId) ? prev : {
+          ...prev,
+          answers: [...prev.answers, answer],
+          questions: prev.questions.map((q) => q.id === answer.questionId && !q.answerIds.includes(answerId) ? { ...q, answerIds: [...q.answerIds, answerId] } : q),
+        });
+        showToast({ title: 'Couldn’t delete your reply. Try again.', icon: 'alert-circle-outline' });
       });
-      showToast({ title: 'Couldn’t delete your reply. Try again.', icon: 'alert-circle-outline' });
     });
   }, [requireUser]);
   const deleteCoachQuestion = useCallback((questionId: ID) => {
