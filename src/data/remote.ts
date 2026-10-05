@@ -2848,7 +2848,8 @@ export const remote = {
   },
   async voteTip(tipId: ID, dir: 1 | -1) { const { error } = await need().rpc('vote_tip', { t: tipId, dir }); if (error) fail('tip vote')(error); },
 
-  async updateProfile(me: ID, patch: { name?: string; bio?: string; location?: string; cityAt?: { lat: number; lng: number } | null; avatarUrl?: string; profile?: PlayerProfile; isPrivate?: boolean; readReceipts?: boolean; openToHitUntil?: string | null; firstMove?: FirstMove }) {
+  /** Resolves false when it was not saved (most callers need not ask). */
+  async updateProfile(me: ID, patch: { name?: string; bio?: string; location?: string; cityAt?: { lat: number; lng: number } | null; avatarUrl?: string; profile?: PlayerProfile; isPrivate?: boolean; readReceipts?: boolean; openToHitUntil?: string | null; firstMove?: FirstMove }): Promise<boolean> {
     const row: Record<string, unknown> = {};
     if (patch.firstMove !== undefined) { row.first_move = patch.firstMove; row.first_move_at = new Date().toISOString(); }
     if (patch.openToHitUntil !== undefined) row.open_to_hit_until = patch.openToHitUntil;
@@ -2869,7 +2870,8 @@ export const remote = {
       if (Object.keys(row).length) ({ error } = await need().from('profiles').update(row).eq('id', me));
       else error = null;
     }
-    if (error) fail('profile update')(error);
+    if (error) { fail('profile update')(error); return false; }
+    return true;
   },
 
   /**

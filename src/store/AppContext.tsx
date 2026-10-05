@@ -5669,9 +5669,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const setOpenToHit = useCallback((on: boolean) => {
     const me = requireUser();
     const until = on ? endOfToday() : undefined;
+    const was = stateRef.current.users.find((u) => u.id === me)?.openToHitUntil;
     // The switch that sets it gives the tap (Toggle's `haptic`), the moment it flips.
     patchCurrentUser((u) => ({ ...u, openToHitUntil: until }));
-    if (live(me)) remote.updateProfile(me, { openToHitUntil: until ?? null });
+    if (!live(me)) return;
+    void remote.updateProfile(me, { openToHitUntil: until ?? null }).catch(() => false).then((ok) => {
+      // Not saved: nobody else sees it, so the switch goes back (unless a later tap has changed it since) and says so.
+      if (ok || stateRef.current.currentUserId !== me) return;
+      if (stateRef.current.users.find((u) => u.id === me)?.openToHitUntil !== until) return;
+      patchCurrentUser((u) => (u.openToHitUntil === until ? { ...u, openToHitUntil: was } : u));
+      haptics.untap();
+      showToast({ title: on ? 'Couldn’t turn on Open to hit today' : 'Couldn’t turn off Open to hit today', body: 'Check your connection and try again.', icon: 'cloud-offline-outline' });
+    });
   }, [requireUser, patchCurrentUser]);
 
   const toggleMute = useCallback((userId: ID, quiet?: boolean) => {
