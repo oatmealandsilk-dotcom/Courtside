@@ -44,6 +44,21 @@ export function learned(key: TipKey) {
   emit();
 }
 
+const ALL_TIPS = Object.keys(TIP_WORDS) as TipKey[];
+
+/** Settings → Tips, when they are on: every tip counts as known, so none shows (Oct 5, owner). */
+export function turnOffTips() {
+  ALL_TIPS.forEach((k) => done.add(k));
+  showing = null;
+  save();
+  emit();
+}
+
+/** Whether any tip can still show: Settings says On or Off from this. */
+export function useTipsOn(): boolean {
+  return useSyncExternalStore(subscribe, () => ALL_TIPS.some((k) => !done.has(k)));
+}
+
 /** Settings → Reset tips. */
 export function resetTips() {
   done = new Set();

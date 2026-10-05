@@ -1,9 +1,10 @@
 import { PlayerName } from '@/components/PlayerName';
-import { resetTips } from '@/features/tips/tips';
+import { resetTips, turnOffTips, useTipsOn } from '@/features/tips/tips';
+import * as haptics from '@/lib/haptics';
 import { show as showToast } from '@/lib/toast';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useState } from 'react';
-import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { goBack } from '@/lib/goBack';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -11,9 +12,9 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Avatar, Screen, Toggle } from '@/components/ui';
 import { useApp } from '@/store/AppContext';
 import { askWhoSeesYou, canChooseVisibility, onTeenMap } from '@/features/players/mapPrivacy';
-import { useTheme, themeList, themes, type ThemeName } from '@/theme/ThemeProvider';
+import { useTheme, themeList, themes } from '@/theme/ThemeProvider';
 import { Wash } from '@/components/Wash';
-import { colors, radius, spacing, typography } from '@/theme';
+import { colors, font, radius, spacing, typography } from '@/theme';
 import { leaveGently } from '@/components/SignOutCurtain';
 import { confirm } from '@/lib/confirm';
 import { replayTour } from '@/features/tour/tourStore';
@@ -34,6 +35,8 @@ interface Row {
   onPress?: () => void;
   /** Renders a switch instead of a chevron. */
   toggle?: { value: boolean; onChange: (next: boolean) => void };
+  /** A row that flips something where it is: its value says On or Off, and there is no chevron (it opens nothing). */
+  flip?: boolean;
 }
 
 /**
@@ -53,7 +56,8 @@ export default function Settings() {
     const problem = await actions.setLocationEnabled(next);
     setLocationNote(problem ?? '');
   };
-  const { theme } = useTheme();
+  const { theme, setTheme } = useTheme();
+  const tipsOn = useTipsOn();
   // The tennis-session alert switch shows once WHOOP's tennis sessions are switched on (migration 58).
   const tennis = useTennisFlags();
   const mapAdult = !!currentUser && !notKnownAdult(currentUser);
@@ -77,7 +81,12 @@ export default function Settings() {
         // Oct 4: the way out of being found that way (migration 89). In a browser too: it is about other people's phones.
         // Shown only once the database has it; before that it would do nothing.
         ...(contactsFindableLive ? [{ icon: 'person-add-outline' as const, label: 'Let people find me from their contacts', detail: 'By your phone number or email', toggle: { value: prefs.contactsFindable, onChange: (v: boolean) => actions.setPref('contactsFindable', v) } }] : []),
-        { icon: 'bulb-outline', label: 'Show tips again', onPress: () => { resetTips(); showToast({ title: 'Tips will show again', icon: 'bulb-outline' }); } },
+        // One tap flips them, and the row says which way they are (Oct 5, owner: no switch, just say On or Off).
+        { icon: 'bulb-outline', label: 'Tips', detail: 'A short hint the first time you reach something', value: tipsOn ? 'On' : 'Off', flip: true, onPress: () => {
+          haptics.tap();
+          if (tipsOn) { turnOffTips(); showToast({ title: 'Tips are off', icon: 'bulb-outline' }); }
+          else { resetTips(); showToast({ title: 'Tips will show again', icon: 'bulb-outline' }); }
+        } },
       ],
     },
     // Phone alerts only exist in the app on a phone; a browser can't receive them, so it doesn't offer switches for them.
@@ -111,7 +120,6 @@ export default function Settings() {
     {
       title: 'App',
       rows: [
-        { icon: 'color-palette-outline', label: 'Theme', leading: <ThemeTile name={theme} />, value: themeList.find((t) => t.name === theme)?.label, onPress: () => router.push('/theme') },
         { icon: 'archive-outline', label: 'Archive', onPress: () => router.push('/archive') },
       ],
     },
@@ -162,6 +170,40 @@ export default function Settings() {
         </View>
       ) : null}
 
+      {/* Your court, near the top (Oct 5, owner: the city courts are a big feature and look great, so they
+          should not sit down in App settings). One tap switches; See all opens the full page with every court. */}
+      <View style={styles.section}>
+        <View style={styles.courtHead}>
+          <Text style={styles.sectionTitle}>Your court</Text>
+          <Pressable accessibilityRole="link" accessibilityLabel="See all courts" onPress={() => router.push('/theme')} hitSlop={8}>
+            <Text style={styles.courtAll}>See all</Text>
+          </Pressable>
+        </View>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.courtRow}>
+          {themeList.map((option) => {
+            const on = option.name === theme;
+            const p = themes[option.name];
+            return (
+              <Pressable key={option.name} accessibilityRole="radio" accessibilityState={{ selected: on }} accessibilityLabel={`${option.label} court`} onPress={() => { if (!on) { haptics.tap(); setTheme(option.name); } }} style={({ pressed }) => [styles.court, pressed && { opacity: 0.8 }]}>
+                <View style={[styles.courtTile, { backgroundColor: p.bg, borderColor: on ? colors.brand : p.borderStrong }, on && styles.courtTileOn]}>
+                  <Wash theme={option.name} height={84} strength={1} fade={p.bg} />
+                  {/* A little court in that city's own surface colour, its lines in white. */}
+                  <View style={[styles.miniCourt, { backgroundColor: p.court }]}>
+                    <View style={[styles.miniLines, { borderColor: p.onMedia }]} />
+                    <View style={[styles.miniSingles, { borderColor: p.onMedia }]} />
+                    <View style={[styles.miniNet, { backgroundColor: p.onMedia }]} />
+                    <View style={[styles.miniService, { top: 11, backgroundColor: p.onMedia }]} />
+                    <View style={[styles.miniService, { bottom: 11, backgroundColor: p.onMedia }]} />
+                    <View style={[styles.miniCentre, { backgroundColor: p.onMedia }]} />
+                  </View>
+                  {on ? <View style={styles.courtCheck}><Ionicons name="checkmark" size={12} color={colors.brandInk} /></View> : null}
+                </View>
+                <Text style={[styles.courtName, on && styles.courtNameOn]} numberOfLines={1}>{option.label}</Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+      </View>
 
       {sections.map((section) => (
         <View key={section.title} style={styles.section}>
@@ -186,8 +228,8 @@ export default function Settings() {
                     <Text style={styles.rowLabel} numberOfLines={row.toggle ? 2 : 1}>{row.label}</Text>
                     {row.detail ? <Text style={styles.rowDetail}>{row.detail}</Text> : null}
                   </View>
-                  {row.value ? <Text style={styles.rowValue} numberOfLines={1}>{row.value}</Text> : null}
-                  {row.toggle ? (
+                  {row.value ? <Text style={[styles.rowValue, row.flip && row.value === 'On' && styles.rowValueOn]} numberOfLines={1}>{row.value}</Text> : null}
+                  {row.flip ? null : row.toggle ? (
                     // The whole row is the switch (it flips on a press anywhere along it), so this one only shows it: a tap is never counted twice.
                     <View pointerEvents="none" aria-hidden accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
                       <Toggle value={row.toggle.value} onChange={row.toggle.onChange} accessibilityLabel={row.label} />
@@ -211,22 +253,6 @@ export default function Settings() {
     </Screen>
   );
 }
-
-/**
- * The Theme row's icon: the chosen court as a tiny page — its ground with its
- * wash faintly on it — the same picture the Theme page shows for each court.
- */
-function ThemeTile({ name }: { name: ThemeName }) {
-  const p = themes[name];
-  return (
-    <View style={[tile.box, { backgroundColor: p.bg, borderColor: p.borderStrong }]}>
-      <Wash theme={name} height={26} strength={0.9} fade={p.bg} />
-    </View>
-  );
-}
-const tile = StyleSheet.create({
-  box: { width: 26, height: 24, borderRadius: 7, borderWidth: 1, overflow: 'hidden' },
-});
 
 const styleDefinitions = StyleSheet.create({
   // You, at the top, on the page's own wash: no card around it.
@@ -253,6 +279,23 @@ const styleDefinitions = StyleSheet.create({
   rowLabel: { ...typography.body, color: colors.text },
   rowDetail: { ...typography.small, color: colors.textFaint },
   rowValue: { ...typography.body, color: colors.textMuted, maxWidth: 140 },
+  rowValueOn: { color: colors.brand, ...font('600') },
+  courtHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingRight: spacing.sm },
+  courtAll: { ...typography.smallStrong, color: colors.brand },
+  courtRow: { gap: 12, paddingHorizontal: 2, paddingVertical: 2 },
+  court: { alignItems: 'center', gap: 6, width: 68 },
+  courtTile: { width: 64, height: 84, borderRadius: 16, borderWidth: 1, overflow: 'hidden' },
+  courtTileOn: { borderWidth: 2.5 },
+  miniCourt: { position: 'absolute', left: 9, right: 9, bottom: 9, height: 42, borderRadius: 5, overflow: 'hidden' },
+  // Doubles sidelines (the outer box), singles sidelines (inset), service lines, the centre line between them, the net.
+  miniLines: { position: 'absolute', left: 4, right: 4, top: 4, bottom: 4, borderWidth: 1, opacity: 0.9 },
+  miniSingles: { position: 'absolute', left: 9, right: 9, top: 4, bottom: 4, borderLeftWidth: 1, borderRightWidth: 1, opacity: 0.9 },
+  miniNet: { position: 'absolute', left: 2, right: 2, top: 20.5, height: 1.5, opacity: 0.95 },
+  miniService: { position: 'absolute', left: 9, right: 9, height: 1, opacity: 0.9 },
+  miniCentre: { position: 'absolute', left: '50%', marginLeft: -0.5, width: 1, top: 11, bottom: 11, opacity: 0.9 },
+  courtCheck: { position: 'absolute', right: 7, top: 7, width: 18, height: 18, borderRadius: 9, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
+  courtName: { ...typography.small, color: colors.textMuted },
+  courtNameOn: { color: colors.text, ...font('600') },
   logout: { alignItems: 'center', justifyContent: 'center', minHeight: 50 },
   logoutText: { ...typography.body, color: colors.danger },
   empty: { ...typography.small, color: colors.textFaint, paddingVertical: spacing.lg },
