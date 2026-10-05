@@ -287,9 +287,11 @@ export default function Onboarding() {
       return;
     }
     if (forCoach) {
-      // The coach's own questions, answered: straight into the coach.
+      // The coach's own questions, answered: back down to the coach they
+      // were opened from (it moves on to the week by itself), not a second
+      // copy of it on top, which Back then had to close as well.
       actions.completeOnboarding({ ...profile, onboardedAt: existing?.onboardedAt });
-      router.replace('/ai-coach');
+      goBack('/ai-coach');
       return;
     }
     actions.completeOnboarding(profile);
@@ -304,10 +306,15 @@ export default function Onboarding() {
     else router.replace('/first-move');
   };
 
+  // Skip goes on the way Continue does: to the next step of this list, and
+  // on its last step it finishes. The coach's two questions end on Calendar;
+  // skipping that once went on to Review, which is not one of them, and
+  // whose Continue went back to Calendar, round and round.
   const skipStep = () => {
     const key = STEPS[step].skip;
     if (key) skipped.current.add(key);
-    setStep((s) => s + 1);
+    if (position === order.length - 1) finish();
+    else setStep(order[position + 1] ?? step + 1);
   };
   const next = async () => {
     if (step === 0 && asksInviter && !(await claimCode())) return;

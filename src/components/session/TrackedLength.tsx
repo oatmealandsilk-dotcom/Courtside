@@ -8,8 +8,8 @@ import * as haptics from '@/lib/haptics';
 import { duration } from '@/lib/format';
 import { colors, radius, spacing, typography } from '@/theme';
 
-/** The shortest and longest a session can be logged at. */
-const MIN = 1;
+/** The shortest and longest a session can be logged at: what the database takes (5 to 600 minutes, migration 39). */
+const MIN = 5;
 const MAX = 10 * 60;
 const clamp = (m: number) => Math.max(MIN, Math.min(MAX, m));
 /** The next or previous whole five minutes: 157 goes up to 160, down to 155. */

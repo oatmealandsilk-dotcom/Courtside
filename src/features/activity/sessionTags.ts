@@ -25,6 +25,9 @@ export const maxTagsFor = (kind: PracticeSession['kind'] | undefined): number =>
 /** The most any session can have: a practice's. */
 export const MAX_SESSION_TAGS = 8;
 
+/** The most a session's typed "Who was there" names can be: the database keeps 60 characters (migration 39), and a longer one never saved. */
+export const OPPONENT_MAX = 60;
+
 /** Only a match or a practice can have people tagged on it. */
 export const canTagKind = (kind: PracticeSession['kind'] | undefined): boolean => kind === 'match' || kind === 'practice';
 

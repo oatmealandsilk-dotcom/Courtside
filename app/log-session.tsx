@@ -335,7 +335,7 @@ function LogSession() {
   ) : fromHit ? (
     <SheetTitle title="How was the hit?" line={`${fromHit.place}${fromHit.who ? ` · with ${fromHit.who}` : ''}. Only you see this.`} lines={2} onClose={close} />
   ) : (
-    <SheetTitle title="Log a session" line="Keeps your streak, hours and win rate. Only you see it." onClose={close} />
+    <SheetTitle title="Log a session" line="Keeps your streak, hours and win rate. Only you see it." lines={2} onClose={close} />
   );
   const numbers = fresh ? privateLine(fresh) : '';
   // Once the sheet is gone: the new post with this session's stats, in this page's place, or back where it was opened from.

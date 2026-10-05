@@ -15,6 +15,7 @@ import { useAiCoachLive, useAiCoachOn } from '@/features/aiCoach/switch';
 import { useAiCoachConsent } from '@/features/aiCoach/consent';
 import { usePaidBooking } from '@/features/coaching/bookings';
 import { openLegal } from '@/lib/legal';
+import { confirmReport } from '@/lib/confirm';
 import { planRemindersSupported, readPlanReminders, schedulePlanReminders, setPlanReminders } from '@/features/aiCoach/planReminder';
 import { show as showToast } from '@/lib/toast';
 import { duration, formatDate, experienceLabel, hoursAndMinutes } from '@/lib/format';
@@ -191,7 +192,7 @@ type Line = AiMessage & { handoff?: AiCoachReply['handoff'] };
 function Train() {
   const styles = useThemedStyles(styleDefinitions);
   const live = useAiCoachLive();
-  const { currentUser, healthHistory, integrations, coaches, users } = useApp();
+  const { currentUser, healthHistory, integrations, coaches, users, actions } = useApp();
   // Prices are only given to the coach where paid booking is open; otherwise it suggests coaches without one.
   const paidBooking = usePaidBooking();
   // A morning reminder opens straight onto that day of the plan.
@@ -239,6 +240,11 @@ function Train() {
     if (result === 'denied') {
       setRemind(false);
       showToast({ title: 'Alerts are off for CourtSide', body: 'Turn them on in your phone’s Settings to get the morning reminder.', icon: 'notifications-off-outline' });
+    } else if (result === 'on' && settled && plan) {
+      // Set now the switch is saved: the effect above ran as it flipped, before
+      // the switch was saved, found it still off and set nothing, and nothing
+      // ran it again until the week was next opened.
+      void schedulePlanReminders(plan);
     }
   };
 
@@ -296,6 +302,23 @@ function Train() {
                 <Text style={styles.bubbleText}>{m.body}</Text>
               </View>
               {m.handoff ? <Handoff coachId={m.handoff.coachId} line={m.handoff.line} /> : null}
+              {/* Any answer the AI wrote can be reported, as everything else in the app can
+                  (Google Play's AI-generated content rule). The report carries the answer's
+                  start, within the 200 characters a report's target may be (migration 36). */}
+              {m.role !== 'user' ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Report this answer"
+                  hitSlop={8}
+                  style={styles.report}
+                  onPress={() => confirmReport('answer', () => {
+                    actions.reportUser('ai-coach', `ai-reply:${m.body.slice(0, 180)}`);
+                    showToast({ title: 'Thanks — a person will review this', icon: 'flag-outline' });
+                  })}
+                >
+                  <Text style={styles.reportText}>Report</Text>
+                </Pressable>
+              ) : null}
             </View>
           ))}
           {thinking ? <View style={[styles.bubble, styles.theirs]}><ThinkingDots /></View> : null}
@@ -361,7 +384,8 @@ function Train() {
               {plan.days.map((day) => {
                 const open = openDay === day.dayIndex;
                 const dayMinutes = day.blocks.reduce((sum, b) => sum + b.minutes, 0);
-                const main = day.restDay ? null : day.blocks.find((b) => b.kind === 'on-court') ?? day.blocks[0];
+                // Named after its longest block, as the morning reminder is: the serve work, not the warm-up every day opens with.
+                const main = day.restDay || !day.blocks.length ? null : day.blocks.reduce((best, b) => (b.minutes > best.minutes ? b : best), day.blocks[0]);
                 const meta = main ? BLOCK_META[main.kind] : null;
                 return (
                   <Pressable
@@ -492,6 +516,8 @@ const styleDefinitions = StyleSheet.create({
   lead: { ...typography.body, color: colors.textMuted, lineHeight: 22 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   lineWrap: { gap: spacing.sm },
+  report: { alignSelf: 'flex-start', paddingHorizontal: spacing.sm },
+  reportText: { ...typography.caption, color: colors.textFaint },
   bubble: { borderRadius: 18, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, maxWidth: '88%' },
   mine: { alignSelf: 'flex-end', backgroundColor: colors.brandDim },
   theirs: { alignSelf: 'flex-start', backgroundColor: colors.surface },

@@ -59,6 +59,8 @@ interface Props {
    * password suggestions.
    */
   autoComplete?: React.ComponentProps<typeof TextInput>['autoComplete'];
+  /** The most characters the box takes, where the database keeps no more (a name typed into "Who was there"). */
+  maxLength?: number;
 }
 
 /**
@@ -93,6 +95,7 @@ export function Field({
   bare = false,
   well = false,
   autoComplete,
+  maxLength,
 }: Props) {
   const styles = useThemedStyles(styleDefinitions);
   const submits = Boolean(onSubmitEditing) && (submitOnEnter || !multiline);
@@ -158,6 +161,7 @@ export function Field({
         keyboardType={keyboardType}
         secureTextEntry={secureTextEntry}
         autoComplete={autoComplete}
+        maxLength={maxLength}
         selectTextOnFocus={selectTextOnFocus}
         onFocus={() => { setFocused(true); reveal(box()); onFocus?.(); }}
         onBlur={() => { setFocused(false); onBlur?.(); }}

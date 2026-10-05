@@ -34,7 +34,7 @@ import { pickSource } from '@/features/activity/recent';
 import { isTennisActivity, workoutLine, workoutName } from '@/features/activity/workouts';
 import { mergePast, readOneWithHeartRate, readPastHealth, type PastWorkout } from '@/features/activity/pastWorkouts';
 import { postShare, reshare, sameShare } from '@/features/activity/healthShare';
-import { REFUSALS, maxTagsFor, canTagKind, firstName, isActive, localRefusal, mirrorCopy, nameFor, patchWith, reconcileWith, refusalWords, roleOn, tagsOnSession, withEntry, withOnNewPost } from '@/features/activity/sessionTags';
+import { OPPONENT_MAX, REFUSALS, maxTagsFor, canTagKind, firstName, isActive, localRefusal, mirrorCopy, nameFor, patchWith, reconcileWith, refusalWords, roleOn, tagsOnSession, withEntry, withOnNewPost } from '@/features/activity/sessionTags';
 import { duration } from '@/lib/format';
 import { forgetReferrer, peekReferrer } from '@/features/invite/referral';
 import { asHitMiles, endOfToday } from '@/features/players/openToHit';
@@ -846,8 +846,8 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
 
   /* Ask a coach */
   askCoach: (input: NewCoachQuestionInput) => ID;
-  /** Resolves 'blocked' when its words were refused (migration 117), as addComment does. */
-  replyToCoachQuestion: (questionId: ID, body: string) => Promise<'blocked' | undefined>;
+  /** Resolves 'blocked' when its words were refused (migration 117), as addComment does, and 'failed' when it did not save for any other reason; either way it comes off the question. */
+  replyToCoachQuestion: (questionId: ID, body: string) => Promise<'blocked' | 'failed' | undefined>;
   toggleReplyHelpful: (replyId: ID) => void;
   /** The asker deletes their question, and the coaches' answers with it. Puts it back with a toast if the server refuses. */
   deleteCoachQuestion: (questionId: ID) => void;
@@ -2989,7 +2989,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const session: PracticeSession = {
       id: nextId('ses'), userId: me, day: input.day ?? localDay(new Date()), minutes: input.minutes, kind: input.kind,
       won: input.kind === 'match' ? setsWinner(sets) ?? input.won : undefined, ...(sets ? { sets } : {}),
-      opponent: input.opponent?.trim() || undefined, note: input.note?.trim() || undefined,
+      // Within what the database keeps (60 characters, migration 39): a longer name never saved.
+      opponent: input.opponent?.trim().slice(0, OPPONENT_MAX).trim() || undefined, note: input.note?.trim() || undefined,
       ...(input.activityId ? { activityId: input.activityId } : {}),
       // What a fitness session logged from a workout was ('run', migration 107).
       ...(input.kind === 'fitness' && input.workout ? { workout: input.workout } : {}),
@@ -3517,7 +3518,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const setSessionOpponent = useCallback(async (sessionId: ID, opponent: string) => {
     const me = requireUser();
-    const text = opponent.trim().slice(0, 80) || undefined;
+    const text = opponent.trim().slice(0, OPPONENT_MAX).trim() || undefined;
     const had = stateRef.current.sessions.find((x) => x.id === sessionId && x.userId === me);
     if (!had || had.opponent === text) return;
     setState((prev) => ({ ...prev, sessions: prev.sessions.map((x) => (x.id === sessionId ? { ...x, opponent: text } : x)) }));
@@ -4359,9 +4360,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
         ...input,
       };
       setState((prev) => ({ ...prev, coachQuestions: [question, ...prev.coachQuestions] }));
-      // Refused for its words (migration 117): it comes down again (the toast says why).
-      const saveQuestion = (q: CoachQuestion) => remote.upsertCoachQuestion(q).then((r) => {
-        if (r === 'blocked') setState((prev) => ({ ...prev, coachQuestions: prev.coachQuestions.filter((x) => x.id !== q.id) }));
+      // Refused for its words (migration 117), or not saved at all (no
+      // connection, a rule that said no): it comes down again, rather than
+      // wait for an answer to a question no coach can see. The words toast
+      // says why for the first; this one for the rest.
+      const saveQuestion = (q: CoachQuestion) => remote.upsertCoachQuestion(q).catch(() => 'failed' as const).then((r) => {
+        if (r === 'blocked' || r === 'failed') setState((prev) => ({ ...prev, coachQuestions: prev.coachQuestions.filter((x) => x.id !== q.id) }));
+        if (r === 'failed') showToast({ title: 'Your question didn’t post', body: 'Check your connection and try again.', icon: 'alert-circle-outline' });
         return r;
       });
       if (live(me, question.id)) {
@@ -4401,7 +4406,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   );
 
   const replyToCoachQuestion = useCallback(
-    (questionId: ID, body: string, parentAnswerId?: ID): Promise<'blocked' | undefined> => {
+    (questionId: ID, body: string, parentAnswerId?: ID): Promise<'blocked' | 'failed' | undefined> => {
       const me = requireUser();
       const reply: CoachReply = {
         id: nextId('cr'),
@@ -4412,16 +4417,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
         helpfulBy: [],
       };
       haptics.commit();
-      const saved = live(me, questionId) ? remote.insertCoachReply(reply).then((r): 'blocked' | undefined => {
-        if (r !== 'blocked') return undefined;
-        // Refused for its words (migration 117): it comes off the question again (the toast says why), and the box gets the words back.
+      const saved = live(me, questionId) ? remote.insertCoachReply(reply).catch(() => 'failed' as const).then((r): 'blocked' | 'failed' | undefined => {
+        if (r !== 'blocked' && r !== 'failed') return undefined;
+        // Refused for its words (migration 117), or not saved at all (no
+        // connection, or a block between you and the asker, migration 115):
+        // it comes off the question again, a toast says why, and the box
+        // gets the words back.
         setState((prev) => ({
           ...prev,
           coachReplies: prev.coachReplies.filter((x) => x.id !== reply.id),
           coachQuestions: prev.coachQuestions.map((q) => (q.id === questionId ? { ...q, replyIds: q.replyIds.filter((id) => id !== reply.id) } : q)),
         }));
-        return 'blocked';
-      }, () => undefined) : Promise.resolve(undefined);
+        if (r === 'failed') showToast({ title: 'Your reply didn’t post', body: 'Check your connection and try again.', icon: 'alert-circle-outline' });
+        return r;
+      }) : Promise.resolve(undefined);
       setState((prev) => {
         const question = prev.coachQuestions.find((q) => q.id === questionId);
         const next: AppState = {
