@@ -138,8 +138,16 @@ export interface StoryLook { sticker: boolean; top: string; bottom: string }
 /**
  * The hidden copy photographed and handed on. Says nothing back when it went
  * (or the sheet opened); a sentence when it could not, or what to do next.
+ *
+ * `link` is the sharer's invite link, which goes as words beside the picture
+ * and is never drawn on it (Oct 5, Strava's way). More sends it with the
+ * picture on an iPhone, so a message or a note gets a link to tap as well.
+ * Copy stays the picture alone: a phone's clipboard here holds one thing, and
+ * Instagram pastes the picture. Android's More keeps sending the file alone
+ * (its share route takes a file and no words), and Stories and Save are the
+ * picture alone everywhere.
  */
-export async function exportStory(view: View | null, action: StoryAction, title: string, look?: StoryLook): Promise<string | null> {
+export async function exportStory(view: View | null, action: StoryAction, title: string, look?: StoryLook, link?: string): Promise<string | null> {
   if (!view) return 'The picture is not ready yet. Try again in a moment.';
   const size = Platform.OS === 'android' ? STORY_PX : stageSize();
   if (action === 'copy') {
@@ -175,6 +183,11 @@ export async function exportStory(view: View | null, action: StoryAction, title:
   if (action === 'save') {
     // The plain share sheet, which carries Save Image from build 11 (see canSaveStory).
     await Share.share({ url: uri });
+    return null;
+  }
+  if (action === 'more' && link && Platform.OS === 'ios') {
+    // The picture and the link together: the plain share sheet takes both, as Save above uses it.
+    await Share.share({ url: uri, message: link });
     return null;
   }
   if (!(await Sharing.isAvailableAsync())) return 'Sharing is not available on this phone.';

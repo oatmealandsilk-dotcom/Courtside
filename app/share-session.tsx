@@ -152,7 +152,8 @@ export default function ShareSession() {
       if (design === 'photo') {
         for (let t = 0; t < 50 && waitFor.current === 'loading'; t += 1) await new Promise((r) => setTimeout(r, 100));
       }
-      const said = await exportStory(stage.current, action, 'My session on CourtSide', storyLook(design));
+      // Your invite link goes along as words (Copy, More), never on the picture: Strava's way (Oct 5).
+      const said = await exportStory(stage.current, action, 'My session on CourtSide', storyLook(design), story?.invite);
       if (said) setNote(said);
       else haptics.commit();
     } catch (error) {

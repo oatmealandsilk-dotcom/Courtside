@@ -60,23 +60,37 @@ function download(blob: Blob, name: string) {
 /** How the picture goes into a story (phones only; the browser shares a file). */
 export interface StoryLook { sticker: boolean; top: string; bottom: string }
 
-export async function exportStory(view: View | null, action: StoryAction, title: string, _look?: StoryLook): Promise<string | null> {
+/**
+ * `link` is the sharer's invite link, as words beside the picture and never
+ * on it (Oct 5, Strava's way). Copy puts the picture and the link on the
+ * clipboard together where the browser takes both (pasted into a story it is
+ * the picture, into a message the link), else the picture alone. More sends
+ * the link as the share's text with the file, where the browser shares both.
+ * Stories and Save are the picture alone.
+ */
+export async function exportStory(view: View | null, action: StoryAction, title: string, _look?: StoryLook, link?: string): Promise<string | null> {
   const made = await storyBlob(view);
   if (typeof made === 'string') return made;
   if (action === 'copy') {
-    try {
-      await navigator.clipboard.write([new ClipboardItem({ 'image/png': made })]);
-      return COPIED_NOTE;
-    } catch {
-      // A browser without picture copying: the file instead.
+    const picture = { 'image/png': made };
+    const tries: Record<string, Blob>[] = link ? [{ ...picture, 'text/plain': new Blob([link], { type: 'text/plain' }) }, picture] : [picture];
+    for (const items of tries) {
+      try {
+        await navigator.clipboard.write([new ClipboardItem(items)]);
+        return COPIED_NOTE;
+      } catch {
+        // Not both at once in this browser: the picture alone, then the file.
+      }
     }
   }
   const name = 'courtside-story.png';
   const file = new File([made], name, { type: 'image/png' });
-  const nav = navigator as Navigator & { canShare?: (data: { files: File[] }) => boolean };
+  const nav = navigator as Navigator & { canShare?: (data: ShareData) => boolean };
+  // The link rides along when Copy fell through to here, or More was tapped; only where the browser shares both.
+  const withLink: ShareData | null = link && (action === 'more' || action === 'copy') ? { files: [file], title, text: link } : null;
   if (action !== 'save' && nav.canShare?.({ files: [file] })) {
     try {
-      await nav.share({ files: [file], title });
+      await nav.share(withLink && nav.canShare(withLink) ? withLink : { files: [file], title });
       return null;
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') return null;
