@@ -47,7 +47,8 @@ export function checkForTennis(me: ID, src: { apple: boolean; whoop: boolean; tr
       const last = await lastLook(key);
       if (force || last === null || now - last > APPLE_EVERY) {
         // Six hours further back than the last look: a watch can take that long to hand a workout to the phone.
-        const since = new Date((last ?? now - 3 * 86_400_000) - 6 * 3_600_000).toISOString();
+        // The first look goes back a week, so tennis played in the days before connecting is there to log.
+        const since = new Date((last ?? now - 7 * 86_400_000) - 6 * 3_600_000).toISOString();
         let failed = false;
         for (const w of await readTennisWorkouts(since, { skipWhoop: src.whoop })) {
           const r = await remote.reportActivity(w.id, {
