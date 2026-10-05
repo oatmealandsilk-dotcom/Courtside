@@ -206,8 +206,13 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
     // never under 40% of it, so a long caption cannot shrink the picture away.
     const rest = head && foot && entry ? head + foot + entry + spacing.md * 2 + spacing.sm * (thread.length ? 2 : 1) + (thread.length ? 72 : 0) : 0;
     const tall = rest ? Math.max(room.h * 0.4, room.h - rest) : room.h * 0.62;
-    const h = Math.min(tall, (room.w - inset * 2) / ratio);
-    return { width: Math.round(h * ratio), height: Math.round(h) };
+    const full = room.w - inset * 2;
+    const h = Math.min(tall, full / ratio);
+    // On a phone a photo always fills the page's width, the way Instagram's feed does (Oct 5, owner: a tall photo
+    // with a session card under it was shrunk to a narrow column). When the page is too short for its whole
+    // height it is trimmed instead, keeping more of the top, where faces usually are. Videos and computers as before.
+    if (!desktopWeb && !post.videoUrl) return { width: Math.round(full), height: Math.round(h), cropped: h < full / ratio - 1 };
+    return { width: Math.round(h * ratio), height: Math.round(h), cropped: false };
   })();
   // On a computer the post is one centred column, the way it is on a phone:
   // the picture in the middle at its own size, and the name above it and the
@@ -261,7 +266,7 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
       {/* A finger on the picture belongs to the picture: no sideways page swipe from here. */}
       <View
         ref={frameRef}
-        style={[styles.frame, landscape ? styles.frameWide : styles.frameTall, frameSize ?? firstFrame]}
+        style={[styles.frame, landscape ? styles.frameWide : styles.frameTall, frameSize ? { width: frameSize.width, height: frameSize.height } : firstFrame]}
         onTouchStart={() => lockPageSwipe(true)}
         onTouchEnd={() => lockPageSwipe(false)}
         onTouchCancel={() => lockPageSwipe(false)}
@@ -270,7 +275,7 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
           <PostVideo uri={post.videoUrl} poster={post.thumbnailUrl} active={active} preload={preload} onDoubleTap={onDoubleTap} trimStart={post.trimStart} trimEnd={post.trimEnd} speed={post.speed} volume={post.volume} crop={post.crop} silent={post.muted} discInk={discInk} onReady={onReady} onSize={landscape ? onSize : undefined} />
         ) : (
           <Pressable accessibilityRole="image" accessibilityLabel={post.mediaLabel ?? 'Post photo'} onPress={tapPicture} style={StyleSheet.absoluteFill}>
-            <ExpoImage accessibilityIgnoresInvertColors source={{ uri: post.imageUrl ?? post.thumbnailUrl }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" onLoad={() => onReady?.(true)} />
+            <ExpoImage accessibilityIgnoresInvertColors source={{ uri: post.imageUrl ?? post.thumbnailUrl }} style={StyleSheet.absoluteFill} contentFit="cover" contentPosition={frameSize?.cropped ? { top: '25%', left: '50%' } : 'center'} cachePolicy="memory-disk" onLoad={() => onReady?.(true)} />
           </Pressable>
         )}
         {/* Heart-rate zones, when shared: a thin foot along the picture's bottom edge, nothing over the picture itself. */}
