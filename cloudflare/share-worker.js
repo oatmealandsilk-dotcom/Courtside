@@ -8,9 +8,12 @@
  * links: for a preview-fetching robot it answers with that post's picture,
  * caption and author; for a person it goes straight on to the post in the app.
  *
- * It reads only what a signed-out visitor could see (the publishable key
- * below is public by design; it is inside the web app too), so private
- * accounts and removed posts get the generic card.
+ * It asks the same question the app's own shared-link page asks
+ * (share_preview, migration 68), with the publishable key below (public by
+ * design; it is inside the web app too). So only a public adult's things get
+ * a card; private accounts, teens and removed posts get the generic one.
+ * (Since migration 109 nothing about people can be read signed out except
+ * through share_preview.)
  *
  * Free on Cloudflare's free plan (100,000 requests a day).
  * Setup: cloudflare/README.md.
@@ -47,11 +50,16 @@ export default {
   },
 };
 
-async function read(path) {
-  const response = await fetch(`${SUPABASE}/rest/v1/${path}`, { headers: { apikey: KEY, accept: 'application/json' } });
+// What a stranger may see of one post, profile or question: null when locked.
+async function preview(kind, id) {
+  const response = await fetch(`${SUPABASE}/rest/v1/rpc/share_preview`, {
+    method: 'POST',
+    headers: { apikey: KEY, 'content-type': 'application/json', accept: 'application/json' },
+    body: JSON.stringify({ p_kind: kind, p_id: id }),
+  });
   if (!response.ok) return null;
-  const rows = await response.json();
-  return Array.isArray(rows) && rows.length ? rows[0] : null;
+  const data = await response.json();
+  return data && typeof data === 'object' && data.open === true ? data : null;
 }
 
 const clip = (text, n) => {
@@ -62,28 +70,32 @@ const clip = (text, n) => {
 async function describe(kind, id) {
   if (!UUID.test(id)) return null;
   if (kind === 'post') {
-    const post = await read(`posts?id=eq.${id}&select=kind,body,image_url,thumbnail_url,author:profiles!posts_author_id_fkey(name,handle)`);
+    const got = await preview('post', id);
+    const post = got && got.post;
     if (!post) return null;
-    const who = post.author?.name || (post.author?.handle ? `@${post.author.handle}` : 'A player');
-    const what = post.kind === 'clip' ? 'a clip' : post.image_url ? 'a photo' : 'a post';
+    const author = got.author || {};
+    const who = author.name || (author.handle ? `@${author.handle}` : 'A player');
+    const what = post.kind === 'clip' ? 'a clip' : post.imageUrl ? 'a photo' : 'a post';
     return {
       title: `${who} on CourtSide`,
       description: clip(post.body, 200) || `See ${what} from ${who} on CourtSide.`,
-      image: post.thumbnail_url || post.image_url || FALLBACK.image,
+      image: post.thumbnailUrl || post.imageUrl || FALLBACK.image,
       large: true,
     };
   }
   if (kind === 'user') {
-    const person = await read(`profiles?id=eq.${id}&select=name,handle,bio,location,avatar_url`);
+    const got = await preview('profile', id);
+    const person = got && got.author;
     if (!person) return null;
     return {
       title: `${person.name || 'A player'} (@${person.handle}) on CourtSide`,
-      description: clip(person.bio, 200) || [person.location, 'Tennis on CourtSide'].filter(Boolean).join(' · '),
-      image: person.avatar_url || FALLBACK.image,
-      large: !person.avatar_url,
+      description: clip(got.profile && got.profile.bio, 200) || [person.location, 'Tennis on CourtSide'].filter(Boolean).join(' · '),
+      image: person.avatarUrl || FALLBACK.image,
+      large: !person.avatarUrl,
     };
   }
-  const thread = await read(`questions?id=eq.${id}&select=title,body`);
+  const got = await preview('question', id);
+  const thread = got && got.question;
   if (!thread) return null;
   return {
     title: clip(thread.title, 110) || 'A question on CourtSide',

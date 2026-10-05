@@ -41,29 +41,85 @@
 --     can_join_groups (73) already uses the same daily limit; until now that
 --     limit was missing from the database, so it failed every time. It works
 --     after this.
---   * Already live and left exactly as they are: who can read a hit and who
---     is in it (95, word for word 64's rule), who can see a spot on the map
---     (78/98/105), what signed-out readers see (94/103).
+--   * The same 300-a-day limit now also covers every action whose yes or no
+--     depends on someone else's age, so trying them one after another
+--     cannot be used to test accounts either: starting a chat
+--     (open_conversation), making a group chat or adding to one
+--     (create_group, add_group_members, through group_fits), tagging
+--     someone on a session (tag_session), inviting people to a hit
+--     (invite_to_hit) and joining a hit (join_hit). Asking about someone who
+--     follows you (or, for hits, someone you follow each other with) never
+--     counts: the answer does not depend on their age. Past the limit the
+--     action says 'age_rule_limit' for everyone alike. Nobody near normal
+--     use comes close: it is 300 different people a day.
+--   * Signed out, nothing about people comes back at all: no profiles and
+--     no posts (94 and 103 showed adults only, which meant comparing that
+--     list with what a free account sees picked out every teen). Links
+--     shared outside the app keep working: their page asks share_preview
+--     (68), which does not read through these rules.
+--   * The three small helpers the hit, join and map rules ask
+--     (hit_shown_to_you, join_shown_to_you, spot_shown_to_you, from 95 and
+--     78) move to a separate area of the database called "private", which
+--     the app's gateway does not open. The rules use them exactly as before;
+--     nobody can call them by name from outside any more. The two helpers
+--     only the signed-out rules used (shown_signed_out, post_shown_signed_out)
+--     are removed: anyone could call them and ask "is this account an adult?"
+--     about any id, as often as they liked.
+--   * Already live and left as they are: who can read a hit and who is in it
+--     (95, word for word 64's rule), who can see a spot on the map
+--     (78/98/105).
 --
 -- The app: the version live since Oct 2 (commit 6dab7fd) already works both
 -- ways. It notices the age is gone from profile rows, reads your own age
 -- from your settings row, and asks the server the yes/no questions above.
 -- An app older than Oct 2 would no longer see its own age and would treat
 -- its own account as a teen's until it updates (64's "Old phones" note).
+-- The link-preview worker (cloudflare/share-worker.js, not switched on yet)
+-- read profiles and posts signed out; it is changed alongside this file to
+-- ask share_preview instead, so its cards stay the same.
 --
--- What this does NOT hide (said plainly, as in 64): someone signed in can
--- still work out, one person at a time, that an account is "not known to be
--- an adult" from the teen rules' visible effects (a locked Message button, a
--- post missing from a court page, the private switch a teen starts with).
--- The 300-a-day limit stops anyone sweeping the whole list in one go.
+-- What this does NOT hide (said plainly, as in 64). Each needs an app change
+-- or an owner decision, so it is listed rather than changed here:
+--   * Someone signed in can still work out, one person at a time, that an
+--     account is "not known to be an adult" from the teen rules' visible
+--     effects (a locked Message button, the private switch a teen starts
+--     with). The 300-a-day limit, per account, stops a sweep from one
+--     account; someone making many accounts gets 300 a day for each.
+--   * share_preview (68), the shared-link page: for a public account that is
+--     not suspended, the card opens only for known adults, and anyone can
+--     ask it about any id or handle without signing in. Comparing that with
+--     the profile list a free account sees still picks out public accounts
+--     that are not known adults. Closing it needs the share link itself to
+--     carry a key the sharer's app makes (an app change).
+--   * New on CourtSide (new_on_courtside, 63) shows adults and 16-17 year
+--     olds; recent public accounts it leaves out are, by its own rule, under
+--     16 or without a birthday.
+--   * Court pages (court_rings, my_courts, court_people_you_follow, the
+--     court card in share_preview) leave out posts by teens, while the same
+--     posts, with their court, show in the feed to anyone signed in
+--     (103's "later" item). Comparing the counts can single a teen out.
+--   * A brand-new account can learn whether one inviter is in its own age
+--     band (claim_referral / claim_invite_code follow the inviter only
+--     then, 84): once per account, on its first day.
+--   * A hit's joined_count counts everyone who joined, including teens a
+--     stranger cannot see in the list of who joined: a number, never who.
 --
 -- Tried on the live database on Oct 5, inside a transaction that was then
 -- undone (nothing was saved): the age group could no longer be listed
 -- signed out or by a signed-in stranger; a teen still read their own; the
 -- map (map_players, map_pair_ok), contacts, hits, joins, New on CourtSide,
 -- court pages and every person-to-person rule gave exactly the same answers
--- before and after for every account; every SQL function still compiled;
--- running it twice changed nothing.
+-- before and after for every account (the only change: signed out, 0
+-- profiles and 0 posts); every SQL function still compiled; running it twice
+-- changed nothing. Then a teen and an adult in the same position were each
+-- put to every function the app can call that takes a person (or their
+-- handle), signed out and as an adult stranger, before the day's limit and
+-- past it. Signed out, only share_preview told them apart. Past the limit,
+-- only share_preview and (for an account made that day) claim_referral and
+-- claim_invite_code did: the items above. Past the limit nobody new was
+-- answered, and with room for one, one was. No table the app can read
+-- showed a stranger every adult but hid a public teen. The app's gateway
+-- refuses the "private" area (only public is open to it).
 --
 -- Safe to run more than once. After it runs, do not re-run 64 or any file
 -- older than this that reads profiles.age_group.
@@ -81,12 +137,12 @@ declare
     ['court_facts',               '4072f6fc09fceb91cbf7e52e21ec44e2', 'ecb4b7d9a2f7aa64700494026786b79c'],
     ['court_right_now',           '5f2b17585528751df92cbec7fa8b9f5c', 'eafcfcfa02c39c05a54ccbbc4c7de2bf'],
     ['fill_post_session_stats',   'e8312c41b2f36aa72ffa714a1857ede6', '29ce26bf1b7ed4b7b6dfe37472dc8cfd'],
-    ['group_fits',                'c8d90a805e38127aefb4a450437a010e', '90b0612351c4065b10de428561cf5d26'],
-    ['join_hit',                  'd0bf6d07351541e2de9b177aa706540e', 'ea2ade2c4cbf6d9de9e73a3905f3b17e'],
+    ['group_fits',                'c8d90a805e38127aefb4a450437a010e', 'd38b5d2fd95a3dfbb80192e8bfe3708e'],
+    ['join_hit',                  'd0bf6d07351541e2de9b177aa706540e', 'fe0811398f64cc2f145a62d12bc73a58'],
     ['known_adult',               '4b04546086eb0bbb13aa77f8e2bf1633', 'a79e745befd4374ea124ccf1692145a2'],
     ['new_on_courtside',          '646774b73f53a89f0a5628a137ced848', '2239944b413b30b0c54ce850b090b7a0'],
     ['notify_joined_nearby',      '0ae17dc06ac1423bc53ee676c66bf6a1', 'b8ca4082a343d262557abbc1fc79cc37'],
-    ['open_conversation',         'c0dc9c7dc3510b1af1293ed37fc97ec0', '68ddc8d79c07cba87d06772f21cdef13'],
+    ['open_conversation',         'c0dc9c7dc3510b1af1293ed37fc97ec0', '8866607ea290d350fcdf2805199da0ac'],
     ['players_court_access',      'bc7cf203fb9b04df69e23f7d034a93e0', '57b63584e688790a6fa05884eb5abbf0'],
     ['same_age_band',             'b573f7ddd762a972497030f2dcec4f04', '5e39fb5120814d0ef105dc42b5c9d465'],
     ['session_tag_refusal',       '76451c55e05b5ed3a556ab5f939e708f', '4abbe6cb3ff33f3955e20d9614c27e08'],
@@ -97,24 +153,36 @@ declare
     ['tell_court_about_post',     '9e88cff0ed2438f16da0798018e2b891', '7974938b1e6fa71d0c81ca8fc202efda'],
     ['tell_followers_up_for_hit', '44c1763f06869fd627732ea407645938', 'b72440b06c45afe6dd3ea4667796798a'],
     ['tell_hit_matches',          '500ad845afc6ce9098aac49de8390c00', 'a24e59d69b3f61ae8208dfc2743621f2'],
-    ['tell_map_about_hit',        '32b43cb0ae0a80e25d6dfc1c08708494', '281db33a3247e05422be20ffe41a6f62']
+    ['tell_map_about_hit',        '32b43cb0ae0a80e25d6dfc1c08708494', '281db33a3247e05422be20ffe41a6f62'],
+    ['tag_session',               'a9a2a9dff57d3e639ef25f5d6c577f83', '5f010cf73d62d73f3f994f5f03a86265'],
+    ['invite_to_hit',             '726e2a48e3245429a0584d4c1760640f', '508f247eaed83a26de9aef5ea0c506a4']
   ];
   -- Live and relied on, never rewritten here: each must still be exactly as
-  -- it is on Oct 5 (78/95/94/103/93).
+  -- it is on Oct 5 (93).
   kept constant text[][] := array[
+    ['guard_new_profile',     '5b34b898d39fda92ae5de03dca77ef58']
+  ];
+  -- Taken out of the app's reach by this file (section 5): as live on Oct 5
+  -- until it runs, gone from public afterwards.
+  moved constant text[][] := array[
     ['spot_shown_to_you',     'b0225e84dee18f183091409c94b91794'],
     ['hit_shown_to_you',      '804e768ee326e84b68eb1d7d96dd5ec5'],
     ['join_shown_to_you',     'ccf84032815473107b4f5f44bc2f064a'],
     ['shown_signed_out',      'fc4bbdc9fc5b56aa92c8c7f64607a093'],
-    ['post_shown_signed_out', 'bf1ff56078653da9f6848866dac3b5e5'],
-    ['guard_new_profile',     '5b34b898d39fda92ae5de03dca77ef58']
+    ['post_shown_signed_out', 'bf1ff56078653da9f6848866dac3b5e5']
   ];
   -- Made new by this file: absent before, or as this file leaves them.
   made constant text[][] := array[
-    ['age_rule_budget',       '25e5abb6722006e1b07d9c43d433bb10'],
+    ['age_rule_budget',       '9f020e0237d8c5e61e913cbc6d5f6923'],
     ['open_to_you',           'c9df7f07753d5b4476b90a89ba6567e4'],
     ['shown_at_court',        '6c10fcbfbb25867eea33cd888d475950'],
     ['guard_state_age_group', '30bb970f947e818de7f47e4db9149f6c']
+  ];
+  -- The private helpers (section 5): absent before, or as this file leaves them.
+  made_private constant text[][] := array[
+    ['spot_shown_to_you',     'b0225e84dee18f183091409c94b91794'],
+    ['hit_shown_to_you',      '804e768ee326e84b68eb1d7d96dd5ec5'],
+    ['join_shown_to_you',     'ccf84032815473107b4f5f44bc2f064a']
   ];
   i int;
   wrong text[] := '{}';
@@ -148,12 +216,32 @@ begin
       wrong := wrong || kept[i][1];
     end if;
   end loop;
+  for i in 1 .. array_length(moved, 1) loop
+    if exists (select 1 from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname = moved[i][1]
+               and md5(p.prosrc) <> moved[i][2]) then
+      wrong := wrong || moved[i][1];
+    end if;
+  end loop;
   for i in 1 .. array_length(made, 1) loop
     if exists (select 1 from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname = made[i][1]
                and md5(p.prosrc) <> made[i][2]) then
       wrong := wrong || made[i][1];
     end if;
   end loop;
+  for i in 1 .. array_length(made_private, 1) loop
+    if exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+               where n.nspname = 'private' and p.proname = made_private[i][1] and md5(p.prosrc) <> made_private[i][2]) then
+      wrong := wrong || ('private.' || made_private[i][1]);
+    end if;
+  end loop;
+  -- Anything else already in "private" was not made by this file.
+  select string_agg(p.proname, ', ' order by p.proname) into bad
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'private'
+      and not (p.proname = any (array(select made_private[k][1] from generate_subscripts(made_private, 1) as g(k))));
+  if bad is not null then
+    wrong := wrong || ('private: ' || bad);
+  end if;
   if cardinality(wrong) > 0 then
     raise exception 'Migration 109 stopped before changing anything: % is not as this file expects (changed after Oct 5). Bring this file up to date first.', array_to_string(wrong, ', ');
   end if;
@@ -199,22 +287,38 @@ begin
 
   -- 4. The helper stays server-only: every function that asks it runs as
   --    the server, and no rule asks it directly.
-  select string_agg(p.proname, ', ' order by p.proname) into bad
-    from pg_proc p
-    where p.pronamespace = 'public'::regnamespace and p.prosrc ~* 'known_adult' and not p.prosecdef;
+  select string_agg(n.nspname || '.' || p.proname, ', ' order by p.proname) into bad
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname in ('public', 'private') and p.prosrc ~* 'known_adult' and not p.prosecdef;
   if bad is not null then
     raise exception 'Migration 109 stopped before changing anything: % ask known_adult without running as the server.', bad;
   end if;
 
-  -- 5. The rules this file relies on (and leaves alone) are in place.
+  -- 5. The rules this file relies on are in place: as live on Oct 5, or as
+  --    this file leaves them (a second run). The three rules section 5
+  --    points at the private helpers must read exactly as below, apart from
+  --    where the helper lives, so repointing them cannot undo a later change.
   if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'hit_requests'
-                 and policyname = 'hits are visible' and qual ~ 'hit_shown_to_you')
+                 and policyname = 'hits are visible' and cmd = 'SELECT' and roles = '{authenticated}'
+                 and regexp_replace(replace(qual, 'private.', ''), '\s+', ' ', 'g')
+                     = '((auth.uid() IS NOT NULL) AND (NOT blocked_with(author_id)) AND ((author_id = auth.uid()) OR hit_shown_to_you(id)))')
      or not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'hit_joins'
-                 and policyname = 'joins are visible' and qual ~ 'join_shown_to_you')
+                 and policyname = 'joins are visible' and cmd = 'SELECT' and roles = '{authenticated}'
+                 and regexp_replace(replace(qual, 'private.', ''), '\s+', ' ', 'g')
+                     = '((EXISTS ( SELECT 1 FROM hit_requests h WHERE (h.id = hit_joins.hit_id))) AND join_shown_to_you(hit_id, user_id))')
      or not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'last_seen'
-                 and policyname = 'who sees a spot' and qual ~ 'spot_shown_to_you')
-     or not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'profiles'
-                 and policyname = 'signed out see adults only' and permissive = 'RESTRICTIVE' and qual ~ 'shown_signed_out')
+                 and policyname = 'who sees a spot' and cmd = 'SELECT' and roles = '{authenticated}'
+                 and regexp_replace(replace(qual, 'private.', ''), '\s+', ' ', 'g')
+                     = '((user_id = auth.uid()) OR spot_shown_to_you(user_id))')
+     or not (exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'profiles'
+                     and policyname = 'signed out see adults only' and permissive = 'RESTRICTIVE' and qual = 'shown_signed_out(id)')
+             or exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'profiles'
+                     and policyname = 'signed out see no profiles' and permissive = 'RESTRICTIVE' and roles = '{anon}' and qual = 'false'))
+     or not (exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'posts'
+                     and policyname = 'signed out see adults'' posts only' and permissive = 'RESTRICTIVE'
+                     and qual = 'post_shown_signed_out(author_id, tagged_user_ids, session)')
+             or exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'posts'
+                     and policyname = 'signed out see no posts' and permissive = 'RESTRICTIVE' and roles = '{anon}' and qual = 'false'))
      or not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'user_state'
                  and policyname = 'read your settings' and cmd = 'SELECT' and qual ~ 'auth\.uid\(\) = user_id')
      or exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'user_state'
@@ -223,6 +327,16 @@ begin
     raise exception 'Migration 109 stopped before changing anything: the rules for hits, the map, signed-out readers or settings rows are not as on Oct 5. Ask Claude to look.';
   end if;
 end $$;
+
+-- ------------------------------------------------- 0b. hold the two tables still
+-- From here until the file finishes, nobody's age can change half way: a
+-- birthday being saved, or a new account being made, waits a moment while
+-- every age is copied across and the old column is removed, then goes
+-- through. Reading carries on as normal. If the two tables cannot be held
+-- within 5 seconds (someone busy with them), the file stops and nothing at
+-- all changes; running it again a minute later is fine.
+set local lock_timeout = '5s';
+lock table public.profiles, public.user_state in share row exclusive mode;
 
 -- ------------------------------------------- 1. where the age lives from now on
 alter table public.user_state add column if not exists age_group text check (age_group in ('teen', 'adult'));
@@ -362,24 +476,51 @@ begin
     raise exception 'blocked';
   end if;
   -- Anyone not known to be an adult gets the teen protection: they must follow you first.
-  if exists (select 1 from public.profiles where id = other) and not public.known_adult(other)
+  -- Unless they follow you, the answer depends on their age, so asking
+  -- counts towards your day's limit (section 6, as open_to_you).
+  if exists (select 1 from public.profiles where id = other)
      and not exists (select 1 from public.follows where follower_id = other and following_id = me) then
-    raise exception 'teen_closed';
+    if not (other = any (public.age_rule_budget(array[other]))) then
+      raise exception 'age_rule_limit';
+    end if;
+    if not public.known_adult(other) then
+      raise exception 'teen_closed';
+    end if;
   end if;
   insert into public.conversations (id) values (coalesce(wanted, gen_random_uuid())) returning id into found_id;
   insert into public.conversation_members (conversation_id, user_id) values (found_id, me), (found_id, other);
   return found_id;
 end $$;
 
--- Groups (migration 54).
+-- Groups (migration 54). Used by create_group and add_group_members (and so
+-- open_group and add_to_group) and by join_hit. Now volatile: asking counts
+-- towards the day's limit, which writes it down.
 create or replace function public.group_fits(adder uuid, members uuid[], newcomers uuid[])
-returns text language plpgsql stable security definer set search_path = public as $$
+returns text language plpgsql volatile security definer set search_path = public as $$
+declare
+  asking uuid[];
 begin
   if exists (
     select 1 from unnest(coalesce(newcomers, '{}')) n, unnest(coalesce(members, '{}') || coalesce(newcomers, '{}')) m
     where m <> n and public.is_blocked_between(n, m)
   ) then
     return 'blocked';
+  end if;
+  -- Whether someone may be added depends on their age when they do not
+  -- follow the adder. When a player asks this about other people, it counts
+  -- towards that player's day's limit (section 6, as open_to_you); past it,
+  -- the answer is 'age_rule_limit' whoever they are.
+  if auth.uid() is not null then
+    select coalesce(array_agg(distinct n), '{}') into asking
+      from unnest(coalesce(newcomers, '{}')) n
+      where n <> adder and n <> auth.uid()
+        and exists (select 1 from public.profiles p where p.id = n)
+        and not exists (select 1 from public.follows f where f.follower_id = n and f.following_id = adder);
+    if cardinality(asking) > 0 then
+      if not (asking <@ public.age_rule_budget(asking)) then
+        return 'age_rule_limit';
+      end if;
+    end if;
   end if;
   if exists (
     select 1 from unnest(coalesce(newcomers, '{}')) n
@@ -410,6 +551,16 @@ begin
   if h.author_id = me then raise exception 'That is your own hit.'; end if;
   if h.starts_at < now() - interval '1 hour' then raise exception 'That hit has already happened.'; end if;
   if public.is_blocked_between(me, h.author_id) then raise exception 'blocked'; end if;
+  -- When the answer below depends on the host's age (you are a known adult
+  -- and you do not follow each other), asking counts towards your day's
+  -- limit (section 6, as open_to_you).
+  if public.known_adult(me)
+     and not (exists (select 1 from public.follows where follower_id = me and following_id = h.author_id)
+          and exists (select 1 from public.follows where follower_id = h.author_id and following_id = me)) then
+    if not (h.author_id = any (public.age_rule_budget(array[h.author_id]))) then
+      raise exception 'age_rule_limit';
+    end if;
+  end if;
   -- Teen protection, as in chats: a player not known to be an adult only plays with people who follow each other.
   if (exists (select 1 from public.profiles p where p.id in (me, h.author_id) and not public.known_adult(p.id)))
      and not (exists (select 1 from public.follows where follower_id = me and following_id = h.author_id)
@@ -468,6 +619,133 @@ returns text language sql stable security definer set search_path = public as $$
          and not exists (select 1 from public.follows where follower_id = who and following_id = tagger) then 'teen_closed'
     else null end
 $$;
+
+-- Tagging someone on a session (migrations 62, 77), exactly as live but for
+-- one thing: when whether you may tag them depends on their age (they do
+-- not follow you), asking counts towards your day's limit (section 6, as
+-- session_tag_refusal); past it, 'age_rule_limit' for everyone alike.
+create or replace function public.tag_session(s uuid, who uuid, as_role text default null)
+returns uuid language plpgsql security definer set search_path = public as $$
+declare
+  me uuid := auth.uid();
+  v_s public.practice_sessions;
+  v_t public.session_tags;
+  v_role text;
+  v_why text;
+  v_alert boolean;
+begin
+  if me is null then raise exception 'not signed in'; end if;
+  -- Held still while it is counted, so two quick taps cannot take one place twice.
+  select * into v_s from public.practice_sessions where id = s for update;
+  if not found or v_s.user_id is distinct from me then raise exception 'not_your_session'; end if;
+  -- Your copy of someone else's session is theirs to tag, not yours.
+  if v_s.from_session_id is not null then raise exception 'copy'; end if;
+  if v_s.kind not in ('match', 'practice') then raise exception 'not_a_match_or_practice'; end if;
+  v_role := case when v_s.kind = 'match' then coalesce(as_role, 'opponent') else 'partner' end;
+  if v_role not in ('opponent', 'partner') then raise exception 'bad_role'; end if;
+  v_why := public.session_tag_refusal_for(me, who);
+  if (v_why is null or v_why = 'teen_closed')
+     and not exists (select 1 from public.follows where follower_id = who and following_id = me) then
+    if not (who = any (public.age_rule_budget(array[who]))) then
+      raise exception 'age_rule_limit';
+    end if;
+  end if;
+  if v_why is not null then raise exception '%', v_why; end if;
+
+  select * into v_t from public.session_tags where session_id = s and tagged_id = who for update;
+  if found then
+    if v_t.status in ('declined', 'removed') then raise exception 'declined'; end if;
+    if v_t.role <> v_role then
+      update public.session_tags
+         set role = v_role,
+             status = case when status = 'accepted' then 'pending' else status end,
+             responded_at = case when status = 'accepted' then null else responded_at end
+       where id = v_t.id;
+      if v_t.status = 'accepted' then
+        update public.notifications set read = false where user_id = who and kind = 'session-tag' and target_id = s::text;
+      end if;
+    end if;
+    return v_t.id;
+  end if;
+  if (select count(*) from public.session_tags where session_id = s and status in ('pending', 'accepted')) >= public.session_tag_room(v_s.kind) then
+    raise exception 'too_many';
+  end if;
+  -- Counted from the log, which deleting a session or a tag never empties.
+  if (select count(*) from public.session_tag_log where tagger_id = me and created_at > now() - interval '1 day') >= 30 then
+    raise exception 'rate_limited';
+  end if;
+  -- The first 3 tags a day from you to one person alert them; the rest wait quietly in their Your sessions.
+  v_alert := (select count(*) from public.session_tag_log where tagger_id = me and tagged_id = who and created_at > now() - interval '1 day') < 3;
+  delete from public.session_tag_log where tagger_id = me and created_at < now() - interval '2 days';
+  insert into public.session_tag_log (tagger_id, tagged_id, alerted) values (me, who, v_alert);
+
+  insert into public.session_tags (session_id, tagger_id, tagged_id, role) values (s, me, who, v_role) returning * into v_t;
+  -- Once per session and person: the same target and words never file twice,
+  -- so taking a tag off and putting it back does not buzz anyone again.
+  if v_alert then
+    perform public.file_notification(who, me, 'session-tag', s::text, 'session-tag', case when v_s.kind = 'match' then 'match' else 'practice' end);
+  end if;
+  return v_t.id;
+end $$;
+
+-- Inviting people to your hit (migrations 76, 95), exactly as live but for one
+-- thing: unless you follow each other, both of you must be known adults,
+-- and when that depends on their age, asking counts towards your day's
+-- limit (section 6, as open_to_you); past it, they are skipped like anyone
+-- the rule leaves out. At most the first 100 people asked are looked at.
+create or replace function public.invite_to_hit(hit uuid, people uuid[])
+returns uuid[] language plpgsql security definer set search_path = public as $$
+declare
+  me uuid := auth.uid();
+  h public.hit_requests;
+  who uuid;
+  added uuid[] := '{}';
+  have int;
+  me_name text;
+  words text;
+begin
+  if me is null then raise exception 'not signed in'; end if;
+  if public.is_suspended(me) then raise exception 'suspended'; end if;
+  select * into h from public.hit_requests where id = hit for update;
+  if not found or h.author_id <> me then raise exception 'not_yours'; end if;
+  if h.cancelled or h.starts_at < now() - interval '1 hour' then raise exception 'That hit is no longer on.'; end if;
+  if h.audience = 'everyone' then return added; end if;
+  select count(*) into have from public.hit_invites where hit_id = hit;
+  select coalesce(nullif(name, ''), handle, 'Someone') into me_name from public.profiles where id = me;
+  -- chr(183) is the middle dot, written so it survives any copy and paste.
+  words := public.hit_when(h.starts_at, h.place) || ' ' || chr(183) || ' ' || coalesce(h.place->>'name', 'a court');
+  for who in select distinct x from unnest((coalesce(people, '{}'))[1:100]) as x where x is not null loop
+    exit when have >= 20;
+    continue when who = me;
+    continue when not exists (select 1 from public.profiles p where p.id = who and p.suspended_at is null);
+    continue when public.is_blocked_between(me, who);
+    if not (exists (select 1 from public.follows where follower_id = me and following_id = who)
+            and exists (select 1 from public.follows where follower_id = who and following_id = me)) then
+      continue when not public.known_adult(me);
+      continue when not (who = any (public.age_rule_budget(array[who])));
+      continue when not public.known_adult(who);
+    end if;
+    insert into public.hit_invites (hit_id, user_id) values (hit, who) on conflict do nothing;
+    continue when not found;
+    have := have + 1;
+    added := added || who;
+    continue when exists (select 1 from public.user_state s where s.user_id = who
+      and (me::text = any (coalesce(s.blocked_ids, '{}')) or me::text = any (coalesce(s.muted_ids, '{}'))));
+    perform public.file_notification(who, me, 'hit-invite', hit::text, 'hit-request', words, true);
+    begin
+      perform public.send_push(who, coalesce(me_name, 'Someone') || ' invited you to hit', upper(left(words, 1)) || substr(words, 2), '/hit-request/' || hit);
+    exception when others then
+      null;
+    end;
+  end loop;
+  -- Touch the hit, so the live feed tells the people just invited (the row reaches them now).
+  if cardinality(added) > 0 then
+    perform set_config('courtside.hit_system', 'on', true);
+    update public.hit_requests set include_groups = include_groups where id = hit;
+    perform set_config('courtside.hit_system', 'off', true);
+  end if;
+  return added;
+end $$;
 
 -- Heart rate on a tracked session's post: adults only (migration 58). No
 -- trigger runs this one any more (72 moved posts to post_session_stats,
@@ -921,18 +1199,98 @@ returns boolean language sql stable security definer set search_path = public as
 $$;
 revoke all on function public.same_age_band(uuid, uuid) from public, anon, authenticated;
 
--- ---------------------------------------------- 5. hits and the map: no change
+-- ------------------------------- 5. helpers the app could call, out of reach
 -- Who can read a hit and who is in it (hit_shown_to_you, join_shown_to_you
 -- and their two rules) went live in migration 95, word for word as 64 wrote
 -- them; who can see a spot (spot_shown_to_you and "who sees a spot") went
 -- live in 78 and was kept by 98 and 105. All of them ask known_adult, so
--- they follow the age to its new place without being touched here.
+-- they follow the age to its new place. What they decide does not change.
+--
+-- But each helper could also be called by name from the app, about any id.
+-- They move to "private", an area of the database the app's gateway does
+-- not open (only public is open to it). The rules on the tables still ask
+-- them, word for word as before: a rule runs as the person reading, so
+-- signed-in players keep the right to use them there, and only there.
+create schema if not exists private;
+revoke all on schema private from public, anon;
+grant usage on schema private to authenticated;
+
+create or replace function private.hit_shown_to_you(hit uuid)
+returns boolean language sql stable security definer set search_path = public as $$
+  select auth.uid() is not null and exists (
+    select 1 from public.hit_requests h
+    where h.id = hit and (
+      h.author_id = auth.uid()
+      or public.known_adult(h.author_id)
+      or exists (select 1 from public.follows f where f.follower_id = auth.uid() and f.following_id = h.author_id)
+      or exists (select 1 from public.hit_joins j where j.hit_id = h.id and j.user_id = auth.uid())))
+$$;
+
+create or replace function private.join_shown_to_you(hit uuid, who uuid)
+returns boolean language sql stable security definer set search_path = public as $$
+  select auth.uid() is not null and exists (
+    select 1 from public.hit_joins j join public.hit_requests h on h.id = j.hit_id
+    where j.hit_id = hit and j.user_id = who and (
+      who = auth.uid()
+      or h.author_id = auth.uid()
+      or public.known_adult(who)
+      or exists (select 1 from public.follows f where f.follower_id = auth.uid() and f.following_id = who)
+      or exists (select 1 from public.hit_joins m where m.hit_id = hit and m.user_id = auth.uid())))
+$$;
+
+create or replace function private.spot_shown_to_you(owner uuid)
+returns boolean language sql stable security definer set search_path = public as $$
+  select auth.uid() is not null and owner is not null and public.spot_shown_to(auth.uid(), owner)
+$$;
+
+revoke all on function private.hit_shown_to_you(uuid) from public, anon;
+revoke all on function private.join_shown_to_you(uuid, uuid) from public, anon;
+revoke all on function private.spot_shown_to_you(uuid) from public, anon;
+grant execute on function private.hit_shown_to_you(uuid) to authenticated;
+grant execute on function private.join_shown_to_you(uuid, uuid) to authenticated;
+grant execute on function private.spot_shown_to_you(uuid) to authenticated;
+
+-- The same three rules, now asking the private helpers (checked word for
+-- word against Oct 5 in section 0).
+alter policy "hits are visible" on public.hit_requests
+  using ((auth.uid() is not null) and (not public.blocked_with(author_id))
+         and ((author_id = auth.uid()) or private.hit_shown_to_you(id)));
+alter policy "joins are visible" on public.hit_joins
+  using ((exists (select 1 from public.hit_requests h where h.id = hit_joins.hit_id))
+         and private.join_shown_to_you(hit_id, user_id));
+alter policy "who sees a spot" on public.last_seen
+  using ((user_id = auth.uid()) or private.spot_shown_to_you(user_id));
+
+drop function if exists public.hit_shown_to_you(uuid);
+drop function if exists public.join_shown_to_you(uuid, uuid);
+drop function if exists public.spot_shown_to_you(uuid);
+
+-- Signed out (94, 103): nothing about people at all. Showing signed-out
+-- readers adults' profiles and posts only meant that the difference from
+-- what any free account sees was exactly the list of teens. Nothing in the
+-- app reads profiles or posts signed out; a shared link's page asks
+-- share_preview, which these rules do not touch. The two helpers only
+-- these rules used (and that anyone could call about any id) are removed.
+drop policy if exists "signed out see adults only" on public.profiles;
+drop policy if exists "signed out see no profiles" on public.profiles;
+create policy "signed out see no profiles" on public.profiles
+  as restrictive for select to anon
+  using (false);
+drop policy if exists "signed out see adults' posts only" on public.posts;
+drop policy if exists "signed out see no posts" on public.posts;
+create policy "signed out see no posts" on public.posts
+  as restrictive for select to anon
+  using (false);
+drop function if exists public.shown_signed_out(uuid);
+drop function if exists public.post_shown_signed_out(uuid, uuid[], jsonb);
 
 -- ----------------------------------------------- 6. how much anyone may ask
 -- Each person someone asks the age rules about (open_to_you,
--- shown_at_court, session_tag_refusal, can_join_groups), kept a day. Asking
--- about the same person again is free; 300 different people a day at most.
--- Server only.
+-- shown_at_court, session_tag_refusal, can_join_groups, and the actions in
+-- section 4 whose yes or no depends on someone else's age), kept a day.
+-- Asking about the same person again is free; 300 different people a day at
+-- most. Two questions at the same moment from one player wait for each
+-- other, so they cannot both use the same room. Server only.
 create table if not exists public.age_rule_asks (
   asker_id uuid not null references public.profiles(id) on delete cascade,
   about_id uuid not null references public.profiles(id) on delete cascade,
@@ -953,6 +1311,7 @@ declare
   room int;
 begin
   if me is null or ids is null or not exists (select 1 from public.profiles where id = me) then return '{}'; end if;
+  perform pg_advisory_xact_lock(hashtextextended('age_rule_budget:' || me::text, 109));
   delete from public.age_rule_asks where asker_id = me and asked_at < now() - interval '1 day';
   select coalesce(array_agg(a.about_id), '{}') into had
     from public.age_rule_asks a where a.asker_id = me and a.about_id = any (ids);
@@ -975,7 +1334,8 @@ revoke all on function public.age_rule_budget(uuid[]) from public, anon, authent
 -- session (they are known to be an adult, or they follow you). Never the
 -- age itself. Left out: yourself, someone with no profile, anyone you are
 -- blocked with either way (refused on its own), and anyone past the day's
--- limit (the app then lets you try; the server decides when you act).
+-- limit (the app then lets you try; the action itself then answers
+-- 'age_rule_limit' for anyone new, whatever their age, until the day frees up).
 drop function if exists public.open_to_you(uuid[]);
 create function public.open_to_you(ids uuid[])
 returns table (user_id uuid, chat boolean)
@@ -1101,6 +1461,51 @@ begin
   if has_table_privilege('anon', 'public.age_rule_asks', 'select') or has_table_privilege('authenticated', 'public.age_rule_asks', 'select') then
     raise exception 'Migration 109 stopped: the app could read age_rule_asks. Nothing was changed.';
   end if;
+  -- Every helper that answers about someone's age or what may be shown of
+  -- them is server only (in public), or gone from public.
+  select string_agg(p.proname, ', ' order by p.proname) into bad
+    from pg_proc p
+    where p.pronamespace = 'public'::regnamespace
+      and p.proname in ('group_fits', 'session_tag_refusal_for', 'shows_at_court', 'map_pair_ok', 'spot_shown_to',
+                        'share_open', 'share_open_to_me', 'map_under_16', 'players_court_access', 'minor_shares_spot')
+      and (has_function_privilege('anon', p.oid, 'execute') or has_function_privilege('authenticated', p.oid, 'execute'));
+  if bad is not null then
+    raise exception 'Migration 109 stopped: the app could call % (server only). Nothing was changed.', bad;
+  end if;
+  select string_agg(p.proname, ', ' order by p.proname) into bad
+    from pg_proc p
+    where p.pronamespace = 'public'::regnamespace
+      and p.proname in ('shown_signed_out', 'post_shown_signed_out', 'hit_shown_to_you', 'join_shown_to_you', 'spot_shown_to_you');
+  if bad is not null then
+    raise exception 'Migration 109 stopped: % is still in public, where the app can call it. Nothing was changed.', bad;
+  end if;
+  -- The private helpers: running as the server, usable by signed-in players
+  -- (their rules need it), never by signed-out ones, and asked by the rules.
+  if (select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'private' and p.prosecdef
+        and p.proname in ('hit_shown_to_you', 'join_shown_to_you', 'spot_shown_to_you')
+        and has_function_privilege('authenticated', p.oid, 'execute')
+        and not has_function_privilege('anon', p.oid, 'execute')) <> 3
+     or has_schema_privilege('anon', 'private', 'usage')
+     or not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'hit_requests' and policyname = 'hits are visible' and qual ~ 'private\.hit_shown_to_you\(')
+     or not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'hit_joins' and policyname = 'joins are visible' and qual ~ 'private\.join_shown_to_you\(')
+     or not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'last_seen' and policyname = 'who sees a spot' and qual ~ 'private\.spot_shown_to_you\(') then
+    raise exception 'Migration 109 stopped: the private helpers or the rules asking them are not as this file sets them. Nothing was changed.';
+  end if;
+  -- Signed out: no profiles, no posts.
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'profiles' and policyname = 'signed out see no profiles'
+                 and permissive = 'RESTRICTIVE' and cmd = 'SELECT' and roles = '{anon}' and qual = 'false')
+     or not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'posts' and policyname = 'signed out see no posts'
+                 and permissive = 'RESTRICTIVE' and cmd = 'SELECT' and roles = '{anon}' and qual = 'false') then
+    raise exception 'Migration 109 stopped: the signed-out rules for profiles and posts are not in place. Nothing was changed.';
+  end if;
+  -- Asking writes the day's list down, which only a volatile function may do.
+  select string_agg(p.proname, ', ' order by p.proname) into bad
+    from pg_proc p
+    where p.pronamespace = 'public'::regnamespace and p.prosrc ~ '(age_rule_budget|group_fits)\(' and p.provolatile <> 'v';
+  if bad is not null then
+    raise exception 'Migration 109 stopped: % ask the day''s limit but are not volatile. Nothing was changed.', bad;
+  end if;
 end $$;
 
 -- Tell the app's database gateway about the new questions straight away.
@@ -1118,3 +1523,8 @@ commit;
 --
 -- (b) Every account that had an age still has it (expect the same two numbers as before: teens, adults):
 -- select age_group, count(*) from public.user_state where age_group is not null group by 1;
+--
+-- (c) Signed out, nothing about people (expect 0 | 0):
+-- begin; set local role anon;
+--   select (select count(*) from public.profiles) profiles, (select count(*) from public.posts) posts;
+-- rollback;
