@@ -73,9 +73,9 @@ const ITEMS: NavItem[] = [
 export function NavBar({ state, navigation }: NavBarProps) {
   const styles = useThemedStyles(styleDefinitions);
   const { isPhone, isCompactSidebar } = useResponsive();
-  const { conversations, notifications, currentUserId } = useApp();
+  const { conversations, notifications, currentUserId, blockedIds } = useApp();
   // Chats with something new, not messages (Instagram's count); a muted chat never counts.
-  const unread = unreadChatCount(conversations);
+  const unread = unreadChatCount(conversations, currentUserId, blockedIds);
   const unseen = notifications.filter((n) => n.userId === currentUserId && !n.read).length;
   const insets = useSafeAreaInsets();
   const activeRoute = state.routes[state.index]?.name ?? 'index';

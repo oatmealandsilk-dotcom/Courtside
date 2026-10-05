@@ -81,10 +81,19 @@ export const photoWords = (count: number) => (count > 1 ? `Sent ${count} photos`
 
 /**
  * The number on the Messages badge: how many chats have something new in
- * them (Instagram counts chats, not messages), never counting a muted one.
+ * them (Instagram counts chats, not messages), never counting a muted one,
+ * nor a one-to-one chat with someone you blocked (the inbox does not show
+ * it, so it could never be opened to clear).
  */
-export const unreadChatCount = (conversations: Conversation[]) =>
-  conversations.filter((c) => (c.unreadCount > 0 || c.markedUnread) && !isMuted(c)).length;
+export const unreadChatCount = (conversations: Conversation[], me?: ID | null, blockedIds: ID[] = []) =>
+  conversations.filter((c) => (c.unreadCount > 0 || c.markedUnread) && !isMuted(c) && !blockedDirect(c, me, blockedIds)).length;
+
+/** A one-to-one chat with someone you blocked: the inbox leaves it out. */
+export const blockedDirect = (c: Conversation, me: ID | null | undefined, blockedIds: ID[]) => {
+  if (isGroupChat(c) || !blockedIds.length) return false;
+  const other = c.participantIds.find((id) => id !== me);
+  return !!other && blockedIds.includes(other);
+};
 
 /**
  * Whether someone runs a group: can remove people and make others admins.
