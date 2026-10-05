@@ -132,7 +132,30 @@ export interface PracticeSession {
    * same session again finds this copy instead of making a second one.
    */
   fromSessionId?: ID;
+  /**
+   * A match's score from your side of the net (migration 91, Oct 4): one
+   * [your games, their games] per set, a match tiebreak counting as a set
+   * (6-4 3-6 10-7 is [[6,4],[3,6],[10,7]]). Only on a match. When one side
+   * took more sets, `won` follows it (the server makes sure). Private to you,
+   * like the rest of your log; a player tagged on it reads it from their side.
+   */
+  sets?: MatchSet[];
   createdAt: string;
+}
+
+/** One set of a match: [your games, their games]. */
+export type MatchSet = [number, number];
+
+/**
+ * Your record against one player (head_to_head, migration 91): only matches
+ * with a score where you were across the net from each other, one of you
+ * logged it and the other accepted the tag. `last` is the newest, your side.
+ */
+export interface HeadToHead {
+  userId: ID;
+  wins: number;
+  losses: number;
+  last?: { sessionId: ID; day: string; won: boolean; sets: MatchSet[] };
 }
 
 /* ------------------------------ Session tags ----------------------------- */
@@ -178,6 +201,8 @@ export interface SessionTag {
   minutes: number;
   /** A match's result from YOUR side: the tagger's result on tags you made, the mirrored one on tags of you. */
   won?: boolean;
+  /** A match's score from YOUR side, the same way (migration 91). */
+  sets?: MatchSet[];
 }
 
 /**
@@ -315,6 +340,8 @@ export interface SessionDetail {
   kind?: PracticeSession['kind'];
   /** A match's result, when you said. */
   won?: boolean;
+  /** A match's score, from the author's side, always as their log says it: only the server writes it (migration 91). */
+  sets?: MatchSet[];
   /**
    * The players on the session who accepted their tag (migration 62):
    * opponents first, then partners. Only the server writes it; whatever the

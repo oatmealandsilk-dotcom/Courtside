@@ -11,6 +11,7 @@ import { StageRail } from '@/components/StageRail';
 import { getStage, markGone, markMounted, setCovered, stageKeyOf, useStageSelect } from '@/features/feed/commentStage';
 import { useApp } from '@/store/AppContext';
 import { postZones } from '@/features/activity/zones';
+import { startRematch } from '@/features/hits/rematch';
 import { goHome } from '@/lib/goBack';
 import { colors, spacing, typography } from '@/theme';
 
@@ -107,6 +108,7 @@ export default function SessionStatsSheet() {
               hidden={blockedIds}
               onEdit={edit}
               onShare={() => router.push({ pathname: '/share-session', params: { post: post.id } })}
+              onRematch={startRematch}
             />
           ) : !looked ? (
             <View style={styles.wait}><CourtSpinner size={30} /></View>

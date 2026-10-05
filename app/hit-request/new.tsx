@@ -39,7 +39,9 @@ const FORMAT_LABEL: Record<HitRequest['format'], string> = { singles: 'Singles',
  * in your groups) the first go, and it opens to everyone an hour after
  * posting or three hours before it starts, whichever is sooner; Only people
  * I invite never opens. Either way each one ticked gets it in your chat and
- * is told.
+ * is told. "Rematch?" on a match (Oct 4) opens it the same way with
+ * ?audience=, ?format= and ?note= set (only them, singles, the last score):
+ * all of it can still be changed before Post.
  */
 export default function NewHit() {
   const styles = useThemedStyles(styleDefinitions);
@@ -55,7 +57,7 @@ export default function NewHit() {
   const setHour = (h: number) => { setHourOnly(h); setHalf(false); };
   // "Play here" on a court's page or card: that court is chosen, its map id kept
   // (when it has one) so the hit shows on the court's page.
-  const params = useLocalSearchParams<{ courtId?: string; courtName?: string; lat?: string; lng?: string; ask?: string }>();
+  const params = useLocalSearchParams<{ courtId?: string; courtName?: string; lat?: string; lng?: string; ask?: string; audience?: string; format?: string; note?: string; rematch?: string }>();
   // "Ask to hit": the players it also goes to, in your chat with each. Only people you may message (an adult, or a teen who follows you).
   // Worked out again once the server has said who may be messaged (openness, migration 64).
   const asked = useMemo(() => (params.ask ?? '').split(',').filter((id, i, all) => !!id && all.indexOf(id) === i && id !== currentUser?.id && actions.canMessage(id))
@@ -63,7 +65,8 @@ export default function NewHit() {
   const namesOf = (list: { name: string }[]) => (list.length === 1 ? list[0].name.split(' ')[0] : list.length === 2 ? `${list[0].name.split(' ')[0]} and ${list[1].name.split(' ')[0]}` : `${list.length} players`);
   const askedNames = namesOf(asked);
   // Who sees it first: everyone (as before), or the people you invite first, or only them.
-  const [audience, setAudience] = useState<HitAudience>('everyone');
+  // A rematch starts as an invite for the one player (any of the three can still be picked).
+  const [audience, setAudience] = useState<HitAudience>(params.audience === 'invite_first' || params.audience === 'invite_only' ? params.audience : 'everyone');
   const inviting = audience !== 'everyone';
   const askedIds = useMemo(() => asked.map((u) => u.id), [asked]);
   const [picked, setPicked] = useState<ID[]>([]);
@@ -96,9 +99,10 @@ export default function NewHit() {
   // Today only offers the hours still ahead, so the first one is the default.
   const hours = day === 0 ? HOURS.filter((h) => h >= new Date().getHours() + 1) : HOURS;
   useEffect(() => { if (hours.length && !hours.includes(hour)) setHour(hours[0]); }, [day]); // eslint-disable-line react-hooks/exhaustive-deps
-  const [format, setFormat] = useState<HitRequest['format']>('singles');
+  const [format, setFormat] = useState<HitRequest['format']>(params.format === 'doubles' || params.format === 'hit' ? params.format : 'singles');
   const [spots, setSpots] = useState(1);
-  const [note, setNote] = useState('');
+  // A rematch's note says the last score ("Rematch? Last time 6–4 3–6 10–7").
+  const [note, setNote] = useState(() => (params.note ?? '').slice(0, 280));
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   // The hit just posted, so the note after the sheet has gone can offer to send it.
@@ -169,7 +173,7 @@ export default function NewHit() {
 
   return (
     <DragSheet fitContent closeSignal={closeSignal} onDismissed={done} peekFraction={0.86}
-      header={<SheetTitle title={asked.length ? `Ask ${askedNames} to hit` : 'Looking for a hit'} line={summary} lineTone="brand" onClose={() => setCloseSignal((n) => n + 1)} />}>
+      header={<SheetTitle title={asked.length ? (params.rematch === '1' && asked.length === 1 ? `Rematch with ${askedNames}?` : `Ask ${askedNames} to hit`) : 'Looking for a hit'} line={summary} lineTone="brand" onClose={() => setCloseSignal((n) => n + 1)} />}>
       <ScrollView contentContainerStyle={formBody} keyboardShouldPersistTaps="handled">
         {/* Asked: said first, before anything is picked, so "Ask Sam" never reads as a private invite. */}
         {asked.length && !inviting ? (

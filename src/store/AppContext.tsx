@@ -102,7 +102,8 @@ import type {
   Story,
   User,
   PlayerProfile,
-  MediaCrop, Tip, TaggedCourt, TrackerId, Invitee, ContactMatch } from '@/data/types';
+  MediaCrop, Tip, TaggedCourt, TrackerId, Invitee, ContactMatch, HeadToHead, MatchSet } from '@/data/types';
+import { setsWinner } from '@/features/activity/score';
 
 interface NewStoryInput {
   imageUrl?: string;
@@ -508,8 +509,11 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
    * moves (migration 63 answers for one part of the map at a time).
    */
   loadLastSeen: (view?: { minLat: number; minLng: number; maxLat: number; maxLng: number } | null) => Promise<void>;
-  /** `activityId`: the tracker session it was logged from, which then counts as logged. */
-  logSession: (input: { minutes: number; kind: PracticeSession['kind']; won?: boolean; opponent?: string; note?: string; day?: string; activityId?: ID }) => Promise<ID>;
+  /**
+   * `activityId`: the tracker session it was logged from, which then counts as logged.
+   * `sets`: a match's score, your side first (migration 91); when one side took more sets, the result follows it.
+   */
+  logSession: (input: { minutes: number; kind: PracticeSession['kind']; won?: boolean; sets?: MatchSet[]; opponent?: string; note?: string; day?: string; activityId?: ID }) => Promise<ID>;
   deleteSession: (id: ID) => void;
   /** Post a "Looking for a hit". Throws a plain sentence if it cannot be posted. */
   /**
@@ -558,6 +562,19 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
   sessionTagRefusal: (userId: ID) => Promise<SessionTagRefusal | null>;
   /** The private name typed for who you played, changed on a session already in your log. */
   setSessionOpponent: (sessionId: ID, opponent: string) => Promise<void>;
+  /**
+   * A match's score on a session already in your log (migration 91): set,
+   * changed, or cleared with null. The result follows the sets when one side
+   * took more. Anyone who accepted a tag on it is asked again (the server does
+   * the same). Throws a plain sentence.
+   */
+  setSessionScore: (sessionId: ID, sets: MatchSet[] | null) => Promise<void>;
+  /**
+   * Your record against one player (migration 91): only scored matches across
+   * the net from each other that you are both confirmed on. Null when it could
+   * not be asked, for yourself, or with someone blocked either way.
+   */
+  headToHead: (userId: ID) => Promise<HeadToHead | null>;
 
   toggleLike: (postId: ID) => void;
   addPost: (input: NewPostInput) => ID;
@@ -1395,13 +1412,15 @@ function postsFollowLog(posts: Post[], me: ID, activityId: ID | null, log: Pract
     if (log && s.activityId === activityId) {
       changed = true;
       const won = log.kind === 'match' && log.won !== undefined ? log.won : undefined;
-      const { won: _w, ...rest } = s;
-      return { ...p, session: { ...rest, kind: log.kind, focus: log.kind === 'match' && won !== undefined ? `Match · ${won ? 'Won' : 'Lost'}` : log.kind.charAt(0).toUpperCase() + log.kind.slice(1), sessionId: log.id, day: log.day, ...(won !== undefined ? { won } : {}) } };
+      // The log's score too (the server puts it on, migration 91).
+      const sets = log.kind === 'match' && log.sets?.length ? log.sets : undefined;
+      const { won: _w, sets: _s, ...rest } = s;
+      return { ...p, session: { ...rest, kind: log.kind, focus: log.kind === 'match' && won !== undefined ? `Match · ${won ? 'Won' : 'Lost'}` : log.kind.charAt(0).toUpperCase() + log.kind.slice(1), sessionId: log.id, day: log.day, ...(won !== undefined ? { won } : {}), ...(sets ? { sets } : {}) } };
     }
     if (deletedId && s.sessionId === deletedId) {
       changed = true;
       // The names go with the log too, as the server takes them off.
-      const { kind: _k, won: _w, sessionId: _s, with: _with, ...rest } = s;
+      const { kind: _k, won: _w, sessionId: _s, with: _with, sets: _sets, ...rest } = s;
       return { ...p, session: { ...rest, focus: 'Tennis' } };
     }
     return p;
@@ -2371,11 +2390,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [patchCurrentUser],
   );
 
-  const logSession = useCallback(async (input: { minutes: number; kind: PracticeSession['kind']; won?: boolean; opponent?: string; note?: string; day?: string; activityId?: ID }) => {
+  const logSession = useCallback(async (input: { minutes: number; kind: PracticeSession['kind']; won?: boolean; sets?: MatchSet[]; opponent?: string; note?: string; day?: string; activityId?: ID }) => {
     const me = requireUser();
+    // A match's score (migration 91): the result follows the sets when one side took more, as the server makes it.
+    const sets = input.kind === 'match' && input.sets?.length ? input.sets.slice(0, 5) : undefined;
     const session: PracticeSession = {
       id: nextId('ses'), userId: me, day: input.day ?? localDay(new Date()), minutes: input.minutes, kind: input.kind,
-      won: input.kind === 'match' ? input.won : undefined, opponent: input.opponent?.trim() || undefined, note: input.note?.trim() || undefined,
+      won: input.kind === 'match' ? setsWinner(sets) ?? input.won : undefined, ...(sets ? { sets } : {}),
+      opponent: input.opponent?.trim() || undefined, note: input.note?.trim() || undefined,
       ...(input.activityId ? { activityId: input.activityId } : {}),
       createdAt: new Date().toISOString(),
     };
@@ -2681,7 +2703,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const now = new Date().toISOString();
     const fresh: SessionTag[] = add.map((p) => ({
       id: nextId('stag'), sessionId, taggerId: me, taggedId: p.id, role: p.role, status: 'pending', createdAt: now,
-      kind: session.kind, day: session.day, minutes: session.minutes, won: session.won,
+      kind: session.kind, day: session.day, minutes: session.minutes, won: session.won, ...(session.sets ? { sets: session.sets } : {}),
     }));
     const dropped = new Set(drop.map((t) => t.id));
     const turned = new Map(turn.map((t) => [t.id, wanted.get(t.taggedId)!]));
@@ -2828,6 +2850,52 @@ export function AppProvider({ children }: { children: ReactNode }) {
       throw e;
     }
   }, [requireUser]);
+
+  const setSessionScore = useCallback(async (sessionId: ID, sets: MatchSet[] | null) => {
+    const me = requireUser();
+    const had = stateRef.current.sessions.find((x) => x.id === sessionId && x.userId === me);
+    if (!had || had.kind !== 'match') return;
+    const next = sets?.length ? sets.slice(0, 5) : undefined;
+    const same = JSON.stringify(had.sets ?? null) === JSON.stringify(next ?? null);
+    if (same) return;
+    // An even count (a match stopped at one set all) keeps the result you chose.
+    const won = setsWinner(next) ?? had.won;
+    const before = stateRef.current;
+    const patch = (x: PracticeSession): PracticeSession => {
+      const { sets: _old, ...rest } = x;
+      return { ...rest, won, ...(next ? { sets: next } : {}) };
+    };
+    haptics.commit();
+    setState((prev) => ({
+      ...prev,
+      sessions: prev.sessions.map((x) => (x.id === sessionId ? patch(x) : x)),
+      // Your posts carrying it show the new score straight away (the server does the same, migration 91).
+      posts: prev.posts.map((p) => {
+        if (p.authorId !== me || !p.session || p.session.sessionId !== sessionId) return p;
+        const { sets: _old, won: _won, ...rest } = p.session;
+        return { ...p, session: { ...rest, ...(won !== undefined ? { won } : {}), ...(next ? { sets: next } : {}) } };
+      }),
+      // Anyone who said yes is asked again, as on the server: what they accepted has changed.
+      sessionTags: prev.sessionTags.map((t) => (t.sessionId === sessionId && t.taggerId === me
+        ? { ...t, won, sets: next, ...(t.status === 'accepted' ? { status: 'pending' as const, respondedAt: undefined } : {}) }
+        : t)),
+    }));
+    if (!live(me, sessionId)) return;
+    try { await remote.updateSessionScore(sessionId, next ?? null, won ?? null); } catch (e) {
+      setState((prev) => ({ ...prev, sessions: before.sessions, posts: prev.posts.map((p) => before.posts.find((b) => b.id === p.id && p.session?.sessionId === sessionId) ?? p), sessionTags: before.sessionTags }));
+      throw e;
+    }
+    // The server's word on who is waiting now.
+    void refreshSessionTags();
+  }, [requireUser, refreshSessionTags]);
+
+  const headToHead = useCallback(async (userId: ID): Promise<HeadToHead | null> => {
+    const s = stateRef.current;
+    const me = s.currentUserId;
+    if (!me || userId === me || s.blockedIds.includes(userId)) return null;
+    if (live(me, userId)) return remote.headToHead(userId);
+    return demoApi.headToHead({ me, other: userId, sessions: s.sessions, tags: s.sessionTags });
+  }, []);
 
   const cancelHit = useCallback((hitId: ID) => {
     const me = requireUser();
@@ -6017,6 +6085,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       refreshSessionTags,
       sessionTagRefusal,
       setSessionOpponent,
+      setSessionScore,
+      headToHead,
       updateIdentity,
       toggleLike,
       addPost,
@@ -6205,6 +6275,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       refreshSessionTags,
       sessionTagRefusal,
       setSessionOpponent,
+      setSessionScore,
+      headToHead,
       updateIdentity,
       toggleLike,
       addPost,

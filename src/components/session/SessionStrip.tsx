@@ -5,7 +5,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { router } from 'expo-router';
 
 import type { ID, SessionDetail } from '@/data/types';
-import { kindWord, resultWord, sourceLabel, spokenDuration } from '@/features/activity/format';
+import { kindWord, resultWithScore, sourceLabel, spokenDuration } from '@/features/activity/format';
 import { sessionPeople } from '@/features/activity/sessionTags';
 import { colors, font, withAlpha } from '@/theme';
 import { Duration, Figure } from './Duration';
@@ -37,7 +37,8 @@ export function SessionStrip({ session, hidden = [], play = false, scale = 1, on
   const strain = session.strain != null ? session.strain : null;
   const kcal = session.kcal ? session.kcal : null;
   const shared = [hr, strain != null, kcal != null].filter(Boolean).length;
-  const result = resultWord(session);
+  // "Match · Won 6–4 3–6 10–7" when the log has a score (migration 91).
+  const result = resultWithScore(session);
   const what = [kindWord(session), result].filter(Boolean).join(' · ');
   const { opponents, partners } = sessionPeople(session, hidden);
   const all = [...opponents, ...partners];

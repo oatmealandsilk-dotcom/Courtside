@@ -7,7 +7,8 @@ import Svg, { Line } from 'react-native-svg';
 import { BrandMark } from '@/components/BrandMark';
 import { Avatar, BrandWash } from '@/components/ui';
 import type { ID, SessionDetail } from '@/data/types';
-import { onCourtWord, resultWord, sessionEyebrow, sourceLabel, spokenDuration } from '@/features/activity/format';
+import { onCourtWord, resultWord, scoreLine, sessionEyebrow, sourceLabel, spokenDuration } from '@/features/activity/format';
+import { spokenScore } from '@/features/activity/score';
 import { sessionPeople } from '@/features/activity/sessionTags';
 import { postZones, zoneColors } from '@/features/activity/zones';
 import { useTheme } from '@/theme/ThemeProvider';
@@ -120,6 +121,8 @@ export function SessionCard({ session, width, play = false, people, hidden = [],
   const kcal = session.kcal ? session.kcal : null;
   const health = hr || !!zones || strain != null || !!kcal;
   const result = resultWord(session);
+  // A match's score from the author's log (migration 91), under the time.
+  const score = scoreLine(session);
   const list: CardPerson[] = people ?? (() => { const p = sessionPeople(session, hidden); return [...p.opponents, ...p.partners]; })();
   const lead = list[0];
   const vs = lead ? (lead.role === 'opponent' && session.kind !== 'practice' ? 'vs' : 'with') : '';
@@ -128,6 +131,7 @@ export function SessionCard({ session, width, play = false, people, hidden = [],
     shownTop.toLowerCase(),
     `${spokenDuration(session.minutes)} ${onCourtWord(session)}`,
     result,
+    score ? spokenScore(session.sets) : null,
     hr ? `max heart rate ${session.maxHr}${session.avgHr ? `, average ${session.avgHr}` : ''}` : null,
     strain != null ? `Strain ${strain.toFixed(1)}` : null,
     kcal ? `${kcal} calories` : null,
@@ -152,6 +156,9 @@ export function SessionCard({ session, width, play = false, people, hidden = [],
       <Reanimated.View layout={picture ? undefined : LinearTransition.duration(220)} style={[styles.middle, { justifyContent: health && !tall ? 'flex-start' : 'center', paddingTop: health && !tall ? 18 * k : 0 }]}>
         <Duration minutes={session.minutes} size={96 * k} color={look.figure} unitColor={look.muted} play={play} delay={120} duration={700} />
         <Text style={{ ...font('500'), fontSize: small(14, 10), color: look.muted, marginTop: 2 * k }} maxFontSizeMultiplier={1.2}>{onCourtWord(session)}</Text>
+        {score ? (
+          <Text style={{ ...font('700'), fontSize: 26 * k, letterSpacing: -0.4 * k, color: look.figure, fontVariant: ['tabular-nums'], marginTop: 8 * k }} numberOfLines={1} maxFontSizeMultiplier={1.2}>{score}</Text>
+        ) : null}
         {place ? (
           <View style={[styles.place, { gap: 4 * k, marginTop: 8 * k }]}>
             <Ionicons name="location-outline" size={small(13, 10)} color={look.muted} />

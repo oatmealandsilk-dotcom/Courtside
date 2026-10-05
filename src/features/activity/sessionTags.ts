@@ -1,6 +1,7 @@
 import type { ID, Post, PracticeSession, SessionDetail, SessionPlayer, SessionTag, SessionTagRefusal, SessionTagRole, SessionWith, User } from '@/data/types';
 import { named, type Named } from '@/features/messages/groupRules';
 import type { AgeSource, OpennessMap } from '@/features/players/age';
+import { scoreText } from './score';
 
 /*
  * Tagging who you played (migration 62). You pick CourtSide players in "Who
@@ -122,6 +123,8 @@ export function mirrorCopy({ me, tag, sessions, taggerName, newId }: { me: ID; t
   return {
     id: newId, userId: me, day: tag.day, minutes: tag.minutes, kind: tag.kind,
     ...(tag.kind === 'match' && tag.won !== undefined ? { won: tag.won } : {}),
+    // The score from your side, as the tag already carries it (migration 91).
+    ...(tag.kind === 'match' && tag.sets?.length ? { sets: tag.sets } : {}),
     ...(partnerInMatch ? { note: `With ${who}` } : { opponent: who }),
     fromSessionId: tag.sessionId,
     createdAt: new Date().toISOString(),
@@ -371,10 +374,12 @@ export function pendingNote(names: string[]): string | null {
   return `Their names show once ${andList(names)} accept.`;
 }
 
-/** A tag of you, from your side, in a few words: "You won", "You lost", "Match", "Practice". */
-export function yourResult(t: Pick<SessionTag, 'kind' | 'won'>): string {
+/** A tag of you, from your side, in a few words: "You won", "You lost 4–6 6–7", "Match", "Practice". */
+export function yourResult(t: Pick<SessionTag, 'kind' | 'won' | 'sets'>): string {
   if (t.kind !== 'match') return t.kind === 'practice' ? 'Practice' : t.kind.charAt(0).toUpperCase() + t.kind.slice(1);
-  return t.won === true ? 'You won' : t.won === false ? 'You lost' : 'Match';
+  const words = t.won === true ? 'You won' : t.won === false ? 'You lost' : 'Match';
+  // The score, from your side, when the tagger saved one (migration 91): what you are asked to confirm.
+  return t.sets?.length ? `${words} ${scoreText(t.sets)}` : words;
 }
 
 /** Where a tag of you stands, when it is no longer waiting: "Accepted", "Declined", "Removed". */

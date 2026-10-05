@@ -3,6 +3,7 @@ import { localDay } from '@/features/practice/stats';
 import { sessionPeople } from './sessionTags';
 import { withShare } from './healthShare';
 import { duration } from '@/lib/format';
+import { scoreText } from './score';
 
 /*
  * How a tracker's tennis session is put into words: its name, its day, its
@@ -156,7 +157,8 @@ export function statsChunks(s: SessionDetail, hidden: ID[] = []): StatsBit[][] {
   if (!s.activityId && s.sessionId) {
     const chunks: StatsBit[][] = [];
     if (s.kind === 'match') {
-      const result = s.won === true ? 'Won' : s.won === false ? 'Lost' : '';
+      // With its score when the log has one (migration 91): "Won 6–4 3–6 10–7".
+      const result = [s.won === true ? 'Won' : s.won === false ? 'Lost' : '', scoreText(s.sets)].filter(Boolean).join(' ');
       // "Match · Won vs @mira", or "Match vs @mira" with no result given.
       if (result) chunks.push([{ text: 'Match' }], [{ text: result }, ...(people.vs ? [{ text: ' ' }, ...people.vs] : [])]);
       else chunks.push([{ text: 'Match' }, ...(people.vs ? [{ text: ' ' }, ...people.vs] : [])]);
@@ -190,7 +192,7 @@ export function reelStatsChunks(s: SessionDetail, hidden: ID[] = []): StatsBit[]
     ? [{ text: opponents.length ? 'vs ' : 'with ' }, { text: `@${lead.handle}`, userId: lead.id }, ...(all.length > 1 ? [{ text: ' ' }, { text: `+${all.length - 1}`, more: true }] : [])]
     : null;
   if (!s.activityId && s.sessionId) {
-    const result = s.kind === 'match' ? (s.won === true ? 'Won' : s.won === false ? 'Lost' : '') : '';
+    const result = s.kind === 'match' ? (resultWithScore(s) ?? '') : '';
     return [
       [{ text: s.kind ? KIND_LABEL[s.kind] : s.focus }],
       result ? [{ text: result }] : null,
@@ -221,9 +223,11 @@ export const hasSessionStats = (s: SessionDetail | undefined): boolean => !!s &&
 
 export const KIND_LABEL: Record<PracticeSession['kind'], string> = { practice: 'Practice', match: 'Match', drills: 'Drills', fitness: 'Fitness' };
 
-/** "Practice", "Match · Won", "Match · Lost", "Drills". */
-export function loggedLabel(s: Pick<PracticeSession, 'kind' | 'won'>): string {
-  if (s.kind === 'match' && s.won !== undefined) return `Match · ${s.won ? 'Won' : 'Lost'}`;
+/** "Practice", "Match · Won", "Match · Lost", "Drills"; with a score, "Match · Won 6–4 3–6 10–7" (migration 91). */
+export function loggedLabel(s: Pick<PracticeSession, 'kind' | 'won' | 'sets'>): string {
+  const score = s.kind === 'match' ? scoreText(s.sets) : '';
+  if (s.kind === 'match' && s.won !== undefined) return `Match · ${s.won ? 'Won' : 'Lost'}${score ? ` ${score}` : ''}`;
+  if (score) return `Match · ${score}`;
   return KIND_LABEL[s.kind];
 }
 
@@ -254,13 +258,15 @@ export function shortDay(day: string, now = new Date()): string {
  */
 export function sessionFromLogged(s: PracticeSession): SessionDetail {
   return {
-    focus: loggedLabel(s),
+    focus: loggedLabel({ kind: s.kind, won: s.won }),
     minutes: s.minutes,
     drills: [],
     sessionId: s.id,
     kind: s.kind,
     day: s.day,
     ...(s.kind === 'match' && s.won !== undefined ? { won: s.won } : {}),
+    // The score goes too; the server puts the log's own on the post either way (migration 91).
+    ...(s.kind === 'match' && s.sets?.length ? { sets: s.sets } : {}),
   };
 }
 
@@ -289,6 +295,15 @@ export const kindWord = (s: Pick<SessionDetail, 'kind'>) => (s.kind ? KIND_LABEL
 /** "Won", "Lost", or null when it was not a match with a result. */
 export const resultWord = (s: Pick<SessionDetail, 'kind' | 'won'>) => (s.kind === 'match' && s.won !== undefined ? (s.won ? 'Won' : 'Lost') : null);
 
+/** A match's score, "6–4 3–6 10–7", or null when it has none (migration 91). */
+export const scoreLine = (s: Pick<SessionDetail, 'kind' | 'sets'>): string | null => (s.kind === 'match' && s.sets?.length ? scoreText(s.sets) : null);
+
+/** "Won 6–4 3–6 10–7", "Won", "6–4 6–3" (a score with no winner given), or null. */
+export function resultWithScore(s: Pick<SessionDetail, 'kind' | 'won' | 'sets'>): string | null {
+  const words = [resultWord(s), scoreLine(s)].filter(Boolean).join(' ');
+  return words || null;
+}
+
 /**
  * The small line over a session's numbers: "MATCH · FRI OCT 2", "PRACTICE ·
  * TODAY". Just "TENNIS" when the post says neither what it was nor which day.
@@ -312,7 +327,7 @@ export function pillPieces(s: SessionDetail, hidden: ID[] = []): { time: string;
   const first = lead ? (lead.name?.trim().split(/\s+/)[0] || `@${lead.handle}`) : '';
   return {
     time: duration(s.minutes),
-    result: resultWord(s) ?? kindWord(s),
+    result: resultWithScore(s) ?? kindWord(s),
     third: s.maxHr ? `${s.maxHr} bpm` : lead ? `${opponents.length ? 'vs' : 'with'} ${first}` : null,
   };
 }

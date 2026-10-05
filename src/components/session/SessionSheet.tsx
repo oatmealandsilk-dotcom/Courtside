@@ -7,8 +7,9 @@ import { router } from 'expo-router';
 import { FormRow } from '@/components/FormRow';
 import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { Avatar } from '@/components/ui';
-import type { DetectedActivity, ID, Post, PracticeSession, SessionTag, User } from '@/data/types';
-import { resultWord, sessionEyebrow, sourceLabel } from '@/features/activity/format';
+import type { DetectedActivity, ID, MatchSet, Post, PracticeSession, SessionTag, User } from '@/data/types';
+import { resultWord, scoreLine, sessionEyebrow, sourceLabel } from '@/features/activity/format';
+import { flipSets, spokenScore } from '@/features/activity/score';
 import { isActive, sessionPeople, tagsOnSession } from '@/features/activity/sessionTags';
 import { overUsual } from '@/features/activity/usual';
 import { cleanZones, hardMinutes, postZones } from '@/features/activity/zones';
@@ -56,8 +57,13 @@ export function SessionSheetHeader({ post, onClose }: { post: Post; onClose: () 
  * 72). The author also sees, in a box marked "Only you", what is not on the
  * post: the start time, and any of those numbers they did not share, read
  * from their own tracker's record while it is still kept.
+ *
+ * A match with a score (migration 91) shows it under the time. "Rematch?"
+ * (Oct 4) is offered to the two across the net: the author, to their first
+ * opponent, and an opponent on the post, to the author; it opens the hit
+ * form as an invite for that one player, with the last score in its note.
  */
-export function SessionSheet({ post, me, users, sessions, sessionTags, activities, hidden, play = true, onEdit, onShare }: {
+export function SessionSheet({ post, me, users, sessions, sessionTags, activities, hidden, play = true, onEdit, onShare, onRematch }: {
   post: Post;
   me: ID | null;
   users: User[];
@@ -69,6 +75,8 @@ export function SessionSheet({ post, me, users, sessions, sessionTags, activitie
   onEdit?: (sessionId: ID) => void;
   /** The author's own: the session as a picture for Instagram (share-session). */
   onShare?: () => void;
+  /** "Rematch?": a hit invite to this player, with the score from the viewer's side. */
+  onRematch?: (userId: ID, sets?: MatchSet[]) => void;
 }) {
   const styles = useThemedStyles(styleDefinitions);
   const s = post.session;
@@ -101,6 +109,14 @@ export function SessionSheet({ post, me, users, sessions, sessionTags, activitie
     }
   }
   const shown = people.slice(0, 3);
+  const score = scoreLine(s);
+  // Who a rematch is with: the author's first opponent (waiting ones too: the hit invite has its own rules),
+  // or, for an opponent on someone else's post, the author, the score turned round to their side.
+  const rival = s.kind !== 'match' || !me ? null
+    : mine ? (people.find((p) => p.opponent) ? { id: people.find((p) => p.opponent)!.id, sets: s.sets } : null)
+    : opponents.some((w) => w.id === me) && !hidden.includes(post.authorId) ? { id: post.authorId, sets: s.sets ? flipSets(s.sets) : undefined }
+    : null;
+  const rivalName = rival ? users.find((u) => u.id === rival.id)?.name.trim().split(/\s+/)[0] : undefined;
   const court = post.court;
   const tracker = !!s.activityId;
   const sparse = !hr && !zones && strain == null && !kcal;
@@ -146,6 +162,9 @@ export function SessionSheet({ post, me, users, sessions, sessionTags, activitie
           </Pop>
         ) : null}
       </View>
+      {score ? (
+        <Text style={styles.score} accessibilityLabel={`Score ${spokenScore(s.sets)}`} numberOfLines={1} maxFontSizeMultiplier={1.2}>{score}</Text>
+      ) : null}
       {over ? (
         <View style={styles.usual} accessible accessibilityLabel={`${over} minutes over your usual. Only you see this.`}>
           <Ionicons name="arrow-up" size={12} color={colors.brand} />
@@ -219,6 +238,9 @@ export function SessionSheet({ post, me, users, sessions, sessionTags, activitie
       {mine && log && onEdit ? (
         <FormRow icon="create-outline" label="Edit session" chevron onPress={() => onEdit(log.id)} />
       ) : null}
+      {rival && onRematch ? (
+        <FormRow icon="repeat-outline" label="Rematch?" value={rivalName} chevron onPress={() => onRematch(rival.id, rival.sets)} accessibilityLabel={`Rematch${rivalName ? ` with ${rivalName}` : ''}: invite them to hit`} />
+      ) : null}
 
       {tracker ? <Text style={styles.source} maxFontSizeMultiplier={1.2}>{sourceLabel(s.source ?? 'apple-health')}</Text> : null}
     </View>
@@ -246,6 +268,7 @@ const styleDefinitions = StyleSheet.create({
   won: { backgroundColor: colors.brand },
   lost: { borderWidth: 1, borderColor: colors.borderStrong },
   resultText: { ...font('700'), fontSize: 14 },
+  score: { ...font('700'), fontSize: 26, letterSpacing: -0.6, color: colors.text, fontVariant: ['tabular-nums'], marginTop: -6 },
   usual: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999, backgroundColor: colors.brandDim, marginTop: -4 },
   usualText: { ...font('600'), fontSize: 12, color: colors.brand },
   peopleRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },

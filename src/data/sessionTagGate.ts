@@ -1,4 +1,5 @@
 import type { Post } from './types';
+import { validSets } from '@/features/activity/score';
 
 /*
  * Names on a post's session stats (session.with, migration 62) are shown
@@ -23,19 +24,26 @@ export function setSessionTagNamesLive(ready: boolean | null): void {
 /** A post's session stats as this app may show them: without a "with" list until the server is known to write it. */
 export function trustedSession(session: Post['session'] | null | undefined): Post['session'] | undefined {
   if (!session) return undefined;
+  // A match's score (migration 91) is drawn only in the shape the server writes; anything else is left off.
+  if ('sets' in session) {
+    const { sets: raw, ...others } = session;
+    const sets = session.kind === 'match' ? validSets(raw) : undefined;
+    session = sets ? { ...others, sets } : others;
+  }
   if (live || !('with' in session)) return session;
   const { with: _unchecked, ...rest } = session;
   return rest;
 }
 
 /**
- * A post's session stats as they are sent: the names and the heart-rate
- * zones are the server's to write (migrations 62 and 65), never this phone's.
- * The copy shown here straight away may carry them; the sent one does not.
+ * A post's session stats as they are sent: the names, the heart-rate zones
+ * and a match's score are the server's to write (migrations 62, 65 and 91,
+ * the score from your own log), never this phone's. The copy shown here
+ * straight away may carry them; the sent one does not.
  */
 export function sessionToSend(session: Post['session'] | null | undefined): Post['session'] | null {
   if (!session) return null;
-  const { with: _shown, zones: _zones, ...rest } = session;
+  const { with: _shown, zones: _zones, sets: _sets, ...rest } = session;
   return rest;
 }
 
