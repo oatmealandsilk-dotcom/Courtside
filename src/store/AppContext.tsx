@@ -1822,13 +1822,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const settingsNow = settingsJson(state);
   // Kept with whose they were: a different account signed in starts from what it loaded, never from the last one's.
   const settingsSeen = useRef<{ who: ID; json: string } | null>(null);
+  // Changes made here, and how many of them have been saved: equal when nothing is on its way up.
+  const settingsCount = useRef({ made: 0, saved: 0 });
   useEffect(() => {
     if (!isSupabaseConfigured || !remoteLoaded || !currentUserForLive || !UUID.test(currentUserForLive)) return;
     if (settingsSeen.current?.who !== currentUserForLive) { settingsSeen.current = { who: currentUserForLive, json: settingsNow }; return; }
     if (settingsSeen.current.json === settingsNow) return;
     settingsSeen.current = { who: currentUserForLive, json: settingsNow };
+    const made = ++settingsCount.current.made;
+    const settled = () => { settingsCount.current.saved = Math.max(settingsCount.current.saved, made); };
+    let sent = false;
     const s = stateRef.current;
     const t = setTimeout(() => {
+      sent = true;
       void remote.saveUserState(currentUserForLive, {
         mutedIds: s.mutedIds, blockedIds: s.blockedIds, savedQuestionIds: s.saved.questionIds, paymentMethods: s.paymentMethods,
         defaultPaymentId: s.defaultPaymentId, showActivity: s.prefs.showActivity, pushLikes: s.prefs.pushLikes, pushCoach: s.prefs.pushCoach,
@@ -1836,9 +1842,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
         pushMapFriends: s.prefs.pushMapFriends, pushMapHits: s.prefs.pushMapHits, pushMapPlayers: s.prefs.pushMapPlayers, pushCourts: s.prefs.pushCourts,
         // Sent only once the database is known to have it (migration 89).
         contactsFindable: s.contactsFindableLive ? s.prefs.contactsFindable : undefined,
-      });
+      }).finally(settled);
     }, 400);
-    return () => clearTimeout(t);
+    // Never sent (a newer change took its place, or the account changed): nothing of it is on its way up.
+    return () => { clearTimeout(t); if (!sent) settled(); };
   }, [settingsNow, remoteLoaded, currentUserForLive]);
   // Back to the front: your mutes, blocks and saved threads as the server has
   // them now. The save above sends whole lists, so a phone left open since
@@ -1847,10 +1854,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!liveEpoch || !isSupabaseConfigured || !remoteLoaded || !currentUserForLive || !UUID.test(currentUserForLive)) return undefined;
     const me = currentUserForLive;
+    // Read only once every change made here is saved, and used only if none was made meanwhile.
+    const asked = settingsCount.current.made;
+    if (settingsCount.current.saved !== asked) return undefined;
     let on = true;
     void remote.fetchUserState(me).then((got) => {
       const s = stateRef.current;
-      if (!on || !got || s.currentUserId !== me) return;
+      if (!on || !got || s.currentUserId !== me || settingsCount.current.made !== asked) return;
       if (settingsSeen.current?.who !== me || settingsSeen.current.json !== settingsJson(s)) return;
       const lists = { mutedIds: got.mutedIds, blockedIds: got.blockedIds, saved: { ...s.saved, questionIds: got.savedQuestionIds } };
       // Taken as already saved, so it is not sent straight back.
