@@ -605,7 +605,7 @@
           <div class="app-cta">
             <a class="btn btn-primary btn-app" href="https://testflight.apple.com/join/21UJPuny" target="_blank" rel="noopener">Get the iPhone app <svg aria-hidden="true"><use href="#out"/></svg></a>
             <p class="app-note">Free. Opens Apple’s TestFlight: install it, then CourtSide. On Android? <a href="https://app.courtsidebase.com">Use CourtSide on the web</a>.</p>
-            <p class="invited" data-invited hidden>Invited by <strong data-at></strong>? Type <b class="code" data-code></b> when the app asks “Invited by?”</p>
+            <p class="invited" data-invited hidden><span data-lead>From a friend’s link?</span> Type <b class="code" data-code></b> when the app asks “Invited by?”</p>
           </div>
           <div class="or-email">
             <p class="or-label"><label for="quick-email">Not on your iPhone right now? Get the link by email</label> <span class="opt">(optional)</span></p>
@@ -928,6 +928,7 @@
     card.querySelector('strong').textContent = result.kind === 'already' ? 'You’re already in.' : 'You’re in.';
     card.querySelector('.spot-words span').textContent = 'The beta is open. Get CourtSide on your iPhone now.';
     card.querySelector('.share-link').value = link;
+    carryRef(card);
     const note = card.querySelector('.msg');
     card.querySelector('[data-copy]').addEventListener('click', async () => {
       try { await navigator.clipboard.writeText(link); note.textContent = 'Copied.'; }
@@ -1012,7 +1013,26 @@
   //     them too (migration 83). Optional: an empty box goes straight on.
   // Anyone without such a link, or who already joined on this visit, goes
   // straight to TestFlight as before.
+  //
+  // Oct 5: a player whose account the server keeps out of signed-out
+  // lookups (a teen, or a private account, like the partner link
+  // ?ref=omuchitaletennis) got nothing at all, so nobody from their link was
+  // told what to type and the credit was lost. Now any ?ref= that looks like
+  // a handle (and is not one of our own campaign labels) shows the handle
+  // from the link itself: no name, no photo, nothing the link does not
+  // already say. The server ignores a handle that is nobody's.
   const maybeHandle = source && /^[a-z0-9_]{2,24}$/.test(source) ? source : null;
+  const CAMPAIGNS = new Set(['instagram', 'ig', 'insta', 'courtsidebase', 'courtside', 'reddit', 'tiktok', 'facebook', 'fb', 'twitter', 'threads', 'youtube', 'snapchat', 'whatsapp', 'discord', 'linktree', 'linkinbio', 'bio', 'email', 'newsletter', 'qr', 'flyer', 'poster', 'google', 'share', 'web', 'app', 'testflight', 'beta', 'robertzchen', 'robchzn', 'gipsperformance']);
+  const refParam = ((params.get('ref') || '').trim().toLowerCase().replace(/^@+/, ''));
+  const linkHandle = /^[a-z0-9_]{2,24}$/.test(refParam) && !CAMPAIGNS.has(refParam) ? refParam : null;
+  function showInvited(lead, handle) {
+    document.querySelectorAll('[data-invited]').forEach((el) => {
+      el.querySelector('[data-lead]').textContent = lead;
+      el.querySelector('[data-code]').textContent = handle;
+      el.hidden = false;
+    });
+  }
+  if (linkHandle) showInvited('From a friend’s link?', linkHandle);
   (async function findInviter() {
     if (!maybeHandle) return;
     try {
@@ -1026,13 +1046,21 @@
       const handle = got && got.open && got.author && typeof got.author.handle === 'string' ? got.author.handle : null;
       if (!handle) return;
       inviter = handle;
-      document.querySelectorAll('[data-invited]').forEach((el) => {
-        el.querySelector('[data-at]').textContent = `@${handle}`;
-        el.querySelector('[data-code]').textContent = handle;
-        el.hidden = false;
-      });
+      showInvited(`Invited by @${handle}?`, handle);
+      carryRef(document);
     } catch {}
   })();
+
+  // The web app's links carry the handle too (app.courtsidebase.com/join?ref=…),
+  // so someone on Android or a computer who signs up there is credited.
+  function carryRef(root) {
+    const handle = inviter || linkHandle;
+    if (!handle) return;
+    root.querySelectorAll('a[href="https://app.courtsidebase.com"], a[href="https://app.courtsidebase.com/"]').forEach((a) => {
+      a.setAttribute('href', `https://app.courtsidebase.com/join?ref=${encodeURIComponent(handle)}`);
+    });
+  }
+  carryRef(document);
 
   (function inviteStep() {
     const step = document.getElementById('invite-step');
@@ -1043,19 +1071,28 @@
     const go = form.querySelector('[data-go]');
     document.addEventListener('click', (event) => {
       const link = event.target.closest && event.target.closest('a[href^="https://testflight.apple.com/"]');
-      if (!link || link.closest('dialog') || joined || !(inviter || referredBy)) return;
+      if (!link || link.closest('dialog') || joined || !(inviter || linkHandle || referredBy)) return;
       event.preventDefault();
       const typeLine = form.querySelector('[data-type]');
+      // Signing in with Apple can hide the real email, and then nothing matches it.
+      const apple = ' (with Apple, choose Share My Email)';
       if (inviter) {
         step.querySelector('#invite-title').textContent = `Invited by @${inviter}?`;
         typeLine.querySelector('[data-code]').textContent = inviter;
         typeLine.querySelector('[data-at]').textContent = `@${inviter}`;
         typeLine.hidden = false;
-        form.querySelector('[data-why]').textContent = `Or add your email, then sign up in the app with the same one, and we’ll credit @${inviter} for you`;
+        form.querySelector('[data-why]').textContent = `Or add your email, then sign up in the app with the same one${apple}, and we’ll credit @${inviter} for you`;
+      } else if (linkHandle) {
+        // The account behind the link is not shown signed out: only the link's own words.
+        step.querySelector('#invite-title').textContent = 'Came from a friend’s link?';
+        typeLine.querySelector('[data-code]').textContent = linkHandle;
+        typeLine.querySelector('[data-at]').textContent = 'whoever sent it';
+        typeLine.hidden = false;
+        form.querySelector('[data-why]').textContent = `Or add your email, then sign up in the app with the same one${apple}, so whoever sent the link gets the credit`;
       } else {
         step.querySelector('#invite-title').textContent = 'Came from a friend’s link?';
         typeLine.hidden = true;
-        form.querySelector('[data-why]').textContent = 'Add your email so your friend gets the credit';
+        form.querySelector('[data-why]').textContent = `Add your email, then sign up in the app with the same one${apple}, so your friend gets the credit`;
       }
       msg.className = 'msg';
       msg.textContent = '';

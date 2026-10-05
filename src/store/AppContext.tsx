@@ -36,7 +36,7 @@ import { mergePast, readOneWithHeartRate, readPastHealth, type PastWorkout } fro
 import { postShare, reshare, sameShare } from '@/features/activity/healthShare';
 import { REFUSALS, maxTagsFor, canTagKind, firstName, isActive, localRefusal, mirrorCopy, nameFor, patchWith, reconcileWith, refusalWords, roleOn, tagsOnSession, withEntry, withOnNewPost } from '@/features/activity/sessionTags';
 import { duration } from '@/lib/format';
-import { takeReferrer } from '@/features/invite/referral';
+import { forgetReferrer, peekReferrer } from '@/features/invite/referral';
 import { endOfToday } from '@/features/players/openToHit';
 import { pickNutritionExport } from '@/features/health/cronometer';
 import { nearestPlace } from '@/data/locations';
@@ -2643,7 +2643,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [signIn]);
 
   const signUp = useCallback(async (email: string, password: string, name: string, handle: string, birthDate?: string) => {
-    const session = await remoteAuth.signUp(email, password, name, handle, birthDate);
+    const invitedBy = await peekReferrer().catch(() => null);
+    const session = await remoteAuth.signUp(email, password, name, handle, birthDate, invitedBy);
     if (!session) return 'confirm' as const;
     // The birthday typed on the sign-up form is kept before the account
     // opens, so it is never asked for a second time.
@@ -6512,14 +6513,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const me = stateRef.current.currentUserId;
     if (!live(me)) return;
     const run = (async () => {
-      const handle = await takeReferrer();
+      const handle = await peekReferrer();
       if (!handle) return;
+      const answer = await remote.claimReferral(handle).catch(() => ({ ok: false as const }));
+      // Not answered (offline, a server hiccup): the handle is kept, tried
+      // again the next time the app opens signed in, and offered in setup's
+      // "Invited by?" meanwhile.
+      if (!answer.ok) return;
+      await forgetReferrer();
       // Null when no follow was made: a teen, or someone whose age is not on
       // file yet, is never made to follow the sharer (followInviter makes it
       // once the birthday says adult).
-      const who = await remote.claimReferral(handle);
-      if (!who) return;
-      showInviterFollow(who, handle);
+      if (answer.followed) { showInviterFollow(answer.followed, handle); return; }
+      // Already credited as the account was made (the link rode along with
+      // the sign-up): the follow the claim would have made, by the same rules.
+      void followInviter();
     })();
     referralClaim.current = run;
     try { await run; } finally { if (referralClaim.current === run) referralClaim.current = null; }

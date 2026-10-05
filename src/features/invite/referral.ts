@@ -33,13 +33,30 @@ const take = async (key: string): Promise<string | null> => {
   return v;
 };
 
+/**
+ * The handle in whatever someone typed or pasted as "who invited me": a
+ * plain handle, "@Handle", "mr dinosaur62", their invite link
+ * (…/join?ref=handle, courtsidebase.com/?ref=handle) or a profile link.
+ * The server reads it the same way (invite_handle_from, migration 116).
+ */
+export function handleFromText(text: string): string {
+  let t = text.trim().toLowerCase();
+  const ref = /ref=(?:@|%40)*([a-z0-9_]+)/.exec(t);
+  if (ref) t = ref[1];
+  else if (/^(https?:\/\/|www\.)/.test(t) || /^[a-z0-9-]+(\.[a-z0-9-]+)+\//.test(t)) {
+    t = t.replace(/[?#].*$/, '').replace(/\/+$/, '').replace(/^.*\//, '');
+  }
+  return t.replace(/\s/g, '').replace(/^@+/, '');
+}
+
 /*
  * The handle an invite link carried (and its court, if any), kept until the
  * person has an account to claim it with — the join page runs before
  * sign-up, the claim after.
  */
 export async function rememberReferrer(handle: string, court?: InviteCourt | null) {
-  const clean = handle.trim().toLowerCase();
+  // "?ref=@Om" typed by hand used to be dropped without a word.
+  const clean = handleFromText(handle);
   if (!/^[a-z0-9_]{2,24}$/.test(clean)) return;
   await put(KEY, clean);
   if (court && isMapCourtId(court.id) && Number.isFinite(court.lat) && Number.isFinite(court.lng)) {
@@ -47,8 +64,18 @@ export async function rememberReferrer(handle: string, court?: InviteCourt | nul
   }
 }
 
-export async function takeReferrer(): Promise<string | null> {
-  return take(KEY);
+/**
+ * The invite link's handle, without using it up: it stays until the claim
+ * has really been answered (forgetReferrer), so a dropped connection is
+ * tried again next time instead of losing the credit.
+ */
+export async function peekReferrer(): Promise<string | null> {
+  if (Platform.OS === 'web') { try { return localStorage.getItem(KEY); } catch { return null; } }
+  return AsyncStorage.getItem(KEY).catch(() => null);
+}
+
+export async function forgetReferrer(): Promise<void> {
+  await take(KEY);
 }
 
 /** The court an invite carried, once, for the first page after joining. */

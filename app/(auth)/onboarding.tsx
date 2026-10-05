@@ -11,7 +11,7 @@ import { Button, Collapse, Field, SegmentedControl, Toggle } from '@/components/
 import { SCALES } from '@/features/players/ratingScales';
 import { writeSkipped, type SetupStep } from '@/features/onboarding/setupProgress';
 import { replaceWithStart } from '@/features/navigation/startTab';
-import { peekShareTarget } from '@/features/invite/referral';
+import { handleFromText, peekReferrer, peekShareTarget } from '@/features/invite/referral';
 import type { InviteCodeResult, MyInviter } from '@/data/remote';
 import * as haptics from '@/lib/haptics';
 import { useApp } from '@/store/AppContext';
@@ -156,7 +156,16 @@ export default function Onboarding() {
   useEffect(() => {
     if (!asksInviter) return;
     let live = true;
-    void actions.myInviter().then((r) => { if (live) setInviter(r); });
+    void (async () => {
+      const r = await actions.myInviter();
+      if (!live) return;
+      setInviter(r);
+      if (!r?.canSet) return;
+      // Filled in for them: the waitlist's guess (still theirs to change), or
+      // the invite link this phone kept when its claim did not get through.
+      const suggested = r.handle ?? await peekReferrer().catch(() => null);
+      if (live && suggested) setInviteCode((typed) => typed || suggested);
+    })();
     return () => { live = false; };
   }, [asksInviter, actions]);
   const INVITE_ERRORS: Record<Exclude<InviteCodeResult['error'], undefined>, string> = {
@@ -168,8 +177,9 @@ export default function Onboarding() {
   };
   /** Claims a typed code. True when there is nothing left to claim (so setup may go on). */
   const claimCode = async (): Promise<boolean> => {
-    const code = inviteCode.trim().replace(/^@+/, '');
-    if (!code || !inviter?.canSet || inviter.handle) return true;
+    // A pasted invite link, spaces or an @ all come down to the handle.
+    const code = handleFromText(inviteCode);
+    if (!code || !inviter?.canSet) return true;
     setClaiming(true);
     const r = await actions.claimInviteCode(code);
     setClaiming(false);
@@ -377,7 +387,7 @@ export default function Onboarding() {
                   segments={YEARS.map((y) => ({ value: String(y.value), label: y.label }))}
                 />
               </Group>
-              {asksInviter && inviter?.handle ? (
+              {asksInviter && inviter?.handle && !inviter.canSet ? (
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
                   <Text style={styles.note} accessibilityLabel={`Invited by @${inviter.handle}`}>Invited by @{inviter.handle}</Text>
                   {followOffer ? (
@@ -387,12 +397,13 @@ export default function Onboarding() {
               ) : asksInviter && inviter?.canSet ? (
                 <Field
                   label="Invited by?"
-                  placeholder="Enter a code: their @handle"
+                  placeholder="Their @handle (or paste their link)"
                   value={inviteCode}
                   onChangeText={(t) => { setInviteCode(t); setInviteNote(undefined); }}
                   autoCapitalize="none"
                   autoCorrect={false}
-                  hint={inviteNote ?? 'Optional. Can only be set once.'}
+                  // A handle the waitlist matched from their email: theirs to keep or change, today only.
+                  hint={inviteNote ?? (inviter.handle ? `Matched from the link you used. Not @${inviter.handle}? Type who invited you.` : 'Optional. Can only be set once.')}
                   onSubmitEditing={() => void claimCode()}
                 />
               ) : null}
