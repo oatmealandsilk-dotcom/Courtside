@@ -274,8 +274,9 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   }, [users, lastSeen, currentUserId, blockedIds, nearFrom?.lat, nearFrom?.lng]); // eslint-disable-line react-hooks/exhaustive-deps
   // "New on CourtSide": who joined in the last two weeks, newest first. With
   // the map's round 2 on the database (migration 63) the server decides who
-  // (new_on_courtside): known adults, 16 and 17 year olds with public
-  // accounts, and anyone you already follow; never under 16. Before it, the
+  // (new_on_courtside): known adults (to a known adult), and anyone you
+  // already follow; since migration 122 never a teen to an adult who does
+  // not follow them, and never under 16. Before 63, the
   // phone works it out the old way: known adults and people you follow, so a
   // teen is never put in front of adult strangers with a one-tap Follow; a
   // teen viewer sees only the people they follow. Either way, nobody already

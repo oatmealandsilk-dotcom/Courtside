@@ -22,7 +22,7 @@ import { blankVideoLocation } from '@/lib/videoLocation';
 import { noteStep } from '@/lib/crashReporting';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
-import type { Answer, ChatEvent, ChatPhoto, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, DetectedActivity, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, CourtNote, LastSeen, MapPlace, MapVisibility, TaggedCourt, Question, Removed, RemovedItem, Story, TakedownKind, TakedownReason, Tip, User, CoachApplication, CourtAccess, CourtAccessSource, CourtDayPart, CourtFacts, CourtFollowCount, CourtNow, CourtRegulars, CourtReview, CourtRightNow, CourtRing, FollowedCourt, SessionTag, SessionTagRefusal, SessionTagRole, FeedGroup, FeedGroupCard, DiscoverGroup, GroupLook, Invitee, ContactMatch, HeadToHead, MatchSet } from './types';
+import type { Answer, ChatEvent, ChatPhoto, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, DetectedActivity, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, CourtNote, LastSeen, MapPlace, MapVisibility, TaggedCourt, Question, Removed, RemovedItem, Story, SurfacePreference, TakedownKind, TakedownReason, Tip, TournamentEntry, User, CoachApplication, CourtAccess, CourtAccessSource, CourtDayPart, CourtFacts, CourtFollowCount, CourtNow, CourtRegulars, CourtReview, CourtRightNow, CourtRing, FollowedCourt, SessionTag, SessionTagRefusal, SessionTagRole, FeedGroup, FeedGroupCard, DiscoverGroup, GroupLook, Invitee, ContactMatch, HeadToHead, MatchSet } from './types';
 import { validSets } from '@/features/activity/score';
 import { TERMS_VERSION } from '@/lib/legal';
 import { readinessOf, sessionTagNamesLive, sessionToSend, setSessionTagNamesLive, trustedSession } from './sessionTagGate';
@@ -576,7 +576,7 @@ const toCoach = (r: CoachRow, services: CoachServiceRow[], me: ID): Coach => ({
 /** One pin from map_players (migration 63; `mutual` since 98). */
 interface MapPlayerRow { user_id: ID; lat: number; lng: number; place: MapPlace | string; court_id: string | null; court_name: string | null; city: string | null; seen_at: string | null; open_until: string | null; mutual?: boolean | null }
 interface NotificationRow { id: string; user_id: string; actor_id: string; kind: string; target_id: string; target_kind: string; preview: string | null; read: boolean; created_at: string }
-interface UserStateRow { muted_ids: string[]; blocked_ids: string[]; saved_question_ids: string[]; payment_methods: PaymentMethod[]; default_payment_id: string | null; show_activity: boolean; push_likes: boolean; push_coach: boolean; push_messages?: boolean | null; push_activity?: boolean | null; push_map_friends?: boolean | null; push_map_hits?: boolean | null; push_map_players?: boolean | null; push_courts?: boolean | null; contacts_findable?: boolean | null; private_profile?: { constraints?: PlayerProfile['constraints'] } | null; map_visibility?: string | null;
+interface UserStateRow { muted_ids: string[]; blocked_ids: string[]; saved_question_ids: string[]; payment_methods: PaymentMethod[]; default_payment_id: string | null; show_activity: boolean; push_likes: boolean; push_coach: boolean; push_messages?: boolean | null; push_activity?: boolean | null; push_map_friends?: boolean | null; push_map_hits?: boolean | null; push_map_players?: boolean | null; push_courts?: boolean | null; contacts_findable?: boolean | null; private_profile?: { constraints?: PlayerProfile['constraints']; tournaments?: unknown } | null; map_visibility?: string | null;
   /** Your own age group, readable only by you (migration 64). Absent before it. */
   age_group?: string | null;
   /** Your birthday, readable only by you (migration 13). */
@@ -842,7 +842,7 @@ const blockedMeIdsOf = (rows: unknown[]): ID[] =>
  * The profile columns the app reads for everyone. Named rather than "*" so
  * nobody's town position (city_lat, city_lng) comes down with the list: the
  * app only ever uses your own, which comes from my_city_at() (migration
- * 118). Migration 120 then takes those two columns away from everyone else
+ * 118). Migration 121 then takes those two columns away from everyone else
  * altogether; after it, a read of "*" is refused. A column added to
  * profiles later has to be granted to signed-in readers and named here.
  */
@@ -855,6 +855,48 @@ const missingColumn = (error: unknown) => !!error && typeof error === 'object' &
  * missing function shows as a failed request in a browser's console.
  */
 const missingThisSession = new Set<string>();
+/**
+ * Set once tournament_plans() (migration 123) has answered this session:
+ * tournament plans live in each owner's settings row now, so a save of your
+ * tennis profile says it knows (see updateProfile).
+ */
+let tournamentsPrivateLive = false;
+const SURFACES: readonly SurfacePreference[] = ['hard', 'clay', 'grass', 'indoor'];
+/** Tournament plans as stored (a profile bundle, a settings row, tournament_plans): only well-formed ones, at most 20. */
+function tournamentsOf(raw: unknown): TournamentEntry[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((item): TournamentEntry[] => {
+    if (!item || typeof item !== 'object') return [];
+    const t = item as Record<string, unknown>;
+    if (typeof t.id !== 'string' || typeof t.name !== 'string' || typeof t.startsAt !== 'string') return [];
+    const surface = SURFACES.find((x) => x === t.surface) ?? 'hard';
+    return [{ id: t.id, name: t.name, startsAt: t.startsAt, surface, level: typeof t.level === 'string' ? t.level : '', location: typeof t.location === 'string' ? t.location : '', registered: t.registered === true }];
+  }).slice(0, 20);
+}
+/**
+ * tournament_plans() (migration 123): the plans you may see, yours and those
+ * of each person you follow who follows you back, by person. Undefined on a
+ * database without it (or when it could not be asked): then the profile rows
+ * still carry everyone's, and the app shows only the same people's.
+ */
+async function fetchPlans(): Promise<Map<ID, TournamentEntry[]> | undefined> {
+  if (missingThisSession.has('tournament_plans')) return undefined;
+  try {
+    const { data, error } = await need().rpc('tournament_plans');
+    if (error) {
+      if (missingFunction(error)) missingThisSession.add('tournament_plans');
+      return undefined;
+    }
+    tournamentsPrivateLive = true;
+    const plans = new Map<ID, TournamentEntry[]>();
+    for (const row of Array.isArray(data) ? data as { user_id?: unknown; tournaments?: unknown }[] : []) {
+      if (typeof row?.user_id === 'string') plans.set(row.user_id, tournamentsOf(row.tournaments));
+    }
+    return plans;
+  } catch {
+    return undefined;
+  }
+}
 /**
  * Every row of a read, fetched 1,000 at a time (the most the database hands
  * back at once) until there are no more, up to `cap` rows.
@@ -950,6 +992,9 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
       return undefined;
     }
   };
+  // Tournament plans you may see (migration 123): yours, and those of people
+  // you follow who follow you back.
+  const plansLoad = fetchPlans();
   const cityLoad = (async (): Promise<CityAt | undefined> => {
     if (missingThisSession.has('my_city_at')) return ownRow();
     try {
@@ -1013,6 +1058,7 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
   const tagsReady = await tagsProbe;
   const blockedMeIds = await blockedMeLoad;
   const ownCity = await cityLoad;
+  const plans = await plansLoad;
   setSessionTagNamesLive(tagsReady);
   if (qs.error) console.warn('[remote] community tables missing; run the pending migrations', qs.error.message);
   const byTime = <T extends { created_at: string }>(a: T, b: T) => (a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0);
@@ -1062,12 +1108,31 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
   const contactsFindableReady = ustate.data || ustate.error ? false
     : await db.from('user_state').select('contacts_findable').limit(0).then(({ error }) => !error, () => false);
   const hitList = await withMyHits(((hitRows.data ?? []) as HitRow[]).map(toHit), me);
+  // Tournament plans (where and when someone will play) are only for
+  // themselves and friends who follow each other, whoever they are. Since
+  // migration 123 they live in each owner's settings row: yours comes with
+  // your settings, the rest from tournament_plans(). On a database before
+  // it, the profile rows still carry everyone's, so the app keeps only the
+  // same people's.
+  const iFollow = new Set<string>();
+  const followMe = new Set<string>();
+  for (const edge of (follows.data ?? []) as Edge[]) {
+    if (edge.follower_id === me) iFollow.add(edge.following_id);
+    if (edge.following_id === me) followMe.add(edge.follower_id);
+  }
+  const ownPlans = Array.isArray(ownState?.private_profile?.tournaments) ? tournamentsOf(ownState!.private_profile!.tournaments) : undefined;
+  const plansFor = (row: ProfileRow): TournamentEntry[] => {
+    if (row.id === me) return ownPlans ?? plans?.get(me) ?? tournamentsOf(row.profile?.tournaments);
+    if (plans) return plans.get(row.id) ?? [];
+    return iFollow.has(row.id) && followMe.has(row.id) ? tournamentsOf(row.profile?.tournaments) : [];
+  };
+  const withPlans = (row: ProfileRow): ProfileRow => ({ ...row, profile: { ...(row.profile ?? {}), tournaments: plansFor(row) } });
   return {
     agesOnProfiles,
     ...(contactsFindableReady ? { contactsFindableReady: true } : {}),
     // Your own "up for a hit" when it is kept privately (migration 78: not a known adult) comes from your settings row.
     // Nobody else's town position is read (PROFILE_COLUMNS); yours comes on its own (cityLoad).
-    users: profileRows.map((row) => toUser(row.id === me
+    users: profileRows.map(withPlans).map((row) => toUser(row.id === me
       ? { ...row, ...(ownCity ?? {}), age_group: ownAge, open_to_hit_until: row.open_to_hit_until ?? ownState?.open_to_hit_until ?? null }
       : { ...row, city_lat: null, city_lng: null }, followers.get(row.id) ?? 0, following.get(row.id) ?? 0)),
     posts: postRows.map(toPost),
@@ -2062,6 +2127,15 @@ export const remote = {
       throw new Error(error.message);
     }
     return String(data);
+  },
+
+  /**
+   * The tournament plans you may see now (migration 123), by person: yours
+   * and those of people you follow who follow you back. Undefined on a
+   * database without it, or when it could not be asked.
+   */
+  async fetchTournamentPlans(): Promise<Map<ID, TournamentEntry[]> | undefined> {
+    return fetchPlans();
   },
 
   /* -------------------------------------------------------------- invites */
@@ -3227,7 +3301,11 @@ export const remote = {
     const town = (n?: number) => (n == null ? null : Math.round(n * 100) / 100);
     if (patch.cityAt !== undefined) { row.city_lat = town(patch.cityAt?.lat); row.city_lng = town(patch.cityAt?.lng); }
     if (patch.avatarUrl !== undefined) row.avatar_url = patch.avatarUrl;
-    if (patch.profile !== undefined) row.profile = patch.profile;
+    // Since migration 123 the database files tournament plans privately as the
+    // profile is saved; the flag says this app knows that, so the plans sent
+    // are the whole list (none clears them). Without the flag (an older app)
+    // the database only ever adds plans.
+    if (patch.profile !== undefined) row.profile = tournamentsPrivateLive ? { ...patch.profile, tournamentsPrivate: true } : patch.profile;
     let { error } = await need().from('profiles').update(row).eq('id', me);
     // A database without the town's position yet (migration 49): save the rest.
     if (error && /city_l(at|ng)/.test(error.message) && ('city_lat' in row || 'city_lng' in row)) {

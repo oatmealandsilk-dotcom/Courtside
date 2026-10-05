@@ -1,6 +1,6 @@
 import { PlayerName } from '@/components/PlayerName';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
@@ -33,6 +33,12 @@ export default function Profile() {
   const loading = useStillLoading();
   const user = userId ? users.find((u) => u.id === userId) ?? null : currentUser;
   const isMe = !!user && user.id === currentUser?.id;
+  // Someone else's tournament plans show only while you follow each other
+  // (migration 123): asked again on opening, so a follow-back since the app
+  // opened counts, and an unfollow hides them.
+  const otherId = user && !isMe ? user.id : null;
+  const { loadTournamentPlans } = actions;
+  useEffect(() => { if (otherId) void loadTournamentPlans(); }, [otherId, loadTournamentPlans]);
 
   if (!user) {
     return (
@@ -208,6 +214,7 @@ export default function Profile() {
               </View>
             ))}
           </View>
+          {isMe ? <Text style={styles.fine}>Only you and friends who follow each other with you see these.</Text> : null}
         </>
       ) : null}
 

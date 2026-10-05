@@ -54,21 +54,24 @@
 --      read everyone's with the profile list, so any signed-in account could
 --      read where a teen tapped "Use my location" (7 teens on Oct 5, one
 --      under 16). The app on this branch reads the profile list without
---      those two columns and asks this for its own. Migration 120 then
+--      those two columns and asks this for its own. Migration 121 then
 --      takes the two columns away from everyone else; it must wait until
---      that app is on the website and on every phone (see 120).
+--      that app is on the website and on every phone (see 121; it was
+--      written as 120 and renumbered in batch A).
 --
 -- Not changed, said plainly (each needs an owner decision):
 --   * Whether an account is private stays on every profile row, readable by
 --     any signed-in account. A teen account starts private, and on Oct 5
 --     every private account was a teen's, so "private" reads as "teen".
 --     Hiding it would change how following works for everyone.
---   * The town typed on a profile (location) and the tennis profile
---     (including tournament dates and places) are on every profile row as
---     before; the app shows a private account's tennis profile only to
---     approved followers, and search no longer finds or shows towns.
+--   * The town typed on a profile (location) and the tennis profile are on
+--     every profile row as before; the app shows a private account's
+--     tennis profile only to approved followers, and search no longer
+--     finds or shows towns. (Batch A: tournament plans, the dates and
+--     places, move off the profile row in 123, readable only by friends
+--     who follow each other.)
 --   * New on CourtSide (63) still shows public 16 and 17 year olds to
---     adults, by its own rule.
+--     adults, by its own rule. (Batch A: 122 stops that.)
 --
 -- Tried on the live database on Oct 5, inside a transaction that was then
 -- undone (nothing was saved). See the end of this file.
@@ -164,14 +167,14 @@ commit;
 -- select proname, prosrc ~* 'age_group|known_adult' from pg_proc where proname in ('blocked_me', 'my_city_at');
 --
 -- ------------------------------------------------------- 4. what the live try showed (Oct 5)
--- 118 run twice, then 120 run twice, in one transaction, then undone (and
+-- 118 run twice, then 120 (now 121) run twice, in one transaction, then undone (and
 -- checked afterwards: nothing was kept). As a signed-in adult who does not
 -- follow @omuchitaletennis (a public teen account) and is not followed by
 -- them, reading profiles the way the app now does (named columns): found by
 -- the exact handle, part of the handle ("chitale"), the start of the name
 -- ("om") and a word of it ("chit"); the teen's row has exactly the same
 -- fields as an adult's, none about age or town position; all 26 rows read.
--- After 120: another account's town position (a teen under 16 with one on
+-- After 120 (now 121): another account's town position (a teen under 16 with one on
 -- file) and a read with "*" are refused; their own (my_city_at) comes back,
 -- and saving it still works and is still rounded (104); the first-sign-in
 -- profile upsert still works; groups near you (discover_groups) still runs.
@@ -182,7 +185,7 @@ commit;
 -- blocked_me(): empty for that adult; for an adult the teen blocked (made
 -- inside the test) it lists the teen; the teen's own block is not listed
 -- for the teen. Signed out: 0 profiles; blocked_me() and my_city_at()
--- refuse (permission denied). 120 alone (without 118) stops at its check.
+-- refuse (permission denied). 120 (now 121) alone (without 118) stops at its check.
 --   RESULT md5=fdd2149e37ec57150f109a63690eb83a/e9bdf013d7e6283f695e4eafb942774d
 --   stranger_ok=true by_handle=1 by_part_handle=1 by_part_name=1
 --   by_name_start=1 shape_same=true age_or_city_keys=0 named_rows=26/26

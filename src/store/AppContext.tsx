@@ -108,7 +108,7 @@ import type {
   Story,
   User,
   PlayerProfile,
-  MediaCrop, Tip, TaggedCourt, TrackerId, Invitee, ContactMatch, HealthShareKey, HeadToHead, MatchSet, Removed, RemovedItem, TakedownKind, TakedownReason } from '@/data/types';
+  MediaCrop, Tip, TaggedCourt, TrackerId, Invitee, ContactMatch, HealthShareKey, HeadToHead, MatchSet, Removed, RemovedItem, TakedownKind, TakedownReason, TournamentEntry } from '@/data/types';
 import { setsWinner } from '@/features/activity/score';
 
 interface NewStoryInput {
@@ -547,6 +547,12 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
   setMapVisibility: (v: MapVisibility) => Promise<boolean>;
   /** Asks who is new on CourtSide for you (migration 63); before it, the screen works the list out itself. */
   loadNewOnCourtside: () => Promise<void>;
+  /**
+   * Asks again whose tournament plans you may see (migration 123: only
+   * friends who follow each other), so a follow-back since the app opened
+   * shows theirs and an unfollow hides them. Does nothing before 123.
+   */
+  loadTournamentPlans: () => Promise<void>;
 
   /* Payments */
   setDefaultPayment: (id: ID) => void;
@@ -3049,6 +3055,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
     return ok;
   }, [loadLastSeen]);
+
+  const loadTournamentPlans = useCallback(async () => {
+    const me = stateRef.current.currentUserId;
+    if (!live(me)) return;
+    const plans = await remote.fetchTournamentPlans().catch(() => undefined);
+    if (!plans || stateRef.current.currentUserId !== me) return;
+    // Your own come with your settings and your own edits: left as they are.
+    const same = (a: TournamentEntry[], b: TournamentEntry[]) => JSON.stringify(a) === JSON.stringify(b);
+    setState((prev) => ({
+      ...prev,
+      users: prev.users.map((u) => {
+        if (u.id === me) return u;
+        const next = plans.get(u.id) ?? [];
+        return same(u.profile.tournaments, next) ? u : { ...u, profile: { ...u.profile, tournaments: next } };
+      }),
+    }));
+  }, []);
 
   const loadNewOnCourtside = useCallback(async () => {
     const s = stateRef.current;
@@ -6929,6 +6952,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setLocationEnabled,
       setMapVisibility,
       loadNewOnCourtside,
+      loadTournamentPlans,
       setDefaultPayment,
       addPaymentMethod,
       removePaymentMethod,
@@ -7135,6 +7159,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setLocationEnabled,
       setMapVisibility,
       loadNewOnCourtside,
+      loadTournamentPlans,
       setDefaultPayment,
       addPaymentMethod,
       removePaymentMethod,
