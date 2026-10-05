@@ -62,7 +62,7 @@ export function useUpToday({ users, lastSeen, me, from, blockedIds }: { users: U
 
 /**
  * "Open to hit" (Oct 5, owner; was "Who's up today"), under the Find Players
- * map: your own "I'm up today" first (one tap puts your green ring on until
+ * map: your own "I’m free" first (one tap puts your green ring on until
  * midnight, the same switch as your card on the map; it never turns Location
  * on; holding it opens the sheet to pick until when and how far, and the
  * first tap shows the tip that says so), then a face for each player near
@@ -104,12 +104,12 @@ export function UpToday({ me, people, teen = false, locationOn, onLocation, onTo
       </View>
       <View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row} style={styles.scroll}>
-        <Pressable accessibilityRole="switch" accessibilityState={{ checked: up }} accessibilityLabel={up ? `You’re open to hit${till ? ` ${till}` : ''}. Turn off` : 'I’m up today'} accessibilityHint="Hold to edit your time and distance" accessibilityActions={[{ name: 'longpress', label: 'Edit your time and distance' }]} onAccessibilityAction={(e) => { if (e.nativeEvent.actionName === 'longpress') edit(); }} onPress={flip} onLongPress={edit} delayLongPress={400} style={({ pressed }) => [styles.item, styles.mine, pressed && styles.pressed]}>
+        <Pressable accessibilityRole="switch" accessibilityState={{ checked: up }} accessibilityLabel={up ? `You’re open to hit${till ? ` ${till}` : ''}. Turn off` : 'I’m free. Turn on open to hit'} accessibilityHint="Hold to edit your time and distance" accessibilityActions={[{ name: 'longpress', label: 'Edit your time and distance' }]} onAccessibilityAction={(e) => { if (e.nativeEvent.actionName === 'longpress') edit(); }} onPress={flip} onLongPress={edit} delayLongPress={400} style={({ pressed }) => [styles.item, styles.mine, pressed && styles.pressed]}>
           <View>
             <OpenRing open={up} size={FACE} hairline><Avatar name={me.name} seed={me.avatarSeed} uri={me.avatarUrl} size={FACE} /></OpenRing>
             {up ? null : <Animated.View entering={FadeIn.duration(160)} style={styles.plus}><Ionicons name="add" size={14} color={colors.bg} /></Animated.View>}
           </View>
-          <Text style={[styles.name, up && styles.nameUp]} numberOfLines={1}>{up ? 'You’re open' : 'I’m up today'}</Text>
+          <Text style={[styles.name, up && styles.nameUp]} numberOfLines={1}>{up ? 'You’re open' : 'I’m free'}</Text>
           <Text style={styles.meta} numberOfLines={1}>{till ?? ' '}</Text>
         </Pressable>
         {people.map((p) => {
@@ -155,7 +155,7 @@ const styleDefinitions = StyleSheet.create({
   scroll: { marginHorizontal: -spacing.lg },
   row: { paddingHorizontal: spacing.lg - 6, gap: 2, alignItems: 'flex-start' },
   item: { width: 78, alignItems: 'center', gap: 3, paddingVertical: 2 },
-  // Yours says the most ("I’m up today"), so it has a little more room.
+  // Yours says the most ("You’re open"), so it has a little more room.
   mine: { width: 96 },
   pressed: { opacity: 0.7 },
   plus: { position: 'absolute', right: 2, bottom: 2, width: 22, height: 22, borderRadius: 11, backgroundColor: colors.text, borderWidth: 2, borderColor: colors.bg, alignItems: 'center', justifyContent: 'center' },
