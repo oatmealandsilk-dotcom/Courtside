@@ -55,6 +55,7 @@ import { opensAtFor } from '@/features/hits/audience';
 import { forgetPushToken, registerForPush } from '@/features/push/push';
 import { framesAt } from '@/features/compose/frames';
 import { noteStep, reportError } from '@/lib/crashReporting';
+import { noteAppOpen } from '@/features/usage/appOpens';
 import { learned as learnedTip } from '@/features/tips/tips';
 import { emptyCourtLife, useCourtLife, type CourtLifeActions, type CourtLifeState } from '@/store/courtLife';
 import { forgetLinkPreviews } from '@/features/messages/linkPreview';
@@ -1797,6 +1798,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const wake = () => setLiveEpoch((n) => n + 1);
     const sub = DeviceState.addEventListener('change', (st) => { if (st === 'active') wake(); });
     const onVisible = () => { if (typeof document !== 'undefined' && document.visibilityState === 'visible') wake(); };
+    if (Platform.OS === 'web' && typeof document !== 'undefined') document.addEventListener('visibilitychange', onVisible);
+    return () => { sub.remove(); if (Platform.OS === 'web' && typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisible); };
+  }, [remoteLoaded, currentUserForLive]);
+  // "Opened the app today" (migration 110): once a day, on start and on coming
+  // back to the front. Fire and forget; it never holds anything up.
+  useEffect(() => {
+    if (!isSupabaseConfigured || !remoteLoaded || !currentUserForLive || !UUID.test(currentUserForLive)) return;
+    const me = currentUserForLive;
+    noteAppOpen(me);
+    const sub = DeviceState.addEventListener('change', (st) => { if (st === 'active') noteAppOpen(me); });
+    const onVisible = () => { if (typeof document !== 'undefined' && document.visibilityState === 'visible') noteAppOpen(me); };
     if (Platform.OS === 'web' && typeof document !== 'undefined') document.addEventListener('visibilitychange', onVisible);
     return () => { sub.remove(); if (Platform.OS === 'web' && typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisible); };
   }, [remoteLoaded, currentUserForLive]);
