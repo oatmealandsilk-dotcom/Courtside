@@ -1062,10 +1062,21 @@ const cleanTitle = (title?: string) => (title ?? '').replace(/\s+/g, ' ').trim()
  * follow each other with them, is the one place it comes from, so the pin,
  * the card and Who's up today all light up from here. Unchanged people keep
  * their objects (and nothing redraws when nobody changed).
+ *
+ * `fresh`: the rows map_players just answered with. Its open_until is the
+ * whole answer (profile and settings row together, null when off), so for
+ * anyone in it a ring turned off goes too. The old table never says, so
+ * then a ring is only ever added. People it did not answer for keep theirs.
  */
-function withMapRings(users: User[], seen: Record<ID, LastSeen>, me: ID | null): User[] {
+function withMapRings(users: User[], seen: Record<ID, LastSeen>, me: ID | null, fresh: Record<ID, LastSeen> | null = null): User[] {
   let changed = false;
   const next = users.map((u) => {
+    const now = u.id === me ? undefined : fresh?.[u.id];
+    if (now) {
+      if (u.openToHitUntil === now.openUntil) return u;
+      changed = true;
+      return { ...u, openToHitUntil: now.openUntil };
+    }
     const until = u.id === me ? undefined : seen[u.id]?.openUntil;
     if (!until || (u.openToHitUntil && u.openToHitUntil >= until)) return u;
     changed = true;
@@ -2547,7 +2558,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     else if (view) seenInView.current = loaded;
     else seenAround.current = loaded;
     const merged = { ...seenAround.current, ...seenInView.current };
-    setState((prev) => ({ ...prev, lastSeen: merged, lastSeenLoaded: true, users: withMapRings(prev.users, merged, me) }));
+    setState((prev) => ({ ...prev, lastSeen: merged, lastSeenLoaded: true, users: withMapRings(prev.users, merged, me, mapLive === true ? loaded : null) }));
     return true;
   }, []);
 
