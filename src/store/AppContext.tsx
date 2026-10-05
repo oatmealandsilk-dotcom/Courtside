@@ -6229,6 +6229,38 @@ export function AppProvider({ children }: { children: ReactNode }) {
     });
   }, [state.locationEnabled, state.detectedLocation]);
 
+  // Back to the front with Location on, where you are now (Oct 5): a phone
+  // opened in Cary in the morning and picked up again in Durham measures
+  // every "x mi" from Durham, not from where the app was opened. At most
+  // every five minutes (or until a first fix comes, if the one at launch
+  // never did), never with the device's own prompt (quiet), and only a real
+  // move (about 150 m) changes anything; sending your spot on is the effect
+  // above's, as for any fix. Location switched off meanwhile: the answer is dropped.
+  const fixAskedAt = useRef(Date.now());
+  const fixAsking = useRef(false);
+  useEffect(() => {
+    if (!state.locationEnabled) return undefined;
+    const FRESH_MS = 5 * 60_000;
+    const refresh = () => {
+      if (fixAsking.current || (stateRef.current.detectedCoords && Date.now() - fixAskedAt.current < FRESH_MS)) return;
+      fixAsking.current = true;
+      fixAskedAt.current = Date.now();
+      void getPosition({ recentMs: FRESH_MS, quiet: true }).then((result) => {
+        if (!result.ok) return;
+        setState((prev) => {
+          if (!prev.locationEnabled) return prev;
+          const was = prev.detectedCoords;
+          if (was && Math.abs(was.lat - result.lat) < 0.0015 && Math.abs(was.lng - result.lng) < 0.0015) return prev;
+          return { ...prev, detectedLocation: nearestPlace(result.lat, result.lng).name, detectedCoords: { lat: result.lat, lng: result.lng } };
+        });
+      }).finally(() => { fixAsking.current = false; });
+    };
+    const sub = DeviceState.addEventListener('change', (st) => { if (st === 'active') refresh(); });
+    const onVisible = () => { if (typeof document !== 'undefined' && document.visibilityState === 'visible') refresh(); };
+    if (Platform.OS === 'web' && typeof document !== 'undefined') document.addEventListener('visibilitychange', onVisible);
+    return () => { sub.remove(); if (Platform.OS === 'web' && typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisible); };
+  }, [state.locationEnabled]);
+
   /* ------------------------------- Payments ------------------------------- */
 
   const setDefaultPayment = useCallback((id: ID) => {
