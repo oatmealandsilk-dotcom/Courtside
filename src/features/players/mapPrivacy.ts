@@ -27,8 +27,7 @@ import { notKnownAdult } from '@/features/players/age';
 export const VISIBILITY_CHOICES: { value: MapVisibility; label: string; line: string }[] = [
   { value: 'nearby', label: 'Players nearby', line: 'Your rough area, or your court when you check in. Exact for people you follow back.' },
   { value: 'mutuals', label: 'Only people you follow back', line: 'Your exact spot, just for them.' },
-  // Since migration 98 you share to see: hidden yourself, you see only your friends.
-  { value: 'none', label: 'Only me', line: 'No one sees you on the map, and you see only people you follow back.' },
+  { value: 'none', label: 'Only me', line: 'No one sees you on the map.' },
 ];
 
 /**
@@ -86,7 +85,13 @@ export const onTeenMap = (me: User | null | undefined, teenMap: TeenMap) => !!me
  * sees only friends whatever they do, and the demo shows everyone.
  */
 export type NearbyLock = 'location' | 'hidden' | null;
+/** Whether you must share your own spot to see players nearby (migration 98's rule; off since 105). */
+const SHARE_TO_SEE = false;
+
 export function nearbyLock(a: { mapLive: boolean | null; me: User | null | undefined; mapVisibility: MapVisibility | null | undefined; locationOn: boolean; hasSpot: boolean }): NearbyLock {
+  // Off since migration 105 (Oct 5, owner: everyone visible for now): Location off or Only me no longer
+  // hides players nearby from you, so there is nothing to say. Flip SHARE_TO_SEE back on with the near-you rule.
+  if (!SHARE_TO_SEE) return null;
   if (a.mapLive !== true || !a.me || notKnownAdult(a.me) || isDemo(a.me.id)) return null;
   if (a.mapVisibility === 'none') return 'hidden';
   // A spot shared from another device still counts: the server measures from it.
