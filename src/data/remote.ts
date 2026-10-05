@@ -369,6 +369,12 @@ export interface RemoteData {
   contactsFindableReady?: boolean;
   /** Messages you deleted for yourself, so a chat fetched again later leaves them out too. Missing in saved copies. */
   hiddenMessageIds?: ID[];
+  /**
+   * The accounts that have blocked you (blocked_me, migration 118): search
+   * leaves them out. Missing on a database without it, or when it could not
+   * be asked.
+   */
+  blockedMeIds?: ID[];
   /** Your settings row could not be read this time (not the same as having none): `userState` is null for that reason. */
   userStateFailed?: boolean;
 }
@@ -828,6 +834,12 @@ export interface ReportedChat {
   messages: { id?: ID; senderId: ID; body: string; kind: string; createdAt: string; photos?: ChatPhoto[] }[];
 }
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** blocked_me()'s rows: plain ids, or ({ blocked_me: id }) from an older gateway. Anything else is dropped. */
+const blockedMeIdsOf = (rows: unknown[]): ID[] =>
+  rows.flatMap((row) => {
+    const id = typeof row === 'string' ? row : row && typeof row === 'object' ? (row as { blocked_me?: unknown }).blocked_me : undefined;
+    return typeof id === 'string' && UUID_RE.test(id) ? [id] : [];
+  });
 /**
  * Every row of a read, fetched 1,000 at a time (the most the database hands
  * back at once) until there are no more, up to `cap` rows.
@@ -902,6 +914,10 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
   // everything else so it is known before any post is read: until it is, the
   // names on posts' session stats are not shown (see trustedSession).
   const tagsProbe = db.from('session_tags').select('id').limit(0).then(({ error }) => readinessOf(error), () => null);
+  // Who has blocked you (migration 118), so search leaves them out the way it
+  // leaves out people you blocked. A database without it (or a failed ask)
+  // gives undefined, and search works as it always has.
+  const blockedMeLoad = db.rpc('blocked_me').then(({ data, error }) => (error || !Array.isArray(data) ? undefined : blockedMeIdsOf(data)), () => undefined);
   const [profiles, posts, storiesTry, follows, requests, convs, qs, cqs, creqs, notes, ustate, tipRows, hiddenRows, applicationRows, sessionRows, pollRows, myPollVotes, hitRows, prefRows, activityRows, hitInviteRows] = await Promise.all([
     // Every profile, in chunks, so nobody is left out past the first 1,000.
     allRows<ProfileRow>((from, to) => db.from('profiles').select('*').order('created_at', { ascending: true }).range(from, to)),
@@ -945,6 +961,7 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
   ]);
   const coaching = await coachingLoad;
   const tagsReady = await tagsProbe;
+  const blockedMeIds = await blockedMeLoad;
   setSessionTagNamesLive(tagsReady);
   if (qs.error) console.warn('[remote] community tables missing; run the pending migrations', qs.error.message);
   const byTime = <T extends { created_at: string }>(a: T, b: T) => (a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0);
@@ -1025,6 +1042,7 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
     activities: activityRows.error ? [] : ((activityRows.data ?? []) as ActivityRow[]).map(toActivity),
     ...(tagsReady === null ? {} : { sessionTagsReady: tagsReady }),
     hiddenMessageIds: [...hidden],
+    ...(blockedMeIds ? { blockedMeIds } : {}),
     ...(ustate.error ? { userStateFailed: true } : {}),
     ...coaching,
   };

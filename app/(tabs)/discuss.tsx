@@ -42,6 +42,7 @@ import { openCourt, playHere } from '@/features/players/courtLink';
 import { formatMiles, formatSpotMiles, milesBetween } from '@/features/players/geo';
 import { isRoughSpot } from '@/features/players/positions';
 import { useMyCity } from '@/features/players/useMyCity';
+import { useFindable } from '@/features/people/findable';
 import { isOpenToHit as isOpenToHitNow } from '@/features/players/openToHit';
 import { plain } from '@/features/search/words';
 import { askedSection, reportSection, subscribeSectionRequest, takeAskedSection } from '@/features/navigation/swipeOrder';
@@ -182,6 +183,11 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   const players = users
     .filter(u => u.id !== currentUserId && !blockedIds.includes(u.id) && `${u.name} ${u.handle} ${u.location}`.toLowerCase().includes(search.toLowerCase()))
     .sort((a, b) => Number(sameCity(b)) - Number(sameCity(a)));
+  // The players a search lists: search's own rule for every account (teens
+  // like anyone; never someone blocked either way or a suspended account).
+  // The map keeps its own list above, and its own server rules.
+  const { findable } = useFindable();
+  const foundPlayers = search ? players.filter(findable) : [];
   // A topic asked for before this tab was built is kept for it, the same as the section.
   const [topic, setTopic] = useState<QuestionTopic | 'all'>(() => asTopic(previewSection ? undefined : askedSection('/discuss#topic')));
   // A topic picked from a thread's label may sit off the end of the strip: the strip slides it into view.
@@ -497,12 +503,12 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
             ))}
           </View>
         ) : null}
-        {search && (players.length || courtMatches.length || placeMatches.length) ? <View style={styles.playersHead}>
+        {search && (foundPlayers.length || courtMatches.length || placeMatches.length) ? <View style={styles.playersHead}>
           <Text style={styles.playersTitle}>Players</Text>
           {/* A court matched but no one did: one quiet line, not a big empty state under the court that was found. */}
-          <Text style={styles.playersBody}>{players.length ? `${players.length} ${players.length === 1 ? 'match' : 'matches'}` : `No players named “${search.trim()}”`}</Text>
+          <Text style={styles.playersBody}>{foundPlayers.length ? `${foundPlayers.length} ${foundPlayers.length === 1 ? 'match' : 'matches'}` : `No players named “${search.trim()}”`}</Text>
         </View> : null}
-        {search ? players.map((user, index) => <Pressable key={user.id} accessibilityRole="link" onPress={() => router.push(`/user/${user.id}`)} style={({ pressed }) => [styles.player, pressed && styles.playerPressed]}>
+        {search ? foundPlayers.map((user, index) => <Pressable key={user.id} accessibilityRole="link" onPress={() => router.push(`/user/${user.id}`)} style={({ pressed }) => [styles.player, pressed && styles.playerPressed]}>
           <Avatar name={user.name} seed={user.avatarSeed} size={52} ring={user.isCoach} />
           <View style={[styles.playerBody, index > 0 && styles.playerLine]}>
             <View style={styles.playerTop}><Text style={styles.playerName} numberOfLines={1}>{user.name}</Text><LevelPill profile={user.profile} small /></View>
@@ -510,7 +516,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
           </View>
           <Ionicons name="chevron-forward" size={16} color={colors.textFaint} style={styles.playerChevron} />
         </Pressable>) : null}
-        {search && !players.length && !courtMatches.length && !placeMatches.length && !placeSearch.searching ? <EmptyState title={`Nothing matches “${search.trim()}”`} body={placeSearch.failed ? 'Places can’t be searched right now. Try a player’s or a court’s name.' : 'No players, courts or places found. Try a name, a city or a park.'} /> : null}
+        {search && !foundPlayers.length && !courtMatches.length && !placeMatches.length && !placeSearch.searching ? <EmptyState title={`Nothing matches “${search.trim()}”`} body={placeSearch.failed ? 'Places can’t be searched right now. Try a player’s or a court’s name.' : 'No players, courts or places found. Try a name, a city or a park.'} /> : null}
         {/* Near you: who shared a spot within 30 miles, the same "near" as the map. */}
         {!search && nearPlayers.length ? (
           <View>
