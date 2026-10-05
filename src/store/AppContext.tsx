@@ -5027,7 +5027,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const markConversationRead = useCallback((conversationId: ID) => {
     const before = stateRef.current.conversations.find((c) => c.id === conversationId);
     const me = stateRef.current.currentUserId;
-    const hadUnread = !!before && before.unreadCount > 0 && !!me && before.participantIds.includes(me);
+    // Something from someone else not yet opened here counts too: a message fetched
+    // while the chat is open (opened from its notification, say) adds no unread count.
+    const unseen = !!me && stateRef.current.messages.some((m) => m.conversationId === conversationId && m.senderId !== me && m.kind !== 'system' && !m.openedAtBy?.[me]);
+    const hadUnread = !!before && (before.unreadCount > 0 || unseen) && !!me && before.participantIds.includes(me);
     if (hadUnread && live(me, conversationId)) void remote.markConversationRead(conversationId, me as ID);
     // Opening a chat you marked unread takes the mark off.
     if (before?.markedUnread) {
