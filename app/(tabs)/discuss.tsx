@@ -218,20 +218,31 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   }, [hitRequests, users, blockedIds, mutedIds, followingIds, currentUserId, seeing]);
   // Near first (within 25 km, the reach of hit matches), soonest first, with how far:
   // everything that close is near, so today's game beats next week's a mile closer.
-  // A place only typed has no spot, so it follows by time (most are local); the rest wait under "Further away".
+  // A place only typed has no spot, so it follows by time when its poster is near (their shared spot,
+  // else the same city on their profile; yours always); a typed place from another city waits under "Further away".
   const { openHits, furtherHits } = useMemo(() => {
     if (!firstCentre) return { openHits: seenHits.map((hit) => ({ hit, miles: undefined as number | undefined })), furtherHits: [] };
     const near: { hit: (typeof seenHits)[number]; miles: number | undefined }[] = [];
     const typed: typeof near = [];
     const far: typeof near = [];
+    const farTyped: typeof near = [];
+    const usersById = new Map(users.map((u) => [u.id, u]));
     for (const hit of seenHits) {
       const spot = hitSpot(hit);
-      if (!spot) { typed.push({ hit, miles: undefined }); continue; }
+      if (!spot) {
+        const seen = lastSeen[hit.authorId];
+        const author = usersById.get(hit.authorId);
+        // Nothing to tell by (no shared spot, no city on either profile): kept with the near ones, as before.
+        const local = hit.authorId === currentUserId
+          || (seen ? milesBetween(firstCentre, seen) <= NEAR_HIT_MILES : !author || !myCity || !author.location?.trim() || sameCity(author));
+        (local ? typed : farTyped).push({ hit, miles: undefined });
+        continue;
+      }
       const miles = milesBetween(firstCentre, spot);
       (miles <= NEAR_HIT_MILES ? near : far).push({ hit, miles });
     }
-    return { openHits: [...near, ...typed], furtherHits: far };
-  }, [seenHits, firstCentre?.lat, firstCentre?.lng]); // eslint-disable-line react-hooks/exhaustive-deps
+    return { openHits: [...near, ...typed], furtherHits: [...far, ...farTyped] };
+  }, [seenHits, firstCentre?.lat, firstCentre?.lng, lastSeen, users, currentUserId, myCity]); // eslint-disable-line react-hooks/exhaustive-deps
   const [furtherOpen, setFurtherOpen] = useState(false);
   const [moreHitsOpen, setMoreHitsOpen] = useState(false);
   const moreHits = Math.max(0, openHits.length - HITS_SHOWN);
