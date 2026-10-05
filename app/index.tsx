@@ -9,7 +9,7 @@ import { raiseCurtain } from '@/features/feed/warmup';
 import { preloadNearbyMap } from '@/components/NearbyMap';
 import { useLaunchUpdate } from '@/lib/instantUpdates';
 
-import { LAUNCH_MAX_MS, hideLaunch } from '@/lib/launchSplash';
+import { LAUNCH_MAX_MS, hideLaunch, launchShowing } from '@/lib/launchSplash';
 import { LaunchMark } from '@/components/LaunchMark';
 import { BrandMark } from '@/components/BrandMark';
 import { useApp } from '@/store/AppContext';
@@ -57,6 +57,11 @@ export default function Index() {
   // cream melts into, say, New York's navy instead of snapping (Oct 2).
   const cover = useRef(new Animated.Value(1)).current;
   const [launchCover, setLaunchCover] = useState(Platform.OS !== 'web');
+  // Only a real launch has the phone's picture still up as this screen first draws, and only then is
+  // the cover that picture itself. Coming here later (a sign-in, a switch of account) there is no
+  // picture to match, and the picture would land a few frames after the drawn copy, a tiny jump of
+  // its own: the drawn copy stays, and fades as soon as it is laid out, as before (Oct 5).
+  const [fromLaunch] = useState(launchShowing);
   // Whether the cover's copy of the picture has drawn (until then the drawn logo sits under it).
   const [coverDrawn, setCoverDrawn] = useState(false);
   const fadeStarted = useRef(false);
@@ -184,7 +189,7 @@ export default function Index() {
         </>
       )}
       {launchCover ? (
-        <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.splash, launchStyles.launch, { opacity: cover }]}>
+        <Animated.View pointerEvents="none" onLayout={fromLaunch ? undefined : startCoverFade} style={[StyleSheet.absoluteFill, styles.splash, launchStyles.launch, { opacity: cover }]}>
           <StatusBar style="dark" />
           {/* The phone's own launch picture itself, drawn the same way (cover is the same sums as the phone's
               fill), so the hand-over is pixel for pixel (Oct 4, owner: "smooth like Instagram"; then "should not
@@ -192,14 +197,16 @@ export default function Index() {
               picture (its name is not set in Inter there), which showed as a tiny jump at the cut. Until the
               picture has drawn, and should it ever fail to load, the drawn copy waits underneath. */}
           {coverDrawn ? null : <LaunchMark ink={lightColors.brand} faint={lightColors.textFaint} />}
-          <Image
-            source={require('../assets/splash.png')}
-            resizeMode="cover"
-            fadeDuration={0}
-            style={StyleSheet.absoluteFill}
-            onLoad={() => { setCoverDrawn(true); startCoverFade(); }}
-            onError={startCoverFade}
-          />
+          {fromLaunch ? (
+            <Image
+              source={require('../assets/splash.png')}
+              resizeMode="cover"
+              fadeDuration={0}
+              style={StyleSheet.absoluteFill}
+              onLoad={() => { setCoverDrawn(true); startCoverFade(); }}
+              onError={startCoverFade}
+            />
+          ) : null}
         </Animated.View>
       ) : null}
     </Animated.View>

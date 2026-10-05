@@ -1,5 +1,5 @@
-import React from 'react';
-import { Platform, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import React, { useState } from 'react';
+import { Platform, StyleSheet, Text, View, useWindowDimensions, type TextLayoutEvent } from 'react-native';
 
 import { font } from '@/theme';
 
@@ -27,6 +27,10 @@ import { font } from '@/theme';
  *   sat 1 px high).
  * iOS adds the letter spacing after the last letter too, which put a centred
  * line half a spacing off (the line 1.7 px left); typeAt puts that half back.
+ * Apple's text engine can also round a line's depth below the baseline to a
+ * whole point at these sizes (it does on a Mac: up to half a point, which is
+ * 1.5 px on an iPhone 16 Pro), so each line reports where its baseline really
+ * landed and is set by that, not by the font's sums (useDrawnBaseline).
  */
 const PIC_W = 1284;
 const PIC_H = 2778;
@@ -50,13 +54,42 @@ const ASCENT = 1984 / 2048;
 const DESCENT = 494 / 2048;
 const LINE_HEIGHT = 1.2105;
 
+/** Where the font's own sums put the baseline, down from the top of the line's box. */
+const baselineBySums = (fontSize: number) => (ASCENT + (LINE_HEIGHT - ASCENT - DESCENT) / 2) * fontSize;
+
+/**
+ * Where each size of line has been seen to put its baseline, kept for the app's whole run, so a
+ * later copy (the curtain, the cream cover after a sign-in) starts in the right place on its first frame.
+ */
+const drawnBaselines = new Map<string, number>();
+
+/**
+ * Where this line's baseline really sits in its box, once the phone has laid it out (a frame in,
+ * under the cover); the font's sums until then. A reading more than a point from the sums is
+ * not a rounding, so it is left alone (Oct 5).
+ */
+function useDrawnBaseline(fontSize: number) {
+  const key = fontSize.toFixed(2);
+  const [seen, setSeen] = useState<{ key: string; at: number }>();
+  const at = seen?.key === key ? seen.at : drawnBaselines.get(key);
+  const onTextLayout = (event: TextLayoutEvent) => {
+    const first = event.nativeEvent.lines[0];
+    if (!first) return;
+    const drawn = first.y + first.ascender;
+    if (!(Math.abs(drawn - baselineBySums(fontSize)) <= 1)) return;
+    drawnBaselines.set(key, drawn);
+    setSeen((was) => (was?.key === key && Math.abs(was.at - drawn) < 0.01 ? was : { key, at: drawn }));
+  };
+  return { at: at ?? baselineBySums(fontSize), onTextLayout };
+}
+
 /** The style that puts one line of the picture's type on its measured baseline and middle. */
-function typeAt(spec: { size: number; tracking: number; baseline: number; centre: number }, s: number, oy: number) {
+function typeAt(spec: { size: number; tracking: number; baseline: number; centre: number }, s: number, oy: number, drawnBaseline: number) {
   const fontSize = spec.size * s;
   const letterSpacing = spec.tracking * fontSize;
   const shift = (spec.centre - PIC_W / 2) * s + (Platform.OS === 'ios' ? letterSpacing / 2 : 0);
   return {
-    top: oy + spec.baseline * s - (ASCENT + (LINE_HEIGHT - ASCENT - DESCENT) / 2) * fontSize,
+    top: oy + spec.baseline * s - drawnBaseline,
     left: shift,
     right: -shift,
     fontSize,
@@ -71,14 +104,16 @@ export function LaunchMark({ ink, faint, line = 'Growing the game' }: { ink: str
   const ox = (W - PIC_W * s) / 2;
   const oy = (H - PIC_H * s) / 2;
   const top = oy + MARK_TOP * s;
+  const name = useDrawnBaseline(NAME.size * s);
+  const tagline = useDrawnBaseline(LINE.size * s);
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
       <View style={[styles.lean, { top, height: MARK_H * s, left: ox + FRAME_LEFT * s, width: FRAME_W * s, borderWidth: FRAME_SIDE * s, borderColor: ink }]}>
         <View style={{ position: 'absolute', left: 0, right: 0, top: (BAR_TOP - MARK_TOP - FRAME_SIDE) * s, height: BAR_H * s, backgroundColor: ink }} />
       </View>
       <View style={[styles.lean, { top, height: MARK_H * s, left: ox + SLASH_LEFT * s, width: SLASH_W * s, backgroundColor: ink }]} />
-      <Text allowFontScaling={false} style={[styles.name, typeAt(NAME, s, oy), { color: ink }]}>CourtSide</Text>
-      <Text allowFontScaling={false} style={[styles.line, typeAt(LINE, s, oy), { color: faint }]}>{line}</Text>
+      <Text allowFontScaling={false} onTextLayout={name.onTextLayout} style={[styles.name, typeAt(NAME, s, oy, name.at), { color: ink }]}>CourtSide</Text>
+      <Text allowFontScaling={false} onTextLayout={tagline.onTextLayout} style={[styles.line, typeAt(LINE, s, oy, tagline.at), { color: faint }]}>{line}</Text>
     </View>
   );
 }

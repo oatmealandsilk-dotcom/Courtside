@@ -19,6 +19,11 @@ export function hideLaunch() {
   SplashScreen.hideAsync().catch(() => undefined);
 }
 
+/** Whether the phone's picture is still up, as on a real launch (on a phone; a browser has none). */
+export function launchShowing() {
+  return Platform.OS !== 'web' && !done;
+}
+
 
 if (Platform.OS !== 'web') {
   SplashScreen.preventAutoHideAsync().catch(() => undefined);
