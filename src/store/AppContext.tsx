@@ -1758,7 +1758,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const refetch = () => {
       if (timer) clearTimeout(timer);
       timer = setTimeout(() => {
-        void remote.fetchHits().then((hits) => { if (on && hits) setState((prev) => ({ ...prev, hitRequests: hits })); }).catch(() => undefined);
+        void remote.fetchHits(currentUserForLive).then((hits) => { if (on && hits) setState((prev) => ({ ...prev, hitRequests: hits })); }).catch(() => undefined);
       }, 400);
     };
     let off: (() => void) | undefined;
