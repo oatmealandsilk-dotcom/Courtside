@@ -17,7 +17,10 @@ const green = (process.env.COURTSIDE_ICON || local.icon) === 'green';
 // service it comes from the GOOGLE_SERVICES_JSON file variable (the path EAS
 // writes it to); on this Mac, from google-services.json in the project folder,
 // which is never committed. With neither, the Android build is still made and
-// works, just without push alerts (registerForPush says 'unavailable').
+// works, just without push alerts (registerForPush says 'unavailable' and files
+// it once per install). It has to be there for preview builds too: the
+// variable is needed in Expo's preview and production environments, and the
+// FCM V1 key on Expo before the first build (docs/android-setup.md).
 const googleServicesFile = process.env.GOOGLE_SERVICES_JSON
   || (require('fs').existsSync(`${__dirname}/google-services.json`) ? './google-services.json' : undefined);
 
