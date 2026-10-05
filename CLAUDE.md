@@ -42,13 +42,25 @@ via expo-router.
 ```bash
 npm start            # Expo dev server; press i / a / w for iOS / Android / web
 npm run web          # dev server, browser only
-npm run typecheck    # tsc --noEmit — the only automated check; run before committing
+npm run typecheck    # tsc --noEmit — run before committing
 npm run build:web    # static web export to dist/
+npm run smoke        # auto-tester: demo web build, clicked through in headless Chrome
 ```
 
-There are no tests and no linter. `npm run typecheck` is the whole safety net,
-so keep TypeScript strict-clean. If dependency versions complain after an
-upgrade, `npx expo install --fix` aligns them to the installed Expo SDK.
+There are no unit tests and no linter. The safety net is `npm run typecheck`
+(keep TypeScript strict-clean) plus the auto-tester, `npm run smoke`
+(`scripts/smoke.mjs`): it builds the web app in demo mode (no Supabase, live
+backend blocked), drives Chrome at 390px through sign-in, each tab, a post and
+its comments, a chat, Settings, Share session, search and the Open to hit
+sheet, fails on any page error, console error, blank screen or missing
+element, and saves a screenshot per step in `smoke-screenshots/`. Both run on
+every pushed branch (`.github/workflows/check.yml`). It finds buttons by their
+accessibility labels and visible words, so renaming one it taps (e.g. "Clip
+comments", "Go back", "Message text") needs the same change in
+`scripts/smoke.mjs`; `npm run smoke -- --verbose` shows each tap.
+
+If dependency versions complain after an upgrade, `npx expo install --fix`
+aligns them to the installed Expo SDK.
 
 ## Deployment
 
