@@ -6560,7 +6560,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const me = stateRef.current.currentUserId;
     if (!live(me)) return;
     const who = await remote.followMyInviter().catch(() => null);
-    if (who) showInviterFollow(who);
+    if (!who) return;
+    // Their @handle for the toast, when they are not loaded here yet (someone
+    // credited as their account was made has never claimed a link on this phone).
+    const known = stateRef.current.users.some((u) => u.id === who);
+    const mine = known ? null : await remote.myInviter().catch(() => null);
+    showInviterFollow(who, mine?.id === who ? mine.handle : undefined);
   };
   useEffect(() => { if (live(state.currentUserId)) void claimPendingReferral(); }, [state.currentUserId, claimPendingReferral]);
   const countReferrals = useCallback(async () => { const me = stateRef.current.currentUserId; return live(me) ? remote.countReferrals(me!) : 0; }, []);

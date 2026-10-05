@@ -37,17 +37,24 @@ const take = async (key: string): Promise<string | null> => {
  * The handle in whatever someone typed or pasted as "who invited me": a
  * plain handle, "@Handle", "mr dinosaur62", their invite link
  * (…/join?ref=handle, courtsidebase.com/?ref=handle) or a profile link.
+ * A friend's waitlist link (courtsidebase.com/?r=1a2b3c4d) comes back as
+ * "r=1a2b3c4d": not a handle, but the server finds the friend from it.
  * The server reads it the same way (invite_handle_from, migration 116).
  */
 export function handleFromText(text: string): string {
   let t = text.trim().toLowerCase();
   const ref = /ref=(?:@|%40)*([a-z0-9_]+)/.exec(t);
+  const code = /(?:^|[?&])r=([0-9a-f]{8})(?:[^0-9a-f]|$)/.exec(t);
   if (ref) t = ref[1];
+  else if (code) return `r=${code[1]}`;
   else if (/^(https?:\/\/|www\.)/.test(t) || /^[a-z0-9-]+(\.[a-z0-9-]+)+\//.test(t)) {
     t = t.replace(/[?#].*$/, '').replace(/\/+$/, '').replace(/^.*\//, '');
   }
   return t.replace(/\s/g, '').replace(/^@+/, '');
 }
+
+/** Whether handleFromText read a friend's waitlist link (r=<code>) rather than a handle. */
+export const isWaitlistCode = (read: string) => /^r=[0-9a-f]{8}$/.test(read);
 
 /*
  * The handle an invite link carried (and its court, if any), kept until the

@@ -49,8 +49,13 @@ export interface InviteSummaryRow {
   qualified: number;
   paid: number; paidCents: number; owed: number; owedCents: number; lastPaidAt?: string;
 }
-/** Who invited me: their id and @handle once set; canSet while a code may still be typed (inside a day of joining). */
-export interface MyInviter { id?: ID; handle?: string; name?: string; canSet: boolean }
+/**
+ * Who invited me: their id and @handle once set; canSet while a code may
+ * still be typed (inside a day of joining). With nobody set yet, `suggested`
+ * is the @handle the waitlist matched from a link they used (migration 116):
+ * filled in at "Invited by?", and only counted once they press Continue.
+ */
+export interface MyInviter { id?: ID; handle?: string; name?: string; canSet: boolean; suggested?: string }
 export type InviteCodeResult =
   | { ok: true; id: ID; handle: string; followed: boolean; error?: undefined }
   | { ok?: undefined; error: 'not-found' | 'self' | 'already' | 'too-late' | 'offline'; handle?: string };

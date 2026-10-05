@@ -846,7 +846,9 @@
       if (res.ok) {
         const rows = await res.json();
         const row = Array.isArray(rows) ? rows[0] : rows;
-        if (row && row.code) return { kind: row.already ? 'already' : 'ok', place: row.place, code: row.code };
+        // Someone already on the list gets no code back (migration 116): their
+        // link is only handed out when the email is new here.
+        if (row && (row.code || row.already)) return { kind: row.already ? 'already' : 'ok', place: row.place, code: row.code || null };
         return { kind: 'error' };
       }
       if (res.status === 404) return { kind: await add('waitlist', { email, name, source }) };
@@ -1017,14 +1019,19 @@
   // Oct 5: a player whose account the server keeps out of signed-out
   // lookups (a teen, or a private account, like the partner link
   // ?ref=omuchitaletennis) got nothing at all, so nobody from their link was
-  // told what to type and the credit was lost. Now any ?ref= that looks like
-  // a handle (and is not one of our own campaign labels) shows the handle
-  // from the link itself: no name, no photo, nothing the link does not
-  // already say. The server ignores a handle that is nobody's.
+  // told what to type and the credit was lost. Now a ?ref= handle that some
+  // account really has (handle_status, the same check the sign-up form
+  // makes: taken, or held after a rename) shows the handle from the link
+  // itself: no name, no photo, nothing the link does not already say. A
+  // label that is nobody's (a new campaign, a typo) shows nothing, so nobody
+  // is told to type a handle the app would refuse. Our own campaign labels
+  // never name anyone, even if someone took that handle.
   const maybeHandle = source && /^[a-z0-9_]{2,24}$/.test(source) ? source : null;
   const CAMPAIGNS = new Set(['instagram', 'ig', 'insta', 'courtsidebase', 'courtside', 'reddit', 'tiktok', 'facebook', 'fb', 'twitter', 'threads', 'youtube', 'snapchat', 'whatsapp', 'discord', 'linktree', 'linkinbio', 'bio', 'email', 'newsletter', 'qr', 'flyer', 'poster', 'google', 'share', 'web', 'app', 'testflight', 'beta', 'robertzchen', 'robchzn', 'gipsperformance']);
   const refParam = ((params.get('ref') || '').trim().toLowerCase().replace(/^@+/, ''));
-  const linkHandle = /^[a-z0-9_]{2,24}$/.test(refParam) && !CAMPAIGNS.has(refParam) ? refParam : null;
+  const refCandidate = /^[a-z0-9_]{2,24}$/.test(refParam) && !CAMPAIGNS.has(refParam) ? refParam : null;
+  // Set once the server says an account has that handle.
+  let linkHandle = null;
   function showInvited(lead, handle) {
     document.querySelectorAll('[data-invited]').forEach((el) => {
       el.querySelector('[data-lead]').textContent = lead;
@@ -1032,23 +1039,44 @@
       el.hidden = false;
     });
   }
-  if (linkHandle) showInvited('From a friend’s link?', linkHandle);
+  async function rpc(name, body) {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${name}`, {
+      method: 'POST',
+      headers: { apikey: SUPABASE_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error(String(res.status));
+    return res.json();
+  }
   (async function findInviter() {
-    if (!maybeHandle) return;
-    try {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/share_preview`, {
-        method: 'POST',
-        headers: { apikey: SUPABASE_KEY, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ p_kind: 'referrer', p_id: maybeHandle }),
-      });
-      if (!res.ok) return;
-      const got = await res.json();
-      const handle = got && got.open && got.author && typeof got.author.handle === 'string' ? got.author.handle : null;
-      if (!handle) return;
+    // A public player's link names them (share_preview, as the app's join page does).
+    const named = maybeHandle && !CAMPAIGNS.has(maybeHandle)
+      ? rpc('share_preview', { p_kind: 'referrer', p_id: maybeHandle })
+        .then((got) => (got && got.open && got.author && typeof got.author.handle === 'string' ? got.author.handle : null))
+        .catch(() => null)
+      : Promise.resolve(null);
+    const real = refCandidate
+      ? rpc('handle_status', { p_handle: refCandidate }).then((s) => s === 'taken' || s === 'held').catch(() => false)
+      : Promise.resolve(false);
+    real.then((yes) => { if (yes) { linkHandle = refCandidate; carryRef(document); } });
+    // The line under the button goes up once both answers are in, so it does
+    // not change under the reader. A slow answer still gets the plain line
+    // after a second.
+    let shown = false;
+    const plain = () => {
+      if (shown || inviter || !linkHandle) return;
+      shown = true;
+      showInvited('From a friend’s link?', linkHandle);
+    };
+    const timer = setTimeout(plain, 1000);
+    const handle = await named;
+    await real;
+    clearTimeout(timer);
+    if (handle) {
       inviter = handle;
       showInvited(`Invited by @${handle}?`, handle);
       carryRef(document);
-    } catch {}
+    } else plain();
   })();
 
   // The web app's links carry the handle too (app.courtsidebase.com/join?ref=…),
@@ -1092,7 +1120,10 @@
       } else {
         step.querySelector('#invite-title').textContent = 'Came from a friend’s link?';
         typeLine.hidden = true;
-        form.querySelector('[data-why]').textContent = `Add your email, then sign up in the app with the same one${apple}, so your friend gets the credit`;
+        // What always happens. The app credit also needs the friend to have an
+        // account with their list email when this person signs up, so it is
+        // not promised here.
+        form.querySelector('[data-why]').textContent = 'Add your email so your friend moves up the list';
       }
       msg.className = 'msg';
       msg.textContent = '';
