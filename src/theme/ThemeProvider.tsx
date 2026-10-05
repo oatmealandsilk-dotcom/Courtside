@@ -304,7 +304,12 @@ export const useTheme = () => useContext(ThemeContext);
 // Every colour any palette uses, and the slot it fills — built once, so a
 // theme change is a lookup per value rather than a scan of every palette.
 const slotOf = new Map<string, keyof typeof lightColors>();
-for (const key of Object.keys(lightColors) as (keyof typeof lightColors)[]) {
+const slotKeys = Object.keys(lightColors) as (keyof typeof lightColors)[];
+// The default palette's own colours claim their slots first: styles are written against it. Without
+// this, white went to 'bg' (the Clean theme's page is white), so white over a picture (onMedia, such
+// as "Change photo" on the share screen) drew in the page colour: navy on New York, near-black on Night.
+for (const key of slotKeys) if (!slotOf.has(lightColors[key])) slotOf.set(lightColors[key], key);
+for (const key of slotKeys) {
   for (const palette of Object.values(themes)) if (!slotOf.has(palette[key])) slotOf.set(palette[key], key);
 }
 
