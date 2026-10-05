@@ -33,6 +33,9 @@ export function HeadToHeadCard({ userId, name }: { userId: ID; name: string }) {
   if (!record || !line) return null;
   const last = record.last;
   const lastWords = last ? `Last: ${last.won ? 'Won' : 'Lost'} ${scoreText(last.sets)} · ${dayWords(last.day)}` : null;
+  // Only someone you may message, as "Ask to hit" on the map (an adult, or a teen who follows you):
+  // otherwise the form would open with nobody to invite (Oct 5, review).
+  const canAsk = actions.canMessage(userId);
   return (
     <View style={styles.card} accessible={false}>
       <View accessible accessibilityLabel={`Head to head with ${first}: ${line}.${last ? ` Last match, you ${last.won ? 'won' : 'lost'} ${spokenScore(last.sets)}, ${dayWords(last.day)}.` : ''}`} style={styles.words}>
@@ -40,16 +43,18 @@ export function HeadToHeadCard({ userId, name }: { userId: ID; name: string }) {
         <Text style={styles.record} numberOfLines={1}>{line}</Text>
         {lastWords ? <Text style={styles.last} numberOfLines={1}>{lastWords}</Text> : null}
       </View>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`Rematch with ${first}: invite them to hit`}
-        hitSlop={6}
-        onPress={() => startRematch(userId, last?.sets)}
-        style={({ pressed }) => [styles.rematch, pressed && styles.pressed]}
-      >
-        <Ionicons name="repeat-outline" size={16} color={colors.brandInk} />
-        <Text style={styles.rematchText}>Rematch?</Text>
-      </Pressable>
+      {canAsk ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Rematch with ${first}: invite them to hit`}
+          hitSlop={6}
+          onPress={() => startRematch(userId, last?.sets)}
+          style={({ pressed }) => [styles.rematch, pressed && styles.pressed]}
+        >
+          <Ionicons name="repeat-outline" size={16} color={colors.brandInk} />
+          <Text style={styles.rematchText}>Rematch?</Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }

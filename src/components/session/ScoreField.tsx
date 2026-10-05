@@ -16,11 +16,15 @@ import { colors, typography } from '@/theme';
 export function ScoreField({ value, onChange }: { value: string; onChange: (text: string) => void }) {
   const styles = useThemedStyles(styleDefinitions);
   const read = readScore(value);
+  // A set still being typed ("6", "6-4 3-") is not a mistake yet: no red until the rest
+  // would be a score without it (Oct 5, review: it went red on the first key). Saving still says why.
+  const typing = !!read.problem && !readScore(value.replace(/(^|[\s,;/])\d{1,2}\s*[-–—:]?\s*$/, '$1')).problem;
+  const problem = typing ? undefined : read.problem;
   const winner = setsWinner(read.sets);
   const mine = read.sets?.filter(([a, b]) => a > b).length ?? 0;
   const theirs = (read.sets?.length ?? 0) - mine;
-  const line = read.problem
-    ? read.problem
+  const line = problem
+    ? problem
     : read.sets
       ? winner === undefined ? `Level at ${mine} set${mine === 1 ? '' : 's'} each: the result is the one you pick.` : `You ${winner ? 'won' : 'lost'}, ${Math.max(mine, theirs)} set${Math.max(mine, theirs) === 1 ? '' : 's'} to ${Math.min(mine, theirs)}.`
       : 'Your games first, like 6-4 3-6 10-7.';
@@ -36,7 +40,7 @@ export function ScoreField({ value, onChange }: { value: string; onChange: (text
         autoCorrect={false}
         keyboardType="numbers-and-punctuation"
       />
-      <Text accessibilityLiveRegion="polite" style={[styles.line, read.problem ? styles.problem : null]}>{line}</Text>
+      <Text accessibilityLiveRegion="polite" style={[styles.line, problem ? styles.problem : null]}>{line}</Text>
     </View>
   );
 }

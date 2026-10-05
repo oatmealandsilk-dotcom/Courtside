@@ -2882,7 +2882,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }));
     if (!live(me, sessionId)) return;
     try { await remote.updateSessionScore(sessionId, next ?? null, won ?? null); } catch (e) {
-      setState((prev) => ({ ...prev, sessions: before.sessions, posts: prev.posts.map((p) => before.posts.find((b) => b.id === p.id && p.session?.sessionId === sessionId) ?? p), sessionTags: before.sessionTags }));
+      // Only this session, its posts and its tags go back: anything else changed meanwhile stays.
+      setState((prev) => ({
+        ...prev,
+        sessions: prev.sessions.map((x) => (x.id === sessionId ? had : x)),
+        posts: prev.posts.map((p) => before.posts.find((b) => b.id === p.id && p.session?.sessionId === sessionId) ?? p),
+        sessionTags: prev.sessionTags.map((t) => (t.sessionId === sessionId ? before.sessionTags.find((b) => b.id === t.id) ?? t : t)),
+      }));
       throw e;
     }
     // The server's word on who is waiting now.

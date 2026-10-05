@@ -63,7 +63,7 @@ export function SessionSheetHeader({ post, onClose }: { post: Post; onClose: () 
  * opponent, and an opponent on the post, to the author; it opens the hit
  * form as an invite for that one player, with the last score in its note.
  */
-export function SessionSheet({ post, me, users, sessions, sessionTags, activities, hidden, play = true, onEdit, onShare, onRematch }: {
+export function SessionSheet({ post, me, users, sessions, sessionTags, activities, hidden, play = true, onEdit, onShare, onRematch, canAsk }: {
   post: Post;
   me: ID | null;
   users: User[];
@@ -77,6 +77,8 @@ export function SessionSheet({ post, me, users, sessions, sessionTags, activitie
   onShare?: () => void;
   /** "Rematch?": a hit invite to this player, with the score from the viewer's side. */
   onRematch?: (userId: ID, sets?: MatchSet[]) => void;
+  /** Whether this player may be asked to hit (someone you may message), as "Ask to hit" on the map. */
+  canAsk?: (userId: ID) => boolean;
 }) {
   const styles = useThemedStyles(styleDefinitions);
   const s = post.session;
@@ -238,7 +240,7 @@ export function SessionSheet({ post, me, users, sessions, sessionTags, activitie
       {mine && log && onEdit ? (
         <FormRow icon="create-outline" label="Edit session" chevron onPress={() => onEdit(log.id)} />
       ) : null}
-      {rival && onRematch ? (
+      {rival && onRematch && (!canAsk || canAsk(rival.id)) ? (
         <FormRow icon="repeat-outline" label="Rematch?" value={rivalName} chevron onPress={() => onRematch(rival.id, rival.sets)} accessibilityLabel={`Rematch${rivalName ? ` with ${rivalName}` : ''}: invite them to hit`} />
       ) : null}
 

@@ -242,7 +242,7 @@ export async function respondSessionTag({ me, tag, accept, addToMine, sessions, 
 export async function headToHead({ me, other, sessions, tags }: { me: ID; other: ID; sessions: PracticeSession[]; tags: SessionTag[] }): Promise<HeadToHead | null> {
   await delay(null, 120);
   if (other === me) return null;
-  const played: { sessionId: ID; day: string; createdAt: string; won: boolean; sets: MatchSet[] }[] = [];
+  const played: { sessionId: ID; day: string; createdAt: string; won: boolean; sets: MatchSet[]; byMe: boolean }[] = [];
   for (const t of tags) {
     if (t.role !== 'opponent' || t.status !== 'accepted' || t.dropped || t.kind !== 'match' || !t.sets?.length || t.won === undefined) continue;
     // Mine with them confirmed, or theirs with me confirmed; the tag already says it from my side.
@@ -251,9 +251,16 @@ export async function headToHead({ me, other, sessions, tags }: { me: ID; other:
     if (!mine && !theirs) continue;
     const own = mine ? sessions.find((x) => x.id === t.sessionId && x.userId === me && !x.fromSessionId) : undefined;
     if (mine && !own) continue;
-    played.push({ sessionId: t.sessionId, day: t.day, createdAt: own?.createdAt ?? t.createdAt, won: t.won, sets: t.sets });
+    played.push({ sessionId: t.sessionId, day: t.day, createdAt: own?.createdAt ?? t.createdAt, won: t.won, sets: t.sets, byMe: mine });
   }
-  const once = played.filter((g, i) => played.findIndex((x) => x.day === g.day && JSON.stringify(x.sets) === JSON.stringify(g.sets)) === i);
+  // One day and score: as many matches as the side that logged more of them (mine kept first), like the server.
+  const key = (g: { day: string; sets: MatchSet[] }) => `${g.day}|${JSON.stringify(g.sets)}`;
+  const mineOf = (k: string) => played.filter((x) => x.byMe && key(x) === k).length;
+  const once = [
+    ...played.filter((g) => g.byMe),
+    ...played.filter((g) => !g.byMe).sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+      .filter((g, i, theirs) => theirs.slice(0, i).filter((x) => key(x) === key(g)).length >= mineOf(key(g))),
+  ];
   const last = [...once].sort((a, b) => b.day.localeCompare(a.day) || b.createdAt.localeCompare(a.createdAt))[0];
   return {
     userId: other,

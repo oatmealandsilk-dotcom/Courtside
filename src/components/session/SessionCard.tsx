@@ -68,7 +68,7 @@ export function cardLook() {
  * from. `width` sets the scale: 358 is the feed's size, the composer's is
  * about two thirds of it.
  */
-export function SessionCard({ session, width, play = false, people, hidden = [], onPress, showSource = true, accessibilityHint, aspect = 4 / 5, radius, eyebrow, place, brand = false, scale = 1, inset, picture = false }: {
+export function SessionCard({ session, width, play = false, people, hidden = [], onPress, showSource = true, accessibilityHint, aspect = 4 / 5, radius, eyebrow, place, brand = false, scale = 1, inset, picture = false, score: typedScore }: {
   session: SessionDetail;
   width: number;
   /**
@@ -92,6 +92,12 @@ export function SessionCard({ session, width, play = false, people, hidden = [],
    * browser's copy for the picture would catch it part way).
    */
   picture?: boolean;
+  /**
+   * The score as typed on the Share page, drawn in place of the log's own
+   * (an empty one draws none), so the Card design follows the Score box as
+   * the other designs do (Oct 5). Left out everywhere else: the log's score.
+   */
+  score?: string;
   /** Count the numbers up (once, when the card comes into view). */
   play?: boolean;
   /** The author's own preview: the players picked, waiting ones faded. Otherwise only those who accepted (session.with). */
@@ -121,8 +127,8 @@ export function SessionCard({ session, width, play = false, people, hidden = [],
   const kcal = session.kcal ? session.kcal : null;
   const health = hr || !!zones || strain != null || !!kcal;
   const result = resultWord(session);
-  // A match's score from the author's log (migration 91), under the time.
-  const score = scoreLine(session);
+  // A match's score from the author's log (migration 91), under the time; on a share picture, the one typed there.
+  const score = typedScore !== undefined ? typedScore.trim() || null : scoreLine(session);
   const list: CardPerson[] = people ?? (() => { const p = sessionPeople(session, hidden); return [...p.opponents, ...p.partners]; })();
   const lead = list[0];
   const vs = lead ? (lead.role === 'opponent' && session.kind !== 'practice' ? 'vs' : 'with') : '';
@@ -131,7 +137,7 @@ export function SessionCard({ session, width, play = false, people, hidden = [],
     shownTop.toLowerCase(),
     `${spokenDuration(session.minutes)} ${onCourtWord(session)}`,
     result,
-    score ? spokenScore(session.sets) : null,
+    score ? (typedScore !== undefined ? score : spokenScore(session.sets)) : null,
     hr ? `max heart rate ${session.maxHr}${session.avgHr ? `, average ${session.avgHr}` : ''}` : null,
     strain != null ? `Strain ${strain.toFixed(1)}` : null,
     kcal ? `${kcal} calories` : null,

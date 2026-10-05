@@ -37,7 +37,7 @@
 --     confirmed (one logged it, the other accepted being tagged across the
 --     net), only matches you are in, never anyone else's, and nothing at all
 --     between two people blocked either way. The same match logged by both
---     of you counts once.
+--     of you counts once (two on one day with the same score count twice).
 --
 -- Nothing here replaces a function another migration checks by its body
 -- (put_session_with and fill_post_session_stats, migration 72, are left
@@ -245,7 +245,7 @@ begin
   if public.is_blocked_between(me, other) then return null; end if;
   with played as (
     -- Logged by me, them across the net and confirmed.
-    select s.id, s.day, s.created_at, s.won, s.sets
+    select s.id, s.day, s.created_at, s.won, s.sets, true as by_me
       from public.practice_sessions s
       join public.session_tags t on t.session_id = s.id and t.tagger_id = s.user_id
      where s.user_id = me and t.tagged_id = other
@@ -253,17 +253,24 @@ begin
        and s.kind = 'match' and s.from_session_id is null and s.sets is not null and s.won is not null
     union all
     -- Logged by them, me across the net and confirmed: my side is the other side.
-    select s.id, s.day, s.created_at, not s.won, public.flip_sets(s.sets)
+    select s.id, s.day, s.created_at, not s.won, public.flip_sets(s.sets), false
       from public.practice_sessions s
       join public.session_tags t on t.session_id = s.id and t.tagger_id = s.user_id
      where s.user_id = other and t.tagged_id = me
        and t.role = 'opponent' and t.status = 'accepted' and not t.tagger_dropped
        and s.kind = 'match' and s.from_session_id is null and s.sets is not null and s.won is not null
+  ), numbered as (
+    -- Each side numbers its own logs of one day and score: my first and
+    -- their first are the same match, my second and their second, and so on.
+    select p.*, row_number() over (partition by p.by_me, p.day, p.sets order by p.created_at, p.id) as n
+      from played p
   ), once as (
-    -- The same match logged by both of us (same day, same score) counts once.
-    select distinct on (day, sets) id, day, created_at, won, sets
-      from played
-     order by day, sets, created_at
+    -- The same match logged by both of us (same day, same score) counts
+    -- once; two matches on one day with the same score still count twice
+    -- (Oct 5, review: a plain "distinct on day and score" counted them once).
+    select distinct on (day, sets, n) id, day, created_at, won, sets
+      from numbered
+     order by day, sets, n, by_me desc, created_at
   )
   select count(*) filter (where won), count(*) filter (where not won),
          (select jsonb_build_object('sessionId', o.id, 'day', to_char(o.day, 'YYYY-MM-DD'), 'won', o.won, 'sets', o.sets)

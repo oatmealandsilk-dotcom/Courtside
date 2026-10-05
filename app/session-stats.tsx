@@ -109,6 +109,7 @@ export default function SessionStatsSheet() {
               onEdit={edit}
               onShare={() => router.push({ pathname: '/share-session', params: { post: post.id } })}
               onRematch={startRematch}
+              canAsk={actions.canMessage}
             />
           ) : !looked ? (
             <View style={styles.wait}><CourtSpinner size={30} /></View>
