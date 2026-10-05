@@ -3426,10 +3426,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
           // The words beyond the "@them" a reply starts with: a reply that was only a photo has none.
           const said = (comment.parentId ? body.replace(/^@[A-Za-z0-9_]+\s*/, '') : body).trim();
           try { imageUrl = await uploadMedia(me, await shrinkPhoto(photo), 'photo'); }
-          catch { showToast({ title: 'The photo didn’t upload', body: said ? 'Your comment was posted without it.' : 'Try again in a moment.', icon: 'alert-circle-outline' }); }
+          catch { showToast({ title: 'The photo didn’t upload', body: said ? 'Your comment was posted without it.' : 'Your comment wasn’t posted. Try again in a moment.', icon: 'alert-circle-outline' }); }
+          // A comment that was only a photo, which did not upload, is not saved
+          // empty, and leaves the thread rather than staying as a blank row.
+          if (!imageUrl && !said) { setState((prev) => dropComment(prev, comment.id)); return; }
           setState((prev) => ({ ...prev, comments: imageUrl ? prev.comments.map((c) => (c.id === comment.id ? { ...c, imageUrl } : c)) : prev.comments.map((c) => (c.id === comment.id ? { ...c, imageUrl: undefined } : c)) }));
-          // A comment that was only a photo, which did not upload, is not saved empty.
-          if (!imageUrl && !said) return;
           await remote.insertComment({ ...comment, imageUrl });
         })();
       }
@@ -3871,8 +3872,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return add.length ? { ...prev, followEdges: [...prev.followEdges, ...add] } : prev;
     });
   }, []);
-  // One page of posts at a time, and one ask per profile per session.
-  const loadingMore = useRef(false);
+  // One page of posts at a time (the one on its way, if any), and one ask per profile per session.
+  const loadingMore = useRef<Promise<Post[]> | null>(null);
   const loadedProfiles = useRef(new Set<ID>());
   const searchedTerms = useRef(new Set<string>());
   const loadedSaved = useRef(false);
@@ -4009,12 +4010,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
    * feed can put those pages on the end without re-ordering what you are
    * already looking at.
    */
-  const loadMorePosts = useCallback(async () => {
+  const loadMorePosts = useCallback((): Promise<Post[]> => {
+    // Asked again while a page is on its way (the feed asks on every swipe,
+    // and lets go of the earlier answer), it gets that same page, not nothing,
+    // so the page is never skipped.
+    if (loadingMore.current) return loadingMore.current;
     const { currentUserId: me, feed } = stateRef.current;
-    if (!live(me) || !feed.more || !feed.cursor || loadingMore.current) return [];
-    loadingMore.current = true;
-    try {
-      const got = await remote.fetchMorePosts(feed.cursor);
+    if (!live(me) || !feed.more || !feed.cursor) return Promise.resolve([]);
+    const cursor = feed.cursor;
+    const run = (async () => {
+      const got = await remote.fetchMorePosts(cursor);
       if (!got) { setState((prev) => ({ ...prev, feed: { ...prev.feed, more: false } })); return []; }
       const known = new Set(stateRef.current.posts.map((p) => p.id));
       const fresh = got.posts.filter((p) => !known.has(p.id));
@@ -4025,9 +4030,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
         feed: { cursor: oldestOf(got.posts) ?? prev.feed.cursor, more: got.more },
       }));
       return fresh;
-    } finally {
-      loadingMore.current = false;
-    }
+    })();
+    loadingMore.current = run;
+    const done = () => { if (loadingMore.current === run) loadingMore.current = null; };
+    run.then(done, done);
+    return run;
   }, []);
   /**
    * Opening a profile: that player's posts, however old, so their grid and
@@ -5605,6 +5612,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const toggleMute = useCallback((userId: ID, quiet?: boolean) => {
     const muting = !stateRef.current.mutedIds.includes(userId);
+    // You can't mute yourself (unmuting stays open, so a self-mute saved before this can be undone).
+    if (muting && userId === stateRef.current.currentUserId) return;
     setState((prev) => {
       prev.mutedIds.includes(userId) ? haptics.untap() : haptics.tap();
       return { ...prev, mutedIds: toggleIn(prev.mutedIds, userId) };
@@ -5697,6 +5706,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [requireUser]);
 
   const reportUser = useCallback((userId: ID, reason: string) => {
+    // Nobody reports themselves (toggleBlock has the same check).
+    if (userId === stateRef.current.currentUserId) return;
     haptics.commit();
     // A reported post or hit leaves your screens at once.
     const target = /^(?:post|hit):(.+)$/.exec(reason)?.[1];
@@ -6497,8 +6508,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const unreported = useMemo(() => {
     if (!state.reportedIds.length) return null;
     const out = new Set(state.reportedIds);
-    return { posts: state.posts.filter((p) => !out.has(p.id)), hitRequests: state.hitRequests.filter((h) => !out.has(h.id)) };
-  }, [state.reportedIds, state.posts, state.hitRequests]);
+    return { posts: state.posts.filter((p) => !out.has(p.id)), stories: state.stories.filter((s) => !out.has(s.id)), hitRequests: state.hitRequests.filter((h) => !out.has(h.id)) };
+  }, [state.reportedIds, state.posts, state.stories, state.hitRequests]);
   const value = useMemo<AppContextValue>(
     () => ({ ...state, ...unreported, ready: state.ready && state.authResolved, currentUser, actions, seeing, shownAtCourt, ageSaysAdult }),
     [state, unreported, currentUser, actions, seeing, shownAtCourt, ageSaysAdult],

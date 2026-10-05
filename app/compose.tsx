@@ -4,6 +4,7 @@ import { Image, Keyboard, Platform, Pressable, ScrollView, StyleSheet, Text, Tex
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { show as showToast } from '@/lib/toast';
+import { whenLanded } from '@/lib/uploads';
 import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import Reanimated, { Easing, FadeInDown, FadeOut, LinearTransition, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 
@@ -594,7 +595,7 @@ export default function Compose() {
       // Post otherwise, as from "Add session stats".
       const stats = withStats && postsChecked;
       applyWho();
-      actions.addPost({
+      const postId = actions.addPost({
         kind: openedClip ? 'clip' : 'note',
         orientation,
         trimStart: edit.trimStart, trimEnd: edit.trimEnd, muted: edit.muted, volume: edit.volume, speed: edit.speed, crop: edit.crop,
@@ -613,7 +614,8 @@ export default function Compose() {
       });
       const firstPost = !posts.some((p) => p.authorId === currentUserId);
       if (shareTo) openGroupFeed(shareTo); else landOnFeed();
-      if (firstPost) setTimeout(() => showToast({ title: 'Your first post is up', body: 'Tap to invite the people you hit with.', icon: 'people-outline', href: '/invite' }), 1800);
+      // Said once the post has actually landed, never while it is still going up (or if it fails).
+      if (firstPost) whenLanded(postId, () => setTimeout(() => showToast({ title: 'Your first post is up', body: 'Tap to invite the people you hit with.', icon: 'people-outline', href: '/invite' }), 1800));
       return;
     }
 
@@ -623,7 +625,7 @@ export default function Compose() {
     // post made from a session, it is never offered for CourtSide's Instagram.
     const stats = statsRow && statsPick ? statsOf(statsPick, shareFor(statsPick)) : undefined;
     applyWho();
-    actions.addPost({
+    const postId = actions.addPost({
       kind: mode === 'clip' ? 'clip' : 'note',
       orientation,
       // The cover's moment is the editor's own bookmark, not part of the post.
@@ -648,7 +650,7 @@ export default function Compose() {
     // they have seen it go up: a light nudge on the feed, not a whole screen.
     const firstPost = !posts.some((p) => p.authorId === currentUserId);
     if (shareTo) openGroupFeed(shareTo); else landOnFeed();
-    if (firstPost) setTimeout(() => showToast({ title: 'Your first post is up', body: 'Tap to invite the people you hit with.', icon: 'people-outline', href: '/invite' }), 1800);
+    if (firstPost) whenLanded(postId, () => setTimeout(() => showToast({ title: 'Your first post is up', body: 'Tap to invite the people you hit with.', icon: 'people-outline', href: '/invite' }), 1800));
   };
 
   // Share from "Log it": log it first (unless it already is), then post it with the log's
@@ -706,10 +708,11 @@ export default function Compose() {
       return;
     }
     landOnFeed();
-    if (firstPost) setTimeout(() => showToast({ title: 'Your first post is up', body: 'Tap to invite the people you hit with.', icon: 'people-outline', href: '/invite' }), 1800);
+    // Said once the post has actually landed, never while it is still going up (or if it fails).
+    if (firstPost) whenLanded(postId, () => setTimeout(() => showToast({ title: 'Your first post is up', body: 'Tap to invite the people you hit with.', icon: 'people-outline', href: '/invite' }), 1800));
     // Otherwise "Posted" with an Instagram button: the session as a story
     // picture, from the post once it has landed, from your log until then.
-    else setTimeout(() => showToast({ title: 'Posted', body: 'Share it to your Instagram story too.', icon: 'checkmark', action: shareAction({ post: postId, session: logId }) }), 600);
+    else whenLanded(postId, () => setTimeout(() => showToast({ title: 'Posted', body: 'Share it to your Instagram story too.', icon: 'checkmark', action: shareAction({ post: postId, session: logId }) }), 600));
   };
 
   const pick = (next: PickedMedia | null) => {

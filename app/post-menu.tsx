@@ -16,6 +16,7 @@ import { postShareText } from '@/features/share/shareText';
 import { confirm, confirmBlock } from '@/lib/confirm';
 import { notKnownAdult } from '@/features/players/age';
 import { CourtGlyph } from '@/components/map/CourtGlyph';
+import type { Post, Story } from '@/data/types';
 
 type Row = {
   key: string;
@@ -39,8 +40,11 @@ export default function PostMenu() {
   const { id = '', kind: rawKind } = useLocalSearchParams<{ id?: string; kind?: string }>();
   const { posts, stories, users, saved, currentUserId, currentUser, mutedIds, blockedIds, actions } = useApp();
   const isHit = rawKind === 'hit';
-  const story = isHit ? stories.find((st) => st.id === id) : undefined;
-  const post = isHit ? undefined : posts.find((p) => p.id === id);
+  // Reporting takes the post or Instant out of every list at once; the menu
+  // holds on to it so its "Thanks" note still shows until you close it.
+  const reported = useRef<{ post?: Post; story?: Story } | null>(null);
+  const story = (isHit ? stories.find((st) => st.id === id) : undefined) ?? reported.current?.story;
+  const post = (isHit ? undefined : posts.find((p) => p.id === id)) ?? reported.current?.post;
   const item = post ?? story;
   const author = users.find((u) => u.id === item?.authorId);
   const mine = !!item && item.authorId === currentUserId;
@@ -104,11 +108,11 @@ export default function PostMenu() {
       // Asked once, the way other apps ask; the menu stays up behind the question, so Cancel leaves you on it.
       { key: 'delete', icon: 'trash-outline', label: 'Delete', danger: true, onPress: () => confirm({ title: 'Delete post?', message: "This can't be undone.", confirmLabel: 'Delete', destructive: true, onConfirm: () => { actions.deletePost(post.id); close(); } }) },
     );
-  } else if (author) {
+  } else if (author && !mine) {
     const muted = mutedIds.includes(author.id);
     const blocked = blockedIds.includes(author.id);
     rows.push(
-      { key: 'report', icon: 'flag-outline', label: 'Report', note: 'Spam, harassment or something that should not be here.', onPress: () => { actions.reportUser(author.id, `${isHit ? 'hit' : 'post'}:${item.id}`); setDone('Thanks — we will take a look.'); } },
+      { key: 'report', icon: 'flag-outline', label: 'Report', note: 'Spam, harassment or something that should not be here.', onPress: () => { reported.current = { post, story }; actions.reportUser(author.id, `${isHit ? 'hit' : 'post'}:${item.id}`); setDone('Thanks — we will take a look.'); } },
       { key: 'mute', icon: muted ? 'volume-high-outline' : 'volume-mute-outline', label: muted ? `Unmute @${author.handle}` : `Mute @${author.handle}`, note: muted ? undefined : 'Their posts stop showing up for you. They are not told.', onPress: () => { actions.toggleMute(author.id); close(); } },
       // Unblocking is one tap; blocking asks first and says what it does.
       { key: 'block', icon: 'ban-outline', label: blocked ? `Unblock @${author.handle}` : `Block @${author.handle}`, danger: !blocked, onPress: () => {

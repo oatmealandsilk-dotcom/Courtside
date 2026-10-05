@@ -323,7 +323,6 @@ function Home({ scope, topRow, paused, onChrome }: {
   // growing to 28 and lifting the words into the picture. Phones only.
   const follow = barInset > 0 ? BAR_TUCK : 0;
   const tuckStyle = useAnimatedStyle(() => ({ transform: [{ translateY: follow * barCompact.value }] }));
-  useEffect(() => { const k = orderRef.current[active]; if (k) seenNow.current.add(k); setQuick(connectionIsQuick()); }, [active]);
 
   // Pinch out on a clip or hit and everything but the picture goes away —
   // caption, buttons, wordmark, sound disc; pinch in brings it all back.
@@ -453,7 +452,8 @@ function Home({ scope, topRow, paused, onChrome }: {
             // Archived posts only ever in your own archive's set, opened from the Archive page.
             .filter((p) => (set === 'archived'
               ? p.archived && p.authorId === userId && userId === data.currentUserId
-              : !p.archived && !p.groupId && (set === 'tagged' ? isTaggedIn(p, userId) : p.authorId === userId && (set !== 'clips' || p.kind === 'clip'))))
+              // A group-only post is let in only when it is the one that was tapped (a notification, Saved, a link), so it opens in place.
+              : !p.archived && (!p.groupId || p.id === scope.start) && (set === 'tagged' ? isTaggedIn(p, userId) : p.authorId === userId && (set !== 'clips' || p.kind === 'clip'))))
             .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
         setOrder(mine.map((p) => `p:${p.id}`));
         setActive(Math.max(0, mine.findIndex((p) => p.id === scope.start)));
@@ -558,7 +558,9 @@ function Home({ scope, topRow, paused, onChrome }: {
       const last = made(prev[prev.length - 1]);
       const older = add.filter((k) => made(k) <= last);
       const newer = add.filter((k) => made(k) > last);
-      const at = Math.min(prev.length, activeRef.current + 1);
+      // Just after the page on screen, found by its key: `active` counts `feed`, which leaves out hidden players.
+      const on = prev.indexOf(activeKeyRef.current ?? '');
+      const at = on >= 0 ? on + 1 : Math.min(prev.length, activeRef.current + 1);
       return [...prev.slice(0, at), ...newer, ...prev.slice(at), ...older];
     });
   }, [groupKeys]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -644,7 +646,9 @@ function Home({ scope, topRow, paused, onChrome }: {
     const made = madeAt(data);
     const dealt = NEWEST_FIRST ? [...fresh].sort((a, b) => made(b) - made(a)) : fresh;
     setOrder((prev) => {
-      const at = Math.min(prev.length, activeRef.current + (NEWEST_FIRST ? 1 : 2));
+      // Placed from the page on screen's key: `active` counts `feed`, which has the tip and challenge pages in it and hidden players out.
+      const on = prev.indexOf(activeKeyRef.current ?? '');
+      const at = Math.min(prev.length, (on >= 0 ? on : activeRef.current) + (NEWEST_FIRST ? 1 : 2));
       return [...prev.slice(0, at), ...dealt.filter((k) => !prev.includes(k)), ...prev.slice(at)];
     });
   };
@@ -760,9 +764,12 @@ function Home({ scope, topRow, paused, onChrome }: {
   useEffect(() => { setFollowedHere([]); }, [visit]);
   const suggestions = useSuggestedPlayers({ keep: followedHere });
 
-  // Blocked and muted players disappear from the feed entirely.
+  // Blocked and muted players disappear from the feed entirely. A feed opened
+  // on one person's posts or a set of posts (a profile tile, a link) still
+  // shows a muted player's: mute only keeps them out of the feeds you scroll.
+  const keepMuted = !!(scope?.userId || scope?.ids);
   const feedItems = useMemo<FeedItem[]>(() => {
-    const hidden = new Set([...blockedIds, ...mutedIds]);
+    const hidden = new Set([...blockedIds, ...(keepMuted ? [] : mutedIds)]);
     const following = new Set(followingIds);
     // A private account is only in your feed once they have let you follow.
     // In a group's feed the server has already decided (migration 74): a private member's posts come only to members who follow them, or shared to the group only.
@@ -791,7 +798,7 @@ function Home({ scope, topRow, paused, onChrome }: {
       const question = questionById.get(id);
       return question && !hidden.has(question.authorId) ? [{ type: 'question' as const, question }] : [];
     });
-  }, [order, posts, questions, stories, blockedIds, mutedIds, users, currentUserId, followingIds, scope?.set, scope?.groupId]);
+  }, [order, posts, questions, stories, blockedIds, mutedIds, users, currentUserId, followingIds, scope?.set, scope?.groupId, keepMuted]);
   // This week's challenge, and its top clips so far. They are settled once
   // per visit: a like arriving mid-scroll must not reshuffle the pages.
   const challenge = useMemo(() => challengeFor(), []);
@@ -817,12 +824,18 @@ function Home({ scope, topRow, paused, onChrome }: {
   // opened over the comments). Read by the page's key in `feed`, which is
   // what `active` counts: `order` has no tip or challenge page.
   const activeKey = feed[active] ? keyOf(feed[active]) : undefined;
+  const activeKeyRef = useRef(activeKey);
+  activeKeyRef.current = activeKey;
+  // The post, Instant or question on screen; the tip and challenge pages are none of them.
+  const realKey = activeKey && signalKind(activeKey) ? activeKey : undefined;
+  // Every page you rest on goes into this visit's seen set (a refresh sends them to the back).
+  useEffect(() => { if (realKey) seenNow.current.add(realKey); setQuick(connectionIsQuick()); }, [active, realKey]);
   const held = !!myStage && myStage.key === activeKey && !myStage.covered && !(PAUSE_AT_FULL && myStage.full);
   const playing = (focused || held) && !touring && !paused;
   // A new page on screen (or the feed coming back to the front): the last one
   // is closed off and the new one's clock starts. Reading the comments under
   // a clip that is still playing counts as watching it.
-  const viewedKey = playing && appActive ? order[active] : undefined;
+  const viewedKey = playing && appActive ? realKey : undefined;
   useEffect(() => {
     endViewing.current();
     if (viewedKey) viewing.current = { key: viewedKey, since: Date.now() };
@@ -1176,13 +1189,15 @@ function Home({ scope, topRow, paused, onChrome }: {
   const scopedBack = !!scope && !rowed;
   useEffect(() => {
     if (!focused || !showing) return;
-    // A hit counts as watched through the story viewer, not here.
-    if (showing.type === 'hit' || showing.type === 'tip' || showing.type === 'challenge') return;
+    // An Instant seen here counts on its views, as in the full-screen viewer
+    // (once per person; your own is left out of its count anyway).
+    if (showing.type === 'hit') { if (showing.story.authorId !== currentUserId) actions.markStoryViewed(showing.story.id); return; }
+    if (showing.type === 'tip' || showing.type === 'challenge') return;
     actions.recordView(
       showing.type === 'post' ? 'post' : 'question',
       showing.type === 'post' ? showing.post.id : showing.question.id,
     );
-  }, [focused, showing, actions]);
+  }, [focused, showing, actions, currentUserId]);
 
   // The last page of the main feed: a small congratulations for getting
   // there this early, a way to post, and a way back to the top.
