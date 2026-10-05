@@ -1,6 +1,6 @@
 import { useTheme } from '@/theme/ThemeProvider';
 import React, { useRef, useState } from 'react';
-import { Image, Modal, Pressable, Text, View, useWindowDimensions } from 'react-native';
+import { Image, Modal, Platform, Pressable, Text, View, useWindowDimensions } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { ZoomableMedia } from './ZoomableMedia';
@@ -57,16 +57,27 @@ function describe(media: PickedMedia): string {
   return 'Photo';
 }
 
+/**
+ * Android (Oct 5) always uses its own Photo Picker, the gallery grid, which
+ * hands over only what was chosen and needs no permission (Google Play's copy
+ * of it reaches older phones too). So nothing is asked for first there: the
+ * question did nothing on Android 13 and later, and on older phones a "no"
+ * blocked picking altogether. The older picker ("legacy") is an iPhone
+ * matter: there it is the one that hands a video over reliably; on Android
+ * it was the bare Files browser.
+ */
+const ANDROID_PICKER = Platform.OS === 'android';
+
 /** Opens the phone's library straight away and resolves with the choice, or null if cancelled. */
 export async function pickFromDevice(selection: 'video' | 'photo' | 'all'): Promise<PickedMedia | null> {
   const kinds: ImagePicker.MediaType[] = selection === 'video' ? ['videos'] : selection === 'photo' ? ['images'] : ['images', 'videos'];
-  const perm = await ImagePicker.requestMediaLibraryPermissionsAsync().catch(() => null);
+  const perm = ANDROID_PICKER ? null : await ImagePicker.requestMediaLibraryPermissionsAsync().catch(() => null);
   if (perm && !perm.granted && !perm.canAskAgain) throw new Error('Photo access is off. Turn it on in Settings → CourtSide → Photos.');
   const full = !!perm?.granted && perm.accessPrivileges !== 'limited';
   // One picker, once. A failed pick used to open the library a second time
   // with the other picker, which read as the app losing your choice.
   try {
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: kinds, quality: 0.85, legacy: selection !== 'photo' && full, ...AS_IS });
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: kinds, quality: 0.85, legacy: Platform.OS === 'ios' && selection !== 'photo' && full, ...AS_IS });
     if (result.canceled) return null;
     const asset = result.assets[0];
     const isVideo = asset.type === 'video';
@@ -163,6 +174,8 @@ const AS_IS = {
 /** iOS's error codes, in words a person can act on. */
 function explainPickError(err: unknown): string {
   const reason = err instanceof Error ? err.message : String(err);
+  // Android has no iCloud and no iPhone error numbers: a plain sentence.
+  if (Platform.OS === 'android') return /cancel/i.test(reason) ? 'Nothing was chosen.' : 'Your photos could not be opened. Try again in a moment.';
   if (/3164/.test(reason)) return 'That video lives in iCloud and could not be fetched. Check the phone has internet, or open the video once in the Photos app so it downloads, then try again.';
   if (/3072|cancel/i.test(reason)) return 'Nothing was chosen.';
   return `Could not open your library: ${reason}`;
@@ -243,12 +256,13 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
    */
   const open = async (): Promise<ImagePicker.ImagePickerResult> => {
     const kinds: ImagePicker.MediaType[] = selection === 'video' ? ['videos'] : selection === 'photo' ? ['images'] : ['images', 'videos'];
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync().catch(() => null);
+    // Android asks nothing first: its Photo Picker needs no permission (see pickFromDevice).
+    const perm = ANDROID_PICKER ? null : await ImagePicker.requestMediaLibraryPermissionsAsync().catch(() => null);
     if (perm && !perm.granted && !perm.canAskAgain) throw new Error('Photo access is off. Turn it on in Settings → CourtSide → Photos.');
     const full = !!perm?.granted && perm.accessPrivileges !== 'limited';
     // Apple's older picker copies the file itself and has proved the reliable
     // one for video; it needs full photo access, which is why that is checked.
-    return ImagePicker.launchImageLibraryAsync({ mediaTypes: kinds, quality: 0.85, legacy: selection !== 'photo' && full, ...AS_IS });
+    return ImagePicker.launchImageLibraryAsync({ mediaTypes: kinds, quality: 0.85, legacy: Platform.OS === 'ios' && selection !== 'photo' && full, ...AS_IS });
   };
   const choose = async () => {
     try {
@@ -268,8 +282,8 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
         orientation: asset.width && asset.height && asset.width > asset.height ? 'landscape' : 'portrait',
       });
     } catch (err) {
-      // Limited photo access is the usual cause of iOS's 3164; name the fix.
-      const perm = await ImagePicker.getMediaLibraryPermissionsAsync().catch(() => null);
+      // Limited photo access is the usual cause of iOS's 3164; name the fix. (Android's picker needs no access, so it has no such fix.)
+      const perm = ANDROID_PICKER ? null : await ImagePicker.getMediaLibraryPermissionsAsync().catch(() => null);
       if (perm && (perm.accessPrivileges === 'limited' || !perm.granted)) {
         setError('Photo access is limited. On your phone: Settings → CourtSide → Photos → All Photos, then try again.');
         return;

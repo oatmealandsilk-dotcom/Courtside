@@ -6,7 +6,8 @@ import * as Sharing from 'expo-sharing';
  * Pulls a post's original picture or video down and hands it to the share
  * sheet, where "Save Video" puts it in the camera roll — the one-tap path
  * from a clip in the app to a repost on Instagram. On a computer it just
- * opens the file.
+ * opens the file. Android's share sheet has no save-to-gallery, so there the
+ * file goes to whichever app is picked (the menu says "Share original").
  */
 export async function downloadMedia(url: string, name: string): Promise<void> {
   if (Platform.OS === 'web') { window.open(url, '_blank', 'noopener'); return; }

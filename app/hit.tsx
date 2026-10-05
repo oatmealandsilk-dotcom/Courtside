@@ -85,7 +85,10 @@ export default function Hit() {
         Animated.timing(flash, { toValue: 0, duration: 260, useNativeDriver: true }),
       ]).start();
       haptics.reward();
-      const photo = await camera.current?.takePictureAsync({ quality: 0.85, skipProcessing: Platform.OS === 'android' });
+      // Android too lets the camera finish the photo (Oct 5): skipping that step
+      // handed back the raw shot, un-mirrored and, on some front cameras
+      // (Samsung, Sony), lying on its side. A touch slower, and right.
+      const photo = await camera.current?.takePictureAsync({ quality: 0.85 });
       if (!photo?.uri) throw new Error('The camera did not return a photo.');
       // What you saw is what you get: the preview is a mirror, so the saved
       // photo is mirrored the same way. The phone does this itself; the

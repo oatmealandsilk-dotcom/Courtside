@@ -12,7 +12,7 @@ import { postedIndex, sourceOn } from '@/features/activity/recent';
 import { useTennisFlags } from '@/features/activity/useTennisFlags';
 import { storyFromLog, storyFromPost, type SessionStory } from '@/features/share/sessionStory';
 import { scoreText } from '@/features/activity/score';
-import { canSaveStory, exportStory, stageSize, warmStory, type StoryAction, type StoryLook } from '@/features/share/storyImage';
+import { canCopyStory, canSaveStory, exportStory, stageSize, warmStory, type StoryAction, type StoryLook } from '@/features/share/storyImage';
 import { mixHex } from '@/features/activity/zones';
 import { goBack } from '@/lib/goBack';
 import * as haptics from '@/lib/haptics';
@@ -266,7 +266,7 @@ export default function ShareSession() {
 
             {/* Strava's row of round buttons, in CourtSide's colours (Oct 4): Stories leads, the rest follow. */}
             <View style={styles.actions}>
-              {ACTIONS.filter((a) => a.key !== 'save' || save).map((a) => {
+              {ACTIONS.filter((a) => (a.key !== 'save' || save) && (a.key !== 'copy' || canCopyStory())).map((a) => {
                 const lead = a.key === 'instagram';
                 return (
                   <Pressable key={a.key} accessibilityRole="button" accessibilityLabel={a.spoken} disabled={!!busy} onPress={() => { void run(a.key); }} style={({ pressed }) => [styles.action, pressed && styles.pressed, !!busy && busy !== a.key && styles.dimmed]}>

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Platform, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 
 import { ShareCard } from '@/components/ShareCard';
@@ -54,7 +54,7 @@ export default function ShareCardScreen() {
             </View>
           </View>
           <Button label="Share" onPress={() => { void share(); }} loading={busy} full />
-          <Text style={note ? styles.note : styles.fine}>{note || 'Post it to your Instagram story, send it, or save it to your photos.'}</Text>
+          <Text style={note ? styles.note : styles.fine}>{note || (Platform.OS === 'android' ? 'Post it to your Instagram story or send it to an app.' : 'Post it to your Instagram story, send it, or save it to your photos.')}</Text>
         </View>
       )}
     </Screen>

@@ -12,6 +12,8 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Avatar, Button, Field, Screen } from '@/components/ui';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { shareOutside } from '@/lib/shareOutside';
+import { File, Paths } from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 import { formatDate } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
 import * as toast from '@/lib/toast';
@@ -80,6 +82,21 @@ export default function AccountCentre() {
       a.click();
       setTimeout(() => URL.revokeObjectURL(url), 5000);
       say('Your data is downloading.');
+      return;
+    }
+    if (Platform.OS === 'android') {
+      // Android's plain share sends only words: the whole file pasted into a
+      // message, and for a big account too long for Android to hand over at
+      // all. So it goes as a file, the way a post's original does (Oct 5).
+      try {
+        const file = new File(Paths.cache, `courtside-${currentUser?.handle ?? 'me'}.json`);
+        if (file.exists) file.delete();
+        file.create();
+        file.write(data);
+        await Sharing.shareAsync(file.uri, { mimeType: 'application/json', dialogTitle: 'My CourtSide data' });
+      } catch {
+        setError('Your data could not be prepared. Try again in a moment.');
+      }
       return;
     }
     await shareOutside('My CourtSide data', data);

@@ -25,6 +25,7 @@ import { claimCarriedBirthDate, isDeviceBlocked, recallAnswered } from '@/featur
 import { auth as remoteAuth } from '@/data/remote';
 import { setCrashScreen } from '@/lib/crashReporting';
 import { listenForPushTaps, registerForPush } from '@/features/push/push';
+import { recoverChatPick } from '@/features/messages/pendingPick';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { TERMS_VERSION } from '@/lib/legal';
 import { colors } from '@/theme';
@@ -102,6 +103,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     pushAskedFor.current = currentUserId;
     void registerForPush();
   }, [currentUserId, remoteLoaded, onboardingComplete, currentUser?.ageGroup]);
+  // Android: a chat photo taken or chosen just before the phone closed the app
+  // (short of memory) is collected, and the app goes back to that chat with it
+  // in the tray, once the app has settled on its first page (see pendingPick).
+  useEffect(() => {
+    if (Platform.OS !== 'android' || !currentUserId || !remoteLoaded || !onboardingComplete) return undefined;
+    const t = setTimeout(() => { void recoverChatPick().then((chatId) => { if (chatId) router.push(`/messages/${chatId}`); }); }, 1200);
+    return () => clearTimeout(t);
+  }, [currentUserId, remoteLoaded, onboardingComplete]);
   // Tennis sessions from a tracker: looked for when the app opens and each
   // time it comes back to the front. It does nothing unless a source has
   // tennis sessions on and its server switch is on (migration 58).
