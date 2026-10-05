@@ -77,6 +77,35 @@ on Android (Instagram there has no paste-a-sticker), and neither is Save
 To check on the first Android test build: Share → Stories on each design, on
 a phone with Instagram and on one without.
 
+## Clips and photos (Oct 5, build 15 extras)
+
+Your own clip or photo post can go straight into Instagram Stories too: the
+post's **•••** menu has **Share to Instagram Story** (on a session post with
+a clip it reads **Share clip to Instagram Story**, beside the session
+picture's own **Share to Instagram**). Code: `src/features/share/mediaStory.ts`.
+
+- The post's original file is downloaded into the app's cache, then handed
+  to Instagram's story editor as the story's background: a clip as
+  `backgroundVideo`, a photo as `backgroundImage`.
+- On it goes a small sticker, `HandleSticker`: the CourtSide mark, "@handle"
+  and "on CourtSide", on a pill in the court's page colour. It can be moved,
+  resized or deleted in Instagram.
+- Only your own posts, and only where the build carries react-native-share
+  (iPhone build 13 on, Android from its first build), so it is safe as an
+  instant update. A browser does not offer it. No Instagram on the phone:
+  the share sheet opens with the file.
+- A session post with only a photo keeps the session picture (its Photo
+  design does that photo better), so the new row is for its clip only.
+- Instagram gets the file as it was uploaded. A trim, a speed, a zoom or
+  "posted without sound" are applied by CourtSide's player as the clip plays,
+  not cut into the file, so they do not come along; Instagram's editor can
+  trim and mute. Instagram's guidance is clips up to about 20 seconds and
+  under 50 MB; a longer one may be cut short there.
+
+To check on build 15 (or 14, over the air): your own clip → ••• → Share to
+Instagram Story, then the same on a photo post. Instagram should open on its
+story editor with the clip or photo filling it and the sticker on top.
+
 ## Not done yet
 
 - **A tighter sticker.** Sticker and Overlay are handed over as the whole

@@ -22,6 +22,7 @@ import { useApp } from '@/store/AppContext';
 import { isPublicPath } from '@/features/share/publicPaths';
 import { useShareLanding } from '@/features/share/useShareLanding';
 import { useWorkoutWatch } from '@/features/activity/useWorkoutWatch';
+import { useRatePrompt } from '@/features/rating/useRatePrompt';
 import { claimCarriedBirthDate, isDeviceBlocked, recallAnswered } from '@/features/age/ageCheck';
 import { auth as remoteAuth } from '@/data/remote';
 import { setCrashScreen } from '@/lib/crashReporting';
@@ -270,6 +271,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   useShareLanding({ pathname, held: !!detour });
   // The phone's own "Workout detected" alert (build 15): kept in step with the switches, and its tap opens Log it.
   useWorkoutWatch({ settled: !detour && !onSplash });
+  // "Rate CourtSide" (build 15): the phone's own rating box after a happy moment, only ever on a calm
+  // page: past the splash, the gates and the tutorial, and not a composer, a sheet or a camera.
+  useRatePrompt({ calm: !!currentUserId && !detour && !onSplash && !hideEverywhere && !tourOpen && curtainDown && !phoneOnlyHide && !SHEETS.has(pathname) });
   const sentTo = useRef<string | null>(null);
   useEffect(() => {
     if (!detour) { sentTo.current = null; return; }
