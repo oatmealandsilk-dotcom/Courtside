@@ -442,6 +442,10 @@ interface AppState extends Bootstrap, CourtLifeState, FeedGroupsState {
   detectedCoords: { lat: number; lng: number } | null;
 }
 
+/** Your own settings as they are saved to the account (see the settings sync in AppProvider), for telling a change apart. */
+const settingsJson = (s: Pick<AppState, 'mutedIds' | 'blockedIds' | 'saved' | 'paymentMethods' | 'defaultPaymentId' | 'prefs'>) =>
+  JSON.stringify({ m: s.mutedIds, b: s.blockedIds, s: s.saved.questionIds, p: s.paymentMethods, d: s.defaultPaymentId, f: s.prefs });
+
 /**
  * An account's own settings as a new account starts with them: what logging
  * out, deleting the account or switching leaves on this device, so the next
@@ -1813,7 +1817,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // here (withNotification) only keep this screen up to date, and run the
   // demo, where there is no database.
   // Your own settings (mutes, blocks, saved threads, payment methods, switches) follow the account.
-  const settingsNow = JSON.stringify({ m: state.mutedIds, b: state.blockedIds, s: state.saved.questionIds, p: state.paymentMethods, d: state.defaultPaymentId, f: state.prefs });
+  const settingsNow = settingsJson(state);
   // Kept with whose they were: a different account signed in starts from what it loaded, never from the last one's.
   const settingsSeen = useRef<{ who: ID; json: string } | null>(null);
   useEffect(() => {
@@ -1834,6 +1838,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }, 400);
     return () => clearTimeout(t);
   }, [settingsNow, remoteLoaded, currentUserForLive]);
+  // Back to the front: your mutes, blocks and saved threads as the server has
+  // them now. The save above sends whole lists, so a phone left open since
+  // before a block made on another device would otherwise undo it with its
+  // next change. A change made here and not saved yet is left to go up as it is.
+  useEffect(() => {
+    if (!liveEpoch || !isSupabaseConfigured || !remoteLoaded || !currentUserForLive || !UUID.test(currentUserForLive)) return undefined;
+    const me = currentUserForLive;
+    let on = true;
+    void remote.fetchUserState(me).then((got) => {
+      const s = stateRef.current;
+      if (!on || !got || s.currentUserId !== me) return;
+      if (settingsSeen.current?.who !== me || settingsSeen.current.json !== settingsJson(s)) return;
+      const lists = { mutedIds: got.mutedIds, blockedIds: got.blockedIds, saved: { ...s.saved, questionIds: got.savedQuestionIds } };
+      // Taken as already saved, so it is not sent straight back.
+      settingsSeen.current = { who: me, json: settingsJson({ ...s, ...lists }) };
+      setState((prev) => (prev.currentUserId === me ? { ...prev, mutedIds: got.mutedIds, blockedIds: got.blockedIds, saved: { ...prev.saved, questionIds: got.savedQuestionIds } } : prev));
+    }).catch(() => undefined);
+    return () => { on = false; };
+  }, [remoteLoaded, currentUserForLive, liveEpoch]);
 
   // What the saved copy put on screen, so the fresh load can take back off anything the server no longer has.
   const snapshotIds = React.useRef<Set<string> | null>(null);

@@ -1122,6 +1122,12 @@ export const remote = {
     const { error } = await need().from('reports').insert({ reporter_id: me, target_user_id: targetUserId, target, reason });
     if (error) fail('report')(error);
   },
+  /** Your settings row as the server has it now (blocks, mutes, saved threads made on another device included). Null when there is none or it could not be read. */
+  async fetchUserState(me: ID): Promise<UserState | null> {
+    const { data, error } = await need().from('user_state').select('*').eq('user_id', me).maybeSingle();
+    if (error || !data) return null;
+    return toUserState(data as UserStateRow);
+  },
   async saveUserState(me: ID, s: UserState) {
     const row: Record<string, unknown> = {
       user_id: me, muted_ids: s.mutedIds, blocked_ids: s.blockedIds, saved_question_ids: s.savedQuestionIds, payment_methods: s.paymentMethods,
