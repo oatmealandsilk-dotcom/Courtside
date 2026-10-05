@@ -973,13 +973,20 @@ function mergeFetchedMessages(prev: AppState, fetched: Message[], me: ID, openCh
   const touched = new Set(added.map((m) => m.conversationId));
   const conversations = prev.conversations.map((c) => {
     if (!touched.has(c.id)) return c;
-    const inChat = messages.filter((m) => m.conversationId === c.id).sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1));
+    // What the chat had loaded and what just came: never a message that is
+    // here only for a reply's quote, from further back (it would leave a gap above it).
+    const inChat = inOrder([...c.messageIds, ...added.filter((m) => m.conversationId === c.id).map((m) => m.id)], byId);
     // An event line ("Mira added Dev") is news, but never unread.
     const newFromOthers = added.filter((m) => m.conversationId === c.id && m.senderId !== me && m.kind !== 'system').length;
     const last = inChat[inChat.length - 1];
     return { ...c, messageIds: inChat.map((m) => m.id), updatedAt: last && last.createdAt > c.updatedAt ? last.createdAt : c.updatedAt, unreadCount: c.id === openChat ? c.unreadCount : c.unreadCount + newFromOthers };
   });
   return { ...prev, messages, conversations };
+}
+
+/** A chat's messages by these ids, once each, oldest first (ids with no message here are left out). */
+function inOrder(ids: ID[], byId: Map<ID, Message>): Message[] {
+  return [...new Set(ids)].map((id) => byId.get(id)).filter((m): m is Message => !!m).sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1));
 }
 
 /** The parts of a chat that change without a message of their own: who is in it, its name, photo, admins, and your mute. */
@@ -1020,7 +1027,7 @@ function foldChatInto(prev: AppState, from: ID, to: ID): AppState {
   if (!target) {
     return { ...prev, messages, conversations: prev.conversations.map((c) => (c.id === from ? { ...c, id: to } : c)) };
   }
-  const inChat = messages.filter((m) => m.conversationId === to).sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1));
+  const inChat = inOrder([...target.messageIds, ...(moving?.messageIds ?? [])], new Map(messages.map((m) => [m.id, m])));
   const updatedAt = moving && moving.updatedAt > target.updatedAt ? moving.updatedAt : target.updatedAt;
   return {
     ...prev,
@@ -4026,18 +4033,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const loadOlderMessages = useCallback(async (conversationId: ID) => {
     const me = stateRef.current.currentUserId;
     if (!me || !live(me, conversationId)) return 0;
-    const have = stateRef.current.messages.filter((m) => m.conversationId === conversationId);
+    // From the oldest the chat has loaded: a reply's original fetched from further back is not part of it.
+    const byId = new Map(stateRef.current.messages.map((m) => [m.id, m]));
+    const have = inOrder(stateRef.current.conversations.find((c) => c.id === conversationId)?.messageIds ?? [], byId);
     if (!have.length) return 0;
-    const oldest = have.reduce((a, b) => (a.createdAt < b.createdAt ? a : b));
+    const oldest = have[0];
     const got = await remote.fetchOlderMessages(me, conversationId, oldest.createdAt);
     if (!got || !got.messages.length) return 0;
     const page = unhidden(me, got.messages);
     setState((prev) => {
       const known = new Set(prev.messages.map((m) => m.id));
       const fresh = page.filter((m) => !known.has(m.id));
-      if (!fresh.length) return prev;
+      const chat = prev.conversations.find((c) => c.id === conversationId);
+      // The whole page joins the chat, a reply's original already here among it too.
+      if (!chat || page.every((m) => chat.messageIds.includes(m.id))) return prev;
       const messages = [...fresh, ...prev.messages];
-      const inChat = messages.filter((m) => m.conversationId === conversationId).sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1)).map((m) => m.id);
+      const inChat = inOrder([...page.map((m) => m.id), ...chat.messageIds], new Map(messages.map((m) => [m.id, m]))).map((m) => m.id);
       return { ...prev, messages, conversations: prev.conversations.map((c) => (c.id === conversationId ? { ...c, messageIds: inChat } : c)) };
     });
     return got.messages.length;
