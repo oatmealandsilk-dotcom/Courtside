@@ -3871,8 +3871,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return add.length ? { ...prev, followEdges: [...prev.followEdges, ...add] } : prev;
     });
   }, []);
-  // One page of posts at a time, and one ask per profile per session.
-  const loadingMore = useRef(false);
+  // One page of posts at a time (the one on its way, if any), and one ask per profile per session.
+  const loadingMore = useRef<Promise<Post[]> | null>(null);
   const loadedProfiles = useRef(new Set<ID>());
   const searchedTerms = useRef(new Set<string>());
   const loadedSaved = useRef(false);
@@ -4009,12 +4009,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
    * feed can put those pages on the end without re-ordering what you are
    * already looking at.
    */
-  const loadMorePosts = useCallback(async () => {
+  const loadMorePosts = useCallback((): Promise<Post[]> => {
+    // Asked again while a page is on its way (the feed asks on every swipe,
+    // and lets go of the earlier answer), it gets that same page, not nothing,
+    // so the page is never skipped.
+    if (loadingMore.current) return loadingMore.current;
     const { currentUserId: me, feed } = stateRef.current;
-    if (!live(me) || !feed.more || !feed.cursor || loadingMore.current) return [];
-    loadingMore.current = true;
-    try {
-      const got = await remote.fetchMorePosts(feed.cursor);
+    if (!live(me) || !feed.more || !feed.cursor) return Promise.resolve([]);
+    const cursor = feed.cursor;
+    const run = (async () => {
+      const got = await remote.fetchMorePosts(cursor);
       if (!got) { setState((prev) => ({ ...prev, feed: { ...prev.feed, more: false } })); return []; }
       const known = new Set(stateRef.current.posts.map((p) => p.id));
       const fresh = got.posts.filter((p) => !known.has(p.id));
@@ -4025,9 +4029,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
         feed: { cursor: oldestOf(got.posts) ?? prev.feed.cursor, more: got.more },
       }));
       return fresh;
-    } finally {
-      loadingMore.current = false;
-    }
+    })();
+    loadingMore.current = run;
+    const done = () => { if (loadingMore.current === run) loadingMore.current = null; };
+    run.then(done, done);
+    return run;
   }, []);
   /**
    * Opening a profile: that player's posts, however old, so their grid and
