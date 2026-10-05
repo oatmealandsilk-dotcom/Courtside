@@ -5,6 +5,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 
 import { useRevealOnFocus } from '@/lib/keyboardScroll';
 import { colors, font, radius, spacing, typography, lift } from '@/theme';
 
+/** Tips and the AI coach box stop here; a coach's answer to a booking passes its own, longer limit. */
 const MAX = 500;
 
 /**
@@ -12,7 +13,7 @@ const MAX = 500;
  * up once there is something to send: a shade off the page, no outline.
  * Tips use it (the feed's tip page and the board), and so does the AI coach.
  */
-export function TipComposer({ onSubmit, onSent, initial = '', placeholder = 'Your tip', accessibilityLabel = 'Your tip' }: {
+export function TipComposer({ onSubmit, onSent, initial = '', placeholder = 'Your tip', accessibilityLabel = 'Your tip', maxLength = MAX }: {
   onSubmit: (body: string) => Promise<void> | void;
   onSent?: () => void;
   /** Text to start with (a suggestion tapped above it). */
@@ -20,6 +21,8 @@ export function TipComposer({ onSubmit, onSent, initial = '', placeholder = 'You
   placeholder?: string;
   /** What a screen reader calls the box: a tip by default, but the same box takes a coach's answer and an AI coach question. */
   accessibilityLabel?: string;
+  /** How many characters the box takes: 500 for a tip unless a screen says otherwise. */
+  maxLength?: number;
 }) {
   const styles = useThemedStyles(styleDefinitions);
   const input = useRef<TextInput>(null);
@@ -54,13 +57,13 @@ export function TipComposer({ onSubmit, onSent, initial = '', placeholder = 'You
           placeholder={placeholder}
           placeholderTextColor={colors.textFaint}
           multiline
-          maxLength={MAX}
+          maxLength={maxLength}
           accessibilityLabel={accessibilityLabel}
           onFocus={() => reveal(input.current as unknown as Parameters<typeof reveal>[0])}
           style={styles.input}
         />
         <View style={styles.foot}>
-          <Text style={styles.left}>{body.length > MAX - 80 ? `${MAX - body.length} left` : ''}</Text>
+          <Text style={styles.left}>{body.length > maxLength - Math.max(80, maxLength * 0.1) ? `${maxLength - body.length} left` : ''}</Text>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Send"
