@@ -10,7 +10,8 @@ export { isTracker, TRACKERS } from './flags';
 /**
  * Which of Fitbit, Oura and Polar the server is set up for (their keys are in
  * its secrets; see docs/trackers-setup.md). One the server is not set up for,
- * or a server without the trackers function at all, shows as "Coming soon".
+ * or a server without the trackers function at all, is not listed on the
+ * Health page (Oct 4: no "Coming soon" rows for Apple's review to find).
  * The demo has all three on, so the whole flow can be seen without a tracker.
  *
  * No .web twin: the call is the same in a browser.
@@ -35,7 +36,7 @@ export function trackerStatus(me: string | null): Promise<TrackerStatus> {
   return asking;
 }
 
-/** The hook screens use. All "Coming soon" until the server answers. */
+/** The hook screens use. None open until the server answers. */
 export function useTrackerStatus(): TrackerStatus {
   const { currentUserId } = useApp();
   const [status, setStatus] = useState<TrackerStatus>(() => (isDemo(currentUserId) ? ALL : known?.status ?? NONE));

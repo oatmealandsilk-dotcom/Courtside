@@ -10,10 +10,11 @@ import * as Clipboard from 'expo-clipboard';
  * Stories' 1080 × 1920 pixels on this screen (stageSize), and photographed
  * from that copy rather than from the small preview, so the words stay sharp.
  *
- * Instagram's own "straight into Stories" handover needs a small piece of
- * native code the app does not have yet (see docs/instagram-stories.md), so
- * "Instagram Stories" opens the phone's share sheet with the picture, where
- * Instagram is one of the apps; it offers Stories, Feed and Messages.
+ * "Instagram Stories" hands the picture straight to Instagram's story editor
+ * on an iPhone build that carries react-native-share (see straightToStories
+ * and docs/instagram-stories.md). Elsewhere: older iPhone builds put it on the
+ * clipboard and open Instagram's story camera, and Android, or a phone with
+ * no Instagram, opens the share sheet, where Instagram is one of the apps.
  */
 
 export const STORY_PX = { width: 1080, height: 1920 };
@@ -39,27 +40,45 @@ export function canSaveStory(): boolean {
 
 export type StoryAction = 'instagram' | 'save' | 'more' | 'copy';
 
-/** What Copy says once the picture is on the clipboard: Instagram pastes it as a sticker. */
 /** Said once Instagram has opened with the picture ready to paste. */
 export const INSTAGRAM_NOTE = 'In Instagram, pick your photo or video first, then tap Add sticker (or tap and hold, then Paste).';
 
+/** What Copy says once the picture is on the clipboard: Instagram pastes it as a sticker. */
 export const COPIED_NOTE = 'Copied. In Instagram, pick your photo or video for the story, then tap Add sticker (or tap and hold, then Paste).';
 
-/**
- * The hidden copy photographed and handed on. Says nothing back when the
- * sheet opened; a sentence when it could not.
- */
 /** CourtSide's app at Meta (Oct 4): Instagram's own "Share to Stories" handoff needs it. Public, not a secret. */
 const FACEBOOK_APP_ID = '1407829631564079';
 
+/** The address Instagram's story editor answers to (react-native-share opens it with ?source_application=FACEBOOK_APP_ID). */
+const STORIES_URL = 'instagram-stories://share';
+
+/**
+ * Where the picture went: into Instagram ('sent'), nowhere because this phone
+ * has no Instagram ('no-instagram'), or not tried because this build cannot
+ * ('unavailable': no react-native-share, Android, or the hand-over failed).
+ */
+type Handoff = 'sent' | 'no-instagram' | 'unavailable';
+
 /**
  * Strava's way (build 13 on): Instagram opens on its story editor with the
- * picture already there, a sticker over the theme's colours or a whole
- * background. Only where the phone's app carries react-native-share; on older
- * builds it is never loaded (loading it there would close the app).
+ * picture already there, a sticker over two colours or a whole background.
+ * Only where the phone's app carries react-native-share; on older builds it
+ * is never loaded (loading it there would close the app).
+ *
+ * react-native-share puts the picture on the pasteboard and opens Instagram
+ * without first asking whether Instagram is there, and says "done" either
+ * way, so a phone without Instagram used to tap Stories and see nothing
+ * happen (Oct 4 audit). The builds that carry it also list instagram-stories
+ * in LSApplicationQueriesSchemes (app.config.js), so the phone answers the
+ * question truthfully here.
  */
-async function straightToStories(b64: string, look: StoryLook): Promise<boolean> {
-  if (Platform.OS !== 'ios' || !TurboModuleRegistry.get('RNShare')) return false;
+async function straightToStories(b64: string, look: StoryLook): Promise<Handoff> {
+  if (Platform.OS !== 'ios' || !TurboModuleRegistry.get('RNShare')) return 'unavailable';
+  try {
+    if (!(await Linking.canOpenURL(STORIES_URL))) return 'no-instagram';
+  } catch {
+    return 'no-instagram';
+  }
   try {
     const Share_ = (require('react-native-share') as typeof import('react-native-share')).default;
     const image = `data:image/png;base64,${b64}`;
@@ -68,15 +87,19 @@ async function straightToStories(b64: string, look: StoryLook): Promise<boolean>
       appId: FACEBOOK_APP_ID,
       ...(look.sticker ? { stickerImage: image, backgroundTopColor: look.top, backgroundBottomColor: look.bottom } : { backgroundImage: image }),
     } as never);
-    return true;
+    return 'sent';
   } catch {
-    return false;
+    return 'unavailable';
   }
 }
 
 /** How the picture goes into a story: as a sticker over two colours, or as the whole background. */
 export interface StoryLook { sticker: boolean; top: string; bottom: string }
 
+/**
+ * The hidden copy photographed and handed on. Says nothing back when it went
+ * (or the sheet opened); a sentence when it could not, or what to do next.
+ */
 export async function exportStory(view: View | null, action: StoryAction, title: string, look?: StoryLook): Promise<string | null> {
   if (!view) return 'The picture is not ready yet. Try again in a moment.';
   const size = Platform.OS === 'android' ? STORY_PX : stageSize();
@@ -87,16 +110,20 @@ export async function exportStory(view: View | null, action: StoryAction, title:
     return COPIED_NOTE;
   }
   if (action === 'instagram' && Platform.OS === 'ios') {
-    // Straight into Instagram (Oct 4): the picture on the clipboard, then its
-    // story camera, where it pastes. Build 12 hands it over with no paste.
+    // Straight into Instagram's story editor where the build can (Oct 4). Where it
+    // cannot, the picture on the clipboard, then Instagram's story camera, where it pastes.
     const b64 = await captureRef(view, { format: 'png', quality: 1, result: 'base64', ...size });
-    if (look && (await straightToStories(b64, look))) return null;
-    await Clipboard.setImageAsync(b64);
-    try {
-      await Linking.openURL('instagram://story-camera');
-      return INSTAGRAM_NOTE;
-    } catch {
-      // No Instagram on this phone: the share sheet below.
+    const handoff: Handoff = look ? await straightToStories(b64, look) : 'unavailable';
+    if (handoff === 'sent') return null;
+    // Known to have no Instagram: the share sheet below, with the clipboard left as it was.
+    if (handoff === 'unavailable') {
+      await Clipboard.setImageAsync(b64);
+      try {
+        await Linking.openURL('instagram://story-camera');
+        return INSTAGRAM_NOTE;
+      } catch {
+        // No Instagram on this phone: the share sheet below.
+      }
     }
   }
   const uri = await captureRef(view, { format: 'png', quality: 1, result: 'tmpfile', ...size });
