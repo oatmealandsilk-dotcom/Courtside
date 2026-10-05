@@ -12,8 +12,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ClipPlayback } from '@/components/ClipPlayback';
 import { MediaPlaceholder } from '@/components/MediaPlaceholder';
 import { Avatar, Button, EmptyState } from '@/components/ui';
-import { isLive } from '@/features/stories/stories';
-import { relativeTime, timeLeft } from '@/lib/format';
+import { hitClock, isLive } from '@/features/stories/stories';
+import { relativeTime } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing, typography } from '@/theme';
 import { useStillLoading } from '@/lib/useStillLoading';
@@ -139,7 +139,7 @@ export default function StoryViewer() {
           <Pressable accessibilityRole="link" onPress={() => router.push(`/user/${user.id}`)} style={styles.who}>
             <Avatar name={user.name} seed={user.avatarSeed} size={34} />
             <Text style={styles.name}>{mine ? 'Your instant' : user.name}</Text>
-            <Text style={styles.time}>{relativeTime(current.createdAt)} · {timeLeft(current.expiresAt)}</Text>
+            <Text style={styles.time}>{relativeTime(current.createdAt)} · {hitClock(current)}</Text>
           </Pressable>
           <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={() => goBack('/')} hitSlop={10}>
             <Ionicons name="close" size={28} color="#FFFFFF" />

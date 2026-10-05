@@ -16,7 +16,8 @@ import { CommentThread, threadOf, threadsOf, useReplyDraft } from '@/components/
 import type { ID } from '@/data/types';
 import { Tappable } from '@/components/Tappable';
 import { Avatar, Button, EmptyState, Field, Screen } from '@/components/ui';
-import { relativeTime, timeLeft } from '@/lib/format';
+import { relativeTime } from '@/lib/format';
+import { hitClock } from '@/features/stories/stories';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing, typography, font } from '@/theme';
 import { useStillLoading } from '@/lib/useStillLoading';
@@ -82,7 +83,7 @@ export default function HitThread() {
         )}
         <View pointerEvents="none" style={styles.clock}>
           <Ionicons name="time-outline" size={13} color="white" />
-          <Text style={styles.clockText}>INSTANT · {timeLeft(story.expiresAt)}</Text>
+          <Text style={styles.clockText}>INSTANT · {hitClock(story)}</Text>
         </View>
       </Pressable>
 
