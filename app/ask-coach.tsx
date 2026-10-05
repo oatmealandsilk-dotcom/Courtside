@@ -135,7 +135,9 @@ export default function AskCoach() {
   const canSubmit = title.trim().length > 10 && body.trim().length > 25;
   const submit = () => {
     if (!canSubmit) return;
-    const id = actions.askCoach({ title: title.trim(), body: body.trim(), specialty, videoUrl: media?.kind === 'video' ? media.uri : undefined, mediaLabel: media?.label });
+    // Only a video goes with the question (coaches see clips, not photos), and its name only with it.
+    const clip = media?.kind === 'video' ? media : null;
+    const id = actions.askCoach({ title: title.trim(), body: body.trim(), specialty, videoUrl: clip?.uri, mediaLabel: clip?.label });
     router.replace(`/coach-question/${id}`);
   };
   const watching = coaches.length;
@@ -198,7 +200,7 @@ export default function AskCoach() {
           <View style={styles.rule} />
           {footage || media ? (
             <View style={styles.footage}>
-              <MediaPicker value={media} onChange={setMedia} noCover />
+              <MediaPicker value={media} onChange={setMedia} noCover selection="video" label="Choose a clip" />
             </View>
           ) : (
             <Pressable accessibilityRole="button" accessibilityLabel="Add a clip" onPress={() => setFootage(true)} style={styles.addRow}>

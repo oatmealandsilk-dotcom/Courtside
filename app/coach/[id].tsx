@@ -72,9 +72,14 @@ export default function CoachDetail() {
       const { outcome, requestId } = await actions.bookCoach(service.id, question.trim(), video);
       if (outcome === 'left') return; // The page went to Stripe.
       if (outcome === 'cancelled') { setNote('Payment cancelled. Nothing was charged.'); return; }
-      setQuestion('');
-      setVideo(null);
-      setSelected(null);
+      // The pay sheet was closed before Stripe took a payment: what they wrote stays, to try again.
+      if (outcome === 'closed') { setNote('Payment not finished, so nothing is booked yet. If you did pay, the booking will show under Coaching shortly.'); return; }
+      // Only a paid booking clears the form; one Stripe has not confirmed yet keeps it here, in case it needs another go.
+      if (outcome === 'paid') {
+        setQuestion('');
+        setVideo(null);
+        setSelected(null);
+      }
       if (requestId) router.push({ pathname: '/booking-done', params: { request: requestId, paid: outcome === 'paid' ? '1' : '0' } });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'That did not go through. Try again.');

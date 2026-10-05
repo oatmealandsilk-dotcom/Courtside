@@ -747,10 +747,11 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
   addCoachReview: (coachId: ID, rating: number, body: string) => void;
   /**
    * Books a coach's service. On a real account the player pays through
-   * Stripe first: paid, cancelled, pending (Stripe has not said yet), or
-   * left (in a browser the page itself went to Stripe and comes back later).
+   * Stripe first: paid, cancelled, pending (Stripe has not said yet), closed
+   * (the player shut the pay sheet and Stripe has no payment), or left (in a
+   * browser the page itself went to Stripe and comes back later).
    */
-  bookCoach: (serviceId: ID, question: string, video?: { uri?: string } | null) => Promise<{ outcome: 'paid' | 'cancelled' | 'pending' | 'left'; requestId?: ID }>;
+  bookCoach: (serviceId: ID, question: string, video?: { uri?: string } | null) => Promise<{ outcome: 'paid' | 'cancelled' | 'pending' | 'closed' | 'left'; requestId?: ID }>;
   /** Reloads coaches, services, reviews and bookings. */
   refreshCoaching: () => Promise<void>;
   /** Asks Stripe directly whether a booking has been paid for. */
@@ -3417,7 +3418,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       questions: prev.questions.map((q) => (q.id === questionId && q.authorId === me ? { ...q, title: patch.title, body: patch.body, tags, editedAt: new Date().toISOString() } : q)),
     }));
     const saved = stateRef.current.questions.find((q) => q.id === questionId);
-    if (saved && live(me, questionId)) void remote.upsertQuestion({ ...saved, title: patch.title, body: patch.body, tags, editedAt: new Date().toISOString() });
+    if (saved && live(me, questionId)) void remote.updateQuestion({ ...saved, title: patch.title, body: patch.body, tags, editedAt: new Date().toISOString() });
   }, [requireUser]);
   const acceptAnswer = useCallback((questionId: ID, answerId: ID) => {
     const me = requireUser();
@@ -3426,7 +3427,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const next = question.acceptedAnswerId === answerId ? undefined : answerId;
     haptics.commit();
     setState((prev) => ({ ...prev, questions: prev.questions.map((q) => (q.id === questionId ? { ...q, acceptedAnswerId: next } : q)) }));
-    if (live(me, questionId)) void remote.upsertQuestion({ ...question, acceptedAnswerId: next });
+    if (live(me, questionId)) void remote.updateQuestion({ ...question, acceptedAnswerId: next });
   }, [requireUser]);
 
   // A caller that reads the store the moment an action resolves (the feed
@@ -3758,6 +3759,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [requireUser],
   );
 
+  // A reply is saved in the background, its picture or clip going up first.
+  // These let it be deleted meanwhile: the delete waits for that save (true
+  // once it reached the server), and one deleted before then is never saved.
+  const answerSaves = useRef(new Map<ID, Promise<boolean>>());
+  const answersDeleted = useRef(new Set<ID>());
+
   const addAnswer = useCallback(
     (questionId: ID, body: string, parentAnswerId?: ID, media?: Answer['media']) => {
       haptics.commit();
@@ -3812,7 +3819,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       });
       if (made && live(me, questionId)) {
         const answer: Answer = made;
-        void (async () => {
+        const deleted = () => answersDeleted.current.has(answer.id);
+        const saving = (async () => {
           // A picture or clip from this device goes up first; the reply is saved with its web address.
           let hosted = answer.media;
           if (hosted && isLocalMedia(hosted.url)) {
@@ -3822,15 +3830,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
               hosted = { ...hosted, url, thumb };
             } catch {
               hosted = undefined;
-              showToast({ title: 'The photo or video didn’t upload', body: 'Your reply was posted without it.', icon: 'alert-circle-outline' });
+              if (!deleted()) showToast({ title: 'The photo or video didn’t upload', body: 'Your reply was posted without it.', icon: 'alert-circle-outline' });
             }
             const settled = hosted;
-            setState((prev) => ({ ...prev, answers: prev.answers.map((a) => (a.id === answer.id ? { ...a, media: settled } : a)) }));
+            if (!deleted()) setState((prev) => ({ ...prev, answers: prev.answers.map((a) => (a.id === answer.id ? { ...a, media: settled } : a)) }));
           }
+          // Deleted while it went up: never saved.
+          if (deleted()) return false;
           // A reply that was only a picture, which did not upload, is not saved empty.
-          if (!hosted && !answer.body.trim()) return;
+          if (!hosted && !answer.body.trim()) return false;
           await remote.upsertAnswer({ ...answer, media: hosted });
-        })();
+          return true;
+        })().catch(() => false);
+        answerSaves.current.set(answer.id, saving);
+        void saving.then(() => answerSaves.current.delete(answer.id));
       }
       setState((prev) => notifyMentions(prev, body, me, questionId, 'question', prev.questions.find((q) => q.id === questionId)?.authorId));
     },
@@ -4320,14 +4333,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const found = await remote.fetchQuestion(questionId);
       if (found) setState((prev) => (prev.questions.some((q) => q.id === questionId) ? prev : { ...prev, questions: [found, ...prev.questions] }));
     }
+    // Replies of yours still being saved as this goes out may not be in what comes back.
+    const saving = new Set(answerSaves.current.keys());
+    const asked = Date.now();
     const replies = await remote.fetchThreadAnswers(questionId);
     if (!replies) return;
     setState((prev) => {
-      const byId = new Map(prev.answers.map((a) => [a.id, a]));
-      for (const r of replies) if (!byId.has(r.id)) byId.set(r.id, r);
-      const answers = [...byId.values()];
+      // What the server sends is the thread now: its votes and pictures, and
+      // no replies deleted since. Kept as well: replies of yours not saved
+      // yet, or written after this went out. (Past the 1,000 a fetch brings,
+      // the rest stay as they were.)
+      const fresh = new Map(replies.map((r) => [r.id, r]));
+      const whole = replies.length < 1000;
+      const keep = (a: Answer) => !whole || saving.has(a.id) || answerSaves.current.has(a.id) || Date.parse(a.createdAt) >= asked;
+      const kept = prev.answers.flatMap((a) => (a.questionId !== questionId ? [a] : fresh.has(a.id) ? [fresh.get(a.id)!] : keep(a) ? [a] : []));
+      const known = new Set(kept.map((a) => a.id));
+      const answers = [...kept, ...replies.filter((r) => !known.has(r.id))];
       const inThread = answers.filter((a) => a.questionId === questionId).sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1)).map((a) => a.id);
-      return { ...prev, answers, questions: prev.questions.map((q) => (q.id === questionId ? { ...q, answerIds: inThread } : q)) };
+      return { ...prev, answers, questions: prev.questions.map((q) => (q.id === questionId ? { ...q, answerIds: inThread, acceptedAnswerId: q.acceptedAnswerId && !inThread.includes(q.acceptedAnswerId) ? undefined : q.acceptedAnswerId } : q)) };
     });
   }, []);
   // Only real accounts and real posts are recorded; the demo records nothing.
@@ -5510,8 +5533,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (paid) haptics.commit();
     // Not paid yet is not the same as cancelled: the sheet may have been
     // closed while Stripe was still taking the payment. Only Stripe's own
-    // cancel link (handled above) means nothing was charged; anything else
-    // goes to the booking page, which keeps asking Stripe for a while.
+    // cancel link (handled above) means nothing was charged. The player
+    // closing the sheet themselves stays on the coach's page with what they
+    // wrote ("closed"); a return from Stripe without the paid mark goes to the
+    // booking page, which keeps asking Stripe for a while.
+    if (!paid && result.type !== 'success') return { outcome: 'closed' as const, requestId };
     return { outcome: paid ? ('paid' as const) : ('pending' as const), requestId };
   }, [requireUser, refreshCoaching, confirmBooking]);
 
@@ -6022,7 +6048,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!question || question.authorId !== me) return;
     haptics.commit();
     setState((prev) => ({ ...prev, coachQuestions: prev.coachQuestions.map((q) => (q.id === questionId ? { ...q, resolved: !q.resolved } : q)) }));
-    if (live(me, questionId)) void remote.upsertCoachQuestion({ ...question, resolved: !question.resolved });
+    if (live(me, questionId)) void remote.setCoachQuestionResolved({ ...question, resolved: !question.resolved });
   }, [requireUser]);
   /**
    * Your own public coach question, gone for everyone along with the coaches'
@@ -6046,14 +6072,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
     haptics.commit();
     setState(takeOff);
     if (!live(me, answer.questionId)) return;
-    remote.deleteAnswer(answerId).catch((err: unknown) => {
-      void reportError(err, { where: 'answer delete' });
-      setState((prev) => prev.answers.some((a) => a.id === answerId) ? prev : {
-        ...prev,
-        answers: [...prev.answers, answer],
-        questions: prev.questions.map((q) => q.id === answer.questionId && !q.answerIds.includes(answerId) ? { ...q, answerIds: [...q.answerIds, answerId] } : q),
-      });
-      showToast({ title: 'Couldn’t delete your reply. Try again.', icon: 'alert-circle-outline' });
+    // Still being saved (its picture or clip going up): the save stops, or,
+    // if it gets there first, the delete follows it. Never saved: nothing to delete.
+    const saving = answerSaves.current.get(answerId);
+    if (saving) answersDeleted.current.add(answerId);
+    void (saving ?? Promise.resolve(true)).then((saved) => {
+      if (!saved) return;
+      remote.deleteAnswer(answerId).then(
+        // A thread refresh that went out before the delete may have brought it back meanwhile.
+        () => setState((prev) => (prev.answers.some((a) => a.id === answerId) ? takeOff(prev) : prev)),
+        (err: unknown) => {
+          void reportError(err, { where: 'answer delete' });
+          setState((prev) => prev.answers.some((a) => a.id === answerId) ? prev : {
+            ...prev,
+            answers: [...prev.answers, answer],
+            questions: prev.questions.map((q) => q.id === answer.questionId && !q.answerIds.includes(answerId) ? { ...q, answerIds: [...q.answerIds, answerId] } : q),
+          });
+          showToast({ title: 'Couldn’t delete your reply. Try again.', icon: 'alert-circle-outline' });
+        },
+      );
     });
   }, [requireUser]);
   const deleteCoachQuestion = useCallback((questionId: ID) => {

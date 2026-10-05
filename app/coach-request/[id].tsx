@@ -123,6 +123,7 @@ export default function Booking() {
           <TipComposer
             placeholder=""
             accessibilityLabel="Your answer"
+            maxLength={8000}
             onSubmit={(text) => actions.answerBooking(request.id, text)}
           />
           <Pressable accessibilityRole="button" onPress={refund} disabled={busy} hitSlop={6} style={styles.quiet}>
