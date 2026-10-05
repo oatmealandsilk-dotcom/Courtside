@@ -58,7 +58,9 @@ export function visibleAboveKeyboard(): number {
 /** Runs `work` once the keyboard has finished rising, or straight away if it is already up. */
 export function afterKeyboard(work: () => void) {
   if (Platform.OS === 'web' || keyboardHeight > 0) { setTimeout(work, 30); return; }
-  const sub = Keyboard.addListener('keyboardDidShow', () => { sub.remove(); setTimeout(work, 30); });
+  // Android says the keys are up as they start to rise, and the room made for
+  // them (keyboardRoom) grows with them: the page is scrolled once it is there.
+  const sub = Keyboard.addListener('keyboardDidShow', () => { sub.remove(); setTimeout(work, Platform.OS === 'android' ? 320 : 30); });
   // A hardware keyboard shows nothing; do not wait forever.
   setTimeout(() => { sub.remove(); work(); }, 600);
 }
