@@ -3426,10 +3426,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
           // The words beyond the "@them" a reply starts with: a reply that was only a photo has none.
           const said = (comment.parentId ? body.replace(/^@[A-Za-z0-9_]+\s*/, '') : body).trim();
           try { imageUrl = await uploadMedia(me, await shrinkPhoto(photo), 'photo'); }
-          catch { showToast({ title: 'The photo didn’t upload', body: said ? 'Your comment was posted without it.' : 'Try again in a moment.', icon: 'alert-circle-outline' }); }
+          catch { showToast({ title: 'The photo didn’t upload', body: said ? 'Your comment was posted without it.' : 'Your comment wasn’t posted. Try again in a moment.', icon: 'alert-circle-outline' }); }
+          // A comment that was only a photo, which did not upload, is not saved
+          // empty, and leaves the thread rather than staying as a blank row.
+          if (!imageUrl && !said) { setState((prev) => dropComment(prev, comment.id)); return; }
           setState((prev) => ({ ...prev, comments: imageUrl ? prev.comments.map((c) => (c.id === comment.id ? { ...c, imageUrl } : c)) : prev.comments.map((c) => (c.id === comment.id ? { ...c, imageUrl: undefined } : c)) }));
-          // A comment that was only a photo, which did not upload, is not saved empty.
-          if (!imageUrl && !said) return;
           await remote.insertComment({ ...comment, imageUrl });
         })();
       }
