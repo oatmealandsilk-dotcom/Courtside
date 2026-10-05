@@ -60,6 +60,9 @@ export default function Settings() {
   };
   const { theme } = useTheme();
   const tipsOn = useTipsOn();
+  // How many joined through your link or code, for the Invites row (Oct 5, owner: partners looked for it in Settings).
+  const [joined, setJoined] = useState<number | null>(null);
+  useEffect(() => { void actions.countReferrals().then(setJoined).catch(() => setJoined(null)); }, [actions]);
   // The tennis-session alert switch shows once WHOOP's tennis sessions are switched on (migration 58).
   const tennis = useTennisFlags();
   const mapAdult = !!currentUser && !notKnownAdult(currentUser);
@@ -107,6 +110,7 @@ export default function Settings() {
         { icon: 'person-circle-outline', label: 'Account center', detail: 'Password, sign-in and payments', onPress: () => router.push('/account') },
         { icon: 'shield-checkmark-outline', label: 'Privacy center', onPress: () => router.push('/privacy') },
         // Oct 4 (owner): link a number so friends can find you, and find friends from your contacts.
+        { icon: 'person-add-outline', label: 'Invites', detail: 'Your link, and who joined through it', value: joined ? `${joined} joined` : undefined, onPress: () => router.push('/invite') },
         { icon: 'call-outline', label: 'Phone number', detail: 'So friends can find you', onPress: () => router.push('/link-phone') },
         ...(Platform.OS === 'web' ? [] : [{ icon: 'people-outline' as const, label: 'Find friends from contacts', onPress: () => router.push('/find-contacts') }]),
         // Oct 4: the way out of being found that way (migration 89). In a browser too: it is about other people's phones.

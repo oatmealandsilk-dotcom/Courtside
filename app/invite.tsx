@@ -49,7 +49,7 @@ export default function Invite() {
   };
   const copy = async () => { await Clipboard.setStringAsync(link); haptics.tap(); setCopied(true); setTimeout(() => setCopied(false), 1600); };
   return (
-    <DragSheet fitContent closeSignal={closeSignal} onDismissed={() => router.back()} peekFraction={0.56} header={
+    <DragSheet fitContent closeSignal={closeSignal} onDismissed={() => router.back()} peekFraction={0.9} header={
       <View style={styles.headerRow}>
         <Text style={styles.heading}>Who do you hit with?</Text>
         <Pressable accessibilityRole="button" accessibilityLabel="Close" hitSlop={10} onPress={() => setCloseSignal((n) => n + 1)}>
