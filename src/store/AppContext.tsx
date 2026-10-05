@@ -510,7 +510,8 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
   /** Everything of yours, as one object, for "download your data". */
   exportData: () => Record<string, unknown>;
   completeOnboarding: (profile: PlayerProfile) => void;
-  updateIdentity: (patch: Pick<User, 'name' | 'bio' | 'location'> & { avatarUrl?: string; cityAt?: { lat: number; lng: number } | null }) => void;
+  /** Only the fields given change: a new photo on its own leaves the name, bio and city as they are. */
+  updateIdentity: (patch: Partial<Pick<User, 'name' | 'bio' | 'location'>> & { avatarUrl?: string; cityAt?: { lat: number; lng: number } | null }) => void;
   updateProfile: (patch: Partial<PlayerProfile>) => void;
   /** Log a session you played (today unless a day is given). Throws a plain sentence when it cannot be saved. */
   /**
@@ -2342,7 +2343,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [patchCurrentUser],
   );
 
-  const updateIdentity = useCallback((patch: Pick<User, 'name' | 'bio' | 'location'> & { avatarUrl?: string; cityAt?: { lat: number; lng: number } | null }) => {
+  const updateIdentity = useCallback((patch: Partial<Pick<User, 'name' | 'bio' | 'location'>> & { avatarUrl?: string; cityAt?: { lat: number; lng: number } | null }) => {
     const before = stateRef.current.users.find((u) => u.id === stateRef.current.currentUserId)?.avatarUrl;
     patchCurrentUser(u => ({ ...u, ...patch, cityAt: patch.cityAt === null ? undefined : patch.cityAt ?? u.cityAt }));
     const me = stateRef.current.currentUserId;
@@ -2350,6 +2351,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     (async () => {
       let avatarUrl = patch.avatarUrl;
       if (isLocalMedia(patch.avatarUrl)) {
+        // Any words in the same change go now, and the photo on its own once it is up: a slow
+        // upload never carries older words over newer ones saved meanwhile (Save changes).
+        const { avatarUrl: _photo, ...rest } = patch;
+        if (Object.values(rest).some((v) => v !== undefined)) void remote.updateProfile(me!, rest).catch(() => undefined);
         // A new photo is shown at once but only exists on this phone until it uploads. If the
         // upload fails, say so and put the old photo back: before, the failure was silent, the
         // owner kept seeing the new photo and everyone else saw their initials.
@@ -2362,15 +2367,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
           void reportError(err, { where: 'avatar upload' });
           patchCurrentUser(u => ({ ...u, avatarUrl: before }));
           showToast({ title: 'Couldn’t save your photo', body: 'Check your connection and try again.', icon: 'cloud-offline-outline' });
-          const { avatarUrl: _skip, ...rest } = patch;
-          await remote.updateProfile(me!, rest).catch(() => undefined);
           return;
         }
         release();
         if (avatarUrl && avatarUrl !== patch.avatarUrl) patchCurrentUser(u => ({ ...u, avatarUrl }));
         showToast({ title: 'Profile photo updated', icon: 'checkmark-circle-outline' });
+        await remote.updateProfile(me!, { avatarUrl });
+        return;
       }
-      await remote.updateProfile(me!, { ...patch, avatarUrl });
+      await remote.updateProfile(me!, patch);
     })();
   }, [patchCurrentUser]);
   const checkHandle = useCallback(async (raw: string): Promise<HandleStatus | null> => {
