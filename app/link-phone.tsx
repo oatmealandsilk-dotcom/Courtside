@@ -20,7 +20,9 @@ import { colors, font, radius, spacing, typography } from '@/theme';
  */
 export default function LinkPhone() {
   const styles = useThemedStyles(styleDefinitions);
-  const { actions } = useApp();
+  const { actions, prefs } = useApp();
+  // "Let people find me from their contacts" off (migration 89): a linked number finds no one to you, so this never says it does.
+  const findable = prefs.contactsFindable;
   const [linked, setLinked] = useState<string | null | undefined>(undefined);
   const [typed, setTyped] = useState('');
   const [sentTo, setSentTo] = useState<string | null>(null);
@@ -49,7 +51,7 @@ export default function LinkPhone() {
     setError('');
     try {
       await actions.confirmPhoneLink(sentTo, entered);
-      showToast({ title: 'Phone number linked', body: 'Friends with it in their contacts can find you now.', icon: 'checkmark-circle-outline' });
+      showToast({ title: 'Phone number linked', body: findable ? 'Friends with it in their contacts can find you now.' : 'No one finds you by it while “Let people find me from their contacts” is off.', icon: 'checkmark-circle-outline' });
       router.back();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'That code didn’t work.');
@@ -75,7 +77,9 @@ export default function LinkPhone() {
             <Ionicons name="checkmark-circle" size={22} color={colors.success} />
             <View style={{ flex: 1 }}>
               <Text style={styles.head}>{showPhone(linked)}</Text>
-              <Text style={styles.sub}>Linked. Friends with this number in their contacts can find you. It’s never shown on your profile.</Text>
+              <Text style={styles.sub}>{findable
+                ? 'Linked. Friends with this number in their contacts can find you. It’s never shown on your profile.'
+                : 'Linked. No one finds you by it while “Let people find me from their contacts” is off in Settings. It’s never shown on your profile.'}</Text>
             </View>
           </View>
           <Button label="Change number" variant="secondary" onPress={() => setLinked(null)} full />

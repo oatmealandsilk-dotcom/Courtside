@@ -343,6 +343,12 @@ export interface RemoteData {
    * own reaches the app). Missing in saved copies.
    */
   agesOnProfiles?: boolean;
+  /**
+   * No settings row yet, and the database has "Let people find me from
+   * their contacts" (migration 89). Missing otherwise: a settings row says
+   * so itself.
+   */
+  contactsFindableReady?: boolean;
 }
 
 interface SessionRow { id: string; user_id: string; day: string; minutes: number; kind: PracticeSession['kind']; won: boolean | null; opponent: string | null; note: string | null; created_at: string; activity_id?: string | null; from_session_id?: string | null }
@@ -884,8 +890,14 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
   const ownAge = ownState?.age_group ?? profileRows.find((row) => row.id === me)?.age_group ?? null;
   // Which database this is: a profile row has an age_group column only before 64.
   const agesOnProfiles = profileRows.some((row) => 'age_group' in row);
+  // A new Apple or Google account has no settings row until its age check,
+  // so whether the database has "Let people find me from their contacts"
+  // (migration 89) is asked on its own: the switch shows from the first visit.
+  const contactsFindableReady = ustate.data || ustate.error ? false
+    : await db.from('user_state').select('contacts_findable').limit(0).then(({ error }) => !error, () => false);
   return {
     agesOnProfiles,
+    ...(contactsFindableReady ? { contactsFindableReady: true } : {}),
     // Your own "up for a hit" when it is kept privately (migration 78: not a known adult) comes from your settings row.
     users: profileRows.map((row) => toUser(row.id === me ? { ...row, age_group: ownAge, open_to_hit_until: row.open_to_hit_until ?? ownState?.open_to_hit_until ?? null } : row, followers.get(row.id) ?? 0, following.get(row.id) ?? 0)),
     posts: postRows.map(toPost),

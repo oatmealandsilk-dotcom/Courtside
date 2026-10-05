@@ -27,7 +27,7 @@ const PAGE = 40;
  */
 export default function FindContacts() {
   const styles = useThemedStyles(styleDefinitions);
-  const { currentUser, followingIds, actions } = useApp();
+  const { currentUser, followingIds, actions, prefs } = useApp();
   const [phase, setPhase] = useState<Phase>(canReadContacts() ? 'start' : 'unavailable');
   const [found, setFound] = useState<Found[]>([]);
   const [others, setOthers] = useState<PhoneContact[]>([]);
@@ -92,7 +92,8 @@ export default function FindContacts() {
         <Message styles={styles} icon="cloud-offline-outline" title="That didn’t work" body="Check your connection and try again." action={{ label: 'Try again', onPress: () => void run() }} />
       ) : (
         <View style={styles.results}>
-          {!hasPhone ? (
+          {/* Not when "Let people find me from their contacts" is off (migration 89): a number would find no one to you. */}
+          {!hasPhone && prefs.contactsFindable ? (
             <Pressable accessibilityRole="link" onPress={() => router.push('/link-phone')} style={({ pressed }) => [styles.nudge, pressed && { opacity: 0.8 }]}>
               <Ionicons name="call-outline" size={18} color={colors.brand} />
               <Text style={styles.nudgeText}>Link your phone number so friends can find you too</Text>

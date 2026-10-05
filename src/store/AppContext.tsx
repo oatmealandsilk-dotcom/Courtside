@@ -422,7 +422,8 @@ interface AppState extends Bootstrap, CourtLifeState, FeedGroupsState {
   prefs: Prefs;
   /**
    * Whether the database has "Let people find me from their contacts"
-   * (migration 89), from the settings row's own key. Until it is known the
+   * (migration 89), from the settings row's own key (with no row yet, from a
+   * question of its own at load). Until it is known the
    * switch is not shown: it would do nothing, and come back on at the next start.
    */
   contactsFindableLive: boolean;
@@ -1326,8 +1327,8 @@ function mergeRemote(prev: AppState, data: RemoteData, me: ID, email: string | n
           contactsFindable: data.userState.contactsFindable ?? true,
         }
         : prev.prefs,
-      // The settings row carries contacts_findable only once migration 89 has run.
-      contactsFindableLive: data.userState?.contactsFindable !== undefined ? true : prev.contactsFindableLive,
+      // The settings row carries contacts_findable only once migration 89 has run (with no row yet, the load asks on its own).
+      contactsFindableLive: data.userState?.contactsFindable !== undefined || data.contactsFindableReady ? true : prev.contactsFindableLive,
       // The saved copy shows the app; only the server's answer counts as loaded (live updates, settings sync and retries wait for it).
       remoteLoaded: fromSnapshot ? prev.remoteLoaded : true,
       snapshotShown: fromSnapshot ? true : prev.snapshotShown,
