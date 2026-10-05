@@ -1352,8 +1352,17 @@ export const remote = {
     return !error && data === true;
   },
 
-  async markConversationRead(conversationId: ID, me: ID) {
-    const { error } = await need().from('conversation_members').update({ last_read_at: new Date().toISOString() }).eq('conversation_id', conversationId).eq('user_id', me);
+  /**
+   * `upTo`: the newest message read, as the server dated it. A phone whose
+   * clock runs behind the server's would otherwise save a read time from
+   * before that message, and it would count as unread (and never "Seen").
+   */
+  async markConversationRead(conversationId: ID, me: ID, upTo?: string) {
+    const now = Date.now();
+    // A millisecond on: the server's dates carry finer time than the phone keeps.
+    const newest = upTo ? Date.parse(upTo) + 1 : NaN;
+    const readAt = new Date(newest > now ? newest : now).toISOString();
+    const { error } = await need().from('conversation_members').update({ last_read_at: readAt }).eq('conversation_id', conversationId).eq('user_id', me);
     if (error) fail('mark read')(error);
   },
 

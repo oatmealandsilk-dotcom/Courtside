@@ -5029,9 +5029,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const me = stateRef.current.currentUserId;
     // Something from someone else not yet opened here counts too: a message fetched
     // while the chat is open (opened from its notification, say) adds no unread count.
-    const unseen = !!me && stateRef.current.messages.some((m) => m.conversationId === conversationId && m.senderId !== me && m.kind !== 'system' && !m.openedAtBy?.[me]);
+    const theirs = me ? stateRef.current.messages.filter((m) => m.conversationId === conversationId && m.senderId !== me && m.kind !== 'system') : [];
+    const unseen = theirs.some((m) => !m.openedAtBy?.[me!]);
     const hadUnread = !!before && (before.unreadCount > 0 || unseen) && !!me && before.participantIds.includes(me);
-    if (hadUnread && live(me, conversationId)) void remote.markConversationRead(conversationId, me as ID);
+    // Read up to their newest message at least, by the server's clock (theirs are dated by it), whatever this phone's says.
+    const upTo = theirs.reduce<string | undefined>((t, m) => (!t || Date.parse(m.createdAt) > Date.parse(t) ? m.createdAt : t), undefined);
+    if (hadUnread && live(me, conversationId)) void remote.markConversationRead(conversationId, me as ID, upTo);
     // Opening a chat you marked unread takes the mark off.
     if (before?.markedUnread) {
       setState((prev) => ({ ...prev, conversations: prev.conversations.map((c) => (c.id === conversationId ? { ...c, markedUnread: undefined } : c)) }));
