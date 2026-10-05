@@ -443,6 +443,8 @@ export interface Post {
    * open it, it shows in that group's feed, and never in For you. Fixed once posted.
    */
   groupId?: ID;
+  /** Taken down by an admin (migration 108). Only its author and admins still get it, and see it marked. */
+  removed?: Removed;
 }
 
 /* --------------------------------- Groups -------------------------------- */
@@ -511,6 +513,48 @@ export interface DiscoverGroup extends FeedGroupCard {
   near: boolean;
 }
 
+/* ------------------------------- Moderation ------------------------------ */
+
+/**
+ * Why an admin took something down (migration 108). Their words are in
+ * src/features/moderation/reasons.ts.
+ */
+export type TakedownReason = 'harassment' | 'hate' | 'sexual' | 'violence' | 'spam' | 'impersonation' | 'minor-safety' | 'other';
+
+/**
+ * What can be taken down: a post or clip, an Instant ('hit'), a comment on
+ * either, a thread ('question') or a reply in one ('answer'), and a public
+ * Ask-a-coach question or a coach's reply to it.
+ */
+export type TakedownKind = 'post' | 'hit' | 'comment' | 'hit-comment' | 'question' | 'answer' | 'coach-question' | 'coach-reply';
+
+/**
+ * Taken down, and why. Never who: the database keeps that only in the
+ * admins' log. Shown to the author as "Removed: <reason>".
+ */
+export interface Removed {
+  reason: TakedownReason;
+  at: string;
+}
+
+/** One line of Settings → Admin → Removed (admin_removed, migration 108). */
+export interface RemovedItem {
+  kind: TakedownKind;
+  id: ID;
+  /** What it sits under: a comment's post or Instant, a reply's thread or coach question. */
+  parentId?: ID;
+  authorId: ID;
+  /** A few of its words (a thread's or coach question's title). */
+  preview: string;
+  picture?: string;
+  reason: TakedownReason;
+  /** The admin's own note, for "Something else". Never shown to the author. */
+  note?: string;
+  removedAt: string;
+  /** The admin who took it down; missing for one taken down before migration 108. */
+  removedBy?: ID;
+}
+
 /* --------------------------------- Stories ------------------------------- */
 
 /** A moment that lasts a day on the rail, then keeps in the author's archive. */
@@ -532,6 +576,8 @@ export interface Story {
   commentIds: ID[];
   /** Taken down early by the author. Stays in their archive. */
   archived?: boolean;
+  /** Taken down by an admin (migration 108). */
+  removed?: Removed;
 }
 
 export interface Comment {
@@ -551,6 +597,8 @@ export interface Comment {
   parentId?: ID;
   /** The comment actually answered (the parent, or a reply in its thread): whose "replied to your comment" this is. */
   replyToId?: ID;
+  /** Taken down by an admin (migration 108). */
+  removed?: Removed;
 }
 
 /* ------------------------------- Discussions ----------------------------- */
@@ -581,6 +629,8 @@ export interface Question {
   source?: ThreadSource;
   /** A poll with the thread (migration 41): its options, the totals so far, and your own pick if you voted. */
   poll?: { options: string[]; counts: number[]; myVote?: number };
+  /** Taken down by an admin (migration 108). */
+  removed?: Removed;
 }
 
 export type ThreadSourceName = 'reddit';
@@ -607,6 +657,8 @@ export interface Answer {
   fromCoach: boolean;
   /** A photo or clip with the reply (see migration 40). */
   media?: { kind: 'photo' | 'video'; url: string; thumb?: string };
+  /** Taken down by an admin (migration 108). */
+  removed?: Removed;
 }
 
 /* --------------------------------- Coaching ------------------------------ */
@@ -813,6 +865,8 @@ export interface CoachQuestion {
   mediaLabel?: string;
   replyIds: ID[];
   resolved: boolean;
+  /** Taken down by an admin (migration 108). */
+  removed?: Removed;
 }
 
 export interface CoachReply {
@@ -822,6 +876,8 @@ export interface CoachReply {
   body: string;
   createdAt: string;
   helpfulBy: ID[];
+  /** Taken down by an admin (migration 108). */
+  removed?: Removed;
 }
 
 /* --------------------------- Coach applications -------------------------- */
@@ -1037,6 +1093,13 @@ export type NotificationKind =
   | 'coach-application'
   /** Someone sent a report. Only admins get these. */
   | 'report'
+  /**
+   * CourtSide took down something of yours (migration 108). Actor is you;
+   * the target is what opens it (a comment's post, a reply's thread); the
+   * preview is the whole sentence: "Your post was removed for breaking
+   * CourtSide's rules: Violence or weapons."
+   */
+  | 'removed'
   /** A player paid for one of your services (you are the coach). */
   | 'booking'
   /** Your coach answered your booking. */

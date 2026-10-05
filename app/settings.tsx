@@ -167,6 +167,8 @@ export default function Settings() {
       rows: [
         { icon: 'hand-left-outline' as const, label: 'Welcome new players', onPress: () => router.push('/admin-welcome') },
         { icon: 'flag-outline' as const, label: 'Reports', onPress: () => router.push('/admin-reports') },
+        // Everything taken down, with Restore (migration 108).
+        { icon: 'eye-off-outline' as const, label: 'Removed', onPress: () => router.push('/admin-removed') },
         { icon: 'mail-outline' as const, label: 'Waitlist', onPress: () => router.push('/admin-waitlist') },
         { icon: 'people-outline' as const, label: 'Invites', onPress: () => router.push('/admin-invites') },
         { icon: 'school-outline' as const, label: 'Coaches and payments', onPress: () => router.push('/admin-coaches') },

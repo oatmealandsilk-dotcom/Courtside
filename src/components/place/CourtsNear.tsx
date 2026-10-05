@@ -79,7 +79,7 @@ export function CourtsNear({ center }: { center: LatLng | null }) {
     const hits = openHits(hitRequests, { blockedIds, mutedIds }).filter((h) => canSeeHitAt(h, { usersById, followingIds, currentUserId, seeing }));
     const ctx = courtSeeing({ users, blockedIds, mutedIds, followingIds, currentUserId, shownAtCourt });
     // Only posts at the courts on these cards are asked about (since migration 64 the server says, post by post).
-    const tagged = posts.filter((p) => !!p.court && !p.archived && rows.some(({ c }) => sameCourt(p.court!, c)) && canSeeAtCourt(p, ctx));
+    const tagged = posts.filter((p) => !!p.court && !p.archived && !p.removed && rows.some(({ c }) => sameCourt(p.court!, c)) && canSeeAtCourt(p, ctx));
     return new Map(rows.map(({ c }) => {
       const next = hitsAtCourt(hits, c)[0];
       const here = tagged.filter((p) => sameCourt(p.court!, c));

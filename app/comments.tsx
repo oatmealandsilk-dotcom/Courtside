@@ -124,6 +124,8 @@ export default function CommentsSheet() {
   const close = useCallback(() => setCloseSignal((n) => n + 1), []);
   const post = kind === 'post' ? posts.find((p) => p.id === id) : undefined;
   const exists = kind === 'hit' ? stories.some((st) => st.id === id) : !!post;
+  // Taken down by an admin (migration 108): its author and admins can still read it, but nothing new can be added.
+  const takenDown = !!(kind === 'hit' ? stories.find((st) => st.id === id)?.removed : post?.removed);
   const author = post ? users.find((u) => u.id === post.authorId) : undefined;
   // Every comment and reply here (the count), and the same laid out as threads.
   const all = comments.filter((c) => c.postId === id);
@@ -199,7 +201,7 @@ export default function CommentsSheet() {
   // Replying: "@them " in the box and a "Replying to @them ×" strip above it.
   const { replyingTo, start: startReply, change: changeDraft, stop: stopReplying, done: doneReplying, words } = useReplyDraft(setDraft, () => input.current?.focus());
   // Something of your own to send: words beyond the "@them " Reply put in, or a photo.
-  const canSend = exists && (!!words(draft).trim() || !!photo);
+  const canSend = exists && !takenDown && (!!words(draft).trim() || !!photo);
   // Kept for next time only if there is something of your own in it.
   const latestWords = useRef(words);
   latestWords.current = words;
@@ -234,11 +236,13 @@ export default function CommentsSheet() {
   // Opened from "Reply" on the post page: already replying as the sheet lands.
   const replyStarted = useRef(false);
   const replyTarget = comments.find((c) => c.id === replyParam && c.postId === id);
+  // Not on something taken down, or under a comment that was (migration 108): the server would refuse it.
+  const replyClosed = takenDown || !!(replyTarget && comments.find((c) => c.id === (replyTarget.parentId ?? replyTarget.id))?.removed);
   useEffect(() => {
-    if (!replyTarget || replyStarted.current) return;
+    if (!replyTarget || replyClosed || replyStarted.current) return;
     const t = setTimeout(() => { replyStarted.current = true; replyTo(replyTarget); }, 380);
     return () => clearTimeout(t);
-  }, [replyTarget]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [replyTarget, replyClosed]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The right-hand button: a photo button while the box is empty, send once there is something to send.
   const sendOn = useSharedValue(canSend ? 1 : 0);
@@ -253,7 +257,7 @@ export default function CommentsSheet() {
   const justSent = useRef<Set<ID> | null>(null);
   const send = () => {
     const text = draft.trim();
-    if (!canSend) return;
+    if (!canSend || takenDown) return;
     const picked = photo;
     const answering = replyingTo?.id;
     setDraft('');
@@ -353,7 +357,7 @@ export default function CommentsSheet() {
                 big
                 open={openThreads.has(t.top.id)}
                 onToggle={() => toggleThread(t.top.id)}
-                onReply={exists ? replyTo : undefined}
+                onReply={exists && !takenDown ? replyTo : undefined}
                 onRowLayout={(commentId, y, height) => { rowY.current[commentId] = y; rowH.current[commentId] = height; }}
                 isFresh={(c) => Date.parse(c.createdAt) > openedAt.current}
               />
@@ -385,7 +389,7 @@ export default function CommentsSheet() {
             <View style={styles.inputRow}>
               <Avatar name={me?.name ?? 'You'} seed={me?.avatarSeed ?? currentUserId ?? 'me'} uri={me?.avatarUrl} size={34} style={styles.me} />
               <View style={{ flex: 1 }}>
-                <Field inputRef={input} value={draft} onChangeText={changeDraft} placeholder={replyingTo ? (replyingTo.self ? 'Add a reply…' : `Reply to @${replyingTo.handle}…`) : author && author.id !== currentUserId ? `Add a comment for ${author.name.split(' ')[0]}…` : 'Add a comment…'} multiline minHeight={44} onSubmitEditing={send} onFocus={onBoxFocus} onBlur={onBoxBlur} mentions compact />
+                <Field inputRef={input} value={draft} onChangeText={changeDraft} placeholder={takenDown ? 'Comments are closed: this was taken down.' : replyingTo ? (replyingTo.self ? 'Add a reply…' : `Reply to @${replyingTo.handle}…`) : author && author.id !== currentUserId ? `Add a comment for ${author.name.split(' ')[0]}…` : 'Add a comment…'} multiline minHeight={44} onSubmitEditing={send} onFocus={onBoxFocus} onBlur={onBoxBlur} mentions compact />
               </View>
               <View style={styles.action}>
                 {kind === 'post' ? (

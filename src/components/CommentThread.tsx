@@ -106,6 +106,10 @@ export function CommentThread({ thread, big = false, open, onToggle, onReply, on
 }) {
   const styles = useThemedStyles(styleDefinitions);
   const count = thread.replies.length;
+  // Under a comment that was taken down (migration 108) nobody can reply any
+  // more, the replies under it included (a reply joins its thread), so none
+  // of its rows offer Reply. Its author and the admins are the ones who see it.
+  const replyHere = thread.top.removed ? undefined : onReply;
   const row = (c: Comment, reply: boolean) => (
     <Animated.View
       key={c.id}
@@ -116,7 +120,7 @@ export function CommentThread({ thread, big = false, open, onToggle, onReply, on
         comment={c}
         big={big}
         reply={reply}
-        onReply={onReply ? () => onReply(c) : undefined}
+        onReply={replyHere ? () => replyHere(c) : undefined}
         onPressBody={onPressBody ? () => onPressBody(c) : undefined}
       />
     </Animated.View>

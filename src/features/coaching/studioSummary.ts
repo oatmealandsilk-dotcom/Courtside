@@ -20,9 +20,9 @@ export function openBookingCount(coach: Coach, requests: CoachingRequest[], curr
   return requests.filter((r) => (r.paidAt || !r.priceCents) && (r.coachId === coach.id || r.coachUserId === currentUserId) && isOpen(r)).length;
 }
 
-/** Free questions from players that nobody has answered yet. */
+/** Free questions from players that nobody has answered yet (not counting one an admin took down). */
 export function waitingQuestionCount(questions: CoachQuestion[]) {
-  return questions.filter((q) => !q.resolved && q.replyIds.length === 0).length;
+  return questions.filter((q) => !q.resolved && !q.removed && q.replyIds.length === 0).length;
 }
 
 /**

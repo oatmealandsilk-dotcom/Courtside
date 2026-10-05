@@ -7,8 +7,11 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { Avatar } from '@/components/ui/Avatar';
 import { RichText } from '@/components/RichText';
-import type { Comment } from '@/data/types';
+import type { Comment, TakedownKind } from '@/data/types';
+import { RemovedNote } from '@/features/moderation/RemovedNote';
+import { confirm } from '@/lib/confirm';
 import { relativeTime } from '@/lib/format';
+import * as haptics from '@/lib/haptics';
 import { useApp } from '@/store/AppContext';
 import { colors, spacing, typography } from '@/theme';
 
@@ -19,6 +22,11 @@ export const replyIndent = (big: boolean) => (big ? 40 : 32) + spacing.md;
  * One comment, Instagram-shaped: who, when, what, and a heart on the right
  * with its count, and "Reply" under the words. A reply is the same row a step
  * in, with a smaller picture. Used by the comments sheet and the post and hit pages.
+ *
+ * One an admin took down (migration 108) reaches only its author and the
+ * admins, and says so under its words ("Removed: Hate"), with no Reply. For
+ * an admin, holding the words offers Take down (or Restore); nobody else
+ * gets anything on a hold.
  */
 export function CommentRow({ comment, big = false, reply = false, onPressBody, onReply, onLayout }: {
   comment: Comment;
@@ -33,8 +41,18 @@ export function CommentRow({ comment, big = false, reply = false, onPressBody, o
   onLayout?: (y: number) => void;
 }) {
   const styles = useThemedStyles(styleDefinitions);
-  const { users, currentUserId, actions } = useApp();
+  const { users, stories, currentUserId, currentUser, actions } = useApp();
   const who = users.find((u) => u.id === comment.authorId);
+  // Admins only: hold the words to take it down, or put it back. A comment on an Instant is its own kind to the server.
+  const moderate = currentUser?.isAdmin ? () => {
+    const kind: TakedownKind = stories.some((st) => st.id === comment.postId) ? 'hit-comment' : 'comment';
+    haptics.tap();
+    if (comment.removed) {
+      confirm({ title: 'Restore this comment?', message: 'Everyone who could see it before sees it again.', confirmLabel: 'Restore', onConfirm: () => { void actions.restoreContent(kind, comment.id); } });
+    } else {
+      confirm({ title: 'Take down this comment?', message: 'Choose which of CourtSide’s rules it breaks on the next page.', confirmLabel: 'Choose a reason', destructive: true, onConfirm: () => router.push({ pathname: '/take-down', params: { kind, id: comment.id } }) });
+    }
+  } : undefined;
   const liked = !!currentUserId && comment.likedBy.includes(currentUserId);
   const openProfile = () => { if (who) router.push(who.id === currentUserId ? '/profile' : `/user/${who.id}`); };
   // A photo in the comment opens to the whole screen; a tap anywhere puts it away.
@@ -45,7 +63,7 @@ export function CommentRow({ comment, big = false, reply = false, onPressBody, o
         <Avatar name={who?.name ?? '?'} seed={who?.avatarSeed ?? comment.authorId} uri={who?.avatarUrl} size={reply ? (big ? 30 : 24) : big ? 40 : 32} />
       </Pressable>
       <View style={styles.body}>
-        <Pressable accessibilityRole={onPressBody ? 'button' : undefined} onPress={onPressBody} disabled={!onPressBody} style={styles.bodyPress}>
+        <Pressable accessibilityRole={onPressBody || moderate ? 'button' : undefined} accessibilityHint={moderate ? (comment.removed ? 'Hold to restore it' : 'Hold to take it down') : undefined} onPress={onPressBody} onLongPress={moderate} delayLongPress={400} disabled={!onPressBody && !moderate} style={styles.bodyPress}>
           <Text style={[styles.meta, big && styles.metaBig]}>
             <Text style={[styles.name, big && styles.nameBig]} onPress={openProfile}>{who?.name ?? 'Unknown'}</Text>
             {'  '}{relativeTime(comment.createdAt)}
@@ -56,9 +74,10 @@ export function CommentRow({ comment, big = false, reply = false, onPressBody, o
               <ExpoImage source={{ uri: comment.imageUrl }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" transition={150} />
             </Pressable>
           ) : null}
+          {comment.removed ? <RemovedNote removed={comment.removed} quiet /> : null}
         </Pressable>
         {/* Beside the words' own button, not inside it: a button may not hold another on the web. */}
-        {onReply ? (
+        {onReply && !comment.removed ? (
           <Pressable accessibilityRole="button" accessibilityLabel={`Reply to ${who?.name ?? 'this comment'}`} hitSlop={{ top: 6, bottom: 8, left: 8, right: 16 }} onPress={onReply} style={styles.replyButton}>
             <Text style={[styles.replyText, big && styles.replyTextBig]}>Reply</Text>
           </Pressable>

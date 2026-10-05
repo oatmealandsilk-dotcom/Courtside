@@ -1,12 +1,12 @@
 import type { ID, Story, User } from '@/data/types';
 import { timeLeft } from '@/lib/format';
 
-/** On the rail right now: not put away, not yet a day old. */
-export const isLive = (story: Story, now = Date.now()) => !story.archived && Date.parse(story.expiresAt) > now;
+/** On the rail right now: not put away, not taken down by an admin (migration 108), not yet a day old. */
+export const isLive = (story: Story, now = Date.now()) => !story.archived && !story.removed && Date.parse(story.expiresAt) > now;
 
-/** An Instant's clock: the time it has left while it is up, else "archived" (put away early) or "expired". */
+/** An Instant's clock: the time it has left while it is up, else "removed" (taken down), "archived" (put away early) or "expired". */
 export const hitClock = (story: Story, now = Date.now()) =>
-  isLive(story, now) ? timeLeft(story.expiresAt, new Date(now)) : Date.parse(story.expiresAt) > now ? 'archived' : 'expired';
+  isLive(story, now) ? timeLeft(story.expiresAt, new Date(now)) : story.removed ? 'removed' : Date.parse(story.expiresAt) > now ? 'archived' : 'expired';
 
 /** Everything of yours that has left the rail, newest first. */
 export const archivedStories = (stories: Story[], me: ID | null, now = Date.now()) =>

@@ -156,8 +156,8 @@ export default function Search() {
       c[kind] += 1;
       counts.set(t, c);
     };
-    for (const p of posts) if (!p.archived && !blocked.has(p.authorId)) p.tags.forEach((t) => add(t, 'posts'));
-    for (const qn of questions) if (!blocked.has(qn.authorId)) qn.tags.forEach((t) => add(t, 'threads'));
+    for (const p of posts) if (!p.archived && !p.removed && !blocked.has(p.authorId)) p.tags.forEach((t) => add(t, 'posts'));
+    for (const qn of questions) if (!qn.removed && !blocked.has(qn.authorId)) qn.tags.forEach((t) => add(t, 'threads'));
     return counts;
   }, [posts, questions, blocked]);
   // "#" alone: this week's tags. "#s": every tag starting with s, the most used first.

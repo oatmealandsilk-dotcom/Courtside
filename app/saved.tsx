@@ -33,12 +33,13 @@ export default function Saved() {
   const tileW = Math.floor((gridW || windowWidth - spacing.lg * 2) / 3);
   const tileH = Math.round((tileW * 4) / 3);
 
+  // Anything an admin took down (migration 108) is no longer saved for anyone.
   const savedPosts = saved.postIds
     .map((id) => posts.find((p) => p.id === id))
-    .filter((p): p is NonNullable<typeof p> => Boolean(p));
+    .filter((p): p is NonNullable<typeof p> => Boolean(p) && !p?.removed);
   const savedQuestions = saved.questionIds
     .map((id) => questions.find((q) => q.id === id))
-    .filter((q): q is NonNullable<typeof q> => Boolean(q));
+    .filter((q): q is NonNullable<typeof q> => Boolean(q) && !q?.removed);
 
   return (
     <Screen title="Saved" compactTitle onBack={() => goBack()}>

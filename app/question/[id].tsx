@@ -28,12 +28,15 @@ import { useApp } from '@/store/AppContext';
 import type { Answer } from '@/data/types';
 import { colors, radius, spacing, typography } from '@/theme';
 import { isDesktopBrowser } from '@/lib/browserDevice';
+import { RemovedNote } from '@/features/moderation/RemovedNote';
+import { confirm } from '@/lib/confirm';
+import * as haptics from '@/lib/haptics';
 import { publicRoute } from '@/features/share/publicRoute';
 
 function QuestionDetail() {
   const styles = useThemedStyles(styleDefinitions);
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { questions, answers, users, currentUserId, actions } = useApp();
+  const { questions, answers, users, currentUserId, currentUser, actions } = useApp();
   const view = actions.recordView;
   useEffect(() => { view('question', String(id)); }, [view, id]);
   // The app arrives with each thread's newest replies; opening one brings them all.
@@ -70,6 +73,18 @@ function QuestionDetail() {
     });
 
 
+  // Taken down by an admin (migration 108): only its author and admins can open it, and nobody can reply.
+  const removed = question.removed;
+  // Admins: take the thread down (the reason is picked on the next page), or put it back.
+  const moderate = currentUser?.isAdmin ? () => {
+    haptics.tap();
+    if (removed) {
+      confirm({ title: 'Restore this thread?', message: 'Everyone who could see it before sees it again, with its replies.', confirmLabel: 'Restore', onConfirm: () => { void actions.restoreContent('question', question.id); } });
+    } else {
+      router.push({ pathname: '/take-down', params: { kind: 'question', id: question.id } });
+    }
+  } : undefined;
+
   const submit = () => {
     const text = draft.trim();
     if (!text && !media) return;
@@ -80,8 +95,9 @@ function QuestionDetail() {
   };
 
   return (
-    <SwipeSurface onSwipe={direction=>{if(direction===-1) { requestSection('/discuss', 'discussions'); goToTab('/discuss', true); }}} renderPreview={direction=>direction===-1 ? <Discuss previewSection="discussions"/> : null}><Screen title="Thread" compactTitle onBack={() => goBack()} onRefresh={isDesktopBrowser() ? undefined : () => loadThread(String(id))} right={<View style={{ flexDirection: 'row', alignItems: 'center', gap: 18 }}>{question.authorId === currentUserId ? <Pressable accessibilityRole="button" accessibilityLabel="Edit this thread" hitSlop={10} onPress={() => router.push({ pathname: '/edit-post', params: { id: question.id, kind: 'question' } })}><Ionicons name="create-outline" size={23} color={colors.text} /></Pressable> : null}<Pressable accessibilityRole="button" accessibilityLabel="Share this thread" hitSlop={10} onPress={() => router.push(`/share?kind=question&id=${question.id}`)}><Ionicons name="arrow-redo-outline" size={23} color={colors.text} /></Pressable></View>}>
+    <SwipeSurface onSwipe={direction=>{if(direction===-1) { requestSection('/discuss', 'discussions'); goToTab('/discuss', true); }}} renderPreview={direction=>direction===-1 ? <Discuss previewSection="discussions"/> : null}><Screen title="Thread" compactTitle onBack={() => goBack()} onRefresh={isDesktopBrowser() ? undefined : () => loadThread(String(id))} right={<View style={{ flexDirection: 'row', alignItems: 'center', gap: 18 }}>{moderate ? <Pressable accessibilityRole="button" accessibilityLabel={removed ? 'Restore this thread' : 'Take down this thread'} hitSlop={10} onPress={moderate}><Ionicons name={removed ? 'eye-outline' : 'eye-off-outline'} size={23} color={removed ? colors.text : colors.danger} /></Pressable> : null}{question.authorId === currentUserId && !removed ? <Pressable accessibilityRole="button" accessibilityLabel="Edit this thread" hitSlop={10} onPress={() => router.push({ pathname: '/edit-post', params: { id: question.id, kind: 'question' } })}><Ionicons name="create-outline" size={23} color={colors.text} /></Pressable> : null}{removed ? null : <Pressable accessibilityRole="button" accessibilityLabel="Share this thread" hitSlop={10} onPress={() => router.push(`/share?kind=question&id=${question.id}`)}><Ionicons name="arrow-redo-outline" size={23} color={colors.text} /></Pressable>}</View>}>
       <Card style={styles.questionCard}>
+        {removed ? <RemovedNote removed={removed} style={styles.removed} /> : null}
         {/* Who asked, up top and at full size — the way a reply shows its author. */}
         <View style={styles.askerRow}>
           <Pressable accessibilityRole="link" accessibilityLabel={asker ? `Open ${asker.name}'s profile` : undefined} onPress={() => asker && router.push(asker.id === currentUserId ? '/profile' : `/user/${asker.id}`)} style={styles.asker}>
@@ -117,13 +133,13 @@ function QuestionDetail() {
         ) : null}
         <View style={styles.voteRow}>
           <VoteControls item={question} userId={currentUserId} onVote={direction => actions.voteQuestion(question.id, direction)} />
-          {/* The same Reply button a reply has; it opens the line to type on right here. */}
-          <Pressable accessibilityRole="button" accessibilityLabel="Reply to this thread" onPress={() => { setReplying(true); setTimeout(() => replyInput.current?.focus(), 50); }} style={styles.replyButton}>
+          {/* The same Reply button a reply has; it opens the line to type on right here. None on a removed thread. */}
+          {removed ? null : <Pressable accessibilityRole="button" accessibilityLabel="Reply to this thread" onPress={() => { setReplying(true); setTimeout(() => replyInput.current?.focus(), 50); }} style={styles.replyButton}>
             <Ionicons name="chatbubble-outline" size={16} color={colors.textMuted}/>
             <Text style={styles.replyLabel}>Reply</Text>
-          </Pressable>
+          </Pressable>}
         </View>
-        {replying ? (
+        {replying && !removed ? (
           <View style={{ gap: 8 }}>
           <MentionSuggestions candidates={tag.rows} onPick={tag.pick} maxHeight={176} />
           <View style={styles.composer}>
@@ -167,7 +183,7 @@ function QuestionDetail() {
         ) : null}
 
         {thread.filter(answer => !answer.parentAnswerId || !thread.some(parent => parent.id === answer.parentAnswerId)).map(answer => (
-          <ThreadReply key={answer.id} answer={answer} thread={thread} acceptedId={question.acceptedAnswerId} askerId={question.authorId} onAccept={question.authorId === currentUserId ? (aid) => actions.acceptAnswer(question.id, aid) : undefined} />
+          <ThreadReply key={answer.id} answer={answer} thread={thread} acceptedId={question.acceptedAnswerId} askerId={question.authorId} closed={!!removed} onAccept={question.authorId === currentUserId ? (aid) => actions.acceptAnswer(question.id, aid) : undefined} />
         ))}
 
       </View>
@@ -178,6 +194,7 @@ function QuestionDetail() {
 const styleDefinitions = StyleSheet.create({
   questionCard: { gap: spacing.md, borderWidth: 0, borderRadius: 0, backgroundColor: 'transparent', paddingHorizontal: 0, paddingBottom: 24, borderBottomWidth: 1, borderBottomColor: colors.border },
   askerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  removed: { alignSelf: 'flex-start' },
   replyButton: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 36, paddingHorizontal: 14, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt },
   // A soft rounded box to write in, the way messaging apps do it.
   composer: { gap: 6, paddingTop: 12, paddingBottom: 8, paddingHorizontal: 14, borderRadius: 20, backgroundColor: colors.surfaceAlt, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },

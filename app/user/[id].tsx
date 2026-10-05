@@ -18,6 +18,7 @@ import { evaluateAchievements, playStyleLabel, surfaceLabel, tierColor } from '@
 import { compactNumber, experienceLabel } from '@/lib/format';
 import { TileViews } from '@/components/TileViews';
 import { TilePin } from '@/components/TilePin';
+import { TileRemoved } from '@/features/moderation/RemovedNote';
 import { SuggestedPlayers } from '@/components/SuggestedPlayers';
 import { HeadToHeadCard } from '@/components/HeadToHeadCard';
 import { useApp } from '@/store/AppContext';
@@ -92,6 +93,8 @@ function UserProfile() {
                   {(p.videoUrl || p.kind === 'clip') && (p.views ?? 0) > 0 ? <TileViews views={p.views ?? 0} /> : null}
                   {/* Pinned, top left; the tile's own label says "pinned" to a screen reader. */}
                   {p.pinned && section !== 'Tagged' ? <TilePin /> : null}
+                  {/* Taken down (migration 108): only admins ever see someone else's, dimmed and marked. */}
+                  {p.removed ? <TileRemoved /> : null}
                 </Pressable>
               ))}
             </View>

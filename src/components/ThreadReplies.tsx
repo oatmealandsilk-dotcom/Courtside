@@ -1,7 +1,8 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { PlayerName } from '@/components/PlayerName';
 import React, { useRef, useState } from 'react';
-import { confirmDelete } from '@/lib/confirm';
+import { confirm, confirmDelete } from '@/lib/confirm';
+import { RemovedNote } from '@/features/moderation/RemovedNote';
 import * as haptics from '@/lib/haptics';
 import { MentionSuggestions } from '@/components/MentionSuggestions';
 import { useMentionDraft } from '@/features/mentions/useMentionDraft';
@@ -25,13 +26,15 @@ export function ThreadReplies({questionId, preview = false}:{questionId:string; 
   const question=questions.find(q=>q.id===questionId);
   const thread=answers.filter(a=>a.questionId===questionId).sort((a,b)=>Number(b.id===question?.acceptedAnswerId)-Number(a.id===question?.acceptedAnswerId)||b.votes-a.votes);
   const canAccept = !!question && question.authorId === currentUserId && !preview;
-  return <View>{thread.filter(a=>!a.parentAnswerId||!thread.some(p=>p.id===a.parentAnswerId)).map(a=><ThreadReply key={a.id} answer={a} thread={thread} acceptedId={question?.acceptedAnswerId} askerId={question?.authorId} preview={preview} onAccept={canAccept ? (id) => actions.acceptAnswer(questionId, id) : undefined}/>)}</View>;
+  return <View>{thread.filter(a=>!a.parentAnswerId||!thread.some(p=>p.id===a.parentAnswerId)).map(a=><ThreadReply key={a.id} answer={a} thread={thread} acceptedId={question?.acceptedAnswerId} askerId={question?.authorId} preview={preview} closed={!!question?.removed} onAccept={canAccept ? (id) => actions.acceptAnswer(questionId, id) : undefined}/>)}</View>;
 }
-export function ThreadReply({ answer, thread, acceptedId, askerId, depth = 0, preview = false, onAccept }: {
-  answer: Answer; thread: Answer[]; acceptedId?: string; /** Who started the thread: their replies carry OP, Reddit's mark. */ askerId?: string; depth?: number; preview?:boolean; /** The asker's: marks this as the answer that solved it. */ onAccept?: (answerId: string) => void;
+export function ThreadReply({ answer, thread, acceptedId, askerId, depth = 0, preview = false, closed = false, onAccept }: {
+  answer: Answer; thread: Answer[]; acceptedId?: string; /** Who started the thread: their replies carry OP, Reddit's mark. */ askerId?: string; depth?: number; preview?:boolean;
+  /** The thread was taken down (migration 108): nobody can reply anywhere in it, so no Reply buttons. */ closed?: boolean;
+  /** The asker's: marks this as the answer that solved it. */ onAccept?: (answerId: string) => void;
 }) {
   const styles = useThemedStyles(styleDefinitions);
-  const { users, currentUserId, actions } = useApp();
+  const { users, currentUserId, currentUser, actions } = useApp();
   const [replying, setReplying] = useState(false);
   const [draft, setDraft] = useState('');
   const [media, setMedia] = useState<ReplyAttachment | null>(null);
@@ -45,13 +48,24 @@ export function ThreadReply({ answer, thread, acceptedId, askerId, depth = 0, pr
   // Hold your own reply to delete it, as on Instagram.
   const mine = !preview && answer.authorId === currentUserId;
   const askDelete = mine ? () => { haptics.tap(); confirmDelete(() => actions.deleteAnswer(answer.id), 'this reply'); } : undefined;
+  // An admin's hold takes it down (or puts it back), with Delete still there on their own reply (migration 108).
+  const askModerate = !preview && currentUser?.isAdmin ? () => {
+    haptics.tap();
+    const deleteToo = mine ? { also: { label: 'Delete it instead', destructive: true, onPress: () => actions.deleteAnswer(answer.id) } } : {};
+    if (answer.removed) {
+      confirm({ title: 'Restore this reply?', message: 'Everyone who could see it before sees it again.', confirmLabel: 'Restore', onConfirm: () => { void actions.restoreContent('answer', answer.id); }, ...deleteToo });
+    } else {
+      confirm({ title: 'Take down this reply?', message: 'Choose which of CourtSide’s rules it breaks on the next page.', confirmLabel: 'Choose a reason', destructive: true, onConfirm: () => router.push({ pathname: '/take-down', params: { kind: 'answer', id: answer.id } }), ...deleteToo });
+    }
+  } : undefined;
+  const hold = askModerate ?? askDelete;
   const children = thread.filter(child => child.parentAnswerId === answer.id)
     .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
   return <View>
     <View style={styles.answerCard}>
       {!collapsed && children.length > 0 && <View pointerEvents="none" style={styles.avatarRail}/>}
       <Pressable accessibilityRole="button" accessibilityLabel={`${collapsed ? 'Expand' : 'Collapse'} reply by ${responder?.name ?? 'player'}`}
-        onPress={() => setCollapsed(value => !value)} onLongPress={askDelete} style={styles.answerHead}>
+        onPress={() => setCollapsed(value => !value)} onLongPress={hold} style={styles.answerHead}>
         <Avatar name={responder?.name ?? '?'} seed={responder?.avatarSeed ?? answer.authorId} size={30}/>
         <PlayerName userId={responder?.id} style={styles.answerName}>{responder?.name ?? 'Unknown'}</PlayerName>
         <Text style={styles.time}>{relativeTime(answer.createdAt)}</Text>
@@ -60,21 +74,23 @@ export function ThreadReply({ answer, thread, acceptedId, askerId, depth = 0, pr
       </Pressable>
       {!collapsed && <>
         {acceptedId === answer.id && <Text style={styles.acceptedText}>Accepted by the asker</Text>}
-        {answer.body ? (mine
-          ? <Pressable accessibilityHint="Hold to delete" onLongPress={askDelete} delayLongPress={350}><RichText style={styles.replyBody}>{answer.body}</RichText></Pressable>
+        {answer.body ? (hold
+          ? <Pressable accessibilityHint={askModerate ? (answer.removed ? 'Hold to restore it' : 'Hold to take it down') : 'Hold to delete'} onLongPress={hold} delayLongPress={350}><RichText style={styles.replyBody}>{answer.body}</RichText></Pressable>
           : <RichText style={styles.replyBody}>{answer.body}</RichText>) : null}
-        {answer.media ? <View style={{ paddingLeft: 42 }}><ReplyMediaView media={answer.media} onLongPress={askDelete} /></View> : null}
+        {answer.media ? <View style={{ paddingLeft: 42 }}><ReplyMediaView media={answer.media} onLongPress={hold} /></View> : null}
+        {/* Taken down by an admin: only its author and admins get it, and see why. */}
+        {answer.removed ? <View style={{ paddingLeft: 42 }}><RemovedNote removed={answer.removed} quiet /></View> : null}
         {!preview && <View style={styles.replyActions}>
           <Pressable accessibilityRole="button" accessibilityLabel={`Collapse reply by ${responder?.name ?? 'player'}`} onPress={()=>setCollapsed(true)} style={styles.collapse}><Ionicons name="remove-circle-outline" size={20} color={colors.textMuted}/></Pressable>
           <VoteControls item={answer} userId={currentUserId} onVote={direction => actions.voteAnswer(answer.id, direction)}/>
-          <Pressable accessibilityRole="button" accessibilityLabel={`Reply to ${responder?.name ?? 'player'}`} onPress={() => setReplying(true)} style={styles.replyButton}>
+          {answer.removed || closed ? null : <Pressable accessibilityRole="button" accessibilityLabel={`Reply to ${responder?.name ?? 'player'}`} onPress={() => setReplying(true)} style={styles.replyButton}>
             <Ionicons name="chatbubble-outline" size={16} color={colors.textMuted}/><Text style={styles.time}>Reply</Text>
-          </Pressable>
+          </Pressable>}
           {onAccept ? <Pressable accessibilityRole="button" accessibilityLabel={acceptedId === answer.id ? 'Unmark as the answer' : 'Mark as the answer'} onPress={() => onAccept(answer.id)} style={styles.replyButton}>
             <Ionicons name={acceptedId === answer.id ? 'checkmark-circle' : 'checkmark-circle-outline'} size={16} color={acceptedId === answer.id ? colors.success : colors.textMuted}/><Text style={styles.time}>{acceptedId === answer.id ? 'Accepted' : 'Accept'}</Text>
           </Pressable> : null}
         </View>}
-        {replying && <View style={styles.inlineComposer}>
+        {replying && !closed && !answer.removed && <View style={styles.inlineComposer}>
           <MentionSuggestions candidates={tag.rows} onPick={tag.pick} maxHeight={176} />
           <View style={styles.composer}>
             <TextInput ref={lineRef} autoFocus onFocus={() => reveal(lineRef.current)} accessibilityLabel={`Reply to ${responder?.name ?? 'player'}`} placeholder={`Reply to ${responder?.name?.split(' ')[0] ?? 'this'}… (@ to tag)`} placeholderTextColor={colors.textFaint} multiline value={draft} onChangeText={setDraft} onSelectionChange={tag.onSelectionChange} style={styles.replyInput}
@@ -98,7 +114,7 @@ export function ThreadReply({ answer, thread, acceptedId, askerId, depth = 0, pr
             ending at the last child's elbow, never at a grandchild. */}
         <View pointerEvents="none" style={[styles.rail, index === children.length - 1 ? {height:16} : {bottom:0}]} />
         <View pointerEvents="none" style={styles.elbow}/>
-        <ThreadReply answer={child} thread={thread} acceptedId={acceptedId} askerId={askerId} depth={depth + 1} preview={preview} onAccept={onAccept}/>
+        <ThreadReply answer={child} thread={thread} acceptedId={acceptedId} askerId={askerId} depth={depth + 1} preview={preview} closed={closed} onAccept={onAccept}/>
       </View>
     ))}
   </View>;

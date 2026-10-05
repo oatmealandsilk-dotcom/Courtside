@@ -361,7 +361,7 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
                 big
                 open={false}
                 onToggle={() => router.push({ pathname: '/comments', params: { kind: 'post', id: post.id, at: t.replies[0]?.id ?? t.top.id } })}
-                onReply={(c) => router.push({ pathname: '/comments', params: { kind: 'post', id: post.id, reply: c.id } })}
+                onReply={post.removed ? undefined : (c) => router.push({ pathname: '/comments', params: { kind: 'post', id: post.id, reply: c.id } })}
                 onPressBody={(c) => router.push({ pathname: '/comments', params: { kind: 'post', id: post.id, at: c.id } })}
               />
             ))}

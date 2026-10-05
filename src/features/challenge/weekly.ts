@@ -54,7 +54,7 @@ export function entriesFor(challenge: Challenge, posts: Post[]): Post[] {
   return posts
     .filter((p) => {
       const at = Date.parse(p.createdAt);
-      return !p.archived && (p.kind === 'clip' || !!p.videoUrl) && p.tags.includes(challenge.tag) && at >= challenge.startsAt && at < challenge.endsAt;
+      return !p.archived && !p.removed && (p.kind === 'clip' || !!p.videoUrl) && p.tags.includes(challenge.tag) && at >= challenge.startsAt && at < challenge.endsAt;
     })
     .sort((a, b) => b.likedBy.length - a.likedBy.length || Date.parse(a.createdAt) - Date.parse(b.createdAt));
 }
