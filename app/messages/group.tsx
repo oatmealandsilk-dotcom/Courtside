@@ -200,7 +200,8 @@ export default function ChatDetails() {
                   message: `A person at CourtSide will look at this chat. ${first(other)} isn’t told it was you.`,
                   confirmLabel: 'Report',
                   // Reported as the chat, naming them, so the admin can read it and act on it (Oct 5).
-                  onConfirm: () => { actions.reportChat(conversation.id, 'one-to-one chat', other.id); showToast({ title: 'Thanks — a person will review this', icon: 'flag-outline' }); },
+                  // The thanks only once it is filed; otherwise a note to try again.
+                  onConfirm: () => { void actions.reportChat(conversation.id, 'one-to-one chat', other.id).then((filed) => showToast(filed ? { title: 'Thanks — a person will review this', icon: 'flag-outline' } : { title: 'Your report didn’t send', body: 'Check your connection and try again.', icon: 'alert-circle-outline' })); },
                 })}
                 style={({ pressed }) => [styles.row, pressed && styles.pressed]}
               >
@@ -331,7 +332,7 @@ export default function ChatDetails() {
     title: 'Report this group?',
     message: 'A person at CourtSide will look at it. Nobody in the group is told.',
     confirmLabel: 'Report',
-    onConfirm: () => { actions.reportChat(conversation.id, 'group chat'); showToast({ title: 'Thanks — a person will review this', icon: 'flag-outline' }); },
+    onConfirm: () => { void actions.reportChat(conversation.id, 'group chat').then((filed) => showToast(filed ? { title: 'Thanks — a person will review this', icon: 'flag-outline' } : { title: 'Your report didn’t send', body: 'Check your connection and try again.', icon: 'alert-circle-outline' })); },
   });
   const removePhoto = () => confirm({
     title: 'Remove the group photo?',

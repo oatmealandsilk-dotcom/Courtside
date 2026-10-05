@@ -996,7 +996,18 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
   loadRemoved: () => Promise<RemovedItem[] | 'not_ready' | null>;
 
   /* Messaging */
+  /**
+   * Your one-to-one chat with someone, or a new one that lives only on this
+   * phone until its first message (Instagram's way): opening a chat and
+   * backing out puts nothing in their inbox.
+   */
   openConversationWith: (userId: ID) => ID;
+  /**
+   * The id a chat goes by now. A chat started on this phone takes the
+   * server's id when the server already had one with that person, so a chat
+   * screen opened on the old id follows it here. Any other id comes back as it is.
+   */
+  resolveChatId: (conversationId: ID) => ID;
   /** Sends words in a chat; `replyToId` answers one of its messages (quoted above the new one). */
   /** Resolves 'blocked' when its words were refused (migration 117): it is taken back, so the chat can put the words back in the box. */
   sendMessage: (conversationId: ID, body: string, replyToId?: ID) => Promise<'blocked' | undefined>;
@@ -1048,8 +1059,9 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
    * Reports a chat to CourtSide for a person to review: the admin can then
    * read it. `aboutUserId` is the person reported (the other person in a
    * one-to-one chat, or a message's sender); `messageId`, one message in it.
+   * Resolves whether the report was filed, so the thanks shows only then.
    */
-  reportChat: (conversationId: ID, reason: string, aboutUserId?: ID, messageId?: ID) => void;
+  reportChat: (conversationId: ID, reason: string, aboutUserId?: ID, messageId?: ID) => Promise<boolean>;
   /** Send a court in a chat: where to meet (with how many courts stand there, when known). */
   sendCourt: (conversationId: ID, place: { id?: string; name: string; lat: number; lng: number; count?: number }, replyToId?: ID) => void;
   /** Send a voice note recorded on this device (uploaded first). */
@@ -1486,7 +1498,9 @@ function snapshotOf(s: AppState, me: ID): RemoteData {
   return {
     users: s.users, posts: s.posts, comments: s.comments, stories: s.stories,
     followingIds: s.followingIds, followEdges: s.followEdges, savedPostIds: s.saved.postIds, followRequests: s.followRequests,
-    conversations: s.conversations, messages: s.messages, questions: s.questions, answers: s.answers,
+    // A one-to-one chat with nothing in it is left out: one opened here and never
+    // written in lives only on this phone until its first message (see openConversationWith).
+    conversations: s.conversations.filter((c) => !isDirectChat(c) || c.messageIds.length > 0), messages: s.messages, questions: s.questions, answers: s.answers,
     coachQuestions: s.coachQuestions, coachReplies: s.coachReplies, coachingRequests: s.coachingRequests, notifications: s.notifications,
     userState: {
       mutedIds: s.mutedIds, blockedIds: s.blockedIds, savedQuestionIds: s.saved.questionIds, paymentMethods: s.paymentMethods,
@@ -5060,6 +5074,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   /* ------------------------------- Messaging ------------------------------ */
 
+  /*
+   * A new one-to-one chat starts on this phone and reaches the server with
+   * its first message (Instagram's way). Opening one and backing out leaves
+   * nothing in the other person's inbox, and asks nothing of the server
+   * (asking about someone who doesn't follow you counts towards the day's
+   * limit, migration 109). The first message waits for the server to start
+   * the chat (open_conversation) before it is saved: saved any sooner, the
+   * database refused it as from someone not in the chat.
+   */
+  // Chats started here and not yet on the server: who each is with, by its id here.
+  const draftChats = useRef(new Map<ID, ID>());
+  // A chat being started right now, so two quick sends ask the server once.
+  const startingChats = useRef(new Map<ID, Promise<ID | null | 'failed'>>());
+  // Chats here the server keeps under another id (it already had one with
+  // that person): the id each moved to, so a chat screen opened on the old one follows it.
+  const foldedChats = useRef(new Map<ID, ID>());
+  const resolveChatId = useCallback((conversationId: ID): ID => {
+    let at = conversationId;
+    for (let hops = 0; hops < 5 && foldedChats.current.has(at); hops += 1) at = foldedChats.current.get(at)!;
+    return at;
+  }, []);
+
   /** Returns the existing 1:1 thread with a user, creating one if needed. A group with just the two of you is never it. */
   const openConversationWith = useCallback(
     (userId: ID): ID => {
@@ -5075,27 +5111,67 @@ export function AppProvider({ children }: { children: ReactNode }) {
         unreadCount: 0,
       };
       setState((prev) => ({ ...prev, conversations: [conversation, ...prev.conversations] }));
-      if (live(me, userId)) void remote.openConversation(userId, conversation.id).then((standing) => {
-        if (standing === 'blocked' || standing === 'limit') {
-          setState((prev) => ({ ...prev, conversations: prev.conversations.filter((c) => c.id !== conversation.id) }));
-          showToast({ title: standing === 'limit' ? LIMIT_NOTE : "You can't message this account", icon: 'lock-closed-outline', long: true });
-          return;
-        }
-        if (standing === null) {
-          // The database said no: someone not known to be an adult who does
-          // not follow you. The empty chat goes, and the note stays to be read.
-          setState((prev) => ({ ...prev, conversations: prev.conversations.filter((c) => c.id !== conversation.id) }));
-          showToast({ title: chatLockNoteFor(stateRef.current.users, userId), icon: 'lock-closed-outline', long: true });
-          return;
-        }
-        if (standing === conversation.id) return;
-        // The database already had one: fold this one into it.
-        setState((prev) => foldChatInto(prev, conversation.id, standing));
-      });
+      // On this phone only, until its first message (startChat).
+      if (live(me, userId)) draftChats.current.set(conversation.id, userId);
       return conversation.id;
     },
     [requireUser],
   );
+
+  /**
+   * Makes sure a chat is on the server before something is saved in it.
+   * Any chat the server already has comes straight back. One started on this
+   * phone is started there now (once, however many sends are waiting): the
+   * server's id comes back, which is a different one when it already had a
+   * chat with that person (this one folds into it). Null when the server
+   * said no (blocked, past the day's limit, or someone not known to be an
+   * adult who doesn't follow you): the chat and what was waiting in it go,
+   * and a note says why. 'failed' when there was no answer: it stays on this
+   * phone, and the next send (or a retry) asks again.
+   */
+  const startChat = useCallback((conversationId: ID): Promise<ID | null | 'failed'> => {
+    const chatId = resolveChatId(conversationId);
+    const other = draftChats.current.get(chatId);
+    if (!other) return Promise.resolve(chatId);
+    const asking = startingChats.current.get(chatId);
+    if (asking) return asking;
+    const me = stateRef.current.currentUserId;
+    const ask = remote.openConversation(other, chatId).catch(() => 'failed' as const).then((standing): ID | null | 'failed' => {
+      startingChats.current.delete(chatId);
+      // Signed out or into another account meanwhile: nothing more to do here.
+      if (standing === 'failed' || stateRef.current.currentUserId !== me) return 'failed';
+      draftChats.current.delete(chatId);
+      if (standing === null || standing === 'blocked' || standing === 'limit') {
+        setState((prev) => ({
+          ...prev,
+          conversations: prev.conversations.filter((c) => c.id !== chatId),
+          messages: prev.messages.filter((m) => m.conversationId !== chatId),
+        }));
+        showToast({ title: standing === 'blocked' ? "You can't message this account" : standing === 'limit' ? LIMIT_NOTE : chatLockNoteFor(stateRef.current.users, other), icon: 'lock-closed-outline', long: true });
+        return null;
+      }
+      if (standing !== chatId) {
+        // The database already had one: this one folds into it.
+        foldedChats.current.set(chatId, standing);
+        setState((prev) => foldChatInto(prev, chatId, standing));
+      }
+      return standing;
+    });
+    startingChats.current.set(chatId, ask);
+    return ask;
+  }, [resolveChatId]);
+
+  /**
+   * Saves one of your messages, starting its chat on the server first when
+   * it is still only on this phone. 'gone' when the server would not start
+   * the chat: the chat, this message with it, has already been taken away.
+   */
+  const saveMessage = useCallback(async (message: Message): Promise<'refused' | 'blocked' | 'failed' | 'gone' | void> => {
+    const chatId = await startChat(message.conversationId);
+    if (chatId === 'failed') return 'failed';
+    if (chatId === null) return 'gone';
+    return remote.insertMessage({ ...message, conversationId: chatId, sending: undefined, failed: undefined });
+  }, [startChat]);
 
   const makeMessage = useCallback((conversationId: ID, senderId: ID, body: string, kind: Message['kind'] = 'text', sharedId?: ID): Message => ({
     id: nextId('m'), conversationId, senderId, body, createdAt: new Date().toISOString(), kind, sharedId,
@@ -5158,10 +5234,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // calledBack), and it never reaches anyone.
   const withdrawn = useRef(new Set<ID>());
   /** After a message's save: true when it was deleted meanwhile, and it is then taken back off the server (its photos too). */
-  const calledBack = (messageId: ID, result: 'refused' | 'blocked' | 'failed' | void, photos: ChatPhoto[] = []) => {
+  const calledBack = (messageId: ID, result: 'refused' | 'blocked' | 'failed' | 'gone' | void, photos: ChatPhoto[] = []) => {
     if (!withdrawn.current.delete(messageId)) return false;
-    // Refused: it never got there. Failed: it may have got there all the same, so it is unsent anyway.
-    if (result !== 'refused' && result !== 'blocked') {
+    // Refused (or its chat never started): it never got there. Failed: it may have got there all the same, so it is unsent anyway.
+    if (result !== 'refused' && result !== 'blocked' && result !== 'gone') {
       const hosted = photos.map((p) => p.path).filter((path) => !isLocalMedia(path));
       void remote.unsendMessage(messageId).then(() => { if (hosted.length) void remote.removeChatPhotos(hosted); });
     }
@@ -5174,10 +5250,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
    * and the toast says why. Its photos, already up, come down again.
    */
   const takeBackRefused = (message: Message, photos: ChatPhoto[] = []) => {
+    // Found by the message, not its chat's id: a chat started with it may have taken the server's id meanwhile.
     setState((prev) => ({
       ...prev,
       messages: prev.messages.filter((m) => m.id !== message.id),
-      conversations: prev.conversations.map((c) => (c.id === message.conversationId ? { ...c, messageIds: c.messageIds.filter((mid) => mid !== message.id) } : c)),
+      conversations: prev.conversations.map((c) => (c.messageIds.includes(message.id) ? { ...c, messageIds: c.messageIds.filter((mid) => mid !== message.id) } : c)),
     }));
     const hosted = photos.map((p) => p.path).filter((path) => !isLocalMedia(path));
     if (hosted.length) void remote.removeChatPhotos(hosted);
@@ -5190,28 +5267,35 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const me = requireUser();
       const trimmed = body.trim();
       if (!trimmed) return Promise.resolve(undefined);
+      // A screen still on a new chat's first id: the id it goes by now.
+      conversationId = resolveChatId(conversationId);
       const sending = live(me, conversationId);
       // "Sending…" under it until the server has it.
       const message: Message = { ...makeMessage(conversationId, me, trimmed), ...(replyToId ? { replyToId } : null), ...(sending ? { sending: true } : null) };
       setState((prev) => appendMessage(prev, message));
       if (!sending) return Promise.resolve(undefined);
-      return remote.insertMessage(message).catch(() => 'failed' as const).then((result): 'blocked' | undefined => {
+      // A new chat's first message waits for the chat to start on the server (saveMessage).
+      return saveMessage(message).catch(() => 'failed' as const).then((result): 'blocked' | undefined => {
         if (calledBack(message.id, result)) return undefined;
+        // Its chat was refused: chat and message have gone, and the note said why.
+        if (result === 'gone') return undefined;
         if (result === 'blocked') { takeBackRefused(message); return 'blocked'; }
         setState((prev) => ({ ...prev, messages: prev.messages.map((m) => (m.id === message.id ? { ...m, sending: undefined, ...(result === 'failed' ? { failed: true } : null) } : m)) }));
         if (result === 'failed') return undefined;
         if (result !== 'refused') return undefined;
+        // The id the chat goes by now (a new one may have taken the server's).
+        const chatId = resolveChatId(conversationId);
         setState((prev) => ({
           ...prev,
           messages: prev.messages.filter((m) => m.id !== message.id),
-          conversations: prev.conversations.map((c) => (c.id === conversationId ? { ...c, messageIds: c.messageIds.filter((mid) => mid !== message.id) } : c)),
+          conversations: prev.conversations.map((c) => (c.id === chatId ? { ...c, messageIds: c.messageIds.filter((mid) => mid !== message.id) } : c)),
         }));
         // A block only locks one-to-one chats; in a group the likely reason is no longer being in it.
-        const chat = stateRef.current.conversations.find((c) => c.id === conversationId);
+        const chat = stateRef.current.conversations.find((c) => c.id === chatId);
         // Re-read the group first: if you were taken out, that says so ("You’re no longer in …") and this note would be one too many.
         if (chat && isGroupChat(chat)) {
-          void refreshChat(conversationId).then(() => {
-            if (stateRef.current.conversations.some((c) => c.id === conversationId)) showToast({ title: 'You can’t send messages in this chat', icon: 'lock-closed-outline' });
+          void refreshChat(chatId).then(() => {
+            if (stateRef.current.conversations.some((c) => c.id === chatId)) showToast({ title: 'You can’t send messages in this chat', icon: 'lock-closed-outline' });
           });
           return undefined;
         }
@@ -5219,7 +5303,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         return undefined;
       });
     },
-    [requireUser, appendMessage, makeMessage, refreshChat],
+    [requireUser, appendMessage, makeMessage, refreshChat, saveMessage, resolveChatId],
   );
 
   /** A message of yours changed in place (sent at last, failed, its recording now up), found by its id. */
@@ -5230,17 +5314,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const sendCourt = useCallback((conversationId: ID, place: { id?: string; name: string; lat: number; lng: number; count?: number }, replyToId?: ID) => {
     haptics.commit();
     const me = requireUser();
+    conversationId = resolveChatId(conversationId);
     const sending = live(me, conversationId);
     // "Sending…" under it until the server has it, as a message of words.
     const message: Message = { ...makeMessage(conversationId, me, place.name), kind: 'court', place, ...(replyToId ? { replyToId } : null), ...(sending ? { sending: true } : null) };
     setState((prev) => appendMessage(prev, message));
-    if (sending) void remote.insertMessage({ ...message, sending: undefined }).catch(() => 'failed' as const).then((result) => {
-      if (calledBack(message.id, result)) return;
+    if (sending) void saveMessage(message).catch(() => 'failed' as const).then((result) => {
+      if (calledBack(message.id, result) || result === 'gone') return;
       if (result === 'blocked') { takeBackRefused(message); return; }
       patchMessage(message.id, { sending: undefined, ...(result === 'failed' || result === 'refused' ? { failed: true } : null) });
-      if (result === 'refused') void refreshChat(conversationId);
+      if (result === 'refused') void refreshChat(resolveChatId(conversationId));
     });
-  }, [requireUser, appendMessage, makeMessage, refreshChat, patchMessage]);
+  }, [requireUser, appendMessage, makeMessage, refreshChat, patchMessage, saveMessage, resolveChatId]);
 
   /**
    * Puts a voice note's recording up (when it is still only on this phone),
@@ -5262,23 +5347,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // Kept on the message as soon as it is up, so a retry after this only saves it.
       patchMessage(message.id, { audio: { url, ms: audio.ms } });
     }
-    // Unsent while it went up: nothing is saved.
-    if (!stillThere()) { withdrawn.current.delete(message.id); return; }
-    const result = await remote.insertMessage({ ...message, audio: { url, ms: audio.ms }, sending: undefined, failed: undefined }).catch(() => 'failed' as const);
-    if (calledBack(message.id, result)) return;
-    if (result === 'blocked') { takeBackRefused(message); return; }
+    // Unsent while it went up: nothing is saved, and the recording comes down again.
+    if (!stillThere()) { withdrawn.current.delete(message.id); void remote.removeMedia(me, [url]); return; }
+    const result = await saveMessage({ ...message, audio: { url, ms: audio.ms } }).catch(() => 'failed' as const);
+    // Deleted meanwhile (unsent as it lands), or its chat refused: the recording, already up, comes down again.
+    if (calledBack(message.id, result) || result === 'gone') { void remote.removeMedia(me, [url]); return; }
+    if (result === 'blocked') { void remote.removeMedia(me, [url]); takeBackRefused(message); return; }
     patchMessage(message.id, { sending: undefined, ...(result === 'failed' || result === 'refused' ? { failed: true } : null) });
-    if (result === 'refused') void refreshChat(message.conversationId);
-  }, [refreshChat, patchMessage]);
+    if (result === 'refused') void refreshChat(resolveChatId(message.conversationId));
+  }, [refreshChat, patchMessage, saveMessage, resolveChatId]);
 
   const sendVoice = useCallback((conversationId: ID, recording: { uri: string; ms: number }, replyToId?: ID) => {
     haptics.commit();
     const me = requireUser();
+    conversationId = resolveChatId(conversationId);
     const sending = live(me, conversationId);
     const message: Message = { ...makeMessage(conversationId, me, 'Voice note'), kind: 'voice', audio: { url: recording.uri, ms: recording.ms }, ...(replyToId ? { replyToId } : null), ...(sending ? { sending: true } : null) };
     setState((prev) => appendMessage(prev, message));
     if (sending) void deliverVoice(message);
-  }, [requireUser, appendMessage, makeMessage, deliverVoice]);
+  }, [requireUser, appendMessage, makeMessage, deliverVoice, resolveChatId]);
 
   /**
    * Puts a photo message's photos up, one after another (the bubble's ring
@@ -5296,13 +5383,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const stillThere = () => stateRef.current.messages.some((m) => m.id === message.id);
     const sent: ChatPhoto[] = [];
     setSendProgress(message.id, 0);
+    // A new chat starts on the server first: its photos' shelf is only open to the chat's people.
+    const chatId = await startChat(message.conversationId).catch(() => 'failed' as const);
+    if (chatId === 'failed' || chatId === null) {
+      clearSendProgress(message.id);
+      // Deleted meanwhile: nothing went up, so nothing more to do.
+      const deleted = withdrawn.current.delete(message.id);
+      // Refused: the chat, with this message, has gone (and the note said why).
+      if (chatId === 'failed' && !deleted) setFailed();
+      return undefined;
+    }
     try {
       for (let i = 0; i < photos.length; i += 1) {
         const photo = photos[i];
         // Unsent part way: stop sending, and see to the ones already up below.
         if (!stillThere()) break;
         if (!isLocalMedia(photo.path)) { sent.push(photo); continue; }
-        const up = await uploadChatPhoto(me, message.conversationId, photo, (f) => setSendProgress(message.id, (i + f) / photos.length));
+        const up = await uploadChatPhoto(me, chatId, photo, (f) => setSendProgress(message.id, (i + f) / photos.length));
         keepLocalCopy(up.path, photo.path);
         sent.push(up);
         // Kept on the message as each lands, so a retry only sends the rest.
@@ -5323,28 +5420,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (hosted.length) void remote.removeChatPhotos(hosted);
       return undefined;
     }
-    const hosted: Message = { ...message, photos: sent, failed: undefined, sending: undefined };
+    const hosted: Message = { ...message, conversationId: chatId, photos: sent, failed: undefined, sending: undefined };
     const result = await remote.insertMessage(hosted).catch(() => 'failed' as const);
     clearSendProgress(message.id);
     if (calledBack(message.id, result, sent)) return undefined;
     if (result === 'blocked') { takeBackRefused(message, sent); return 'blocked'; }
     if (result === 'failed' || result === 'refused') setFailed();
     else patchMessage(message.id, { sending: undefined });
-    if (result === 'refused') void refreshChat(message.conversationId);
+    if (result === 'refused') void refreshChat(chatId);
     return undefined;
-  }, [refreshChat, patchMessage]);
+  }, [refreshChat, patchMessage, startChat]);
 
   const sendPhotos = useCallback((conversationId: ID, picked: { uri: string; width: number; height: number }[], caption = '', replyToId?: ID): Promise<'blocked' | undefined> => {
     const photos: ChatPhoto[] = picked.slice(0, MAX_CHAT_PHOTOS).map((p) => ({ path: p.uri, w: Math.max(1, p.width), h: Math.max(1, p.height) }));
     if (!photos.length) return Promise.resolve(undefined);
     haptics.commit();
     const me = requireUser();
+    conversationId = resolveChatId(conversationId);
     const sending = live(me, conversationId);
     const message: Message = { ...makeMessage(conversationId, me, caption.trim(), 'photo'), photos, ...(replyToId ? { replyToId } : null), ...(sending ? { sending: true } : null) };
     setState((prev) => appendMessage(prev, message));
     // The demo has nowhere to put them: they stay as they are, on this device.
     return sending ? deliverPhotos(message).catch(() => undefined) : Promise.resolve(undefined);
-  }, [requireUser, appendMessage, makeMessage, deliverPhotos]);
+  }, [requireUser, appendMessage, makeMessage, deliverPhotos, resolveChatId]);
 
   /* Group chats. Most changes show at once and are saved afterwards; when the
      server says no, it is put back and a note says why. Starting a group and
@@ -5677,13 +5775,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
    * keeps that name only if they are in the chat). A single message goes in
    * the reason as "message:<id>", so the admin card can point at it.
    */
-  const reportChat = useCallback((conversationId: ID, reason: string, aboutUserId?: ID, messageId?: ID) => {
+  const reportChat = useCallback((conversationId: ID, reason: string, aboutUserId?: ID, messageId?: ID): Promise<boolean> => {
     haptics.commit();
     const me = stateRef.current.currentUserId;
-    if (!me || !live(me, conversationId)) return;
+    // The demo has nobody to send it to: it simply says thanks.
+    if (!me || !live(me, conversationId)) return Promise.resolve(true);
     const about = aboutUserId && aboutUserId !== me && UUID.test(aboutUserId) ? aboutUserId : null;
     const why = messageId && UUID.test(messageId) ? `message:${messageId}` : reason;
-    void remote.insertReport(me, about, `conversation:${conversationId}`, why).catch(() => undefined);
+    return remote.fileReport(me, about, `conversation:${conversationId}`, why).catch(() => false);
   }, []);
 
   /** Sends a message that did not go through, again. */
@@ -5698,12 +5797,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (message.kind === 'photo') { void deliverPhotos({ ...message, failed: undefined, sending: true }); return; }
     // A voice note's recording too, when it never got up.
     if (message.kind === 'voice') { void deliverVoice({ ...message, failed: undefined, sending: true }); return; }
-    void remote.insertMessage({ ...message, failed: undefined, sending: undefined }).catch(() => 'failed' as const).then((result) => {
-      if (calledBack(messageId, result)) return;
+    // A new chat whose start went unanswered is started again first (saveMessage).
+    void saveMessage(message).catch(() => 'failed' as const).then((result) => {
+      if (calledBack(messageId, result) || result === 'gone') return;
       if (result === 'blocked') { takeBackRefused(message); return; }
       patchMessage(messageId, { sending: undefined, ...(result === 'failed' || result === 'refused' ? { failed: true } : null) });
     });
-  }, [requireUser, deliverPhotos, deliverVoice, patchMessage]);
+  }, [requireUser, deliverPhotos, deliverVoice, patchMessage, saveMessage]);
 
   const editMessage = useCallback((messageId: ID, body: string): Promise<'blocked' | undefined> => {
     const me = requireUser();
@@ -5731,6 +5831,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
     messages: prev.messages.filter((m) => m.id !== messageId),
     conversations: prev.conversations.map((c) => (c.messageIds.includes(messageId) ? { ...c, messageIds: c.messageIds.filter((x) => x !== messageId) } : c)),
   });
+  /** A message back where it was in its chat: an unsend or delete the server did not take. */
+  const restoreMessage = (prev: AppState, message: Message): AppState => {
+    if (prev.messages.some((m) => m.id === message.id)) return prev;
+    const messages = [...prev.messages, message];
+    const byId = new Map(messages.map((m) => [m.id, m]));
+    return {
+      ...prev,
+      messages,
+      conversations: prev.conversations.map((c) => (c.id === message.conversationId ? { ...c, messageIds: inOrder([...c.messageIds, message.id], byId).map((m) => m.id) } : c)),
+    };
+  };
   const unsendMessage = useCallback((messageId: ID) => {
     const me = requireUser();
     const message = stateRef.current.messages.find((m) => m.id === messageId);
@@ -5740,7 +5851,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!live(me, messageId)) return;
     // A photo message's photos come down with it (any still on their way up are seen to by deliverPhotos).
     const hosted = (message.photos ?? []).map((p) => p.path).filter((path) => !isLocalMedia(path));
-    void remote.unsendMessage(messageId).then(() => { if (hosted.length) void remote.removeChatPhotos(hosted); });
+    // So does a voice note's recording, which sits on the public media shelf
+    // (unless another message of yours here still plays it: one you forwarded).
+    const audio = message.audio?.url;
+    void remote.unsendMessage(messageId).catch(() => false).then((ok) => {
+      if (!ok) {
+        // The server still has it: it comes back here too, rather than turning up again on the next open.
+        setState((prev) => restoreMessage(prev, message));
+        showToast({ title: 'Your message wasn’t unsent', body: 'Try again in a moment.', icon: 'alert-circle-outline' });
+        return;
+      }
+      if (hosted.length) void remote.removeChatPhotos(hosted);
+      if (audio && !stateRef.current.messages.some((m) => m.audio?.url === audio)) void remote.removeMedia(me, [audio]);
+    });
   }, [requireUser]);
 
   const deleteMessageForMe = useCallback((messageId: ID) => {
@@ -5765,7 +5888,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (hosted.length) void remote.removeChatPhotos(hosted);
       return;
     }
-    void remote.hideMessage(me, messageId);
+    void remote.hideMessage(me, messageId).catch(() => false).then((ok) => {
+      if (ok || !message) return;
+      // Not saved: it would turn up again on the next open, so it comes back now, with a note.
+      hiddenFor(me).delete(messageId);
+      setState((prev) => restoreMessage(prev, message));
+      showToast({ title: 'This message wasn’t deleted', body: 'Try again in a moment.', icon: 'alert-circle-outline' });
+    });
   }, [requireUser]);
 
   const confirmBirthDate = useCallback(async (birthDate: string): Promise<AgeGroup | 'under13'> => {
@@ -5815,7 +5944,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const me = s.currentUserId;
     if (!me) return false;
     // A chat you already have carries on: the server hands it back before it checks anything (open_conversation).
-    if (findDirectChat(s.conversations, me, userId)) return true;
+    // Not one only opened on this phone: the server has not been asked about that one yet.
+    const chat = findDirectChat(s.conversations, me, userId);
+    if (chat && !draftChats.current.has(chat.id)) return true;
     return openToYou(userId, s.users.find((u) => u.id === userId), me, s.followEdges, ageSource(s, userId), s.openness, wantOpenness);
   }, [wantOpenness]);
 
@@ -5938,34 +6069,33 @@ export function AppProvider({ children }: { children: ReactNode }) {
         return next;
       });
 
-      // Saved after they show: new one-to-one chats are opened first (the
-      // server may already have one with that person, or say no), then the
+      // Saved after they show: new one-to-one chats (and any opened here and
+      // not yet written in) are started on the server first (it may already
+      // have one with that person, or say no: see startChat), then the
       // messages go up. One that does not go through shows its retry.
       if (!saving) return;
+      for (const chat of fresh) {
+        const other = chat.participantIds.find((p) => p !== me);
+        if (other && UUID.test(other)) draftChats.current.set(chat.id, other);
+      }
       void (async () => {
         const movedTo = new Map<ID, ID>();
         const refused = new Set<ID>();
-        for (const chat of fresh) {
-          const other = chat.participantIds.find((p) => p !== me);
-          if (!other || !UUID.test(other)) continue;
-          const standing = await remote.openConversation(other, chat.id).catch(() => chat.id);
-          if (standing === null || standing === 'blocked' || standing === 'limit') {
-            refused.add(chat.id);
-            setState((prev) => ({
-              ...prev,
-              conversations: prev.conversations.filter((c) => c.id !== chat.id),
-              messages: prev.messages.filter((m) => m.conversationId !== chat.id),
-            }));
-            showToast({ title: standing === 'blocked' ? "You can't message this account" : standing === 'limit' ? LIMIT_NOTE : chatLockNoteFor(stateRef.current.users, other), icon: 'lock-closed-outline', long: true });
-            continue;
-          }
-          if (standing !== chat.id) {
-            movedTo.set(chat.id, standing);
-            setState((prev) => foldChatInto(prev, chat.id, standing));
-          }
+        const unanswered = new Set<ID>();
+        for (const chat of chats) {
+          const standing = await startChat(chat.id).catch(() => 'failed' as const);
+          // Refused: the chat, with what was waiting in it, has gone, and the note said why.
+          if (standing === null) refused.add(chat.id);
+          else if (standing === 'failed') unanswered.add(chat.id);
+          else if (standing !== chat.id) movedTo.set(chat.id, standing);
         }
         for (const message of outgoing) {
           if (refused.has(message.conversationId)) continue;
+          // No answer starting its chat: "Not sent", and its retry starts the chat again.
+          if (unanswered.has(message.conversationId)) {
+            if (!withdrawn.current.delete(message.id)) patchMessage(message.id, { sending: undefined, failed: true });
+            continue;
+          }
           const conversationId = movedTo.get(message.conversationId) ?? message.conversationId;
           if (!UUID.test(conversationId)) { patchMessage(message.id, { sending: undefined }); continue; }
           // Deleted before its turn came: it is simply not sent.
@@ -5977,7 +6107,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }
       })();
     },
-    [requireUser, appendMessage, makeMessage, patchMessage],
+    [requireUser, appendMessage, makeMessage, patchMessage, startChat],
   );
 
   const markConversationRead = useCallback((conversationId: ID) => {
@@ -6014,10 +6144,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
    */
   const pinChat = useCallback((conversationId: ID, pinned: boolean): boolean => {
     const me = requireUser();
-    const chats = stateRef.current.conversations;
+    const { conversations: chats, blockedIds } = stateRef.current;
     const chat = chats.find((c) => c.id === conversationId);
     if (!chat || !!chat.pinnedAt === pinned) return true;
-    if (pinned && chats.filter((c) => c.pinnedAt).length >= MAX_PINNED_CHATS) {
+    // Pinned chats the inbox doesn't show (a one-to-one with someone you
+    // blocked, or one with nothing in it) don't count, and can't be unpinned
+    // there: pinning another takes them off, here and on the server, which counts every pin.
+    const unseen = (c: Conversation) => isDirectChat(c) && (!c.messageIds.length || c.participantIds.some((p) => p !== me && blockedIds.includes(p)));
+    const hiddenPins = pinned ? chats.filter((c) => c.pinnedAt && c.id !== conversationId && unseen(c)) : [];
+    if (pinned && chats.filter((c) => c.pinnedAt && !unseen(c)).length >= MAX_PINNED_CHATS) {
       haptics.reject();
       showToast({ title: `You can pin up to ${MAX_PINNED_CHATS} chats`, body: 'Unpin one to make room.', icon: 'pin-outline' });
       return false;
@@ -6027,7 +6162,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setState((prev) => ({ ...prev, conversations: prev.conversations.map((c) => (c.id === conversationId ? { ...c, pinnedAt: value } : c)) }));
     const before = chat.pinnedAt;
     put(pinned ? new Date().toISOString() : undefined);
-    if (live(me, conversationId)) void remote.setChatPin(conversationId, pinned).catch(() => 'failed' as const).then((result) => {
+    if (hiddenPins.length) {
+      const off = new Set(hiddenPins.map((c) => c.id));
+      setState((prev) => ({ ...prev, conversations: prev.conversations.map((c) => (off.has(c.id) ? { ...c, pinnedAt: undefined } : c)) }));
+    }
+    const unpinHidden = Promise.all(hiddenPins.filter((c) => live(me, c.id)).map((c) => remote.setChatPin(c.id, false).catch(() => 'failed' as const)));
+    if (live(me, conversationId)) void unpinHidden.then(() => remote.setChatPin(conversationId, pinned)).catch(() => 'failed' as const).then((result) => {
       if (result === 'ok' || result === 'missing') return;
       put(before);
       showToast(result === 'limit'
@@ -6683,6 +6823,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const me = stateRef.current.currentUserId;
     if (!quiet && me && userId !== me && stateRef.current.blockedIds.includes(userId)) {
       offerUndo(`Unblocked${atHandle(userId)}`, () => !stateRef.current.blockedIds.includes(userId), () => toggleBlock(userId, true), { icon: 'checkmark-circle-outline' });
+    }
+    // Blocking: your one-to-one chat with them leaves the inbox, so its pin
+    // comes off on the server too (it held one of your three pin places, out of sight).
+    if (me && userId !== me && !stateRef.current.blockedIds.includes(userId)) {
+      const pinnedWith = findDirectChat(stateRef.current.conversations, me, userId);
+      if (pinnedWith?.pinnedAt && live(me, pinnedWith.id)) void remote.setChatPin(pinnedWith.id, false).catch(() => undefined);
     }
     setState((prev) => {
       const me = prev.currentUserId;
@@ -7523,6 +7669,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       restoreContent,
       loadRemoved,
       openConversationWith,
+      resolveChatId,
       sendMessage,
       sendCourt,
       sendVoice,
@@ -7729,6 +7876,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       restoreContent,
       loadRemoved,
       openConversationWith,
+      resolveChatId,
       sendMessage,
       sendCourt,
       sendVoice,

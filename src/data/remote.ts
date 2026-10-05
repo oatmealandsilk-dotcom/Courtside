@@ -1624,6 +1624,12 @@ export const remote = {
     if (error) fail('report')(error);
     return null;
   },
+  /** Files a report, as insertReport, resolving whether it was filed (so the thanks shows only then). */
+  async fileReport(me: ID, targetUserId: ID | null, target: string, reason: string): Promise<boolean> {
+    const { error } = await need().from('reports').insert({ reporter_id: me, target_user_id: targetUserId, target, reason });
+    if (error) { fail('report')(error); return false; }
+    return true;
+  },
   /** Your settings row as the server has it now (blocks, mutes, saved threads made on another device included). Null when there is none; throws when it could not be read. */
   async fetchUserState(me: ID): Promise<UserState | null> {
     const { data, error } = await need().from('user_state').select('*').eq('user_id', me).maybeSingle();
@@ -1664,8 +1670,12 @@ export const remote = {
 
   /* ------------------------------ messages ------------------------------ */
 
-  /** The 1:1 you already have with someone, or a new one under the id the app chose. Returns the id that stands. */
-  async openConversation(other: ID, wanted: ID): Promise<ID | null | 'blocked' | 'limit'> {
+  /**
+   * The 1:1 you already have with someone, or a new one under the id the app
+   * chose. Returns the id that stands; 'failed' when there was no answer (no
+   * signal), so the chat is not taken to be there when it may not be.
+   */
+  async openConversation(other: ID, wanted: ID): Promise<ID | null | 'blocked' | 'limit' | 'failed'> {
     const { data, error } = await need().rpc('open_conversation', { other, wanted });
     // Past the day's limit of new people (migration 109): no chat, whoever it was.
     if (error && /age_rule_limit/.test(error.message)) return 'limit';
@@ -1673,7 +1683,7 @@ export const remote = {
     if (error && /teen_closed/.test(error.message)) return null;
     // Nor can someone you are blocked with, either way.
     if (error && /blocked/.test(error.message)) return 'blocked';
-    if (error) { fail('open conversation')(error); return wanted; }
+    if (error) { fail('open conversation')(error); return 'failed'; }
     return (data as string) || wanted;
   },
 
@@ -1945,16 +1955,20 @@ export const remote = {
     return !!data?.length;
   },
 
-  /** Unsend: gone for everyone in the chat. */
-  async unsendMessage(messageId: ID) {
+  /** Unsend: gone for everyone in the chat. Resolves whether the server took it (one already gone counts). */
+  async unsendMessage(messageId: ID): Promise<boolean> {
     const { error } = await need().from('messages').delete().eq('id', messageId);
-    if (error) fail('message unsend')(error);
+    if (error) { fail('message unsend')(error); return false; }
+    return true;
   },
 
-  /** Delete for yourself: hidden from your view only. */
-  async hideMessage(me: ID, messageId: ID) {
+  /** Delete for yourself: hidden from your view only. Resolves whether it was saved (one already hidden counts). */
+  async hideMessage(me: ID, messageId: ID): Promise<boolean> {
     const { error } = await need().from('hidden_messages').insert({ user_id: me, message_id: messageId });
-    if (error) fail('message delete')(error);
+    // Already hidden, or not on the server at all (yours that never went): nothing more to hide.
+    if (error && (error.code === '23505' || error.code === '23503')) return true;
+    if (error) { fail('message delete')(error); return false; }
+    return true;
   },
 
   /**
@@ -1992,6 +2006,22 @@ export const remote = {
     if (!paths.length) return;
     const { error } = await need().storage.from(CHAT_PHOTOS).remove(paths);
     if (error) fail('chat photo remove')(error);
+  },
+
+  /**
+   * Takes files of yours down from the public media shelf by their links (a
+   * voice note unsent, or one whose message never went). Only links into
+   * your own folder (the shelf lets you delete only those): a voice note
+   * forwarded from someone else points at theirs, and is left alone. Best effort.
+   */
+  async removeMedia(me: ID, urls: string[]) {
+    const mark = '/object/public/media/';
+    const paths = urls
+      .map((url) => { const at = url.indexOf(mark); return at < 0 ? '' : decodeURIComponent(url.slice(at + mark.length).split(/[?#]/)[0]); })
+      .filter((path) => path.startsWith(`${me}/`));
+    if (!paths.length) return;
+    const { error } = await need().storage.from('media').remove(paths);
+    if (error) fail('media remove')(error);
   },
 
   /** One conversation with its messages — for one that just started on another phone. Null when it cannot be had, for whatever reason. */

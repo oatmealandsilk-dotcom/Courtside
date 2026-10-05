@@ -177,10 +177,15 @@ const firstName = (u?: User) => u?.name.trim().split(/\s+/)[0] ?? 'Someone';
  */
 export default function Thread() {
   const styles = useThemedStyles(styleDefinitions);
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id: routeId } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
   const { width: winW } = useWindowDimensions();
   const { conversations, messages, users, posts, questions, hitRequests, currentUserId, currentUser, detectedCoords, defaultReaction, actions, blockedIds, lastSeen } = useApp();
+  // A new chat opened here that took the server's id with its first message
+  // (the server already had one with them): followed to that id, and the
+  // address changed to match, so a reload or a link opens the same chat.
+  const id = routeId ? actions.resolveChatId(routeId) : routeId;
+  useEffect(() => { if (routeId && id && id !== routeId) router.setParams({ id }); }, [routeId, id]);
   // The message box keeps its own words, cursor and recording (Composer, below):
   // a key typed redraws the box alone, never the chat above it.
   const composer = useRef<ComposerHandle>(null);
@@ -537,6 +542,32 @@ export default function Thread() {
     );
   }, [rowCtx, byId, hiddenAt, group, currentUserId, blockedIds, shownIds, menuId, flash, lastRealId, readLine, typingNow, canWrite]);
 
+  // Android's Back closes what is open over the typing bar before it leaves
+  // the chat: the emoji keyboard, the "+" tray, then an edit or a reply (as
+  // Escape does on a computer). With none of them open, the chat closes.
+  // Every hook stays above the "Conversation not found" page below: the chat
+  // can go while this screen is open (you block them, leave the group) or
+  // arrive after it opened (an alert tapped at launch), and React needs the
+  // same hooks on every draw, or the whole app falls over.
+  useAndroidBack(() => {
+    if (emojiOpen) { setEmojiOpen(false); return true; }
+    if (composer.current?.plusIsOpen()) { composer.current.closePlus(); return true; }
+    // The edit called off (endEditing's steps, written out: that is made further down).
+    if (editing) { setEditing(null); composer.current?.setText(draftBeforeEdit.current ?? ''); draftBeforeEdit.current = null; return true; }
+    if (replyTo) { setReplyTo(null); return true; }
+    return false;
+  });
+  // While a message is on the go, keep saying so, even with the keyboard put
+  // away, so the dots hold steady instead of blinking off in a pause. A
+  // message left sitting stops counting a minute after the last key.
+  useEffect(() => {
+    const beat = setInterval(() => {
+      const now = Date.now();
+      if (draftNow.current.trim() && now - lastKey.current < 60_000 && now - lastPing.current > 2500) { lastPing.current = now; typingLink.current?.ping(); }
+    }, 1000);
+    return () => clearInterval(beat);
+  }, []);
+
   // A group opens even with nobody else left in it (or nobody else loaded yet).
   if (!conversation || (!group && !other)) {
     return (
@@ -659,16 +690,6 @@ export default function Thread() {
     composer.current?.setText(draftBeforeEdit.current ?? '');
     draftBeforeEdit.current = null;
   };
-  // Android's Back closes what is open over the typing bar before it leaves
-  // the chat: the emoji keyboard, the "+" tray, then an edit or a reply (as
-  // Escape does on a computer). With none of them open, the chat closes.
-  useAndroidBack(() => {
-    if (emojiOpen) { setEmojiOpen(false); return true; }
-    if (composer.current?.plusIsOpen()) { composer.current.closePlus(); return true; }
-    if (editing) { endEditing(); return true; }
-    if (replyTo) { setReplyTo(null); return true; }
-    return false;
-  });
 
   const send = (text: string) => {
     if (draftNow.current.trim()) { draftNow.current = ''; lastPing.current = 0; typingLink.current?.stop(); }
@@ -748,16 +769,6 @@ export default function Thread() {
     lastKey.current = now;
     if (now - lastPing.current > 2000) { lastPing.current = now; typingLink.current?.ping(); }
   };
-  // While a message is on the go, keep saying so, even with the keyboard put
-  // away, so the dots hold steady instead of blinking off in a pause. A
-  // message left sitting stops counting a minute after the last key.
-  useEffect(() => {
-    const beat = setInterval(() => {
-      const now = Date.now();
-      if (draftNow.current.trim() && now - lastKey.current < 60_000 && now - lastPing.current > 2500) { lastPing.current = now; typingLink.current?.ping(); }
-    }, 1000);
-    return () => clearInterval(beat);
-  }, []);
   // Tapping into the words brings the phone keyboard back in the emoji keyboard's place.
   const boxFocused = (on: boolean) => {
     setTypingFocus(on);
@@ -982,7 +993,7 @@ export default function Thread() {
           onUnsend={() => { const messageId = menuMessage.id; confirmAfterMenu({ title: 'Unsend message?', message: "It's removed for everyone in the chat.", confirmLabel: 'Unsend', destructive: true, onConfirm: () => actions.unsendMessage(messageId) }); }}
           // Someone else's message: reported as the chat, naming them and pointing at this one message,
           // so an admin can read it in place and act on it (App Review 1.2, Oct 5).
-          onReport={conversation ? () => { const m = menuMessage; const chatId = conversation.id; confirmReport('message', () => { actions.reportChat(chatId, 'message', m.senderId, m.id); showToast({ title: 'Thanks — a person will review this', icon: 'flag-outline' }); }, true); } : undefined}
+          onReport={conversation ? () => { const m = menuMessage; const chatId = conversation.id; confirmReport('message', () => { void actions.reportChat(chatId, 'message', m.senderId, m.id).then((filed) => showToast(filed ? { title: 'Thanks — a person will review this', icon: 'flag-outline' } : { title: 'Your report didn’t send', body: 'Check your connection and try again.', icon: 'alert-circle-outline' })); }, true); } : undefined}
           onDelete={() => { const messageId = menuMessage.id; confirmAfterMenu({ title: 'Delete message?', message: menuPending ? 'It hasn’t been sent, so it’s simply removed.' : menu.mine ? "It's removed for you. Others in the chat still see it." : "It's removed for you only.", confirmLabel: 'Delete', destructive: true, onConfirm: () => actions.deleteMessageForMe(messageId) }); }}
           // The Send-to sheet, once the menu has gone: pick chats (groups too) and it goes to each as it is.
           onForward={() => { const messageId = menuMessage.id; afterMenu(() => router.push({ pathname: '/share', params: { kind: 'message', id: messageId } })); }}
