@@ -346,8 +346,9 @@ export default function Thread() {
     if (loadingOlder.current || noMoreOlder.current || !conversation || removed) return;
     loadingOlder.current = true;
     setOlderLoading(true);
-    const came = await actions.loadOlderMessages(conversation.id);
-    if (came < MESSAGE_PAGE) noMoreOlder.current = true;
+    // The end only when the server says so: a page can come short because of messages you deleted for yourself.
+    const { more } = await actions.loadOlderMessages(conversation.id);
+    if (more === false) noMoreOlder.current = true;
     loadingOlder.current = false;
     setOlderLoading(false);
   }, [conversation, removed, actions]);
@@ -533,7 +534,7 @@ export default function Thread() {
     message: leaveGroupMessage(conversation, hitRequests, currentUserId),
     confirmLabel: 'Leave',
     destructive: true,
-    onConfirm: () => { actions.leaveGroup(conversation.id); router.replace('/messages'); },
+    onConfirm: () => { actions.leaveGroup(conversation.id); router.dismissTo('/messages'); },
   });
   // Under the name in the header, something worth knowing: who is typing; in
   // a one-to-one chat, the court they are at, or that they are up to hit
@@ -1487,33 +1488,37 @@ const MessageRow = memo(function MessageRow({ item, ctx, original, originalBlock
       <Row {...rowProps}>
         <HoldArea hover={hover} onHold={(rect) => openMenu({ message, mine, rect })} style={styles.sharedCardArea}>
           {(hold) => (
-            <Tappable
-              accessibilityRole="link"
-              accessibilityLabel={`${hit ? `Looking for a hit, ${hitWhen(hit.startsAt)}, ${hit.place.name}` : 'This hit is over'}, sent ${sentAt}`}
-              scaleTo={0.97}
-              onLongPress={hold}
-              onPress={() => (hit ? router.push(`/hit-request/${hit.id}`) : undefined)}
-              style={[styles.sharedCard, styles.courtCard]}
-            >
-              <View style={styles.sharedHead}>
-                <HitGlyph size={16} color={hit ? colors.brand : colors.textFaint} />
-                <Text style={[styles.sharedKind, !hit && styles.sharedKindOver]}>{hit ? 'Looking for a hit' : 'Hit'}</Text>
-              </View>
-              {hit ? (
-                <>
-                  <Text numberOfLines={1} style={styles.courtName}>{hitWhen(hit.startsAt)}</Text>
-                  <Text numberOfLines={2} style={styles.sharedBody}>{hit.place.name} · {left ? `${left} ${left === 1 ? 'spot' : 'spots'} left` : 'Full'}</Text>
-                </>
-              ) : (
-                // Gone (played or called off): a quiet card that says so, not a live-looking one.
-                <>
-                  <Text numberOfLines={1} style={[styles.courtName, styles.overTitle]}>This hit is over</Text>
-                  <Text style={styles.overBody}>It was played or called off.</Text>
-                </>
-              )}
-            </Tappable>
+            <>
+              <Tappable
+                accessibilityRole="link"
+                accessibilityLabel={`${hit ? `Looking for a hit, ${hitWhen(hit.startsAt)}, ${hit.place.name}` : 'This hit is over'}, sent ${sentAt}`}
+                scaleTo={0.97}
+                onLongPress={hold}
+                onPress={() => (hit ? router.push(`/hit-request/${hit.id}`) : undefined)}
+                style={[styles.sharedCard, styles.courtCard]}
+              >
+                <View style={styles.sharedHead}>
+                  <HitGlyph size={16} color={hit ? colors.brand : colors.textFaint} />
+                  <Text style={[styles.sharedKind, !hit && styles.sharedKindOver]}>{hit ? 'Looking for a hit' : 'Hit'}</Text>
+                </View>
+                {hit ? (
+                  <>
+                    <Text numberOfLines={1} style={styles.courtName}>{hitWhen(hit.startsAt)}</Text>
+                    <Text numberOfLines={2} style={styles.sharedBody}>{hit.place.name} · {left ? `${left} ${left === 1 ? 'spot' : 'spots'} left` : 'Full'}</Text>
+                  </>
+                ) : (
+                  // Gone (played or called off): a quiet card that says so, not a live-looking one.
+                  <>
+                    <Text numberOfLines={1} style={[styles.courtName, styles.overTitle]}>This hit is over</Text>
+                    <Text style={styles.overBody}>It was played or called off.</Text>
+                  </>
+                )}
+              </Tappable>
+              {failedMark}
+            </>
           )}
         </HoldArea>
+        {notSent}
         <Reactions message={message} me={me} mine={mine} styles={styles} onOpen={call.openReactions} inline />
       </Row>
     );
@@ -1536,8 +1541,14 @@ const MessageRow = memo(function MessageRow({ item, ctx, original, originalBlock
     body = (
       <Row {...rowProps}>
         <HoldArea hover={hover} onHold={(rect) => openMenu({ message, mine, rect })} style={styles.sharedCardArea}>
-          {(hold) => <SharedCard message={message} posts={ctx.posts} questions={ctx.questions} users={ctx.users} sentAt={sentAt} onLongPress={hold} styles={styles} />}
+          {(hold) => (
+            <>
+              <SharedCard message={message} posts={ctx.posts} questions={ctx.questions} users={ctx.users} sentAt={sentAt} onLongPress={hold} styles={styles} />
+              {failedMark}
+            </>
+          )}
         </HoldArea>
+        {notSent}
         <Reactions message={message} me={me} mine={mine} styles={styles} onOpen={call.openReactions} inline />
       </Row>
     );

@@ -5,7 +5,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import Reanimated, { Easing, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { Tappable } from '@/components/Tappable';
 import { useApp } from '@/store/AppContext';
-import { isGroupChat, isMuted, unreadChatCount } from '@/features/messages/groupRules';
+import { blockedDirect, isGroupChat, isMuted, unreadChatCount } from '@/features/messages/groupRules';
 import { colors, typography } from '@/theme';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 
@@ -58,15 +58,15 @@ export function InboxButton({ variant = 'plain', size = 24, ink, style, coaching
   coaching?: boolean;
 }) {
   const styles = useThemedStyles(styleDefinitions);
-  const { conversations, users, currentUserId, currentUser } = useApp();
+  const { conversations, users, currentUserId, currentUser, blockedIds } = useApp();
   const coach = !!currentUser?.isCoach;
   const unread = coaching
     ? conversations.filter((c) => {
-      if (isGroupChat(c) || isMuted(c) || !(c.unreadCount > 0 || c.markedUnread)) return false;
+      if (isGroupChat(c) || isMuted(c) || !(c.unreadCount > 0 || c.markedUnread) || blockedDirect(c, currentUserId, blockedIds)) return false;
       const other = users.find((u) => u.id === c.participantIds.find((id) => id !== currentUserId));
       return !!other && (coach ? !other.isCoach : !!other.isCoach);
     }).length
-    : unreadChatCount(conversations);
+    : unreadChatCount(conversations, currentUserId, blockedIds);
   const tile = variant === 'tile';
   // At least 44 points to aim at, however small the icon is drawn.
   const box = tile ? 40 : size + 8;

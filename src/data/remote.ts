@@ -351,6 +351,8 @@ export interface RemoteData {
    * so itself.
    */
   contactsFindableReady?: boolean;
+  /** Messages you deleted for yourself, so a chat fetched again later leaves them out too. Missing in saved copies. */
+  hiddenMessageIds?: ID[];
 }
 
 interface SessionRow { id: string; user_id: string; day: string; minutes: number; kind: PracticeSession['kind']; won: boolean | null; opponent: string | null; note: string | null; created_at: string; activity_id?: string | null; from_session_id?: string | null; sets?: unknown }
@@ -940,6 +942,7 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
     hitRequests: withInvites(((hitRows.data ?? []) as HitRow[]).map(toHit), hitInviteRows.error ? null : (hitInviteRows.data as { hit_id: string; user_id: string }[])),
     activities: activityRows.error ? [] : ((activityRows.data ?? []) as ActivityRow[]).map(toActivity),
     ...(tagsReady === null ? {} : { sessionTagsReady: tagsReady }),
+    hiddenMessageIds: [...hidden],
     ...coaching,
   };
 }
@@ -1352,8 +1355,17 @@ export const remote = {
     return !error && data === true;
   },
 
-  async markConversationRead(conversationId: ID, me: ID) {
-    const { error } = await need().from('conversation_members').update({ last_read_at: new Date().toISOString() }).eq('conversation_id', conversationId).eq('user_id', me);
+  /**
+   * `upTo`: the newest message read, as the server dated it. A phone whose
+   * clock runs behind the server's would otherwise save a read time from
+   * before that message, and it would count as unread (and never "Seen").
+   */
+  async markConversationRead(conversationId: ID, me: ID, upTo?: string) {
+    const now = Date.now();
+    // A millisecond on: the server's dates carry finer time than the phone keeps.
+    const newest = upTo ? Date.parse(upTo) + 1 : NaN;
+    const readAt = new Date(newest > now ? newest : now).toISOString();
+    const { error } = await need().from('conversation_members').update({ last_read_at: readAt }).eq('conversation_id', conversationId).eq('user_id', me);
     if (error) fail('mark read')(error);
   },
 
@@ -1409,10 +1421,15 @@ export const remote = {
     if (error) throw new Error(/relation|schema cache/i.test(error.message) ? 'Applications are not switched on yet. Try again soon.' : error.message);
   },
 
-  /** New words for a message of yours; the database stamps it as edited. */
-  async editMessage(messageId: ID, body: string) {
-    const { error } = await need().from('messages').update({ body }).eq('id', messageId);
-    if (error) fail('message edit')(error);
+  /**
+   * New words for a message of yours; the database stamps it as edited.
+   * Resolves whether it was saved: an update the database quietly turned
+   * down changes no row, so that counts as not saved too.
+   */
+  async editMessage(messageId: ID, body: string): Promise<boolean> {
+    const { data, error } = await need().from('messages').update({ body }).eq('id', messageId).select('id');
+    if (error) { fail('message edit')(error); return false; }
+    return !!data?.length;
   },
 
   /** Unsend: gone for everyone in the chat. */
@@ -1494,20 +1511,31 @@ export const remote = {
 
   /**
    * The page of messages just before `before` in one chat, oldest first, for
-   * scrolling up. `more` says whether there are older ones still.
+   * scrolling up. `more` says whether there are older ones still. Messages
+   * you deleted for yourself are left out, so a page can come short; a page
+   * of nothing else is passed over for the one before it.
    */
   async fetchOlderMessages(me: ID, conversationId: ID, before: string): Promise<{ messages: Message[]; more: boolean } | null> {
     const db = need();
-    const [members, msgs, hiddenRows] = await Promise.all([
+    const page = (until: string) => db.from('messages').select('*').eq('conversation_id', conversationId).lt('created_at', until).order('created_at', { ascending: false }).limit(MESSAGE_PAGE);
+    const [members, first, hiddenRows] = await Promise.all([
       db.from('conversation_members').select('user_id, last_read_at').eq('conversation_id', conversationId),
-      db.from('messages').select('*').eq('conversation_id', conversationId).lt('created_at', before).order('created_at', { ascending: false }).limit(MESSAGE_PAGE),
+      page(before),
       db.from('hidden_messages').select('message_id').eq('user_id', me),
     ]);
-    if (msgs.error) { fail('older messages')(msgs.error); return null; }
-    const rows = (msgs.data ?? []) as MessageRow[];
     const hidden = new Set(((hiddenRows.data ?? []) as { message_id: string }[]).map((r) => r.message_id));
+    let msgs = first;
+    let rows: MessageRow[] = [];
+    let shown: MessageRow[] = [];
+    for (let tries = 0; ; tries += 1) {
+      if (msgs.error) { fail('older messages')(msgs.error); return null; }
+      rows = (msgs.data ?? []) as MessageRow[];
+      shown = rows.filter((m) => !hidden.has(m.id));
+      if (shown.length || rows.length < MESSAGE_PAGE || tries >= 4) break;
+      msgs = await page(rows[rows.length - 1].created_at);
+    }
     const conv: ConversationRow = { id: conversationId, updated_at: before, conversation_members: (members.data ?? []) as ConversationRow['conversation_members'] };
-    const dm = toConversations(me, [conv], rows.filter((m) => !hidden.has(m.id)).reverse());
+    const dm = toConversations(me, [conv], shown.reverse());
     return { messages: dm.messages, more: rows.length === MESSAGE_PAGE };
   },
 
