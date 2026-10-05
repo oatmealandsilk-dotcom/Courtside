@@ -6,10 +6,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as maplibregl from 'maplibre-gl';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
-import { CitylessCard, CourtSheet, CourtsZoomNote, FilterChips, HitSheet, MapCredit, YouSheet, MapButtons, MapTopBar, NearbyRail, PlayerSheet, PreviewOverlay, WhereCard } from '@/components/map/MapChrome';
+import { CitylessCard, CourtSheet, CourtsZoomNote, FilterChips, HitSheet, MapCredit, YouSheet, MapButtons, MapTopBar, NearbyRail, PlaceSheet, PlayerSheet, PreviewOverlay, WhereCard } from '@/components/map/MapChrome';
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { CardStage } from '@/components/map/CardStage';
 import type { NearbyMapProps } from '@/components/NearbyMap.types';
+import { placeZoom } from '@/features/places/geocode';
 import { milesBetween } from '@/features/players/geo';
 import { COURTS_MIN_ZOOM, useMapModel } from '@/features/players/mapModel';
 import { askWhoSeesYou, canChooseVisibility, nearbyLock, onTeenMap } from '@/features/players/mapPrivacy';
@@ -55,7 +56,7 @@ maplibregl.setWorkerUrl(`${BASE}/maplibre/maplibre-gl-worker.mjs`);
  * marks. The controls laid over it are shared with the phone.
  */
 export function NearbyMap(props: NearbyMapProps) {
-  const { me, players, onOpen, onExpand, expanded = false, onBack, at, locationOn, locating = false, onToggleLocation, focusCourt, focusHit, focusUser, focusSpot, holdPins = false } = props;
+  const { me, players, onOpen, onExpand, expanded = false, onBack, at, locationOn, locating = false, onToggleLocation, focusCourt, focusHit, focusUser, focusSpot, focusPlace, holdPins = false } = props;
   const styles = useThemedStyles(styleDefinitions);
   const { theme, night } = useTheme();
   const insets = useSafeAreaInsets();
@@ -75,7 +76,7 @@ export function NearbyMap(props: NearbyMapProps) {
   // Your own pin, tapped: the card with your open-to-hit switch.
   const [meOpen, setMeOpen] = useState(false);
   const openToHit = isOpenToHit(me);
-  const model = useMapModel(me, players, at, focusCourt, !expanded, focusHit, focusUser, focusSpot, !!locationOn);
+  const model = useMapModel(me, players, at, focusCourt, !expanded, focusHit, focusUser, focusSpot, !!locationOn, focusPlace);
   // The still card on the start page holds the opening curtain until its streets are drawn (see warmup).
   const painted = useStartMapHold(!expanded && (!!model.city || model.cityPending));
   // The still card fades in whole once its map has drawn (Oct 4, owner), never waiting past 2.5 s.
@@ -248,12 +249,12 @@ export function NearbyMap(props: NearbyMapProps) {
   // The sheet over the map has gone: the first pins come in.
   useEffect(() => { pinsOn.current?.hold(expanded && holdPins); }, [expanded, holdPins, mapGen]);
   // A fix arriving after the map is up moves the map to it (as on the phone);
-  // opened on a tagged court, a hit or a spot, the map stays there.
+  // opened on a tagged court, a hit or a spot, or looking at a place searched for, the map stays there.
   const lastHome = useRef(home);
   useEffect(() => {
     if (lastHome.current.lat === home.lat && lastHome.current.lng === home.lng) return;
     lastHome.current = home;
-    if (expanded && model.homeKnown && !focusCourt && !focusHit && !focusSpot && !model.selected) map.current?.flyTo({ center: [home.lng, home.lat], zoom: START_ZOOM, duration: 600 });
+    if (expanded && model.homeKnown && !focusCourt && !focusHit && !focusSpot && !model.place && !model.selected) map.current?.flyTo({ center: [home.lng, home.lat], zoom: START_ZOOM, duration: 600 });
   }, [home]); // eslint-disable-line react-hooks/exhaustive-deps
   // The still card follows a change of city on the profile.
   const cityKey = model.city ? `${model.city.lat},${model.city.lng}` : '';
@@ -287,7 +288,15 @@ export function NearbyMap(props: NearbyMapProps) {
   useEffect(() => { if (model.selectedHit) map.current?.flyTo({ center: [model.selectedHit.at.lng, model.selectedHit.at.lat], zoom: Math.max(map.current.getZoom(), CLOSE_ZOOM), duration: 500 }); }, [model.selectedHit]);
   // Your card up: your pin glides into the clear strip above it, so the ring switching on is there to see.
   useEffect(() => { if (meOpen && model.mePos) map.current?.flyTo({ center: [model.mePos.lng, model.mePos.lat], zoom: map.current.getZoom(), duration: 500, offset: [0, -youLift(host.current?.clientHeight ?? 800)] }); }, [meOpen]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { if (model.place) map.current?.flyTo({ center: [model.place.lng, model.place.lat], zoom: START_ZOOM, duration: 700 }); }, [model.place]);
+  // A place picked from the search: exactly as close as it needs (placeZoom), out as well as in, so its court pins show;
+  // set in the clear above its list of courts, the way a court sits above its card (as on the phone).
+  // A beat later than a new map's own settling (its jump back to the middle), so opening on a place is not undone.
+  useEffect(() => {
+    const p = model.place;
+    if (!p) return undefined;
+    const t = setTimeout(() => map.current?.flyTo({ center: [p.lng, p.lat], zoom: placeZoom(p, COURTS_MIN_ZOOM), duration: 700, offset: [0, -courtLift(host.current?.clientHeight ?? 800)] }), 90);
+    return () => clearTimeout(t);
+  }, [model.place]);
 
   // On the still card the pins say nothing a screen reader needs (the card says it all, and takes the tap).
   const canvas = <div ref={host} aria-hidden={expanded ? undefined : true} style={{ position: 'absolute', inset: 0, background: colors.bg }} />;
@@ -315,7 +324,8 @@ export function NearbyMap(props: NearbyMapProps) {
     : model.selected ? `p:${model.selected.user.id}`
       : model.selectedCourt ? `c:${model.selectedCourt.id}`
         : model.selectedHit ? `h:${model.selectedHit.hit.id}`
-          : !model.homeKnown && !model.place ? 'where' : 'tray';
+          : model.place ? `place:${model.place.id}`
+            : !model.homeKnown ? 'where' : 'tray';
   // Locked (checked with the server first), it says why in a note that stays to be read.
   const message = async (id: string) => {
     const lock = await actions.messageLock(id);
@@ -328,7 +338,7 @@ export function NearbyMap(props: NearbyMapProps) {
     <View style={styles.fill}>
       {canvas}
       <View pointerEvents="box-none" style={[styles.top, { paddingTop: insets.top + spacing.sm }]}>
-        <MapTopBar onBack={onBack} query={model.query} onQuery={model.setQuery} locationOn={locationOn} locating={locating} onToggleLocation={onToggleLocation} results={model.courtResults} onPickCourt={model.pickCourt} locationMenu={choosing} />
+        <MapTopBar onBack={onBack} query={model.query} onQuery={model.setQuery} locationOn={locationOn} locating={locating} onToggleLocation={onToggleLocation} results={model.courtResults} onPickCourt={model.pickCourt} places={model.placeSearch} onPickPlace={model.pickPlace} players={model.query.trim() ? model.tray.length : 0} locationMenu={choosing} />
         <FilterChips filter={model.filter} onFilter={model.setFilter} courtsOn={model.courtsOn} onCourts={model.toggleCourts} courtsLoading={model.courtsLoading} />
         {model.courtsOn && far && !model.selectedCourt && !model.query.trim() ? <CourtsZoomNote /> : null}
       </View>
@@ -337,12 +347,12 @@ export function NearbyMap(props: NearbyMapProps) {
         <CardStage
           cardKey={stageKey}
           kind={stageKey === 'tray' || stageKey === 'where' ? 'tray' : 'card'}
-          crown={<View pointerEvents="box-none" style={styles.crown}><MapButtons onRecentre={() => { model.select(null); model.selectCourt(null); model.selectHit(null); map.current?.flyTo({ center: [model.homeView.center.lng, model.homeView.center.lat], zoom: model.homeView.zoom ?? START_ZOOM, duration: 600 }); }} onZoomIn={() => map.current?.zoomIn()} onZoomOut={() => map.current?.zoomOut()} /></View>}
+          crown={<View pointerEvents="box-none" style={styles.crown}><MapButtons onRecentre={() => { model.select(null); model.selectCourt(null); model.selectHit(null); model.clearPlace(); map.current?.flyTo({ center: [model.homeView.center.lng, model.homeView.center.lat], zoom: model.homeView.zoom ?? START_ZOOM, duration: 600 }); }} onZoomIn={() => map.current?.zoomIn()} onZoomOut={() => map.current?.zoomOut()} /></View>}
         >
           {stageKey === 'where' ? (
             <WhereCard locating={locating} onLocation={onToggleLocation} />
           ) : stageKey === 'tray' ? (
-            <NearbyRail items={model.tray} cityName={model.place ? model.place.name.split(',')[0] : cityName} selectedId={null} onSelect={model.select} weather={weather} query={model.query} filter={model.filter} courts={model.nearestCourts} onPickCourt={model.selectCourt} lock={lock} onUnlock={unlock} />
+            <NearbyRail items={model.tray} cityName={cityName} selectedId={null} onSelect={model.select} weather={weather} query={model.query} filter={model.filter} courts={model.nearestCourts} onPickCourt={model.selectCourt} lock={lock} onUnlock={unlock} />
           ) : meOpen ? (
             <YouSheet me={me} open={openToHit} teen={teen} onToggle={(on) => { void toggleOpen(on); }} onProfile={() => { setMeOpen(false); router.push('/(tabs)/profile'); }} onClose={() => setMeOpen(false)} seenBy={mapVisibility} onSeenBy={choosing ? () => { void askWhoSeesYou('manage'); } : undefined} />
           ) : model.selected ? (
@@ -351,6 +361,8 @@ export function NearbyMap(props: NearbyMapProps) {
             <CourtSheet court={model.selectedCourt} miles={milesBetween(home, model.selectedCourt)} ringed={model.ringed.has(model.selectedCourt.id)} onClose={() => model.selectCourt(null)} />
           ) : model.selectedHit ? (
             <HitSheet hit={model.selectedHit.hit} miles={milesBetween(home, model.selectedHit.at)} onClose={() => model.selectHit(null)} />
+          ) : model.place ? (
+            <PlaceSheet place={model.place} rows={model.placeRows} loading={model.placeLoading} failed={model.placeFailed} onPickCourt={model.pickCourt} onRetry={model.retryPlace} onClose={model.clearPlace} played={model.ringFor} />
           ) : null}
         </CardStage>
         {/* The tray's own colour runs on beneath the floating tab bar, so no map shows between them. */}

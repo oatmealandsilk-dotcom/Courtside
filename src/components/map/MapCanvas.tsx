@@ -11,8 +11,11 @@ import * as haptics from '@/lib/haptics';
 
 export type { CanvasMarker };
 
-/** `offsetY`: where the spot ends up, in pixels from the middle (negative is higher: clear of a tall card). */
-export interface MapCanvasHandle { flyTo: (to: LatLng, zoom?: number, ms?: number, offsetY?: number) => void }
+/**
+ * `offsetY`: where the spot ends up, in pixels from the middle (negative is higher: clear of a tall card).
+ * `exact`: go to exactly that zoom, out as well as in (a place searched for); otherwise the map only ever zooms in.
+ */
+export interface MapCanvasHandle { flyTo: (to: LatLng, zoom?: number, ms?: number, offsetY?: number, exact?: boolean) => void }
 
 interface Props {
   center: LatLng;
@@ -58,12 +61,12 @@ export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas({
   // The page takes a moment to start. A move asked for before then (your
   // location arriving) is kept and made the instant it is ready; dropping
   // it left the map on the default city until it was opened again.
-  const pendingMove = useRef<{ to: LatLng; zoom?: number } | null>(null);
+  const pendingMove = useRef<{ to: LatLng; zoom?: number; offsetY?: number; exact?: boolean } | null>(null);
 
   useImperativeHandle(ref, () => ({
-    flyTo: (to, z, ms = 500, offsetY = 0) => {
-      if (!ready.current) { pendingMove.current = { to, zoom: z }; return; }
-      send(`window.__cs.fly(${to.lat},${to.lng},${z ?? 'null'},${ms},${Math.round(offsetY)})`);
+    flyTo: (to, z, ms = 500, offsetY = 0, exact = false) => {
+      if (!ready.current) { pendingMove.current = { to, zoom: z, offsetY, exact }; return; }
+      send(`window.__cs.fly(${to.lat},${to.lng},${z ?? 'null'},${ms},${Math.round(offsetY)},${exact ? 'true' : 'false'})`);
     },
   }), []);
   const markerJson = JSON.stringify({ items: markers, tpl });
@@ -114,7 +117,7 @@ var engine=(${PIN_ENGINE_JS})(map,maplibregl,{tap:function(id){post({type:'tap',
 window.__cs={
   set:function(p){engine.set(p)},
   hold:function(on){engine.hold(on)},
-  fly:function(lat,lng,z,ms,oy){map.flyTo({center:[lng,lat],zoom:z==null?map.getZoom():Math.max(map.getZoom(),z),duration:ms,offset:[0,oy||0]})},
+  fly:function(lat,lng,z,ms,oy,exact){map.flyTo({center:[lng,lat],zoom:z==null?map.getZoom():exact?z:Math.max(map.getZoom(),z),duration:ms,offset:[0,oy||0]})},
   look:function(l){LOOK=l;document.body.style.background=(l.background&&l.background.fill)||'#F4EFE6';if(map.isStyleLoaded())look(l)}
 };
 </script></body></html>`, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -144,7 +147,7 @@ window.__cs={
             send(`window.__cs.set(${markersNow.current})`);
             const move = pendingMove.current;
             pendingMove.current = null;
-            if (move) send(`window.__cs.fly(${move.to.lat},${move.to.lng},${move.zoom ?? 'null'},0)`);
+            if (move) send(`window.__cs.fly(${move.to.lat},${move.to.lng},${move.zoom ?? 'null'},0,${Math.round(move.offsetY ?? 0)},${move.exact ? 'true' : 'false'})`);
           }
           // A frame later, so what the page drew is on the phone's screen too.
           else if (msg.type === 'painted') requestAnimationFrame(() => latest.current.onPainted?.());

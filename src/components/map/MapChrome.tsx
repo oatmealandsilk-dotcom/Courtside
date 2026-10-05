@@ -47,6 +47,9 @@ import { notKnownAdult } from '@/features/players/age';
 import { dismissHideTip, useHideTip, useHideTipText, visibilityLabel, type NearbyLock, type TipSpot } from '@/features/players/mapPrivacy';
 import { formatSpotMiles } from '@/features/players/geo';
 import type { MapVisibility } from '@/data/types';
+import type { FoundPlace } from '@/features/places/geocode';
+import type { PlaceSearch } from '@/features/places/usePlaceSearch';
+import { plain } from '@/features/search/words';
 
 // Kept here too, for the screens that already import it from the map's chrome.
 export { CourtGlyph };
@@ -59,11 +62,36 @@ export { CourtGlyph };
 /**
  * Back, the search, and the location switch across the top. While the search
  * names courts (`results`), they list under it: a pick takes the map there
- * with the court's card up.
+ * with the court's card up. Places come under them (a city, a neighbourhood,
+ * an address, a park: `places`), a pick taking the map there with that
+ * place's courts listed. Return picks a court or place named exactly what
+ * was typed ("Raleigh" is the city, not The Raleigh Racquet Club), else the
+ * top row. Players still filter the tray below as before (`players` says how
+ * many match, so "No places found" never hangs over a name that found someone).
  */
-export function MapTopBar({ onBack, query, onQuery, locationOn, locating, onToggleLocation, results, onPickCourt, locationMenu = false }: { onBack?: () => void; query: string; onQuery: (next: string) => void; locationOn?: boolean; locating?: boolean; onToggleLocation?: () => void; results?: CourtRow[]; onPickCourt?: (c: Court) => void; /** With Location on, the button opens who can see you (and Location off) rather than switching off. */ locationMenu?: boolean }) {
+export function MapTopBar({ onBack, query, onQuery, locationOn, locating, onToggleLocation, results, onPickCourt, places, onPickPlace, players = 0, locationMenu = false }: { onBack?: () => void; query: string; onQuery: (next: string) => void; locationOn?: boolean; locating?: boolean; onToggleLocation?: () => void; results?: CourtRow[]; onPickCourt?: (c: Court) => void; /** The place search as you type (usePlaceSearch). */ places?: PlaceSearch; onPickPlace?: (p: FoundPlace) => void; /** Players whose names match what is typed. */ players?: number; /** With Location on, the button opens who can see you (and Location off) rather than switching off. */ locationMenu?: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
-  const found = onPickCourt && query.trim() ? (results ?? []).slice(0, 5) : [];
+  const key = plain(query);
+  const typed = !!key;
+  const allCourts = onPickCourt && typed ? (results ?? []) : [];
+  // A place that is one of the courts listed is already there, as the court.
+  const courtNames = new Set(allCourts.slice(0, 5).map((r) => plain(labelOf(r.c))));
+  const placeRows = onPickPlace && typed && places ? places.places.filter((p) => !courtNames.has(plain(p.title))).slice(0, 4) : [];
+  // Fewer courts when places are listed too, so the list never runs down over the tray.
+  const found = allCourts.slice(0, placeRows.length ? 3 : 5);
+  const placeNote = !onPickPlace || !typed || !places ? null
+    : places.failed ? 'Search isn’t working right now'
+      : places.done && !placeRows.length && !found.length && !players ? 'No places found'
+        : null;
+  const searching = !!onPickPlace && typed && !!places?.searching && !placeRows.length && !found.length && !players;
+  const submit = () => {
+    const sameCourt = found.find((r) => plain(labelOf(r.c)) === key);
+    const samePlace = placeRows.find((p) => plain(p.title) === key);
+    if (sameCourt && onPickCourt) onPickCourt(sameCourt.c);
+    else if (samePlace && onPickPlace) onPickPlace(samePlace);
+    else if (found[0] && onPickCourt) onPickCourt(found[0].c);
+    else if (placeRows[0] && onPickPlace) onPickPlace(placeRows[0]);
+  };
   return (
     // Above the filter chips under it, so the location tip hangs over them.
     <View style={{ gap: spacing.sm, zIndex: 5 }}>
@@ -76,15 +104,15 @@ export function MapTopBar({ onBack, query, onQuery, locationOn, locating, onTogg
       <Glass radius={21} style={styles.search}>
         <Ionicons name="search" size={16} color={colors.textFaint} />
         <TextInput
-          accessibilityLabel="Search players, courts or places"
-          placeholder="Players, courts or places"
+          accessibilityLabel="Search players, courts, or a city, address or park"
+          placeholder="Search a city, address or park"
           placeholderTextColor={colors.textFaint}
           value={query}
           onChangeText={onQuery}
           autoCorrect={false}
           autoCapitalize="words"
           returnKeyType="search"
-          onSubmitEditing={() => { if (found[0] && onPickCourt) onPickCourt(found[0].c); }}
+          onSubmitEditing={submit}
           style={styles.searchInput}
         />
         {query ? (
@@ -104,7 +132,7 @@ export function MapTopBar({ onBack, query, onQuery, locationOn, locating, onTogg
         </View>
       ) : null}
     </View>
-    {found.length ? (
+    {found.length || placeRows.length || placeNote || searching ? (
       <Animated.View entering={FadeIn.duration(140)} style={styles.resultsWrap}>
         <Glass radius={18} style={styles.results}>
           {found.map(({ c, miles }, i) => {
@@ -119,6 +147,23 @@ export function MapTopBar({ onBack, query, onQuery, locationOn, locating, onTogg
               </Pressable>
             );
           })}
+          {placeRows.map((p, i) => (
+            <Pressable key={p.id} accessibilityRole="button" accessibilityLabel={`${p.title}${p.sub ? `, ${p.sub}` : ''}. Show its courts on the map`} onPress={() => { haptics.tap(); onPickPlace?.(p); }} style={({ pressed }) => [styles.resultRow, (found.length > 0 || i > 0) && styles.listRule, pressed && styles.listPressed]}>
+              <View style={styles.placeTile}><Ionicons name={p.kind === 'area' ? 'map-outline' : 'location-outline'} size={15} color={colors.textMuted} /></View>
+              <View style={styles.listWords}>
+                <Text style={styles.listName} numberOfLines={1}>{p.title}</Text>
+                {p.sub ? <Text style={styles.personMeta} numberOfLines={1}>{p.sub}</Text> : null}
+              </View>
+            </Pressable>
+          ))}
+          {searching ? (
+            <View style={styles.placeNote}><ActivityIndicator size="small" color={colors.textFaint} /><Text style={styles.placeNoteText}>Looking for places…</Text></View>
+          ) : placeNote ? (
+            <View style={[styles.placeNote, found.length + placeRows.length > 0 ? styles.listRule : null]}>
+              <Ionicons name={places?.failed ? 'cloud-offline-outline' : 'search-outline'} size={15} color={colors.textFaint} />
+              <Text style={styles.placeNoteText}>{placeNote}</Text>
+            </View>
+          ) : null}
         </Glass>
       </Animated.View>
     ) : null}
@@ -850,6 +895,78 @@ export function CourtSheet({ court, miles, ringed = false, onClose }: { court: C
   );
 }
 
+/**
+ * A place picked from the map's search: its courts, best first (rankForPlace
+ * in courts.ts). A city or neighbourhood lists the bigger and busier places
+ * to play nearer the middle first; an address, a street or a park simply
+ * the nearest. Each row says how far from the place, how many courts and
+ * whether there are lights, and opens that court's card; closing the card
+ * comes back here. Close (or a swipe down) puts the list away and the
+ * players tray comes back; the map stays where it is.
+ */
+export function PlaceSheet({ place, rows, loading, failed, onPickCourt, onRetry, onClose, played }: { place: FoundPlace; rows: CourtRow[]; loading: boolean; failed: boolean; onPickCourt: (c: Court) => void; onRetry: () => void; onClose: () => void; /** Whether a court was played on this week (the map's ring). */ played: (c: Court) => boolean }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const pull = useDragToClose(onClose);
+  const { height: windowH } = useWindowDimensions();
+  const area = place.kind === 'area';
+  const title = `Courts ${area ? 'in' : 'near'} ${place.title}`;
+  const how = area ? 'Bigger, busier, central first' : 'Nearest first';
+  // Tall enough for a good few rows, never so tall it hides the place on the map.
+  const listMax = Math.max(160, Math.round(windowH * 0.42));
+  return (
+    <GestureDetector gesture={pull.gesture}>
+    <Animated.View style={[styles.sheet, pull.style]}>
+      <View style={styles.grabber} />
+      <View style={styles.personRow}>
+        <View style={styles.placeDisc}><Ionicons name={area ? 'map-outline' : 'location-outline'} size={18} color={colors.brand} /></View>
+        <View style={styles.personWords}>
+          <Text accessibilityRole="header" style={styles.personName} numberOfLines={1}>{title}</Text>
+          <Text style={styles.personMeta} numberOfLines={1}>{rows.length ? `${rows.length} ${rows.length === 1 ? 'place' : 'places'} · ${how}` : place.sub || how}</Text>
+        </View>
+        <Pressable accessibilityRole="button" accessibilityLabel="Close" hitSlop={10} onPress={onClose} style={styles.close}>
+          <Ionicons name="close" size={18} color={colors.textMuted} />
+        </Pressable>
+      </View>
+      {rows.length ? (
+        <GHScrollView style={{ maxHeight: listMax, flexGrow: 0 }} contentContainerStyle={styles.list} showsVerticalScrollIndicator={false} bounces={false}>
+          {rows.map(({ c, miles }, i) => {
+            const busy = played(c);
+            // "N courts" always shows here: how big a place is, is half of why it is where it is in this list.
+            const meta = [formatMiles(miles), `${c.count} ${c.count === 1 ? 'court' : 'courts'}`, c.lit ? 'lights' : null, busy ? 'played this week' : null].filter(Boolean).join(' · ');
+            return (
+              <Pressable key={c.id} accessibilityRole="button" accessibilityLabel={`${labelOf(c)}, ${meta}. Show on the map`} onPress={() => { haptics.tap(); onPickCourt(c); }} style={({ pressed }) => [styles.resultRow, i > 0 && styles.listRule, pressed && styles.listPressed]}>
+                <View style={styles.resultTile}><CourtGlyph size={13} color={colors.brand} /></View>
+                <View style={styles.listWords}>
+                  <Text style={styles.listName} numberOfLines={1}>{labelOf(c)}</Text>
+                  <Text style={styles.personMeta} numberOfLines={1}>{meta}</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={14} color={colors.textFaint} />
+              </Pressable>
+            );
+          })}
+        </GHScrollView>
+      ) : (
+        <View style={styles.placeEmpty}>
+          {loading ? (
+            <View style={styles.placeNote}><ActivityIndicator size="small" color={colors.textFaint} /><Text style={styles.placeNoteText}>Finding courts…</Text></View>
+          ) : failed ? (
+            <>
+              <Text style={styles.openNote}>Couldn’t load the courts here. Check your connection.</Text>
+              <Pressable accessibilityRole="button" onPress={onRetry} hitSlop={6} style={styles.lockAction}>
+                <Ionicons name="refresh" size={14} color={colors.brand} />
+                <Text style={styles.lockActionText}>Try again</Text>
+              </Pressable>
+            </>
+          ) : (
+            <Text style={styles.openNote}>No courts on the map here yet.</Text>
+          )}
+        </View>
+      )}
+    </Animated.View>
+    </GestureDetector>
+  );
+}
+
 /** An open hit, picked on the map: its card, the same one Find Players shows, with how far it is. */
 export function HitSheet({ hit, miles, onClose }: { hit: HitRequest; miles?: number; onClose: () => void }) {
   const styles = useThemedStyles(styleDefinitions);
@@ -1145,6 +1262,14 @@ const styleDefinitions = StyleSheet.create({
   results: { paddingHorizontal: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderColor: `${colors.borderStrong}55` },
   resultRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: 9 },
   resultTile: { width: 30, height: 30, borderRadius: 9, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
+  // A place in the map search's list: the court rows' tile, in the quiet surface colour, so places and courts read apart.
+  placeTile: { width: 30, height: 30, borderRadius: 9, backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
+  // "Looking for places…", "No places found", "Finding courts…": one quiet line.
+  placeNote: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: 10 },
+  placeNoteText: { ...typography.small, color: colors.textMuted },
+  // The searched place's list: its disc (the courts' tile, larger), and the room for a note when there is nothing to list.
+  placeDisc: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
+  placeEmpty: { paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
   // A court card's open hits: one quiet line each, above its actions.
   hitRows: { paddingHorizontal: spacing.lg, paddingBottom: spacing.sm, gap: 6 },
   hitRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.sm, paddingVertical: 6, borderRadius: radius.md, backgroundColor: colors.bgElevated },

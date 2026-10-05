@@ -5,7 +5,7 @@ import Reanimated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { CitylessCard, CourtSheet, CourtsZoomNote, FilterChips, HitSheet, MapCredit, YouSheet, MapButtons, MapTopBar, NearbyRail, PlayerSheet, PreviewOverlay, WhereCard } from '@/components/map/MapChrome';
+import { CitylessCard, CourtSheet, CourtsZoomNote, FilterChips, HitSheet, MapCredit, YouSheet, MapButtons, MapTopBar, NearbyRail, PlaceSheet, PlayerSheet, PreviewOverlay, WhereCard } from '@/components/map/MapChrome';
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { CardStage } from '@/components/map/CardStage';
 import { MapCanvas, type CanvasMarker, type MapCanvasHandle } from '@/components/map/MapCanvas';
@@ -13,6 +13,7 @@ import { cardLook, lookFor } from '@/components/map/look';
 import { clusterTemplates, courtLift, youLift } from '@/components/map/markers';
 import { mapMarkers } from '@/components/map/pinList';
 import type { NearbyMapProps } from '@/components/NearbyMap.types';
+import { placeZoom } from '@/features/places/geocode';
 import { milesBetween } from '@/features/players/geo';
 import { COURTS_MIN_ZOOM, useMapModel } from '@/features/players/mapModel';
 import { askWhoSeesYou, canChooseVisibility, nearbyLock, onTeenMap } from '@/features/players/mapPrivacy';
@@ -60,7 +61,7 @@ export function nearbyMapSettled(): Promise<void> { return Promise.resolve(); }
  * card for whoever or whatever you tap.
  */
 export function NearbyMap(props: NearbyMapProps) {
-  const { me, players, onOpen, onExpand, expanded = false, onBack, at, locationOn, locating = false, onToggleLocation, focusCourt, focusHit, focusUser, focusSpot, holdPins = false } = props;
+  const { me, players, onOpen, onExpand, expanded = false, onBack, at, locationOn, locating = false, onToggleLocation, focusCourt, focusHit, focusUser, focusSpot, focusPlace, holdPins = false } = props;
   const styles = useThemedStyles(styleDefinitions);
   const { theme } = useTheme();
   // The still card takes the place names off: it sets your city's name in the middle itself.
@@ -83,7 +84,7 @@ export function NearbyMap(props: NearbyMapProps) {
   // Your own pin, tapped: the card with your open-to-hit switch.
   const [meOpen, setMeOpen] = useState(false);
   const openToHit = isOpenToHit(me);
-  const model = useMapModel(me, players, at, focusCourt, !expanded, focusHit, focusUser, focusSpot, !!locationOn);
+  const model = useMapModel(me, players, at, focusCourt, !expanded, focusHit, focusUser, focusSpot, !!locationOn, focusPlace);
   // The still card on the start page holds the opening curtain until its streets are drawn (see warmup).
   const painted = useStartMapHold(!expanded && (!!model.city || model.cityPending));
   // The still card fades in whole once its map has drawn (Oct 4, owner): the
@@ -108,8 +109,8 @@ export function NearbyMap(props: NearbyMapProps) {
   useEffect(() => {
     if (lastHome.current.lat === home.lat && lastHome.current.lng === home.lng) return;
     lastHome.current = home;
-    // Opened on a tagged court or a hit, the map stays there; the still card stays on your city.
-    if (expanded && model.homeKnown && !focusCourt && !focusHit && !focusSpot) canvas.current?.flyTo(home, CITY_ZOOM, 600);
+    // Opened on a tagged court or a hit, or looking at a place searched for, the map stays there; the still card stays on your city.
+    if (expanded && model.homeKnown && !focusCourt && !focusHit && !focusSpot && !model.place) canvas.current?.flyTo(home, CITY_ZOOM, 600);
   }, [home]); // eslint-disable-line react-hooks/exhaustive-deps
   // The still card follows a change of city on the profile.
   const cityKey = model.city ? `${model.city.lat},${model.city.lng}` : '';
@@ -121,7 +122,9 @@ export function NearbyMap(props: NearbyMapProps) {
   useEffect(() => { if (model.selectedHit) canvas.current?.flyTo(model.selectedHit.at, CLOSE_ZOOM); }, [model.selectedHit]);
   // Your card up: your pin glides into the clear strip above it, so the ring switching on is there to see.
   useEffect(() => { if (meOpen && model.mePos) canvas.current?.flyTo(model.mePos, undefined, 500, -youLift(windowH)); }, [meOpen]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { if (model.place) canvas.current?.flyTo(model.place, CITY_ZOOM, 700); }, [model.place]);
+  // A place picked from the search: exactly as close as it needs (placeZoom), out as well as in, so its court pins show;
+  // set in the clear above its list of courts, the way a court sits above its card.
+  useEffect(() => { if (model.place) canvas.current?.flyTo(model.place, placeZoom(model.place, COURTS_MIN_ZOOM), 700, -courtLift(windowH), true); }, [model.place]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const shown = expanded ? model.shown : model.inCity;
   const selectedId = model.selected?.user.id ?? null;
@@ -186,7 +189,8 @@ export function NearbyMap(props: NearbyMapProps) {
     : model.selected ? `p:${model.selected.user.id}`
       : model.selectedCourt ? `c:${model.selectedCourt.id}`
         : model.selectedHit ? `h:${model.selectedHit.hit.id}`
-          : !model.homeKnown && !model.place ? 'where' : 'tray';
+          : model.place ? `place:${model.place.id}`
+            : !model.homeKnown ? 'where' : 'tray';
   // Locked (checked with the server first), it says why in a note that stays to be read.
   const message = async (id: string) => {
     const lock = await actions.messageLock(id);
@@ -199,7 +203,7 @@ export function NearbyMap(props: NearbyMapProps) {
     <View style={styles.fill}>
       {mapView}
       <View pointerEvents="box-none" style={[styles.top, { paddingTop: insets.top + spacing.sm }]}>
-        <MapTopBar onBack={onBack} query={model.query} onQuery={model.setQuery} locationOn={locationOn} locating={locating} onToggleLocation={onToggleLocation} results={model.courtResults} onPickCourt={model.pickCourt} locationMenu={choosing} />
+        <MapTopBar onBack={onBack} query={model.query} onQuery={model.setQuery} locationOn={locationOn} locating={locating} onToggleLocation={onToggleLocation} results={model.courtResults} onPickCourt={model.pickCourt} places={model.placeSearch} onPickPlace={model.pickPlace} players={model.query.trim() ? model.tray.length : 0} locationMenu={choosing} />
         <FilterChips filter={model.filter} onFilter={model.setFilter} courtsOn={model.courtsOn} onCourts={model.toggleCourts} courtsLoading={model.courtsLoading} />
         {model.courtsOn && far && !model.selectedCourt && !model.query.trim() ? <CourtsZoomNote /> : null}
       </View>
@@ -208,12 +212,12 @@ export function NearbyMap(props: NearbyMapProps) {
         <CardStage
           cardKey={stageKey}
           kind={stageKey === 'tray' || stageKey === 'where' ? 'tray' : 'card'}
-          crown={<View pointerEvents="box-none" style={styles.crown}><MapButtons onRecentre={() => { model.select(null); model.selectCourt(null); model.selectHit(null); canvas.current?.flyTo(model.homeView.center, model.homeView.zoom ?? CITY_ZOOM, 600); }} /></View>}
+          crown={<View pointerEvents="box-none" style={styles.crown}><MapButtons onRecentre={() => { model.select(null); model.selectCourt(null); model.selectHit(null); model.clearPlace(); canvas.current?.flyTo(model.homeView.center, model.homeView.zoom ?? CITY_ZOOM, 600); }} /></View>}
         >
           {stageKey === 'where' ? (
             <WhereCard locating={locating} onLocation={onToggleLocation} />
           ) : stageKey === 'tray' ? (
-            <NearbyRail items={model.tray} cityName={model.place ? model.place.name.split(',')[0] : cityName} selectedId={null} onSelect={model.select} weather={weather} query={model.query} filter={model.filter} courts={model.nearestCourts} onPickCourt={model.selectCourt} lock={lock} onUnlock={unlock} />
+            <NearbyRail items={model.tray} cityName={cityName} selectedId={null} onSelect={model.select} weather={weather} query={model.query} filter={model.filter} courts={model.nearestCourts} onPickCourt={model.selectCourt} lock={lock} onUnlock={unlock} />
           ) : meOpen ? (
             <YouSheet me={me} open={openToHit} teen={teen} onToggle={(on) => { void toggleOpen(on); }} onProfile={() => { setMeOpen(false); router.push('/(tabs)/profile'); }} onClose={() => setMeOpen(false)} seenBy={mapVisibility} onSeenBy={choosing ? () => { void askWhoSeesYou('manage'); } : undefined} />
           ) : model.selected ? (
@@ -222,6 +226,8 @@ export function NearbyMap(props: NearbyMapProps) {
             <CourtSheet court={model.selectedCourt} miles={milesBetween(home, model.selectedCourt)} ringed={model.ringed.has(model.selectedCourt.id)} onClose={() => model.selectCourt(null)} />
           ) : model.selectedHit ? (
             <HitSheet hit={model.selectedHit.hit} miles={milesBetween(home, model.selectedHit.at)} onClose={() => model.selectHit(null)} />
+          ) : model.place ? (
+            <PlaceSheet place={model.place} rows={model.placeRows} loading={model.placeLoading} failed={model.placeFailed} onPickCourt={model.pickCourt} onRetry={model.retryPlace} onClose={model.clearPlace} played={model.ringFor} />
           ) : null}
         </CardStage>
         {/* The tray's own colour runs on beneath the floating tab bar, so no map shows between them. */}

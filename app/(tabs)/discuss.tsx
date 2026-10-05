@@ -36,6 +36,8 @@ import { confirmUnfollow } from '@/lib/confirm';
 import { NEAR_HIT_MILES, canSeeHitAt, hitSpot, openHits as openHitsOf } from '@/features/hits/visible';
 import { labelOf, looksPublic } from '@/features/places/courtName';
 import { useCourtSearch } from '@/features/places/useCourtSearch';
+import { handPlace, type FoundPlace } from '@/features/places/geocode';
+import { usePlaceSearch } from '@/features/places/usePlaceSearch';
 import { openCourt, playHere } from '@/features/players/courtLink';
 import { formatMiles, formatSpotMiles, milesBetween } from '@/features/players/geo';
 import { isRoughSpot } from '@/features/players/positions';
@@ -302,6 +304,19 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   };
   // Typing two letters or more finds courts too, above the players.
   const courtMatches = useCourtSearch(search, firstCentre, nearCourts.all, 4);
+  // And places (a city, a neighbourhood, an address, a park), leaning toward
+  // your town (only ever a rough area is sent): a tap opens the full map
+  // there, with that place's courts listed best first.
+  const placeSearch = usePlaceSearch(search, firstCentre, 3);
+  const placeMatches = useMemo(() => {
+    // A place that is one of the courts listed is already there, as the court.
+    const courtNames = new Set(courtMatches.map(({ c }) => plain(labelOf(c))));
+    return placeSearch.places.filter((p) => !courtNames.has(plain(p.title)));
+  }, [placeSearch.places, courtMatches]);
+  const openPlace = (p: FoundPlace) => {
+    handPlace(p);
+    router.push({ pathname: '/map', params: { place: '1' } });
+  };
   const searchWords = useMemo(() => plain(search).split(' ').filter(Boolean), [search]);
   const [sortOpen, setSortOpen] = useState(false);
   const [shownCount, setShownCount] = useState(25);
@@ -329,7 +344,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   const content = (section:string) => (section === 'players' ? <View style={{ gap: 16 }}>
         <View style={styles.searchWrap}>
           <Ionicons name="search" size={17} color={colors.textFaint} style={styles.searchIcon} />
-          <TextInput accessibilityLabel="Search players or courts" placeholder="Search players or courts" placeholderTextColor={colors.textFaint} value={search} onChangeText={setSearch} style={styles.search} />
+          <TextInput accessibilityLabel="Search players, courts or places" placeholder="Search players, courts or places" placeholderTextColor={colors.textFaint} value={search} onChangeText={setSearch} style={styles.search} />
         </View>
         {currentUser && !search ? (section === 'players'
           ? <NearbyMap me={currentUser} players={players} at={detectedCoords} locationOn={location.locationOn} locating={location.locating} onToggleLocation={location.toggle} onOpen={id => router.push(`/user/${id}`)} onExpand={() => router.push('/map')} />
@@ -414,7 +429,26 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
             })}
           </View>
         ) : null}
-        {search && (players.length || courtMatches.length) ? <View style={styles.playersHead}>
+        {/* Places by name, under the courts: a city, an address or a park, each opening the map there. */}
+        {search.trim() && placeMatches.length ? (
+          <View>
+            <View style={styles.playersHead}>
+              <Text style={styles.playersTitle}>Places</Text>
+              <Text style={styles.playersBody}>{placeSearch.failed ? 'Search isn’t working right now' : 'See the courts there on the map'}</Text>
+            </View>
+            {placeMatches.map((p, index) => (
+              <Pressable key={p.id} accessibilityRole="link" accessibilityLabel={`${p.title}${p.sub ? `, ${p.sub}` : ''}, see its courts on the map`} onPress={() => openPlace(p)} style={({ pressed }) => [styles.player, pressed && styles.playerPressed]}>
+                <View style={styles.placeTile}><Ionicons name={p.kind === 'area' ? 'map-outline' : 'location-outline'} size={20} color={colors.textMuted} /></View>
+                <View style={[styles.playerBody, index > 0 && styles.playerLine]}>
+                  <Highlighted text={p.title} words={searchWords} style={styles.playerName} strong={styles.courtNameMatch} lines={1} wordStart />
+                  {p.sub ? <Text style={styles.playerMeta} numberOfLines={1}>{p.sub}</Text> : null}
+                </View>
+                <Ionicons name="chevron-forward" size={16} color={colors.textFaint} style={styles.playerChevron} />
+              </Pressable>
+            ))}
+          </View>
+        ) : null}
+        {search && (players.length || courtMatches.length || placeMatches.length) ? <View style={styles.playersHead}>
           <Text style={styles.playersTitle}>Players</Text>
           {/* A court matched but no one did: one quiet line, not a big empty state under the court that was found. */}
           <Text style={styles.playersBody}>{players.length ? `${players.length} ${players.length === 1 ? 'match' : 'matches'}` : `No players named “${search.trim()}”`}</Text>
@@ -427,7 +461,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
           </View>
           <Ionicons name="chevron-forward" size={16} color={colors.textFaint} style={styles.playerChevron} />
         </Pressable>) : null}
-        {search && !players.length && !courtMatches.length ? <EmptyState title={`Nothing matches “${search.trim()}”`} body="Try a name, a city or a park." /> : null}
+        {search && !players.length && !courtMatches.length && !placeMatches.length && !placeSearch.searching ? <EmptyState title={`Nothing matches “${search.trim()}”`} body={placeSearch.failed ? 'Places can’t be searched right now. Try a player’s or a court’s name.' : 'No players, courts or places found. Try a name, a city or a park.'} /> : null}
         {/* Near you: who shared a spot within 30 miles, the same "near" as the map. */}
         {!search && nearPlayers.length ? (
           <View>
@@ -606,6 +640,8 @@ const styleDefinitions = StyleSheet.create({
   furtherText: { ...typography.smallStrong, color: colors.textMuted },
   // A court found by the search: the same tile as Search's court rows, in the players' row frame.
   courtTile: { width: 52, height: 52, borderRadius: 14, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
+  // A place found by the search: the court tile's frame, in the quiet surface colour, so places and courts read apart.
+  placeTile: { width: 52, height: 52, borderRadius: 14, backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
   courtNameMatch: { ...font('700'), color: colors.text },
   postHit: { ...typography.smallStrong, color: colors.brand },
   hitPrompt: { ...lift, flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.lg, borderRadius: 20, backgroundColor: colors.surface },

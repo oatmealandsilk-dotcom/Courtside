@@ -1,4 +1,5 @@
 import type { TaggedCourt, User } from '@/data/types';
+import type { FoundPlace } from '@/features/places/geocode';
 import type { LatLng } from '@/features/players/positions';
 
 export interface NearbyMapProps {
@@ -23,6 +24,8 @@ export interface NearbyMapProps {
   focusUser?: string | null;
   /** Opened on a spot (?lat=…&lng=…, from an alert): the map starts there. */
   focusSpot?: LatLng | null;
+  /** Opened on a place picked in Find Players' search (?place=…): the map starts there with that place's courts listed. */
+  focusPlace?: FoundPlace | null;
   /** "Who can see you on the map?" is up (or about to be) over the full map: its first pins wait to come in until it has gone. */
   holdPins?: boolean;
 }

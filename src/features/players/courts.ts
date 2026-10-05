@@ -4,6 +4,7 @@ import type { CourtAccess } from '@/data/types';
 import { milesBetween } from '@/features/players/geo';
 import type { LatLng } from '@/features/players/positions';
 import { plain } from '@/features/search/words';
+import { looksPublic } from '@/features/places/courtName';
 // The courts function's own reading of a court's map tags, so a court
 // fetched straight from OpenStreetMap is read the same way as a stored one.
 import { courtTagFacts } from '../../../supabase/functions/courts/tags';
@@ -193,6 +194,76 @@ export const sizeBonusMiles = (count: number) => Math.min(1, 0.25 * (Math.max(1,
 /** Rows in that order: by distance less the size bonus, then nearest on a tie. */
 export function biggerFirst(rows: CourtRow[]): CourtRow[] {
   return [...rows].sort((a, b) => (a.miles - sizeBonusMiles(a.c.count)) - (b.miles - sizeBonusMiles(b.c.count)) || a.miles - b.miles);
+}
+
+/** A searched place, as far as ordering its courts goes (FoundPlace in places/geocode has the rest). */
+export interface SearchedPlace { lat: number; lng: number; kind: 'area' | 'spot'; reach: number }
+
+/** Each court past the first, as a share of the place's reach. */
+const PER_EXTRA_COURT = 0.1;
+/** Each post or open hit there in the last 7 days (the map's ring), as a share of the reach. */
+const PER_PLAYED = 0.05;
+/** All of it together, never more than this share of the reach… */
+const MOST_SHARE = 0.4;
+/** …nor more than this many miles. */
+const MOST_MILES = 4;
+/** Past the place's edge, each mile counts this many. */
+const PAST_EDGE = 2;
+
+/**
+ * How far a court "counts as" when a whole city, town or neighbourhood was
+ * searched (the owner, Oct 5: "bigger courts, more popular ones first
+ * because you're just searching a city … if it's at the outskirts maybe
+ * still prioritize closer to city"). The round 3 rule for Courts near you
+ * (sizeBonusMiles), scaled to the place: "a mile" means little in a big
+ * city and a lot in a neighbourhood, so every bonus is a share of how far
+ * the place reaches from its middle (its `reach`, from its outline):
+ *   - each court past the first: a tenth of the reach closer;
+ *   - each post or open hit there this week: a twentieth closer;
+ *   - together never more than two fifths of the reach, nor 4 miles, so a
+ *     big park can move up the list but never from the edge to the middle;
+ *   - past the place's edge each mile counts double, so a big complex on
+ *     the outskirts never beats a good park in town.
+ * Raleigh reaches about 9 miles (a court is 0.9 mi, a post 0.45 mi, at most 3.6 mi):
+ *   4 courts at 1.5 mi (counts as -1.2) comes before
+ *   2 courts at 3 mi with 5 posts or hits this week (-0.2), before
+ *   1 quiet court at 0.8 mi (0.8), before
+ *   23 courts at 6.2 mi (2.6), before
+ *   30 courts at 11 mi, past the edge (9.3).
+ * The miles shown on each row stay the real ones, from the middle.
+ */
+export function placeMiles(miles: number, count: number, played: number, place: SearchedPlace): number {
+  const reach = Math.max(1, place.reach);
+  const far = miles <= reach ? miles : reach + PAST_EDGE * (miles - reach);
+  const bonus = Math.min(MOST_SHARE * reach, MOST_MILES, reach * (PER_EXTRA_COURT * (Math.max(1, count) - 1) + PER_PLAYED * Math.max(0, played)));
+  return far - bonus;
+}
+
+/**
+ * The courts of a searched place, best first, as its list reads them. Rows
+ * carry their miles from the searched spot (courtRows from there).
+ * - An area (a city, a neighbourhood): by placeMiles; the places whose names
+ *   read as public (parks, rec centres, schools) first, as Courts near you
+ *   does, then the other named ones.
+ * - A spot (an address, a street, a park): purely nearest first. Someone who
+ *   typed an address wants what is near that door, not the city's best.
+ * Members-only and private courts are never listed (they stay greyed on the
+ * map). Unnamed courts say too little to list where there are enough named
+ * places (five or more); where there are fewer (a small town, or the map's
+ * own data with few names), every open court is listed, ranked together, so
+ * a court a mile from the middle is never left off for a named one 14 miles out.
+ * `played` says how many posts and open hits a court had this week.
+ */
+export function rankForPlace(rows: CourtRow[], place: SearchedPlace, played: (c: Court) => number, max = 25): CourtRow[] {
+  const open = rows.filter((r) => !isClosedCourt(r.c));
+  const named = open.filter((r) => r.c.name !== 'Tennis courts');
+  const enoughNamed = named.length >= 5;
+  const pool = enoughNamed ? named : open;
+  if (place.kind === 'spot') return [...pool].sort((a, b) => a.miles - b.miles).slice(0, max);
+  const score = new Map(pool.map((r) => [r.c.id, placeMiles(r.miles, r.c.count, played(r.c), place)]));
+  const best = (list: CourtRow[]) => [...list].sort((a, b) => (score.get(a.c.id) ?? 0) - (score.get(b.c.id) ?? 0) || a.miles - b.miles);
+  if (!enoughNamed) return best(pool).slice(0, max);
+  return [...best(pool.filter((r) => looksPublic(r.c.name))), ...best(pool.filter((r) => !looksPublic(r.c.name)))].slice(0, max);
 }
 
 const named = new Map<string, Court[]>();
