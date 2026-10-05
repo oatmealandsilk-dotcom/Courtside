@@ -44,7 +44,7 @@ import { sheetFling } from '@/components/map/sheetFling';
 import { OpenRing } from '@/components/map/OpenRing';
 import { mix } from '@/components/map/look';
 import { notKnownAdult } from '@/features/players/age';
-import { dismissHideTip, useHideTip, useHideTipText, visibilityLabel, type TipSpot } from '@/features/players/mapPrivacy';
+import { dismissHideTip, useHideTip, useHideTipText, visibilityLabel, type NearbyLock, type TipSpot } from '@/features/players/mapPrivacy';
 import { formatSpotMiles } from '@/features/players/geo';
 import type { MapVisibility } from '@/data/types';
 
@@ -294,10 +294,15 @@ const TRAY_SPRING = { damping: 26, stiffness: 260, mass: 0.9, overshootClamping:
  * the title, the faces, the list's top — or tap the title to step it up.
  * Tap a player and the map goes to them.
  */
-export function NearbyRail({ items, cityName, onSelect, weather, query = '', filter = 'all', courts = [], onPickCourt }: { items: Placed[]; cityName: string; selectedId?: string | null; onSelect: (id: string) => void; /** Beside the city's name: what it's like to play there today. */ weather?: Weather | null; /** What is typed in the search, which the players are filtered by. */ query?: string; /** Which chip is on, so an empty tray says why. */ filter?: MapFilter; /** With nobody sharing nearby, the nearest few places anyone may play, to tap. */ courts?: CourtRow[]; onPickCourt?: (id: string) => void }) {
+export function NearbyRail({ items, cityName, onSelect, weather, query = '', filter = 'all', courts = [], onPickCourt, lock = null, onUnlock }: { items: Placed[]; cityName: string; selectedId?: string | null; onSelect: (id: string) => void; /** Beside the city's name: what it's like to play there today. */ weather?: Weather | null; /** What is typed in the search, which the players are filtered by. */ query?: string; /** Which chip is on, so an empty tray says why. */ filter?: MapFilter; /** With nobody sharing nearby, the nearest few places anyone may play, to tap. */ courts?: CourtRow[]; onPickCourt?: (id: string) => void; /** What keeps "Players nearby" from you (nearbyLock): an empty tray says so, not that nobody is there. */ lock?: NearbyLock; /** The one tap that lifts it: Location on, or who can see you. */ onUnlock?: () => void }) {
   const styles = useThemedStyles(styleDefinitions);
   const { height: windowH } = useWindowDimensions();
   const hasList = items.length > 0;
+  // Since migration 98 you share to see: with Location off or on Only me the
+  // server sends only your friends, so an empty tray says how to see the
+  // players near you instead of "No one sharing nearby yet". (Not with a
+  // name typed, or on Following: neither depends on it.)
+  const locked = lock && !query.trim() && filter !== 'following' ? lock : null;
   // The row's own height, and the list's: measured, then kept on the animation
   // thread too so a drag never waits on JavaScript (busy with pins).
   const [railH, setRailH] = useState(0);
@@ -422,6 +427,10 @@ export function NearbyRail({ items, cityName, onSelect, weather, query = '', fil
                     ))}
                   </GHScrollView>
                 </Animated.View>
+              ) : locked && (filter !== 'all' || !courts.length) ? (
+                <Animated.View entering={FadeIn.duration(180)} style={styles.lockBox}>
+                  <LockNote lock={locked} onUnlock={onUnlock} />
+                </Animated.View>
               ) : query.trim() || filter !== 'all' || !courts.length ? (
                 // With a name typed, say only that no player has it: a court's name finds the court, and the players are still there.
                 <Animated.Text entering={FadeIn.duration(180)} style={styles.sheetEmpty}>
@@ -433,7 +442,8 @@ export function NearbyRail({ items, cityName, onSelect, weather, query = '', fil
               ) : (
                 // Nobody sharing yet: the nearest places to play instead of an empty tray, each a tap from its card.
                 <Animated.View entering={FadeIn.duration(180)} style={styles.emptyCourts}>
-                  <Text style={styles.emptyCourtsTitle}>No one sharing nearby yet. The nearest courts:</Text>
+                  {locked ? <LockNote lock={locked} onUnlock={onUnlock} /> : null}
+                  <Text style={styles.emptyCourtsTitle}>{locked ? 'The nearest courts:' : 'No one sharing nearby yet. The nearest courts:'}</Text>
                   {courts.map(({ c, miles }, i) => (
                     <Pressable key={c.id} accessibilityRole="button" accessibilityLabel={`${c.name}, ${formatMiles(miles)}. Show on the map`} onPress={() => { haptics.tap(); onPickCourt?.(c.id); }} style={({ pressed }) => [styles.resultRow, i > 0 && styles.listRule, pressed && styles.listPressed]}>
                       <View style={styles.resultTile}><CourtGlyph size={13} color={colors.brand} /></View>
@@ -477,6 +487,29 @@ export function NearbyRail({ items, cityName, onSelect, weather, query = '', fil
           ) : null}
         </Animated.View>
       </GestureDetector>
+    </View>
+  );
+}
+
+/**
+ * Why no players nearby show (migration 98: you share to see), with the one
+ * tap that changes it: Location on, or who can see you (from Only me).
+ */
+function LockNote({ lock, onUnlock }: { lock: 'location' | 'hidden'; onUnlock?: () => void }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const words = lock === 'location'
+    ? 'Players near you show once you share your spot too.'
+    : 'You’re on Only me, so players nearby are hidden from you too.';
+  const action = lock === 'location' ? 'Turn on Location' : 'Change who can see you';
+  return (
+    <View style={styles.lockNote}>
+      <Text style={styles.lockWords}>{words}</Text>
+      {onUnlock ? (
+        <Pressable accessibilityRole="button" accessibilityLabel={action} hitSlop={8} onPress={() => { haptics.tap(); onUnlock(); }} style={({ pressed }) => [styles.lockAction, pressed && styles.listPressed]}>
+          <Ionicons name={lock === 'location' ? 'navigate' : 'eye-outline'} size={14} color={colors.brand} />
+          <Text style={styles.lockActionText}>{action}</Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -843,17 +876,21 @@ export function HitSheet({ hit, miles, onClose }: { hit: HitRequest; miles?: num
  * under it; a round location switch, and the weather. Nothing says "open" —
  * a map is plainly a thing you tap.
  */
-export function PreviewOverlay({ cityName, count, placeCount = 0, hitCount = 0, weather, locationOn, locating, onToggleLocation }: { cityName: string; count: number; /** Places to play in town (one per park, not single courts). */ placeCount?: number; /** Open hits in town. */ hitCount?: number; weather: Weather | null; locationOn?: boolean; locating?: boolean; onToggleLocation?: () => void }) {
+export function PreviewOverlay({ cityName, count, placeCount = 0, hitCount = 0, weather, locationOn, locating, onToggleLocation, lock = null }: { cityName: string; count: number; /** Places to play in town (one per park, not single courts). */ placeCount?: number; /** Open hits in town. */ hitCount?: number; weather: Weather | null; locationOn?: boolean; locating?: boolean; onToggleLocation?: () => void; /** What keeps "Players nearby" from you (nearbyLock). */ lock?: NearbyLock }) {
   const styles = useThemedStyles(styleDefinitions);
   // A teen sees only friends who follow each other with them (migration 78),
   // so for anyone not known to be an adult an empty map says nothing about
   // the town: no "be the first" for them.
   const { currentUser } = useApp();
   const adult = !!currentUser && !notKnownAdult(currentUser);
+  // Since migration 98 you share to see: with Location off or on Only me
+  // only your friends come back, so an empty map says how to see the
+  // players here, never "Be the first player on the map".
+  const hint = lock === 'location' ? 'Turn on Location to see players' : lock === 'hidden' ? 'On Only me, players nearby are hidden' : null;
   // Players first; with none sharing yet, the courts still say the map is worth opening.
   const line = count === 1 ? '1 player around' : count ? `${count} players around`
     : placeCount ? `${placeCount}${placeCount >= 30 ? '+' : ''} ${placeCount === 1 ? 'place' : 'places'} to play nearby`
-      : 'No one here yet';
+      : hint ?? 'No one here yet';
   return (
     <>
       {/* The city's name is the top layer, so a player's ring or a court never
@@ -866,8 +903,9 @@ export function PreviewOverlay({ cityName, count, placeCount = 0, hitCount = 0, 
           <Text style={styles.cityName} numberOfLines={1}>{cityName}</Text>
           <Text style={[styles.cityCount, (count > 0 || placeCount > 0) && styles.cityCountOn]}>{line}</Text>
           {hitCount ? <Text style={styles.cityHits}>{hitCount === 1 ? '1 open hit nearby' : `${hitCount} open hits nearby`}</Text>
-            // Nobody sharing yet, but courts to play on: a next step, not an empty town.
-            : !count && placeCount && adult ? <Text style={styles.cityHits}>Be the first player on the map</Text> : null}
+            // Nobody to show, but courts to play on: how to see the players here, or (sharing already) a next step, not an empty town.
+            : !count && placeCount && hint ? <Text style={styles.cityHits}>{hint}</Text>
+              : !count && placeCount && adult ? <Text style={styles.cityHits}>Be the first player on the map</Text> : null}
         </View>
       </View>
       {onToggleLocation ? (
@@ -1028,6 +1066,12 @@ const styleDefinitions = StyleSheet.create({
   // The empty tray's nearest courts: the search results' rows, under one quiet line.
   emptyCourts: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xs },
   emptyCourtsTitle: { ...typography.small, color: colors.textMuted, paddingBottom: 2 },
+  // Why no players nearby show, and the tap that changes it (LockNote).
+  lockBox: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xs },
+  lockNote: { paddingBottom: spacing.xs },
+  lockWords: { ...typography.small, color: colors.textMuted },
+  lockAction: { flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'flex-start', paddingVertical: 6 },
+  lockActionText: { ...typography.smallStrong, color: colors.brand },
   rail: { paddingHorizontal: spacing.md, gap: 4 },
   railItem: { width: 76, alignItems: 'center', gap: 4, paddingVertical: 6, borderRadius: radius.lg },
   railItemOn: { backgroundColor: colors.brandDim },

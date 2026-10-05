@@ -2450,10 +2450,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const seenAround = useRef<Record<ID, LastSeen>>({});
   const seenInView = useRef<Record<ID, LastSeen>>({});
   const seenFor = useRef<ID | null>(null);
+  // Goes up once the server has forgotten your spot (Location off): a load
+  // asked for before then may still carry strangers near it, and is dropped.
+  const spotGen = useRef(0);
   const loadLastSeen = useCallback(async (view?: { minLat: number; minLng: number; maxLat: number; maxLng: number } | null) => {
     const me = stateRef.current.currentUserId;
     if (!live(me)) return;
     if (seenFor.current !== me) { seenFor.current = me; seenAround.current = {}; seenInView.current = {}; }
+    const gen = spotGen.current;
     // The map's own function first (migration 63): each pin where you may see
     // it. A database without it yet answers 'missing', and the map reads the
     // old table (everyone about a kilometre out) the way it always has.
@@ -2472,7 +2476,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       else { if (got) mapLive = true; rows = got; }
     }
     if (mapLive === false) rows = await remote.fetchLastSeen();
-    if (stateRef.current.currentUserId !== me) return;
+    if (stateRef.current.currentUserId !== me || spotGen.current !== gen) return;
     // Live, and the settings row said nothing (an account with no settings saved yet): never chosen.
     if (mapLive !== stateRef.current.mapLive || (mapLive && stateRef.current.mapVisibility === undefined && stateRef.current.remoteLoaded)) {
       setState((prev) => ({ ...prev, mapLive, mapVisibility: mapLive && prev.mapVisibility === undefined && prev.remoteLoaded ? null : prev.mapVisibility }));
@@ -5276,7 +5280,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
         courtNow: Object.fromEntries(Object.entries(prev.courtNow).map(([id, row]) => [id, { ...row, youHere: false }])),
         followedCourts: prev.followedCourts?.map((c) => ({ ...c, youHere: false })) ?? null,
       }));
-      if (live(stateRef.current.currentUserId)) void remote.forgetLastSeen();
+      if (live(self)) {
+        // Since migration 98 nobody counts as near someone with no spot of
+        // their own: once the server has forgotten yours, the map is asked
+        // again (you and your friends), and what the full map last brought
+        // for its view keeps only your friends, so strangers loaded a moment
+        // ago do not stay on the pins and in the tray until the next pan. A
+        // load asked for before the server forgot is dropped when it lands.
+        void remote.forgetLastSeen().then((ok) => {
+          if (!ok || stateRef.current.currentUserId !== self) return;
+          spotGen.current += 1;
+          seenInView.current = Object.fromEntries(Object.entries(seenInView.current).filter(([, r]) => r.mutual));
+          return loadLastSeen();
+        }).catch(() => undefined);
+      }
       markedAt.current = null;
       return null;
     }
@@ -5296,7 +5313,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     remember(true);
     setState((prev) => ({ ...prev, locationEnabled: true, locationAsked: true, detectedLocation: place.name, detectedCoords: { lat: result.lat, lng: result.lng } }));
     return null;
-  }, []);
+  }, [loadLastSeen]);
 
   // Where you are, for other players' maps: the database keeps the exact spot
   // to itself and shows each player only what they may see (about a kilometre

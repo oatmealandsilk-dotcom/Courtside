@@ -2558,7 +2558,8 @@ export const remote = {
    * friends who follow each other with you, wherever they are (`mutual`),
    * and anyone else only inside `view` (at most 2° each way round its
    * middle) and within about 50 miles of your own shared spot: the server
-   * decides "near you", whatever view is asked for. With no view: you and
+   * decides "near you", whatever view is asked for, and with Location off
+   * or on Only me nobody is near you (nearbyLock). With no view: you and
    * your friends. 'missing' on a database without it (the app reads
    * last_seen instead); null when the ask failed.
    */
@@ -2594,9 +2595,11 @@ export const remote = {
     const { error } = await need().rpc('mark_last_seen', { p_lat: lat, p_lng: lng, p_city: city ?? null });
     if (error) fail('mark last seen')(error);
   },
-  async forgetLastSeen() {
+  /** Location off: the server drops your spots. Resolves false when it could not. */
+  async forgetLastSeen(): Promise<boolean> {
     const { error } = await need().rpc('forget_last_seen');
     if (error) fail('forget last seen')(error);
+    return !error;
   },
   /*
    * Courts (migration 60). Every read here answers null on a database

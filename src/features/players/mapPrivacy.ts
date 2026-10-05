@@ -5,6 +5,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 
 import type { MapVisibility, User } from '@/data/types';
+import { isDemo } from '@/features/activity/flags';
 import { notKnownAdult } from '@/features/players/age';
 
 /*
@@ -26,7 +27,8 @@ import { notKnownAdult } from '@/features/players/age';
 export const VISIBILITY_CHOICES: { value: MapVisibility; label: string; line: string }[] = [
   { value: 'nearby', label: 'Players nearby', line: 'Your rough area, or your court when you check in. Exact for people you follow back.' },
   { value: 'mutuals', label: 'Only people you follow back', line: 'Your exact spot, just for them.' },
-  { value: 'none', label: 'Only me', line: 'No one sees you on the map.' },
+  // Since migration 98 you share to see: hidden yourself, you see only your friends.
+  { value: 'none', label: 'Only me', line: 'No one sees you on the map, and you see only people you follow back.' },
 ];
 
 /**
@@ -73,6 +75,23 @@ export const canChooseVisibility = (mapLive: boolean | null, me: User | null | u
 
 /** Whether the map's teen rule (friends who follow each other only) applies to you. */
 export const onTeenMap = (me: User | null | undefined, teenMap: TeenMap) => !!me && notKnownAdult(me) && teenMap === 'on';
+
+/**
+ * Why the map cannot show you "Players nearby" right now. Since migration
+ * 98 you share to see: the server sends strangers only to someone with a
+ * spot of their own on the map who did not choose Only me (friends who
+ * follow each other with you show either way). 'location': Location is off
+ * and the server has no spot for you; 'hidden': you chose Only me; null:
+ * nothing holds them back. Only for a known adult on a real account: a teen
+ * sees only friends whatever they do, and the demo shows everyone.
+ */
+export type NearbyLock = 'location' | 'hidden' | null;
+export function nearbyLock(a: { mapLive: boolean | null; me: User | null | undefined; mapVisibility: MapVisibility | null | undefined; locationOn: boolean; hasSpot: boolean }): NearbyLock {
+  if (a.mapLive !== true || !a.me || notKnownAdult(a.me) || isDemo(a.me.id)) return null;
+  if (a.mapVisibility === 'none') return 'hidden';
+  // A spot shared from another device still counts: the server measures from it.
+  return !a.locationOn && !a.hasSpot ? 'location' : null;
+}
 
 /* ------------------------------------------------------------- the screen */
 
