@@ -9,6 +9,10 @@ yarn-error.*
 *.orig.*
 ios/
 android/
+# Except CourtSide's own native modules: their phone code in modules/<name>/ios and
+# /android is written by hand, unlike the ./ios and ./android that prebuild makes.
+!/modules/*/ios/
+!/modules/*/android/
 .env*.local
 expo-env.d.ts
 

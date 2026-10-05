@@ -2849,10 +2849,16 @@ export const remote = {
 
   /* ------------------------------------------- tennis sessions (migration 58) */
 
-  /** Which server switches are on for you, by name ('tennis-apple', 'tennis-whoop'). Empty on a database without them. */
-  async myFlags(): Promise<Record<string, boolean>> {
+  /**
+   * Which server switches are on for you, by name ('tennis-apple', 'tennis-whoop'). Empty on a
+   * database without them. Null when they could not be read (no signal, say): not the same as
+   * all off, so a step that would switch something off for good can wait (useWorkoutWatch).
+   */
+  async myFlags(): Promise<Record<string, boolean> | null> {
     const { data, error } = await need().rpc('my_flags');
-    if (error || !data || typeof data !== 'object') return {};
+    // PGRST202: no such function (a database before migration 58), which is all off.
+    if (error) return error.code === 'PGRST202' ? {} : null;
+    if (!data || typeof data !== 'object') return {};
     return data as Record<string, boolean>;
   },
   /** Your tracker sessions from the last two weeks. Null when they could not be read (empty on a database without them). */

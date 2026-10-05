@@ -29,7 +29,7 @@ import { readReceiptPreference, saveReceiptPreference } from '@/features/messagi
 import { connectProvider, disconnectProvider, withCatalog } from '@/lib/integrations';
 import { appleHealthAvailable, connectAppleHealth, readAppleHealth, readAppleNutrition } from '@/features/health/appleHealth';
 import { isTracker, tennisFlags, TRACKERS } from '@/features/activity/flags';
-import { checkForTennis } from '@/features/activity/check';
+import { checkForTennis, reportFromAlert } from '@/features/activity/check';
 import { pickSource } from '@/features/activity/recent';
 import { isTennisActivity, workoutLine, workoutName } from '@/features/activity/workouts';
 import { mergePast, readOneWithHeartRate, readPastHealth, type PastWorkout } from '@/features/activity/pastWorkouts';
@@ -55,6 +55,7 @@ import type { TeenMap } from '@/features/players/mapPrivacy';
 import { show as showToast } from '@/lib/toast';
 import { opensAtFor } from '@/features/hits/audience';
 import { forgetPushToken, registerForPush } from '@/features/push/push';
+import { stopWorkoutWatch } from '@/features/health/workoutWatch';
 import { framesAt } from '@/features/compose/frames';
 import { noteStep, reportError } from '@/lib/crashReporting';
 import { noteAppOpen } from '@/features/usage/appOpens';
@@ -767,6 +768,15 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
   pastWorkouts: () => Promise<PastWorkout[] | null>;
   /** Log it on a past workout: hands one the server does not have yet to it (with its heart rate), and gives the id to open. Throws a plain sentence. */
   logPastWorkout: (w: PastWorkout) => Promise<ID>;
+  /**
+   * A tap on this iPhone's own "Workout detected" alert (from build 15,
+   * features/health/workoutWatch): the workout is read from Health and
+   * handed to the server as the check hands one over, so it gets its row in
+   * Notifications too; your sessions and Notifications are read again. The
+   * id to open Log it on, or null when it can't be (Health no longer has
+   * it, the server turned it away, or it did not get through).
+   */
+  reportWorkoutFromAlert: (w: { id: string; startedAt: string; endedAt: string }) => Promise<ID | null>;
   /**
    * Asks the source for workouts (Apple Health's sheet, or WHOOP's, Fitbit's,
    * Oura's or Polar's sign-in again), then turns tennis sessions on for it.
@@ -2402,7 +2412,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const { id, email } = session.user;
         void loadRemote(id, email).then((ok) => { if (!ok && !cancelled && !stateRef.current.remoteLoaded && stateRef.current.currentUserId === id) void loadRemote(id, email); });
       }
-      if (event === 'SIGNED_OUT') setState((prev) => ({ ...prev, currentUserId: null, onboardingComplete: false, termsVersion: undefined, ...freshAccountSettings() }));
+      if (event === 'SIGNED_OUT') {
+        // Truly signed out (the session was ended, here or from another phone): this
+        // iPhone's own "Workout detected" alerts stop too (build 15, workoutWatch).
+        void stopWorkoutWatch();
+        setState((prev) => ({ ...prev, currentUserId: null, onboardingComplete: false, termsVersion: undefined, ...freshAccountSettings() }));
+      }
     });
     // Tokens only refresh while the app is in front.
     const sub = DeviceState.addEventListener('change', (status) => {
@@ -2688,6 +2703,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       await forgetPushToken();
       try { await remoteAuth.signOutEverywhere(); } catch (err) { void registerForPush(); throw err; }
     }
+    // Nor this iPhone's own "Workout detected" alerts (build 15, workoutWatch).
+    void stopWorkoutWatch();
     // Everywhere includes this device: the remembered login is gone too.
     const savedAccounts = me ? await forgetAccount(me) : stateRef.current.savedAccounts;
     // Nothing of the account stays on the device (see signOut), its saved copy included.
@@ -2722,6 +2739,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // An account made with Apple: Apple's sheet confirms once more, so the server can revoke
     // the Sign in with Apple link too (best effort: closing the sheet still deletes the account).
     if (isSupabaseConfigured) await remoteAuth.deleteAccount(await remoteAuth.appleCodeForDelete());
+    // Nor this iPhone's own "Workout detected" alerts for it (build 15, workoutWatch).
+    void stopWorkoutWatch();
     // A deleted account has no business in the remembered-logins list.
     const savedAccounts = me ? await forgetAccount(me) : stateRef.current.savedAccounts;
     // Nor anything of it on the device (see signOut), its saved copy included.
@@ -2770,6 +2789,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     void forgetLinkPreviews();
     // This phone stops getting the account's alerts before the session ends (the removal needs it).
     if (isSupabaseConfigured) void forgetPushToken().finally(() => remoteAuth.signOut());
+    // Nor this iPhone's own "Workout detected" alerts (build 15, workoutWatch): only signing out
+    // stops them, never an open that merely could not read the session (useWorkoutWatch).
+    void stopWorkoutWatch();
     // One account's health, courts and settings never carry over to the next one signed in.
     setState(signedOut);
   }, []);
@@ -5467,6 +5489,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       try {
         if (isSupabaseConfigured) await remoteAuth.deleteAccount();
       } catch { /* the sign-out below still takes it off this phone */ }
+      void stopWorkoutWatch();
       const savedAccounts = await forgetAccount(me).catch(() => stateRef.current.savedAccounts);
       setState((prev) => ({ ...signedOut(prev), savedAccounts }));
       void clearSnapshot(me);
@@ -6749,6 +6772,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return r.id;
   }, [refreshActivities]);
 
+  const reportWorkoutFromAlert = useCallback(async (w: { id: string; startedAt: string; endedAt: string }): Promise<ID | null> => {
+    const me = stateRef.current.currentUserId;
+    if (!live(me) || !appleHealthAvailable()) return null;
+    const r = await reportFromAlert(me!, w);
+    if (r === 'error' || stateRef.current.currentUserId !== me) return null;
+    // The workout among your sessions, and its "Workout detected" row in Notifications, as after a check.
+    const [list, notes] = await Promise.all([remote.fetchActivities(me!).catch(() => null), remote.fetchActivityNotes(me!).catch(() => [])]);
+    if (stateRef.current.currentUserId !== me) return null;
+    if (list) setState((prev) => ({ ...prev, detectedActivities: list }));
+    if (notes.length) setState((prev) => ({ ...prev, notifications: [...notes.filter((n) => !prev.notifications.some((x) => x.id === n.id)), ...prev.notifications] }));
+    return r;
+  }, []);
+
   const turnOnTennis = useCallback(async (provider: 'apple-health' | 'whoop' | TrackerId, opts: { workouts?: boolean } = {}) => {
     const me = stateRef.current.currentUserId;
     // Every workout too: only Apple Health, and only on the person's own yes to it.
@@ -6958,6 +6994,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       dismissActivity,
       pastWorkouts,
       logPastWorkout,
+      reportWorkoutFromAlert,
       turnOnTennis,
       turnOffTennis,
       claimPendingReferral,
@@ -7157,6 +7194,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       dismissActivity,
       pastWorkouts,
       logPastWorkout,
+      reportWorkoutFromAlert,
       turnOnTennis,
       turnOffTennis,
       claimPendingReferral,

@@ -36,8 +36,10 @@ export const NO_FLAGS: TennisFlags = { apple: false, whoop: false, fitbit: false
 const OFF = NO_FLAGS;
 const DEMO: TennisFlags = { apple: true, whoop: true, fitbit: true, oura: true, polar: true, workoutsApple: true };
 
-let known: { me: string; flags: TennisFlags; at: number } | null = null;
-let asking: { me: string; answer: Promise<TennisFlags> } | null = null;
+/** The last answer, per account. `failed`: the server could not be asked, and OFF stands in for it. */
+type Known = { me: string; flags: TennisFlags; at: number; failed: boolean };
+let known: Known | null = null;
+let asking: { me: string; answer: Promise<Known> } | null = null;
 
 /** True for the demo: no database, or an account that is one of the fixtures. */
 export const isDemo = (me: string | null) => !supabase || (!!me && !UUID.test(me));
@@ -48,20 +50,41 @@ export function knownTennisFlags(me: string | null): TennisFlags | null {
   return known && known.me === me ? known.flags : null;
 }
 
+const toFlags = (f: Record<string, boolean>): TennisFlags => ({ apple: f['tennis-apple'] === true, whoop: f['tennis-whoop'] === true, fitbit: f['tennis-fitbit'] === true, oura: f['tennis-oura'] === true, polar: f['tennis-polar'] === true, workoutsApple: f['workouts-apple'] === true });
+
+/** The server's answer, kept for a few minutes; `usable` says whether a kept one will do. */
+function ask(me: string, usable: (k: Known) => boolean): Promise<Known> {
+  if (known && known.me === me && Date.now() - known.at < RECHECK_MS && usable(known)) return Promise.resolve(known);
+  if (asking && asking.me === me) return asking.answer;
+  const answer = remote.myFlags()
+    .then((f): Known => (f ? { me, flags: toFlags(f), at: Date.now(), failed: false } : { me, flags: OFF, at: Date.now(), failed: true }))
+    .catch((): Known => ({ me, flags: OFF, at: Date.now(), failed: true }))
+    .then((k) => {
+      known = k;
+      if (asking?.me === me) asking = null;
+      return k;
+    });
+  asking = { me, answer };
+  return answer;
+}
+
+/** The switches; all off when the server could not be asked (kept that way for a few minutes, as always). */
 export function tennisFlags(me: string | null): Promise<TennisFlags> {
   if (isDemo(me)) return Promise.resolve(DEMO);
   // Signed out: nothing is on.
   if (!me) return Promise.resolve(OFF);
-  if (known && known.me === me && Date.now() - known.at < RECHECK_MS) return Promise.resolve(known.flags);
-  if (asking && asking.me === me) return asking.answer;
-  const answer = remote.myFlags()
-    .then((f) => ({ apple: f['tennis-apple'] === true, whoop: f['tennis-whoop'] === true, fitbit: f['tennis-fitbit'] === true, oura: f['tennis-oura'] === true, polar: f['tennis-polar'] === true, workoutsApple: f['workouts-apple'] === true }))
-    .catch(() => OFF)
-    .then((flags) => {
-      known = { me, flags, at: Date.now() };
-      if (asking?.me === me) asking = null;
-      return flags;
-    });
-  asking = { me, answer };
-  return answer;
+  return ask(me, () => true).then((k) => k.flags);
+}
+
+/**
+ * The switches as the server actually said them, or null when it could not
+ * be asked (no signal at the court, airplane mode, a wake in the background
+ * on a weak signal). For a step with a lasting effect, which must not take
+ * "could not ask" for "off": useWorkoutWatch, whose stop forgets the phone's
+ * whole record of workouts. A failed answer is never reused here: it asks again.
+ */
+export function tennisFlagsKnown(me: string | null): Promise<TennisFlags | null> {
+  if (isDemo(me)) return Promise.resolve(DEMO);
+  if (!me) return Promise.resolve(null);
+  return ask(me, (k) => !k.failed).then((k) => (k.failed ? null : k.flags));
 }

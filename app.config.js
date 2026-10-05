@@ -46,6 +46,12 @@ module.exports = {
       supportsTablet: false,
       usesAppleSignIn: true,
       bundleIdentifier: 'co.courtside.app',
+      // Apple Health may wake the app the moment a workout is saved, so "Workout detected"
+      // comes even with CourtSide closed (modules/workout-watch, Oct 5). The react-native-health
+      // plugin below adds the HealthKit entitlement itself; this adds background delivery only.
+      // No other permission is needed: the alert is the app's own, under its usual alerts.
+      // Takes effect from the next App Store build (15).
+      entitlements: { 'com.apple.developer.healthkit.background-delivery': true },
       infoPlist: {
         // No custom encryption: skips the export-compliance question on every upload.
         ITSAppUsesNonExemptEncryption: false,
@@ -165,6 +171,11 @@ module.exports = {
     // its Android fixes away), and if a package with phone code is ever added for
     // one platform only (Health Connect, say), bump `version` and build both, or
     // the other platform's older build would be sent code that needs it.
+    // Once iPhone build 15 (modules/workout-watch) is out, never roll back to or
+    // republish an update made before that module's code was merged: that older
+    // code never tells the module when sessions are turned off, so its "Workout
+    // detected" alerts would carry on (the module drops switches the app has not
+    // confirmed for 30 days, as a backstop only).
     runtimeVersion: { policy: 'appVersion' },
     // The phone waits up to 3 s while opening for a newer version and opens straight into it,
     // so testers don't need to close and reopen twice (from build 11, Oct 2).
