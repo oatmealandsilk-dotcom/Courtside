@@ -98,7 +98,8 @@ export function SessionSheet({ post, me, users, sessions, sessionTags, activitie
   const kcal = s.kcal ? s.kcal : null;
   // A workout's distance (migration 107): only ever on a workout's post, never on tennis.
   const far = s.workout ? distanceFigure(s.distanceM) : null;
-  const over = mine ? overUsual(sessions, me, s.minutes, { exclude: log?.id }) : null;
+  // Like with like: tennis against tennis (as before workouts were logged), a run against your runs.
+  const over = mine ? overUsual(sessions, me, s.minutes, { exclude: log?.id, workout: s.workout }) : null;
 
   // Who played: those who accepted, for everyone; to the author, those still waiting too, faded.
   const { opponents, partners } = sessionPeople(s, hidden);
@@ -251,7 +252,8 @@ export function SessionSheet({ post, me, users, sessions, sessionTags, activitie
           <FormRow icon="logo-instagram" label="Share to Instagram" chevron onPress={() => { learned('share-session'); onShare(); }} />
         </View>
       ) : null}
-      {mine && log && onEdit ? (
+      {/* A workout's log (a run, the gym: migration 107) has nobody to tag and no score, so nothing to edit there. */}
+      {mine && log && onEdit && !(log.kind === 'fitness' && log.workout) ? (
         <FormRow icon="create-outline" label="Edit session" chevron onPress={() => onEdit(log.id)} />
       ) : null}
       {rival && onRematch && (!canAsk || canAsk(rival.id)) ? (

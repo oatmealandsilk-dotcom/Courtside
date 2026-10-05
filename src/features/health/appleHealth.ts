@@ -115,9 +115,11 @@ const metresOf = (miles: number | undefined) => (typeof miles === 'number' && Nu
  * when WHOOP already sends its own straight to the server; WHOOP sends only
  * tennis, so its runs and lifts copied into Health are kept. `heartRate:
  * false` skips the heart-rate read (one ask of Health per workout, the slow
- * part), for a plain list. Never throws.
+ * part), for a plain list. `skip` leaves out workouts by Health's id (ones
+ * already handed to the server), before their heart rate is read and before
+ * `limit` counts them. Never throws.
  */
-export async function readWorkouts(sinceIso: string, opts: { sports?: ('tennis' | 'other')[]; skipWhoopTennis?: boolean; limit?: number; heartRate?: boolean; untilIso?: string } = {}): Promise<HealthWorkout[]> {
+export async function readWorkouts(sinceIso: string, opts: { sports?: ('tennis' | 'other')[]; skipWhoopTennis?: boolean; limit?: number; heartRate?: boolean; untilIso?: string; skip?: (id: string) => boolean } = {}): Promise<HealthWorkout[]> {
   const h = load();
   if (!h) return [];
   const settle = async <T,>(p: Promise<T>) => { try { return await p; } catch { return null; } };
@@ -129,6 +131,7 @@ export async function readWorkouts(sinceIso: string, opts: { sports?: ('tennis' 
       .map((w) => ({ w, sport: slugOfAppleWorkout(w.activityId, w.activityName) }))
       .filter(({ sport }) => sports.includes(sport === 'tennis' ? 'tennis' : 'other'))
       .filter(({ w, sport }) => !(opts.skipWhoopTennis && sport === 'tennis' && /whoop/i.test(`${w.sourceName} ${w.sourceId}`)))
+      .filter(({ w }) => !opts.skip?.(w.id))
       .slice(0, opts.limit ?? 40);
     const out: HealthWorkout[] = [];
     for (const { w, sport } of picked) {

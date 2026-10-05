@@ -729,6 +729,12 @@ export interface Integration {
   provides: string[];
   /** Tennis sessions switched on for this source (migration 58). */
   readsWorkouts?: boolean;
+  /**
+   * Every workout too, not only tennis (Apple Health; migration 107, column
+   * reads_all_workouts): its own yes to "Workouts from Apple Health", never
+   * carried over from the tennis one.
+   */
+  readsAllWorkouts?: boolean;
 }
 
 export interface DailyHealth {

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router, useLocalSearchParams } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
@@ -12,8 +13,10 @@ import { canTagKind, firstName, peopleText, peopleWords, yourResult } from '@/fe
 import { show as showToast } from '@/lib/toast';
 import { ATTACH_DAYS, pickSource, postOf, postedIndex, sourceOn, type SessionPick } from '@/features/activity/recent';
 import { useTennisFlags } from '@/features/activity/useTennisFlags';
-import { formatDistance, isTennisActivity, workoutIcon } from '@/features/activity/workouts';
+import { formatDistance, isTennisActivity, workoutIcon, WORKOUTS_ASK } from '@/features/activity/workouts';
+import { appleHealthAvailable } from '@/features/health/appleHealth';
 import { localDay } from '@/features/practice/stats';
+import { confirm } from '@/lib/confirm';
 import { goBack } from '@/lib/goBack';
 import { duration } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
@@ -74,8 +77,16 @@ export default function YourSessions() {
   const styles = useThemedStyles(styleDefinitions);
   const { currentUserId, sessions, detectedActivities, posts, sessionTags, users, actions, integrations } = useApp();
   const flags = useTennisFlags();
-  // Past workouts (Oct 5): once every workout is switched on and Apple Health reads them (or something already came in).
-  const pastOn = flags.workoutsApple && (integrations.some((i) => i.provider === 'apple-health' && i.connected && i.readsWorkouts) || detectedActivities.some((a) => a.userId === currentUserId));
+  const apple = integrations.find((i) => i.provider === 'apple-health');
+  // Past workouts (Oct 5): once every workout is switched on and Apple Health reads them (their own yes
+  // to it, kept on the connection itself, so only ever there while Apple Health is connected).
+  const pastOn = flags.workoutsApple && !!apple?.readsWorkouts && !!apple.readsAllWorkouts;
+  // The list also holds tennis from WHOOP and the other trackers that have sessions on: it says so.
+  const otherTrackers = integrations.some((i) => i.provider !== 'apple-health' && i.connected && i.readsWorkouts
+    && (i.provider === 'whoop' ? flags.whoop : i.provider === 'fitbit' || i.provider === 'oura' || i.provider === 'polar' ? flags[i.provider] : false));
+  const pastFrom = otherTrackers ? 'your trackers' : 'Apple Health';
+  // Tennis sessions on from Apple Health, every workout not yet: offered here too (on this iPhone), never switched on for them.
+  const offerOn = flags.workoutsApple && !!apple?.connected && !!apple.readsWorkouts && !apple.readsAllWorkouts && appleHealthAvailable();
   // Opened from a tag's phone alert: its sheet opens over this page, once.
   const { tag: tagParam } = useLocalSearchParams<{ tag?: string }>();
   const opened = useRef<string | null>(null);
@@ -133,15 +144,16 @@ export default function YourSessions() {
   return (
     <Screen title="Your sessions" subtitle="Only you see this." compactTitle onBack={() => goBack('/profile')} right={logButton}>
       {pastOn ? (
-        <Pressable accessibilityRole="button" accessibilityLabel="Past workouts: the last 30 days from Apple Health" onPress={() => router.push('/workouts')} style={({ pressed }) => [styles.group, styles.pastRow, pressed && styles.pressed]}>
+        <Pressable accessibilityRole="button" accessibilityLabel={`Past workouts: the last 30 days from ${pastFrom}`} onPress={() => router.push('/workouts')} style={({ pressed }) => [styles.group, styles.pastRow, pressed && styles.pressed]}>
           <View style={styles.pastIcon}><Ionicons name="fitness-outline" size={18} color={colors.court} /></View>
           <View style={styles.words}>
             <Text style={styles.title}>Past workouts</Text>
-            <Text style={styles.when}>The last 30 days, from Apple Health</Text>
+            <Text style={styles.when}>The last 30 days, from {pastFrom}</Text>
           </View>
           <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
         </Pressable>
       ) : null}
+      {offerOn && currentUserId ? <WorkoutsOffer me={currentUserId} /> : null}
       {!waiting.length && !groups.length && !taggedYou.length ? (
         <EmptyState
           icon="stopwatch-outline"
@@ -222,6 +234,67 @@ export default function YourSessions() {
         </Pressable>
       ) : null}
     </Screen>
+  );
+}
+
+/** "Not now" on the offer below, kept on this phone per account. */
+const offerKey = (me: string) => `courtside-workouts-offer:${me}`;
+
+/**
+ * The offer of every workout (migration 107) to someone who turned on tennis
+ * sessions from Apple Health only: they agreed to their tennis workouts, so
+ * runs, rides and the gym are never picked up until they say yes here (or on
+ * the Health page), after the same explanation anyone new gets. "Not now"
+ * puts it away on this phone; the Health page keeps offering it.
+ */
+function WorkoutsOffer({ me }: { me: string }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const { actions } = useApp();
+  // Hidden until this phone has said whether it was put away, so it never flashes up and away.
+  const [shown, setShown] = useState(false);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    let on = true;
+    AsyncStorage.getItem(offerKey(me)).then((v) => { if (on && !v) setShown(true); }).catch(() => { if (on) setShown(true); });
+    return () => { on = false; };
+  }, [me]);
+  if (!shown) return null;
+  const later = () => {
+    setShown(false);
+    void AsyncStorage.setItem(offerKey(me), '1').catch(() => undefined);
+  };
+  const turnOn = () => confirm({
+    ...WORKOUTS_ASK,
+    confirmLabel: 'Continue',
+    onConfirm: async () => {
+      setBusy(true);
+      try {
+        await actions.turnOnTennis('apple-health', { workouts: true });
+      } catch (err) {
+        showToast({ title: 'Could not turn that on', body: err instanceof Error ? err.message : 'Try again in a moment.', icon: 'alert-circle-outline' });
+      } finally {
+        setBusy(false);
+      }
+    },
+  });
+  return (
+    <View style={[styles.group, styles.offer]}>
+      <View style={styles.offerTop}>
+        <View style={styles.pastIcon}><Ionicons name="fitness-outline" size={18} color={colors.court} /></View>
+        <View style={styles.words}>
+          <Text style={styles.title}>Also pick up runs, rides and the gym?</Text>
+          <Text style={styles.when}>Your other workouts from Apple Health, ready to log like your tennis. Only you see them.</Text>
+        </View>
+      </View>
+      <View style={styles.offerButtons}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Not now" disabled={busy} hitSlop={8} onPress={later} style={({ pressed }) => [styles.offerLater, pressed && styles.pressed]}>
+          <Text style={styles.offerLaterText}>Not now</Text>
+        </Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel="Turn on every workout from Apple Health" accessibilityState={{ busy, disabled: busy }} disabled={busy} onPress={turnOn} style={({ pressed }) => [styles.action, styles.actionOn, styles.offerOn, pressed && styles.pressed]}>
+          {busy ? <ActivityIndicator size="small" color={colors.brandInk} /> : <Text style={[styles.actionText, styles.actionTextOn]}>Turn on</Text>}
+        </Pressable>
+      </View>
+    </View>
   );
 }
 
@@ -448,6 +521,13 @@ const styleDefinitions = StyleSheet.create({
   // Past workouts: one row of its own, the list's card look, above everything else.
   pastRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: 14, marginTop: spacing.sm },
   pastIcon: { width: 22, alignItems: 'center', justifyContent: 'center' },
+  // The offer of every workout: the same card, its words, then Not now and Turn on at the right.
+  offer: { paddingVertical: 14, marginTop: spacing.sm, gap: spacing.md },
+  offerTop: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
+  offerButtons: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: spacing.sm },
+  offerLater: { paddingHorizontal: 12, paddingVertical: 7 },
+  offerLaterText: { ...typography.smallStrong, color: colors.textMuted },
+  offerOn: { minWidth: 84, alignItems: 'center' },
   moreText: { ...typography.smallStrong, color: colors.brand },
   pressed: { opacity: 0.6 },
 });

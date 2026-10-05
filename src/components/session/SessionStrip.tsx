@@ -6,7 +6,7 @@ import { router } from 'expo-router';
 
 import type { ID, SessionDetail } from '@/data/types';
 import { resultWithScore, sourceLabel, spokenDuration, whatWord } from '@/features/activity/format';
-import { distanceFigure } from '@/features/activity/workouts';
+import { distanceFigure, formatDistance } from '@/features/activity/workouts';
 import { sessionPeople } from '@/features/activity/sessionTags';
 import { colors, font, withAlpha } from '@/theme';
 import { Duration, Figure } from './Duration';
@@ -37,12 +37,14 @@ export function SessionStrip({ session, hidden = [], play = false, scale = 1, on
   const hr = session.maxHr != null;
   const strain = session.strain != null ? session.strain : null;
   const kcal = session.kcal ? session.kcal : null;
-  // A workout's distance (migration 107): tennis never has one.
+  // A workout's distance (migration 107), in its title line ("Run · 3.1 mi") rather than a fifth
+  // column the panel has no room for. Tennis never has one.
   const far = session.workout ? distanceFigure(session.distanceM) : null;
   const shared = [hr, strain != null, kcal != null].filter(Boolean).length;
   // "Match · Won 6–4 3–6 10–7" when the log has a score (migration 91).
   const result = resultWithScore(session);
   const what = [whatWord(session), result].filter(Boolean).join(' · ');
+  const title = far ? `${what} · ${formatDistance(session.distanceM)}` : what;
   const { opponents, partners } = sessionPeople(session, hidden);
   const all = [...opponents, ...partners];
   const lead = all[0];
@@ -54,7 +56,6 @@ export function SessionStrip({ session, hidden = [], play = false, scale = 1, on
   // The session card's own look (Oct 4, owner: "looks a bit flat"): the theme's colour and its wash, white numbers; glass-dark on dark themes.
   const look = cardLook();
   const stats = [
-    far ? { key: 'far', label: 'Distance', node: <Figure value={far.value} part={far.value < 10 ? 'dec1' : 'int'} unit={far.unit} baseline unitScale={0.62} size={19 * k} color={look.figure} unitColor={look.muted} play={play} delay={160} duration={600} /> } : null,
     kcal != null ? { key: 'kcal', label: 'Calories', node: <Figure value={kcal} baseline size={19 * k} color={look.figure} unitColor={look.muted} play={play} delay={200} duration={600} /> } : null,
     hr && session.avgHr ? { key: 'avg', label: 'Avg HR', node: <Figure value={session.avgHr} unit="bpm" baseline unitScale={0.62} size={19 * k} color={look.figure} unitColor={look.muted} play={play} delay={200} duration={600} /> } : null,
     hr ? { key: 'max', label: 'Max HR', node: <Figure value={session.maxHr!} unit="bpm" baseline unitScale={0.62} size={19 * k} color={look.figure} unitColor={look.muted} play={play} delay={200} duration={600} /> } : null,
@@ -77,7 +78,7 @@ export function SessionStrip({ session, hidden = [], play = false, scale = 1, on
           <ZoneGlyph size={14 * k} color={look.ink} />
         </View>
         <View style={[styles.flex, { gap: 1 * k }]}>
-          <Text style={[styles.title, { color: look.ink }, { fontSize: 14.5 * k, lineHeight: Math.round(19 * k) }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>{what}</Text>
+          <Text style={[styles.title, { color: look.ink }, { fontSize: 14.5 * k, lineHeight: Math.round(19 * k) }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>{title}</Text>
           {lead || source ? (
             <Text style={[styles.sub, small, { color: look.muted }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>
               {lead ? (

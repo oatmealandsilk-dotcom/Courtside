@@ -134,12 +134,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // While the app stays open on screen, new rows in Notifications arrive
   // without closing and opening it (Oct 5): a workout just found, WHOOP's own
   // alert, anything else filed meanwhile. One small ask every two minutes
-  // and a bit, only while the app is in front.
+  // and a bit, only while the app is in front. The workouts look on a tick
+  // hands over only workouts not handed over yet, and reads your sessions
+  // again only when one was.
   useEffect(() => {
     if (!isSupabaseConfigured || !currentUserId || !remoteLoaded || !onboardingComplete) return undefined;
     const tick = setInterval(() => {
       if (AppState.currentState !== 'active') return;
-      if (healthIsReal) void actions.checkForActivities();
+      if (healthIsReal) void actions.checkForActivities(false, true);
       void actions.catchUpNotifications();
     }, LIVE_LOOK_MS);
     return () => clearInterval(tick);

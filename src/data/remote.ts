@@ -1692,7 +1692,7 @@ export const remote = {
   /* --------------------------------------------------------------- health */
 
   /** A person's days and which sources are connected. Null while the tables do not exist yet. */
-  async fetchHealth(me: ID): Promise<{ days: DailyHealth[]; connections: { provider: IntegrationProvider; lastSyncedAt?: string; readsWorkouts?: boolean }[] } | null> {
+  async fetchHealth(me: ID): Promise<{ days: DailyHealth[]; connections: { provider: IntegrationProvider; lastSyncedAt?: string; readsWorkouts?: boolean; readsAllWorkouts?: boolean }[] } | null> {
     const db = need();
     const [d, c] = await Promise.all([
       db.from('health_days').select('*').eq('user_id', me).order('date', { ascending: false }).limit(60),
@@ -1711,6 +1711,8 @@ export const remote = {
         provider: r.provider as IntegrationProvider, lastSyncedAt: r.last_synced_at ?? undefined,
         // Tennis sessions switched on for this source (migration 58; never without it).
         readsWorkouts: r.reads_workouts === true,
+        // Every workout too, its own yes (migration 107; never without it).
+        readsAllWorkouts: r.reads_all_workouts === true,
       })),
     };
   },
@@ -1737,21 +1739,35 @@ export const remote = {
     if (error) throw new Error(error.message);
   },
 
-  /** `readsWorkouts` turns tennis sessions on or off for a connected source (migration 58). */
-  async setHealthConnection(me: ID, provider: IntegrationProvider, connected: boolean, extra?: { readsWorkouts?: boolean }) {
+  /**
+   * `readsWorkouts` turns tennis sessions on or off for a connected source
+   * (migration 58); `readsAllWorkouts`, every other workout as well
+   * (migration 107), only ever on the person's own yes to it.
+   */
+  async setHealthConnection(me: ID, provider: IntegrationProvider, connected: boolean, extra?: { readsWorkouts?: boolean; readsAllWorkouts?: boolean }) {
     const db = need();
     if (!connected) {
       const { error } = await db.from('health_connections').delete().match({ user_id: me, provider });
       if (error) throw new Error(error.message);
       return;
     }
-    const tennis = extra?.readsWorkouts !== undefined;
+    const cols: Record<string, boolean> = {};
+    if (extra?.readsWorkouts !== undefined) cols.reads_workouts = extra.readsWorkouts;
+    if (extra?.readsAllWorkouts !== undefined) cols.reads_all_workouts = extra.readsAllWorkouts;
+    const tennis = Object.keys(cols).length > 0;
     // Turning tennis sessions on or off is not a sync, so it leaves "Synced …" as it was
     // (every caller has just made or already has the row).
     const row: Record<string, unknown> = tennis ? { user_id: me, provider } : { user_id: me, provider, last_synced_at: new Date().toISOString() };
-    let { error } = await db.from('health_connections').upsert(tennis ? { ...row, reads_workouts: extra!.readsWorkouts } : row);
-    // A database before migration 58 has no such column: the connection is still saved.
-    if (error && tennis && /reads_workouts/.test(error.message)) ({ error } = await db.from('health_connections').upsert(row));
+    let { error } = await db.from('health_connections').upsert({ ...row, ...cols });
+    // A database before migration 107 (or 58) has no such column: the rest is still saved.
+    if (error && 'reads_all_workouts' in cols && /reads_all_workouts/.test(error.message)) {
+      delete cols.reads_all_workouts;
+      ({ error } = await db.from('health_connections').upsert({ ...row, ...cols }));
+    }
+    if (error && 'reads_workouts' in cols && /reads_workouts/.test(error.message)) {
+      delete cols.reads_workouts;
+      ({ error } = await db.from('health_connections').upsert({ ...row, ...cols }));
+    }
     if (error) throw new Error(error.message);
   },
 

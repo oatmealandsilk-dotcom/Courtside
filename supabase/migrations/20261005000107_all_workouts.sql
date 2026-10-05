@@ -17,31 +17,49 @@
 --     'hiit', 'yoga', 'swim', …; lower case letters, numbers and dashes), and
 --     a new column distance_m holds its distance in metres when Health had
 --     one (runs, walks, rides, swims). Tennis rows are unchanged.
---   * A new switch, 'flag:workouts-apple', starts 'on' (everyone), as
---     tennis from Apple Health already is. Turning it off stops new workouts
---     other than tennis at once, without an app update:
---       update server_settings set value = 'off', updated_at = now() where key = 'flag:workouts-apple';
---     Tennis keeps its own switches. WHOOP, Fitbit, Oura and Polar still only
---     ever send tennis (they have no 'workouts-' switch, so anything else
---     from them is turned away).
+--   * A new switch, 'flag:workouts-apple', starts 'admins' (only admin
+--     accounts), the way tennis from Apple Health started: try it on the
+--     owner's iPhone first, then open it to everyone with his OK:
+--       update server_settings set value = 'on', updated_at = now() where key = 'flag:workouts-apple';
+--     Turning it 'off' stops new workouts other than tennis at once, without
+--     an app update. Tennis keeps its own switches. WHOOP, Fitbit, Oura and
+--     Polar still only ever send tennis (they have no 'workouts-' switch, so
+--     anything else from them is turned away).
+--   * A few people before everyone (the owner's brother, Oct 5): a switch
+--     set to 'admins' is also on for the accounts listed under
+--     'flag-people:<switch>'. To let one person in by their handle (put it
+--     in place of their_handle; run again with the full list to change it):
+--       insert into server_settings (key, value) select 'flag-people:workouts-apple', string_agg(id::text, ',') from profiles where handle in ('their_handle') having count(*) > 0 on conflict (key) do update set value = excluded.value, updated_at = now();
+--     With no such row, every switch works exactly as before. The app can
+--     neither read nor change server_settings.
+--   * Every workout is its own yes, never the tennis one carried over
+--     (health_connections.reads_all_workouts). Someone who turned on tennis
+--     sessions agreed to "your Tennis workouts" only: their runs, rides and
+--     gym sessions are never read or kept until they say yes to "Workouts
+--     from Apple Health" (the Health page, or the card on Your sessions).
+--     Turning sessions off turns both off.
 --   * The alert row in Notifications names the workout: "Run · 32 min · from
 --     your Apple Watch". Tennis keeps today's words exactly ("32 min · from
 --     your Apple Watch"). A session the app only finds more than 20 hours
 --     after it ended gets its weekday too ("Run · Tue · 32 min · from …").
 --   * The past week, once (the owner, Oct 5): a session that ended up to 8
 --     days ago now gets its alert row (before, only up to 48 hours), so the
---     first look after this update (the phone looks back a week and six
---     hours) puts each of the past week's workouts in Notifications, ready to
---     log. The lock-screen alert still only goes out for a session that ended
---     in the last 12 hours, never between 10pm and 7am, so catching up never
---     buzzes a phone. A phone may now hand over 60 sessions a day (was 40),
---     so a week of workouts fits.
+--     first look once 'flag:workouts-apple' is on for someone (the phone
+--     looks back a week and six hours, and asks WHOOP and the trackers for a
+--     week) puts each of the past week's workouts in Notifications, ready to
+--     log. The phone waits for that switch, so the week is never looked at
+--     while this file has not run. The lock-screen alert still only goes
+--     out for a session that ended in the last 12 hours, never between 10pm
+--     and 7am, so catching up never buzzes a phone. A phone may now hand
+--     over 60 sessions a day (was 40), so a week of workouts fits.
 --   * The same session seen twice (the Watch and WHOOP) is only a copy when
 --     it is the same sport: a gym session never silences a tennis match. And
 --     a session logged by hand only stands for a tracker's session of the
---     same kind: a practice, match or drills for tennis, a fitness session
---     for any other workout. (Before, any session logged that evening hid
---     that morning's run.)
+--     same kind: a practice, match or drills for tennis; for any other
+--     workout, a fitness session about as long (within 30%, or 5 minutes),
+--     and only one workout each. (Before, any session logged that evening
+--     hid that morning's run; a 6pm gym session logged by hand no longer
+--     hides the 7am run.)
 --   * The lock-screen alert (WHOOP only today; Apple Health never sends one)
 --     says "Workout detected" / "Run · Log it on CourtSide." for anything
 --     that is not tennis. Tennis keeps "Tennis detected" / "Log it on
@@ -57,13 +75,13 @@
 --     (an owner question: see the report). Heart rate, zones, Strain and
 --     calories keep migration 72's rules exactly. A tennis post is unchanged.
 --
--- Replaces record_activity (65), report_activity (65), note_detected_activity
--- (69), sweep_activities (58), put_session_with (72) and post_session_stats
--- (72), as they are live (all six bodies checked against the files they came
--- from), and stops without changing anything if any of them was changed
--- since, or if the posts trigger runs something else. After this has run, do
--- not run 58, 65, 69 or 72 again (they would put the tennis-only versions
--- back); if one ever is, run this again.
+-- Replaces flag_on_for (58), record_activity (65), report_activity (65),
+-- note_detected_activity (69), sweep_activities (58), put_session_with (72)
+-- and post_session_stats (72), as they are live (all seven bodies checked
+-- against the files they came from), and stops without changing anything if
+-- any of them was changed since, or if the posts trigger runs something
+-- else. After this has run, do not run 58, 65, 69 or 72 again (they would
+-- put the tennis-only versions back); if one ever is, run this again.
 --
 -- Mentions nobody's age (migration 64, not run yet, looks for that).
 -- Needs 39, 58, 62, 65, 69 and 72 (all live). Safe to run more than once.
@@ -76,9 +94,10 @@ do $$
 declare
   expected constant text[][] := array[
     -- name, live (Oct 5), as 107 leaves it
+    ['flag_on_for', '4df60b03325fe9df1372b09a7999d0e4', 'c6b2562859282d7fbda907465cd70ba4'],
     ['record_activity', 'e872943428d16808ef64dfb4f2f997cf', '204b3c5b813b86e4128786eb7bddabfc'],
     ['report_activity', '1da946533886a6c87cf3a2812a383140', '3570c287b136c7fa38f972809c77104e'],
-    ['note_detected_activity', '2f2e50a737115c4ccce92ef65d71154f', 'c4ed53d3c64a97039126d84033c2ea7f'],
+    ['note_detected_activity', '2f2e50a737115c4ccce92ef65d71154f', '772a7a28edd2cdc8d55000b87634142d'],
     ['sweep_activities', '2bee888baacd4653daa7d1cfc4fe4707', '7c356d369f3806b1ab7f2cd4111c23d2'],
     ['put_session_with', '6faff87c098ccc412732c47233c04fd5', 'fdec3bfa130321b3e37a6d8e5176aeef'],
     ['post_session_stats', 'b1ce4a311a2558cd9a3542dc9b6bef89', 'c1425ad4aa68b6fad6f1ffa855382d59']
@@ -115,9 +134,24 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------- 1. switch
--- 'on': everyone, as tennis from Apple Health already is (Oct 4). my_flags()
--- hands it to the app as 'workouts-apple' with nothing else to change.
-insert into public.server_settings (key, value) values ('flag:workouts-apple', 'on') on conflict (key) do nothing;
+-- 'admins': admin accounts (and anyone listed, below) only, to be tried on
+-- the owner's iPhone before it is opened to everyone, as tennis from Apple
+-- Health was (Oct 4). my_flags() hands it to the app as 'workouts-apple'
+-- with nothing else to change. Never changes a value already set.
+insert into public.server_settings (key, value) values ('flag:workouts-apple', 'admins') on conflict (key) do nothing;
+
+-- Migration 58's flag_on_for, plus one thing: a switch set to 'admins' is
+-- also on for the accounts listed under 'flag-people:<switch>' (their ids,
+-- separated by commas; see the top of this file). With no such row it is
+-- exactly as before, for every switch. Server only, as before.
+create or replace function public.flag_on_for(flag text, u uuid) returns boolean
+language sql stable security definer set search_path = public as $$
+  select case (select value from public.server_settings where key = 'flag:' || flag)
+    when 'on' then true
+    when 'admins' then coalesce((select is_admin from public.profiles where id = u), false)
+      or coalesce(u::text = any (string_to_array(replace((select value from public.server_settings where key = 'flag-people:' || flag), ' ', ''), ',')), false)
+    else false end
+$$;
 
 -- --------------------------------------------------------------- 2. columns
 -- What it was, as a short name. Was: tennis only.
@@ -128,6 +162,11 @@ alter table public.detected_activities add constraint detected_activities_sport_
 alter table public.detected_activities add column if not exists distance_m int check (distance_m between 0 and 1000000);
 -- What a session logged from a workout was ('run'), kept in your own log.
 alter table public.practice_sessions add column if not exists workout text check (workout is null or workout ~ '^[a-z][a-z0-9-]{1,39}$');
+-- Every workout, not only tennis, switched on for this source: its own yes,
+-- set only when the person agrees to "Workouts from Apple Health". Tennis
+-- (reads_workouts) never carries it over. The owner's existing rule lets the
+-- app set it on their own row, as reads_workouts.
+alter table public.health_connections add column if not exists reads_all_workouts boolean not null default false;
 
 -- --------------------------------------------------------------- 3. helpers
 -- A workout's short name in words: 'run' → 'Run', 'hiit' → 'HIIT'. The app
@@ -142,7 +181,8 @@ language sql immutable set search_path = public as $$
     when 'hike' then 'Hike'
     when 'swim' then 'Swim'
     when 'strength' then 'Strength training'
-    when 'functional-strength' then 'Functional strength training'
+    -- The Watch's two strength types read the same (a longer name pushed the day off a story picture).
+    when 'functional-strength' then 'Strength training'
     when 'hiit' then 'HIIT'
     when 'core' then 'Core training'
     when 'yoga' then 'Yoga'
@@ -187,13 +227,15 @@ $$;
 
 -- Whether this person may have this kind of session from this source:
 -- tennis by its own switch (migration 58, unchanged), anything else by the
--- source's 'workouts-' switch (only 'workouts-apple' exists). Either way,
--- only once they turned sessions on for that source.
+-- source's 'workouts-' switch (only 'workouts-apple' exists). Tennis once
+-- they turned sessions on for that source; anything else only once they
+-- also said yes to every workout (reads_all_workouts), never on the tennis
+-- yes alone.
 create or replace function public.activity_allowed(u uuid, src text, a_sport text) returns boolean
 language sql stable security definer set search_path = public as $$
   select case when a_sport = 'tennis' then public.tennis_allowed(u, src)
     else public.flag_on_for('workouts-' || case src when 'apple-health' then 'apple' else src end, u)
-         and exists (select 1 from public.health_connections c where c.user_id = u and c.provider = src and c.reads_workouts) end
+         and exists (select 1 from public.health_connections c where c.user_id = u and c.provider = src and c.reads_workouts and c.reads_all_workouts) end
 $$;
 
 -- ------------------------------------------- 4. a tracker's session comes in
@@ -295,8 +337,9 @@ end $$;
 -- ------------------------------------------------ 5. the alert, once each
 -- Migration 69's, with four changes: a copy is only a copy of the same
 -- sport; up to 8 days old still gets its row (was 48 hours); a session
--- logged by hand only stands for one of the same kind; and the words name
--- the workout (tennis's words are unchanged when found the same day).
+-- logged by hand only stands for one of the same kind (and, for a workout
+-- other than tennis, about as long, and only one); and the words name the
+-- workout (tennis's words are unchanged when found the same day).
 create or replace function public.note_detected_activity(a_id uuid, quiet boolean default false, force_pending boolean default false)
 returns text language plpgsql security definer set search_path = public as $$
 declare
@@ -335,11 +378,19 @@ begin
   if v_a.ended_at < now() - interval '8 days' then return 'stale'; end if;
 
   -- The player already logged it by hand (a session of the same kind, saved
-  -- between the start and 12 hours after the end): tennis for tennis, a
-  -- fitness session for any other workout.
+  -- between the start and 12 hours after the end): tennis for tennis. For any
+  -- other workout, a fitness session about as long (within 30%, or 5
+  -- minutes) that no other workout already stands for, so one session logged
+  -- by hand never hides a whole day's workouts.
   if exists (select 1 from public.practice_sessions s where s.user_id = v_a.user_id and s.activity_id is null
                and s.created_at between v_a.started_at and v_a.ended_at + interval '12 hours'
-               and case when v_a.sport = 'tennis' then s.kind in ('practice', 'match', 'drills') else s.kind = 'fitness' end) then
+               and case when v_a.sport = 'tennis' then s.kind in ('practice', 'match', 'drills')
+                        else s.kind = 'fitness' and abs(s.minutes - v_a.minutes) <= greatest(5, 0.3 * v_a.minutes)
+                             and not exists (select 1 from public.detected_activities o
+                                              where o.user_id = v_a.user_id and o.id <> v_a.id and o.sport <> 'tennis'
+                                                and o.status = 'duplicate' and o.duplicate_of is null
+                                                and s.created_at between o.started_at and o.ended_at + interval '12 hours'
+                                                and abs(s.minutes - o.minutes) <= greatest(5, 0.3 * o.minutes)) end) then
     update public.detected_activities set status = 'duplicate', notified_at = now(), updated_at = now() where id = v_a.id;
     return 'logged-by-hand';
   end if;
@@ -584,6 +635,7 @@ create trigger fill_post_session_stats before insert or update of session, featu
 
 -- ------------------------------------------------------------ 8. who may call
 -- Server only (as 58, 65, 69 and 72 have them, plus the two new helpers).
+revoke all on function public.flag_on_for(text, uuid) from public, anon, authenticated;
 revoke all on function public.workout_name(text) from public, anon, authenticated;
 revoke all on function public.activity_allowed(uuid, text, text) from public, anon, authenticated;
 revoke all on function public.record_activity(uuid, text, text, jsonb, boolean) from public, anon, authenticated;
@@ -591,6 +643,7 @@ revoke all on function public.note_detected_activity(uuid, boolean, boolean) fro
 revoke all on function public.sweep_activities() from public, anon, authenticated;
 revoke all on function public.put_session_with(jsonb, uuid) from public, anon, authenticated;
 revoke all on function public.post_session_stats() from public, anon, authenticated;
+grant execute on function public.flag_on_for(text, uuid) to service_role;
 grant execute on function public.activity_allowed(uuid, text, text) to service_role;
 grant execute on function public.record_activity(uuid, text, text, jsonb, boolean) to service_role;
 grant execute on function public.sweep_activities() to service_role;
@@ -606,7 +659,7 @@ begin
   select string_agg(p.proname, ', ' order by p.proname) into bad
     from pg_proc p
     where p.pronamespace = 'public'::regnamespace and p.prosrc ~* 'age_group'
-      and p.proname in ('workout_name', 'activity_allowed', 'record_activity', 'report_activity', 'note_detected_activity', 'sweep_activities', 'put_session_with', 'post_session_stats');
+      and p.proname in ('flag_on_for', 'workout_name', 'activity_allowed', 'record_activity', 'report_activity', 'note_detected_activity', 'sweep_activities', 'put_session_with', 'post_session_stats');
   if bad is not null then
     raise exception 'Migration 107 stopped: % read the age directly. Nothing was changed.', bad;
   end if;
@@ -618,17 +671,17 @@ commit;
 -- Read-only: each of these only looks. Paste one at a time into the SQL
 -- editor (remove the leading "-- ") after running this file.
 --
--- (a) The switches (expect workouts-apple 'on', and the tennis ones as they were):
+-- (a) The switches (expect workouts-apple 'admins', and the tennis ones as they were):
 -- select key, value from server_settings where key like 'flag:%' order by 1;
 --
--- (b) The new columns (expect detected_activities.distance_m integer, practice_sessions.workout text):
+-- (b) The new columns (expect detected_activities.distance_m integer, health_connections.reads_all_workouts boolean, practice_sessions.workout text):
 -- select table_name, column_name, data_type from information_schema.columns
---   where table_schema = 'public' and (table_name, column_name) in (('detected_activities', 'distance_m'), ('practice_sessions', 'workout')) order by 1;
+--   where table_schema = 'public' and (table_name, column_name) in (('detected_activities', 'distance_m'), ('health_connections', 'reads_all_workouts'), ('practice_sessions', 'workout')) order by 1;
 --
--- (c) Who may call what (expect report_activity true; activity_allowed, put_session_with, record_activity, workout_name false):
+-- (c) Who may call what (expect report_activity true; activity_allowed, flag_on_for, put_session_with, record_activity, workout_name false):
 -- select p.proname, has_function_privilege('authenticated', p.oid, 'execute') from pg_proc p
 --   where p.pronamespace = 'public'::regnamespace
---   and p.proname in ('report_activity', 'record_activity', 'activity_allowed', 'workout_name', 'put_session_with') order by 1;
+--   and p.proname in ('report_activity', 'record_activity', 'activity_allowed', 'flag_on_for', 'workout_name', 'put_session_with') order by 1;
 --
 -- (d) No function name exists twice (expect no rows):
 -- select proname, count(*) from pg_proc where pronamespace = 'public'::regnamespace group by 1 having count(*) > 1;

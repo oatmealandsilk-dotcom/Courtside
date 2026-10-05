@@ -78,7 +78,8 @@ const NAMES: Record<string, string> = {
   hike: 'Hike',
   swim: 'Swim',
   strength: 'Strength training',
-  'functional-strength': 'Functional strength training',
+  // The Watch's two strength types read the same: a longer name pushed the day off a story picture.
+  'functional-strength': 'Strength training',
   hiit: 'HIIT',
   core: 'Core training',
   yoga: 'Yoga',
@@ -154,7 +155,9 @@ export function workoutIcon(slug: string | undefined): keyof typeof Ionicons.gly
     case 'strength': case 'functional-strength': case 'core': case 'cross-training': return 'barbell-outline';
     case 'yoga': case 'pilates': case 'barre': case 'stretching': case 'cooldown': case 'recovery': case 'mind-body': case 'dance': return 'body-outline';
     case 'tennis': case 'pickleball': case 'table-tennis': case 'squash': case 'badminton': case 'racquetball': case 'padel': return 'tennisball-outline';
-    case 'soccer': case 'basketball': case 'volleyball': case 'golf': return 'football-outline';
+    case 'soccer': return 'football-outline';
+    case 'basketball': case 'volleyball': return 'basketball-outline';
+    case 'golf': return 'golf-outline';
     default: return 'fitness-outline';
   }
 }
@@ -184,3 +187,14 @@ export function inSentence(name: string): string {
 export function workoutLine(a: Pick<DetectedActivity, 'sport' | 'minutes' | 'distanceM'>): string {
   return [workoutName(a.sport), duration(a.minutes), formatDistance(a.distanceM)].filter(Boolean).join(' · ');
 }
+
+/**
+ * What CourtSide says before Apple Health's own sheet, when asking for every
+ * workout (migration 107): on the Health page, and in the offer to someone
+ * who so far turned on tennis sessions only. Their own yes, never carried
+ * over from the tennis one.
+ */
+export const WORKOUTS_ASK = {
+  title: 'Workouts from Apple Health',
+  message: 'CourtSide reads your workouts (tennis, runs, rides, the gym and more) and your heart rate during them, so you can log and post them, plus sleep, HRV, resting heart rate and steps. Nothing is posted unless you choose to.',
+} as const;

@@ -4,7 +4,7 @@ import type { DailyHealth, Integration } from '../types';
 
 /** The demo's sources: the full list, with WHOOP and Cronometer already connected. */
 const demoState: Partial<Record<Integration['provider'], Partial<Integration>>> = {
-  'apple-health': { readsWorkouts: true },
+  'apple-health': { readsWorkouts: true, readsAllWorkouts: true },
   whoop: { connected: true, lastSyncedAt: isoDaysAgo(0, 5), readsWorkouts: true },
   cronometer: { connected: true, lastSyncedAt: isoDaysAgo(0, 2) },
 };

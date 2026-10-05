@@ -14,6 +14,7 @@ import { Screen } from '@/components/ui';
 import { appleHealthAvailable, inExpoGo } from '@/features/health/appleHealth';
 import { FoodSection } from '@/features/health/FoodSection';
 import { useTennisFlags } from '@/features/activity/useTennisFlags';
+import { WORKOUTS_ASK } from '@/features/activity/workouts';
 import { isTracker, useTrackerStatus } from '@/features/activity/trackers';
 import { confirm } from '@/lib/confirm';
 import { withCatalog } from '@/lib/integrations';
@@ -81,15 +82,19 @@ export default function Health() {
   // Food apps the Food card does not already cover (see foodCardCovers).
   const foodRows = integrations.filter((i) => !TRACKER_ROWS.includes(i.provider) && ABOUT[i.provider] && !foodCardCovers(i));
   const [busy, setBusy] = useState<string | null>(null);
+  // Which step is working, so the "every workout" pill can say so itself.
+  const [step, setStep] = useState<string | null>(null);
   const latest = healthHistory[0];
   const connected = integrations.filter((i) => i.connected).length;
   // Tennis sessions, per source, once the server's switch for it is on. Off, this page is as it always was.
   const flags = useTennisFlags();
   const tennisOn = (provider: Integration['provider']) => (provider === 'apple-health' ? flags.apple || flags.workoutsApple : provider === 'whoop' || isTracker(provider) ? flags[provider] : false);
-  // Apple Health reads every workout, not only tennis (migration 107): its words say so.
+  // Apple Health can read every workout, not only tennis (migration 107): its words say so.
   const workouts = (provider: Integration['provider']) => provider === 'apple-health' && flags.workoutsApple;
-  /** "tennis sessions", or "workouts" for Apple Health once it reads every workout. */
-  const what = (provider: Integration['provider']) => (workouts(provider) ? 'workouts' : 'tennis sessions');
+  // Every workout is its own yes: someone who turned on tennis sessions only still has tennis only.
+  const allOn = (i: Integration) => workouts(i.provider) && !!i.readsAllWorkouts;
+  /** What turning on (or off) means for this row: "tennis sessions", or "workouts" (every workout). */
+  const what = (i: Integration) => (workouts(i.provider) && (!i.readsWorkouts || i.readsAllWorkouts) ? 'workouts' : 'tennis sessions');
   // Fitbit, Oura and Polar: open once the server has their keys and their switch is on.
   const trackers = useTrackerStatus();
   const open = (provider: Integration['provider']) => !isTracker(provider) || (trackers[provider] && flags[provider]);
@@ -112,31 +117,35 @@ export default function Health() {
   const removers = ['WHOOP', ...trackerRows.filter((i) => isTracker(i.provider)).map((i) => i.label)];
   const removersText = removers.length > 1 ? `${removers.slice(0, -1).join(', ')} or ${removers[removers.length - 1]}` : removers[0];
 
-  const run = async (provider: Integration['provider'], what: 'toggle' | 'sync' | 'tennis' | 'tennis-off') => {
+  const run = async (provider: Integration['provider'], what: 'toggle' | 'sync' | 'tennis' | 'tennis-off' | 'workouts') => {
     setBusy(provider);
+    setStep(what);
     try {
-      // Workouts are asked for only when this screen has said so (Apple Health's explanation, or WHOOP's own sign-in).
-      if (what === 'toggle') await actions.toggleIntegration(provider, { tennis: tennisOn(provider) });
+      // Workouts are asked for only when this screen has said so (Apple Health's explanation, or WHOOP's own sign-in);
+      // every workout only when what it said was "Workouts from Apple Health".
+      if (what === 'toggle') await actions.toggleIntegration(provider, { tennis: tennisOn(provider), workouts: workouts(provider) });
       else if (what === 'sync') await actions.syncHealth(provider);
-      else if (provider === 'apple-health' || provider === 'whoop' || isTracker(provider)) await (what === 'tennis' ? actions.turnOnTennis(provider) : actions.turnOffTennis(provider));
+      else if (what === 'workouts') await actions.turnOnTennis('apple-health', { workouts: true });
+      else if (provider === 'apple-health' || provider === 'whoop' || isTracker(provider)) await (what === 'tennis' ? actions.turnOnTennis(provider, { workouts: workouts(provider) }) : actions.turnOffTennis(provider));
     } catch (err) {
       showToast({ title: 'Could not connect', body: err instanceof Error ? err.message : 'Try again in a moment.', icon: 'alert-circle-outline' });
     } finally {
       setBusy(null);
+      setStep(null);
     }
   };
 
   // Apple Health's own permission sheet comes next, so CourtSide says why first.
-  const askApple = (step: 'toggle' | 'tennis') => confirm(flags.workoutsApple ? {
-    title: 'Workouts from Apple Health',
-    message: 'CourtSide reads your workouts (tennis, runs, rides, the gym and more) and your heart rate during them, so you can log and post them, plus sleep, HRV, resting heart rate and steps. Nothing is posted unless you choose to.',
+  // 'workouts': someone with tennis sessions on, saying yes to every workout as well.
+  const askApple = (next: 'toggle' | 'tennis' | 'workouts') => confirm(flags.workoutsApple ? {
+    ...WORKOUTS_ASK,
     confirmLabel: 'Continue',
-    onConfirm: () => run('apple-health', step),
+    onConfirm: () => run('apple-health', next),
   } : {
     title: 'Tennis sessions from Apple Health',
     message: 'CourtSide reads your Tennis workouts and your heart rate during them, so you can log and post them, plus sleep, HRV, resting heart rate and steps. Nothing is posted unless you choose to.',
     confirmLabel: 'Continue',
-    onConfirm: () => run('apple-health', step),
+    onConfirm: () => run('apple-health', next),
   });
 
   // Once WHOOP's switch is on, disconnecting it also removes what it sent (the server does), so ask first.
@@ -167,7 +176,7 @@ export default function Health() {
     const base = ABOUT[i.provider];
     if (!base) return null;
     const tennis = tennisOn(i.provider);
-    const about = tennis ? { ...base, ...(workouts(i.provider) ? ABOUT_WORKOUTS : ABOUT_TENNIS[i.provider]) } : base;
+    const about = tennis ? { ...base, ...(what(i) === 'workouts' ? ABOUT_WORKOUTS : ABOUT_TENNIS[i.provider]) } : base;
     const loading = busy === i.provider;
     const needsBuild = i.provider === 'apple-health' && Platform.OS === 'ios' && !appleHealthAvailable();
     const wrongPhone = i.provider === 'apple-health' && Platform.OS !== 'ios';
@@ -178,6 +187,9 @@ export default function Health() {
     const linked = garmin ? viaHealth && !!apple?.connected && !!apple.readsWorkouts : i.connected;
     // A tracker is connected for its tennis sessions, so "on" needs no card of its own; only "off" (its sign-in ran out) does.
     const tennisCard = i.connected && tennis && !(isTracker(i.provider) && i.readsWorkouts);
+    // Tennis sessions on, every workout not yet (they agreed to tennis only): offered, never switched on for them.
+    const offer = tennisCard && !!i.readsWorkouts && workouts(i.provider) && !i.readsAllWorkouts && !blocked;
+    const offerBusy = loading && step === 'workouts';
     return (
       <View key={i.provider} style={[styles.row, index > 0 && styles.rowLine]}>
         <View style={[styles.disc, linked && styles.discOn]}>
@@ -208,41 +220,54 @@ export default function Health() {
           ) : null}
           {tennisCard ? (
             i.readsWorkouts ? (
-              // On: a plain tick in the brand colour springs in, the way iPhone's own
-              // Settings confirms a choice, so switching on reads as something happening
-              // (no cartoon ball: William found it childish).
-              <Reanimated.View key="tennis-on" entering={FadeIn.duration(260)} exiting={FadeOut.duration(140)} style={styles.tennisCard}>
-                <Reanimated.View entering={ZoomIn.springify().damping(12).stiffness(240).delay(60)} style={styles.tennisTick}>
-                  <Ionicons name="checkmark" size={14} color={colors.brandInk} />
+              <>
+                {/* On: a plain tick in the brand colour springs in, the way iPhone's own
+                    Settings confirms a choice, so switching on reads as something happening
+                    (no cartoon ball: William found it childish). */}
+                <Reanimated.View key="tennis-on" entering={FadeIn.duration(260)} exiting={FadeOut.duration(140)} style={styles.tennisCard}>
+                  <Reanimated.View entering={ZoomIn.springify().damping(12).stiffness(240).delay(60)} style={styles.tennisTick}>
+                    <Ionicons name="checkmark" size={14} color={colors.brandInk} />
+                  </Reanimated.View>
+                  <View style={styles.tennisWords}>
+                    <Text style={styles.tennisTitle}>{allOn(i) ? 'Workouts on' : 'Tennis sessions on'}</Text>
+                    {/* The last 30 days of them, with Log it on any not logged (Oct 5). */}
+                    {allOn(i) ? (
+                      <Text accessibilityRole="link" onPress={() => router.push('/workouts')} style={styles.pastLink}>See past workouts</Text>
+                    ) : null}
+                  </View>
+                  <Pressable accessibilityRole="button" accessibilityLabel={`Turn off ${what(i)} from ${i.label}`} disabled={loading} onPress={() => { haptics.untap(); run(i.provider, 'tennis-off'); }} hitSlop={8} style={({ pressed }) => [styles.smallGhost, pressed && styles.pressedDim]}>
+                    <Text style={styles.smallGhostText}>Turn off</Text>
+                  </Pressable>
                 </Reanimated.View>
-                <View style={styles.tennisWords}>
-                  <Text style={styles.tennisTitle}>{workouts(i.provider) ? 'Workouts on' : 'Tennis sessions on'}</Text>
-                  {/* The last 30 days of them, with Log it on any not logged (Oct 5). */}
-                  {workouts(i.provider) ? (
-                    <Text accessibilityRole="link" onPress={() => router.push('/workouts')} style={styles.pastLink}>See past workouts</Text>
-                  ) : null}
-                </View>
-                <Pressable accessibilityRole="button" accessibilityLabel={`Turn off ${what(i.provider)} from ${i.label}`} disabled={loading} onPress={() => { haptics.untap(); run(i.provider, 'tennis-off'); }} hitSlop={8} style={({ pressed }) => [styles.smallGhost, pressed && styles.pressedDim]}>
-                  <Text style={styles.smallGhostText}>Turn off</Text>
-                </Pressable>
-              </Reanimated.View>
+                {offer ? (
+                  // Every other workout too: their own yes, after the same explanation anyone new gets.
+                  <Reanimated.View key="workouts-offer" entering={FadeIn.duration(220)} exiting={FadeOut.duration(140)} style={styles.offer}>
+                    <Text style={styles.offerText}>Also pick up runs, rides and the gym?</Text>
+                    <Tappable accessibilityRole="button" accessibilityLabel={`Turn on every workout from ${i.label}: runs, rides, the gym and more`} disabled={loading} scaleTo={0.96} onPress={() => { haptics.tap(); askApple('workouts'); }} style={styles.turnOn}>
+                      <BrandWash />
+                      {offerBusy ? <ActivityIndicator size="small" color={colors.brandInk} /> : null}
+                      <Text style={styles.turnOnText}>{offerBusy ? 'Turning on…' : 'Turn on'}</Text>
+                    </Tappable>
+                  </Reanimated.View>
+                ) : null}
+              </>
             ) : blocked ? null : (
               // Not offered where it could never work (Expo Go, or not an iPhone): the row is as it always was.
               <Reanimated.View key="tennis-off" entering={FadeIn.duration(220)} exiting={FadeOut.duration(140)} style={styles.actions}>
                 {/* WHOOP's (and each tracker's) own sign-in says what it shares; Apple Health is explained here first.
                     The app's own filled pill (with its soft wash) dips under the finger; while it
                     works, the pill itself says so rather than the row going quiet. */}
-                <Tappable accessibilityRole="button" accessibilityLabel={`Turn on ${what(i.provider)} from ${i.label}`} disabled={loading} scaleTo={0.96} onPress={() => { haptics.tap(); if (i.provider === 'apple-health') askApple('tennis'); else run(i.provider, 'tennis'); }} style={styles.turnOn}>
+                <Tappable accessibilityRole="button" accessibilityLabel={`Turn on ${what(i)} from ${i.label}`} disabled={loading} scaleTo={0.96} onPress={() => { haptics.tap(); if (i.provider === 'apple-health') askApple('tennis'); else run(i.provider, 'tennis'); }} style={styles.turnOn}>
                   <BrandWash />
                   {loading ? <ActivityIndicator size="small" color={colors.brandInk} /> : null}
-                  <Text style={styles.turnOnText}>{loading ? 'Turning on…' : `Turn on ${what(i.provider)}`}</Text>
+                  <Text style={styles.turnOnText}>{loading ? 'Turning on…' : `Turn on ${what(i)}`}</Text>
                 </Tappable>
               </Reanimated.View>
             )
           ) : null}
         </View>
         {/* The tennis pill shows its own "Turning on…"; a second spinner beside it would be one too many. */}
-        {loading && !(tennisCard && !i.readsWorkouts) ? (
+        {loading && !(tennisCard && !i.readsWorkouts) && !offerBusy ? (
           <CourtSpinner size={26} />
         ) : viaHealth ? (
           // Not something to press: a quiet label in the button's place.
@@ -340,6 +365,9 @@ const styleDefinitions = StyleSheet.create({
   tennisWords: { flex: 1, gap: 1 },
   tennisTitle: { ...typography.smallStrong, color: colors.text },
   pastLink: { ...typography.smallStrong, color: colors.brand, alignSelf: 'flex-start' },
+  // The offer of every workout, under "Tennis sessions on": its question, then the same filled pill.
+  offer: { gap: spacing.sm, marginTop: spacing.sm, alignItems: 'flex-start' },
+  offerText: { ...typography.small, color: colors.textMuted },
   pressedDim: { opacity: 0.55 },
   sectionTitle: { ...typography.smallStrong, color: colors.textMuted, paddingHorizontal: spacing.sm, paddingBottom: spacing.sm },
   sectionGap: { paddingTop: spacing.xl },
