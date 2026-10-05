@@ -1,12 +1,14 @@
 # CourtSide on Android: setting it up
 
-The app's code is ready for Android. What is left is a handful of accounts
-and files that only you can make, because they need your Google login. This
-page lists them in order, click by click. Nothing here costs money, and
-nothing here makes anything public, except where a step says so in bold.
+The app's code is ready for Android (Oct 5: keyboard, Back button, sign-in,
+photos and videos, Instagram Stories, alerts, the logo and launch screen; the
+list is at the end). What is left is a handful of accounts and files that only
+you can make, because they need your Google login. This page lists them in
+order, click by click. Nothing here costs money, and nothing here makes
+anything public, except where a step says so in bold.
 
-No Android build has been made yet. Claude makes the first one when you say
-go, once Google has verified your identity.
+No Android build has been made yet. The first one is started only when you
+say go.
 
 ## Words used here
 
@@ -25,6 +27,9 @@ go, once Google has verified your identity.
   Firebase. Treat it like a password: never post it, never email it.
 - **EAS / expo.dev**: Expo's website and build service, where CourtSide's
   builds and push settings already live (the robertzchen account).
+- **Environment variable** (on Expo, a **file variable**): a setting kept on
+  Expo's website instead of in the code, handed to each build as it is made.
+  Expo keeps separate sets for **preview** builds and **production** builds.
 - **Package name**: the Android app's permanent ID, `co.courtside.app`, the
   same as the iPhone app's. It can never change once a build is on Google Play.
 - **SHA-1 fingerprint**: a short code (pairs of letters and numbers separated
@@ -32,12 +37,37 @@ go, once Google has verified your identity.
   serial number on a wax seal.
 - **Closed testing**: a private release on Google Play that only the people
   you invite can install.
+- **Migration**: a small, saved change to the database's set-up (here, how
+  push alerts are worded for Android phones). It does nothing until it is run
+  in Supabase's SQL editor.
+- **Main**: the version of the code the live website and the instant updates
+  come from. **Merging** this Android work into main puts it there.
 
 ## What you do, and what Claude does
 
-You: steps 1, 2, 3 and 5 below (they need your Google and Expo logins).
-Claude: everything else, including making the builds and uploading the
-Firebase file to Expo, each only after you say go.
+You: steps 1, 2 and 5 below (they need your Google and Expo logins), and the
+go-ahead for anything marked **Flag**.
+
+Claude: everything else, each only after you say go: merging this work into
+main, uploading the Firebase file to Expo, running the push migration, and
+drafting the Google Play forms.
+
+## The order matters
+
+1. **Merge this Android work into main first, and make every Android build
+   from main.** The iPhone and Android builds take the same instant updates
+   (they share version 1.0.0). An Android build made from anywhere else would
+   have its Android fixes taken away by the next `npm run update` from main.
+   **Flag: pushing main also publishes the website.** The privacy page's new
+   "delete your account without the app" line goes live then (step 5b needs it).
+2. Step 1 (Firebase file) and step 2 (the FCM V1 key) **before** the first
+   build. A build made with the Firebase file but before the key is on Expo
+   saves Android push addresses that can never receive anything, and nobody
+   would notice: alerts are sent and forgotten.
+3. Claude runs migration 106 in Supabase (alerts to Android phones arrive at
+   once, not minutes late, and land in the right group). Nothing changes for
+   iPhones.
+4. The first build (step 4), then Google Play (step 5).
 
 ---
 
@@ -73,13 +103,16 @@ Firebase file to Expo, each only after you say go.
 12. Open Finder, go to **Downloads**, and drag `google-services.json` into the
     **Courtside** folder on your Desktop.
 13. Tell Claude: "google-services.json is in the folder". Claude uploads it to
-    Expo as a private file setting called `GOOGLE_SERVICES_JSON`, so every
-    Android build picks it up. The file is never put on GitHub.
+    Expo as a private file setting called `GOOGLE_SERVICES_JSON`, in **both**
+    the **preview** and the **production** environments (a preview .apk reads
+    the preview set; with the file only in production, the test .apk would be
+    made without push). The file is never put on GitHub.
 
 ## 2. Give Expo the FCM V1 key (so alerts reach Android phones)
 
 **Why:** Expo's push service sends CourtSide's alerts. For Android it needs
 permission from your Firebase project, and this key is that permission.
+**Do this before the first Android build** (see "The order matters").
 
 1. In the Firebase console (same project), click the **gear icon** next to
    **Project Overview** in the top left, then **Project settings**.
@@ -101,27 +134,24 @@ permission from your Firebase project, and this key is that permission.
 10. Move that file from Downloads to the Bin. Expo keeps its own copy, and a
     new one can always be made in step 3.
 
-Nothing in the database needs changing: alerts are already sent through
-Expo's push service, which now knows how to reach Android phones too.
+The database side is migration 106 (in the code, not run yet): alerts to
+Android phones are sent as "high priority", so a phone left idle on a table
+still shows a message straight away, and each alert names its group
+("Messages", or "Likes, replies and follows") so people can switch one off
+and keep the other. Claude runs it in Supabase's SQL editor once you say go.
 
-## 3. Google sign-in on Android
+## 3. Google sign-in on Android: nothing to do
 
-**How it works today:** the **Continue with Google** button opens Google's
-page in a sheet inside the app, and CourtSide's server (Supabase) talks to
-Google. That is the same way it works on the website, so Google needs **no
-Android-specific setting**. There is only one thing to check:
+The Android app returns from Google to the same address the iPhone app
+already uses (`courtside://auth`), which Supabase already allows, so there is
+no setting to add. It also uses the safer "PKCE" way on Android: what comes
+back from Google is a one-time code that only this phone can use, not the
+login itself.
 
-1. Open https://supabase.com/dashboard, sign in, and open the CourtSide project.
-2. In the left menu: **Authentication** → **URL Configuration**.
-3. Under **Redirect URLs**, look for `courtside://**`.
-   - If it is there, you are done.
-   - If it is not, click **Add URL**, paste `courtside://**`, and click
-     **Save URLs**. This is the address the Android app returns to after
-     Google; the star pattern also covers the iPhone's `courtside://auth`,
-     so nothing that works today changes.
-
-(Or tell Claude "check the Google redirect" and Claude does it in your
-browser with you watching.)
+Apple sign-in has no Android button (Apple does not offer one there). Someone
+who made their account with Apple on an iPhone sees a line on Android's
+sign-in page telling them to set a password on the iPhone first (Settings →
+Account center → Set a password) and then sign in with that email.
 
 ### Only if Claude later switches to Google's own Android sign-in button
 
@@ -149,19 +179,26 @@ would need Google to know the app's SHA-1 fingerprints. If that day comes:
 5. Repeat step 4 with the name `CourtSide Android (Expo)` and Expo's SHA-1, so
    test builds can sign in too.
 
-## 4. The first build (Claude, when you say go)
+## 4. The first build (when you say go)
 
 **Flag: Expo builds count towards your Expo plan's monthly builds, the same
-as iPhone builds.** Claude says before starting one.
+as iPhone builds.** Nothing is started without your go-ahead.
 
 - **Preview (.apk):** for trying on an Android phone straight away, before
   Google is involved. Expo gives a link; open it on the phone, download, and
   allow the install when Android asks.
-- **Production (.aab):** for Google Play. Claude starts it and gives you the
-  expo.dev page where the **.aab** file can be downloaded, for step 5.
+- **Production (.aab):** for Google Play. Expo gives you the expo.dev page
+  where the **.aab** file can be downloaded, for step 5.
 
 Expo creates the app's signing key on the first build and keeps it safe. Say
 yes if it asks to "generate a new Android Keystore".
+
+**One setting for the test .apk to get instant updates:** the .apk listens
+for updates on Expo's "preview" channel, and `npm run update` publishes to
+"production". With your OK, Claude points the preview channel at the
+production updates once (`eas channel:edit preview --branch production`,
+which changes a setting on Expo's website, nothing else). Without it the .apk
+stays on the code it was built with.
 
 ## 5. Google Play: closed testing with 12 testers for 14 days
 
@@ -185,16 +222,43 @@ app access, ads, content rating, target audience, data safety and a few
 more. Useful answers:
 
 - **Privacy policy:** `https://app.courtsidebase.com/privacy.html`
+- **Delete account URL** (asked in the **Data safety** form, because people
+  can make accounts): `https://app.courtsidebase.com/privacy.html#delete-account`
+  That spot on the privacy page says how to delete an account in the app and,
+  without the app, on the website. It is live once main has been pushed (see
+  "The order matters").
 - **App access:** "All or some functionality is restricted", then give a
   test email and password for a reviewer account (the same kind of login
   given to Apple's reviewers).
 - **Ads:** No.
+- **Data safety, a few answers the code decides:**
+  - **Contacts:** collected, only to find friends; sent to CourtSide's server,
+    checked against accounts, then deleted; not shared; optional. (The app
+    says so on screen before Android's own question, which Google requires.)
+  - **Location:** approximate and precise, while the app is open, for the map
+    and players near you; optional.
+  - **Photos and videos:** only the ones you choose to post or send.
+  - **Crash logs:** collected (the app files its own crash reports).
+  - The Android app has no Google Maps and no advertising ID in it.
 
 Tell Claude "draft the Play forms" and Claude writes the rest (content
-rating, target audience, data safety) from the app's code, the way the App
-Store listing was written, for you to paste in.
+rating, target audience, the full data safety form) from the app's code, the
+way the App Store listing was written, for you to paste in.
 
-### 5c. Make the testers list
+### 5c. Phones only, for now (tablets and foldables)
+
+**Why:** CourtSide's layout is made for phones. Android 16 lets big tablets
+and the inside screen of a folding phone turn any app sideways and stretch it,
+and the app has not been checked that way yet. Leaving them out of the test is
+the safe start; they can be added later.
+
+1. Left menu: **Test and release** → **Reach and devices** → **Device catalog**
+   (older screens: **Release** → **Device catalog**).
+2. Click the **Tablet** filter (under **Form factor**), tick every tablet
+   listed with the box at the top of the list, then **Exclude devices** and
+   confirm. Do the same for **Foldable** if it is offered.
+
+### 5d. Make the testers list
 
 1. Left menu: **Test and release** → **Testing** → **Closed testing**.
 2. Next to the track called **Closed testing - Alpha**, click **Manage track**.
@@ -207,10 +271,22 @@ Store listing was written, for you to paste in.
    fill in **Feedback URL or email address** (for example
    support@courtsidebase.com), and click **Save**.
 
-### 5d. Upload the first build
+### 5e. The store listing pictures
+
+Left menu: **Grow users** → **Store presence** → **Main store listing**.
+
+- **App icon (512 × 512):** `assets/logo-beige-512.png` (the beige icon you
+  chose).
+- **Feature graphic (1024 × 500):** `store/google-play/feature-graphic-1024x500.png`
+  (cream, the green mark and name, one line about the app).
+- **Phone screenshots (2 to 8):** these are best taken on the first Android
+  test build, so they show Android's own status bar and buttons rather than an
+  iPhone's. Claude can make them from the preview .apk once it is installed.
+
+### 5f. Upload the first build
 
 Google's rule: the very first build has to be uploaded by hand on this
-website. Later ones Claude can send from Expo (see 5f).
+website. Later ones can be sent from Expo (see 5h).
 
 1. Still in **Closed testing - Alpha**, click **Create new release**.
 2. If it asks about **app signing**, choose **Use Google-generated key** (the
@@ -223,7 +299,7 @@ website. Later ones Claude can send from Expo (see 5f).
    checks it (from a few hours to a few days). **This makes the app
    installable by your testers, still not public.**
 
-### 5e. Get the testers in, then wait 14 days
+### 5g. Get the testers in, then wait 14 days
 
 1. When the review is done, go back to **Closed testing - Alpha** →
    **Testers** tab, and copy the link under **Join on Android** (or **Join on
@@ -238,10 +314,96 @@ website. Later ones Claude can send from Expo (see 5f).
    what changed). Claude can draft the answers. Google replies within about a
    week. **Production is the public release on Google Play.**
 
-### 5f. Optional, later: let Claude upload builds for you
+### 5h. Optional, later: let builds go to Google Play without dragging files
 
 So that new builds go to Google Play without you dragging files in, Google
 Play needs a "service account" (a robot login) for Expo. Ask Claude to walk
 you through it when the first build is up; until then, uploading by hand
-works fine. When set up, Claude's uploads land in **Closed testing - Alpha**
-as a **draft**, so nothing reaches testers until you press the button.
+works fine. When set up, uploads land in **Closed testing - Alpha** as a
+**draft**, so nothing reaches testers until you press the button.
+
+## 6. What to try on the first Android test build
+
+Most of the Android work could only be checked by reading the code, because
+this Mac cannot run Android. On the first .apk, these are worth a minute each:
+
+- **Typing:** a chat (the box sits right on the keyboard; the emoji keyboard
+  is the same height), sign-up's lowest boxes, the instant's caption, the
+  birthday page, Account center's password sheet.
+- **Back button:** in a chat with the emoji keyboard or the + tray open; in
+  Create (caption → editor → photos; a session's post asks "Discard post?");
+  on a sheet (it slides down); on Community with a search open; during setup.
+- **Photos and videos:** pinch and swipe-down on a full-screen photo; move and
+  zoom in the profile-photo crop; close a full-screen video and check the
+  clip on the page is still playing; rounded corners on clips in cards.
+- **Instagram Stories** from Share, with and without Instagram installed.
+- **Google sign-in**, and Account center afterwards (it stays put).
+- **Alerts:** a message from another phone while CourtSide is closed, then
+  Settings → Apps → CourtSide → Notifications shows Messages, Likes replies
+  and follows, and Reminders.
+- **Look:** the launch (the mark should not move as the app opens), the
+  leaning logo, bold titles in the same typeface as on iPhone, the tab bar in
+  the theme's colour, the New York theme's status bar.
+- **An HDR clip** from a Pixel or Samsung (see 7), viewed on the website and
+  an iPhone afterwards.
+
+## 7. Later: things that need a new build of both apps
+
+These need a new native part (a "package with phone code"), so they only
+arrive with a new build, and the iPhone and Android builds must move to a
+new version together (bump `version` in app.config.js). None is needed for
+the closed test.
+
+- **Navigation-bar buttons that follow the Night and New York themes**
+  (`expo-navigation-bar`, Android code only). Today the bar under the app is
+  light with dark buttons, which suits the cream and the four city courts.
+  With it, the bar would turn dark on the two dark themes too.
+- **Saving a clip or picture to the gallery** (`expo-media-library`).
+  Android's share sheet has no "save to gallery", so on Android a post's
+  menu says **Share original**, and Share has no Save button. With it, both
+  would save straight to the phone's gallery.
+- **HDR clips from Android cameras.** iPhones turn HDR clips into normal ones
+  as they are picked; Android does not, and the compressor keeps the HDR
+  labels, so an HDR clip from a Pixel or Samsung could look washed out. Check
+  on the first test build (6). If it does, the fix is either a small manifest
+  setting that makes Android hand over a normal copy, or a converter package.
+  Until then: turn **HDR video** off in the camera's settings before filming.
+- **Health Connect** (Samsung Health, Pixel Watch, Fitbit, Garmin on
+  Android), after launch. A new package, the manifest permissions, and a
+  "Health apps" declaration in Play Console (you). Until then Android's tennis
+  sessions come from WHOOP and the other trackers, and Apple Health shows
+  only for someone who connected it on an iPhone.
+- **Shared links opening in the app** ("App Links": a post, a profile or a
+  group link from app.courtsidebase.com opening in the Android app rather
+  than the website). A choice for you: the iPhone app does not do it either
+  today. If wanted, it takes a build, a small file on the website, and the
+  Play app-signing fingerprint (step 3's list, Google Play's one).
+- **A "Continue with Apple" button on Android** (optional): Supabase's web
+  Apple sign-in in the same in-app browser as Google. It needs an Apple
+  "Services ID" and a signing key added to Supabase (the key expires every six
+  months). The line on the sign-in page covers it meanwhile.
+
+## What the Android work changed (for reference)
+
+All of it is Android-only unless it says otherwise, and the generated iPhone
+project is identical to before.
+
+- **Keyboard:** Android draws the app under the keyboard (always, in this
+  Expo version) and never shrinks the window, so every page now makes room
+  for the keyboard itself.
+- **Back button:** steps back inside a page (chat panels, Create's steps,
+  setup, sheets, searches, the map's cards) instead of closing it.
+- **Sign-in:** Google returns to the same address as on iPhone, with PKCE;
+  password-manager autofill; a line for Apple-account people.
+- **Photos and videos:** gestures in full-screen viewers and the photo crop;
+  Android's own Photo Picker with no permission question; exact cover frames;
+  rounded, croppable video; the camera's instant is mirrored like its preview.
+- **Instagram Stories** straight into Instagram.
+- **Alerts:** three channels, on-time delivery (migration 106), a Settings row
+  when alerts are off, the in-app banner standing aside under Android's own
+  windows, read chats' alerts cleared.
+- **Look:** the leaning logo, Inter Bold, the launch screen's mark staying
+  put, the theme's own glass colour, brand-green cursor, light status-bar
+  icons over black pages and New York's navy (that one on iPhone too).
+- **Instant updates** go to both platforms; crash reports name the Android
+  phone.
