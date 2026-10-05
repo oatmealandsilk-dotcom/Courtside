@@ -2064,6 +2064,22 @@ export const remote = {
     return data as Invitee[];
   },
 
+  /**
+   * "Opened the app today" (migration 110): one row per person per day, for
+   * the owner's day-1 / day-7 return numbers. `day` is the phone's own date.
+   * Never throws: 'missing' while the database does not have it yet, 'failed'
+   * for anything else (offline, a hiccup), so the caller can try again later.
+   */
+  async noteAppOpen(platform: 'ios' | 'android' | 'web' | 'other', day: string): Promise<'ok' | 'missing' | 'failed'> {
+    try {
+      const { error } = await need().rpc('note_app_open', { p_platform: platform, p_day: day });
+      if (!error) return 'ok';
+      return missingFunction(error) ? 'missing' : 'failed';
+    } catch {
+      return 'failed';
+    }
+  },
+
   /** Whether the first move works: day-one movers, and week-two returns for movers vs everyone else. Null while the function is missing. */
   async fetchFirstDayStats(): Promise<FirstDayStats | null> {
     const { data, error } = await need().rpc('first_day_stats');

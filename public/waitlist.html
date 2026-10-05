@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>CourtSide — The world’s first social media app for tennis</title>
-<meta name="description" content="The world’s first social media app for tennis. Part Instagram, part Reddit, all tennis: post your clips, discuss hot takes, find new hits, and get coaching from a vast network all around the world. Sign up to be one of the early pioneers.">
-<meta property="og:title" content="CourtSide — the world’s first social media app for tennis">
-<meta property="og:description" content="Part Instagram, part Reddit, all tennis. Sign up to be one of the early pioneers and get the iPhone app before anyone else.">
+<title>CourtSide — The social media app for tennis</title>
+<meta name="description" content="The social media app for tennis. Part Instagram, part Reddit, all tennis: post your clips, discuss hot takes, find new hits, and ask real coaches about your game. Get the iPhone app now, free.">
+<meta property="og:title" content="CourtSide — the social media app for tennis">
+<meta property="og:description" content="Part Instagram, part Reddit, all tennis. Get the iPhone app now, free.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://app.courtsidebase.com/waitlist.html">
 <meta property="og:image" content="https://app.courtsidebase.com/waitlist/og.png">
@@ -273,7 +273,31 @@
   .cta { display: grid; gap: 14px; }
   .cta .msg:empty, .join-form .msg:empty, .fb-form .msg:empty { min-height: 0; }
   .join-form .msg:empty, .fb-form .msg:empty { margin-top: -18px; }
+  /* The app first (Oct 5): one big button, then the email list for anyone not on their iPhone. */
+  .app-cta { display: grid; gap: 12px; justify-items: start; }
+  .btn-app { padding: 19px 30px; font-size: 18px; text-decoration: none; }
+  .btn-app svg { width: 18px; height: 18px; }
+  .app-note { margin: 0; font-size: 15px; color: var(--muted); max-width: 30em; text-wrap: pretty; }
+  .app-note a { color: var(--text); font-weight: 600; }
+  /* Someone a player invited (?ref=their handle): the handle to type in the app, shown once the server says it is a real public account. */
+  .invited { margin: 0; font-size: 15px; color: var(--muted); max-width: 30em; text-wrap: pretty; }
+  .invited strong { color: var(--text); font-weight: 600; }
+  .code { font-weight: 600; color: var(--text); background: var(--brand-dim); border-radius: 6px; padding: 1px 7px; white-space: nowrap; }
+  /* The one step before TestFlight, only for someone who came from a player's or a friend's link. */
+  .invite-step { width: min(440px, calc(100% - 32px)); padding: 0; border: 1px solid var(--border); border-radius: 20px; background: var(--bg); color: var(--text); box-shadow: var(--shadow-float); }
+  .invite-step::backdrop { background: rgba(15, 20, 18, 0.45); }
+  .invite-card { display: grid; gap: 16px; padding: 26px 24px 22px; }
+  .invite-card h2 { font-size: 24px; }
+  .invite-card p { margin: 0; color: var(--muted); font-size: 15px; text-wrap: pretty; }
+  .invite-card .msg:empty { min-height: 0; margin-top: -8px; }
+  .invite-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+  .invite-actions .btn { text-decoration: none; }
+  .invite-actions .btn-primary { flex: 1 1 auto; }
+  .or-email { display: grid; gap: 12px; padding-top: 22px; border-top: 1px solid var(--border); max-width: 480px; }
+  .or-label { margin: 0; font-size: 15px; color: var(--muted); }
+  .or-label .opt { color: var(--faint); }
   .quick { display: flex; gap: 10px; max-width: 480px; }
+  .quick .btn-quiet { padding: 15px 20px; font-size: 15px; }
   .quick input { flex: 1; min-width: 0; }
   .quick-note { display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: center; font-size: 15px; color: var(--muted); margin: 0; }
   .quick-note a { display: inline-flex; align-items: center; gap: 6px; color: var(--text); font-weight: 600; text-decoration: none; }
@@ -443,7 +467,7 @@
   /* ---------------------------------------------------------------- footer */
   footer { border-top: 1px solid var(--border); padding: 36px 0 48px; }
   footer .wrap { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px 32px; font-size: 13px; color: var(--muted); }
-  footer nav { display: flex; gap: 22px; }
+  footer nav { display: flex; flex-wrap: wrap; gap: 10px 22px; }
   footer nav a { text-decoration: none; }
   .foot-brand { display: inline-flex; align-items: center; gap: 12px; }
   .foot-brand svg { width: 22px; height: 22px; color: var(--brand); }
@@ -470,6 +494,8 @@
     .hero-phone { bottom: -132px; width: min(70%, 268px); }
     .quick { flex-direction: column; }
     .quick .btn { width: 100%; }
+    .app-cta { justify-items: stretch; }
+    .btn-app { width: 100%; }
     .features { grid-template-columns: 1fr; }
     .feature, .feature:nth-child(2n) { padding: 24px 0; border-left: 0; }
     .rail { grid-auto-columns: 68%; gap: 20px; margin-inline: -20px; padding-inline: 20px; scroll-padding-inline: 20px; }
@@ -511,6 +537,7 @@
     <symbol id="check" viewBox="0 0 24 24"><path d="M5 12.5l4.2 4.2L19 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
     <symbol id="check-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/><path d="M7.5 12.4l3 3 6-6.2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
     <symbol id="down" viewBox="0 0 24 24"><path d="M12 5v14M6 13l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="out" viewBox="0 0 24 24"><path d="M7 17L17 7M9 7h8v8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
     <symbol id="next" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="2.6 3"/></symbol>
   </defs>
 </svg>
@@ -562,7 +589,7 @@
         </button>
         </div>
       </details>
-      <a class="btn btn-quiet" href="#top" data-join>Get early access</a>
+      <a class="btn btn-quiet" href="https://testflight.apple.com/join/21UJPuny" target="_blank" rel="noopener">Get the app</a>
     </div>
   </div>
 </header>
@@ -572,19 +599,26 @@
   <section class="hero" aria-labelledby="hero-title">
     <div class="wrap">
       <div class="hero-copy">
-        <h1 id="hero-title">The world’s first social media app <span class="tint">for tennis.</span></h1>
-        <p class="lead">Part Instagram, part Reddit, all tennis. Post your clips, discuss hot takes, find new hits, and get coaching from a vast network of players and coaches all around the world. Sign up to be one of the early pioneers in this story.</p>
+        <h1 id="hero-title">The social media app <span class="tint">for tennis.</span></h1>
+        <p class="lead">Part Instagram, part Reddit, all tennis. Post your clips, discuss hot takes, find new hits, and ask real coaches about your game.</p>
         <div class="cta">
-          <form class="quick" data-waitlist novalidate>
-            <label class="sr" for="quick-email">Email</label>
-            <input id="quick-email" name="email" type="email" inputmode="email" autocomplete="email" placeholder="you@example.com" required>
-            <input class="hp" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
-            <button class="btn btn-primary" type="submit"><span class="spin" aria-hidden="true"></span><span data-label>Get early access</span></button>
-          </form>
-          <p class="msg" data-msg-for="quick" role="status" aria-live="polite"></p>
-          <p class="count" data-count hidden></p>
+          <div class="app-cta">
+            <a class="btn btn-primary btn-app" href="https://testflight.apple.com/join/21UJPuny" target="_blank" rel="noopener">Get the iPhone app <svg aria-hidden="true"><use href="#out"/></svg></a>
+            <p class="app-note">Free. Opens Apple’s TestFlight: install it, then CourtSide. On Android? <a href="https://app.courtsidebase.com">Use CourtSide on the web</a>.</p>
+            <p class="invited" data-invited hidden>Invited by <strong data-at></strong>? Type <b class="code" data-code></b> when the app asks “Invited by?”</p>
+          </div>
+          <div class="or-email">
+            <p class="or-label"><label for="quick-email">Not on your iPhone right now? Get the link by email</label> <span class="opt">(optional)</span></p>
+            <form class="quick" data-waitlist novalidate>
+              <input id="quick-email" name="email" type="email" inputmode="email" autocomplete="email" placeholder="you@example.com" required>
+              <input class="hp" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+              <button class="btn btn-quiet" type="submit"><span class="spin" aria-hidden="true"></span><span data-label>Email me the link</span></button>
+            </form>
+            <p class="msg" data-msg-for="quick" role="status" aria-live="polite"></p>
+            <p class="count" data-count hidden></p>
+          </div>
           <p class="quick-note">
-            <span>Free. Get the iPhone app before it’s in the App Store.</span>
+            <span>Follow along on Instagram: <a href="https://www.instagram.com/courtsidebase/" target="_blank" rel="noopener">@courtsidebase</a> <a href="https://www.instagram.com/robertzchen/" target="_blank" rel="noopener">@robertzchen</a></span>
             <a href="#screens">See the app <svg aria-hidden="true"><use href="#down"/></svg></a>
           </p>
         </div>
@@ -617,8 +651,8 @@
           <p>Private threads with your hitting partners and your training group, without the group chat you already have getting lost.</p>
         </article>
         <article class="feature">
-          <div class="feature-top"><h3>Coaching</h3><span class="tag soon">Being built</span></div>
-          <p>Real coaches, approved one by one, for video reviews and written answers about your game. This is the set we’re playing now.</p>
+          <div class="feature-top"><h3>Coaching</h3><span class="tag">Live</span></div>
+          <p>Real coaches, approved one by one. Ask them about your game on the board, or message them directly.</p>
         </article>
       </div>
     </div>
@@ -655,7 +689,7 @@
     <div class="wrap">
       <div class="head">
         <h2 id="score-title">The score so far</h2>
-        <p class="body">We’re building it in the open, one set at a time — five sets, like a major final. Three are in the books.</p>
+        <p class="body">We’re building it in the open, one set at a time — five sets, like a major final. Four are in the books.</p>
       </div>
       <div class="board" role="list">
         <div class="set won" role="listitem">
@@ -673,15 +707,15 @@
           <div class="set-body"><h3>The real thing</h3><p>A real database, direct messages, blocking, reporting and moderation.</p></div>
           <div class="set-state"><svg aria-hidden="true"><use href="#check"/></svg>Done</div>
         </div>
-        <div class="set live" role="listitem">
+        <div class="set won" role="listitem">
           <div class="set-no">Set 4</div>
-          <div class="set-body"><h3>Coaching</h3><p>Approved coaches, video reviews and written answers.</p></div>
-          <div class="set-state"><span class="live-dot" aria-hidden="true"></span>In play</div>
+          <div class="set-body"><h3>Coaching</h3><p>Approved coaches, coach pages, and real answers about your game.</p></div>
+          <div class="set-state"><svg aria-hidden="true"><use href="#check"/></svg>Done</div>
         </div>
-        <div class="set" role="listitem">
+        <div class="set live" role="listitem">
           <div class="set-no">Set 5</div>
-          <div class="set-body"><h3>Launch</h3><p>Early access on iPhone for the waitlist first, then the App Store.</p></div>
-          <div class="set-state"><svg aria-hidden="true"><use href="#next"/></svg>Next</div>
+          <div class="set-body"><h3>Launch</h3><p>The iPhone app is open to everyone through TestFlight. The App Store is next.</p></div>
+          <div class="set-state"><span class="live-dot" aria-hidden="true"></span>In play</div>
         </div>
       </div>
     </div>
@@ -695,15 +729,15 @@
       <div class="qs">
         <details class="q">
           <summary>When do I actually get it?<span class="pm" aria-hidden="true"></span></summary>
-          <p class="a">When Set 4 is done — coaching is the last big piece before launch. Invites go out to the waitlist first, roughly in the order people joined. We’d rather say that than give you a date we’d miss.</p>
+          <p class="a">Now. Tap “Get the iPhone app” at the top: it opens Apple’s TestFlight, Apple’s app for trying apps before they’re in the App Store. Install that, then CourtSide.</p>
         </details>
         <details class="q">
           <summary>Is it free?<span class="pm" aria-hidden="true"></span></summary>
-          <p class="a">The app is free. Sessions with real coaches will cost money once that’s running, because the coaches get paid. Everything else — the feed, the board, messages — doesn’t.</p>
+          <p class="a">Yes. The app is free, and so is asking a coach for now. If paid lessons with coaches come later, you’ll always see the price before you book. Everything else — the feed, the board, messages — stays free.</p>
         </details>
         <details class="q">
           <summary>Is it iPhone only?<span class="pm" aria-hidden="true"></span></summary>
-          <p class="a">The iPhone app is what the waitlist is for. There’s already a version you can open in a browser right now at <a href="https://app.courtsidebase.com">app.courtsidebase.com</a>. Android comes after iPhone.</p>
+          <p class="a">The iPhone app is out now through TestFlight. There’s also a version you can open in any browser right now at <a href="https://app.courtsidebase.com">app.courtsidebase.com</a>. Android comes after iPhone.</p>
         </details>
         <details class="q">
           <summary>Do I need to be any good?<span class="pm" aria-hidden="true"></span></summary>
@@ -711,11 +745,11 @@
         </details>
         <details class="q">
           <summary>What will you email me?<span class="pm" aria-hidden="true"></span></summary>
-          <p class="a">Your invite, and the occasional note when something big ships. That’s it — no daily anything. One click unsubscribes, and you can ask us to delete your email whenever you like.</p>
+          <p class="a">Only if you give us your email: the link to the iPhone app, and the occasional note when something big ships. That’s it — no daily anything. One click unsubscribes, and you can ask us to delete your email whenever you like.</p>
         </details>
         <details class="q">
           <summary>Who’s building it?<span class="pm" aria-hidden="true"></span></summary>
-          <p class="a">A very small team, in the open. The scoreboard above is the honest version of where things stand — it gets updated as sets get won, not as they get planned.</p>
+          <p class="a">A very small team, in the open. The scoreboard above is the honest version of where things stand — it gets updated as sets get won, not as they get planned. Follow along on Instagram at <a href="https://www.instagram.com/courtsidebase/" target="_blank" rel="noopener">@courtsidebase</a> and <a href="https://www.instagram.com/robertzchen/" target="_blank" rel="noopener">@robertzchen</a>.</p>
         </details>
       </div>
     </div>
@@ -743,9 +777,26 @@
 <footer>
   <div class="wrap">
     <span class="foot-brand"><svg aria-hidden="true"><use href="#mark"/></svg>CourtSide · Growing the game</span>
-    <nav aria-label="Legal"><a href="privacy.html">Privacy</a><a href="terms.html">Terms</a></nav>
+    <nav aria-label="Links"><a href="https://www.instagram.com/courtsidebase/" target="_blank" rel="noopener">Instagram @courtsidebase</a><a href="https://www.instagram.com/robertzchen/" target="_blank" rel="noopener">@robertzchen</a><a href="privacy.html">Privacy</a><a href="terms.html">Terms</a></nav>
   </div>
 </footer>
+
+<dialog class="invite-step" id="invite-step" aria-labelledby="invite-title">
+  <form class="invite-card" novalidate>
+    <h2 id="invite-title">Before you go</h2>
+    <p data-type hidden>When CourtSide asks <strong>“Invited by?”</strong>, type <b class="code" data-code></b>. That’s how <span data-at></span> gets the credit.</p>
+    <div class="field">
+      <label for="invite-email"><span data-why></span> <span class="opt">(optional)</span></label>
+      <input id="invite-email" name="email" type="email" inputmode="email" autocomplete="email" placeholder="you@example.com">
+    </div>
+    <p class="msg" role="status" aria-live="polite"></p>
+    <div class="invite-actions">
+      <a class="btn btn-primary" data-go autofocus href="https://testflight.apple.com/join/21UJPuny" target="_blank" rel="noopener">Continue to TestFlight</a>
+      <button class="btn btn-quiet" type="button" data-back>Back</button>
+    </div>
+    <p class="fine">Your email only goes on our list (see the <a href="privacy.html">privacy policy</a>). Leave it empty to go straight on.</p>
+  </form>
+</dialog>
 
 <script>
   // The page's own key is the public one the app ships with: it can add a row
@@ -758,6 +809,10 @@
   const source = ((params.get('ref') || params.get('utm_source') || '').toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 40)) || null;
   const referredBy = ((params.get('r') || '').toLowerCase().replace(/[^0-9a-f]/g, '').slice(0, 8)) || null;
   const SHARE_BASE = 'https://courtsidebase.com/';
+  // Set once this visit's email is on the list with the link's label: the label is recorded, so the buttons go straight on.
+  let joined = false;
+  // The player a ?ref= names, once the server says it is a real, public CourtSide account (see findInviter).
+  let inviter = null;
   const stillMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
@@ -780,10 +835,11 @@
     }
   }
 
-  async function join(email, name) {
+  async function join(email, name, keepalive = false) {
     try {
       const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/join_waitlist`, {
         method: 'POST',
+        keepalive,
         headers: { apikey: SUPABASE_KEY, 'Content-Type': 'application/json' },
         body: JSON.stringify({ p_email: email, p_name: name, p_source: source, p_referred_by: referredBy }),
       });
@@ -801,6 +857,11 @@
     } catch {
       return { kind: 'offline' };
     }
+  }
+
+  // The welcome email goes out now. The server checks this person is on the list and has not had it yet.
+  function sendWelcome(email) {
+    fetch(`${SUPABASE_URL}/functions/v1/waitlist-welcome`, { method: 'POST', headers: { apikey: SUPABASE_KEY, 'Content-Type': 'application/json' }, body: JSON.stringify({ email }), keepalive: true }).catch(() => {});
   }
 
   // How many are in already — shown once it is a number worth showing.
@@ -830,7 +891,7 @@
     const box = document.createElement('div');
     box.className = 'done';
     box.setAttribute('role', 'status');
-    box.innerHTML = '<svg aria-hidden="true"><use href="#check-circle"/></svg><div><strong></strong><span></span><a class="btn btn-primary btn-beta" href="https://testflight.apple.com/join/21UJPuny" target="_blank" rel="noopener">Get the iPhone beta</a></div>';
+    box.innerHTML = '<svg aria-hidden="true"><use href="#check-circle"/></svg><div><strong></strong><span></span><a class="btn btn-primary btn-beta" href="https://testflight.apple.com/join/21UJPuny" target="_blank" rel="noopener">Get the iPhone app</a></div>';
     box.querySelector('strong').textContent = title;
     box.querySelector('span').textContent = detail;
     form.replaceWith(box);
@@ -852,7 +913,7 @@
         <div class="spot-place"><small>Your place</small><b><i>#</i><span data-place>0</span></b></div>
       </div>
       <div class="spot-beta">
-        <a class="btn btn-primary btn-beta" href="https://testflight.apple.com/join/21UJPuny" target="_blank" rel="noopener">Get the iPhone beta</a>
+        <a class="btn btn-primary btn-beta" href="https://testflight.apple.com/join/21UJPuny" target="_blank" rel="noopener">Get the iPhone app</a>
         <p>Opens Apple’s TestFlight: install it, then CourtSide. On Android? <a href="https://app.courtsidebase.com">Use CourtSide on the web</a>.</p>
       </div>
       <div class="spot-share">
@@ -873,7 +934,7 @@
       catch { card.querySelector('.share-link').select(); note.textContent = 'Press ⌘C to copy.'; }
     });
     card.querySelector('[data-share]').addEventListener('click', async () => {
-      const text = 'I’m on the list for CourtSide — the first social media app for tennis. Get in ahead of the App Store:';
+      const text = 'I’m on CourtSide — the social media app for tennis. Get the iPhone app:';
       if (navigator.share) {
         try { await navigator.share({ title: 'CourtSide', text, url: link }); } catch {}
       } else {
@@ -925,9 +986,9 @@
       const result = await join(email, name);
       busy(form, false);
       if (result.kind === 'ok' || result.kind === 'already') {
+        joined = true;
         msg.textContent = '';
-        // The welcome email goes out now. The server checks this person is on the list and has not had it yet.
-        if (result.kind === 'ok') fetch(`${SUPABASE_URL}/functions/v1/waitlist-welcome`, { method: 'POST', headers: { apikey: SUPABASE_KEY, 'Content-Type': 'application/json' }, body: JSON.stringify({ email }), keepalive: true }).catch(() => {});
+        if (result.kind === 'ok') sendWelcome(email);
         if (result.code) showSpot(form, result, email);
         else confirmIn(form, result.kind === 'ok' ? 'You’re in.' : 'You’re already in.', 'The beta is open. Get CourtSide on your iPhone now.');
         return;
@@ -937,6 +998,95 @@
     });
   });
 
+  // Links from players and friends (Oct 5). The "Get the iPhone app" buttons
+  // used to go straight to TestFlight, and the link's ?ref= / ?r= was lost:
+  // TestFlight cannot carry it into the app. So the page does two things:
+  //  1. ?ref=<handle>: once the server says that handle is a real, public
+  //     CourtSide account (share_preview, the same check the app's join page
+  //     uses, so a made-up link names nobody), it shows the handle to type
+  //     when the app asks "Invited by?" — that is what credits the player.
+  //  2. Before TestFlight opens, someone who came from a player's or a
+  //     friend's link is offered the email list, recorded exactly as the
+  //     email form does (join_waitlist, with the link's label and the
+  //     friend's code), so signing up in the app with that email credits
+  //     them too (migration 83). Optional: an empty box goes straight on.
+  // Anyone without such a link, or who already joined on this visit, goes
+  // straight to TestFlight as before.
+  const maybeHandle = source && /^[a-z0-9_]{2,24}$/.test(source) ? source : null;
+  (async function findInviter() {
+    if (!maybeHandle) return;
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/share_preview`, {
+        method: 'POST',
+        headers: { apikey: SUPABASE_KEY, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ p_kind: 'referrer', p_id: maybeHandle }),
+      });
+      if (!res.ok) return;
+      const got = await res.json();
+      const handle = got && got.open && got.author && typeof got.author.handle === 'string' ? got.author.handle : null;
+      if (!handle) return;
+      inviter = handle;
+      document.querySelectorAll('[data-invited]').forEach((el) => {
+        el.querySelector('[data-at]').textContent = `@${handle}`;
+        el.querySelector('[data-code]').textContent = handle;
+        el.hidden = false;
+      });
+    } catch {}
+  })();
+
+  (function inviteStep() {
+    const step = document.getElementById('invite-step');
+    if (!step || typeof step.showModal !== 'function') return;
+    const form = step.querySelector('form');
+    const input = form.querySelector('input[name="email"]');
+    const msg = form.querySelector('.msg');
+    const go = form.querySelector('[data-go]');
+    document.addEventListener('click', (event) => {
+      const link = event.target.closest && event.target.closest('a[href^="https://testflight.apple.com/"]');
+      if (!link || link.closest('dialog') || joined || !(inviter || referredBy)) return;
+      event.preventDefault();
+      const typeLine = form.querySelector('[data-type]');
+      if (inviter) {
+        step.querySelector('#invite-title').textContent = `Invited by @${inviter}?`;
+        typeLine.querySelector('[data-code]').textContent = inviter;
+        typeLine.querySelector('[data-at]').textContent = `@${inviter}`;
+        typeLine.hidden = false;
+        form.querySelector('[data-why]').textContent = `Or add your email, then sign up in the app with the same one, and we’ll credit @${inviter} for you`;
+      } else {
+        step.querySelector('#invite-title').textContent = 'Came from a friend’s link?';
+        typeLine.hidden = true;
+        form.querySelector('[data-why]').textContent = 'Add your email so your friend gets the credit';
+      }
+      msg.className = 'msg';
+      msg.textContent = '';
+      input.removeAttribute('aria-invalid');
+      step.showModal();
+    });
+    form.querySelector('[data-back]').addEventListener('click', () => step.close());
+    // Return in the email box does what the button does.
+    form.addEventListener('submit', (event) => { event.preventDefault(); go.click(); });
+    // The button is a plain link to TestFlight, so the phone opens it like
+    // any other link; it is only held back when the email is mistyped.
+    go.addEventListener('click', (event) => {
+      const email = input.value.trim();
+      if (email && !EMAIL.test(email)) {
+        input.setAttribute('aria-invalid', 'true');
+        msg.className = 'msg error';
+        msg.textContent = 'That email doesn’t look right — fix it, or leave it empty.';
+        event.preventDefault();
+        input.focus();
+        return;
+      }
+      if (email) {
+        // keepalive: it still lands while the page hands over to TestFlight.
+        // The link cannot wait for the answer, or the phone would treat
+        // TestFlight as a pop-up and block it.
+        void join(email, null, true).then((result) => { if (result.kind === 'ok') sendWelcome(email); });
+        joined = true;
+      }
+      step.close();
+    });
+  })();
 
   // Every court the app has, on the page too. The choice is kept in the browser.
   (function themes() {
@@ -969,15 +1119,6 @@
     matchMedia('(prefers-color-scheme: dark)').addEventListener('change', mark);
     mark();
   })();
-
-  // "Get early access" up top takes you to the one form and puts the cursor in it.
-  document.querySelectorAll('[data-join]').forEach((a) => a.addEventListener('click', (event) => {
-    event.preventDefault();
-    const cta = document.querySelector('.hero .cta');
-    cta.scrollIntoView({ behavior: stillMotion ? 'auto' : 'smooth', block: 'center' });
-    const input = document.getElementById('quick-email');
-    if (input) setTimeout(() => input.focus({ preventScroll: true }), stillMotion ? 0 : 450);
-  }));
 
   document.querySelectorAll('form[data-feedback]').forEach((form) => {
     const msg = form.querySelector('.msg');

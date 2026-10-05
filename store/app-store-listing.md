@@ -369,14 +369,16 @@ For every kind of data, App Store Connect asks:
 
 1. **Is it collected?** Apple's definition: the data leaves the phone and is kept by you, or by a company working for you, for longer than it takes to answer the request right then. Data that never leaves the phone does not count.
 2. **Is it linked to the user?** Is it stored with the person's account or identity? At CourtSide nearly everything is stored with the account, so the answer below is Yes almost everywhere. Answering Yes when unsure is the safe side.
-3. **Is it used for tracking?** No, for everything. CourtSide contains no advertising or analytics code (checked `package.json`: only Expo, Supabase and map add-ons, none that track), does not read the iPhone's advertising ID, and sells or shares nothing with data brokers. That also means the app never needs to show the "Allow this app to track you?" pop-up.
+3. **Is it used for tracking?** No, for everything. CourtSide contains no advertising code and no outside analytics tool (checked `package.json`: only Expo, Supabase and map add-ons, none that track), does not read the iPhone's advertising ID, and sells or shares nothing with data brokers. It does keep **its own (first-party) usage records** in its own database: which posts were on screen and for how long (to order the feed), and which days each person opens the app (`app_opens`, migration 110, to count daily users and day-1 / day-7 return). Those are declared below under Usage Data → Product Interaction, linked to the user. They are not tracking, because they never leave CourtSide and are never combined with other companies' data. That also means the app never needs to show the "Allow this app to track you?" pop-up.
 
 For each data type marked collected, Apple also asks **what it is used for** (the **purpose**). The purposes used here:
 
 - **App Functionality:** making the app work (accounts, showing posts, sending messages, keeping it secure, fixing crashes).
 - **Product Personalization:** changing what someone sees based on them. CourtSide does this in two places: the Home feed is ordered partly by what you have liked and commented on, and "Players you might know" suggests people from your city and people you have interacted with.
 
-Never tick Third-Party Advertising, Developer's Advertising or Marketing, Analytics, or Other Purposes. If you ever start sending marketing emails, come back and add "Developer's Advertising or Marketing" to Email Address.
+- **Analytics:** CourtSide's own counts of how the app is used: daily users and how many new players come back the next day and the next week (from `app_opens`). Tick it only on Usage Data → Product Interaction.
+
+Never tick Third-Party Advertising, Developer's Advertising or Marketing, or Other Purposes. If you ever start sending marketing emails, come back and add "Developer's Advertising or Marketing" to Email Address.
 
 ### First question
 
@@ -413,7 +415,7 @@ Tracking is **No** in every row.
 | **Identifiers → User ID** | Yes | Yes | App Functionality | The account ID and @handle. |
 | **Identifiers → Device ID** | Yes | Yes | App Functionality | The phone's push address (the code that lets alerts reach one phone), saved with the account once someone allows notifications. It is **not** the advertising ID. |
 | Purchases → Purchase History | Yes | Yes | No | App Functionality. Each paid coaching booking (what was bought, the price, when, and whether it was refunded) is kept with the account so the player and coach can see it. |
-| **Usage Data → Product Interaction** | Yes | Yes | App Functionality, Product Personalization | Likes, saves, votes, follows, views of posts and hits (each view is saved with the viewer's account; the poster sees only the count), and when each person last read a chat (unread counts and read receipts). |
+| **Usage Data → Product Interaction** | Yes | Yes | App Functionality, Product Personalization, Analytics | Likes, saves, votes, follows, views of posts and hits (each view is saved with the viewer's account; the poster sees only the count), and when each person last read a chat (unread counts and read receipts). Also first-party usage records kept only in CourtSide's own database: the feed's watch record (which posts were on screen, for how long, and which were swiped past, used to order the feed), and which days each person opens the app, the time of the first open that day and the phone type (`app_opens`, used only to count daily users and day-1 / day-7 return; admins see only the totals). Not used for tracking. |
 | Usage Data → Advertising Data | No | – | – | No ads. |
 | Usage Data → Other Usage Data | No | – | – | – |
 | **Diagnostics → Crash Data** | Yes | Yes | App Functionality | New crash reporting: when the app hits an error it saves the error message and technical details to CourtSide's own database (`app_errors` table), with the account ID if signed in. |
@@ -456,7 +458,7 @@ The label covers what these services handle on CourtSide's behalf. They do not g
 
 ### When you must update the label
 
-Update it (App Privacy → Edit), and the privacy policy, before releasing any version that: opens the AI coach (it sends questions and a profile summary to Anthropic, the company behind Claude, and stores coach conversations), lets people add injury notes or connect Apple Health or a wearable, takes payments, or adds any analytics or advertising tool.
+Update it (App Privacy → Edit), and the privacy policy, before releasing any version that: opens the AI coach (it sends questions and a profile summary to Anthropic, the company behind Claude, and stores coach conversations), lets people add injury notes or connect Apple Health or a wearable, takes payments, or adds any outside analytics or advertising tool.
 
 ---
 
