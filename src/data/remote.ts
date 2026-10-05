@@ -22,7 +22,7 @@ import { blankVideoLocation } from '@/lib/videoLocation';
 import { noteStep } from '@/lib/crashReporting';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
-import type { Answer, ChatEvent, ChatPhoto, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, DetectedActivity, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, CourtNote, LastSeen, MapPlace, MapVisibility, TaggedCourt, Question, Removed, RemovedItem, Story, TakedownKind, TakedownReason, Tip, User, CoachApplication, CourtAccess, CourtAccessSource, CourtDayPart, CourtFacts, CourtFollowCount, CourtNow, CourtRegulars, CourtReview, CourtRightNow, CourtRing, FollowedCourt, SessionTag, SessionTagRefusal, SessionTagRole, FeedGroup, FeedGroupCard, DiscoverGroup, GroupLook, Invitee, ContactMatch, HeadToHead, MatchSet } from './types';
+import type { Answer, ChatEvent, ChatPhoto, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, DetectedActivity, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, CourtNote, LastSeen, MapPlace, MapVisibility, TaggedCourt, Question, Removed, RemovedItem, Story, SurfacePreference, TakedownKind, TakedownReason, Tip, TournamentEntry, User, CoachApplication, CourtAccess, CourtAccessSource, CourtDayPart, CourtFacts, CourtFollowCount, CourtNow, CourtRegulars, CourtReview, CourtRightNow, CourtRing, FollowedCourt, SessionTag, SessionTagRefusal, SessionTagRole, FeedGroup, FeedGroupCard, DiscoverGroup, GroupLook, Invitee, ContactMatch, HeadToHead, MatchSet } from './types';
 import { validSets } from '@/features/activity/score';
 import { TERMS_VERSION } from '@/lib/legal';
 import { readinessOf, sessionTagNamesLive, sessionToSend, setSessionTagNamesLive, trustedSession } from './sessionTagGate';
@@ -49,8 +49,13 @@ export interface InviteSummaryRow {
   qualified: number;
   paid: number; paidCents: number; owed: number; owedCents: number; lastPaidAt?: string;
 }
-/** Who invited me: their id and @handle once set; canSet while a code may still be typed (inside a day of joining). */
-export interface MyInviter { id?: ID; handle?: string; name?: string; canSet: boolean }
+/**
+ * Who invited me: their id and @handle once set; canSet while a code may
+ * still be typed (inside a day of joining). With nobody set yet, `suggested`
+ * is the @handle the waitlist matched from a link they used (migration 116):
+ * filled in at "Invited by?", and only counted once they press Continue.
+ */
+export interface MyInviter { id?: ID; handle?: string; name?: string; canSet: boolean; suggested?: string }
 export type InviteCodeResult =
   | { ok: true; id: ID; handle: string; followed: boolean; error?: undefined }
   | { ok?: undefined; error: 'not-found' | 'self' | 'already' | 'too-late' | 'offline'; handle?: string };
@@ -369,6 +374,12 @@ export interface RemoteData {
   contactsFindableReady?: boolean;
   /** Messages you deleted for yourself, so a chat fetched again later leaves them out too. Missing in saved copies. */
   hiddenMessageIds?: ID[];
+  /**
+   * The accounts that have blocked you (blocked_me, migration 118): search
+   * leaves them out. Missing on a database without it, or when it could not
+   * be asked.
+   */
+  blockedMeIds?: ID[];
   /** Your settings row could not be read this time (not the same as having none): `userState` is null for that reason. */
   userStateFailed?: boolean;
 }
@@ -485,9 +496,10 @@ export interface UserState {
   /**
    * The map's teen rule (migration 78): undefined on a database without it.
    * 'on': you may share with friends who follow you back (if you are not a
-   * known adult); 'under16': your birthday says under 16, so never on the map.
+   * known adult). Since migration 119 that includes under 16s, the same
+   * rule as 16 and 17 year olds.
    */
-  teenMap?: 'on' | 'under16';
+  teenMap?: 'on';
   /** Your own "up for a hit today" when it is kept privately (not a known adult; migration 78). */
   ownOpenUntil?: string | null;
 }
@@ -564,7 +576,7 @@ const toCoach = (r: CoachRow, services: CoachServiceRow[], me: ID): Coach => ({
 /** One pin from map_players (migration 63; `mutual` since 98). */
 interface MapPlayerRow { user_id: ID; lat: number; lng: number; place: MapPlace | string; court_id: string | null; court_name: string | null; city: string | null; seen_at: string | null; open_until: string | null; mutual?: boolean | null }
 interface NotificationRow { id: string; user_id: string; actor_id: string; kind: string; target_id: string; target_kind: string; preview: string | null; read: boolean; created_at: string }
-interface UserStateRow { muted_ids: string[]; blocked_ids: string[]; saved_question_ids: string[]; payment_methods: PaymentMethod[]; default_payment_id: string | null; show_activity: boolean; push_likes: boolean; push_coach: boolean; push_messages?: boolean | null; push_activity?: boolean | null; push_map_friends?: boolean | null; push_map_hits?: boolean | null; push_map_players?: boolean | null; push_courts?: boolean | null; contacts_findable?: boolean | null; private_profile?: { constraints?: PlayerProfile['constraints'] } | null; map_visibility?: string | null;
+interface UserStateRow { muted_ids: string[]; blocked_ids: string[]; saved_question_ids: string[]; payment_methods: PaymentMethod[]; default_payment_id: string | null; show_activity: boolean; push_likes: boolean; push_coach: boolean; push_messages?: boolean | null; push_activity?: boolean | null; push_map_friends?: boolean | null; push_map_hits?: boolean | null; push_map_players?: boolean | null; push_courts?: boolean | null; contacts_findable?: boolean | null; private_profile?: { constraints?: PlayerProfile['constraints']; tournaments?: unknown } | null; map_visibility?: string | null;
   /** Your own age group, readable only by you (migration 64). Absent before it. */
   age_group?: string | null;
   /** Your birthday, readable only by you (migration 13). */
@@ -622,18 +634,10 @@ const toUserState = (r: UserStateRow): UserState => ({
   constraints: Array.isArray(r.private_profile?.constraints) ? r.private_profile!.constraints : undefined,
   // The key is there only once migration 63 has run; null means never chosen.
   mapVisibility: 'map_visibility' in r ? asVisibility(r.map_visibility) : undefined,
-  // The key is there only once migration 78 has run.
-  teenMap: 'map_answered_at' in r ? (under16(r.birth_date) ? 'under16' : 'on') : undefined,
+  // The key is there only once migration 78 has run. Under 16s too (migration 119): the same rule as 16 and 17 year olds.
+  teenMap: 'map_answered_at' in r ? 'on' : undefined,
   ownOpenUntil: 'open_to_hit_until' in r ? r.open_to_hit_until ?? null : undefined,
 });
-/** A birthday (yyyy-mm-dd) less than 16 years ago. */
-function under16(dob: string | null | undefined): boolean {
-  if (!dob || !/^\d{4}-\d{2}-\d{2}/.test(dob)) return false;
-  const [y, m, d] = dob.slice(0, 10).split('-').map(Number);
-  const now = new Date();
-  const sixteenth = new Date(y + 16, m - 1, d);
-  return sixteenth.getTime() > new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-}
 const asVisibility = (v: unknown): MapVisibility | null => (v === 'nearby' || v === 'mutuals' || v === 'none' ? v : null);
 
 interface CoachApplicationRow {
@@ -828,6 +832,71 @@ export interface ReportedChat {
   messages: { id?: ID; senderId: ID; body: string; kind: string; createdAt: string; photos?: ChatPhoto[] }[];
 }
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** blocked_me()'s rows: plain ids, or ({ blocked_me: id }) from an older gateway. Anything else is dropped. */
+const blockedMeIdsOf = (rows: unknown[]): ID[] =>
+  rows.flatMap((row) => {
+    const id = typeof row === 'string' ? row : row && typeof row === 'object' ? (row as { blocked_me?: unknown }).blocked_me : undefined;
+    return typeof id === 'string' && UUID_RE.test(id) ? [id] : [];
+  });
+/**
+ * The profile columns the app reads for everyone. Named rather than "*" so
+ * nobody's town position (city_lat, city_lng) comes down with the list: the
+ * app only ever uses your own, which comes from my_city_at() (migration
+ * 118). Migration 121 then takes those two columns away from everyone else
+ * altogether; after it, a read of "*" is refused. A column added to
+ * profiles later has to be granted to signed-in readers and named here.
+ */
+const PROFILE_COLUMNS = 'id, handle, name, bio, location, avatar_url, is_coach, profile, created_at, is_private, read_receipts, followers_count, following_count, is_admin, suspended_at, open_to_hit_until, handle_changed_at';
+/** Postgres's "column … does not exist": a database older than one of the columns named above. */
+const missingColumn = (error: unknown) => !!error && typeof error === 'object' && (error as { code?: string }).code === '42703';
+/**
+ * Set once this session finds a function missing (a database before
+ * migration 118), so it is not asked again on every load: each ask of a
+ * missing function shows as a failed request in a browser's console.
+ */
+const missingThisSession = new Set<string>();
+/**
+ * Set once tournament_plans() (migration 123) has answered this session:
+ * tournament plans live in each owner's settings row now, so a save of your
+ * tennis profile says it knows (see updateProfile).
+ */
+let tournamentsPrivateLive = false;
+const SURFACES: readonly SurfacePreference[] = ['hard', 'clay', 'grass', 'indoor'];
+/** Tournament plans as stored (a profile bundle, a settings row, tournament_plans): only well-formed ones, at most 20. */
+function tournamentsOf(raw: unknown): TournamentEntry[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((item): TournamentEntry[] => {
+    if (!item || typeof item !== 'object') return [];
+    const t = item as Record<string, unknown>;
+    if (typeof t.id !== 'string' || typeof t.name !== 'string' || typeof t.startsAt !== 'string') return [];
+    const surface = SURFACES.find((x) => x === t.surface) ?? 'hard';
+    return [{ id: t.id, name: t.name, startsAt: t.startsAt, surface, level: typeof t.level === 'string' ? t.level : '', location: typeof t.location === 'string' ? t.location : '', registered: t.registered === true }];
+  }).slice(0, 20);
+}
+/**
+ * tournament_plans() (migration 123): the plans you may see, yours and those
+ * of each person you follow who follows you back, by person. Undefined on a
+ * database without it (or when it could not be asked): then the profile rows
+ * still carry everyone's, and the app shows only the same people's.
+ */
+async function fetchPlans(): Promise<Map<ID, TournamentEntry[]> | undefined> {
+  if (missingThisSession.has('tournament_plans')) return undefined;
+  try {
+    const { data, error } = await need().rpc('tournament_plans');
+    if (error) {
+      if (missingFunction(error)) missingThisSession.add('tournament_plans');
+      return undefined;
+    }
+    tournamentsPrivateLive = true;
+    const plans = new Map<ID, TournamentEntry[]>();
+    for (const row of Array.isArray(data) ? data as { user_id?: unknown; tournaments?: unknown }[] : []) {
+      if (typeof row?.user_id === 'string') plans.set(row.user_id, tournamentsOf(row.tournaments));
+    }
+    return plans;
+  } catch {
+    return undefined;
+  }
+}
 /**
  * Every row of a read, fetched 1,000 at a time (the most the database hands
  * back at once) until there are no more, up to `cap` rows.
@@ -902,9 +971,51 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
   // everything else so it is known before any post is read: until it is, the
   // names on posts' session stats are not shown (see trustedSession).
   const tagsProbe = db.from('session_tags').select('id').limit(0).then(({ error }) => readinessOf(error), () => null);
+  // Who has blocked you (migration 118), so search leaves them out the way it
+  // leaves out people you blocked. A database without it (or a failed ask)
+  // gives undefined, and search works as it always has. Only the standard
+  // app does this: their profile row still reaches you (see useFindable).
+  const blockedMeLoad = missingThisSession.has('blocked_me') ? Promise.resolve(undefined)
+    : db.rpc('blocked_me').then(({ data, error }) => {
+      if (error && missingFunction(error)) missingThisSession.add('blocked_me');
+      return error || !Array.isArray(data) ? undefined : blockedMeIdsOf(data);
+    }, () => undefined);
+  // Your own town position, the only one the app uses (map, distances):
+  // my_city_at() (migration 118); on a database without it, your own row.
+  // Undefined when it could not be read: then the app goes by the town's name.
+  type CityAt = { city_lat: number | null; city_lng: number | null };
+  const ownRow = async (): Promise<CityAt | undefined> => {
+    try {
+      const { data, error } = await db.from('profiles').select('city_lat, city_lng').eq('id', me).maybeSingle();
+      return error || !data ? undefined : (data as CityAt);
+    } catch {
+      return undefined;
+    }
+  };
+  // Tournament plans you may see (migration 123): yours, and those of people
+  // you follow who follow you back.
+  const plansLoad = fetchPlans();
+  const cityLoad = (async (): Promise<CityAt | undefined> => {
+    if (missingThisSession.has('my_city_at')) return ownRow();
+    try {
+      const { data, error } = await db.rpc('my_city_at');
+      if (error && missingFunction(error)) { missingThisSession.add('my_city_at'); return ownRow(); }
+      const row: unknown = Array.isArray(data) ? data[0] : data;
+      if (error || !row || typeof row !== 'object') return undefined;
+      const { lat, lng } = row as { lat?: unknown; lng?: unknown };
+      return { city_lat: typeof lat === 'number' ? lat : null, city_lng: typeof lng === 'number' ? lng : null };
+    } catch {
+      return undefined;
+    }
+  })();
   const [profiles, posts, storiesTry, follows, requests, convs, qs, cqs, creqs, notes, ustate, tipRows, hiddenRows, applicationRows, sessionRows, pollRows, myPollVotes, hitRows, prefRows, activityRows, hitInviteRows] = await Promise.all([
-    // Every profile, in chunks, so nobody is left out past the first 1,000.
-    allRows<ProfileRow>((from, to) => db.from('profiles').select('*').order('created_at', { ascending: true }).range(from, to)),
+    // Every profile, in chunks, so nobody is left out past the first 1,000:
+    // the named columns, never anyone's town position (see PROFILE_COLUMNS).
+    // A database older than one of them is read whole, as before.
+    (async () => {
+      const named = await allRows<ProfileRow>((from, to) => db.from('profiles').select(PROFILE_COLUMNS).order('created_at', { ascending: true }).range(from, to));
+      return missingColumn(named.error) ? allRows<ProfileRow>((from, to) => db.from('profiles').select('*').order('created_at', { ascending: true }).range(from, to)) : named;
+    })(),
     db.from('posts').select(POST_SELECT).order('created_at', { ascending: false }).limit(POST_PAGE),
     storiesFull,
     // Only the follows that involve you: who you follow, and who follows you.
@@ -945,6 +1056,9 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
   ]);
   const coaching = await coachingLoad;
   const tagsReady = await tagsProbe;
+  const blockedMeIds = await blockedMeLoad;
+  const ownCity = await cityLoad;
+  const plans = await plansLoad;
   setSessionTagNamesLive(tagsReady);
   if (qs.error) console.warn('[remote] community tables missing; run the pending migrations', qs.error.message);
   const byTime = <T extends { created_at: string }>(a: T, b: T) => (a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0);
@@ -994,11 +1108,33 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
   const contactsFindableReady = ustate.data || ustate.error ? false
     : await db.from('user_state').select('contacts_findable').limit(0).then(({ error }) => !error, () => false);
   const hitList = await withMyHits(((hitRows.data ?? []) as HitRow[]).map(toHit), me);
+  // Tournament plans (where and when someone will play) are only for
+  // themselves and friends who follow each other, whoever they are. Since
+  // migration 123 they live in each owner's settings row: yours comes with
+  // your settings, the rest from tournament_plans(). On a database before
+  // it, the profile rows still carry everyone's, so the app keeps only the
+  // same people's.
+  const iFollow = new Set<string>();
+  const followMe = new Set<string>();
+  for (const edge of (follows.data ?? []) as Edge[]) {
+    if (edge.follower_id === me) iFollow.add(edge.following_id);
+    if (edge.following_id === me) followMe.add(edge.follower_id);
+  }
+  const ownPlans = Array.isArray(ownState?.private_profile?.tournaments) ? tournamentsOf(ownState!.private_profile!.tournaments) : undefined;
+  const plansFor = (row: ProfileRow): TournamentEntry[] => {
+    if (row.id === me) return ownPlans ?? plans?.get(me) ?? tournamentsOf(row.profile?.tournaments);
+    if (plans) return plans.get(row.id) ?? [];
+    return iFollow.has(row.id) && followMe.has(row.id) ? tournamentsOf(row.profile?.tournaments) : [];
+  };
+  const withPlans = (row: ProfileRow): ProfileRow => ({ ...row, profile: { ...(row.profile ?? {}), tournaments: plansFor(row) } });
   return {
     agesOnProfiles,
     ...(contactsFindableReady ? { contactsFindableReady: true } : {}),
     // Your own "up for a hit" when it is kept privately (migration 78: not a known adult) comes from your settings row.
-    users: profileRows.map((row) => toUser(row.id === me ? { ...row, age_group: ownAge, open_to_hit_until: row.open_to_hit_until ?? ownState?.open_to_hit_until ?? null } : row, followers.get(row.id) ?? 0, following.get(row.id) ?? 0)),
+    // Nobody else's town position is read (PROFILE_COLUMNS); yours comes on its own (cityLoad).
+    users: profileRows.map(withPlans).map((row) => toUser(row.id === me
+      ? { ...row, ...(ownCity ?? {}), age_group: ownAge, open_to_hit_until: row.open_to_hit_until ?? ownState?.open_to_hit_until ?? null }
+      : { ...row, city_lat: null, city_lng: null }, followers.get(row.id) ?? 0, following.get(row.id) ?? 0)),
     posts: postRows.map(toPost),
     comments: [
       ...postRows.flatMap((row) => (row.comments ?? []).map(toComment)),
@@ -1025,6 +1161,7 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
     activities: activityRows.error ? [] : ((activityRows.data ?? []) as ActivityRow[]).map(toActivity),
     ...(tagsReady === null ? {} : { sessionTagsReady: tagsReady }),
     hiddenMessageIds: [...hidden],
+    ...(blockedMeIds ? { blockedMeIds } : {}),
     ...(ustate.error ? { userStateFailed: true } : {}),
     ...coaching,
   };
@@ -1992,13 +2129,27 @@ export const remote = {
     return String(data);
   },
 
+  /**
+   * The tournament plans you may see now (migration 123), by person: yours
+   * and those of people you follow who follow you back. Undefined on a
+   * database without it, or when it could not be asked.
+   */
+  async fetchTournamentPlans(): Promise<Map<ID, TournamentEntry[]> | undefined> {
+    return fetchPlans();
+  },
+
   /* -------------------------------------------------------------- invites */
 
-  /** Claims the invite this person joined through; returns who invited them, or null when the handle is unknown or the tables are not there yet. */
-  async claimReferral(handle: string): Promise<ID | null> {
+  /**
+   * Claims the invite this person joined through. Answered: `followed` is who
+   * was followed (null when no follow was made, or nothing was credited).
+   * Not answered (offline, a server hiccup): `ok: false`, so the handle is
+   * kept and tried again rather than lost.
+   */
+  async claimReferral(handle: string): Promise<{ ok: true; followed: ID | null } | { ok: false }> {
     const { data, error } = await need().rpc('claim_referral', { p_handle: handle });
-    if (error) return null;
-    return (data as ID | null) ?? null;
+    if (error) return { ok: false };
+    return { ok: true, followed: (data as ID | null) ?? null };
   },
 
   /** Who invited me (migration 80), and whether a code may still be typed. Null when unknown. */
@@ -3150,7 +3301,11 @@ export const remote = {
     const town = (n?: number) => (n == null ? null : Math.round(n * 100) / 100);
     if (patch.cityAt !== undefined) { row.city_lat = town(patch.cityAt?.lat); row.city_lng = town(patch.cityAt?.lng); }
     if (patch.avatarUrl !== undefined) row.avatar_url = patch.avatarUrl;
-    if (patch.profile !== undefined) row.profile = patch.profile;
+    // Since migration 123 the database files tournament plans privately as the
+    // profile is saved; the flag says this app knows that, so the plans sent
+    // are the whole list (none clears them). Without the flag (an older app)
+    // the database only ever adds plans.
+    if (patch.profile !== undefined) row.profile = tournamentsPrivateLive ? { ...patch.profile, tournamentsPrivate: true } : patch.profile;
     let { error } = await need().from('profiles').update(row).eq('id', me);
     // A database without the town's position yet (migration 49): save the rest.
     if (error && /city_l(at|ng)/.test(error.message) && ('city_lat' in row || 'city_lng' in row)) {
@@ -3835,7 +3990,8 @@ export const auth = {
     if (error) throw new Error(error.message);
     return data.session;
   },
-  async signUp(email: string, password: string, name: string, handle: string, birthDate?: string) {
+  async signUp(email: string, password: string, name: string, handle: string, birthDate?: string, invitedBy?: string | null) {
+    const base = (process.env.EXPO_BASE_URL ?? '').replace(/\/$/, '');
     const { data, error } = await need().auth.signUp({
       email: email.trim(),
       password,
@@ -3845,7 +4001,14 @@ export const auth = {
       // saved, or only from the email link (on any phone or browser), and the
       // age check saves it from here instead of asking again. It still goes
       // through set_birth_date, and comes off once the age is on file.
-      options: { data: { name: name.trim(), handle: handle.trim().toLowerCase(), terms_version: TERMS_VERSION, terms_accepted_at: new Date().toISOString(), ...(birthDate ? { birth_date: birthDate } : {}) } },
+      // The invite link this person came through rides along as well, and the
+      // server credits it the moment the account is made (migration 116), so
+      // it is not lost when the confirmation email opens in another browser.
+      options: {
+        data: { name: name.trim(), handle: handle.trim().toLowerCase(), terms_version: TERMS_VERSION, terms_accepted_at: new Date().toISOString(), ...(birthDate ? { birth_date: birthDate } : {}), ...(invitedBy ? { invited_by: invitedBy } : {}) },
+        // The confirmation link comes back to this same site, where the invite link was kept.
+        ...(Platform.OS === 'web' ? { emailRedirectTo: `${window.location.origin}${base}/` } : {}),
+      },
     });
     if (error) throw new Error(error.message);
     // With email confirmation on, there is no session yet; the screen says so.

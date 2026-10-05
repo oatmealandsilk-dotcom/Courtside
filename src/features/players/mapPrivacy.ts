@@ -58,16 +58,18 @@ export const visibilityLabel = (v: MapVisibility | null | undefined, teen = fals
 /**
  * Where someone not known to be an adult stands with the map (migration
  * 78): 'off' on a database without it (they are never on the map, and see
- * only themselves), 'on' (only between friends who follow each other), or
- * 'under16' (a birthday on file says under 16: never on the map).
+ * only themselves), or 'on' (only between friends who follow each other).
+ * Since migration 119 under 16s are 'on' too, with the same rule as 16 and
+ * 17 year olds: off until they turn it on, then only people they follow who
+ * follow them back.
  */
-export type TeenMap = 'off' | 'on' | 'under16';
+export type TeenMap = 'off' | 'on';
 
 /**
  * Whether there is a choice to make here at all: the map's round 2 is on
  * the database, and you are known to be an adult, or (migration 78) a teen
- * of 16 or 17, or anyone with no age on file, who may share with friends
- * who follow them back.
+ * (any age, since 119), or anyone with no age on file, who may share with
+ * friends who follow them back.
  */
 export const canChooseVisibility = (mapLive: boolean | null, me: User | null | undefined, teenMap: TeenMap) =>
   mapLive === true && !!me && (!notKnownAdult(me) || teenMap === 'on');

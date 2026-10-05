@@ -42,6 +42,7 @@ import { openCourt, playHere } from '@/features/players/courtLink';
 import { formatMiles, formatSpotMiles, milesBetween } from '@/features/players/geo';
 import { isRoughSpot } from '@/features/players/positions';
 import { useMyCity } from '@/features/players/useMyCity';
+import { useFindable } from '@/features/people/findable';
 import { isOpenToHit as isOpenToHitNow } from '@/features/players/openToHit';
 import { plain } from '@/features/search/words';
 import { askedSection, reportSection, subscribeSectionRequest, takeAskedSection } from '@/features/navigation/swipeOrder';
@@ -179,9 +180,20 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   const myCity = (currentUser?.location ?? '').split(',')[0].trim().toLowerCase();
   const sameCity = (u: (typeof users)[number]) => !!myCity && (u.location ?? '').toLowerCase().startsWith(myCity);
   // Your own city first — the people you could actually hit with this week.
+  // The map's list (it shows only with the search box empty).
   const players = users
     .filter(u => u.id !== currentUserId && !blockedIds.includes(u.id) && `${u.name} ${u.handle} ${u.location}`.toLowerCase().includes(search.toLowerCase()))
     .sort((a, b) => Number(sameCity(b)) - Number(sameCity(a)));
+  // The players a search lists: search's own rule for every account (teens
+  // like anyone; never someone blocked either way or a suspended account),
+  // found by name or @handle only, never by town, and never sorted or
+  // labelled by where they live: a search says nothing about where anyone
+  // is. A town typed here still finds places and courts (below). The map
+  // keeps its own list above, and its own server rules.
+  const { findable } = useFindable();
+  const foundPlayers = search
+    ? users.filter((u) => findable(u) && `${u.name} ${u.handle}`.toLowerCase().includes(search.toLowerCase()))
+    : [];
   // A topic asked for before this tab was built is kept for it, the same as the section.
   const [topic, setTopic] = useState<QuestionTopic | 'all'>(() => asTopic(previewSection ? undefined : askedSection('/discuss#topic')));
   // A topic picked from a thread's label may sit off the end of the strip: the strip slides it into view.
@@ -262,8 +274,9 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   }, [users, lastSeen, currentUserId, blockedIds, nearFrom?.lat, nearFrom?.lng]); // eslint-disable-line react-hooks/exhaustive-deps
   // "New on CourtSide": who joined in the last two weeks, newest first. With
   // the map's round 2 on the database (migration 63) the server decides who
-  // (new_on_courtside): known adults, 16 and 17 year olds with public
-  // accounts, and anyone you already follow; never under 16. Before it, the
+  // (new_on_courtside): known adults (to a known adult), and anyone you
+  // already follow; since migration 122 never a teen to an adult who does
+  // not follow them, and never under 16. Before 63, the
   // phone works it out the old way: known adults and people you follow, so a
   // teen is never put in front of adult strangers with a one-tap Follow; a
   // teen viewer sees only the people they follow. Either way, nobody already
@@ -291,7 +304,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   const ownSpot = detectedCoords ?? (currentUserId && lastSeen[currentUserId] ? { lat: lastSeen[currentUserId].lat, lng: lastSeen[currentUserId].lng } : null);
   const upToday = useUpToday({ users, lastSeen, me: currentUserId, from: ownSpot, blockedIds });
   // A teen (migration 78) has it too: only friends who follow each other with
-  // them are in it, and only those friends see theirs. Never under 16.
+  // them are in it, and only those friends see theirs. Under 16s too (migration 119), the same way.
   const teen = onTeenMap(currentUser, teenMap);
   const showUpToday = !!currentUser && (!notKnownAdult(currentUser) || teen);
   const toggleOpen = useOpenToHitToggle();
@@ -497,20 +510,20 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
             ))}
           </View>
         ) : null}
-        {search && (players.length || courtMatches.length || placeMatches.length) ? <View style={styles.playersHead}>
+        {search && (foundPlayers.length || courtMatches.length || placeMatches.length) ? <View style={styles.playersHead}>
           <Text style={styles.playersTitle}>Players</Text>
           {/* A court matched but no one did: one quiet line, not a big empty state under the court that was found. */}
-          <Text style={styles.playersBody}>{players.length ? `${players.length} ${players.length === 1 ? 'match' : 'matches'}` : `No players named “${search.trim()}”`}</Text>
+          <Text style={styles.playersBody}>{foundPlayers.length ? `${foundPlayers.length} ${foundPlayers.length === 1 ? 'match' : 'matches'}` : `No players named “${search.trim()}”`}</Text>
         </View> : null}
-        {search ? players.map((user, index) => <Pressable key={user.id} accessibilityRole="link" onPress={() => router.push(`/user/${user.id}`)} style={({ pressed }) => [styles.player, pressed && styles.playerPressed]}>
+        {search ? foundPlayers.map((user, index) => <Pressable key={user.id} accessibilityRole="link" onPress={() => router.push(`/user/${user.id}`)} style={({ pressed }) => [styles.player, pressed && styles.playerPressed]}>
           <Avatar name={user.name} seed={user.avatarSeed} size={52} ring={user.isCoach} />
           <View style={[styles.playerBody, index > 0 && styles.playerLine]}>
             <View style={styles.playerTop}><Text style={styles.playerName} numberOfLines={1}>{user.name}</Text><LevelPill profile={user.profile} small /></View>
-            <Text style={styles.playerMeta} numberOfLines={1}>@{user.handle} · {user.location}</Text>
+            <Text style={styles.playerMeta} numberOfLines={1}>@{user.handle}</Text>
           </View>
           <Ionicons name="chevron-forward" size={16} color={colors.textFaint} style={styles.playerChevron} />
         </Pressable>) : null}
-        {search && !players.length && !courtMatches.length && !placeMatches.length && !placeSearch.searching ? <EmptyState title={`Nothing matches “${search.trim()}”`} body={placeSearch.failed ? 'Places can’t be searched right now. Try a player’s or a court’s name.' : 'No players, courts or places found. Try a name, a city or a park.'} /> : null}
+        {search && !foundPlayers.length && !courtMatches.length && !placeMatches.length && !placeSearch.searching ? <EmptyState title={`Nothing matches “${search.trim()}”`} body={placeSearch.failed ? 'Places can’t be searched right now. Try a player’s or a court’s name.' : 'No players, courts or places found. Try a name, a city or a park.'} /> : null}
         {/* Near you: who shared a spot within 30 miles, the same "near" as the map. */}
         {!search && nearPlayers.length ? (
           <View>

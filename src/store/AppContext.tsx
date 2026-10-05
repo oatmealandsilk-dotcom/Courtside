@@ -36,7 +36,7 @@ import { mergePast, readOneWithHeartRate, readPastHealth, type PastWorkout } fro
 import { postShare, reshare, sameShare } from '@/features/activity/healthShare';
 import { REFUSALS, maxTagsFor, canTagKind, firstName, isActive, localRefusal, mirrorCopy, nameFor, patchWith, reconcileWith, refusalWords, roleOn, tagsOnSession, withEntry, withOnNewPost } from '@/features/activity/sessionTags';
 import { duration } from '@/lib/format';
-import { takeReferrer } from '@/features/invite/referral';
+import { forgetReferrer, peekReferrer } from '@/features/invite/referral';
 import { endOfToday } from '@/features/players/openToHit';
 import { pickNutritionExport } from '@/features/health/cronometer';
 import { nearestPlace } from '@/data/locations';
@@ -108,7 +108,7 @@ import type {
   Story,
   User,
   PlayerProfile,
-  MediaCrop, Tip, TaggedCourt, TrackerId, Invitee, ContactMatch, HealthShareKey, HeadToHead, MatchSet, Removed, RemovedItem, TakedownKind, TakedownReason } from '@/data/types';
+  MediaCrop, Tip, TaggedCourt, TrackerId, Invitee, ContactMatch, HealthShareKey, HeadToHead, MatchSet, Removed, RemovedItem, TakedownKind, TakedownReason, TournamentEntry } from '@/data/types';
 import { setsWinner } from '@/features/activity/score';
 
 interface NewStoryInput {
@@ -382,6 +382,12 @@ interface AppState extends Bootstrap, CourtLifeState, FeedGroupsState {
   reportedIds: ID[];
   /** People you have blocked. Their posts and messages are hidden. */
   blockedIds: ID[];
+  /**
+   * People who have blocked you, as the server says (migration 118; empty
+   * without it). Search, the @ list and suggestions leave them out, the way
+   * they leave out people you blocked.
+   */
+  blockedMeIds: ID[];
   /** People whose new posts you have asked to be told about. */
   alertIds: ID[];
   /** Ways to pay a coach, and which one is used unless you say otherwise. */
@@ -439,8 +445,8 @@ interface AppState extends Bootstrap, CourtLifeState, FeedGroupsState {
   /**
    * The map's teen rule (migration 78), for an account not known to be an
    * adult: 'off' until the database has it (on the map only adults, as
-   * before), 'on' (shared only between friends who follow each other), or
-   * 'under16' (never on the map).
+   * before), or 'on' (shared only between friends who follow each other;
+   * under 16s too since migration 119).
    */
   teenMap: TeenMap;
   /** New on CourtSide as the server lists it for you (migration 63), newest first; null until asked, or before 63. */
@@ -513,7 +519,7 @@ function withServerSettings(s: AppState, base: string, got: UserState | null): P
 function freshAccountSettings(): Partial<AppState> {
   if (!isSupabaseConfigured) return {};
   return {
-    mutedIds: [], blockedIds: [], reportedIds: [], alertIds: [], saved: { postIds: [], questionIds: [] },
+    mutedIds: [], blockedIds: [], blockedMeIds: [], reportedIds: [], alertIds: [], saved: { postIds: [], questionIds: [] },
     paymentMethods: [], defaultPaymentId: null, prefs: DEFAULT_PREFS,
   };
 }
@@ -541,6 +547,12 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
   setMapVisibility: (v: MapVisibility) => Promise<boolean>;
   /** Asks who is new on CourtSide for you (migration 63); before it, the screen works the list out itself. */
   loadNewOnCourtside: () => Promise<void>;
+  /**
+   * Asks again whose tournament plans you may see (migration 123: only
+   * friends who follow each other), so a follow-back since the app opened
+   * shows theirs and an unfollow hides them. Does nothing before 123.
+   */
+  loadTournamentPlans: () => Promise<void>;
 
   /* Payments */
   setDefaultPayment: (id: ID) => void;
@@ -1441,6 +1453,8 @@ function snapshotOf(s: AppState, me: ID): RemoteData {
     tips: s.tips, coachApplications: s.coachApplications, coaches: s.coaches, coachReviews: s.coachReviews, coachResults: s.coachResults,
     sessions: s.sessions,
     hitRequests: s.hitRequests,
+    // Who blocked you, so a cold start from this copy leaves them out of search before the fresh load.
+    blockedMeIds: s.blockedMeIds,
     // Tracker sessions are left out: private health numbers stay off the saved copy on the device.
   };
 }
@@ -1536,6 +1550,7 @@ function mergeRemote(prev: AppState, data: RemoteData, me: ID, email: string | n
       coachApplications: [...data.coachApplications, ...prev.coachApplications.filter((a) => !data.coachApplications.some((x) => x.id === a.id))],
       mutedIds: data.userState ? data.userState.mutedIds : prev.mutedIds,
       blockedIds: data.userState ? data.userState.blockedIds : prev.blockedIds,
+      blockedMeIds: data.blockedMeIds ?? prev.blockedMeIds,
       paymentMethods: data.userState && data.userState.paymentMethods.length ? data.userState.paymentMethods : prev.paymentMethods,
       defaultPaymentId: data.userState?.defaultPaymentId ?? prev.defaultPaymentId,
       // The settings row carries map_visibility only once migration 63 has run: its key says the map's round 2 is live.
@@ -1792,6 +1807,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     mutedIds: [],
     reportedIds: [],
     blockedIds: [],
+    blockedMeIds: [],
     alertIds: [],
     paymentMethods: STARTER_PAYMENTS,
     defaultPaymentId: readDefaultPayment(),
@@ -2658,7 +2674,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [signIn]);
 
   const signUp = useCallback(async (email: string, password: string, name: string, handle: string, birthDate?: string) => {
-    const session = await remoteAuth.signUp(email, password, name, handle, birthDate);
+    const invitedBy = await peekReferrer().catch(() => null);
+    const session = await remoteAuth.signUp(email, password, name, handle, birthDate, invitedBy);
     if (!session) return 'confirm' as const;
     // The birthday typed on the sign-up form is kept before the account
     // opens, so it is never asked for a second time.
@@ -3038,6 +3055,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
     return ok;
   }, [loadLastSeen]);
+
+  const loadTournamentPlans = useCallback(async () => {
+    const me = stateRef.current.currentUserId;
+    if (!live(me)) return;
+    const plans = await remote.fetchTournamentPlans().catch(() => undefined);
+    if (!plans || stateRef.current.currentUserId !== me) return;
+    // Your own come with your settings and your own edits: left as they are.
+    const same = (a: TournamentEntry[], b: TournamentEntry[]) => JSON.stringify(a) === JSON.stringify(b);
+    setState((prev) => ({
+      ...prev,
+      users: prev.users.map((u) => {
+        if (u.id === me) return u;
+        const next = plans.get(u.id) ?? [];
+        return same(u.profile.tournaments, next) ? u : { ...u, profile: { ...u.profile, tournaments: next } };
+      }),
+    }));
+  }, []);
 
   const loadNewOnCourtside = useCallback(async () => {
     const s = stateRef.current;
@@ -6535,14 +6569,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const me = stateRef.current.currentUserId;
     if (!live(me)) return;
     const run = (async () => {
-      const handle = await takeReferrer();
+      const handle = await peekReferrer();
       if (!handle) return;
+      const answer = await remote.claimReferral(handle).catch(() => ({ ok: false as const }));
+      // Not answered (offline, a server hiccup): the handle is kept, tried
+      // again the next time the app opens signed in, and offered in setup's
+      // "Invited by?" meanwhile.
+      if (!answer.ok) return;
+      await forgetReferrer();
       // Null when no follow was made: a teen, or someone whose age is not on
       // file yet, is never made to follow the sharer (followInviter makes it
       // once the birthday says adult).
-      const who = await remote.claimReferral(handle);
-      if (!who) return;
-      showInviterFollow(who, handle);
+      if (answer.followed) { showInviterFollow(answer.followed, handle); return; }
+      // Already credited as the account was made (the link rode along with
+      // the sign-up): the follow the claim would have made, by the same rules.
+      void followInviter();
     })();
     referralClaim.current = run;
     try { await run; } finally { if (referralClaim.current === run) referralClaim.current = null; }
@@ -6575,7 +6616,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const me = stateRef.current.currentUserId;
     if (!live(me)) return;
     const who = await remote.followMyInviter().catch(() => null);
-    if (who) showInviterFollow(who);
+    if (!who) return;
+    // Their @handle for the toast, when they are not loaded here yet (someone
+    // credited as their account was made has never claimed a link on this phone).
+    const known = stateRef.current.users.some((u) => u.id === who);
+    const mine = known ? null : await remote.myInviter().catch(() => null);
+    showInviterFollow(who, mine?.id === who ? mine.handle : undefined);
   };
   useEffect(() => { if (live(state.currentUserId)) void claimPendingReferral(); }, [state.currentUserId, claimPendingReferral]);
   const countReferrals = useCallback(async () => { const me = stateRef.current.currentUserId; return live(me) ? remote.countReferrals(me!) : 0; }, []);
@@ -6906,6 +6952,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setLocationEnabled,
       setMapVisibility,
       loadNewOnCourtside,
+      loadTournamentPlans,
       setDefaultPayment,
       addPaymentMethod,
       removePaymentMethod,
@@ -7112,6 +7159,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setLocationEnabled,
       setMapVisibility,
       loadNewOnCourtside,
+      loadTournamentPlans,
       setDefaultPayment,
       addPaymentMethod,
       removePaymentMethod,

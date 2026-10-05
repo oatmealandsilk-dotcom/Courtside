@@ -18,6 +18,7 @@ import { SearchField } from '@/components/SearchField';
 import { Avatar, DottedRule, EmptyState } from '@/components/ui';
 import type { Post, Question, User } from '@/data/types';
 import { useBarInset } from '@/features/navigation/barInset';
+import { useFindable } from '@/features/people/findable';
 import { useSuggestedPlayers } from '@/features/people/suggestions';
 import { openCourt as openCourtPage } from '@/features/players/courtLink';
 import { useCourtSearch } from '@/features/places/useCourtSearch';
@@ -92,6 +93,12 @@ export default function Search() {
   // The tabs come with something to sort: not for "@" or "#" on their own.
   const showTabs = q.text.length > 0 && !pickingTag;
   const blocked = useMemo(() => new Set(blockedIds), [blockedIds]);
+  // People search: everyone, teens included, by the same rule for every
+  // account (so it never says who is a teen); never you, anyone blocked
+  // either way, or a suspended account (see useFindable). Found by name or
+  // @handle only, and a row never shows a town (see matchPeople, PersonRow).
+  const { findable } = useFindable();
+  const findableUsers = useMemo(() => users.filter(findable), [users, findable]);
   const me = users.find((u) => u.id === currentUserId);
   const myTown = townOf(detectedLocation ?? me?.location);
   const userById = useMemo(() => new Map(users.map((u) => [u.id, u])), [users]);
@@ -133,8 +140,8 @@ export default function Search() {
     undoTimer.current = setTimeout(() => setUndo(null), 4000);
   };
   const putBack = () => { if (undo) keep(undo); setUndo(null); };
-  // Gone or blocked people are skipped rather than shown as a blank row.
-  const shownRecents = recents.filter((r) => r.kind !== 'user' || (userById.has(r.key) && !blocked.has(r.key))).slice(0, RECENT_ROWS);
+  // Gone, blocked (either way) or suspended people are skipped rather than shown as a blank row.
+  const shownRecents = recents.filter((r) => r.kind !== 'user' || findable(userById.get(r.key))).slice(0, RECENT_ROWS);
 
   /* -------------------------------- Suggestions ------------------------------- */
   // Trending: the tags used most on posts and threads this past week.
@@ -172,8 +179,8 @@ export default function Search() {
   }, [pickingTag, q.text, trending, tagCounts]);
   // "@" alone: the people you follow, or players to follow when that is nobody yet.
   const followedRows = useMemo(
-    () => followingIds.flatMap((id) => { const u = userById.get(id); return u && !blocked.has(id) ? [u] : []; }).slice(0, FOLLOWED_ROWS),
-    [followingIds, userById, blocked],
+    () => followingIds.flatMap((id) => { const u = userById.get(id); return findable(u) ? [u] : []; }).slice(0, FOLLOWED_ROWS),
+    [followingIds, userById, findable],
   );
   // Followed from this list: the row stays where it is and reads Following, the way Instagram keeps it.
   const [followedHere, setFollowedHere] = useState<string[]>([]);
@@ -199,8 +206,8 @@ export default function Search() {
 
   /* --------------------------------- Results --------------------------------- */
   const people = useMemo(
-    () => matchPeople(q, { users, coaches, me: currentUserId, myTown, followingIds, followEdges, blocked }),
-    [q, users, coaches, currentUserId, myTown, followingIds, followEdges, blocked],
+    () => matchPeople(q, { users: findableUsers, coaches, me: currentUserId, followingIds, followEdges, blocked }),
+    [q, findableUsers, coaches, currentUserId, followingIds, followEdges, blocked],
   );
   const ranked = useMemo(() => matchPosts(q, posts, blocked), [q, posts, blocked]);
   // Tiles already on screen for this search keep their places; posts that
@@ -228,8 +235,8 @@ export default function Search() {
     return pool ? matchCourts(q, pool, home) : [];
   }, [q, courts, farCourts, home]);
   const order: ('people' | 'posts' | 'threads' | 'courts')[] = q.mode === 'people' ? ['people'] : q.mode === 'tag' ? ['posts', 'threads'] : ['people', 'posts', 'threads', 'courts'];
-  // All shows only people whose name or handle matched. Someone found only
-  // through their town or bio ("serve" in a bio) waits on the People tab,
+  // All shows only people whose name or handle matched. A coach found only
+  // through their listing ("serve" in a specialty) waits on the People tab,
   // unless nothing else matched at all.
   const others = (order.includes('posts') ? foundPosts.length + threads.length : 0) + (order.includes('courts') ? foundCourts.length : 0);
   const strongPeople = people.filter(strongPerson);
