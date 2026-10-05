@@ -14,6 +14,13 @@ import { useApp } from '@/store/AppContext';
  * Left out: you, anyone you blocked or who blocked you (the server says who,
  * migration 118), and a suspended account, whose page only says it is
  * unavailable (an admin still finds it, to review it).
+ *
+ * Leaving out someone who blocked you is a courtesy of this app, not a
+ * protection: their profile row still reaches your phone like everyone's
+ * (and a direct link still opens their profile, as the privacy policy says),
+ * so a changed app or a direct request to the database would still find
+ * them. What protects them is the server's own block rules (no new chat,
+ * no tag, not on the map), not this list.
  */
 export function useFindable() {
   const { currentUserId, currentUser, blockedIds, blockedMeIds } = useApp();

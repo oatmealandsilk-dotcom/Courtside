@@ -180,14 +180,20 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   const myCity = (currentUser?.location ?? '').split(',')[0].trim().toLowerCase();
   const sameCity = (u: (typeof users)[number]) => !!myCity && (u.location ?? '').toLowerCase().startsWith(myCity);
   // Your own city first — the people you could actually hit with this week.
+  // The map's list (it shows only with the search box empty).
   const players = users
     .filter(u => u.id !== currentUserId && !blockedIds.includes(u.id) && `${u.name} ${u.handle} ${u.location}`.toLowerCase().includes(search.toLowerCase()))
     .sort((a, b) => Number(sameCity(b)) - Number(sameCity(a)));
   // The players a search lists: search's own rule for every account (teens
-  // like anyone; never someone blocked either way or a suspended account).
-  // The map keeps its own list above, and its own server rules.
+  // like anyone; never someone blocked either way or a suspended account),
+  // found by name or @handle only, never by town, and never sorted or
+  // labelled by where they live: a search says nothing about where anyone
+  // is. A town typed here still finds places and courts (below). The map
+  // keeps its own list above, and its own server rules.
   const { findable } = useFindable();
-  const foundPlayers = search ? players.filter(findable) : [];
+  const foundPlayers = search
+    ? users.filter((u) => findable(u) && `${u.name} ${u.handle}`.toLowerCase().includes(search.toLowerCase()))
+    : [];
   // A topic asked for before this tab was built is kept for it, the same as the section.
   const [topic, setTopic] = useState<QuestionTopic | 'all'>(() => asTopic(previewSection ? undefined : askedSection('/discuss#topic')));
   // A topic picked from a thread's label may sit off the end of the strip: the strip slides it into view.
@@ -512,7 +518,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
           <Avatar name={user.name} seed={user.avatarSeed} size={52} ring={user.isCoach} />
           <View style={[styles.playerBody, index > 0 && styles.playerLine]}>
             <View style={styles.playerTop}><Text style={styles.playerName} numberOfLines={1}>{user.name}</Text><LevelPill profile={user.profile} small /></View>
-            <Text style={styles.playerMeta} numberOfLines={1}>@{user.handle} · {user.location}</Text>
+            <Text style={styles.playerMeta} numberOfLines={1}>@{user.handle}</Text>
           </View>
           <Ionicons name="chevron-forward" size={16} color={colors.textFaint} style={styles.playerChevron} />
         </Pressable>) : null}

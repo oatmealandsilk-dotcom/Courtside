@@ -48,30 +48,34 @@ export interface PersonHit {
   score: number;
   /**
    * How they matched: 3 the name or handle starts with it, 2.5 a word of the
-   * name does, 2 the handle holds it, 1 only their town, bio or coaching
-   * words do. Under 2 is a weak match: the All tab leaves those out.
+   * name does, 2 the handle holds it, 1 only a coach's listing (headline,
+   * specialties, credentials) does. Under 2 is a weak match: the All tab
+   * leaves those out.
    */
   match: number;
-  /** For a weak match, the words of theirs that matched, so the row can show why. */
+  /** For a weak match, the words of the coach's listing that matched, so the row can show why. */
   via?: string;
 }
 
-/** A name or handle answers what was typed; a town or bio only hints at it. */
+/** A name or handle answers what was typed; a coach's listing only hints at it. */
 export const strongPerson = (hit: PersonHit) => hit.match >= 2;
 
 /**
  * People, ranked the way Instagram and TikTok do it: the closest name match
- * first, then anyone near you, then people you share follows with, then by
- * how many follow them. A coach also turns up for words in their headline,
- * specialties or credentials, and appears once, as the person they are.
- * Everything matches from the start of a word, so the bold always shows why.
- * One letter finds only names and handles that start with it.
+ * first, then people you share follows with, then by how many follow them.
+ * A coach also turns up for words in their headline, specialties or
+ * credentials, and appears once, as the person they are. Everything matches
+ * from the start of a word, so the bold always shows why. One letter finds
+ * only names and handles that start with it.
+ *
+ * Only a name or @handle finds a player, the same for every account (teens
+ * like anyone): never their town or bio, and nothing here ranks or labels
+ * anyone by where they live, so a search never says where someone is.
  */
 export function matchPeople(q: Query, ctx: {
   users: User[];
   coaches: Coach[];
   me: ID | null;
-  myTown: string;
   followingIds: ID[];
   followEdges: { followerId: ID; followingId: ID }[];
   blocked: Set<ID>;
@@ -97,19 +101,18 @@ export function matchPeople(q: Query, ctx: {
     else if (startsWord(name, needle)) match = 2.5;
     else if (inHandle) match = 2;
     else if (needle.length >= 2) {
-      via = [user.location, user.bio, coach?.headline, ...(coach?.specialties ?? []), ...(coach?.credentials ?? [])]
+      via = [coach?.headline, ...(coach?.specialties ?? []), ...(coach?.credentials ?? [])]
         .find((field) => !!field && startsWord(plain(field), needle));
       if (via) match = 1;
     }
     if (!match) continue;
-    const near = !!ctx.myTown && townOf(user.location) === ctx.myTown;
     const mutual = (followersOf.get(user.id) ?? []).filter((id) => iFollow.has(id)).length;
     const follows = iFollow.has(user.id);
-    const rank = match * 10 + (near ? 4 : 0) + Math.min(mutual, 5) * 1.5 + (follows ? 2 : 0) + Math.log10(1 + user.followers);
-    const reason = user.isCoach ? 'Coach' : mutual ? `${mutual} mutual` : near ? 'Near you' : user.followers >= 1000 ? 'Popular' : '';
+    const rank = match * 10 + Math.min(mutual, 5) * 1.5 + (follows ? 2 : 0) + Math.log10(1 + user.followers);
+    const reason = user.isCoach ? 'Coach' : mutual ? `${mutual} mutual` : user.followers >= 1000 ? 'Popular' : '';
     out.push({ user, coach, reason, score: rank, match, via });
   }
-  // A name match always ranks above a town or bio match, however near or popular.
+  // A name match always ranks above a coaching-words match, however popular.
   return out.sort((a, b) => Number(strongPerson(b)) - Number(strongPerson(a)) || b.score - a.score);
 }
 

@@ -1437,6 +1437,8 @@ function snapshotOf(s: AppState, me: ID): RemoteData {
     tips: s.tips, coachApplications: s.coachApplications, coaches: s.coaches, coachReviews: s.coachReviews, coachResults: s.coachResults,
     sessions: s.sessions,
     hitRequests: s.hitRequests,
+    // Who blocked you, so a cold start from this copy leaves them out of search before the fresh load.
+    blockedMeIds: s.blockedMeIds,
     // Tracker sessions are left out: private health numbers stay off the saved copy on the device.
   };
 }

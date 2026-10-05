@@ -841,6 +841,23 @@ const blockedMeIdsOf = (rows: unknown[]): ID[] =>
     return typeof id === 'string' && UUID_RE.test(id) ? [id] : [];
   });
 /**
+ * The profile columns the app reads for everyone. Named rather than "*" so
+ * nobody's town position (city_lat, city_lng) comes down with the list: the
+ * app only ever uses your own, which comes from my_city_at() (migration
+ * 118). Migration 120 then takes those two columns away from everyone else
+ * altogether; after it, a read of "*" is refused. A column added to
+ * profiles later has to be granted to signed-in readers and named here.
+ */
+const PROFILE_COLUMNS = 'id, handle, name, bio, location, avatar_url, is_coach, profile, created_at, is_private, read_receipts, followers_count, following_count, is_admin, suspended_at, open_to_hit_until, handle_changed_at';
+/** Postgres's "column … does not exist": a database older than one of the columns named above. */
+const missingColumn = (error: unknown) => !!error && typeof error === 'object' && (error as { code?: string }).code === '42703';
+/**
+ * Set once this session finds a function missing (a database before
+ * migration 118), so it is not asked again on every load: each ask of a
+ * missing function shows as a failed request in a browser's console.
+ */
+const missingThisSession = new Set<string>();
+/**
  * Every row of a read, fetched 1,000 at a time (the most the database hands
  * back at once) until there are no more, up to `cap` rows.
  */
@@ -916,11 +933,46 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
   const tagsProbe = db.from('session_tags').select('id').limit(0).then(({ error }) => readinessOf(error), () => null);
   // Who has blocked you (migration 118), so search leaves them out the way it
   // leaves out people you blocked. A database without it (or a failed ask)
-  // gives undefined, and search works as it always has.
-  const blockedMeLoad = db.rpc('blocked_me').then(({ data, error }) => (error || !Array.isArray(data) ? undefined : blockedMeIdsOf(data)), () => undefined);
+  // gives undefined, and search works as it always has. Only the standard
+  // app does this: their profile row still reaches you (see useFindable).
+  const blockedMeLoad = missingThisSession.has('blocked_me') ? Promise.resolve(undefined)
+    : db.rpc('blocked_me').then(({ data, error }) => {
+      if (error && missingFunction(error)) missingThisSession.add('blocked_me');
+      return error || !Array.isArray(data) ? undefined : blockedMeIdsOf(data);
+    }, () => undefined);
+  // Your own town position, the only one the app uses (map, distances):
+  // my_city_at() (migration 118); on a database without it, your own row.
+  // Undefined when it could not be read: then the app goes by the town's name.
+  type CityAt = { city_lat: number | null; city_lng: number | null };
+  const ownRow = async (): Promise<CityAt | undefined> => {
+    try {
+      const { data, error } = await db.from('profiles').select('city_lat, city_lng').eq('id', me).maybeSingle();
+      return error || !data ? undefined : (data as CityAt);
+    } catch {
+      return undefined;
+    }
+  };
+  const cityLoad = (async (): Promise<CityAt | undefined> => {
+    if (missingThisSession.has('my_city_at')) return ownRow();
+    try {
+      const { data, error } = await db.rpc('my_city_at');
+      if (error && missingFunction(error)) { missingThisSession.add('my_city_at'); return ownRow(); }
+      const row: unknown = Array.isArray(data) ? data[0] : data;
+      if (error || !row || typeof row !== 'object') return undefined;
+      const { lat, lng } = row as { lat?: unknown; lng?: unknown };
+      return { city_lat: typeof lat === 'number' ? lat : null, city_lng: typeof lng === 'number' ? lng : null };
+    } catch {
+      return undefined;
+    }
+  })();
   const [profiles, posts, storiesTry, follows, requests, convs, qs, cqs, creqs, notes, ustate, tipRows, hiddenRows, applicationRows, sessionRows, pollRows, myPollVotes, hitRows, prefRows, activityRows, hitInviteRows] = await Promise.all([
-    // Every profile, in chunks, so nobody is left out past the first 1,000.
-    allRows<ProfileRow>((from, to) => db.from('profiles').select('*').order('created_at', { ascending: true }).range(from, to)),
+    // Every profile, in chunks, so nobody is left out past the first 1,000:
+    // the named columns, never anyone's town position (see PROFILE_COLUMNS).
+    // A database older than one of them is read whole, as before.
+    (async () => {
+      const named = await allRows<ProfileRow>((from, to) => db.from('profiles').select(PROFILE_COLUMNS).order('created_at', { ascending: true }).range(from, to));
+      return missingColumn(named.error) ? allRows<ProfileRow>((from, to) => db.from('profiles').select('*').order('created_at', { ascending: true }).range(from, to)) : named;
+    })(),
     db.from('posts').select(POST_SELECT).order('created_at', { ascending: false }).limit(POST_PAGE),
     storiesFull,
     // Only the follows that involve you: who you follow, and who follows you.
@@ -962,6 +1014,7 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
   const coaching = await coachingLoad;
   const tagsReady = await tagsProbe;
   const blockedMeIds = await blockedMeLoad;
+  const ownCity = await cityLoad;
   setSessionTagNamesLive(tagsReady);
   if (qs.error) console.warn('[remote] community tables missing; run the pending migrations', qs.error.message);
   const byTime = <T extends { created_at: string }>(a: T, b: T) => (a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0);
@@ -1015,7 +1068,10 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
     agesOnProfiles,
     ...(contactsFindableReady ? { contactsFindableReady: true } : {}),
     // Your own "up for a hit" when it is kept privately (migration 78: not a known adult) comes from your settings row.
-    users: profileRows.map((row) => toUser(row.id === me ? { ...row, age_group: ownAge, open_to_hit_until: row.open_to_hit_until ?? ownState?.open_to_hit_until ?? null } : row, followers.get(row.id) ?? 0, following.get(row.id) ?? 0)),
+    // Nobody else's town position is read (PROFILE_COLUMNS); yours comes on its own (cityLoad).
+    users: profileRows.map((row) => toUser(row.id === me
+      ? { ...row, ...(ownCity ?? {}), age_group: ownAge, open_to_hit_until: row.open_to_hit_until ?? ownState?.open_to_hit_until ?? null }
+      : { ...row, city_lat: null, city_lng: null }, followers.get(row.id) ?? 0, following.get(row.id) ?? 0)),
     posts: postRows.map(toPost),
     comments: [
       ...postRows.flatMap((row) => (row.comments ?? []).map(toComment)),

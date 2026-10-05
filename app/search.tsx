@@ -95,7 +95,8 @@ export default function Search() {
   const blocked = useMemo(() => new Set(blockedIds), [blockedIds]);
   // People search: everyone, teens included, by the same rule for every
   // account (so it never says who is a teen); never you, anyone blocked
-  // either way, or a suspended account (see useFindable).
+  // either way, or a suspended account (see useFindable). Found by name or
+  // @handle only, and a row never shows a town (see matchPeople, PersonRow).
   const { findable } = useFindable();
   const findableUsers = useMemo(() => users.filter(findable), [users, findable]);
   const me = users.find((u) => u.id === currentUserId);
@@ -205,8 +206,8 @@ export default function Search() {
 
   /* --------------------------------- Results --------------------------------- */
   const people = useMemo(
-    () => matchPeople(q, { users: findableUsers, coaches, me: currentUserId, myTown, followingIds, followEdges, blocked }),
-    [q, findableUsers, coaches, currentUserId, myTown, followingIds, followEdges, blocked],
+    () => matchPeople(q, { users: findableUsers, coaches, me: currentUserId, followingIds, followEdges, blocked }),
+    [q, findableUsers, coaches, currentUserId, followingIds, followEdges, blocked],
   );
   const ranked = useMemo(() => matchPosts(q, posts, blocked), [q, posts, blocked]);
   // Tiles already on screen for this search keep their places; posts that
@@ -234,8 +235,8 @@ export default function Search() {
     return pool ? matchCourts(q, pool, home) : [];
   }, [q, courts, farCourts, home]);
   const order: ('people' | 'posts' | 'threads' | 'courts')[] = q.mode === 'people' ? ['people'] : q.mode === 'tag' ? ['posts', 'threads'] : ['people', 'posts', 'threads', 'courts'];
-  // All shows only people whose name or handle matched. Someone found only
-  // through their town or bio ("serve" in a bio) waits on the People tab,
+  // All shows only people whose name or handle matched. A coach found only
+  // through their listing ("serve" in a specialty) waits on the People tab,
   // unless nothing else matched at all.
   const others = (order.includes('posts') ? foundPosts.length + threads.length : 0) + (order.includes('courts') ? foundCourts.length : 0);
   const strongPeople = people.filter(strongPerson);
