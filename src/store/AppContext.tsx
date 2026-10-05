@@ -155,6 +155,9 @@ interface NewCoachQuestionInput {
   mediaLabel?: string;
 }
 
+
+/** Said when the day's limit of new people to message is used up (migration 109). */
+const LIMIT_NOTE = 'You have messaged a lot of new people today. Try again tomorrow.';
 export type CoachApplicationInput = Omit<CoachApplication, 'id' | 'userId' | 'status' | 'createdAt'>;
 
 /**
@@ -4793,9 +4796,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       };
       setState((prev) => ({ ...prev, conversations: [conversation, ...prev.conversations] }));
       if (live(me, userId)) void remote.openConversation(userId, conversation.id).then((standing) => {
-        if (standing === 'blocked') {
+        if (standing === 'blocked' || standing === 'limit') {
           setState((prev) => ({ ...prev, conversations: prev.conversations.filter((c) => c.id !== conversation.id) }));
-          showToast({ title: "You can't message this account", icon: 'lock-closed-outline', long: true });
+          showToast({ title: standing === 'limit' ? LIMIT_NOTE : "You can't message this account", icon: 'lock-closed-outline', long: true });
           return;
         }
         if (standing === null) {
@@ -5636,14 +5639,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
           const other = chat.participantIds.find((p) => p !== me);
           if (!other || !UUID.test(other)) continue;
           const standing = await remote.openConversation(other, chat.id).catch(() => chat.id);
-          if (standing === null || standing === 'blocked') {
+          if (standing === null || standing === 'blocked' || standing === 'limit') {
             refused.add(chat.id);
             setState((prev) => ({
               ...prev,
               conversations: prev.conversations.filter((c) => c.id !== chat.id),
               messages: prev.messages.filter((m) => m.conversationId !== chat.id),
             }));
-            showToast({ title: standing === 'blocked' ? "You can't message this account" : chatLockNoteFor(stateRef.current.users, other), icon: 'lock-closed-outline', long: true });
+            showToast({ title: standing === 'blocked' ? "You can't message this account" : standing === 'limit' ? LIMIT_NOTE : chatLockNoteFor(stateRef.current.users, other), icon: 'lock-closed-outline', long: true });
             continue;
           }
           if (standing !== chat.id) {

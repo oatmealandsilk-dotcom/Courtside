@@ -1305,8 +1305,10 @@ export const remote = {
   /* ------------------------------ messages ------------------------------ */
 
   /** The 1:1 you already have with someone, or a new one under the id the app chose. Returns the id that stands. */
-  async openConversation(other: ID, wanted: ID): Promise<ID | null | 'blocked'> {
+  async openConversation(other: ID, wanted: ID): Promise<ID | null | 'blocked' | 'limit'> {
     const { data, error } = await need().rpc('open_conversation', { other, wanted });
+    // Past the day's limit of new people (migration 109): no chat, whoever it was.
+    if (error && /age_rule_limit/.test(error.message)) return 'limit';
     // A teen who does not follow you cannot be sent a new chat: null says so.
     if (error && /teen_closed/.test(error.message)) return null;
     // Nor can someone you are blocked with, either way.
