@@ -1189,13 +1189,15 @@ function Home({ scope, topRow, paused, onChrome }: {
   const scopedBack = !!scope && !rowed;
   useEffect(() => {
     if (!focused || !showing) return;
-    // A hit counts as watched through the story viewer, not here.
-    if (showing.type === 'hit' || showing.type === 'tip' || showing.type === 'challenge') return;
+    // An Instant seen here counts on its views, as in the full-screen viewer
+    // (once per person; your own is left out of its count anyway).
+    if (showing.type === 'hit') { if (showing.story.authorId !== currentUserId) actions.markStoryViewed(showing.story.id); return; }
+    if (showing.type === 'tip' || showing.type === 'challenge') return;
     actions.recordView(
       showing.type === 'post' ? 'post' : 'question',
       showing.type === 'post' ? showing.post.id : showing.question.id,
     );
-  }, [focused, showing, actions]);
+  }, [focused, showing, actions, currentUserId]);
 
   // The last page of the main feed: a small congratulations for getting
   // there this early, a way to post, and a way back to the top.
