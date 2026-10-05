@@ -305,9 +305,11 @@ export interface Prefs {
   showActivity: boolean; pushLikes: boolean; pushCoach: boolean; pushMessages: boolean; pushActivity: boolean;
   /** The four map alerts (migration 60): a friend up for a hit, new hits near you, new players near you, courts you follow. */
   pushMapFriends: boolean; pushMapHits: boolean; pushMapPlayers: boolean; pushCourts: boolean;
+  /** "Let people find me from their contacts" (migration 89): off, you never come up when someone checks their contacts. */
+  contactsFindable: boolean;
 }
 export type PrefKey = keyof Prefs;
-const DEFAULT_PREFS: Prefs = { showActivity: true, pushLikes: true, pushCoach: true, pushMessages: true, pushActivity: true, pushMapFriends: true, pushMapHits: true, pushMapPlayers: true, pushCourts: true };
+const DEFAULT_PREFS: Prefs = { showActivity: true, pushLikes: true, pushCoach: true, pushMessages: true, pushActivity: true, pushMapFriends: true, pushMapHits: true, pushMapPlayers: true, pushCourts: true, contactsFindable: true };
 
 interface AppState extends Bootstrap, CourtLifeState, FeedGroupsState {
   ready: boolean;
@@ -418,6 +420,12 @@ interface AppState extends Bootstrap, CourtLifeState, FeedGroupsState {
   hitRequests: HitRequest[];
   /** Small switches from Settings, kept with the account. */
   prefs: Prefs;
+  /**
+   * Whether the database has "Let people find me from their contacts"
+   * (migration 89), from the settings row's own key. Until it is known the
+   * switch is not shown: it would do nothing, and come back on at the next start.
+   */
+  contactsFindableLive: boolean;
   /** Whether the app may ask the device where you are, and the city it found. */
   locationEnabled: boolean;
   /**
@@ -1203,6 +1211,7 @@ function snapshotOf(s: AppState, me: ID): RemoteData {
       pushMessages: s.prefs.pushMessages,
       pushActivity: s.prefs.pushActivity,
       pushMapFriends: s.prefs.pushMapFriends, pushMapHits: s.prefs.pushMapHits, pushMapPlayers: s.prefs.pushMapPlayers, pushCourts: s.prefs.pushCourts,
+      contactsFindable: s.contactsFindableLive ? s.prefs.contactsFindable : undefined,
       constraints: self?.profile.constraints,
     },
     tips: s.tips, coachApplications: s.coachApplications, coaches: s.coaches, coachReviews: s.coachReviews, coachResults: s.coachResults,
@@ -1314,8 +1323,11 @@ function mergeRemote(prev: AppState, data: RemoteData, me: ID, email: string | n
         ? {
           showActivity: data.userState.showActivity, pushLikes: data.userState.pushLikes, pushCoach: data.userState.pushCoach, pushMessages: data.userState.pushMessages ?? true, pushActivity: data.userState.pushActivity ?? true,
           pushMapFriends: data.userState.pushMapFriends ?? true, pushMapHits: data.userState.pushMapHits ?? true, pushMapPlayers: data.userState.pushMapPlayers ?? true, pushCourts: data.userState.pushCourts ?? true,
+          contactsFindable: data.userState.contactsFindable ?? true,
         }
         : prev.prefs,
+      // The settings row carries contacts_findable only once migration 89 has run.
+      contactsFindableLive: data.userState?.contactsFindable !== undefined ? true : prev.contactsFindableLive,
       // The saved copy shows the app; only the server's answer counts as loaded (live updates, settings sync and retries wait for it).
       remoteLoaded: fromSnapshot ? prev.remoteLoaded : true,
       snapshotShown: fromSnapshot ? true : prev.snapshotShown,
@@ -1464,6 +1476,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     paymentMethods: STARTER_PAYMENTS,
     defaultPaymentId: readDefaultPayment(),
     prefs: DEFAULT_PREFS,
+    contactsFindableLive: false,
     tips: [],
     sessions: [],
     sessionTags: [],
@@ -1751,6 +1764,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         defaultPaymentId: s.defaultPaymentId, showActivity: s.prefs.showActivity, pushLikes: s.prefs.pushLikes, pushCoach: s.prefs.pushCoach,
         pushMessages: s.prefs.pushMessages, pushActivity: s.prefs.pushActivity,
         pushMapFriends: s.prefs.pushMapFriends, pushMapHits: s.prefs.pushMapHits, pushMapPlayers: s.prefs.pushMapPlayers, pushCourts: s.prefs.pushCourts,
+        // Sent only once the database is known to have it (migration 89).
+        contactsFindable: s.contactsFindableLive ? s.prefs.contactsFindable : undefined,
       });
     }, 400);
     return () => clearTimeout(t);
