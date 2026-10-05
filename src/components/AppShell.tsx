@@ -26,6 +26,7 @@ import { auth as remoteAuth } from '@/data/remote';
 import { setCrashScreen } from '@/lib/crashReporting';
 import { listenForPushTaps, registerForPush } from '@/features/push/push';
 import { recoverChatPick } from '@/features/messages/pendingPick';
+import { setUpNotificationChannels } from '@/features/push/channels';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { TERMS_VERSION } from '@/lib/legal';
 import { colors } from '@/theme';
@@ -96,6 +97,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // and set up, the phone asks (once, ever) whether alerts may be sent, and
   // keeps this phone's push address on the account fresh.
   useEffect(() => listenForPushTaps(), []);
+  // Android: the alert channels (Messages, Likes and replies, Reminders) exist from the first launch, before any alert or question.
+  useEffect(() => { void setUpNotificationChannels(); }, []);
   const pushAskedFor = useRef<string | null>(null);
   useEffect(() => {
     if (!isSupabaseConfigured || !currentUserId || !remoteLoaded || !onboardingComplete || !currentUser?.ageGroup) return;

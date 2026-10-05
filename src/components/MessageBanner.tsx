@@ -21,6 +21,7 @@ import { isSupabaseConfigured } from '@/lib/supabase';
 import { useReducedMotion } from '@/lib/useReducedMotion';
 import { useResponsive } from '@/lib/useResponsive';
 import { useApp } from '@/store/AppContext';
+import { anyModalOpen } from '@/lib/modalOpen';
 import type { User } from '@/data/types';
 import { colors, spacing, typography } from '@/theme';
 
@@ -133,11 +134,24 @@ export function MessageBanner({ enabled }: { enabled: boolean }) {
   // app is out of sight.
   const gate = useRef({ ready, onInbox, openChat, me: currentUserId });
   gate.current = { ready, onInbox, openChat, me: currentUserId };
+  // Android keeps the app "active" while the notification shade is pulled down
+  // over it (an iPhone says "inactive"), and only says it has lost focus. A
+  // banner then would land behind the shade with the phone's alert held back,
+  // so while it is down the phone's own alert shows, in the shade being read.
+  const shadeDown = useRef(false);
+  useEffect(() => {
+    if (Platform.OS !== 'android') return undefined;
+    const blur = AppState.addEventListener('blur', () => { shadeDown.current = true; });
+    const focus = AppState.addEventListener('focus', () => { shadeDown.current = false; });
+    return () => { blur.remove(); focus.remove(); };
+  }, []);
   useEffect(() => judgeIncoming((conversationId, message) => {
     const g = gate.current;
     // That chat (or the inbox) on screen: nothing at all, not even the phone's own alert (Oct 4, owner).
     if (AppState.currentState === 'active' && (g.onInbox || conversationId === g.openChat)) return 'here';
     if (!g.ready || AppState.currentState !== 'active') return 'off';
+    // Android: under the shade, or under a Modal (drawn above the banner there), the phone's own alert does it (see modalOpen).
+    if (Platform.OS === 'android' && (shadeDown.current || anyModalOpen())) return 'off';
     if (message) {
       if (message.senderId === g.me || message.kind === 'system') return 'off';
       const kept = keepRef.current({ kind: 'chat', id: 0, conversationId, messages: [message], alertNewest: false, alerts: 0 });

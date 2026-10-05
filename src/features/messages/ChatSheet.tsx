@@ -1,5 +1,6 @@
 import React from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useModalOpenWhile } from '@/lib/modalOpen';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -35,6 +36,7 @@ export function ChatSheet({ visible, title, options, onClose }: {
 }) {
   const styles = useThemedStyles(styleDefinitions);
   const insets = useSafeAreaInsets();
+  useModalOpenWhile(visible);
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       {/* The backdrop is a plain surface, not a button: a button here would

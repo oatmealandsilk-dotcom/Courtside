@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Platform, StatusBar } from 'react-native';
 import { useFocusEffect } from 'expo-router';
+import { useModalOpenWhile } from '@/lib/modalOpen';
 
 /**
  * Light status-bar icons (the clock, the battery) while a black page or a
@@ -51,6 +52,8 @@ export function useLightStatusWhileFocused() {
  * opens one frame later. An iPhone opens it at once, as before.
  */
 export function useLightStatusWhile(open: boolean): boolean {
+  // It is a Modal: on Android the message banner stands aside while it is up (see modalOpen).
+  useModalOpenWhile(open);
   const [ready, setReady] = useState(false);
   useEffect(() => {
     if (!open) { setReady(false); return undefined; }

@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { AppState } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import * as Updates from 'expo-updates';
 
 import { crashScreen, noteRestartCancelled, noteRestartForUpdate, setCrashRelease } from '@/lib/crashReporting';
@@ -7,8 +7,14 @@ import { anyUploading, quietUploading, sinceLastPost } from '@/lib/uploads';
 
 /** How often the phone asks Expo for newer app code while it is open. */
 const CHECK_EVERY_MS = 10 * 60_000;
-/** Away at least this long, and a waiting update is put on as the app comes back. */
-const AWAY_MS = 30_000;
+/**
+ * Away at least this long, and a waiting update is put on as the app comes back.
+ * Android counts as "away" whenever one of its own screens covers the app (the
+ * share sheet, the photo picker, a permission question), where an iPhone does
+ * not, so half a minute choosing where to share a post reloaded the app on
+ * return and lost the place (Oct 5). There it waits two minutes.
+ */
+const AWAY_MS = Platform.OS === 'android' ? 2 * 60_000 : 30_000;
 /** After posting, this long with no restart: the post's landing and its "Posted" are seen. */
 const QUIET_AFTER_POST_MS = 2 * 60_000;
 

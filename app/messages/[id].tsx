@@ -56,6 +56,8 @@ import { useLinkPreview } from '@/features/messages/linkPreview';
 import { useDragDownDismiss, useKeyboardLift } from '@/features/messages/keyboardLift';
 import { useAndroidBack } from '@/lib/androidBack';
 import { phoneSaysCopied } from '@/lib/copied';
+import { useModalOpenWhile } from '@/lib/modalOpen';
+import * as Notifications from 'expo-notifications';
 import { clearChatPick, noteChatPick, takeRecoveredPick } from '@/features/messages/pendingPick';
 import { GroupInviteCard } from '@/features/groups/GroupInviteCard';
 import { readGroupInvite } from '@/features/groups/inviteMessage';
@@ -258,6 +260,17 @@ export default function Thread() {
 
   // Opening a chat fetches it fresh, so it never sits on an old copy waiting for the next refresh.
   useEffect(() => { if (id) void actions.syncConversation(id); }, [id, actions]);
+  // Android: this chat's alerts leave the notification shade once it is open and read
+  // (they stayed, stacking up, after being read here). An iPhone is left as it was.
+  useEffect(() => {
+    if (Platform.OS !== 'android' || !focused || !id) return;
+    const here = `/messages/${id}`;
+    void Notifications.getPresentedNotificationsAsync()
+      .then((shown) => Promise.all(shown
+        .filter((n) => n.request.content.data?.href === here)
+        .map((n) => Notifications.dismissNotificationAsync(n.request.identifier))))
+      .catch(() => undefined);
+  }, [focused, id]);
 
   useEffect(() => {
     const mark = () => {
@@ -2086,6 +2099,8 @@ function MessageMenu({ target, me, styles, canReply, canReact, pending, onClose,
   /** The reaction a double tap leaves, and how to change it: the last row turns the reactions above into that choice. */
   doubleTap: string; onDoubleTap: (emoji: string) => void;
 }) {
+  // A Modal: on Android the message banner stands aside while it is up (see modalOpen).
+  useModalOpenWhile(true);
   const [choosing, setChoosing] = useState(false);
   const { width: W, height: H } = useWindowDimensions();
   const insets = useSafeAreaInsets();

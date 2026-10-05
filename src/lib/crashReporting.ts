@@ -1,5 +1,6 @@
 import { AppState, Platform } from 'react-native';
 import Constants from 'expo-constants';
+import * as Device from 'expo-device';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '@/lib/supabase';
 import { anyUploading, subscribeUploads } from '@/lib/uploads';
@@ -52,7 +53,21 @@ export function setCrashRelease(label: string) {
 }
 
 const appVersion = () => `${Constants.expoConfig?.version ?? '?'}${release ? ` · ${release}` : ''}${__DEV__ ? ' (testing)' : ''}`;
-const platformName = () => `${Platform.OS} ${String(Platform.Version ?? '')}`.trim();
+/**
+ * "ios 18.6", or on Android (Oct 5) "android 35 · samsung SM-S921B": Android
+ * runs on hundreds of phones, and which one is the first thing to know when
+ * sorting out a crash there. An iPhone report is as it was.
+ */
+const platformName = () => {
+  const base = `${Platform.OS} ${String(Platform.Version ?? '')}`.trim();
+  if (Platform.OS !== 'android') return base;
+  const phone = [Device.manufacturer, Device.modelName].filter(Boolean).join(' ');
+  return phone ? `${base} · ${phone}` : base;
+};
+/** Where the phone's own crash log is, for a crash JavaScript never saw. */
+const NATIVE_LOG = Platform.OS === 'android'
+  ? 'The native crash log, if there is one, is in Play Console → Android vitals → Crashes and ANRs (only for copies installed from Google Play; a test .apk has none).'
+  : 'The native crash log, if there is one, is in App Store Connect → TestFlight → Crashes.';
 
 /** One report, as it goes into the table (the account is added when it is sent). */
 interface Report {
@@ -229,7 +244,7 @@ async function checkLastOpen(): Promise<void> {
       message: `[last open] The app closed without warning while open on ${note.screen || 'an unknown screen'}`
         + `${note.uploading ? ', with a post going up' : ''}${during}${note.lowMemory ? ', after the phone warned it was low on memory' : ''}`,
       stack: `Last noted ${note.at}. No JavaScript error was caught: the phone closed the app (most often for memory) or a native part of it failed. `
-        + 'The native crash log, if there is one, is in App Store Connect → TestFlight → Crashes.',
+        + NATIVE_LOG,
       screen: note.screen,
       app_version: note.version,
       fatal: true,

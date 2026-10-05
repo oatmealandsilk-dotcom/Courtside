@@ -3,6 +3,7 @@ import { PlaceLine } from '@/components/PlaceLine';
 import { TaggedLine } from '@/components/TaggedLine';
 import React, { useEffect, useState, memo } from 'react';
 import { Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useModalOpenWhile } from '@/lib/modalOpen';
 import { Image as ExpoImage } from 'expo-image';
 import { router } from 'expo-router';
 import * as haptics from '@/lib/haptics';
@@ -115,6 +116,7 @@ function PostCardInner({
   }, [sessionCard, active, post.id]);
   const openStats = () => router.push({ pathname: '/session-stats', params: { kind: 'post', id: post.id } });
   const [menuOpen, setMenuOpen] = useState(false);
+  useModalOpenWhile(menuOpen);
   // The tutorial never starts under this menu.
   useHoldTour(menuOpen);
   // A post carrying a tennis session (a tracker's, or one from your log) is labelled for the game itself, not as a generic session:

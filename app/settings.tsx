@@ -4,7 +4,9 @@ import * as haptics from '@/lib/haptics';
 import { show as showToast } from '@/lib/toast';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useState } from 'react';
-import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { AppState, Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import * as Notifications from 'expo-notifications';
+import { registerForPush } from '@/features/push/push';
 import { router } from 'expo-router';
 import { goBack } from '@/lib/goBack';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -68,6 +70,27 @@ export default function Settings() {
   // back on at the next start. Asking for Your courts is what finds out.
   useEffect(() => { if (courtExtras === null && currentUserId) void actions.loadFollowedCourts(); }, [courtExtras, currentUserId, actions]);
   const mapAlerts = courtExtras === true;
+  // Android (Oct 5): whether the phone lets CourtSide send alerts at all. A
+  // "Don't allow" (or a dismissed question) on Android 13 left every switch
+  // below on with nothing arriving, and no way back from the app. Read again
+  // each time the app comes back to the front (after the phone's Settings).
+  const [alertsOff, setAlertsOff] = useState<{ canAskAgain: boolean } | null>(null);
+  useEffect(() => {
+    if (Platform.OS !== 'android') return undefined;
+    const check = () => { void Notifications.getPermissionsAsync().then((p) => setAlertsOff(p.granted ? null : { canAskAgain: p.canAskAgain })).catch(() => undefined); };
+    check();
+    const sub = AppState.addEventListener('change', (s) => { if (s === 'active') check(); });
+    return () => sub.remove();
+  }, []);
+  const turnOnAlerts = async () => {
+    if (alertsOff?.canAskAgain) {
+      const asked = await Notifications.requestPermissionsAsync().catch(() => null);
+      if (asked?.granted) { setAlertsOff(null); void registerForPush(); return; }
+      setAlertsOff(asked ? { canAskAgain: asked.canAskAgain } : alertsOff);
+      return;
+    }
+    await Linking.openSettings().catch(() => undefined);
+  };
 
   const sections: { title: string; rows: Row[]; note?: string }[] = [
     // Theme first (Oct 5, owner: the city courts are a big feature, so they sit at the top, looking the same as ever).
@@ -101,6 +124,7 @@ export default function Settings() {
     ...(Platform.OS === 'web' ? [] : [{
       title: 'Notifications',
       rows: [
+        ...(alertsOff ? [{ icon: 'notifications-off-outline' as const, label: 'Phone alerts are off for CourtSide', detail: alertsOff.canAskAgain ? 'Tap to turn them on' : 'Tap, then Notifications, to turn them on', onPress: () => { void turnOnAlerts(); } }] : []),
         // Every chat, groups included; a single chat is muted from its own details page instead.
         { icon: 'paper-plane-outline' as const, label: 'Messages', toggle: { value: prefs.pushMessages, onChange: (v: boolean) => actions.setPref('pushMessages', v) } },
         { icon: 'heart-outline' as const, label: 'Likes and comments', toggle: { value: prefs.pushLikes, onChange: (v: boolean) => actions.setPref('pushLikes', v) } },

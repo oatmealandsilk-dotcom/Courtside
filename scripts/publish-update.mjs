@@ -1,5 +1,5 @@
-// Sends the current code to every CourtSide iPhone build on a channel: an
-// instant update, no new build. Usage:  npm run update -- "What changed"
+// Sends the current code to every CourtSide build, iPhone and Android, on a
+// channel: an instant update, no new build. Usage:  npm run update -- "What changed"
 //
 // The Supabase address and key come from eas.json's build profile, the same
 // ones the build was made with. Without them the update would open in demo
@@ -15,8 +15,11 @@ if (!env.EXPO_PUBLIC_SUPABASE_URL || !env.EXPO_PUBLIC_SUPABASE_KEY) {
   process.exit(1);
 }
 const message = process.argv.slice(2).join(' ').trim() || 'Fixes';
-// iOS only: there is no Android build yet. Add 'android' here once there is.
-const run = spawnSync('npx', ['eas-cli@latest', 'update', '--channel', channel, '--environment', 'production', '--platform', 'ios', '--message', message, '--non-interactive'], {
+// Both platforms (Oct 5). Publishing Android before any Android build exists does
+// no harm: no phone is asking for it yet. Publish from main, the branch the
+// Android build is made from, or an update would take its Android fixes away
+// (both platforms share runtime 1.0.0; see app.config.js).
+const run = spawnSync('npx', ['eas-cli@latest', 'update', '--channel', channel, '--environment', 'production', '--platform', 'all', '--message', message, '--non-interactive'], {
   stdio: 'inherit',
   env: { ...process.env, ...env, EXPO_BASE_URL: '' },
 });
