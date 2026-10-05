@@ -143,7 +143,7 @@ return function(map,ml,o){
   var items={},tpl={badge:'',stack:'',court:'{n}',chip:'{n}'},tree={},lvl=-1,fan=null,flying=false,ready=false,held=!!o.hold,ms={},owner={},raf=0,cullT=0,dead=false;
   // The first wave: when it started (0: not yet), and whether it is over.
   var wave0=0,waveDone=!o.popIn,waveMax=1;
-  function still(){try{return document.body.classList.contains('cs-still')||window.matchMedia('(prefers-reduced-motion: reduce)').matches}catch(e){return false}}
+  function still(){try{return document.body.classList.contains('cs-still')}catch(e){return false}}
   // Levels come every half step of zoom (lvl counts half steps: 23 is zoom 11.5), so a pin is never gathered for more than a little way past the point it needs.
   function levelNow(){return Math.max(ZMIN*2,Math.min(ZMAX*2,Math.floor(map.getZoom()*2+1e-6)))}
   function zoomOf(l){return l/2}

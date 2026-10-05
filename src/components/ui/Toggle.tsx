@@ -1,7 +1,8 @@
 import { useTheme } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef } from 'react';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Animated, { interpolateColor, runOnJS, useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
+import Animated, { interpolateColor, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
+import { useReducedMotion } from '@/lib/useReducedMotion';
 
 import * as haptics from '@/lib/haptics';
 import { KNOB_COLOR, KNOB_SHADOW, TOGGLE, TRAVEL, trackOff, trackOn } from './toggleLook';

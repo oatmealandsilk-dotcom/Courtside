@@ -1,9 +1,10 @@
 import React, { useEffect } from 'react';
-import { AccessibilityInfo, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
 
 import { useTheme } from '@/theme/ThemeProvider';
 import { colors } from '@/theme';
+import { reduceMotionEnabled } from '@/lib/useReducedMotion';
 
 /**
  * A small green dot with a ring that leaves it every couple of seconds — the
@@ -16,7 +17,7 @@ export function LiveDot({ size = 8, color }: { size?: number; color?: string }) 
   const ring = useSharedValue(0);
   useEffect(() => {
     let live = true;
-    AccessibilityInfo.isReduceMotionEnabled().then((reduced) => {
+    reduceMotionEnabled().then((reduced) => {
       if (!live || reduced) return;
       ring.value = withRepeat(withTiming(1, { duration: 1800, easing: Easing.out(Easing.cubic) }), -1, false);
     }).catch(() => {});

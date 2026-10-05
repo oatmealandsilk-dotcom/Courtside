@@ -1,10 +1,11 @@
 import React, { useEffect } from 'react';
-import { AccessibilityInfo, View } from 'react-native';
+import { View } from 'react-native';
 import Svg, { G, Line, Rect } from 'react-native-svg';
 import Animated, { Easing, useAnimatedProps, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
 
 import { useTheme } from '@/theme/ThemeProvider';
 import { colors } from '@/theme';
+import { reduceMotionEnabled } from '@/lib/useReducedMotion';
 
 const ARect = Animated.createAnimatedComponent(Rect);
 const ALine = Animated.createAnimatedComponent(Line);
@@ -31,7 +32,7 @@ export function MarkDraw({ size = 34, color, play = true }: { size?: number; col
     let live = true;
     const settle = () => { court.value = 0; net.value = 0; post.value = 0; };
     if (!play) { settle(); return; }
-    AccessibilityInfo.isReduceMotionEnabled().then((reduced) => {
+    reduceMotionEnabled().then((reduced) => {
       if (!live) return;
       if (reduced) { settle(); return; }
       court.value = withTiming(0, { duration: 640, easing: EASE });

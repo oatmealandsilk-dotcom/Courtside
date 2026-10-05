@@ -1,26 +1,17 @@
-import { useEffect, useState } from 'react';
-import { AccessibilityInfo, Platform } from 'react-native';
-
 /**
- * Whether the person has asked for less motion: the phone's Reduce Motion
- * setting, or the browser's prefers-reduced-motion. Animations run by hand
- * (a requestAnimationFrame loop, an RNAnimated spring) read this and land on
- * their end state instead; Reanimated's own use ReduceMotion.System.
+ * Whether to tone animations down for the phone's Reduce Motion setting.
+ *
+ * Always no (Oct 5, owner: "all animation should look like the one on my
+ * phone"). A friend with Reduce Motion on saw sheets and See stats just pop
+ * up, because the app swapped its slides for fades and the animation library
+ * skipped the rest. Every phone now gets the same motion; the root layout
+ * also tells Reanimated never to cut its animations short
+ * (ReducedMotionConfig). To honour the setting again, bring back the
+ * AccessibilityInfo / prefers-reduced-motion check here.
  */
 export function useReducedMotion(): boolean {
-  const [reduced, setReduced] = useState(false);
-  useEffect(() => {
-    if (Platform.OS === 'web') {
-      if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
-      const query = window.matchMedia('(prefers-reduced-motion: reduce)');
-      const update = () => setReduced(query.matches);
-      update();
-      query.addEventListener?.('change', update);
-      return () => query.removeEventListener?.('change', update);
-    }
-    AccessibilityInfo.isReduceMotionEnabled().then(setReduced).catch(() => undefined);
-    const sub = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduced);
-    return () => sub.remove();
-  }, []);
-  return reduced;
+  return false;
 }
+
+/** The same answer for code outside a component (a one-off check before an animation). */
+export const reduceMotionEnabled = (): Promise<boolean> => Promise.resolve(false);

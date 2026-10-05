@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { AccessibilityInfo, Pressable, StyleSheet } from 'react-native';
+import { Pressable, StyleSheet } from 'react-native';
 import Animated, { Easing, interpolateColor, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
@@ -8,6 +8,7 @@ import { useTheme } from '@/theme/ThemeProvider';
 import { BrandWash } from '@/components/ui/BrandWash';
 import { useApp } from '@/store/AppContext';
 import { colors, typography } from '@/theme';
+import { reduceMotionEnabled } from '@/lib/useReducedMotion';
 
 const EASE = Easing.bezier(0.22, 1, 0.36, 1);
 
@@ -26,7 +27,7 @@ export function FollowPill({ following, onPress, small = false, name, userId, wi
   const on = useSharedValue(filled ? 1 : 0);
   const bump = useSharedValue(1);
   const reduced = useRef(false);
-  useEffect(() => { AccessibilityInfo.isReduceMotionEnabled().then((r) => { reduced.current = r; }).catch(() => {}); }, []);
+  useEffect(() => { reduceMotionEnabled().then((r) => { reduced.current = r; }).catch(() => {}); }, []);
   useEffect(() => { on.value = withTiming(filled ? 1 : 0, { duration: 280, easing: EASE }); }, [filled, on]);
 
   // The theme's colours are read here, on each draw, and handed to the animation as plain values.

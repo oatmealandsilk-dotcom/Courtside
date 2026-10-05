@@ -8,6 +8,7 @@ import { Stack, type ErrorBoundaryProps } from 'expo-router';
 import { useInstantExit } from '@/features/navigation/instantExit';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { ReducedMotionConfig, ReduceMotion } from 'react-native-reanimated';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
@@ -60,7 +61,10 @@ export default function RootLayout() {
   // While the fonts load, the launch picture's cream (not the theme's colour), so nothing changes colour under the logo.
   if (!fontsReady) return <View style={{ flex: 1, backgroundColor: lightColors.bg }} />;
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}><ThemeProvider><SafeAreaProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      {/* Every phone gets the same motion, Reduce Motion or not (Oct 5, owner; see src/lib/useReducedMotion.ts). */}
+      <ReducedMotionConfig mode={ReduceMotion.Never} />
+      <ThemeProvider><SafeAreaProvider>
       <AppProvider>
         <ThemedStatusBar/>
         <AppShell><Stack

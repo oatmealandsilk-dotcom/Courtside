@@ -93,7 +93,6 @@ export const MAP_PIN_CSS = `
 .cs-open .cs-dot{width:7px;margin-right:4px}
 .cs-tag-open{display:inline-block;overflow:hidden;white-space:nowrap;vertical-align:top;max-width:0;opacity:0;transition:max-width .45s cubic-bezier(.2,.8,.2,1),opacity .12s ease}
 .cs-open .cs-tag-open{max-width:90px;opacity:1;transition:max-width .45s cubic-bezier(.2,.8,.2,1),opacity .25s ease .14s}
-@media (prefers-reduced-motion:reduce){.cs-halo{animation:none;transform:scale(1.35);opacity:.2}.cs-just-open .cs-disc{animation:none}.cs-ring circle,.cs-open .cs-ring circle{stroke-dashoffset:0;transition:opacity .3s ease}}
 .cs-still .cs-halo{animation:none;transform:scale(1.35);opacity:.2}
 .cs-still .cs-just-open .cs-disc{animation:none}
 .cs-still .cs-ring circle,.cs-still .cs-open .cs-ring circle{stroke-dashoffset:0;transition:opacity .3s ease}
@@ -104,7 +103,6 @@ export const MAP_PIN_CSS = `
 @keyframes cs-fade-in{from{opacity:0}to{opacity:1}}
 .cs-out{animation:cs-fade-out .24s ease-in forwards}
 @keyframes cs-fade-out{to{opacity:0;scale:.7}}
-@media (prefers-reduced-motion:reduce){.cs-pop,.cs-out{animation-name:cs-fade-in}.cs-out{animation-direction:reverse}}
 .cs-still .cs-pop{animation-name:cs-fade-in}
 .cs-still .cs-out{animation-name:cs-fade-in;animation-direction:reverse}
 .cs-short .cs-ago{display:none}
