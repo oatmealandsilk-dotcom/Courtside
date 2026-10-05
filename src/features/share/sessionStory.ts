@@ -1,6 +1,7 @@
 import type { DetectedActivity, ID, Post, PracticeSession, SessionDetail, User } from '@/data/types';
 import { sessionFromLogged, statsSourceOf, whatWord } from '@/features/activity/format';
 import { isTennisActivity } from '@/features/activity/workouts';
+import { inviteLink } from '@/features/invite/referral';
 import { notKnownAdult } from '@/features/players/age';
 
 /*
@@ -17,6 +18,10 @@ import { notKnownAdult } from '@/features/players/age';
  * - Where it was played only for someone known to be an adult. A teen's court
  *   tag stays off court pages for strangers (useCourtPosts), and a picture
  *   posted to Instagram is for strangers.
+ * - The sharer's own invite link travels beside the picture as words, never
+ *   on it (Oct 5, "Strava way": the picture is the session and the logo).
+ *   Copy and More hand it on where the phone or browser can carry both;
+ *   whoever joins through it counts as theirs, as from the Invites page.
  */
 
 export interface SessionStory {
@@ -29,6 +34,8 @@ export interface SessionStory {
   eyebrow: string;
   /** The post it came from, when it was posted. */
   postId?: ID;
+  /** The sharer's invite link (app.courtsidebase.com/join?ref=handle): sent as words with the picture, never drawn on it. */
+  invite?: string;
 }
 
 /** "Fri Oct 2", in the phone's own order, without commas. */
@@ -49,6 +56,9 @@ function placeFor(me: User | undefined, name: string | undefined): string | unde
   return clean;
 }
 
+/** The sharer's own invite link, when there is a handle to carry. */
+const inviteFor = (me: User | undefined) => (me?.handle ? inviteLink(me.handle) : undefined);
+
 /** The YYYY-MM-DD a post went up, on this phone's clock. */
 const dayOf = (iso: string) => {
   const d = new Date(iso);
@@ -64,6 +74,7 @@ export function storyFromPost(post: Post, me: User | undefined): SessionStory | 
     place: placeFor(me, post.court?.name ?? post.location),
     eyebrow: storyEyebrow(post.session, dayOf(post.createdAt)),
     postId: post.id,
+    invite: inviteFor(me),
   };
 }
 
@@ -81,5 +92,5 @@ export function storyFromLog(s: PracticeSession, me: User | undefined, activity?
   };
   // A session logged from a hit keeps where it was in its note: "At Alder Park".
   const at = s.note?.startsWith('At ') ? s.note.slice(3).split(' · ')[0] : undefined;
-  return { session, place: placeFor(me, at), eyebrow: storyEyebrow(session) };
+  return { session, place: placeFor(me, at), eyebrow: storyEyebrow(session), invite: inviteFor(me) };
 }
