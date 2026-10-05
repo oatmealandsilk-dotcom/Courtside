@@ -4,7 +4,7 @@ import * as haptics from '@/lib/haptics';
 import { show as showToast } from '@/lib/toast';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useState } from 'react';
-import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { goBack } from '@/lib/goBack';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -12,7 +12,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Avatar, Screen, Toggle } from '@/components/ui';
 import { useApp } from '@/store/AppContext';
 import { askWhoSeesYou, canChooseVisibility, onTeenMap } from '@/features/players/mapPrivacy';
-import { useTheme, themeList, themes } from '@/theme/ThemeProvider';
+import { useTheme, themeList, themes, type ThemeName } from '@/theme/ThemeProvider';
 import { Wash } from '@/components/Wash';
 import { colors, font, radius, spacing, typography } from '@/theme';
 import { leaveGently } from '@/components/SignOutCurtain';
@@ -56,7 +56,7 @@ export default function Settings() {
     const problem = await actions.setLocationEnabled(next);
     setLocationNote(problem ?? '');
   };
-  const { theme, setTheme } = useTheme();
+  const { theme } = useTheme();
   const tipsOn = useTipsOn();
   // The tennis-session alert switch shows once WHOOP's tennis sessions are switched on (migration 58).
   const tennis = useTennisFlags();
@@ -70,6 +70,14 @@ export default function Settings() {
   const mapAlerts = courtExtras === true;
 
   const sections: { title: string; rows: Row[]; note?: string }[] = [
+    // Theme first (Oct 5, owner: the city courts are a big feature, so they sit at the top, looking the same as ever).
+    {
+      title: 'App',
+      rows: [
+        { icon: 'color-palette-outline', label: 'Theme', leading: <ThemeTile name={theme} />, value: themeList.find((t) => t.name === theme)?.label, onPress: () => router.push('/theme') },
+        { icon: 'archive-outline', label: 'Archive', onPress: () => router.push('/archive') },
+      ],
+    },
     {
       title: 'Account',
       rows: [
@@ -118,12 +126,6 @@ export default function Settings() {
       ],
     }]),
     {
-      title: 'App',
-      rows: [
-        { icon: 'archive-outline', label: 'Archive', onPress: () => router.push('/archive') },
-      ],
-    },
-    {
       title: 'Your tennis',
       rows: [
         { icon: 'pulse-outline', label: 'Health and nutrition', onPress: () => router.push('/health') },
@@ -170,40 +172,6 @@ export default function Settings() {
         </View>
       ) : null}
 
-      {/* Your court, near the top (Oct 5, owner: the city courts are a big feature and look great, so they
-          should not sit down in App settings). One tap switches; See all opens the full page with every court. */}
-      <View style={styles.section}>
-        <View style={styles.courtHead}>
-          <Text style={styles.sectionTitle}>Your court</Text>
-          <Pressable accessibilityRole="link" accessibilityLabel="See all courts" onPress={() => router.push('/theme')} hitSlop={8}>
-            <Text style={styles.courtAll}>See all</Text>
-          </Pressable>
-        </View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.courtRow}>
-          {themeList.map((option) => {
-            const on = option.name === theme;
-            const p = themes[option.name];
-            return (
-              <Pressable key={option.name} accessibilityRole="radio" accessibilityState={{ selected: on }} accessibilityLabel={`${option.label} court`} onPress={() => { if (!on) { haptics.tap(); setTheme(option.name); } }} style={({ pressed }) => [styles.court, pressed && { opacity: 0.8 }]}>
-                <View style={[styles.courtTile, { backgroundColor: p.bg, borderColor: on ? colors.brand : p.borderStrong }, on && styles.courtTileOn]}>
-                  <Wash theme={option.name} height={84} strength={1} fade={p.bg} />
-                  {/* A little court in that city's own surface colour, its lines in white. */}
-                  <View style={[styles.miniCourt, { backgroundColor: p.court }]}>
-                    <View style={[styles.miniLines, { borderColor: p.onMedia }]} />
-                    <View style={[styles.miniSingles, { borderColor: p.onMedia }]} />
-                    <View style={[styles.miniNet, { backgroundColor: p.onMedia }]} />
-                    <View style={[styles.miniService, { top: 11, backgroundColor: p.onMedia }]} />
-                    <View style={[styles.miniService, { bottom: 11, backgroundColor: p.onMedia }]} />
-                    <View style={[styles.miniCentre, { backgroundColor: p.onMedia }]} />
-                  </View>
-                  {on ? <View style={styles.courtCheck}><Ionicons name="checkmark" size={12} color={colors.brandInk} /></View> : null}
-                </View>
-                <Text style={[styles.courtName, on && styles.courtNameOn]} numberOfLines={1}>{option.label}</Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
-      </View>
 
       {sections.map((section) => (
         <View key={section.title} style={styles.section}>
@@ -254,6 +222,22 @@ export default function Settings() {
   );
 }
 
+/**
+ * The Theme row's icon: the chosen court as a tiny page — its ground with its
+ * wash faintly on it — the same picture the Theme page shows for each court.
+ */
+function ThemeTile({ name }: { name: ThemeName }) {
+  const p = themes[name];
+  return (
+    <View style={[tile.box, { backgroundColor: p.bg, borderColor: p.borderStrong }]}>
+      <Wash theme={name} height={26} strength={0.9} fade={p.bg} />
+    </View>
+  );
+}
+const tile = StyleSheet.create({
+  box: { width: 26, height: 24, borderRadius: 7, borderWidth: 1, overflow: 'hidden' },
+});
+
 const styleDefinitions = StyleSheet.create({
   // You, at the top, on the page's own wash: no card around it.
   me: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingBottom: spacing.lg },
@@ -280,22 +264,6 @@ const styleDefinitions = StyleSheet.create({
   rowDetail: { ...typography.small, color: colors.textFaint },
   rowValue: { ...typography.body, color: colors.textMuted, maxWidth: 140 },
   rowValueOn: { color: colors.brand, ...font('600') },
-  courtHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingRight: spacing.sm },
-  courtAll: { ...typography.smallStrong, color: colors.brand },
-  courtRow: { gap: 12, paddingHorizontal: 2, paddingVertical: 2 },
-  court: { alignItems: 'center', gap: 6, width: 68 },
-  courtTile: { width: 64, height: 84, borderRadius: 16, borderWidth: 1, overflow: 'hidden' },
-  courtTileOn: { borderWidth: 2.5 },
-  miniCourt: { position: 'absolute', left: 9, right: 9, bottom: 9, height: 42, borderRadius: 5, overflow: 'hidden' },
-  // Doubles sidelines (the outer box), singles sidelines (inset), service lines, the centre line between them, the net.
-  miniLines: { position: 'absolute', left: 4, right: 4, top: 4, bottom: 4, borderWidth: 1, opacity: 0.9 },
-  miniSingles: { position: 'absolute', left: 9, right: 9, top: 4, bottom: 4, borderLeftWidth: 1, borderRightWidth: 1, opacity: 0.9 },
-  miniNet: { position: 'absolute', left: 2, right: 2, top: 20.5, height: 1.5, opacity: 0.95 },
-  miniService: { position: 'absolute', left: 9, right: 9, height: 1, opacity: 0.9 },
-  miniCentre: { position: 'absolute', left: '50%', marginLeft: -0.5, width: 1, top: 11, bottom: 11, opacity: 0.9 },
-  courtCheck: { position: 'absolute', right: 7, top: 7, width: 18, height: 18, borderRadius: 9, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
-  courtName: { ...typography.small, color: colors.textMuted },
-  courtNameOn: { color: colors.text, ...font('600') },
   logout: { alignItems: 'center', justifyContent: 'center', minHeight: 50 },
   logoutText: { ...typography.body, color: colors.danger },
   empty: { ...typography.small, color: colors.textFaint, paddingVertical: spacing.lg },
