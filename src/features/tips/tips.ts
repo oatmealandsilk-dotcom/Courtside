@@ -23,12 +23,18 @@ export const TIP_WORDS: Record<TipKey, string> = {
 };
 
 /**
- * The tips there were before Oct 5. Saved before then (v1), every one of them
- * done is exactly when Settings said Tips: Off, so a tip added since stays
- * away for them too.
+ * Kept beside the done tips (v2): Settings → Tips is Off, so a tip added
+ * later never shows either.
+ *
+ * A save from before Oct 5 (v1) only listed the tips done, so it cannot tell
+ * "turned Tips off" from "learned all eight by using the app". Chosen on
+ * purpose: a v1 save reads as On, its done tips kept. Turning tips off had
+ * existed for less than a day, while the players who learned every tip are
+ * the most active ones, and the owner wants everyone shown "Hold to edit
+ * your time and distance" the first time they tap their ring. So someone who
+ * had turned tips off may see that one new tip once (closing it makes
+ * Settings read Off again; turning Tips off there keeps later ones away too).
  */
-const BEFORE_OCT5: TipKey[] = ['map-who-sees', 'activities', 'double-tap', 'see-stats', 'share-session', 'hold-to-record', 'who-liked', 'chat-times'];
-/** Kept beside the done tips (v2): Settings → Tips is Off, so a tip added later never shows either. */
 const OFF_MARK = '*off';
 
 const KEY = 'courtside.tips.done.v2';
@@ -51,8 +57,8 @@ void AsyncStorage.getItem(KEY)
     }
     const before = await AsyncStorage.getItem(KEY_V1);
     if (!before) return;
+    // On, with the tips it had done (see OFF_MARK for why).
     done = new Set((JSON.parse(before) as string[]).filter((k): k is TipKey => k in TIP_WORDS));
-    off = BEFORE_OCT5.every((k) => done.has(k));
     save();
   })
   .catch(() => undefined)

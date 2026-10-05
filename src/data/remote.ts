@@ -2956,15 +2956,12 @@ export const remote = {
     const area = view ? { min_lat: view.minLat, min_lng: view.minLng, max_lat: view.maxLat, max_lng: view.maxLng } : {};
     const { data, error } = await need().rpc('map_players', area);
     if (error) { if (missingFunction(error)) return 'missing'; fail('map players')(error); return null; }
-    const rows = (data ?? []) as MapPlayerRow[];
-    // How far each person up for a hit would like to go (migration 120), asked only about them.
-    const now = Date.now();
-    const miles = await remote.fetchOpenToHitMiles(rows.filter((r) => !!r.open_until && Date.parse(r.open_until) > now).map((r) => r.user_id));
-    return rows.map((r) => ({
+    // (How far each person up for a hit would like to go, migration 120, is asked
+    // afterwards by the app, so the pins never wait for it: fetchOpenToHitMiles.)
+    return ((data ?? []) as MapPlayerRow[]).map((r) => ({
       userId: r.user_id, lat: r.lat, lng: r.lng, city: r.city ?? undefined, seenAt: r.seen_at ?? undefined,
       place: r.place === 'court' || r.place === 'exact' ? r.place : 'approx',
       courtId: r.court_id ?? undefined, courtName: r.court_name ?? undefined, openUntil: r.open_until ?? undefined,
-      ...(miles[r.user_id] ? { openMiles: miles[r.user_id] } : {}),
       ...(r.mutual ? { mutual: true } : {}),
     }));
   },
@@ -2972,14 +2969,15 @@ export const remote = {
    * How far each of these people would like to go for a hit (migration 120),
    * for those whose ring is on and whose "open until" you may already read
    * (on your map, or on their profile). Nobody else comes back, the same as
-   * someone who chose any distance. Empty on a database without it, or when
-   * the ask fails: then everyone reads as any distance.
+   * someone who chose any distance. Empty on a database without it (then
+   * everyone reads as any distance); null when the ask failed, so what was
+   * known before is kept.
    */
-  async fetchOpenToHitMiles(ids: ID[]): Promise<Record<ID, number>> {
+  async fetchOpenToHitMiles(ids: ID[]): Promise<Record<ID, number> | null> {
     const unique = [...new Set(ids)].slice(0, 200);
     if (!unique.length || lacksOpenToHitMiles) return {};
     const { data, error } = await need().rpc('open_to_hit_miles', { ids: unique });
-    if (error) { if (missingFunction(error)) lacksOpenToHitMiles = true; else fail('open to hit distance')(error); return {}; }
+    if (error) { if (missingFunction(error)) { lacksOpenToHitMiles = true; return {}; } fail('open to hit distance')(error); return null; }
     const out: Record<ID, number> = {};
     for (const r of (data ?? []) as { user_id: ID; miles: number | null }[]) { const m = asHitMiles(r.miles); if (m) out[r.user_id] = m; }
     return out;

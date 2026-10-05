@@ -28,6 +28,7 @@ import { Image as ExpoImage } from 'expo-image';
 import { formatMiles } from '@/features/players/geo';
 import { relativeTime } from '@/lib/format';
 import { hitsWithinLine, isOpenToHit, tillLabel } from '@/features/players/openToHit';
+import { useOpenClock } from '@/features/players/useOpenClock';
 import { LevelPill as Level } from '@/components/LevelPill';
 import type { User } from '@/data/types';
 import { countLabel } from '@/features/places/court';
@@ -622,6 +623,8 @@ export function PlayerSheet({ placed, following, onClose, onProfile, onMessage, 
   const styles = useThemedStyles(styleDefinitions);
   const pull = useDragToClose(onClose);
   const { user, miles, seenAt, seenCity, rough, court } = placed;
+  // Their "till 7pm" (and the line below) go by themselves at 7pm, the card still open.
+  useOpenClock([user.openToHitUntil]);
   // Farther than they'd like to go for a hit (migration 120): one friendly line, never a warning, and Ask to hit stays as it is.
   const farLine = hitsWithinLine(user, miles, seenCity || user.location);
   const till = isOpenToHit(user) ? tillLabel(user.openToHitUntil) : null;

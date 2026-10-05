@@ -25,13 +25,23 @@ export function todayAt(hour: number, minutes = 0): Date {
 export const HIT_MILES = [5, 10, 25] as const;
 export const asHitMiles = (v: unknown): number | undefined => (typeof v === 'number' && (HIT_MILES as readonly number[]).includes(v) ? v : undefined);
 
-/** Whether this moment reads as midnight: the one-tap end of today (11:59:59pm) or 12am itself. */
-function isMidnight(d: Date): boolean {
-  return (d.getHours() === 23 && d.getMinutes() === 59) || (d.getHours() === 0 && d.getMinutes() === 0);
+/**
+ * The moment, rounded up to the next whole minute: how a time is said. A
+ * one-tap ring ends at 11:59:59pm where it was set, so it reads as midnight
+ * there and as the matching hour anywhere else ("till 9pm" for a New York
+ * friend's midnight, seen from Los Angeles), never "till 8:59pm".
+ */
+export function onTheMinute(at: Date | number | string): Date {
+  const t = typeof at === 'string' ? Date.parse(at) : typeof at === 'number' ? at : at.getTime();
+  return new Date(Math.ceil(t / 60_000) * 60_000);
 }
 
+/** Whether this moment (already on the minute) is 12am, where the phone is: the one-tap end of today, or 12am itself. */
+const isMidnight = (d: Date) => d.getHours() === 0 && d.getMinutes() === 0;
+
 /** "8pm", "8:30pm", "noon" or "midnight": a clock time the way people say it. */
-export function clockWords(d: Date): string {
+export function clockWords(at: Date): string {
+  const d = onTheMinute(at);
   if (isMidnight(d)) return 'midnight';
   const h = d.getHours();
   const m = d.getMinutes();
@@ -47,7 +57,7 @@ export function tillLabel(iso: string | null | undefined): string | null {
   if (!iso) return null;
   const at = Date.parse(iso);
   if (!Number.isFinite(at) || at <= Date.now()) return null;
-  const d = new Date(at);
+  const d = onTheMinute(at);
   // Past midnight into the small hours reads plainly ("till 1am"); tomorrow's daytime says so.
   const tomorrow = d.toDateString() !== new Date().toDateString() && !isMidnight(d) && d.getHours() >= 6;
   return `till ${clockWords(d)}${tomorrow ? ' tomorrow' : ''}`;

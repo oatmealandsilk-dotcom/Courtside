@@ -26,9 +26,14 @@
 --     (b) their ring is on their public profile (profiles.open_to_hit_until,
 --     which every signed-in account can already read; since migration 78
 --     only a known adult's ring is ever there). You always get your own.
---     Anyone else gets nothing back, the same as someone who chose "any".
---     At most 200 people per ask.
+--     Never between two people where either has blocked the other, and
+--     never for or to a suspended account (the same as map_pair_ok), by
+--     either way. Anyone else gets nothing back, the same as someone who
+--     chose "any". At most 200 people per ask.
 --   * Signed out: nothing. Neither function can be called without an account.
+--   * A last check before the end: signed out can call neither function,
+--     signed in can call both, and both are exactly as this file writes
+--     them. If not, the whole file is undone.
 --
 -- What it cannot tell anyone: where someone is (no spot, no town, no
 -- distance from you: just the number they picked) or how old they are (a
@@ -39,7 +44,7 @@
 -- keeps it on that phone only, and everyone reads everyone as "any
 -- distance" (no line on anyone's card).
 --
--- Needs 31, 63, 78 and 105 (all live). Touches no existing function, rule
+-- Needs 21, 23, 31, 63, 78 and 105 (all live). Touches no existing function, rule
 -- or trigger.
 
 begin;
@@ -51,7 +56,7 @@ do $$
 declare
   expected constant text[][] := array[
     -- name, as this file leaves it (md5 of the body)
-    ['open_to_hit_miles',     '76154180d5f3638f868a53f583d3019c'],
+    ['open_to_hit_miles',     '2b3e53b8ed18715017e79e01556c3996'],
     ['set_open_to_hit_miles', 'fa8f11802b6826e597ed84b6ca84172c']
   ];
   i int;
@@ -65,6 +70,10 @@ begin
   end if;
   if to_regprocedure('public.map_pair_ok(uuid, uuid, text)') is null then
     raise exception 'Migration 120 stopped before changing anything: migration 105 (map_pair_ok) has to run first.';
+  end if;
+  if to_regprocedure('public.is_blocked_between(uuid, uuid)') is null
+     or not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'profiles' and column_name = 'suspended_at') then
+    raise exception 'Migration 120 stopped before changing anything: migrations 21 and 23 (blocking, suspended accounts) have to run first.';
   end if;
   for i in 1 .. array_length(expected, 1) loop
     select md5(p.prosrc) into now_is from pg_proc p
@@ -109,7 +118,9 @@ grant execute on function public.set_open_to_hit_miles(integer) to authenticated
 -- ---------------------------------------------------------------- 3. theirs
 -- Someone else's distance, only where their "open until" is already
 -- readable and only while their ring is on (see the top of this file).
--- Nobody who picked "any" (or whose distance you may not read) comes back.
+-- Never across a block either way, or for or to a suspended account (as
+-- map_pair_ok), whichever way it is read. Nobody who picked "any" (or
+-- whose distance you may not read) comes back.
 create or replace function public.open_to_hit_miles(ids uuid[])
 returns table (user_id uuid, miles smallint)
 language sql stable security definer set search_path = public as $$
@@ -121,13 +132,63 @@ language sql stable security definer set search_path = public as $$
     and us.open_to_hit_miles is not null
     and greatest(p.open_to_hit_until, us.open_to_hit_until) > now()
     and (us.user_id = auth.uid()
-      or p.open_to_hit_until > now()
-      or exists (select 1 from public.last_seen s
-                 where s.user_id = us.user_id and s.visibility <> 'none'
-                   and public.map_pair_ok(auth.uid(), s.user_id, s.visibility)))
+      or (not public.is_blocked_between(auth.uid(), us.user_id)
+        and not exists (select 1 from public.profiles x
+                        where x.id in (auth.uid(), us.user_id) and x.suspended_at is not null)
+        and (p.open_to_hit_until > now()
+          or exists (select 1 from public.last_seen s
+                     where s.user_id = us.user_id and s.visibility <> 'none'
+                       and public.map_pair_ok(auth.uid(), s.user_id, s.visibility)))))
 $$;
 revoke all on function public.open_to_hit_miles(uuid[]) from public, anon, authenticated;
 grant execute on function public.open_to_hit_miles(uuid[]) to authenticated;
+
+-- ------------------------------------------------------------ 4. last check
+-- Signed out can call neither function, signed in can call both, nobody
+-- else's grant is left on them, and both are exactly as this file writes
+-- them. Any of these failing undoes the whole file.
+do $$
+declare
+  expected constant text[][] := array[
+    ['open_to_hit_miles',     'public.open_to_hit_miles(uuid[])',         '2b3e53b8ed18715017e79e01556c3996'],
+    ['set_open_to_hit_miles', 'public.set_open_to_hit_miles(integer)',    'fa8f11802b6826e597ed84b6ca84172c']
+  ];
+  i int;
+  f regprocedure;
+  bad text;
+begin
+  for i in 1 .. array_length(expected, 1) loop
+    f := to_regprocedure(expected[i][2]);
+    if f is null then
+      raise exception 'Migration 120 stopped: % is missing. Nothing was changed.', expected[i][2];
+    end if;
+    if has_function_privilege('anon', f, 'execute') then
+      raise exception 'Migration 120 stopped: signed out can still call %. Nothing was changed.', expected[i][2];
+    end if;
+    if not has_function_privilege('authenticated', f, 'execute') then
+      raise exception 'Migration 120 stopped: signed in cannot call %. Nothing was changed.', expected[i][2];
+    end if;
+    select string_agg(coalesce(nullif(a.grantee, 0)::regrole::text, 'public'), ', ') into bad
+      from pg_proc p cross join lateral aclexplode(p.proacl) a
+      where p.oid = f and a.privilege_type = 'EXECUTE'
+        and a.grantee <> p.proowner and a.grantee <> 'authenticated'::regrole
+        and a.grantee not in (select oid from pg_roles where rolname in ('postgres', 'supabase_admin', 'service_role'));
+    if bad is not null then
+      raise exception 'Migration 120 stopped: % can also be called by %. Nothing was changed.', expected[i][2], bad;
+    end if;
+    if (select md5(p.prosrc) from pg_proc p where p.oid = f) <> expected[i][3]
+       or not (select p.prosecdef from pg_proc p where p.oid = f)
+       or (select count(*) from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname = expected[i][1]) <> 1 then
+      raise exception 'Migration 120 stopped: % is not as this file writes it. Nothing was changed.', expected[i][2];
+    end if;
+  end loop;
+  if not exists (select 1 from pg_constraint where conname = 'user_state_open_to_hit_miles_check' and conrelid = 'public.user_state'::regclass) then
+    raise exception 'Migration 120 stopped: the 5, 10 or 25 rule on user_state is missing. Nothing was changed.';
+  end if;
+end $$;
+
+-- Tell the app's database gateway about the two new functions straight away.
+notify pgrst, 'reload schema';
 
 commit;
 

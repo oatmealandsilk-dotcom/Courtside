@@ -12,6 +12,7 @@ import { formatSpotMiles, milesBetween, spotMilesKey } from '@/features/players/
 import { IN_TOWN_MILES } from '@/features/players/mapModel';
 import { isOpenToHit, laterUntil, tillLabel } from '@/features/players/openToHit';
 import { isRoughSpot, type LatLng } from '@/features/players/positions';
+import { useOpenClock } from '@/features/players/useOpenClock';
 import { learned, useTip } from '@/features/tips/tips';
 import { show as showToast } from '@/lib/toast';
 import * as haptics from '@/lib/haptics';
@@ -35,10 +36,12 @@ interface Up { user: User; miles?: number; rough: boolean; seenAt?: string; unti
  * how to fix that).
  */
 export function useUpToday({ users, lastSeen, me, from, blockedIds }: { users: User[]; lastSeen: Record<ID, LastSeen>; me: ID | null; from: LatLng | null; blockedIds: ID[] }): Up[] {
+  // Every "open until" the row could show, so it looks again the moment the soonest one ends (someone's "till 6pm" goes at 6pm).
+  const byId = useMemo(() => new Map(users.map((u) => [u.id, u])), [users]);
+  const ends = useMemo(() => Object.values(lastSeen).flatMap((row) => (row.userId === me ? [] : [row.openUntil, byId.get(row.userId)?.openToHitUntil])), [lastSeen, byId, me]);
+  const now = useOpenClock(ends);
   return useMemo(() => {
     if (!from) return [];
-    const now = Date.now();
-    const byId = new Map(users.map((u) => [u.id, u]));
     const list: Up[] = [];
     for (const row of Object.values(lastSeen)) {
       if (row.userId === me || blockedIds.includes(row.userId)) continue;
@@ -54,7 +57,7 @@ export function useUpToday({ users, lastSeen, me, from, blockedIds }: { users: U
     // In the order the distances read (a rough "~1 mi" never before "0.8 mi"); on a tie, a pin on a court or exact first, then the most recent.
     return list.sort((a, b) => spotMilesKey(a.miles ?? 0, a.rough) - spotMilesKey(b.miles ?? 0, b.rough)
       || Number(a.rough) - Number(b.rough) || (b.seenAt ?? '').localeCompare(a.seenAt ?? ''));
-  }, [users, lastSeen, me, from?.lat, from?.lng, blockedIds]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [byId, lastSeen, me, from?.lat, from?.lng, blockedIds, now]); // eslint-disable-line react-hooks/exhaustive-deps
 }
 
 /**
@@ -72,6 +75,8 @@ export function useUpToday({ users, lastSeen, me, from, blockedIds }: { users: U
  */
 export function UpToday({ me, people, teen = false, locationOn, onLocation, onToggle }: { me: User; people: Up[]; /** Not known to be an adult, with the map's teen rule on: friends only. */ teen?: boolean; locationOn: boolean; /** No spot of yours yet: the way to give one. */ onLocation?: () => void; onToggle: (on: boolean) => void }) {
   const styles = useThemedStyles(styleDefinitions);
+  // Your ring goes out by itself at the time you picked.
+  useOpenClock([me.openToHitUntil]);
   const up = isOpenToHit(me);
   const till = up ? tillLabel(me.openToHitUntil) : null;
   // The first tap on your own ring (on or off) brings the tip: holding it is how you edit.

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -6,13 +6,13 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import { DragSheet } from '@/components/DragSheet';
 import { ChipStrip, Chips, Section, SheetTitle, Submit, formBody } from '@/components/sheet/SheetForm';
 import { onTeenMap } from '@/features/players/mapPrivacy';
-import { HIT_MILES, asHitMiles, clockWords, endOfToday, isOpenToHit, tillLabel, todayAt } from '@/features/players/openToHit';
+import { HIT_MILES, asHitMiles, clockWords, endOfToday, isOpenToHit, onTheMinute, tillLabel, todayAt } from '@/features/players/openToHit';
 import { useOpenToHitToggle } from '@/features/players/useLocationToggle';
 import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
 
-/** The quick picks for "Open until", and "Pick a time" for any other. */
-type Until = 'two-hours' | 'six' | 'nine' | 'midnight' | 'time';
+/** The quick picks for "Open until", "Pick a time" for any other, and "keep": the time your ring has now, when it is none of the others. */
+type Until = 'keep' | 'two-hours' | 'six' | 'nine' | 'midnight' | 'time';
 type Distance = 'any' | `${(typeof HIT_MILES)[number]}`;
 
 /** "7 PM": an hour on the time picker's strip, the way the hit form says it. */
@@ -23,6 +23,8 @@ const timeLabel = (d: Date, half: boolean) => `${d.getHours() % 12 || 12}:${half
 const PICKER_HOURS = 18;
 /** A quick pick is offered only while it is at least this far ahead. */
 const LEAD_MS = 15 * 60_000;
+/** "2 hours" lands on a quarter hour. */
+const QUARTER_MS = 15 * 60_000;
 
 /**
  * Holding your own ring in Community's Open to hit row (Oct 5, owner: "I
@@ -40,7 +42,15 @@ export default function OpenToHitSheet() {
   const close = () => setCloseSignal((n) => n + 1);
   // The moment the sheet opened: the quick picks and the picker's hours are worked out from it.
   const [opened] = useState(() => new Date());
-  const current = currentUser && isOpenToHit(currentUser) ? new Date(currentUser.openToHitUntil!) : null;
+  // Now, moved on twice a minute while the sheet is open, so the line at the top always says what Save will save.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(id);
+  }, []);
+  // Your ring's time as the sheet opened, when it is on (and on the minute, to compare with the picks).
+  const [currentAt] = useState(() => (currentUser && isOpenToHit(currentUser) ? new Date(currentUser.openToHitUntil!) : null));
+  const current = currentAt ? onTheMinute(currentAt) : null;
   const six = todayAt(18);
   const nine = todayAt(21);
   const ahead = (d: Date) => d.getTime() - opened.getTime() >= LEAD_MS;
@@ -53,24 +63,29 @@ export default function OpenToHitSheet() {
     return d;
   }), [opened]);
 
-  // Starts on what you have now: your own time, else till midnight (what a tap gives).
+  // Starts on what you have now: one of the quick picks when it is one, else
+  // your own time as its own chip ("Till 6:47pm"), kept exactly as it is
+  // until another is tapped; with your ring off, till midnight (what a tap gives).
   const [until, setUntil] = useState<Until>(() => {
     if (!current) return 'midnight';
-    const midnight = (current.getHours() === 23 && current.getMinutes() === 59) || (current.getHours() === 0 && current.getMinutes() === 0);
-    if (midnight) return 'midnight';
+    if (current.getTime() === onTheMinute(endOfToday()).getTime()) return 'midnight';
     if (current.getTime() === six.getTime() && ahead(six)) return 'six';
     if (current.getTime() === nine.getTime() && ahead(nine)) return 'nine';
-    return 'time';
+    return 'keep';
   });
-  // The picker starts on your own time when it is one of its own (not midnight, which has its chip), else the next hour.
-  const picked = current && until === 'time' ? current : null;
-  const startHour = useMemo(() => {
-    if (!picked) return 0;
-    const i = hours.findIndex((h) => h.getHours() === picked.getHours() && h.getDate() === picked.getDate());
-    return i >= 0 ? i : 0;
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  const [hour, setHourOnly] = useState(startHour);
-  const [half, setHalf] = useState(() => !!picked && picked.getMinutes() >= 30 && hours[startHour]?.getHours() === picked.getHours());
+  // Its chip stays in the row once another is tapped, so you can go back to it.
+  const [startedOnKeep] = useState(until === 'keep');
+  // "Pick a time" starts on your own time when it is one of its own (on the hour or half past, and
+  // not midnight, which has its own chip), else the next hour.
+  const [start] = useState(() => {
+    for (let i = 0; current && until !== 'midnight' && i < hours.length; i++) {
+      if (current.getTime() === hours[i].getTime()) return { hour: i, half: false };
+      if (current.getTime() === hours[i].getTime() + 30 * 60_000) return { hour: i, half: true };
+    }
+    return { hour: 0, half: false };
+  });
+  const [hour, setHourOnly] = useState(start.hour);
+  const [half, setHalf] = useState(start.half);
   const setHour = (i: number) => { setHourOnly(i); setHalf(false); };
 
   const [distance, setDistance] = useState<Distance>(() => {
@@ -81,17 +96,19 @@ export default function OpenToHitSheet() {
   // Opened only as tall as the form (it grows when "Pick a time" opens the picker).
   const [contentH, setContentH] = useState(0);
 
-  /** The moment chosen, worked out when it is needed ("2 hours" from when Save is pressed). */
-  const untilAt = (now = new Date()): Date => {
-    if (until === 'two-hours') return new Date(now.getTime() + 2 * 3_600_000);
+  /** The moment chosen: what the line at the top says, and what Save saves. */
+  const untilAt = (): Date => {
+    // Two hours from now, up to the next quarter hour ("till 7:45pm", never "till 7:38pm").
+    if (until === 'two-hours') return new Date(Math.ceil((now + 2 * 3_600_000) / QUARTER_MS) * QUARTER_MS);
     if (until === 'six') return six;
     if (until === 'nine') return nine;
     if (until === 'midnight') return new Date(endOfToday());
+    if (until === 'keep' && currentAt) return currentAt;
     const d = new Date(hours[hour] ?? hours[0]);
     if (half) d.setMinutes(30);
     return d;
   };
-  const chosen = untilAt(opened);
+  const chosen = untilAt();
   const miles = distance === 'any' ? null : Number(distance);
   const summary = [tillLabel(chosen.toISOString()) ?? `till ${clockWords(chosen)}`, miles ? `within ${miles} mi` : 'any distance'].join(' · ');
   const past = chosen.getTime() <= Date.now();
@@ -100,7 +117,7 @@ export default function OpenToHitSheet() {
 
   const save = async () => {
     if (!currentUser || saving) return;
-    const at = untilAt();
+    const at = chosen;
     if (at.getTime() <= Date.now()) return;
     setSaving(true);
     const on = await toggleOpen(true, { until: at.toISOString(), miles });
@@ -111,7 +128,10 @@ export default function OpenToHitSheet() {
     close();
   };
 
+  // Your own time, when it is none of the quick picks: kept as it is unless you pick another.
+  const keepWords = current ? (tillLabel(current.toISOString()) ?? `till ${clockWords(current)}`) : null;
   const quick: { value: Until; label: string }[] = [
+    ...(keepWords && startedOnKeep ? [{ value: 'keep' as const, label: `T${keepWords.slice(1)}` }] : []),
     { value: 'two-hours', label: '2 hours' },
     ...(ahead(six) ? [{ value: 'six' as const, label: 'Till 6pm' }] : []),
     ...(ahead(nine) ? [{ value: 'nine' as const, label: 'Till 9pm' }] : []),
