@@ -14,21 +14,41 @@
 --    "Confirm email" switch in Supabase is off), so every address counted as
 --    confirmed the moment the account was made. Someone could sign up with a
 --    coach's or a parent's email and show up in a teen's Find friends as
---    "Coach X · in your contacts". Now an email matches when it came from
---    Apple or Google, when its owner clicked the confirmation link Supabase
---    sends once "Confirm email" is on, or when the account already existed
---    the day this ran (the people on CourtSide today keep being found exactly
---    as before). Phone numbers were already matched only once confirmed by a
---    texted code.
+--    "Coach X · in your contacts". Now an email matches when Apple or Google
+--    vouched for that very address, when its owner clicked the confirmation
+--    link Supabase sends once "Confirm email" is on, or when the account
+--    already had that same address the day this ran (the people on
+--    CourtSide today keep being found exactly as before). Phone numbers
+--    were already matched only once confirmed by a texted code.
+--    "Came from Apple or Google" means the address Apple or Google gave, not
+--    just "has a Google sign-in somewhere": an email account can add Google
+--    from the Account screen, and the Account screen's "change email" lands
+--    at once while "Confirm email" is off, so either would otherwise carry a
+--    typed-in address through (review of these fixes, Oct 5).
 --
 -- Unchanged: who can be found (the "Let people find me" switch, migration
 -- 89), what comes back, and the 3,000 and 10-a-day limits themselves.
 -- Needs migrations 88 and 89. Safe to run more than once (the day of the
--- first run is kept, never moved).
+-- first run, and the addresses noted that day, are kept, never moved).
 
 insert into public.server_settings (key, value)
 values ('contacts:emails-trusted-before', now()::text)
 on conflict (key) do nothing;
+
+-- The address each account already on CourtSide had the day this first ran,
+-- as a one-way scramble (never the address itself). Trusted only while the
+-- account keeps that address: a later change is not trusted on sight.
+create table if not exists public.contacts_trusted_emails (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  email_md5 text not null
+);
+alter table public.contacts_trusted_emails enable row level security;
+revoke all on public.contacts_trusted_emails from public, anon, authenticated;
+insert into public.contacts_trusted_emails (user_id, email_md5)
+select u.id, md5(lower(u.email)) from auth.users u
+where u.email is not null and u.email_confirmed_at is not null
+  and u.created_at < (select value::timestamptz from public.server_settings where key = 'contacts:emails-trusted-before')
+on conflict (user_id) do nothing;
 
 -- Whether this account's email is known to be its owner's (see 3 above).
 create or replace function public.email_is_proven(who uuid)
@@ -36,11 +56,12 @@ returns boolean language sql stable security definer set search_path = public, a
   select exists (
     select 1 from auth.users u
     where u.id = who and u.email is not null and (
-      coalesce(u.raw_app_meta_data->>'provider', '') in ('apple', 'google')
-      or coalesce(u.raw_app_meta_data->'providers', '[]'::jsonb) ?| array['apple', 'google']
+      exists (select 1 from auth.identities i
+              where i.user_id = u.id and i.provider in ('apple', 'google')
+                and lower(i.identity_data->>'email') = lower(u.email))
       or (u.email_confirmed_at is not null and u.confirmation_sent_at is not null and u.email_confirmed_at >= u.confirmation_sent_at)
-      or (u.email_confirmed_at is not null and u.created_at < coalesce(
-            (select value::timestamptz from public.server_settings where key = 'contacts:emails-trusted-before'), '-infinity'::timestamptz))))
+      or exists (select 1 from public.contacts_trusted_emails t
+                 where t.user_id = u.id and t.email_md5 = md5(lower(u.email)))))
 $$;
 revoke all on function public.email_is_proven(uuid) from public, anon, authenticated;
 
@@ -102,3 +123,5 @@ end $$;
 --   select value from public.server_settings where key = 'contacts:emails-trusted-before';
 -- (b) everyone on CourtSide today is still matchable by email (expect 0):
 --   select count(*) from auth.users u where u.email is not null and not public.email_is_proven(u.id);
+-- (c) the addresses noted today (expect the number of accounts with a confirmed email, 26 on Oct 5):
+--   select count(*) from public.contacts_trusted_emails;

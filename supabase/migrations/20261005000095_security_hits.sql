@@ -86,6 +86,10 @@ declare
   hit uuid := coalesce(new.hit_id, old.hit_id);
   before_flag text := coalesce(current_setting('courtside.hit_system', true), '');
 begin
+  -- Hold the hit first, then count: joining holds it (join_hit) but leaving
+  -- does not, so a join and a leave at the same moment would each count
+  -- without the other and leave the number one out until the next change.
+  perform 1 from public.hit_requests where id = hit for update;
   perform set_config('courtside.hit_system', 'on', true);
   update public.hit_requests
      set joined_count = (select count(*)::int from public.hit_joins where hit_id = hit)
