@@ -4,7 +4,7 @@ import UIKit
 import UserNotifications
 
 /*
- * "Workout detected" on the lock screen, straight from Apple Health (owner,
+ * "Activity detected" on the lock screen, straight from Apple Health (owner,
  * Oct 5: "They should also give notification like how mine gives me a
  * notification from Apple when it registers a workout").
  *
@@ -14,9 +14,10 @@ import UserNotifications
  * Each wake reads only what is new since the last one (an anchor, kept on
  * the phone), and puts up the phone's own alert for a workout worth one:
  *
- * - "Tennis detected" / "Log it on CourtSide.", or "Workout detected" /
+ * - "Tennis detected" / "Log it on CourtSide.", or "Activity detected" /
  *   "Run · Log it on CourtSide.": the server's own words for WHOOP's alert
- *   (migration 107). Never a number on the lock screen.
+ *   (migration 107; "Activity detected" since 131, owner, Oct 5). Never a
+ *   number on the lock screen.
  * - Only one that ended in the last 12 hours, 5 minutes to 10 hours long
  *   (the server keeps no other), never between 10pm and 7am here, tennis
  *   only unless the person said yes to every workout, no tennis at all when
@@ -24,7 +25,7 @@ import UserNotifications
  *   when Settings' alert switch for sessions is off, and each session once
  *   (also when two apps saved it: the Watch's run and Strava's copy of it).
  * - With CourtSide open on screen, no alert: the app is told instead, and
- *   its own check puts up its own "Workout detected" note at once.
+ *   its own check puts up its own "Activity detected" note at once.
  *
  * A locked phone: Health keeps its data sealed until the phone is unlocked,
  * which is the usual state when a Watch workout reaches a phone in a pocket.
@@ -452,7 +453,7 @@ final class WorkoutWatcher: @unchecked Sendable {
       content.title = "Tennis detected"
       content.body = "Log it on CourtSide."
     } else {
-      content.title = "Workout detected"
+      content.title = "Activity detected"
       content.body = "\(name(of: w.workoutActivityType)) · Log it on CourtSide."
     }
     content.sound = .default
