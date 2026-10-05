@@ -8,7 +8,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { Avatar, Button, Screen } from '@/components/ui';
 import { LiveDot } from '@/components/LiveDot';
-import { InboxButton } from '@/components/InboxButton';
+import { InboxButton, NotificationButton } from '@/components/InboxButton';
 import { lockPageSwipe } from '@/features/navigation/swipeLock';
 import { money, relativeTime } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
@@ -47,7 +47,17 @@ function Coaching() {
   const shown = coaches.filter((c) => c.listed !== false);
 
   return (
-    <Screen memoryKey="coaches" title="Coaching" wash onRefresh={isDesktopBrowser() ? undefined : actions.refresh} right={<InboxButton size={27} coaching />}>
+    <Screen memoryKey="coaches" title="Coaching" wash onRefresh={isDesktopBrowser() ? undefined : actions.refresh} right={
+        // Bell, chats, search: the same three, sizes and spacing as Community's header, so the chats
+        // button sits in exactly the same spot on every tab (Oct 5, owner). Search opens on people (coaches).
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 18 }}>
+          <NotificationButton size={25} />
+          <InboxButton size={27} coaching />
+          <Pressable accessibilityRole="link" accessibilityLabel="Search coaches and players" onPress={() => router.push({ pathname: '/search', params: { scope: 'coaches' } })} hitSlop={8}>
+            <Ionicons name="search" size={23} color={colors.text} />
+          </Pressable>
+        </View>
+      }>
       {/* ------------------------------ Coach studio ---------------------------- */}
       {/* Coaches only: their studio comes first, not tucked under everything else. */}
       {myCoach && studio ? (
