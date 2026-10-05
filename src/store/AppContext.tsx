@@ -5605,6 +5605,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const toggleMute = useCallback((userId: ID, quiet?: boolean) => {
     const muting = !stateRef.current.mutedIds.includes(userId);
+    // You can't mute yourself (unmuting stays open, so a self-mute saved before this can be undone).
+    if (muting && userId === stateRef.current.currentUserId) return;
     setState((prev) => {
       prev.mutedIds.includes(userId) ? haptics.untap() : haptics.tap();
       return { ...prev, mutedIds: toggleIn(prev.mutedIds, userId) };
@@ -5697,6 +5699,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [requireUser]);
 
   const reportUser = useCallback((userId: ID, reason: string) => {
+    // Nobody reports themselves (toggleBlock has the same check).
+    if (userId === stateRef.current.currentUserId) return;
     haptics.commit();
     // A reported post or hit leaves your screens at once.
     const target = /^(?:post|hit):(.+)$/.exec(reason)?.[1];
@@ -6497,8 +6501,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const unreported = useMemo(() => {
     if (!state.reportedIds.length) return null;
     const out = new Set(state.reportedIds);
-    return { posts: state.posts.filter((p) => !out.has(p.id)), hitRequests: state.hitRequests.filter((h) => !out.has(h.id)) };
-  }, [state.reportedIds, state.posts, state.hitRequests]);
+    return { posts: state.posts.filter((p) => !out.has(p.id)), stories: state.stories.filter((s) => !out.has(s.id)), hitRequests: state.hitRequests.filter((h) => !out.has(h.id)) };
+  }, [state.reportedIds, state.posts, state.stories, state.hitRequests]);
   const value = useMemo<AppContextValue>(
     () => ({ ...state, ...unreported, ready: state.ready && state.authResolved, currentUser, actions, seeing, shownAtCourt, ageSaysAdult }),
     [state, unreported, currentUser, actions, seeing, shownAtCourt, ageSaysAdult],
