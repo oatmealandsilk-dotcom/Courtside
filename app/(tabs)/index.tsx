@@ -65,6 +65,7 @@ import { CLOSE_MS, PAUSE_AT_FULL, SIDE_MIN_WINDOW, STAGE_EASING, STAGE_ON_ANDROI
 import { StageChromeContext, useStageMotion, useStagePageChrome } from '@/features/feed/useStageMotion';
 import { colors, radius, typography, spacing, font, lift } from '@/theme';
 import { isTaggedIn } from '@/features/activity/sessionTags';
+import { useAndroidBack } from '@/lib/androidBack';
 
 /**
  * The heart that blooms when you double tap a clip.
@@ -354,6 +355,8 @@ function Home({ scope, topRow, paused, onChrome }: {
     immersion.value = withTiming(on ? 1 : 0, { duration: 180 });
     punch.value = withSequence(withTiming(on ? 1.03 : 0.97, { duration: 80 }), withTiming(1, { duration: 110 }));
   };
+  // Android's Back while pinched in brings the words and buttons back first (the feed in front only).
+  useAndroidBack(() => { if (!immersive || paused) return false; lock(false); return true; });
   // The wordmark and the thread logo can be tapped away, page by page: the
   // one you tapped goes; the next page still has its own.
   const [hiddenMarks, setHiddenMarks] = useState<Set<string>>(() => new Set());
@@ -1823,6 +1826,9 @@ function GroupedFeed() {
   const forYouChrome = useCallback((c: FeedChrome) => { if (!groupId) setChrome(c); }, [groupId]);
   const groupChrome = useCallback((c: FeedChrome) => setChrome(c), []);
   const insets = useSafeAreaInsets();
+  // Android's Back on a group's feed goes back to For you rather than leaving
+  // the Feed. A feed pinched in is let out first (its own Back, in Home).
+  useAndroidBack(() => { if (!groupId || chrome.hidden) return false; setGroupId(null); return true; });
   const activitiesTip = useTip('activities', groupId === ACTIVITIES);
   const waiting = feedGroups.some((g) => g.requests.length > 0 && g.members.some((m) => m.id === currentUserId && m.admin));
   return (

@@ -54,6 +54,7 @@ import { firstLink, isOnlyLink } from '@/lib/links';
 import { LINK_CARD_W, LinkCard, linkCardShows } from '@/features/messages/LinkCard';
 import { useLinkPreview } from '@/features/messages/linkPreview';
 import { useDragDownDismiss, useKeyboardLift } from '@/features/messages/keyboardLift';
+import { useAndroidBack } from '@/lib/androidBack';
 import { GroupInviteCard } from '@/features/groups/GroupInviteCard';
 import { readGroupInvite } from '@/features/groups/inviteMessage';
 import { Slide, TimeAnchor, TimeSwipeArea } from '@/features/messages/MessageTimes';
@@ -623,6 +624,16 @@ export default function Thread() {
     composer.current?.setText(draftBeforeEdit.current ?? '');
     draftBeforeEdit.current = null;
   };
+  // Android's Back closes what is open over the typing bar before it leaves
+  // the chat: the emoji keyboard, the "+" tray, then an edit or a reply (as
+  // Escape does on a computer). With none of them open, the chat closes.
+  useAndroidBack(() => {
+    if (emojiOpen) { setEmojiOpen(false); return true; }
+    if (composer.current?.plusIsOpen()) { composer.current.closePlus(); return true; }
+    if (editing) { endEditing(); return true; }
+    if (replyTo) { setReplyTo(null); return true; }
+    return false;
+  });
 
   const send = (text: string) => {
     if (draftNow.current.trim()) { draftNow.current = ''; lastPing.current = 0; typingLink.current?.stop(); }
@@ -1030,6 +1041,8 @@ interface ComposerHandle {
   /** The emoji keyboard's delete key: the last character before the cursor (a whole emoji). */
   deleteBack: () => void;
   closePlus: () => void;
+  /** Whether the "+" tray (photos and courts) is open. */
+  plusIsOpen: () => boolean;
 }
 
 /**
@@ -1059,6 +1072,8 @@ const Composer = memo(function Composer({ ref, styles, pickedCount, editingBody,
   const [caret, setCaret] = useState(0);
   // The "+": photos and courts, one tap away.
   const [plusOpen, setPlusOpen] = useState(false);
+  const plusNow = useRef(plusOpen);
+  plusNow.current = plusOpen;
   const now = useRef({ draft, caret });
   now.current = { draft, caret };
   const inputRef = useRef<TextInput>(null);
@@ -1093,6 +1108,7 @@ const Composer = memo(function Composer({ ref, styles, pickedCount, editingBody,
       placeCaret(before.length);
     },
     closePlus: () => setPlusOpen(false),
+    plusIsOpen: () => plusNow.current,
   }), []);
 
   const sendRecording = async () => {

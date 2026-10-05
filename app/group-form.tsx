@@ -442,6 +442,7 @@ export default function GroupForm() {
 
   return (
     <DragSheet
+      ownBack
       closeSignal={closeSignal}
       onDismissed={done}
       beforeClose={() => guard.current()}

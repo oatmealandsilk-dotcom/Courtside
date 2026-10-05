@@ -26,6 +26,7 @@ import { show as showToast } from '@/lib/toast';
 import { confirmUnfollow } from '@/lib/confirm';
 import { useApp } from '@/store/AppContext';
 import { useStartMapHold } from '@/features/feed/warmup';
+import { useAndroidBack } from '@/lib/androidBack';
 import { colors, radius, spacing } from '@/theme';
 
 const HEIGHT = 330;
@@ -167,6 +168,18 @@ export function NearbyMap(props: NearbyMapProps) {
       onFar={expanded ? setFar : undefined}
     />
   );
+
+  // The full map: Android's Back closes the card that is up (yours, a player's,
+  // a court's, a hit's, a place's), then clears a search, and only then leaves the map.
+  useAndroidBack(() => {
+    if (meOpen) { setMeOpen(false); return true; }
+    if (model.selected) { model.select(null); return true; }
+    if (model.selectedCourt) { model.selectCourt(null); return true; }
+    if (model.selectedHit) { model.selectHit(null); return true; }
+    if (model.place) { model.clearPlace(); return true; }
+    if (model.query.trim()) { model.setQuery(''); return true; }
+    return false;
+  }, expanded);
 
   if (!expanded && !model.city) {
     // A city still being looked up holds the card's place; no city at all asks for one.

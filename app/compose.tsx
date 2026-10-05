@@ -56,6 +56,7 @@ import { colors, radius, spacing, typography, font } from '@/theme';
 import { challengeFor } from '@/features/challenge/weekly';
 import { goHome } from '@/lib/goBack';
 import { useRevealOnFocus } from '@/lib/keyboardScroll';
+import { useAndroidBack } from '@/lib/androidBack';
 
 type Mode = 'clip' | 'post' | 'story' | 'hit';
 /** What a session was, the log sheet's four. */
@@ -244,6 +245,12 @@ export default function Compose() {
   const closeRef = useRef(closeMenu);
   closeRef.current = closeMenu;
   useEffect(() => (stage === 'choose' ? registerCreateClose(() => closeRef.current()) : undefined), [stage]);
+  // Android's Back does what each stage's own back does (set just before each
+  // stage draws, below): the Create box closes the way its ✕ does, the editor
+  // goes back to your photos, the caption back to the editor, a session's post
+  // asks "Discard post?". Without it Back threw the whole post away at once.
+  const stageBack = useRef<() => boolean>(() => false);
+  useAndroidBack(() => stageBack.current());
   const [mode, setMode] = useState<Mode>(isHit ? 'hit' : params.mode === 'story' ? 'story' : entering ? 'clip' : 'post');
   const [media, setMedia] = useState<PickedMedia | null>(isHit ? { uri: shotUri as string, label: 'Instant', kind: 'photo', thumbnailUrl: shotUri as string, orientation: 'portrait' } : null);
   // A session's post goes where its picture goes (owner, Oct 2): with a video
@@ -816,6 +823,7 @@ export default function Compose() {
     </>
   );
 
+  if (stage === 'choose') stageBack.current = () => { closeMenu(); return true; };
   if (stage === 'choose') return <View style={styles.choiceBackdrop}>
     <Reanimated.View pointerEvents="none" style={[StyleSheet.absoluteFill, dimStyle]}><SheetBackdrop /></Reanimated.View>
     <Pressable accessibilityRole="button" accessibilityLabel="Close create menu" onPress={closeMenu} style={StyleSheet.absoluteFill}/>
@@ -855,21 +863,23 @@ export default function Compose() {
     const initial = source.kind === 'video'
       ? { ...edit, orientation: returning ? orientation : undefined, cover: media.thumbnailUrl }
       : { orientation: returning ? orientation : undefined };
+    // Back means "wrong one": straight back into your photos to pick again,
+    // not out to the menu. Stories go back to their own library.
+    const editBack = () => {
+      // A session's photo is optional: back drops it and returns to the post.
+      if (opened) { setMedia(null); setPicked(null); setStage('form'); return; }
+      if (params.mode === 'story') { setStage('library'); return; }
+      setStage('choose');
+      void openDevice(mode === 'clip' ? 'video' : 'all');
+    };
+    stageBack.current = () => { editBack(); return true; };
     return (
       <View style={[styles.backdrop, { backgroundColor: '#000' }]}>
         <MediaEditor
           media={source}
           portraitRatio={portraitRatio}
           initial={initial}
-          // Back means "wrong one": straight back into your photos to pick again,
-          // not out to the menu. Stories go back to their own library.
-          onBack={() => {
-            // A session's photo is optional: back drops it and returns to the post.
-            if (opened) { setMedia(null); setPicked(null); setStage('form'); return; }
-            if (params.mode === 'story') { setStage('library'); return; }
-            setStage('choose');
-            void openDevice(mode === 'clip' ? 'video' : 'all');
-          }}
+          onBack={editBack}
           onDone={(result) => {
             setMedia(result.media);
             setOrientation(result.orientation);
@@ -899,6 +909,8 @@ export default function Compose() {
       seen.add(item.uri);
       return true;
     });
+    const libraryBack = () => (params.mode === 'story' ? router.back() : setStage('choose'));
+    stageBack.current = () => { libraryBack(); return true; };
 
     return (
       <View style={styles.backdrop}>
@@ -907,7 +919,7 @@ export default function Compose() {
           <Screen
             title={mode === 'clip' ? 'Your videos' : 'Your library'}
             compactTitle
-            onBack={() => (params.mode === 'story' ? router.back() : setStage('choose'))}
+            onBack={libraryBack}
           >
             <MediaPicker compact selection={mode === 'clip' ? 'video' : 'all'} label={mode === 'clip' ? 'New video from your device' : 'New from your device'} value={null} onChange={pick} />
             <Text style={styles.libraryTitle}>{bank.length ? 'Recent' : 'Nothing here yet'}</Text>
@@ -942,6 +954,7 @@ export default function Compose() {
   }
 
   if (logMode) {
+    stageBack.current = () => { leaveLog(); return true; };
     return (
       <View style={styles.backdrop}>
         <SheetBackdrop />
@@ -1030,6 +1043,8 @@ export default function Compose() {
     );
   }
 
+  const formBack = () => (mode === 'hit' ? router.navigate('/hit') : opened && !media ? goBackNow() : setStage('edit'));
+  stageBack.current = () => { formBack(); return true; };
   return (
     <View style={[styles.backdrop, mode === 'hit' && { backgroundColor: colors.bg }]}>
       {mode === 'hit' ? null : <SheetBackdrop />}
@@ -1037,7 +1052,7 @@ export default function Compose() {
         <Screen
           title={mode === 'clip' || openedClip ? 'New clip' : mode === 'post' ? 'New post' : mode === 'story' ? 'New story' : 'New instant'}
           compactTitle
-          onBack={() => (mode === 'hit' ? router.navigate('/hit') : opened && !media ? goBackNow() : setStage('edit'))}
+          onBack={formBack}
           right={<Button label={mode === 'story' || mode === 'hit' ? 'Post instant' : 'Share'} variant="secondary" onPress={submit} disabled={!canSubmit || groupWaiting || groupGone} />}
         >
           <View style={mode === 'story' || mode === 'hit' ? styles.form : null}>

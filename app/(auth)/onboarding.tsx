@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Easing, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { goBack } from '@/lib/goBack';
+import { useAndroidBack } from '@/lib/androidBack';
 
 import { LocationField } from '@/components/LocationField';
 import { PermissionRows } from '@/components/PermissionRows';
@@ -327,6 +328,9 @@ export default function Onboarding() {
     setStep(order[position + 1] ?? step + 1);
   };
   const back = () => setStep(order[position - 1] ?? step - 1);
+  // Android's Back goes back a step, as the Back button on the page does. At
+  // sign-up this is the only page, so before, it left the app and lost the steps.
+  useAndroidBack(() => { if (position <= 0) return false; back(); return true; });
 
   const last = position === order.length - 1;
   const canContinue = step === 0 ? (ratingOnly ? ratingValid : name.trim().length > 0 && ratingValid && !claiming) : true;

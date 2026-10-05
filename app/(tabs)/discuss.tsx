@@ -48,6 +48,7 @@ import { askedSection, reportSection, subscribeSectionRequest, takeAskedSection 
 import { START_SECTION, START_TAB } from '@/features/navigation/startTab';
 import { setStartDrawn } from '@/features/feed/warmup';
 import { useApp } from '@/store/AppContext';
+import { useAndroidBack } from '@/lib/androidBack';
 import type { QuestionTopic } from '@/data/types';
 import { colors, radius, spacing, typography, font, lift } from '@/theme';
 import { isDesktopBrowser } from '@/lib/browserDevice';
@@ -328,6 +329,16 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   };
   const searchWords = useMemo(() => plain(search).split(' ').filter(Boolean), [search]);
   const [sortOpen, setSortOpen] = useState(false);
+  // Android's Back on the page the app opens on: out of a search first (the
+  // keyboard goes on the first Back by itself, the search on the next, as
+  // Cancel does), then the sort menu, then from Discussions to Find Players.
+  // Only then does it leave the app. Not for a picture of this tab sliding in.
+  useAndroidBack(() => {
+    if (search || searching) { cancelSearch(); return true; }
+    if (sortOpen) { setSortOpen(false); return true; }
+    if (section !== 'players') { setSection('players'); return true; }
+    return false;
+  }, !previewSection);
   const [shownCount, setShownCount] = useState(25);
   const visible = useMemo(() => {
     // Nobody you have blocked or muted shows up here, the same as in the feed.

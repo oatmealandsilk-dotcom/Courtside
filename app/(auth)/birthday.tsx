@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { BackHandler, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 
 import { BrandMark } from '@/components/BrandMark';
@@ -9,6 +9,7 @@ import { isDeviceBlocked, toBirthDate } from '@/features/age/ageCheck';
 import { useLeave } from '@/components/LeaveCurtain';
 import { useApp } from '@/store/AppContext';
 import { useGateSpace } from '@/lib/useGateSpace';
+import { useAndroidBack } from '@/lib/androidBack';
 import { StatusShade } from '@/components/StatusShade';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, spacing, typography } from '@/theme';
@@ -28,6 +29,8 @@ export default function Birthday() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [blocked, setBlocked] = useState(false);
+  // Android's Back leaves the app, as on any first page (see agree.tsx).
+  useAndroidBack(() => { BackHandler.exitApp(); return true; });
   useEffect(() => { void isDeviceBlocked().then((b) => { if (b) setBlocked(true); }); }, []);
   // The age is on file after all (the sign-up form's birthday was saved a
   // moment after this page opened): carry on into the app rather than ask again.

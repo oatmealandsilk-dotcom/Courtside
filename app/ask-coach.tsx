@@ -4,6 +4,7 @@ import { Keyboard, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput,
 import { router, useLocalSearchParams } from 'expo-router';
 import Reanimated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { goBack } from '@/lib/goBack';
+import { useAndroidBack } from '@/lib/androidBack';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { MediaPicker, type PickedMedia } from '@/components/MediaPicker';
@@ -132,6 +133,8 @@ export default function AskCoach() {
     }
     grow.value = withTiming(0, { duration: 300, easing: Easing.bezier(0.4, 0, 0.6, 1) }, (done) => { if (done) runOnJS(goBack)(); });
   };
+  // Android's Back closes it the same way, shrinking back into the box it grew from.
+  useAndroidBack(() => { close(); return true; });
   const canSubmit = title.trim().length > 10 && body.trim().length > 25;
   const submit = () => {
     if (!canSubmit) return;

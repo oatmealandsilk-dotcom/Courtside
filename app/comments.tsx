@@ -319,6 +319,7 @@ export default function CommentsSheet() {
       {/* Over the stage's black the phone's clock is white, as it is over the clip in the Feed. */}
       {staged && focused ? <StatusBar style="light" animated /> : null}
       <DragSheet
+        ownBack
         closeSignal={closeSignal}
         onDismissed={leave}
         peekFraction={0.7}

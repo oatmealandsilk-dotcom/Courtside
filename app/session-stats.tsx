@@ -85,6 +85,7 @@ export default function SessionStatsSheet() {
     <>
       {staged && focused ? <StatusBar style="light" animated /> : null}
       <DragSheet
+        ownBack
         closeSignal={closeSignal}
         onDismissed={leave}
         peekFraction={sparse ? 0.46 : 0.64}
