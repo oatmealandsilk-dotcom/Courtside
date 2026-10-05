@@ -12,6 +12,8 @@ let done = false;
 
 /** The longest the phone's picture (or the app's copy of it) is ever waited on. */
 export const LAUNCH_MAX_MS = 2500;
+/** How long the phone's own picture takes to dissolve into the app (iPhone; it is set below). */
+export const LAUNCH_FADE_MS = 700;
 
 export function hideLaunch() {
   if (done) return;
@@ -27,6 +29,9 @@ export function launchShowing() {
 
 if (Platform.OS !== 'web') {
   SplashScreen.preventAutoHideAsync().catch(() => undefined);
+  // The phone's picture dissolves into the app's first screen instead of vanishing (Oct 5, owner's video:
+  // the app's own cream copy of it showed blank before fading). A build without this option ignores it.
+  try { SplashScreen.setOptions({ fade: true, duration: LAUNCH_FADE_MS }); } catch { /* an older build */ }
   // Never longer than this, whatever happens (a link that opens elsewhere, a slow phone).
   setTimeout(hideLaunch, LAUNCH_MAX_MS);
 }

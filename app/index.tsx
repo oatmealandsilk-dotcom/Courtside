@@ -1,6 +1,6 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef, useState } from 'react';
-import { Image, Animated, Easing, Platform, StyleSheet, Text, View } from 'react-native';
+import { Animated, Easing, Platform, StyleSheet, Text, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Redirect, useNavigation } from 'expo-router';
 import { isSupabaseConfigured } from '@/lib/supabase';
@@ -9,7 +9,7 @@ import { raiseCurtain } from '@/features/feed/warmup';
 import { preloadNearbyMap } from '@/components/NearbyMap';
 import { useLaunchUpdate } from '@/lib/instantUpdates';
 
-import { LAUNCH_MAX_MS, hideLaunch, launchShowing } from '@/lib/launchSplash';
+import { LAUNCH_FADE_MS, LAUNCH_MAX_MS, hideLaunch, launchShowing } from '@/lib/launchSplash';
 import { LaunchMark } from '@/components/LaunchMark';
 import { BrandMark } from '@/components/BrandMark';
 import { useApp } from '@/store/AppContext';
@@ -66,8 +66,24 @@ export default function Index() {
   const startCoverFade = () => {
     if (fadeStarted.current) return;
     fadeStarted.current = true;
+    if (fromLaunch) {
+      // A real launch: no copy of the picture at all. The phone's own picture dissolves straight into
+      // this themed screen (launchSplash sets the fade), the logo, name and line already in place under
+      // it (Oct 5, owner's video: the copy that stood in between showed blank cream, then the logo faded in).
+      hideLaunch();
+      setTimeout(() => setLaunchCover(false), LAUNCH_FADE_MS + 60);
+      return;
+    }
     hideLaunch();
     Animated.timing(cover, { toValue: 0, duration: 700, delay: 350, easing: Easing.inOut(Easing.cubic), useNativeDriver: true }).start(() => setLaunchCover(false));
+  };
+  // A real launch: once this screen is laid out and two frames have drawn it (the text settles on its
+  // measured baseline in the first), a short beat on the cream, then the dissolve.
+  const laidOut = useRef(false);
+  const onThemedLayout = () => {
+    if (laidOut.current) return;
+    laidOut.current = true;
+    requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(startCoverFade, 250)));
   };
   useEffect(() => {
     if (!launchCover) return;
@@ -171,7 +187,7 @@ export default function Index() {
   }
 
   return (
-    <Animated.View style={[styles.splash, { opacity }]}>
+    <Animated.View onLayout={fromLaunch ? onThemedLayout : undefined} style={[styles.splash, { opacity }]}>
       {Platform.OS !== 'web' ? (
         // On a phone the themed screen is the launch picture's own logo and line, cut from it
         // and drawn the same way (cover), in the theme's colours: the cream fades into it with
@@ -186,29 +202,11 @@ export default function Index() {
           <Text style={styles.tagline}>{launchUpdate.downloading ? 'Getting the newest version' : 'Growing the game'}</Text>
         </>
       )}
-      {launchCover ? (
-        <Animated.View pointerEvents="none" onLayout={fromLaunch ? undefined : startCoverFade} style={[StyleSheet.absoluteFill, styles.splash, launchStyles.launch, { opacity: cover }]}>
+      {launchCover && !fromLaunch ? (
+        // Coming here later (a sign-in, a switch of account): the cream drawn copy, faded once laid out.
+        <Animated.View pointerEvents="none" onLayout={startCoverFade} style={[StyleSheet.absoluteFill, styles.splash, launchStyles.launch, { opacity: cover }]}>
           <StatusBar style="dark" />
-          {/* The phone's own launch picture itself, drawn the same way (cover is the same sums as the phone's
-              fill), so the hand-over is pixel for pixel (Oct 4, owner: "smooth like Instagram"; then "should not
-              be misalignment even if it's a tiny bit"). The drawn copy that stood here never quite matched the
-              picture (its name is not set in Inter there), which showed as a tiny jump at the cut. The drawn
-              copy stays underneath the whole time (Oct 5, owner: "it flashes and logos disappear while it fades"):
-              a phone can report the picture loaded a frame or two before it is on screen, and taking the drawn
-              copy away at that report left bare cream, with no logo, through the fade. The picture is opaque, so
-              once it is up the copy under it never shows; if it is late, or never comes, the copy is there. */}
           <LaunchMark ink={lightColors.brand} faint={lightColors.textFaint} />
-          {fromLaunch ? (
-            <Image
-              source={require('../assets/splash.png')}
-              resizeMode="cover"
-              fadeDuration={0}
-              style={StyleSheet.absoluteFill}
-              // Two frames after "loaded", so the picture is on screen before the phone's own one is taken away.
-              onLoad={() => requestAnimationFrame(() => requestAnimationFrame(startCoverFade))}
-              onError={startCoverFade}
-            />
-          ) : null}
         </Animated.View>
       ) : null}
     </Animated.View>
