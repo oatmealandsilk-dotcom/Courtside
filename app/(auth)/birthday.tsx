@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { BackHandler, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 
 import { BrandMark } from '@/components/BrandMark';
 import { BirthDateField } from '@/components/BirthDateField';
@@ -29,8 +29,12 @@ export default function Birthday() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [blocked, setBlocked] = useState(false);
-  // Android's Back leaves the app, as on any first page (see agree.tsx).
-  useAndroidBack(() => { BackHandler.exitApp(); return true; });
+  // Android's Back leaves the app, as on any first page (see agree.tsx), when
+  // this is the age check every account is sent to. Opened from the group
+  // form's "Add your birthday" (from=group) it sits on top of where the person
+  // was, so Back simply goes back there.
+  const { from } = useLocalSearchParams<{ from?: string }>();
+  useAndroidBack(() => { BackHandler.exitApp(); return true; }, from !== 'group');
   useEffect(() => { void isDeviceBlocked().then((b) => { if (b) setBlocked(true); }); }, []);
   // The age is on file after all (the sign-up form's birthday was saved a
   // moment after this page opened): carry on into the app rather than ask again.

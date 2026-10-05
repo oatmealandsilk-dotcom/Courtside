@@ -15,6 +15,9 @@ import type { InviteCodeResult, MyInviter } from '@/data/remote';
 import * as haptics from '@/lib/haptics';
 import { useApp } from '@/store/AppContext';
 import { useGateSpace } from '@/lib/useGateSpace';
+import Reanimated from 'react-native-reanimated';
+import { KeyboardScrollContext, useKeyboardReveal } from '@/lib/keyboardScroll';
+import { KEYBOARD_ROOM, useKeyboardRoom } from '@/lib/keyboardRoom';
 import type {
   Backhand,
   FitnessLevel,
@@ -138,6 +141,12 @@ export default function Onboarding() {
   const { currentUser, currentUserId, posts, questions, answers, actions } = useApp();
   // The progress bar sits a calm step below the status bar; the buttons clear the home bar.
   const space = useGateSpace();
+  // Android: the box you tap is scrolled clear of the keyboard, with room
+  // under the form to scroll into (the app is drawn under the keyboard there
+  // and the window never shrinks). The iPhone is left as it was: the
+  // provider below hands the scrolling to Android only.
+  const keyboard = useKeyboardReveal();
+  const keyboardRoom = useKeyboardRoom(space.footer);
   // The profile's "finish setting up" card lands straight on the step it names.
   const params = useLocalSearchParams<{ step?: string; from?: string; only?: string }>();
   const editing = params.from === 'edit';
@@ -231,7 +240,7 @@ export default function Onboarding() {
 
   const progress = useRef(new Animated.Value((position + 1) / order.length)).current;
   const fade = useRef(new Animated.Value(1)).current;
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = keyboard.scroller;
   useEffect(() => {
     Animated.timing(progress, { toValue: (position + 1) / order.length, duration: 360, easing: Easing.out(Easing.cubic), useNativeDriver: false }).start();
     fade.setValue(0);
@@ -336,6 +345,7 @@ export default function Onboarding() {
   const canContinue = step === 0 ? (ratingOnly ? ratingValid : name.trim().length > 0 && ratingValid && !claiming) : true;
 
   return (
+    <KeyboardScrollContext.Provider value={Platform.OS === 'android' ? keyboard.reveal : null}>
     <View style={[styles.root, { paddingTop: space.header }]}>
       <View style={styles.head}>
         {ratingOnly ? null : (
@@ -351,7 +361,15 @@ export default function Onboarding() {
           : STEPS[step].lead ? <Text style={styles.lead}>{STEPS[step].lead}</Text> : null}
       </View>
 
-      <ScrollView ref={scrollRef} contentContainerStyle={styles.body} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        ref={scrollRef}
+        onScroll={keyboard.onScroll}
+        scrollEventThrottle={16}
+        contentContainerStyle={styles.body}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode={Platform.OS === 'android' ? 'on-drag' : undefined}
+      >
         <Animated.View style={{ gap: spacing.lg, opacity: fade }}>
           {step === 0 ? (
             <>
@@ -541,6 +559,7 @@ export default function Onboarding() {
             </>
           ) : null}
         </Animated.View>
+        {KEYBOARD_ROOM ? <Reanimated.View pointerEvents="none" style={keyboardRoom} /> : null}
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: space.footer }]}>
@@ -565,6 +584,7 @@ export default function Onboarding() {
         </View>
       </View>
     </View>
+    </KeyboardScrollContext.Provider>
   );
 }
 

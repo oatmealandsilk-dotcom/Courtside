@@ -117,8 +117,11 @@ module.exports = {
       // Android draws the status-bar alert icon in white from the picture's shape alone, so
       // it gets the mark as a white cut-out (Oct 4); the full-colour app icon would be a blank square.
       ['expo-notifications', { color: '#3F7049', icon: './assets/notification-icon.png', defaultChannel: 'activity' }],
-      // Android's alert channels are made by the app (src/features/push/channels.ts); an alert that
-      // names none goes to "Likes, replies and follows" (defaultChannel above), never "Miscellaneous".
+      // Android's alert channels are made by the app (src/features/push/channels.ts). Every server
+      // alert must name its channel (send_push does, migration 106): Expo's push service sends
+      // Android alerts as data that the app draws itself, and one naming no channel lands in a new,
+      // permanent "Miscellaneous" channel. defaultChannel above only applies to alerts sent straight
+      // through Firebase, which CourtSide does not do; nothing relies on it.
       // Logins kept in the phone's secure storage stay out of Android's backup to Google Drive and
       // phone-to-phone copies (Oct 5): a copied phone opened signed in on the same login as the old
       // one, and one of the two was then signed out at random. faceIDPermission: false keeps the

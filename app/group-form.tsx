@@ -320,7 +320,7 @@ export default function GroupForm() {
   // ---------------------------------------------------------------- the button
   let primary: { label: string; busyLabel?: string; waiting?: string; disabled: boolean; onPress: () => void } | null = null;
   if (gate === 'young' || gate === 'gone') primary = { label: 'OK', disabled: false, onPress: dismiss };
-  else if (gate === 'birthday') primary = { label: 'Add your birthday', disabled: false, onPress: () => { landing.current = { href: '/birthday' }; dismiss(); } };
+  else if (gate === 'birthday') primary = { label: 'Add your birthday', disabled: false, onPress: () => { landing.current = { href: '/birthday?from=group' }; dismiss(); } };
   else if (gate === 'off') primary = { label: retrying ? 'Trying again…' : 'Try again', disabled: retrying, onPress: () => { void retry(); } };
   else if (gate === 'full') primary = { label: 'See your groups', disabled: false, onPress: () => { landing.current = { href: '/groups' }; dismiss(); } };
   else if (gate === 'loading') primary = null;

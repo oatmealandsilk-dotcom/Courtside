@@ -96,8 +96,12 @@ export function listenForPushTaps(): () => void {
   const open = async (response: Notifications.NotificationResponse | null) => {
     const href = response?.notification.request.content.data?.href;
     if (typeof href !== 'string' || !href.startsWith('/')) return;
+    // One tap is its alert's name plus when that alert arrived. The name alone
+    // is not enough: training-plan reminders reuse theirs every week
+    // (courtside-plan-0 is every Monday), and next Monday's tap must still open.
+    const identifier = response?.notification.request.identifier;
+    const id = identifier ? `${identifier}@${response?.notification.date ?? ''}` : null;
     // At launch the same tap can arrive both ways (asked for, and as an event): it opens one page.
-    const id = response?.notification.request.identifier ?? null;
     if (id && id === opened) return;
     opened = id;
     // An instant update reloads the app, and Android then hands the tap that

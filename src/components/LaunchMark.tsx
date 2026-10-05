@@ -133,13 +133,14 @@ function PictureLaunchMark({ ink, faint, line = 'Growing the game' }: { ink: str
  * points) with Python + PIL, in its pixels: the frame 270 wide and 377 tall
  * round the middle row (512), its sides and bars 50.9 thick, the bar across
  * 38.6 tall on the middle; the sideline 51 wide, 41 to the right of the
- * frame; everything leaning 14° about the middle row. Android's shapes cannot
+ * frame and taller than it (417, 303.5 to 720.5, 20 past the frame
+ * at each end); everything leaning 14° about the middle row. Android's shapes cannot
  * lean (a skew is dropped), so it is drawn as a picture.
  */
 const ICON_PT = 288;
 const ICON_PX = 1024;
-const MARK = { left: 330.5, top: 323.5, width: 270, height: 377, side: 50.9, bar: 38.6, slashLeft: 641.5, slashWidth: 51 };
-/** How far below the middle of the screen the mark's lowest point sits, in points. */
+const MARK = { left: 330.5, top: 323.5, width: 270, height: 377, side: 50.9, bar: 38.6, slashLeft: 641.5, slashWidth: 51, slashTop: 303.5, slashHeight: 417 };
+/** How far below the middle of the screen the frame's foot sits, in points (the name is placed from it; the sideline reaches about 5.7 further). */
 const MARK_BELOW = ((MARK.top + MARK.height) - ICON_PX / 2) * (ICON_PT / ICON_PX);
 
 function AndroidLaunchMark({ ink, faint, line = 'Growing the game' }: { ink: string; faint: string; line?: string }) {
@@ -156,7 +157,7 @@ function AndroidLaunchMark({ ink, faint, line = 'Growing the game' }: { ink: str
         <G transform={`translate(${half} ${half}) skewX(-14) translate(${-half} ${-half})`}>
           <Rect x={MARK.left + MARK.side / 2} y={MARK.top + MARK.side / 2} width={MARK.width - MARK.side} height={MARK.height - MARK.side} fill="none" stroke={ink} strokeWidth={MARK.side} />
           <Rect x={MARK.left} y={half - MARK.bar / 2} width={MARK.width} height={MARK.bar} fill={ink} />
-          <Rect x={MARK.slashLeft} y={MARK.top} width={MARK.slashWidth} height={MARK.height} fill={ink} />
+          <Rect x={MARK.slashLeft} y={MARK.slashTop} width={MARK.slashWidth} height={MARK.slashHeight} fill={ink} />
         </G>
       </Svg>
       <Animated.Text allowFontScaling={false} style={[styles.androidName, { color: ink, opacity: words, transform: [{ translateY: MARK_BELOW + 26 }] }]}>CourtSide</Animated.Text>

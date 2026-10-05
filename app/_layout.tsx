@@ -16,7 +16,6 @@ import { AppProvider } from '@/store/AppContext';
 import { AppShell } from '@/components/AppShell';
 import { ThemeProvider, useTheme } from '@/theme/ThemeProvider';
 import { Platform } from 'react-native';
-import * as SystemUI from 'expo-system-ui';
 import { noteThemedStatusStyle } from '@/lib/statusBarStyle';
 import { colors, font, lightColors } from '@/theme';
 import { BrandMark } from '@/components/BrandMark';
@@ -145,7 +144,17 @@ function ThemedStatusBar() {
   const style = dark ? 'light' : 'dark';
   noteThemedStatusStyle(style);
   useEffect(() => {
-    if (Platform.OS === 'android') void SystemUI.setBackgroundColorAsync(colors.bg).catch(() => undefined);
+    if (Platform.OS !== 'android') return;
+    // Loaded here, on Android only, never at the top of the file: iPhone
+    // builds 7 to 11 share this update channel but were made before
+    // expo-system-ui was installed, and loading it there would stop them at
+    // launch. Every Android build has it.
+    try {
+      const SystemUI = require('expo-system-ui') as typeof import('expo-system-ui');
+      void SystemUI.setBackgroundColorAsync(colors.bg).catch(() => undefined);
+    } catch {
+      // Not in this build: the window keeps its launch colour.
+    }
   }, [theme]);
   return <StatusBar style={style} />;
 }

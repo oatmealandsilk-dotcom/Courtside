@@ -64,9 +64,13 @@ drafting the Google Play forms.
    build. A build made with the Firebase file but before the key is on Expo
    saves Android push addresses that can never receive anything, and nobody
    would notice: alerts are sent and forgotten.
-3. Claude runs migration 106 in Supabase (alerts to Android phones arrive at
-   once, not minutes late, and land in the right group). Nothing changes for
-   iPhones.
+3. **Claude runs migration 106 in Supabase before the first Android build,
+   with no exceptions.** It makes alerts to Android phones arrive at once, not
+   minutes late, and land in the right group. It must be live before any
+   Android phone (yours or a tester's) can get a single alert: an alert sent
+   without it lands in an extra group called "Miscellaneous", which then
+   stays in that phone's notification settings for good and cannot be
+   removed. Nothing changes for iPhones.
 4. The first build (step 4), then Google Play (step 5).
 
 ---
@@ -138,7 +142,10 @@ The database side is migration 106 (in the code, not run yet): alerts to
 Android phones are sent as "high priority", so a phone left idle on a table
 still shows a message straight away, and each alert names its group
 ("Messages", or "Likes, replies and follows") so people can switch one off
-and keep the other. Claude runs it in Supabase's SQL editor once you say go.
+and keep the other. Claude runs it in Supabase's SQL editor once you say go,
+and it has to be done before the first Android build: an alert that reaches
+an Android phone before it runs creates a permanent extra "Miscellaneous"
+group on that phone (see "The order matters").
 
 ## 3. Google sign-in on Android: nothing to do
 
@@ -186,7 +193,9 @@ as iPhone builds.** Nothing is started without your go-ahead.
 
 - **Preview (.apk):** for trying on an Android phone straight away, before
   Google is involved. Expo gives a link; open it on the phone, download, and
-  allow the install when Android asks.
+  allow the install when Android asks. Remember which phones have it: before
+  CourtSide can be installed from Google Play on one of them, the test .apk
+  has to be uninstalled first (see 5g, step 2).
 - **Production (.aab):** for Google Play. Expo gives you the expo.dev page
   where the **.aab** file can be downloaded, for step 5.
 
@@ -275,8 +284,10 @@ the safe start; they can be added later.
 
 Left menu: **Grow users** → **Store presence** → **Main store listing**.
 
-- **App icon (512 × 512):** `assets/logo-beige-512.png` (the beige icon you
-  chose).
+- **App icon (512 × 512):** `store/google-play/icon-512.png` (the beige icon
+  you chose, saved in the format Google Play asks for: a PNG with a
+  see-through layer, 32-bit, under 1 MB. The `assets/logo-beige-512.png` copy
+  lacks that layer and may be refused).
 - **Feature graphic (1024 × 500):** `store/google-play/feature-graphic-1024x500.png`
   (cream, the green mark and name, one line about the app).
 - **Phone screenshots (2 to 8):** these are best taken on the first Android
@@ -307,6 +318,12 @@ website. Later ones can be sent from Expo (see 5h).
 2. Send that link to your testers. Each one opens it on their Android phone,
    signed in with the same Gmail address you listed, taps **Become a tester**,
    then **Download it on Google Play**.
+   **On a phone that still has the test .apk from step 4** (yours, say),
+   uninstall it first: **Settings → Apps → CourtSide → Uninstall**. The .apk
+   is sealed with Expo's key and Google Play's copy with Google's, and
+   Android will not put one over the other: Install fails with a "conflicts
+   with an existing package" message. After installing from Google Play,
+   sign in again.
 3. The 14 days count from when 12 testers have opted in. They should keep the
    app installed and open it now and then; Google asks what they thought.
 4. After 14 days, the Dashboard shows **Apply for production**. Click it and
@@ -328,9 +345,12 @@ Most of the Android work could only be checked by reading the code, because
 this Mac cannot run Android. On the first .apk, these are worth a minute each:
 
 - **Typing:** a chat (the box sits right on the keyboard; the emoji keyboard
-  is the same height), sign-up's lowest boxes, the instant's caption, the
+  is the same height), sign-up's lowest boxes, setup's lowest boxes
+  ("Invited by?", "Goal", "Next tournament"), the instant's caption, the
   birthday page, Account center's password sheet.
-- **Back button:** in a chat with the emoji keyboard or the + tray open; in
+- **Back button:** on the birthday page opened from the group form's "Add
+  your birthday" (it should go back, not close the app); in a chat with the
+  emoji keyboard or the + tray open; in
   Create (caption → editor → photos; a session's post asks "Discard post?");
   on a sheet (it slides down); on Community with a search open; during setup.
 - **Photos and videos:** pinch and swipe-down on a full-screen photo; move and

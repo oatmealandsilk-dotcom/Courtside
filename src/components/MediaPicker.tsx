@@ -372,8 +372,8 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
               ? <View style={cropLayer(trim?.crop)}><ClipVideo uri={value.uri} poster={value.thumbnailUrl} active={expanded} muted={!!trim?.muted} fit={orientation === 'landscape' ? 'contain' : 'cover'} trimStart={trim?.trimStart} trimEnd={trim?.trimEnd} speed={trim?.speed} volume={trim?.volume} /></View>
               : poster ? <Image source={{ uri: poster }} resizeMode="contain" style={{ width: '100%', height: '100%' }}/> : null}
           </ZoomableMedia>
-          {/* Under the status bar or the camera cut-out whatever its height, as PostVideo's close button is. */}
-          <Pressable accessibilityRole="button" accessibilityLabel="Close preview" onPress={() => setExpanded(false)} style={{ position: 'absolute', top: insets.top + 12, right: 16, width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center' }}>
+          {/* Android: under the status bar or the camera cut-out whatever its height, as PostVideo's close button is. The iPhone keeps its place, 54 from the top. */}
+          <Pressable accessibilityRole="button" accessibilityLabel="Close preview" onPress={() => setExpanded(false)} style={{ position: 'absolute', top: Platform.OS === 'android' ? insets.top + 12 : 54, right: 16, width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center' }}>
             <Ionicons name="close" size={22} color="white" />
           </Pressable>
         </GestureHandlerRootView>

@@ -13,9 +13,14 @@ import * as Notifications from 'expo-notifications';
  * - reminders: the training plan's and the streak's reminders, set on the
  *   phone. Default: in the list and the status bar, no pop-up.
  *
- * Alerts from the server name their channel (send_push, migration 106);
- * anything that names none goes to "activity" (the expo-notifications plugin's
- * defaultChannel in app.config.js). A channel's importance can never be changed
+ * Every alert from the server must name its channel (send_push does, from
+ * migration 106). One that names none does NOT go to "activity": Expo's push
+ * service hands Android alerts over as data, the app draws them itself, and
+ * with no channel named it makes a fourth one, "Miscellaneous", which then
+ * stays in the phone's settings for good. (The expo-notifications plugin's
+ * defaultChannel in app.config.js only covers alerts sent straight through
+ * Firebase, which CourtSide does not do; nothing relies on it.) So migration
+ * 106 has to be live before any Android tester gets an alert. A channel's importance can never be changed
  * on a phone once it exists, which is why these are set before the first
  * Android test build rather than after. An iPhone has no channels: nothing here
  * runs there.
