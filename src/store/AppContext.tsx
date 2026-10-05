@@ -636,6 +636,7 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
   toggleReplyHelpful: (replyId: ID) => void;
   /** The asker deletes their question, and the coaches' answers with it. Puts it back with a toast if the server refuses. */
   deleteCoachQuestion: (questionId: ID) => void;
+  deleteAnswer: (answerId: ID) => void;
 
   /* Become a coach */
   /** Files a coach application (and its résumé file, if any). Rejects with a readable message when it could not be sent. */
@@ -5550,6 +5551,31 @@ export function AppProvider({ children }: { children: ReactNode }) {
    * it was and a toast says so, rather than vanishing here while it stays up
    * for everyone else.
    */
+  // Your own thread reply. Replies under it stay and move up a level; it comes back if the server says no.
+  const deleteAnswer = useCallback((answerId: ID) => {
+    const me = requireUser();
+    const answer = stateRef.current.answers.find((a) => a.id === answerId);
+    if (!answer || answer.authorId !== me) return;
+    const takeOff = (prev: AppState): AppState => ({
+      ...prev,
+      answers: prev.answers.filter((a) => a.id !== answerId),
+      questions: prev.questions.map((q) => q.id === answer.questionId
+        ? { ...q, answerIds: q.answerIds.filter((id) => id !== answerId), acceptedAnswerId: q.acceptedAnswerId === answerId ? undefined : q.acceptedAnswerId }
+        : q),
+    });
+    haptics.commit();
+    setState(takeOff);
+    if (!live(me, answer.questionId)) return;
+    remote.deleteAnswer(answerId).catch((err: unknown) => {
+      void reportError(err, { where: 'answer delete' });
+      setState((prev) => prev.answers.some((a) => a.id === answerId) ? prev : {
+        ...prev,
+        answers: [...prev.answers, answer],
+        questions: prev.questions.map((q) => q.id === answer.questionId && !q.answerIds.includes(answerId) ? { ...q, answerIds: [...q.answerIds, answerId] } : q),
+      });
+      showToast({ title: 'Couldn’t delete your reply. Try again.', icon: 'alert-circle-outline' });
+    });
+  }, [requireUser]);
   const deleteCoachQuestion = useCallback((questionId: ID) => {
     const me = requireUser();
     const s = stateRef.current;
@@ -6009,6 +6035,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       replyToCoachQuestion,
       toggleReplyHelpful,
       deleteCoachQuestion,
+      deleteAnswer,
       submitCoachApplication,
       toggleSavePost,
       toggleSaveQuestion,
@@ -6190,6 +6217,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       replyToCoachQuestion,
       toggleReplyHelpful,
       deleteCoachQuestion,
+      deleteAnswer,
       submitCoachApplication,
       toggleSavePost,
       toggleSaveQuestion,

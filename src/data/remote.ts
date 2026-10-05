@@ -1059,6 +1059,12 @@ export const remote = {
    * refused delete with zero rows, not an error, so an empty answer is the
    * only sign it did not happen.
    */
+  /** Deletes your own thread reply (migration 87). Throws when nothing was deleted. */
+  async deleteAnswer(id: ID) {
+    const { data, error } = await need().from('answers').delete().eq('id', id).select('id');
+    if (error) throw new Error(error.message);
+    if (!(data ?? []).length) throw new Error('answer not deleted');
+  },
   async deleteCoachQuestion(id: ID) {
     const { data, error } = await need().from('coach_questions').delete().eq('id', id).select('id');
     if (error) throw new Error(error.message);

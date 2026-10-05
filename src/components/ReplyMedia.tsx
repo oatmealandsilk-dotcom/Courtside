@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
+import React, { useRef, useState } from 'react';
+import { ActivityIndicator, Modal, Pressable, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image as ExpoImage } from 'expo-image';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { ClipVideo } from '@/components/ClipVideo';
+import { ZoomableMedia, type HomeRect, type ZoomableMediaHandle } from '@/components/ZoomableMedia';
 import { pickFromDevice } from '@/components/MediaPicker';
 import type { Answer } from '@/data/types';
 import { useThemedStyles } from '@/theme/ThemeProvider';
@@ -47,15 +49,46 @@ export function AttachedPreview({ media, onRemove }: { media: ReplyAttachment; o
   );
 }
 
-/** The picture or clip in a posted reply. A clip waits for a tap before it plays, with sound. */
-export function ReplyMediaView({ media }: { media: ReplyAttachment }) {
+/**
+ * The picture or clip in a posted reply. A clip waits for a tap before it
+ * plays, with sound. A photo opens full screen on a tap, growing out of its
+ * spot the way a post's photo does; pinch to look closer, swipe to close.
+ */
+export function ReplyMediaView({ media, onLongPress }: { media: ReplyAttachment; onLongPress?: () => void }) {
   const styles = useThemedStyles(styleDefinitions);
+  const insets = useSafeAreaInsets();
   const [playing, setPlaying] = useState(false);
+  const [full, setFull] = useState(false);
+  const [home, setHome] = useState<HomeRect | undefined>(undefined);
+  const frame = useRef<View>(null);
+  const zoom = useRef<ZoomableMediaHandle>(null);
   if (media.kind === 'photo') {
-    return <ExpoImage accessibilityLabel="Photo in this reply" source={{ uri: media.url }} style={styles.media} contentFit="cover" cachePolicy="memory-disk" />;
+    const open = () => {
+      const node = frame.current;
+      if (!node) { setFull(true); return; }
+      node.measureInWindow((x, y, width, height) => { setHome(width > 0 && height > 0 ? { x, y, width, height, radius: radius.lg } : undefined); setFull(true); });
+    };
+    const close = () => { if (zoom.current) zoom.current.close(); else setFull(false); };
+    return (
+      <>
+        <Pressable ref={frame} accessibilityRole="imagebutton" accessibilityLabel="Photo in this reply. Tap to see it full screen." onPress={open} onLongPress={onLongPress} delayLongPress={350} style={styles.media}>
+          <ExpoImage source={{ uri: media.url }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" />
+        </Pressable>
+        <Modal visible={full} transparent animationType="none" statusBarTranslucent onRequestClose={close}>
+          <View style={{ flex: 1 }}>
+            <ZoomableMedia ref={zoom} home={home} onDismiss={() => { setFull(false); setHome(undefined); }}>
+              <ExpoImage source={{ uri: media.url }} style={StyleSheet.absoluteFill} contentFit="contain" cachePolicy="memory-disk" />
+            </ZoomableMedia>
+            <Pressable accessibilityRole="button" accessibilityLabel="Close full screen" onPress={close} style={[styles.fullClose, { top: insets.top + 12 }]}>
+              <Ionicons name="close" size={22} color="white" />
+            </Pressable>
+          </View>
+        </Modal>
+      </>
+    );
   }
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={playing ? 'Pause the video' : 'Play the video'} onPress={() => setPlaying((p) => !p)} style={styles.media}>
+    <Pressable accessibilityRole="button" accessibilityLabel={playing ? 'Pause the video' : 'Play the video'} onPress={() => setPlaying((p) => !p)} onLongPress={onLongPress} delayLongPress={350} style={styles.media}>
       {playing ? <ClipVideo uri={media.url} poster={media.thumb} active muted={false} fit="cover" /> : (
         <>
           {media.thumb ? <ExpoImage source={{ uri: media.thumb }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" /> : <View style={[StyleSheet.absoluteFill, styles.blank]} />}
@@ -72,5 +105,6 @@ const styleDefinitions = StyleSheet.create({
   playBadge: { position: 'absolute', left: 6, bottom: 6, width: 22, height: 22, borderRadius: 11, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center' },
   remove: { position: 'absolute', top: 5, right: 5, width: 22, height: 22, borderRadius: 11, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center' },
   media: { width: '100%', maxWidth: 420, aspectRatio: 4 / 3, borderRadius: radius.lg, overflow: 'hidden', backgroundColor: colors.bgElevated, marginTop: spacing.xs, alignItems: 'center', justifyContent: 'center' },
+  fullClose: { position: 'absolute', right: 16, width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center' },
   bigPlay: { width: 56, height: 56, borderRadius: 28, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center', paddingLeft: 3 },
 });

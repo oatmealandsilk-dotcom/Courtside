@@ -1,6 +1,8 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { PlayerName } from '@/components/PlayerName';
 import React, { useRef, useState } from 'react';
+import { confirmDelete } from '@/lib/confirm';
+import * as haptics from '@/lib/haptics';
 import { MentionSuggestions } from '@/components/MentionSuggestions';
 import { useMentionDraft } from '@/features/mentions/useMentionDraft';
 import { Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -40,13 +42,16 @@ export function ThreadReply({ answer, thread, acceptedId, askerId, depth = 0, pr
   const lineRef = useRef<TextInput>(null);
   const responder = users.find(user => user.id === answer.authorId);
   const tag = useMentionDraft(draft, setDraft, lineRef);
+  // Hold your own reply to delete it, as on Instagram.
+  const mine = !preview && answer.authorId === currentUserId;
+  const askDelete = mine ? () => { haptics.tap(); confirmDelete(() => actions.deleteAnswer(answer.id), 'this reply'); } : undefined;
   const children = thread.filter(child => child.parentAnswerId === answer.id)
     .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
   return <View>
     <View style={styles.answerCard}>
       {!collapsed && children.length > 0 && <View pointerEvents="none" style={styles.avatarRail}/>}
       <Pressable accessibilityRole="button" accessibilityLabel={`${collapsed ? 'Expand' : 'Collapse'} reply by ${responder?.name ?? 'player'}`}
-        onPress={() => setCollapsed(value => !value)} style={styles.answerHead}>
+        onPress={() => setCollapsed(value => !value)} onLongPress={askDelete} style={styles.answerHead}>
         <Avatar name={responder?.name ?? '?'} seed={responder?.avatarSeed ?? answer.authorId} size={30}/>
         <PlayerName userId={responder?.id} style={styles.answerName}>{responder?.name ?? 'Unknown'}</PlayerName>
         <Text style={styles.time}>{relativeTime(answer.createdAt)}</Text>
@@ -55,8 +60,10 @@ export function ThreadReply({ answer, thread, acceptedId, askerId, depth = 0, pr
       </Pressable>
       {!collapsed && <>
         {acceptedId === answer.id && <Text style={styles.acceptedText}>Accepted by the asker</Text>}
-        {answer.body ? <RichText style={styles.replyBody}>{answer.body}</RichText> : null}
-        {answer.media ? <View style={{ paddingLeft: 42 }}><ReplyMediaView media={answer.media} /></View> : null}
+        {answer.body ? (mine
+          ? <Pressable accessibilityHint="Hold to delete" onLongPress={askDelete} delayLongPress={350}><RichText style={styles.replyBody}>{answer.body}</RichText></Pressable>
+          : <RichText style={styles.replyBody}>{answer.body}</RichText>) : null}
+        {answer.media ? <View style={{ paddingLeft: 42 }}><ReplyMediaView media={answer.media} onLongPress={askDelete} /></View> : null}
         {!preview && <View style={styles.replyActions}>
           <Pressable accessibilityRole="button" accessibilityLabel={`Collapse reply by ${responder?.name ?? 'player'}`} onPress={()=>setCollapsed(true)} style={styles.collapse}><Ionicons name="remove-circle-outline" size={20} color={colors.textMuted}/></Pressable>
           <VoteControls item={answer} userId={currentUserId} onVote={direction => actions.voteAnswer(answer.id, direction)}/>
