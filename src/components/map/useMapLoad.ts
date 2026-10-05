@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { AppState, Platform } from 'react-native';
 
-import { LOAD_BUDGET_MS, LOAD_SILENCE_MS, RETRY_WAITS_MS } from '@/components/map/engineLoader';
+import { LOAD_BUDGET_MS, LOAD_SILENCE_MS, LOAD_STUCK_MS, RETRY_WAITS_MS } from '@/components/map/engineLoader';
 import { reportError } from '@/lib/crashReporting';
 
 /** Where a map is: on its way (including any retries), drawn, or given up on after every retry. */
@@ -14,12 +14,16 @@ export type MapLoadStatus = 'loading' | 'painted' | 'failed';
  * this what it hears (PAINT_WATCH_JS, ENGINE_JS) and when it fails.
  *
  * - A try that fails, or goes 20 seconds without a word before the map is
- *   up, is made again after 2 seconds, then 6 (RETRY_WAITS_MS).
- * - After the third failure, or 45 seconds without the map coming up and
- *   nothing arriving in the last few, it says 'failed', once, in app_errors
- *   too (with what failed, so "check crashes" shows it).
+ *   up, is made again after 2 seconds, then 6 (RETRY_WAITS_MS). Each try
+ *   gets its own clock: one that has just started is never timed out.
+ * - After the third failure, or a failure past 45 seconds (or 45 seconds
+ *   gone, the try itself 20 seconds in, and nothing arriving in the last
+ *   few), it says 'failed', once, in app_errors too (with what failed and
+ *   how many tries, so "check crashes" shows it).
  * - Once the map is up, slow streets are never a failure: it is 'loading'
- *   until they have drawn.
+ *   until they have drawn. The page fetches failed or stuck streets again
+ *   itself, and says 'fail' if they never come (PAINT_WATCH_JS); a page
+ *   that goes 90 seconds without a word counts as failed too.
  * - Given up, it tries again by itself when the app comes back to the front
  *   or the connection comes back, and whenever `restart` is called (a tap).
  *   A try that was still going and comes good later still counts.
@@ -27,13 +31,14 @@ export type MapLoadStatus = 'loading' | 'painted' | 'failed';
 export function useMapLoad(where: string) {
   const [attempt, setAttempt] = useState(0);
   const [status, setStatus] = useState<MapLoadStatus>('loading');
-  const s = useRef({ tries: 0, since: Date.now(), heard: Date.now(), progress: 0, up: false, painted: false, gaveUp: false, reported: false, retry: null as ReturnType<typeof setTimeout> | null }).current;
+  // since: when this round of tries began; began: when the current try did.
+  const s = useRef({ tries: 0, since: Date.now(), began: Date.now(), heard: Date.now(), progress: Date.now(), up: false, painted: false, gaveUp: false, reported: false, retry: null as ReturnType<typeof setTimeout> | null }).current;
 
-  /** A new try: the page or map is made again. */
+  /** A new try, with its own clock: the page or map is made again. */
   const begin = () => {
     if (s.retry) { clearTimeout(s.retry); s.retry = null; }
     s.up = false;
-    s.heard = Date.now();
+    s.began = s.heard = s.progress = Date.now();
     setAttempt((n) => n + 1);
   };
   const giveUp = (why: string) => {
@@ -80,19 +85,21 @@ export function useMapLoad(where: string) {
   /** The page was stopped by the phone (to free memory): made again, without counting as a failure. */
   const reboot = () => begin();
 
-  // Before the map is up: a try that has gone quiet is a failure, and time runs out once nothing is arriving.
+  // A try that has gone quiet is a failure (20 s before the map is up, 90 s after); before it is up, time runs
+  // out once nothing is arriving, but never for a try that has only just started (it counts as a try then).
   useEffect(() => {
     if (status !== 'loading') return undefined;
     const t = setInterval(() => {
-      if (s.up || s.painted || s.gaveUp || s.retry) return;
+      if (s.painted || s.gaveUp || s.retry) return;
       const now = Date.now();
+      if (s.up) { if (now - s.heard > LOAD_STUCK_MS) failed('stuck'); return; }
       if (now - s.heard > LOAD_SILENCE_MS) { failed('no answer'); return; }
-      if (now - s.since > LOAD_BUDGET_MS && now - s.progress > 5000) giveUp('too slow');
+      if (now - s.since > LOAD_BUDGET_MS && now - s.began > LOAD_SILENCE_MS && now - s.progress > 5000) failed('too slow');
     }, 1000);
     return () => clearInterval(t);
   }, [status]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Back in front: a map given up on tries again; one still on its way gets a fresh clock (the
+  // Back in front: a map given up on tries again; one still on its way gets fresh clocks (the
   // phone may have paused it, and the timers above with it, while the app was away).
   const latest = useRef({ restart });
   latest.current = { restart };
@@ -100,7 +107,8 @@ export function useMapLoad(where: string) {
     const sub = AppState.addEventListener('change', (state) => {
       if (state !== 'active' || s.painted) return;
       if (s.gaveUp) { latest.current.restart(); return; }
-      if (!s.up) { s.heard = Date.now(); s.since = Date.now(); }
+      s.heard = Date.now();
+      if (!s.up) { s.since = s.began = s.progress = Date.now(); }
     });
     return () => sub.remove();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps

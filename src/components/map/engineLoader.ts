@@ -18,7 +18,7 @@
  * when the map is up (its style has arrived: from then on a slow network only
  * means streets fill in late, never a failure) and when it has first drawn,
  * fetching again any streets that failed on the way. useMapLoad decides when
- * a map that never came up is tried again, and when to say it didn't load.
+ * a map that never drew is tried again, and when to say it didn't load.
  */
 const VERSION = '4.7.1';
 const HOSTS = [
@@ -79,30 +79,54 @@ if(window.maplibregl)begin();else post({type:'fail',stage:'engine',detail:'did n
  *   try also forgets any lettering that failed to arrive, which MapLibre 4
  *   would otherwise never ask for again (every street needing it failing
  *   with it).
- * - tell('fail', why): the style never came, or none of the streets did
- *   even after those three tries.
+ * - The list of where the streets are (the one small file the style points
+ *   to) failing is fetched again on the same waits straight away: in
+ *   MapLibre 4, the phone's, a map without it never settles, so waiting for
+ *   it to settle first waited forever (Oct 5 review). Its fetch being
+ *   called off by a fresh one (MapLibre 4 reports that as an error too) is
+ *   not a failure.
+ * - Nothing at all arriving for 40 seconds once the map is up (a request the
+ *   network left hanging) gets one fresh fetch of everything; a second time,
+ *   it counts as out of tries. A slow download is not this: every piece that
+ *   arrives resets the clock (on a 100 kbps line the first street came 26 s
+ *   after the style), and a phone that paused the page (the app in the
+ *   background) gets a fresh one when it comes back.
+ * - tell('tiles') at most every 3 seconds while streets are arriving, and
+ *   tell('retry', why) as each fresh fetch is set up: signs of life for
+ *   useMapLoad.
+ * - tell('fail', why): the style never came; or, out of tries, none of the
+ *   streets did (or their list never came). Some did: it is 'painted' with
+ *   what came. After a 'fail' about the streets the page keeps watching, so
+ *   streets that come after all (the connection back) still say 'painted'.
  *
  * Returns {stop} for a map that is being taken down.
  */
 export const PAINT_WATCH_JS = `function(map,tell){
-var up=false,painted=false,over=false,trouble=0,good=0,tries=0,timer=0,WAITS=[1500,4000,9000];
-function again(){timer=0;trouble=0;try{var g=map.style&&map.style.glyphManager,k;if(g&&g.entries)for(k in g.entries)if(g.entries[k]&&g.entries[k].requests)g.entries[k].requests={}}catch(e){}try{var st=map.getStyle(),id,d,s;for(id in st.sources){d=st.sources[id];s=map.getSource(id);if(d&&d.url&&s&&s.setUrl)s.setUrl(d.url)}}catch(e){}}
-map.on('error',function(e){if(over||painted)return;var er=e&&e.error;if(er&&er.status===404)return;if(!up){over=true;tell('fail','style: '+String(er&&er.message||'error'));return}if(e&&e.sourceId){trouble++;try{map.triggerRepaint()}catch(x){}}});
-map.on('sourcedata',function(e){if(e&&e.tile)good++});
-map.on('style.load',function(){if(!up){up=true;tell('up')}});
-map.on('idle',function(){if(painted||over)return;if(trouble){if(timer)return;if(tries<WAITS.length){timer=setTimeout(again,WAITS[tries++]);return}if(!good){over=true;tell('fail','tiles');return}}painted=true;tell('painted')});
-function online(){if(timer){clearTimeout(timer);again()}}
+var up=false,painted=false,over=false,told=false,trouble=0,good=0,tries=0,stalls=0,timer=0,seen=Date.now(),tick=seen,beatAt=0,why='',WAITS=[1500,4000,9000],STALL=40000;
+function again(){timer=0;trouble=0;seen=Date.now();try{var g=map.style&&map.style.glyphManager,k;if(g&&g.entries)for(k in g.entries)if(g.entries[k]&&g.entries[k].requests)g.entries[k].requests={}}catch(e){}try{var st=map.getStyle(),id,d,s;for(id in st.sources){d=st.sources[id];s=map.getSource(id);if(d&&d.url&&s&&s.setUrl)s.setUrl(d.url)}}catch(e){}}
+function done(){if(painted||over)return;painted=true;clearInterval(watch);tell('painted')}
+function end(w){if(good){done();return}if(!told){told=true;tell('fail','tiles: '+w)}}
+function retry(){if(painted||over||timer)return;if(tries<WAITS.length){tell('retry',why);timer=setTimeout(again,WAITS[tries++]);return}end(why)}
+map.on('error',function(e){if(over||painted)return;var er=e&&e.error;if(er&&(er.status===404||er.name==='AbortError'||er.message==='AbortError'))return;if(!up){over=true;tell('fail','style: '+String(er&&er.message||'error'));return}if(e&&e.sourceId){trouble++;why=String(er&&er.message||'error');try{map.triggerRepaint()}catch(x){}if(!e.tile){why='list: '+why;retry()}}});
+map.on('sourcedata',function(e){seen=Date.now();if(e&&e.tile){good++;if(!painted&&seen-beatAt>3000){beatAt=seen;tell('tiles')}}});
+map.on('style.load',function(){if(!up){up=true;seen=Date.now();tell('up')}});
+map.on('idle',function(){if(painted||over)return;if(trouble){retry();return}done()});
+var watch=setInterval(function(){var t=Date.now();if(t-tick>6000)seen=t;tick=t;if(!up||painted||over||told||timer||t-seen<STALL)return;seen=t;why='nothing for '+STALL/1000+'s';if(stalls++){end(why);return}tell('retry',why);again()},2000);
+function online(){if(painted||over||!up)return;if(timer){clearTimeout(timer);timer=0}if(trouble||told){told=false;again()}}
 window.addEventListener('online',online);
-return {stop:function(){over=true;clearTimeout(timer);window.removeEventListener('online',online)}};
+return {stop:function(){over=true;clearTimeout(timer);clearInterval(watch);window.removeEventListener('online',online)}};
 }`;
 
 /*
- * When a map that has not come up is tried again (useMapLoad): a page or map
- * that fails is made afresh after 2 seconds, then 6; after the third failure,
- * or 45 seconds without the map coming up and nothing arriving, the card says
- * it didn't load. A map that has said nothing at all for 20 seconds counts
- * as failed.
+ * When a map that has not drawn is tried again (useMapLoad): a page or map
+ * that fails is made afresh after 2 seconds, then 6, each new try with its
+ * own clock. After the third failure, or a try that ends past 45 seconds,
+ * the card says it didn't load. Before the map is up, a try that has said
+ * nothing at all for 20 seconds counts as failed; after, one silent for 90
+ * (a page that is alive says something far more often: PAINT_WATCH_JS), so
+ * a map can never sit on "Loading map…" for good.
  */
 export const RETRY_WAITS_MS = [2000, 6000];
 export const LOAD_BUDGET_MS = 45_000;
 export const LOAD_SILENCE_MS = 20_000;
+export const LOAD_STUCK_MS = 90_000;

@@ -77,9 +77,11 @@ export function MapCardFailed() {
 }
 
 /**
- * Over the full map: "Loading map…" once it has taken longer than a normal
+ * On the full map: "Loading map…" once it has taken longer than a normal
  * load (so a quick one shows nothing new), or "Map didn't load · Tap to try
- * again", which tries again.
+ * again", which tries again. It goes in the column of bars along the top,
+ * just under the filter chips (where "Zoom in to see courts" sits), not in
+ * the middle of the map, where the pins around you gather (Oct 5 review).
  */
 export function MapLoadPill({ status, onRetry }: { status: MapLoadStatus; onRetry: () => void }) {
   const styles = useThemedStyles(styleDefinitions);
@@ -97,7 +99,7 @@ export function MapLoadPill({ status, onRetry }: { status: MapLoadStatus; onRetr
           <Text style={styles.pillText}>Map didn’t load · <Text style={styles.pillAgain}>Tap to try again</Text></Text>
         </Pressable>
       ) : (
-        <View style={[styles.pill, styles.pillRow]} accessible accessibilityRole="progressbar" accessibilityLabel="Loading map">
+        <View style={[styles.pill, styles.pillRow, still.noTaps]} accessible accessibilityRole="progressbar" accessibilityLabel="Loading map">
           <CourtSpinner size={14} />
           <Text style={styles.pillText}>Loading map…</Text>
         </View>
@@ -112,8 +114,8 @@ const styleDefinitions = StyleSheet.create({
   disc: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center', marginBottom: 2 },
   title: { ...typography.bodyStrong, color: colors.text, textAlign: 'center', marginBottom: -4 },
   again: { ...typography.smallStrong, color: colors.brand, textAlign: 'center' },
-  // Over the map's pins (in the browser they are page elements with their own stacking), under its bars and cards.
-  pillSpot: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, alignItems: 'center', justifyContent: 'center', padding: spacing.lg, pointerEvents: 'box-none', zIndex: 8 },
+  // Centred in the column of bars along the top of the full map, a little below the chips.
+  pillSpot: { alignSelf: 'center', marginTop: spacing.xs, pointerEvents: 'box-none' },
   pill: { paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderRadius: radius.pill, backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
   pillRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   pillText: { ...typography.smallStrong, color: colors.textMuted },
@@ -123,4 +125,6 @@ const styleDefinitions = StyleSheet.create({
 /** Seen, never tapped: the tap belongs to the card (or the map) underneath. In a style, which the browser also honours. */
 const still = StyleSheet.create({
   fill: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, pointerEvents: 'none' },
+  // The same, for something that keeps its place (the "Loading map…" pill: a tap on it goes to the map).
+  noTaps: { pointerEvents: 'none' },
 });

@@ -5,7 +5,6 @@ import { useReducedMotion } from '@/lib/useReducedMotion';
 
 import { STYLE, type Look } from '@/components/map/look';
 import { ENGINE_JS, PAINT_WATCH_JS } from '@/components/map/engineLoader';
-import { MapLoadPill } from '@/components/map/MapLoadState';
 import { useMapLoad, type MapLoadStatus } from '@/components/map/useMapLoad';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { CLOSE_ZOOM_NAMES, FAR_ZOOM, MAP_PIN_CSS, SHORT_ZOOM } from '@/components/map/markers';
@@ -21,7 +20,7 @@ export type { CanvasMarker, MapLoadStatus };
  */
 export interface MapCanvasHandle {
   flyTo: (to: LatLng, zoom?: number, ms?: number, offsetY?: number, exact?: boolean) => void;
-  /** From the beginning, with all its tries again (the still card's "Tap to try again"). */
+  /** From the beginning, with all its tries again ("Tap to try again", on the still card or the full map's pill). */
   retry: () => void;
 }
 
@@ -47,7 +46,7 @@ interface Props {
   onMove?: (center: LatLng, zoom: number, bounds: ViewBounds) => void;
   /** Once, the first time everything in view has drawn (streets, names, pins). */
   onPainted?: () => void;
-  /** The still card's own loading and "didn't load" (MapLoadState): told each time it changes. The full map shows its own. */
+  /** Whether the map is loading, drawn, or given up on (useMapLoad), told each time it changes: the still card and the full map show it themselves (MapLoadState). */
   onStatus?: (status: MapLoadStatus) => void;
   /** With `onFar`: the zoom below which the map counts as far out (courts hide there: COURTS_MIN_ZOOM). Read once, when the page is made. */
   farBelow?: number;
@@ -65,10 +64,11 @@ interface Props {
  * The map's code comes from a public file host, with two more to fall back
  * on (engineLoader). A try that fails or stalls before the map is up gets a
  * fresh web view and goes again, a couple of times (useMapLoad); once it is
- * up, slow streets are only slow. The still card shows its own loading look
- * and "didn't load" (onStatus, MapLoadState); the full map says so in a
- * small pill, with Tap to try again. If iOS or Android stops the web view to
- * free memory, it is started again by itself (Oct 5).
+ * up, slow streets are only slow. What it shows meanwhile is up to the
+ * screen it is on (onStatus, MapLoadState): the still card its own loading
+ * look and "didn't load", the full map a small pill under its chips, with
+ * Tap to try again (retry). If iOS or Android stops the web view to free
+ * memory, it is started again by itself (Oct 5).
  */
 export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas({ center, zoom, look, interactive, markers, tpl, popIn = false, holdPins = false, pad, onTap, onMapTap, onMove, onPainted, onStatus, farBelow, onFar, style }, ref) {
   const styles = useThemedStyles(styleDefinitions);
@@ -197,8 +197,6 @@ ${ENGINE_JS}
           }
         }}
       />
-      {/* The full map says when it is slow or didn't load; the still card shows its own (onStatus). */}
-      {interactive ? <MapLoadPill status={load.status} onRetry={load.restart} /> : null}
     </View>
   );
 });

@@ -8,7 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CitylessCard, CourtSheet, CourtsZoomNote, FilterChips, HitSheet, MapCredit, YouSheet, MapButtons, MapTopBar, NearbyRail, PlaceSheet, PlayerSheet, PreviewOverlay, WhereCard } from '@/components/map/MapChrome';
 import { CardStage } from '@/components/map/CardStage';
 import { MapCanvas, type CanvasMarker, type MapCanvasHandle, type MapLoadStatus } from '@/components/map/MapCanvas';
-import { MapCardFailed, MapCardLoading } from '@/components/map/MapLoadState';
+import { MapCardFailed, MapCardLoading, MapLoadPill } from '@/components/map/MapLoadState';
 import { cardLook, lookFor } from '@/components/map/look';
 import { clusterTemplates, courtLift, youLift } from '@/components/map/markers';
 import { mapMarkers } from '@/components/map/pinList';
@@ -166,8 +166,8 @@ export function NearbyMap(props: NearbyMapProps) {
       // The full map's first pins come in as one wave (once any sheet over it has gone); a tap on "+N" zooms in clear of the bars and the tray.
       popIn={expanded}
       onPainted={expanded ? undefined : () => { painted?.(); showCard(); }}
-      // Given up on: the opening curtain stops waiting for it, and the card says so.
-      onStatus={expanded ? undefined : (status) => { setMapStatus(status); if (status === 'failed') painted?.(); }}
+      // Given up on: the opening curtain stops waiting for it, and the card (or the full map's pill) says so.
+      onStatus={(status) => { setMapStatus(status); if (!expanded && status === 'failed') painted?.(); }}
       holdPins={expanded && holdPins}
       pad={{ top: insets.top + 120, bottom: 250, left: 50, right: 50 }}
       onTap={(id) => {
@@ -251,6 +251,8 @@ export function NearbyMap(props: NearbyMapProps) {
         <MapTopBar onBack={onBack} query={model.query} onQuery={model.setQuery} locationOn={locationOn} locating={locating} onToggleLocation={onToggleLocation} results={model.courtResults} onPickCourt={model.pickCourt} places={model.placeSearch} onPickPlace={model.pickPlace} players={model.query.trim() ? model.tray.length : 0} locationMenu={choosing} />
         <FilterChips filter={model.filter} onFilter={model.setFilter} courtsOn={model.courtsOn} onCourts={model.toggleCourts} courtsLoading={model.courtsLoading} />
         {model.courtsOn && far && !model.selectedCourt && !model.query.trim() ? <CourtsZoomNote /> : null}
+        {/* Slow to come, or didn't: a small pill under the chips, clear of the pins around you. */}
+        <MapLoadPill status={mapStatus} onRetry={() => canvas.current?.retry()} />
       </View>
       <View pointerEvents="box-none" style={styles.bottom}>
         {/* What is up along the bottom (the tray or a card) glides in and out, the map's buttons riding on top of it: CardStage. */}

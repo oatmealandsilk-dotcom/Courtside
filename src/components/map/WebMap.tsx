@@ -43,7 +43,7 @@ const CARD_ZOOM = 10.4;
  */
 const makePins = new Function(`return ${PIN_ENGINE_JS}`)() as PinEngineFactory;
 /** When a map is up and has first drawn, fetching again any streets that failed: the very text the phone's page runs (engineLoader). */
-const watchPaint = new Function(`return ${PAINT_WATCH_JS}`)() as (map: maplibregl.Map, tell: (what: 'up' | 'painted' | 'fail', why?: string) => void) => { stop: () => void };
+const watchPaint = new Function(`return ${PAINT_WATCH_JS}`)() as (map: maplibregl.Map, tell: (what: 'up' | 'painted' | 'fail' | 'tiles' | 'retry', why?: string) => void) => { stop: () => void };
 /** Close enough to read street names, when the map goes to someone. */
 const CLOSE_ZOOM = 13.5;
 // MapLibre does its heavy lifting in a background worker script. The bundler
@@ -161,6 +161,8 @@ export function NearbyMap(props: NearbyMapProps) {
     const watch = watchPaint(instance, (what, why) => {
       if (what === 'fail') { load.failed(why ?? 'failed'); return; }
       if (what === 'up') { load.heard('up'); return; }
+      // Streets arriving, or failed ones being fetched again: still alive.
+      if (what !== 'painted') { load.heard('other'); return; }
       requestAnimationFrame(() => { load.heard('painted'); if (!expanded) { painted(); setCardShown(true); } });
     });
     instance.touchZoomRotate.disableRotation();
@@ -376,12 +378,12 @@ export function NearbyMap(props: NearbyMapProps) {
   return (
     <View style={styles.fill}>
       {canvas}
-      {/* Slow to come, or didn't: a small pill in the middle of the map (as on the phone). */}
-      <MapLoadPill status={load.status} onRetry={load.restart} />
       <View pointerEvents="box-none" style={[styles.top, { paddingTop: insets.top + spacing.sm }]}>
         <MapTopBar onBack={onBack} query={model.query} onQuery={model.setQuery} locationOn={locationOn} locating={locating} onToggleLocation={onToggleLocation} results={model.courtResults} onPickCourt={model.pickCourt} places={model.placeSearch} onPickPlace={model.pickPlace} players={model.query.trim() ? model.tray.length : 0} locationMenu={choosing} />
         <FilterChips filter={model.filter} onFilter={model.setFilter} courtsOn={model.courtsOn} onCourts={model.toggleCourts} courtsLoading={model.courtsLoading} />
         {model.courtsOn && far && !model.selectedCourt && !model.query.trim() ? <CourtsZoomNote /> : null}
+        {/* Slow to come, or didn't: a small pill under the chips, clear of the pins around you (as on the phone). */}
+        <MapLoadPill status={load.status} onRetry={load.restart} />
       </View>
       <View pointerEvents="box-none" style={styles.bottom}>
         {/* What is up along the bottom (the tray or a card) glides in and out, the map's buttons riding on top of it: CardStage. */}
