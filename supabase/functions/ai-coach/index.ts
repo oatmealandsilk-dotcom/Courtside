@@ -17,7 +17,7 @@
 // agree in the app, even from an older copy of the app that never asked
 // (Apple 5.1.2(i) and 5.1.3, Oct 5). So run migration 115 before adding the key.
 // (SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY / SUPABASE_ANON_KEY are provided.)
-import Anthropic from 'npm:@anthropic-ai/sdk@0.128.0';
+import Anthropic from 'npm:@anthropic-ai/sdk@0.129.0'; // 0.129.0 is the first with Sonnet 5.5's between_tools thinking
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { takeRate } from '../_shared/rateLimit.ts';
 
@@ -26,6 +26,10 @@ const PLAN_MODEL = 'claude-opus-5-5';
 // tokens (Sonnet 5 needed 1,024). The chat also ends on a system note in the
 // conversation itself, which Sonnet 5.5 takes and Sonnet 5 does not: going
 // back to Sonnet 5 means moving that note into the user's message.
+// Chat and notes calls send thinking 'between_tools': no thinking before the
+// reply (there are no tools, so the reply is plain text and no thinking is
+// billed). It is Sonnet 5.5's lowest setting and works at 'high' effort or
+// below; Sonnet 5 would need 'disabled' instead, which Sonnet 5.5 refuses.
 const CHAT_MODEL = 'claude-sonnet-5-5';
 const DAILY_CAP = 20;
 const REMEMBERED = 10;          // recent entries (5 questions) checked for a repeated topic
@@ -124,7 +128,7 @@ function clean(raw: unknown) {
     ? (b.coaches as unknown[]).slice(0, LIMITS.coaches).flatMap((c) => {
         const o = c as Record<string, unknown>;
         if (!o || typeof o.id !== 'string' || typeof o.name !== 'string' || !Array.isArray(o.specialties) || !Number.isFinite(o.fromCents)) return [];
-        return [{ id: o.id.slice(0, 64), name: o.name.slice(0, 80), specialties: (o.specialties as unknown[]).filter((x) => typeof x === 'string').slice(0, 6) as string[], fromCents: Number(o.fromCents) }];
+        return [{ id: o.id.slice(0, 64), name: o.name.slice(0, 80), specialties: ((o.specialties as unknown[]).filter((x) => typeof x === 'string') as string[]).slice(0, 6).map((s) => s.slice(0, 40)), fromCents: Number(o.fromCents) }];
       })
     : [];
   const mode = ['status', 'plan', 'chat', 'memory'].includes(String(b.mode)) ? (String(b.mode) as 'status' | 'plan' | 'chat' | 'memory') : 'chat';
@@ -342,6 +346,7 @@ async function chat(userId: string, body: { prompt: string; context: string; coa
   const response = await anthropic.messages.create({
     model: CHAT_MODEL,
     max_tokens: 2000,
+    thinking: { type: 'between_tools' },
     output_config: { effort: 'low', format: { type: 'json_schema', schema: CHAT_SCHEMA } },
     system: [
       { type: 'text', text: `${VOICE}\n\n${CHAT_RULES}`, cache_control: { type: 'ephemeral' } },
@@ -377,26 +382,30 @@ async function chat(userId: string, body: { prompt: string; context: string; coa
   // Counting from the mark is the fix for Oct 5: the stored history keeps only
   // the last 40 entries (20 questions), so counting every question in it stuck
   // at 20 and refreshed the notes on every single question after the 20th.
+  // The mark is set whenever the notes call comes back, even when its answer
+  // is not usable (a refusal or a cut-off would fail the same way again, and
+  // retrying would bring that every-question refresh back). Only a call that
+  // never came back (network or server error) is tried again next question.
   let nextSummary = summary;
   const unfolded = all.slice(all.findLastIndex((e) => e.folded) + 1);
   if (unfolded.filter((e) => e.role === 'user').length >= SUMMARISE_EVERY) {
     try {
       const folded = await anthropic.messages.create({
         model: CHAT_MODEL,
-        max_tokens: 1000,
+        max_tokens: 2000,
+        thinking: { type: 'between_tools' },
         output_config: { effort: 'low' },
         system: 'You keep a coach\'s private notes on one player. Update the notes from the transcript. One paragraph, under 120 words, plain sentences: what they are working on, what was advised, what they said helped or did not, anything to watch (injury, schedule). Drop what is no longer relevant. Output only the paragraph.',
         messages: [{ role: 'user', content: `Current notes:\n${summary || '(none)'}\n\nTranscript since:\n${unfolded.map((e) => `${e.role}: ${e.body}`).join('\n')}` }],
       });
       logUsage('notes', folded);
       const text = folded.content.filter((b) => b.type === 'text').map((b) => b.text).join('').trim();
-      // Only a finished paragraph replaces the notes; otherwise the next question tries again.
-      if (folded.stop_reason === 'end_turn' && text) {
-        nextSummary = text;
-        answered.folded = true;
-      }
+      // Only a finished paragraph replaces the notes; otherwise the old notes stay
+      // and the next try is 10 questions on.
+      if (folded.stop_reason === 'end_turn' && text) nextSummary = text;
+      answered.folded = true;
     } catch (err) {
-      // The player still gets this answer; the notes are refreshed on the next question instead.
+      // The call never came back. The player still gets this answer; the notes are tried again on the next question.
       console.error('[ai-coach] notes', err);
     }
   }
