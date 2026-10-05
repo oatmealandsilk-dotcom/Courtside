@@ -533,7 +533,7 @@ export default function Thread() {
     message: leaveGroupMessage(conversation, hitRequests, currentUserId),
     confirmLabel: 'Leave',
     destructive: true,
-    onConfirm: () => { actions.leaveGroup(conversation.id); router.replace('/messages'); },
+    onConfirm: () => { actions.leaveGroup(conversation.id); router.dismissTo('/messages'); },
   });
   // Under the name in the header, something worth knowing: who is typing; in
   // a one-to-one chat, the court they are at, or that they are up to hit
