@@ -764,9 +764,12 @@ function Home({ scope, topRow, paused, onChrome }: {
   useEffect(() => { setFollowedHere([]); }, [visit]);
   const suggestions = useSuggestedPlayers({ keep: followedHere });
 
-  // Blocked and muted players disappear from the feed entirely.
+  // Blocked and muted players disappear from the feed entirely. A feed opened
+  // on one person's posts or a set of posts (a profile tile, a link) still
+  // shows a muted player's: mute only keeps them out of the feeds you scroll.
+  const keepMuted = !!(scope?.userId || scope?.ids);
   const feedItems = useMemo<FeedItem[]>(() => {
-    const hidden = new Set([...blockedIds, ...mutedIds]);
+    const hidden = new Set([...blockedIds, ...(keepMuted ? [] : mutedIds)]);
     const following = new Set(followingIds);
     // A private account is only in your feed once they have let you follow.
     // In a group's feed the server has already decided (migration 74): a private member's posts come only to members who follow them, or shared to the group only.
@@ -795,7 +798,7 @@ function Home({ scope, topRow, paused, onChrome }: {
       const question = questionById.get(id);
       return question && !hidden.has(question.authorId) ? [{ type: 'question' as const, question }] : [];
     });
-  }, [order, posts, questions, stories, blockedIds, mutedIds, users, currentUserId, followingIds, scope?.set, scope?.groupId]);
+  }, [order, posts, questions, stories, blockedIds, mutedIds, users, currentUserId, followingIds, scope?.set, scope?.groupId, keepMuted]);
   // This week's challenge, and its top clips so far. They are settled once
   // per visit: a like arriving mid-scroll must not reshuffle the pages.
   const challenge = useMemo(() => challengeFor(), []);
