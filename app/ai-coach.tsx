@@ -64,15 +64,31 @@ function healthLine(signal: ReturnType<typeof healthSignal>, whoop: boolean) {
   return signal.hasWearable ? 'No recent wearable numbers.' : 'No wearable connected.';
 }
 
-/** What the coach is told about you: the profile, and recovery when a wearable gave some. */
-function aboutYou(p: PlayerProfile, signal: ReturnType<typeof healthSignal>, whoop: boolean) {
+/** The profile part of what the coach is told: everything you set yourself. */
+function profileLines(p: PlayerProfile) {
   return [
     `Rating: ${p.skillSystem} ${p.rating}. Style: ${p.playStyle}, ${p.handedness}-handed, ${p.backhand} backhand. Prefers ${p.preferredSurface}. Fitness: ${p.fitnessLevel}. ${p.sessionsPerWeek !== undefined ? `${p.sessionsPerWeek} sessions a week` : 'Sessions a week not given'}, ${p.yearsPlaying !== undefined ? `${experienceLabel(p.yearsPlaying)} playing` : 'years playing not given'}.`,
     `Goals: ${p.goals.map((g) => g.label).join('; ') || 'none set'}.`,
     `Injury and schedule notes: ${p.constraints.filter((c) => c.active).map((c) => `${c.kind}: ${c.label}`).join('; ') || 'none'}.`,
     p.tournaments[0] ? `Next tournament: ${p.tournaments[0].name} on ${formatDate(p.tournaments[0].startsAt)}.` : 'No tournament scheduled.',
-    healthLine(signal, whoop),
-  ].join('\n');
+  ];
+}
+
+/** What the coach is told about you: the profile, and recovery when a wearable gave some. */
+function aboutYou(p: PlayerProfile, signal: ReturnType<typeof healthSignal>, whoop: boolean) {
+  return [...profileLines(p), healthLine(signal, whoop)].join('\n');
+}
+
+/**
+ * What earns a new week: a change to your profile, or recovery crossing the
+ * 65% line the coach's plan rules turn on. The week itself is still written
+ * from today's numbers; they just do not decide when to write it again.
+ * (Fingerprinting the numbers themselves rewrote a wearable user's week every
+ * time sleep or HRV moved, up to three times a week.)
+ */
+function planKey(p: PlayerProfile, signal: ReturnType<typeof healthSignal>) {
+  const lowRecovery = signal.recovery !== undefined && signal.recovery < 65;
+  return fingerprint([...profileLines(p), lowRecovery ? 'Recovery low.' : 'Recovery fine or unknown.'].join('\n'));
 }
 
 /**
@@ -212,19 +228,21 @@ function Train() {
   const signal = useMemo(() => healthSignal(shared, integrations, { skipSource: 'whoop' }), [shared, integrations]);
   const whoopOn = integrations.some((i) => i.provider === 'whoop' && i.connected);
   const about = currentUser ? aboutYou(currentUser.profile, signal, whoopOn) : '';
+  const planHash = currentUser ? planKey(currentUser.profile, signal) : '';
   const standIn = useMemo(() => (currentUser ? generatePlan({ profile: currentUser.profile, health: shared }) : null), [currentUser, shared]);
 
   // The week the coach wrote: asked for once per profile, kept by the server for the week.
+  // Asked again only when planKey changes, not every time a wearable number moves; the
+  // request still carries today's numbers for when a week does get written.
   const [written, setWritten] = useState<TrainingPlan | null | undefined>(live ? undefined : null);
   const asked = useRef('');
   useEffect(() => {
-    if (!live || !about) return;
-    const hash = fingerprint(about);
-    if (asked.current === hash) return;
-    asked.current = hash;
+    if (!live || !about || !planHash) return;
+    if (asked.current === planHash) return;
+    asked.current = planHash;
     setWritten(undefined);
-    void fetchAiPlan(about, hash).then(setWritten).catch(() => setWritten(null));
-  }, [live, about]);
+    void fetchAiPlan(about, planHash).then(setWritten).catch(() => setWritten(null));
+  }, [live, planHash]); // eslint-disable-line react-hooks/exhaustive-deps
   const plan = written ?? standIn;
 
   // Morning reminders: set again from the plan on screen each time it is
