@@ -28,6 +28,13 @@ export function canCopyStory(): boolean { return true; }
 export type StoryAction = 'instagram' | 'save' | 'more' | 'copy';
 
 /**
+ * Instagram's steps after a clipboard hand-over: an iPhone build's (see
+ * storyImage.ts). Never said in a browser, which has no hand-over; named here
+ * too so the share pages read one name on both.
+ */
+export const INSTAGRAM_NOTE = 'In Instagram, pick a photo or video, then tap Add sticker (or hold and tap Paste).';
+
+/**
  * What Copy says once the picture is on the clipboard, short, the way a toast
  * says it. On a phone's browser a sticker (or the overlay) is pasted into a
  * story; a computer has no story to paste into, so there it is just "Copied."

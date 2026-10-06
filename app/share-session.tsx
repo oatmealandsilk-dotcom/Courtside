@@ -15,7 +15,7 @@ import { postedIndex, sourceOn } from '@/features/activity/recent';
 import { useTennisFlags } from '@/features/activity/useTennisFlags';
 import { storyFromLog, storyFromPost, type SessionStory } from '@/features/share/sessionStory';
 import { scoreText } from '@/features/activity/score';
-import { exportStory, stageSize, storyNoteOk, warmStory, type StoryAction, type StoryLook } from '@/features/share/storyImage';
+import { INSTAGRAM_NOTE, exportStory, stageSize, storyNoteOk, warmStory, type StoryAction, type StoryLook } from '@/features/share/storyImage';
 import { mixHex } from '@/features/activity/zones';
 import { goBack } from '@/lib/goBack';
 import * as haptics from '@/lib/haptics';
@@ -35,7 +35,9 @@ import { colors, font, pageIsDark, radius, spacing } from '@/theme';
  *
  * The pictures take the room at the top; the score and the buttons sit at
  * the bottom, in thumb's reach, as Strava's do (Oct 5 polish). What a button
- * did (Copied, Saved) is said in a toast, so nothing moves under the finger.
+ * did (Copied, Saved) is said in a toast, so nothing moves under the finger;
+ * Instagram's own steps, when an older iPhone build hands the picture over by
+ * the clipboard, stay on a line under the buttons until you change design.
  *
  * Each picture is drawn twice: small to look at, and once more out of sight
  * at exactly 1080 × 1920 pixels, which is the one photographed (storyImage.ts).
@@ -169,9 +171,14 @@ export default function ShareSession() {
   useEffect(() => { warmStory(); }, []);
 
   const [busy, setBusy] = useState<StoryAction | null>(null);
+  // Instagram's steps (INSTAGRAM_NOTE), kept under the buttons for when you come back from Instagram;
+  // gone once you pick another design or tap again.
+  const [steps, setSteps] = useState<string | null>(null);
+  useEffect(() => { setSteps(null); }, [design]);
   const run = async (action: StoryAction) => {
     if (busy) return;
     setBusy(action);
+    setSteps(null);
     try {
       // The photo has to have drawn in the hidden copy first: a few seconds at most.
       if (design === 'photo') {
@@ -180,6 +187,7 @@ export default function ShareSession() {
       // Your invite link goes along as words (Copy, More), never on the picture: Strava's way (Oct 5).
       const said = await exportStory(stage.current, action, 'My session on CourtSide', storyLook(design), story?.invite);
       if (!said) haptics.commit();
+      else if (said === INSTAGRAM_NOTE) { haptics.commit(); setSteps(said); }
       else if (storyNoteOk(said)) { haptics.commit(); showToast({ title: said, icon: 'checkmark-circle-outline', long: said.length > 40 }); }
       else showToast({ title: 'That didn’t work', body: said, icon: 'alert-circle-outline', long: true });
     } catch (error) {
@@ -301,7 +309,7 @@ export default function ShareSession() {
                   />
                 </View>
               ) : null}
-              <ShareActions busy={busy} onRun={(a) => { void run(a); }} />
+              <ShareActions busy={busy} onRun={(a) => { void run(a); }} steps={steps} />
             </View>
           </View>
         </Screen>

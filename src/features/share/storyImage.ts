@@ -51,8 +51,12 @@ export function canCopyStory(): boolean {
   return Platform.OS !== 'android';
 }
 
-/** Said once Instagram has opened with the picture ready to paste. */
-export const INSTAGRAM_NOTE = 'In Instagram, pick your photo or video first, then tap Add sticker (or tap and hold, then Paste).';
+/**
+ * Said once Instagram has opened with the picture ready to paste. The share
+ * pages keep it on a line under their buttons (ShareActions' steps) rather
+ * than in a toast: by the time it is said, Instagram is in front.
+ */
+export const INSTAGRAM_NOTE = 'In Instagram, pick a photo or video, then tap Add sticker (or hold and tap Paste).';
 
 /**
  * What Copy says once the picture is on the clipboard: short, the way a

@@ -9,7 +9,7 @@ import { ShareActions } from '@/components/share/ShareActions';
 import { EmptyState, Screen } from '@/components/ui';
 import { inviteLink } from '@/features/invite/referral';
 import { useOpenOutside } from '@/features/share/openOutside';
-import { exportStory, stageSize, storyNoteOk, warmStory, type StoryAction } from '@/features/share/storyImage';
+import { INSTAGRAM_NOTE, exportStory, stageSize, storyNoteOk, warmStory, type StoryAction } from '@/features/share/storyImage';
 import { goBack } from '@/lib/goBack';
 import * as haptics from '@/lib/haptics';
 import { show as showToast } from '@/lib/toast';
@@ -26,7 +26,8 @@ const CHROME_H = 250;
  * the picture in the room at the top, the same round buttons at the bottom
  * (Stories, Copy, Save, More), your invite link going along as words with
  * Copy and More, never on the picture (Oct 5, Strava's way), and what a
- * button did said in a toast. Only a post that may leave CourtSide
+ * button did said in a toast (Instagram's own steps, after a clipboard
+ * hand-over, on a line under the buttons that stays). Only a post that may leave CourtSide
  * (useOpenOutside): never one shared to a group only, and someone else's
  * only when the server would show it to a stranger.
  *
@@ -47,15 +48,19 @@ export default function ShareCardScreen() {
   const stage = useRef<View>(null);
   const size = stageSize();
   const [busy, setBusy] = useState<StoryAction | null>(null);
+  // Instagram's steps (INSTAGRAM_NOTE), kept under the buttons for when you come back from Instagram, until you tap again.
+  const [steps, setSteps] = useState<string | null>(null);
   // In a browser the picture's drawing kit comes down now, so the first tap is quick.
   useEffect(() => { warmStory(); }, []);
 
   const run = async (action: StoryAction) => {
     if (!post || !open || busy) return;
     setBusy(action);
+    setSteps(null);
     try {
       const said = await exportStory(stage.current, action, author ? `${author.name} on CourtSide` : 'CourtSide', { sticker: false, top: colors.brand.slice(0, 7), bottom: colors.bg.slice(0, 7) }, currentUser?.handle ? inviteLink(currentUser.handle) : undefined);
       if (!said) haptics.commit();
+      else if (said === INSTAGRAM_NOTE) { haptics.commit(); setSteps(said); }
       else if (storyNoteOk(said)) { haptics.commit(); showToast({ title: said, icon: 'checkmark-circle-outline', long: said.length > 40 }); }
       else showToast({ title: 'That didn’t work', body: said, icon: 'alert-circle-outline', long: true });
     } catch (error) {
@@ -96,7 +101,7 @@ export default function ShareCardScreen() {
               </View>
             </View>
             <View style={[styles.bottom, { paddingBottom: insets.bottom + spacing.lg }]}>
-              <ShareActions busy={busy} onRun={(a) => { void run(a); }} />
+              <ShareActions busy={busy} onRun={(a) => { void run(a); }} steps={steps} />
             </View>
           </View>
         </Screen>
