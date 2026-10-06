@@ -15,6 +15,7 @@ import { BrandMark } from '@/components/BrandMark';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { duration, relativeTime } from '@/lib/format';
 import { shortDay } from '@/features/activity/format';
+import { allTennis, foundBursts, foundHref, foundLine, foundTitle } from '@/features/activity/found';
 import { tagState, yourResult } from '@/features/activity/sessionTags';
 import { useApp } from '@/store/AppContext';
 import { confirmUnfollow } from '@/lib/confirm';
@@ -132,9 +133,17 @@ interface Group {
   createdAt: string;
   preview?: string;
   unread: boolean;
+  /**
+   * More than three workouts found in one go (a watch or a strap catching
+   * up): one row for them all, "4 workouts found. Tap to log.", opening
+   * their list (features/activity/found). Each workout once, newest first.
+   */
+  found?: { activityIds: string[]; previews: (string | undefined)[] };
 }
 
 function routeFor(group: Group): string {
+  // Several workouts found at once: their list, each with its own Log it.
+  if (group.found) return foundHref(group.found.activityIds);
   // The map's alerts open the map: on the player, or on the hit with its card up.
   if (group.kind === 'map-friend-hit' || group.kind === 'map-new-player') return `/map?user=${group.actorIds[0]}`;
   if (group.kind === 'map-new-hit') return `/map?hit=${group.targetId}`;
@@ -277,6 +286,12 @@ export default function Notifications() {
   };
   // "liked your clip", "liked your photo": the verb names what was liked, not just "post".
   const verbFor = (group: Group) => {
+    // Several found at once: "Tap to log.", until none is waiting any more.
+    if (group.found) {
+      const statuses = group.found.activityIds.map((id) => detectedActivities.find((a) => a.id === id)?.status);
+      if (statuses.every((st) => st === 'logged')) return 'All logged.';
+      return statuses.every((st) => st === 'logged' || st === 'dismissed') ? 'Nothing left to log.' : 'Tap to log.';
+    }
     if (group.kind === 'milestone') return `just passed ${group.preview ?? 'a milestone'}`;
     // From CourtSide: "removed your clip for breaking its rules"; the reason goes on the line under it.
     if (group.kind === 'removed') return `removed your ${removedNotice(group.preview).thing} for breaking its rules`;
@@ -314,9 +329,29 @@ export default function Notifications() {
   // Snapshot on first render so rows do not lose their tint as we mark them read.
   const groups = useMemo<Group[]>(() => {
     const byTarget = new Map<string, Group>();
+    // More than three workouts found in one go: one row for them all (features/activity/found).
+    const bursts = foundBursts(mine, detectedActivities);
+    const burstOf = new Map(bursts.flatMap((b) => b.rowIds.map((id) => [id, b] as const)));
     for (const n of [...mine].sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
     )) {
+      const burst = burstOf.get(n.id);
+      if (burst) {
+        if (!byTarget.has(burst.key)) {
+          byTarget.set(burst.key, {
+            key: burst.key,
+            section: sectionFor(burst.unread, burst.createdAt),
+            kind: 'activity',
+            targetId: burst.activityIds[0],
+            targetKind: 'activity',
+            actorIds: [n.actorId],
+            createdAt: burst.createdAt,
+            unread: burst.unread,
+            found: { activityIds: burst.activityIds, previews: burst.previews },
+          });
+        }
+        continue;
+      }
       // Follows are one row per person, never bundled. A like not yet seen is
       // its own row too; once seen it folds in with the other likes on that thing.
       // The way Instagram's inbox reads: every comment, reply, mention and
@@ -434,6 +469,7 @@ export default function Notifications() {
                 ? (group.preview?.startsWith('Instant') || group.preview?.startsWith('Hit')) ? 'Your instant' : group.targetKind === 'question' ? 'Your question' : 'Your post'
                 : group.kind === 'coach-application' || group.kind === 'refund' || group.kind === 'removed' ? 'CourtSide'
                 : group.kind === 'weekly-recap' ? 'Your week on court'
+                : group.found ? `${foundTitle(group.found.activityIds.length, allTennis(group.found.activityIds, group.found.previews, detectedActivities))}.`
                 : group.kind === 'activity' ? detectedWho(group.preview, detectedActivities.find((a) => a.id === group.targetId)?.sport)
                 : rest.length === 0
                 ? nameOf(first)
@@ -497,6 +533,9 @@ export default function Notifications() {
                         {[tagState(tag), yourResult(tag), shortDay(tag.day), duration(tag.minutes)].filter(Boolean).join(' · ')}
                       </Text>
                     ) : null
+                  ) : group.found ? (
+                    // What they were, newest first, and where from: "Run, Tennis, Walk and 2 more · from your Apple Watch".
+                    <Text style={styles.preview} numberOfLines={2}>{foundLine(group.found.activityIds, group.found.previews, detectedActivities)}</Text>
                   ) : group.kind === 'removed' ? (
                     // The reason only: the whole sentence is already the row's words.
                     removedNotice(group.preview).reason ? (

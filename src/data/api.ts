@@ -15,7 +15,7 @@ import { demoGroupPosts } from './mock/groups';
 import { stories } from './mock/stories';
 import { conversations, messages } from './mock/messages';
 import { healthHistory, integrations } from './mock/health';
-import { activityNotifications, detectedActivities, whoopWeek } from './mock/activities';
+import { activityNotifications, demoFoundWorkouts, detectedActivities, whoopWeek } from './mock/activities';
 import { CURRENT_USER_ID, users } from './mock/users';
 import { demoHits } from './mock/hits';
 import { isMapCourtId } from '@/features/places/courtName';
@@ -128,6 +128,8 @@ function demoRecapNotification(): Notification[] {
 }
 
 export async function fetchBootstrap(): Promise<Bootstrap> {
+  // The demo's catch-up, only with ?found=1 (mock/activities): five workouts found in one go.
+  const found = supabase ? null : demoFoundWorkouts();
   return delay(
     clone({
       users,
@@ -152,8 +154,8 @@ export async function fetchBootstrap(): Promise<Bootstrap> {
       // The demo's tracker session and its "Tennis detected" row, two of the
       // map's alerts and a tag of you. Only without a database: a real
       // account's come from the server.
-      notifications: supabase ? [] : [...demoRecapNotification(), ...activityNotifications, ...DEMO_MAP_ALERTS, ...demoSessionTagNotifications],
-      detectedActivities: supabase ? [] : detectedActivities,
+      notifications: supabase ? [] : [...demoRecapNotification(), ...activityNotifications, ...(found?.notifications ?? []), ...DEMO_MAP_ALERTS, ...demoSessionTagNotifications],
+      detectedActivities: supabase ? [] : [...detectedActivities, ...(found?.activities ?? [])],
       coachingRequests,
       integrations,
       healthHistory,

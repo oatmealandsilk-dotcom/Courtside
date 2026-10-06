@@ -1,8 +1,10 @@
 import { router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 
+import type { ID } from '@/data/types';
 import { openingFromAlert } from '@/features/activity/check';
 import { isDemo, tennisFlagsKnown } from '@/features/activity/flags';
+import { foundHref } from '@/features/activity/found';
 import { listenForWorkoutAlertTaps, onWorkoutInFront, startWorkoutWatch, stopWorkoutWatch, workoutWatchAvailable, type WatchedWorkout } from '@/features/health/workoutWatch';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { useApp } from '@/store/AppContext';
@@ -26,7 +28,9 @@ import { useApp } from '@/store/AppContext';
  * - A tap on the alert hands that workout to the server, as the check does,
  *   then opens Log it on it: the same page as the note's Log it and the row
  *   in Notifications. Once the app is signed in, loaded and past its opening
- *   page; Past workouts instead, if it can't be logged.
+ *   page; Past workouts instead, if it can't be logged. A tap on the one
+ *   "4 workouts found" alert (more than three saved at once, Oct 5) hands
+ *   each over, then opens their list (Workouts found), each with Log it.
  *
  * On a build without the watching (14 and older, Android, a browser) it does nothing.
  */
@@ -70,12 +74,21 @@ export function useWorkoutWatch({ settled }: { settled: boolean }) {
   }, [available, ready]);
 
   // The alert's tap: held until the app can act on it (a tap that opened the app arrives before sign-in is read).
-  const [tapped, setTapped] = useState<WatchedWorkout | null>(null);
-  useEffect(() => (available ? listenForWorkoutAlertTaps((w) => { openingFromAlert(w.id); setTapped(w); }) : undefined), [available]);
+  const [tapped, setTapped] = useState<{ list: WatchedWorkout[]; grouped: boolean } | null>(null);
+  useEffect(() => (available ? listenForWorkoutAlertTaps((list, grouped) => { for (const w of list) openingFromAlert(w.id); setTapped({ list, grouped }); }) : undefined), [available]);
   useEffect(() => {
     if (!tapped || !ready || !settled) return;
-    const w = tapped;
+    const { list, grouped } = tapped;
     setTapped(null);
+    // "4 workouts found" (more than three at once): each handed over, then their list, each with its own Log it.
+    if (grouped) {
+      void actionsRef.current.reportWorkoutsFromAlert(list).catch((): ID[] => []).then((ids) => {
+        router.push((ids.length ? foundHref(ids) : '/workouts-found') as never);
+      });
+      return;
+    }
+    const w = list[0];
+    if (!w) return;
     void actionsRef.current.reportWorkoutFromAlert(w).catch(() => null).then((id) => {
       if (id) router.push(`/compose?activity=${id}` as never);
       else router.push('/workouts');
