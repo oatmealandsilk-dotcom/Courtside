@@ -90,12 +90,19 @@ export function ConfirmHost() {
   };
 
   useEffect(() => {
-    setConfirmHost((next) => {
-      const asking = live.current;
-      if (!asking) { present(next); return; }
-      // A double tap asks the same thing twice; it is asked once.
-      if (sameQuestion(asking, next) || line.current.some((q) => sameQuestion(q, next))) return;
-      line.current.push(next);
+    setConfirmHost({
+      show: (next) => {
+        const asking = live.current;
+        if (!asking) { present(next); return; }
+        // A double tap asks the same thing twice; it is asked once.
+        if (sameQuestion(asking, next) || line.current.some((q) => sameQuestion(q, next))) return;
+        line.current.push(next);
+      },
+      // The screen that asked has gone: its question leaves unanswered, as Cancel would leave it.
+      withdraw: (request) => {
+        line.current = line.current.filter((q) => q !== request);
+        if (live.current === request) answer('cancel');
+      },
     });
     return () => setConfirmHost(null);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps

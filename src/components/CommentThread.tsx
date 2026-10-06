@@ -1,7 +1,8 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
+import { LinearGradient } from 'expo-linear-gradient';
 
 import { CommentRow, replyIndent } from '@/components/CommentRow';
 import { JumpFlash, useJump } from '@/components/JumpTo';
@@ -9,7 +10,7 @@ import type { Comment, ID } from '@/data/types';
 import { shownInList } from '@/features/hiddenWords/hiddenWords';
 import * as haptics from '@/lib/haptics';
 import { useApp } from '@/store/AppContext';
-import { colors, spacing, typography } from '@/theme';
+import { colors, spacing, typography, withAlpha } from '@/theme';
 
 /** A top-level comment and the replies under it. */
 export interface Thread { top: Comment; replies: Comment[] }
@@ -160,11 +161,59 @@ export function CommentThread({ thread, big = false, open, onToggle, onReply, on
 }
 
 const styleDefinitions = StyleSheet.create({
+  // Clips what does not fit; never scrolls (see CommentsPeek).
+  peek: { overflow: 'hidden' },
+  // The comments at their own full height, whatever room the box has: the box cuts them, they never squeeze.
+  peekInner: { flexShrink: 0 },
+  peekHidden: { opacity: 0 },
+  peekFade: { position: 'absolute', left: 0, right: 0, bottom: 0 },
   // Tucked up under the comment (or its last reply), closer than the gap
-  // between comments. Padded to a full finger's height (about 41pt) and pulled
-  // up by the same, so it sits where it did: a browser ignores hitSlop.
-  toggle: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, alignSelf: 'flex-start', marginTop: -12, paddingVertical: 6 },
-  dash: { width: 24, height: StyleSheet.hairlineWidth * 2, backgroundColor: colors.textFaint, opacity: 0.6 },
+  // between comments. A full finger's height (44pt: a browser ignores
+  // hitSlop), the extra hanging into the gap below, so the words sit where they did.
+  toggle: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, alignSelf: 'flex-start', marginTop: -12, minHeight: 44, paddingTop: 6, paddingRight: spacing.lg, marginBottom: -16 },
+  dash: { width: 24, height: StyleSheet.hairlineWidth * 2, marginTop: 8, backgroundColor: colors.textFaint, opacity: 0.6 },
   toggleText: { ...typography.smallStrong, fontSize: 12, color: colors.textFaint },
   toggleTextBig: { fontSize: 13 },
 });
+
+/**
+ * Less room than this (a name and one line of words) and the comments are
+ * not shown at all: the top of a name under a fade reads as something
+ * broken, not as "more below".
+ */
+const PEEK_MIN = 46;
+
+/**
+ * A post's comments on its own page in the feed (a photo post's, a written
+ * post's): as many as fit between the buttons and "Add a comment…", newest
+ * first. It is a still preview, never a box that scrolls (Oct 6 review): one
+ * that scrolls inside the feed's own swipe caught the swipe meant for the
+ * next post, and once scrolled it cut its top comment off mid-letter. Where
+ * the room runs out mid-comment the last lines fade into the page, the way
+ * the Q&A thread's replies do in the feed: plainly more, a tap away. A tap on
+ * a comment (or "View 2 replies", or Reply) opens the comments sheet there.
+ */
+export function CommentsPeek({ style, contentContainerStyle, children }: { style?: StyleProp<ViewStyle>; contentContainerStyle?: StyleProp<ViewStyle>; children: React.ReactNode }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const [box, setBox] = useState(0);
+  const [content, setContent] = useState(0);
+  const cut = box > 0 && content > box + 1;
+  // Only a sliver of room (a long post on a small phone): nothing rather than half a name.
+  // Still drawn, unseen, so it keeps its size and the page does not flicker between the two.
+  const sliver = cut && box < PEEK_MIN;
+  return (
+    <View style={[style, styles.peek]} onLayout={(e) => setBox(Math.round(e.nativeEvent.layout.height))}>
+      <View
+        style={[contentContainerStyle, styles.peekInner, sliver && styles.peekHidden]}
+        pointerEvents={sliver ? 'none' : 'box-none'}
+        aria-hidden={sliver || undefined}
+        accessibilityElementsHidden={sliver}
+        importantForAccessibility={sliver ? 'no-hide-descendants' : 'auto'}
+        onLayout={(e) => setContent(Math.round(e.nativeEvent.layout.height))}
+      >
+        {children}
+      </View>
+      {cut && !sliver ? <LinearGradient pointerEvents="none" colors={[withAlpha(colors.bg, 0), colors.bg]} style={[styles.peekFade, { height: Math.max(16, Math.min(48, Math.round(box * 0.3))) }]} /> : null}
+    </View>
+  );
+}

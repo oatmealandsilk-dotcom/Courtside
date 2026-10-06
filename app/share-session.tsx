@@ -2,32 +2,43 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
+import { Image as ExpoImage } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { SessionStoryArt, STORY_DESIGNS, type StoryDesign } from '@/components/share/SessionStoryArt';
+import { ShareActions } from '@/components/share/ShareActions';
 import { EmptyState, Screen } from '@/components/ui';
 import { postedIndex, sourceOn } from '@/features/activity/recent';
 import { useTennisFlags } from '@/features/activity/useTennisFlags';
 import { storyFromLog, storyFromPost, type SessionStory } from '@/features/share/sessionStory';
 import { canScore } from '@/features/activity/score';
 import { AddScore } from '@/components/session/ScoreField';
-import { canCopyStory, canSaveStory, exportStory, stageSize, warmStory, type StoryAction, type StoryLook } from '@/features/share/storyImage';
+import { INSTAGRAM_NOTE, exportStory, stageSize, storyNoteOk, warmStory, type StoryAction, type StoryLook } from '@/features/share/storyImage';
 import { mixHex } from '@/features/activity/zones';
 import { goBack } from '@/lib/goBack';
 import * as haptics from '@/lib/haptics';
+import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import { colors, font, pageIsDark, radius, spacing, typography, withAlpha } from '@/theme';
+import { colors, font, pageIsDark, radius, spacing } from '@/theme';
 
 /**
- * Share a session to Instagram, the way Strava does: three pictures to swipe
+ * Share a session to Instagram, the way Strava does: four pictures to swipe
  * between (your photo with the session card on it, the card filling the
- * story, the card alone as a see-through sticker), then Instagram Stories,
- * Save image or More…. Opened with ?post= (one of your posts with a session)
- * or ?session= (a session in your log; when it is on a post, the post's
- * numbers and photo are used). Only your own: anyone else's is not found.
+ * story, the card alone as a see-through sticker, and the numbers alone as a
+ * see-through overlay), then Instagram Stories, Copy, Save or More. Opened
+ * with ?post= (one of your posts with a session) or ?session= (a session in
+ * your log; when it is on a post, the post's numbers and photo are used).
+ * Only your own: anyone else's is not found.
+ *
+ * The pictures take the room at the top; "Add score" and the buttons sit at
+ * the bottom, in thumb's reach, as Strava's do (Oct 5 polish). What a button
+ * did (Copied, Saved) is said in a toast, so nothing moves under the finger;
+ * Instagram's own steps, when an older iPhone build hands the picture over by
+ * the clipboard, stay on a line under the buttons until you change design.
  *
  * Each picture is drawn twice: small to look at, and once more out of sight
  * at exactly 1080 × 1920 pixels, which is the one photographed (storyImage.ts).
@@ -36,13 +47,8 @@ import { colors, font, pageIsDark, radius, spacing, typography, withAlpha } from
 const SHADOW_ROOM = 16;
 /** Space between the designs as they sit side by side. */
 const CARD_GAP = 14;
-
-const ACTIONS: { key: StoryAction; label: string; spoken: string; icon: React.ComponentProps<typeof Ionicons>['name'] }[] = [
-  { key: 'instagram', label: 'Stories', spoken: 'Share to Instagram Stories', icon: 'logo-instagram' },
-  { key: 'copy', label: 'Copy', spoken: 'Copy the picture', icon: 'copy-outline' },
-  { key: 'save', label: 'Save', spoken: 'Save the picture', icon: 'download-outline' },
-  { key: 'more', label: 'More', spoken: 'More ways to share', icon: 'share-outline' },
-];
+/** What the page keeps for everything but the pictures: the title, the designs' names, Add score and the buttons. */
+const CHROME_H = 380;
 
 /**
  * How Instagram's story editor gets each design: Photo and Card as the whole
@@ -65,8 +71,28 @@ function storyLook(design: StoryDesign): StoryLook {
   return { sticker: design === 'sticker', top: colors.brand.slice(0, 7), bottom: colors.bg.slice(0, 7) };
 }
 
+/**
+ * What a see-through design is previewed over: your photo when there is one
+ * (where a pasted sticker usually lands), else the two colours Instagram
+ * Stories will put behind it (storyLook), so the preview is what you get.
+ */
+function StickerGround({ design, photo }: { design: StoryDesign; photo?: string }) {
+  const look = storyLook(design);
+  if (photo) {
+    return (
+      <>
+        <ExpoImage source={{ uri: photo }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" />
+        {/* A touch of shade, as a story's own text sits on: white numbers read on a bright photo too. */}
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.22)' }]} />
+      </>
+    );
+  }
+  return <LinearGradient colors={[look.top, look.bottom]} style={StyleSheet.absoluteFill} />;
+}
+
 export default function ShareSession() {
   const styles = useThemedStyles(styleDefinitions);
+  const insets = useSafeAreaInsets();
   const { post: postParam, session: sessionParam } = useLocalSearchParams<{ post?: string; session?: string }>();
   const { posts, sessions, detectedActivities, currentUser, currentUserId, blockedIds, ready } = useApp();
   const flags = useTennisFlags();
@@ -92,7 +118,7 @@ export default function ShareSession() {
   const { height: windowH } = useWindowDimensions();
   const [pageW, setPageW] = useState(0);
   // Narrow enough that the designs either side peek in, the way Strava's share screen shows there is more to swipe (Oct 5, owner).
-  const cardW = Math.floor(Math.max(150, Math.min(290, pageW - 96, ((windowH - 400) * 9) / 16)));
+  const cardW = Math.floor(Math.max(150, Math.min(290, pageW - 96, ((windowH - CHROME_H - insets.top - insets.bottom) * 9) / 16)));
   const cardH = Math.round((cardW * 16) / 9);
   const step = cardW + CARD_GAP;
   const sidePad = Math.max(0, (pageW - cardW) / 2 - CARD_GAP / 2);
@@ -107,8 +133,6 @@ export default function ShareSession() {
   const addScore = log && canScore(log.kind) && !log.fromSessionId && !log.sets?.length && !story?.session.sets?.length ? log.id : undefined;
   const photo = picked ?? story?.photo;
   const [index, setIndex] = useState<number | null>(null);
-  // What the last button said ("Saved to your downloads…"); a new design clears it.
-  const [note, setNote] = useState('');
   const shownIndex = index ?? (story?.photo ? 0 : 1);
   const design: StoryDesign = STORY_DESIGNS[shownIndex].key;
 
@@ -122,11 +146,10 @@ export default function ShareSession() {
   const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     if (!pageW) return;
     const i = Math.max(0, Math.min(STORY_DESIGNS.length - 1, Math.round(e.nativeEvent.contentOffset.x / step)));
-    if (i !== shownIndex) { setIndex(i); setNote(''); }
+    if (i !== shownIndex) setIndex(i);
   };
   const goTo = (i: number) => {
     setIndex(i);
-    setNote('');
     pager.current?.scrollTo({ x: i * step, y: 0, animated: true });
   };
 
@@ -140,10 +163,14 @@ export default function ShareSession() {
   useEffect(() => { warmStory(); }, []);
 
   const [busy, setBusy] = useState<StoryAction | null>(null);
+  // Instagram's steps (INSTAGRAM_NOTE), kept under the buttons for when you come back from Instagram;
+  // gone once you pick another design or tap again.
+  const [steps, setSteps] = useState<string | null>(null);
+  useEffect(() => { setSteps(null); }, [design]);
   const run = async (action: StoryAction) => {
     if (busy) return;
     setBusy(action);
-    setNote('');
+    setSteps(null);
     try {
       // The photo has to have drawn in the hidden copy first: a few seconds at most.
       if (design === 'photo') {
@@ -151,10 +178,12 @@ export default function ShareSession() {
       }
       // Your invite link goes along as words (Copy, More), never on the picture: Strava's way (Oct 5).
       const said = await exportStory(stage.current, action, 'My session on CourtSide', storyLook(design), story?.invite);
-      if (said) setNote(said);
-      else haptics.commit();
+      if (!said) haptics.commit();
+      else if (said === INSTAGRAM_NOTE) { haptics.commit(); setSteps(said); }
+      else if (storyNoteOk(said)) { haptics.commit(); showToast({ title: said, icon: 'checkmark-circle-outline', long: said.length > 40 }); }
+      else showToast({ title: 'That didn’t work', body: said, icon: 'alert-circle-outline', long: true });
     } catch (error) {
-      setNote(error instanceof Error && error.message ? error.message : 'The picture could not be made. Try again.');
+      showToast({ title: 'That didn’t work', body: error instanceof Error && error.message ? error.message : 'The picture could not be made. Try again.', icon: 'alert-circle-outline', long: true });
     } finally {
       setBusy(null);
     }
@@ -167,7 +196,7 @@ export default function ShareSession() {
       setPicked(result.assets[0].uri);
       if (shownIndex !== 0) goTo(0);
     } catch {
-      setNote('Your photos could not be opened.');
+      showToast({ title: 'Your photos could not be opened', icon: 'alert-circle-outline' });
     }
   };
 
@@ -182,7 +211,6 @@ export default function ShareSession() {
     );
   }
 
-  const save = canSaveStory();
   return (
     <View style={styles.root}>
       {/* The copy that is photographed: full size, out of sight under the page. */}
@@ -192,79 +220,72 @@ export default function ShareSession() {
         </View>
       </View>
       <View style={styles.page}>
-        <Screen title="Share" compactTitle onBack={() => goBack('/your-sessions')} bar={false} padded={false}>
-          <View style={styles.body} onLayout={(e) => setPageW(Math.round(e.nativeEvent.layout.width))}>
-            {pageW ? (
-              <Animated.ScrollView
-                ref={pager as never}
-                horizontal
-                snapToInterval={step}
-                decelerationRate="fast"
-                disableIntervalMomentum
-                showsHorizontalScrollIndicator={false}
-                onScroll={Animated.event([{ nativeEvent: { contentOffset: { x: scrollX } } }], { useNativeDriver: true, listener: onScroll })}
-                scrollEventThrottle={16}
-                contentContainerStyle={{ paddingHorizontal: sidePad }}
-                style={{ width: pageW, height: cardH + SHADOW_ROOM * 2 }}
-              >
-                {STORY_DESIGNS.map((d, i) => {
-                  // The one in the middle full size; its neighbours a touch smaller and quieter, easing as you swipe.
-                  const range = [(i - 1) * step, i * step, (i + 1) * step];
-                  const look = {
-                    opacity: scrollX.interpolate({ inputRange: range, outputRange: [0.55, 1, 0.55], extrapolate: 'clamp' }),
-                    transform: [{ scale: scrollX.interpolate({ inputRange: range, outputRange: [0.92, 1, 0.92], extrapolate: 'clamp' }) }],
-                  };
-                  return (
-                  <Animated.View key={d.key} style={[styles.pageSlot, { width: step, height: cardH + SHADOW_ROOM * 2 }, look]}>
-                    <Pressable disabled={i === shownIndex} onPress={() => goTo(i)} accessible={false}>
-                    <View style={[styles.frame, { width: cardW, height: cardH }]} accessible accessibilityLabel={`${d.label} design`}>
-                      {/* A see-through sticker is shown over a quiet backdrop, the way it will sit over a story. */}
-                      {d.key === 'sticker' || d.key === 'overlay' ? <LinearGradient colors={[withAlpha(colors.text, 0.16), withAlpha(colors.text, 0.38)]} style={StyleSheet.absoluteFill} /> : null}
-                      <SessionStoryArt design={d.key} story={story} width={cardW} photo={photo} hidden={blockedIds} />
-                      {d.key === 'photo' ? (
-                        <Pressable accessibilityRole="button" accessibilityLabel={photo ? 'Change photo' : 'Choose a photo'} onPress={() => { void choosePhoto(); }} style={({ pressed }) => [styles.photoButton, pressed && styles.pressed]}>
-                          <Ionicons name="image-outline" size={14} color={colors.onMedia} />
-                          <Text style={styles.photoButtonText}>{photo ? 'Change photo' : 'Choose a photo'}</Text>
+        <Screen title="Share" compactTitle onBack={() => goBack('/your-sessions')} bar={false} padded={false} scroll={false}>
+          <View style={styles.body}>
+            {/* The pictures, centred in all the room above the controls. */}
+            <View style={styles.top} onLayout={(e) => setPageW(Math.round(e.nativeEvent.layout.width))}>
+              {pageW ? (
+                <Animated.ScrollView
+                  ref={pager as never}
+                  horizontal
+                  snapToInterval={step}
+                  decelerationRate="fast"
+                  disableIntervalMomentum
+                  showsHorizontalScrollIndicator={false}
+                  onScroll={Animated.event([{ nativeEvent: { contentOffset: { x: scrollX } } }], { useNativeDriver: true, listener: onScroll })}
+                  scrollEventThrottle={16}
+                  contentContainerStyle={{ paddingHorizontal: sidePad }}
+                  style={{ width: pageW, height: cardH + SHADOW_ROOM * 2, flexGrow: 0 }}
+                >
+                  {STORY_DESIGNS.map((d, i) => {
+                    // The one in the middle full size; its neighbours a touch smaller and quieter, easing as you swipe.
+                    const range = [(i - 1) * step, i * step, (i + 1) * step];
+                    const look = {
+                      opacity: scrollX.interpolate({ inputRange: range, outputRange: [0.55, 1, 0.55], extrapolate: 'clamp' }),
+                      transform: [{ scale: scrollX.interpolate({ inputRange: range, outputRange: [0.92, 1, 0.92], extrapolate: 'clamp' }) }],
+                    };
+                    return (
+                      <Animated.View key={d.key} style={[styles.pageSlot, { width: step, height: cardH + SHADOW_ROOM * 2 }, look]}>
+                        <Pressable disabled={i === shownIndex} onPress={() => goTo(i)} accessible={false}>
+                          <View style={[styles.frame, { width: cardW, height: cardH }]} accessible accessibilityLabel={`${d.label} design`}>
+                            {/* A see-through design is shown over what it will sit on (StickerGround). */}
+                            {d.key === 'sticker' || d.key === 'overlay' ? <StickerGround design={d.key} photo={photo} /> : null}
+                            <SessionStoryArt design={d.key} story={story} width={cardW} photo={photo} hidden={blockedIds} />
+                            {d.key === 'photo' ? (
+                              <Pressable accessibilityRole="button" accessibilityLabel={photo ? 'Change photo' : 'Choose a photo'} onPress={() => { void choosePhoto(); }} style={({ pressed }) => [styles.photoButton, pressed && styles.pressed]}>
+                                <View style={styles.photoChip}>
+                                  <Ionicons name="image-outline" size={14} color={colors.onMedia} />
+                                  <Text style={styles.photoButtonText}>{photo ? 'Change photo' : 'Choose a photo'}</Text>
+                                </View>
+                              </Pressable>
+                            ) : null}
+                          </View>
                         </Pressable>
-                      ) : null}
-                    </View>
+                      </Animated.View>
+                    );
+                  })}
+                </Animated.ScrollView>
+              ) : <View style={{ height: cardH + SHADOW_ROOM * 2 }} />}
+
+              {/* The designs' names under the cards, the one showing marked with a dot; a tap goes to it. */}
+              <View style={styles.designs} accessibilityRole="tablist">
+                {STORY_DESIGNS.map((d, i) => {
+                  const on = i === shownIndex;
+                  return (
+                    <Pressable key={d.key} accessibilityRole="tab" accessibilityState={{ selected: on }} onPress={() => goTo(i)} style={styles.design}>
+                      <Text style={[styles.designText, on && styles.designTextOn]}>{d.label}</Text>
+                      <View style={[styles.designDot, on && styles.designDotOn]} />
                     </Pressable>
-                  </Animated.View>
                   );
                 })}
-              </Animated.ScrollView>
-            ) : <View style={{ height: cardH + SHADOW_ROOM * 2 }} />}
-
-            {/* The designs' names under the cards, the one showing marked with a dot; a tap goes to it. */}
-            <View style={styles.designs} accessibilityRole="tablist">
-              {STORY_DESIGNS.map((d, i) => {
-                const on = i === shownIndex;
-                return (
-                  <Pressable key={d.key} accessibilityRole="tab" accessibilityState={{ selected: on }} onPress={() => goTo(i)} hitSlop={8} style={styles.design}>
-                    <Text style={[styles.designText, on && styles.designTextOn]}>{d.label}</Text>
-                    <View style={[styles.designDot, on && styles.designDotOn]} />
-                  </Pressable>
-                );
-              })}
+              </View>
             </View>
 
-            {addScore ? <AddScore sessionId={addScore} /> : null}
-
-            {/* Strava's row of round buttons, in CourtSide's colours (Oct 4): Stories leads, the rest follow. */}
-            <View style={styles.actions}>
-              {ACTIONS.filter((a) => (a.key !== 'save' || save) && (a.key !== 'copy' || canCopyStory())).map((a) => {
-                const lead = a.key === 'instagram';
-                return (
-                  <Pressable key={a.key} accessibilityRole="button" accessibilityLabel={a.spoken} disabled={!!busy} onPress={() => { void run(a.key); }} style={({ pressed }) => [styles.action, pressed && styles.pressed, !!busy && busy !== a.key && styles.dimmed]}>
-                    <View style={[styles.actionCircle, lead && styles.actionLead]}>
-                      {busy === a.key ? <CourtSpinner size={22} ink={lead ? colors.brandInk : colors.text} /> : <Ionicons name={a.icon} size={24} color={lead ? colors.brandInk : colors.text} />}
-                    </View>
-                    <Text style={styles.actionLabel} numberOfLines={1}>{a.label}</Text>
-                  </Pressable>
-                );
-              })}
+            {/* The controls, at the bottom in thumb's reach. */}
+            <View style={[styles.bottom, { paddingBottom: insets.bottom + spacing.lg }]}>
+              {addScore ? <AddScore sessionId={addScore} /> : null}
+              <ShareActions busy={busy} onRun={(a) => { void run(a); }} steps={steps} />
             </View>
-            {note ? <Text style={styles.note}>{note}</Text> : null}
           </View>
         </Screen>
       </View>
@@ -277,26 +298,21 @@ const styleDefinitions = StyleSheet.create({
   wait: { paddingTop: spacing.xxl, alignItems: 'center' },
   stage: { position: 'absolute', left: 0, top: 0 },
   page: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: colors.bg },
-  body: { gap: spacing.md, paddingBottom: spacing.xxl },
+  body: { flex: 1 },
+  top: { flex: 1, justifyContent: 'center', gap: spacing.md, minHeight: 0 },
+  bottom: { gap: spacing.lg, paddingTop: spacing.md },
   pageSlot: { alignItems: 'center', justifyContent: 'center' },
   frame: { borderRadius: 18, overflow: 'hidden', boxShadow: '0px 8px 28px rgba(0, 0, 0, 0.22)' },
-  photoButton: { position: 'absolute', top: 12, right: 12, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: colors.overlay },
+  // "Change photo": a small chip on the picture, in a 44-point corner that takes the tap.
+  photoButton: { position: 'absolute', top: 2, right: 2, minHeight: 44, paddingHorizontal: 10, justifyContent: 'center' },
+  photoChip: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: colors.overlay },
   photoButtonText: { ...font('600'), fontSize: 12, color: colors.onMedia },
   pressed: { opacity: 0.7 },
-  designs: { flexDirection: 'row', alignSelf: 'center', gap: spacing.lg },
-  design: { alignItems: 'center', gap: 5, paddingVertical: 2 },
-  designText: { ...typography.smallStrong, color: colors.textFaint },
+  designs: { flexDirection: 'row', alignSelf: 'center' },
+  // Each name is a full 44-point target; the names keep their 16-point rhythm between them.
+  design: { alignItems: 'center', justifyContent: 'center', gap: 5, minHeight: 44, paddingHorizontal: spacing.sm },
+  designText: { ...font('600'), fontSize: 13, color: colors.textFaint },
   designTextOn: { color: colors.text },
   designDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: 'transparent' },
   designDotOn: { backgroundColor: colors.brand },
-  actions: { flexDirection: 'row', justifyContent: 'center', gap: spacing.lg, paddingHorizontal: spacing.lg, marginTop: spacing.xs },
-  action: { alignItems: 'center', gap: 6, width: 64 },
-  actionCircle: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
-  actionLead: { backgroundColor: colors.brand, borderColor: colors.brand },
-  actionLabel: { ...font('500'), fontSize: 12.5, color: colors.text },
-  dimmed: { opacity: 0.45 },
-  row: { flexDirection: 'row', gap: spacing.sm },
-  half: { flex: 1 },
-  fine: { ...typography.caption, color: colors.textFaint, textAlign: 'center', letterSpacing: 0 },
-  note: { ...typography.small, color: colors.text, textAlign: 'center' },
 });

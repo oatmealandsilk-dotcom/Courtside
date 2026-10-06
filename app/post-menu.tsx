@@ -1,6 +1,6 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Dimensions, Easing, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Animated, Dimensions, Easing, PanResponder, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -10,11 +10,10 @@ import { useApp } from '@/store/AppContext';
 import { shareOutside } from '@/lib/shareOutside';
 import { downloadMedia } from '@/lib/downloadMedia';
 import { goBack } from '@/lib/goBack';
-import { colors, radius, spacing, typography } from '@/theme';
+import { colors, font, pageIsDark, radius, spacing, typography } from '@/theme';
 import { shareLink } from '@/lib/shareLink';
 import { postShareText } from '@/features/share/shareText';
-import { confirm, confirmBlock, confirmReport } from '@/lib/confirm';
-import { REPORT_THANKS } from '@/features/moderation/reportThanks';
+import { REPORT_THANKS, blockQuestion, reportQuestion, useScopedConfirm } from '@/lib/confirm';
 import { notKnownAdult } from '@/features/players/age';
 import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { removedLine, thingWord } from '@/features/moderation/reasons';
@@ -26,36 +25,74 @@ import { CourtSpinner } from '@/components/CourtSpinner';
 import { useOpenOutside } from '@/features/share/openOutside';
 import type { Post, Story } from '@/data/types';
 
+type IconName = React.ComponentProps<typeof Ionicons>['name'];
+
+/** One of the round buttons across the top: the ways to share. */
+type Tile = {
+  key: string;
+  icon: IconName;
+  /** One short word under the circle. */
+  label: string;
+  /** What a screen reader says: the whole action. */
+  spoken: string;
+  /** Still asking the server whether it may (a spinner in the circle, not tappable yet). */
+  waiting?: boolean;
+  /** Working on it (a spinner in the circle). */
+  busy?: boolean;
+  onPress: () => void | Promise<void>;
+};
+
+/** One line of the list under them. */
 type Row = {
   key: string;
   /** An Ionicon, or 'court' for the court drawn the app's way. */
-  icon: React.ComponentProps<typeof Ionicons>['name'] | 'court';
+  icon: IconName | 'court';
   label: string;
+  /** A few words under the label, only where the label alone would not say what happens. */
   note?: string;
   danger?: boolean;
-  /** Shown dimmed and not tappable yet (still asking the server whether it may). */
+  /** Not a thing to tap yet, or only a status (a review asked): dimmed. */
   waiting?: boolean;
   onPress: () => void | Promise<void>;
 };
 
+/** What the sheet says once something has happened: a tick when it went, a warning (and Try again) when it did not. */
+type Done = { text: string; ok: boolean; retry?: () => void };
+
 /**
- * The "…" menu under a post's Save button: a short sheet that slides up from
- * the bottom. Your own post can be pinned, archived or deleted; anyone else's
- * can be reported, and its author muted or blocked. Everything else — save,
- * send, share the link — is there for both. Admins also get "Take down"
- * (or "Restore" once it is down); nobody else ever sees either.
+ * The sheet's widest: a phone's full width, and on a computer a column about
+ * as wide as the post it is about, centred, rather than a strip across the
+ * whole window with its buttons at the far left (Oct 6 review).
+ */
+const SHEET_MAX_W = 480;
+
+/** How far down a drag must carry the sheet (or how fast) before letting go closes it. */
+const DRAG_CLOSE_PX = 90;
+const DRAG_CLOSE_SPEED = 0.9;
+
+/**
+ * The "…" menu on a post or an Instant: a short sheet that slides up from the
+ * bottom, shaped the way Instagram's is (Oct 5 polish). Across the top, a row
+ * of round buttons for the ways to share a post (Send, Story or Instagram, Link, Image,
+ * Download); under them a short list, what can't be undone last, after a
+ * hairline. Your own post can be edited, pinned, archived or deleted; anyone
+ * else's can be reported, and its author muted or blocked. Admins also get
+ * "Take down" (or "Restore" once it is down); nobody else ever sees either.
+ * Save is not here: the bookmark sits right beside the ••• everywhere it opens.
  *
  * A post shared to a group only never leaves the group: no picture of it, no
  * link (the server locks both, share_preview in migration 68). Someone
  * else's post is a picture only when the server would show it to a stranger
- * (useOpenOutside).
+ * (useOpenOutside, asked ahead as the post comes on screen, so the Image
+ * button is settled before the sheet rises).
  */
 export default function PostMenu() {
   const styles = useThemedStyles(styleDefinitions);
   const insets = useSafeAreaInsets();
   const { id = '', kind: rawKind } = useLocalSearchParams<{ id?: string; kind?: string }>();
-  const { posts, stories, users, saved, currentUserId, currentUser, mutedIds, blockedIds, actions } = useApp();
+  const { posts, stories, users, currentUserId, currentUser, mutedIds, blockedIds, actions } = useApp();
   const isHit = rawKind === 'hit';
+  const ask = useScopedConfirm();
   // Reporting takes the post or Instant out of every list at once; the menu
   // holds on to it so its "Thanks" note still shows until you close it.
   const reported = useRef<{ post?: Post; story?: Story } | null>(null);
@@ -64,18 +101,22 @@ export default function PostMenu() {
   const item = post ?? story;
   const author = users.find((u) => u.id === item?.authorId);
   const mine = !!item && item.authorId === currentUserId;
-  const isSaved = saved.postIds.includes(id);
-  const [done, setDone] = useState('');
+  const [done, setDone] = useState<Done | null>(null);
   // Reported from here: the note thanks you and offers to block them too (Instagram's way).
   const [reportedNow, setReportedNow] = useState(false);
   const navigation = useNavigation();
+  // Your own, taken down: why (the rules) and "Ask for a review", once per take-down.
+  const { mine: ownRemoved, review, known: reviewKnown, off: reviewsOff } = useReviewOf(item ? { kind: isHit ? 'hit' : 'post', id: item.id, authorId: item.authorId } : undefined, item?.removed);
   // Share to Instagram Story: on its way (the file coming down), and the overlay photographed for it:
   // on a see-through story-sized canvas for a clip's sticker, or drawn onto a photo (`baking`, its address).
   const [working, setWorking] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const sticker = useRef<View>(null);
   const baked = useRef<View>(null);
   const [baking, setBaking] = useState<string | null>(null);
   const photoDrawn = useRef<((ok: boolean) => void) | null>(null);
+  // Each tap on Story is its own run; Cancel (or a second run) leaves the one before behind.
+  const storyRun = useRef(0);
   const stage = stageSize();
   // Gone: the menu has left the screen (the back button or a swipe, not only close()), so a share
   // still on its way stops before it opens Instagram. Set false again on mount for React's dev double-mount.
@@ -85,15 +126,15 @@ export default function PostMenu() {
     return () => { gone.current = true; };
   }, []);
   const openOutside = useOpenOutside(post, currentUserId);
-  // Your own, taken down: why (the rules) and "Ask for a review", once per take-down.
-  const { mine: ownRemoved, review, known: reviewKnown, off: reviewsOff } = useReviewOf(item ? { kind: isHit ? 'hit' : 'post', id: item.id, authorId: item.authorId } : undefined, item?.removed);
   // A long menu (an admin's own post, bigger text on a small phone) scrolls
   // rather than running off the top of the screen.
-  const { height: windowHeight } = useWindowDimensions();
+  const { height: windowHeight, width: windowWidth } = useWindowDimensions();
 
   // The same rise and fall as the comments and Send-to sheets.
   const EASE = Easing.bezier(0.22, 0.61, 0.36, 1);
   const rise = useRef(new Animated.Value(1)).current;
+  // How far a finger has pulled the sheet down from where it sits.
+  const drag = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     Animated.timing(rise, { toValue: 0, duration: 320, easing: EASE, useNativeDriver: true }).start();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -117,14 +158,39 @@ export default function PostMenu() {
     const leaveTheirFeed = reportedNow && !!author && under?.name === 'posts/[userId]' && (under.params as { userId?: string } | undefined)?.userId === author.id && router.canDismiss();
     Animated.timing(rise, { toValue: 1, duration: 220, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start(() => (leaveTheirFeed ? router.dismiss(2) : goBack('/')));
   };
+  const closeRef = useRef(close);
+  closeRef.current = close;
 
-  if (!item) return <View style={styles.backdrop}><SheetBackdrop /><Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={() => goBack('/')} style={StyleSheet.absoluteFill} /></View>;
+  // The grabber does what it says: pull the sheet down and let go to close it, or it settles back.
+  // From the grabber's strip anywhere; on a phone from anywhere on the sheet too, while its list is at the top.
+  const listTop = useRef(true);
+  const pullDown = (dy: number, dx: number) => dy > 8 && dy > Math.abs(dx) * 1.4;
+  const release = (dy: number, vy: number) => {
+    if (dy > DRAG_CLOSE_PX || vy > DRAG_CLOSE_SPEED) { closeRef.current(); return; }
+    Animated.spring(drag, { toValue: 0, useNativeDriver: true, bounciness: 0, speed: 18 }).start();
+  };
+  const handlers = {
+    onPanResponderMove: (_: unknown, g: { dy: number }) => drag.setValue(Math.max(0, g.dy)),
+    onPanResponderRelease: (_: unknown, g: { dy: number; vy: number }) => release(g.dy, g.vy),
+    onPanResponderTerminate: () => release(0, 0),
+  };
+  const grabberPan = useRef(PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponder: (_, g) => pullDown(g.dy, g.dx),
+    ...handlers,
+  })).current;
+  const sheetPan = useRef(PanResponder.create({
+    onMoveShouldSetPanResponderCapture: (_, g) => Platform.OS !== 'web' && listTop.current && pullDown(g.dy, g.dx),
+    ...handlers,
+  })).current;
 
-  const url = shareLink('post', item.id, currentUser?.handle);
+  const say = (text: string, ok: boolean, retry?: () => void) => { if (!gone.current) setDone({ text, ok, retry }); };
+
+  const url = item ? shareLink('post', item.id, currentUser?.handle) : '';
   // Taken down by an admin (migration 108): only its author and admins see
   // it, so there is nothing to save, send, share or edit; deleting and
   // archiving still work.
-  const removed = item.removed;
+  const removed = item?.removed;
   const admin = !!currentUser?.isAdmin;
   // Your own clip or photo, straight into Instagram's story editor with a CourtSide sticker (Oct 5;
   // builds with react-native-share only, never in a browser: see mediaStory.ts). A session post with
@@ -132,9 +198,6 @@ export default function PostMenu() {
   const storyMedia: { url: string; kind: StoryMediaKind } | null = post && mine && !removed && currentUser && canShareMediaStory()
     ? (post.videoUrl ? { url: post.videoUrl, kind: 'video' } : post.imageUrl && !post.session ? { url: post.imageUrl, kind: 'photo' } : null)
     : null;
-  // Closing the menu (a tap above it, Done, the back button) while the file is still coming down
-  // cancels the share: Instagram does not open on its own a moment later.
-  const cancelled = () => closing.current || gone.current;
   // A photo with the overlay drawn onto it, out of sight: answers with the picture once the photo
   // has drawn (two frames later, so it is on screen), or null if it will not load within 8 seconds.
   const bake = (photo: string) => new Promise<View | null>((resolve) => {
@@ -153,6 +216,11 @@ export default function PostMenu() {
   });
   const toStory = async () => {
     if (!post || !storyMedia || working) return;
+    const run = ++storyRun.current;
+    // Closing the menu (a tap above it, the back button) or Cancel while the file is still coming
+    // down cancels the share: Instagram does not open on its own a moment later.
+    const cancelled = () => closing.current || gone.current || storyRun.current !== run;
+    setDone(null);
     setWorking(true);
     try {
       const said = await shareMediaToStory({
@@ -160,48 +228,85 @@ export default function PostMenu() {
         ...(storyMedia.kind === 'photo' ? { bake: () => bake(storyMedia.url) } : {}),
       });
       if (cancelled()) return;
-      if (said) setDone(said);
+      if (said) say(said, false, () => { void toStory(); });
       else close();
     } catch (err) {
       if (cancelled()) return;
-      setDone(err instanceof Error && err.message ? err.message : 'Instagram could not be opened. Try again.');
+      say(err instanceof Error && err.message ? err.message : 'Instagram could not be opened. Try again.', false, () => { void toStory(); });
     } finally {
-      if (!gone.current) { setWorking(false); setBaking(null); }
+      if (!gone.current && storyRun.current === run) { setWorking(false); setBaking(null); }
     }
   };
+  const cancelStory = () => {
+    storyRun.current += 1;
+    setWorking(false);
+    setBaking(null);
+  };
   // What Instagram gets is the file as uploaded (mediaStory.ts): "posted without sound" and a trim
-  // are applied by CourtSide's player, not cut into it, so the note says so rather than surprise anyone.
+  // are applied by CourtSide's player, not cut into it, so the wait says so rather than surprise anyone.
   const trimmed = !!post && (post.trimStart != null || post.trimEnd != null);
   const asIs = !!post && storyMedia?.kind === 'video' && (!!post.muted || trimmed);
-  const storyNote = !storyMedia ? undefined
-    : working ? (storyMedia.kind === 'video' ? 'Getting your clip ready…' : 'Getting your photo ready…')
-    : asIs && post?.muted ? (trimmed ? 'The full original clip, with its sound. Trim and mute it in Instagram.' : 'The original clip, with its sound. Mute it in Instagram.')
-    : asIs ? 'The full original clip, before your trim. Trim it in Instagram.'
-    : storyMedia.kind === 'video' ? 'Your clip in your story, with your @handle.' : 'Your photo in your story, with your @handle.';
-  const storyRow: Row | null = post && storyMedia ? {
-    key: 'ig-story', icon: 'logo-instagram',
-    label: post.session ? 'Share clip to Instagram Story' : 'Share to Instagram Story',
-    note: storyNote,
-    onPress: toStory,
-  } : null;
-  // A hit is a moment, not a keepsake: nothing to save or send on.
-  const rows: Row[] = post && !removed ? [
-    { key: 'save', icon: isSaved ? 'bookmark' : 'bookmark-outline', label: isSaved ? 'Remove from saved' : 'Save', onPress: () => { actions.toggleSavePost(post.id); close(); } },
+  const asIsNote = !asIs ? undefined
+    : post?.muted ? (trimmed ? 'Instagram gets the whole clip, with its sound. Trim and mute it there.' : 'Instagram gets the clip with its sound. Mute it there.')
+    : 'Instagram gets the whole clip, before your trim. Trim it there.';
+
+  const download = async () => {
+    if (!post || downloading) return;
+    setDone(null);
+    setDownloading(true);
+    try {
+      await downloadMedia(post.videoUrl ?? post.imageUrl!, post.id.slice(0, 8));
+      if (!gone.current) close();
+    } catch (err) {
+      say(err instanceof Error && err.message ? err.message : 'It could not be downloaded. Check your connection and try again.', false, () => { void download(); });
+    } finally {
+      if (!gone.current) setDownloading(false);
+    }
+  };
+  const shareTheLink = async () => {
+    if (!post) return;
+    try {
+      const note = await shareOutside(postShareText(post, users.find((u) => u.id === post.authorId), currentUserId), url);
+      if (note) say(note, true);
+      else close();
+    } catch {
+      say(`Share this link: ${url}`, true);
+    }
+  };
+
+  // The ways to share, as round buttons. A hit is a moment, not a keepsake: an Instant has none.
+  const tiles: Tile[] = [];
+  if (post && !removed) {
     // A group-only post goes only to people in that group (the Send sheet lists no one else).
-    { key: 'send', icon: 'paper-plane-outline', label: 'Send to…', onPress: () => router.replace({ pathname: '/share', params: { kind: 'post', id: post.id } }) },
-    // Your own clip or photo straight into a story leads; on a session post it follows the session's picture.
-    ...(storyRow && !post.session ? [storyRow] : []),
-    // Your own post with a session on it shares as the session's story picture (share-session), the way Strava does; any other post as its own card.
-    ...(mine && post.session
-      ? [{ key: 'story', icon: 'logo-instagram' as const, label: 'Share to Instagram', note: 'Your session as a story picture.', onPress: () => router.replace({ pathname: '/share-session', params: { post: post.id } }) }]
-      // Still asking (null): the row holds its place dimmed, so the rows below don't jump when the answer comes.
-      : openOutside !== false ? [{ key: 'card', icon: 'image-outline' as const, label: 'Share as image', waiting: openOutside === null, onPress: () => router.replace({ pathname: '/share-card', params: { id: post.id } }) }] : []),
-    ...(storyRow && post.session ? [storyRow] : []),
+    tiles.push({ key: 'send', icon: 'paper-plane-outline', label: 'Send', spoken: 'Send to someone on CourtSide', onPress: () => router.replace({ pathname: '/share', params: { kind: 'post', id: post.id } }) });
+    // Your own post with a session on it goes to Instagram as the session's story picture (share-session,
+    // whose first button is Instagram Stories), the way Strava does. Said as "Instagram", with its logo,
+    // second in the row (Oct 6 review: Instagram is how the app grows, and "Image" hid it). Where Story
+    // already holds that place (your clip, straight into Instagram's story editor), the session's picture
+    // is "Image" further along instead, so the row never shows two Instagram buttons.
+    const sessionShare = mine && !!post.session;
+    const toSession = () => router.replace({ pathname: '/share-session', params: { post: post.id } });
+    if (storyMedia) tiles.push({ key: 'story', icon: 'logo-instagram', label: 'Story', spoken: storyMedia.kind === 'video' ? 'Share your clip to your Instagram story' : 'Share your photo to your Instagram story', busy: working, onPress: toStory });
+    else if (sessionShare) tiles.push({ key: 'instagram', icon: 'logo-instagram', label: 'Instagram', spoken: 'Share your session to Instagram', onPress: toSession });
     // A group-only post stays in its group: no link to it goes outside.
-    ...(post.groupId ? [] : [{ key: 'link', icon: 'link-outline' as const, label: 'Share link', onPress: async () => { try { const note = await shareOutside(postShareText(post, users.find((u) => u.id === post.authorId), currentUserId), url); if (note) setDone(note); else close(); } catch { setDone(`Share this link: ${url}`); } } }]),
-  ] : [];
+    if (!post.groupId) tiles.push({ key: 'link', icon: 'link-outline', label: 'Link', spoken: 'Share a link to this post', onPress: shareTheLink });
+    // Beside Story, your session's picture; any other post shares as its own card. Settled before the
+    // sheet rises (openOutside.ts); still asking, it waits at the end of the row, so nothing moves if the answer is no.
+    if (sessionShare) {
+      if (storyMedia) tiles.push({ key: 'image', icon: 'image-outline', label: 'Image', spoken: 'Share your session to Instagram as a picture', onPress: toSession });
+    } else if (openOutside !== false) tiles.push({ key: 'image', icon: 'image-outline', label: 'Image', spoken: 'Share this post as a picture', waiting: openOutside === null, onPress: () => router.replace({ pathname: '/share-card', params: { id: post.id } }) });
+    // The original file, for the owner and for CourtSide's own channels (an admin): one tap to the camera roll, then Instagram.
+    // Android's share sheet has no "Save to gallery" (a real save needs a new build: docs/android-setup.md), so there it says what it does.
+    if ((post.videoUrl || post.imageUrl) && (mine || (admin && post.featureOk !== false))) {
+      tiles.push({ key: 'download', icon: 'download-outline', label: Platform.OS === 'android' ? 'Original' : 'Download', spoken: Platform.OS === 'android' ? 'Share the original file' : 'Download the original', busy: downloading, onPress: download });
+    }
+  }
+
+  // The list: what you can do to it, then (after a hairline) what can't be taken back or reports it.
+  const rows: Row[] = [];
+  const dangerRows: Row[] = [];
   // Your own, taken down: the rule it broke, and asking us to look again (or where that stands).
-  if (removed && ownRemoved) {
+  if (removed && ownRemoved && item) {
     const what = isHit ? 'hit' as const : 'post' as const;
     const thing = thingWord(what, post?.kind === 'clip');
     rows.push({ key: 'rules', icon: 'book-outline', label: 'See the rules', note: `Why your ${thing} was removed.`, onPress: () => router.replace({ pathname: '/guidelines', params: { rule: removed.reason, what: thing } }) });
@@ -215,66 +320,179 @@ export default function PostMenu() {
     );
   }
   if (mine && story) {
-    rows.push(
-      { key: 'archive', icon: 'archive-outline', label: story.archived ? 'Unarchive' : 'Archive', onPress: () => { actions.toggleArchiveStory(story.id); close(); } },
-      { key: 'delete', icon: 'trash-outline', label: 'Delete', danger: true, onPress: () => confirm({ title: 'Delete this Instant?', message: "Its likes and comments go with it. This can't be undone.", confirmLabel: 'Delete', destructive: true, onConfirm: () => { void actions.deleteStory(story.id); close(); } }) },
-    );
-  }
-  // The original file, for the owner and for CourtSide's own channels (an admin): one tap to the camera roll, then Instagram.
-  if (post && (post.videoUrl || post.imageUrl) && (mine || (currentUser?.isAdmin && post.featureOk !== false && !removed))) {
-    // Android's share sheet has no "Save to gallery" (a real save needs a new build: docs/android-setup.md), so there it says what it does.
-    rows.push({ key: 'download', icon: 'download-outline', label: Platform.OS === 'android' ? 'Share original' : 'Download', note: currentUser?.isAdmin && !mine ? 'The author said CourtSide may feature this.' : Platform.OS === 'android' ? 'The original file, to send to another app.' : 'The original, to post elsewhere.', onPress: async () => { try { await downloadMedia(post.videoUrl ?? post.imageUrl!, post.id.slice(0, 8)); close(); } catch (err) { setDone(err instanceof Error ? err.message : 'Could not download.'); } } });
+    // Archive only while it is still up: an expired Instant is already in your archive for good.
+    const stillUp = !story.removed && Date.parse(story.expiresAt) > Date.now();
+    if (stillUp) rows.push({ key: 'archive', icon: 'archive-outline', label: story.archived ? 'Unarchive' : 'Archive', note: story.archived ? undefined : 'Only you can see it', onPress: () => { actions.toggleArchiveStory(story.id); close(); } });
+    dangerRows.push({ key: 'delete', icon: 'trash-outline', label: 'Delete', danger: true, onPress: () => ask({ title: 'Delete Instant?', message: 'Its likes and comments go with it. This can’t be undone.', confirmLabel: 'Delete', destructive: true, onConfirm: () => { void actions.deleteStory(story.id); close(); } }) });
   }
   if (mine && post) {
-    rows.push(
-      ...(removed ? [] : [
-        { key: 'edit', icon: 'create-outline' as const, label: 'Edit', onPress: () => router.replace({ pathname: '/edit-post', params: { id: post.id, kind: 'post' } }) },
-        // A place only typed, with no court: one tap to pick the court, so the post shows on its page.
-        // Known adults only: a court tag says where a minor regularly plays.
-        // Never on a group-only post: the server keeps those off every court's page.
-        ...(post.location && !post.court && !post.groupId && currentUser && !notKnownAdult(currentUser)
-          ? [{ key: 'court', icon: 'court' as const, label: 'Add the court', note: 'Shows this post on the court’s page.', onPress: () => router.replace({ pathname: '/edit-post', params: { id: post.id, kind: 'post', pickPlace: '1' } }) }]
-          : []),
-        { key: 'pin', icon: 'pin-outline' as const, label: post.pinned ? 'Unpin from profile' : 'Pin to profile', note: post.pinned ? undefined : 'Shown first on your profile.', onPress: () => { actions.togglePinPost(post.id); close(); } },
-      ]),
-      { key: 'archive', icon: 'archive-outline', label: post.archived ? 'Unarchive' : 'Archive', note: post.archived ? undefined : 'Hidden from everyone; kept in your archive.', onPress: () => { actions.toggleArchivePost(post.id); close(); } },
-      // Asked once, the way other apps ask; the menu stays up behind the question, so Cancel leaves you on it.
-      { key: 'delete', icon: 'trash-outline', label: 'Delete', danger: true, onPress: () => confirm({ title: 'Delete post?', message: "This can't be undone.", confirmLabel: 'Delete', destructive: true, onConfirm: () => { actions.deletePost(post.id); close(); } }) },
-    );
-  } else if (author && !mine) {
+    if (!removed) {
+      rows.push({ key: 'edit', icon: 'create-outline', label: 'Edit', onPress: () => router.replace({ pathname: '/edit-post', params: { id: post.id, kind: 'post' } }) });
+      // A place only typed, with no court: one tap to pick the court, so the post shows on its page.
+      // Known adults only: a court tag says where a minor regularly plays.
+      // Never on a group-only post: the server keeps those off every court's page.
+      if (post.location && !post.court && !post.groupId && currentUser && !notKnownAdult(currentUser)) {
+        rows.push({ key: 'court', icon: 'court', label: 'Add the court', note: 'Shows it on the court’s page', onPress: () => router.replace({ pathname: '/edit-post', params: { id: post.id, kind: 'post', pickPlace: '1' } }) });
+      }
+      rows.push({ key: 'pin', icon: 'pin-outline', label: post.pinned ? 'Unpin from profile' : 'Pin to profile', onPress: () => { actions.togglePinPost(post.id); close(); } });
+    }
+    rows.push({ key: 'archive', icon: 'archive-outline', label: post.archived ? 'Unarchive' : 'Archive', note: post.archived ? undefined : 'Only you can see it', onPress: () => { actions.toggleArchivePost(post.id); close(); } });
+    // Asked once, the way other apps ask; the menu stays up behind the question, so Cancel leaves you on it.
+    dangerRows.push({ key: 'delete', icon: 'trash-outline', label: 'Delete', danger: true, onPress: () => ask({ title: 'Delete post?', message: 'Its likes and comments go with it. This can’t be undone.', confirmLabel: 'Delete', destructive: true, onConfirm: () => { actions.deletePost(post.id); close(); } }) });
+  } else if (item && author && !mine) {
     const muted = mutedIds.includes(author.id);
     const blocked = blockedIds.includes(author.id);
-    rows.push(
-      // Asked first, the same question as everywhere else; the menu stays up behind it, so Cancel leaves you on it.
-      { key: 'report', icon: 'flag-outline', label: 'Report', note: 'Spam, harassment or something that should not be here.', onPress: () => confirmReport(isHit ? 'Instant' : post?.kind === 'clip' ? 'clip' : 'post', () => {
-        reported.current = { post, story };
-        actions.reportUser(author.id, `${isHit ? 'hit' : 'post'}:${item.id}`);
-        setReportedNow(true);
-        setDone(REPORT_THANKS);
-      }) },
-      { key: 'mute', icon: muted ? 'volume-high-outline' : 'volume-mute-outline', label: muted ? `Unmute @${author.handle}` : `Mute @${author.handle}`, note: muted ? undefined : 'Their posts stop showing up for you. They are not told.', onPress: () => { actions.toggleMute(author.id); close(); } },
-      // Unblocking is one tap; blocking asks first and says what it does.
-      { key: 'block', icon: 'ban-outline', label: blocked ? `Unblock @${author.handle}` : `Block @${author.handle}`, danger: !blocked, onPress: () => {
-        if (blocked) { actions.toggleBlock(author.id); close(); return; }
-        confirmBlock(author, () => { if (!actions.isBlocked(author.id)) actions.toggleBlock(author.id); close(); });
-      } },
-    );
+    rows.push({ key: 'mute', icon: muted ? 'volume-high-outline' : 'volume-mute-outline', label: muted ? `Unmute @${author.handle}` : `Mute @${author.handle}`, note: muted ? undefined : 'You won’t see their posts. They aren’t told.', onPress: () => { actions.toggleMute(author.id); close(); } });
+    // Asked first, as a comment's report is; the menu stays up behind the question and says thanks after.
+    dangerRows.push({ key: 'report', icon: 'flag-outline', label: 'Report', danger: true, onPress: () => ask(reportQuestion(isHit ? 'Instant' : post?.kind === 'clip' ? 'clip' : 'post', () => {
+      reported.current = { post, story };
+      actions.reportUser(author.id, `${isHit ? 'hit' : 'post'}:${item.id}`);
+      setReportedNow(true);
+      say(REPORT_THANKS, true);
+    })) });
+    // Unblocking is one tap; blocking asks first and says what it does.
+    dangerRows.push({ key: 'block', icon: 'ban-outline', label: blocked ? `Unblock @${author.handle}` : `Block @${author.handle}`, danger: !blocked, onPress: () => {
+      if (blocked) { actions.toggleBlock(author.id); close(); return; }
+      ask(blockQuestion(author, () => { if (!actions.isBlocked(author.id)) actions.toggleBlock(author.id); close(); }));
+    } });
   }
   // Admins only (the database refuses anyone else): take it down, with a
   // reason, on its own page; or, once down, put it back. Never on your own:
   // Delete and Archive are there for that.
-  if (admin && !mine) {
+  if (admin && item && !mine) {
     const what = isHit ? 'hit' as const : 'post' as const;
-    rows.push(removed
-      ? { key: 'restore', icon: 'eye-outline', label: 'Restore', note: 'Everyone who could see it before sees it again.', onPress: () => { void actions.restoreContent(what, item.id); close(); } }
+    dangerRows.push(removed
+      ? { key: 'restore', icon: 'eye-outline', label: 'Restore', note: 'Everyone who could see it sees it again', onPress: () => { void actions.restoreContent(what, item.id); close(); } }
       : { key: 'takedown', icon: 'eye-off-outline', label: 'Take down', note: 'Breaks CourtSide’s rules. Its author is told why.', danger: true, onPress: () => router.replace({ pathname: '/take-down', params: { kind: what, id: item.id } }) });
   }
+
+  // Each button's width: 72 where the row has room, narrower so five still fit a small phone.
+  const tileW = Math.min(72, Math.floor((Math.min(windowWidth, SHEET_MAX_W) - spacing.md * 2) / Math.max(4, tiles.length)));
+
+  const listRow = (row: Row) => (
+    <Pressable
+      key={row.key}
+      accessibilityRole="button"
+      accessibilityLabel={row.label}
+      accessibilityHint={row.note}
+      accessibilityState={{ disabled: !!row.waiting }}
+      disabled={!!row.waiting}
+      onPress={() => { void row.onPress(); }}
+      style={({ pressed }) => [styles.row, pressed && styles.rowPressed, row.waiting && styles.dimmed]}
+    >
+      {row.icon === 'court'
+        ? <View style={styles.glyph}><CourtGlyph size={17} color={row.danger ? colors.danger : colors.text} /></View>
+        : <Ionicons name={row.icon} size={22} color={row.danger ? colors.danger : colors.text} />}
+      <View style={styles.rowWords}>
+        <Text style={[styles.label, row.danger && styles.labelDanger]}>{row.label}</Text>
+        {row.note ? <Text style={styles.note}>{row.note}</Text> : null}
+      </View>
+    </Pressable>
+  );
+
+  const body = !item ? (
+    // Opened for something no longer loaded (an Instant that ran out, a post deleted, an old link).
+    <View style={styles.panel} accessibilityLiveRegion="polite">
+      <Ionicons name="time-outline" size={26} color={colors.textMuted} />
+      <Text style={styles.panelText}>{isHit ? 'This Instant isn’t here any more.' : 'This post isn’t here any more.'}</Text>
+      <View style={styles.panelButtons}>
+        <Pressable accessibilityRole="button" onPress={close} style={({ pressed }) => [styles.primary, pressed && styles.pressedButton]}><Text style={styles.primaryText}>Done</Text></Pressable>
+      </View>
+    </View>
+  ) : done ? (
+    <View style={styles.panel} accessibilityLiveRegion="polite" {...(Platform.OS === 'web' ? { role: 'status', 'aria-live': 'polite' } : {})}>
+      <Ionicons name={done.ok ? 'checkmark-circle' : 'alert-circle'} size={26} color={done.ok ? colors.brand : colors.danger} />
+      <Text style={styles.panelText}>{done.text}</Text>
+      <View style={styles.panelButtons}>
+        {done.retry ? (
+          <Pressable accessibilityRole="button" onPress={() => { const again = done.retry; setDone(null); again?.(); }} style={({ pressed }) => [styles.secondary, pressed && styles.pressedButton]}><Text style={styles.secondaryText}>Try again</Text></Pressable>
+        ) : null}
+        {/* Instagram's next step after a report: block them too (asked first, as blocking always is). */}
+        {reportedNow && author && !blockedIds.includes(author.id) ? (
+          <Pressable accessibilityRole="button" accessibilityLabel={`Block @${author.handle}`} onPress={() => ask(blockQuestion(author, () => { if (!actions.isBlocked(author.id)) actions.toggleBlock(author.id); close(); }))} style={({ pressed }) => [styles.secondary, styles.blockButton, pressed && styles.pressedButton]}>
+            <Text style={[styles.secondaryText, styles.blockText]} numberOfLines={1}>Block @{author.handle}</Text>
+          </Pressable>
+        ) : null}
+        <Pressable accessibilityRole="button" onPress={close} style={({ pressed }) => [styles.primary, pressed && styles.pressedButton]}><Text style={styles.primaryText}>Done</Text></Pressable>
+      </View>
+    </View>
+  ) : working ? (
+    // The clip coming down for Instagram (it can take a while): what is happening, what Instagram gets, and a way out.
+    <View style={styles.panel} accessibilityLiveRegion="polite" {...(Platform.OS === 'web' ? { role: 'status', 'aria-live': 'polite' } : {})}>
+      <CourtSpinner size={26} />
+      <Text style={styles.panelText}>{storyMedia?.kind === 'photo' ? 'Getting your photo ready for Instagram…' : 'Getting your clip ready for Instagram…'}</Text>
+      {asIsNote ? <Text style={styles.panelNote}>{asIsNote}</Text> : null}
+      <View style={styles.panelButtons}>
+        <Pressable accessibilityRole="button" onPress={cancelStory} style={({ pressed }) => [styles.secondary, pressed && styles.pressedButton]}><Text style={styles.secondaryText}>Cancel</Text></Pressable>
+      </View>
+    </View>
+  ) : (
+    <ScrollView
+      style={{ maxHeight: Math.max(240, windowHeight - insets.top - insets.bottom - 64) }}
+      contentContainerStyle={styles.list}
+      bounces={false}
+      showsVerticalScrollIndicator={false}
+      scrollEventThrottle={32}
+      onScroll={(e) => { listTop.current = e.nativeEvent.contentOffset.y <= 0; }}
+    >
+      {removed ? (
+        // Why it is down, in the words its author was given; who did it is never shown.
+        <View style={styles.removedBox} accessibilityRole="text">
+          <Ionicons name="eye-off-outline" size={20} color={colors.danger} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.removedTitle}>{removedLine(removed)}</Text>
+            <Text style={styles.note}>{mine ? 'Only you and CourtSide’s admins can see it.' : 'Only its author and admins can see it.'}</Text>
+          </View>
+        </View>
+      ) : null}
+      {tiles.length ? (
+        <View style={styles.tiles}>
+          {tiles.map((tile) => {
+            const still = tile.waiting || tile.busy;
+            return (
+              <Pressable
+                key={tile.key}
+                accessibilityRole="button"
+                accessibilityLabel={tile.spoken}
+                accessibilityState={{ disabled: !!still, busy: !!tile.busy }}
+                disabled={!!still}
+                onPress={() => { void tile.onPress(); }}
+                style={[styles.tile, { width: tileW }]}
+              >
+                {({ pressed }) => (
+                  <>
+                    <View style={[styles.tileCircle, pressed && styles.tileCirclePressed, tile.waiting && styles.dimmed]}>
+                      {still ? <CourtSpinner size={20} ink={colors.textMuted} /> : <Ionicons name={tile.icon} size={23} color={colors.text} />}
+                    </View>
+                    <Text style={[styles.tileLabel, tile.waiting && styles.dimmed]} numberOfLines={1}>{tile.label}</Text>
+                  </>
+                )}
+              </Pressable>
+            );
+          })}
+        </View>
+      ) : null}
+      {tiles.length && (rows.length || dangerRows.length) ? <View style={styles.rule} /> : null}
+      {rows.map(listRow)}
+      {rows.length && dangerRows.length ? <View style={styles.rule} /> : null}
+      {dangerRows.map(listRow)}
+    </ScrollView>
+  );
 
   return (
     <View style={styles.backdrop}>
       <SheetBackdrop leaving={leaving} />
       <Pressable accessibilityRole="button" accessibilityLabel="Close menu" onPressIn={close} style={StyleSheet.absoluteFill} />
-      <Animated.View onLayout={(e) => { const h = Math.ceil(e.nativeEvent.layout.height); if (h > 0) setSheetH(h + 24); }} style={[styles.sheet, { paddingBottom: insets.bottom + spacing.md, transform: [{ translateY: rise.interpolate({ inputRange: [0, 1], outputRange: [0, sheetH] }) }] }]}>
+      <Animated.View
+        {...sheetPan.panHandlers}
+        onLayout={(e) => { const h = Math.ceil(e.nativeEvent.layout.height); if (h > 0) setSheetH(h + 24); }}
+        style={[
+          styles.sheet,
+          // On a dark court the page behind is dimmed to almost the sheet's own colour: a step lighter keeps its edge.
+          pageIsDark() && { backgroundColor: colors.bgElevated },
+          { paddingBottom: insets.bottom + spacing.md, transform: [{ translateY: Animated.add(rise.interpolate({ inputRange: [0, 1], outputRange: [0, sheetH] }), drag) }] },
+        ]}
+      >
         {storyMedia && currentUser ? (
           <>
             {/* The overlay for Share to Instagram Story, drawn story-sized (1080 × 1920 on this screen) out of sight under the
@@ -293,51 +511,14 @@ export default function PostMenu() {
                 ) : null}
               </View>
             </View>
-            <View pointerEvents="none" style={styles.stickerCover} />
+            <View pointerEvents="none" style={[styles.stickerCover, pageIsDark() && { backgroundColor: colors.bgElevated }]} />
           </>
         ) : null}
-        <View style={styles.grabber} />
-        {done ? (
-          <View style={styles.doneBox}>
-            <Ionicons name="checkmark-circle" size={22} color={colors.brand} />
-            <Text style={styles.doneText}>{done}</Text>
-            <View style={styles.doneActions}>
-              {/* Instagram's next step after a report: block them too (asked first, as blocking always is). */}
-              {reportedNow && author && !blockedIds.includes(author.id) ? (
-                <Pressable accessibilityRole="button" accessibilityLabel={`Block @${author.handle}`} onPress={() => confirmBlock(author, () => { if (!actions.isBlocked(author.id)) actions.toggleBlock(author.id); close(); })} style={({ pressed }) => [styles.blockButton, pressed && { opacity: 0.7 }]}>
-                  <Text style={styles.blockButtonText} numberOfLines={1}>Block @{author.handle}</Text>
-                </Pressable>
-              ) : null}
-              <Pressable accessibilityRole="button" onPress={close} style={({ pressed }) => [styles.doneButton, pressed && { opacity: 0.85 }]}><Text style={styles.doneButtonText}>Done</Text></Pressable>
-            </View>
-          </View>
-        ) : (
-          <ScrollView style={{ maxHeight: Math.max(240, windowHeight - insets.top - insets.bottom - 64) }} contentContainerStyle={styles.list} bounces={false} showsVerticalScrollIndicator={false}>
-            {removed ? (
-              // Why it is down, in the words its author was given; who did it is never shown.
-              <View style={styles.removedBox} accessibilityRole="text">
-                <Ionicons name="eye-off-outline" size={20} color={colors.danger} />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.removedTitle}>{removedLine(removed)}</Text>
-                  <Text style={styles.note}>{mine ? 'Only you and CourtSide’s admins can see it.' : 'Only its author and admins can see it.'}</Text>
-                </View>
-              </View>
-            ) : null}
-            {rows.map((row) => (
-              <Pressable key={row.key} accessibilityRole="button" accessibilityLabel={row.label} disabled={working || row.waiting} onPress={() => { void row.onPress(); }} style={({ pressed }) => [styles.row, pressed && styles.rowPressed, ((working && row.key !== 'ig-story') || row.waiting) && styles.rowDimmed]}>
-                {working && row.key === 'ig-story'
-                  ? <View style={styles.glyph}><CourtSpinner size={20} ink={colors.text} /></View>
-                  : row.icon === 'court'
-                  ? <View style={styles.glyph}><CourtGlyph size={17} color={row.danger ? colors.danger : colors.text} /></View>
-                  : <Ionicons name={row.icon} size={22} color={row.danger ? colors.danger : colors.text} />}
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.label, row.danger && { color: colors.danger }]}>{row.label}</Text>
-                  {row.note ? <Text style={styles.note}>{row.note}</Text> : null}
-                </View>
-              </Pressable>
-            ))}
-          </ScrollView>
-        )}
+        {/* The grabber, in a strip tall enough to take hold of. */}
+        <View {...grabberPan.panHandlers} style={styles.grabberStrip}>
+          <View style={styles.grabber} />
+        </View>
+        {body}
       </Animated.View>
     </View>
   );
@@ -345,28 +526,46 @@ export default function PostMenu() {
 
 const styleDefinitions = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'transparent', justifyContent: 'flex-end' },
-  sheet: { backgroundColor: colors.bg, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: spacing.md, paddingTop: spacing.sm, gap: 4 },
-  grabber: { alignSelf: 'center', width: 36, height: 4, borderRadius: 2, backgroundColor: colors.border, marginBottom: spacing.sm },
-  // The rows keep the sheet's own gap between them inside the scroll.
-  list: { gap: 4 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 13, paddingHorizontal: spacing.sm, borderRadius: radius.md },
+  // A drag with a mouse moves the sheet rather than selecting its words.
+  // A drag moves the whole sheet (its transform), centred and capped on a wide window, so pulling it down still closes it there.
+  sheet: { width: '100%', maxWidth: SHEET_MAX_W, alignSelf: 'center', backgroundColor: colors.bg, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: spacing.md, userSelect: 'none' },
+  // The same grabber as the comments sheet's, in a strip a finger can find.
+  grabberStrip: { height: 24, alignItems: 'center', justifyContent: 'center', marginBottom: 2 },
+  grabber: { width: 40, height: 4, borderRadius: 2, backgroundColor: colors.borderStrong },
+  list: { gap: 2, paddingBottom: 2 },
+  // The round buttons: one fixed width each, from the left, so a button settling late at the end moves nothing.
+  // The first circle's edge lines up with the list's icons below it.
+  tiles: { flexDirection: 'row', paddingTop: 4, paddingBottom: spacing.md },
+  tile: { alignItems: 'center', gap: 7, paddingVertical: 2 },
+  tileCircle: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
+  tileCirclePressed: { backgroundColor: colors.surfaceAlt },
+  tileLabel: { ...font('500'), fontSize: 12.5, color: colors.text },
+  dimmed: { opacity: 0.45 },
+  rule: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border, marginHorizontal: spacing.sm, marginVertical: 6 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 14, minHeight: 50, paddingVertical: 11, paddingHorizontal: spacing.sm, borderRadius: radius.md },
+  rowWords: { flex: 1, gap: 2 },
   // The court glyph is narrower than an icon: as wide as one, so the labels line up.
   glyph: { width: 22, alignItems: 'center' },
-  rowPressed: { backgroundColor: colors.surface },
-  rowDimmed: { opacity: 0.45 },
+  rowPressed: { backgroundColor: colors.surfaceAlt },
   // The Instagram overlay's hidden copy, clipped to the sheet, and the sheet-coloured cover over it (the rows draw on top).
   stickerClip: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, overflow: 'hidden', borderTopLeftRadius: 24, borderTopRightRadius: 24 },
   stickerStage: { position: 'absolute', left: 0, bottom: 0 },
   stickerCover: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: colors.bg, borderTopLeftRadius: 24, borderTopRightRadius: 24 },
-  label: { ...typography.bodyStrong, color: colors.text },
-  note: { ...typography.small, color: colors.textMuted, marginTop: 2 },
-  removedBox: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 12, paddingHorizontal: spacing.md, marginBottom: 4, borderRadius: radius.md, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
-  removedTitle: { ...typography.bodyStrong, color: colors.danger },
-  doneBox: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.lg, paddingHorizontal: spacing.md },
-  doneText: { ...typography.body, color: colors.text, textAlign: 'center' },
-  doneActions: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: spacing.sm, marginTop: spacing.sm },
-  doneButton: { minHeight: 44, minWidth: 96, paddingHorizontal: spacing.xl, borderRadius: radius.pill, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
-  doneButtonText: { ...typography.smallStrong, fontSize: 14, color: colors.brandInk },
-  blockButton: { minHeight: 44, maxWidth: 220, paddingHorizontal: spacing.lg, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.danger, alignItems: 'center', justifyContent: 'center' },
-  blockButtonText: { ...typography.smallStrong, fontSize: 14, color: colors.danger },
+  label: { ...font('500'), fontSize: 16, letterSpacing: -0.2, color: colors.text },
+  labelDanger: { color: colors.danger },
+  note: { ...typography.small, color: colors.textMuted },
+  removedBox: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 12, paddingHorizontal: spacing.md, marginBottom: spacing.sm, borderRadius: radius.md, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
+  removedTitle: { ...typography.body, ...font('600'), color: colors.danger },
+  // What happened, in the sheet's place: an icon, a line or two, and the way on.
+  panel: { alignItems: 'center', gap: spacing.sm, paddingTop: spacing.md, paddingBottom: spacing.lg, paddingHorizontal: spacing.lg },
+  panelText: { ...typography.body, ...font('500'), color: colors.text, textAlign: 'center', lineHeight: 21 },
+  panelNote: { ...typography.small, color: colors.textMuted, textAlign: 'center', lineHeight: 18 },
+  panelButtons: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
+  primary: { minHeight: 44, minWidth: 112, paddingHorizontal: spacing.xl, borderRadius: radius.pill, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
+  primaryText: { ...typography.bodyStrong, color: colors.brandInk },
+  secondary: { minHeight: 44, minWidth: 112, paddingHorizontal: spacing.xl, borderRadius: radius.pill, backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center' },
+  secondaryText: { ...typography.bodyStrong, color: colors.text },
+  pressedButton: { opacity: 0.8 },
+  blockButton: { maxWidth: 220, borderColor: colors.danger },
+  blockText: { color: colors.danger },
 });

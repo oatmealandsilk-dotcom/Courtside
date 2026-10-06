@@ -3,7 +3,7 @@ import { PlaceLine } from '@/components/PlaceLine';
 import { TaggedLine } from '@/components/TaggedLine';
 import { Wash } from '@/components/Wash';
 import React, { useEffect, useRef, useState, memo } from 'react';
-import { Image, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Image, Modal, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ZoomableMedia, type HomeRect, type ZoomableMediaHandle } from '@/components/ZoomableMedia';
@@ -13,7 +13,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Heart } from '@/components/Heart';
 
 import { PostVideo } from '@/components/PostVideo';
-import { CommentThread, threadsOf } from '@/components/CommentThread';
+import { CommentThread, CommentsPeek, threadsOf } from '@/components/CommentThread';
 import { useApp } from '@/store/AppContext';
 import { isDesktopBrowser } from '@/lib/browserDevice';
 import { lockPageSwipe } from '@/features/navigation/swipeLock';
@@ -57,6 +57,12 @@ interface Props {
   onMore: () => void;
   /** Room left above for the wordmark. */
   topInset: number;
+  /**
+   * Room kept clear at the bottom for the tab bar: the feed passes the same
+   * as under a written post, so "Add a comment…" sits on one line on every
+   * post. Left out, a full-size bar's worth.
+   */
+  bottomInset?: number;
   /** A play burst over the picture, drawn by the feed. */
   burst?: React.ReactNode;
   /** Counts up on each double tap, so the heart on the button pops with it. */
@@ -97,7 +103,7 @@ const LANE_MIN = 400;
 /** The buttons' one size: like, comment, send, save and more all read as a set. */
 const ICON = 26;
 
-function MediaPostPageInner({ post, author, liked, saved, active, preload = false, onDoubleTap, onToggleLike, onToggleSave, onComment, onShare, onMore, topInset, burst, pop = 0, discInk, onReady }: Props) {
+function MediaPostPageInner({ post, author, liked, saved, active, preload = false, onDoubleTap, onToggleLike, onToggleSave, onComment, onShare, onMore, topInset, bottomInset, burst, pop = 0, discInk, onReady }: Props) {
   // Fills on the tap; the store's own redraw follows without changing anything on screen.
   const like = useOptimisticToggle(`p:${post.id}`, liked, onToggleLike, pop);
   const likes = post.likedBy.length + like.delta;
@@ -247,11 +253,11 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
     : { width: '100%' as const, maxHeight: '62%' as const, aspectRatio: !post.videoUrl && shape ? shape : 4 / 5, ...(desktopWeb ? { maxWidth: LANE_MIN } : null) };
 
   return (
-    // Without comments there is nothing to fill the bottom, so the picture and
-    // its words sit in the middle of the page instead of leaving a gap below.
-    <View style={[styles.page, { paddingTop: topInset }]}>
+    // Top down, the way every post's page is laid out, so the name sits in the same place from one post
+    // to the next; "Add a comment…" closes the page at its bottom edge, comments or not (Oct 6 review).
+    <View style={[styles.page, { paddingTop: topInset }, bottomInset != null ? { paddingBottom: bottomInset } : null]}>
       <Wash height={300} strength={0.6} />
-     <View style={[styles.column, !thread.length && styles.pageCentred]} onLayout={(e) => { const { width, height } = e.nativeEvent.layout; if (width > 0 && height > 0) setRoom({ w: width, h: height }); }}>
+     <View style={styles.column} onLayout={(e) => { const { width, height } = e.nativeEvent.layout; if (width > 0 && height > 0) setRoom({ w: width, h: height }); }}>
       {/* Who and their level, in the space above the picture. */}
       <View style={[styles.whoRow, lane]} onLayout={measured(setHead, head)}>
         <Pressable accessibilityRole="link" accessibilityLabel={`View ${author.name}'s profile${streakWords(streak)}`} onPress={() => { actions.noteFeedSignal({ kind: 'post', id: post.id, profileTap: true }); openPlayer(author.id, currentUserId); }} style={styles.who}>
@@ -329,42 +335,42 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
               once there is one: no row of zeros. */}
           <View style={styles.actions}>
             {/* A tap likes; holding it opens who liked it. The like waits for the finger to lift, so a hold never likes by accident. The number opens who liked it too. */}
-            <View style={styles.action}>
-              <Tappable onPress={like.toggle} onLongPress={() => { haptics.commit(); router.push({ pathname: '/likes', params: { id: post.id } }); }} scaleTo={0.78} hitSlop={8} accessibilityLabel={like.on ? 'Unlike. Hold to see who liked it' : 'Like. Hold to see who liked it'}>
+            <View style={styles.like}>
+              <Tappable onPress={like.toggle} onLongPress={() => { haptics.commit(); router.push({ pathname: '/likes', params: { id: post.id } }); }} scaleTo={0.78} style={[styles.action, likes > 0 && styles.actionBeforeCount]} accessibilityLabel={like.on ? 'Unlike. Hold to see who liked it' : 'Like. Hold to see who liked it'}>
                 <Heart liked={like.on} pop={pop} size={ICON} ink={colors.text} />
               </Tappable>
               {likes > 0 ? (
-                <Pressable accessibilityRole="button" accessibilityLabel={`${likes} ${likes === 1 ? 'like' : 'likes'}, see who`} hitSlop={8} onPress={() => router.push({ pathname: '/likes', params: { id: post.id } })}>
+                <Pressable accessibilityRole="button" accessibilityLabel={`${likes} ${likes === 1 ? 'like' : 'likes'}, see who`} onPress={() => router.push({ pathname: '/likes', params: { id: post.id } })} style={styles.count}>
                   <Text style={styles.actionText}>{compactNumber(likes)}</Text>
                 </Pressable>
               ) : null}
             </View>
-            <Tappable onPress={onComment} scaleTo={0.78} hitSlop={6} style={styles.action} accessibilityLabel={post.commentIds.length ? `Comments, ${post.commentIds.length}` : 'Comments'}>
+            <Tappable onPress={onComment} scaleTo={0.78} style={styles.action} accessibilityLabel={post.commentIds.length ? `Comments, ${post.commentIds.length}` : 'Comments'}>
               <Ionicons name="chatbubble-outline" size={ICON - 1} color={colors.text} />
               {post.commentIds.length ? <Text style={styles.actionText}>{compactNumber(post.commentIds.length)}</Text> : null}
             </Tappable>
             {/* Nobody else can open something taken down, so there is nothing to send. */}
             {closed ? null : (
-              <Tappable onPress={onShare} scaleTo={0.78} hitSlop={6} style={styles.action} accessibilityLabel="Send this post to someone">
+              <Tappable onPress={onShare} scaleTo={0.78} style={styles.action} accessibilityLabel="Send this post to someone">
                 <Ionicons name="arrow-redo-outline" size={ICON} color={colors.text} />
                 {post.shares ? <Text style={styles.actionText}>{compactNumber(post.shares)}</Text> : null}
               </Tappable>
             )}
             <View style={styles.flex} />
-            <Tappable onPress={onToggleSave} scaleTo={0.78} hitSlop={6} style={styles.action} accessibilityLabel={saved ? 'Remove from saved' : 'Save this post'}>
+            <Tappable onPress={onToggleSave} scaleTo={0.78} style={styles.action} accessibilityLabel={saved ? 'Remove from saved' : 'Save this post'}>
               <Ionicons name={saved ? 'bookmark' : 'bookmark-outline'} size={ICON - 1} color={colors.text} />
               {post.savedBy?.length ? <Text style={styles.actionText}>{compactNumber(post.savedBy.length)}</Text> : null}
             </Tappable>
-            <Tappable onPress={onMore} scaleTo={0.78} hitSlop={6} style={styles.more} accessibilityLabel="More options">
+            <Tappable onPress={onMore} scaleTo={0.78} style={styles.action} accessibilityLabel="More options">
               <Ionicons name="ellipsis-horizontal" size={ICON - 2} color={colors.text} />
             </Tappable>
           </View>
         </View>
 
-        {/* The comments, open on the page and filling whatever is left of it;
-            the line at the bottom opens the sheet to write one. */}
+        {/* The comments, a still preview in whatever room is left (CommentsPeek: never a box that scrolls
+            inside the feed's swipe); the line on the page's bottom edge opens the sheet to write one. */}
         {thread.length ? (
-          <ScrollView style={styles.thread} contentContainerStyle={styles.threadInner} nestedScrollEnabled showsVerticalScrollIndicator={false}>
+          <CommentsPeek style={styles.thread} contentContainerStyle={styles.threadInner}>
             {thread.map((t) => (
               <CommentThread
                 key={t.top.id}
@@ -376,10 +382,10 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
                 onPressBody={(c) => router.push({ pathname: '/comments', params: { kind: 'post', id: post.id, at: c.id } })}
               />
             ))}
-          </ScrollView>
+          </CommentsPeek>
         ) : null}
         {closed ? null : (
-          <Pressable accessibilityRole="button" accessibilityLabel="Add a comment" onPress={() => router.push({ pathname: '/comments', params: { kind: 'post', id: post.id, focus: '1' } })} onLayout={measured(setEntry, entry)} style={styles.addComment}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Add a comment" onPress={() => router.push({ pathname: '/comments', params: { kind: 'post', id: post.id, focus: '1' } })} onLayout={measured(setEntry, entry)} style={({ pressed }) => [styles.addComment, pressed && styles.addCommentPressed]}>
             {currentUser ? <Avatar name={currentUser.name} seed={currentUser.avatarSeed} uri={currentUser.avatarUrl} size={28} /> : null}
             <Text style={styles.addCommentText}>{thread.length ? 'Add a comment…' : 'Be the first to comment…'}</Text>
           </Pressable>
@@ -394,13 +400,13 @@ const styleDefinitions = StyleSheet.create({
   // The bottom keeps clear of the bar at its full size (see VerticalPager).
   page: { flex: 1, backgroundColor: colors.bg, paddingHorizontal: spacing.md, paddingBottom: spacing.md + BAR_OVERLAY_PX, alignItems: 'center' },
   column: { flex: 1, width: '100%', gap: spacing.md },
-  pageCentred: { justifyContent: 'center' },
   frame: { borderRadius: radius.lg, overflow: 'hidden', backgroundColor: '#000' },
   // Instagram's tall post: 4:5 by default, so the picture is big without taking the page.
   frameTall: { alignSelf: 'center' },
   // A wide video: the same rounding as every picture in the feed, the video's own shape.
   frameWide: { alignSelf: 'center' },
-  details: { gap: spacing.sm, flexShrink: 1, minHeight: 0 },
+  // Takes all the room under the picture, so "Add a comment…" can sit on the page's bottom edge.
+  details: { gap: spacing.sm, flexGrow: 1, flexShrink: 1, minHeight: 0 },
   // The stats, caption and buttons: close together, as one block under the picture.
   under: { gap: 10 },
   flex: { flex: 1 },
@@ -411,15 +417,20 @@ const styleDefinitions = StyleSheet.create({
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   name: { ...typography.bodyStrong, color: colors.text, flexShrink: 1, minWidth: 56 },
   sub: { ...typography.small, color: colors.textFaint },
-  actions: { flexDirection: 'row', alignItems: 'center', gap: 18 },
-  action: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 32 },
-  // The last glyph's dots end on the page's right edge, like the caption's words.
-  more: { minHeight: 32, justifyContent: 'center', marginRight: -2 },
+  // 18 points between glyphs, each button a full 44-point square (a browser has no hitSlop); the row
+  // is pulled out by the padding at its ends, and up and down, so it takes the room it always did.
+  actions: { flexDirection: 'row', alignItems: 'center', marginHorizontal: -9, marginVertical: -6 },
+  action: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, minHeight: 44, minWidth: 44, paddingHorizontal: 9 },
+  like: { flexDirection: 'row', alignItems: 'center' },
+  actionBeforeCount: { paddingRight: 3 },
+  count: { minHeight: 44, justifyContent: 'center', paddingLeft: 3, paddingRight: 9 },
   actionText: { ...typography.bodyStrong, fontSize: 14, color: colors.text, fontVariant: ['tabular-nums'] },
   thread: { flexShrink: 1, minHeight: 0, marginTop: spacing.xs },
   threadInner: { gap: spacing.lg, paddingTop: spacing.xs, paddingBottom: spacing.sm },
   foot: { position: 'absolute', left: 0, right: 0, bottom: 0 },
-  addComment: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingTop: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  // Pinned to the page's bottom edge, as under a written post (PostCard): marginTop auto takes the room left above it.
+  addComment: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 44, marginTop: 'auto', paddingTop: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  addCommentPressed: { opacity: 0.7 },
   addCommentText: { ...typography.body, color: colors.textFaint, flex: 1 },
   caption: { ...typography.body, color: colors.text, lineHeight: 21 },
   captionName: { ...typography.bodyStrong, color: colors.text },

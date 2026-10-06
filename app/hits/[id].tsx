@@ -63,7 +63,7 @@ export default function HitThread() {
   if (!story || !author) {
     return (
       <Screen title="Instant" compactTitle onBack={() => goBack()}>
-        {loading ? <View style={{ paddingVertical: 60, alignItems: 'center' }}><CourtSpinner size={28} /></View> : <EmptyState title="This instant has gone" body="It may have expired or been taken down." />}
+        {loading ? <View style={{ paddingVertical: 60, alignItems: 'center' }}><CourtSpinner size={28} /></View> : <EmptyState title="This Instant has gone" body="It may have expired or been taken down." />}
       </Screen>
     );
   }
@@ -75,7 +75,7 @@ export default function HitThread() {
   const moderate = currentUser?.isAdmin ? () => {
     haptics.tap();
     if (story.removed) {
-      confirm({ title: 'Restore this instant?', message: 'Everyone who could see it before sees it again, with its comments.', confirmLabel: 'Restore', onConfirm: () => { void actions.restoreContent('hit', story.id); } });
+      confirm({ title: 'Restore this Instant?', message: 'Everyone who could see it before sees it again, with its comments.', confirmLabel: 'Restore', onConfirm: () => { void actions.restoreContent('hit', story.id); } });
     } else {
       router.push({ pathname: '/take-down', params: { kind: 'hit', id: story.id } });
     }
@@ -107,7 +107,7 @@ export default function HitThread() {
       compactTitle
       onBack={() => goBack()}
       right={moderate ? (
-        <Pressable accessibilityRole="button" accessibilityLabel={story.removed ? 'Restore this instant' : 'Take down this instant'} hitSlop={10} onPress={moderate}>
+        <Pressable accessibilityRole="button" accessibilityLabel={story.removed ? 'Restore this Instant' : 'Take down this Instant'} hitSlop={10} onPress={moderate}>
           <Ionicons name={story.removed ? 'eye-outline' : 'eye-off-outline'} size={23} color={story.removed ? colors.text : colors.danger} />
         </Pressable>
       ) : undefined}

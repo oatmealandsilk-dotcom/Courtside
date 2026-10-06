@@ -140,7 +140,7 @@ export default function Hit() {
           <Ionicons name="camera-outline" size={30} color="rgba(255,255,255,0.7)" />
           <Text style={styles.gateTitle}>Allow camera access</Text>
           {/* What an instant is lives on the Instant option in the Create box; here it only says why the camera is asked for. */}
-          <Text style={styles.gateBody}>CourtSide uses it to take your instant.</Text>
+          <Text style={styles.gateBody}>CourtSide uses it to take your Instant.</Text>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={permission.canAskAgain ? 'Allow camera' : 'Open Settings'}
@@ -160,7 +160,7 @@ export default function Hit() {
   if (shot) {
     return (
       <KeyboardAvoidingView behavior={Platform.OS === 'web' ? undefined : 'padding'} style={styles.root}>
-        <Image source={{ uri: shot }} style={StyleSheet.absoluteFill} resizeMode="cover" accessibilityLabel="Your instant" />
+        <Image source={{ uri: shot }} style={StyleSheet.absoluteFill} resizeMode="cover" accessibilityLabel="Your Instant" />
         <View pointerEvents="none" style={styles.scrimTop} />
         <View pointerEvents="none" style={styles.scrimBottom} />
         <View style={[styles.topBar, { top: insets.top + spacing.sm }]}>
@@ -185,7 +185,7 @@ export default function Hit() {
           />
           <View style={styles.actions}>
             <View style={styles.hours}><Ionicons name="time-outline" size={13} color="rgba(255,255,255,0.85)" /><Text style={styles.hoursText}>On the feed for 24 hours</Text></View>
-            <Pressable accessibilityRole="button" accessibilityLabel="Post instant" accessibilityState={{ disabled: posting }} disabled={posting} onPress={post} style={({ pressed }) => [styles.post, pressed && { opacity: 0.85 }, posting && { opacity: 0.6 }]}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Post Instant" accessibilityState={{ disabled: posting }} disabled={posting} onPress={post} style={({ pressed }) => [styles.post, pressed && { opacity: 0.85 }, posting && { opacity: 0.6 }]}>
               <Text style={styles.postText}>Post</Text>
               <Ionicons name="arrow-forward" size={17} color={colors.brandInk} />
             </Pressable>

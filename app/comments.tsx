@@ -6,7 +6,7 @@ import { StatusBar } from 'expo-status-bar';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image as ExpoImage } from 'expo-image';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Animated, { FadeInDown, FadeOut, runOnJS, scrollTo, useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming, type AnimatedRef } from 'react-native-reanimated';
+import Animated, { FadeInDown, FadeOut, LayoutAnimationConfig, ZoomIn, ZoomOut, runOnJS, scrollTo, useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming, type AnimatedRef } from 'react-native-reanimated';
 
 import { CommentThread, threadOf, threadsOf, useReplyDraft } from '@/components/CommentThread';
 import { JumpProvider } from '@/components/JumpTo';
@@ -266,12 +266,10 @@ export default function CommentsSheet() {
     return () => clearTimeout(t);
   }, [replyTarget, replyClosed]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // The right-hand button: a photo button while the box is empty, send once there is something to send.
-  const sendOn = useSharedValue(canSend ? 1 : 0);
+  // The right-hand button: a photo button while the box is empty, send once there is something to send
+  // (on an Instant, send only). Sending gives it a little push.
   const sendPop = useSharedValue(1);
-  useEffect(() => { sendOn.value = withTiming(canSend ? 1 : 0, { duration: 160 }); }, [canSend, sendOn]);
-  const sendStyle = useAnimatedStyle(() => ({ opacity: sendOn.value, transform: [{ scale: (0.6 + 0.4 * sendOn.value) * sendPop.value }] }));
-  const photoStyle = useAnimatedStyle(() => ({ opacity: 1 - sendOn.value, transform: [{ scale: 1 - 0.3 * sendOn.value }] }));
+  const sendStyle = useAnimatedStyle(() => ({ transform: [{ scale: sendPop.value }] }));
 
   // Sending feels instant: the box clears first, the button gives a little
   // push, the comment lands, and the list slides to it once it is drawn: to
@@ -368,7 +366,7 @@ export default function CommentsSheet() {
         header={
           <View style={styles.headerRow}>
             <Text ref={heading} accessibilityRole="header" accessibilityLabel={count ? `Comments, ${count}` : 'Comments'} style={styles.heading}>Comments{count ? ` · ${count}` : ''}</Text>
-            <Pressable accessibilityRole="button" accessibilityLabel="Close" hitSlop={10} onPress={close}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={close} style={styles.closeButton}>
               <Ionicons name="close" size={22} color={colors.textMuted} />
             </Pressable>
           </View>
@@ -422,8 +420,10 @@ export default function CommentsSheet() {
             {photo ? (
               <Animated.View entering={FadeInDown.duration(180)} style={styles.attached}>
                 <ExpoImage source={{ uri: photo }} style={StyleSheet.absoluteFill} contentFit="cover" />
-                <Pressable accessibilityRole="button" accessibilityLabel="Remove the photo" hitSlop={8} onPress={() => setPhoto(null)} style={styles.attachedRemove}>
-                  <Ionicons name="close" size={13} color="#fff" />
+                <Pressable accessibilityRole="button" accessibilityLabel="Remove the photo" onPress={() => setPhoto(null)} style={styles.attachedRemoveTarget}>
+                  <View style={styles.attachedRemove}>
+                    <Ionicons name="close" size={13} color="#fff" />
+                  </View>
                 </Pressable>
               </Animated.View>
             ) : null}
@@ -432,21 +432,34 @@ export default function CommentsSheet() {
               <View style={{ flex: 1 }}>
                 <Field inputRef={input} value={draft} onChangeText={changeDraft} placeholder={takenDown ? 'Comments are closed: this was taken down.' : replyingTo ? (replyingTo.self ? 'Add a reply…' : `Reply to @${replyingTo.handle}…`) : author && author.id !== currentUserId ? `Add a comment for ${author.name.split(' ')[0]}…` : 'Add a comment…'} multiline minHeight={44} onSubmitEditing={send} onFocus={onBoxFocus} onBlur={onBoxBlur} mentions compact maxLength={COMMENT_MAX} />
               </View>
-              <View style={styles.action}>
-                {kind === 'post' ? (
-                  <Animated.View style={[StyleSheet.absoluteFill, styles.center, photoStyle]} pointerEvents={canSend ? 'none' : 'auto'}>
-                    <Pressable accessibilityRole="button" accessibilityLabel="Add a photo" hitSlop={6} onPress={() => void addPhoto()} style={styles.photoButton}>
-                      <Ionicons name="image-outline" size={19} color={colors.textMuted} />
-                    </Pressable>
-                  </Animated.View>
-                ) : null}
-                <Animated.View style={[StyleSheet.absoluteFill, styles.center, kind === 'post' ? sendStyle : null]} pointerEvents={canSend ? 'auto' : kind === 'post' ? 'none' : 'auto'}>
-                  <Pressable accessibilityRole="button" accessibilityLabel="Post comment" disabled={!canSend} onPress={send} style={[styles.send, !canSend && kind !== 'post' && { opacity: 0.4 }]}>
-                    <BrandWash />
-                    <Ionicons name="arrow-up" size={19} color={colors.brandInk} />
-                  </Pressable>
-                </Animated.View>
-              </View>
+              {/* One button at a time, swapped with a quick zoom: drawn one over the other, a browser
+                  let the hidden send arrow catch the tap meant for the photo button (Oct 5 audit). */}
+              <LayoutAnimationConfig skipEntering>
+                <View style={styles.action}>
+                  {kind === 'post' && !canSend ? (
+                    <Animated.View key="photo" entering={ZoomIn.duration(160)} exiting={ZoomOut.duration(110)} style={[StyleSheet.absoluteFill, styles.center]}>
+                      <Pressable accessibilityRole="button" accessibilityLabel="Add a photo" onPress={() => void addPhoto()} style={styles.target}>
+                        {({ pressed }) => (
+                          <View style={[styles.photoButton, pressed && styles.photoPressed]}>
+                            <Ionicons name="image-outline" size={19} color={colors.textMuted} />
+                          </View>
+                        )}
+                      </Pressable>
+                    </Animated.View>
+                  ) : (
+                    <Animated.View key="send" entering={kind === 'post' ? ZoomIn.duration(160) : undefined} exiting={kind === 'post' ? ZoomOut.duration(110) : undefined} style={[StyleSheet.absoluteFill, styles.center]}>
+                      <Animated.View style={sendStyle}>
+                        <Pressable accessibilityRole="button" accessibilityLabel="Post comment" disabled={!canSend} onPress={send} style={styles.target}>
+                          <View style={[styles.send, !canSend && { opacity: 0.4 }]}>
+                            <BrandWash />
+                            <Ionicons name="arrow-up" size={19} color={colors.brandInk} />
+                          </View>
+                        </Pressable>
+                      </Animated.View>
+                    </Animated.View>
+                  )}
+                </View>
+              </LayoutAnimationConfig>
             </View>
           </View>
         </View>
@@ -532,6 +545,8 @@ function CommentList({ listRef, pull, onScrollY, contentContainerStyle, children
 const styleDefinitions = StyleSheet.create({
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
   heading: { ...typography.title, color: colors.text },
+  // A full 44-point target (a browser has no hitSlop), its × still on the page's right edge.
+  closeButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', marginRight: -11, marginVertical: -8 },
   list: { padding: spacing.lg, paddingTop: spacing.sm, gap: spacing.lg, paddingBottom: spacing.xl },
   empty: { ...typography.small, color: colors.textFaint, paddingVertical: spacing.lg, textAlign: 'center' },
   composer: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: 10, gap: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, backgroundColor: colors.bg },
@@ -539,18 +554,24 @@ const styleDefinitions = StyleSheet.create({
   replying: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm, marginHorizontal: -spacing.lg, marginTop: -spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: 8, backgroundColor: colors.surfaceAlt },
   replyingText: { ...typography.small, color: colors.textMuted, flex: 1 },
   replyingHandle: { ...typography.smallStrong, color: colors.text },
-  quick: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 2 },
-  quickItem: { width: 34, height: 30, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill },
+  // Each emoji is a full-height target sharing the row's width; the row gives back the extra height around it.
+  quick: { flexDirection: 'row', justifyContent: 'space-between', marginVertical: -6 },
+  quickItem: { flex: 1, maxWidth: 48, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill },
   quickPressed: { backgroundColor: colors.surfaceAlt, transform: [{ scale: 1.15 }] },
   quickEmoji: { fontSize: 22 },
   attached: { width: 64, height: 80, borderRadius: 12, overflow: 'hidden', backgroundColor: colors.surfaceAlt, marginLeft: 34 + spacing.sm },
-  attachedRemove: { position: 'absolute', top: 4, right: 4, width: 20, height: 20, borderRadius: 10, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center' },
+  // The × is small on the photo; what takes the tap is the whole top-right corner of it.
+  attachedRemoveTarget: { position: 'absolute', top: 0, right: 0, width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+  attachedRemove: { width: 22, height: 22, borderRadius: 11, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center' },
   inputRow: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm },
   // Centred on the box while it is one line; it stays at the bottom as the box grows.
   me: { marginBottom: 5 },
-  action: { width: 40, height: 44, alignItems: 'center', justifyContent: 'center' },
+  action: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  // The round button is 40 across; the whole 44-point square around it takes the tap.
+  target: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   center: { alignItems: 'center', justifyContent: 'center' },
   // The same two round buttons as the message box: a quiet one for the photo (like the mic there), the green one to send.
   photoButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
+  photoPressed: { backgroundColor: colors.surfaceAlt },
   send: { width: 40, height: 40, borderRadius: radius.pill, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center', shadowColor: colors.brand, shadowOpacity: 0.28, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 3 },
 });

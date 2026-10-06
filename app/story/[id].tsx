@@ -12,12 +12,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ClipPlayback } from '@/components/ClipPlayback';
 import { MediaPlaceholder } from '@/components/MediaPlaceholder';
-import { Avatar, Button, EmptyState } from '@/components/ui';
+import { Avatar, EmptyState } from '@/components/ui';
 import { hitClock, isLive } from '@/features/stories/stories';
 import { RemovedNote } from '@/features/moderation/RemovedNote';
-import { confirm } from '@/lib/confirm';
 import { relativeTime } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
+import type { Story } from '@/data/types';
 import { colors, radius, spacing, typography } from '@/theme';
 import { useStillLoading } from '@/lib/useStillLoading';
 import { CourtSpinner } from '@/components/CourtSpinner';
@@ -30,6 +30,11 @@ const VIDEO_MS = 12000;
  * Full-screen story viewer for one player. Tap the right side to move on, the
  * left to go back; the last one closes. Opened from the archive with ?story=,
  * it shows that one story on its own, live or not.
+ *
+ * Its ••• opens the same menu as an Instant's ••• in the feed (post-menu,
+ * kind=hit): Archive and Delete on your own, Report, Mute and Block on
+ * anyone else's. The viewer is paused while the menu (and any question it
+ * asks) is up, and on the way back moves on from an Instant that went.
  */
 export default function StoryViewer() {
   const focused = useIsFocused();
@@ -51,7 +56,11 @@ export default function StoryViewer() {
     [stories, id, only],
   );
   const [index, setIndex] = useState(0);
-  const current = list[Math.min(index, list.length - 1)];
+  // The Instant the ••• menu was opened on, as it was then. While the menu is up the viewer keeps
+  // showing it, deleted or not, rather than slide on to the next one behind the menu.
+  const [held, setHeld] = useState<{ story: Story; archived: boolean } | null>(null);
+  const shown = list[Math.min(index, list.length - 1)];
+  const current = held && !focused ? (stories.find((st) => st.id === held.story.id) ?? held.story) : shown;
   const progress = useRef(new Animated.Value(0)).current;
 
   // Count the view and start the bar afresh only when the Instant itself changes.
@@ -82,17 +91,20 @@ export default function StoryViewer() {
     });
     return () => { stopped = true; run?.stop(); };
   }, [current?.id, index, list.length, focused, progress]);
-  // What the viewer shows right now. A delete waits on its question while the
-  // bar keeps running, so by the yes the viewer may have moved on or closed.
-  const live = useRef({ mounted: true, index, list, currentId: current?.id });
-  live.current.index = index;
-  live.current.list = list;
-  live.current.currentId = current?.id;
+  // Back from the ••• menu: an Instant that went meanwhile (deleted, reported) or was put away
+  // (archived from the rail's viewer) is left behind, the way it was when these lived on the viewer
+  // itself: the next one slides into its place, or the viewer closes when there is none.
+  // Opened from the archive (?story=), archiving or unarchiving takes you back there.
   useEffect(() => {
-    const now = live.current;
-    now.mounted = true;
-    return () => { now.mounted = false; };
-  }, []);
+    if (!focused || !held) return;
+    const was = held;
+    setHeld(null);
+    const now = stories.find((st) => st.id === was.story.id);
+    const stillShown = list.some((st) => st.id === was.story.id);
+    if (now && stillShown && !!now.archived === was.archived) return;
+    if (only || !list.length) { goBack('/'); return; }
+    setIndex((i) => Math.min(i, list.length - 1));
+  }, [focused]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!user || !current) {
     return (
@@ -100,7 +112,7 @@ export default function StoryViewer() {
         <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={() => goBack('/')} style={styles.close}>
           <Ionicons name="close" size={28} color="#FFFFFF" />
         </Pressable>
-        {loading ? <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}><CourtSpinner size={28} ink="white" /></View> : <EmptyState title="Nothing to show" body="This instant has gone." />}
+        {loading ? <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}><CourtSpinner size={28} ink="white" /></View> : <EmptyState title="Nothing to show" body="This Instant has gone." />}
       </View>
     );
   }
@@ -112,34 +124,9 @@ export default function StoryViewer() {
     setIndex(next);
   };
 
-  // Off the list on show: back out when it was the only one, or step back from the last.
-  const leaveCurrent = () => {
-    if (only || list.length === 1) goBack('/');
-    else if (index >= list.length - 1) setIndex(Math.max(0, index - 1));
-  };
-  const archive = () => {
-    actions.toggleArchiveStory(current.id);
-    leaveCurrent();
-  };
-  const remove = () => {
-    const goingId = current.id;
-    confirm({
-      title: 'Delete this instant?', message: "Its likes and comments go with it. This can't be undone.", confirmLabel: 'Delete', destructive: true,
-      onConfirm: () => {
-        actions.deleteStory(goingId);
-        // The viewer already closed itself: nothing more to do here.
-        const now = live.current;
-        if (!now.mounted || !focusedRef.current) return;
-        if (now.currentId === goingId) {
-          if (only || now.list.length === 1) goBack('/');
-          else if (now.index >= now.list.length - 1) setIndex(Math.max(0, now.index - 1));
-          return;
-        }
-        // It moved past the deleted one: step back so the next Instant isn't skipped.
-        const at = now.list.findIndex((s) => s.id === goingId);
-        if (at >= 0 && at < now.index) setIndex(now.index - 1);
-      },
-    });
+  const openMenu = () => {
+    setHeld({ story: current, archived: !!current.archived });
+    router.push({ pathname: '/post-menu', params: { id: current.id, kind: 'hit' } });
   };
 
   const viewers = current.viewedBy.filter((v) => v !== current.authorId).length;
@@ -160,8 +147,8 @@ export default function StoryViewer() {
       </View>
 
       {/* Tap zones: a third on the left goes back, the rest goes forward. */}
-      <Pressable accessibilityRole="button" accessibilityLabel="Previous instant" onPress={() => step(-1)} style={styles.zoneLeft} />
-      <Pressable accessibilityRole="button" accessibilityLabel="Next instant" onPress={() => step(1)} style={styles.zoneRight} />
+      <Pressable accessibilityRole="button" accessibilityLabel="Previous Instant" onPress={() => step(-1)} style={styles.zoneLeft} />
+      <Pressable accessibilityRole="button" accessibilityLabel="Next Instant" onPress={() => step(1)} style={styles.zoneRight} />
 
       <View pointerEvents="box-none" style={[styles.top, { paddingTop: insets.top + 8 }]}>
         <View style={styles.bars}>
@@ -178,10 +165,10 @@ export default function StoryViewer() {
         <View style={styles.head}>
           <Pressable accessibilityRole="link" onPress={() => router.push(`/user/${user.id}`)} style={styles.who}>
             <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={34} />
-            <Text style={styles.name}>{mine ? 'Your instant' : user.name}</Text>
+            <Text style={styles.name}>{mine ? 'Your Instant' : user.name}</Text>
             <Text style={styles.time}>{relativeTime(current.createdAt)} · {hitClock(current)}</Text>
           </Pressable>
-          <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={() => goBack('/')} hitSlop={10}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={() => goBack('/')} style={styles.closeTarget}>
             <Ionicons name="close" size={28} color="#FFFFFF" />
           </Pressable>
         </View>
@@ -191,38 +178,28 @@ export default function StoryViewer() {
         {/* Taken down by an admin (migration 108): only its author and admins get here, and see why. */}
         {current.removed ? <RemovedNote removed={current.removed} align="start" onMedia item={{ kind: 'hit', id: current.id, authorId: current.authorId }} /> : null}
         {current.caption ? <Text style={styles.caption}>{current.caption}</Text> : null}
+        {/* One row of the same white-on-dark pills, all one height: like and comments on the left; your
+            views, then the ••• (Archive, Delete; or Report, Mute, Block) on the right. */}
         <View style={styles.reactRow}>
-          <Pressable accessibilityRole="button" accessibilityLabel={liked ? 'Unlike hit. Hold to see who liked it' : 'Like hit. Hold to see who liked it'} onPress={() => actions.toggleLikeStory(current.id)} onLongPress={() => { haptics.commit(); router.push({ pathname: '/likes', params: { id: current.id, kind: 'hit' } }); }} style={styles.views}>
-            <Ionicons name={liked ? 'heart' : 'heart-outline'} size={16} color={liked ? '#E17B7B' : '#FFFFFF'} />
-            <Text style={styles.viewsText}>{current.likedBy.length}</Text>
+          <Pressable accessibilityRole="button" accessibilityLabel={liked ? 'Unlike Instant. Hold to see who liked it' : 'Like Instant. Hold to see who liked it'} onPress={() => actions.toggleLikeStory(current.id)} onLongPress={() => { haptics.commit(); router.push({ pathname: '/likes', params: { id: current.id, kind: 'hit' } }); }} style={({ pressed }) => [styles.pill, pressed && styles.pillPressed]}>
+            <Ionicons name={liked ? 'heart' : 'heart-outline'} size={18} color={liked ? '#E17B7B' : '#FFFFFF'} />
+            <Text style={styles.pillText}>{current.likedBy.length}</Text>
           </Pressable>
-          <Pressable accessibilityRole="link" accessibilityLabel="Comments on this hit" onPress={() => router.push(`/hits/${current.id}`)} style={styles.views}>
-            <Ionicons name="chatbubble-outline" size={15} color="#FFFFFF" />
-            <Text style={styles.viewsText}>{current.commentIds.length}</Text>
+          <Pressable accessibilityRole="link" accessibilityLabel={`Comments on this Instant, ${current.commentIds.length}`} onPress={() => router.push(`/hits/${current.id}`)} style={({ pressed }) => [styles.pill, pressed && styles.pillPressed]}>
+            <Ionicons name="chatbubble-outline" size={17} color="#FFFFFF" />
+            <Text style={styles.pillText}>{current.commentIds.length}</Text>
+          </Pressable>
+          <View style={styles.flex} />
+          {mine ? (
+            <View style={styles.pill} accessibilityLabel={`${viewers} ${viewers === 1 ? 'view' : 'views'}`}>
+              <Ionicons name="stats-chart" size={15} color="#FFFFFF" />
+              <Text style={styles.pillText}>{viewers} {viewers === 1 ? 'view' : 'views'}</Text>
+            </View>
+          ) : null}
+          <Pressable accessibilityRole="button" accessibilityLabel="More options" onPress={openMenu} style={({ pressed }) => [styles.pill, styles.morePill, pressed && styles.pillPressed]}>
+            <Ionicons name="ellipsis-horizontal" size={20} color="#FFFFFF" />
           </Pressable>
         </View>
-        {mine ? (
-          <View style={styles.ownRow}>
-            <View style={styles.views}>
-              <Ionicons name="stats-chart" size={14} color="#FFFFFF" />
-              <Text style={styles.viewsText}>{viewers} {viewers === 1 ? 'view' : 'views'}</Text>
-            </View>
-            <View style={styles.ownActions}>
-              <Pressable accessibilityRole="button" accessibilityLabel="Delete this instant" onPress={remove} hitSlop={6} style={styles.views}>
-                <Ionicons name="trash-outline" size={15} color="#FFFFFF" />
-              </Pressable>
-              {current.removed ? null : isLive(current) || current.archived ? (
-                <Button
-                  label={current.archived ? 'Unarchive' : 'Archive'}
-                  variant="secondary"
-                  onPress={archive}
-                />
-              ) : (
-                <Text style={styles.viewsText}>Expired · in your archive</Text>
-              )}
-            </View>
-          </View>
-        ) : null}
       </View>
     </View>
   );
@@ -240,7 +217,7 @@ const styleDefinitions = StyleSheet.create({
   barTrack: { flex: 1, height: 3, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.35)', overflow: 'hidden' },
   barFill: { height: '100%', backgroundColor: '#FFFFFF' },
   head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  who: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  who: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 44, flexShrink: 1 },
   name: { ...typography.smallStrong, color: '#FFFFFF', textShadowColor: '#0009', textShadowRadius: 4 },
   time: { ...typography.small, color: 'rgba(255,255,255,0.75)' },
   bottom: { position: 'absolute', left: 0, right: 0, bottom: 0, padding: spacing.lg, gap: spacing.md },
@@ -248,12 +225,15 @@ const styleDefinitions = StyleSheet.create({
     ...typography.body, color: '#FFFFFF', lineHeight: 22,
     textShadowColor: '#000A', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4,
   },
-  ownRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
-  ownActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   reactRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  views: {
-    flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: spacing.md, paddingVertical: 6,
+  flex: { flex: 1 },
+  // The viewer's one pill: 44 points tall, white on a dark glass, whatever the court's colours.
+  pill: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, minHeight: 44, minWidth: 44, paddingHorizontal: 14,
     borderRadius: radius.pill, backgroundColor: 'rgba(0,0,0,0.45)',
   },
-  viewsText: { ...typography.smallStrong, color: '#FFFFFF' },
+  pillPressed: { backgroundColor: 'rgba(0,0,0,0.65)' },
+  morePill: { paddingHorizontal: 0, width: 44 },
+  pillText: { ...typography.smallStrong, fontSize: 14, color: '#FFFFFF', fontVariant: ['tabular-nums'] },
+  closeTarget: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', marginRight: -8 },
 });

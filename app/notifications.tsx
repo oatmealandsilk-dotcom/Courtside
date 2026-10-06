@@ -370,7 +370,7 @@ export default function Notifications() {
     // A kind this build does not know yet (a newer server) still reads as a sentence.
     if (group.kind !== 'like' && group.kind !== 'comment' && group.kind !== 'share') return VERB[group.kind] ?? 'updated';
     const act = group.kind === 'like' ? 'liked' : group.kind === 'comment' ? 'commented on' : 'shared';
-    if (group.targetKind === 'hit') return `${act} your instant`;
+    if (group.targetKind === 'hit') return `${act} your Instant`;
     if (group.targetKind === 'question') return `${act} your thread`;
     const post = posts.find((p) => p.id === group.targetId);
     const thing = !post ? 'post' : post.kind === 'clip' ? 'clip' : post.videoUrl ? 'video' : post.imageUrl ? 'photo' : 'post';
@@ -542,7 +542,7 @@ export default function Notifications() {
               group.kind === 'milestone'
                 ? (posts.find((p) => p.id === group.targetId)?.kind === 'clip' ? 'Your clip' : 'Your post')
                 : group.kind === 'posted'
-                ? (group.preview?.startsWith('Instant') || group.preview?.startsWith('Hit')) ? 'Your instant' : group.targetKind === 'question' ? 'Your question' : 'Your post'
+                ? (group.preview?.startsWith('Instant') || group.preview?.startsWith('Hit')) ? 'Your Instant' : group.targetKind === 'question' ? 'Your question' : 'Your post'
                 : group.kind === 'coach-application' || group.kind === 'refund' || group.kind === 'removed' || group.kind === 'review' ? 'CourtSide'
                 : group.kind === 'review-request' ? reviewAsk(group.preview).who
                 : group.kind === 'weekly-recap' ? 'Your week on court'

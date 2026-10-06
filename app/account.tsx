@@ -229,7 +229,7 @@ export default function AccountCentre() {
               <>
                 <SheetTitle title="Delete your account?" line="This can't be undone." onClose={() => setSheet(null)} />
                 <View style={styles.sheetBody}>
-                  <Text style={styles.sheetNote}>Your profile, posts, clips, instants, questions and messages are removed for good.{paidBooking ? ' Coaches keep records of paid sessions.' : ''} Type DELETE to confirm.{appleConfirm ? ' Apple then asks you to confirm once more, so CourtSide is also removed from your Apple ID.' : ''}</Text>
+                  <Text style={styles.sheetNote}>Your profile, posts, clips, Instants, questions and messages are removed for good.{paidBooking ? ' Coaches keep records of paid sessions.' : ''} Type DELETE to confirm.{appleConfirm ? ' Apple then asks you to confirm once more, so CourtSide is also removed from your Apple ID.' : ''}</Text>
                   <Field soft value={confirmWord} onChangeText={setConfirmWord} autoCapitalize="none" placeholder="DELETE" />
                   {error ? <Text style={styles.error}>{error}</Text> : null}
                   <Button label="Delete my account" variant="danger" loading={busy} disabled={confirmWord.trim() !== 'DELETE'} onPress={() => run(async () => { await actions.deleteAccount(); router.replace('/'); }, 'Account deleted.')} full />

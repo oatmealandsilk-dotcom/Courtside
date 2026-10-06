@@ -89,11 +89,14 @@ export function CommentsCaption({ kind, id }: { kind: 'post' | 'hit'; id: string
         </Pressable>
         <View style={styles.column}>
           <View style={styles.who}>
-            <Text style={styles.name} numberOfLines={1} onPress={openProfile} accessibilityRole="link" suppressHighlighting>{author.name}</Text>
-            <StreakFlame days={streak} style={styles.flame} />
-            <LevelPill profile={author.profile} small />
-            {post && isNewHere(post) ? <NewHereTag short /> : null}
-            <View style={styles.spacer} />
+            {/* The name first and whole: its pills follow on the same line while there is room, and drop
+                under it on a narrow phone, rather than squeezing the name down to "J…" (Oct 5 audit). */}
+            <View style={styles.badges}>
+              <Text style={styles.name} numberOfLines={1} onPress={openProfile} accessibilityRole="link" suppressHighlighting>{author.name}</Text>
+              <StreakFlame days={streak} style={styles.flame} />
+              <LevelPill profile={author.profile} small />
+              {post && isNewHere(post) ? <NewHereTag short /> : null}
+            </View>
             {offerFollow.current ? (
               <FollowPill
                 small
@@ -121,9 +124,9 @@ const styleDefinitions = StyleSheet.create({
   row: { flexDirection: 'row', gap: spacing.md, alignItems: 'flex-start' },
   column: { flex: 1, minWidth: 0, gap: 4 },
   who: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 32 },
+  badges: { flex: 1, minWidth: 0, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: spacing.sm, rowGap: 4 },
   name: { ...typography.bodyStrong, fontSize: 15, color: colors.text, flexShrink: 1 },
   flame: { marginLeft: -3 },
-  spacer: { flex: 1 },
   words: { ...typography.body, lineHeight: 22, color: colors.text },
   tag: { color: colors.brand, ...font('600') },
   meta: { ...typography.small, lineHeight: 18, color: colors.textMuted },

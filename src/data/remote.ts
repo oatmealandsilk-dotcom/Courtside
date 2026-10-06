@@ -4191,12 +4191,14 @@ export const remote = {
     const { data: there } = await need().from('stories').select('id').eq('id', story.id).maybeSingle().then((r) => r, () => ({ data: null }));
     if (there) return;
     fail('story insert')(error);
-    throw new Error('Your instant could not be saved. Check your connection and try again.');
+    throw new Error('Your Instant could not be saved. Check your connection and try again.');
   },
 
-  async setStoryArchived(storyId: ID, archived: boolean) {
+  /** False when it did not go through: the app puts the Instant back as it was. */
+  async setStoryArchived(storyId: ID, archived: boolean): Promise<boolean> {
     const { error } = await need().from('stories').update({ archived }).eq('id', storyId);
     if (error) fail('story archive')(error);
+    return !error;
   },
 
   /** Your own Instant, gone for good with its likes, views and comments. False when it is still there. */

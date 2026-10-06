@@ -1,5 +1,7 @@
 import type { View } from 'react-native';
 
+import { isDesktopBrowser } from '@/lib/browserDevice';
+
 /*
  * The browser twin of storyImage.ts: the hidden copy (360 × 640 on the page)
  * drawn onto a canvas three times over, 1080 × 1920, then shared as a file
@@ -25,8 +27,25 @@ export function canCopyStory(): boolean { return true; }
 
 export type StoryAction = 'instagram' | 'save' | 'more' | 'copy';
 
-/** What Copy says once the picture is on the clipboard: Instagram pastes it as a sticker. */
-export const COPIED_NOTE = 'Copied. In Instagram, pick your photo or video for the story, then tap Add sticker (or tap and hold, then Paste).';
+/**
+ * Instagram's steps after a clipboard hand-over: an iPhone build's (see
+ * storyImage.ts). Never said in a browser, which has no hand-over; named here
+ * too so the share pages read one name on both.
+ */
+export const INSTAGRAM_NOTE = 'In Instagram, pick a photo or video, then tap Add sticker (or hold and tap Paste).';
+
+/**
+ * What Copy says once the picture is on the clipboard, short, the way a toast
+ * says it. On a phone's browser a sticker (or the overlay) is pasted into a
+ * story; a computer has no story to paste into, so there it is just "Copied."
+ */
+export const COPIED_NOTE = 'Copied.';
+export const COPIED_STICKER_NOTE = 'Copied. Paste it into your story.';
+
+/** Whether something exportStory said is news that it went (Copied, Saved), not a reason it could not. */
+export function storyNoteOk(said: string): boolean {
+  return said.startsWith('Copied') || said.startsWith('Saved');
+}
 
 /** The picture as a PNG file, ready to share or save. Exported for the demo's own check. */
 export async function storyBlob(view: View | null): Promise<Blob | string> {
@@ -68,7 +87,7 @@ export interface StoryLook { sticker: boolean; top: string; bottom: string }
  * the link as the share's text with the file, where the browser shares both.
  * Stories and Save are the picture alone.
  */
-export async function exportStory(view: View | null, action: StoryAction, title: string, _look?: StoryLook, link?: string): Promise<string | null> {
+export async function exportStory(view: View | null, action: StoryAction, title: string, look?: StoryLook, link?: string): Promise<string | null> {
   const made = await storyBlob(view);
   if (typeof made === 'string') return made;
   if (action === 'copy') {
@@ -77,7 +96,7 @@ export async function exportStory(view: View | null, action: StoryAction, title:
     for (const items of tries) {
       try {
         await navigator.clipboard.write([new ClipboardItem(items)]);
-        return COPIED_NOTE;
+        return look?.sticker && !isDesktopBrowser() ? COPIED_STICKER_NOTE : COPIED_NOTE;
       } catch {
         // Not both at once in this browser: the picture alone, then the file.
       }
