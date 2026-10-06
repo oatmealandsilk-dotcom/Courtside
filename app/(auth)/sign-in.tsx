@@ -21,6 +21,7 @@ import { auth as remoteAuth, remote, type HandleStatus } from '@/data/remote';
 import { BLOCKED_WORDS_NOTE } from '@/features/hiddenWords/hiddenWords';
 import { SigningInAs, SigningInWith } from '@/components/SigningInAs';
 import { useLeave } from '@/components/LeaveCurtain';
+import { peekReferrer } from '@/features/invite/referral';
 import { useApp } from '@/store/AppContext';
 import { useGateSpace } from '@/lib/useGateSpace';
 import { KeyboardScrollContext, useKeyboardReveal } from '@/lib/keyboardScroll';
@@ -116,6 +117,21 @@ export default function SignIn() {
   // Apple and Google sit at the top of the form, so what went wrong with them is said up there too.
   const [providerError, setProviderError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+
+  // Arrived from a player's invite link (the join page kept their handle):
+  // say who, as the website does. Only once the server says that handle is a
+  // real account, so a made-up link never puts a word on this page.
+  const [invitedBy, setInvitedBy] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    void peekReferrer().then(async (kept) => {
+      const handle = kept && /^[a-z0-9_]{2,24}$/.test(kept) ? kept : null;
+      if (!handle) return;
+      const real = !isSupabaseConfigured || ['taken', 'held'].includes((await remote.handleStatus(handle).catch(() => null)) ?? '');
+      if (live && real) setInvitedBy(handle);
+    }).catch(() => undefined);
+    return () => { live = false; };
+  }, []);
 
   // Coming back from Google, the session can land a moment after this screen
   // draws; leave as soon as it does instead of sitting on an empty form.
@@ -351,7 +367,9 @@ export default function SignIn() {
   const fill = (hint: NonNullable<React.ComponentProps<typeof Field>['autoComplete']>) => (Platform.OS === 'android' ? hint : undefined);
   const begin = (next: Mode) => { setMode(next); setStarted(true); setError(null); setProviderError(null); };
   const title = chooser ? 'Welcome back' : mode === 'sign-up' ? 'Create your account' : 'Sign in';
-  const line = chooser ? 'Pick an account to carry on.' : mode === 'sign-up' ? 'Free, and it takes a minute.' : 'Tennis clips, people to hit with, and real coaches.';
+  const line = chooser ? 'Pick an account to carry on.'
+    : mode === 'sign-up' ? (invitedBy ? `Invited by @${invitedBy}. Free, and it takes a minute.` : 'Free, and it takes a minute.')
+    : 'Tennis clips, people to hit with, and real coaches.';
 
   return (
     <KeyboardScrollContext.Provider value={keyboard.reveal}>

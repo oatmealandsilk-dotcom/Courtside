@@ -40,7 +40,7 @@ import { mergePast, readOneWithHeartRate, readPastHealth, type PastWorkout } fro
 import { postShare, reshare, sameShare } from '@/features/activity/healthShare';
 import { OPPONENT_MAX, REFUSALS, maxTagsFor, canTagKind, firstName, isActive, localRefusal, mirrorCopy, nameFor, patchWith, reconcileWith, refusalWords, roleOn, tagsOnSession, withEntry, withOnNewPost } from '@/features/activity/sessionTags';
 import { duration } from '@/lib/format';
-import { forgetReferrer, peekReferrer } from '@/features/invite/referral';
+import { forgetReferrer, isWaitlistCode, peekReferrer } from '@/features/invite/referral';
 import { asHitMiles, endOfToday } from '@/features/players/openToHit';
 import { pickNutritionExport } from '@/features/health/cronometer';
 import { nearestPlace } from '@/data/locations';
@@ -7550,6 +7550,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const run = (async () => {
       const handle = await peekReferrer();
       if (!handle) return;
+      // A friend's waitlist code (r=<code>, carried by the website's web-app
+      // link): the friend it belongs to, the way "Invited by?" reads it. Kept
+      // only while the answer is still out; a code with no account behind it
+      // is let go, and setup's "Invited by?" still asks.
+      if (isWaitlistCode(handle)) {
+        const r = await remote.claimInviteCode(handle).catch((): InviteCodeResult => ({ error: 'offline' }));
+        if (r.error === 'offline') return;
+        await forgetReferrer();
+        if (r.ok && r.followed) showInviterFollow(r.id, r.handle);
+        return;
+      }
       const answer = await remote.claimReferral(handle).catch(() => ({ ok: false as const }));
       // Not answered (offline, a server hiccup): the handle is kept, tried
       // again the next time the app opens signed in, and offered in setup's

@@ -17,8 +17,12 @@ import { colors } from '@/theme';
  */
 export default function Join() {
   const { ref, court, name, lat, lng } = useLocalSearchParams<{ ref?: string; court?: string; name?: string; lat?: string; lng?: string }>();
-  const { currentUserId, actions } = useApp();
+  const { currentUserId, authResolved, actions } = useApp();
   useEffect(() => {
+    // A saved login is still being read: wait for it, or a signed-in visitor
+    // is sent to "Create your account" for a moment, then bounced home, and
+    // the invite (and its court) is never opened for them.
+    if (!authResolved) return undefined;
     let live = true;
     // The court a link can carry ("my court"): kept with the handle, opened once the person is in.
     const place = court && name && lat && lng ? { id: String(court), name: String(name), lat: Number(lat), lng: Number(lng) } : null;
@@ -33,6 +37,6 @@ export default function Join() {
       else router.replace({ pathname: '/sign-in', params: { mode: 'create' } });
     })();
     return () => { live = false; };
-  }, [ref, court, name, lat, lng, currentUserId, actions]);
+  }, [ref, court, name, lat, lng, currentUserId, authResolved, actions]);
   return <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg }}><CourtSpinner size={32} /></View>;
 }
