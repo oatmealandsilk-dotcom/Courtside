@@ -114,7 +114,7 @@ export function ThreadReply({ answer, thread, acceptedId, askerId, depth = 0, pr
           : <RichText style={styles.replyBody}>{answer.body}</RichText>) : null}
         {answer.media ? <View style={{ paddingLeft: 42 }}><ReplyMediaView media={answer.media} onLongPress={hold} /></View> : null}
         {/* Taken down by an admin: only its author and admins get it, and see why. */}
-        {answer.removed ? <View style={{ paddingLeft: 42 }}><RemovedNote removed={answer.removed} quiet /></View> : null}
+        {answer.removed ? <View style={{ paddingLeft: 42 }}><RemovedNote removed={answer.removed} quiet item={{ kind: 'answer', id: answer.id, authorId: answer.authorId }} /></View> : null}
         {!preview && <View style={styles.replyActions}>
           <Pressable accessibilityRole="button" accessibilityLabel={`Collapse reply by ${responder?.name ?? 'player'}`} onPress={()=>setCollapsed(true)} style={styles.collapse}><Ionicons name="remove-circle-outline" size={20} color={colors.textMuted}/></Pressable>
           <VoteControls item={answer} userId={currentUserId} onVote={direction => actions.voteAnswer(answer.id, direction)}/>

@@ -99,6 +99,11 @@ export default function Help() {
             <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
           </Pressable>
         ) : null}
+        <Pressable accessibilityRole="link" onPress={() => router.push('/guidelines')} style={styles.link}>
+          <Ionicons name="book-outline" size={19} color={colors.text} />
+          <Text style={styles.linkText}>Community Guidelines</Text>
+          <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
+        </Pressable>
         <Pressable accessibilityRole="link" onPress={() => router.push('/privacy')} style={styles.link}>
           <Ionicons name="shield-checkmark-outline" size={19} color={colors.text} />
           <Text style={styles.linkText}>Privacy center</Text>

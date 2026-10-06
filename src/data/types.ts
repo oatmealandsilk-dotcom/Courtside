@@ -608,6 +608,31 @@ export interface RemovedItem {
   removedBy?: ID;
 }
 
+/**
+ * Where an author's "Ask for a review" stands (migration 2026100600016):
+ * waiting for an admin, looked at again and kept down, or put back.
+ */
+export type ReviewStatus = 'open' | 'kept' | 'restored';
+
+/**
+ * An author asking CourtSide to look again at something taken down, once
+ * per take-down. The author reads their own; admins read every open one on
+ * Settings → Admin → Removed. Which admin answered is never sent.
+ */
+export interface ReviewRequest {
+  id: ID;
+  authorId: ID;
+  kind: TakedownKind;
+  targetId: ID;
+  /** Their own words, up to 300 characters; only admins see them. */
+  note?: string;
+  status: ReviewStatus;
+  /** The take-down this is about: the item's removed `at` when it was asked. */
+  removedAt: string;
+  createdAt: string;
+  closedAt?: string;
+}
+
 /* --------------------------------- Stories ------------------------------- */
 
 /** A moment that lasts a day on the rail, then keeps in the author's archive. */
@@ -1189,6 +1214,20 @@ export type NotificationKind =
    * CourtSide's rules: Violence or weapons."
    */
   | 'removed'
+  /**
+   * How your "Ask for a review" went (migration 2026100600016). Actor is
+   * you, from CourtSide; the target is what opens it, as for 'removed'; the
+   * preview is the whole sentence: "Your post was restored." or "We looked
+   * again and your post stays removed: Spam or scams."
+   */
+  | 'review'
+  /**
+   * Admins only: an author asked for a review. Actor is the admin themself
+   * (so it never alerts as someone else); the target is what opens the item;
+   * the preview is the whole sentence: "@sam wants their post looked at
+   * again." Opens Settings → Admin → Removed.
+   */
+  | 'review-request'
   /** A player paid for one of your services (you are the coach). */
   | 'booking'
   /** Your coach answered your booking. */

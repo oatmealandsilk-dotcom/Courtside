@@ -16,7 +16,8 @@ import { postShareText } from '@/features/share/shareText';
 import { confirm, confirmBlock } from '@/lib/confirm';
 import { notKnownAdult } from '@/features/players/age';
 import { CourtGlyph } from '@/components/map/CourtGlyph';
-import { removedLine } from '@/features/moderation/reasons';
+import { removedLine, thingWord } from '@/features/moderation/reasons';
+import { useReviewOf } from '@/features/moderation/RemovedNote';
 import { canShareMediaStory, shareMediaToStory, type StoryMediaKind } from '@/features/share/mediaStory';
 import { stageSize } from '@/features/share/storyImage';
 import { StoryOverlayCanvas } from '@/components/share/StoryOverlay';
@@ -80,6 +81,8 @@ export default function PostMenu() {
     return () => { gone.current = true; };
   }, []);
   const openOutside = useOpenOutside(post, currentUserId);
+  // Your own, taken down: why (the rules) and "Ask for a review", once per take-down.
+  const { mine: ownRemoved, review, known: reviewKnown, off: reviewsOff } = useReviewOf(item ? { kind: isHit ? 'hit' : 'post', id: item.id, authorId: item.authorId } : undefined, item?.removed);
   // A long menu (an admin's own post, bigger text on a small phone) scrolls
   // rather than running off the top of the screen.
   const { height: windowHeight } = useWindowDimensions();
@@ -188,6 +191,20 @@ export default function PostMenu() {
     // A group-only post stays in its group: no link to it goes outside.
     ...(post.groupId ? [] : [{ key: 'link', icon: 'link-outline' as const, label: 'Share link', onPress: async () => { try { const note = await shareOutside(postShareText(post, users.find((u) => u.id === post.authorId), currentUserId), url); if (note) setDone(note); else close(); } catch { setDone(`Share this link: ${url}`); } } }]),
   ] : [];
+  // Your own, taken down: the rule it broke, and asking us to look again (or where that stands).
+  if (removed && ownRemoved) {
+    const what = isHit ? 'hit' as const : 'post' as const;
+    const thing = thingWord(what, post?.kind === 'clip');
+    rows.push({ key: 'rules', icon: 'book-outline', label: 'See the rules', note: `Why your ${thing} was removed.`, onPress: () => router.replace({ pathname: '/guidelines', params: { rule: removed.reason, what: thing } }) });
+    // No ask to offer before reviews are on this database (migration 2026100600016).
+    if (!reviewsOff) rows.push(
+      review?.status === 'open'
+        ? { key: 'review', icon: 'time-outline', label: 'Review asked', note: 'We’ll let you know.', waiting: true, onPress: () => undefined }
+        : review?.status === 'kept'
+          ? { key: 'review', icon: 'checkmark-done-outline', label: 'Reviewed', note: 'We looked again, and it stays removed.', waiting: true, onPress: () => undefined }
+          : { key: 'review', icon: 'refresh-outline', label: 'Ask for a review', note: 'Someone on our team looks at it again.', waiting: !reviewKnown, onPress: () => router.replace({ pathname: '/review-request', params: { kind: what, id: item.id } }) },
+    );
+  }
   if (mine && story) {
     rows.push(
       { key: 'archive', icon: 'archive-outline', label: story.archived ? 'Unarchive' : 'Archive', onPress: () => { actions.toggleArchiveStory(story.id); close(); } },

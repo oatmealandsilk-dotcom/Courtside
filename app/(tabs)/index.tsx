@@ -50,7 +50,7 @@ import { hasSessionStats } from '@/features/activity/format';
 import { MediaPlaceholder } from '@/components/MediaPlaceholder';
 import { TipPage } from '@/components/TipPage';
 import { isLive } from '@/features/stories/stories';
-import { RemovedNote } from '@/features/moderation/RemovedNote';
+import { RemovedActions, RemovedNote } from '@/features/moderation/RemovedNote';
 import { show as showToast } from '@/lib/toast';
 import { ClipPlayback } from '@/components/ClipPlayback';
 import { NEWEST_FIRST, rankFeed, type FeedItem, type RankContext } from '@/features/feed/rankFeed';
@@ -201,6 +201,13 @@ const RAIL_ICONS = [['heart-outline', 31], ['chatbubble-outline', 29], ['arrow-r
  * crowding the tab bar); the gaps between its items stay even.
  */
 const RAIL_DROP = 10;
+/**
+ * Something of yours taken down: the pill in the top row with "Why? See the
+ * rules · Ask for a review" under it. Your page starts below the two, by
+ * their measured height (this guess until they are drawn: a two-line pill
+ * and a one-line card).
+ */
+const REMOVED_GUESS = 92;
 
 /**
  * A hit's photo at its own shape. A tall one fills the page; a wide one (a
@@ -718,6 +725,11 @@ function Home({ scope, topRow, paused, onChrome }: {
   // The shape of a page before it is in: a round stand-in where the picture
   // will be, the name beside it, and the column of buttons down the right.
   const insets = useSafeAreaInsets();
+  // How tall the removed notice over each post of yours is, once drawn, so the post starts under it.
+  const [removedTall, setRemovedTall] = useState<Record<string, number>>({});
+  const noteRemovedTall = useCallback((id: string, h: number) => {
+    setRemovedTall((m) => (Math.abs((m[id] ?? -1) - h) < 1 ? m : { ...m, [id]: h }));
+  }, []);
   // A written or photo post's shape: who at the top, the picture in its frame
   // with the mark on it, the words, and the row of buttons under them.
   const skeletonPost = useMemo(() => (
@@ -1358,6 +1370,23 @@ function Home({ scope, topRow, paused, onChrome }: {
               // scrolling stays smooth.
               const near = Platform.OS === 'web' ? (ahead === 0 || ahead === 1) && (!warming || ahead === 0) : distance <= 1 || (ahead > 0 && ahead <= AHEAD);
               const strip = index === suggestHost ? suggestStrip : null;
+              // Taken down (migration 108): the reason in a pill over the top of the page, and for
+              // its author "Why? See the rules · Ask for a review" under it (Oct 5), the page's width.
+              const removedOver = (post: Post) => {
+                if (!post.removed) return null;
+                const item = { kind: 'post' as const, id: post.id, authorId: post.authorId, clip: post.kind === 'clip' };
+                const pill = <RemovedNote removed={post.removed} item={item} actions={false} />;
+                if (post.authorId !== currentUserId) return <View pointerEvents="box-none" style={[styles.removedWrap, { top: insets.top + 12 }]}>{pill}</View>;
+                return (
+                  <View pointerEvents="box-none" style={[styles.removedStack, { top: insets.top + 12 }]} onLayout={(e) => noteRemovedTall(post.id, e.nativeEvent.layout.height)}>
+                    <View pointerEvents="box-none" style={styles.removedPillRow}>{pill}</View>
+                    <RemovedActions removed={post.removed} item={item} card align="center" />
+                  </View>
+                );
+              };
+              // Your own removed post starts under that notice; anyone else's page is as it was.
+              const clearOfRemoved = (post: Post, top: number) => (post.removed && post.authorId === currentUserId
+                ? Math.max(top, insets.top + 12 + (removedTall[post.id] ?? REMOVED_GUESS) + 16) : top);
 
               if (item.type === 'tip') return <TipPage key="tip" onSubmit={actions.submitTip} />;
               if (item.type === 'challenge') return <ChallengePage key="challenge" challenge={challenge} />;
@@ -1475,7 +1504,7 @@ function Home({ scope, topRow, paused, onChrome }: {
                       saved={isSaved}
                       active={playing && active === index && warmed && playable}
                       preload={near}
-                      topInset={insets.top + 66}
+                      topInset={clearOfRemoved(post, insets.top + 66)}
                       onDoubleTap={() => likeByTap(post.id, liked)}
                       onToggleLike={() => actions.toggleLike(post.id)}
                       onToggleSave={() => actions.toggleSavePost(post.id)}
@@ -1488,7 +1517,7 @@ function Home({ scope, topRow, paused, onChrome }: {
                       onReady={(ok) => markReady(post.id, ok)}
                     />
                     {cover(post.id, 'mark')}
-                    {post.removed ? <View pointerEvents="none" style={[styles.removedWrap, { top: insets.top + 12 }]}><RemovedNote removed={post.removed} /></View> : null}
+                    {removedOver(post)}
                   </View>
                 );
               }
@@ -1497,7 +1526,7 @@ function Home({ scope, topRow, paused, onChrome }: {
                 return (
                   // A session posted with no photo is its card: the page keeps clear of the
                   // floating tab bar, so the caption and buttons under the card stay in view.
-                  <View key={post.id} style={[styles.article, scopedBack && styles.articleScoped, !phone && styles.articleCentred, (topRow || rowed) && { paddingTop: insets.top + 64 }, barInset > 0 && post.session && hasSessionStats(post.session) && !post.imageUrl && !post.videoUrl ? { paddingBottom: barInset + 8 } : null]}>
+                  <View key={post.id} style={[styles.article, scopedBack && styles.articleScoped, !phone && styles.articleCentred, (topRow || rowed) && { paddingTop: insets.top + 64 }, barInset > 0 && post.session && hasSessionStats(post.session) && !post.imageUrl && !post.videoUrl ? { paddingBottom: barInset + 8 } : null, post.removed && post.authorId === currentUserId ? { paddingTop: clearOfRemoved(post, topRow || rowed ? insets.top + 64 : scopedBack ? 116 : 64) } : null]}>
                     <Wash height={300} strength={0.6} />
                     {strip}
                     <View style={{ flex: 1, minHeight: 0, overflow: 'hidden', justifyContent: 'flex-start' }}>
@@ -1508,7 +1537,7 @@ function Home({ scope, topRow, paused, onChrome }: {
                         onToggleLike={() => actions.toggleLike(post.id)}
                         saved={isSaved}
                         onToggleSave={() => actions.toggleSavePost(post.id)}
-                        onShare={() => share('post', post.id)}
+                        onShare={post.removed ? undefined : () => share('post', post.id)}
                         onComment={() => router.push({ pathname: '/comments', params: { kind: 'post', id: post.id } })}
                         onPress={() => router.push(`/post/${post.id}`)}
                         onPressAuthor={() => router.push(`/user/${author.id}`)}
@@ -1517,7 +1546,7 @@ function Home({ scope, topRow, paused, onChrome }: {
                         active={active === index && focused}
                       />
                     </View>
-                    {post.removed ? <View pointerEvents="none" style={[styles.removedWrap, { top: insets.top + 12 }]}><RemovedNote removed={post.removed} /></View> : null}
+                    {removedOver(post)}
                   </View>
                 );
               }
@@ -1615,15 +1644,18 @@ function Home({ scope, topRow, paused, onChrome }: {
                       <Ionicons name="chatbubble-outline" size={RAIL_ICONS[1][1]} color="white" style={styles.actionGlyph} />
                       {(post.commentIds.length) > 0 ? <Text style={styles.actionLabel} maxFontSizeMultiplier={MAX_GROW}>{railCount(post.commentIds.length)}</Text> : null}
                     </Tappable>
-                    <Tappable
-                      accessibilityLabel="Send this clip to someone"
-                      onPress={() => share('post', post.id)}
-                      scaleTo={0.78}
-                      style={styles.action}
-                    >
-                      <Ionicons name="arrow-redo-outline" size={RAIL_ICONS[2][1]} color="white" style={styles.actionGlyph} />
-                      {(post.shares ?? 0) > 0 ? <Text style={styles.actionLabel} maxFontSizeMultiplier={MAX_GROW}>{railCount(post.shares ?? 0)}</Text> : null}
-                    </Tappable>
+                    {/* Taken down, nobody else could open it: nothing to send. */}
+                    {post.removed ? null : (
+                      <Tappable
+                        accessibilityLabel="Send this clip to someone"
+                        onPress={() => share('post', post.id)}
+                        scaleTo={0.78}
+                        style={styles.action}
+                      >
+                        <Ionicons name="arrow-redo-outline" size={RAIL_ICONS[2][1]} color="white" style={styles.actionGlyph} />
+                        {(post.shares ?? 0) > 0 ? <Text style={styles.actionLabel} maxFontSizeMultiplier={MAX_GROW}>{railCount(post.shares ?? 0)}</Text> : null}
+                      </Tappable>
+                    )}
                     <Tappable
                       accessibilityLabel={isSaved ? 'Remove from saved' : 'Save this clip'}
                       onPress={() => actions.toggleSavePost(post.id)}
@@ -1645,7 +1677,7 @@ function Home({ scope, topRow, paused, onChrome }: {
                   </ChromeLayer>
                  </Reanimated.View></PinchZone>
                   {post.videoUrl ? cover(post.id, 'word', post.thumbnailUrl, post.orientation === 'landscape') : null}
-                  {post.removed ? <View pointerEvents="none" style={[styles.removedWrap, { top: insets.top + 12 }]}><RemovedNote removed={post.removed} /></View> : null}
+                  {removedOver(post)}
                 </View>
               );
             }).map((page, index) => {
@@ -1761,6 +1793,9 @@ const styleDefinitions = StyleSheet.create({
   // "Removed: <reason>" across the top of a page an admin took down (only its author and admins ever see
   // one, and only in a scoped feed): level with the back button, clear of it on both sides.
   removedWrap: { position: 'absolute', left: 64, right: 64, alignItems: 'center', zIndex: 6 },
+  // On your own: the pill in the same lane as everyone's (clear of the back button), its line under it at the page's width.
+  removedStack: { position: 'absolute', left: 16, right: 16, alignItems: 'center', gap: 8, zIndex: 6 },
+  removedPillRow: { alignSelf: 'stretch', paddingHorizontal: 48, alignItems: 'center' },
   holdPage: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg },
   holdWord: { ...typography.display, fontSize: 34, ...font('600'), color: colors.brand, letterSpacing: -1.2 },
   bone: { height: 12, borderRadius: 6, backgroundColor: colors.border },

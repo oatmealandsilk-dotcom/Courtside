@@ -189,7 +189,7 @@ export default function StoryViewer() {
 
       <View pointerEvents="box-none" style={[styles.bottom, { paddingBottom: insets.bottom + 16 }]}>
         {/* Taken down by an admin (migration 108): only its author and admins get here, and see why. */}
-        {current.removed ? <RemovedNote removed={current.removed} style={{ alignSelf: 'flex-start' }} /> : null}
+        {current.removed ? <RemovedNote removed={current.removed} align="start" onMedia item={{ kind: 'hit', id: current.id, authorId: current.authorId }} /> : null}
         {current.caption ? <Text style={styles.caption}>{current.caption}</Text> : null}
         <View style={styles.reactRow}>
           <Pressable accessibilityRole="button" accessibilityLabel={liked ? 'Unlike hit. Hold to see who liked it' : 'Like hit. Hold to see who liked it'} onPress={() => actions.toggleLikeStory(current.id)} onLongPress={() => { haptics.commit(); router.push({ pathname: '/likes', params: { id: current.id, kind: 'hit' } }); }} style={styles.views}>
