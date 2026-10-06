@@ -30,6 +30,8 @@ export const replyIndent = (big: boolean) => (big ? 40 : 32) + spacing.md;
  * an admin, holding the words offers Take down (or Restore); nobody else
  * gets anything on a hold.
  * Holding someone else's comment reports it (App Review 1.2, Oct 5).
+ * Holding your own deletes it; under your own post or Instant, holding
+ * anyone's offers Delete (migration 125) or Report.
  */
 export function CommentRow({ comment, big = false, reply = false, onPressBody, onReply, onUnhide, onLayout }: {
   comment: Comment;
@@ -46,7 +48,7 @@ export function CommentRow({ comment, big = false, reply = false, onPressBody, o
   onLayout?: (y: number) => void;
 }) {
   const styles = useThemedStyles(styleDefinitions);
-  const { users, stories, currentUserId, currentUser, actions } = useApp();
+  const { users, posts, stories, currentUserId, currentUser, actions } = useApp();
   const who = users.find((u) => u.id === comment.authorId);
   // Admins only: hold the words to take it down, or put it back. A comment on an Instant is its own kind to the server.
   const moderate = currentUser?.isAdmin ? () => {
@@ -64,20 +66,35 @@ export function CommentRow({ comment, big = false, reply = false, onPressBody, o
   const [viewing, setViewing] = useState(false);
   // Someone else's comment: hold it to report it. It leaves your screens at once.
   const canReport = !!currentUserId && comment.authorId !== currentUserId;
+  const sendReport = () => {
+    actions.reportUser(comment.authorId, `comment:${comment.id}`);
+    showToast({ title: 'Thanks — a person will review this', icon: 'flag-outline' });
+  };
   const report = canReport ? () => {
     haptics.tap();
-    confirmReport('comment', () => {
-      actions.reportUser(comment.authorId, `comment:${comment.id}`);
-      showToast({ title: 'Thanks — a person will review this', icon: 'flag-outline' });
-    });
+    confirmReport('comment', sendReport);
   } : undefined;
+  // Your own comment: hold it to delete it.
+  const mine = !!currentUserId && comment.authorId === currentUserId;
+  const deleteOwn = mine ? () => {
+    haptics.tap();
+    confirm({ title: 'Delete comment?', message: "This can't be undone.", confirmLabel: 'Delete', destructive: true, onConfirm: () => actions.deleteComment(comment.id) });
+  } : undefined;
+  // Someone else's, under your own post or Instant: delete it for everyone, or report it.
+  const underMine = !!currentUserId && (posts.some((p) => p.id === comment.postId && p.authorId === currentUserId) || stories.some((st) => st.id === comment.postId && st.authorId === currentUserId));
+  const deleteTheirs = canReport && underMine ? () => {
+    haptics.tap();
+    confirm({ title: 'Delete this comment?', message: 'It’s removed for everyone.', confirmLabel: 'Delete', destructive: true, onConfirm: () => actions.deleteComment(comment.id), also: { label: 'Report', destructive: true, onPress: sendReport } });
+  } : undefined;
+  const hold = deleteOwn ?? moderate ?? deleteTheirs ?? report;
+  const holdHint = deleteOwn ? 'Hold to delete it' : moderate ? (comment.removed ? 'Hold to restore it' : 'Hold to take it down') : deleteTheirs ? 'Hold to delete or report it' : report ? 'Hold to report' : undefined;
   return (
     <View style={[styles.row, reply && { marginLeft: replyIndent(big) }]} onLayout={onLayout ? (e) => onLayout(e.nativeEvent.layout.y) : undefined}>
       <Pressable accessibilityRole="link" accessibilityLabel={who ? `Open ${who.name}'s profile` : undefined} onPress={openProfile}>
         <Avatar name={who?.name ?? '?'} seed={who?.avatarSeed ?? comment.authorId} uri={who?.avatarUrl} size={reply ? (big ? 30 : 24) : big ? 40 : 32} />
       </Pressable>
       <View style={styles.body}>
-        <Pressable accessibilityRole={onPressBody || moderate ? 'button' : undefined} accessibilityHint={moderate ? (comment.removed ? 'Hold to restore it' : 'Hold to take it down') : report ? 'Hold to report' : undefined} onPress={onPressBody} onLongPress={moderate ?? report} delayLongPress={400} disabled={!onPressBody && !moderate && !report} style={styles.bodyPress}>
+        <Pressable accessibilityRole={onPressBody || hold ? 'button' : undefined} accessibilityHint={holdHint} onPress={onPressBody} onLongPress={hold} delayLongPress={400} disabled={!onPressBody && !hold} style={styles.bodyPress}>
           <Text style={[styles.meta, big && styles.metaBig]}>
             <Text style={[styles.name, big && styles.nameBig]} onPress={openProfile}>{who?.name ?? 'Unknown'}</Text>
             {'  '}{relativeTime(comment.createdAt)}

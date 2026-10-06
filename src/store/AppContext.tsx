@@ -724,7 +724,8 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
    */
   headToHead: (userId: ID) => Promise<HeadToHead | null>;
 
-  toggleLike: (postId: ID) => void;
+  /** `wantOn` says which way (a double tap only ever likes); without it, the other way from the last tap. */
+  toggleLike: (postId: ID, wantOn?: boolean) => void;
   addPost: (input: NewPostInput) => ID;
   /** Puts one of your posts away, or brings it back. */
   toggleArchivePost: (postId: ID, quiet?: boolean) => void;
@@ -741,18 +742,23 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
   /** Fetches what is new. False when it could not (no connection, a failed load), so a page does not say "Updated". */
   refresh: () => Promise<boolean>;
   deletePost: (postId: ID) => void;
+  /** Deletes a comment (on a post or an Instant) and its replies: your own, or anyone's under something of yours (migration 125). */
+  deleteComment: (commentId: ID) => void;
+  /** Deletes your own Instant for good, with its likes and comments. */
+  deleteStory: (storyId: ID) => void;
   /**
    * A comment on a post; `photo` is a picture picked on this device, shrunk and uploaded here.
    * `replyTo` makes it a reply to that comment: it goes under the thread's top comment
    * (one level, as on Instagram) and tells that comment's writer.
-   * Resolves 'blocked' when its words were refused (migration 117): it comes
-   * off the list again, so the box can have the words back.
+   * Resolves 'blocked' when its words were refused (migration 117), 'failed'
+   * when it did not save at all (a toast says so): either way it comes off
+   * the list again, so the box can have the words back.
    */
-  addComment: (postId: ID, body: string, photo?: string, replyTo?: ID) => Promise<'blocked' | undefined>;
+  addComment: (postId: ID, body: string, photo?: string, replyTo?: ID) => Promise<'blocked' | 'failed' | undefined>;
   toggleLikeStory: (storyId: ID) => void;
   toggleLikeComment: (commentId: ID) => void;
   /** A comment on an Instant; `replyTo` and what it resolves as for addComment. */
-  addStoryComment: (storyId: ID, body: string, replyTo?: ID) => Promise<'blocked' | undefined>;
+  addStoryComment: (storyId: ID, body: string, replyTo?: ID) => Promise<'blocked' | 'failed' | undefined>;
   /** New and deleted comments on one post or Instant arrive live while its comments are open. Returns the way to stop. */
   watchComments: (targetId: ID, kind: 'post' | 'hit') => () => void;
 
@@ -1754,6 +1760,21 @@ function postsFollowLog(posts: Post[], me: ID, activityId: ID | null, log: Pract
     return p;
   });
   return changed ? next : posts;
+}
+
+/** Someone in a list of ids, or not: the list as it is when it already says so. */
+const withOrWithout = (ids: ID[], id: ID, on: boolean): ID[] => (on ? (ids.includes(id) ? ids : [...ids, id]) : ids.includes(id) ? ids.filter((x) => x !== id) : ids);
+
+/** Comments a delete took off that did not go through, back on their post or Instant (any already back are left as they are). */
+function putBackComments(prev: AppState, gone: Comment[]): AppState {
+  const have = new Set(prev.comments.map((c) => c.id));
+  const back = gone.filter((c) => !have.has(c.id));
+  if (!back.length) return prev;
+  const grow = <T extends { id: ID; commentIds: ID[] }>(x: T): T => {
+    const add = back.filter((c) => c.postId === x.id && !x.commentIds.includes(c.id)).map((c) => c.id);
+    return add.length ? { ...x, commentIds: [...x.commentIds, ...add] } : x;
+  };
+  return { ...prev, comments: [...prev.comments, ...back], posts: prev.posts.map(grow), stories: prev.stories.map(grow) };
 }
 
 /** A comment deleted elsewhere: gone here too, with its replies (the database removes them with it). */
@@ -3595,33 +3616,57 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, [requireUser]);
 
+  // What the last tap on a heart or a bookmark asked for, until the store's
+  // own redraw has it: a second tap quicker than that redraw reads this,
+  // not the store a beat behind (two quick taps used to send "like" twice
+  // and leave the server liked under an empty heart). Held a few seconds at
+  // most, so a refresh in between is never overruled for long.
+  const asked = useRef(new Map<string, { on: boolean; at: number }>());
+  const intended = (key: string, stored: boolean) => {
+    const a = asked.current.get(key);
+    if (!a || a.on === stored || Date.now() - a.at > 4000) { asked.current.delete(key); return stored; }
+    return a.on;
+  };
+  // The writes for one heart or bookmark go one at a time, in the order they
+  // were tapped, so the last tap is what the server keeps. One that does not
+  // go through, with nothing tapped after it, is put back on screen.
+  const writes = useRef(new Map<string, Promise<void>>());
+  const inTurn = (key: string, write: () => Promise<boolean>, failed: () => void) => {
+    const run: Promise<void> = (writes.current.get(key) ?? Promise.resolve())
+      .catch(() => undefined)
+      .then(write)
+      .then((ok) => { if (!ok && writes.current.get(key) === run) failed(); }, () => { if (writes.current.get(key) === run) failed(); });
+    writes.current.set(key, run);
+    void run.finally(() => { if (writes.current.get(key) === run) writes.current.delete(key); });
+  };
+
   const toggleLike = useCallback(
-    (postId: ID) => {
+    (postId: ID, wantOn?: boolean) => {
       learnedTip('double-tap');
       const me = requireUser();
       const now = stateRef.current.posts.find((p) => p.id === postId);
+      const key = `like:${postId}`;
+      const liking = wantOn ?? !intended(key, !!now && now.likedBy.includes(me));
+      asked.current.set(key, { on: liking, at: Date.now() });
       // The buzz answers the tap itself. Inside the update it waited for
       // React to get round to redrawing the whole feed, which read as lag.
-      if (now) now.likedBy.includes(me) ? haptics.untap() : haptics.reward();
-      if (live(me, postId) && now) remote.setLike(postId, me, !now.likedBy.includes(me));
+      if (now) liking ? haptics.reward() : haptics.untap();
+      if (live(me, postId) && now) {
+        inTurn(key, () => remote.setLike(postId, me, liking), () => {
+          asked.current.delete(key);
+          setState((prev) => ({ ...prev, posts: prev.posts.map((p) => (p.id === postId ? { ...p, likedBy: withOrWithout(p.likedBy, me, !liking) } : p)) }));
+        });
+      }
       setState((prev) => {
         const post = prev.posts.find((p) => p.id === postId);
-        const liking = !!post && !post.likedBy.includes(me);
+        // Set to what was asked, never flipped: two taps queued before a redraw end where the last one said.
+        if (!post || post.likedBy.includes(me) === liking) return prev;
         const next: AppState = {
           ...prev,
-          posts: prev.posts.map((p) =>
-            p.id === postId
-              ? {
-                  ...p,
-                  likedBy: p.likedBy.includes(me)
-                    ? p.likedBy.filter((id) => id !== me)
-                    : [...p.likedBy, me],
-                }
-              : p,
-          ),
+          posts: prev.posts.map((p) => (p.id === postId ? { ...p, likedBy: withOrWithout(p.likedBy, me, liking) } : p)),
         };
         // Only the like fires a notification; taking it back should not.
-        return liking && post
+        return liking
           ? withNotification(next, {
               userId: post.authorId,
               actorId: me,
@@ -3743,34 +3788,63 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [requireUser],
   );
 
-  /** Gone for good: the post, its comments, likes and saves. Only the author can. */
+  /**
+   * Gone for good: the post, its comments, likes and saves. Only the author
+   * can. If the server does not take it (no connection), it comes back and
+   * says so, rather than looking deleted here while everyone else still sees it.
+   */
   const deletePost = useCallback((postId: ID) => {
     const me = requireUser();
-    const post = stateRef.current.posts.find((p) => p.id === postId);
+    const was = stateRef.current;
+    const post = was.posts.find((p) => p.id === postId);
     if (!post || post.authorId !== me) return;
     haptics.commit();
-    if (live(me, postId)) remote.deletePost(postId);
+    const at = was.posts.indexOf(post);
+    const itsComments = was.comments.filter((c) => c.postId === postId);
+    const wasSaved = was.saved.postIds.includes(postId);
     setState((prev) => ({
       ...prev,
       posts: prev.posts.filter((p) => p.id !== postId),
       comments: prev.comments.filter((c) => c.postId !== postId),
       saved: { ...prev.saved, postIds: prev.saved.postIds.filter((id) => id !== postId) },
     }));
+    if (!live(me, postId)) return;
+    void remote.deletePost(postId).then((ok) => {
+      if (ok || stateRef.current.currentUserId !== me) return;
+      setState((prev) => {
+        if (prev.posts.some((p) => p.id === postId)) return prev;
+        const posts = [...prev.posts];
+        posts.splice(Math.min(at, posts.length), 0, post);
+        const have = new Set(prev.comments.map((c) => c.id));
+        return {
+          ...prev,
+          posts,
+          comments: [...prev.comments, ...itsComments.filter((c) => !have.has(c.id))],
+          saved: wasSaved && !prev.saved.postIds.includes(postId) ? { ...prev.saved, postIds: [postId, ...prev.saved.postIds] } : prev.saved,
+        };
+      });
+      showToast({ title: 'Couldn’t delete your post', body: 'Check your connection and try again.', icon: 'alert-circle-outline' });
+    });
   }, [requireUser]);
 
   const toggleArchivePost = useCallback((postId: ID, quiet?: boolean) => {
     const me = requireUser();
     haptics.commit();
     const post = stateRef.current.posts.find((p) => p.id === postId);
-    if (live(me, postId)) {
-      if (post?.authorId === me) remote.setPostArchived(postId, !post.archived);
+    const archiving = !post?.archived;
+    if (live(me, postId) && post?.authorId === me) {
+      void remote.setPostArchived(postId, archiving).then((ok) => {
+        if (ok) return;
+        // It didn't go through: back as it was (unless it has changed again since), and said.
+        setState((prev) => ({ ...prev, posts: prev.posts.map((p) => (p.id === postId && !!p.archived === archiving ? { ...p, archived: !archiving } : p)) }));
+        showToast({ title: archiving ? 'Couldn’t archive your post' : 'Couldn’t unarchive your post', body: 'Check your connection and try again.', icon: 'alert-circle-outline' });
+      });
     }
     setState((prev) => ({
       ...prev,
-      posts: prev.posts.map((p) => (p.id === postId && p.authorId === me ? { ...p, archived: !p.archived } : p)),
+      posts: prev.posts.map((p) => (p.id === postId && p.authorId === me ? { ...p, archived: archiving } : p)),
     }));
     if (quiet || post?.authorId !== me) return;
-    const archiving = !post.archived;
     offerUndo(
       archiving ? 'Archived' : 'Back on your profile',
       () => { const p = stateRef.current.posts.find((x) => x.id === postId); return !!p && !!p.archived === archiving; },
@@ -3783,15 +3857,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const me = requireUser();
     haptics.commit();
     const post = stateRef.current.posts.find((p) => p.id === postId);
-    if (live(me, postId)) {
-      if (post?.authorId === me) remote.setPostPinned(postId, !post.pinned);
+    const pinning = !post?.pinned;
+    if (live(me, postId) && post?.authorId === me) {
+      void remote.setPostPinned(postId, pinning).then((ok) => {
+        if (ok) return;
+        setState((prev) => ({ ...prev, posts: prev.posts.map((p) => (p.id === postId && !!p.pinned === pinning ? { ...p, pinned: !pinning } : p)) }));
+        showToast({ title: pinning ? 'Couldn’t pin your post' : 'Couldn’t unpin your post', body: 'Check your connection and try again.', icon: 'alert-circle-outline' });
+      });
     }
     setState((prev) => ({
       ...prev,
-      posts: prev.posts.map((p) => (p.id === postId && p.authorId === me ? { ...p, pinned: !p.pinned } : p)),
+      posts: prev.posts.map((p) => (p.id === postId && p.authorId === me ? { ...p, pinned: pinning } : p)),
     }));
     if (quiet || post?.authorId !== me) return;
-    const pinning = !post.pinned;
     offerUndo(
       pinning ? 'Pinned to your profile' : 'Unpinned',
       () => { const p = stateRef.current.posts.find((x) => x.id === postId); return !!p && !!p.pinned === pinning; },
@@ -3818,8 +3896,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const tracker = healthWas?.activityId ? stateRef.current.detectedActivities.find((a) => a.id === healthWas.activityId && a.userId === me) : undefined;
     const healthNow = healthWas?.activityId && patch.share && !sameShare(postShare(healthWas), patch.share) ? reshare(healthWas, patch.share, tracker) : undefined;
     if (live(me, postId)) void remote.updatePost(postId, { body: patch.body, tags, taggedUserIds: patch.taggedUserIds, location, court, editedAt }).then((r) => {
-      if (r !== 'blocked') return;
-      // Refused for its words (migration 117): the post goes back to what it said (the toast says why).
+      if (!r) return;
+      // Refused for its words (migration 117; that toast says why), or not
+      // saved at all: the post goes back to what it said.
+      if (r === 'failed') showToast({ title: 'Your changes didn’t save', body: 'Check your connection and try again.', icon: 'alert-circle-outline' });
       setState((prev) => ({ ...prev, posts: prev.posts.map((p) => (p.id === postId && p.editedAt === editedAt ? { ...p, body: post.body, tags: post.tags, taggedUserIds: post.taggedUserIds, location: post.location, court: post.court, editedAt: post.editedAt } : p)) }));
     });
     setState((prev) => {
@@ -4038,15 +4118,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [requireUser],
   );
 
-  /** A comment refused for its words (migration 117) comes off the list again; says 'blocked' so the box can have the words back. */
-  const takeBackComment = (commentId: ID, result: 'blocked' | undefined): 'blocked' | undefined => {
-    if (result !== 'blocked') return undefined;
+  /**
+   * A comment refused for its words (migration 117), or not saved at all,
+   * comes off the list again; says which, so the box can have the words back.
+   * Not saved is said here (the refusal says itself). `photoOnly`: a photo
+   * with no words, which the database refuses until migration 125 runs.
+   */
+  const takeBackComment = (commentId: ID, result: 'blocked' | 'failed' | undefined, photoOnly = false): 'blocked' | 'failed' | undefined => {
+    if (!result) return undefined;
     setState((prev) => dropComment(prev, commentId));
-    return 'blocked';
+    if (result === 'failed') showToast({ title: 'Your comment wasn’t posted', body: photoOnly ? 'Add a few words with the photo, or try again in a moment.' : 'Check your connection and try again.', icon: 'alert-circle-outline' });
+    return result;
   };
 
   const addStoryComment = useCallback(
-    (storyId: ID, body: string, replyTo?: ID): Promise<'blocked' | undefined> => {
+    (storyId: ID, body: string, replyTo?: ID): Promise<'blocked' | 'failed' | undefined> => {
       const me = requireUser();
       const comment: Comment = {
         id: nextId('c'), postId: storyId, authorId: me, body, createdAt: new Date().toISOString(), likedBy: [],
@@ -4057,7 +4143,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // Refused for its words (migration 117): it comes off the list again (the toast says why), and the box gets the words back.
       const saved = live(me, storyId) && (!comment.parentId || live(comment.parentId))
         ? remote.insertStoryComment(comment).then((r) => takeBackComment(comment.id, r), () => undefined)
-        : Promise.resolve(undefined);
+        : Promise.resolve<'blocked' | 'failed' | undefined>(undefined);
       setState((prev) => {
         const story = prev.stories.find((st) => st.id === storyId);
         const next: AppState = {
@@ -4073,7 +4159,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   );
 
   const addComment = useCallback(
-    (postId: ID, body: string, photo?: string, replyTo?: ID): Promise<'blocked' | undefined> => {
+    (postId: ID, body: string, photo?: string, replyTo?: ID): Promise<'blocked' | 'failed' | undefined> => {
       const me = requireUser();
       const comment: Comment = {
         id: nextId('c'),
@@ -4088,12 +4174,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
         ...replyFields(stateRef.current.comments, replyTo, postId),
       };
       haptics.commit();
-      let saved: Promise<'blocked' | undefined> = Promise.resolve(undefined);
+      let saved: Promise<'blocked' | 'failed' | undefined> = Promise.resolve(undefined);
       // A plain comment has no parent; only a reply needs its parent to be a saved row.
       if (live(me, postId) && (!comment.parentId || live(comment.parentId))) {
         // Refused for its words (migration 117): it comes off the list again (the toast says why), and the box gets the words back.
         if (!photo) saved = remote.insertComment(comment).then((r) => takeBackComment(comment.id, r), () => undefined);
-        else saved = (async (): Promise<'blocked' | undefined> => {
+        else saved = (async (): Promise<'blocked' | 'failed' | undefined> => {
           // Shrunk first (about 1080 px, a couple of hundred KB), then uploaded, then saved with its address.
           let imageUrl: string | undefined;
           // The words beyond the "@them" a reply starts with: a reply that was only a photo has none.
@@ -4104,7 +4190,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           // empty, and leaves the thread rather than staying as a blank row.
           if (!imageUrl && !said) { setState((prev) => dropComment(prev, comment.id)); return undefined; }
           setState((prev) => ({ ...prev, comments: imageUrl ? prev.comments.map((c) => (c.id === comment.id ? { ...c, imageUrl } : c)) : prev.comments.map((c) => (c.id === comment.id ? { ...c, imageUrl: undefined } : c)) }));
-          return takeBackComment(comment.id, await remote.insertComment({ ...comment, imageUrl }));
+          return takeBackComment(comment.id, await remote.insertComment({ ...comment, imageUrl }), !said);
         })().catch(() => undefined);
       }
       setState((prev) => {
@@ -4122,6 +4208,54 @@ export function AppProvider({ children }: { children: ReactNode }) {
     },
     [requireUser],
   );
+
+  /**
+   * Deletes a comment (on a post or an Instant) with its replies: your own,
+   * or anyone's under something of yours (migration 125). Gone at once; if
+   * the server does not take it, it comes back and says so.
+   */
+  const deleteComment = useCallback((commentId: ID) => {
+    const me = requireUser();
+    const s = stateRef.current;
+    const comment = s.comments.find((c) => c.id === commentId);
+    if (!comment) return;
+    const onHit = s.stories.some((st) => st.id === comment.postId);
+    const owner = onHit ? s.stories.find((st) => st.id === comment.postId)?.authorId : s.posts.find((p) => p.id === comment.postId)?.authorId;
+    if (comment.authorId !== me && owner !== me) return;
+    haptics.commit();
+    const gone = s.comments.filter((c) => c.id === commentId || c.parentId === commentId);
+    setState((prev) => dropComment(prev, commentId));
+    if (!live(me, commentId)) return;
+    void remote.deleteComment(commentId, onHit).then((ok) => {
+      if (ok || stateRef.current.currentUserId !== me) return;
+      setState((prev) => putBackComments(prev, gone));
+      showToast({ title: 'Couldn’t delete the comment', body: 'Try again in a moment.', icon: 'alert-circle-outline' });
+    });
+  }, [requireUser]);
+
+  /** Your own Instant, gone for good with its likes and comments. If the server does not take it, it comes back and says so. */
+  const deleteStory = useCallback((storyId: ID) => {
+    const me = requireUser();
+    const s = stateRef.current;
+    const story = s.stories.find((st) => st.id === storyId);
+    if (!story || story.authorId !== me) return;
+    haptics.commit();
+    const at = s.stories.indexOf(story);
+    const itsComments = s.comments.filter((c) => c.postId === storyId);
+    setState((prev) => ({ ...prev, stories: prev.stories.filter((st) => st.id !== storyId), comments: prev.comments.filter((c) => c.postId !== storyId) }));
+    if (!live(me, storyId)) return;
+    void remote.deleteStory(storyId).then((ok) => {
+      if (ok || stateRef.current.currentUserId !== me) return;
+      setState((prev) => {
+        if (prev.stories.some((st) => st.id === storyId)) return prev;
+        const stories = [...prev.stories];
+        stories.splice(Math.min(at, stories.length), 0, story);
+        const have = new Set(prev.comments.map((c) => c.id));
+        return { ...prev, stories, comments: [...prev.comments, ...itsComments.filter((c) => !have.has(c.id))] };
+      });
+      showToast({ title: 'Couldn’t delete your instant', body: 'Check your connection and try again.', icon: 'alert-circle-outline' });
+    });
+  }, [requireUser]);
 
   // An open comment sheet (or Instant page) hears new and deleted comments on
   // what it shows, and catches up on any it missed each time it connects.
@@ -4941,11 +5075,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const toggleSavePost = useCallback((postId: ID, quiet?: boolean) => {
+    // Which way from the last tap, not the store a beat behind (see `asked`).
+    const key = `save:${postId}`;
+    const saving = !intended(key, stateRef.current.saved.postIds.includes(postId));
+    asked.current.set(key, { on: saving, at: Date.now() });
     {
       const me = stateRef.current.currentUserId;
-      const saving = !stateRef.current.saved.postIds.includes(postId);
       saving ? haptics.tap() : haptics.untap();
-      if (live(me, postId)) remote.setSaved(postId, me!, saving);
+      if (live(me, postId)) {
+        inTurn(key, () => remote.setSaved(postId, me!, saving), () => {
+          asked.current.delete(key);
+          setState((prev) => ({ ...prev, saved: { ...prev.saved, postIds: saving ? prev.saved.postIds.filter((id) => id !== postId) : prev.saved.postIds.includes(postId) ? prev.saved.postIds : [postId, ...prev.saved.postIds] } }));
+        });
+      }
       // Saving says so with the filled bookmark; taking one off can be a slip.
       if (!saving && !quiet) {
         offerUndo('Removed from saved', () => !stateRef.current.saved.postIds.includes(postId), () => toggleSavePost(postId, true), { icon: 'bookmark-outline' });
@@ -4953,7 +5095,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
     setState((prev) => {
       const me = prev.currentUserId;
-      const saving = !prev.saved.postIds.includes(postId);
+      // Set to what was asked, never flipped (see toggleLike).
+      if (prev.saved.postIds.includes(postId) === saving) return prev;
       return {
         ...prev,
         saved: {
@@ -7385,6 +7528,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       editQuestion,
       refresh,
       deletePost,
+      deleteComment,
+      deleteStory,
       addStory,
       toggleArchiveStory,
       markStoryViewed,
@@ -7591,6 +7736,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       editQuestion,
       refresh,
       deletePost,
+      deleteComment,
+      deleteStory,
       addStory,
       toggleArchiveStory,
       markStoryViewed,

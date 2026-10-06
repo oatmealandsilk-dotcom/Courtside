@@ -52,6 +52,7 @@ import { useApp } from '@/store/AppContext';
 import { courtRows, fetchCourts, peekCourts, type Court } from '@/features/players/courts';
 import { labelOf } from '@/features/places/courtName';
 import { notKnownAdult } from '@/features/players/age';
+import { INSTANT_MAX, POST_MAX } from '@/features/feed/limits';
 import { homeFor, type LatLng } from '@/features/players/positions';
 import { getPosition } from '@/lib/geo';
 import type { TaggedCourt } from '@/data/types';
@@ -280,6 +281,8 @@ export default function Compose() {
   // Opened from a court's page ("Post from here"): that court is already the place.
   const [location, setLocation] = useState(params.courtName?.trim() ?? '');
   // The court it was played on, when the location was picked from the courts list.
+  // Only ever put on the post for someone known to be an adult (owner decision
+  // 7, below): for anyone else the place goes on as words, without the court.
   const [court, setCourt] = useState<TaggedCourt | null>(() => {
     const lat = Number(params.lat); const lng = Number(params.lng); const name = params.courtName?.trim();
     return params.courtId && name && params.lat && params.lng && Number.isFinite(lat) && Number.isFinite(lng) ? { id: params.courtId, name, lat, lng } : null;
@@ -633,7 +636,7 @@ export default function Compose() {
         tags: Array.from(new Set((body.match(/#[\p{L}\p{N}_]+/gu) ?? []).map(tag=>tag.slice(1).toLowerCase()))),
         taggedUserIds: postTags,
         location: location.trim() || undefined,
-        court: location.trim() && court && !groupPost ? court : undefined,
+        court: adult && location.trim() && court && !groupPost ? court : undefined,
         featureOk: stats || groupPost ? false : featureOk ? undefined : false,
         groupId: shareTo ?? undefined,
         imageUrl: media?.kind === 'photo' ? media.uri : undefined,
@@ -664,7 +667,7 @@ export default function Compose() {
       tags: Array.from(new Set((body.match(/#[\p{L}\p{N}_]+/gu) ?? []).map(tag=>tag.slice(1).toLowerCase()))),
       taggedUserIds: postTags,
       location: location.trim() || undefined,
-      court: location.trim() && court && !groupPost ? court : undefined,
+      court: adult && location.trim() && court && !groupPost ? court : undefined,
       featureOk: stats || groupPost ? false : featureOk ? undefined : false,
       groupId: shareTo ?? undefined,
       imageUrl: media?.kind === 'photo' ? media.uri : undefined,
@@ -723,7 +726,7 @@ export default function Compose() {
         tags: Array.from(new Set((body.match(/#[\p{L}\p{N}_]+/gu) ?? []).map((tag) => tag.slice(1).toLowerCase()))),
         taggedUserIds: postTags,
         location: location.trim() || undefined,
-        court: location.trim() && court ? court : undefined,
+        court: adult && location.trim() && court ? court : undefined,
         featureOk: false,
         imageUrl: media?.kind === 'photo' ? media.uri : undefined,
         videoUrl: media?.kind === 'video' ? media.uri : undefined,
@@ -834,7 +837,7 @@ export default function Compose() {
                   {location ? (
                     <FormRow
                       line
-                      lead={court ? <CourtGlyph size={16} color={colors.brand} /> : <Ionicons name="location" size={20} color={colors.brand} />}
+                      lead={court && adult ? <CourtGlyph size={16} color={colors.brand} /> : <Ionicons name="location" size={20} color={colors.brand} />}
                       label={location}
                       accessibilityLabel={`Location: ${location}. Tap to change it`}
                       onPress={() => openPlacePicker((value, picked) => { setLocation(value); setCourt(picked ?? null); }, location)}
@@ -1016,7 +1019,7 @@ export default function Compose() {
             <View style={styles.logCaption}>
               {currentUser ? <Avatar name={currentUser.name} seed={currentUser.avatarSeed} uri={currentUser.avatarUrl} size={30} style={styles.logAvatar} /> : null}
               <View style={styles.flex}>
-                <Field bare accessibilityLabel="Caption" value={body} onChangeText={setBody} placeholder={`${logHint} — how did it go?`} multiline minHeight={44} mentions />
+                <Field bare accessibilityLabel="Caption" value={body} onChangeText={setBody} placeholder={`${logHint} — how did it go?`} multiline minHeight={44} mentions maxLength={POST_MAX} />
               </View>
             </View>
             {openedLog || workoutLog ? null : (
@@ -1135,12 +1138,13 @@ export default function Compose() {
                 multiline
                 minHeight={64}
                 mentions
+                maxLength={INSTANT_MAX}
               />
             ) : (
               <>
                 {/* The caption, with no label over it: the box says what it is. */}
                 <View style={styles.caption}>
-                  <Field accessibilityLabel="Caption" value={body} onChangeText={setBody} placeholder={opened && !openedPosted ? `${pickCaption(opened)} — how did it go?` : 'Write a caption…'} multiline minHeight={88} mentions />
+                  <Field accessibilityLabel="Caption" value={body} onChangeText={setBody} placeholder={opened && !openedPosted ? `${pickCaption(opened)} — how did it go?` : 'Write a caption…'} multiline minHeight={88} mentions maxLength={POST_MAX} />
                 </View>
                 {inChallenge ? (
                   <View style={styles.challengeChip} accessible accessibilityLabel={`Entering this week's challenge: ${challenge.title}`}>

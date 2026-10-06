@@ -59,6 +59,7 @@ import { ChallengePage } from '@/components/ChallengePage';
 import { lockPageSwipe } from '@/features/navigation/swipeLock';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useApp } from '@/store/AppContext';
+import type { Post } from '@/data/types';
 import { confirmUnfollow } from '@/lib/confirm';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { isDesktopBrowser } from '@/lib/browserDevice';
@@ -81,6 +82,9 @@ import { useAndroidBack } from '@/lib/androidBack';
  */
 /** Media the internet can reach: a file:// link only ever worked on the phone that made it. */
 const reachable = (p: { imageUrl?: string; videoUrl?: string }) => [p.imageUrl, p.videoUrl].every((u) => !u || /^(https?:|data:|blob:)/.test(u));
+/** One for Activities: a session with its numbers, yours or by someone you follow, out on the feed (not archived, taken down or group-only). */
+const isActivity = (p: Post, me: string | null | undefined, follows: Set<string>) =>
+  !p.archived && !p.removed && !p.groupId && reachable(p) && !!p.session && hasSessionStats(p.session) && (p.authorId === me || follows.has(p.authorId));
 
 /** When each page's post, thread or Instant was made, for putting new ones newest first. */
 /** What the ranking may know about you: who you follow, who follows you, profiles, and what you have seen this visit. */
@@ -432,6 +436,8 @@ function Home({ scope, topRow, paused, onChrome }: {
   // focus — otherwise stepping into a thread and back would reshuffle the feed
   // and throw you to the top.
   const rankedFor = useRef<string | null>(null);
+  // Which session posts Activities was last dealt from (ids, sorted), so a new one is noticed.
+  const actsDealt = useRef<string | null>(null);
   // When the main feed was last dealt, so a pull knows what is new since.
   const dealtAt = useRef<number | null>(null);
   // Builds the page order from whatever is loaded; a pull-to-refresh asks for it again.
@@ -445,8 +451,9 @@ function Home({ scope, topRow, paused, onChrome }: {
         if (scope.activities) {
           const follows = new Set(data.followingIds);
           const acts = data.posts
-            .filter((p) => !p.archived && !p.removed && !p.groupId && reachable(p) && !!p.session && hasSessionStats(p.session) && (p.authorId === data.currentUserId || follows.has(p.authorId)))
+            .filter((p) => isActivity(p, data.currentUserId, follows))
             .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+          actsDealt.current = acts.map((p) => p.id).sort().join(',');
           setOrder(acts.map((p) => `p:${p.id}`));
           setActive(0);
           setVisit((v) => v + 1);
@@ -574,6 +581,33 @@ function Home({ scope, topRow, paused, onChrome }: {
       return [...prev.slice(0, at), ...newer, ...prev.slice(at), ...older];
     });
   }, [groupKeys]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Activities take a session post as it arrives (yours just shared, or one
+  // from someone you follow), the way a group's feed does: dealt again while
+  // you are on its first page (so "No activities yet" gives way to your
+  // first), otherwise put in just after the page on screen, newest first,
+  // so nothing moves under you. Before, it was dealt once and never again.
+  const actKeys = useMemo(() => {
+    if (!scope?.activities) return '';
+    const follows = new Set(followingIds);
+    return posts.filter((p) => isActivity(p, currentUserId, follows)).map((p) => p.id).sort().join(',');
+  }, [posts, followingIds, currentUserId, scope?.activities]);
+  useEffect(() => {
+    // Not until the first deal, and not when nothing changed since the last.
+    if (!scope?.activities || actsDealt.current === null || actKeys === actsDealt.current) return;
+    if (!orderRef.current.length || activeRef.current === 0) { rerank(); return; }
+    actsDealt.current = actKeys;
+    const data = latest.current;
+    const byId = new Map(data.posts.map((p) => [p.id, p]));
+    const made = (k: string) => Date.parse(byId.get(k.slice(2))?.createdAt ?? '') || 0;
+    setOrder((prev) => {
+      const have = new Set(prev);
+      const add = (actKeys ? actKeys.split(',') : []).map((id) => `p:${id}`).filter((k) => !have.has(k)).sort((a, b) => made(b) - made(a));
+      if (!add.length) return prev;
+      const on = prev.indexOf(activeKeyRef.current ?? '');
+      const at = on >= 0 ? on + 1 : Math.min(prev.length, activeRef.current + 1);
+      return [...prev.slice(0, at), ...add, ...prev.slice(at)];
+    });
+  }, [actKeys]); // eslint-disable-line react-hooks/exhaustive-deps
   // Opening a group's feed asks the server for its newest page; nearing the
   // end of what is loaded asks for the next, older one, until there is no more.
   const groupNext = useRef<string | null | undefined>(undefined);
@@ -1045,7 +1079,7 @@ function Home({ scope, topRow, paused, onChrome }: {
   const likeByTap = (postId: string, _alreadyLiked?: boolean) => {
     const { posts: all, me } = likedNow.current;
     const post = all.find((p) => p.id === postId);
-    if (post && me && !(wantsOn(`p:${postId}`) ?? post.likedBy.includes(me))) actions.toggleLike(postId);
+    if (post && me && !(wantsOn(`p:${postId}`) ?? post.likedBy.includes(me))) actions.toggleLike(postId, true);
     setBurst((b) => ({ id: postId, n: b.n + 1 }));
   };
   const likeHitByTap = (storyId: string, _alreadyLiked?: boolean) => {
@@ -1477,6 +1511,7 @@ function Home({ scope, topRow, paused, onChrome }: {
                         onComment={() => router.push({ pathname: '/comments', params: { kind: 'post', id: post.id } })}
                         onPress={() => router.push(`/post/${post.id}`)}
                         onPressAuthor={() => router.push(`/user/${author.id}`)}
+                        onMore={() => router.push({ pathname: '/post-menu', params: { id: post.id } })}
                         clamp={8}
                         active={active === index && focused}
                       />

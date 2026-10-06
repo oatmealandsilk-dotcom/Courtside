@@ -27,6 +27,7 @@ import { useStillLoading } from '@/lib/useStillLoading';
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { RemovedNote } from '@/features/moderation/RemovedNote';
 import { confirm } from '@/lib/confirm';
+import { COMMENT_MAX } from '@/features/feed/limits';
 
 /** One hit with its likes and comments — the same page a post gets. */
 export default function HitThread() {
@@ -90,10 +91,10 @@ export default function HitThread() {
     const answering = replyingTo?.id;
     const was = replyingTo;
     if (answering) { const top = threadOf(comments, answering); if (top) setOpenThreads((s) => new Set(s).add(top)); }
-    // Refused for its words (migration 117): the toast says why, and what you
-    // wrote comes back into the box (if you haven't started something else there).
+    // Refused for its words (migration 117), or it didn't save at all: the toast
+    // says why, and what you wrote comes back into the box (if you haven't started something else there).
     void actions.addStoryComment(story.id, text, answering).then((result) => {
-      if (result === 'blocked' && !latestDraft.current.trim()) resumeDraft(text, was);
+      if (result && !latestDraft.current.trim()) resumeDraft(text, was);
     });
     setDraft('');
     doneReplying();
@@ -158,7 +159,7 @@ export default function HitThread() {
               </Pressable>
             </View>
           ) : null}
-          <Field inputRef={input} value={draft} onChangeText={changeDraft} placeholder={replyingTo ? (replyingTo.self ? 'Add a reply' : `Reply to @${replyingTo.handle}`) : 'Add a comment'} multiline minHeight={70} onSubmitEditing={submit} mentions />
+          <Field inputRef={input} value={draft} onChangeText={changeDraft} placeholder={replyingTo ? (replyingTo.self ? 'Add a reply' : `Reply to @${replyingTo.handle}`) : 'Add a comment'} multiline minHeight={70} onSubmitEditing={submit} mentions maxLength={COMMENT_MAX} />
           <Button label={replyingTo ? 'Post reply' : 'Post comment'} onPress={submit} disabled={!hasWords} />
         </View>}
       </View>

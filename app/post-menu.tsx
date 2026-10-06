@@ -1,6 +1,6 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Dimensions, Easing, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, Dimensions, Easing, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -17,6 +17,7 @@ import { confirm, confirmBlock } from '@/lib/confirm';
 import { notKnownAdult } from '@/features/players/age';
 import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { removedLine } from '@/features/moderation/reasons';
+import { useOpenOutside } from '@/features/share/openOutside';
 import type { Post, Story } from '@/data/types';
 
 type Row = {
@@ -35,6 +36,11 @@ type Row = {
  * can be reported, and its author muted or blocked. Everything else — save,
  * send, share the link — is there for both. Admins also get "Take down"
  * (or "Restore" once it is down); nobody else ever sees either.
+ *
+ * A post shared to a group only never leaves the group: no picture of it, no
+ * link (the server locks both, share_preview in migration 68). Someone
+ * else's post is a picture only when the server would show it to a stranger
+ * (useOpenOutside).
  */
 export default function PostMenu() {
   const styles = useThemedStyles(styleDefinitions);
@@ -52,6 +58,10 @@ export default function PostMenu() {
   const mine = !!item && item.authorId === currentUserId;
   const isSaved = saved.postIds.includes(id);
   const [done, setDone] = useState('');
+  const openOutside = useOpenOutside(post, currentUserId);
+  // A long menu (an admin's own post, bigger text on a small phone) scrolls
+  // rather than running off the top of the screen.
+  const { height: windowHeight } = useWindowDimensions();
 
   // The same rise and fall as the comments and Send-to sheets.
   const EASE = Easing.bezier(0.22, 0.61, 0.36, 1);
@@ -86,16 +96,18 @@ export default function PostMenu() {
   // A hit is a moment, not a keepsake: nothing to save or send on.
   const rows: Row[] = post && !removed ? [
     { key: 'save', icon: isSaved ? 'bookmark' : 'bookmark-outline', label: isSaved ? 'Remove from saved' : 'Save', onPress: () => { actions.toggleSavePost(post.id); close(); } },
+    // A group-only post goes only to people in that group (the Send sheet lists no one else).
     { key: 'send', icon: 'paper-plane-outline', label: 'Send to…', onPress: () => router.replace({ pathname: '/share', params: { kind: 'post', id: post.id } }) },
     // Your own post with a session on it shares as the session's story picture (share-session), the way Strava does; any other post as its own card.
-    mine && post.session
-      ? { key: 'story', icon: 'logo-instagram', label: 'Share to Instagram', note: 'Your session as a story picture.', onPress: () => router.replace({ pathname: '/share-session', params: { post: post.id } }) }
-      : { key: 'card', icon: 'image-outline', label: 'Share as image', onPress: () => router.replace({ pathname: '/share-card', params: { id: post.id } }) },
-    { key: 'link', icon: 'link-outline', label: 'Share link', onPress: async () => { try { const note = await shareOutside(postShareText(post, users.find((u) => u.id === post.authorId), currentUserId), url); if (note) setDone(note); else close(); } catch { setDone(`Share this link: ${url}`); } } },
+    ...(mine && post.session
+      ? [{ key: 'story', icon: 'logo-instagram' as const, label: 'Share to Instagram', note: 'Your session as a story picture.', onPress: () => router.replace({ pathname: '/share-session', params: { post: post.id } }) }]
+      : openOutside ? [{ key: 'card', icon: 'image-outline' as const, label: 'Share as image', onPress: () => router.replace({ pathname: '/share-card', params: { id: post.id } }) }] : []),
+    ...(post.groupId ? [] : [{ key: 'link', icon: 'link-outline' as const, label: 'Share link', onPress: async () => { try { const note = await shareOutside(postShareText(post, users.find((u) => u.id === post.authorId), currentUserId), url); if (note) setDone(note); else close(); } catch { setDone(`Share this link: ${url}`); } } }]),
   ] : [];
   if (mine && story) {
     rows.push(
       { key: 'archive', icon: 'archive-outline', label: story.archived ? 'Unarchive' : 'Archive', onPress: () => { actions.toggleArchiveStory(story.id); close(); } },
+      { key: 'delete', icon: 'trash-outline', label: 'Delete', danger: true, onPress: () => confirm({ title: 'Delete this instant?', message: "Its likes and comments go with it. This can't be undone.", confirmLabel: 'Delete', destructive: true, onConfirm: () => { void actions.deleteStory(story.id); close(); } }) },
     );
   }
   // The original file, for the owner and for CourtSide's own channels (an admin): one tap to the camera roll, then Instagram.
@@ -109,7 +121,8 @@ export default function PostMenu() {
         { key: 'edit', icon: 'create-outline' as const, label: 'Edit', onPress: () => router.replace({ pathname: '/edit-post', params: { id: post.id, kind: 'post' } }) },
         // A place only typed, with no court: one tap to pick the court, so the post shows on its page.
         // Known adults only: a court tag says where a minor regularly plays.
-        ...(post.location && !post.court && currentUser && !notKnownAdult(currentUser)
+        // Never on a group-only post: the server keeps those off every court's page.
+        ...(post.location && !post.court && !post.groupId && currentUser && !notKnownAdult(currentUser)
           ? [{ key: 'court', icon: 'court' as const, label: 'Add the court', note: 'Shows this post on the court’s page.', onPress: () => router.replace({ pathname: '/edit-post', params: { id: post.id, kind: 'post', pickPlace: '1' } }) }]
           : []),
         { key: 'pin', icon: 'pin-outline' as const, label: post.pinned ? 'Unpin from profile' : 'Pin to profile', note: post.pinned ? undefined : 'Shown first on your profile.', onPress: () => { actions.togglePinPost(post.id); close(); } },
@@ -153,7 +166,7 @@ export default function PostMenu() {
             <Pressable accessibilityRole="button" onPress={close} style={styles.doneButton}><Text style={styles.doneButtonText}>Done</Text></Pressable>
           </View>
         ) : (
-          <>
+          <ScrollView style={{ maxHeight: Math.max(240, windowHeight - insets.top - insets.bottom - 64) }} contentContainerStyle={styles.list} bounces={false} showsVerticalScrollIndicator={false}>
             {removed ? (
               // Why it is down, in the words its author was given; who did it is never shown.
               <View style={styles.removedBox} accessibilityRole="text">
@@ -175,7 +188,7 @@ export default function PostMenu() {
                 </View>
               </Pressable>
             ))}
-          </>
+          </ScrollView>
         )}
       </Animated.View>
     </View>
@@ -186,6 +199,8 @@ const styleDefinitions = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'transparent', justifyContent: 'flex-end' },
   sheet: { backgroundColor: colors.bg, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: spacing.md, paddingTop: spacing.sm, gap: 4 },
   grabber: { alignSelf: 'center', width: 36, height: 4, borderRadius: 2, backgroundColor: colors.border, marginBottom: spacing.sm },
+  // The rows keep the sheet's own gap between them inside the scroll.
+  list: { gap: 4 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 13, paddingHorizontal: spacing.sm, borderRadius: radius.md },
   // The court glyph is narrower than an icon: as wide as one, so the labels line up.
   glyph: { width: 22, alignItems: 'center' },

@@ -19,6 +19,7 @@ import { Avatar, BrandWash, Field } from '@/components/ui';
 import type { Comment, ID } from '@/data/types';
 import { LIST_PULL, getStage, markGone, markMounted, setCovered, stageKeyOf, useStageSelect } from '@/features/feed/commentStage';
 import { hiddenCommentsOn, listedComments } from '@/features/hiddenWords/hiddenWords';
+import { COMMENT_MAX } from '@/features/feed/limits';
 import * as haptics from '@/lib/haptics';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing, typography } from '@/theme';
@@ -280,12 +281,12 @@ export default function CommentsSheet() {
     sendPop.value = withSequence(withTiming(0.8, { duration: 80 }), withSpring(1, { damping: 10, stiffness: 320 }));
     if (answering) openThread(threadOf(comments, answering));
     const saving = kind === 'hit' ? actions.addStoryComment(id, text, answering) : actions.addComment(id, text, picked ?? undefined, answering);
-    // Refused for its words (migration 117): the toast says why, and what you
-    // wrote comes back into the box (if you haven't started something else
-    // there), answering whoever it answered, its photo too. The sheet already
-    // closed: it waits there for next time.
+    // Refused for its words (migration 117), or it didn't save at all: the
+    // toast says why, and what you wrote comes back into the box (if you
+    // haven't started something else there), answering whoever it answered,
+    // its photo too. The sheet already closed: it waits there for next time.
     void saving.then((result) => {
-      if (result !== 'blocked') return;
+      if (!result) return;
       if (!sheetOpen.current) { if (!drafts.get(key)?.trim()) drafts.set(key, text); return; }
       if (latestDraft.current.trim() || latestPhoto.current) return;
       resumeDraft(text, was);
@@ -417,7 +418,7 @@ export default function CommentsSheet() {
             <View style={styles.inputRow}>
               <Avatar name={me?.name ?? 'You'} seed={me?.avatarSeed ?? currentUserId ?? 'me'} uri={me?.avatarUrl} size={34} style={styles.me} />
               <View style={{ flex: 1 }}>
-                <Field inputRef={input} value={draft} onChangeText={changeDraft} placeholder={takenDown ? 'Comments are closed: this was taken down.' : replyingTo ? (replyingTo.self ? 'Add a reply…' : `Reply to @${replyingTo.handle}…`) : author && author.id !== currentUserId ? `Add a comment for ${author.name.split(' ')[0]}…` : 'Add a comment…'} multiline minHeight={44} onSubmitEditing={send} onFocus={onBoxFocus} onBlur={onBoxBlur} mentions compact />
+                <Field inputRef={input} value={draft} onChangeText={changeDraft} placeholder={takenDown ? 'Comments are closed: this was taken down.' : replyingTo ? (replyingTo.self ? 'Add a reply…' : `Reply to @${replyingTo.handle}…`) : author && author.id !== currentUserId ? `Add a comment for ${author.name.split(' ')[0]}…` : 'Add a comment…'} multiline minHeight={44} onSubmitEditing={send} onFocus={onBoxFocus} onBlur={onBoxBlur} mentions compact maxLength={COMMENT_MAX} />
               </View>
               <View style={styles.action}>
                 {kind === 'post' ? (
