@@ -219,6 +219,7 @@ export default function YourSessions() {
                     postable={checked && !postId && s.day >= firstPostable}
                     onPost={() => router.push({ pathname: '/compose', params: pick.type === 'tracker' ? { activity: pick.activity.id } : { session: s.id } })}
                     onShare={() => router.push({ pathname: '/share-session', params: postId ? { post: postId, session: s.id } : { session: s.id } })}
+                    onRemove={() => confirm({ title: 'Remove this session?', message: 'It comes off your streak and totals.', confirmLabel: 'Remove', destructive: true, onConfirm: () => actions.deleteSession(s.id) })}
                     line={i > 0}
                   />
                 );
@@ -233,6 +234,8 @@ export default function YourSessions() {
           <Text style={styles.moreText}>Show earlier weeks</Text>
         </Pressable>
       ) : null}
+      {/* The one place that says how a session comes off the log (a hold, here or on the Tennis profile). */}
+      {groups.length ? <Text style={styles.holdHint}>Hold a session to remove it.</Text> : null}
     </Screen>
   );
 }
@@ -400,14 +403,17 @@ function TaggedYou({ tag, tagger, line }: { tag: SessionTag; tagger: User; line:
  * a share button beside it (the session as a picture for Instagram). A tap on
  * the rest opens who you played (or, for a copy from a tag, that tag).
  */
-function Logged({ session: s, people, onOpen, hideNote = false, source, postId, postable, onPost, onShare, line }: {
+function Logged({ session: s, people, onOpen, hideNote = false, source, postId, postable, onPost, onShare, onRemove, line }: {
   session: PracticeSession;
   /** "vs Mira" (accepted), "vs June · Waiting", "with Dev", a name you typed. */
   people: PeopleLine | null;
   onOpen?: () => void;
   /** The note says nothing the title doesn't (a copy from a tag). */
   hideNote?: boolean;
-  source: string; postId?: string; postable: boolean; onPost: () => void; onShare: () => void; line: boolean;
+  source: string; postId?: string; postable: boolean; onPost: () => void; onShare: () => void;
+  /** A hold on the row: remove it from your log (after a yes). Offered to a screen reader as an action of its own. */
+  onRemove: () => void;
+  line: boolean;
 }) {
   const styles = useThemedStyles(styleDefinitions);
   const title = `${loggedLabel(s)}${people ? ` ${peopleText(people)}` : ''}`;
@@ -421,10 +427,13 @@ function Logged({ session: s, people, onOpen, hideNote = false, source, postId, 
       {/* The row itself, beside its button rather than around it: a button inside a button is not allowed in a browser. */}
       <Pressable
         accessibilityRole={onOpen ? 'button' : undefined}
-        accessibilityLabel={onOpen ? `${title}, ${duration(s.minutes)}, ${dayWords(s.day)}. ${s.fromSessionId ? 'Open the tag' : 'Who you played'}` : undefined}
-        disabled={!onOpen}
+        accessibilityLabel={onOpen ? `${title}, ${duration(s.minutes)}, ${dayWords(s.day)}. ${s.fromSessionId ? 'Open the tag' : 'Who you played'}` : `${title}, ${duration(s.minutes)}, ${dayWords(s.day)}`}
+        accessibilityActions={[{ name: 'longpress', label: 'Remove' }]}
+        onAccessibilityAction={(e) => { if (e.nativeEvent.actionName === 'longpress') onRemove(); }}
         onPress={onOpen}
-        style={({ pressed }) => [styles.rowMain, pressed && onOpen && styles.pressed]}
+        onLongPress={onRemove}
+        delayLongPress={450}
+        style={({ pressed }) => [styles.rowMain, pressed && styles.pressed]}
       >
         <View style={styles.icon}>
           {s.kind === 'match' ? <Ionicons name="trophy-outline" size={18} color={colors.textMuted} />
@@ -474,7 +483,7 @@ function Logged({ session: s, people, onOpen, hideNote = false, source, postId, 
 }
 
 const styleDefinitions = StyleSheet.create({
-  // The grouped lists of "Your game" (profile-details): white cards on a soft shadow, rows parted by a hairline.
+  // The grouped lists the Tennis profile used to have (profile-details): white cards on a soft shadow, rows parted by a hairline.
   group: { ...lift, borderRadius: 20, backgroundColor: colors.surface, overflow: 'hidden', paddingHorizontal: spacing.lg },
   sectionTitle: { ...typography.smallStrong, color: colors.textMuted, paddingHorizontal: spacing.sm, paddingTop: spacing.xl, paddingBottom: spacing.sm },
   weekHead: { flexDirection: 'row', alignItems: 'flex-end' },
@@ -529,5 +538,6 @@ const styleDefinitions = StyleSheet.create({
   offerLaterText: { ...typography.smallStrong, color: colors.textMuted },
   offerOn: { minWidth: 84, alignItems: 'center' },
   moreText: { ...typography.smallStrong, color: colors.brand },
+  holdHint: { ...typography.small, color: colors.textMuted, textAlign: 'center', marginTop: spacing.lg },
   pressed: { opacity: 0.6 },
 });

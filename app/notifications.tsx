@@ -191,16 +191,16 @@ function shortLength(preview: string): string {
 }
 
 /**
- * "Tennis detected." or "Workout detected." for a row about a session a
- * tracker picked up. The session itself says, when the app holds it;
+ * "Tennis detected." or "Activity detected." (owner, Oct 5) for a row about a
+ * session a tracker picked up. The session itself says, when the app holds it;
  * otherwise the row's own words do: a workout's start with its name ("Run ·
  * 32 min · …", migration 107), tennis's with its length or a weekday.
  */
 function detectedWho(preview: string | undefined, sport: string | undefined): string {
-  if (sport) return sport === 'tennis' ? 'Tennis detected.' : 'Workout detected.';
+  if (sport) return sport === 'tennis' ? 'Tennis detected.' : 'Activity detected.';
   const first = (preview ?? '').split(' · ')[0]?.trim() ?? '';
   if (!first || /^\d/.test(first) || /^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)$/.test(first)) return 'Tennis detected.';
-  return 'Workout detected.';
+  return 'Activity detected.';
 }
 
 export default function Notifications() {

@@ -43,6 +43,7 @@ import { nearestPlace } from '@/data/locations';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getPosition } from '@/lib/geo';
 import { shrinkPhoto } from '@/features/compose/shrinkPhoto';
+import { canBeFeatured } from '@/features/compose/featuring';
 import * as haptics from '@/lib/haptics';
 import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
@@ -733,8 +734,11 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
    * Change your own post's words, tags, who is in it, and where it was; and,
    * on a tracker session's post, which health numbers it shares (`share`,
    * "Share health data"). The numbers come back off if the server refuses.
+   * `featureOk` is the "Let CourtSide feature this on its Instagram" switch,
+   * only on a post that can be featured (canBeFeatured); changed on its own,
+   * the post is not marked "Edited".
    */
-  editPost: (postId: ID, patch: { body: string; taggedUserIds: ID[]; location?: string; court?: TaggedCourt | null; share?: HealthShareKey[] }) => void;
+  editPost: (postId: ID, patch: { body: string; taggedUserIds: ID[]; location?: string; court?: TaggedCourt | null; share?: HealthShareKey[]; featureOk?: boolean }) => void;
   /** Change your own thread's question and details. */
   editQuestion: (questionId: ID, patch: { title: string; body: string }) => void;
   /** Pull-to-refresh: fetches everything again from the server. */
@@ -1805,7 +1809,7 @@ const demoHandle: string | null = (() => {
 
 /**
  * Demo build in a browser: `?toast=tennis` puts up the "Tennis detected"
- * note for your waiting session, `?toast=workout` the "Workout detected"
+ * note for your waiting session, `?toast=workout` the "Activity detected"
  * one for your waiting run, so the Log it flow can be seen.
  */
 const demoActivityToast: 'tennis' | 'workout' | null = (() => {
@@ -1818,9 +1822,9 @@ const demoActivityToast: 'tennis' | 'workout' | null = (() => {
 
 /**
  * The note when a check files sessions. One: "Tennis detected" with its
- * time, heart rate and source, as always, or "Workout detected" ("Run · 32
- * min · 3.1 mi"), each with Log it, which opens the composer with it on
- * (Oct 2): post it, or just log it. More than one at once (the past week,
+ * time, heart rate and source, as always, or "Activity detected" ("Run · 32
+ * min · 3.1 mi"; owner, Oct 5), each with Log it, which opens the composer
+ * with it on (Oct 2): post it, or just log it. More than one at once (the past week,
  * picked up once after the Oct 5 update, or a few since the app was last
  * open): how many, and See them, which opens Notifications, where each one
  * waits with its own row. Your own numbers, for you only: the lock-screen
@@ -1843,7 +1847,7 @@ function activityToast(count: number, newestFirst: DetectedActivity[], holdMs?: 
   if (!a) return;
   const href = `/compose?activity=${a.id}`;
   showToast({
-    title: isTennisActivity(a) ? 'Tennis detected' : 'Workout detected',
+    title: isTennisActivity(a) ? 'Tennis detected' : 'Activity detected',
     body: isTennisActivity(a)
       ? [duration(a.minutes), a.maxHr ? `${a.maxHr} max bpm` : null, pickSource({ type: 'tracker', activity: a })].filter(Boolean).join(' · ')
       : workoutLine(a),
@@ -3824,7 +3828,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     );
   }, [requireUser]);
 
-  const editPost = useCallback((postId: ID, patch: { body: string; taggedUserIds: ID[]; location?: string; court?: TaggedCourt | null; share?: HealthShareKey[] }) => {
+  const editPost = useCallback((postId: ID, patch: { body: string; taggedUserIds: ID[]; location?: string; court?: TaggedCourt | null; share?: HealthShareKey[]; featureOk?: boolean }) => {
     const me = requireUser();
     const post = stateRef.current.posts.find((p) => p.id === postId);
     if (!post || post.authorId !== me) return;
@@ -3841,6 +3845,32 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const healthWas = post.session;
     const tracker = healthWas?.activityId ? stateRef.current.detectedActivities.find((a) => a.id === healthWas.activityId && a.userId === me) : undefined;
     const healthNow = healthWas?.activityId && patch.share && !sameShare(postShare(healthWas), patch.share) ? reshare(healthWas, patch.share, tracker) : undefined;
+    // "Let CourtSide feature this on its Instagram" switched after posting
+    // (Oct 5, owner): only on a post that can be featured, only when it
+    // really changed. Shown at once; the server's answer then counts (it
+    // keeps a tracker session's post off), and a switch that did not save
+    // goes back, with a toast, so nobody thinks it is off when it is not.
+    const featureNow = patch.featureOk !== undefined && canBeFeatured(post) && patch.featureOk !== (post.featureOk !== false) ? patch.featureOk : undefined;
+    const saveFeature = () => {
+      if (featureNow === undefined) return;
+      const shown = (p: Post) => p.featureOk !== false;
+      setState((prev) => ({ ...prev, posts: prev.posts.map((p) => (p.id === postId ? { ...p, featureOk: featureNow ? undefined : false } : p)) }));
+      if (!live(me, postId)) return;
+      void remote.setPostFeatureOk(postId, featureNow).catch(() => null).then((saved) => {
+        if (saved === featureNow) return;
+        // Not if it has been switched again since: that one counts.
+        setState((prev) => ({ ...prev, posts: prev.posts.map((p) => (p.id === postId && shown(p) === featureNow ? { ...p, featureOk: (saved ?? !featureNow) ? undefined : false } : p)) }));
+        if (saved === null) showToast({ title: featureNow ? 'Featuring didn’t switch on' : 'Featuring didn’t switch off', body: 'Try again in a moment.', icon: 'alert-circle-outline' });
+      });
+    };
+    // Only the switch changed: saved on its own, and the post is not marked
+    // "Edited" (nothing anyone sees on it changed).
+    const sameTagged = patch.taggedUserIds.length === (post.taggedUserIds ?? []).length && patch.taggedUserIds.every((id) => (post.taggedUserIds ?? []).includes(id));
+    const sameCourt = court === undefined || (court?.id ?? undefined) === post.court?.id;
+    if (featureNow !== undefined && patch.body === post.body && sameTagged && location === (post.location || undefined) && sameCourt && !healthNow) {
+      saveFeature();
+      return;
+    }
     if (live(me, postId)) void remote.updatePost(postId, { body: patch.body, tags, taggedUserIds: patch.taggedUserIds, location, court, editedAt }).then((r) => {
       if (r !== 'blocked') return;
       // Refused for its words (migration 117): the post goes back to what it said (the toast says why).
@@ -3855,6 +3885,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       };
       return newlyTagged.reduce((acc, id) => withNotification(acc, { userId: id, actorId: me, kind: 'tag', targetId: postId, targetKind: 'post', preview: snippet(patch.body || 'a post') }), next);
     });
+    saveFeature();
     if (!healthNow || !live(me, postId)) return;
     void remote.setPostHealthShare(postId, healthNow).catch(() => null).then((saved) => {
       // The server's numbers, or back to what the post had. Not if it has

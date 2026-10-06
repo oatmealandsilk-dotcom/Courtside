@@ -7,7 +7,7 @@ import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, spacing, typography } from '@/theme';
 
-/** Your gear bag, part of your tennis profile: whatever you fill in shows there; leave the rest blank. */
+/** Your gear bag, part of your Tennis profile: whatever you fill in shows there; leave the rest blank. */
 export default function EditGear() {
   const styles = useThemedStyles(styleDefinitions);
   const { currentUser, actions } = useApp();
@@ -32,7 +32,7 @@ export default function EditGear() {
   return (
     <Screen title="Gear bag" onBack={() => goBack('/profile-details')}>
       <View style={styles.body}>
-        <Text style={styles.lead}>Shows on your tennis profile. Fill in what you like; blanks stay hidden.</Text>
+        <Text style={styles.lead}>Shows on your Tennis profile. Fill in what you like; blanks stay hidden.</Text>
         <Field label="Racket" value={racket} onChangeText={setRacket} autoCapitalize="words" />
         <View style={styles.pair}>
           <View style={{ flex: 1 }}><Field label="Strings" value={strings} onChangeText={setStrings} autoCapitalize="words" /></View>

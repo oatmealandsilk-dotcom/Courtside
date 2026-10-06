@@ -21,6 +21,8 @@ SHEETS.add('/court-now');
 SHEETS.add('/map-visibility');
 // So does Open to hit's hold-to-edit sheet, over Find Players.
 SHEETS.add('/open-to-hit');
+// The Tennis profile's sheets (an injury or limit, a goal, every achievement) sit over the page the same way.
+SHEETS.add('/tennis-sheet');
 
 /**
  * Animate the content without remounting the router or moving navigation.
