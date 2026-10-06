@@ -102,7 +102,7 @@ export function UpToday({ me, people, teen = false, locationOn, finding = false,
       if (on && noting) {
         showToast({
           title: 'You’re open to hit',
-          body: teen ? 'Turn on Location so friends who follow you back see it.' : 'Turn on Location to show on the map.',
+          body: teen ? 'Friends see it once Location is on.' : 'Off the map until Location is on.',
           icon: 'navigate-outline',
           ...(onTurnOnLocation ? { action: { label: 'Turn on', onPress: onTurnOnLocation } } : {}),
         });

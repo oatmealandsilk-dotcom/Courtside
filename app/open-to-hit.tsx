@@ -125,7 +125,7 @@ export default function OpenToHitSheet() {
     if (!locationEnabled) {
       showToast({
         title: 'You’re open to hit',
-        body: teen ? 'Turn on Location so friends who follow you back see it.' : 'Turn on Location to show on the map.',
+        body: teen ? 'Friends see it once Location is on.' : 'Off the map until Location is on.',
         icon: 'navigate-outline',
         action: { label: 'Turn on', onPress: () => { void location.toggle(); } },
       });
