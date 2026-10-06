@@ -30,7 +30,7 @@ export function FlybyPill({ courtId, courtName, day, skip = [] }: { courtId: str
   if (!people.length) return null;
   const words = flybyPill(people, day);
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={`${words} at ${courtName}. See who`} hitSlop={4} onPress={() => openFlyby(courtId, courtName, day)} style={({ pressed }) => [styles.pill, pressed && styles.pressed]}>
+    <Pressable accessibilityRole="button" accessibilityLabel={`${words} at ${courtName}. See who`} hitSlop={7} onPress={() => openFlyby(courtId, courtName, day)} style={({ pressed }) => [styles.pill, pressed && styles.pressed]}>
       <View style={styles.faces}>
         {people.slice(0, 3).map((u, i) => (
           <View key={u.id} style={[styles.face, i > 0 && styles.faceOver]}>
@@ -50,5 +50,6 @@ const styleDefinitions = StyleSheet.create({
   faces: { flexDirection: 'row', alignItems: 'center' },
   face: { borderWidth: 1.5, borderColor: colors.brandDim, borderRadius: 13 },
   faceOver: { marginLeft: -7 },
-  text: { ...font('600'), fontSize: 13.5, color: colors.brand, flexShrink: 1 },
+  // The words in ink, the chevron in the brand: brand words on their own dim tint fell under 4.5:1 on some courts (clay).
+  text: { ...font('600'), fontSize: 13.5, color: colors.text, flexShrink: 1 },
 });

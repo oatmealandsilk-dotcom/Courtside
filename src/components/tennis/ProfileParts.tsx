@@ -1,20 +1,20 @@
 import React from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import type { AchievementProgress } from '@/lib/badges';
 import { tierColor } from '@/lib/badges';
 import { show as showToast } from '@/lib/toast';
 import { mixHex } from '@/features/activity/zones';
-import { daysUntil } from '@/features/players/tennisProfile';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
-import { colors, font, lift, pageIsDark, spacing, typography, withAlpha } from '@/theme';
+import { colors, font, lift, spacing, typography, withAlpha } from '@/theme';
 
 /*
  * The pieces the Tennis profile page is built from (Oct 5): a section's head,
  * the white box each section sits in, a row on a hairline (the hairline
- * starting at the words, not the tile), the countdown to a tournament, the
- * row of medals and the bar to the next one. Everything from the theme's
+ * starting at the words, not the tile), a status chip, a card's summary line
+ * with its thin bar, an empty section's one row with its Add button, the
+ * grid of medals and the bar to the next one. Everything from the theme's
  * slots, so every court draws them in its own colours.
  */
 
@@ -53,12 +53,12 @@ export function SectionHead({ title, onlyYou = false, count, line, link }: {
   );
 }
 
-/** "Only you", small and quiet, with a lock: said once per private tab, in plain words. Read as part of the heading it sits beside. */
+/** "Only you", small and quiet, with a crossed-out eye (a lock read as "not unlocked yet", Oct 6): said once per private tab, in plain words. Read as part of the heading it sits beside. */
 export function OnlyYou() {
   const styles = useThemedStyles(styleDefinitions);
   return (
     <View style={styles.onlyYou} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-      <Ionicons name="lock-closed" size={10} color={colors.textMuted} />
+      <Ionicons name="eye-off-outline" size={10} color={colors.textMuted} />
       <Text style={styles.onlyYouText}>Only you</Text>
     </View>
   );
@@ -190,35 +190,83 @@ function deepenFor(fill: string, ink: string, target: number): string {
   return out;
 }
 
-/** A small tag on a row ("Entered", "Watching"): radius 6, since a pill would read as something to press. */
-export function Tag({ label, on = false }: { label: string; on?: boolean }) {
+/**
+ * A quiet status chip ("Entered", "Watching"): small, rounded, an icon and a
+ * word. "On" is the brand's colour on its own dim wash, the ink deepened
+ * where it fell short of 4.5:1 on it (Paris's brick); "off" is muted on the
+ * page's raised tone. Not a button, so not a pill.
+ */
+export function Chip({ label, icon, on = false }: { label: string; icon?: IconName; on?: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
-  // An "on" tag is the brand colour, deepened where its ink on it fell short of 4.5:1 (white on Melbourne's blue is 4:1).
-  return <View style={[styles.tag, on && { backgroundColor: deepenFor(colors.brand, colors.brandInk, 4.5) }]}><Text style={[styles.tagText, on && styles.tagTextOn]}>{label}</Text></View>;
+  useTheme();
+  const ink = on ? deepenFor(colors.brand, colors.brandDim, 4.5) : colors.textMuted;
+  return (
+    <View style={[styles.chip, { backgroundColor: on ? colors.brandDim : colors.bgElevated }]}>
+      {icon ? <Ionicons name={icon} size={12} color={ink} /> : null}
+      <Text style={[styles.chipText, { color: ink }]}>{label}</Text>
+    </View>
+  );
 }
 
 /**
- * How long until a tournament, in its court's colour on a whisper of it:
- * "26 days", "Today" on the day, and from 100 days out the date itself.
+ * A card's first line: what it adds up to ("1 of 3 done", "2 of 10
+ * unlocked"), small and upper-case, with a thin bar in the brand colour
+ * filling the rest of the line when there is a share to show.
  */
-export function CountdownTile({ iso, slot }: { iso: string; slot: 'hard' | 'clay' | 'grass' | 'court' }) {
+export function Summary({ label, share }: { label: string; share?: number }) {
   const styles = useThemedStyles(styleDefinitions);
   useTheme();
-  const tint = colors[slot];
-  const dark = pageIsDark();
-  // On a light page both the number and its word are a step toward the text, so they read on the tint as well
-  // as on the page: the light clay courts' own colour was under 3:1 there (Paris 2.8:1). A dark page keeps the
-  // court's colour for the number, which already reads.
-  const ink = dark ? tint : mixHex(tint, colors.text, 0.25);
-  const small = mixHex(tint, colors.text, dark ? 0.25 : 0.4);
-  const days = daysUntil(iso);
-  const d = new Date(iso);
-  const [big, word] = days <= 0 ? ['Today', ''] : days >= 100 ? [String(d.getDate()), d.toLocaleDateString(undefined, { month: 'short' })] : [String(days), days === 1 ? 'day' : 'days'];
+  const pct = share === undefined ? undefined : Math.round(Math.max(0, Math.min(1, share)) * 100);
   return (
-    <View style={[styles.countdown, { backgroundColor: withAlpha(tint, 0.12) }]}>
-      {days >= 100 ? <Text style={[styles.countWord, { color: small }]}>{word}</Text> : null}
-      <Text maxFontSizeMultiplier={1.2} style={[days <= 0 ? styles.countToday : styles.countBig, { color: days <= 0 ? small : ink }]}>{big}</Text>
-      {days > 0 && days < 100 ? <Text maxFontSizeMultiplier={1.2} style={[styles.countWord, { color: small }]}>{word}</Text> : null}
+    <View style={styles.summary} accessible accessibilityLabel={label}>
+      <Text style={styles.eyebrow}>{label}</Text>
+      {pct !== undefined ? (
+        <View style={styles.summaryTrack}>
+          {pct > 0 ? <View style={[styles.summaryFill, { width: `${pct}%`, backgroundColor: colors.brand }]} /> : null}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+/**
+ * An empty section, tidily: an icon on the brand's dim wash, what belongs
+ * here and why, and one white outline button. The whole row is the button,
+ * so the target is never just the small pill.
+ */
+export function EmptyRow({ icon, title, sub, action = 'Add', accessibilityLabel, onPress }: {
+  icon: IconName;
+  title: string;
+  sub?: string;
+  action?: string;
+  accessibilityLabel: string;
+  onPress: () => void;
+}) {
+  const styles = useThemedStyles(styleDefinitions);
+  useTheme();
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={accessibilityLabel} accessibilityHint={sub} onPress={onPress} style={({ pressed }) => [styles.empty, pressed && styles.pressed]}>
+      <View style={styles.emptyIcon}><Ionicons name={icon} size={20} color={colors.brand} /></View>
+      <View style={styles.words}>
+        <Text style={styles.emptyTitle}>{title}</Text>
+        {sub ? <Text style={styles.rowSub} numberOfLines={2}>{sub}</Text> : null}
+      </View>
+      <View style={styles.outline}>
+        <Ionicons name="add" size={14} color={colors.text} />
+        <Text style={styles.outlineText}>{action}</Text>
+      </View>
+    </Pressable>
+  );
+}
+
+/** A day on the calendar as a small tile: the month in capitals over the day's number. For a row's lead. */
+export function DateTile({ iso }: { iso: string }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const d = new Date(iso);
+  return (
+    <View style={styles.dateTile}>
+      <Text style={styles.dateMonth} maxFontSizeMultiplier={1.2}>{d.toLocaleDateString(undefined, { month: 'short' }).toUpperCase()}</Text>
+      <Text style={styles.dateDay} maxFontSizeMultiplier={1.2}>{d.getDate()}</Text>
     </View>
   );
 }
@@ -233,26 +281,49 @@ const TIER_ORDER = { platinum: 0, gold: 1, silver: 2, bronze: 3 } as const;
  */
 const medalTint = (tier: AchievementProgress['achievement']['tier']) => (tier === 'silver' ? mixHex(colors.textMuted, colors.hard, 0.35) : tierColor(tier));
 
-/** Unlocked medals in one row that scrolls sideways, gold first; a tap names the medal in a toast. Every disc is ringed in its metal, so none reads as locked. */
-export function MedalRow({ items }: { items: AchievementProgress[] }) {
+/**
+ * Medals as a grid, four across and two rows at most, so the box is never
+ * half-empty: the won ones first in their metal, gold first, then (with
+ * `locked`) the ones nearest to winning, greyed with a small lock, so you
+ * can see what is next. A tap names the medal in a toast; a locked one also
+ * says how far along it is.
+ */
+export function MedalGrid({ items, locked = false, max = 8 }: { items: AchievementProgress[]; locked?: boolean; max?: number }) {
   const styles = useThemedStyles(styleDefinitions);
   useTheme();
-  const shown = items.filter((a) => a.unlocked).sort((a, b) => TIER_ORDER[a.achievement.tier] - TIER_ORDER[b.achievement.tier]);
+  const won = items.filter((a) => a.unlocked).sort((a, b) => TIER_ORDER[a.achievement.tier] - TIER_ORDER[b.achievement.tier]);
+  const waiting = locked ? items.filter((a) => !a.unlocked).sort((a, b) => b.progress - a.progress) : [];
+  const shown = [...won, ...waiting].slice(0, max);
   return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.medalStrip} contentContainerStyle={styles.medals}>
-      {shown.map(({ achievement: a }) => {
+    <View style={styles.grid}>
+      {shown.map(({ achievement: a, unlocked, current, target, unit }) => {
         const tint = medalTint(a.tier);
         const tier = a.tier.charAt(0).toUpperCase() + a.tier.slice(1);
+        const far = `${current} of ${target}${unit ? ` ${unit}` : ''}`;
         return (
-          <Pressable key={a.id} accessibilityRole="button" accessibilityLabel={`${a.name}, ${tier}. ${a.description}`} onPress={() => showToast({ title: a.name, body: `${tier} · ${a.description}`, icon: a.icon })} style={({ pressed }) => [styles.medal, pressed && styles.pressed]}>
-            <View style={[styles.disc, { backgroundColor: withAlpha(tint, 0.18), borderColor: withAlpha(tint, 0.45) }]}>
-              <Ionicons name={a.icon as IconName} size={22} color={tint} />
+          <Pressable
+            key={a.id}
+            accessibilityRole="button"
+            accessibilityLabel={unlocked ? `${a.name}, ${tier}. ${a.description}` : `${a.name}, locked. ${a.description}. ${far}`}
+            onPress={() => showToast(unlocked
+              ? { title: a.name, body: `${tier} · ${a.description}`, icon: a.icon }
+              : { title: a.name, body: `Locked · ${a.description} · ${far}`, icon: 'lock-closed-outline' })}
+            style={({ pressed }) => [styles.cell, pressed && styles.pressed]}
+          >
+            <View style={[styles.disc, unlocked
+              ? { backgroundColor: withAlpha(tint, 0.18), borderColor: withAlpha(tint, 0.45) }
+              : { backgroundColor: colors.bgElevated, borderColor: colors.border }]}
+            >
+              <Ionicons name={a.icon as IconName} size={22} color={unlocked ? tint : withAlpha(colors.textFaint, 0.55)} />
+              {unlocked ? null : (
+                <View style={styles.lockBadge}><Ionicons name="lock-closed" size={8} color={colors.textFaint} /></View>
+              )}
             </View>
-            <Text style={styles.medalName} numberOfLines={2}>{a.name}</Text>
+            <Text style={[styles.medalName, !unlocked && styles.medalNameLocked]} numberOfLines={2}>{a.name}</Text>
           </Pressable>
         );
       })}
-    </ScrollView>
+    </View>
   );
 }
 
@@ -289,17 +360,26 @@ const styleDefinitions = StyleSheet.create({
   pressed: { opacity: 0.6 },
   tile: { width: 40, height: 40, borderRadius: 12, backgroundColor: colors.bgElevated, alignItems: 'center', justifyContent: 'center' },
   tileBrand: { backgroundColor: colors.brandDim },
-  tag: { paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6, backgroundColor: colors.bgElevated },
-  tagText: { ...typography.caption, letterSpacing: 0.2, color: colors.textMuted },
-  tagTextOn: { color: colors.brandInk },
-  countdown: { width: 56, height: 56, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-  countBig: { ...font('600'), fontSize: 22, lineHeight: 24, letterSpacing: -0.9, fontVariant: ['tabular-nums'] },
-  countToday: { ...font('600'), fontSize: 14, lineHeight: 18, letterSpacing: -0.2 },
-  countWord: { ...font('600'), fontSize: 11, lineHeight: 13 },
-  medalStrip: { marginHorizontal: -spacing.lg },
-  // The first medal's name starts on the page's 16-point gutter, and each name wraps inside its own column.
-  medals: { paddingHorizontal: spacing.lg, gap: 10, paddingTop: 4, paddingBottom: 2 },
-  medal: { width: 72, alignItems: 'center', gap: 6, paddingVertical: 4 },
-  disc: { width: 54, height: 54, borderRadius: 27, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
-  medalName: { ...typography.caption, letterSpacing: 0, lineHeight: 14, maxWidth: 72, color: colors.text, textAlign: 'center' },
+  chip: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
+  chipText: { ...font('600'), fontSize: 12, lineHeight: 15, letterSpacing: 0 },
+  // A card's eyebrow ("Next up", "1 of 3 done"): small capitals in the muted ink, the one label style in the Game tab.
+  eyebrow: { ...typography.caption, letterSpacing: 0.6, textTransform: 'uppercase', color: colors.textMuted },
+  summary: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingTop: 14, paddingBottom: 6 },
+  summaryTrack: { flex: 1, height: 4, borderRadius: 2, backgroundColor: colors.surfaceAlt, overflow: 'hidden' },
+  summaryFill: { height: 4, borderRadius: 2 },
+  empty: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: 14 },
+  emptyIcon: { width: 44, height: 44, borderRadius: 14, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
+  emptyTitle: { ...typography.bodyStrong, lineHeight: 20, color: colors.text },
+  // The white outline button (the Share page's): the card's own white, a firm hairline, the page's ink.
+  outline: { flexDirection: 'row', alignItems: 'center', gap: 4, height: 34, paddingHorizontal: 14, borderRadius: 999, borderWidth: 1, borderColor: colors.borderStrong, backgroundColor: colors.surface },
+  outlineText: { ...typography.smallStrong, color: colors.text },
+  dateTile: { width: 40, height: 44, borderRadius: 12, backgroundColor: colors.bgElevated, alignItems: 'center', justifyContent: 'center' },
+  dateMonth: { ...font('600'), fontSize: 10, lineHeight: 12, letterSpacing: 0.5, color: colors.textMuted },
+  dateDay: { ...font('600'), fontSize: 17, lineHeight: 20, letterSpacing: -0.4, color: colors.text, fontVariant: ['tabular-nums'] },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -4, paddingTop: 6, paddingBottom: 4 },
+  cell: { width: '25%', alignItems: 'center', gap: 6, paddingHorizontal: 4, paddingVertical: 8 },
+  disc: { width: 52, height: 52, borderRadius: 26, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
+  lockBadge: { position: 'absolute', right: -1, bottom: -1, width: 18, height: 18, borderRadius: 9, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
+  medalName: { ...typography.caption, letterSpacing: 0, lineHeight: 14, color: colors.text, textAlign: 'center' },
+  medalNameLocked: { ...font('500'), color: colors.textFaint },
 });

@@ -7,7 +7,7 @@ import { Avatar } from '@/components/ui';
 import { CardWash, cardLook } from '@/components/session/SessionCard';
 import { Duration, Figure } from '@/components/session/Duration';
 import type { ID, SessionDetail } from '@/data/types';
-import { resultWord } from '@/features/activity/format';
+import { resultWord, scoreLine } from '@/features/activity/format';
 import { sessionPeople } from '@/features/activity/sessionTags';
 import { distanceFigure } from '@/features/activity/workouts';
 import { font } from '@/theme';
@@ -22,9 +22,7 @@ import { useTheme } from '@/theme/ThemeProvider';
  * with along the bottom. No address and no tracker line: at this size they
  * only came out as specks. Everything scales with `width` (300 is the base).
  */
-export function SessionStamp({ session, width, eyebrow, place, hidden = [], score }: {
-  /** A match's score, typed on the Share page. */
-  score?: string;
+export function SessionStamp({ session, width, eyebrow, place, hidden = [] }: {
   session: SessionDetail;
   width: number;
   eyebrow: string;
@@ -35,6 +33,8 @@ export function SessionStamp({ session, width, eyebrow, place, hidden = [], scor
   const look = cardLook(theme);
   const u = width / 300;
   const result = resultWord(session);
+  // The session's saved score (a match's, or a practice's since Oct 6), under the time.
+  const score = scoreLine(session);
   // A workout's distance (migration 107) goes under the time, as on the post's card, so the
   // numbers row never holds more than the three it has room for. Tennis never has one.
   const far = session.workout ? distanceFigure(session.distanceM) : null;

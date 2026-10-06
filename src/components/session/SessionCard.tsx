@@ -122,6 +122,16 @@ export function cardLook(theme: ThemeName): CardLook {
 }
 
 /**
+ * The Share card's cream as a plain card's ground (Your sessions, Oct 6): the
+ * same warm cream on the default court, the court's own raised ground on the
+ * city courts (never the brand-filled card), the page's surface on a dark one.
+ */
+export function creamFill(theme: ThemeName): string {
+  if (pageIsDark()) return colors.surface;
+  return theme === 'default' ? mixHex(colors.bgElevated, colors.sun, 0.1) : colors.bgElevated;
+}
+
+/**
  * The fade inside a session box, laid as its first child: the brand's wash in
  * a green box, the shirt's in a cream one (with its hairline, unless `edge` is
  * off for a picture drawn edge to edge), nothing on a dark page.
@@ -141,7 +151,7 @@ export function CardWash({ look, radius, edge = true }: { look: CardLook; radius
  * from. `width` sets the scale: 358 is the feed's size, the composer's is
  * about two thirds of it.
  */
-export function SessionCard({ session, width, play = false, people, hidden = [], onPress, showSource = true, accessibilityHint, aspect = 4 / 5, radius, eyebrow, place, brand = false, scale = 1, inset, picture = false, score: typedScore }: {
+export function SessionCard({ session, width, play = false, people, hidden = [], onPress, showSource = true, accessibilityHint, aspect = 4 / 5, radius, eyebrow, place, brand = false, scale = 1, inset, picture = false }: {
   session: SessionDetail;
   width: number;
   /**
@@ -165,12 +175,6 @@ export function SessionCard({ session, width, play = false, people, hidden = [],
    * browser's copy for the picture would catch it part way).
    */
   picture?: boolean;
-  /**
-   * The score as typed on the Share page, drawn in place of the log's own
-   * (an empty one draws none), so the Card design follows the Score box as
-   * the other designs do (Oct 5). Left out everywhere else: the log's score.
-   */
-  score?: string;
   /** Count the numbers up (once, when the card comes into view). */
   play?: boolean;
   /** The author's own preview: the players picked, waiting ones faded. Otherwise only those who accepted (session.with). */
@@ -200,8 +204,8 @@ export function SessionCard({ session, width, play = false, people, hidden = [],
   const kcal = session.kcal ? session.kcal : null;
   const health = hr || !!zones || strain != null || !!kcal;
   const result = resultWord(session);
-  // A match's score from the author's log (migration 91), under the time; on a share picture, the one typed there.
-  const score = typedScore !== undefined ? typedScore.trim() || null : scoreLine(session);
+  // The score from the author's log (migration 91; a practice's too since Oct 6), under the time, the share picture included.
+  const score = scoreLine(session);
   // A workout's distance (a run, a ride: migration 107), under the time. Tennis never has one.
   const far = session.workout ? distanceFigure(session.distanceM) : null;
   const list: CardPerson[] = people ?? (() => { const p = sessionPeople(session, hidden); return [...p.opponents, ...p.partners]; })();
@@ -212,7 +216,7 @@ export function SessionCard({ session, width, play = false, people, hidden = [],
     shownTop.toLowerCase(),
     `${spokenDuration(session.minutes)} ${onCourtWord(session)}`,
     result,
-    score ? (typedScore !== undefined ? score : spokenScore(session.sets)) : null,
+    score ? spokenScore(session.sets) : null,
     far ? `${far.value} miles` : null,
     hr ? `max heart rate ${session.maxHr}${session.avgHr ? `, average ${session.avgHr}` : ''}` : null,
     strain != null ? `Strain ${strain.toFixed(1)}` : null,
@@ -224,7 +228,8 @@ export function SessionCard({ session, width, play = false, people, hidden = [],
   const body = (
     <View collapsable={false} style={[styles.card, { width, aspectRatio: aspect, borderRadius: round, padding: pad, paddingTop: inset ? inset.top : pad, paddingBottom: inset ? inset.bottom : pad, backgroundColor: look.fill, borderColor: look.border, borderWidth: look.dark && round > 0 ? 1 : 0 }]}>
       <CardWash look={look} radius={round} edge={round > 0} />
-      <CourtLines color={look.lines} />
+      {/* The faint court is tennis's: a run or the gym has none. */}
+      {session.kind === 'fitness' || session.workout ? null : <CourtLines color={look.lines} />}
       <View style={styles.top}>
         <Reanimated.Text key={shownTop} entering={picture ? undefined : FadeIn.duration(160)} style={{ ...font('600'), fontSize: small(11.5, 9), letterSpacing: Math.max(0.8, 1.1 * k), color: look.eyebrow, flex: 1 }} numberOfLines={1} maxFontSizeMultiplier={1.2}>
           {shownTop}

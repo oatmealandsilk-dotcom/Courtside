@@ -3,7 +3,7 @@ import { localDay } from '@/features/practice/stats';
 import { sessionPeople } from './sessionTags';
 import { withShare } from './healthShare';
 import { duration } from '@/lib/format';
-import { scoreText } from './score';
+import { canScore, scoreText } from './score';
 import { formatDistance, inSentence, isTennisActivity, workoutName } from './workouts';
 
 /*
@@ -24,6 +24,25 @@ import { formatDistance, inSentence, isTennisActivity, workoutName } from './wor
 export function sportName(sport: string | undefined | null): string {
   const words = (sport ?? '').replace(/[_-]+/g, ' ').trim().toLowerCase();
   return words ? words[0].toUpperCase() + words.slice(1) : 'Activity';
+}
+
+/**
+ * The words the server files a tracker's session under in Notifications
+ * (migration 107's note_detected_activity): "Run · Tue · 32 min · from your
+ * WHOOP"; tennis without its name ("1 hr 24 min · from your WHOOP"); the
+ * weekday only when it is found more than 20 hours after it ended. For the
+ * demo, which files its own.
+ */
+export function detectedNote(a: DetectedActivity, now = Date.now()): string {
+  const m = a.minutes;
+  const length = m < 60 ? `${m} min` : `${Math.floor(m / 60)} hr${m % 60 ? ` ${m % 60} min` : ''}`;
+  const day = Date.parse(a.endedAt) < now - 20 * 3_600_000 && a.tzOffsetMin != null
+    ? ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][new Date(Date.parse(a.startedAt) + a.tzOffsetMin * 60_000).getUTCDay()]
+    : null;
+  const who = a.source === 'whoop' ? 'your WHOOP'
+    : a.source === 'apple-health' ? (/^Watch[0-9]+,[0-9]+$/.test(a.device ?? '') ? 'your Apple Watch' : 'Apple Health')
+    : a.source === 'fitbit' ? 'your Fitbit' : a.source === 'oura' ? 'your Oura Ring' : a.source === 'polar' ? 'your Polar' : 'your tracker';
+  return `${[isTennisActivity(a) ? null : workoutName(a.sport), day, length].filter(Boolean).join(' · ')} · from ${who}`;
 }
 
 /** "Tennis", or a workout's name: "Run", "Strength training" (workouts.ts). */
@@ -169,7 +188,10 @@ export function statsChunks(s: SessionDetail, hidden: ID[] = []): StatsBit[][] {
       else chunks.push([{ text: 'Match' }, ...(people.vs ? [{ text: ' ' }, ...people.vs] : [])]);
       if (people.with) chunks.push(people.with);
     } else {
-      chunks.push([{ text: whatWord(s, s.focus) }, ...(people.with ? [{ text: ' ' }, ...people.with] : [])]);
+      // A practice or drills with a score (Oct 6) reads as a match does: "Practice · 6–4 6–3 with @dev".
+      const score = scoreLine(s);
+      if (score) chunks.push([{ text: whatWord(s, s.focus) }], [{ text: score }, ...(people.with ? [{ text: ' ' }, ...people.with] : [])]);
+      else chunks.push([{ text: whatWord(s, s.focus) }, ...(people.with ? [{ text: ' ' }, ...people.with] : [])]);
     }
     chunks.push([{ text: duration(s.minutes) }]);
     return chunks;
@@ -201,7 +223,8 @@ export function reelStatsChunks(s: SessionDetail, hidden: ID[] = []): StatsBit[]
     ? [{ text: opponents.length ? 'vs ' : 'with ' }, { text: `@${lead.handle}`, userId: lead.id }, ...(all.length > 1 ? [{ text: ' ' }, { text: `+${all.length - 1}`, more: true }] : [])]
     : null;
   if (!s.activityId && s.sessionId) {
-    const result = s.kind === 'match' ? (resultWithScore(s) ?? '') : '';
+    // A match's result and score; a practice's score alone (Oct 6).
+    const result = resultWithScore(s) ?? '';
     return [
       [{ text: s.kind ? KIND_LABEL[s.kind] : s.focus }],
       result ? [{ text: result }] : null,
@@ -232,11 +255,15 @@ export const hasSessionStats = (s: SessionDetail | undefined): boolean => !!s &&
 
 export const KIND_LABEL: Record<PracticeSession['kind'], string> = { practice: 'Practice', match: 'Match', drills: 'Drills', fitness: 'Fitness' };
 
-/** "Practice", "Match · Won", "Match · Lost", "Drills", "Run" (a fitness session logged from a run); with a score, "Match · Won 6–4 3–6 10–7" (migration 91). */
+/**
+ * "Practice", "Match · Won", "Match · Lost", "Drills", "Run" (a fitness
+ * session logged from a run); with a score, "Match · Won 6–4 3–6 10–7"
+ * (migration 91) or "Practice · 6–4 6–3" (Oct 6).
+ */
 export function loggedLabel(s: Pick<PracticeSession, 'kind' | 'won' | 'sets'> & { workout?: string }): string {
-  const score = s.kind === 'match' ? scoreText(s.sets) : '';
+  const score = canScore(s.kind) ? scoreText(s.sets) : '';
   if (s.kind === 'match' && s.won !== undefined) return `Match · ${s.won ? 'Won' : 'Lost'}${score ? ` ${score}` : ''}`;
-  if (score) return `Match · ${score}`;
+  if (score) return `${KIND_LABEL[s.kind]} · ${score}`;
   if (s.kind === 'fitness' && s.workout) return workoutName(s.workout);
   return KIND_LABEL[s.kind];
 }
@@ -278,8 +305,8 @@ export function sessionFromLogged(s: PracticeSession): SessionDetail {
     // A fitness session logged from a workout says what it was ("Run"), as the server writes it from the log (migration 107).
     ...(s.kind === 'fitness' && s.workout ? { workout: s.workout } : {}),
     ...(s.kind === 'match' && s.won !== undefined ? { won: s.won } : {}),
-    // The score goes too; the server puts the log's own on the post either way (migration 91).
-    ...(s.kind === 'match' && s.sets?.length ? { sets: s.sets } : {}),
+    // The score goes too, on any tennis session (Oct 6); the server puts the log's own on the post either way (migration 91).
+    ...(canScore(s.kind) && s.sets?.length ? { sets: s.sets } : {}),
   };
 }
 
@@ -315,10 +342,10 @@ export const whatWord = (s: Pick<SessionDetail, 'kind' | 'workout'>, fallback?: 
 /** "Won", "Lost", or null when it was not a match with a result. */
 export const resultWord = (s: Pick<SessionDetail, 'kind' | 'won'>) => (s.kind === 'match' && s.won !== undefined ? (s.won ? 'Won' : 'Lost') : null);
 
-/** A match's score, "6–4 3–6 10–7", or null when it has none (migration 91). */
-export const scoreLine = (s: Pick<SessionDetail, 'kind' | 'sets'>): string | null => (s.kind === 'match' && s.sets?.length ? scoreText(s.sets) : null);
+/** A tennis session's score, "6–4 3–6 10–7", or null when it has none (migration 91; a practice's or drills' too since Oct 6). Never a workout's. */
+export const scoreLine = (s: Pick<SessionDetail, 'kind' | 'sets'>): string | null => (canScore(s.kind) && s.sets?.length ? scoreText(s.sets) : null);
 
-/** "Won 6–4 3–6 10–7", "Won", "6–4 6–3" (a score with no winner given), or null. */
+/** "Won 6–4 3–6 10–7", "Won", "6–4 6–3" (a score with no winner given, or a practice's), or null. */
 export function resultWithScore(s: Pick<SessionDetail, 'kind' | 'won' | 'sets'>): string | null {
   const words = [resultWord(s), scoreLine(s)].filter(Boolean).join(' ');
   return words || null;
@@ -347,7 +374,9 @@ export function pillPieces(s: SessionDetail, hidden: ID[] = []): { time: string;
   const first = lead ? (lead.name?.trim().split(/\s+/)[0] || `@${lead.handle}`) : '';
   return {
     time: duration(s.minutes),
-    result: resultWithScore(s) ?? kindWord(s),
+    // The pill on clips stays as it was (owner, Oct 5: leave it): a match's result and score, otherwise
+    // what it was. A practice's score (Oct 6) is on its card and in its stats, not on the pill.
+    result: (s.kind === 'match' ? resultWithScore(s) : null) ?? kindWord(s),
     third: s.maxHr ? `${s.maxHr} bpm` : lead ? `${opponents.length ? 'vs' : 'with'} ${first}` : null,
   };
 }

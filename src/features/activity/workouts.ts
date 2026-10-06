@@ -118,6 +118,9 @@ const NAMES: Record<string, string> = {
   track: 'Track and field',
   wheelchair: 'Wheelchair workout',
   workout: 'Workout',
+  // Fitness logged by hand as "Gym" (Log a session). Not a Health type, and not on the
+  // server's list: its fallback writes it the same way ("Gym").
+  gym: 'Gym',
 };
 
 /** A short name the server takes: lower-case letters, numbers and dashes, 2 to 40 long, starting with a letter. */
@@ -152,7 +155,7 @@ export function workoutIcon(slug: string | undefined): keyof typeof Ionicons.gly
     case 'run': case 'walk': case 'hike': case 'track': case 'wheelchair': return 'walk-outline';
     case 'ride': return 'bicycle-outline';
     case 'swim': case 'paddling': case 'surfing': case 'rowing': return 'water-outline';
-    case 'strength': case 'functional-strength': case 'core': case 'cross-training': return 'barbell-outline';
+    case 'strength': case 'functional-strength': case 'core': case 'cross-training': case 'gym': return 'barbell-outline';
     case 'yoga': case 'pilates': case 'barre': case 'stretching': case 'cooldown': case 'recovery': case 'mind-body': case 'dance': return 'body-outline';
     case 'tennis': case 'pickleball': case 'table-tennis': case 'squash': case 'badminton': case 'racquetball': case 'padel': return 'tennisball-outline';
     case 'soccer': return 'football-outline';
@@ -197,4 +200,10 @@ export function workoutLine(a: Pick<DetectedActivity, 'sport' | 'minutes' | 'dis
 export const WORKOUTS_ASK = {
   title: 'Workouts from Apple Health',
   message: 'CourtSide reads your workouts (tennis, runs, rides, the gym and more) and your heart rate during them, so you can log and post them, plus sleep, HRV, resting heart rate and steps. Nothing is posted unless you choose to.',
+} as const;
+
+/** The same for WHOOP (migration 135), to someone whose WHOOP so far brings in tennis only. WHOOP already shares workouts, so no sign-in follows. */
+export const WHOOP_WORKOUTS_ASK = {
+  title: 'Workouts from WHOOP',
+  message: 'CourtSide reads your WHOOP workouts (tennis, runs, rides, the gym and more) and your heart rate during them, so you can log and post them. The past week’s show up in Notifications. Nothing is posted unless you choose to.',
 } as const;

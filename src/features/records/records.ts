@@ -21,6 +21,14 @@ import { duration } from '@/lib/format';
  * celebration: only beating a number you already had is (beaten()).
  */
 
+/**
+ * A record's own mark (an Ionicons name): a rosette, never the trophy, which is
+ * a match's icon everywhere in the app (a lost match would wear two). The
+ * same mark on the Record pill, the tiles, the "New record!" note and the
+ * weekly recap.
+ */
+export const RECORD_ICON = 'ribbon' as const;
+
 /** The least each record needs before it counts. */
 export const RECORD_MIN: Record<RecordKey, number> = { week: 60, streak: 3, month: 3, win: 1, match: 30 };
 
@@ -78,26 +86,29 @@ export function computeRecords(me: ID, sessions: PracticeSession[], posts: Post[
     if (!had || value > had.value) out[key] = { key, value, ...rest };
   };
 
-  const weeks = new Map<string, number>();
-  const months = new Map<string, number>();
+  // Each week's and month's total, and the day of its last session: the day it reached that total.
+  const weeks = new Map<string, { total: number; last: string }>();
+  const months = new Map<string, { total: number; last: string }>();
   for (const s of tennis) {
     const w = weekStart(s.day);
-    weeks.set(w, (weeks.get(w) ?? 0) + s.minutes);
+    const wk = weeks.get(w);
+    weeks.set(w, { total: (wk?.total ?? 0) + s.minutes, last: wk && wk.last > s.day ? wk.last : s.day });
     const m = s.day.slice(0, 7);
-    months.set(m, (months.get(m) ?? 0) + 1);
+    const mo = months.get(m);
+    months.set(m, { total: (mo?.total ?? 0) + 1, last: mo && mo.last > s.day ? mo.last : s.day });
   }
-  for (const [w, minutes] of [...weeks].sort(([a], [b]) => a.localeCompare(b))) keep('week', minutes, { from: w, to: addDays(w, 6) });
-  for (const [m, n] of [...months].sort(([a], [b]) => a.localeCompare(b))) {
+  for (const [w, { total, last }] of [...weeks].sort(([a], [b]) => a.localeCompare(b))) keep('week', total, { from: w, to: addDays(w, 6), reached: last });
+  for (const [m, { total, last }] of [...months].sort(([a], [b]) => a.localeCompare(b))) {
     const first = `${m}-01`;
-    const last = localDay(new Date(Number(m.slice(0, 4)), Number(m.slice(5, 7)), 0, 12));
-    keep('month', n, { from: first, to: last });
+    const end = localDay(new Date(Number(m.slice(0, 4)), Number(m.slice(5, 7)), 0, 12));
+    keep('month', total, { from: first, to: end, reached: last });
   }
   for (const s of tennis) {
     const margin = winMargin(s);
-    if (margin !== undefined) keep('win', margin, { sessionId: s.id, from: s.day, to: s.day });
-    if (s.kind === 'match') keep('match', s.minutes, { sessionId: s.id, from: s.day, to: s.day });
+    if (margin !== undefined) keep('win', margin, { sessionId: s.id, from: s.day, to: s.day, reached: s.day });
+    if (s.kind === 'match') keep('match', s.minutes, { sessionId: s.id, from: s.day, to: s.day, reached: s.day });
   }
-  for (const run of streakRuns(activeDays(me, sessions, posts, stories))) keep('streak', run.length, { from: run.from, to: run.to });
+  for (const run of streakRuns(activeDays(me, sessions, posts, stories))) keep('streak', run.length, { from: run.from, to: run.to, reached: run.to });
   return out;
 }
 

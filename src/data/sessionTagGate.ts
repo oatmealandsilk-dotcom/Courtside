@@ -1,5 +1,5 @@
 import type { Post } from './types';
-import { validSets } from '@/features/activity/score';
+import { canScore, validSets } from '@/features/activity/score';
 
 /*
  * Names on a post's session stats (session.with, migration 62) are shown
@@ -24,10 +24,10 @@ export function setSessionTagNamesLive(ready: boolean | null): void {
 /** A post's session stats as this app may show them: without a "with" list until the server is known to write it. */
 export function trustedSession(session: Post['session'] | null | undefined): Post['session'] | undefined {
   if (!session) return undefined;
-  // A match's score (migration 91) is drawn only in the shape the server writes; anything else is left off.
+  // A tennis session's score (migration 91; any tennis session since Oct 6) is drawn only in the shape the server writes; anything else is left off.
   if ('sets' in session) {
     const { sets: raw, ...others } = session;
-    const sets = session.kind === 'match' ? validSets(raw) : undefined;
+    const sets = canScore(session.kind) ? validSets(raw) : undefined;
     session = sets ? { ...others, sets } : others;
   }
   if (live || !('with' in session)) return session;

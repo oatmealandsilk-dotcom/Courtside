@@ -21,7 +21,11 @@ import { dismissWorkoutAlerts, presentedWorkoutAlerts } from '@/features/health/
  * under a key of its own, so phones that already looked for tennis look
  * back a week too, and each of the past week's workouts gets its row in
  * Notifications. Tennis alone (Apple Health, WHOOP and the trackers) is
- * looked back over for a week once too. All of it waits for
+ * looked back over for a week once too. WHOOP's every workout (migration
+ * 135) the same: its first look after the person's yes goes back a week,
+ * under a key of its own, and so does any look while the app holds none of
+ * WHOOP's sessions at all (connected on an older version, say, that looked
+ * back only a day and a half). All of it waits for
  * 'flag:workouts-apple' to be on for this person (`weekBack`): that switch
  * only exists once the server keeps a week-old session as news (migration
  * 107; before, 48 hours, and a week looked at then would be used up for
@@ -124,11 +128,13 @@ async function noteLook(key: string, at: number) {
 
 /**
  * What to look at: Apple Health's tennis (`apple`) and its other workouts
- * (`appleWorkouts`), WHOOP's tennis, and the trackers'. `weekBack`: the
- * one-time look back over the past week may be used ('flag:workouts-apple'
- * is on for this person, so the server keeps a week-old session as news).
+ * (`appleWorkouts`), WHOOP's tennis (`whoop`) and its other workouts
+ * (`whoopWorkouts`, migration 135), and the trackers'. `weekBack`: the one-time look back
+ * over the past week may be used ('flag:workouts-apple' is on for this
+ * person, so the server keeps a week-old session as news). `whoopEmpty`:
+ * the app holds none of WHOOP's sessions, so WHOOP's look goes back a week.
  */
-export type CheckSources = { apple: boolean; appleWorkouts?: boolean; whoop: boolean; trackers?: TrackerId[]; weekBack?: boolean };
+export type CheckSources = { apple: boolean; appleWorkouts?: boolean; whoop: boolean; whoopWorkouts?: boolean; whoopEmpty?: boolean; trackers?: TrackerId[]; weekBack?: boolean };
 
 /** New tennis sessions and workouts: Apple Health read on this phone, WHOOP and the other trackers asked of the server. Never throws. */
 export function checkForTennis(me: ID, src: CheckSources, force = false): Promise<CheckResult> {
@@ -158,7 +164,8 @@ export function checkForTennis(me: ID, src: CheckSources, force = false): Promis
         const shown = await presentedWorkoutAlerts();
         for (const a of shown) openingFromAlert(a.workoutId);
         // At most 40 a look (the newest not handed over yet), well inside the server's 60 a day.
-        const fresh = await readWorkouts(since, { sports, skipWhoopTennis: src.whoop, limit: 40, skip: (id) => handed.has(`${me}:${id}`) });
+        // What the WHOOP app copied into Health is left out when WHOOP sends its own (tennis, and every workout once that is on).
+        const fresh = await readWorkouts(since, { sports, skipWhoopTennis: src.whoop, skipWhoopOther: !!src.whoopWorkouts, limit: 40, skip: (id) => handed.has(`${me}:${id}`) });
         for (const w of fresh) {
           const r = await remote.reportActivity(w.id, reportOf(w));
           if (r === 'error') { failed = true; continue; }
@@ -177,7 +184,7 @@ export function checkForTennis(me: ID, src: CheckSources, force = false): Promis
       }
     }
 
-    if (src.whoop) {
+    if (src.whoop || src.whoopWorkouts) {
       const key = `courtside-tennis-whoop:${me}`;
       // The past week of WHOOP's tennis, asked for once, and only with
       // `weekBack` (see above). Done only when WHOOP's function says it
@@ -185,14 +192,21 @@ export function checkForTennis(me: ID, src: CheckSources, force = false): Promis
       // say, so it is asked again at the next hourly look.
       const weekKey = `courtside-whoop-week:${me}`;
       const week = !!src.weekBack && (await lastLook(weekKey)) === null;
+      // Every workout (migration 135): the first look after the yes goes back a week too. Done only when
+      // the function says it looked for every workout that far (an older one looks for tennis only).
+      const allKey = `courtside-whoop-workouts-week:${me}`;
+      const allWeek = !!src.whoopWorkouts && (await lastLook(allKey)) === null;
       const last = await lastLook(key);
       if (force || last === null || now - last > WHOOP_EVERY) {
+        // The past week: once (above), or while none of WHOOP's sessions is here at all.
+        const back = week || allWeek || !!src.whoopEmpty;
         // A server without the tennis part yet answers with an error, which is simply ignored.
-        const r = await remote.whoop<{ fresh?: ID[]; workoutDays?: number }>('sync', { only: 'workouts', ...(week ? { days: 7 } : {}) }).catch(() => null);
+        const r = await remote.whoop<{ fresh?: ID[]; workoutDays?: number; allWorkouts?: boolean }>('sync', { only: 'workouts', ...(back ? { days: 7 } : {}) }).catch(() => null);
         filed.push(...(r?.fresh ?? []));
         if (r) news = true;
         await noteLook(key, now);
         if (week && (r?.workoutDays ?? 0) >= 7) await noteLook(weekKey, now);
+        if (allWeek && (r?.workoutDays ?? 0) >= 7 && r?.allWorkouts) await noteLook(allKey, now);
       }
     }
 

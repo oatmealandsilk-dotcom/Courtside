@@ -28,10 +28,11 @@ export type SessionPick =
  * Whether the server has this kind of session switched on for a tracker's
  * source: tennis by its source's switch (migrations 58 and 69: WHOOP, Apple
  * Health, Fitbit, Oura, Polar), any other workout by 'workouts-apple'
- * (migration 107; only Apple Health sends those).
+ * (migration 107) or 'workouts-whoop' (migration 135): only Apple Health and
+ * WHOOP send those.
  */
 export const sourceOn = (a: DetectedActivity, flags: TennisFlags) => (!isTennisActivity(a)
-  ? a.source === 'apple-health' && flags.workoutsApple
+  ? (a.source === 'apple-health' && flags.workoutsApple) || (a.source === 'whoop' && flags.workoutsWhoop)
   : a.source === 'apple-health' ? flags.apple : a.source === 'health-connect' ? false : flags[a.source]);
 
 /** Posts of yours that carry a session, by what they carry: 'a:<tracker id>' or 's:<log id>' → the post. */

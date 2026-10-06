@@ -7,17 +7,17 @@ import { CourtSpinner } from '@/components/CourtSpinner';
 import { DragSheet } from '@/components/DragSheet';
 import { Chips, Section, SheetTitle, Submit, Tiles, formBody } from '@/components/sheet/SheetForm';
 import { WhoYouPlayed } from '@/components/WhoYouPlayed';
-import { activityDay, activityTitle, activityWhen, dayWords, fromWho, loggedLabel, privateLine, sessionEyebrow } from '@/features/activity/format';
+import { KIND_LABEL, activityDay, activityTitle, activityWhen, dayWords, fromWho, loggedLabel, privateLine, sessionEyebrow } from '@/features/activity/format';
 import { showLogged } from '@/features/activity/useTrackerSession';
 import { Duration } from '@/components/session/Duration';
 import { LENGTHS, lengthTile, trackerName } from '@/features/activity/lengths';
 import { TrackedLength } from '@/components/session/TrackedLength';
 import { ScoreField } from '@/components/session/ScoreField';
-import { readScore, scoreText, setsWinner } from '@/features/activity/score';
+import { canScore, readScore, scoreText, setsWinner, tookScoreNotKept } from '@/features/activity/score';
 import { computeStats } from '@/features/practice/stats';
 import { andList, canTagKind, firstName as firstOfName, isActive, tagsOnSession } from '@/features/activity/sessionTags';
 import { pickSource, postOf, postedIndex, sourceOn } from '@/features/activity/recent';
-import { isTennisActivity, workoutIcon } from '@/features/activity/workouts';
+import { formatDistance, isTennisActivity, workoutIcon, workoutName } from '@/features/activity/workouts';
 import { useTennisFlags } from '@/features/activity/useTennisFlags';
 import { hitPrefill, prefillFor } from '@/features/hits/followUp';
 import { beatenBy, recordToast } from '@/features/records/records';
@@ -41,6 +41,16 @@ const KINDS: { value: PracticeSession['kind']; label: string }[] = [
 ];
 
 /**
+ * What a fitness session logged by hand was, kept as the same slugs a
+ * tracker's workouts use (migration 107), so it reads "Run", "Gym" in your
+ * sessions like one from the Watch. Each chip says the name it saves as
+ * (workoutName, the same list as the server's): what you tap is what the
+ * row, the note and the picture say ("Bike ride", never "Ride" then "Bike
+ * ride"). Nothing picked stays "Fitness".
+ */
+const WORKOUT_KINDS: { value: string; label: string }[] = ['run', 'ride', 'swim', 'gym'].map((value) => ({ value, label: workoutName(value) }));
+
+/**
  * Log a session in two taps: what it was (practice is picked already) and
  * how long, then Save. A match can say whether you won. Yesterday is one
  * more tap, for the session you forgot to log.
@@ -60,8 +70,11 @@ const KINDS: { value: PracticeSession['kind']; label: string }[] = [
  * rest, so one game is never logged twice.
  *
  * A match can carry its score (Oct 4, migration 91), typed as "6-4 3-6
- * 10-7", your games first; the result then follows the sets. Editing a
- * logged match (?edit=) can add or change it too.
+ * 10-7", your games first; the result then follows the sets. A practice or
+ * drills can too (Oct 6, owner: "well practices can have scores too"), as
+ * just the sets: only a match has a result. Editing a logged session
+ * (?edit=) can add or change it; ?focus=score (Share's "Add score") opens
+ * with the caret in the box, and Save goes back to where it came from.
  *
  * "Who was there" (a match or a practice) tags CourtSide players, up to
  * 3 on a match or 8 on a practice, each asked to accept before their name shows on a post; a name
@@ -81,6 +94,12 @@ export default function LogSessionRoute() {
   return <LogSession />;
 }
 
+/** What a tracker's session was, with a workout's distance: "Tennis", "Run · 3.1 mi". */
+function pickTitle(x: DetectedActivity): string {
+  const far = isTennisActivity(x) ? null : formatDistance(x.distanceM);
+  return far ? `${activityTitle(x)} · ${far}` : activityTitle(x);
+}
+
 function ToComposer({ activity, hit }: { activity: string; hit?: string }) {
   useEffect(() => { router.replace({ pathname: '/compose', params: { activity, ...(hit ? { hit } : {}) } }); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   return null;
@@ -96,7 +115,7 @@ function ToComposer({ activity, hit }: { activity: string; hit?: string }) {
  */
 function LogSession() {
   const styles = useThemedStyles(styleDefinitions);
-  const { activity, hit, edit } = useLocalSearchParams<{ activity?: string; hit?: string; edit?: string }>();
+  const { activity, hit, edit, focus } = useLocalSearchParams<{ activity?: string; hit?: string; edit?: string; focus?: string }>();
   const { actions, detectedActivities, remoteLoaded, ready, hitRequests, currentUserId, users, posts, stories, sessions, sessionTags, sessionTagsReady } = useApp();
   // The box you type in stays above a phone's keyboard, and so do the names listed under it.
   const { scroller, onScroll, reveal } = useKeyboardReveal();
@@ -150,16 +169,18 @@ function LogSession() {
   const alreadyPosted = !!done && !!postOf({ type: 'tracker', activity: done }, postedIndex(posts, currentUserId));
 
   const [kind, setKind] = useState<PracticeSession['kind']>(fromHit?.kind ?? 'practice');
+  // A fitness session's kind ("run", "gym"), when picked.
+  const [workout, setWorkout] = useState<string | undefined>();
   const [minutes, setMinutes] = useState<number | null>(fresh ? fresh.minutes : fromHit ? fromHit.minutes : null);
   const [editLength, setEditLength] = useState(false);
   // A session that arrives after the sheet opened starts on its own length too.
   const [preset, setPreset] = useState(fresh?.id);
   if (fresh && preset !== fresh.id) { setPreset(fresh.id); setMinutes(fresh.minutes); }
   const [won, setWon] = useState<'won' | 'lost' | null>(null);
-  // A match's score, as typed; when one side took more sets it decides the result, and the Won/Lost chips step aside.
+  // The score, as typed, on any tennis session (Oct 6). On a match, when one side took more sets it decides the result, and the Won/Lost chips step aside.
   const [score, setScore] = useState('');
   const scored = readScore(score);
-  const decided = setsWinner(scored.sets);
+  const decided = kind === 'match' ? setsWinner(scored.sets) : undefined;
   const shownWon: 'won' | 'lost' | null = decided === undefined ? won : decided ? 'won' : 'lost';
   // Who you played: CourtSide players to tag, and any name typed that isn't on CourtSide.
   // From a hit, its people are offered to tag; with no tagging yet, their names start in the box.
@@ -179,22 +200,39 @@ function LogSession() {
    * logged yet, newest first, each opening the composer for it ("Log it"),
    * and "Log one yourself" under them for the by-hand log (owner, Oct 3).
    * With none waiting, the by-hand log opens straight away, as before.
-   * Decided once, as the sheet opens, so it never swaps under your thumb.
+   * Decided once, so it never swaps under your thumb, but only once your
+   * tracker's sessions are here: opened before they load (from cold, a link,
+   * a refresh in a browser), the sheet waits a moment rather than offering
+   * the by-hand log over a session already waiting (the same game, twice).
    */
   const plain = !activity && !hit && !edit;
   const unlogged = useMemo(
     () => (plain ? detectedActivities.filter((x) => x.userId === currentUserId && x.status === 'new' && sourceOn(x, flags)).sort((x, y) => y.startedAt.localeCompare(x.startedAt)) : []),
     [plain, detectedActivities, currentUserId, flags],
   );
-  const [offered] = useState(() => unlogged.length > 0);
+  const listLoaded = isSupabaseConfigured ? remoteLoaded : ready;
+  // A slow or failed load never keeps the sheet waiting for ever: after a few seconds it goes on with what it has.
+  const [waitedOut, setWaitedOut] = useState(false);
+  useEffect(() => {
+    if (!plain || listLoaded) return undefined;
+    const t = setTimeout(() => setWaitedOut(true), 4000);
+    return () => clearTimeout(t);
+  }, [plain, listLoaded]);
+  const [offered, setOffered] = useState<boolean | null>(() => (unlogged.length > 0 ? true : listLoaded ? false : null));
+  useEffect(() => {
+    if (offered !== null) return;
+    if (unlogged.length > 0) setOffered(true);
+    else if (listLoaded || waitedOut) setOffered(false);
+  }, [offered, unlogged.length, listLoaded, waitedOut]);
+  const deciding = plain && offered === null;
   const [byHand, setByHand] = useState(false);
-  const choosing = offered && !byHand && unlogged.length > 0;
+  const choosing = !!offered && !byHand && unlogged.length > 0;
   const logThis = (x: DetectedActivity) => { next.current = x.id; close(); };
 
-  // Opened on a session already logged (?edit=): who you played, and nothing else.
+  // Opened on a session already logged (?edit=): its score and who you played, and nothing else.
   const editing = edit ? sessions.find((x) => x.id === edit && x.userId === currentUserId) : undefined;
   // Your log (and its tags) may still be on its way when the sheet opens from a link.
-  const loaded = isSupabaseConfigured ? remoteLoaded : ready;
+  const loaded = listLoaded;
   const editTags = editing ? tagsOnSession(sessionTags, editing.id, currentUserId) : [];
   const activeOn = editTags.filter(isActive).map((t) => ({ id: t.taggedId, role: t.role }));
   // What the sheet opened with: the people tagged and the name typed. It is
@@ -202,7 +240,7 @@ function LogSession() {
   const [editStart, setEditStart] = useState<{ players: SessionPlayer[]; text: string }>({ players: activeOn, text: editing?.opponent ?? '' });
   const [editPlayers, setEditPlayers] = useState<SessionPlayer[]>(editStart.players);
   const [editText, setEditText] = useState(editStart.text);
-  // A logged match's score, as it is in your log (migration 91), to add or change here.
+  // A logged session's score, as it is in your log (migration 91; any tennis session since Oct 6), to add or change here.
   const [editScore, setEditScore] = useState(scoreText(editing?.sets, true));
   const editScored = readScore(editScore);
   const scoreTouched = useRef(false);
@@ -225,17 +263,24 @@ function LogSession() {
   const editClosed = editing ? tagsOnSession(sessionTags, editing.id, currentUserId, true).filter((t) => !isActive(t)).map((t) => t.taggedId) : [];
   const fromTag = editing?.fromSessionId ? sessionTags.find((t) => t.taggedId === currentUserId && (t.mirroredSessionId === editing.id || t.sessionId === editing.fromSessionId)) : undefined;
   const fromName = fromTag ? firstOfName(users.find((u) => u.id === fromTag.taggerId)?.name ?? '') : '';
+  const editScoring = !!editing && canScore(editing.kind) && !editing.fromSessionId;
   const saveEdit = async () => {
     if (!editing || saving) return;
     // A score that isn't one yet says why, and nothing is saved.
-    if (editing.kind === 'match' && !editing.fromSessionId && editScored.problem) { setError(editScored.problem); return; }
+    if (editScoring && editScored.problem) { setError(editScored.problem); return; }
     setSaving(true);
     setError('');
     try {
-      await actions.setSessionOpponent(editing.id, editText);
-      // The score, only when it changed: anyone who accepted is asked again (migration 91).
-      if (editing.kind === 'match' && !editing.fromSessionId && scoreText(editScored.sets) !== scoreText(editing.sets)) {
+      if (canTagKind(editing.kind)) await actions.setSessionOpponent(editing.id, editText);
+      // The score, only when it changed: on a match, anyone who accepted is asked again (migration 91).
+      if (editScoring && scoreText(editScored.sets) !== scoreText(editing.sets)) {
         await actions.setSessionScore(editing.id, editScored.sets ?? null);
+      }
+      // Drills has nobody to tag: its score is all there is to save.
+      if (!canTagKind(editing.kind)) {
+        showToast({ title: 'Saved', icon: 'checkmark-circle-outline' });
+        close();
+        return;
       }
       // A no taken off your log: off it (the server keeps it, so they are not asked again).
       for (const id of drops) {
@@ -267,7 +312,7 @@ function LogSession() {
 
   const save = async (post = false) => {
     if (!minutes || saving) return;
-    if (kind === 'match' && scored.problem) { setError(scored.problem); return; }
+    if (canScore(kind) && scored.problem) { setError(scored.problem); return; }
     setSaving(true);
     setAndPost(post);
     setError('');
@@ -278,9 +323,11 @@ function LogSession() {
     // From a hit with nobody tagged and nothing typed, its people's names are kept as private words, as before.
     const typed = canTagKind(kind) ? (opponent.trim() || (fromHit && !tagging.length ? fromHit.who : '')) : '';
     try {
-      const sets = kind === 'match' ? scored.sets : undefined;
+      // A score on any tennis session (Oct 6); never on a workout.
+      const sets = canScore(kind) ? scored.sets : undefined;
       const id = await actions.logSession({
         minutes, kind, won: shownWon === 'won' ? true : shownWon === 'lost' ? false : undefined, ...(sets ? { sets } : {}), opponent: typed, day,
+        ...(kind === 'fitness' && workout ? { workout } : {}),
         ...(fresh ? { activityId: fresh.id } : {}),
         // From a hit: where it was, as the note, and the court itself in your log (migration 130).
         ...(fromHit ? { note: `At ${fromHit.place}` } : {}),
@@ -297,15 +344,23 @@ function LogSession() {
       // save went through, and says "Posted" when shared. A toast there would
       // sit over its Share button for a few seconds.
       if (post && fresh) next.current = fresh.id;
-      else if (asked) showToast({ title: 'Logged', body: `${asked} will be asked to accept.`, glyph: 'logged' });
+      // The server didn't keep the score (a practice's, before migration 136): said here too, never shown as saved.
+      else if (asked) showToast(tookScoreNotKept(id)
+        ? { title: 'Logged without the score', body: `Scores aren’t ready yet. ${asked} will be asked to accept.`, icon: 'alert-circle-outline', long: true }
+        : { title: 'Logged', body: `${asked} will be asked to accept.`, glyph: 'logged' });
       else {
-        // "Logged · 1h 30m · Match · Won", and the streak once it is two days or more.
-        const streak = currentUserId ? computeStats(currentUserId, [{ id: id, userId: currentUserId, day, minutes, kind, createdAt: new Date().toISOString() }, ...sessions], posts, stories).currentStreakDays : 0;
+        // "Logged · 1h 30m · Match · Won", and the streak once it is two days or more (rolling up only if this made it grow).
+        const streak = currentUserId
+          ? {
+            now: computeStats(currentUserId, [{ id: id, userId: currentUserId, day, minutes, kind, createdAt: new Date().toISOString() }, ...sessions], posts, stories).currentStreakDays,
+            before: computeStats(currentUserId, sessions, posts, stories).currentStreakDays,
+          }
+          : { now: 0, before: 0 };
         const won = kind === 'match' && shownWon ? shownWon === 'won' : undefined;
         // A personal record it beat is the moment instead (records.ts).
-        const added: PracticeSession = { id, userId: currentUserId ?? '', day, minutes, kind, won, ...(kind === 'match' && scored.sets ? { sets: scored.sets } : {}), createdAt: new Date().toISOString() };
+        const added: PracticeSession = { id, userId: currentUserId ?? '', day, minutes, kind, won, ...(sets ? { sets } : {}), createdAt: new Date().toISOString() };
         const record = currentUserId ? recordToast(beatenBy(currentUserId, sessions, added, posts, stories), [added, ...sessions]) : null;
-        showLogged(minutes, { kind, won, sets: kind === 'match' ? scored.sets : undefined }, streak, id, record);
+        showLogged(minutes, { kind, won, sets, workout: kind === 'fitness' ? workout : undefined }, streak, id, record);
         // Logged from a hit at a court: who else was there that day, a few seconds on.
         if (fromHit?.placeId) {
           const people = users;
@@ -333,7 +388,7 @@ function LogSession() {
   });
 
   const header = editing ? (
-    <SheetTitle title={editing.kind === 'match' && !editing.fromSessionId ? 'Edit match' : 'Who was there'} line={`${loggedLabel(editing)} · ${dayWords(editing.day)} · ${duration(editing.minutes)}`} onClose={close} />
+    <SheetTitle title={editing.fromSessionId || !canScore(editing.kind) ? 'Who was there' : `Edit ${KIND_LABEL[editing.kind].toLowerCase()}`} line={`${loggedLabel(editing)} · ${dayWords(editing.day)} · ${duration(editing.minutes)}`} onClose={close} />
   ) : edit ? (
     <SheetTitle title="Who was there" onClose={close} />
   ) : waiting ? (
@@ -342,12 +397,14 @@ function LogSession() {
     <SheetTitle title={fromHit ? 'How was the hit?' : isTennisActivity(fresh) ? 'Log your tennis' : 'Log your workout'} line={`${fromHit ? `${fromHit.place}. ` : ''}From ${fromWho(fresh)} · ${activityWhen(fresh)}. Only you see this.`} lines={2} onClose={close} />
   ) : done ? (
     <SheetTitle title={isTennisActivity(done) ? 'Log your tennis' : 'Log your workout'} line={done.status === 'logged' ? 'Logged. It counts toward your streak and hours.' : 'You already logged this session.'} lines={2} onClose={close} />
+  ) : deciding ? (
+    <SheetTitle title="Log a session" onClose={close} />
   ) : choosing ? (
     <SheetTitle title="Log a session" line="Your tracker picked these up. Pick one, or log one yourself." lines={2} onClose={close} />
   ) : fromHit ? (
     <SheetTitle title="How was the hit?" line={`${fromHit.place}${fromHit.who ? ` · with ${fromHit.who}` : ''}. Only you see this.`} lines={2} onClose={close} />
   ) : (
-    <SheetTitle title="Log a session" line="Keeps your streak, hours and win rate. Only you see it." lines={2} onClose={close} />
+    <SheetTitle title="Log a session" line="Counts toward your streak. Only you see it." onClose={close} />
   );
   const numbers = fresh ? privateLine(fresh) : '';
   // Once the sheet is gone: the new post with this session's stats, in this page's place, or back where it was opened from.
@@ -370,36 +427,40 @@ function LogSession() {
               <Text style={styles.hint}>{fromName ? `This session came from ${fromName}’s tag. It’s theirs to tag.` : 'This session came from someone else’s tag. It’s theirs to tag.'}</Text>
               <Submit label="Close" onPress={close} />
             </>
-          ) : !canTagKind(editing.kind) ? (
+          ) : !canScore(editing.kind) ? (
             <>
               <Text style={styles.hint}>Players can be tagged on a match or a practice.</Text>
               <Submit label="Close" onPress={close} />
             </>
           ) : (
             <>
-              {editing.kind === 'match' ? (
-                <Section title="Score" hint={editTags.some((t) => t.status === 'accepted') ? 'Changing it asks the players who accepted to confirm again.' : undefined}>
-                  <ScoreField value={editScore} onChange={(next) => { scoreTouched.current = true; setEditScore(next); }} />
+              {/* Any tennis session's score (Oct 6): a match's as before; a practice's or drills' is optional and only the sets. */}
+              <Section title={editing.kind === 'match' ? 'Score' : 'Score (optional)'} hint={editing.kind === 'match' && editTags.some((t) => t.status === 'accepted') ? 'Changing it asks the players who accepted to confirm again.' : undefined}>
+                <ScoreField kind={editing.kind} focus={focus === 'score'} value={editScore} onChange={(next) => { scoreTouched.current = true; setEditScore(next); }} />
+              </Section>
+              {canTagKind(editing.kind) ? (
+                // Its own heading now the sheet is titled for the session ("Edit practice").
+                <Section title="Who was there">
+                  <WhoYouPlayed
+                    kind={editing.kind}
+                    players={editPlayers}
+                    onPlayers={(next) => { touched.current = true; setEditPlayers(next); }}
+                    text={editText}
+                    onText={(next) => { touched.current = true; setEditText(next); }}
+                    search={sessionTagsReady}
+                    status={editStatus}
+                    declined={editDeclined}
+                    closed={editClosed}
+                    onDrop={(id) => { touched.current = true; setDrops((was) => [...was, id]); }}
+                  />
                 </Section>
               ) : null}
-              <WhoYouPlayed
-                kind={editing.kind}
-                players={editPlayers}
-                onPlayers={(next) => { touched.current = true; setEditPlayers(next); }}
-                text={editText}
-                onText={(next) => { touched.current = true; setEditText(next); }}
-                search={sessionTagsReady}
-                status={editStatus}
-                declined={editDeclined}
-                closed={editClosed}
-                onDrop={(id) => { touched.current = true; setDrops((was) => [...was, id]); }}
-              />
               {error ? <Text style={styles.error}>{error}</Text> : null}
               <Submit label="Save" onPress={() => { void saveEdit(); }} busy={saving} />
             </>
           )}
         </ScrollView>
-      ) : waiting ? (
+      ) : waiting || deciding ? (
         <View style={styles.wait}><CourtSpinner size={34} /></View>
       ) : choosing ? (
         <ScrollView contentContainerStyle={formBody}>
@@ -418,7 +479,8 @@ function LogSession() {
                     <Text style={styles.pickHero}>{duration(x.minutes)}</Text>
                     <View style={styles.pickTag}><Text style={styles.pickTagText} numberOfLines={1}>{pickSource({ type: 'tracker', activity: x })}</Text></View>
                   </View>
-                  <Text style={styles.pickTitle} numberOfLines={1}>{activityTitle(x)}</Text>
+                  {/* "Run · 3.1 mi", as Your sessions and the note say it. */}
+                  <Text style={styles.pickTitle} numberOfLines={1}>{pickTitle(x)}</Text>
                   <Text style={styles.pickWhen}>{activityWhen(x, new Date(), ' · ')}</Text>
                 </View>
                 <Ionicons name="chevron-forward" size={18} color={colors.textFaint} style={styles.pickChevron} />
@@ -449,8 +511,8 @@ function LogSession() {
           {numbers ? <Text style={styles.numbers}>{numbers}</Text> : null}
           {/* The session as it will go in your log, in the sessions' own look: what and when, then the time, big. */}
           {minutes && !fresh ? (
-            <View style={styles.hero} accessible accessibilityLabel={`${sessionEyebrow({ kind, day: heroDay }).toLowerCase()}, ${duration(minutes)}`}>
-              <Text style={styles.heroEyebrow}>{sessionEyebrow({ kind, day: heroDay })}</Text>
+            <View style={styles.hero} accessible accessibilityLabel={`${sessionEyebrow({ kind, day: heroDay, workout: kind === 'fitness' ? workout : undefined }).toLowerCase()}, ${duration(minutes)}`}>
+              <Text style={styles.heroEyebrow}>{sessionEyebrow({ kind, day: heroDay, workout: kind === 'fitness' ? workout : undefined })}</Text>
               <View style={styles.heroRow}>
                 <Duration minutes={minutes} size={56} color={colors.text} unitColor={colors.textMuted} />
                 {kind === 'match' && shownWon ? (
@@ -464,6 +526,12 @@ function LogSession() {
           <Section title="What was it">
             <Chips value={kind} onChange={(k) => { if (k) setKind(k); }} options={KINDS} />
           </Section>
+          {/* Fitness can say what it was, the way a workout from the Watch does: "Run", "Gym". */}
+          {kind === 'fitness' && !fresh ? (
+            <Section title="What kind">
+              <Chips clearable value={workout} onChange={setWorkout} options={WORKOUT_KINDS} />
+            </Section>
+          ) : null}
           <Section title="How long">
             {/* From a tracker the length is simply the tracker's (Oct 3): one line, with Edit for a break (hours and minutes, then Done). */}
             {fresh ? (
@@ -486,6 +554,11 @@ function LogSession() {
                 <Chips clearable value={won ?? undefined} onChange={(v) => setWon(v ?? null)} options={[{ value: 'won', label: 'Won' }, { value: 'lost', label: 'Lost' }]} />
               ) : null}
               <ScoreField value={score} onChange={setScore} />
+            </Section>
+          ) : canScore(kind) ? (
+            // A practice or drills can be scored too (Oct 6, owner): optional, just the sets.
+            <Section title="Score (optional)">
+              <ScoreField kind={kind} value={score} onChange={setScore} />
             </Section>
           ) : null}
           {canTagKind(kind) ? (

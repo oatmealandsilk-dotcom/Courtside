@@ -227,19 +227,35 @@ export function weekDays(sessions: PracticeSession[], me: string | null, now = n
   return days;
 }
 
-/**
- * The week's few numbers under its chart, from the same seven days: sessions
- * on court, matches (won and lost when every one says, otherwise how many),
- * and the longest session.
- */
-export function weekNumbers(sessions: PracticeSession[], me: string | null, now = new Date()): { sessions: number; matches: number; won: number; lost: number; told: boolean; longest: number } {
-  const from = localDay(now.getTime() - 6 * 86_400_000);
-  const to = localDay(now);
+/** The few numbers under the This week chart: sessions on court, matches (won and lost when every one says), the longest session. */
+export interface WeekNumbers { sessions: number; matches: number; won: number; lost: number; told: boolean; longest: number }
+
+/** Those numbers for your sessions from one calendar day to another, both included (fitness left out). */
+function numbersBetween(sessions: PracticeSession[], me: string | null, from: string, to: string): WeekNumbers {
   const list = sessions.filter((s) => s.userId === me && s.kind !== 'fitness' && s.day >= from && s.day <= to);
   const matches = list.filter((s) => s.kind === 'match');
   const won = matches.filter((s) => s.won === true).length;
   const lost = matches.filter((s) => s.won === false).length;
   return { sessions: list.length, matches: matches.length, won, lost, told: won + lost === matches.length, longest: list.reduce((most, s) => Math.max(most, s.minutes), 0) };
+}
+
+/**
+ * The week's few numbers under its chart, from the same seven days: sessions
+ * on court, matches (won and lost when every one says, otherwise how many),
+ * and the longest session.
+ */
+export function weekNumbers(sessions: PracticeSession[], me: string | null, now = new Date()): WeekNumbers {
+  return numbersBetween(sessions, me, localDay(now.getTime() - 6 * 86_400_000), localDay(now));
+}
+
+/** The same numbers for one day of the seven: the chart's tapped bar. */
+export function dayNumbers(sessions: PracticeSession[], me: string | null, day: string): WeekNumbers {
+  return numbersBetween(sessions, me, day, day);
+}
+
+/** A day of the chart in full: "Thursday, Oct 1". */
+export function weekdayDate(day: string): string {
+  return new Date(`${day}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
 }
 
 /** Your newest sessions first, the way Your sessions lists them. */

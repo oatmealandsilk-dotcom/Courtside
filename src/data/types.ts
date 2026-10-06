@@ -174,11 +174,13 @@ export interface PracticeSession {
    */
   fromSessionId?: ID;
   /**
-   * A match's score from your side of the net (migration 91, Oct 4): one
+   * The score from your side of the net (migration 91, Oct 4): one
    * [your games, their games] per set, a match tiebreak counting as a set
-   * (6-4 3-6 10-7 is [[6,4],[3,6],[10,7]]). Only on a match. When one side
-   * took more sets, `won` follows it (the server makes sure). Private to you,
-   * like the rest of your log; a player tagged on it reads it from their side.
+   * (6-4 3-6 10-7 is [[6,4],[3,6],[10,7]]). On any tennis session (a
+   * practice or drills too since Oct 6), never a workout. On a match, when
+   * one side took more sets, `won` follows it (the server makes sure).
+   * Private to you, like the rest of your log; a player tagged on a match
+   * reads it from their side (a practice's stays yours alone).
    */
   sets?: MatchSet[];
   /**
@@ -287,10 +289,11 @@ export interface DetectedActivity {
   /**
    * What it was, as a short name: 'tennis', or since migration 107 any
    * workout from Apple Health ('run', 'walk', 'ride', 'strength', 'hiit',
-   * 'yoga', 'swim'…). Put into words by workoutName (features/activity/workouts.ts).
+   * 'yoga', 'swim'…), and since migration 135 from WHOOP too. Put into
+   * words by workoutName (features/activity/workouts.ts).
    */
   sport: string;
-  /** Its distance in metres, when Health had one (runs, walks, rides, swims; migration 107). */
+  /** Its distance in metres, when Health or WHOOP had one (runs, walks, rides, swims; migration 107). */
   distanceM?: number;
   /** The tracker's own id for it (Apple Health's workout id), to match it against the phone's Health list. */
   externalId?: string;
@@ -405,7 +408,7 @@ export interface SessionDetail {
   distanceM?: number;
   /** A match's result, when you said. */
   won?: boolean;
-  /** A match's score, from the author's side, always as their log says it: only the server writes it (migration 91). */
+  /** The session's score (a match's, or since Oct 6 a practice's or drills'), from the author's side, always as their log says it: only the server writes it (migration 91). */
   sets?: MatchSet[];
   /**
    * The players on the session who accepted their tag (migration 62):
@@ -1469,6 +1472,12 @@ export interface PersonalRecord {
   /** The first and last day it covers ('YYYY-MM-DD'): a week's Monday and Sunday, a streak's days, a month's first day, a session's day. */
   from: string;
   to: string;
+  /**
+   * The day it reached its number: the last session in a week or a month
+   * that holds it, a streak's last day, a session's own day. Never in the
+   * future (a week's Sunday can be), so it is what "new this week" goes by.
+   */
+  reached: string;
 }
 
 /** Your personal records; one is absent until there is enough to count (a week of an hour, a streak of 3 days…). */

@@ -7,7 +7,7 @@ import { CourtSpinner } from '@/components/CourtSpinner';
 import { HitGlyph } from '@/components/HitGlyph';
 import { RecapCard, RecapHighlights } from '@/components/recap/RecapCard';
 import { RecapStoryArt } from '@/components/recap/RecapStoryArt';
-import { Button, EmptyState, Screen } from '@/components/ui';
+import { Button, Screen } from '@/components/ui';
 import { requestSection } from '@/features/navigation/swipeOrder';
 import { goToTab } from '@/features/navigation/startTab';
 import { lastWeekStart, weekRange, weekRecap } from '@/features/recap/recap';
@@ -37,7 +37,8 @@ const ACTIONS: { key: StoryAction; label: string; spoken: string; icon: React.Co
  * session: the card as an Instagram story picture. Only you see it until you
  * share it. A rest week (nothing played, something the week before) is a
  * small card of its own instead: what you played the week before and "Find
- * a hit", never a big zero, and nothing to share.
+ * a hit", never a big zero, and nothing to share. An empty week (nothing in
+ * it or the week before) is the same card, saying how the recap comes.
  */
 export default function WeeklyRecap() {
   const styles = useThemedStyles(styleDefinitions);
@@ -69,30 +70,32 @@ export default function WeeklyRecap() {
 
   const title = 'Your week';
   const label = week === lastWeekStart() ? 'LAST WEEK' : weekRange(week).toUpperCase();
+  // A week with nothing to show: the hit mark, what it was, and one way back on court ("Find a hit").
+  // The same card for a rest week and an empty one. Never "Log a session" here: that logs today, not the week on screen.
+  const restCard = (heading: string, words: string) => (
+    <View style={styles.body}>
+      {/* The page's own title already says which week: the card is the mark, the words and one way back on court. */}
+      <View style={styles.rest}>
+        <View style={styles.restDisc}><HitGlyph size={26} color={colors.brand} /></View>
+        <Text accessibilityRole="header" style={styles.restTitle}>{heading}</Text>
+        <Text style={styles.restLine}>{words}</Text>
+        <View style={styles.restButton}><Button label="Find a hit" onPress={() => { requestSection('/discuss', 'players'); goToTab('/discuss'); }} full /></View>
+      </View>
+    </View>
+  );
   if (!recap || (!recap.sessions && !recap.prevSessions)) {
     return (
       <Screen title={title} subtitle={weekRange(week)} compactTitle onBack={() => goBack('/your-sessions')} bar={false}>
-        {!ready ? <View style={styles.wait}><CourtSpinner size={28} /></View> : (
-          <EmptyState icon="stats-chart-outline" title="Nothing logged that week" body="Log your sessions and every Monday brings your week on court." />
-        )}
+        {!ready ? <View style={styles.wait}><CourtSpinner size={28} /></View> : restCard('Nothing logged that week', 'Log what you play, and every Monday brings your week on court.')}
       </Screen>
     );
   }
 
   // A rest week: the week before, and a way back on court.
   if (!recap.sessions) {
-    const findHit = () => { requestSection('/discuss', 'players'); goToTab('/discuss'); };
     return (
       <Screen title={title} subtitle={weekRange(week)} compactTitle onBack={() => goBack('/your-sessions')} bar={false}>
-        <View style={styles.body}>
-          <View style={styles.rest}>
-            <Text style={styles.restLabel}>{label}</Text>
-            <View style={styles.restDisc}><HitGlyph size={26} color={colors.brand} /></View>
-            <Text accessibilityRole="header" style={styles.restTitle}>A quiet week</Text>
-            <Text style={styles.restLine}>{`You played ${duration(recap.prevMinutes)} the week before.`}</Text>
-            <Button label="Find a hit" onPress={findHit} style={styles.restButton} />
-          </View>
-        </View>
+        {restCard('A quiet week', `You played ${duration(recap.prevMinutes)} the week before.`)}
       </Screen>
     );
   }
@@ -102,8 +105,7 @@ export default function WeeklyRecap() {
     <View style={styles.root}>
       <View pointerEvents="none" aria-hidden accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={[styles.stage, size]}>
         <View ref={stage} collapsable={false} style={size}>
-          {/* The same label as the card on the screen: an older week never goes out as "LAST WEEK". */}
-          <RecapStoryArt recap={recap} width={size.width} label={label} />
+          <RecapStoryArt recap={recap} width={size.width} />
         </View>
       </View>
       <View style={styles.page}>
@@ -127,7 +129,7 @@ export default function WeeklyRecap() {
             </View>
             {note ? <Text style={styles.note}>{note}</Text> : null}
             <View style={styles.only}>
-              <Ionicons name="lock-closed-outline" size={13} color={colors.textMuted} />
+              <Ionicons name="eye-off-outline" size={13} color={colors.textMuted} />
               <Text style={styles.onlyText}>Only you see this until you share it.</Text>
             </View>
           </View>
@@ -145,8 +147,7 @@ const styleDefinitions = StyleSheet.create({
   body: { gap: spacing.md, paddingTop: spacing.xs, paddingBottom: spacing.xxl },
   // A rest week's card.
   rest: { ...lift, borderRadius: 24, backgroundColor: colors.surface, padding: spacing.xl, alignItems: 'center', gap: spacing.sm },
-  restLabel: { ...typography.caption, fontSize: 12, letterSpacing: 1.4, color: colors.brand, alignSelf: 'flex-start' },
-  restDisc: { width: 56, height: 56, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.brandDim, marginTop: spacing.md },
+  restDisc: { width: 56, height: 56, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.brandDim },
   restTitle: { ...font('600'), fontSize: 22, letterSpacing: -0.5, color: colors.text, marginTop: spacing.xs },
   restLine: { ...typography.body, color: colors.textMuted, textAlign: 'center' },
   restButton: { marginTop: spacing.md, alignSelf: 'stretch' },

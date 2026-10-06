@@ -667,8 +667,8 @@ async function expectAll(page, specs) {
 
 
 /**
- * Your sessions opens with the week's card and your personal records above
- * the sessions (Oct 5), so the first session can sit below the fold: brought
+ * Your sessions opens with the week's summary and To do above the sessions
+ * (Oct 6), so the first session can sit below the fold: brought
  * into view the way a person would scroll to it.
  */
 const showFirstSession = (page) => page.waitUntil(() => page.call(() => {
@@ -677,6 +677,9 @@ const showFirstSession = (page) => page.waitUntil(() => page.call(() => {
   el.scrollIntoView({ block: 'center' });
   return true;
 }), 15000, 'a session in Your sessions');
+
+/** A day's bar in the This week chart, named by its weekday ("Thursday, 1 hour 20 minutes"); today's says "Today". */
+const WEEKDAY_BAR = /^(Sun|Mon|Tues|Wednes|Thurs|Fri|Satur)day, /;
 
 const STEPS = [
   {
@@ -764,6 +767,34 @@ const STEPS = [
     },
     expect: [{ label: 'Account center' }, { label: 'Privacy center' }],
     after: async (page) => { await page.tap({ label: 'Go back' }); await page.waitFor({ text: 'Edit Profile' }); },
+  },
+  {
+    name: 'week-chart',
+    title: 'This week chart',
+    async run(page) {
+      // The Tennis profile's Activity tab (the first, on a fresh browser): the week's time over a bar a day.
+      await page.tap({ label: /tennis profile\./ });
+      await page.reveal({ label: /^Today, / });
+    },
+    expect: [{ text: 'on court in the last 7 days' }, { label: /^Today, / }],
+  },
+  {
+    name: 'week-chart-day',
+    title: 'This week chart: tap a day',
+    async run(page) {
+      // Like the phone's Screen Time: yesterday's bar (the sixth with a weekday's name; today's says "Today")
+      // shows that day's time, counting up, and that day's numbers.
+      await page.tap({ label: WEEKDAY_BAR, index: 5 });
+      await sleep(800); // the count-up, finished before the picture
+    },
+    expect: [{ text: 'on court yesterday' }],
+    after: async (page) => {
+      // The same bar again: back to the whole week.
+      await page.tap({ label: WEEKDAY_BAR, index: 5 });
+      await page.waitFor({ text: 'on court in the last 7 days' });
+      await page.tap({ label: 'Go back' });
+      await page.waitFor({ text: 'Edit Profile' });
+    },
   },
   {
     name: 'your-sessions',

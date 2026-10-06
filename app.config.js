@@ -39,13 +39,19 @@ module.exports = {
     primaryColor: '#3F7049',
     // Shown by Expo Go and native builds while the JS loads; matches app/index.tsx
     // so the loader fades straight into the in-app splash.
-    icon: green ? './assets/icon.png' : './assets/icon-glow.png',
+    // The refined icon he picked (Oct 6): the same green court mark, redrawn with even
+    // corners, heavier lines and round bar ends. The old icon-glow.png stays in assets/.
+    icon: green ? './assets/icon.png' : './assets/icon-refined.png',
     splash: { image: './assets/splash.png', resizeMode: 'contain', backgroundColor: '#F8F7F2' },
     newArchEnabled: true,
     ios: {
       supportsTablet: false,
       usesAppleSignIn: true,
       bundleIdentifier: 'co.courtside.app',
+      // iOS 18+ lets people pick a light, dark or tinted home screen. Each gets its own
+      // drawing of the refined icon (Oct 6) instead of iOS guessing the dark and tinted
+      // looks (its guessed tinted icon was a solid amber square). Next App Store build.
+      icon: green ? './assets/icon.png' : { light: './assets/icon-refined.png', dark: './assets/icon-refined-dark.png', tinted: './assets/icon-refined-tinted.png' },
       // Apple Health may wake the app the moment a workout is saved, so "Workout detected"
       // comes even with CourtSide closed (modules/workout-watch, Oct 5). The react-native-health
       // plugin below adds the HealthKit entitlement itself; this adds background delivery only.
@@ -72,11 +78,11 @@ module.exports = {
       // Play's build number. Expo's build service keeps the real count and adds one per
       // production build (appVersionSource "remote" + autoIncrement in eas.json); this is only where it starts.
       versionCode: 1,
-      // The beige icon he chose (Oct 1), unchanged: the green mark on the cream ground. Android
-      // crops icons to a circle or a squircle, and the iPhone-sized mark lost its tips in the
-      // circle, so this copy of the mark is drawn a little smaller to sit inside Android's safe
-      // zone. The same picture is the Android 13+ "themed icon" (Android only uses its shape).
-      adaptiveIcon: { foregroundImage: './assets/android-icon-foreground.png', monochromeImage: './assets/android-icon-foreground.png', backgroundColor: '#F8F7F2' },
+      // The refined icon (Oct 6): the green mark on the icon's cream. Android crops icons to a
+      // circle or a squircle, so this copy of the mark is drawn smaller to sit inside Android's
+      // safe zone. The Android 13+ "themed icon" gets the same mark without its soft shadow
+      // (Android only uses its shape). The old android-icon-foreground.png stays in assets/.
+      adaptiveIcon: { foregroundImage: './assets/icon-refined-android-foreground.png', monochromeImage: './assets/icon-refined-android-monochrome.png', backgroundColor: '#F5EEE4' },
       // Only what the app uses (Oct 4): the camera (instants, hits), the microphone (voice notes),
       // location while open (courts and players near you), contacts read-only (find friends) and
       // alerts. Photos need nothing on Android 13+: the system photo picker hands over only what

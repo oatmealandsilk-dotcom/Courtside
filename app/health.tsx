@@ -15,11 +15,11 @@ import { appleHealthAvailable, inExpoGo } from '@/features/health/appleHealth';
 import { FoodSection } from '@/features/health/FoodSection';
 import { alertsAllowed } from '@/features/health/workoutWatch';
 import { useTennisFlags } from '@/features/activity/useTennisFlags';
-import { WORKOUTS_ASK } from '@/features/activity/workouts';
+import { WHOOP_WORKOUTS_ASK, WORKOUTS_ASK } from '@/features/activity/workouts';
 import { isTracker, useTrackerStatus } from '@/features/activity/trackers';
 import { confirm } from '@/lib/confirm';
 import { withCatalog } from '@/lib/integrations';
-import { relativeTime, hoursAndMinutes } from '@/lib/format';
+import { agoInWords, hoursAndMinutes } from '@/lib/format';
 import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
 import { useAiCoachOn } from '@/features/aiCoach/switch';
@@ -45,15 +45,27 @@ const ABOUT: Partial<Record<Integration['provider'], { icon: keyof typeof Ionico
   myfitnesspal: { icon: 'restaurant-outline', line: 'Calories, protein, carbs, fat.', how: appleHealthAvailable() ? 'Through Apple Health: in MyFitnessPal, Settings → Sharing & Privacy → Apple Health.' : 'Reads MyFitnessPal\'s export file (Premium → Export data).' },
 };
 
+/** "5 hours ago", "just now", "Sep 21": when a source last synced, for "Synced 5 hours ago." */
+function syncedWhen(iso: string): string {
+  const words = agoInWords(iso);
+  return words === 'Just now' ? 'just now' : words;
+}
+
 /** The name a row shows, where it differs from the source's own label. */
 const NAME: Partial<Record<Integration['provider'], string>> = { 'apple-health': 'Apple Watch' };
 /** The trackers list, in this order; everything else (food) goes below it. */
 const TRACKER_ROWS: Integration['provider'][] = ['whoop', 'apple-health', 'fitbit', 'oura', 'polar', 'garmin'];
 
-/** Apple Health once every workout is switched on for it on the server (migration 107; owner, Oct 5). */
-const ABOUT_WORKOUTS = {
-  line: 'Through Apple Health: your workouts (tennis, runs, rides, the gym and more) and their heart rate, plus sleep, HRV, resting heart rate, steps.',
-  how: 'Reads the Health app on this phone. Record a workout on your Apple Watch or iPhone; CourtSide picks it up when you open the app.',
+/** Apple Health and WHOOP once every workout is switched on for them on the server (migrations 107 and 135; owner, Oct 5). */
+const ABOUT_WORKOUTS: Partial<Record<Integration['provider'], { line: string; how: string }>> = {
+  'apple-health': {
+    line: 'Through Apple Health: your workouts (tennis, runs, rides, the gym and more) and their heart rate, plus sleep, HRV, resting heart rate, steps.',
+    how: 'Reads the Health app on this phone. Record a workout on your Apple Watch or iPhone; CourtSide picks it up when you open the app.',
+  },
+  whoop: {
+    line: 'Your workouts (tennis, runs, rides, the gym and more), recovery, strain, HRV, sleep.',
+    how: 'Sign in to WHOOP once. A workout it records arrives as an alert, usually within an hour; the past week’s show up in Notifications.',
+  },
 };
 
 /** The same two, once tennis sessions are switched on for them on the server (migration 58). */
@@ -92,13 +104,14 @@ export default function Health() {
   const flags = useTennisFlags();
   // The coach is only mentioned once it is switched on: nothing here promises a feature nobody can find (App Review 2.1).
   const coachOn = useAiCoachOn() === true;
-  const tennisOn = (provider: Integration['provider']) => (provider === 'apple-health' ? flags.apple || flags.workoutsApple : provider === 'whoop' || isTracker(provider) ? flags[provider] : false);
-  // Apple Health can read every workout, not only tennis (migration 107): its words say so.
-  const workouts = (provider: Integration['provider']) => provider === 'apple-health' && flags.workoutsApple;
+  const tennisOn = (provider: Integration['provider']) => (provider === 'apple-health' ? flags.apple || flags.workoutsApple
+    : provider === 'whoop' ? flags.whoop || flags.workoutsWhoop : isTracker(provider) ? flags[provider] : false);
+  // Apple Health and WHOOP can read every workout, not only tennis (migrations 107 and 135): their words say so.
+  const workouts = (provider: Integration['provider']) => (provider === 'apple-health' && flags.workoutsApple) || (provider === 'whoop' && flags.workoutsWhoop);
   // Every workout is its own yes: someone who turned on tennis sessions only still has tennis only.
   const allOn = (i: Integration) => workouts(i.provider) && !!i.readsAllWorkouts;
-  /** What turning on (or off) means for this row: "tennis sessions", or "workouts" (every workout). */
-  const what = (i: Integration) => (workouts(i.provider) && (!i.readsWorkouts || i.readsAllWorkouts) ? 'workouts' : 'tennis sessions');
+  /** What turning on (or off) means for this row: "tennis sessions", or "workouts" (every workout: what Connect turns on, too). */
+  const what = (i: Integration) => (workouts(i.provider) && (!i.connected || !i.readsWorkouts || i.readsAllWorkouts) ? 'workouts' : 'tennis sessions');
   // Fitbit, Oura and Polar: open once the server has their keys and their switch is on.
   const trackers = useTrackerStatus();
   const open = (provider: Integration['provider']) => !isTracker(provider) || (trackers[provider] && flags[provider]);
@@ -136,13 +149,19 @@ export default function Health() {
     setStep(what);
     try {
       // Workouts are asked for only when this screen has said so (Apple Health's explanation, or WHOOP's own sign-in);
-      // every workout only when what it said was "Workouts from Apple Health".
+      // every workout only when what it said was "workouts" (Apple Health's or WHOOP's row, or its own ask).
       if (what === 'toggle') await actions.toggleIntegration(provider, { tennis: tennisOn(provider), workouts: workouts(provider) });
       else if (what === 'sync') await actions.syncHealth(provider);
-      else if (what === 'workouts') await actions.turnOnTennis('apple-health', { workouts: true });
+      else if (what === 'workouts') { if (provider === 'apple-health' || provider === 'whoop') await actions.turnOnTennis(provider, { workouts: true }); }
       else if (provider === 'apple-health' || provider === 'whoop' || isTracker(provider)) await (what === 'tennis' ? actions.turnOnTennis(provider, { workouts: workouts(provider) }) : actions.turnOffTennis(provider));
     } catch (err) {
-      showToast({ title: 'Could not connect', body: err instanceof Error ? err.message : 'Try again in a moment.', icon: 'alert-circle-outline' });
+      // What failed, in its own words: a failed Sync never says "Could not connect".
+      const was = integrations.find((i) => i.provider === provider)?.connected;
+      const title = what === 'sync' ? 'Couldn’t sync'
+        : what === 'tennis-off' ? 'Couldn’t turn that off'
+        : what === 'tennis' || what === 'workouts' ? 'Couldn’t turn that on'
+        : was ? 'Couldn’t disconnect' : 'Couldn’t connect';
+      showToast({ title, body: err instanceof Error ? err.message : 'Try again in a moment.', icon: 'alert-circle-outline' });
     } finally {
       setBusy(null);
       setStep(null);
@@ -162,6 +181,9 @@ export default function Health() {
     onConfirm: () => run('apple-health', next),
   });
 
+  // WHOOP, with tennis sessions on, saying yes to every workout as well: its own yes, though WHOOP already shares them.
+  const askWhoop = () => confirm({ ...WHOOP_WORKOUTS_ASK, confirmLabel: 'Turn on', onConfirm: () => run('whoop', 'workouts') });
+
   // Once WHOOP's switch is on, disconnecting it also removes what it sent (the server does), so ask first.
   // Fitbit, Oura and Polar always remove their tennis sessions on disconnect.
   const disconnect = (provider: Integration['provider']) => (isTracker(provider)
@@ -172,25 +194,26 @@ export default function Health() {
       destructive: true,
       onConfirm: () => run(provider, 'toggle'),
     })
-    : provider === 'whoop' && flags.whoop
+    : provider === 'whoop' && (flags.whoop || flags.workoutsWhoop)
     ? confirm({
       title: 'Disconnect WHOOP?',
-      message: 'Its numbers and tennis sessions are removed from CourtSide. Connecting again brings back only the last week.',
+      message: `Its numbers and ${integrations.find((i) => i.provider === 'whoop')?.readsAllWorkouts && flags.workoutsWhoop ? 'workouts' : 'tennis sessions'} are removed from CourtSide. Connecting again brings back only the last week.`,
       confirmLabel: 'Disconnect',
       destructive: true,
       onConfirm: () => run('whoop', 'toggle'),
     })
     : run(provider, 'toggle'));
 
+  // Four to a row leaves a narrow phone about 75 points a tile: a longer number steps down a size (a browser cannot shrink it to fit), so "6h 6m" and "Recovery" are never cut.
   const stat = (label: string, value: string | null) => (
-    <View style={styles.stat}><Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>{value ?? '—'}</Text><Text style={styles.statLabel} numberOfLines={1}>{label}</Text></View>
+    <View style={styles.stat}><Text style={[styles.statValue, (value ?? '').length > 5 && styles.statValueLong]} numberOfLines={1} adjustsFontSizeToFit>{value ?? '—'}</Text><Text style={styles.statLabel} numberOfLines={1}>{label}</Text></View>
   );
 
   const row = (i: Integration, index: number) => {
     const base = ABOUT[i.provider];
     if (!base) return null;
     const tennis = tennisOn(i.provider);
-    const about = tennis ? { ...base, ...(what(i) === 'workouts' ? ABOUT_WORKOUTS : ABOUT_TENNIS[i.provider]) } : base;
+    const about = tennis ? { ...base, ...(what(i) === 'workouts' ? ABOUT_WORKOUTS[i.provider] : ABOUT_TENNIS[i.provider]) } : base;
     const loading = busy === i.provider;
     const needsBuild = i.provider === 'apple-health' && Platform.OS === 'ios' && !appleHealthAvailable();
     const wrongPhone = i.provider === 'apple-health' && Platform.OS !== 'ios';
@@ -217,7 +240,7 @@ export default function Health() {
           <Text style={styles.line}>{about.line}</Text>
           <Text style={styles.how}>
             {wrongPhone && i.connected && Platform.OS === 'android' ? 'Connected on your iPhone. It syncs from there.'
-              : i.connected && i.lastSyncedAt ? `Synced ${relativeTime(i.lastSyncedAt)}.` : blocked ? (wrongPhone ? 'iPhone only.' : inExpoGo() ? 'Available in the App Store version of CourtSide.' : 'Coming in the next app update.') : about.how}
+              : i.connected && i.lastSyncedAt ? `Synced ${syncedWhen(i.lastSyncedAt)}.` : blocked ? (wrongPhone ? 'iPhone only.' : inExpoGo() ? 'Available in the App Store version of CourtSide.' : 'Coming in the next app update.') : about.how}
           </Text>
           {i.connected ? (
             <View style={styles.actions}>
@@ -243,13 +266,18 @@ export default function Health() {
                     <Ionicons name="checkmark" size={14} color={colors.brandInk} />
                   </Reanimated.View>
                   <View style={styles.tennisWords}>
-                    <Text style={styles.tennisTitle}>{allOn(i) ? 'Workouts on' : 'Tennis sessions on'}</Text>
+                    {/* Short enough to stay on one line beside Turn off on the narrowest phones. */}
+                    <Text style={styles.tennisTitle} numberOfLines={1}>{allOn(i) ? 'Workouts on' : 'Tennis on'}</Text>
                     {i.provider === 'apple-health' && alertsOn && (allOn(i) || flags.apple) ? (
                       <Text style={styles.line}>{allOn(i) ? 'You’ll get a notification after each workout.' : 'You’ll get a notification after each tennis session.'}</Text>
                     ) : null}
-                    {/* The last 30 days of them, with Log it on any not logged (Oct 5). */}
-                    {allOn(i) ? (
-                      <Text accessibilityRole="link" onPress={() => router.push('/workouts')} style={styles.pastLink}>See past workouts</Text>
+                    {/* The last 30 days of them, with Log it on any not logged (Oct 5). Apple Health's: the page reads this iPhone's Health. */}
+                    {allOn(i) && i.provider === 'apple-health' ? (
+                      // A real button with room round it (44 tall to a finger), not a line of words.
+                      <Pressable accessibilityRole="link" accessibilityLabel="See past workouts" hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }} onPress={() => router.push('/workouts')} style={({ pressed }) => [styles.pastLinkBox, pressed && styles.pressedDim]}>
+                        <Text style={styles.pastLink}>See past workouts</Text>
+                        <Ionicons name="chevron-forward" size={13} color={colors.textMuted} />
+                      </Pressable>
                     ) : null}
                   </View>
                   <Pressable accessibilityRole="button" accessibilityLabel={`Turn off ${what(i)} from ${i.label}`} disabled={loading} onPress={() => { haptics.untap(); run(i.provider, 'tennis-off'); }} hitSlop={8} style={({ pressed }) => [styles.smallGhost, pressed && styles.pressedDim]}>
@@ -260,7 +288,7 @@ export default function Health() {
                   // Every other workout too: their own yes, after the same explanation anyone new gets.
                   <Reanimated.View key="workouts-offer" entering={FadeIn.duration(220)} exiting={FadeOut.duration(140)} style={styles.offer}>
                     <Text style={styles.offerText}>Also pick up runs, rides and the gym?</Text>
-                    <Tappable accessibilityRole="button" accessibilityLabel={`Turn on every workout from ${i.label}: runs, rides, the gym and more`} disabled={loading} scaleTo={0.96} onPress={() => { haptics.tap(); askApple('workouts'); }} style={styles.turnOn}>
+                    <Tappable accessibilityRole="button" accessibilityLabel={`Turn on every workout from ${i.label}: runs, rides, the gym and more`} disabled={loading} scaleTo={0.96} onPress={() => { haptics.tap(); if (i.provider === 'whoop') askWhoop(); else askApple('workouts'); }} style={styles.turnOn}>
                       <BrandWash />
                       {offerBusy ? <ActivityIndicator size="small" color={colors.brandInk} /> : null}
                       <Text style={styles.turnOnText}>{offerBusy ? 'Turning on…' : 'Turn on'}</Text>
@@ -345,7 +373,7 @@ export default function Health() {
       <Text style={styles.foot}>
         {`Only you see these.${coachOn ? ` If you agree to use the AI coach, your recent sleep and heart rate variability are sent to Anthropic, which powers it${flags.whoop ? '; WHOOP’s numbers never are' : ''}.` : ''} `}
         {flags.whoop
-          ? `${flags.workoutsApple ? 'Tennis sessions and workouts stay' : 'Tennis sessions stay'} private until you post one. Disconnecting ${removersText} removes what it sent; other sources stay until you delete your account.`
+          ? `${flags.workoutsApple || flags.workoutsWhoop ? 'Tennis sessions and workouts stay' : 'Tennis sessions stay'} private until you post one. Disconnecting ${removersText} removes what it sent; other sources stay until you delete your account.`
           : flags.workoutsApple
             ? 'Tennis sessions and workouts stay private until you post one. Disconnecting stops new numbers; what was already read stays until you delete your account.'
           : flags.apple
@@ -362,8 +390,9 @@ const styleDefinitions = StyleSheet.create({
   todayTitle: { ...typography.heading, color: colors.text },
   todayDate: { ...typography.small, color: colors.textFaint },
   stats: { flexDirection: 'row', gap: spacing.sm },
-  stat: { flex: 1, gap: 2, padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
-  statValue: { ...typography.heading, color: colors.text, fontVariant: ['tabular-nums'] },
+  stat: { flex: 1, minWidth: 0, gap: 2, paddingVertical: spacing.md, paddingHorizontal: 10, borderRadius: radius.md, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
+  statValue: { ...typography.heading, lineHeight: 22, color: colors.text, fontVariant: ['tabular-nums'] },
+  statValueLong: { fontSize: 15, letterSpacing: -0.3 },
   statLabel: { ...typography.caption, color: colors.textMuted, letterSpacing: 0.2 },
   list: { borderRadius: radius.xl, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, paddingHorizontal: spacing.lg },
   row: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md, paddingVertical: spacing.lg },
@@ -387,7 +416,9 @@ const styleDefinitions = StyleSheet.create({
   tennisTick: { width: 24, height: 24, borderRadius: 12, marginLeft: 4, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
   tennisWords: { flex: 1, gap: 1 },
   tennisTitle: { ...typography.smallStrong, color: colors.text },
-  pastLink: { ...typography.smallStrong, color: colors.brand, alignSelf: 'flex-start' },
+  // In ink, not the brand: brand words on this card's raised ground fell under 4.5:1 on some courts (clay, Melbourne).
+  pastLinkBox: { flexDirection: 'row', alignItems: 'center', gap: 2, alignSelf: 'flex-start', paddingVertical: 2 },
+  pastLink: { ...typography.smallStrong, color: colors.text },
   // The offer of every workout, under "Tennis sessions on": its question, then the same filled pill.
   offer: { gap: spacing.sm, marginTop: spacing.sm, alignItems: 'flex-start' },
   offerText: { ...typography.small, color: colors.textMuted },

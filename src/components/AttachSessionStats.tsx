@@ -3,8 +3,8 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { FormRow } from '@/components/FormRow';
-import { SessionStats } from '@/components/SessionStats';
 import { HealthShareRow } from '@/components/session/HealthShareRow';
+import { SessionStrip } from '@/components/session/SessionStrip';
 import { fromWho } from '@/features/activity/format';
 import { availableShare, chosenShare, type HealthChoice } from '@/features/activity/healthShare';
 import { statsOf, type SessionPick } from '@/features/activity/recent';
@@ -15,8 +15,11 @@ import { colors, spacing, typography } from '@/theme';
 import { isTennisActivity } from '@/features/activity/workouts';
 
 /**
- * A session's stats on a new post: the stats exactly as the post will show
- * them, an × to post without them, and, when the tracker read any health
+ * A session's stats on a new post, in the session box's own look (the
+ * strip a photo post shows under its picture, in the court's colour: the
+ * same look as the card a post with nothing else shows, Oct 5, owner: one
+ * look, not a light one here and a blue one on the post), an × to post
+ * without them, and, when the tracker read any health
  * numbers, "Share health data" with its Choose sheet (HealthShareRow), the
  * same for every age (migration 72). A session you logged by hand shows how
  * long and what it was, and never a heart rate.
@@ -48,7 +51,7 @@ export function AttachSessionStats({ pick, attached, onAttach, health, onHealth,
   justLogged?: boolean;
 }) {
   const styles = useThemedStyles(styleDefinitions);
-  const { currentUserId, sessions, sessionTags, users } = useApp();
+  const { currentUserId, sessions, sessionTags, users, blockedIds } = useApp();
   const activity = pick.type === 'tracker' ? pick.activity : undefined;
   // The session from your log this is (a tracker's, once logged), and who on it is still to answer.
   const logged = pick.session;
@@ -80,7 +83,7 @@ export function AttachSessionStats({ pick, attached, onAttach, health, onHealth,
               <Ionicons name="close-circle" size={20} color={colors.textFaint} />
             </Pressable>
           </View>
-          <SessionStats session={stats} />
+          <SessionStrip session={stats} hidden={blockedIds} />
           <Text style={styles.note}>{hint}</Text>
           {activity ? <HealthShareRow activity={activity} choice={health} onChoice={onHealth} /> : null}
           {waitingNote ? (
