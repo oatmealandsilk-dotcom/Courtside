@@ -6,7 +6,7 @@ import Svg, { Rect } from 'react-native-svg';
  * chart at a glance. It stands for a session wherever one shows (the toast,
  * the pill over a clip, "Add session stats"), in place of a cartoon ball.
  */
-export function ZoneGlyph({ size = 16, color }: { size?: number; color: string }) {
+export const ZoneGlyph = React.memo(function ZoneGlyph({ size = 16, color }: { size?: number; color: string }) {
   const bars = [
     { x: 1.5, h: 5, o: 0.55 },
     { x: 5.5, h: 8, o: 0.7 },
@@ -20,4 +20,4 @@ export function ZoneGlyph({ size = 16, color }: { size?: number; color: string }
       ))}
     </Svg>
   );
-}
+});

@@ -27,7 +27,7 @@ const SYSTEM_INK: Record<string, { light: string; dark: string; media: string }>
  * system ("UTR") set small and the number set bold, so the number is what
  * reads. Over a clip it is the frosted dark chip every reels feed uses.
  */
-export function LevelPill({ profile, small = false, onMedia = false, style }: { profile: PlayerProfile; small?: boolean; onMedia?: boolean; style?: StyleProp<ViewStyle> }) {
+export const LevelPill = React.memo(function LevelPill({ profile, small = false, onMedia = false, style }: { profile: PlayerProfile; small?: boolean; onMedia?: boolean; style?: StyleProp<ViewStyle> }) {
   // Without this the pill keeps the colours of whichever theme it first drew in.
   useTheme();
   const badge = levelBadge(profile);
@@ -49,7 +49,7 @@ export function LevelPill({ profile, small = false, onMedia = false, style }: { 
       <Text style={[styles.value, small && styles.valueSmall, { color: ink }]}>{value}</Text>
     </View>
   );
-}
+});
 
 /** Over a picture, the chip's rim wears the system's colour faintly, so the colour reads before the letters do. */
 function edge(tint: string): string {
