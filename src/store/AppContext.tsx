@@ -1341,6 +1341,13 @@ function chatLockNoteFor(users: User[], userId: ID): string {
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
+const NO_USERS: User[] = [];
+/**
+ * Just the people, on their own: a part that only needs someone's photo or
+ * name (Avatar) reads this, so a like, a view or a message elsewhere in the
+ * app does not redraw it. The very same list as the app state's `users`.
+ */
+const UsersContext = createContext<User[]>(NO_USERS);
 
 const emptyBootstrap: Bootstrap = {
   users: [],
@@ -7822,7 +7829,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [state, unreported, currentUser, actions, seeing, shownAtCourt, ageSaysAdult],
   );
 
-  return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
+  return <AppContext.Provider value={value}><UsersContext.Provider value={value.users}>{children}</UsersContext.Provider></AppContext.Provider>;
 }
 
 function applyVote<T extends { votes: number; votedBy: Record<ID, 1 | -1> }>(
@@ -7859,7 +7866,13 @@ function applyVote<T extends { votes: number; votedBy: Record<ID, 1 | -1> }>(
 export function AppStateLater({ hidden, children }: { hidden: boolean; children: ReactNode }) {
   const live = useContext(AppContext);
   const later = useDeferredValue(live);
-  return <AppContext.Provider value={hidden ? later : live}>{children}</AppContext.Provider>;
+  const shown = hidden ? later : live;
+  return <AppContext.Provider value={shown}><UsersContext.Provider value={shown?.users ?? NO_USERS}>{children}</UsersContext.Provider></AppContext.Provider>;
+}
+
+/** Everyone the app knows about (the app state's `users`), for a part that needs nothing else. */
+export function useUsers(): User[] {
+  return useContext(UsersContext);
 }
 
 export function useApp(): AppContextValue {
