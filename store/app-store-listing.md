@@ -6,7 +6,7 @@ Everything you type into Apple's forms to send CourtSide to the App Store, in th
 
 **Updated Oct 5, evening:** Hidden words is live (database update 117 was applied at about 8pm), so it's marked done and named in the description and the review notes. The demo-account steps no longer let the made-up accounts reach real players (no city, Location off, follows only your own accounts). The Instagram switch was an open decision; it's now decided (see the next note). Smaller fixes: when the app asks for notifications, the sign-up box's name ("Username"), the location wording in the description, and the Device ID row (the privacy policy gains one matching line with Claude's next website update).
 
-**Updated Oct 5, late:** you decided the Instagram switch (section 8, item J): it stays **on for everyone** and is now written into the Terms and the privacy policy. On the post screen it now reads "Let CourtSide feature this on its Instagram" (it used to say "Feature on CourtSide's Instagram"). The two marketing boxes in section 4 are ticked for good, and the item is gone from section 0.
+**Updated Oct 5, late:** you decided the Instagram switch (section 8, item J): it stays **on for everyone** and is now written into the Terms and the privacy policy. On the post screen it now reads "Let CourtSide feature this on its Instagram" (it used to say "Feature on CourtSide's Instagram"). The two marketing boxes in section 4 are ticked for good, and the item is gone from section 0. Later still: the same switch is now on the **Edit post** screen too, so people can switch it off any time after posting, and the Terms, the privacy policy and the short "I agree" page say so.
 
 **How to use it**
 
@@ -195,7 +195,7 @@ And for each one it asks **what it is used for** (the purpose). Four purposes ap
 - **App Functionality:** making the app work.
 - **Product Personalization:** changing what someone sees based on them (the feed's order, "Players you might know", players near you).
 - **Analytics:** CourtSide's own count of how many people open the app each day (`app_opens`), kept in its own database. Tick it only where the table says.
-- **Developer's Advertising or Marketing:** tick it on **Photos or Videos** and **User ID** only. Every post has a "Let CourtSide feature this on its Instagram" switch, on unless the person turns it off, so CourtSide may repost a member's photo or clip, credited to their @handle, on its own Instagram to promote the app. That's marketing use, and Apple wants it declared (section 8, item J).
+- **Developer's Advertising or Marketing:** tick it on **Photos or Videos** and **User ID** only. Most posts have a "Let CourtSide feature this on its Instagram" switch, on unless the person turns it off (before posting, or later in Edit post), so CourtSide may repost a member's photo or clip, credited to their @handle, on its own Instagram to promote the app. That's marketing use, and Apple wants it declared (section 8, item J).
 
 Never tick **Third-Party Advertising** or **Other Purposes**.
 
@@ -586,7 +586,7 @@ Or say: **"Yes, turn on Sign in with Apple in Supabase"** and Claude does steps 
 
 ### D. Build 15 (you start it, then test it) — must
 
-1. Build 15 must include everything above, the new Instagram switch words (item J), and today's fixes. When Claude says main is ready, start it yourself (Claude can't start builds): in the Terminal tab, paste the line Claude gives you. It's normally `cd ~/Desktop/Courtside && npx eas-cli@latest build --platform ios --profile production --auto-submit`. It may ask for your Apple ID password when it uploads to TestFlight.
+1. Build 15 must include everything above, the new Instagram switch words and the same switch on Edit post (item J), and today's fixes. When Claude says main is ready, start it yourself (Claude can't start builds): in the Terminal tab, paste the line Claude gives you. It's normally `cd ~/Desktop/Courtside && npx eas-cli@latest build --platform ios --profile production --auto-submit`. It may ask for your Apple ID password when it uploads to TestFlight.
    - **Cost:** free within Expo's monthly build allowance; past it, Expo bills you.
 2. When it reaches TestFlight, install it and try, in this order: Sign in with Apple, Continue with Google, email sign-in with demo A, post a photo, take an instant, report a comment, block account B then unblock, the map with Location on, Apple Health → Connect, a message with a voice note, and delete a throwaway account (never a demo one).
 3. If you can borrow an iPad, try sign-in and a photo there too. Apple often tests iPhone-only apps on an iPad.
@@ -626,13 +626,14 @@ Send any email to **support@courtsidebase.com** from your phone. If it doesn't r
 
 **What you said (Oct 5):** "Let's just make it on for everyone and then we have it listed inside of the terms and agreement."
 
-**What that means:** every new post has a "Let CourtSide feature this on its Instagram" switch (it used to say "Feature on CourtSide's Instagram"). It starts **on** for everyone, teens included, and people can switch it off before they post. Posts shared only to a group, and posts showing session or health numbers, are never featured.
+**What that means:** every new post has a "Let CourtSide feature this on its Instagram" switch (it used to say "Feature on CourtSide's Instagram"). It starts **on** for everyone, teens included, and people can switch it off before they post, or any time after on the post itself (••• → Edit, the same switch). Posts shared only to a group, posts with a logged or tracked session's stats attached (including "Log it" posts), and instants have no switch and are never featured.
 
 **What Claude did:**
 
-- **Terms:** a new section, "When CourtSide features your post". While the switch is on, the person gives CourtSide a free, non-exclusive licence to show that post (photo or clip, caption, @handle) on CourtSide's own social media and marketing, credited to their @handle. Switching it off before posting, deleting the post, or emailing support@ to have it switched off stops any new use; anything already up can be taken down on request. (There's no switch for a post that's already up yet, which is why the Terms say to email.) Nothing is sold to anyone.
-- **Privacy policy:** the same thing in one line of "What we collect" (next to what you post), and a line in "Your choices" on how to switch it off.
-- **The switch's words** on the post screen are plainer now. Nothing else in the app changed: it was already on for everyone.
+- **Terms:** a new section, "When CourtSide features your post". While the switch is on, the person gives CourtSide a free, non-exclusive licence to show that post (photo or clip, caption, @handle) on CourtSide's own social media and marketing, credited to their @handle. Switching it off (before posting, or any time after on Edit post), deleting the post, or emailing support@ to have it switched off stops any new use; anything already up can be taken down on request. Nothing is sold to anyone.
+- **Privacy policy:** the same thing in one line of "What we collect" (next to what you post), a line in "Your choices" on how to switch it off, a sentence each in "Private accounts" and the teen rules saying a featured post is public even from a private or teen account, a line under "Some things stay" for posts already featured when an account is deleted, and Instagram (Meta) in "Services we rely on".
+- **The switch's words** on the post screen are plainer now, and the same switch is on **Edit post** (••• → Edit on your own post), so it can be switched off after posting. It isn't there on group posts or posts with a session's stats, which are never featured.
+- **The short terms** (the "I agree" page) gained one line: "Featured posts: CourtSide may feature your posts on its Instagram, credited to you. Switch it off on any post when you share it, or later in Edit post."
 - **Section 4:** **Developer's Advertising or Marketing** stays ticked on Photos or Videos and User ID.
 
 **Still for you:** the Terms and privacy policy go live with the next website update (public, on app.courtsidebase.com). People who agreed to the Terms before today aren't asked again unless Claude bumps the Terms version, which shows everyone the "I agree" page once more on their next open. Say **"Ask everyone to agree to the new Terms"** if you want that.

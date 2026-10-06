@@ -3759,6 +3759,19 @@ export const remote = {
     if (error) { fail('post health share')(error); return null; }
     return trustedSession((data as { session: Post['session'] | null } | null)?.session) ?? null;
   },
+  /**
+   * "Let CourtSide feature this on its Instagram" switched on a post already
+   * up (Edit post, Oct 5, owner). What the server kept comes back: a tracker
+   * session's post always stays off (the posts trigger, migration 58 on).
+   * Null when it did not save (not yours, no connection, a database before
+   * migration 28).
+   */
+  async setPostFeatureOk(postId: ID, ok: boolean): Promise<boolean | null> {
+    const { data, error } = await need().from('posts').update({ feature_ok: ok }).eq('id', postId).select('feature_ok').maybeSingle();
+    if (error) { fail('post feature switch')(error); return null; }
+    const row = data as { feature_ok: boolean | null } | null;
+    return row ? row.feature_ok !== false : null;
+  },
   async setPostPinned(postId: ID, pinned: boolean) {
     const { error } = await need().from('posts').update({ pinned }).eq('id', postId);
     if (error) fail('post pin')(error);
