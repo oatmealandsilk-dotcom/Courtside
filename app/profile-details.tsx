@@ -23,6 +23,7 @@ import { useTennisFlags } from '@/features/activity/useTennisFlags';
 import { isTennisActivity, workoutIcon } from '@/features/activity/workouts';
 import { type ProfileTab, useProfileTab } from '@/features/players/profileTab';
 import { dayLabel, eventDate, newestFirst, shortDate, shortLength, surfaceSlot, weekDays, weekNumbers } from '@/features/players/tennisProfile';
+import { localDay } from '@/features/practice/stats';
 import { wrappedYear } from '@/features/wrapped/yearInTennis';
 import { evaluateAchievements, surfaceLabel } from '@/lib/badges';
 import { confirm } from '@/lib/confirm';
@@ -289,7 +290,8 @@ function Waiting({ user }: { user: User }) {
   const sources = andList([...new Set(waiting.map((a) => sourceWord(a)))]);
   return (
     <View>
-      <SectionHead title="Waiting on you" count={(ask ? asking.length : 0) + waiting.length} />
+      {/* One for each row, as the mock counts them; each row says its own number ("4 workouts to log"). */}
+      <SectionHead title="Waiting on you" count={(ask ? 1 : 0) + (w ? 1 : 0)} />
       <Box>
         {ask && tagger ? (
           <Row first
@@ -385,8 +387,10 @@ function Health() {
   const source = integrations.filter((i) => i.connected && i.category === 'wearable').sort((a, b) => (b.lastSyncedAt ?? '').localeCompare(a.lastSyncedAt ?? ''))[0];
   const ago = source?.lastSyncedAt ? relativeTime(source.lastSyncedAt) : '';
   const synced = !ago ? '' : ago === 'just now' ? 'synced just now' : /\d[mh]$/.test(ago) ? `synced ${ago} ago` : `synced ${ago}`;
-  // The day is a plain YYYY-MM-DD: read as it is, never through a Date (which takes it as UTC midnight, a day early in America).
-  const dayWord = dayLabel(latest.date.slice(0, 10));
+  // A plain YYYY-MM-DD (as the server keeps it) is read as it is, never through a Date (which takes it
+  // as UTC midnight, a day early in America). A full timestamp (the demo's) is read on this phone's
+  // clock: its UTC date is tomorrow every American evening.
+  const dayWord = dayLabel(latest.date.length > 10 ? localDay(latest.date) : latest.date);
   const recent = dayWord === 'Today' || dayWord === 'Yesterday';
   const from = source ? (recent ? `From ${source.label}` : `${dayWord}, from ${source.label}`) : recent ? '' : dayWord;
   const line = [from, synced].filter(Boolean).join(' · ');

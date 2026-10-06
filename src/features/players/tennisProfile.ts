@@ -212,12 +212,6 @@ export function eventDate(iso: string, now = new Date()): string {
   return d.toLocaleDateString(undefined, d.getFullYear() === now.getFullYear() ? { weekday: 'short', month: 'short', day: 'numeric' } : { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-/** Minutes on court (fitness left out) in the last seven days, today included. */
-export function weekOnCourt(sessions: PracticeSession[], me: string | null, now = new Date()): number {
-  const from = localDay(now.getTime() - 6 * 86_400_000);
-  return sessions.filter((s) => s.userId === me && s.kind !== 'fitness' && s.day >= from).reduce((sum, s) => sum + s.minutes, 0);
-}
-
 /** One day of the last seven: its calendar day, minutes on court (fitness left out), and whether it is today. */
 export interface WeekDay { day: string; minutes: number; today: boolean }
 
