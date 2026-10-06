@@ -54,8 +54,18 @@ export function canCopyStory(): boolean {
 /** Said once Instagram has opened with the picture ready to paste. */
 export const INSTAGRAM_NOTE = 'In Instagram, pick your photo or video first, then tap Add sticker (or tap and hold, then Paste).';
 
-/** What Copy says once the picture is on the clipboard: Instagram pastes it as a sticker. */
-export const COPIED_NOTE = 'Copied. In Instagram, pick your photo or video for the story, then tap Add sticker (or tap and hold, then Paste).';
+/**
+ * What Copy says once the picture is on the clipboard: short, the way a
+ * toast says it. A sticker (or the see-through overlay) is pasted into a
+ * story; a whole picture (a card, a photo) can go anywhere.
+ */
+export const COPIED_NOTE = 'Copied.';
+export const COPIED_STICKER_NOTE = 'Copied. Paste it into your story.';
+
+/** Whether something exportStory said is news that it went (Copied, Saved, the Instagram steps), not a reason it could not. */
+export function storyNoteOk(said: string): boolean {
+  return said.startsWith('Copied') || said.startsWith('Saved') || said === INSTAGRAM_NOTE;
+}
 
 /** CourtSide's app at Meta (Oct 4): Instagram's own "Share to Stories" handoff needs it. Public, not a secret. Also used by mediaStory.ts. */
 export const FACEBOOK_APP_ID = '1407829631564079';
@@ -154,7 +164,7 @@ export async function exportStory(view: View | null, action: StoryAction, title:
     // On the clipboard as a picture, so a story pastes it as a sticker, the way Strava's overlay goes on.
     const b64 = await captureRef(view, { format: 'png', quality: 1, result: 'base64', ...size });
     await Clipboard.setImageAsync(b64);
-    return COPIED_NOTE;
+    return look?.sticker ? COPIED_STICKER_NOTE : COPIED_NOTE;
   }
   if (action === 'instagram' && Platform.OS === 'android') {
     // Straight into Instagram's story editor (Oct 5). No Instagram, or a hand-over

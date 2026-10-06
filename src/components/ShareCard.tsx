@@ -106,7 +106,7 @@ export function ShareCard({ post, author, width }: { post: Post; author?: User; 
             {author?.handle ? <Text numberOfLines={1} style={{ fontFamily: fontFamily.regular, fontSize: 12 * u, color: 'rgba(255,255,255,0.7)' }}>@{author.handle} on CourtSide</Text> : null}
           </View>
         </View>
-        <Text style={{ fontFamily: fontFamily.medium, fontSize: 11 * u, letterSpacing: 0.2 * u, color: 'rgba(255,255,255,0.6)' }}>app.courtsidebase.com</Text>
+        <Text style={{ fontFamily: fontFamily.medium, fontSize: 11 * u, letterSpacing: 0.2 * u, color: 'rgba(255,255,255,0.6)' }}>courtsidebase.com</Text>
       </View>
     </View>
   );
