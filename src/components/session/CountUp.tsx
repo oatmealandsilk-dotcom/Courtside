@@ -16,8 +16,10 @@ const AnimatedInput = Reanimated.createAnimatedComponent(TextInput);
  * never makes it stutter. With Reduce Motion on, it simply shows the number.
  * See CountUp.web for the browser's.
  */
-export function CountUp({ value, part = 'int', delay = 0, duration = 700, play = true, style, maxFontSizeMultiplier }: {
+export function CountUp({ value, from = 0, part = 'int', delay = 0, duration = 700, play = true, style, maxFontSizeMultiplier }: {
   value: number;
+  /** Where the count starts (0 unless a clock starts at its first hour). */
+  from?: number;
   part?: CountPart;
   delay?: number;
   duration?: number;
@@ -27,13 +29,13 @@ export function CountUp({ value, part = 'int', delay = 0, duration = 700, play =
   maxFontSizeMultiplier?: number;
 }) {
   const reduced = useReducedMotion();
-  const v = useSharedValue(play && !reduced ? 0 : value);
+  const v = useSharedValue(play && !reduced ? from : value);
   useEffect(() => {
     cancelAnimation(v);
     if (!play || reduced) { v.value = value; return; }
-    v.value = 0;
+    v.value = from;
     v.value = withDelay(delay, withTiming(value, { duration, easing: Easing.out(Easing.cubic) }));
-  }, [value, play, reduced, delay, duration, v]);
+  }, [value, from, play, reduced, delay, duration, v]);
   const animatedProps = useAnimatedProps(() => {
     const text = countText(v.value, part);
     return { text, defaultValue: text } as never;
@@ -45,7 +47,7 @@ export function CountUp({ value, part = 'int', delay = 0, duration = 700, play =
       importantForAccessibility="no"
       accessibilityElementsHidden
       pointerEvents="none"
-      defaultValue={countText(play && !reduced ? 0 : value, part)}
+      defaultValue={countText(play && !reduced ? from : value, part)}
       maxFontSizeMultiplier={maxFontSizeMultiplier}
       animatedProps={animatedProps}
       style={[styles.input, style]}

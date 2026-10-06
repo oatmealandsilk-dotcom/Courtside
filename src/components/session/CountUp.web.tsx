@@ -13,8 +13,10 @@ const outCubic = (t: number) => 1 - (1 - t) ** 3;
  * the same curve, drawn frame by frame with requestAnimationFrame. With
  * reduced motion asked for, it shows the number straight away.
  */
-export function CountUp({ value, part = 'int', delay = 0, duration = 700, play = true, style, maxFontSizeMultiplier }: {
+export function CountUp({ value, from = 0, part = 'int', delay = 0, duration = 700, play = true, style, maxFontSizeMultiplier }: {
   value: number;
+  /** Where the count starts (0 unless a clock starts at its first hour). */
+  from?: number;
   part?: CountPart;
   delay?: number;
   duration?: number;
@@ -23,23 +25,23 @@ export function CountUp({ value, part = 'int', delay = 0, duration = 700, play =
   maxFontSizeMultiplier?: number;
 }) {
   const reduced = useReducedMotion();
-  const [shown, setShown] = useState(play && !reduced ? 0 : value);
+  const [shown, setShown] = useState(play && !reduced ? from : value);
   const frame = useRef<number | null>(null);
   useEffect(() => {
     if (!play || reduced || typeof requestAnimationFrame !== 'function') { setShown(value); return undefined; }
-    setShown(0);
+    setShown(from);
     let start = 0;
     const timer = setTimeout(() => {
       const step = (t: number) => {
         if (!start) start = t;
         const p = Math.min(1, (t - start) / Math.max(1, duration));
-        setShown(value * outCubic(p));
+        setShown(from + (value - from) * outCubic(p));
         if (p < 1) frame.current = requestAnimationFrame(step);
       };
       frame.current = requestAnimationFrame(step);
     }, delay);
     return () => { clearTimeout(timer); if (frame.current != null) cancelAnimationFrame(frame.current); };
-  }, [value, play, reduced, delay, duration]);
+  }, [value, from, play, reduced, delay, duration]);
   return (
     <Text aria-hidden style={[{ fontVariant: ['tabular-nums'] }, style]} maxFontSizeMultiplier={maxFontSizeMultiplier}>
       {countText(shown, part)}

@@ -42,13 +42,16 @@ export function Duration({ minutes, size, color, unitColor, play = false, delay 
       {parts.map((p, i) => (
         <React.Fragment key={p.u}>
           <CountUp
-            // Each part counts on its own ("1h 00m" up to "1h 24m"), so the
-            // hours never read 0 and the minutes never wrap round past 59.
-            value={parts.length === 1 ? Math.round(minutes) : Number(p.n)}
-            part={parts.length === 1 ? 'int' : p.u === 'h' ? 'hours' : 'minutes2'}
+            // Hours and minutes count as one clock rolling forward from the
+            // first hour (Oct 6, owner): "2h 04m" runs 1h 00m → 1h 59m → 2h 00m
+            // → 2h 04m, so there is something to watch. Under an hour it is
+            // just the minutes counting up.
+            value={Math.round(minutes)}
+            from={parts.length === 1 ? 0 : 60}
+            part={parts.length === 1 ? 'int' : p.u === 'h' ? 'clockHours' : 'clockMinutes2'}
             play={play}
             delay={delay}
-            duration={duration}
+            duration={parts.length === 1 ? duration : Math.max(duration, 1100)}
             style={[figure, i > 0 ? { marginLeft: Math.round(size * 0.12) } : null]}
             maxFontSizeMultiplier={maxGrow}
           />
