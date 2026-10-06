@@ -9,6 +9,8 @@ import { LocationField } from '@/components/LocationField';
 import { PermissionRows } from '@/components/PermissionRows';
 import { Button, Collapse, Field, SegmentedControl, Toggle } from '@/components/ui';
 import { SCALES } from '@/features/players/ratingScales';
+import { playingFor, startedYearBounds, yearsFromStarted, yearsWords } from '@/features/players/tennisProfile';
+import { experienceLabel } from '@/lib/format';
 import { writeSkipped, type SetupStep } from '@/features/onboarding/setupProgress';
 import { replaceWithStart } from '@/features/navigation/startTab';
 import { handleFromText, isWaitlistCode, peekReferrer, peekShareTarget } from '@/features/invite/referral';
@@ -29,13 +31,6 @@ import type {
   SurfacePreference,
 } from '@/data/types';
 import { colors, radius, spacing, typography } from '@/theme';
-
-const YEARS = [
-  { label: '< 1', value: 0 },
-  { label: '1–3', value: 2 },
-  { label: '4–9', value: 6 },
-  { label: '10+', value: 12 },
-];
 
 const PLAY_STYLES: { value: PlayStyle; label: string; detail: string }[] = [
   { value: 'aggressive-baseliner', label: 'Aggressive baseliner', detail: 'Big forehand, dictates' },
@@ -127,7 +122,9 @@ export default function Onboarding() {
   const [skillSystem, setSkillSystem] = useState<'NTRP' | 'UTR'>(existing?.skillSystem === 'UTR' ? 'UTR' : 'NTRP');
   const [rating, setRating] = useState(existing?.rating && existing.skillSystem !== 'ITF' ? existing.rating : 3.5);
   const [ratingText, setRatingText] = useState(String(existing?.rating && existing.skillSystem !== 'ITF' ? existing.rating : '3.5'));
-  const [yearsPlaying, setYearsPlaying] = useState<number | undefined>(existing?.yearsPlaying);
+  // The year they started playing, typed (Oct 5, owner: "Years playing should be able to say specific
+  // year"). A profile from before has only the old range: the box starts empty and the range stays until a year is typed.
+  const [startedText, setStartedText] = useState(existing?.startedYear != null ? String(existing.startedYear) : '');
   const [playStyle, setPlayStyle] = useState<PlayStyle>(existing?.playStyle ?? 'all-court');
   const [styleOpen, setStyleOpen] = useState(false);
   const chevronTurn = useRef(new Animated.Value(0)).current;
@@ -215,6 +212,21 @@ export default function Onboarding() {
   const parsed = Number(ratingText.replace(',', '.'));
   const ratingValid = ratingText.trim() !== '' && Number.isFinite(parsed) && parsed >= scale.min && parsed <= scale.max;
 
+  // The started year: empty (not said), or four figures from 1940 (later for a teen) to this year.
+  const years = startedYearBounds(currentUser?.ageGroup);
+  const typedYear = /^\d{4}$/.test(startedText) ? Number(startedText) : NaN;
+  const yearOk = typedYear >= years.min && typedYear <= years.max;
+  const yearValid = startedText === '' || yearOk;
+  // What gets saved: the year typed; nothing once the box is emptied of one saved before; and while
+  // what is typed is not a year yet, whatever was saved stays as it was.
+  const startedYear = yearOk ? typedYear : startedText === '' ? undefined : existing?.startedYear;
+  const oldRange = existing?.startedYear == null ? existing?.yearsPlaying : undefined;
+  const yearsPlaying = startedYear !== undefined ? yearsFromStarted(startedYear) : startedText === '' && existing?.startedYear != null ? undefined : oldRange;
+  const playing = playingFor({ startedYear, yearsPlaying });
+  const yearNote = startedText !== '' && !yearOk ? `Enter a year from ${years.min} to ${years.max}`
+    : playing ? (playing.since !== undefined ? yearsWords(playing) : `Your profile says ${experienceLabel(playing.years).toLowerCase()}. Add the year you started.`)
+    : 'The year you first played.';
+
   /* ------------------------------ Animation ------------------------------ */
 
   const progress = useRef(new Animated.Value((position + 1) / order.length)).current;
@@ -233,6 +245,8 @@ export default function Onboarding() {
     const n = Number(text.replace(',', '.'));
     if (text.trim() !== '' && Number.isFinite(n) && n >= scale.min && n <= scale.max) setRating(round(n, scale.decimals));
   };
+  // Figures only, four at most: a year.
+  const typeStarted = (text: string) => setStartedText(text.replace(/\D/g, '').slice(0, 4));
   const changeSystem = (next: 'NTRP' | 'UTR') => {
     if (next === skillSystem) return;
     haptics.tap();
@@ -245,6 +259,7 @@ export default function Onboarding() {
   /* -------------------------------- Profile ------------------------------- */
 
   const profile = useMemo<PlayerProfile>(() => {
+    const { onboardedAt: _joined, ...kept } = existing ?? {};
     // A goal or tournament that did not change keeps everything it had (done, a target date, its id).
     const keptGoal = existing?.goals[0];
     const goals = [goalOne]
@@ -268,15 +283,20 @@ export default function Onboarding() {
         }, ...otherTournaments]
       : otherTournaments;
     return {
+      // Whatever setup does not ask (the gear bag, and anything added later) stays as it was: saving
+      // the steps once dropped the gear bag. Everything below is what the steps hold now; when you
+      // joined is stamped by the caller, as before.
+      ...kept,
       skillSystem: skillSystem as SkillSystem, rating, playStyle, handedness, backhand, fitnessLevel,
-      preferredSurface: surface, sessionsPerWeek, yearsPlaying,
+      // The started year, and the old range filled in from it for an app from before (see PlayerProfile).
+      preferredSurface: surface, sessionsPerWeek, yearsPlaying, startedYear,
       // Setup only asks about the first goal; any others you had stay as they were. No goal given means none, not an invented one.
       goals: [...goals, ...(existing?.goals.slice(1) ?? [])],
       // Injury and schedule notes are added later, from the profile.
       constraints: existing?.constraints ?? [],
       tournaments,
     };
-  }, [skillSystem, rating, playStyle, handedness, backhand, fitnessLevel, surface, sessionsPerWeek, yearsPlaying, goalOne, tournamentName, tournamentDays, location, existing?.constraints, existing?.goals, existing?.tournaments, savedTournament]);
+  }, [skillSystem, rating, playStyle, handedness, backhand, fitnessLevel, surface, sessionsPerWeek, yearsPlaying, startedYear, goalOne, tournamentName, tournamentDays, location, existing, savedTournament]);
 
   const finish = () => {
     haptics.commit();
@@ -324,7 +344,7 @@ export default function Onboarding() {
   useAndroidBack(() => { if (position <= 0) return false; back(); return true; });
 
   const last = position === order.length - 1;
-  const canContinue = step === 0 ? (ratingOnly ? ratingValid : name.trim().length > 0 && ratingValid && !claiming) : true;
+  const canContinue = step === 0 ? (ratingOnly ? ratingValid : name.trim().length > 0 && ratingValid && yearValid && !claiming) : true;
 
   return (
     <KeyboardScrollContext.Provider value={Platform.OS === 'android' ? keyboard.reveal : null}>
@@ -393,13 +413,18 @@ export default function Onboarding() {
               </View>
               <Text style={styles.note}>{ratingValid ? band.label : `Enter ${scale.min.toFixed(1)}–${scale.max.toFixed(1)}`}</Text>
               {ratingOnly ? null : <>
-              <Group label="Years playing">
-                <SegmentedControl<string>
-                  value={yearsPlaying === undefined ? '' : String(yearsPlaying)}
-                  onChange={(v) => pick(setYearsPlaying)(Number(v))}
-                  segments={YEARS.map((y) => ({ value: String(y.value), label: y.label }))}
+              {/* The year they started, typed: four figures on the number pad, how long that is said under it. */}
+              <View style={styles.yearBox}>
+                <Field
+                  label="Started playing"
+                  accessibilityLabel="Year you started playing"
+                  value={startedText}
+                  onChangeText={typeStarted}
+                  keyboardType="number-pad"
+                  selectTextOnFocus
                 />
-              </Group>
+              </View>
+              <Text style={styles.note} accessibilityLiveRegion="polite">{yearNote}</Text>
               {asksInviter && inviter?.handle && !inviter.canSet ? (
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
                   <Text style={styles.note} accessibilityLabel={`Invited by @${inviter.handle}`}>Invited by @{inviter.handle}</Text>
@@ -525,7 +550,7 @@ export default function Onboarding() {
                   ['Name', name.trim() || currentUser?.name || ''],
                   ['From', location.trim() || '—'],
                   ['Rating', `${skillSystem} ${rating.toFixed(1)} · ${band.label}`],
-                  ['Experience', yearsPlaying === undefined ? 'Not set' : `${YEARS.find((y) => y.value === yearsPlaying)?.label ?? yearsPlaying} years`],
+                  ['Experience', playing ? yearsWords(playing) : 'Not set'],
                   ['Style', PLAY_STYLES.find((p) => p.value === playStyle)?.label ?? ''],
                   ['Hand', `${handedness === 'left' ? 'Left' : 'Right'} · ${backhand === 'one-handed' ? 'one-handed' : 'two-handed'} backhand`],
                   ['Surface', SURFACES.find((s) => s.value === surface)?.label ?? ''],
@@ -622,6 +647,8 @@ const styleDefinitions = StyleSheet.create({
   groupLabel: { ...typography.smallStrong, color: colors.textMuted },
   note: { ...typography.small, color: colors.textFaint, lineHeight: 18 },
   twoCol: { flexDirection: 'row', gap: spacing.md, alignItems: 'flex-end' },
+  // A year is four figures: a short box, not the full width.
+  yearBox: { width: 160 },
 
   list: { borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, overflow: 'hidden' },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.md, paddingVertical: 13, minHeight: 52 },
