@@ -12,6 +12,8 @@ import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { Highlighted, labelOf } from '@/components/CourtSearch';
 import { PersonRow } from '@/components/PersonRow';
+import { StreakFlame } from '@/components/StreakFlame';
+import { shownStreak, streakWords } from '@/features/practice/streakFlame';
 import { PostTile } from '@/components/PostTile';
 import { TOPIC_META } from '@/components/QuestionCard';
 import { SearchField } from '@/components/SearchField';
@@ -412,17 +414,23 @@ export default function Search() {
           : tag ? <View style={styles.circle}><Text style={styles.hash}>#</Text></View>
             : <View style={styles.circle}><Ionicons name="search" size={17} color={colors.textMuted} /></View>;
     const text = tag ? r.text.slice(1) : r.text;
+    const streak = shownStreak(user, currentUserId);
     return (
       <View key={`${r.kind}:${r.key}`} style={styles.recentRow}>
         <Pressable
           accessibilityRole={r.kind === 'term' ? 'button' : 'link'}
-          accessibilityLabel={r.kind === 'term' ? `Search ${r.text}` : r.kind === 'user' ? `${user?.name}, @${user?.handle}` : r.kind === 'thread' ? `Thread: ${r.text}` : `${r.text}${line2 ? `, ${line2}` : ''}, open the court`}
+          accessibilityLabel={r.kind === 'term' ? `Search ${r.text}` : r.kind === 'user' ? `${user?.name}${streakWords(streak)}, @${user?.handle}` : r.kind === 'thread' ? `Thread: ${r.text}` : `${r.text}${line2 ? `, ${line2}` : ''}, open the court`}
           onPress={() => openRecent(r)}
           style={({ pressed }) => [styles.recentMain, pressed && styles.pressed]}
         >
           {lead}
           <View style={[styles.recentWords, !first && styles.rowRule]}>
-            <Text style={styles.recentText} numberOfLines={1}>{tag ? <Text style={styles.hashInline}>#</Text> : null}{user?.name ?? text}</Text>
+            {user ? (
+              <View style={styles.recentName}>
+                <Text style={[styles.recentText, styles.recentTextShrink]} numberOfLines={1}>{user.name}</Text>
+                <StreakFlame days={streak} />
+              </View>
+            ) : <Text style={styles.recentText} numberOfLines={1}>{tag ? <Text style={styles.hashInline}>#</Text> : null}{text}</Text>}
             {line2 ? <Text style={styles.rowMeta} numberOfLines={1}>{line2}</Text> : null}
           </View>
         </Pressable>
@@ -678,6 +686,9 @@ const styleDefinitions = StyleSheet.create({
   recentMain: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingLeft: spacing.lg },
   recentWords: { flex: 1, minWidth: 0, minHeight: 56, justifyContent: 'center', gap: 1, paddingVertical: 6 },
   recentText: { ...font('500'), fontSize: 16, color: colors.text },
+  // A player's name and their streak's flame, the name giving way first.
+  recentName: { flexDirection: 'row', alignItems: 'center', gap: 6, minWidth: 0 },
+  recentTextShrink: { flexShrink: 1 },
   removeWrap: { paddingRight: spacing.xs, justifyContent: 'center' },
   remove: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   circle: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' },

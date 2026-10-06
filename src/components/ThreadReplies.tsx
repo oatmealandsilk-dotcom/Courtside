@@ -1,5 +1,7 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { PlayerName } from '@/components/PlayerName';
+import { StreakFlame } from '@/components/StreakFlame';
+import { shownStreak, streakWords } from '@/features/practice/streakFlame';
 import React, { useRef, useState } from 'react';
 import { confirm, confirmDelete, confirmReport } from '@/lib/confirm';
 import { RemovedNote } from '@/features/moderation/RemovedNote';
@@ -67,6 +69,7 @@ export function ThreadReply({ answer, thread, acceptedId, askerId, depth = 0, pr
   const reveal = useRevealOnFocus();
   const lineRef = useRef<TextInput>(null);
   const responder = users.find(user => user.id === answer.authorId);
+  const streak = shownStreak(responder, currentUserId);
   const tag = useMentionDraft(draft, setDraft, lineRef);
   // Hold your own reply to delete it, as on Instagram; hold someone else's to report it (Oct 5).
   const mine = !preview && answer.authorId === currentUserId;
@@ -95,10 +98,11 @@ export function ThreadReply({ answer, thread, acceptedId, askerId, depth = 0, pr
   return <View>
     <View style={styles.answerCard}>
       {!collapsed && children.length > 0 && <View pointerEvents="none" style={styles.avatarRail}/>}
-      <Pressable accessibilityRole="button" accessibilityLabel={`${collapsed ? 'Expand' : 'Collapse'} reply by ${responder?.name ?? 'player'}`}
+      <Pressable accessibilityRole="button" accessibilityLabel={`${collapsed ? 'Expand' : 'Collapse'} reply by ${responder?.name ?? 'player'}${streakWords(streak)}`}
         onPress={() => setCollapsed(value => !value)} onLongPress={hold} style={styles.answerHead}>
         <Avatar name={responder?.name ?? '?'} seed={responder?.avatarSeed ?? answer.authorId} size={30}/>
         <PlayerName userId={responder?.id} style={styles.answerName}>{responder?.name ?? 'Unknown'}</PlayerName>
+        <StreakFlame days={streak} size="small" style={styles.flame} />
         <Text style={styles.time}>{relativeTime(answer.createdAt)}</Text>
         {askerId && answer.authorId === askerId ? <View style={styles.op}><Text style={styles.opText}>OP</Text></View> : null}
         {answer.fromCoach && <Ionicons name="shield-checkmark" size={14} color={colors.brand}/>}
@@ -197,6 +201,8 @@ const styleDefinitions = StyleSheet.create({
   answerMeta: { flex: 1, gap: 2 },
   answerNameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   answerName: { ...typography.smallStrong, color: colors.text },
+  // Close after the name, as on a comment.
+  flame: { marginLeft: -spacing.sm },
   coachTag: {
     flexDirection: 'row',
     alignItems: 'center',

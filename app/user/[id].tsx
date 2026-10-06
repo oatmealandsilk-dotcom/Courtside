@@ -12,6 +12,8 @@ import { TileCover } from '@/components/TileCover';
 import { SessionTile } from '@/components/session/SessionTile';
 import { hasSessionStats } from '@/features/activity/format';
 import { PlayerName } from '@/components/PlayerName';
+import { StreakFlame } from '@/components/StreakFlame';
+import { shownStreak } from '@/features/practice/streakFlame';
 import { Tappable } from '@/components/Tappable';
 import { Avatar, Button, EmptyState, Screen } from '@/components/ui';
 import { PlayerCard } from '@/components/tennis/PlayerCard';
@@ -153,7 +155,11 @@ function UserProfile() {
       <View style={styles.identity}>
         <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={92} ring={user.isCoach} style={{ backgroundColor: colors.brand, alignSelf: 'center' }} />
         <View style={styles.nameRow}>
-          <PlayerName userId={user.id} style={styles.name}>{user.name}</PlayerName>
+          {/* The name and, close after it, their streak's flame (3 days or more). */}
+          <View style={styles.nameLine}>
+            <PlayerName userId={user.id} style={styles.name}>{user.name}</PlayerName>
+            <StreakFlame days={shownStreak(user, currentUserId)} size="large" />
+          </View>
           {user.isPrivate ? <Ionicons name="lock-closed" size={14} color={colors.textMuted} /> : null}
           <LevelPill profile={profile} />
         </View>
@@ -256,7 +262,8 @@ const styleDefinitions = StyleSheet.create({
   more: { padding: 4 },
   identity: { gap: 10, paddingTop: 10, paddingBottom: 20, paddingHorizontal: 12, alignItems: 'center' },
   nameRow: { flexDirection: 'row', gap: 10, alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap', marginTop: 4 },
-  name: { fontSize: 20, ...font('700'), color: colors.text },
+  nameLine: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1, minWidth: 0 },
+  name: { fontSize: 20, ...font('700'), color: colors.text, flexShrink: 1 },
   bio: { fontSize: 14, lineHeight: 21, color: colors.textMuted, textAlign: 'center', maxWidth: 320 },
   meta: { fontSize: 12, color: colors.textMuted, lineHeight: 19 },
   followRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },

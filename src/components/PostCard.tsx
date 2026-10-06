@@ -12,6 +12,8 @@ import { ClipVideo } from '@/components/ClipVideo';
 import { cropLayer } from '@/lib/crop';
 import { Tappable } from '@/components/Tappable';
 import { NewHereTag } from '@/components/NewHereTag';
+import { StreakFlame } from '@/components/StreakFlame';
+import { shownStreak, streakWords } from '@/features/practice/streakFlame';
 import { isNewHere } from '@/features/feed/newHere';
 import { useOptimisticToggle } from '@/lib/useOptimisticToggle';
 import { Avatar, Card, Chip } from '@/components/ui';
@@ -100,7 +102,8 @@ function PostCardInner({
   active = false,
 }: Props) {
   const styles = useThemedStyles(styleDefinitions);
-  const { blockedIds } = useApp();
+  const { blockedIds, currentUserId } = useApp();
+  const streak = shownStreak(author, currentUserId);
   // A session with no photo or video: the session's card is the post's picture (Oct 2).
   const sessionCard = !!post.session && hasSessionStats(post.session) && !post.imageUrl && !post.videoUrl && post.kind !== 'clip';
   // The room the card has: as wide as the post, and in the feed's fixed-height
@@ -122,13 +125,14 @@ function PostCardInner({
 
   return (
     <Card style={styles.card}>
-      <Pressable accessibilityRole="link" accessibilityLabel={`View ${author.name} profile`} onPress={onPressAuthor ?? (() => router.push(`/user/${author.id}`))} style={styles.header}>
+      <Pressable accessibilityRole="link" accessibilityLabel={`View ${author.name} profile${streakWords(streak)}`} onPress={onPressAuthor ?? (() => router.push(`/user/${author.id}`))} style={styles.header}>
         <Avatar name={author.name} seed={author.avatarSeed} uri={author.avatarUrl} size={42} />
         <View style={styles.headerText}>
           <View style={styles.nameRow}>
             <Text style={styles.name} numberOfLines={1}>
               {author.name}
             </Text>
+            <StreakFlame days={streak} />
             {author.isCoach ? (
               <Ionicons name="shield-checkmark" size={14} color={colors.brand} />
             ) : null}
@@ -299,7 +303,7 @@ const styleDefinitions = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   headerText: { flex: 1, gap: 1 },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  name: { ...typography.bodyStrong, color: colors.text },
+  name: { ...typography.bodyStrong, color: colors.text, flexShrink: 1 },
   sub: { ...typography.small, color: colors.textFaint },
   body: { gap: spacing.md, flexShrink: 1, minHeight: 0, overflow: 'hidden' },
   // Pictures round off like the feed's photo posts.

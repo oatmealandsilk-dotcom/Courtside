@@ -6,6 +6,8 @@ import { router } from 'expo-router';
 import { Avatar, DottedRule } from '@/components/ui';
 import { LevelPill } from '@/components/LevelPill';
 import { NewHereTag } from '@/components/NewHereTag';
+import { StreakFlame } from '@/components/StreakFlame';
+import { shownStreak } from '@/features/practice/streakFlame';
 import { FollowPill } from '@/components/FollowPill';
 import { RichText } from '@/components/RichText';
 import type { User } from '@/data/types';
@@ -50,6 +52,7 @@ export function CommentsCaption({ kind, id }: { kind: 'post' | 'hit'; id: string
     : story?.caption?.trim() ?? '';
   const openProfile = () => openPlayer(author.id, currentUserId);
   const following = followingIds.includes(author.id);
+  const streak = shownStreak(author, currentUserId);
   const tagged = (post?.taggedUserIds ?? []).filter((uid) => !blockedIds.includes(uid)).map((uid) => users.find((u) => u.id === uid)).filter((u): u is User => !!u);
   const first = (name: string) => name.split(' ')[0];
   const withWho = tagged.length === 1 ? first(tagged[0].name) : tagged.length === 2 ? `${first(tagged[0].name)} and ${first(tagged[1].name)}` : tagged.length ? `${first(tagged[0].name)} and ${tagged.length - 1} others` : '';
@@ -87,6 +90,7 @@ export function CommentsCaption({ kind, id }: { kind: 'post' | 'hit'; id: string
         <View style={styles.column}>
           <View style={styles.who}>
             <Text style={styles.name} numberOfLines={1} onPress={openProfile} accessibilityRole="link" suppressHighlighting>{author.name}</Text>
+            <StreakFlame days={streak} style={styles.flame} />
             <LevelPill profile={author.profile} small />
             {post && isNewHere(post) ? <NewHereTag short /> : null}
             <View style={styles.spacer} />
@@ -118,6 +122,7 @@ const styleDefinitions = StyleSheet.create({
   column: { flex: 1, minWidth: 0, gap: 4 },
   who: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 32 },
   name: { ...typography.bodyStrong, fontSize: 15, color: colors.text, flexShrink: 1 },
+  flame: { marginLeft: -3 },
   spacer: { flex: 1 },
   words: { ...typography.body, lineHeight: 22, color: colors.text },
   tag: { color: colors.brand, ...font('600') },
