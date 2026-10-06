@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View, type ScrollView } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -22,13 +22,14 @@ import { canTagKind, firstName, peopleText, peopleWords } from '@/features/activ
 import { useTennisFlags } from '@/features/activity/useTennisFlags';
 import { isTennisActivity, workoutIcon } from '@/features/activity/workouts';
 import { type ProfileTab, useProfileTab } from '@/features/players/profileTab';
-import { dayLabel, eventDate, newestFirst, shortDate, shortLength, surfaceSlot, weekDays, weekNumbers } from '@/features/players/tennisProfile';
+import { dayLabel, dayNumbers, eventDate, newestFirst, shortDate, shortLength, surfaceSlot, weekDays, weekNumbers, weekdayDate } from '@/features/players/tennisProfile';
 import { localDay } from '@/features/practice/stats';
 import { wrappedYear } from '@/features/wrapped/yearInTennis';
 import { evaluateAchievements, surfaceLabel } from '@/lib/badges';
 import { confirm } from '@/lib/confirm';
 import { relativeTime } from '@/lib/format';
 import { goBack } from '@/lib/goBack';
+import * as haptics from '@/lib/haptics';
 import { useStillLoading } from '@/lib/useStillLoading';
 import { useApp } from '@/store/AppContext';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
@@ -214,42 +215,66 @@ function Theirs({ user }: { user: User }) {
  * The last seven days (only you see them): time on court in big figures, a
  * small bar a day, then sessions, matches and the longest. Fitness is left
  * out, as on the card.
+ *
+ * Tap a day's bar (Oct 6, owner: "almost like iphone screen time") and the
+ * big figures count up to that day's time, the line under them names the
+ * day, and the three numbers are that day's. Tap the same bar again, or
+ * anywhere else on the card, and it counts back up to the week. Until the
+ * first tap the week's time stands still, as it always has.
  */
 function ThisWeek({ user }: { user: User }) {
   const styles = useThemedStyles(styleDefinitions);
   const { sessions } = useApp();
   const days = useMemo(() => weekDays(sessions, user.id), [sessions, user.id]);
-  const n = useMemo(() => weekNumbers(sessions, user.id), [sessions, user.id]);
+  const week = useMemo(() => weekNumbers(sessions, user.id), [sessions, user.id]);
   const total = days.reduce((sum, d) => sum + d.minutes, 0);
+  const [selected, setSelected] = useState<string | null>(null);
+  // Off until the first tap, so the page opens on the week's time standing still.
+  const [counting, setCounting] = useState(false);
+  // The tapped day, while it is still one of the seven (past midnight it drops off).
+  const pick = selected ? days.find((d) => d.day === selected) ?? null : null;
+  const dayN = useMemo(() => (pick ? dayNumbers(sessions, user.id, pick.day) : null), [pick, sessions, user.id]);
+  const n = dayN ?? week;
+  const choose = (day: string | null) => {
+    setSelected(day);
+    setCounting(true);
+    if (day) haptics.tap(); else haptics.untap();
+  };
+  const minutes = pick ? pick.minutes : total;
+  const when = !pick ? 'in the last 7 days' : pick.today ? 'today' : dayLabel(pick.day) === 'Yesterday' ? 'yesterday' : `on ${weekdayDate(pick.day)}`;
   const matches = n.matches && n.told ? `${n.won}–${n.lost}` : String(n.matches);
   const matchesSpoken = n.matches && n.told ? `${n.matches} ${n.matches === 1 ? 'match' : 'matches'}, ${n.won} won, ${n.lost} lost` : `${n.matches} ${n.matches === 1 ? 'match' : 'matches'}`;
   return (
     <View>
       <SectionHead title="This week" onlyYou />
       <Box padded>
-        {total > 0 ? (
-          <View accessible accessibilityLabel={`${spokenDuration(total)} on court in the last 7 days`}>
-            <Duration minutes={total} size={34} color={colors.text} unitColor={colors.textMuted} />
-            <Text style={styles.weekCaption}>on court in the last 7 days</Text>
-          </View>
-        ) : <Text style={styles.weekNone}>Nothing on court in the last 7 days</Text>}
-        <WeekBars days={days} />
-        {n.sessions ? (
-          <View style={styles.weekStats}>
-            <View style={styles.weekStat} accessible accessibilityLabel={`${n.sessions} ${n.sessions === 1 ? 'session' : 'sessions'}`}>
-              <Text maxFontSizeMultiplier={1.25} style={styles.weekFigure}>{n.sessions}</Text>
-              <Text style={styles.weekLabel}>{n.sessions === 1 ? 'Session' : 'Sessions'}</Text>
+        {/* A tap anywhere on the card but a bar goes back to the whole week. */}
+        <Pressable accessible={false} focusable={false} disabled={!pick} onPress={() => choose(null)} style={styles.weekCard}>
+          {total > 0 ? (
+            <View accessible accessibilityLabel={`${spokenDuration(minutes)} on court ${when}`} accessibilityLiveRegion="polite">
+              {/* A new key for each day, so the figures count up afresh with every tap. */}
+              <Duration key={pick?.day ?? 'week'} minutes={minutes} size={34} color={colors.text} unitColor={colors.textMuted} play={counting} />
+              <Text style={styles.weekCaption}>{`on court ${when}`}</Text>
             </View>
-            <View style={[styles.weekStat, styles.weekDivide]} accessible accessibilityLabel={matchesSpoken}>
-              <Text maxFontSizeMultiplier={1.25} style={styles.weekFigure}>{matches}</Text>
-              <Text style={styles.weekLabel}>{n.matches === 1 && !n.told ? 'Match' : 'Matches'}</Text>
+          ) : <Text style={styles.weekNone}>Nothing on court in the last 7 days</Text>}
+          <WeekBars days={days} selected={pick?.day ?? null} onSelect={total > 0 ? (day) => choose(day === pick?.day ? null : day) : undefined} />
+          {week.sessions ? (
+            <View style={styles.weekStats}>
+              <View style={styles.weekStat} accessible accessibilityLabel={`${n.sessions} ${n.sessions === 1 ? 'session' : 'sessions'}`}>
+                <Text maxFontSizeMultiplier={1.25} style={styles.weekFigure}>{n.sessions}</Text>
+                <Text style={styles.weekLabel}>{n.sessions === 1 ? 'Session' : 'Sessions'}</Text>
+              </View>
+              <View style={[styles.weekStat, styles.weekDivide]} accessible accessibilityLabel={matchesSpoken}>
+                <Text maxFontSizeMultiplier={1.25} style={styles.weekFigure}>{matches}</Text>
+                <Text style={styles.weekLabel}>{n.matches === 1 && !n.told ? 'Match' : 'Matches'}</Text>
+              </View>
+              <View style={[styles.weekStat, styles.weekDivide]} accessible accessibilityLabel={`Longest, ${spokenDuration(n.longest)}`}>
+                <Duration minutes={n.longest} size={20} color={colors.text} unitColor={colors.textMuted} unitScale={0.65} />
+                <Text style={styles.weekLabel}>Longest</Text>
+              </View>
             </View>
-            <View style={[styles.weekStat, styles.weekDivide]} accessible accessibilityLabel={`Longest, ${spokenDuration(n.longest)}`}>
-              <Duration minutes={n.longest} size={20} color={colors.text} unitColor={colors.textMuted} unitScale={0.65} />
-              <Text style={styles.weekLabel}>Longest</Text>
-            </View>
-          </View>
-        ) : null}
+          ) : null}
+        </Pressable>
       </Box>
     </View>
   );
@@ -586,6 +611,8 @@ const styleDefinitions = StyleSheet.create({
   ghost: { minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing.md },
   ghostText: { ...typography.smallStrong, color: colors.textMuted },
   allShared: { ...typography.small, color: colors.textFaint, textAlign: 'center', paddingTop: spacing.xxl },
+  // The card's own tap (back to the week) shows no hand pointer: only the bars are buttons.
+  weekCard: { cursor: 'auto' },
   weekCaption: { ...typography.small, color: colors.textMuted, marginTop: 4 },
   weekNone: { ...typography.body, ...font('500'), color: colors.textMuted },
   weekStats: { flexDirection: 'row', marginTop: spacing.lg, paddingTop: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
