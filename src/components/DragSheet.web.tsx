@@ -109,6 +109,28 @@ function useMayClose(beforeClose?: () => boolean) {
   return () => !latest.current || latest.current();
 }
 
+/**
+ * A click on the backdrop closes only when the press began there. A hold
+ * that opens a sheet (your ring in Open to hit, held) ends, in a browser,
+ * with a click aimed at whatever is under the finger by then: often this
+ * backdrop, which closed the sheet the moment it opened (Oct 5). A click with
+ * no pointer behind it (a screen reader, a keyboard) still closes.
+ */
+function useBackdropPress(onClose: () => void) {
+  const began = useRef(false);
+  return {
+    area: { onPointerDownCapture: () => { began.current = false; } },
+    backdrop: {
+      onPointerDown: () => { began.current = true; },
+      onClick: (e: React.MouseEvent) => {
+        const ok = began.current || e.detail === 0;
+        began.current = false;
+        if (ok) onClose();
+      },
+    },
+  };
+}
+
 const SIDE_WIDTH = 420;
 const SIDE_GAP = 12;
 
@@ -138,6 +160,7 @@ function SidePanel({ header, children, onDismissed, closeSignal, onSettled, acti
     const out = panel.current?.animate([{ opacity: 1, transform: 'translateX(0)' }, { opacity: 0, transform: 'translateX(28px)' }], { duration: 180, easing: 'ease-in', fill: 'forwards' });
     if (out) out.onfinish = () => onDismissed(); else onDismissed();
   };
+  const outside = useBackdropPress(() => { if (mayClose()) close(); });
   const closeCount = useRef(closeSignal);
   useEffect(() => {
     if (closeSignal === closeCount.current) return;
@@ -146,8 +169,8 @@ function SidePanel({ header, children, onDismissed, closeSignal, onSettled, acti
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [closeSignal]);
   return (
-    <div style={{ position: 'absolute', inset: 0 }}>
-      <div onClick={() => { if (mayClose()) close(); }} role="button" aria-label="Close comments" tabIndex={-1} style={{ position: 'absolute', inset: 0 }} />
+    <div {...outside.area} style={{ position: 'absolute', inset: 0 }}>
+      <div {...outside.backdrop} role="button" aria-label="Close comments" tabIndex={-1} style={{ position: 'absolute', inset: 0 }} />
       <div
         ref={panel}
         role="dialog"
@@ -193,6 +216,7 @@ function DialogBox({ header, children, onDismissed, closeSignal, fitContent, onS
     const out = backdrop.current?.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 160, easing: 'ease-in', fill: 'forwards' });
     if (out) out.onfinish = () => onDismissed(); else onDismissed();
   };
+  const outside = useBackdropPress(() => { if (mayClose()) close(); });
   const closeCount = useRef(closeSignal);
   useEffect(() => {
     if (closeSignal === closeCount.current) return;
@@ -201,8 +225,8 @@ function DialogBox({ header, children, onDismissed, closeSignal, fitContent, onS
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [closeSignal]);
   return (
-    <div style={{ position: 'absolute', inset: 0 }}>
-      <div ref={backdrop} onClick={() => { if (mayClose()) close(); }} role="button" aria-label="Close" tabIndex={-1}
+    <div {...outside.area} style={{ position: 'absolute', inset: 0 }}>
+      <div ref={backdrop} {...outside.backdrop} role="button" aria-label="Close" tabIndex={-1}
         style={{ position: 'absolute', inset: 0, backgroundColor: colors.overlay, backdropFilter: 'blur(10px) saturate(0.8)', WebkitBackdropFilter: 'blur(10px) saturate(0.8)' } as React.CSSProperties} />
       <div
         ref={box}
@@ -332,6 +356,7 @@ function Sheet({
     place(geometry.current.fullHeight, SETTLE_MS, 'cubic-bezier(.4,0,1,1)');
     window.setTimeout(finish, SETTLE_MS + 20);
   };
+  const outside = useBackdropPress(() => { if (mayClose()) close(); });
   const openFull = () => place(0, SETTLE_MS);
   const returnTo = (y: number) => place(y, SETTLE_MS);
   const closeCount = useRef(closeSignal);
@@ -381,9 +406,9 @@ function Sheet({
   };
 
   return (
-    <div ref={area} style={{ position: 'absolute', inset: 0 }}>
+    <div ref={area} {...outside.area} style={{ position: 'absolute', inset: 0 }}>
       <div ref={backdrop} style={{ position: 'absolute', inset: 0, backgroundColor: colors.overlay, opacity: 0 }} />
-      <div role="button" aria-label="Close" tabIndex={-1} onClick={() => { if (mayClose()) close(); }} style={{ position: 'absolute', inset: 0 }} />
+      <div role="button" aria-label="Close" tabIndex={-1} {...outside.backdrop} style={{ position: 'absolute', inset: 0 }} />
       <div
         ref={sheet}
         style={{

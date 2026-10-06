@@ -90,10 +90,13 @@ export const TOUR_STEPS: TourStep[] = [
     wide: { title: 'Your map', body: 'Courts near you, and the players who shared their spot.' },
     byLead: {
       // One line: the lit card says "Send them your link", and a shorter tip keeps clear of the map's own lines above it.
-      invite: { title: 'Start here', body: 'Anyone who joins follows you.' },
+      invite: { title: 'Send your link', body: 'Anyone who joins follows you.' },
       friends: { title: 'Start here', body: 'Share your link, or find a friend by @handle.' },
-      free: { title: 'Up for a hit?', body: 'Tap I’m free, and players nearby see your green ring on the map.' },
-      'free-friends': { title: 'Up for a hit?', body: 'Tap I’m free, and friends who follow you back see your green ring.' },
+      // Never "Tap I'm free" now: a tap during the tutorial only moves it on, so the ring stayed
+      // off while a new player thought they had turned it on (Oct 5). The words say what the ring
+      // is for, for whenever they are free.
+      free: { title: 'Up for a hit?', body: 'Tap your ring any time you’re free. Players nearby see it on the map.' },
+      'free-friends': { title: 'Up for a hit?', body: 'Tap your ring any time you’re free. Friends who follow you back see it.' },
     },
   },
   {

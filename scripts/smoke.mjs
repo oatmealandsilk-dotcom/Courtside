@@ -885,7 +885,29 @@ const STEPS = [
       // Your own ring, off ("I’m free") or on ("You’re open to hit…"); a hold opens its sheet.
       await page.hold({ label: /^I’m free\. Turn on open to hit$|^You’re open to hit.*Turn off$/ });
     },
-    expect: [{ text: 'Open until' }, { text: 'Save' }],
+    // The button says what it does: "I’m free till …" with your ring off, "Save" with it on.
+    expect: [{ text: 'Open until' }, { text: /^Save$|^I’m free till / }],
+    after: async (page) => { await page.tap({ label: 'Close' }); await page.gone({ text: 'Open until' }); },
+  },
+  {
+    // The same hold with the row high on the screen, the page scrolled: in a browser the lifted
+    // finger's click landed on the new sheet's backdrop and closed it at once (Oct 5).
+    name: 'open-to-hit-scrolled',
+    title: 'Open to hit: hold your ring, page scrolled',
+    async run(page) {
+      await page.waitUntil(() => page.call(() => {
+        const el = document.querySelector('[aria-label^="I’m free. Turn on open to hit"], [aria-label^="You’re open to hit"]');
+        if (!el) return false;
+        // About a quarter of the way down the screen, clear of the header: where the new sheet's backdrop will be.
+        let scroller = el.parentElement;
+        while (scroller && !(scroller.scrollHeight > scroller.clientHeight + 20 && ['auto', 'scroll'].includes(getComputedStyle(scroller).overflowY))) scroller = scroller.parentElement;
+        if (!scroller) return false;
+        scroller.scrollTop += el.getBoundingClientRect().top - window.innerHeight * 0.27;
+        return true;
+      }), 15000, 'your ring in Open to hit');
+      await page.hold({ label: /^I’m free\. Turn on open to hit$|^You’re open to hit.*Turn off$/ });
+    },
+    expect: [{ text: 'Open until' }, { text: /^Save$|^I’m free till / }],
     after: async (page) => { await page.tap({ label: 'Close' }); await page.gone({ text: 'Open until' }); },
   },
 ];

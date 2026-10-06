@@ -339,10 +339,13 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   // the only people there are, so they show in full.
   const [elsewhereOpen, setElsewhereOpen] = useState(false);
   const newTucked = newElsewhere && nearPlayers.length > 0 && !elsewhereOpen;
-  // "Open to hit" (was "Who's up today"): from the map's own pins only, measured from where you
-  // are (the phone's fix, or your own last spot), never from a profile's city.
+  // "Open to hit" (was "Who's up today"): from the map's own pins only (nobody is placed by
+  // their profile's city), measured from the same spot as Near you below: where you are (the
+  // phone's fix, or your own last spot), else your profile's city. With Location off the row
+  // and Near you used to disagree (Oct 5): the row said nobody was up while Near you, a few
+  // rows down, marked five people "open to hit".
   const ownSpot = detectedCoords ?? ownLastSpot;
-  const upToday = useUpToday({ users, lastSeen, me: currentUserId, from: ownSpot, blockedIds });
+  const upToday = useUpToday({ users, lastSeen, me: currentUserId, from: nearFrom, blockedIds });
   // A teen (migration 78) has it too: only friends who follow each other with
   // them are in it, and only those friends see theirs. Under 16s too (migration 119), the same way.
   const teen = onTeenMap(currentUser, teenMap);
@@ -467,7 +470,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
           ) : null}
         </View>
         {currentUser && !search ? (section === 'players'
-          ? <NearbyMap me={currentUser} players={players} at={detectedCoords} locationOn={location.locationOn} locating={location.locating} onToggleLocation={location.toggle} onOpen={id => router.push(`/user/${id}`)} onExpand={() => router.push('/map')} hitCount={openHits.length} />
+          ? <NearbyMap me={currentUser} players={players} at={detectedCoords} locationOn={location.locationOn} locating={location.locating} onToggleLocation={location.toggle} onOpen={id => router.push(`/user/${id}`)} onExpand={() => router.push('/map')} hitCount={openHits.length} inviting={early} />
           // The same footprint, empty: keeps the list from jumping when the map mounts on arrival.
           : <View style={styles.mapStandIn} />) : null}
         {/* Nobody sharing a spot within 30 miles: the way to fill the map,
@@ -481,7 +484,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
           // Never folded away by the phone's renderer: with players around, the tutorial's first tip lights this row.
           <View ref={early || friendsEarly ? undefined : leadRef} collapsable={false}>
             {/* "Turn on Location" only while it is off: with it on and no spot yet, the row waits for one (the switch would have turned it off). */}
-            <UpToday me={currentUser} people={upToday} teen={teen} locationOn={location.locationOn} finding={location.locationOn && !ownSpot} onLocation={ownSpot || location.locationOn ? undefined : location.toggle} onToggle={toggleOpen} />
+            <UpToday me={currentUser} people={upToday} teen={teen} locationOn={location.locationOn} finding={location.locationOn && !ownSpot} onLocation={ownSpot || location.locationOn ? undefined : location.toggle} onTurnOnLocation={location.locationOn ? undefined : () => { void location.toggle(); }} onToggle={toggleOpen} />
           </View>
         ) : null}
         {/* A quiet area leads with where to play (your courts, then the others
@@ -664,7 +667,8 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
         </ScrollView>
         {/* One quiet line under the topics: how many threads, and a single Sort button, the way Reddit does it. */}
         <View style={styles.sortRow}>
-          <Text style={styles.sortCount}>{visible.length === 1 ? '1 thread' : `${visible.length} threads`}</Text>
+          {/* Nothing here: the empty state below says so, not "0 threads" over it. */}
+          <Text style={styles.sortCount}>{visible.length === 0 ? '' : visible.length === 1 ? '1 thread' : `${visible.length} threads`}</Text>
           <View>
             <Pressable accessibilityRole="button" accessibilityLabel={`Sort: ${SORT_LABEL[sort]}`} accessibilityState={{ expanded: sortOpen }} onPress={() => setSortOpen((o) => !o)} hitSlop={8} style={({ pressed }) => [styles.sortButton, pressed && { opacity: 0.7 }]}>
               <Ionicons name="swap-vertical" size={14} color={colors.textMuted} />
@@ -718,14 +722,12 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
               onPress={() => router.push(`/question/${q.id}`)}
             />
           ))}
+          {/* The count sits once, above the list; the end of the list is just its end. */}
           {visible.length > slice.length ? (
             <Pressable accessibilityRole="button" onPress={() => setShownCount((n) => n + 25)} style={styles.more}>
               <Text style={styles.moreText}>Show more threads</Text>
             </Pressable>
           ) : null}
-          <Text style={styles.end}>
-            {visible.length} {visible.length === 1 ? 'thread' : 'threads'}
-          </Text>
         </View>
       )}
       </>);
@@ -835,7 +837,6 @@ const styleDefinitions = StyleSheet.create({
   controls: { gap: spacing.md, paddingBottom: spacing.lg, zIndex: 10, elevation: 10 },
   topicRow: { flexDirection: 'row', gap: spacing.sm, paddingVertical: 8 },
   list: { gap: spacing.md },
-  end: { ...typography.small, color: colors.textFaint, textAlign: 'center', paddingVertical: spacing.xl },
 });
 
 export default asTabRoute<{ previewSection?: string }>(Discuss);
