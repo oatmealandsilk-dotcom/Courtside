@@ -1,9 +1,9 @@
 Screens on this page
 --------------------
-Every image in this folder is an unretouched screenshot of the CourtSide iPhone
-app, captured 22 September 2026 on the owner's own phone, from his own account
-(@mrdinosaur62). Nothing is a mockup, a render or a composite. They were resized
-for the web and re-encoded as JPEG; nothing else was changed.
+Every screen image in this folder is an unretouched screenshot of the CourtSide
+iPhone app, captured 22 September 2026 on the owner's own phone, from his own
+account (@mrdinosaur62). Nothing is a mockup, a render or a composite. They were
+resized for the web and re-encoded as JPEG; nothing else was changed.
 
 post.jpg     the feed, a post of photos from a session
 feed.jpg     the feed, a clip playing full screen
@@ -13,3 +13,15 @@ board.jpg    the community board, threads by topic
 
 A sixth capture (Find Players, with the map) is deliberately not shipped: it
 showed another player's name, handle and city.
+
+On the page (Oct 5) each phone fades out toward its foot, in CSS only: the hero
+before the post's like and comment counts, and the four in "See it in action"
+fully before the tab bar (gone by 78% of the phone's height; the bar starts at
+78.5%), which the app has since replaced. The files are unchanged.
+These captures predate the map-first app and show 0 votes on the threads.
+Owner to-do: new captures from today's app, in this order: the map (Find
+Players, with nobody else's name on it), a busy thread, the feed, a profile.
+
+og.png and email-hero.png are not screenshots: they are the link-preview card
+and the email header, laid out around post.jpg. og.png was redrawn on Oct 5
+with the page's current headline, the post fading out the same way.

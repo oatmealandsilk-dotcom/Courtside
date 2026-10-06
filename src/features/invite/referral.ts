@@ -62,9 +62,11 @@ export const isWaitlistCode = (read: string) => /^r=[0-9a-f]{8}$/.test(read);
  * sign-up, the claim after.
  */
 export async function rememberReferrer(handle: string, court?: InviteCourt | null) {
-  // "?ref=@Om" typed by hand used to be dropped without a word.
+  // "?ref=@Om" typed by hand used to be dropped without a word. A friend's
+  // waitlist code (?ref=r=1a2b3c4d, carried over by the website) is kept as
+  // it is: the claim reads it the way "Invited by?" does.
   const clean = handleFromText(handle);
-  if (!/^[a-z0-9_]{2,24}$/.test(clean)) return;
+  if (!/^[a-z0-9_]{2,24}$/.test(clean) && !isWaitlistCode(clean)) return;
   await put(KEY, clean);
   if (court && isMapCourtId(court.id) && Number.isFinite(court.lat) && Number.isFinite(court.lng)) {
     await put(COURT_KEY, JSON.stringify({ id: court.id, name: court.name.slice(0, 120), lat: court.lat, lng: court.lng }));
