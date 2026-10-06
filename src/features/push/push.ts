@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabase';
 import { reportError } from '@/lib/crashReporting';
 import { goHome } from '@/lib/goBack';
 import { heardAlert } from '@/features/messages/incoming';
+import { isChatInFront } from '@/features/messages/chatInFront';
 import { setUpNotificationChannels } from '@/features/push/channels';
 
 /**
@@ -116,7 +117,15 @@ export function listenForPushTaps(): () => void {
     try { Notifications.clearLastNotificationResponse(); } catch { /* an older build */ }
     // Home ('/') is reached with goHome, never pushed: '/' is also the splash
     // screen's address, and pushing it built a second copy of the app.
-    const go = () => { if (href === '/') goHome(); else router.push(href as never); };
+    // An alert about the chat already in front leaves it where it is, rather
+    // than stacking a second copy of it that Back then lands on. (A browser has
+    // no alerts to tap: push.web.ts.)
+    const chat = href.startsWith('/messages/') ? href.slice('/messages/'.length).split(/[/?#]/)[0] : '';
+    const go = () => {
+      if (href === '/') goHome();
+      else if (chat && isChatInFront(chat)) return;
+      else router.push(href as never);
+    };
     // The tap that opened the app waits a beat while its pages are set up.
     // One meaning Home is left alone at launch: the app opens on its own start
     // page (Community, see startTab), and no alert sent today points at

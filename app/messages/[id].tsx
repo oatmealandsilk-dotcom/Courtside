@@ -6,6 +6,7 @@ import { PlayerName } from '@/components/PlayerName';
 import React, { memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  AppState,
   FlatList,
   Keyboard,
   Modal,
@@ -23,7 +24,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import { useIsFocused } from '@/lib/useIsFocused';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import Svg, { Path } from 'react-native-svg';
@@ -40,7 +41,7 @@ import { goBack } from '@/lib/goBack';
 import { VoiceNote } from '@/components/VoiceNote';
 import { EmojiKeyboard } from '@/components/EmojiKeyboard';
 import { isDesktopBrowser } from '@/lib/browserDevice';
-import { VOICE_LIMIT_MS, clock, useVoiceRecorder } from '@/features/voice/useVoiceRecorder';
+import { VOICE_LIMIT_MS, canRecordVoice, clock, useVoiceRecorder } from '@/features/voice/useVoiceRecorder';
 import { openCourt } from '@/features/players/courtLink';
 import { isOpenToHit } from '@/features/players/openToHit';
 import { COURT_CARD_W, CourtCard } from '@/features/messages/CourtCard';
@@ -59,6 +60,7 @@ import { phoneSaysCopied } from '@/lib/copied';
 import { useModalOpenWhile } from '@/lib/modalOpen';
 import * as Notifications from 'expo-notifications';
 import { clearChatPick, noteChatPick, takeRecoveredPick } from '@/features/messages/pendingPick';
+import { chatCameToFront } from '@/features/messages/chatInFront';
 import { GroupInviteCard } from '@/features/groups/GroupInviteCard';
 import { readGroupInvite } from '@/features/groups/inviteMessage';
 import { Slide, TimeAnchor, TimeSwipeArea } from '@/features/messages/MessageTimes';
@@ -124,6 +126,8 @@ interface Calls {
   jumpTo: (messageId: ID) => void;
   showFolded: (ids: ID[]) => void;
   openPhoto: (message: Message, index: number, rects: (TileRect | undefined)[]) => void;
+  /** A shared clip this phone hasn't loaded: fetched, so its card can show it. */
+  loadPost: (postId: ID) => void;
   // The message box.
   send: (text: string) => void;
   sendVoice: (recording: { uri: string; ms: number }) => void;
@@ -138,7 +142,7 @@ interface Calls {
   escape: () => void;
 }
 const CALL_NAMES: (keyof Calls)[] = [
-  'openMenu', 'startReply', 'react', 'anyEmoji', 'copy', 'retry', 'openReactions', 'jumpTo', 'showFolded', 'openPhoto',
+  'openMenu', 'startReply', 'react', 'anyEmoji', 'copy', 'retry', 'openReactions', 'jumpTo', 'showFolded', 'openPhoto', 'loadPost',
   'send', 'sendVoice', 'recording', 'typed', 'focused', 'toggleEmoji', 'plusToggled', 'camera', 'photos', 'court', 'escape',
 ];
 
@@ -163,6 +167,9 @@ interface RowCtx {
 
 const firstName = (u?: User) => u?.name.trim().split(/\s+/)[0] ?? 'Someone';
 
+/** Shared clips already asked for (see Calls.loadPost). */
+const askedPosts = new Set<string>();
+
 /**
  * One conversation: bubbles, shared-item cards and a message box.
  *
@@ -177,10 +184,17 @@ const firstName = (u?: User) => u?.name.trim().split(/\s+/)[0] ?? 'Someone';
  */
 export default function Thread() {
   const styles = useThemedStyles(styleDefinitions);
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id: routeId } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
   const { width: winW } = useWindowDimensions();
   const { conversations, messages, users, posts, questions, hitRequests, currentUserId, currentUser, detectedCoords, defaultReaction, actions, blockedIds, lastSeen } = useApp();
+  // A new chat opened here that took the server's id with its first message
+  // (the server already had one with them): followed to that id, and the
+  // address changed to match, so a reload or a link opens the same chat.
+  const id = routeId ? actions.resolveChatId(routeId) : routeId;
+  // This screen's own address: the chat may be under another page by then.
+  const navigation = useNavigation();
+  useEffect(() => { if (routeId && id && id !== routeId) navigation.setParams({ id } as never); }, [routeId, id, navigation]);
   // The message box keeps its own words, cursor and recording (Composer, below):
   // a key typed redraws the box alone, never the chat above it.
   const composer = useRef<ComposerHandle>(null);
@@ -266,6 +280,8 @@ export default function Thread() {
     setPicked(recovered ? recovered.slice(0, MAX_CHAT_PHOTOS) : []);
   }, [id]);
 
+  // While this chat is the page in front, a tapped alert about it leaves it be (see chatInFront).
+  useEffect(() => (focused && id ? chatCameToFront(id) : undefined), [focused, id]);
   // Opening a chat fetches it fresh, so it never sits on an old copy waiting for the next refresh.
   useEffect(() => { if (id) void actions.syncConversation(id); }, [id, actions]);
   // Android: this chat's alerts leave the notification shade once it is open and read
@@ -280,15 +296,21 @@ export default function Thread() {
       .catch(() => undefined);
   }, [focused, id]);
 
+  // Read only while you can see it: in a browser, the tab in front; on a
+  // phone, the app in front (not in the background, nor half-hidden behind
+  // the app switcher or Notification Center), and read again on coming back.
   useEffect(() => {
+    const seen = () => (typeof document === 'undefined' ? AppState.currentState === 'active' : document.visibilityState === 'visible');
     const mark = () => {
-      if (focused && conversation && !removed && (typeof document === 'undefined' || document.visibilityState === 'visible')) actions.markConversationRead(conversation.id);
+      if (focused && conversation && !removed && seen()) actions.markConversationRead(conversation.id);
     };
     mark();
     if (typeof document !== 'undefined') {
       document.addEventListener('visibilitychange', mark);
       return () => document.removeEventListener('visibilitychange', mark);
     }
+    const sub = AppState.addEventListener('change', (now) => { if (now === 'active') mark(); });
+    return () => sub.remove();
   }, [focused, conversation?.id, messages, currentUserId, actions, removed]);
 
   // A group you were taken out of shows the messages it had when you were.
@@ -311,6 +333,9 @@ export default function Thread() {
   // seconds after the last word of it if their phone goes quiet.
   const [typing, setTyping] = useState<Record<string, number>>({});
   const typingLink = useRef<{ ping: () => void; stop: () => void; off: () => void } | null>(null);
+  // A new chat is only on the server once its first message lands (startChat),
+  // and its private typing channel refuses anyone not yet in it: joined again then.
+  const onServer = thread.some((m) => m.kind !== 'system' && !m.sending && !m.failed);
   useEffect(() => {
     if (!id || removed) return;
     setTyping({});
@@ -321,7 +346,7 @@ export default function Thread() {
     }));
     typingLink.current = link;
     return () => { if (draftNow.current.trim()) link.stop(); link.off(); typingLink.current = null; };
-  }, [id, actions, removed]);
+  }, [id, actions, removed, onServer]);
   useEffect(() => {
     if (!Object.keys(typing).length) return;
     const t = setInterval(() => setTyping((cur) => {
@@ -537,6 +562,32 @@ export default function Thread() {
     );
   }, [rowCtx, byId, hiddenAt, group, currentUserId, blockedIds, shownIds, menuId, flash, lastRealId, readLine, typingNow, canWrite]);
 
+  // Android's Back closes what is open over the typing bar before it leaves
+  // the chat: the emoji keyboard, the "+" tray, then an edit or a reply (as
+  // Escape does on a computer). With none of them open, the chat closes.
+  // Every hook stays above the "Conversation not found" page below: the chat
+  // can go while this screen is open (you block them, leave the group) or
+  // arrive after it opened (an alert tapped at launch), and React needs the
+  // same hooks on every draw, or the whole app falls over.
+  useAndroidBack(() => {
+    if (emojiOpen) { setEmojiOpen(false); return true; }
+    if (composer.current?.plusIsOpen()) { composer.current.closePlus(); return true; }
+    // The edit called off (endEditing's steps, written out: that is made further down).
+    if (editing) { setEditing(null); composer.current?.setText(draftBeforeEdit.current ?? ''); draftBeforeEdit.current = null; return true; }
+    if (replyTo) { setReplyTo(null); return true; }
+    return false;
+  });
+  // While a message is on the go, keep saying so, even with the keyboard put
+  // away, so the dots hold steady instead of blinking off in a pause. A
+  // message left sitting stops counting a minute after the last key.
+  useEffect(() => {
+    const beat = setInterval(() => {
+      const now = Date.now();
+      if (draftNow.current.trim() && now - lastKey.current < 60_000 && now - lastPing.current > 2500) { lastPing.current = now; typingLink.current?.ping(); }
+    }, 1000);
+    return () => clearInterval(beat);
+  }, []);
+
   // A group opens even with nobody else left in it (or nobody else loaded yet).
   if (!conversation || (!group && !other)) {
     return (
@@ -659,16 +710,6 @@ export default function Thread() {
     composer.current?.setText(draftBeforeEdit.current ?? '');
     draftBeforeEdit.current = null;
   };
-  // Android's Back closes what is open over the typing bar before it leaves
-  // the chat: the emoji keyboard, the "+" tray, then an edit or a reply (as
-  // Escape does on a computer). With none of them open, the chat closes.
-  useAndroidBack(() => {
-    if (emojiOpen) { setEmojiOpen(false); return true; }
-    if (composer.current?.plusIsOpen()) { composer.current.closePlus(); return true; }
-    if (editing) { endEditing(); return true; }
-    if (replyTo) { setReplyTo(null); return true; }
-    return false;
-  });
 
   const send = (text: string) => {
     if (draftNow.current.trim()) { draftNow.current = ''; lastPing.current = 0; typingLink.current?.stop(); }
@@ -748,16 +789,6 @@ export default function Thread() {
     lastKey.current = now;
     if (now - lastPing.current > 2000) { lastPing.current = now; typingLink.current?.ping(); }
   };
-  // While a message is on the go, keep saying so, even with the keyboard put
-  // away, so the dots hold steady instead of blinking off in a pause. A
-  // message left sitting stops counting a minute after the last key.
-  useEffect(() => {
-    const beat = setInterval(() => {
-      const now = Date.now();
-      if (draftNow.current.trim() && now - lastKey.current < 60_000 && now - lastPing.current > 2500) { lastPing.current = now; typingLink.current?.ping(); }
-    }, 1000);
-    return () => clearInterval(beat);
-  }, []);
   // Tapping into the words brings the phone keyboard back in the emoji keyboard's place.
   const boxFocused = (on: boolean) => {
     setTypingFocus(on);
@@ -774,6 +805,8 @@ export default function Thread() {
     jumpTo: (messageId) => { void jumpTo(messageId); },
     showFolded: (ids) => setShownIds((s) => [...s, ...ids]),
     openPhoto: (m, index, rects) => { Keyboard.dismiss(); setViewing({ message: m, index, rects }); },
+    // Asked once each while the app is open: one gone for good is not asked about on every draw.
+    loadPost: (postId) => { if (askedPosts.has(postId)) return; askedPosts.add(postId); void actions.loadPost(postId); },
     send,
     sendVoice: sendVoiceNote,
     recording: setRecording,
@@ -982,7 +1015,7 @@ export default function Thread() {
           onUnsend={() => { const messageId = menuMessage.id; confirmAfterMenu({ title: 'Unsend message?', message: "It's removed for everyone in the chat.", confirmLabel: 'Unsend', destructive: true, onConfirm: () => actions.unsendMessage(messageId) }); }}
           // Someone else's message: reported as the chat, naming them and pointing at this one message,
           // so an admin can read it in place and act on it (App Review 1.2, Oct 5).
-          onReport={conversation ? () => { const m = menuMessage; const chatId = conversation.id; confirmReport('message', () => { actions.reportChat(chatId, 'message', m.senderId, m.id); showToast({ title: 'Thanks — a person will review this', icon: 'flag-outline' }); }, true); } : undefined}
+          onReport={conversation ? () => { const m = menuMessage; const chatId = conversation.id; confirmReport('message', () => { void actions.reportChat(chatId, 'message', m.senderId, m.id).then((filed) => showToast(filed ? { title: 'Thanks — a person will review this', icon: 'flag-outline' } : { title: 'Your report didn’t send', body: 'Check your connection and try again.', icon: 'alert-circle-outline' })); }, true); } : undefined}
           onDelete={() => { const messageId = menuMessage.id; confirmAfterMenu({ title: 'Delete message?', message: menuPending ? 'It hasn’t been sent, so it’s simply removed.' : menu.mine ? "It's removed for you. Others in the chat still see it." : "It's removed for you only.", confirmLabel: 'Delete', destructive: true, onConfirm: () => actions.deleteMessageForMe(messageId) }); }}
           // The Send-to sheet, once the menu has gone: pick chats (groups too) and it goes to each as it is.
           onForward={() => { const messageId = menuMessage.id; afterMenu(() => router.push({ pathname: '/share', params: { kind: 'message', id: messageId } })); }}
@@ -1198,7 +1231,8 @@ const Composer = memo(function Composer({ ref, styles, pickedCount, editingBody,
   const words = draft.trim();
   // The photo and court buttons step aside while there are words (or photos) to send, as Instagram's do, and the box takes the room.
   const tools = !words && !editing && !pickedCount;
-  const showSend = !!words || !!pickedCount || editing;
+  // A browser that can't record a voice note every phone can play offers no mic: the Send arrow stays, dim until there is something to send.
+  const showSend = !!words || !!pickedCount || editing || !canRecordVoice;
   const sendReady = (!!pickedCount && !editing) || (!!words && (!editing || words !== editingBody));
   const micTip = useTip('hold-to-record', !showSend && !voice.recording && !editing);
   const cameraOn = photosOn === 'on';
@@ -1646,7 +1680,7 @@ const MessageRow = memo(function MessageRow({ item, ctx, original, originalBlock
         <HoldArea hover={hover} onHold={(rect) => openMenu({ message, mine, rect })} style={styles.sharedCardArea}>
           {(hold) => (
             <>
-              <SharedCard message={message} posts={ctx.posts} questions={ctx.questions} users={ctx.users} sentAt={sentAt} onLongPress={hold} styles={styles} />
+              <SharedCard message={message} posts={ctx.posts} questions={ctx.questions} users={ctx.users} sentAt={sentAt} onLongPress={hold} onMissingPost={ctx.call.loadPost} styles={styles} />
               {failedMark}
             </>
           )}
@@ -1745,14 +1779,21 @@ function Reactions({ message, me, mine, styles, onOpen, inline = false }: { mess
 }
 
 /** A shared clip, discussion or profile: a small card that opens it (a clip with its picture). */
-function SharedCard({ message, posts, questions, users, sentAt, onLongPress, styles }: {
-  message: Message; posts: Post[]; questions: Question[]; users: User[]; sentAt: string; onLongPress: () => void; styles: any;
+function SharedCard({ message, posts, questions, users, sentAt, onLongPress, onMissingPost, styles }: {
+  message: Message; posts: Post[]; questions: Question[]; users: User[]; sentAt: string; onLongPress: () => void;
+  onMissingPost: (postId: ID) => void; styles: any;
 }) {
   const post = message.kind === 'post' ? posts.find((p) => p.id === message.sharedId) : undefined;
   const person = message.kind === 'profile' ? users.find((u) => u.id === message.sharedId) : undefined;
   const question = message.kind === 'question' ? questions.find((q) => q.id === message.sharedId) : undefined;
   const there = post ?? person ?? question;
-  const label = !there ? 'This item was removed' : person ? person.name : question ? question.title : (post?.body || 'A clip');
+  // A clip or thread this phone hasn't loaded (an older one, say) is very likely
+  // still there: its page fetches it, so the card opens it, and a clip is
+  // fetched here too so its card can show it. Only a profile that isn't here is gone.
+  const opens = !!there || ((message.kind === 'post' || message.kind === 'question') && !!message.sharedId);
+  useEffect(() => { if (message.kind === 'post' && !post && message.sharedId) onMissingPost(message.sharedId); }, [message.kind, message.sharedId, post, onMissingPost]);
+  const label = person ? person.name : question ? question.title : post ? (post.body || 'A clip')
+    : message.kind === 'post' ? 'A clip' : message.kind === 'question' ? 'A discussion' : 'This item was removed';
   const kindWord = message.kind === 'profile' ? 'Profile' : message.kind === 'post' ? 'Clip' : 'Discussion';
   const thumb = post ? clipPicture(post) : undefined;
   return (
@@ -1761,7 +1802,7 @@ function SharedCard({ message, posts, questions, users, sentAt, onLongPress, sty
       accessibilityLabel={`${kindWord}: ${label}, sent ${sentAt}`}
       scaleTo={0.97}
       onLongPress={onLongPress}
-      onPress={() => (there ? router.push(message.kind === 'profile' ? `/user/${message.sharedId}` : message.kind === 'post' ? `/post/${message.sharedId}` : `/question/${message.sharedId}`) : undefined)}
+      onPress={() => (opens ? router.push(message.kind === 'profile' ? `/user/${message.sharedId}` : message.kind === 'post' ? `/post/${message.sharedId}` : `/question/${message.sharedId}`) : undefined)}
       style={[styles.sharedCard, post && styles.sharedCardClip]}
     >
       {post ? (
@@ -2279,7 +2320,8 @@ function MessageMenu({ target, me, styles, canReply, canReact, pending, canDelet
             {target.copy}
           </Reanimated.View>
         ) : message.kind === 'text' ? (
-          <Reanimated.View pointerEvents="none" style={[styles.bubble, mine ? styles.mine : styles.theirs, styles.lifted, { position: 'absolute', left: rect.x, top: rect.y - shift, width: rect.w, alignSelf: 'auto' }, liftLook]}>
+          // A long message is drawn smaller the same way, so it never runs under the actions or off the screen.
+          <Reanimated.View pointerEvents="none" style={[styles.bubble, mine ? styles.mine : styles.theirs, styles.lifted, { position: 'absolute', left: rect.x, top: rect.y - shift, width: rect.w, alignSelf: 'auto' }, scale < 1 ? { transformOrigin: mine ? 'right top' : 'left top', transform: [{ scale }] } : liftLook]}>
             <RichText style={[styles.bubbleText, mine && { color: colors.brandInk }]}>{message.body}</RichText>
           </Reanimated.View>
         ) : null}

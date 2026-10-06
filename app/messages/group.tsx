@@ -155,6 +155,9 @@ export default function ChatDetails() {
     const other = users.find((u) => u.id === conversation.participantIds.find((p) => p !== currentUserId));
     const blocked = !!other && blockedIds.includes(other.id);
     const groupLocked = !!other && !actions.canAddToGroup(other.id);
+    // Nothing sent yet: the chat is only on this phone, so there is nothing
+    // on the server to mute, and a report is about them, not the chat.
+    const draft = actions.isDraftChat(conversation.id);
     return (
       <Screen title="Details" compactTitle onBack={back}>
         {other ? (
@@ -164,7 +167,7 @@ export default function ChatDetails() {
             <Text style={styles.meta}>@{other.handle}</Text>
           </Pressable>
         ) : null}
-        {muteCard}
+        {draft ? null : muteCard}
         {other ? (
           <>
             <View style={[styles.group, styles.gap]}>
@@ -197,10 +200,14 @@ export default function ChatDetails() {
                 accessibilityRole="button"
                 onPress={() => confirm({
                   title: `Report ${first(other)}?`,
-                  message: `A person at CourtSide will look at this chat. ${first(other)} isn’t told it was you.`,
+                  message: draft ? `A person at CourtSide will look at ${first(other)}’s profile. ${first(other)} isn’t told it was you.` : `A person at CourtSide will look at this chat. ${first(other)} isn’t told it was you.`,
                   confirmLabel: 'Report',
                   // Reported as the chat, naming them, so the admin can read it and act on it (Oct 5).
-                  onConfirm: () => { actions.reportChat(conversation.id, 'one-to-one chat', other.id); showToast({ title: 'Thanks — a person will review this', icon: 'flag-outline' }); },
+                  // The thanks only once it is filed; otherwise a note to try again.
+                  // A chat with nothing in it yet isn't on the server: their profile is reported, as from their page.
+                  onConfirm: () => {
+                    if (draft) { actions.reportUser(other.id, 'profile'); showToast({ title: 'Thanks — a person will review this', icon: 'flag-outline' }); return; }
+                    void actions.reportChat(conversation.id, 'one-to-one chat', other.id).then((filed) => showToast(filed ? { title: 'Thanks — a person will review this', icon: 'flag-outline' } : { title: 'Your report didn’t send', body: 'Check your connection and try again.', icon: 'alert-circle-outline' })); },
                 })}
                 style={({ pressed }) => [styles.row, pressed && styles.pressed]}
               >
@@ -331,7 +338,7 @@ export default function ChatDetails() {
     title: 'Report this group?',
     message: 'A person at CourtSide will look at it. Nobody in the group is told.',
     confirmLabel: 'Report',
-    onConfirm: () => { actions.reportChat(conversation.id, 'group chat'); showToast({ title: 'Thanks — a person will review this', icon: 'flag-outline' }); },
+    onConfirm: () => { void actions.reportChat(conversation.id, 'group chat').then((filed) => showToast(filed ? { title: 'Thanks — a person will review this', icon: 'flag-outline' } : { title: 'Your report didn’t send', body: 'Check your connection and try again.', icon: 'alert-circle-outline' })); },
   });
   const removePhoto = () => confirm({
     title: 'Remove the group photo?',

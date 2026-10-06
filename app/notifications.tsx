@@ -205,7 +205,7 @@ function detectedWho(preview: string | undefined, sport: string | undefined): st
 
 export default function Notifications() {
   const styles = useThemedStyles(styleDefinitions);
-  const { notifications, users, posts, stories, comments, hitRequests, conversations, questions, currentUserId, followRequests, followingIds, followedCourts, sessionTags, detectedActivities, actions } = useApp();
+  const { notifications, users, posts, stories, comments, hitRequests, conversations, questions, currentUserId, followRequests, followingIds, followedCourts, sessionTags, detectedActivities, actions, blockedIds } = useApp();
   // "New hit at Alder Park" opens the map on that court: where it is comes from the courts you follow.
   const courtRows = notifications.some((n) => n.kind === 'court-activity');
   useEffect(() => { if (courtRows && followedCourts === null) void actions.loadFollowedCourts(); }, [courtRows, followedCourts, actions]);
@@ -276,9 +276,10 @@ export default function Notifications() {
     return `${act} your ${thing}`;
   };
 
+  // Nothing from someone you blocked: their likes, follows and comments go with them.
   const mine = useMemo(
-    () => notifications.filter((n) => n.userId === currentUserId),
-    [notifications, currentUserId],
+    () => notifications.filter((n) => n.userId === currentUserId && !blockedIds.includes(n.actorId)),
+    [notifications, currentUserId, blockedIds],
   );
 
   // Snapshot on first render so rows do not lose their tint as we mark them read.
