@@ -32,8 +32,8 @@ import { colors, spacing, font } from '@/theme';
  * page shows what it has.
  */
 const CURTAIN_MAX_MS = 10_000;
-/** The lift: long enough to read as the page arriving, short enough not to keep anyone waiting. */
-const LIFT_MS = 560;
+/** The lift: long enough to read as the page arriving, short enough not to keep anyone waiting (560 ms until Oct 6, when the owner found opening too slow). */
+const LIFT_MS = 320;
 const LIFT_EASE = Easing.bezier(0.33, 0, 0.15, 1);
 
 export function WarmCurtain() {

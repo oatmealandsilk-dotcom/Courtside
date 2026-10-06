@@ -1,9 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Platform, StyleSheet, Text, View, useWindowDimensions, type TextLayoutEvent } from 'react-native';
+import { Animated, Easing, Platform, StyleSheet, Text, View, useWindowDimensions, type TextLayoutEvent } from 'react-native';
 import Svg, { G, Rect } from 'react-native-svg';
 
 import { font } from '@/theme';
-import { LAUNCH_FADE_MS, launchShowing, whenLaunchHidden } from '@/lib/launchSplash';
+import { LAUNCH_FADE_MS, launchHiddenAt, launchShowing, whenLaunchHidden } from '@/lib/launchSplash';
 
 /*
  * The launch picture's logo, name and line, drawn (not a picture) at exactly
@@ -143,12 +143,26 @@ const MARK = { left: 330.5, top: 323.5, width: 270, height: 377, side: 50.9, bar
 /** How far below the middle of the screen the frame's foot sits, in points (the name is placed from it; the sideline reaches about 5.7 further). */
 const MARK_BELOW = ((MARK.top + MARK.height) - ICON_PX / 2) * (ICON_PT / ICON_PX);
 
+/** The name and line fade in this long after the launch screen starts to go, over WORDS_MS. */
+const WORDS_DELAY_MS = Math.round(LAUNCH_FADE_MS * 0.6);
+const WORDS_MS = 420;
+/** How far the words' fade-in has got, by the clock: a copy drawn partway through (the curtain, taking over from the loading screen) carries on from there. */
+function wordsShown(): number {
+  if (launchShowing()) return 0;
+  const at = launchHiddenAt();
+  return at ? Math.min(1, Math.max(0, (Date.now() - at - WORDS_DELAY_MS) / WORDS_MS)) : 1;
+}
+
 function AndroidLaunchMark({ ink, faint, line = 'Growing the game' }: { ink: string; faint: string; line?: string }) {
   // The name and line wait for the launch screen to go (they are not on it);
-  // drawn later on (the curtain, a sign-in), they are simply there.
-  const words = useRef(new Animated.Value(launchShowing() ? 0 : 1)).current;
+  // drawn later on (a sign-in), they are simply there. The curtain the loading screen hands over to
+  // (at once, since Oct 6) picks the fade up where the loading screen's copy had got to, so nothing jumps.
+  const words = useRef(new Animated.Value(wordsShown())).current;
   useEffect(() => whenLaunchHidden(() => {
-    Animated.timing(words, { toValue: 1, duration: 420, delay: Math.round(LAUNCH_FADE_MS * 0.6), useNativeDriver: true }).start();
+    const from = wordsShown();
+    if (from >= 1) { words.setValue(1); return; }
+    const wait = Math.max(0, launchHiddenAt() + WORDS_DELAY_MS - Date.now());
+    Animated.timing(words, { toValue: 1, duration: Math.round((1 - from) * WORDS_MS), delay: wait, easing: Easing.linear, useNativeDriver: true }).start();
   }), [words]);
   const half = ICON_PX / 2;
   return (

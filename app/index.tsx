@@ -3,7 +3,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Platform, StyleSheet, Text, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Redirect, useNavigation } from 'expo-router';
-import { isSupabaseConfigured } from '@/lib/supabase';
+import { isSupabaseConfigured, storedLoginNow } from '@/lib/supabase';
 import { START_HREF, goToStart } from '@/features/navigation/startTab';
 import { raiseCurtain } from '@/features/feed/warmup';
 import { preloadNearbyMap } from '@/components/NearbyMap';
@@ -50,7 +50,10 @@ export default function Index() {
   // full size, so the mark carries straight on rather than vanishing and
   // springing back in (that blink read as a flash). The browser has no
   // launch picture, so there it still rises in.
-  const rise = useRef(new Animated.Value(Platform.OS === 'web' ? 0 : 1)).current;
+  // A browser that already keeps a login is on its way straight in: the mark is simply there, as on
+  // the curtain it hands over to (rising in, then cut to the curtain's still copy, would jump).
+  const [quickIn] = useState(() => Platform.OS !== 'web' || storedLoginNow());
+  const rise = useRef(new Animated.Value(quickIn ? 1 : 0)).current;
   // On a phone the iPhone's launch picture (always cream: it shows before any
   // code runs and cannot know the theme) hands over to this screen, which is in
   // your own theme. A copy of the launch picture sits on top and fades away, so
@@ -78,12 +81,12 @@ export default function Index() {
     Animated.timing(cover, { toValue: 0, duration: 700, delay: 350, easing: Easing.inOut(Easing.cubic), useNativeDriver: true }).start(() => setLaunchCover(false));
   };
   // A real launch: once this screen is laid out and two frames have drawn it (the text settles on its
-  // measured baseline in the first), a short beat on the cream, then the dissolve.
+  // measured baseline in the first), the dissolve, at once (Oct 6, owner: the loading screen was too long).
   const laidOut = useRef(false);
   const onThemedLayout = () => {
     if (laidOut.current) return;
     laidOut.current = true;
-    requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(startCoverFade, 250)));
+    requestAnimationFrame(() => requestAnimationFrame(startCoverFade));
   };
   useEffect(() => {
     if (!launchCover) return;
@@ -142,9 +145,14 @@ export default function Index() {
   useEffect(() => { if (currentUserId) preloadNearbyMap(); }, [currentUserId]);
 
   useEffect(() => {
-    // On a phone the loading screen stays until the cream has finished fading,
-    // so the fade is never cut short by the app opening over it.
-    if (!settled || !held || gone || launchUpdate.holding || launchCover) return;
+    // Signed in and set up: straight into the app the moment the account is known (last time's saved
+    // copy is enough), with no beat on the logo. The curtain it opens behind is this same mark, so the
+    // phone's own picture can carry on dissolving over it (Oct 6, owner: "on the loading screen too long").
+    // Anyone else: a beat on the mark. And the drawn cream copy (coming here later, from a sign-in) is
+    // never cut short: on a phone the loading screen stays until the cream has finished fading.
+    const intoApp = !!currentUserId && onboardingComplete;
+    const waiting = (intoApp ? !held && !quickIn : !held) || (launchCover && !(intoApp && fromLaunch));
+    if (!settled || waiting || gone || launchUpdate.holding) return;
     // Into the app: no fade here. The page it opens on is built behind the
     // shell's curtain — the same mark and name — and that curtain does the
     // one fade, once the page has drawn (see warmup). Fading here too showed
@@ -154,7 +162,7 @@ export default function Index() {
     Animated.timing(opacity, { toValue: 0, duration: FADE_MS, useNativeDriver: true }).start(({ finished }) => {
       if (finished) setGone(true);
     });
-  }, [settled, held, gone, opacity, currentUserId, onboardingComplete, overTabs, launchUpdate.holding, launchCover]);
+  }, [settled, held, gone, opacity, currentUserId, onboardingComplete, overTabs, launchUpdate.holding, launchCover, quickIn, fromLaunch]);
 
   // On its way back to the app underneath: a plain page for the moment it takes, no logo.
   // Nothing to draw over (back into a running app, or already on the way in): let the phone's picture go.

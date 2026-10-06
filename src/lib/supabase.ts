@@ -18,14 +18,15 @@ if ((!url || !key) && !__DEV__) {
   console.error('[supabase] EXPO_PUBLIC_SUPABASE_URL / _KEY are not set — running in demo mode.');
 }
 
+/** Where the login is kept on the device. Named after the project, not the address, so moving to auth.courtsidebase.com signs nobody out. */
+const AUTH_STORAGE_KEY = 'sb-cgitvbnvchmofqkhtlml-auth-token';
+
 export const supabase: SupabaseClient | null =
   url && key
     ? createClient(url, key, {
         auth: {
           storage: Platform.OS === 'web' ? undefined : AsyncStorage,
-          // Where the login is kept on the device. Named after the project, not
-          // the address, so moving to auth.courtsidebase.com signs nobody out.
-          storageKey: 'sb-cgitvbnvchmofqkhtlml-auth-token',
+          storageKey: AUTH_STORAGE_KEY,
           autoRefreshToken: true,
           persistSession: true,
           detectSessionInUrl: Platform.OS === 'web',
@@ -34,6 +35,28 @@ export const supabase: SupabaseClient | null =
     : null;
 
 export const isSupabaseConfigured = supabase !== null;
+
+/**
+ * The account whose login this device keeps, read straight from where it is kept, without the
+ * check against the server that getSession makes (after an hour away, a trip to renew it). Only
+ * ever a hint for opening on last time's saved copy; the check still decides (see AppContext).
+ */
+export async function storedLoginId(): Promise<string | null> {
+  if (!supabase) return null;
+  try {
+    const raw = Platform.OS === 'web' ? window.localStorage.getItem(AUTH_STORAGE_KEY) : await AsyncStorage.getItem(AUTH_STORAGE_KEY);
+    const kept = raw ? (JSON.parse(raw) as { user?: { id?: unknown }; refresh_token?: unknown }) : null;
+    return kept && typeof kept.user?.id === 'string' && typeof kept.refresh_token === 'string' ? kept.user.id : null;
+  } catch { return null; }
+}
+
+/** In a browser: whether a login (or the demo's ?as= one) is already kept, known before anything loads. */
+export function storedLoginNow(): boolean {
+  if (Platform.OS !== 'web') return false;
+  try {
+    return supabase ? !!window.localStorage.getItem(AUTH_STORAGE_KEY) : !!(new URLSearchParams(window.location.search).get('as') || window.sessionStorage.getItem('courtside-demo-as'));
+  } catch { return false; }
+}
 
 let throwaways = 0;
 /**

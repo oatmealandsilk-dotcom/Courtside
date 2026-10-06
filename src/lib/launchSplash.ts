@@ -9,17 +9,23 @@ import * as SplashScreen from 'expo-splash-screen';
  * and the calls below quietly do nothing there.
  */
 let done = false;
+/** When the phone's picture started to go (0 until it has). */
+let hiddenAt = 0;
 /** Told once, the moment the phone's own launch picture starts to go. */
 const onHidden = new Set<() => void>();
 
-/** The longest the phone's picture (or the app's copy of it) is ever waited on. */
-export const LAUNCH_MAX_MS = 2500;
-/** How long the phone's own picture takes to dissolve into the app (iPhone; it is set below). */
-export const LAUNCH_FADE_MS = 700;
+/** The longest the phone's picture (or the app's copy of it) is ever waited on (2.5 s until Oct 6). */
+export const LAUNCH_MAX_MS = 2000;
+/**
+ * How long the phone's own picture takes to dissolve into the app (iPhone; it is set below). 700 ms
+ * until Oct 6, when the owner found the loading screen too long: a quick dissolve reads as instant.
+ */
+export const LAUNCH_FADE_MS = 300;
 
 export function hideLaunch() {
   if (done) return;
   done = true;
+  hiddenAt = Date.now();
   SplashScreen.hideAsync().catch(() => undefined);
   for (const told of [...onHidden]) told();
   onHidden.clear();
@@ -30,6 +36,11 @@ export function whenLaunchHidden(then: () => void): () => void {
   if (done || Platform.OS === 'web') { then(); return () => undefined; }
   onHidden.add(then);
   return () => { onHidden.delete(then); };
+}
+
+/** When the phone's picture started to go, or 0 while it is still up (or on a browser, which has none). */
+export function launchHiddenAt() {
+  return hiddenAt;
 }
 
 /** Whether the phone's picture is still up, as on a real launch (on a phone; a browser has none). */

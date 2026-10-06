@@ -183,9 +183,11 @@ module.exports = {
     // detected" alerts would carry on (the module drops switches the app has not
     // confirmed for 30 days, as a backstop only).
     runtimeVersion: { policy: 'appVersion' },
-    // The phone waits up to 3 s while opening for a newer version and opens straight into it,
-    // so testers don't need to close and reopen twice (from build 11, Oct 2).
-    updates: { url: 'https://u.expo.dev/ce2e922d-6122-47f6-97b7-58a7fad4b3ef', checkAutomatically: 'ON_LOAD', fallbackToCacheTimeout: 3000 },
+    // The phone opens at once on the version it already has; a newer one downloads in the
+    // background and is used from the next open (Oct 6, owner: the loading screen was too long).
+    // Builds 11 to this one waited up to 3 s for it on every open; that wait only goes with a new
+    // store build, since this setting is built into the app, not sent with an update.
+    updates: { url: 'https://u.expo.dev/ce2e922d-6122-47f6-97b7-58a7fad4b3ef', checkAutomatically: 'ON_LOAD', fallbackToCacheTimeout: 0 },
     // The app's home on Expo's build service (the robertzchen account), for builds and push alerts.
     extra: { eas: { projectId: process.env.EAS_PROJECT_ID ?? 'ce2e922d-6122-47f6-97b7-58a7fad4b3ef' } },
   },

@@ -48,8 +48,8 @@ export function setStartDrawn(value: boolean) {
 let mapHolds = 0;
 /** The map's grace is up: the curtain lifts whether or not it has drawn. */
 let mapWaitOver = false;
-/** The longest the curtain waits on the map, once the page under it has drawn. */
-export const MAP_WAIT_MS = 1500;
+/** The longest the curtain waits on the map, once the page under it has drawn (1.5 s until Oct 6: opening felt slow). */
+export const MAP_WAIT_MS = 1000;
 export function setMapWaitOver() {
   if (mapWaitOver) return;
   mapWaitOver = true;

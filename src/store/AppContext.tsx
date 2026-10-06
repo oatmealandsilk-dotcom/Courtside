@@ -24,7 +24,7 @@ import * as demoApi from '@/data/api';
 import { BLOCKED_WORDS_NOTE, CHAT_PHOTO_UNREADABLE, REVIEW_NOTE_MAX, auth as remoteAuth, fetchRemote, isLocalMedia, onWordsRefused, queueFeedSignal, remote, uploadChatPhoto, uploadMedia, emptyProfile, type GroupRefusal, type AdminReport, type ModerationResult, type ReviewAskResult, type ReportedChat, type ReportedItem, type ReportedItemKind, type ReportEvidence, type FeedSignal, type SiteFeedback, type WaitlistEntry, type BetaInviteStatus, type FirstDayStats, type FirstMove, type HandleStatus, type InviteCodeResult, type MyInviter, type RemoteData, type UserState } from '@/data/remote';
 import { clearSnapshot, markSnapshotOpened, markSnapshotOpening, readSnapshot, saveSnapshot, snapshotFailedBefore } from '@/data/snapshot';
 import { forgetAccount, listSavedAccounts, rememberAccount, type SavedAccount } from '@/features/accounts/savedAccounts';
-import { isSupabaseConfigured, supabase } from '@/lib/supabase';
+import { isSupabaseConfigured, storedLoginId, supabase } from '@/lib/supabase';
 import { markMessagesOpened } from '@/features/messaging/readReceipts';
 import { GROUP_CAP, MAX_PINNED_CHATS, chatLockNote, eventText, findDirectChat, groupName, isDirectChat, isGroupAdmin, isGroupChat, named } from '@/features/messages/groupRules';
 import { heardMessage, heardUnsent } from '@/features/messages/incoming';
@@ -2674,8 +2674,32 @@ export function AppProvider({ children }: { children: ReactNode }) {
       .then((list) => list[0]?.id)
       .then((id) => (id ? Promise.all([snapshotFailedBefore(id), readSnapshot(id)]).then(([failed, copy]) => ({ id, failed, copy })) : null))
       .catch(() => null);
+    // Instagram-style (Oct 6, owner: "on the loading screen too long"): when the login kept on this
+    // device is the account the newest saved copy belongs to, the copy goes up at once, without
+    // waiting for the login check, which after an hour away is a trip to the server to renew it.
+    // The check still decides: no login after all, and the app signs out as it always would.
+    // Not on the way back from a sign-in page (a ?code= or #access_token= on the address).
+    let checked = false;
+    let shownEarly: ID | null = null;
+    const signingIn = Platform.OS === 'web' && /[?&#](code|access_token)=/.test(`${window.location.search}${window.location.hash}`);
+    if (!signingIn) {
+      void Promise.all([earlyCopy, storedLoginId()]).then(([early, kept]) => {
+        if (cancelled || checked || !early || early.failed || !early.copy || early.id !== kept) return;
+        shownEarly = early.id;
+        showSnapshot(early.id, early.copy);
+        void markSnapshotOpening(early.id);
+        setTimeout(() => { void markSnapshotOpened(early.id); }, 8000);
+      });
+    }
     supabase.auth.getSession().then(({ data }) => {
       if (cancelled) return;
+      checked = true;
+      // Opened on the copy, and the login turned out not to be that account's after all: signed out, as before.
+      if (shownEarly && data.session?.user.id !== shownEarly) {
+        snapshotIds.current = null;
+        setState((prev) => ({ ...signedOut(prev), snapshotShown: false }));
+        shownEarly = null;
+      }
       if (data.session) {
         // Known to be signed in: let the app open now and merge the feed in
         // when it lands, instead of holding the splash for the whole fetch.
@@ -2683,6 +2707,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setState((prev) => ({ ...prev, currentUserId: prev.currentUserId ?? me, authResolved: true, termsVersion: termsOf(data.session.user) }));
         // Last time's copy goes up straight after the logo, the fresh load lands on top of it.
         void (async () => {
+          // Already up, before the check (above).
+          if (shownEarly === me) return;
           const early = await earlyCopy;
           // Whether the last open on it got through, and the copy itself: read together.
           const [failed, snapshot] = early?.id === me ? [early.failed, early.copy] : await Promise.all([snapshotFailedBefore(me), readSnapshot(me)]);
