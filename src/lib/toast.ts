@@ -12,14 +12,15 @@ export interface ToastMessage {
    * A mark drawn in a brand-coloured disc instead of the plain icon:
    * 'session' (the zone bars, "Tennis detected"), 'logged' (a tick that
    * draws itself, "Logged"), 'flyby' (two people, "3 others were at Alder
-   * Park today"), or 'record' (a trophy in a gold disc, "New record!").
+   * Park today"), or 'record' (a record's rosette in a gold disc, "New record!").
    */
   glyph?: 'session' | 'logged' | 'flyby' | 'record';
   /**
    * A number on the right, under a thin rule: "10 day streak". It rolls up
-   * from the one before as the toast lands.
+   * from `from` as the toast lands, only when it grew (without `from`, from
+   * the one before); otherwise it holds still.
    */
-  stat?: { value: number; label: string };
+  stat?: { value: number; label: string; from?: number };
   /**
    * A small text button on the right, such as "Undo". Tapping it runs
    * `onPress` and closes the toast. A toast with one stays up longer, so

@@ -224,7 +224,8 @@ export function SessionCard({ session, width, play = false, people, hidden = [],
   const body = (
     <View collapsable={false} style={[styles.card, { width, aspectRatio: aspect, borderRadius: round, padding: pad, paddingTop: inset ? inset.top : pad, paddingBottom: inset ? inset.bottom : pad, backgroundColor: look.fill, borderColor: look.border, borderWidth: look.dark && round > 0 ? 1 : 0 }]}>
       <CardWash look={look} radius={round} edge={round > 0} />
-      <CourtLines color={look.lines} />
+      {/* The faint court is tennis's: a run or the gym has none. */}
+      {session.kind === 'fitness' || session.workout ? null : <CourtLines color={look.lines} />}
       <View style={styles.top}>
         <Reanimated.Text key={shownTop} entering={picture ? undefined : FadeIn.duration(160)} style={{ ...font('600'), fontSize: small(11.5, 9), letterSpacing: Math.max(0.8, 1.1 * k), color: look.eyebrow, flex: 1 }} numberOfLines={1} maxFontSizeMultiplier={1.2}>
           {shownTop}

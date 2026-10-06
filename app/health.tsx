@@ -19,7 +19,7 @@ import { WORKOUTS_ASK } from '@/features/activity/workouts';
 import { isTracker, useTrackerStatus } from '@/features/activity/trackers';
 import { confirm } from '@/lib/confirm';
 import { withCatalog } from '@/lib/integrations';
-import { relativeTime, hoursAndMinutes } from '@/lib/format';
+import { agoInWords, hoursAndMinutes } from '@/lib/format';
 import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
 import { useAiCoachOn } from '@/features/aiCoach/switch';
@@ -44,6 +44,12 @@ const ABOUT: Partial<Record<Integration['provider'], { icon: keyof typeof Ionico
   cronometer: { icon: 'nutrition-outline', line: 'Calories, protein, carbs, fat.', how: appleHealthAvailable() ? 'Through Apple Health: in Cronometer, turn on sharing with Health.' : 'Reads the export file Cronometer gives you (Settings → Data → Export).' },
   myfitnesspal: { icon: 'restaurant-outline', line: 'Calories, protein, carbs, fat.', how: appleHealthAvailable() ? 'Through Apple Health: in MyFitnessPal, Settings → Sharing & Privacy → Apple Health.' : 'Reads MyFitnessPal\'s export file (Premium → Export data).' },
 };
+
+/** "5 hours ago", "just now", "Sep 21": when a source last synced, for "Synced 5 hours ago." */
+function syncedWhen(iso: string): string {
+  const words = agoInWords(iso);
+  return words === 'Just now' ? 'just now' : words;
+}
 
 /** The name a row shows, where it differs from the source's own label. */
 const NAME: Partial<Record<Integration['provider'], string>> = { 'apple-health': 'Apple Watch' };
@@ -142,7 +148,13 @@ export default function Health() {
       else if (what === 'workouts') await actions.turnOnTennis('apple-health', { workouts: true });
       else if (provider === 'apple-health' || provider === 'whoop' || isTracker(provider)) await (what === 'tennis' ? actions.turnOnTennis(provider, { workouts: workouts(provider) }) : actions.turnOffTennis(provider));
     } catch (err) {
-      showToast({ title: 'Could not connect', body: err instanceof Error ? err.message : 'Try again in a moment.', icon: 'alert-circle-outline' });
+      // What failed, in its own words: a failed Sync never says "Could not connect".
+      const was = integrations.find((i) => i.provider === provider)?.connected;
+      const title = what === 'sync' ? 'Couldn’t sync'
+        : what === 'tennis-off' ? 'Couldn’t turn that off'
+        : what === 'tennis' || what === 'workouts' ? 'Couldn’t turn that on'
+        : was ? 'Couldn’t disconnect' : 'Couldn’t connect';
+      showToast({ title, body: err instanceof Error ? err.message : 'Try again in a moment.', icon: 'alert-circle-outline' });
     } finally {
       setBusy(null);
       setStep(null);
@@ -182,8 +194,9 @@ export default function Health() {
     })
     : run(provider, 'toggle'));
 
+  // Four to a row leaves a narrow phone about 75 points a tile: a longer number steps down a size (a browser cannot shrink it to fit), so "6h 6m" and "Recovery" are never cut.
   const stat = (label: string, value: string | null) => (
-    <View style={styles.stat}><Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>{value ?? '—'}</Text><Text style={styles.statLabel} numberOfLines={1}>{label}</Text></View>
+    <View style={styles.stat}><Text style={[styles.statValue, (value ?? '').length > 5 && styles.statValueLong]} numberOfLines={1} adjustsFontSizeToFit>{value ?? '—'}</Text><Text style={styles.statLabel} numberOfLines={1}>{label}</Text></View>
   );
 
   const row = (i: Integration, index: number) => {
@@ -217,7 +230,7 @@ export default function Health() {
           <Text style={styles.line}>{about.line}</Text>
           <Text style={styles.how}>
             {wrongPhone && i.connected && Platform.OS === 'android' ? 'Connected on your iPhone. It syncs from there.'
-              : i.connected && i.lastSyncedAt ? `Synced ${relativeTime(i.lastSyncedAt)}.` : blocked ? (wrongPhone ? 'iPhone only.' : inExpoGo() ? 'Available in the App Store version of CourtSide.' : 'Coming in the next app update.') : about.how}
+              : i.connected && i.lastSyncedAt ? `Synced ${syncedWhen(i.lastSyncedAt)}.` : blocked ? (wrongPhone ? 'iPhone only.' : inExpoGo() ? 'Available in the App Store version of CourtSide.' : 'Coming in the next app update.') : about.how}
           </Text>
           {i.connected ? (
             <View style={styles.actions}>
@@ -243,13 +256,18 @@ export default function Health() {
                     <Ionicons name="checkmark" size={14} color={colors.brandInk} />
                   </Reanimated.View>
                   <View style={styles.tennisWords}>
-                    <Text style={styles.tennisTitle}>{allOn(i) ? 'Workouts on' : 'Tennis sessions on'}</Text>
+                    {/* Short enough to stay on one line beside Turn off on the narrowest phones. */}
+                    <Text style={styles.tennisTitle} numberOfLines={1}>{allOn(i) ? 'Workouts on' : 'Tennis on'}</Text>
                     {i.provider === 'apple-health' && alertsOn && (allOn(i) || flags.apple) ? (
                       <Text style={styles.line}>{allOn(i) ? 'You’ll get a notification after each workout.' : 'You’ll get a notification after each tennis session.'}</Text>
                     ) : null}
                     {/* The last 30 days of them, with Log it on any not logged (Oct 5). */}
                     {allOn(i) ? (
-                      <Text accessibilityRole="link" onPress={() => router.push('/workouts')} style={styles.pastLink}>See past workouts</Text>
+                      // A real button with room round it (44 tall to a finger), not a line of words.
+                      <Pressable accessibilityRole="link" accessibilityLabel="See past workouts" hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }} onPress={() => router.push('/workouts')} style={({ pressed }) => [styles.pastLinkBox, pressed && styles.pressedDim]}>
+                        <Text style={styles.pastLink}>See past workouts</Text>
+                        <Ionicons name="chevron-forward" size={13} color={colors.textMuted} />
+                      </Pressable>
                     ) : null}
                   </View>
                   <Pressable accessibilityRole="button" accessibilityLabel={`Turn off ${what(i)} from ${i.label}`} disabled={loading} onPress={() => { haptics.untap(); run(i.provider, 'tennis-off'); }} hitSlop={8} style={({ pressed }) => [styles.smallGhost, pressed && styles.pressedDim]}>
@@ -362,8 +380,9 @@ const styleDefinitions = StyleSheet.create({
   todayTitle: { ...typography.heading, color: colors.text },
   todayDate: { ...typography.small, color: colors.textFaint },
   stats: { flexDirection: 'row', gap: spacing.sm },
-  stat: { flex: 1, gap: 2, padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
-  statValue: { ...typography.heading, color: colors.text, fontVariant: ['tabular-nums'] },
+  stat: { flex: 1, minWidth: 0, gap: 2, paddingVertical: spacing.md, paddingHorizontal: 10, borderRadius: radius.md, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
+  statValue: { ...typography.heading, lineHeight: 22, color: colors.text, fontVariant: ['tabular-nums'] },
+  statValueLong: { fontSize: 15, letterSpacing: -0.3 },
   statLabel: { ...typography.caption, color: colors.textMuted, letterSpacing: 0.2 },
   list: { borderRadius: radius.xl, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, paddingHorizontal: spacing.lg },
   row: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md, paddingVertical: spacing.lg },
@@ -387,7 +406,9 @@ const styleDefinitions = StyleSheet.create({
   tennisTick: { width: 24, height: 24, borderRadius: 12, marginLeft: 4, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
   tennisWords: { flex: 1, gap: 1 },
   tennisTitle: { ...typography.smallStrong, color: colors.text },
-  pastLink: { ...typography.smallStrong, color: colors.brand, alignSelf: 'flex-start' },
+  // In ink, not the brand: brand words on this card's raised ground fell under 4.5:1 on some courts (clay, Melbourne).
+  pastLinkBox: { flexDirection: 'row', alignItems: 'center', gap: 2, alignSelf: 'flex-start', paddingVertical: 2 },
+  pastLink: { ...typography.smallStrong, color: colors.text },
   // The offer of every workout, under "Tennis sessions on": its question, then the same filled pill.
   offer: { gap: spacing.sm, marginTop: spacing.sm, alignItems: 'flex-start' },
   offerText: { ...typography.small, color: colors.textMuted },

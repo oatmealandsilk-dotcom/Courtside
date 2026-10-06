@@ -103,9 +103,9 @@ export default function ShareSession() {
   const [score, setScore] = useState(saved);
   const scoreTyped = useRef(false);
   useEffect(() => { if (!scoreTyped.current && saved) setScore(saved); }, [saved]);
-  // A workout (a run, the gym: migration 107) has no score: no Score box, and nothing typed goes on its picture.
-  // Tennis, and anything logged by hand, keep the box as before.
-  const workout = !!story?.session.workout;
+  // A workout (a run, the gym: migration 107) or Fitness logged by hand has no score: no Score box, and
+  // nothing typed goes on its picture. Tennis keeps the box as before.
+  const workout = !!story?.session.workout || story?.session.kind === 'fitness';
   // "6-4 6-3" reads as a score with proper dashes and single spaces.
   const shownScore = !workout && score.trim() ? score.trim().replace(/\s*[-–]\s*/g, '–').replace(/\s+/g, ' ') : undefined;
   const photo = picked ?? story?.photo;

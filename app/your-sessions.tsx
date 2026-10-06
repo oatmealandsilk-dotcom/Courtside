@@ -171,16 +171,6 @@ export default function YourSessions() {
 
   return (
     <Screen title="Your sessions" subtitle="Only you see this." compactTitle onBack={() => goBack('/profile')} right={logButton}>
-      {pastOn ? (
-        <Pressable accessibilityRole="button" accessibilityLabel={`Past workouts: the last 30 days from ${pastFrom}`} onPress={() => router.push('/workouts')} style={({ pressed }) => [styles.group, styles.pastRow, pressed && styles.pressed]}>
-          <View style={styles.pastIcon}><Ionicons name="fitness-outline" size={18} color={colors.court} /></View>
-          <View style={styles.words}>
-            <Text style={styles.title}>Past workouts</Text>
-            <Text style={styles.when}>The last 30 days, from {pastFrom}</Text>
-          </View>
-          <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
-        </Pressable>
-      ) : null}
       {offerOn && currentUserId ? <WorkoutsOffer me={currentUserId} /> : null}
       {recap && recapAway === false && showWeekCard(recap) ? (
         <YourWeekBanner recap={recap} onOpen={() => router.push({ pathname: '/weekly-recap', params: { week: recap.week } })} onClose={putRecapAway} />
@@ -212,8 +202,21 @@ export default function YourSessions() {
         </>
       ) : null}
 
+      {/* Older workouts, after what is waiting on you: browsing never outranks the things to do. */}
+      {pastOn ? (
+        <Pressable accessibilityRole="button" accessibilityLabel={`Past workouts: the last 30 days from ${pastFrom}`} onPress={() => router.push('/workouts')} style={({ pressed }) => [styles.group, styles.pastRow, pressed && styles.pressed]}>
+          <View style={styles.pastIcon}><Ionicons name="fitness-outline" size={18} color={colors.court} /></View>
+          <View style={styles.words}>
+            <Text style={styles.title}>Past workouts</Text>
+            <Text style={styles.when} numberOfLines={1}>Last 30 days · {pastFrom}</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
+        </Pressable>
+      ) : null}
+
       {tennisCount >= 3 ? (
-        <PersonalRecords records={records} sessions={sessions} sessionTags={sessionTags} users={users} currentStreak={streakNow} />
+        // The page already says only you see it: no lock note of its own here.
+        <PersonalRecords records={records} sessions={sessions} sessionTags={sessionTags} users={users} currentStreak={streakNow} privateNote={false} />
       ) : null}
 
       {groups.slice(0, weeks).map(({ start, list }) => {
@@ -247,21 +250,30 @@ export default function YourSessions() {
                 const flyby = courtId && flybyDays.includes(s.day) && s.kind !== 'fitness'
                   ? <FlybyPill courtId={courtId} courtName={courtName} day={s.day} />
                   : null;
+                const share = () => router.push({ pathname: '/share-session', params: postId ? { post: postId, session: s.id } : { session: s.id } });
+                // Where it came from, on the day's line: the tracker's name ("WHOOP"), or who shared it with you. Logged
+                // by hand is the usual, so it says nothing. A tag copy whose title already names them says it once.
+                const source = s.fromSessionId ? (people ? '' : fromFirst ? `with ${fromFirst}` : 'Shared with you')
+                  : pick.type === 'tracker' ? pickSource(pick) : s.activityId ? 'Tracker' : '';
                 return (
                   <Logged
                     key={s.id}
                     session={s}
                     people={people}
+                    // A match or a practice opens who you played (a tag's copy, its tag); drills and fitness open their picture to share.
                     onOpen={from ? () => router.push({ pathname: '/session-tag', params: { tag: from.id } })
                       : canTagKind(s.kind) && !s.fromSessionId ? () => router.push({ pathname: '/log-session', params: { edit: s.id } })
-                      : undefined}
+                      : share}
+                    openWord={from ? 'Open the tag' : canTagKind(s.kind) && !s.fromSessionId ? 'Who you played' : 'Share'}
                     // Built from the tag, the title already says who it was with: no note line repeating it.
                     hideNote={!!(from && fromFirst)}
-                    source={s.fromSessionId ? (fromFirst ? `with ${fromFirst}` : 'Shared with you') : pickSource(pick)}
+                    source={source}
+                    // A run from the Watch keeps its distance once logged: "Run · 3.1 mi", as it said while waiting.
+                    far={activity && !isTennisActivity(activity) ? formatDistance(activity.distanceM) : null}
                     postId={postId}
                     postable={checked && !postId && s.day >= firstPostable}
                     onPost={() => router.push({ pathname: '/compose', params: pick.type === 'tracker' ? { activity: pick.activity.id } : { session: s.id } })}
-                    onShare={() => router.push({ pathname: '/share-session', params: postId ? { post: postId, session: s.id } : { session: s.id } })}
+                    onShare={share}
                     onRemove={() => confirm({ title: 'Remove this session?', message: 'It comes off your streak and totals.', confirmLabel: 'Remove', destructive: true, onConfirm: () => actions.deleteSession(s.id) })}
                     line={i > 0}
                     record={recordIds.has(s.id)}
@@ -349,9 +361,9 @@ function WorkoutsOffer({ me }: { me: string }) {
 }
 
 /**
- * The tracker or the log a session came from ("WHOOP", "Apple Watch", "By
- * hand", "Mira’s tag"), as a small quiet tag beside how long it was: worth
- * knowing, never worth reading first.
+ * The tracker a session waiting to be logged came from ("WHOOP", "Apple
+ * Watch"), as a small quiet tag beside how long it was: worth knowing, never
+ * worth reading first. (A logged session says it on its day's line.)
  */
 function SourceTag({ label }: { label: string }) {
   const styles = useThemedStyles(styleDefinitions);
@@ -434,10 +446,10 @@ function TaggedYou({ tag, tagger, line }: { tag: SessionTag; tagger: User; line:
       </Pressable>
       {/* Accept and Decline under the words, the way a follow request asks in Notifications. */}
       <View style={styles.answers}>
-        <Pressable accessibilityRole="button" accessibilityLabel={`Accept ${first}’s tag`} accessibilityState={{ busy: busy === 'accept' }} disabled={!!busy} hitSlop={4} onPress={() => { void answer(true); }} style={({ pressed }) => [styles.answer, styles.actionOn, pressed && styles.pressed]}>
+        <Pressable accessibilityRole="button" accessibilityLabel={`Accept ${first}’s tag`} accessibilityState={{ busy: busy === 'accept' }} disabled={!!busy} hitSlop={5} onPress={() => { void answer(true); }} style={({ pressed }) => [styles.answer, styles.actionOn, pressed && styles.pressed]}>
           {busy === 'accept' ? <ActivityIndicator size="small" color={colors.brandInk} /> : <Text style={[styles.actionText, styles.actionTextOn]}>Accept</Text>}
         </Pressable>
-        <Pressable accessibilityRole="button" accessibilityLabel={`Decline ${first}’s tag`} accessibilityState={{ busy: busy === 'decline' }} disabled={!!busy} hitSlop={4} onPress={() => { void answer(false); }} style={({ pressed }) => [styles.answer, pressed && styles.pressed]}>
+        <Pressable accessibilityRole="button" accessibilityLabel={`Decline ${first}’s tag`} accessibilityState={{ busy: busy === 'decline' }} disabled={!!busy} hitSlop={5} onPress={() => { void answer(false); }} style={({ pressed }) => [styles.answer, pressed && styles.pressed]}>
           {busy === 'decline' ? <ActivityIndicator size="small" color={colors.textMuted} /> : <Text style={styles.actionText}>Decline</Text>}
         </Pressable>
       </View>
@@ -448,16 +460,27 @@ function TaggedYou({ tag, tagger, line }: { tag: SessionTag; tagger: User; line:
 /**
  * One session you logged, with Post it, or Posted (which opens the post), and
  * a share button beside it (the session as a picture for Instagram). A tap on
- * the rest opens who you played (or, for a copy from a tag, that tag).
+ * the rest opens who you played (or, for a copy from a tag, that tag; for
+ * drills and fitness, its picture to share).
+ *
+ * The big line holds only how long and, when it holds one, the gold Record:
+ * where it came from ("WHOOP", "with Mira") reads on the day's line, so
+ * nothing on the big line is ever squeezed to fit beside the buttons.
  */
-function Logged({ session: s, people, onOpen, hideNote = false, source, postId, postable, onPost, onShare, onRemove, line, record = false, flyby = null }: {
+function Logged({ session: s, people, onOpen, openWord, hideNote = false, source, far = null, postId, postable, onPost, onShare, onRemove, line, record = false, flyby = null }: {
   session: PracticeSession;
   /** "vs Mira" (accepted), "vs June · Waiting", "with Dev", a name you typed. */
   people: PeopleLine | null;
-  onOpen?: () => void;
+  onOpen: () => void;
+  /** What a tap on the row does, for a screen reader: "Who you played", "Open the tag", "Share". */
+  openWord: string;
   /** The note says nothing the title doesn't (a copy from a tag). */
   hideNote?: boolean;
-  source: string; postId?: string; postable: boolean; onPost: () => void; onShare: () => void;
+  /** "WHOOP", "Apple Watch", "with Mira"; empty for a session logged by hand. */
+  source: string;
+  /** A workout's distance from its tracker ("3.1 mi"). */
+  far?: string | null;
+  postId?: string; postable: boolean; onPost: () => void; onShare: () => void;
   /** A hold on the row: remove it from your log (after a yes). Offered to a screen reader as an action of its own. */
   onRemove: () => void;
   line: boolean;
@@ -467,18 +490,21 @@ function Logged({ session: s, people, onOpen, hideNote = false, source, postId, 
   flyby?: React.ReactNode;
 }) {
   const styles = useThemedStyles(styleDefinitions);
-  const title = `${loggedLabel(s)}${people ? ` ${peopleText(people)}` : ''}`;
+  const label = far ? `${loggedLabel(s)} · ${far}` : loggedLabel(s);
+  const title = `${label}${people ? ` ${peopleText(people)}` : ''}`;
   const shownNote = s.note && !hideNote ? s.note : '';
   const place = shownNote.startsWith('At ') ? shownNote.slice(3) : '';
   const note = place ? '' : shownNote;
-  // Short enough to share the day's line without wrapping on a phone.
-  const shortPlace = place.length <= 18;
+  // The day, and where it came from: "Sat Oct 3 · WHOOP".
+  const day = source ? `${dayWords(s.day)} · ${source}` : dayWords(s.day);
+  // Where, on the same line when it all fits on a phone ("Yesterday · Alder Park"), else on a line of its own.
+  const placeOnDay = !!place && `${day} · ${place}`.length <= 30;
   return (
     <View style={[styles.row, line && styles.line]}>
       {/* The row itself, beside its button rather than around it: a button inside a button is not allowed in a browser. */}
       <Pressable
-        accessibilityRole={onOpen ? 'button' : undefined}
-        accessibilityLabel={onOpen ? `${title}, ${duration(s.minutes)}, ${dayWords(s.day)}. ${s.fromSessionId ? 'Open the tag' : 'Who you played'}` : `${title}, ${duration(s.minutes)}, ${dayWords(s.day)}`}
+        accessibilityRole="button"
+        accessibilityLabel={`${title}, ${duration(s.minutes)}, ${dayWords(s.day)}${source ? `, ${source}` : ''}${record ? ', personal record' : ''}. ${openWord}`}
         accessibilityActions={[{ name: 'longpress', label: 'Remove' }]}
         onAccessibilityAction={(e) => { if (e.nativeEvent.actionName === 'longpress') onRemove(); }}
         onPress={onOpen}
@@ -492,20 +518,17 @@ function Logged({ session: s, people, onOpen, hideNote = false, source, postId, 
             : <CourtGlyph size={15} color={colors.textMuted} />}
         </View>
         <View style={styles.words}>
-          {/* How long, big: the number you scan a week of sessions for. Where it came from, small beside it. */}
+          {/* How long, big: the number you scan a week of sessions for. A record wears its gold pill beside it. */}
           <View style={[styles.heroLine, styles.heroLineShare]}>
             <Text style={styles.hero}>{duration(s.minutes)}</Text>
             {record ? <RecordPill /> : null}
-            {/* "By hand" gives way to a record: the line has room for one small tag beside the number. */}
-            {record && source === 'By hand' ? null : <SourceTag label={source} />}
           </View>
-          <LoggedTitle label={loggedLabel(s)} people={people} style={styles.title} faint={styles.waiting} numberOfLines={2} />
-          {/* The day, and where, for a session logged from a hit ("At Alder Park"): "Yesterday · Alder Park" when that fits on the line, the place on its own line when it is long. */}
+          <LoggedTitle label={label} people={people} style={styles.title} faint={styles.waiting} numberOfLines={2} />
           <Text style={styles.when}>
-            {dayWords(s.day)}
-            {place && shortPlace ? <>{' · '}<Ionicons name="location-outline" size={13} color={colors.textFaint} />{` ${place}`}</> : null}
+            {day}
+            {placeOnDay ? <>{' · '}<Ionicons name="location-outline" size={13} color={colors.textFaint} />{` ${place}`}</> : null}
           </Text>
-          {place && !shortPlace ? (
+          {place && !placeOnDay ? (
             <View style={styles.placeRow}>
               <Ionicons name="location-outline" size={13} color={colors.textFaint} />
               <Text style={styles.note} numberOfLines={2}>{place}</Text>
@@ -517,21 +540,24 @@ function Logged({ session: s, people, onOpen, hideNote = false, source, postId, 
       </Pressable>
       {/* Its own button under the words, outside the row's: a button inside a button is not allowed in a browser. */}
       {flyby ? <View style={styles.flybyRow}>{flyby}</View> : null}
-      {/* Beside the big number, outside the row's own button: a button inside a button is not allowed in a browser. */}
+      {/* Beside the big number, outside the row's own button. Post it / Posted keep a slot of the same width on every
+          row, so the share buttons stand in one line down the list, even on a row too old to post. */}
       <View style={[styles.actionSpot, styles.actionRow]}>
         <Pressable accessibilityRole="button" accessibilityLabel={`Share to Instagram: ${title}`} hitSlop={6} onPress={onShare} style={({ pressed }) => [styles.share, pressed && styles.pressed]}>
           <Ionicons name="share-outline" size={18} color={colors.textMuted} />
         </Pressable>
-        {postId ? (
-          <Pressable accessibilityRole="link" accessibilityLabel={`Posted. Open the post: ${title}`} hitSlop={8} onPress={() => router.push(`/post/${postId}`)} style={({ pressed }) => [styles.posted, pressed && styles.pressed]}>
-            <Ionicons name="checkmark" size={14} color={colors.textMuted} />
-            <Text style={styles.postedText}>Posted</Text>
-          </Pressable>
-        ) : postable ? (
-          <Pressable accessibilityRole="button" accessibilityLabel={`Post it: ${title}`} hitSlop={8} onPress={onPost} style={({ pressed }) => [styles.action, pressed && styles.pressed]}>
-            <Text style={styles.actionText}>Post it</Text>
-          </Pressable>
-        ) : null}
+        <View style={styles.postSlot}>
+          {postId ? (
+            <Pressable accessibilityRole="link" accessibilityLabel={`Posted. Open the post: ${title}`} hitSlop={{ top: 8, bottom: 8, left: 2, right: 8 }} onPress={() => router.push(`/post/${postId}`)} style={({ pressed }) => [styles.posted, pressed && styles.pressed]}>
+              <Ionicons name="checkmark" size={14} color={colors.textMuted} />
+              <Text style={styles.postedText}>Posted</Text>
+            </Pressable>
+          ) : postable ? (
+            <Pressable accessibilityRole="button" accessibilityLabel={`Post it: ${title}`} hitSlop={{ top: 8, bottom: 8, left: 2, right: 8 }} onPress={onPost} style={({ pressed }) => [styles.action, pressed && styles.pressed]}>
+              <Text style={styles.actionText}>Post it</Text>
+            </Pressable>
+          ) : null}
+        </View>
       </View>
     </View>
   );
@@ -574,7 +600,9 @@ const styleDefinitions = StyleSheet.create({
   // A logged session's share button sits before Post it / Posted; its big line keeps clear of both.
   actionRow: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   heroLineShare: { paddingRight: 112 },
-  share: { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
+  share: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  // As wide as Post it, its button at the right edge: the share buttons line up whatever is beside them.
+  postSlot: { width: 76, alignItems: 'flex-end' },
   // Post it: a small outlined pill, quieter than Log it (the one thing waiting on you).
   action: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderStrong },
   actionOn: { backgroundColor: colors.brand, borderColor: colors.brand },
@@ -585,8 +613,8 @@ const styleDefinitions = StyleSheet.create({
   log: { flexDirection: 'row', alignItems: 'center', gap: 2, paddingLeft: 10, paddingRight: 14, paddingVertical: 7, borderRadius: radius.pill, backgroundColor: colors.surface, ...lift },
   logText: { ...typography.smallStrong, color: colors.text },
   more: { alignSelf: 'center', marginTop: spacing.lg, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
-  // Past workouts: one row of its own, the list's card look, above everything else.
-  pastRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: 14, marginTop: spacing.sm },
+  // Past workouts: one row of its own, the list's card look, under what is waiting to be logged.
+  pastRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: 14, marginTop: spacing.md },
   pastIcon: { width: 22, alignItems: 'center', justifyContent: 'center' },
   // The offer of every workout: the same card, its words, then Not now and Turn on at the right.
   offer: { paddingVertical: 14, marginTop: spacing.sm, gap: spacing.md },

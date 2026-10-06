@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { CourtSpinner } from '@/components/CourtSpinner';
@@ -73,7 +73,7 @@ export default function WeeklyRecap() {
     return (
       <Screen title={title} subtitle={weekRange(week)} compactTitle onBack={() => goBack('/your-sessions')} bar={false}>
         {!ready ? <View style={styles.wait}><CourtSpinner size={28} /></View> : (
-          <EmptyState icon="stats-chart-outline" title="Nothing logged that week" body="Log your sessions and every Monday brings your week on court." />
+          <EmptyState icon="stats-chart-outline" title="Nothing logged that week" body="Log your sessions and every Monday brings your week on court." action={{ label: 'Log a session', onPress: () => router.push('/log-session') }} />
         )}
       </Screen>
     );
@@ -85,12 +85,12 @@ export default function WeeklyRecap() {
     return (
       <Screen title={title} subtitle={weekRange(week)} compactTitle onBack={() => goBack('/your-sessions')} bar={false}>
         <View style={styles.body}>
+          {/* The page's own title already says which week: the card is the mark, the words and one way back on court. */}
           <View style={styles.rest}>
-            <Text style={styles.restLabel}>{label}</Text>
             <View style={styles.restDisc}><HitGlyph size={26} color={colors.brand} /></View>
             <Text accessibilityRole="header" style={styles.restTitle}>A quiet week</Text>
             <Text style={styles.restLine}>{`You played ${duration(recap.prevMinutes)} the week before.`}</Text>
-            <Button label="Find a hit" onPress={findHit} style={styles.restButton} />
+            <View style={styles.restButton}><Button label="Find a hit" onPress={findHit} full /></View>
           </View>
         </View>
       </Screen>
@@ -102,8 +102,7 @@ export default function WeeklyRecap() {
     <View style={styles.root}>
       <View pointerEvents="none" aria-hidden accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={[styles.stage, size]}>
         <View ref={stage} collapsable={false} style={size}>
-          {/* The same label as the card on the screen: an older week never goes out as "LAST WEEK". */}
-          <RecapStoryArt recap={recap} width={size.width} label={label} />
+          <RecapStoryArt recap={recap} sessions={sessions} width={size.width} />
         </View>
       </View>
       <View style={styles.page}>
@@ -145,8 +144,7 @@ const styleDefinitions = StyleSheet.create({
   body: { gap: spacing.md, paddingTop: spacing.xs, paddingBottom: spacing.xxl },
   // A rest week's card.
   rest: { ...lift, borderRadius: 24, backgroundColor: colors.surface, padding: spacing.xl, alignItems: 'center', gap: spacing.sm },
-  restLabel: { ...typography.caption, fontSize: 12, letterSpacing: 1.4, color: colors.brand, alignSelf: 'flex-start' },
-  restDisc: { width: 56, height: 56, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.brandDim, marginTop: spacing.md },
+  restDisc: { width: 56, height: 56, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.brandDim },
   restTitle: { ...font('600'), fontSize: 22, letterSpacing: -0.5, color: colors.text, marginTop: spacing.xs },
   restLine: { ...typography.body, color: colors.textMuted, textAlign: 'center' },
   restButton: { marginTop: spacing.md, alignSelf: 'stretch' },

@@ -67,7 +67,8 @@ export default function PastWorkouts() {
   const healthHere = appleHealthAvailable();
   return (
     <Screen title="Past workouts" subtitle="Only you see this." compactTitle onBack={() => goBack('/your-sessions')} onRefresh={load}>
-      {!healthHere ? (
+      {/* Over a list only: with nothing to list, the empty state says it once. */}
+      {!healthHere && list?.length ? (
         <Text style={styles.note}>{Platform.OS === 'ios' ? 'Apple Health workouts show here in the App Store version of CourtSide.' : 'Apple Health workouts show here on your iPhone. These are the ones already picked up.'}</Text>
       ) : null}
       {list === null && !failed ? (
@@ -78,7 +79,7 @@ export default function PastWorkouts() {
         <EmptyState
           icon="fitness-outline"
           title={`No workouts in the last ${PAST_DAYS} days`}
-          body={healthHere ? 'Start a workout on your Apple Watch or iPhone. It shows up here, and in Notifications, ready to log.' : 'Workouts your Apple Watch or iPhone records show up here once CourtSide has picked them up.'}
+          body={healthHere ? 'Start a workout on your Apple Watch or iPhone. It shows up here, and in Notifications, ready to log.' : 'Workouts from your Apple Watch or iPhone show here once CourtSide has them.'}
         />
       ) : (
         <View style={styles.group}>

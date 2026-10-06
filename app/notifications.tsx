@@ -18,7 +18,8 @@ import { shortDay } from '@/features/activity/format';
 import { tagState, yourResult } from '@/features/activity/sessionTags';
 import { useApp } from '@/store/AppContext';
 import { confirmUnfollow } from '@/lib/confirm';
-import type { Notification, NotificationKind, PostKind } from '@/data/types';
+import type { DetectedActivity, Notification, NotificationKind, PostKind } from '@/data/types';
+import { isTennisActivity, workoutName } from '@/features/activity/workouts';
 import { colors, radius, spacing, surfaceColorFor, typography } from '@/theme';
 import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { HitGlyph } from '@/components/HitGlyph';
@@ -189,15 +190,15 @@ const SECTIONS = ['New', 'Today', 'This week', 'This month', 'Earlier'];
 /**
  * The server writes a session's length the long way ("1 hr 24 min · from
  * your WHOOP", migration 58, also the lock-screen alert's words); the row
- * says it the way the rest of the app does now ("1h 24m · from your WHOOP").
+ * says it the way the rest of the app does now ("1h 24m · from your WHOOP",
+ * "32 min" under an hour, as Your sessions and Past workouts say it).
  * Since migration 107 the length can come after a workout's name or a day
  * ("Run · 32 min · …", "Tue · 1 hr 24 min · …"), so it is found anywhere.
  */
 function shortLength(preview: string): string {
   return preview
     .replace(/\b(\d+) hr (\d+) min\b/, '$1h $2m')
-    .replace(/\b(\d+) hr\b/, '$1h')
-    .replace(/\b(\d+) min\b/, '$1m');
+    .replace(/\b(\d+) hr\b/, '$1h');
 }
 
 /**
@@ -211,6 +212,21 @@ function detectedWho(preview: string | undefined, sport: string | undefined): st
   const first = (preview ?? '').split(' · ')[0]?.trim() ?? '';
   if (!first || /^\d/.test(first) || /^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)$/.test(first)) return 'Tennis detected.';
   return 'Activity detected.';
+}
+
+/**
+ * A tracker's session the app holds, by how it stands now: logged ("Run
+ * logged." and "Tap to post it."), hidden, or gone from the tracker, which
+ * open nothing (there is nothing left to log). Undefined while it is still
+ * waiting, or not held here: the row reads as the alert did.
+ */
+function activityNow(a: DetectedActivity | undefined): { who: string; verb: string; opens: boolean } | undefined {
+  if (!a) return undefined;
+  const name = isTennisActivity(a) ? 'Tennis' : workoutName(a.sport);
+  if (a.status === 'logged') return { who: `${name} logged.`, verb: 'Tap to post it.', opens: true };
+  if (a.status === 'dismissed') return { who: `${name} detected.`, verb: 'You hid it.', opens: false };
+  if (a.status === 'withdrawn') return { who: `${name} detected.`, verb: 'No longer on your tracker.', opens: false };
+  return undefined;
 }
 
 export default function Notifications() {
@@ -281,8 +297,11 @@ export default function Notifications() {
     // From CourtSide: "removed your clip for breaking its rules"; the reason goes on the line under it.
     if (group.kind === 'removed') return `removed your ${removedNotice(group.preview).thing} for breaking its rules`;
     if (group.kind === 'session-tag') return `tagged you in a ${group.preview === 'match' ? 'match' : 'practice'}`;
-    // A workout you have since logged: no longer "Tap to log it" (the tap opens the post for it).
-    if (group.kind === 'activity' && detectedActivities.find((a) => a.id === group.targetId)?.status === 'logged') return 'Logged. Tap to post it.';
+    // A workout you have since logged (the tap opens the post for it), hidden or gone: no longer "Tap to log it".
+    if (group.kind === 'activity') {
+      const now = activityNow(detectedActivities.find((a) => a.id === group.targetId));
+      if (now) return now.verb;
+    }
     // "Your week on court 6h 15m, 4 sessions — up 2h. Best streak yet.": the server's line, as the phone alert said it.
     if (group.kind === 'weekly-recap') return group.preview ?? 'is ready';
     // Someone who joined through a link you shared (migration 68).
@@ -404,7 +423,7 @@ export default function Notifications() {
         // friends card is; never the invite sheet's poster), the invite sheet
         // where nobody near an adult is on the map yet, else Find Players.
         <View style={[styles.row, welcomeTint && styles.rowUnread, groups.length ? styles.welcomeGap : null]}>
-          <View style={styles.brandFace}><BrandMark size={24} /></View>
+          <View style={[styles.brandFace, welcomeTint && styles.brandFaceOnTint]}><BrandMark size={24} /></View>
           <View style={styles.body}>
             <Text style={styles.who}>Welcome, {currentUser.name.split(' ')[0]}.</Text>
             <Text style={styles.preview} numberOfLines={2}>{welcomeStep.line}</Text>
@@ -427,6 +446,8 @@ export default function Notifications() {
           {groups.map((group, index) => {
             const icon = ICON[group.kind] ?? { name: 'notifications', tint: 'brand' };
             const [first, ...rest] = group.actorIds;
+            // A tracker's session this row is about, when the app holds it.
+            const activity = group.kind === 'activity' ? detectedActivities.find((a) => a.id === group.targetId) : undefined;
             const who =
               group.kind === 'milestone'
                 ? (posts.find((p) => p.id === group.targetId)?.kind === 'clip' ? 'Your clip' : 'Your post')
@@ -434,13 +455,15 @@ export default function Notifications() {
                 ? (group.preview?.startsWith('Instant') || group.preview?.startsWith('Hit')) ? 'Your instant' : group.targetKind === 'question' ? 'Your question' : 'Your post'
                 : group.kind === 'coach-application' || group.kind === 'refund' || group.kind === 'removed' ? 'CourtSide'
                 : group.kind === 'weekly-recap' ? 'Your week on court'
-                : group.kind === 'activity' ? detectedWho(group.preview, detectedActivities.find((a) => a.id === group.targetId)?.sport)
+                : group.kind === 'activity' ? (activityNow(activity)?.who ?? detectedWho(group.preview, activity?.sport))
                 : rest.length === 0
                 ? nameOf(first)
                 : rest.length === 1
                   ? `${nameOf(first)} and ${nameOf(rest[0])}`
                   : `${nameOf(first)}, ${nameOf(rest[0])} and ${rest.length - 1} ${rest.length - 1 === 1 ? 'other' : 'others'}`;
             const heading = index === 0 || groups[index - 1].section !== group.section ? group.section : null;
+            // A hidden session (or one gone from the tracker) has nothing to open: the row stays, as a record of the alert.
+            const dead = group.kind === 'activity' && activityNow(activity)?.opens === false;
             const thumb = thumbFor(group);
             const hitChat = hitChatFor(group);
             const tag = tagFor(group);
@@ -449,8 +472,9 @@ export default function Notifications() {
               <React.Fragment key={group.key}>
               {heading ? <Text style={[styles.heading, index > 0 && { marginTop: spacing.lg }]}>{heading}</Text> : null}
               <Pressable
-                accessibilityRole="link"
+                accessibilityRole={dead ? 'text' : 'link'}
                 accessibilityLabel={`${who} ${verbFor(group)}`}
+                disabled={dead}
                 onPress={() => {
                   const reply = replyAt(group);
                   if (reply) { router.push({ pathname: '/comments', params: reply }); return; }
@@ -469,7 +493,8 @@ export default function Notifications() {
                     <View style={[styles.brandFace, styles.recapFace]}><Ionicons name="stats-chart" size={20} color={colors.brandInk} /></View>
                   ) : group.kind === 'coach-application' || group.kind === 'refund' || group.kind === 'activity' || group.kind === 'removed' ? (
                     // From CourtSide itself: the mark, not a person's face.
-                    <View style={styles.brandFace}><BrandMark size={24} /></View>
+                    // On an unread row the tint is the disc's own colour: the disc steps up to the card's surface so it still reads as one.
+                    <View style={[styles.brandFace, group.unread && styles.brandFaceOnTint]}><BrandMark size={24} /></View>
                   ) : rest.length ? (
                     <View style={styles.pair}>
                       <View style={styles.pairBack}><Avatar name={nameOf(rest[0])} seed={seedOf(rest[0])} uri={photoOf(rest[0])} size={32} /></View>
@@ -577,6 +602,7 @@ export default function Notifications() {
 const styleDefinitions = StyleSheet.create({
   list: { gap: 2 },
   brandFace: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.brandDim },
+  brandFaceOnTint: { backgroundColor: colors.surface },
   recapFace: { backgroundColor: colors.brand },
   heading: { ...typography.smallStrong, color: colors.text, paddingHorizontal: spacing.sm, paddingBottom: spacing.xs },
   pair: { width: 44, height: 44 },

@@ -124,26 +124,32 @@ export function useTrackerSession(activityId: ID | undefined) {
     }
   };
 
-  /** The streak once a session on `day` is in your log. */
+  /** The streak once a session on `day` is in your log, and what it was before. */
   const streakWith = (day: string) => (currentUserId
-    ? computeStats(currentUserId, [{ id: '__new', userId: currentUserId, day, minutes: 1, kind: 'practice', createdAt: new Date().toISOString() }, ...sessions], posts, stories).currentStreakDays
-    : 0);
+    ? {
+      now: computeStats(currentUserId, [{ id: '__new', userId: currentUserId, day, minutes: 1, kind: 'practice', createdAt: new Date().toISOString() }, ...sessions], posts, stories).currentStreakDays,
+      before: computeStats(currentUserId, sessions, posts, stories).currentStreakDays,
+    }
+    : { now: 0, before: 0 });
 
   return { activity, live, waiting, gone, logged, flags, postable, save, streakWith, askedNames: (players: SessionPlayer[]) => andList(players.map((p) => firstOf(p.id))) };
 }
 
 /**
  * "Logged · 1h 24m · Match · Won", with the streak beside it from two days
- * on: the note after a session goes into your log without a post. Given the
+ * on: the note after a session goes into your log without a post. The streak
+ * rolls up only when this session made it grow (`before` is what it was);
+ * a day that already counted (a post, an Instant, an earlier session) holds
+ * it still, so the note never celebrates what didn't happen. Given the
  * session's id, it carries an "Instagram" button: the session as a story
  * picture (share-session), the way Strava offers it once you save.
  *
  * When the session beat a personal record you already had (records.ts), the
  * moment is that instead, in one note, not two: "New record! Longest match ·
- * 2h 40m · beat 2h 5m" on a gold trophy, with a reward buzz and the same
+ * 2h 40m · beat 2h 5m" on a gold rosette, with a reward buzz and the same
  * Instagram button.
  */
-export function showLogged(minutes: number, s: Pick<PracticeSession, 'kind' | 'won' | 'sets'> & { workout?: string }, streak: number, sessionId?: string, record?: { title: string; body: string } | null) {
+export function showLogged(minutes: number, s: Pick<PracticeSession, 'kind' | 'won' | 'sets'> & { workout?: string }, streak: { now: number; before: number }, sessionId?: string, record?: { title: string; body: string } | null) {
   if (record) {
     haptics.reward();
     showToast({ title: record.title, body: record.body, glyph: 'record', ...(sessionId ? { action: shareAction({ session: sessionId }) } : {}) });
@@ -153,7 +159,7 @@ export function showLogged(minutes: number, s: Pick<PracticeSession, 'kind' | 'w
     title: 'Logged',
     body: `${duration(minutes)} · ${loggedLabel(s)}`,
     glyph: 'logged',
-    ...(streak >= 2 ? { stat: { value: streak, label: 'day streak' } } : {}),
+    ...(streak.now >= 2 ? { stat: { value: streak.now, from: streak.before, label: 'day streak' } } : {}),
     ...(sessionId ? { action: shareAction({ session: sessionId }) } : {}),
   });
 }

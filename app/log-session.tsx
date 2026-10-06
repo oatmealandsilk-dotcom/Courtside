@@ -17,7 +17,7 @@ import { readScore, scoreText, setsWinner } from '@/features/activity/score';
 import { computeStats } from '@/features/practice/stats';
 import { andList, canTagKind, firstName as firstOfName, isActive, tagsOnSession } from '@/features/activity/sessionTags';
 import { pickSource, postOf, postedIndex, sourceOn } from '@/features/activity/recent';
-import { isTennisActivity, workoutIcon } from '@/features/activity/workouts';
+import { formatDistance, isTennisActivity, workoutIcon } from '@/features/activity/workouts';
 import { useTennisFlags } from '@/features/activity/useTennisFlags';
 import { hitPrefill, prefillFor } from '@/features/hits/followUp';
 import { beatenBy, recordToast } from '@/features/records/records';
@@ -38,6 +38,18 @@ const KINDS: { value: PracticeSession['kind']; label: string }[] = [
   { value: 'match', label: 'Match' },
   { value: 'drills', label: 'Drills' },
   { value: 'fitness', label: 'Fitness' },
+];
+
+/**
+ * What a fitness session logged by hand was, kept as the same short names a
+ * tracker's workouts use (migration 107), so it reads "Run", "Gym" in your
+ * sessions like one from the Watch. Nothing picked stays "Fitness".
+ */
+const WORKOUT_KINDS: { value: string; label: string }[] = [
+  { value: 'run', label: 'Run' },
+  { value: 'ride', label: 'Ride' },
+  { value: 'swim', label: 'Swim' },
+  { value: 'gym', label: 'Gym' },
 ];
 
 /**
@@ -79,6 +91,12 @@ export default function LogSessionRoute() {
   // (the server's link says /log-session?activity=), so it hands those on.
   if (activity && !edit) return <ToComposer activity={activity} hit={hit} />;
   return <LogSession />;
+}
+
+/** What a tracker's session was, with a workout's distance: "Tennis", "Run · 3.1 mi". */
+function pickTitle(x: DetectedActivity): string {
+  const far = isTennisActivity(x) ? null : formatDistance(x.distanceM);
+  return far ? `${activityTitle(x)} · ${far}` : activityTitle(x);
 }
 
 function ToComposer({ activity, hit }: { activity: string; hit?: string }) {
@@ -150,6 +168,8 @@ function LogSession() {
   const alreadyPosted = !!done && !!postOf({ type: 'tracker', activity: done }, postedIndex(posts, currentUserId));
 
   const [kind, setKind] = useState<PracticeSession['kind']>(fromHit?.kind ?? 'practice');
+  // A fitness session's kind ("run", "gym"), when picked.
+  const [workout, setWorkout] = useState<string | undefined>();
   const [minutes, setMinutes] = useState<number | null>(fresh ? fresh.minutes : fromHit ? fromHit.minutes : null);
   const [editLength, setEditLength] = useState(false);
   // A session that arrives after the sheet opened starts on its own length too.
@@ -179,22 +199,39 @@ function LogSession() {
    * logged yet, newest first, each opening the composer for it ("Log it"),
    * and "Log one yourself" under them for the by-hand log (owner, Oct 3).
    * With none waiting, the by-hand log opens straight away, as before.
-   * Decided once, as the sheet opens, so it never swaps under your thumb.
+   * Decided once, so it never swaps under your thumb, but only once your
+   * tracker's sessions are here: opened before they load (from cold, a link,
+   * a refresh in a browser), the sheet waits a moment rather than offering
+   * the by-hand log over a session already waiting (the same game, twice).
    */
   const plain = !activity && !hit && !edit;
   const unlogged = useMemo(
     () => (plain ? detectedActivities.filter((x) => x.userId === currentUserId && x.status === 'new' && sourceOn(x, flags)).sort((x, y) => y.startedAt.localeCompare(x.startedAt)) : []),
     [plain, detectedActivities, currentUserId, flags],
   );
-  const [offered] = useState(() => unlogged.length > 0);
+  const listLoaded = isSupabaseConfigured ? remoteLoaded : ready;
+  // A slow or failed load never keeps the sheet waiting for ever: after a few seconds it goes on with what it has.
+  const [waitedOut, setWaitedOut] = useState(false);
+  useEffect(() => {
+    if (!plain || listLoaded) return undefined;
+    const t = setTimeout(() => setWaitedOut(true), 4000);
+    return () => clearTimeout(t);
+  }, [plain, listLoaded]);
+  const [offered, setOffered] = useState<boolean | null>(() => (unlogged.length > 0 ? true : listLoaded ? false : null));
+  useEffect(() => {
+    if (offered !== null) return;
+    if (unlogged.length > 0) setOffered(true);
+    else if (listLoaded || waitedOut) setOffered(false);
+  }, [offered, unlogged.length, listLoaded, waitedOut]);
+  const deciding = plain && offered === null;
   const [byHand, setByHand] = useState(false);
-  const choosing = offered && !byHand && unlogged.length > 0;
+  const choosing = !!offered && !byHand && unlogged.length > 0;
   const logThis = (x: DetectedActivity) => { next.current = x.id; close(); };
 
   // Opened on a session already logged (?edit=): who you played, and nothing else.
   const editing = edit ? sessions.find((x) => x.id === edit && x.userId === currentUserId) : undefined;
   // Your log (and its tags) may still be on its way when the sheet opens from a link.
-  const loaded = isSupabaseConfigured ? remoteLoaded : ready;
+  const loaded = listLoaded;
   const editTags = editing ? tagsOnSession(sessionTags, editing.id, currentUserId) : [];
   const activeOn = editTags.filter(isActive).map((t) => ({ id: t.taggedId, role: t.role }));
   // What the sheet opened with: the people tagged and the name typed. It is
@@ -281,6 +318,7 @@ function LogSession() {
       const sets = kind === 'match' ? scored.sets : undefined;
       const id = await actions.logSession({
         minutes, kind, won: shownWon === 'won' ? true : shownWon === 'lost' ? false : undefined, ...(sets ? { sets } : {}), opponent: typed, day,
+        ...(kind === 'fitness' && workout ? { workout } : {}),
         ...(fresh ? { activityId: fresh.id } : {}),
         // From a hit: where it was, as the note, and the court itself in your log (migration 130).
         ...(fromHit ? { note: `At ${fromHit.place}` } : {}),
@@ -299,13 +337,18 @@ function LogSession() {
       if (post && fresh) next.current = fresh.id;
       else if (asked) showToast({ title: 'Logged', body: `${asked} will be asked to accept.`, glyph: 'logged' });
       else {
-        // "Logged · 1h 30m · Match · Won", and the streak once it is two days or more.
-        const streak = currentUserId ? computeStats(currentUserId, [{ id: id, userId: currentUserId, day, minutes, kind, createdAt: new Date().toISOString() }, ...sessions], posts, stories).currentStreakDays : 0;
+        // "Logged · 1h 30m · Match · Won", and the streak once it is two days or more (rolling up only if this made it grow).
+        const streak = currentUserId
+          ? {
+            now: computeStats(currentUserId, [{ id: id, userId: currentUserId, day, minutes, kind, createdAt: new Date().toISOString() }, ...sessions], posts, stories).currentStreakDays,
+            before: computeStats(currentUserId, sessions, posts, stories).currentStreakDays,
+          }
+          : { now: 0, before: 0 };
         const won = kind === 'match' && shownWon ? shownWon === 'won' : undefined;
         // A personal record it beat is the moment instead (records.ts).
         const added: PracticeSession = { id, userId: currentUserId ?? '', day, minutes, kind, won, ...(kind === 'match' && scored.sets ? { sets: scored.sets } : {}), createdAt: new Date().toISOString() };
         const record = currentUserId ? recordToast(beatenBy(currentUserId, sessions, added, posts, stories), [added, ...sessions]) : null;
-        showLogged(minutes, { kind, won, sets: kind === 'match' ? scored.sets : undefined }, streak, id, record);
+        showLogged(minutes, { kind, won, sets: kind === 'match' ? scored.sets : undefined, workout: kind === 'fitness' ? workout : undefined }, streak, id, record);
         // Logged from a hit at a court: who else was there that day, a few seconds on.
         if (fromHit?.placeId) {
           const people = users;
@@ -342,12 +385,14 @@ function LogSession() {
     <SheetTitle title={fromHit ? 'How was the hit?' : isTennisActivity(fresh) ? 'Log your tennis' : 'Log your workout'} line={`${fromHit ? `${fromHit.place}. ` : ''}From ${fromWho(fresh)} · ${activityWhen(fresh)}. Only you see this.`} lines={2} onClose={close} />
   ) : done ? (
     <SheetTitle title={isTennisActivity(done) ? 'Log your tennis' : 'Log your workout'} line={done.status === 'logged' ? 'Logged. It counts toward your streak and hours.' : 'You already logged this session.'} lines={2} onClose={close} />
+  ) : deciding ? (
+    <SheetTitle title="Log a session" onClose={close} />
   ) : choosing ? (
     <SheetTitle title="Log a session" line="Your tracker picked these up. Pick one, or log one yourself." lines={2} onClose={close} />
   ) : fromHit ? (
     <SheetTitle title="How was the hit?" line={`${fromHit.place}${fromHit.who ? ` · with ${fromHit.who}` : ''}. Only you see this.`} lines={2} onClose={close} />
   ) : (
-    <SheetTitle title="Log a session" line="Keeps your streak, hours and win rate. Only you see it." lines={2} onClose={close} />
+    <SheetTitle title="Log a session" line="Counts toward your streak. Only you see it." onClose={close} />
   );
   const numbers = fresh ? privateLine(fresh) : '';
   // Once the sheet is gone: the new post with this session's stats, in this page's place, or back where it was opened from.
@@ -399,7 +444,7 @@ function LogSession() {
             </>
           )}
         </ScrollView>
-      ) : waiting ? (
+      ) : waiting || deciding ? (
         <View style={styles.wait}><CourtSpinner size={34} /></View>
       ) : choosing ? (
         <ScrollView contentContainerStyle={formBody}>
@@ -418,7 +463,8 @@ function LogSession() {
                     <Text style={styles.pickHero}>{duration(x.minutes)}</Text>
                     <View style={styles.pickTag}><Text style={styles.pickTagText} numberOfLines={1}>{pickSource({ type: 'tracker', activity: x })}</Text></View>
                   </View>
-                  <Text style={styles.pickTitle} numberOfLines={1}>{activityTitle(x)}</Text>
+                  {/* "Run · 3.1 mi", as Your sessions and the note say it. */}
+                  <Text style={styles.pickTitle} numberOfLines={1}>{pickTitle(x)}</Text>
                   <Text style={styles.pickWhen}>{activityWhen(x, new Date(), ' · ')}</Text>
                 </View>
                 <Ionicons name="chevron-forward" size={18} color={colors.textFaint} style={styles.pickChevron} />
@@ -449,8 +495,8 @@ function LogSession() {
           {numbers ? <Text style={styles.numbers}>{numbers}</Text> : null}
           {/* The session as it will go in your log, in the sessions' own look: what and when, then the time, big. */}
           {minutes && !fresh ? (
-            <View style={styles.hero} accessible accessibilityLabel={`${sessionEyebrow({ kind, day: heroDay }).toLowerCase()}, ${duration(minutes)}`}>
-              <Text style={styles.heroEyebrow}>{sessionEyebrow({ kind, day: heroDay })}</Text>
+            <View style={styles.hero} accessible accessibilityLabel={`${sessionEyebrow({ kind, day: heroDay, workout: kind === 'fitness' ? workout : undefined }).toLowerCase()}, ${duration(minutes)}`}>
+              <Text style={styles.heroEyebrow}>{sessionEyebrow({ kind, day: heroDay, workout: kind === 'fitness' ? workout : undefined })}</Text>
               <View style={styles.heroRow}>
                 <Duration minutes={minutes} size={56} color={colors.text} unitColor={colors.textMuted} />
                 {kind === 'match' && shownWon ? (
@@ -464,6 +510,12 @@ function LogSession() {
           <Section title="What was it">
             <Chips value={kind} onChange={(k) => { if (k) setKind(k); }} options={KINDS} />
           </Section>
+          {/* Fitness can say what it was, the way a workout from the Watch does: "Run", "Gym". */}
+          {kind === 'fitness' && !fresh ? (
+            <Section title="What kind">
+              <Chips clearable value={workout} onChange={setWorkout} options={WORKOUT_KINDS} />
+            </Section>
+          ) : null}
           <Section title="How long">
             {/* From a tracker the length is simply the tracker's (Oct 3): one line, with Edit for a break (hours and minutes, then Done). */}
             {fresh ? (

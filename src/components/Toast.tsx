@@ -13,6 +13,7 @@ import { Glass } from '@/components/ui/Glass';
 import { HitGlyph } from '@/components/HitGlyph';
 import { ZoneGlyph } from '@/components/session/ZoneGlyph';
 import { DrawnTick } from '@/components/session/DrawnTick';
+import { RECORD_ICON } from '@/features/records/records';
 import { useBelowBanner } from '@/features/messages/bannerSpace';
 import { requestScrollToTop } from '@/features/navigation/scrollToTop';
 import { goHome } from '@/lib/goBack';
@@ -149,10 +150,11 @@ export function Toast() {
                 <View style={styles.words}>
                   {/* Cut to one line only when it is a quick note; one that has to be read wraps. */}
                   <Text style={styles.title} numberOfLines={toast.long ? 3 : 1}>{toast.title}</Text>
-                  {toast.body ? <Text style={styles.body} numberOfLines={toast.long ? 4 : 1}>{toast.body}</Text> : null}
+                  {/* Beside a number and a button (the Logged note) the words have little room on a narrow phone: they wrap to a second line rather than being cut. */}
+                  {toast.body ? <Text style={styles.body} numberOfLines={toast.long ? 4 : toast.stat ? 2 : 1}>{toast.body}</Text> : null}
                 </View>
               </Pressable>
-              {toast.stat ? <Stat value={toast.stat.value} label={toast.stat.label} token={toast.id} /> : null}
+              {toast.stat ? <Stat value={toast.stat.value} from={toast.stat.from} label={toast.stat.label} token={toast.id} /> : null}
               {/* Its own button beside the words, not part of them, so a tap on
                   the words still only opens what the toast is about. */}
               {action ? (
@@ -177,8 +179,8 @@ export function Toast() {
 /**
  * A session's mark in a brand disc: the zone bars ("Tennis detected"), a
  * tick that draws itself in from the left a moment after the toast lands
- * ("Logged"), two people ("3 others were at Alder Park today"), or a trophy
- * in gold ("New record!").
+ * ("Logged"), two people ("3 others were at Alder Park today"), or a record's
+ * rosette in gold ("New record!").
  */
 function Disc({ glyph, token }: { glyph: NonNullable<ToastMessage['glyph']>; token: number }) {
   const styles = useThemedStyles(styleDefinitions);
@@ -186,29 +188,35 @@ function Disc({ glyph, token }: { glyph: NonNullable<ToastMessage['glyph']>; tok
   return (
     <View style={[styles.disc, { backgroundColor: glyph === 'record' ? colors.sun : colors.brand }]}>
       {glyph === 'session' ? <ZoneGlyph size={15} color={colors.brandInk} />
-        : glyph === 'record' ? <Ionicons name="trophy" size={14} color={colors.brandInk} />
+        : glyph === 'record' ? <Ionicons name={RECORD_ICON} size={14} color={colors.brandInk} />
           : glyph === 'flyby' ? <Ionicons name="people-outline" size={15} color={colors.brandInk} />
             : <DrawnTick size={16} color={colors.brandInk} delay={250} duration={320} token={token} />}
     </View>
   );
 }
 
-/** "10 / day streak" beside the words, behind a thin rule; it rolls up from 9 to 10 once the toast has settled. */
-function Stat({ value, label, token }: { value: number; label: string; token: number }) {
+/**
+ * "10 / day streak" beside the words, behind a thin rule. It rolls up from
+ * 9 to 10 once the toast has settled, only when what was just done made it
+ * grow (`from` is the number before); a day that already counted holds still.
+ */
+function Stat({ value, from, label, token }: { value: number; from?: number; label: string; token: number }) {
   const styles = useThemedStyles(styleDefinitions);
   const reduced = useReducedMotion();
-  const roll = useSharedValue(reduced ? 1 : 0);
+  const before = from ?? value - 1;
+  const grew = before < value;
+  const roll = useSharedValue(reduced || !grew ? 1 : 0);
   useEffect(() => {
-    if (reduced) { roll.value = 1; return; }
+    if (reduced || !grew) { roll.value = 1; return; }
     roll.value = 0;
     roll.value = withDelay(600, withTiming(1, { duration: 420, easing: STAGE_EASING }));
-  }, [token, reduced, roll]);
+  }, [token, reduced, grew, roll]);
   const rolling = useAnimatedStyle(() => ({ transform: [{ translateY: -26 * roll.value }] }));
   return (
     <View style={styles.stat} accessible accessibilityLabel={`${value} ${label}`}>
       <View style={styles.statWindow}>
         <Animated.View style={rolling}>
-          <Text style={styles.statValue}>{Math.max(0, value - 1)}</Text>
+          <Text style={styles.statValue}>{Math.max(0, grew ? before : value)}</Text>
           <Text style={styles.statValue}>{value}</Text>
         </Animated.View>
       </View>
@@ -219,7 +227,7 @@ function Stat({ value, label, token }: { value: number; label: string; token: nu
 
 const styleDefinitions = StyleSheet.create({
   disc: { width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
-  stat: { alignSelf: 'stretch', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 14, marginLeft: 4, borderLeftWidth: StyleSheet.hairlineWidth, borderLeftColor: colors.borderStrong, minWidth: 64 },
+  stat: { alignSelf: 'stretch', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 12, marginLeft: 4, borderLeftWidth: StyleSheet.hairlineWidth, borderLeftColor: colors.borderStrong, minWidth: 64 },
   statWindow: { height: 26, overflow: 'hidden' },
   statValue: { fontSize: 24, lineHeight: 26, ...font('600'), letterSpacing: -0.8, color: colors.text, textAlign: 'center', fontVariant: ['tabular-nums'] },
   statLabel: { fontSize: 10, ...font('600'), color: colors.textMuted, marginTop: 1 },

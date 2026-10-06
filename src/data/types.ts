@@ -1430,6 +1430,12 @@ export interface PersonalRecord {
   /** The first and last day it covers ('YYYY-MM-DD'): a week's Monday and Sunday, a streak's days, a month's first day, a session's day. */
   from: string;
   to: string;
+  /**
+   * The day it reached its number: the last session in a week or a month
+   * that holds it, a streak's last day, a session's own day. Never in the
+   * future (a week's Sunday can be), so it is what "new this week" goes by.
+   */
+  reached: string;
 }
 
 /** Your personal records; one is absent until there is enough to count (a week of an hour, a streak of 3 days…). */
