@@ -1,7 +1,7 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Easing, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
+import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { goBack } from '@/lib/goBack';
 import { useAndroidBack } from '@/lib/androidBack';
 
@@ -105,9 +105,14 @@ const round = (n: number, decimals: number) => Number(n.toFixed(decimals));
  */
 export default function Onboarding() {
   const styles = useThemedStyles(styleDefinitions);
-  const { currentUser } = useApp();
+  const { currentUser, currentUserId, authResolved, error } = useApp();
   const { from } = useLocalSearchParams<{ from?: string }>();
   const fromSaved = from === 'edit' || from === 'coach' || from === 'profile';
+  // Nobody signed in (a login that ran out, a visitor with an old link): no
+  // account will come, so sign-in rather than a spinner that never ends.
+  if (fromSaved && authResolved && !currentUserId) return <Redirect href="/sign-in" />;
+  // The account didn't load: the start page says so, with Try again.
+  if (fromSaved && !currentUser && error) return <Redirect href="/" />;
   if (fromSaved && !currentUser) {
     return <View style={[styles.root, styles.waiting]}><CourtSpinner size={28} /></View>;
   }

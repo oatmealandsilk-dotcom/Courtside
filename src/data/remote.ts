@@ -4316,8 +4316,10 @@ export const auth = {
    * so a failure signed you out of both.) The account being left stays valid
    * on the server too, so switching back is a tap. An expired login's error
    * is marked `expired`, so only that one is dropped from the saved list.
+   * Renewing spends the old token, so `keep` saves the new one at once,
+   * before anything else can fail: the saved list never holds a spent one.
    */
-  async resumeAccount(refreshToken: string) {
+  async resumeAccount(refreshToken: string, keep?: (renewed: { userId: string; email?: string; refreshToken: string }) => Promise<unknown>) {
     const client = need();
     const check = throwawayAuthClient();
     if (!check) throw new Error('Supabase is not configured');
@@ -4326,6 +4328,7 @@ export const auth = {
       if (error && isAuthRetryableFetchError(error)) throw new Error('Could not reach CourtSide. Check your connection and try again.');
       throw Object.assign(new Error('That login has expired on this phone. Sign in with your email to add it again.'), { expired: true });
     }
+    if (keep) await keep({ userId: data.session.user.id, email: data.session.user.email ?? undefined, refreshToken: data.session.refresh_token }).catch(() => undefined);
     const set = await client.auth.setSession({ access_token: data.session.access_token, refresh_token: data.session.refresh_token });
     if (set.error || !set.data.session) throw new Error('Could not switch accounts. Check your connection and try again.');
     return set.data.session;

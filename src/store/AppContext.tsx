@@ -2811,7 +2811,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!saved) throw new Error('That account is not saved on this device.');
     let session;
     try {
-      session = await remoteAuth.resumeAccount(saved.refreshToken);
+      // The renewed login is saved the moment it exists, so a dropped connection after it can't leave a spent one in the list.
+      session = await remoteAuth.resumeAccount(saved.refreshToken, (renewed) => rememberAccount({ id: renewed.userId, email: renewed.email, refreshToken: renewed.refreshToken }).then((savedAccounts) => setState((prev) => ({ ...prev, savedAccounts }))));
     } catch (err) {
       // Only a login that has really expired leaves the list; a dropped
       // connection leaves it there to try again (and you as you were).
