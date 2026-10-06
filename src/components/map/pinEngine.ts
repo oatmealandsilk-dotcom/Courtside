@@ -70,7 +70,7 @@ export interface CanvasMarker {
   solo?: boolean;
   /** How many it stands for in a gathered pin's count (a court pin: its courts). Absent: one. */
   n?: number;
-  /** Half its width, where wider than a court's square (a crowd's "11 courts"), so room for players counts all of it. */
+  /** Half its width, where wider than a court's square (a court crowd's number), so room for players counts all of it. */
   cw?: number;
   /** A player's disc, across (for room and for lifting what stands under it). */
   ds?: number;
@@ -128,8 +128,8 @@ export interface PinEngineOptions {
 export type PinEngineFactory = (map: unknown, maplibre: unknown, options: PinEngineOptions) => PinEngine;
 
 /** The room each kind needs on the full map, where players' names show: a name is about 100 wide, a disc and its name about 70 tall. */
-/** Courts: a crowd of them says "11 courts", about 80 wide, so they gather a little sooner than their 30-wide squares alone would. */
-export const FULL_MAP_BOX: NonNullable<PinEngineOptions['box']> = { p: [100, 70], pFar: [74, 70], c: [56, 30], h: [92, 28] };
+/** Courts gather from about twice a crowd's width apart, so a whole city shows a handful of numbers, not a dozen (Oct 6, owner: "Numbers + fewer"); closer in they split. */
+export const FULL_MAP_BOX: NonNullable<PinEngineOptions['box']> = { p: [100, 70], pFar: [74, 70], c: [120, 64], h: [92, 28] };
 /** On the still card: faces only. */
 export const CARD_BOX: NonNullable<PinEngineOptions['box']> = { p: [48, 48], pFar: [48, 48], c: [22, 22], h: [92, 28] };
 
@@ -213,8 +213,8 @@ return function(map,ml,o){
       if(!lead||inFan[g.lead]||off(g.lead))lead=items[m[0]];
       if(k==='p'||k==='h')html=lead.html.replace(BADGE,tpl.badge.replace('{n}','+'+(m.length-1))).replace(STACK,k==='p'?tpl.stack:'');
       else{var total=m.reduce(function(t,id){return t+((items[id]&&items[id].n)||1)},0);html=tpl.court.replace('{n}',String(total))}
-      // A court crowd's "11 courts" is wide (cw: half its width), so room for players' faces and names counts all of it.
-      out[cid]={id:cid,lat:lead.lat,lng:lead.lng,html:html,anchor:lead.anchor,offsetY:lead.offsetY,z:lead.z,cls:k==='p'?lead.cls:'',g:lead.g,k:k,ds:lead.ds,cw:k==='c'?Math.round((42+6.8*(String(total).length+7))/2):undefined,
+      // A court crowd is wider than a court (cw: half its width), so room for players' faces and names counts all of it.
+      out[cid]={id:cid,lat:lead.lat,lng:lead.lng,html:html,anchor:lead.anchor,offsetY:lead.offsetY,z:lead.z,cls:k==='p'?lead.cls:'',g:lead.g,k:k,ds:lead.ds,cw:k==='c'?Math.round((30+7.2*String(total).length)/2):undefined,
         role:o.quiet?undefined:'button',label:o.quiet?undefined:(k==='p'?(lead.label||'A player')+' and '+(m.length-1)+' more here':k==='h'?m.length+' open hits here':m.length+' places to play here')+'. Show them',cl:{k:k,m:m}};
       m.forEach(function(id){own[id]=cid});
     })});
@@ -235,7 +235,7 @@ return function(map,ml,o){
     // Whether a court this wide (cw: half its width) at x, y would sit on any player's face or name: moved aside off one, it must not land on the next.
     function onPlayer(x,y,cw){for(var i=0;i<ps.length;i++){var p=ps[i],dx=x-p.x,dy=y-p.y;if(Math.abs(dx)<p.w+cw-2&&dy>-p.r-12&&dy<p.r+(p.chip?12:36))return true}return false}
     for(id in out){it=out[id];if(it.k!=='c'||it.sel)continue;
-      // A crowd's wide "11 courts" (cw) counts its whole width; on a player's very spot it moves aside rather than up.
+      // A court crowd (cw) counts its whole width; on a player's very spot it moves aside rather than up.
       var c=lp(it.lat,it.lng),lift=0,shift=0,gone=false,cw=it.cw||14;
       ps.forEach(function(p){var dx=c.x-p.x,dy=c.y-p.y;
         if(Math.abs(dx)<8&&Math.abs(dy)<8&&cw<=14){lift=Math.min(lift,-(p.r+13))}

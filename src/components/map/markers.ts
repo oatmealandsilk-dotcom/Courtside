@@ -285,9 +285,11 @@ export const youLift = (mapHeight: number) => Math.round(Math.min(150, mapHeight
  * crowd of players is the leading player's own pin with a second disc
  * peeking out behind it and a small ink badge, "+4"; so when it splits the
  * leader's pin is left exactly where it was. A crowd of courts is a court
- * square stretched to say what it holds, the little court and "11 courts"
- * (every court at those places, not how many places; Oct 6, owner: a bare
- * number could mean courts or players). Never mistaken for players. Players crowding your own pin (or
+ * square stretched to hold its number, the little court and "11" (every
+ * court at those places), quiet like a single court's square: outlined, not
+ * filled, so the faces stay the loudest thing (Oct 6, owner: "Numbers +
+ * fewer"; players always show a face, so a number reads as courts). Never
+ * mistaken for players. Players crowding your own pin (or
  * whoever is picked) gather into a small "+3" beside it instead (`chip`).
  */
 export function clusterTemplates(): { badge: string; stack: string; court: string; chip: string } {
@@ -297,7 +299,7 @@ export function clusterTemplates(): { badge: string; stack: string; court: strin
   return {
     badge: `<div style="position:absolute;right:-7px;top:-3px;min-width:22px;height:20px;padding:0 6px;box-sizing:border-box;border-radius:999px;background:${colors.text};color:${colors.bg};border:2px solid ${colors.bg};display:flex;align-items:center;justify-content:center;${FONT};font-size:11px;box-shadow:0 1px 4px rgba(0,0,0,.2)">{n}</div>`,
     stack: `<div style="position:absolute;left:${at - 9}px;top:${at - 2}px;width:${inner}px;height:${inner}px;border-radius:999px;background:${colors.surfaceAlt};border:1.5px solid ${colors.bg};box-sizing:border-box;box-shadow:0 2px 7px rgba(0,0,0,.2)"></div>`,
-    court: `<div class="cs-pin" style="position:relative;display:flex;align-items:center;gap:4px;height:30px;padding:0 10px 0 8px;border-radius:8px;background:${colors.court};border:2px solid ${colors.bg};box-sizing:border-box;box-shadow:0 0 0 3px ${colors.court}40,0 2px 6px rgba(0,0,0,.22);color:${colors.brandInk};white-space:nowrap;${FONT};font-size:12px;cursor:pointer">${courtGlyph(colors.brandInk)}{n} courts${hitDot()}</div>`,
+    court: `<div class="cs-pin" style="position:relative;display:flex;align-items:center;gap:3px;height:24px;padding:0 7px 0 5px;border-radius:6px;background:${colors.bg};border:1.5px solid ${colors.court};box-sizing:border-box;box-shadow:0 2px 6px rgba(0,0,0,.2);color:${colors.court};white-space:nowrap;${FONT};font-size:12px;cursor:pointer">${courtGlyph(colors.court, 11)}{n}${hitDot()}</div>`,
     // Beside you (or whoever is picked): the others crowding your spot, as a small ink "+3" with a disc peeking behind it.
     chip: `<div class="cs-pin" style="position:relative;width:40px;height:30px;cursor:pointer"><div style="position:absolute;left:12px;top:2px;width:26px;height:26px;border-radius:999px;background:${colors.surfaceAlt};border:1.5px solid ${colors.bg};box-sizing:border-box;box-shadow:0 2px 6px rgba(0,0,0,.18)"></div><div style="position:absolute;left:0;top:2px;min-width:28px;height:26px;padding:0 7px;box-sizing:border-box;border-radius:999px;background:${colors.text};color:${colors.bg};border:2px solid ${colors.bg};display:flex;align-items:center;justify-content:center;${FONT};box-shadow:0 2px 6px rgba(0,0,0,.22)">{n}</div></div>`,
   };

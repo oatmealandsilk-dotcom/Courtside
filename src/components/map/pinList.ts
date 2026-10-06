@@ -68,7 +68,7 @@ export function mapMarkers({ model, expanded, me, shown, selectedId, selectedCou
     const n = playing.get(c.id) ?? 0;
     const hit = hitAt.get(c.id);
     const tag = n ? `${n} playing` : hit ? `Hit ${hitShort(hit).replace(/^Today /, '')}` : undefined;
-    // Something on: never gathered into an "11 courts", above the others, and shown at every zoom (as its hit's flag was).
+    // Something on: never gathered into a court crowd, above the others, and shown at every zoom (as its hit's flag was).
     // `n`: how many courts it is, for the count on a crowd.
     return { id: `c:${c.id}`, lat: c.lat, lng: c.lng, html: courtPinHtml(c, on, ringed, tag), z: on ? 4 : tag ? 2 : 1, k: 'c' as const, r: (ringed ? 0 : 1e6) - c.count * 1000 + i, sel: on, solo: !!tag, n: c.count, g: 'c' as const, role: 'button', label: tag ? `${c.name}, ${tag}` : c.name, mz: on || tag ? undefined : COURTS_MIN_ZOOM };
   });
