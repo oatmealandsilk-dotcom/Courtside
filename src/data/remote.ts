@@ -1353,6 +1353,23 @@ export function onWordsRefused(fn: () => void): () => void {
 }
 /** A save refused for its words, so the app takes back what it showed. */
 const refusedFor = (error: unknown) => (isBlockedWords(error) ? ('blocked' as const) : undefined);
+/** The most #tags a post files, and people it tags (posts_tags_count). */
+const TAGS_MAX = 20;
+/** Whether a row is there (read as you, so only one you may see). Errors count as there: nothing is put back wrongly. */
+async function rowThere(table: 'stories' | 'comments' | 'story_comments', id: ID): Promise<boolean> {
+  try {
+    const { data, error } = await need().from(table).select('id').eq('id', id).maybeSingle();
+    return !!error || !!data;
+  } catch { return true; }
+}
+/** A comment whose answer was lost on the way back (no connection) may still have been saved: looked for before saying it failed. */
+async function commentLanded(table: 'comments' | 'story_comments', id: ID, error: { code?: string; message: string }): Promise<boolean> {
+  if (error.code || !/network|fetch|timed? ?out|abort/i.test(error.message)) return false;
+  try {
+    const { data } = await need().from(table).select('id').eq('id', id).maybeSingle();
+    return !!data;
+  } catch { return false; }
+}
 /** Why your Hidden words did not save, as set_hidden_words says it. */
 export type HiddenWordsRefusal = 'too_many_words' | 'word_too_long' | 'not_ready' | 'failed';
 
@@ -3711,7 +3728,8 @@ export const remote = {
       match: post.match ?? null,
       // The names on a session are the server's to write (migration 62); a list shown here early is never sent.
       session: sessionToSend(post.session),
-      tags: post.tags,
+      // The database files 20 #tags at most (posts_tags_count): any more stay in the words, just not filed.
+      tags: post.tags.slice(0, TAGS_MAX),
       tagged_user_ids: post.taggedUserIds ?? [],
       created_at: post.createdAt,
       // A group post must never go up without its group (it would be public),
@@ -3776,6 +3794,9 @@ export const remote = {
       }
       // Refused for its words (migration 117): saying so is the whole message.
       if (isBlockedWords(error)) throw new Error(BLOCKED_WORDS_NOTE);
+      // Past the database's own limits (posts_tags_count, posts_body_len): said as it is, not as a connection problem.
+      if (error.code === '23514' && /posts_tags_count/.test(error.message)) throw new Error(`A post can tag up to ${TAGS_MAX} people. Take some off and post it again.`);
+      if (error.code === '23514' && /posts_body_len/.test(error.message)) throw new Error('The caption is too long. Shorten it and post it again.');
       // Before saying it failed (and you post it again, as a second post): is it there after all?
       if (await landed()) return;
       fail('post insert')(error);
@@ -3785,31 +3806,41 @@ export const remote = {
     throw new Error('Your post could not be saved. Try again in a moment.');
   },
 
-  async deletePost(postId: ID) {
+  /** False when it did not go through (no connection, say): the app puts the post back. */
+  async deletePost(postId: ID): Promise<boolean> {
     const { error } = await need().from('posts').delete().eq('id', postId);
     if (error) fail('delete post')(error);
+    return !error;
   },
-  async setPostArchived(postId: ID, archived: boolean) {
+  /** False when it did not go through: the app puts the post back as it was. */
+  async setPostArchived(postId: ID, archived: boolean): Promise<boolean> {
     const { error } = await need().from('posts').update({ archived }).eq('id', postId);
     if (error) fail('post archive')(error);
+    return !error;
   },
   /** The author's edit: words, tags, who is in it, where it was — and when. */
-  /** Resolves 'blocked' when the new words were refused (migration 117). */
-  async updatePost(postId: ID, patch: { body: string; tags: string[]; taggedUserIds: ID[]; location?: string; court?: TaggedCourt | null; editedAt: string }): Promise<'blocked' | undefined> {
-    const base = { body: patch.body, tags: patch.tags, tagged_user_ids: patch.taggedUserIds };
+  /**
+   * Resolves 'blocked' when the new words were refused (migration 117),
+   * 'too-many-tagged' past the database's limit on tagged people
+   * (posts_tags_count), and 'failed' when it did not save at all.
+   */
+  async updatePost(postId: ID, patch: { body: string; tags: string[]; taggedUserIds: ID[]; location?: string; court?: TaggedCourt | null; editedAt: string }): Promise<'blocked' | 'failed' | 'too-many-tagged' | undefined> {
+    const base = { body: patch.body, tags: patch.tags.slice(0, TAGS_MAX), tagged_user_ids: patch.taggedUserIds };
     const court = patch.court === undefined ? {} : { court_id: patch.court?.id ?? null, court_name: patch.court?.name ?? null, court_lat: patch.court?.lat ?? null, court_lng: patch.court?.lng ?? null };
     let { error } = await need().from('posts').update({ ...base, location: patch.location ?? null, ...court, edited_at: patch.editedAt }).eq('id', postId);
     // Before migration 51 there is nowhere to keep the court: save the rest.
     if (error && /court_/.test(error.message)) ({ error } = await need().from('posts').update({ ...base, location: patch.location ?? null, edited_at: patch.editedAt }).eq('id', postId));
     if (!error) return undefined;
+    if (error.code === '23514' && /posts_tags_count/.test(error.message)) return 'too-many-tagged';
     if (/location|edited_at/.test(error.message)) {
       console.warn('[remote] edit columns missing; run the pending migration — saving the words only');
       const retry = await need().from('posts').update(base).eq('id', postId);
-      if (retry.error) fail('post edit')(retry.error);
-      return refusedFor(retry.error);
+      if (!retry.error) return undefined;
+      fail('post edit')(retry.error);
+      return refusedFor(retry.error) ?? 'failed';
     }
     fail('post edit')(error);
-    return refusedFor(error);
+    return refusedFor(error) ?? 'failed';
   },
   /**
    * "Share health data" changed on a post already up (Oct 4, owner). Only the
@@ -3837,40 +3868,48 @@ export const remote = {
     const row = data as { feature_ok: boolean | null } | null;
     return row ? row.feature_ok !== false : null;
   },
-  async setPostPinned(postId: ID, pinned: boolean) {
+  /** False when it did not go through: the app puts the pin back as it was. */
+  async setPostPinned(postId: ID, pinned: boolean): Promise<boolean> {
     const { error } = await need().from('posts').update({ pinned }).eq('id', postId);
     if (error) fail('post pin')(error);
+    return !error;
   },
 
   // Likes, saves, views and follows are one row per person: a repeat (another
   // phone, a tap that raced a refresh) leaves the row already there alone
   // (ignoreDuplicates). A plain upsert tries to rewrite it, which these tables'
   // rules never allow, so a second like or follow came back refused.
-  async setLike(postId: ID, me: ID, liked: boolean) {
+  /** False when it did not go through (no connection, say). */
+  async setLike(postId: ID, me: ID, liked: boolean): Promise<boolean> {
     const db = need();
     const { error } = liked
       ? await db.from('post_likes').upsert({ post_id: postId, user_id: me }, { ignoreDuplicates: true })
       : await db.from('post_likes').delete().match({ post_id: postId, user_id: me });
     if (error) fail('like')(error);
+    return !error;
   },
 
-  async setSaved(postId: ID, me: ID, saved: boolean) {
+  /** False when it did not go through (no connection, say). */
+  async setSaved(postId: ID, me: ID, saved: boolean): Promise<boolean> {
     const db = need();
     const { error } = saved
       ? await db.from('post_saves').upsert({ post_id: postId, user_id: me }, { ignoreDuplicates: true })
       : await db.from('post_saves').delete().match({ post_id: postId, user_id: me });
     if (error) fail('save')(error);
+    return !error;
   },
 
-  async insertComment(comment: Comment) {
+  async insertComment(comment: Comment): Promise<'blocked' | 'failed' | undefined> {
     const row = { id: comment.id, post_id: comment.postId, author_id: comment.authorId, body: comment.body, created_at: comment.createdAt };
     const insert = (r: Record<string, unknown>) => insertReplying('comments', r, comment);
     let { error } = await insert({ ...row, ...(comment.imageUrl ? { image_url: comment.imageUrl } : {}) });
     // Before migration 52 there is nowhere for the photo: the words still go up.
     if (error && comment.imageUrl && /image_url/.test(error.message)) ({ error } = await insert(row));
-    if (error) fail('comment insert')(error);
-    // 'blocked': refused for its words (migration 117); the app takes it back off the list.
-    return refusedFor(error);
+    if (!error || error.code === '23505' || await commentLanded('comments', comment.id, error)) return undefined;
+    fail('comment insert')(error);
+    // 'blocked': refused for its words (migration 117); 'failed': not saved at all
+    // (no connection; a photo with no words before migration 125). Either way the app takes it back off the list.
+    return refusedFor(error) ?? 'failed';
   },
 
   /** The same as insertPost: saved under the phone's own id, safe to send twice, throws when it could not be saved. */
@@ -3906,6 +3945,25 @@ export const remote = {
     if (error) fail('story archive')(error);
   },
 
+  /** Your own Instant, gone for good with its likes, views and comments. False when it is still there. */
+  async deleteStory(storyId: ID): Promise<boolean> {
+    const { data, error } = await need().from('stories').delete().eq('id', storyId).select('id');
+    if (error) { fail('delete instant')(error); return false; }
+    return !!data?.length || !(await rowThere('stories', storyId));
+  },
+
+  /**
+   * A comment (or one on an Instant), with its replies: your own, or anyone's
+   * under something of yours (migration 125). False when it is still there:
+   * no connection, or a database from before 125 refusing a post's author.
+   */
+  async deleteComment(commentId: ID, onHit: boolean): Promise<boolean> {
+    const table = onHit ? 'story_comments' : 'comments';
+    const { data, error } = await need().from(table).delete().eq('id', commentId).select('id');
+    if (error) { fail('delete comment')(error); return false; }
+    return !!data?.length || !(await rowThere(table, commentId));
+  },
+
   async setStoryLike(storyId: ID, me: ID, liked: boolean) {
     const db = need();
     const { error } = liked
@@ -3924,12 +3982,13 @@ export const remote = {
     if (error) fail('comment like')(error);
   },
 
-  async insertStoryComment(comment: Comment) {
+  async insertStoryComment(comment: Comment): Promise<'blocked' | 'failed' | undefined> {
     const { error } = await insertReplying('story_comments', {
       id: comment.id, story_id: comment.postId, author_id: comment.authorId, body: comment.body, created_at: comment.createdAt,
     }, comment);
-    if (error) fail('hit comment insert')(error);
-    return refusedFor(error);
+    if (!error || error.code === '23505' || await commentLanded('story_comments', comment.id, error)) return undefined;
+    fail('hit comment insert')(error);
+    return refusedFor(error) ?? 'failed';
   },
 
   /**

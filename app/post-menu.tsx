@@ -1,6 +1,6 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Dimensions, Easing, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, Dimensions, Easing, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -20,6 +20,7 @@ import { removedLine } from '@/features/moderation/reasons';
 import { canShareMediaStory, shareMediaToStory, type StoryMediaKind } from '@/features/share/mediaStory';
 import { HandleSticker } from '@/components/share/HandleSticker';
 import { CourtSpinner } from '@/components/CourtSpinner';
+import { useOpenOutside } from '@/features/share/openOutside';
 import type { Post, Story } from '@/data/types';
 
 type Row = {
@@ -29,6 +30,8 @@ type Row = {
   label: string;
   note?: string;
   danger?: boolean;
+  /** Shown dimmed and not tappable yet (still asking the server whether it may). */
+  waiting?: boolean;
   onPress: () => void | Promise<void>;
 };
 
@@ -38,6 +41,11 @@ type Row = {
  * can be reported, and its author muted or blocked. Everything else — save,
  * send, share the link — is there for both. Admins also get "Take down"
  * (or "Restore" once it is down); nobody else ever sees either.
+ *
+ * A post shared to a group only never leaves the group: no picture of it, no
+ * link (the server locks both, share_preview in migration 68). Someone
+ * else's post is a picture only when the server would show it to a stranger
+ * (useOpenOutside).
  */
 export default function PostMenu() {
   const styles = useThemedStyles(styleDefinitions);
@@ -65,6 +73,10 @@ export default function PostMenu() {
     gone.current = false;
     return () => { gone.current = true; };
   }, []);
+  const openOutside = useOpenOutside(post, currentUserId);
+  // A long menu (an admin's own post, bigger text on a small phone) scrolls
+  // rather than running off the top of the screen.
+  const { height: windowHeight } = useWindowDimensions();
 
   // The same rise and fall as the comments and Send-to sheets.
   const EASE = Easing.bezier(0.22, 0.61, 0.36, 1);
@@ -138,19 +150,23 @@ export default function PostMenu() {
   // A hit is a moment, not a keepsake: nothing to save or send on.
   const rows: Row[] = post && !removed ? [
     { key: 'save', icon: isSaved ? 'bookmark' : 'bookmark-outline', label: isSaved ? 'Remove from saved' : 'Save', onPress: () => { actions.toggleSavePost(post.id); close(); } },
+    // A group-only post goes only to people in that group (the Send sheet lists no one else).
     { key: 'send', icon: 'paper-plane-outline', label: 'Send to…', onPress: () => router.replace({ pathname: '/share', params: { kind: 'post', id: post.id } }) },
     // Your own clip or photo straight into a story leads; on a session post it follows the session's picture.
     ...(storyRow && !post.session ? [storyRow] : []),
     // Your own post with a session on it shares as the session's story picture (share-session), the way Strava does; any other post as its own card.
-    mine && post.session
-      ? { key: 'story', icon: 'logo-instagram', label: 'Share to Instagram', note: 'Your session as a story picture.', onPress: () => router.replace({ pathname: '/share-session', params: { post: post.id } }) }
-      : { key: 'card', icon: 'image-outline', label: 'Share as image', onPress: () => router.replace({ pathname: '/share-card', params: { id: post.id } }) },
+    ...(mine && post.session
+      ? [{ key: 'story', icon: 'logo-instagram' as const, label: 'Share to Instagram', note: 'Your session as a story picture.', onPress: () => router.replace({ pathname: '/share-session', params: { post: post.id } }) }]
+      // Still asking (null): the row holds its place dimmed, so the rows below don't jump when the answer comes.
+      : openOutside !== false ? [{ key: 'card', icon: 'image-outline' as const, label: 'Share as image', waiting: openOutside === null, onPress: () => router.replace({ pathname: '/share-card', params: { id: post.id } }) }] : []),
     ...(storyRow && post.session ? [storyRow] : []),
-    { key: 'link', icon: 'link-outline', label: 'Share link', onPress: async () => { try { const note = await shareOutside(postShareText(post, users.find((u) => u.id === post.authorId), currentUserId), url); if (note) setDone(note); else close(); } catch { setDone(`Share this link: ${url}`); } } },
+    // A group-only post stays in its group: no link to it goes outside.
+    ...(post.groupId ? [] : [{ key: 'link', icon: 'link-outline' as const, label: 'Share link', onPress: async () => { try { const note = await shareOutside(postShareText(post, users.find((u) => u.id === post.authorId), currentUserId), url); if (note) setDone(note); else close(); } catch { setDone(`Share this link: ${url}`); } } }]),
   ] : [];
   if (mine && story) {
     rows.push(
       { key: 'archive', icon: 'archive-outline', label: story.archived ? 'Unarchive' : 'Archive', onPress: () => { actions.toggleArchiveStory(story.id); close(); } },
+      { key: 'delete', icon: 'trash-outline', label: 'Delete', danger: true, onPress: () => confirm({ title: 'Delete this instant?', message: "Its likes and comments go with it. This can't be undone.", confirmLabel: 'Delete', destructive: true, onConfirm: () => { void actions.deleteStory(story.id); close(); } }) },
     );
   }
   // The original file, for the owner and for CourtSide's own channels (an admin): one tap to the camera roll, then Instagram.
@@ -164,7 +180,8 @@ export default function PostMenu() {
         { key: 'edit', icon: 'create-outline' as const, label: 'Edit', onPress: () => router.replace({ pathname: '/edit-post', params: { id: post.id, kind: 'post' } }) },
         // A place only typed, with no court: one tap to pick the court, so the post shows on its page.
         // Known adults only: a court tag says where a minor regularly plays.
-        ...(post.location && !post.court && currentUser && !notKnownAdult(currentUser)
+        // Never on a group-only post: the server keeps those off every court's page.
+        ...(post.location && !post.court && !post.groupId && currentUser && !notKnownAdult(currentUser)
           ? [{ key: 'court', icon: 'court' as const, label: 'Add the court', note: 'Shows this post on the court’s page.', onPress: () => router.replace({ pathname: '/edit-post', params: { id: post.id, kind: 'post', pickPlace: '1' } }) }]
           : []),
         { key: 'pin', icon: 'pin-outline' as const, label: post.pinned ? 'Unpin from profile' : 'Pin to profile', note: post.pinned ? undefined : 'Shown first on your profile.', onPress: () => { actions.togglePinPost(post.id); close(); } },
@@ -217,7 +234,7 @@ export default function PostMenu() {
             <Pressable accessibilityRole="button" onPress={close} style={styles.doneButton}><Text style={styles.doneButtonText}>Done</Text></Pressable>
           </View>
         ) : (
-          <>
+          <ScrollView style={{ maxHeight: Math.max(240, windowHeight - insets.top - insets.bottom - 64) }} contentContainerStyle={styles.list} bounces={false} showsVerticalScrollIndicator={false}>
             {removed ? (
               // Why it is down, in the words its author was given; who did it is never shown.
               <View style={styles.removedBox} accessibilityRole="text">
@@ -229,7 +246,7 @@ export default function PostMenu() {
               </View>
             ) : null}
             {rows.map((row) => (
-              <Pressable key={row.key} accessibilityRole="button" accessibilityLabel={row.label} disabled={working} onPress={() => { void row.onPress(); }} style={({ pressed }) => [styles.row, pressed && styles.rowPressed, working && row.key !== 'ig-story' && styles.rowDimmed]}>
+              <Pressable key={row.key} accessibilityRole="button" accessibilityLabel={row.label} disabled={working || row.waiting} onPress={() => { void row.onPress(); }} style={({ pressed }) => [styles.row, pressed && styles.rowPressed, ((working && row.key !== 'ig-story') || row.waiting) && styles.rowDimmed]}>
                 {working && row.key === 'ig-story'
                   ? <View style={styles.glyph}><CourtSpinner size={20} ink={colors.text} /></View>
                   : row.icon === 'court'
@@ -241,7 +258,7 @@ export default function PostMenu() {
                 </View>
               </Pressable>
             ))}
-          </>
+          </ScrollView>
         )}
       </Animated.View>
     </View>
@@ -252,6 +269,8 @@ const styleDefinitions = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'transparent', justifyContent: 'flex-end' },
   sheet: { backgroundColor: colors.bg, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: spacing.md, paddingTop: spacing.sm, gap: 4 },
   grabber: { alignSelf: 'center', width: 36, height: 4, borderRadius: 2, backgroundColor: colors.border, marginBottom: spacing.sm },
+  // The rows keep the sheet's own gap between them inside the scroll.
+  list: { gap: 4 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 13, paddingHorizontal: spacing.sm, borderRadius: radius.md },
   // The court glyph is narrower than an icon: as wide as one, so the labels line up.
   glyph: { width: 22, alignItems: 'center' },
