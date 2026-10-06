@@ -1,14 +1,15 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
+import { LinearGradient } from 'expo-linear-gradient';
 
 import { CommentRow, replyIndent } from '@/components/CommentRow';
 import type { Comment, ID } from '@/data/types';
 import { shownInList } from '@/features/hiddenWords/hiddenWords';
 import * as haptics from '@/lib/haptics';
 import { useApp } from '@/store/AppContext';
-import { colors, spacing, typography } from '@/theme';
+import { colors, spacing, typography, withAlpha } from '@/theme';
 
 /** A top-level comment and the replies under it. */
 export interface Thread { top: Comment; replies: Comment[] }
@@ -156,11 +157,45 @@ export function CommentThread({ thread, big = false, open, onToggle, onReply, on
 }
 
 const styleDefinitions = StyleSheet.create({
+  peekScroll: { flexGrow: 0, flexShrink: 1, minHeight: 0 },
+  peekFade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 28 },
   // Tucked up under the comment (or its last reply), closer than the gap
-  // between comments. Padded to a full finger's height (about 41pt) and pulled
-  // up by the same, so it sits where it did: a browser ignores hitSlop.
-  toggle: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, alignSelf: 'flex-start', marginTop: -12, paddingVertical: 6 },
-  dash: { width: 24, height: StyleSheet.hairlineWidth * 2, backgroundColor: colors.textFaint, opacity: 0.6 },
+  // between comments. A full finger's height (44pt: a browser ignores
+  // hitSlop), the extra hanging into the gap below, so the words sit where they did.
+  toggle: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, alignSelf: 'flex-start', marginTop: -12, minHeight: 44, paddingTop: 6, paddingRight: spacing.lg, marginBottom: -16 },
+  dash: { width: 24, height: StyleSheet.hairlineWidth * 2, marginTop: 8, backgroundColor: colors.textFaint, opacity: 0.6 },
   toggleText: { ...typography.smallStrong, fontSize: 12, color: colors.textFaint },
   toggleTextBig: { fontSize: 13 },
 });
+
+/**
+ * A post's comments on its own page in the feed (a photo post's, a written
+ * post's), filling whatever room is left under it and scrolling inside it.
+ * Where the room runs out mid-comment, the last lines fade into the page
+ * rather than stop at a hard edge, so it reads as "more below", not as cut
+ * off; scrolled to its end, the fade goes.
+ */
+export function CommentsPeek({ style, contentContainerStyle, children }: { style?: StyleProp<ViewStyle>; contentContainerStyle?: StyleProp<ViewStyle>; children: React.ReactNode }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const [box, setBox] = useState(0);
+  const [content, setContent] = useState(0);
+  const [atEnd, setAtEnd] = useState(false);
+  const cut = box > 0 && content > box + 1 && !atEnd;
+  return (
+    <View style={style}>
+      <ScrollView
+        style={styles.peekScroll}
+        contentContainerStyle={contentContainerStyle}
+        nestedScrollEnabled
+        showsVerticalScrollIndicator={false}
+        scrollEventThrottle={64}
+        onLayout={(e) => setBox(Math.round(e.nativeEvent.layout.height))}
+        onContentSizeChange={(_w, h) => setContent(Math.round(h))}
+        onScroll={(e) => { const { contentOffset, layoutMeasurement, contentSize } = e.nativeEvent; setAtEnd(contentOffset.y + layoutMeasurement.height >= contentSize.height - 4); }}
+      >
+        {children}
+      </ScrollView>
+      {cut ? <LinearGradient pointerEvents="none" colors={[withAlpha(colors.bg, 0), colors.bg]} style={styles.peekFade} /> : null}
+    </View>
+  );
+}

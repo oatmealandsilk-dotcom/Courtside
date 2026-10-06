@@ -3,7 +3,7 @@ import { PlaceLine } from '@/components/PlaceLine';
 import { TaggedLine } from '@/components/TaggedLine';
 import { Wash } from '@/components/Wash';
 import React, { useEffect, useRef, useState, memo } from 'react';
-import { Image, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Image, Modal, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ZoomableMedia, type HomeRect, type ZoomableMediaHandle } from '@/components/ZoomableMedia';
@@ -13,7 +13,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Heart } from '@/components/Heart';
 
 import { PostVideo } from '@/components/PostVideo';
-import { CommentThread, threadsOf } from '@/components/CommentThread';
+import { CommentThread, CommentsPeek, threadsOf } from '@/components/CommentThread';
 import { useApp } from '@/store/AppContext';
 import { isDesktopBrowser } from '@/lib/browserDevice';
 import { lockPageSwipe } from '@/features/navigation/swipeLock';
@@ -327,30 +327,30 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
               once there is one: no row of zeros. */}
           <View style={styles.actions}>
             {/* A tap likes; holding it opens who liked it. The like waits for the finger to lift, so a hold never likes by accident. The number opens who liked it too. */}
-            <View style={styles.action}>
-              <Tappable onPress={like.toggle} onLongPress={() => { haptics.commit(); router.push({ pathname: '/likes', params: { id: post.id } }); }} scaleTo={0.78} hitSlop={8} accessibilityLabel={like.on ? 'Unlike. Hold to see who liked it' : 'Like. Hold to see who liked it'}>
+            <View style={styles.like}>
+              <Tappable onPress={like.toggle} onLongPress={() => { haptics.commit(); router.push({ pathname: '/likes', params: { id: post.id } }); }} scaleTo={0.78} style={[styles.action, likes > 0 && styles.actionBeforeCount]} accessibilityLabel={like.on ? 'Unlike. Hold to see who liked it' : 'Like. Hold to see who liked it'}>
                 <Heart liked={like.on} pop={pop} size={ICON} ink={colors.text} />
               </Tappable>
               {likes > 0 ? (
-                <Pressable accessibilityRole="button" accessibilityLabel={`${likes} ${likes === 1 ? 'like' : 'likes'}, see who`} hitSlop={8} onPress={() => router.push({ pathname: '/likes', params: { id: post.id } })}>
+                <Pressable accessibilityRole="button" accessibilityLabel={`${likes} ${likes === 1 ? 'like' : 'likes'}, see who`} onPress={() => router.push({ pathname: '/likes', params: { id: post.id } })} style={styles.count}>
                   <Text style={styles.actionText}>{compactNumber(likes)}</Text>
                 </Pressable>
               ) : null}
             </View>
-            <Tappable onPress={onComment} scaleTo={0.78} hitSlop={6} style={styles.action} accessibilityLabel={post.commentIds.length ? `Comments, ${post.commentIds.length}` : 'Comments'}>
+            <Tappable onPress={onComment} scaleTo={0.78} style={styles.action} accessibilityLabel={post.commentIds.length ? `Comments, ${post.commentIds.length}` : 'Comments'}>
               <Ionicons name="chatbubble-outline" size={ICON - 1} color={colors.text} />
               {post.commentIds.length ? <Text style={styles.actionText}>{compactNumber(post.commentIds.length)}</Text> : null}
             </Tappable>
-            <Tappable onPress={onShare} scaleTo={0.78} hitSlop={6} style={styles.action} accessibilityLabel="Send this post to someone">
+            <Tappable onPress={onShare} scaleTo={0.78} style={styles.action} accessibilityLabel="Send this post to someone">
               <Ionicons name="arrow-redo-outline" size={ICON} color={colors.text} />
               {post.shares ? <Text style={styles.actionText}>{compactNumber(post.shares)}</Text> : null}
             </Tappable>
             <View style={styles.flex} />
-            <Tappable onPress={onToggleSave} scaleTo={0.78} hitSlop={6} style={styles.action} accessibilityLabel={saved ? 'Remove from saved' : 'Save this post'}>
+            <Tappable onPress={onToggleSave} scaleTo={0.78} style={styles.action} accessibilityLabel={saved ? 'Remove from saved' : 'Save this post'}>
               <Ionicons name={saved ? 'bookmark' : 'bookmark-outline'} size={ICON - 1} color={colors.text} />
               {post.savedBy?.length ? <Text style={styles.actionText}>{compactNumber(post.savedBy.length)}</Text> : null}
             </Tappable>
-            <Tappable onPress={onMore} scaleTo={0.78} hitSlop={6} style={styles.more} accessibilityLabel="More options">
+            <Tappable onPress={onMore} scaleTo={0.78} style={styles.action} accessibilityLabel="More options">
               <Ionicons name="ellipsis-horizontal" size={ICON - 2} color={colors.text} />
             </Tappable>
           </View>
@@ -359,7 +359,7 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
         {/* The comments, open on the page and filling whatever is left of it;
             the line at the bottom opens the sheet to write one. */}
         {thread.length ? (
-          <ScrollView style={styles.thread} contentContainerStyle={styles.threadInner} nestedScrollEnabled showsVerticalScrollIndicator={false}>
+          <CommentsPeek style={styles.thread} contentContainerStyle={styles.threadInner}>
             {thread.map((t) => (
               <CommentThread
                 key={t.top.id}
@@ -371,7 +371,7 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
                 onPressBody={(c) => router.push({ pathname: '/comments', params: { kind: 'post', id: post.id, at: c.id } })}
               />
             ))}
-          </ScrollView>
+          </CommentsPeek>
         ) : null}
         <Pressable accessibilityRole="button" accessibilityLabel="Add a comment" onPress={() => router.push({ pathname: '/comments', params: { kind: 'post', id: post.id, focus: '1' } })} onLayout={measured(setEntry, entry)} style={styles.addComment}>
           {currentUser ? <Avatar name={currentUser.name} seed={currentUser.avatarSeed} uri={currentUser.avatarUrl} size={28} /> : null}
@@ -404,15 +404,18 @@ const styleDefinitions = StyleSheet.create({
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   name: { ...typography.bodyStrong, color: colors.text, flexShrink: 1, minWidth: 56 },
   sub: { ...typography.small, color: colors.textFaint },
-  actions: { flexDirection: 'row', alignItems: 'center', gap: 18 },
-  action: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 32 },
-  // The last glyph's dots end on the page's right edge, like the caption's words.
-  more: { minHeight: 32, justifyContent: 'center', marginRight: -2 },
+  // 18 points between glyphs, each button a full 44-point square (a browser has no hitSlop); the row
+  // is pulled out by the padding at its ends, and up and down, so it takes the room it always did.
+  actions: { flexDirection: 'row', alignItems: 'center', marginHorizontal: -9, marginVertical: -6 },
+  action: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, minHeight: 44, minWidth: 44, paddingHorizontal: 9 },
+  like: { flexDirection: 'row', alignItems: 'center' },
+  actionBeforeCount: { paddingRight: 3 },
+  count: { minHeight: 44, justifyContent: 'center', paddingLeft: 3, paddingRight: 9 },
   actionText: { ...typography.bodyStrong, fontSize: 14, color: colors.text, fontVariant: ['tabular-nums'] },
   thread: { flexShrink: 1, minHeight: 0, marginTop: spacing.xs },
   threadInner: { gap: spacing.lg, paddingTop: spacing.xs, paddingBottom: spacing.sm },
   foot: { position: 'absolute', left: 0, right: 0, bottom: 0 },
-  addComment: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingTop: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  addComment: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 44, paddingTop: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   addCommentText: { ...typography.body, color: colors.textFaint, flex: 1 },
   caption: { ...typography.body, color: colors.text, lineHeight: 21 },
   captionName: { ...typography.bodyStrong, color: colors.text },

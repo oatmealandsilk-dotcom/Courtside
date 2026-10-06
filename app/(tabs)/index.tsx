@@ -59,6 +59,7 @@ import { ChallengePage } from '@/components/ChallengePage';
 import { lockPageSwipe } from '@/features/navigation/swipeLock';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useApp } from '@/store/AppContext';
+import { warmOpenOutside } from '@/features/share/openOutside';
 import type { Post } from '@/data/types';
 import { confirmUnfollow } from '@/lib/confirm';
 import { isSupabaseConfigured } from '@/lib/supabase';
@@ -471,7 +472,9 @@ function Home({ scope, topRow, paused, onChrome }: {
               ? p.archived && p.authorId === userId && userId === data.currentUserId
               // A group-only post is let in only when it is the one that was tapped (a notification, Saved, a link), so it opens in place.
               : !p.archived && (!p.groupId || p.id === scope.start) && (set === 'tagged' ? isTaggedIn(p, userId) : p.authorId === userId && (set !== 'clips' || p.kind === 'clip'))))
-            .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+            // In the grid's own order: pinned first, then newest (the archive's set is newest first only),
+            // so a pinned post opens where its tile sits and a swipe goes on in the grid's order.
+            .sort((a, b) => (set === 'archived' ? 0 : Number(!!b.pinned) - Number(!!a.pinned)) || Date.parse(b.createdAt) - Date.parse(a.createdAt));
         setOrder(mine.map((p) => `p:${p.id}`));
         setActive(Math.max(0, mine.findIndex((p) => p.id === scope.start)));
         setVisit((v) => v + 1);
@@ -1214,6 +1217,13 @@ function Home({ scope, topRow, paused, onChrome }: {
     }
   }, [feed, markReady]);
 
+  // Whether someone else's post may leave CourtSide as a picture is asked as it
+  // comes on screen, so its ••• menu opens already knowing (openOutside.ts).
+  useEffect(() => {
+    const item = feed[active];
+    if (item?.type === 'post') warmOpenOutside(item.post, currentUserId);
+  }, [active, feed, currentUserId]);
+
   // Warm the covers on either side so a swipe never lands on a grey rectangle.
   useEffect(() => {
     if (Platform.OS !== 'web') return;
@@ -1373,13 +1383,13 @@ function Home({ scope, topRow, paused, onChrome }: {
                 return (
                   <View key={story.id} style={styles.clip}>
                    <PinchZone onPinchOut={() => lock(true)} onPinchIn={() => lock(false)}><Reanimated.View style={[StyleSheet.absoluteFill, pictureStyle]}>
-                    <View accessibilityLabel={`${author.name}'s instant`} style={styles.clipFrame}>
+                    <View accessibilityLabel={`${author.name}'s Instant`} style={styles.clipFrame}>
                       <View style={phone ? StyleSheet.absoluteFill : styles.clipPortrait}>
                         {story.videoUrl ? (
                           <ClipPlayback uri={story.videoUrl} poster={story.thumbnailUrl} active={playing && active === index && warmed && playable} held={held && myStage?.key === hitKey} onStage={myStage?.key === hitKey} preload={near} warmOnly={warming} bare={immersive} onDoubleTap={() => likeHitByTap(story.id, hitLiked)} discInk={theme === 'us-open' ? '#FFFFFF' : colors.brand} discPinned={index === 0 && !scope} onReady={(ok) => markReady(story.id, ok)} />
                         ) : (
                           // Two quick taps like a hit, the way they like a clip.
-                          <Pressable accessibilityRole="image" accessibilityLabel={`${author.name}'s instant`} onPress={() => { const now = Date.now(); if (now - lastHitTap.current < 280) { lastHitTap.current = 0; likeHitByTap(story.id, hitLiked); } else lastHitTap.current = now; }} style={StyleSheet.absoluteFill}>
+                          <Pressable accessibilityRole="image" accessibilityLabel={`${author.name}'s Instant`} onPress={() => { const now = Date.now(); if (now - lastHitTap.current < 280) { lastHitTap.current = 0; likeHitByTap(story.id, hitLiked); } else lastHitTap.current = now; }} style={StyleSheet.absoluteFill}>
                             {story.imageUrl ? (
                               <HitPicture uri={story.imageUrl} onShape={(wide) => hitShapes.current.set(story.id, wide)} />
                             ) : (
@@ -1407,8 +1417,8 @@ function Home({ scope, topRow, paused, onChrome }: {
                     </Reanimated.View>
                     <Reanimated.View style={[styles.actions, { bottom: wordsBottom + RAIL_DROP }, tuckStyle]}>
                       <RailShade />
-                      <LikeButton ledgerKey={`h:${story.id}`} liked={hitLiked} count={story.likedBy.length} onToggle={() => actions.toggleLikeStory(story.id)} likesRoute={{ pathname: '/likes', params: { id: story.id, kind: 'hit' } }} pop={burst.id === story.id ? burst.n : 0} what="hit" size={RAIL_ICONS[0][1]} style={styles.action} glyphStyle={styles.actionGlyph} labelStyle={styles.actionLabel} />
-                      <Tappable accessibilityLabel="Hit comments" onPress={() => openHitComments()} scaleTo={0.78} style={styles.action}>
+                      <LikeButton ledgerKey={`h:${story.id}`} liked={hitLiked} count={story.likedBy.length} onToggle={() => actions.toggleLikeStory(story.id)} likesRoute={{ pathname: '/likes', params: { id: story.id, kind: 'hit' } }} pop={burst.id === story.id ? burst.n : 0} what="Instant" size={RAIL_ICONS[0][1]} style={styles.action} glyphStyle={styles.actionGlyph} labelStyle={styles.actionLabel} />
+                      <Tappable accessibilityLabel={story.commentIds.length ? `Instant comments, ${story.commentIds.length}` : "Instant comments"} onPress={() => openHitComments()} scaleTo={0.78} style={styles.action}>
                         <Ionicons name="chatbubble-outline" size={RAIL_ICONS[1][1]} color="white" style={styles.actionGlyph} />
                         {(story.commentIds.length) > 0 ? <Text style={styles.actionLabel} maxFontSizeMultiplier={MAX_GROW}>{railCount(story.commentIds.length)}</Text> : null}
                       </Tappable>
@@ -1495,9 +1505,9 @@ function Home({ scope, topRow, paused, onChrome }: {
 
               if (post.kind !== 'clip') {
                 return (
-                  // A session posted with no photo is its card: the page keeps clear of the
-                  // floating tab bar, so the caption and buttons under the card stay in view.
-                  <View key={post.id} style={[styles.article, scopedBack && styles.articleScoped, !phone && styles.articleCentred, (topRow || rowed) && { paddingTop: insets.top + 64 }, barInset > 0 && post.session && hasSessionStats(post.session) && !post.imageUrl && !post.videoUrl ? { paddingBottom: barInset + 8 } : null]}>
+                  // A written post (or a session posted with no photo, its card) fills its page down to its
+                  // comments, kept clear of the floating tab bar so "Add a comment…" stays in view.
+                  <View key={post.id} style={[styles.article, scopedBack && styles.articleScoped, !phone && styles.articleCentred, (topRow || rowed) && { paddingTop: insets.top + 64 }, barInset > 0 ? { paddingBottom: barInset + 8 } : null]}>
                     <Wash height={300} strength={0.6} />
                     {strip}
                     <View style={{ flex: 1, minHeight: 0, overflow: 'hidden', justifyContent: 'flex-start' }}>

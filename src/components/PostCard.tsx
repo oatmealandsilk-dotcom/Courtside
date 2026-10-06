@@ -2,13 +2,15 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import { PlaceLine } from '@/components/PlaceLine';
 import { TaggedLine } from '@/components/TaggedLine';
 import React, { useEffect, useState, memo } from 'react';
-import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import { router } from 'expo-router';
 import * as haptics from '@/lib/haptics';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { ClipVideo } from '@/components/ClipVideo';
+import { CommentThread, CommentsPeek, threadsOf } from '@/components/CommentThread';
+import { Heart } from '@/components/Heart';
 import { cropLayer } from '@/lib/crop';
 import { Tappable } from '@/components/Tappable';
 import { NewHereTag } from '@/components/NewHereTag';
@@ -82,8 +84,8 @@ const KIND_META: Record<Post['kind'], KindMeta> = {
   milestone: { label: 'Milestone', icon: 'flag-outline', tint: 'warning' },
 };
 const TENNIS_META: KindMeta = { label: 'Tennis', icon: 'court', tint: 'court' };
-/** The buttons' one size, the same set as under a photo post. */
-const ICON = 24;
+/** The buttons' one size and ink: the same set as under a photo post (MediaPostPage). */
+const ICON = 26;
 
 function PostCardInner({
   onComment,
@@ -102,7 +104,10 @@ function PostCardInner({
   active = false,
 }: Props) {
   const styles = useThemedStyles(styleDefinitions);
-  const { blockedIds, currentUserId } = useApp();
+  const { blockedIds, currentUserId, currentUser, comments } = useApp();
+  // Its comments under it, newest first, filling what is left of the page, then "Add a comment…": the same
+  // as under a photo post, so a written post is not half a page of nothing (Oct 5 audit).
+  const thread = threadsOf(comments, post.id, 'newest', currentUserId);
   const streak = shownStreak(author, currentUserId);
   // A session with no photo or video: the session's card is the post's picture (Oct 2).
   const sessionCard = !!post.session && hasSessionStats(post.session) && !post.imageUrl && !post.videoUrl && post.kind !== 'clip';
@@ -147,7 +152,7 @@ function PostCardInner({
         <LevelPill profile={author.profile} small />
       </Pressable>
 
-      {post.imageUrl && <ExpoImage accessibilityLabel={post.mediaLabel ?? "Post photo"} source={{uri:post.imageUrl}} style={styles.photo} contentFit="cover" cachePolicy="memory-disk"/>}
+      {post.imageUrl ? <ExpoImage accessibilityLabel={post.mediaLabel ?? "Post photo"} source={{uri:post.imageUrl}} style={styles.photo} contentFit="cover" cachePolicy="memory-disk"/> : null}
       {/* The player fills whatever box it is given, so the card gives it one in the post's own shape. */}
       {post.videoUrl ? (
         <View style={[styles.video, { aspectRatio: post.orientation === 'landscape' ? 16 / 9 : 4 / 5 }]}>
@@ -238,33 +243,31 @@ function PostCardInner({
       </Pressable>
 
       <View style={styles.actions}>
-        {/* The heart likes; the number opens who liked it, as on Instagram (holding the heart still works too). */}
-        <View style={styles.action}>
-          <Tappable onPress={like.toggle} onLongPress={() => { haptics.commit(); router.push({ pathname: '/likes', params: { id: post.id } }); }} scaleTo={0.8} hitSlop={8} accessibilityLabel={like.on ? 'Unlike' : 'Like'}>
-            <Ionicons
-              name={like.on ? 'heart' : 'heart-outline'}
-              size={ICON}
-              color={like.on ? colors.danger : colors.textMuted}
-            />
+        {/* The heart likes; the number opens who liked it, as on Instagram (holding the heart still works too).
+            Each button is a full 44-point square (a browser has no hitSlop); the row gives the extra back at its ends. */}
+        <View style={styles.like}>
+          <Tappable onPress={like.toggle} onLongPress={() => { haptics.commit(); router.push({ pathname: '/likes', params: { id: post.id } }); }} scaleTo={0.8} style={[styles.action, post.likedBy.length + like.delta > 0 && styles.actionBeforeCount]} accessibilityLabel={like.on ? 'Unlike. Hold to see who liked it' : 'Like. Hold to see who liked it'}>
+            <Heart liked={like.on} size={ICON} ink={colors.text} />
           </Tappable>
           {/* A count only once there is one, as on Instagram: no zeros. */}
           {post.likedBy.length + like.delta > 0 ? (
-            <Pressable accessibilityRole="button" accessibilityLabel="See who liked this" hitSlop={8} onPress={() => router.push({ pathname: '/likes', params: { id: post.id } })} style={styles.countHit}>
+            <Pressable accessibilityRole="button" accessibilityLabel={`${post.likedBy.length + like.delta} ${post.likedBy.length + like.delta === 1 ? 'like' : 'likes'}, see who`} onPress={() => router.push({ pathname: '/likes', params: { id: post.id } })} style={styles.count}>
               {(state) => (
-                <Text style={[styles.actionText, like.on && { color: colors.danger }, (state as { hovered?: boolean }).hovered && styles.countHover]}>
+                <Text style={[styles.actionText, (state as { hovered?: boolean }).hovered && styles.countHover]}>
                   {compactNumber(post.likedBy.length + like.delta)}
                 </Text>
               )}
             </Pressable>
           ) : null}
         </View>
-        <Tappable onPress={onComment ?? onPress} scaleTo={0.8} style={styles.action} accessibilityLabel="Comments">
-          <Ionicons name="chatbubble-outline" size={ICON - 1} color={colors.textMuted} />
+        <Tappable onPress={onComment ?? onPress} scaleTo={0.8} style={styles.action} accessibilityLabel={post.commentIds.length ? `Comments, ${post.commentIds.length}` : 'Comments'}>
+          <Ionicons name="chatbubble-outline" size={ICON - 1} color={colors.text} />
           {post.commentIds.length ? <Text style={styles.actionText}>{compactNumber(post.commentIds.length)}</Text> : null}
         </Tappable>
         {onShare ? (
-          <Tappable onPress={onShare} scaleTo={0.8} style={styles.action} accessibilityLabel="Share this post">
-            <Ionicons name="arrow-redo-outline" size={ICON} color={colors.textMuted} />
+          <Tappable onPress={onShare} scaleTo={0.8} style={styles.action} accessibilityLabel="Send this post to someone">
+            <Ionicons name="arrow-redo-outline" size={ICON} color={colors.text} />
+            {post.shares ? <Text style={styles.actionText}>{compactNumber(post.shares)}</Text> : null}
           </Tappable>
         ) : null}
         {onToggleSave || onMore ? (
@@ -276,30 +279,48 @@ function PostCardInner({
                 style={styles.action}
                 accessibilityLabel={saved ? 'Remove from saved' : 'Save this post'}
               >
-                <Ionicons
-                  name={saved ? 'bookmark' : 'bookmark-outline'}
-                  size={ICON - 1}
-                  color={saved ? colors.brand : colors.textMuted}
-                />
+                <Ionicons name={saved ? 'bookmark' : 'bookmark-outline'} size={ICON - 1} color={colors.text} />
               </Tappable>
             ) : null}
             {onMore ? (
-              <Tappable onPress={onMore} scaleTo={0.8} hitSlop={6} style={styles.action} accessibilityLabel="More options">
-                <Ionicons name="ellipsis-horizontal" size={ICON - 2} color={colors.textMuted} />
+              <Tappable onPress={onMore} scaleTo={0.8} style={styles.action} accessibilityLabel="More options">
+                <Ionicons name="ellipsis-horizontal" size={ICON - 2} color={colors.text} />
               </Tappable>
             ) : null}
           </View>
         ) : null}
       </View>
+
+      {/* The comments, open on the page and filling whatever is left of it (they give way first when it
+          is short); the line under them opens the sheet to write one. Replies stay folded here. */}
+      {thread.length ? (
+        <CommentsPeek style={styles.thread} contentContainerStyle={styles.threadInner}>
+          {thread.map((t) => (
+            <CommentThread
+              key={t.top.id}
+              thread={t}
+              big
+              open={false}
+              onToggle={() => router.push({ pathname: '/comments', params: { kind: 'post', id: post.id, at: t.replies[0]?.id ?? t.top.id } })}
+              onReply={post.removed ? undefined : (c) => router.push({ pathname: '/comments', params: { kind: 'post', id: post.id, reply: c.id } })}
+              onPressBody={(c) => router.push({ pathname: '/comments', params: { kind: 'post', id: post.id, at: c.id } })}
+            />
+          ))}
+        </CommentsPeek>
+      ) : null}
+      <Pressable accessibilityRole="button" accessibilityLabel="Add a comment" onPress={() => router.push({ pathname: '/comments', params: { kind: 'post', id: post.id, focus: '1' } })} style={({ pressed }) => [styles.addComment, pressed && styles.addCommentPressed]}>
+        {currentUser ? <Avatar name={currentUser.name} seed={currentUser.avatarSeed} uri={currentUser.avatarUrl} size={28} /> : null}
+        <Text style={styles.addCommentText}>{thread.length ? 'Add a comment…' : 'Be the first to comment…'}</Text>
+      </Pressable>
     </Card>
   );
 }
 
 const styleDefinitions = StyleSheet.create({
-  // In the feed the card sits in a page of fixed height. It shrinks rather
-  // than overflowing, and the words below are what gives, so the row of
-  // buttons is never sliced through the middle.
-  card: { gap: spacing.md, borderRadius: 0, borderWidth: 0, borderBottomWidth: 1, paddingHorizontal: 0, paddingBottom: spacing.xl, backgroundColor: 'transparent', flexShrink: 1, minHeight: 0 },
+  // In the feed the card fills a page of fixed height. It never overflows:
+  // the comments give way first, then the words, so the row of buttons is
+  // never sliced through the middle. No rules round it: the page is its edge.
+  card: { flex: 1, gap: spacing.md, borderRadius: 0, borderWidth: 0, paddingHorizontal: 0, paddingBottom: 0, backgroundColor: 'transparent', minHeight: 0 },
   header: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   headerText: { flex: 1, gap: 1 },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
@@ -343,20 +364,24 @@ const styleDefinitions = StyleSheet.create({
   surfaceText: { ...typography.caption, color: colors.textFaint },
   drill: { ...typography.small, color: colors.textMuted, lineHeight: 20 },
   tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  actions: {
-    flexDirection: 'row',
-    gap: spacing.xl,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
-    paddingTop: spacing.md,
-  },
-  action: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 28 },
+  // Instagram's row, as under a photo post: like, comment and send on the left, save and more on the
+  // right, 18 points between glyphs. Each is a 44-point square; the row is pulled out by the padding
+  // at its ends (and up and down) so the first and last glyphs sit on the words' edges.
+  actions: { flexDirection: 'row', alignItems: 'center', marginHorizontal: -9, marginVertical: -6 },
+  action: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, minHeight: 44, minWidth: 44, paddingHorizontal: 9 },
+  like: { flexDirection: 'row', alignItems: 'center' },
+  actionBeforeCount: { paddingRight: 3 },
+  count: { minHeight: 44, justifyContent: 'center', paddingLeft: 3, paddingRight: 9 },
   // Save and the ••• on the right, as under a photo post.
-  actionsEnd: { marginLeft: 'auto', flexDirection: 'row', alignItems: 'center', gap: spacing.lg },
-  actionText: { ...typography.bodyStrong, fontSize: 14, color: colors.textMuted },
-  // Browsers ignore hitSlop, so on a computer the number gets a real, bigger click area (without moving anything) and underlines on hover.
-  countHit: Platform.OS === 'web' ? ({ padding: 8, margin: -8, cursor: 'pointer' } as object) : {},
+  actionsEnd: { marginLeft: 'auto', flexDirection: 'row', alignItems: 'center' },
+  actionText: { ...typography.bodyStrong, fontSize: 14, color: colors.text, fontVariant: ['tabular-nums'] },
   countHover: { textDecorationLine: 'underline' },
+  // Gives way before anything else on the page when it is short.
+  thread: { flexGrow: 0, flexShrink: 1000, minHeight: 0 },
+  threadInner: { gap: spacing.lg, paddingTop: spacing.xs, paddingBottom: spacing.sm },
+  addComment: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 44, paddingTop: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  addCommentPressed: { opacity: 0.7 },
+  addCommentText: { ...typography.body, color: colors.textFaint, flex: 1 },
 });
 
 /** Re-renders only when a shown value changes; the handlers passed in read fresh values through their own props, so a new function alone is no reason to rebuild. */

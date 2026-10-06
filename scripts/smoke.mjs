@@ -793,18 +793,19 @@ const STEPS = [
     async run(page) {
       await page.tap({ label: /^Posted\. Open the post/ });
     },
-    expect: [{ label: 'Comments' }, { label: 'Share this post' }],
+    expect: [{ label: /^Comments(, \d+)?$/ }, { label: 'Send this post to someone' }],
   },
   {
     name: 'post-comments',
     title: 'The post’s comments',
     async run(page) {
-      await page.tap({ label: 'Comments' });
+      await page.tap({ label: /^Comments(, \d+)?$/ });
     },
-    expect: [{ label: /^Add a comment/ }],
+    // The sheet's own photo button: the post's page has an "Add a comment" line of its own under it.
+    expect: [{ label: 'Add a photo' }],
     after: async (page) => {
       await page.tap({ label: 'Close' });
-      await page.gone({ label: /^Add a comment/ });
+      await page.gone({ label: 'Add a photo' });
       await page.tap({ label: 'Profile' });
       await page.waitFor({ text: 'Edit Profile' });
     },
