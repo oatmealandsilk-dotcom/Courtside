@@ -33,6 +33,12 @@ import { MapCardFailed, MapCardLoading, MapLoadPill } from '@/components/map/Map
 import { useMapLoad } from '@/components/map/useMapLoad';
 import { useStartMapHold } from '@/features/feed/warmup';
 
+// The court pictures in chats (CourtMapThumb) fetch their drawing through
+// this file too. With two separate files each fetching the map engine, the
+// bundler moved the engine (about a megabyte) into the app's first download
+// for everyone, sign-in page included. One door in keeps it out.
+export { snapshotMap } from '@/components/map/snapshotWeb';
+
 const HEIGHT = 330;
 const START_ZOOM = 11.5;
 /** The still card shows the whole metro (see NearbyMap). */

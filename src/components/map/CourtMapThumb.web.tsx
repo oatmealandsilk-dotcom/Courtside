@@ -65,7 +65,8 @@ let drawing = false;
 function drawNext(key: string, lat: number, lng: number, width: number, height: number, look: ReturnType<typeof lookFor>) {
   if (drawing) return;
   drawing = true;
-  import('@/components/map/snapshotWeb')
+  // Through the big map's file, the one door to the map engine (see WebMap).
+  import('@/components/map/WebMap')
     .then((m) => m.snapshotMap({ lat, lng, zoom: THUMB_ZOOM, width, height, look }))
     .then((picture) => keep(key, picture))
     .catch(() => { failed.add(key); queue.leave(key); })

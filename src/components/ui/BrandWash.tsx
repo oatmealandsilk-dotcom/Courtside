@@ -49,7 +49,7 @@ const ellipse = (cx: number, cy: number, rx: number, ry: number) => (Platform.OS
   ? { cx: 0, cy: 0, r: 1, gradientTransform: `translate(${cx} ${cy}) scale(${rx} ${ry})` }
   : { cx, cy, rx, ry });
 
-export function BrandWash({ radius = 999, strength = 1, base }: {
+export const BrandWash = React.memo(function BrandWash({ radius = 999, strength = 1, base }: {
   radius?: number;
   /**
    * How much of the glow and sheen to draw, 0 to 1. A surface with small
@@ -87,7 +87,7 @@ export function BrandWash({ radius = 999, strength = 1, base }: {
       {look.rim ? <View style={[StyleSheet.absoluteFill, { borderRadius: radius, borderWidth: 1, borderColor: look.rim }]} /> : null}
     </View>
   );
-}
+});
 
 /**
  * The Classic shirt's fade, for a cream box (the session boxes on the
@@ -100,7 +100,7 @@ export function BrandWash({ radius = 999, strength = 1, base }: {
  * so the box's own size never changes. Lay it as the first child, as
  * BrandWash.
  */
-export function CreamWash({ radius = 999, rim }: { radius?: number; rim?: string | null }) {
+export const CreamWash = React.memo(function CreamWash({ radius = 999, rim }: { radius?: number; rim?: string | null }) {
   const { theme } = useTheme();
   // The court's name in the ids, as above: iOS would not repaint a gradient kept under the same name.
   const id = `${useId().replace(/[^a-zA-Z0-9]/g, '')}cream${theme.replace(/-/g, '')}`;
@@ -127,4 +127,4 @@ export function CreamWash({ radius = 999, rim }: { radius?: number; rim?: string
       {rim ? <View style={[StyleSheet.absoluteFill, { borderRadius: radius, borderWidth: StyleSheet.hairlineWidth, borderColor: rim }]} /> : null}
     </View>
   );
-}
+});

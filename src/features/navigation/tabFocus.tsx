@@ -1,5 +1,7 @@
 import React, { createContext, useContext } from 'react';
 import { Platform } from 'react-native';
+import { useIsFocused as useRouteFocused } from 'expo-router';
+import { AppStateLater } from '@/store/AppContext';
 
 /**
  * Whether the tab a component sits in is the one on screen.
@@ -35,6 +37,19 @@ export function asTabRoute<P extends object>(Screen: React.ComponentType<P>) {
     // Only props a caller passed (a preview, one person's feed) count.
     const own = Object.keys(props).filter((key) => key !== 'segment');
     if (Platform.OS !== 'web' && !inPager && own.length === 0) return null;
-    return <Screen {...props} />;
+    return <OffScreenLater><Screen {...props} /></OffScreenLater>;
   };
+}
+
+/**
+ * A tab that is off screen (slid to the side, or under a page opened on top)
+ * keeps up with the app as background work, so sending a message or turning
+ * a page in the Feed does not wait for the other tabs to redraw first. On
+ * screen again, it reads the live state at once (AppStateLater).
+ */
+function OffScreenLater({ children }: { children: React.ReactNode }) {
+  // Both hooks run every time (see useIsFocused): a hook behind `&&` would be skipped.
+  const routeFocused = useRouteFocused();
+  const tabActive = useTabActive();
+  return <AppStateLater hidden={!(routeFocused && tabActive)}>{children}</AppStateLater>;
 }

@@ -3,14 +3,16 @@ import * as maplibregl from 'maplibre-gl';
 import { STYLE, applyLook, type Look } from '@/components/map/look';
 
 // The map engine's background worker ships in public/ (see WebMap): pointed
-// at again here, since this file can load before the big map ever has.
+// at here as well, so this file never depends on the order WebMap sets up in.
 const BASE = (process.env.EXPO_BASE_URL ?? '').replace(/\/$/, '');
 maplibregl.setWorkerUrl(`${BASE}/maplibre/maplibre-gl-worker.mjs`);
 
 /**
  * Draws a spot of the map off screen and hands back a picture of it (a
- * JPEG), then closes the engine. Only loaded by CourtMapThumb in a browser,
- * on first need, so the engine is not part of the app's first download.
+ * JPEG), then closes the engine. Only reached through WebMap (CourtMapThumb
+ * loads it from there in a browser, on first need), so the engine is not part
+ * of the app's first download. Never import this file from anywhere else: a
+ * second way in puts the engine back in the first download.
  */
 export function snapshotMap({ lat, lng, zoom, width, height, look }: { lat: number; lng: number; zoom: number; width: number; height: number; look: Look }): Promise<Blob> {
   return new Promise((resolve, reject) => {
