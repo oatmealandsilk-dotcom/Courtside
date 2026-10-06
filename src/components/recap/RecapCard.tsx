@@ -8,10 +8,10 @@ import type { PracticeSession } from '@/data/types';
 import { spokenDuration } from '@/features/activity/format';
 import { compareLine, weekRange, type WeekRecap } from '@/features/recap/recap';
 import { RECORD_ICON, RECORD_LABEL, recordValue } from '@/features/records/records';
-import { mixHex } from '@/features/activity/zones';
+import { CardWash, type CardLook } from '@/components/session/SessionCard';
 import { duration } from '@/lib/format';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import { colors, font, lift, pageIsDark, radius, spacing, typography, withAlpha } from '@/theme';
+import { colors, font, lift, radius, spacing, typography, withAlpha } from '@/theme';
 
 const DAY_LETTERS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
@@ -188,7 +188,9 @@ function shortCompare(r: Pick<WeekRecap, 'minutes' | 'prevMinutes' | 'prevSessio
 
 /**
  * The one summary at the top of Your sessions (Oct 6 redesign, owner: "too
- * jumbled"; the Share page's look: a cream card, the figure in green). Its
+ * jumbled"; then "they need the wash"): one of the session boxes, its look
+ * and wash from cardLook (cream with the shirt's fade on the CourtSide court,
+ * the court's colour on a city court), the figure in the box's figure ink. Its
  * small line says which week ("LAST WEEK · SEP 28 – OCT 4", or "THIS WEEK"),
  * then the week's time on court big, then its sessions and how it compares,
  * with the week's bars small on the right. Last week's (the in-app recap,
@@ -197,12 +199,12 @@ function shortCompare(r: Pick<WeekRecap, 'minutes' | 'prevMinutes' | 'prevSessio
  * instead of a big zero. `children` sits under a hairline at the card's foot
  * (Your sessions puts its Personal records row there).
  */
-export function WeekSummary({ recap, label, fill, onOpen, onClose, extra, children }: {
+export function WeekSummary({ recap, label, look, onOpen, onClose, extra, children }: {
   recap: WeekRecap;
   /** The small line over the figure: "LAST WEEK · SEP 28 – OCT 4", "THIS WEEK". */
   label: string;
-  /** The card's ground: the Share card's cream (creamFill), read from the live theme. */
-  fill: string;
+  /** The session boxes' look (cardLook): their ground, wash and inks, so the summary is one of them. */
+  look: CardLook;
   onOpen?: () => void;
   onClose?: () => void;
   /** Said after the sessions on the small line ("10-day streak"), when there is no comparison to say. */
@@ -218,31 +220,30 @@ export function WeekSummary({ recap, label, fill, onOpen, onClose, extra, childr
   const line = quiet ? (onOpen ? 'Up for a hit this week?' : extra ?? 'Log one after you play.') : [sessionsText, after].filter(Boolean).join(' · ');
   const spokenAfter = onOpen ? shortCompare(recap, true) ?? otherwise : extra ?? null;
   const spoken = quiet ? `nothing on court. ${line}` : [`${spokenDuration(recap.minutes)} on court`, sessionsText, spokenAfter].filter(Boolean).join(', ');
-  const eyebrowInk = pageIsDark() ? colors.textMuted : mixHex(colors.brand, colors.text, 0.2);
   const body = (
     <>
       <View style={styles.sumTop}>
-        <Text style={[styles.sumLabel, { color: eyebrowInk }]} numberOfLines={1}>{label}</Text>
-        {onOpen ? <Ionicons name="chevron-forward" size={13} color={eyebrowInk} /> : null}
+        <Text style={[styles.sumLabel, { color: look.eyebrow }]} numberOfLines={1}>{label}</Text>
+        {onOpen ? <Ionicons name="chevron-forward" size={13} color={look.eyebrow} /> : null}
       </View>
       <View style={styles.sumRow}>
         <View style={styles.sumWords}>
           {quiet ? (
-            <Text style={styles.sumQuiet} numberOfLines={1}>{onOpen ? 'A quiet week' : 'No tennis yet'}</Text>
+            <Text style={[styles.sumQuiet, { color: look.wash === 'brand' ? look.ink : colors.text }]} numberOfLines={1}>{onOpen ? 'A quiet week' : 'No tennis yet'}</Text>
           ) : (
-            <Text style={styles.sumBig} numberOfLines={1}>
+            <Text style={[styles.sumBig, { color: look.figure }]} numberOfLines={1}>
               {duration(recap.minutes)}
-              <Text style={styles.sumUnit}> on court</Text>
+              <Text style={[styles.sumUnit, { color: look.muted }]}> on court</Text>
             </Text>
           )}
-          <Text style={styles.sumLine} numberOfLines={2}>{line}</Text>
+          <Text style={[styles.sumLine, { color: look.muted }]} numberOfLines={2}>{line}</Text>
         </View>
         {quiet ? (
-          <View style={styles.quietDisc}><HitGlyph size={20} color={colors.brand} /></View>
+          <View style={[styles.quietDisc, { backgroundColor: withAlpha(look.figure, 0.12) }]}><HitGlyph size={20} color={look.figure} /></View>
         ) : (
           <View style={styles.mini}>
             {recap.days.map((m, i) => (
-              <View key={i} style={[styles.miniBar, m ? { height: Math.max(6, Math.round((m / most) * 40)), backgroundColor: colors.brand } : { backgroundColor: withAlpha(colors.text, 0.1) }]} />
+              <View key={i} style={[styles.miniBar, m ? { height: Math.max(6, Math.round((m / most) * 40)), backgroundColor: look.figure } : { backgroundColor: look.lines }]} />
             ))}
           </View>
         )}
@@ -250,7 +251,8 @@ export function WeekSummary({ recap, label, fill, onOpen, onClose, extra, childr
     </>
   );
   return (
-    <View style={[styles.summary, { backgroundColor: fill }]}>
+    <View style={[styles.summary, { backgroundColor: look.fill, borderColor: look.border, borderWidth: look.dark ? 1 : 0 }]}>
+      <CardWash look={look} radius={22} />
       {onOpen ? (
         <Pressable accessibilityRole="button" accessibilityLabel={`Your week, ${weekRange(recap.week).replace(' – ', ' to ')}: ${spoken}. Open`} onPress={onOpen} style={({ pressed }) => [styles.sumMain, pressed && styles.pressed]}>
           {body}
@@ -260,10 +262,10 @@ export function WeekSummary({ recap, label, fill, onOpen, onClose, extra, childr
       )}
       {onClose ? (
         <Pressable accessibilityRole="button" accessibilityLabel="Hide this week's recap" hitSlop={6} onPress={onClose} style={({ pressed }) => [styles.sumClose, pressed && styles.pressed]}>
-          <Ionicons name="close" size={16} color={colors.textMuted} />
+          <Ionicons name="close" size={16} color={look.muted} />
         </Pressable>
       ) : null}
-      {children ? <View style={[styles.sumFoot, { borderTopColor: withAlpha(colors.text, 0.08) }]}>{children}</View> : null}
+      {children ? <View style={[styles.sumFoot, { borderTopColor: look.lines }]}>{children}</View> : null}
     </View>
   );
 }

@@ -8,9 +8,9 @@ import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { FlybyPill } from '@/components/flyby/FlybyPill';
 import { WeekSummary } from '@/components/recap/RecapCard';
 import { PersonalRecords, RecordPill } from '@/components/records/PersonalRecords';
-import { creamFill } from '@/components/session/SessionCard';
+import { cardLook, creamFill } from '@/components/session/SessionCard';
 import { LoggedTitle, type PeopleLine } from '@/components/LoggedTitle';
-import { Avatar, EmptyState, Screen } from '@/components/ui';
+import { Avatar, CreamWash, EmptyState, Screen } from '@/components/ui';
 import type { DetectedActivity, PracticeSession, SessionTag, User } from '@/data/types';
 import { activityTitle, activityWhen, dayWords, loggedLabel } from '@/features/activity/format';
 import { canTagKind, firstName, peopleText, peopleWords, yourResult } from '@/features/activity/sessionTags';
@@ -27,7 +27,7 @@ import { goBack } from '@/lib/goBack';
 import { duration } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
-import { colors, font, radius, spacing, typography } from '@/theme';
+import { colors, font, pageIsDark, radius, spacing, typography, withAlpha } from '@/theme';
 
 /** Weeks shown at first; "Show earlier weeks" adds as many again. */
 const WEEKS = 8;
@@ -169,6 +169,9 @@ export default function YourSessions() {
   // The page's cards wear the Share card's cream (Oct 6, owner: "those are better than green"), read from the live theme.
   const { theme } = useTheme();
   const fill = creamFill(theme);
+  // The summary is one of the session boxes (Oct 6, owner: "they need the wash"): their look and wash, from cardLook.
+  const look = cardLook(theme);
+  const onBrand = look.wash === 'brand';
   // The summary is last week's recap while it is up (Monday to Wednesday, until put away), else this week so far.
   const recapUp = !!recap && showWeekCard(recap);
   const showRecap = recapUp && recapAway === false;
@@ -195,11 +198,11 @@ export default function YourSessions() {
       onPress={() => setRecordsOpen((o) => !o)}
       style={({ pressed }) => [styles.recordsRow, pressed && styles.pressed]}
     >
-      <Ionicons name={RECORD_ICON} size={16} color={colors.sun} />
-      <Text style={styles.recordsWord}>Personal records</Text>
-      {freshRecord ? <RecordPill label="New" /> : null}
-      <Text style={styles.recordsCount}>{recordList.length}</Text>
-      <Ionicons name={recordsOpen ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textMuted} />
+      <Ionicons name={RECORD_ICON} size={16} color={onBrand ? look.ink : colors.sun} />
+      <Text style={[styles.recordsWord, { color: onBrand ? look.ink : colors.text }]}>Personal records</Text>
+      {freshRecord ? (onBrand ? <View style={[styles.newPill, { backgroundColor: withAlpha(look.ink, 0.16) }]}><Text style={[styles.newText, { color: look.ink }]}>New</Text></View> : <RecordPill label="New" />) : null}
+      <Text style={[styles.recordsCount, { color: look.muted }]}>{recordList.length}</Text>
+      <Ionicons name={recordsOpen ? 'chevron-up' : 'chevron-down'} size={16} color={look.muted} />
     </Pressable>
   ) : null;
 
@@ -210,11 +213,11 @@ export default function YourSessions() {
       {/* 1. One summary: the week's time on court, big, with your records folded into its foot. */}
       {groups.length && recap && thisWeek && (!recapUp || recapAway !== null) ? (
         showRecap ? (
-          <WeekSummary recap={recap} fill={fill} label={`Last week · ${weekRange(recap.week)}`.toUpperCase()} onOpen={() => router.push({ pathname: '/weekly-recap', params: { week: recap.week } })} onClose={putRecapAway}>
+          <WeekSummary recap={recap} look={look} label={`Last week · ${weekRange(recap.week)}`.toUpperCase()} onOpen={() => router.push({ pathname: '/weekly-recap', params: { week: recap.week } })} onClose={putRecapAway}>
             {recordsRow}
           </WeekSummary>
         ) : (
-          <WeekSummary recap={thisWeek} fill={fill} label="THIS WEEK" extra={streakNow > 1 ? `${streakNow}-day streak` : null}>
+          <WeekSummary recap={thisWeek} look={look} label="THIS WEEK" extra={streakNow > 1 ? `${streakNow}-day streak` : null}>
             {recordsRow}
           </WeekSummary>
         )
@@ -241,10 +244,10 @@ export default function YourSessions() {
             <Text style={[styles.sectionTitle, styles.weekName]}>To do</Text>
             <Text style={styles.weekHours}>{todo}</Text>
           </View>
-          <View style={[styles.group, { backgroundColor: fill }]}>
+          <SoftCard fill={fill}>
             {taggedYou.map((t, i) => <TaggedYou key={t.id} tag={t} tagger={users.find((u) => u.id === t.taggerId)!} line={i > 0} />)}
             {waiting.map((a, i) => <Waiting key={a.id} activity={a} line={i > 0 || taggedYou.length > 0} />)}
-          </View>
+          </SoftCard>
         </>
       ) : null}
 
@@ -258,7 +261,7 @@ export default function YourSessions() {
               {records.week?.from === start ? <View style={styles.bestWeek}><RecordPill label="Best week" /></View> : null}
               {onCourt ? <Text style={styles.weekHours}>{duration(onCourt)} on court</Text> : null}
             </View>
-            <View style={[styles.group, { backgroundColor: fill }]}>
+            <SoftCard fill={fill}>
               {list.map((s, i) => {
                 const found = s.activityId ? detectedActivities.find((a) => a.id === s.activityId) : undefined;
                 // A tracker's session posts with its tracker numbers, and is named for its tracker, only while its source is switched on; otherwise as you logged it.
@@ -311,7 +314,7 @@ export default function YourSessions() {
                   />
                 );
               })}
-            </View>
+            </SoftCard>
           </React.Fragment>
         );
       })}
@@ -337,6 +340,22 @@ export default function YourSessions() {
       ) : null}
       {offerOn && currentUserId ? <WorkoutsOffer me={currentUserId} fill={fill} /> : null}
     </Screen>
+  );
+}
+
+/**
+ * A card of rows (To do, a week of sessions, the offer): the cream, with the
+ * session boxes' wash laid lighter (CreamWash at a little over half), so the
+ * page has the boxes' soft corner glow without a wall of colour. None on a
+ * dark page, as the boxes there.
+ */
+function SoftCard({ fill, style, children }: { fill: string; style?: object; children: React.ReactNode }) {
+  const styles = useThemedStyles(styleDefinitions);
+  return (
+    <View style={[styles.group, { backgroundColor: fill }, style]}>
+      {pageIsDark() ? null : <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.softWash]}><CreamWash radius={20} /></View>}
+      {children}
+    </View>
   );
 }
 
@@ -383,7 +402,7 @@ function WorkoutsOffer({ me, fill }: { me: string; fill: string }) {
     },
   });
   return (
-    <View style={[styles.group, styles.offer, { backgroundColor: fill }]}>
+    <SoftCard fill={fill} style={styles.offer}>
       <View style={styles.offerTop}>
         <View style={styles.pastIcon}><Ionicons name="fitness-outline" size={18} color={colors.textMuted} /></View>
         <View style={styles.words}>
@@ -399,7 +418,7 @@ function WorkoutsOffer({ me, fill }: { me: string; fill: string }) {
           {busy ? <ActivityIndicator size="small" color={colors.textMuted} /> : <Text style={styles.actionText}>Turn on</Text>}
         </Pressable>
       </View>
-    </View>
+    </SoftCard>
   );
 }
 
@@ -584,7 +603,7 @@ function Logged({ session: s, people, onOpen, openWord, hideNote = false, source
 }
 
 const styleDefinitions = StyleSheet.create({
-  // A card of rows (To do, a week of sessions): the Share card's cream, given as the fill by the page, no shadow, rows parted by a hairline.
+  // A card of rows (To do, a week of sessions): the Share card's cream and a lighter lay of its wash (SoftCard), no shadow, rows parted by a hairline.
   group: { borderRadius: 20, overflow: 'hidden', paddingHorizontal: spacing.lg },
   sectionTitle: { ...typography.smallStrong, color: colors.textMuted, paddingHorizontal: spacing.sm, paddingTop: spacing.xxl, paddingBottom: spacing.sm },
   weekHead: { flexDirection: 'row', alignItems: 'flex-end' },
@@ -634,6 +653,9 @@ const styleDefinitions = StyleSheet.create({
   recordsWord: { ...font('600'), fontSize: 14.5, color: colors.text, flex: 1 },
   recordsCount: { ...typography.smallStrong, color: colors.textMuted, fontVariant: ['tabular-nums'] },
   recordsOpen: { marginTop: spacing.md },
+  newPill: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: radius.pill },
+  newText: { fontSize: 11, lineHeight: 15, ...font('600'), letterSpacing: 0.2 },
+  softWash: { opacity: 0.55 },
   more: { alignSelf: 'center', marginTop: spacing.lg, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
   moreText: { ...typography.smallStrong, color: colors.text },
   holdHint: { ...typography.small, color: colors.textMuted, textAlign: 'center', marginTop: spacing.lg },
