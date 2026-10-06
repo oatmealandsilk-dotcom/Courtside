@@ -60,6 +60,14 @@ interface Props {
   onMore?: () => void;
   /** This post's page is the one on show: a session card counts its numbers up, once per post per app run. */
   active?: boolean;
+  /**
+   * What fills the room a short post leaves, under its pulled-up "Add a
+   * comment…" (the feed's find-players card, on one page a visit), given that
+   * room in points. Shown only while the post is short; the feed checks it fits (onRoom).
+   */
+  under?: (room: number) => React.ReactNode;
+  /** The room the page leaves empty, in points, each time it changes: the feed picks the page `under` goes on from it. */
+  onRoom?: (room: number) => void;
 }
 
 /** Session cards that have already counted up this run: after the first time, they just show their numbers. */
@@ -86,6 +94,13 @@ const KIND_META: Record<Post['kind'], KindMeta> = {
 const TENNIS_META: KindMeta = { label: 'Tennis', icon: 'court', tint: 'court' };
 /** The buttons' one size and ink: the same set as under a photo post (MediaPostPage). */
 const ICON = 26;
+/**
+ * A short post: one that would leave at least this much of its page empty
+ * between its buttons (or comments) and "Add a comment…". Its comment line
+ * comes up under it instead of waiting at the bottom of the page (Oct 6
+ * audit, item 10), and the room goes under the line.
+ */
+const SHORT_ROOM = 120;
 
 function PostCardInner({
   onComment,
@@ -102,6 +117,8 @@ function PostCardInner({
   onMore,
   playing = true,
   active = false,
+  under,
+  onRoom,
 }: Props) {
   const styles = useThemedStyles(styleDefinitions);
   const { blockedIds, currentUserId, currentUser, comments } = useApp();
@@ -127,6 +144,23 @@ function PostCardInner({
   const meta = { ...kind, tint: colors[kind.tint] };
   // The heart fills on the tap; the store's own redraw follows without changing anything on screen.
   const like = useOptimisticToggle(`p:${post.id}`, liked, onToggleLike);
+  // The page's empty room, measured (null until it has been): a short post's comment line comes up under it.
+  const [room, setRoom] = useState<number | null>(null);
+  const short = room !== null && room >= SHORT_ROOM;
+  // The room is the same wherever the comment line sits, so the line moving never changes the answer.
+  const roomBox = (
+    <View
+      style={styles.room}
+      onLayout={(e) => {
+        const h = Math.round(e.nativeEvent.layout.height);
+        if (h === room) return;
+        setRoom(h);
+        onRoom?.(h);
+      }}
+    >
+      {short && under ? under(room) : null}
+    </View>
+  );
 
   return (
     <Card style={styles.card}>
@@ -141,11 +175,15 @@ function PostCardInner({
             {author.isCoach ? (
               <Ionicons name="shield-checkmark" size={14} color={colors.brand} />
             ) : null}
+          </View>
+          {/* "New to CourtSide" on the handle's line, or the line under it when the two don't fit:
+              beside the name, with the streak and the level, it cut the name down to "June …" (Oct 6 audit, item 9). */}
+          <View style={styles.subRow}>
+            <Text style={styles.sub} numberOfLines={1}>
+              @{author.handle} · {relativeTime(post.createdAt)}
+            </Text>
             {isNewHere(post) ? <NewHereTag /> : null}
           </View>
-          <Text style={styles.sub} numberOfLines={1}>
-            @{author.handle} · {relativeTime(post.createdAt)}
-          </Text>
           {/* Where, on its own line under the name, as Instagram sets it: the whole place, a tap opens the court. */}
           <PlaceLine court={post.court} location={post.location} />
         </View>
@@ -315,10 +353,13 @@ function PostCardInner({
           ))}
         </CommentsPeek>
       ) : null}
-      <Pressable accessibilityRole="button" accessibilityLabel="Add a comment" onPress={() => router.push({ pathname: '/comments', params: { kind: 'post', id: post.id, focus: '1' } })} style={({ pressed }) => [styles.addComment, pressed && styles.addCommentPressed]}>
+      {/* A short post's room goes under its comment line (and holds `under`); any other post's above it, so the line sits on the page's bottom edge. */}
+      {short ? null : roomBox}
+      <Pressable accessibilityRole="button" accessibilityLabel="Add a comment" onPress={() => router.push({ pathname: '/comments', params: { kind: 'post', id: post.id, focus: '1' } })} style={({ pressed }) => [styles.addComment, room === null && styles.addCommentWait, pressed && styles.addCommentPressed]}>
         {currentUser ? <Avatar name={currentUser.name} seed={currentUser.avatarSeed} uri={currentUser.avatarUrl} size={28} /> : null}
         <Text style={styles.addCommentText}>{thread.length ? 'Add a comment…' : 'Be the first to comment…'}</Text>
       </Pressable>
+      {short ? roomBox : null}
     </Card>
   );
 }
@@ -332,7 +373,9 @@ const styleDefinitions = StyleSheet.create({
   headerText: { flex: 1, gap: 1 },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   name: { ...typography.bodyStrong, color: colors.text, flexShrink: 1 },
-  sub: { ...typography.small, color: colors.textFaint },
+  // The handle's line: "New to CourtSide" goes on to the next line when it doesn't fit beside it.
+  subRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: spacing.sm, rowGap: spacing.xs },
+  sub: { ...typography.small, color: colors.textFaint, flexShrink: 1 },
   body: { gap: spacing.md, flexShrink: 1, minHeight: 0, overflow: 'hidden' },
   // Pictures round off like the feed's photo posts.
   photo: { width: '100%', aspectRatio: 1, borderRadius: radius.lg },
@@ -388,9 +431,14 @@ const styleDefinitions = StyleSheet.create({
   // Gives way before anything else on the page when it is short.
   thread: { flexGrow: 0, flexShrink: 1000, minHeight: 0 },
   threadInner: { gap: spacing.lg, paddingTop: spacing.xs, paddingBottom: spacing.sm },
-  // Pinned to the page's bottom edge (marginTop auto takes up whatever room is left above it).
-  addComment: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 44, marginTop: 'auto', paddingTop: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  // On the page's bottom edge (the room above it takes up whatever is left), or right under a short post.
+  addComment: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 44, paddingTop: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  // Until the room is measured, so it never shows at the bottom and then jumps up under a short post.
+  addCommentWait: { opacity: 0 },
   addCommentPressed: { opacity: 0.7 },
+  // Whatever the page leaves empty, and no more: its size never comes from what it holds (a find-players
+  // card that no longer fits is cut off, never pushing the post up). Its negative margin takes back the card's gap.
+  room: { flexGrow: 1, flexShrink: 1, flexBasis: 0, minHeight: 0, marginTop: -spacing.md, overflow: 'hidden' },
   addCommentText: { ...typography.body, color: colors.textFaint, flex: 1 },
 });
 

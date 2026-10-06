@@ -55,7 +55,7 @@ const WebMap = lazy(() => loadMap().then((m) => {
 
 export function NearbyMap(props: NearbyMapProps) {
   return (
-    <Suspense fallback={<StandIn expanded={!!props.expanded} />}>
+    <Suspense fallback={<StandIn expanded={!!props.expanded} height={props.cardHeight} />}>
       <WebMap {...props} />
     </Suspense>
   );
@@ -66,22 +66,22 @@ export function NearbyMap(props: NearbyMapProps) {
  * page, it holds the opening curtain too (see warmup), handing over to the
  * map itself; it looks just as the card does while its map loads after.
  */
-function StandIn({ expanded }: { expanded: boolean }) {
+function StandIn({ expanded, height }: { expanded: boolean; height?: number }) {
   const styles = useThemedStyles(styleDefinitions);
   useStartMapHold(!expanded);
   return (
-    <View style={expanded ? styles.fill : styles.card}>
+    <View style={expanded ? styles.fill : [styles.card, height ? { height } : null]}>
       {expanded ? <CourtSpinner size={24} /> : <MapCardLoading />}
     </View>
   );
 }
 
-function MapUnavailable({ expanded, onBack }: NearbyMapProps) {
+function MapUnavailable({ expanded, onBack, cardHeight }: NearbyMapProps) {
   const styles = useThemedStyles(styleDefinitions);
   // The still card says it as the phone's does; a tap loads the page again (the engine comes with it).
   if (!expanded) {
     return (
-      <Pressable accessibilityRole="button" accessibilityLabel="The map didn't load. Tap to try again" onPress={() => window.location.reload()} style={styles.card}>
+      <Pressable accessibilityRole="button" accessibilityLabel="The map didn't load. Tap to try again" onPress={() => window.location.reload()} style={[styles.card, cardHeight ? { height: cardHeight } : null]}>
         <MapCardFailed />
       </Pressable>
     );

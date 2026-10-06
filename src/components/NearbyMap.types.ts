@@ -40,4 +40,10 @@ export interface NearbyMapProps {
   inviting?: boolean;
   /** "Who can see you on the map?" is up (or about to be) over the full map: its first pins wait to come in until it has gone. */
   holdPins?: boolean;
+  /**
+   * The still card's height, when not Find Players' own (CARD_HEIGHT): in
+   * For you it fits the room a short post leaves (FeedFindPlayers). Its
+   * "N players around" counts the faces on a card this tall.
+   */
+  cardHeight?: number;
 }

@@ -63,7 +63,7 @@ export function nearbyMapSettled(): Promise<void> { return Promise.resolve(); }
  * card for whoever or whatever you tap.
  */
 export function NearbyMap(props: NearbyMapProps) {
-  const { me, players, onOpen, onExpand, expanded = false, onBack, at, locationOn, locating = false, onToggleLocation, focusCourt, focusHit, focusUser, focusSpot, focusPlace, holdPins = false, hitCount, inviting = false } = props;
+  const { me, players, onOpen, onExpand, expanded = false, onBack, at, locationOn, locating = false, onToggleLocation, focusCourt, focusHit, focusUser, focusSpot, focusPlace, holdPins = false, hitCount, inviting = false, cardHeight } = props;
   const styles = useThemedStyles(styleDefinitions);
   const { theme } = useTheme();
   // The still card takes the place names off: it sets your city's name in the middle itself.
@@ -121,8 +121,8 @@ export function NearbyMap(props: NearbyMapProps) {
   const cardCenter = model.city ?? start.center;
   const cardPlayers = model.inCity;
   const onCardCount = useMemo(
-    () => (expanded ? 0 : cardPlayers.filter((p) => onCard(cardCenter, p.at, cardW || windowW - 2 * spacing.lg)).length),
-    [expanded, cardPlayers, cardCenter.lat, cardCenter.lng, cardW, windowW], // eslint-disable-line react-hooks/exhaustive-deps
+    () => (expanded ? 0 : cardPlayers.filter((p) => onCard(cardCenter, p.at, cardW || windowW - 2 * spacing.lg, cardHeight ?? HEIGHT)).length),
+    [expanded, cardPlayers, cardCenter.lat, cardCenter.lng, cardW, windowW, cardHeight], // eslint-disable-line react-hooks/exhaustive-deps
   );
   // Zoomed out past about a city: the court pins step aside (pinList), and a note says so.
   const [far, setFar] = useState(() => view.zoom < COURTS_MIN_ZOOM);
@@ -210,7 +210,7 @@ export function NearbyMap(props: NearbyMapProps) {
 
   if (!expanded && !model.city) {
     // A city still being looked up holds the card's place, looking as the map will while it loads; no city at all asks for one.
-    return model.cityPending ? <View style={styles.card}><MapCardLoading /></View> : <CitylessCard onOpenMap={onExpand} />;
+    return model.cityPending ? <View style={[styles.card, cardHeight ? { height: cardHeight } : null]}><MapCardLoading /></View> : <CitylessCard onOpenMap={onExpand} />;
   }
   if (!expanded) {
     // Given up on, the card is one button that tries again; otherwise it opens the full map.
@@ -222,7 +222,7 @@ export function NearbyMap(props: NearbyMapProps) {
         onPress={failed ? () => canvas.current?.retry() : onExpand}
         disabled={!failed && !onExpand}
         onLayout={(e) => { const w = Math.round(e.nativeEvent.layout.width); if (w > 0 && w !== cardW) setCardW(w); }}
-        style={styles.card}
+        style={[styles.card, cardHeight ? { height: cardHeight } : null]}
       >
         {/* Not yet drawn: covered, not tappable, and not read out (the city and its players come with the map). */}
         <Reanimated.View pointerEvents={cardUp ? 'auto' : 'none'} accessibilityElementsHidden={!cardUp} importantForAccessibility={cardUp ? 'auto' : 'no-hide-descendants'} style={[StyleSheet.absoluteFill, cardGrow]}>

@@ -9,6 +9,7 @@ import { Avatar } from '@/components/ui';
 import { Wash } from '@/components/Wash';
 import type { User } from '@/data/types';
 import { useConnectRow } from '@/features/activity/autoLog';
+import { hasSessionStats } from '@/features/activity/format';
 import { START_UNDER, useInviterToFollow } from '@/features/activity/nearYou';
 import { canReadContacts } from '@/features/contacts/phoneContacts';
 import { CONTACTS_LABEL } from '@/features/invite/friendsWords';
@@ -39,10 +40,19 @@ const PICKS = 3;
  *    invite link instead).
  * Below it, the sessions of the people you follow and, marked "Near you",
  * players in your town (features/activity/nearYou).
+ *
+ * "Start logging" heads it only for someone with nothing logged yet. Anyone
+ * who logs already reads "Follow more players" (while the people to follow
+ * show) or "Your activities": the page opened on "Start logging" with their
+ * own sessions right under it (Oct 6 audit, item 8). `sessions`: how many
+ * session pages follow it, for the line at its foot.
  */
-export function ActivitiesStart({ topInset, bottomInset, nearCount }: { topInset: number; bottomInset: number; nearCount: number }) {
+export function ActivitiesStart({ topInset, bottomInset, nearCount, sessions = 0 }: { topInset: number; bottomInset: number; nearCount: number; sessions?: number }) {
   const styles = useThemedStyles(styleDefinitions);
-  const { followingIds, actions } = useApp();
+  const { followingIds, actions, sessions: log, posts, currentUserId } = useApp();
+  // Anything in your own log, or a session of yours posted with its numbers.
+  const logs = log.some((s) => s.userId === currentUserId)
+    || posts.some((p) => p.authorId === currentUserId && !p.archived && !p.removed && !!p.session && hasSessionStats(p.session));
   const { auto, source, offer, close } = useConnectRow();
   const [busy, setBusy] = useState(false);
   const inviter = useInviterToFollow();
@@ -79,8 +89,8 @@ export function ActivitiesStart({ topInset, bottomInset, nearCount }: { topInset
     <View style={[styles.page, { paddingTop: topInset, paddingBottom: bottomInset }]}>
       <Wash height={300} strength={0.6} />
       <View style={styles.head}>
-        <Text style={styles.title}>Start logging</Text>
-        <Text style={styles.lead}>Your sessions and the people you follow show up here.</Text>
+        <Text style={styles.title}>{!logs ? 'Start logging' : few ? 'Follow more players' : 'Your activities'}</Text>
+        <Text style={styles.lead}>{logs && few ? 'Their sessions show up here, with yours.' : 'Your sessions and the people you follow show up here.'}</Text>
       </View>
 
       <View style={styles.card}>
@@ -131,7 +141,7 @@ export function ActivitiesStart({ topInset, bottomInset, nearCount }: { topInset
 
       <View style={styles.more}>
         <Ionicons name="chevron-down" size={16} color={colors.textFaint} />
-        <Text style={styles.moreText}>{nearCount ? 'Swipe up for sessions near you' : 'Sessions you and they post show up here'}</Text>
+        <Text style={styles.moreText}>{nearCount ? 'Swipe up for sessions near you' : sessions ? 'Swipe up for the latest sessions' : 'Sessions you and they post show up here'}</Text>
       </View>
     </View>
   );

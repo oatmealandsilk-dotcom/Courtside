@@ -264,14 +264,17 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
           <Avatar name={author.name} seed={author.avatarSeed} uri={author.avatarUrl} size={40} />
           <View style={{ flex: 1, gap: 1 }}>
             <View style={styles.nameRow}>
-              {/* The name keeps some room: the badges beside it never squeeze it down to a letter ("New" is the short tag here, the lane can be narrow). */}
+              {/* The name keeps some room: the badges beside it never squeeze it down to a letter. */}
               <Text style={styles.name} numberOfLines={1}>{author.name}</Text>
               <StreakFlame days={streak} />
               {author.isCoach ? <Ionicons name="shield-checkmark" size={14} color={colors.brand} /> : null}
               <LevelPill profile={author.profile} small />
+            </View>
+            {/* "New" on the handle's line (or the one under it), out of the name's way, as on a written post (Oct 6 audit, item 9). */}
+            <View style={styles.subRow}>
+              <Text style={styles.sub} numberOfLines={1}>@{author.handle} · {relativeTime(post.createdAt)}{post.editedAt ? ' · Edited' : ''}</Text>
               {isNewHere(post) ? <NewHereTag short /> : null}
             </View>
-            <Text style={styles.sub} numberOfLines={1}>@{author.handle} · {relativeTime(post.createdAt)}{post.editedAt ? ' · Edited' : ''}</Text>
             {/* Where, on its own line under the name, as Instagram sets it: the whole place, a tap opens the court. */}
             <PlaceLine court={post.court} location={post.location} />
           </View>
@@ -416,7 +419,9 @@ const styleDefinitions = StyleSheet.create({
   who: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   name: { ...typography.bodyStrong, color: colors.text, flexShrink: 1, minWidth: 56 },
-  sub: { ...typography.small, color: colors.textFaint },
+  // The handle's line: "New" goes on to the next line when it doesn't fit beside it.
+  subRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: spacing.sm, rowGap: spacing.xs },
+  sub: { ...typography.small, color: colors.textFaint, flexShrink: 1 },
   // 18 points between glyphs, each button a full 44-point square (a browser has no hitSlop); the row
   // is pulled out by the padding at its ends, and up and down, so it takes the room it always did.
   actions: { flexDirection: 'row', alignItems: 'center', marginHorizontal: -9, marginVertical: -6 },
