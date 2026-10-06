@@ -3,6 +3,7 @@ import React, {
   startTransition,
   useCallback,
   useContext,
+  useDeferredValue,
   useEffect,
   useMemo,
   useRef,
@@ -7845,6 +7846,20 @@ function applyVote<T extends { votes: number; votedBy: Record<ID, 1 | -1> }>(
   }
 
   return { ...item, votes: item.votes + delta, votedBy };
+}
+
+/**
+ * For a screen nobody is looking at (a tab slid off to the side, or under a
+ * page opened on top): while `hidden`, an app-wide change reaches the screens
+ * inside as background work, drawn after whatever is on screen has drawn,
+ * instead of all four tabs redrawing before a sent message can show. The
+ * moment it is on screen again it reads the live state, so what you see is
+ * never behind. See asTabRoute.
+ */
+export function AppStateLater({ hidden, children }: { hidden: boolean; children: ReactNode }) {
+  const live = useContext(AppContext);
+  const later = useDeferredValue(live);
+  return <AppContext.Provider value={hidden ? later : live}>{children}</AppContext.Provider>;
 }
 
 export function useApp(): AppContextValue {
