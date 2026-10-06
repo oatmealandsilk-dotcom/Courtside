@@ -44,6 +44,10 @@ export function Avatar({ uri, name, seed, size = 40, style, ring = false, plain 
   const { users } = useApp();
   const photo = uri ?? users.find(user => user.avatarSeed === seed || user.id === seed)?.avatarUrl;
   const tint = tintFor(seed);
+  // The fill the initials actually sit on: a caller's own background (the profile's brand disc,
+  // the player card's deeper shade) wins over the seed's tint, so the ink is chosen against that.
+  const drawn = StyleSheet.flatten(style)?.backgroundColor;
+  const fill = typeof drawn === 'string' ? drawn : tint;
   const badge = Math.max(14, Math.round(size * 0.36));
   return (
     <View
@@ -58,8 +62,8 @@ export function Avatar({ uri, name, seed, size = 40, style, ring = false, plain 
         style,
       ]}
     >
-      {/* White initials where white reads on the tint, else black: white alone fell to 1.5:1 on New York's yellow. */}
-      {plain ? null : <Text style={[styles.label, { fontSize: size * 0.38, color: inkOn(tint) }]}>{initials(name)}</Text>}
+      {/* White initials where white reads on the fill, else black: white alone fell to 1.5:1 on New York's yellow. */}
+      {plain ? null : <Text style={[styles.label, { fontSize: size * 0.38, color: inkOn(fill) }]}>{initials(name)}</Text>}
       {photo && <ExpoImage source={{uri:photo}} accessibilityLabel={`${name} profile photo`} contentFit="cover" recyclingKey={photo} style={{position:"absolute",width:size,height:size,borderRadius:size/2}}/>}
       {ring ? (
         <View
