@@ -26,7 +26,7 @@ const CHAT_PREVIEW = 8;
 /** What each kind of report says on its card. */
 const KIND_NAME: Record<AdminReport['kind'], string> = {
   post: 'Post', hit: 'Instant', 'hit-request': 'Open hit', question: 'Thread', answer: 'Reply', comment: 'Comment',
-  'coach-question': 'Coach question', 'coach-reply': 'Coach reply', profile: 'Profile', conversation: 'Chat',
+  'coach-question': 'Coach question', 'coach-reply': 'Coach reply', tip: 'Tip', profile: 'Profile', conversation: 'Chat',
 };
 /** Things a report can point at, besides an account or a chat. */
 const isItem = (kind: AdminReport['kind']): kind is ReportedItemKind => kind !== 'profile' && kind !== 'conversation';

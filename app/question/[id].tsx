@@ -36,6 +36,7 @@ import { hiddenAnswersOn, shownInList } from '@/features/hiddenWords/hiddenWords
 import { confirm } from '@/lib/confirm';
 import * as haptics from '@/lib/haptics';
 import { publicRoute } from '@/features/share/publicRoute';
+import { openPlayer } from '@/features/navigation/openPlayer';
 
 function QuestionDetail() {
   const styles = useThemedStyles(styleDefinitions);
@@ -130,7 +131,7 @@ function QuestionDetail() {
         {removed ? <RemovedNote removed={removed} style={styles.removed} /> : null}
         {/* Who asked, up top and at full size — the way a reply shows its author. */}
         <View style={styles.askerRow}>
-          <Pressable accessibilityRole="link" accessibilityLabel={asker ? `Open ${asker.name}'s profile` : undefined} onPress={() => asker && router.push(asker.id === currentUserId ? '/profile' : `/user/${asker.id}`)} style={styles.asker}>
+          <Pressable accessibilityRole="link" accessibilityLabel={asker ? `Open ${asker.name}'s profile` : undefined} onPress={() => asker && openPlayer(asker.id, currentUserId)} style={styles.asker}>
             <Avatar name={asker?.name ?? '?'} seed={asker?.avatarSeed ?? question.authorId} uri={asker?.avatarUrl} size={32} />
             <View style={{ flex: 1 }}>
               <Text style={styles.askerName} numberOfLines={1}>{asker?.name ?? 'Unknown'}</Text>

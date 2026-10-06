@@ -37,6 +37,7 @@ import { compactNumber, relativeTime } from '@/lib/format';
 import type { Post, User } from '@/data/types';
 import { colors, radius, spacing, typography } from '@/theme';
 import { tagsNotInCaption } from '@/features/feed/tags';
+import { openPlayer } from '@/features/navigation/openPlayer';
 
 interface Props {
   post: Post;
@@ -248,7 +249,7 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
      <View style={[styles.column, !thread.length && styles.pageCentred]} onLayout={(e) => { const { width, height } = e.nativeEvent.layout; if (width > 0 && height > 0) setRoom({ w: width, h: height }); }}>
       {/* Who and their level, in the space above the picture. */}
       <View style={[styles.whoRow, lane]} onLayout={measured(setHead, head)}>
-        <Pressable accessibilityRole="link" accessibilityLabel={`View ${author.name}'s profile`} onPress={() => { actions.noteFeedSignal({ kind: 'post', id: post.id, profileTap: true }); router.push(author.id === currentUserId ? '/profile' : `/user/${author.id}`); }} style={styles.who}>
+        <Pressable accessibilityRole="link" accessibilityLabel={`View ${author.name}'s profile`} onPress={() => { actions.noteFeedSignal({ kind: 'post', id: post.id, profileTap: true }); openPlayer(author.id, currentUserId); }} style={styles.who}>
           <Avatar name={author.name} seed={author.avatarSeed} uri={author.avatarUrl} size={40} />
           <View style={{ flex: 1, gap: 1 }}>
             <View style={styles.nameRow}>

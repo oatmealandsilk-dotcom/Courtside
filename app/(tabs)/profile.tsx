@@ -130,7 +130,7 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
  const page = (selected: string, live: boolean) => {
   const index = TABS.indexOf(selected as typeof TABS[number]);
   const body = <>
-   {!hasMoved && <Pressable accessibilityRole="link" accessibilityLabel="Make your first move" onPress={() => router.push('/first-move')} style={styles.setup}>
+   {!hasMoved && <Pressable accessibilityRole="link" accessibilityLabel="Make your first move" onPress={() => router.push({ pathname: '/first-move', params: { from: 'profile' } })} style={styles.setup}>
      <Ionicons name="videocam-outline" size={20} color={colors.brand}/>
      <View style={{ flex: 1 }}><Text style={styles.setupTitle}>Make your first move</Text><Text style={styles.meta}>Post a clip, or answer someone's question. It's how players near you find you.</Text></View>
      <Ionicons name="chevron-forward" size={16} color={colors.textMuted}/>

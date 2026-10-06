@@ -80,9 +80,16 @@ export default function SignIn() {
       // The account's picture settles into the page colour, then the app opens.
       leave(() => router.replace('/'));
     } catch (err) {
-      // A login that expired on this phone is dropped from the list; the email form takes over.
       setError(err instanceof Error ? err.message : 'Could not switch accounts.');
       setSwitching(null);
+      // A login that expired on this phone is dropped from the list; the email
+      // form takes over, with its email filled in and the reason above the
+      // button (with no saved login left, the first-visit welcome showed instead).
+      if ((err as { expired?: boolean } | null)?.expired) {
+        setStarted(true);
+        setMode('sign-in');
+        setEmail(savedAccounts.find((a) => a.id === id)?.email ?? '');
+      }
     }
   };
   const [email, setEmail] = useState('');
@@ -120,7 +127,15 @@ export default function SignIn() {
       const stored = sessionStorage.getItem('courtside-auth-error');
       const message = fromHash.get('error_description') || fromQuery.get('error_description') || stored;
       if (message) {
-        setProviderError(`Google sign-in did not go through: ${message.replace(/\+/g, ' ')}`);
+        const said = message.replace(/\+/g, ' ');
+        // An emailed link (confirming an account, a new password, a new email)
+        // that has expired or was used already comes back the same way as a
+        // Google sign-in that failed: each is named for what it was.
+        const fromEmail = /email link|otp/i.test(said) || /otp/i.test(fromHash.get('error_code') ?? '');
+        setProviderError(fromEmail ? `That email link did not work: ${said}.` : `Google sign-in did not go through: ${said}`);
+        // The form, which shows it, opens straight away: the first-visit
+        // welcome has no room for it, and its buttons would clear it.
+        setStarted(true);
         sessionStorage.removeItem('courtside-auth-error');
       }
     } catch { /* No storage, no message to show. */ }
@@ -155,16 +170,22 @@ export default function SignIn() {
   const carryBirthday = async (): Promise<'carried' | 'none' | 'too-young'> => {
     // Each tap starts clean: nothing an earlier tap (or someone else's) carried goes along.
     dropCarriedBirthDate();
-    if (mode !== 'sign-up' || !birthDate) return 'none';
-    if (yearsOld(birthDate) < 13) {
+    if (mode !== 'sign-up') return 'none';
+    if (birthDate && yearsOld(birthDate) < 13) {
       await blockDevice();
       setAgeBlocked(true);
       setProviderError("Sorry, you can't create a CourtSide account.");
       return 'too-young';
     }
-    // A phone that has had an under-13 answer carries nothing: a new account
-    // meets the birthday page, which says CourtSide is not available.
-    if (ageBlocked || await isDeviceBlocked()) return 'none';
+    // A phone that has had an under-13 answer makes no new account, with or
+    // without a date typed, the same as the form's own button. (Before, a new
+    // Apple or Google account was made and then stuck on the birthday page.)
+    if (ageBlocked || await isDeviceBlocked()) {
+      setAgeBlocked(true);
+      setProviderError("Sorry, you can't create a CourtSide account.");
+      return 'too-young';
+    }
+    if (!birthDate) return 'none';
     carryBirthDate(birthDate);
     return 'carried';
   };
@@ -260,11 +281,21 @@ export default function SignIn() {
   // the saved ones, from the form to the welcome. From there it leaves the app.
   const backToForm = () => { setSent(null); setError(null); };
   const backToWelcome = () => { setStarted(false); setError(null); setProviderError(null); };
+  // "Use another account" or "New here?" from the saved accounts goes back to them.
+  const backToAccounts = () => { setUseAnother(false); setMode('sign-in'); setError(null); setProviderError(null); };
+  // The form's back arrow: to the saved accounts, from "another account" or
+  // from Account center's Add account (which has already logged you out);
+  // otherwise to the welcome. An iPhone has no other way back from these.
+  const showBack = (started && !chooser) || useAnother || !!add;
+  const goBackHere = () => {
+    if (useAnother) backToAccounts();
+    else if (add) { setMode('sign-in'); setError(null); setProviderError(null); router.replace('/sign-in'); }
+    else backToWelcome();
+  };
   useAndroidBack(() => {
     if (busy || via || switching) return true;
     if (sent) { backToForm(); return true; }
-    if (useAnother) { setUseAnother(false); setError(null); setProviderError(null); return true; }
-    if (started && !chooser) { backToWelcome(); return true; }
+    if (showBack) { goBackHere(); return true; }
     return false;
   });
   // Autofill hints for Android's password manager (an iPhone keeps its own way; see Field).
@@ -354,8 +385,8 @@ export default function SignIn() {
             </View>
           ) : (
             <>
-              {started && !chooser ? (
-                <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={backToWelcome} hitSlop={12} style={styles.back}>
+              {showBack ? (
+                <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={goBackHere} hitSlop={12} style={styles.back}>
                   <Ionicons name="chevron-back" size={22} color={colors.text} />
                 </Pressable>
               ) : null}

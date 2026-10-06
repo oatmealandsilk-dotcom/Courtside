@@ -59,7 +59,11 @@ export default function ChangeHandle() {
     return <Screen title="Handle" compactTitle onBack={() => goBack()}><View style={styles.wait}><CourtSpinner size={28} /></View></Screen>;
   }
 
-  const canSave = !locked && !busy && handle !== current && (status === 'ok' || status === null);
+  // Only a handle that fits the rules (3 to 24 letters, numbers or underscores):
+  // an emptied box shows no note at all, and once enabled Change and then the
+  // 30-day question for "@". Unchecked (status null: the live check could not
+  // run) still counts, as before; the server has the last word.
+  const canSave = !locked && !busy && /^[a-z0-9_]{3,24}$/.test(handle) && handle !== current && (status === 'ok' || status === null);
   const save = () => {
     if (!canSave) return;
     confirm({
