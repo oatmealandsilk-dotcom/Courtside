@@ -1212,14 +1212,15 @@ export default function Compose() {
                       />
                     }
                   />}
-                  {/* A post with session stats is never offered for CourtSide's Instagram. */}
+                  {/* A post with session stats is never offered for CourtSide's Instagram. On for everyone by default (owner, Oct 5);
+                      the Terms' "When CourtSide features your post" and the privacy policy quote this label, so change them together. */}
                   {(opened && withStats) || (statsRow && statsPick) || groupPost ? null : <FormRow
                     line
                     icon="megaphone-outline"
-                    label="Feature on CourtSide's Instagram"
+                    label="Let CourtSide feature this on its Instagram"
                     accessibilityRole="switch"
                     accessibilityState={{ checked: featureOk }}
-                    accessibilityLabel="Feature on CourtSide's Instagram"
+                    accessibilityLabel="Let CourtSide feature this on its Instagram"
                     onPress={() => setFeatureOk((on) => !on)}
                     // The row is the switch: the toggle only shows its state, so one tap flips it once.
                     accessory={<View pointerEvents="none" aria-hidden accessibilityElementsHidden importantForAccessibility="no-hide-descendants"><Toggle value={featureOk} onChange={setFeatureOk} /></View>}

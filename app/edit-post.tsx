@@ -5,13 +5,15 @@ import { router, useLocalSearchParams } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { DragSheet } from '@/components/DragSheet';
+import { FormRow } from '@/components/FormRow';
 import { LocationLink } from '@/components/LocationChip';
 import { HealthShareRow } from '@/components/session/HealthShareRow';
 import type { DetectedActivity, TaggedCourt } from '@/data/types';
 import { availableShare, chosenShare, choiceFromTicks, postShare, type HealthChoice } from '@/features/activity/healthShare';
 import { openPlacePicker } from '@/features/places/picker';
 import { TagPlayers } from '@/components/TagPlayers';
-import { Button, Field } from '@/components/ui';
+import { Button, Field, Toggle } from '@/components/ui';
+import { canBeFeatured } from '@/features/compose/featuring';
 import { BLOCKED_WORDS_NOTE } from '@/features/hiddenWords/hiddenWords';
 import * as haptics from '@/lib/haptics';
 import { show as showToast } from '@/lib/toast';
@@ -22,7 +24,9 @@ import { colors, spacing, typography } from '@/theme';
  * Editing something of yours after it is up: a post's caption, who is in it
  * and where it was, or a thread's question and details. Saving stamps it
  * "Edited" next to the date. A tracker session's post also has "Share health
- * data" (Oct 4, owner), as in the composer.
+ * data" (Oct 4, owner), as in the composer. A post that can be featured has
+ * the composer's "Let CourtSide feature this on its Instagram" switch, so it
+ * can be switched off any time after posting (Oct 5, owner).
  */
 export default function EditPost() {
   const styles = useThemedStyles(styleDefinitions);
@@ -38,6 +42,7 @@ export default function EditPost() {
   const [tagged, setTagged] = useState<string[]>(post?.taggedUserIds ?? []);
   const [location, setLocation] = useState(post?.location ?? '');
   const [court, setCourt] = useState<TaggedCourt | null>(post?.court ?? null);
+  const [feature, setFeature] = useState(post ? post.featureOk !== false : true);
   const [closeSignal, setCloseSignal] = useState(0);
   // Opened before the post had loaded (a reload, a link): the fields fill in
   // once, when it arrives, and Save stays off until then, so saving can
@@ -50,6 +55,7 @@ export default function EditPost() {
     setTagged(post?.taggedUserIds ?? []);
     setLocation(post?.location ?? '');
     setCourt(post?.court ?? null);
+    setFeature(post ? post.featureOk !== false : true);
     setFilled(true);
   }, [filled, post, question]);
 
@@ -83,6 +89,8 @@ export default function EditPost() {
   // Null until it is changed here: until then it reads what the post shares.
   const [health, setHealth] = useState<HealthChoice | null>(null);
   const healthShown = health ?? choiceFromTicks(postShare(post?.session), available);
+  // Never on a group post or one with a session's stats: those are never featured.
+  const featurable = !!post && canBeFeatured(post);
 
   const canSave = filled && mine && (isQuestion ? title.trim().length >= 3 : true);
   // A quick second tap on Save would ask twice.
@@ -99,7 +107,7 @@ export default function EditPost() {
         showToast({ title: BLOCKED_WORDS_NOTE, body: 'Change them and save again.', icon: 'alert-circle-outline', long: true });
         return;
       }
-      if (post) actions.editPost(post.id, { body: body.trim(), taggedUserIds: tagged, location, court, ...(health && available.length ? { share: chosenShare(health, available) } : {}) });
+      if (post) actions.editPost(post.id, { body: body.trim(), taggedUserIds: tagged, location, court, ...(health && available.length ? { share: chosenShare(health, available) } : {}), ...(featurable ? { featureOk: feature } : {}) });
       if (question) actions.editQuestion(question.id, { title: title.trim(), body: body.trim() });
       setCloseSignal((n) => n + 1);
     });
@@ -132,6 +140,19 @@ export default function EditPost() {
             <Field label="Caption" labelRight={<LocationLink value={location} court={!!court} onPress={() => openPlacePicker((value, picked) => { setLocation(value); setCourt(picked ?? null); }, location)} onClear={() => { setLocation(''); setCourt(null); }} />} value={body} onChangeText={setBody} multiline minHeight={80} mentions />
             <TagPlayers tagged={tagged} onChange={setTagged} />
             {tracker && available.length ? <HealthShareRow activity={tracker} choice={healthShown} onChoice={setHealth} /> : null}
+            {/* The composer's switch, word for word: the Terms ("When CourtSide features your post") and the privacy policy quote it. */}
+            {featurable ? (
+              <FormRow
+                icon="megaphone-outline"
+                label="Let CourtSide feature this on its Instagram"
+                accessibilityRole="switch"
+                accessibilityState={{ checked: feature }}
+                accessibilityLabel="Let CourtSide feature this on its Instagram"
+                onPress={() => setFeature((on) => !on)}
+                // The row is the switch: the toggle only shows its state, so one tap flips it once.
+                accessory={<View pointerEvents="none" aria-hidden accessibilityElementsHidden importantForAccessibility="no-hide-descendants"><Toggle value={feature} onChange={setFeature} /></View>}
+              />
+            ) : null}
           </>
         )}
         {mine ? <Button label="Save" onPress={save} disabled={!canSave} loading={checking} full /> : null}
