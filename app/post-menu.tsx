@@ -23,6 +23,7 @@ import { stageSize } from '@/features/share/storyImage';
 import { StoryOverlayCanvas } from '@/components/share/StoryOverlay';
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { useOpenOutside } from '@/features/share/openOutside';
+import { useAndroidBack } from '@/lib/androidBack';
 import type { Post, Story } from '@/data/types';
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
@@ -160,6 +161,9 @@ export default function PostMenu() {
   };
   const closeRef = useRef(close);
   closeRef.current = close;
+  // Android's Back: the same slide down as a tap outside or a pull on the grabber, rather than the
+  // menu vanishing in one frame (as every other sheet does, DragSheet).
+  useAndroidBack(() => { closeRef.current(); return true; });
 
   // The grabber does what it says: pull the sheet down and let go to close it, or it settles back.
   // From the grabber's strip anywhere; on a phone from anywhere on the sheet too, while its list is at the top.

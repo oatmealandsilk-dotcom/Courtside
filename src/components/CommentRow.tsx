@@ -18,6 +18,7 @@ import { thankForReport } from '@/features/moderation/reportThanks';
 import { useApp } from '@/store/AppContext';
 import { colors, spacing, typography } from '@/theme';
 import { openPlayer } from '@/features/navigation/openPlayer';
+import { useLightStatusWhile } from '@/lib/statusBarStyle';
 
 /**
  * A comment's first few words, in quotes, so a card about it says which one
@@ -92,6 +93,9 @@ export function CommentRow({ comment, big = false, reply = false, onPressBody, o
   const openProfile = () => { if (who) openPlayer(who.id, currentUserId); };
   // A photo in the comment opens to the whole screen; a tap anywhere puts it away.
   const [viewing, setViewing] = useState(false);
+  // The photo opened larger is a dark room: the clock and battery go light over it, and on Android
+  // the message banner stands aside while it is up (it would be drawn under it), as in the other viewers.
+  const viewerShown = useLightStatusWhile(viewing);
   // Someone else's comment: hold it to report it. It leaves your screens at once.
   const canReport = !!currentUserId && comment.authorId !== currentUserId;
   const sendReport = () => {
@@ -183,7 +187,7 @@ export function CommentRow({ comment, big = false, reply = false, onPressBody, o
         ) : null}
       </View>
       {comment.imageUrl ? (
-        <Modal visible={viewing} transparent animationType="fade" onRequestClose={() => setViewing(false)} statusBarTranslucent>
+        <Modal visible={viewerShown} transparent animationType="fade" onRequestClose={() => setViewing(false)} statusBarTranslucent>
           <Pressable accessibilityRole="button" accessibilityLabel="Close the photo" onPress={() => setViewing(false)} style={styles.viewer}>
             <ExpoImage source={{ uri: comment.imageUrl }} style={styles.viewerImage} contentFit="contain" cachePolicy="memory-disk" />
           </Pressable>
