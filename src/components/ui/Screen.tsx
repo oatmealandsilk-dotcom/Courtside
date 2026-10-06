@@ -16,6 +16,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { LAYOUT, useResponsive } from '@/lib/useResponsive';
 import { Wash } from '@/components/Wash';
+import { PAGE_WASH, PageWashContext, type PageWashFrame } from './pageWash';
 import { useBarInset } from '@/features/navigation/barInset';
 import { colors, spacing, typography } from '@/theme';
 
@@ -146,6 +147,8 @@ export function Screen({
   const [keysCover, setKeysCover] = useState<{ truly: number; avoided: number } | null>(null);
   // The avoider's place in its parent: the same layout it does its own sum with.
   const avoiderFrame = useRef<{ y: number; height: number } | null>(null);
+  // In a browser, where the scrolling part starts under the wash, for a bar pinned at its top to carry the wash on (pageWash).
+  const washFrame = useRef<PageWashFrame>({ node: null, y: 0 });
   // Android has no need: there the keyboard's room is an empty box that follows the keys (useKeyboardRoom, below).
   const watchKeys = IOS && (!scroll || strip > 0);
   useEffect(() => {
@@ -501,6 +504,7 @@ export function Screen({
 
   return (
     <KeyboardScrollContext.Provider value={scroll ? reveal : null}>
+    <PageWashContext.Provider value={wash && scroll && Platform.OS === 'web' ? washFrame : null}>
     <KeyboardAvoidingView
       style={[styles.root, { paddingTop: isPhone ? insets.top : wideNative ? Math.max(insets.top, spacing.sm) : spacing.sm }]}
       // A scrolling page moves the box itself; a fixed page lifts everything.
@@ -508,10 +512,14 @@ export function Screen({
       enabled={Platform.OS === 'ios' && !scroll}
       onLayout={(e) => { avoiderFrame.current = e.nativeEvent.layout; }}
     >
-      {wash ? <Reanimated.View pointerEvents="none" style={[StyleSheet.absoluteFill, washStyle]}><Wash height={360} strength={0.85} /></Reanimated.View> : null}
+      {wash ? <Reanimated.View pointerEvents="none" style={[StyleSheet.absoluteFill, washStyle]}><Wash height={PAGE_WASH.height} strength={PAGE_WASH.strength} /></Reanimated.View> : null}
       {headerWrapper ? headerWrapper(header) : header}
       {scroll ? (
-        <View style={styles.flex}>
+        <View
+          style={styles.flex}
+          ref={Platform.OS === 'web' ? (node) => { washFrame.current.node = node; } : undefined}
+          onLayout={Platform.OS === 'web' ? (e) => { washFrame.current.y = e.nativeEvent.layout.y; } : undefined}
+        >
         <Reanimated.ScrollView
           ref={(node: unknown) => { list(node as never); scroller.current = node as unknown as ScrollView | null; if (scrollRef) scrollRef.current = node as unknown as ScrollView | null; }}
           style={styles.flex}
@@ -578,6 +586,7 @@ export function Screen({
         </Reanimated.View>
       ) : null}
     </KeyboardAvoidingView>
+    </PageWashContext.Provider>
     </KeyboardScrollContext.Provider>
   );
 }
