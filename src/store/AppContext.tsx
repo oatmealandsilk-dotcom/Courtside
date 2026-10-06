@@ -7899,13 +7899,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const reportWorkoutsFromAlert = useCallback(async (ws: { id: string; startedAt: string; endedAt: string }[]): Promise<ID[]> => {
     const me = stateRef.current.currentUserId;
     if (!live(me) || !appleHealthAvailable()) return [];
-    const ids: ID[] = [];
-    // One after another, newest first, as a look hands them over.
-    for (const w of [...ws].sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt))) {
-      const r = await reportFromAlert(me!, w);
-      if (stateRef.current.currentUserId !== me) return [];
-      if (r && r !== 'error' && !ids.includes(r)) ids.push(r);
-    }
+    // Newest first, a few at a time (a catch-up can be dozens: one after another kept the list waiting).
+    const sorted = [...ws].sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt));
+    const got: (ID | null)[] = sorted.map(() => null);
+    let next = 0;
+    await Promise.all(Array.from({ length: Math.min(4, sorted.length) }, async () => {
+      while (next < sorted.length && stateRef.current.currentUserId === me) {
+        const i = next;
+        next += 1;
+        const r = await reportFromAlert(me!, sorted[i]);
+        if (r && r !== 'error') got[i] = r;
+      }
+    }));
+    if (stateRef.current.currentUserId !== me) return [];
+    const ids = [...new Set(got.filter((id): id is ID => !!id))];
     // Your sessions and Notifications read once for them all, as after a check.
     const [list, notes] = await Promise.all([remote.fetchActivities(me!).catch(() => null), remote.fetchActivityNotes(me!).catch(() => [])]);
     if (stateRef.current.currentUserId !== me) return [];

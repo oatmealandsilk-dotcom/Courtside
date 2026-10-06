@@ -6,7 +6,7 @@ import { CourtSpinner } from '@/components/CourtSpinner';
 import { EmptyState, Screen } from '@/components/ui';
 import { WorkoutCard, WorkoutRow, type WorkoutRowItem } from '@/components/WorkoutRow';
 import type { DetectedActivity, ID } from '@/data/types';
-import { allTennis, foundTitle } from '@/features/activity/found';
+import { allTennis, foundBursts, foundTitle, handedOver } from '@/features/activity/found';
 import { goBack } from '@/lib/goBack';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
@@ -23,16 +23,40 @@ const WAITING_DAYS = 8;
  * ones say Logged, hidden ones Hidden, as on Past workouts, whose rows these
  * are. Only you see this page.
  *
- * `ids`: the workouts of that one row (features/activity/found). Without
- * them (the alert's tap), every workout still waiting to be logged that was
- * found in the last eight days. Opening it marks their rows in
+ * `ids`: the workouts of that one row or alert (features/activity/found),
+ * and any more found in the same go since (an alert tells of the first
+ * four; the row counts them all). `handing`: the phone's own alert was
+ * tapped and its workouts are still being handed to the server; the list
+ * waits for them. Without either, every workout still waiting to be logged
+ * that was found in the last eight days. Opening it marks their rows in
  * Notifications read, together.
  */
 export default function WorkoutsFound() {
   const styles = useThemedStyles(styleDefinitions);
-  const { ids: idsParam } = useLocalSearchParams<{ ids?: string }>();
-  const { detectedActivities, currentUserId, ready, actions } = useApp();
-  const asked = useMemo(() => (idsParam ?? '').split(',').map((s) => s.trim()).filter(Boolean).slice(0, 200), [idsParam]);
+  const { ids: idsParam, handing } = useLocalSearchParams<{ ids?: string; handing?: string }>();
+  const { detectedActivities, notifications, currentUserId, ready, actions } = useApp();
+
+  // The phone's own alert, tapped: open at once, and wait here while its workouts are handed over.
+  const [handed, setHanded] = useState<ID[] | null>(null);
+  useEffect(() => {
+    if (!handing) return undefined;
+    let on = true;
+    void handedOver(handing).then((got) => { if (on) setHanded(got); });
+    return () => { on = false; };
+  }, [handing]);
+  const busy = !!handing && handed === null;
+
+  const askedFor = useMemo(
+    () => (handed?.length ? handed : (idsParam ?? '').split(',').map((s) => s.trim()).filter(Boolean)).slice(0, 200),
+    [handed, idsParam],
+  );
+  // The whole go they were found in, as its one row in Notifications counts it.
+  const myRows = useMemo(() => notifications.filter((n) => n.userId === currentUserId && n.kind === 'activity'), [notifications, currentUserId]);
+  const asked = useMemo(() => {
+    if (!askedFor.length) return askedFor;
+    const go = foundBursts(myRows, detectedActivities).find((b) => b.activityIds.some((id) => askedFor.includes(id)));
+    return go ? [...new Set([...askedFor, ...go.activityIds])].slice(0, 200) : askedFor;
+  }, [askedFor, myRows, detectedActivities]);
 
   // A session the app no longer holds (older than the two weeks it keeps): read on its own, while the server keeps it.
   const [extra, setExtra] = useState<Record<ID, DetectedActivity | null>>({});
@@ -46,12 +70,14 @@ export default function WorkoutsFound() {
     return () => { on = false; };
   }, [ready, missing, actions]);
 
-  // Opened from the lock screen: what the server filed since the app last read it.
+  // Opened from the lock screen: what the server filed since the app last read it, the
+  // sessions and their rows in Notifications both (so those rows are read with the list).
   const fetched = useRef(false);
   useEffect(() => {
     if (!ready || fetched.current) return;
     fetched.current = true;
-    void actions.refreshActivities();
+    void actions.refreshActivities().catch(() => undefined);
+    void actions.catchUpNotifications().catch(() => undefined);
   }, [ready, actions]);
 
   const list = useMemo(() => {
@@ -68,10 +94,12 @@ export default function WorkoutsFound() {
 
   // Their rows in Notifications, read together (the bell's number drops by one).
   // (Those asked for too: a row about a copy that turned out to be the same session as another.)
+  // Again whenever more of their rows arrive (opened from an alert before the app had them).
   const listIds = [...new Set([...asked, ...list.map((a) => a.id)])].join(',');
+  const unreadRows = myRows.filter((n) => !n.read).length;
   useEffect(() => {
-    if (listIds) actions.markActivityNotesRead(listIds.split(','));
-  }, [listIds, actions]);
+    if (listIds && !busy) actions.markActivityNotesRead(listIds.split(','));
+  }, [listIds, unreadRows, busy, actions]);
 
   const row = (a: DetectedActivity): WorkoutRowItem => ({ ...a, status: a.status === 'logged' ? 'logged' : a.status === 'dismissed' ? 'hidden' : 'new' });
   const waiting = list.filter((a) => a.status === 'new').length;
@@ -80,7 +108,7 @@ export default function WorkoutsFound() {
 
   return (
     <Screen title={title} subtitle={subtitle} compactTitle onBack={() => goBack('/notifications')}>
-      {list.length === 0 && (waitingFor || !ready) ? (
+      {busy || (list.length === 0 && (waitingFor || !ready)) ? (
         <View style={styles.wait}><CourtSpinner size={34} /></View>
       ) : list.length === 0 ? (
         <EmptyState

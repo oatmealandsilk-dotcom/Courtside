@@ -4,7 +4,7 @@
  * nothing, and the phone's notification module is never loaded here.
  */
 
-export type WatchPrefs = { tennis: boolean; workouts: boolean; skipWhoopTennis: boolean; alerts: boolean };
+export type WatchPrefs = { tennis: boolean; workouts: boolean; skipWhoopTennis: boolean; skipWhoopOther: boolean; alerts: boolean };
 export type WatchedWorkout = { id: string; startedAt: string; endedAt: string; tennis: boolean };
 
 export const workoutWatchAvailable = () => false;

@@ -16,7 +16,15 @@
 --
 -- which opens their list in the app (Workouts found, each with its own Log
 -- it), and any more in that go stay quiet. "One go" is ten minutes: alerts
--- to the same person less than ten minutes after their last one.
+-- to the same person less than ten minutes after their last one (the app's
+-- one row and the iPhone's own alert use the same ten minutes). Only those
+-- still waiting to be logged are counted: one logged or hidden meanwhile is
+-- not in the number.
+--
+-- Safe to apply before or after the app's code with the list is on phones:
+-- the one alert opens Notifications ("/notifications?workouts=…", an
+-- address every version of the app has), which the version with the list
+-- turns into the list itself (src/features/push/push.ts).
 --
 --   * WHOOP's sessions still being scored, which the sweep alerts later
 --     (sweep_activities, every 15 minutes), are counted first and alerted
@@ -35,8 +43,9 @@
 --     counted twice.
 --   * Nothing else changes: the same sessions alert at the same times (only
 --     one that ended in the last 12 hours, never between 10pm and 7am where
---     it was played, never for someone who turned these alerts off), and
---     still no times or stats on the lock screen.
+--     it was played, never for someone who turned these alerts off), a
+--     session WHOOP took back and sent again alerts again, and still no
+--     times or stats on the lock screen.
 --
 -- How: two columns on detected_activities, private like the rest of the
 -- row (only its owner can read it, nothing in the app can write it): when
@@ -86,7 +95,7 @@ begin
   -- The new function: not there yet, or this file's own.
   select count(*), max(md5(p.prosrc)) into n, now_is from pg_proc p
     where p.pronamespace = 'public'::regnamespace and p.proname = 'send_activity_pushes';
-  if n > 1 or (n = 1 and now_is <> 'a228ece90ab4454dedaebd7347ce2c1f') then
+  if n > 1 or (n = 1 and now_is <> '53e074d640f3f446e61c3c8c612c60f1') then
     wrong := wrong || 'send_activity_pushes'::text;
   end if;
   if cardinality(wrong) > 0 then
@@ -109,15 +118,26 @@ create index if not exists detected_activities_pushed on public.detected_activit
 -- --------------------------------------------- 2. the alerts, folded past 3
 -- One person's sessions whose alert is due (every rule for an alert already
 -- passed: see note_detected_activity and sweep_activities). Three or fewer
--- in the go (these, and their alerts in the last ten minutes): one each, as
--- before, oldest first so the newest sits on top. More than three: ONE "N
--- workouts found" for the go. Already told that in the go: quiet. Answers
--- 'pushed', 'pushed-found', 'folded' or 'none'. Server only.
+-- in the go (these, and those alerted on their own in the last ten minutes
+-- that still wait to be logged): one each, as before, oldest first so the
+-- newest sits on top. More than three: ONE "N workouts found" for the go.
+-- Already told that in the go: quiet. Answers 'pushed', 'pushed-found',
+-- 'folded' or 'none'. Server only.
+--
+-- A session WHOOP took back and then sent again is news once more (record_activity):
+-- filed again since its alert (notified_at after pushed_at), it is due again.
+--
+-- The one alert opens Notifications with the go's workouts in its address
+-- ("/notifications?workouts=…", newest first, at most 40), an address every
+-- version of the app has. The version with the list (app/workouts-found)
+-- opens their list from it (src/features/push/push.ts); an older one simply
+-- opens Notifications, so this can go live before or after the app's code.
 create or replace function public.send_activity_pushes(u uuid, ids uuid[]) returns text
 language plpgsql security definer set search_path = public as $$
 declare
   v_due uuid[];
-  v_ones int;
+  v_ones uuid[];
+  v_go uuid[];
   v_found boolean;
   v_n int;
   v_tennis boolean;
@@ -126,21 +146,26 @@ begin
   if u is null or coalesce(cardinality(ids), 0) = 0 then return 'none'; end if;
   -- One person's alerts one at a time (note_detected_activity holds the same lock).
   perform pg_advisory_xact_lock(hashtextextended('activity:' || u::text, 0));
-  -- Theirs, still waiting to be logged, not alerted yet: newest first.
+  -- Theirs, still waiting to be logged, not alerted since they were filed: newest first.
   select array_agg(d.id order by d.ended_at desc) into v_due from public.detected_activities d
-   where d.user_id = u and d.id = any(ids) and d.status = 'new' and d.pushed_at is null;
+   where d.user_id = u and d.id = any(ids) and d.status = 'new'
+     and (d.pushed_at is null or d.pushed_at < d.notified_at);
   if v_due is null then return 'none'; end if;
-  -- The go under way: their alerts in the last ten minutes.
-  select count(*) filter (where d.pushed_as = 'one'), coalesce(bool_or(d.pushed_as = 'found'), false)
-    into v_ones, v_found
+  -- The go under way: their alerts in the last ten minutes. Already told "N workouts found" in it?
+  select coalesce(bool_or(d.pushed_as = 'found'), false) into v_found
     from public.detected_activities d
-   where d.user_id = u and d.pushed_at > now() - interval '10 minutes';
-  -- Already told "N workouts found" in this go: these join it quietly (the app's one row counts them).
+   where d.user_id = u and d.pushed_at > now() - interval '10 minutes' and not (d.id = any(v_due));
+  -- These join it quietly (the app's one row counts them).
   if v_found then
     update public.detected_activities set pushed_at = now(), pushed_as = 'folded' where id = any(v_due);
     return 'folded';
   end if;
-  v_n := v_ones + cardinality(v_due);
+  -- Its single alerts, those still waiting to be logged (one logged or hidden since is not counted).
+  select coalesce(array_agg(d.id order by d.ended_at desc), '{}') into v_ones
+    from public.detected_activities d
+   where d.user_id = u and d.pushed_as = 'one' and d.status = 'new'
+     and d.pushed_at > now() - interval '10 minutes' and not (d.id = any(v_due));
+  v_n := cardinality(v_ones) + cardinality(v_due);
   -- Three or fewer in the go: one each, as before. No numbers on the lock screen: the time and stats show only in the app.
   if v_n <= 3 then
     for r in select d.id, d.sport from public.detected_activities d where d.id = any(v_due) order by d.ended_at loop
@@ -153,11 +178,11 @@ begin
     update public.detected_activities set pushed_at = now(), pushed_as = 'one' where id = any(v_due);
     return 'pushed';
   end if;
-  -- More than three: ONE alert for the go, opening its list in the app (app/workouts-found).
-  select coalesce(bool_and(d.sport = 'tennis'), false) into v_tennis from public.detected_activities d
-   where d.user_id = u and (d.id = any(v_due) or (d.pushed_as = 'one' and d.pushed_at > now() - interval '10 minutes'));
+  -- More than three: ONE alert for the go, opening its list in the app.
+  select array_agg(d.id order by d.ended_at desc), coalesce(bool_and(d.sport = 'tennis'), false) into v_go, v_tennis
+    from public.detected_activities d where d.id = any(v_due || v_ones);
   perform public.send_push(u, v_n || case when v_tennis then ' tennis sessions found' else ' workouts found' end,
-                           'Tap to log them on CourtSide.', '/workouts-found');
+                           'Tap to log them on CourtSide.', '/notifications?workouts=' || array_to_string(v_go[1:40], ','));
   update public.detected_activities set pushed_at = now(), pushed_as = case when id = v_due[1] then 'found' else 'folded' end where id = any(v_due);
   return 'pushed-found';
 end $$;
@@ -306,7 +331,7 @@ declare
 begin
   if (select md5(p.prosrc) from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname = 'note_detected_activity') is distinct from '804e5d88e5a616bd9890a116f8d749bd'
      or (select md5(p.prosrc) from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname = 'sweep_activities') is distinct from 'f4f320c3bf39edc4bb488c1966b4900b'
-     or (select md5(p.prosrc) from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname = 'send_activity_pushes') is distinct from 'a228ece90ab4454dedaebd7347ce2c1f'
+     or (select md5(p.prosrc) from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname = 'send_activity_pushes') is distinct from '53e074d640f3f446e61c3c8c612c60f1'
      or not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'detected_activities' and column_name = 'pushed_as') then
     raise exception 'Migration 2026100600018 stopped: the result was not as planned; nothing was changed.';
   end if;
@@ -322,10 +347,11 @@ commit;
 -- ------------------------------------------------- 7. check to run afterwards
 -- Read-only. Paste into the SQL editor (remove the leading "-- "). Expect
 -- three rows: note_detected_activity 804e5d88e5a616bd9890a116f8d749bd, send_activity_pushes
--- a228ece90ab4454dedaebd7347ce2c1f, sweep_activities f4f320c3bf39edc4bb488c1966b4900b:
+-- 53e074d640f3f446e61c3c8c612c60f1, sweep_activities f4f320c3bf39edc4bb488c1966b4900b:
 -- select proname, md5(prosrc) from pg_proc where pronamespace = 'public'::regnamespace and proname in ('note_detected_activity', 'send_activity_pushes', 'sweep_activities') order by 1;
 --
 -- The rolled-back test that goes with this file (run before applying it):
--- scratchpad grp/t18_rollback.sql — the whole file twice, then WHOOP
--- sessions put through it one at a time and in a sweep, inside one
+-- scratchpad grp-fix/t18_rollback.sql — the whole file twice, then WHOOP
+-- sessions put through it one at a time and in a sweep (and one taken back
+-- and sent again, and one logged in the middle of a go), inside one
 -- transaction that is undone.

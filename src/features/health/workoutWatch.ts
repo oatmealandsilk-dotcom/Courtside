@@ -35,6 +35,13 @@ export type WatchPrefs = {
   workouts: boolean;
   /** WHOOP sends its own tennis alert: its copy in Health gets none. */
   skipWhoopTennis: boolean;
+  /**
+   * WHOOP sends its own alert for every other workout too (its every-workout
+   * switch, migration 135): no alert from here for those either, so one run
+   * never buzzes twice, nor a catch-up twice ("4 workouts found" from each).
+   * Only a build after this change knows it (see startWorkoutWatch).
+   */
+  skipWhoopOther: boolean;
   /** Settings' alert switch for sessions (push_activity). */
   alerts: boolean;
 };
@@ -44,6 +51,8 @@ export type WatchedWorkout = { id: string; startedAt: string; endedAt: string; t
 
 type Native = {
   start(tennis: boolean, workouts: boolean, skipWhoopTennis: boolean, alerts: boolean): Promise<void>;
+  /** The same with every switch by name (skipWhoopOther too); missing on a build that has only start. */
+  startWith?(prefs: Record<string, boolean>): Promise<void>;
   stop(): Promise<void>;
   addListener(event: 'onWorkout', listener: (payload: Record<string, unknown>) => void): EventSubscription;
 };
@@ -64,7 +73,11 @@ export const workoutWatchAvailable = () => mod() !== null;
 export async function startWorkoutWatch(p: WatchPrefs): Promise<void> {
   const m = mod();
   if (!m) return;
-  try { await m.start(p.tennis, p.workouts, p.skipWhoopTennis, p.alerts); } catch { /* tried again next launch */ }
+  try {
+    // A build that knows every switch by name; an older one (build 15) is told the four it knows.
+    if (typeof m.startWith === 'function') await m.startWith({ tennis: p.tennis, workouts: p.workouts, skipWhoopTennis: p.skipWhoopTennis, skipWhoopOther: p.skipWhoopOther, alerts: p.alerts });
+    else await m.start(p.tennis, p.workouts, p.skipWhoopTennis, p.alerts);
+  } catch { /* tried again next launch */ }
 }
 
 /** Switched off, or signed out: no more alerts, and what the module kept is forgotten. Never throws. */

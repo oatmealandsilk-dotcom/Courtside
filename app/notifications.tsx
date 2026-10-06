@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { requestScrollToTop } from '@/features/navigation/scrollToTop';
 import { router } from 'expo-router';
@@ -326,10 +326,17 @@ export default function Notifications() {
     [notifications, currentUserId, blockedIds],
   );
 
+  // Every row that was new while this page has been open keeps its tint until you leave, however
+  // often the rows are put together again (more rows coming in, or your sessions loading after them).
+  const newWhileOpen = useRef(new Set<string>());
+  for (const n of mine) if (!n.read) newWhileOpen.current.add(n.id);
+  const fresh = (n: Notification) => !n.read || newWhileOpen.current.has(n.id);
+
   // Snapshot on first render so rows do not lose their tint as we mark them read.
   const groups = useMemo<Group[]>(() => {
     const byTarget = new Map<string, Group>();
     // More than three workouts found in one go: one row for them all (features/activity/found).
+    // Put together again once your sessions load: a copy of one folds into it, one WHOOP took back is left out.
     const bursts = foundBursts(mine, detectedActivities);
     const burstOf = new Map(bursts.flatMap((b) => b.rowIds.map((id) => [id, b] as const)));
     for (const n of [...mine].sort(
@@ -338,15 +345,16 @@ export default function Notifications() {
       const burst = burstOf.get(n.id);
       if (burst) {
         if (!byTarget.has(burst.key)) {
+          const unread = burst.unread || burst.rowIds.some((id) => newWhileOpen.current.has(id));
           byTarget.set(burst.key, {
             key: burst.key,
-            section: sectionFor(burst.unread, burst.createdAt),
+            section: sectionFor(unread, burst.createdAt),
             kind: 'activity',
             targetId: burst.activityIds[0],
             targetKind: 'activity',
             actorIds: [n.actorId],
             createdAt: burst.createdAt,
-            unread: burst.unread,
+            unread,
             found: { activityIds: burst.activityIds, previews: burst.previews },
           });
         }
@@ -362,17 +370,17 @@ export default function Notifications() {
       const key = n.kind === 'follow' || n.kind === 'follow-request' || n.kind === 'follow-accepted'
         ? `${n.kind}:${n.actorId}`
         : n.kind === 'like' || n.kind === 'upvote' || n.kind === 'share' || n.kind === 'helpful'
-          ? (!n.read ? `${n.kind}-new:${n.targetKind}:${n.targetId}:${day}` : `${n.kind}:${n.targetKind}:${n.targetId}:${day}`)
+          ? (fresh(n) ? `${n.kind}-new:${n.targetKind}:${n.targetId}:${day}` : `${n.kind}:${n.targetKind}:${n.targetId}:${day}`)
           : `one:${n.id}`;
       const existing = byTarget.get(key);
       if (existing) {
         if (!existing.actorIds.includes(n.actorId)) existing.actorIds.push(n.actorId);
-        existing.unread = existing.unread || !n.read;
+        existing.unread = existing.unread || fresh(n);
         continue;
       }
       byTarget.set(key, {
         key,
-        section: sectionFor(!n.read, n.createdAt),
+        section: sectionFor(fresh(n), n.createdAt),
         kind: n.kind,
         targetId: n.targetId,
         targetKind: n.targetKind,
@@ -380,14 +388,14 @@ export default function Notifications() {
         createdAt: n.createdAt,
         // The server's stand-in for an Instant with no caption; the row already says what it was.
         preview: n.preview === 'your hit' ? undefined : n.kind === 'activity' && n.preview ? shortLength(n.preview) : n.preview,
-        unread: !n.read,
+        unread: fresh(n),
       });
     }
     return [...byTarget.values()].sort((a, b) => SECTIONS.indexOf(a.section) - SECTIONS.indexOf(b.section) || Date.parse(b.createdAt) - Date.parse(a.createdAt));
-    // Deliberately keyed on length only: re-grouping as rows are marked read
-    // would wipe the tint mid-view.
+    // Deliberately keyed on length only: re-grouping on every row marked read is
+    // not needed (the tint is kept above either way).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mine.length, followRequests.length]);
+  }, [mine.length, followRequests.length, detectedActivities.length]);
 
   // The post each row is about, small on the right the way Instagram's inbox
   // shows it, so "liked your clip" says which clip. Posts the app hasn't

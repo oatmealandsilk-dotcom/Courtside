@@ -21,7 +21,8 @@ import UserNotifications
  * - Only one that ended in the last 12 hours, 5 minutes to 10 hours long
  *   (the server keeps no other), never between 10pm and 7am here, tennis
  *   only unless the person said yes to every workout, no tennis at all when
- *   WHOOP already sends its own tennis alert (one session, one alert), none
+ *   WHOOP already sends its own tennis alert (one session, one alert), and
+ *   no other workout when WHOOP sends those too (its every-workout switch), none
  *   when Settings' alert switch for sessions is off, and each session once
  *   (also when two apps saved it: the Watch's run and Strava's copy of it).
  * - With CourtSide open on screen, no alert: the app is told instead, and
@@ -67,17 +68,20 @@ final class WorkoutWatcher: @unchecked Sendable {
     var workouts: Bool
     /** WHOOP sends its own tennis alert (its server push): no tennis alert from here at all, so one session never buzzes twice. */
     var skipWhoopTennis: Bool
+    /** WHOOP sends its own alert for every other workout too (its every-workout switch): none from here for those either. */
+    var skipWhoopOther: Bool
     /** Settings' alert switch for sessions (push_activity). Off: no alert, the app still finds them. */
     var alerts: Bool
 
     var asDictionary: [String: Bool] {
-      ["tennis": tennis, "workouts": workouts, "skipWhoopTennis": skipWhoopTennis, "alerts": alerts]
+      ["tennis": tennis, "workouts": workouts, "skipWhoopTennis": skipWhoopTennis, "skipWhoopOther": skipWhoopOther, "alerts": alerts]
     }
 
-    init(tennis: Bool, workouts: Bool, skipWhoopTennis: Bool, alerts: Bool) {
+    init(tennis: Bool, workouts: Bool, skipWhoopTennis: Bool, skipWhoopOther: Bool = false, alerts: Bool) {
       self.tennis = tennis
       self.workouts = workouts
       self.skipWhoopTennis = skipWhoopTennis
+      self.skipWhoopOther = skipWhoopOther
       self.alerts = alerts
     }
 
@@ -87,6 +91,7 @@ final class WorkoutWatcher: @unchecked Sendable {
         tennis: d["tennis"] as? Bool ?? false,
         workouts: d["workouts"] as? Bool ?? false,
         skipWhoopTennis: d["skipWhoopTennis"] as? Bool ?? false,
+        skipWhoopOther: d["skipWhoopOther"] as? Bool ?? false,
         alerts: d["alerts"] as? Bool ?? true
       )
     }
@@ -395,6 +400,9 @@ final class WorkoutWatcher: @unchecked Sendable {
     // here. Runs and the rest still do, and the app's own check files the tennis all the same. (Fitbit, Oura
     // and Polar never push from the server, so their copies need no such rule.)
     if tennis && prefs.skipWhoopTennis { return false }
+    // The same for every other workout once WHOOP sends those too (its every-workout switch): a run from
+    // the Watch and WHOOP's copy of it buzz once, and a catch-up gives one "4 workouts found", not two.
+    if !tennis && prefs.skipWhoopOther { return false }
     return true
   }
 

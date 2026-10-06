@@ -89,14 +89,29 @@ export async function forgetPushToken() {
   currentToken = null;
 }
 
+/**
+ * The server's one "4 workouts found" alert (several workouts found at once,
+ * migration 2026100600018) is sent to open Notifications with its workouts'
+ * ids, "/notifications?workouts=…": an address every version of the app can
+ * open, so it never lands on a page an older version does not have yet. This
+ * version opens their list instead (app/workouts-found), each with Log it.
+ */
+function foundListFor(href: string): string | null {
+  const m = /^\/notifications\?workouts=([0-9a-f,-]*)$/i.exec(href);
+  if (!m) return null;
+  const ids = m[1].split(',').filter(Boolean);
+  return ids.length ? `/workouts-found?ids=${ids.join(',')}` : '/workouts-found';
+}
+
 /** A tap on an alert opens what it is about — also when the tap is what opened the app. */
 export function listenForPushTaps(): () => void {
   if (Platform.OS === 'web') return () => undefined;
   const since = Date.now();
   let opened: string | null = null;
   const open = async (response: Notifications.NotificationResponse | null) => {
-    const href = response?.notification.request.content.data?.href;
-    if (typeof href !== 'string' || !href.startsWith('/')) return;
+    const sent = response?.notification.request.content.data?.href;
+    if (typeof sent !== 'string' || !sent.startsWith('/')) return;
+    const href = foundListFor(sent) ?? sent;
     // One tap is its alert's name plus when that alert arrived. The name alone
     // is not enough: training-plan reminders reuse theirs every week
     // (courtside-plan-0 is every Monday), and next Monday's tap must still open.

@@ -13,9 +13,11 @@ import { sourceWord } from '@/features/activity/recent';
  * (app/workouts-found), newest first, each with its own Log it. Three or
  * fewer keep a row each, as before.
  *
- * "One go" is how the rows were filed: one after another, each within two
+ * "One go" is how the rows were filed: one after another, each within ten
  * minutes of the one before (a look hands its workouts to the server one at
- * a time, a few a second; WHOOP's catch-up arrives the same way). Apple
+ * a time, a few a second; WHOOP's catch-up arrives one workout at a time,
+ * sometimes minutes apart). The phone's own alerts and the server's use the
+ * same ten minutes, so an alert's "4 workouts found" is one row here. Apple
  * Health and WHOOP filed in the same go are one group, never counted twice:
  * the server keeps one row for a session both of them saw (the later copy is
  * a duplicate, with no row of its own), and a row is counted once by its
@@ -28,8 +30,8 @@ import { sourceWord } from '@/features/activity/recent';
 
 /** More than this many found in one go fold into one row and one alert; this many or fewer each keep their own. */
 export const FOLD_OVER = 3;
-/** Rows filed this close to the one before belong to the same go. */
-const SAME_GO_MS = 2 * 60_000;
+/** Rows filed this close to the one before belong to the same go (the same ten minutes as the phone's alerts and the server's). */
+const SAME_GO_MS = 10 * 60_000;
 
 /** One go of more than three: its rows (any copies of a row too), and its workouts' ids, newest first. */
 export type FoundBurst = {
@@ -162,3 +164,26 @@ export function allTennis(ids: ID[], previews: (string | undefined)[], held: Det
 
 /** The list of a go's workouts: app/workouts-found with their ids, newest first. */
 export const foundHref = (ids: ID[]) => `/workouts-found?ids=${ids.map(encodeURIComponent).join(',')}`;
+
+/*
+ * A tap on the phone's own "4 workouts found" alert (modules/workout-watch):
+ * its workouts are handed to the server a few at a time (useWorkoutWatch),
+ * which takes a few seconds for a big catch-up, so their list opens at once and
+ * waits for them (app/workouts-found?handing=…) instead of the tap seeming
+ * to do nothing.
+ */
+const handing = new Map<string, Promise<ID[]>>();
+let handNo = 0;
+
+/** Keeps `work` (the ids it hands over, newest first) under a key for the list to wait on. */
+export function handOver(work: Promise<ID[]>): string {
+  handNo += 1;
+  const key = `${Date.now().toString(36)}-${handNo}`;
+  handing.set(key, work);
+  return key;
+}
+
+/** What that hand-over came to: the ids to list, newest first; empty when none could be (or the key is not this run's). Never rejects. */
+export function handedOver(key: string): Promise<ID[]> {
+  return (handing.get(key) ?? Promise.resolve([])).catch((): ID[] => []);
+}
