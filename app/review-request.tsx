@@ -36,6 +36,8 @@ export default function ReviewRequestSheet() {
   const [note, setNote] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
+  // The sheet opens only as tall as what it holds.
+  const [contentH, setContentH] = useState(0);
 
   // What it is, as this phone holds it: whose, why it came down, a few words and a picture.
   const item = useMemo((): { authorId?: string; removed?: Removed; words?: string; picture?: string; clip?: boolean } => {
@@ -77,10 +79,10 @@ export default function ReviewRequestSheet() {
   const answered = !blocked && review ? review : null;
 
   return (
-    <DragSheet fitContent closeSignal={closeSignal} onDismissed={() => router.back()} peekFraction={0.86}
+    <DragSheet fitContent closeSignal={closeSignal} onDismissed={() => router.back()} peekFraction={0.9} contentHeight={contentH || undefined}
       beforeClose={() => !sending}
       header={<SheetTitle title="Ask for a review" line={removed ? removedLine(removed) : undefined} onClose={close} />}>
-      <ScrollView contentContainerStyle={formBody} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={formBody} keyboardShouldPersistTaps="handled" onContentSizeChange={(_, h) => { const r = Math.ceil(h); if (r !== contentH) setContentH(r); }}>
         {blocked ? (
           <View style={styles.empty}>
             <Ionicons name="eye-outline" size={22} color={colors.textMuted} />

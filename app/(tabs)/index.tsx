@@ -50,7 +50,7 @@ import { hasSessionStats } from '@/features/activity/format';
 import { MediaPlaceholder } from '@/components/MediaPlaceholder';
 import { TipPage } from '@/components/TipPage';
 import { isLive } from '@/features/stories/stories';
-import { RemovedNote } from '@/features/moderation/RemovedNote';
+import { RemovedActions, RemovedNote } from '@/features/moderation/RemovedNote';
 import { show as showToast } from '@/lib/toast';
 import { ClipPlayback } from '@/components/ClipPlayback';
 import { NEWEST_FIRST, rankFeed, type FeedItem, type RankContext } from '@/features/feed/rankFeed';
@@ -201,6 +201,13 @@ const RAIL_ICONS = [['heart-outline', 31], ['chatbubble-outline', 29], ['arrow-r
  * crowding the tab bar); the gaps between its items stay even.
  */
 const RAIL_DROP = 10;
+/**
+ * Something of yours taken down: the pill sits in the top row, and the band
+ * under it ("Why? See the rules · Ask for a review") starts this far down;
+ * your page's own top moves down this much so the band never sits on it.
+ */
+const REMOVED_BAND_TOP = 54;
+const REMOVED_BAND_ROOM = 40;
 
 /**
  * A hit's photo at its own shape. A tall one fills the page; a wide one (a
@@ -1358,6 +1365,20 @@ function Home({ scope, topRow, paused, onChrome }: {
               // scrolling stays smooth.
               const near = Platform.OS === 'web' ? (ahead === 0 || ahead === 1) && (!warming || ahead === 0) : distance <= 1 || (ahead > 0 && ahead <= AHEAD);
               const strip = index === suggestHost ? suggestStrip : null;
+              // Taken down (migration 108): the reason in a pill over the top of the page, and for
+              // its author "Why? See the rules · Ask for a review" on the band under it (Oct 5).
+              const removedOver = (post: Post) => (post.removed ? (
+                <>
+                  <View pointerEvents="box-none" style={[styles.removedWrap, { top: insets.top + 12 }]}>
+                    <RemovedNote removed={post.removed} item={{ kind: 'post', id: post.id, authorId: post.authorId, clip: post.kind === 'clip' }} actions={false} />
+                  </View>
+                  <View pointerEvents="box-none" style={[styles.removedBand, { top: insets.top + REMOVED_BAND_TOP }]}>
+                    <RemovedActions removed={post.removed} item={{ kind: 'post', id: post.id, authorId: post.authorId, clip: post.kind === 'clip' }} card align="center" />
+                  </View>
+                </>
+              ) : null);
+              // That band has room of its own on the author's page: what is under it starts lower.
+              const bandRoom = (post: Post) => (post.removed && post.authorId === currentUserId ? REMOVED_BAND_ROOM : 0);
 
               if (item.type === 'tip') return <TipPage key="tip" onSubmit={actions.submitTip} />;
               if (item.type === 'challenge') return <ChallengePage key="challenge" challenge={challenge} />;
@@ -1475,7 +1496,7 @@ function Home({ scope, topRow, paused, onChrome }: {
                       saved={isSaved}
                       active={playing && active === index && warmed && playable}
                       preload={near}
-                      topInset={insets.top + 66}
+                      topInset={insets.top + 66 + bandRoom(post)}
                       onDoubleTap={() => likeByTap(post.id, liked)}
                       onToggleLike={() => actions.toggleLike(post.id)}
                       onToggleSave={() => actions.toggleSavePost(post.id)}
@@ -1488,7 +1509,7 @@ function Home({ scope, topRow, paused, onChrome }: {
                       onReady={(ok) => markReady(post.id, ok)}
                     />
                     {cover(post.id, 'mark')}
-                    {post.removed ? <View pointerEvents="box-none" style={[styles.removedWrap, { top: insets.top + 12 }]}><RemovedNote removed={post.removed} item={{ kind: 'post', id: post.id, authorId: post.authorId }} /></View> : null}
+                    {removedOver(post)}
                   </View>
                 );
               }
@@ -1497,7 +1518,7 @@ function Home({ scope, topRow, paused, onChrome }: {
                 return (
                   // A session posted with no photo is its card: the page keeps clear of the
                   // floating tab bar, so the caption and buttons under the card stay in view.
-                  <View key={post.id} style={[styles.article, scopedBack && styles.articleScoped, !phone && styles.articleCentred, (topRow || rowed) && { paddingTop: insets.top + 64 }, barInset > 0 && post.session && hasSessionStats(post.session) && !post.imageUrl && !post.videoUrl ? { paddingBottom: barInset + 8 } : null]}>
+                  <View key={post.id} style={[styles.article, scopedBack && styles.articleScoped, !phone && styles.articleCentred, (topRow || rowed) && { paddingTop: insets.top + 64 + bandRoom(post) }, barInset > 0 && post.session && hasSessionStats(post.session) && !post.imageUrl && !post.videoUrl ? { paddingBottom: barInset + 8 } : null]}>
                     <Wash height={300} strength={0.6} />
                     {strip}
                     <View style={{ flex: 1, minHeight: 0, overflow: 'hidden', justifyContent: 'flex-start' }}>
@@ -1517,7 +1538,7 @@ function Home({ scope, topRow, paused, onChrome }: {
                         active={active === index && focused}
                       />
                     </View>
-                    {post.removed ? <View pointerEvents="box-none" style={[styles.removedWrap, { top: insets.top + 12 }]}><RemovedNote removed={post.removed} item={{ kind: 'post', id: post.id, authorId: post.authorId }} /></View> : null}
+                    {removedOver(post)}
                   </View>
                 );
               }
@@ -1645,7 +1666,7 @@ function Home({ scope, topRow, paused, onChrome }: {
                   </ChromeLayer>
                  </Reanimated.View></PinchZone>
                   {post.videoUrl ? cover(post.id, 'word', post.thumbnailUrl, post.orientation === 'landscape') : null}
-                  {post.removed ? <View pointerEvents="box-none" style={[styles.removedWrap, { top: insets.top + 12 }]}><RemovedNote removed={post.removed} item={{ kind: 'post', id: post.id, authorId: post.authorId, clip: post.kind === 'clip' }} /></View> : null}
+                  {removedOver(post)}
                 </View>
               );
             }).map((page, index) => {
@@ -1761,6 +1782,8 @@ const styleDefinitions = StyleSheet.create({
   // "Removed: <reason>" across the top of a page an admin took down (only its author and admins ever see
   // one, and only in a scoped feed): level with the back button, clear of it on both sides.
   removedWrap: { position: 'absolute', left: 64, right: 64, alignItems: 'center', zIndex: 6 },
+  // The author's line under the pill: the page's width, clear of the back button above it.
+  removedBand: { position: 'absolute', left: 16, right: 16, alignItems: 'center', zIndex: 6 },
   holdPage: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg },
   holdWord: { ...typography.display, fontSize: 34, ...font('600'), color: colors.brand, letterSpacing: -1.2 },
   bone: { height: 12, borderRadius: 6, backgroundColor: colors.border },

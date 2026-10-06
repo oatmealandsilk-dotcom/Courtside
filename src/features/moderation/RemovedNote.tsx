@@ -61,7 +61,7 @@ export function useReviewOf(item: RemovedRef | undefined, removed: Removed | und
  * (RemovedActions). `actions={false}` leaves that line for the caller to
  * place (a comment, where it must not sit inside the words' own button).
  */
-export function RemovedNote({ removed, quiet = false, style, item, actions = true, align = 'center' }: {
+export function RemovedNote({ removed, quiet = false, style, item, actions = true, align = 'center', onMedia = false }: {
   removed: Removed;
   quiet?: boolean;
   style?: StyleProp<ViewStyle>;
@@ -69,6 +69,8 @@ export function RemovedNote({ removed, quiet = false, style, item, actions = tru
   actions?: boolean;
   /** Where the pill and its line sit: centred over a page (the default), or at the start of a column. */
   align?: 'center' | 'start';
+  /** Over a photo or clip: the author's line on a small card of its own, so it reads on any picture. */
+  onMedia?: boolean;
 }) {
   const styles = useThemedStyles(styleDefinitions);
   const words = removedLine(removed);
@@ -110,7 +112,7 @@ export function RemovedNote({ removed, quiet = false, style, item, actions = tru
       >
         {pillWords}
       </Pressable>
-      {actions ? <RemovedActions removed={removed} item={item} card align={align} /> : null}
+      {actions ? <RemovedActions removed={removed} item={item} card={onMedia} align={align} /> : null}
     </View>
   );
 }
@@ -190,7 +192,7 @@ const styleDefinitions = StyleSheet.create({
   pillStart: { alignSelf: 'flex-start' },
   pillText: { ...typography.smallStrong, flexShrink: 1 },
   // The pill and its line as one piece: the pill on top, the quieter card under it.
-  stack: { alignItems: 'center', alignSelf: 'stretch', gap: 6 },
+  stack: { alignItems: 'center', alignSelf: 'stretch', gap: 8 },
   stackStart: { alignItems: 'flex-start' },
   quietWrap: { gap: 3 },
   line: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingTop: 2 },
