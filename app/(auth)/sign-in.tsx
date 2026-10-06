@@ -119,14 +119,21 @@ export default function SignIn() {
   const [notice, setNotice] = useState<string | null>(null);
 
   // Arrived from a player's invite link (the join page kept their handle):
-  // say who, as the website does. Only once the server says that handle is a
-  // real account, so a made-up link never puts a word on this page.
+  // say who, as the website does, on a line of its own under the title's.
+  // Only once the server says that handle is a real account, so a made-up
+  // link never puts a word on this page. The line's room is kept from the
+  // moment a handle is found on the phone (a quick read), while the server
+  // answers, so the form under it never moves when the words fade in; a
+  // handle the server calls free leaves that room empty rather than pull the
+  // form back up under a thumb.
+  const [inviteRoom, setInviteRoom] = useState(false);
   const [invitedBy, setInvitedBy] = useState<string | null>(null);
   useEffect(() => {
     let live = true;
     void peekReferrer().then(async (kept) => {
       const handle = kept && /^[a-z0-9_]{2,24}$/.test(kept) ? kept : null;
-      if (!handle) return;
+      if (!handle || !live) return;
+      setInviteRoom(true);
       const real = !isSupabaseConfigured || ['taken', 'held'].includes((await remote.handleStatus(handle).catch(() => null)) ?? '');
       if (live && real) setInvitedBy(handle);
     }).catch(() => undefined);
@@ -367,9 +374,7 @@ export default function SignIn() {
   const fill = (hint: NonNullable<React.ComponentProps<typeof Field>['autoComplete']>) => (Platform.OS === 'android' ? hint : undefined);
   const begin = (next: Mode) => { setMode(next); setStarted(true); setError(null); setProviderError(null); };
   const title = chooser ? 'Welcome back' : mode === 'sign-up' ? 'Create your account' : 'Sign in';
-  const line = chooser ? 'Pick an account to carry on.'
-    : mode === 'sign-up' ? (invitedBy ? `Invited by @${invitedBy}. Free, and it takes a minute.` : 'Free, and it takes a minute.')
-    : 'Tennis clips, people to hit with, and real coaches.';
+  const line = chooser ? 'Pick an account to carry on.' : mode === 'sign-up' ? 'Free, and it takes a minute.' : 'Tennis clips, people to hit with, and real coaches.';
 
   return (
     <KeyboardScrollContext.Provider value={keyboard.reveal}>
@@ -480,6 +485,15 @@ export default function SignIn() {
                 <View style={{ gap: 6 }}>
                   <Text style={styles.title}>{title}</Text>
                   <Text style={styles.line}>{line}</Text>
+                  {!chooser && mode === 'sign-up' && inviteRoom ? (
+                    <View style={styles.invitedRoom}>
+                      {invitedBy ? (
+                        <Animated.Text entering={FadeIn.duration(280)} numberOfLines={1} style={styles.line}>
+                          Invited by <Text style={styles.invitedHandle}>@{invitedBy}</Text>
+                        </Animated.Text>
+                      ) : null}
+                    </View>
+                  ) : null}
                 </View>
               </View>
 
@@ -653,6 +667,9 @@ const styleDefinitions = StyleSheet.create({
   back: { width: 36, height: 36, borderRadius: 18, marginBottom: -spacing.lg, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface, ...lift },
   title: { ...typography.display, fontSize: 32, letterSpacing: -1.1, color: colors.text },
   line: { ...typography.body, fontSize: 16, color: colors.textMuted, lineHeight: 23 },
+  // One line's room for "Invited by @handle", kept while the server checks the handle.
+  invitedRoom: { height: 23 },
+  invitedHandle: { ...typography.bodyStrong, fontSize: 16, lineHeight: 23, color: colors.text },
   // Each remembered account is its own soft card, like the app's own cards.
   accounts: { gap: spacing.md },
   account: { ...lift, flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: spacing.lg, paddingVertical: 14, borderRadius: 20, backgroundColor: colors.surface },

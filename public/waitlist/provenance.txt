@@ -16,9 +16,11 @@ showed another player's name, handle and city.
 
 On the page (Oct 5) each phone fades out toward its foot, in CSS only: the hero
 before the post's like and comment counts, and the four in "See it in action"
-before the tab bar, which the app has since replaced. The files are unchanged.
-These captures predate the map-first app; new ones from today's app should
-replace them.
+fully before the tab bar (gone by 78% of the phone's height; the bar starts at
+78.5%), which the app has since replaced. The files are unchanged.
+These captures predate the map-first app and show 0 votes on the threads.
+Owner to-do: new captures from today's app, in this order: the map (Find
+Players, with nobody else's name on it), a busy thread, the feed, a profile.
 
 og.png and email-hero.png are not screenshots: they are the link-preview card
 and the email header, laid out around post.jpg. og.png was redrawn on Oct 5

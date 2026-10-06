@@ -243,7 +243,10 @@
   input::placeholder, textarea::placeholder { color: var(--faint); opacity: 1; }
   input:hover, textarea:hover { border-color: var(--border-strong); }
   input:focus, textarea:focus { outline: none; border-color: var(--brand); background: var(--bg); box-shadow: 0 0 0 3px var(--brand-dim); }
-  input[aria-invalid="true"] { border-color: var(--danger); }
+  input[aria-invalid="true"], textarea[aria-invalid="true"] { border-color: var(--danger); }
+  input[aria-invalid="true"]:focus, textarea[aria-invalid="true"]:focus { box-shadow: 0 0 0 3px color-mix(in oklab, var(--danger) 16%, transparent); }
+  /* A field's own problem, said right under it. */
+  .field .msg { font-size: 14px; min-height: 0; }
   textarea { min-height: 128px; resize: vertical; }
   .hp { position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0; }
 
@@ -326,10 +329,11 @@
      them. The shadow is drawn around whatever is left of the phone, so it fades with it. */
   .hero-stage { position: relative; align-self: stretch; }
   .hero-phone { position: absolute; right: -6%; bottom: -120px; width: min(112%, 392px); transform: rotate(2.6deg); filter: drop-shadow(0 24px 26px var(--shade)) drop-shadow(0 5px 10px var(--shade-soft)); }
+  /* Eased, not straight: a straight ramp leaves a visible edge where it ends, most of all on Night. */
   .hero-phone .phone {
     box-shadow: none;
-    -webkit-mask-image: linear-gradient(to bottom, #000 0 54%, transparent 67%);
-    mask-image: linear-gradient(to bottom, #000 0 54%, transparent 67%);
+    -webkit-mask-image: linear-gradient(to bottom, #000 0 52%, rgba(0, 0, 0, 0.896) 55%, rgba(0, 0, 0, 0.648) 58%, rgba(0, 0, 0, 0.352) 61%, rgba(0, 0, 0, 0.104) 64%, transparent 67%);
+    mask-image: linear-gradient(to bottom, #000 0 52%, rgba(0, 0, 0, 0.896) 55%, rgba(0, 0, 0, 0.648) 58%, rgba(0, 0, 0, 0.352) 61%, rgba(0, 0, 0, 0.104) 64%, transparent 67%);
   }
 
   /* ---------------------------------------------------------------- what's in it */
@@ -349,12 +353,14 @@
   .rail figcaption { display: grid; gap: 2px; }
   .rail figcaption strong { font-weight: 600; letter-spacing: -0.018em; }
   .rail figcaption span { font-size: 15px; color: var(--muted); }
-  /* Each screen fades out before the tab bar at its foot, into its caption. */
-  .rail .shot { filter: drop-shadow(0 12px 16px var(--shade-soft)); margin-bottom: -16%; }
+  /* Each screen fades out into its caption, and is fully gone by 78% of its
+     height: the old tab bar at its foot starts just under that (78.5%). The
+     caption comes up over the empty 22% (45% of the width). */
+  .rail .shot { filter: drop-shadow(0 12px 16px var(--shade-soft)); margin-bottom: -38%; }
   .rail .phone {
     box-shadow: none;
-    -webkit-mask-image: linear-gradient(to bottom, #000 0 72%, transparent 90%);
-    mask-image: linear-gradient(to bottom, #000 0 72%, transparent 90%);
+    -webkit-mask-image: linear-gradient(to bottom, #000 0 60%, rgba(0, 0, 0, 0.896) 63.6%, rgba(0, 0, 0, 0.648) 67.2%, rgba(0, 0, 0, 0.352) 70.8%, rgba(0, 0, 0, 0.104) 74.4%, transparent 78%);
+    mask-image: linear-gradient(to bottom, #000 0 60%, rgba(0, 0, 0, 0.896) 63.6%, rgba(0, 0, 0, 0.648) 67.2%, rgba(0, 0, 0, 0.352) 70.8%, rgba(0, 0, 0, 0.104) 74.4%, transparent 78%);
   }
 
   /* ---------------------------------------------------------------- scoreboard */
@@ -392,7 +398,7 @@
   .q { border-bottom: 1px solid var(--border); }
   .q summary {
     display: flex; align-items: center; justify-content: space-between; gap: 24px;
-    padding: 24px 2px; cursor: pointer; list-style: none;
+    padding: 24px 0; cursor: pointer; list-style: none;
     font-size: 18px; font-weight: 500; letter-spacing: -0.022em; line-height: 1.35;
     transition: color 140ms ease-out;
   }
@@ -406,7 +412,7 @@
   .pm::after { width: 1.5px; height: 15px; transform: translate(-50%, -50%); transition: transform 340ms cubic-bezier(0.22, 1, 0.36, 1), opacity 240ms ease-out; }
   .q[open] .pm::after { transform: translate(-50%, -50%) rotate(90deg); opacity: 0; }
   .q summary:hover .pm, .q[open] .pm { color: var(--brand); }
-  .q .a { padding: 0 64px 26px 2px; margin: 0; color: var(--muted); max-width: 58ch; text-wrap: pretty; }
+  .q .a { padding: 0 64px 26px 0; margin: 0; color: var(--muted); max-width: 58ch; text-wrap: pretty; }
   @media (prefers-reduced-motion: no-preference) {
     :root { interpolate-size: allow-keywords; }
     .q::details-content {
@@ -442,9 +448,13 @@
   .spot-words { flex: 1 1 auto; display: grid; gap: 4px; min-width: 0; }
   .spot-words h2 { font-size: 22px; font-weight: 500; letter-spacing: -0.03em; line-height: 1.2; }
   .spot-words p { margin: 0; color: var(--muted); font-size: 15px; line-height: 1.5; text-wrap: pretty; }
-  /* The beta, straight away (Oct 4): the one thing to do after joining. */
-  .spot-beta { display: grid; gap: 10px; }
-  .spot-beta .btn-beta { justify-self: stretch; text-align: center; text-decoration: none; }
+  .spot-words p strong { color: var(--text); font-weight: 600; overflow-wrap: anywhere; }
+  /* Asked by email, so the app is the second choice here: for whoever is on their iPhone already. */
+  .spot-beta { display: grid; gap: 10px; padding-top: 18px; border-top: 1px solid var(--border); }
+  .spot-ask { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; }
+  .spot-beta .spot-ask p { margin: 0; font-size: 15px; font-weight: 500; letter-spacing: -0.01em; color: var(--text); }
+  .spot-beta .btn-beta { padding: 12px 20px; font-size: 15px; text-decoration: none; }
+  .spot-beta .btn-beta svg { width: 14px; height: 14px; }
   .spot-beta p { margin: 0; font-size: 14px; color: var(--muted); text-wrap: pretty; }
   .spot-beta .type-hint { font-size: 15px; color: var(--text); }
   .spot-beta p a { color: var(--text); font-weight: 600; }
@@ -481,15 +491,29 @@
   .foot-follow { margin: 0; display: flex; flex-wrap: wrap; align-items: center; column-gap: 14px; }
   .foot-follow a { display: inline-flex; align-items: center; min-height: 44px; color: var(--text); font-weight: 600; text-decoration: none; }
   footer nav { display: flex; flex-wrap: wrap; gap: 0 24px; }
-  footer nav a { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; min-width: 44px; color: var(--text); text-decoration: none; }
+  /* Each link's tap area reaches 4px past its word on both sides (44pt and up), so the words
+     themselves start at the column's edge and sit evenly apart. */
+  footer nav a { display: inline-flex; align-items: center; min-height: 44px; padding-inline: 4px; margin-inline: -4px; color: var(--text); text-decoration: none; }
   footer a:hover { color: var(--brand-text); }
 
   /* ---------------------------------------------------------------- small screens */
   @media (max-width: 880px) {
     .hero .wrap { grid-template-columns: 1fr; gap: 0; min-height: 0; }
     .hero-copy { padding-bottom: 40px; }
-    .hero-stage { height: 430px; }
-    .hero-phone { right: auto; left: 50%; bottom: -185px; width: min(74%, 300px); transform: translateX(-50%) rotate(2deg); }
+    /* The phone sits in the flow under the words and is cut off by the hero's
+       edge. How much of it shows is worked out from its own width, so at every
+       screen size the fade (done at 67% of its height) and the shadow under it
+       finish 52px inside that edge: never a straight cut through the picture.
+       0.6759 is the 33% under the fade as a share of the width (the phone is
+       2470/1206 times as tall as it is wide). */
+    .hero-stage { align-self: start; }
+    .hero-phone {
+      --w: min(74%, 300px);
+      position: relative; right: auto; bottom: auto; width: var(--w);
+      margin: 16px auto calc(52px - 0.6759 * var(--w)); transform: rotate(2deg);
+    }
+    /* That faded foot already reads as space: the next section needs less of its own. */
+    .hero + section { padding-top: 56px; }
     /* The phone picture is right below, so no "See the app" link. */
     .see-app { display: none; }
     /* Each set as a row: its number and its state on one line, then what it was. */
@@ -508,8 +532,8 @@
     .hero { padding-top: 20px; }
     .hero-copy { gap: 24px; padding-top: 12px; }
     .cta { gap: 24px; }
-    .hero-stage { height: 372px; }
-    .hero-phone { bottom: -160px; width: min(70%, 268px); }
+    .hero-phone { --w: min(70%, 268px); }
+    .hero + section { padding-top: 24px; }
     .quick { flex-direction: column; }
     .quick .btn { width: 100%; }
     .app-cta { justify-items: stretch; }
@@ -526,11 +550,22 @@
     .theme-menu button { padding: 8px 10px; }
     .fb-form .btn { width: 100%; }
     .spot { padding: 20px 18px 18px; }
+    .spot-ask { display: grid; grid-template-columns: minmax(0, 1fr); justify-content: normal; gap: 10px; }
+    .spot-beta .btn-beta { width: 100%; }
     .share-row { grid-template-columns: 1fr; }
-    .q summary { font-size: 17px; gap: 16px; padding: 21px 2px; }
+    .q summary { font-size: 17px; gap: 16px; padding: 21px 0; }
     .q .a { padding-right: 24px; }
     footer .wrap { flex-direction: column; align-items: flex-start; gap: 4px; }
     .foot-follow span { flex-basis: 100%; padding-top: 6px; }
+  }
+  /* The smallest phones (320pt): the header's three pieces still fit side by side. */
+  @media (max-width: 359px) {
+    .bar { gap: 8px; }
+    .bar-right { gap: 4px; }
+    .brand { gap: 8px; }
+    .brand svg { width: 28px; height: 28px; }
+    .wordmark { font-size: 20px; }
+    .bar .btn-quiet { padding: 8px 12px; font-size: 13px; }
   }
 </style>
 </head>
@@ -663,12 +698,12 @@
           <p>A map of the courts around you and the players on them. Find people at your level, see who’s open to hit today, and ask to hit.</p>
         </article>
         <article class="feature">
-          <h3>The feed</h3>
-          <p>Full-screen clips and posts from other players, one at a time. Every clip carries the player’s level, so you can read it properly instead of just watching it.</p>
-        </article>
-        <article class="feature">
           <h3>Community</h3>
           <p>Ask about your serve, your strings or your next tournament, and get answers from players who have been there. Then chat with your hitting partners, one to one or as a group.</p>
+        </article>
+        <article class="feature">
+          <h3>The feed</h3>
+          <p>Full-screen clips and posts from other players, one at a time. Every clip carries the player’s level, so you can read it properly instead of just watching it.</p>
         </article>
         <article class="feature">
           <h3>Coaching</h3>
@@ -748,8 +783,8 @@
       </div>
       <div class="qs">
         <details class="q">
-          <summary>When do I actually get it?<span class="pm" aria-hidden="true"></span></summary>
-          <p class="a">Now. Tap “Get the iPhone app” at the top: it opens Apple’s TestFlight, Apple’s app for trying apps before they’re in the App Store. Install that, then CourtSide.</p>
+          <summary>How do I get it?<span class="pm" aria-hidden="true"></span></summary>
+          <p class="a">Tap “Get the iPhone app” at the top. It opens TestFlight, Apple’s app for trying apps before they’re in the App Store. Install that, then CourtSide.</p>
         </details>
         <details class="q">
           <summary>Is it free?<span class="pm" aria-hidden="true"></span></summary>
@@ -780,7 +815,7 @@
       <h2 id="fb-title">Tried it? <span class="nowrap">Tell us what to fix.</span></h2>
       <p class="body" style="margin-top:16px">Bugs, confusing screens, things you wish it did. We read every one of these ourselves.</p>
       <form class="fb-form" data-feedback novalidate>
-        <div class="field"><label for="fb-message">What happened, or what’s missing</label><textarea id="fb-message" name="message" maxlength="4000" required aria-describedby="fb-msg"></textarea></div>
+        <div class="field"><label for="fb-message">What happened, or what’s missing</label><textarea id="fb-message" name="message" maxlength="4000" required aria-describedby="fb-message-msg fb-msg"></textarea><p class="msg error" id="fb-message-msg" hidden></p></div>
         <div class="field"><label for="fb-email">Your email <span class="opt">(optional, if you want a reply)</span></label><input id="fb-email" name="email" type="email" inputmode="email" autocomplete="email" placeholder="you@example.com" aria-describedby="fb-msg"></div>
         <input class="hp" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
         <div><button class="btn btn-primary" type="submit"><span class="spin" aria-hidden="true"></span><span data-label>Send feedback</span></button></div>
@@ -883,9 +918,14 @@
     }
   }
 
-  // The welcome email goes out now. The server checks this person is on the list and has not had it yet.
-  function sendWelcome(email) {
-    fetch(`${SUPABASE_URL}/functions/v1/waitlist-welcome`, { method: 'POST', headers: { apikey: SUPABASE_KEY, 'Content-Type': 'application/json' }, body: JSON.stringify({ email }), keepalive: true }).catch(() => {});
+  // The welcome email goes out now. The server checks this person joined just
+  // now and has not had it yet, and answers whether it sent (it may not: a
+  // daily ceiling, too many from one address). The page only says "we sent the
+  // link" on a yes; no answer within a few seconds counts as not known.
+  function sendWelcome(email, wait = 6000) {
+    const asked = fetch(`${SUPABASE_URL}/functions/v1/waitlist-welcome`, { method: 'POST', headers: { apikey: SUPABASE_KEY, 'Content-Type': 'application/json' }, body: JSON.stringify({ email }), keepalive: true })
+      .then((res) => res.json()).then((body) => !!body && body.sent === true).catch(() => false);
+    return Promise.race([asked, new Promise((done) => setTimeout(() => done(false), wait))]);
   }
 
   // How many are in already — shown once it is a number worth showing.
@@ -898,7 +938,7 @@
       const n = Number(await res.json());
       if (!Number.isFinite(n) || n < 10) return;
       document.querySelectorAll('[data-count]').forEach((el) => {
-        el.innerHTML = '<span class="live-dot" aria-hidden="true"></span><span><b></b> players already on the list.</span>';
+        el.innerHTML = '<span class="live-dot" aria-hidden="true"></span><span><b></b> players signed up</span>';
         el.querySelector('b').textContent = n.toLocaleString();
         el.hidden = false;
       });
@@ -923,11 +963,13 @@
     box.querySelector('strong').focus({ preventScroll: true });
   }
 
-  // On the list. The email box and its count give way to one card: the app
-  // (the only thing to do next, so the hero's own button steps aside), and,
-  // for a new email, the link to send to friends. The mark draws itself in —
-  // the one moment on this page worth marking, still for anyone who asked
-  // for less motion.
+  // On the list. The email box and its count give way to one card that
+  // answers what was asked: the link is in your email (only when the server
+  // says it sent it), or, when no email went, where to get the app instead.
+  // Then the app itself, for whoever is on their iPhone already (so the
+  // hero's own button steps aside), and, for a new email, the link to send to
+  // friends. The mark draws itself in — the one moment on this page worth
+  // marking, still for anyone who asked for less motion.
   function showSpot(form, result) {
     const card = document.createElement('section');
     card.className = 'spot';
@@ -938,12 +980,28 @@
         <div class="spot-words"><h2 id="spot-title" tabindex="-1"></h2><p></p></div>
       </div>
       <div class="spot-beta">
-        <a class="btn btn-primary btn-beta" href="https://testflight.apple.com/join/21UJPuny" target="_blank" rel="noopener">Get the iPhone app</a>
+        <div class="spot-ask">
+          <p>On your iPhone now?</p>
+          <a class="btn btn-quiet btn-beta" href="https://testflight.apple.com/join/21UJPuny" target="_blank" rel="noopener">Get the app <svg aria-hidden="true"><use href="#out"/></svg></a>
+        </div>
         <p class="type-hint" hidden>In the app, type <b class="code"></b> under <span class="nowrap">“Invited by?”</span></p>
-        <p>Opens Apple’s TestFlight: install it, then CourtSide. On Android? <a href="https://app.courtsidebase.com">Use CourtSide on the web</a>.</p>
+        <p>Free, through Apple’s TestFlight. On Android? <a href="https://app.courtsidebase.com">Use CourtSide on the web</a>.</p>
       </div>`;
-    card.querySelector('h2').textContent = result.kind === 'already' ? 'You’re already in.' : 'You’re in.';
-    card.querySelector('.spot-words p').textContent = 'The beta is open. Get CourtSide on your iPhone now.';
+    const title = card.querySelector('h2');
+    const line = card.querySelector('.spot-words p');
+    if (result.kind === 'ok' && result.sent && result.email) {
+      title.textContent = 'Check your email';
+      line.append('We sent the link to ');
+      // A long address wraps after its @ rather than mid-word.
+      const to = document.createElement('strong');
+      const at = result.email.lastIndexOf('@');
+      to.append(result.email.slice(0, at + 1), document.createElement('wbr'), result.email.slice(at + 1));
+      line.append(to, '. Open it on your iPhone.');
+    } else {
+      // Nothing was sent (already on the list, or the server said no): no promise of an email.
+      title.textContent = result.kind === 'already' ? 'You’re already on the list' : 'You’re on the list';
+      line.textContent = 'Open courtsidebase.com on your iPhone to get the app.';
+    }
     const handle = inviter || linkHandle;
     if (handle) {
       card.querySelector('.type-hint .code').textContent = handle;
@@ -1021,14 +1079,16 @@
       if (form.querySelector('input[name="website"]').value) { showSpot(form, { kind: 'ok' }); return; }
       busy(form, true);
       const result = await join(email, name);
-      busy(form, false);
       if (result.kind === 'ok' || result.kind === 'already') {
         joined = true;
         msg.textContent = '';
-        if (result.kind === 'ok') sendWelcome(email);
-        showSpot(form, result);
+        // Someone already on the list is never sent a second email (the server only welcomes new rows).
+        const sent = result.kind === 'ok' ? await sendWelcome(email) : false;
+        busy(form, false);
+        showSpot(form, { ...result, email, sent });
         return;
       }
+      busy(form, false);
       msg.className = 'msg error';
       msg.textContent = failures[result.kind] || failures.error;
     });
@@ -1250,20 +1310,27 @@
   watchAppButton(document.querySelector('.btn-app'));
 
   document.querySelectorAll('form[data-feedback]').forEach((form) => {
-    const msg = form.querySelector('.msg');
+    const msg = form.querySelector('#fb-msg');
+    const box = form.querySelector('textarea');
+    // The empty box is said right under the box, which turns red, not under the button.
+    const boxMsg = form.querySelector('#fb-message-msg');
+    const boxOk = () => { box.removeAttribute('aria-invalid'); boxMsg.hidden = true; boxMsg.textContent = ''; };
+    box.addEventListener('input', () => { if (box.value.trim().length >= 3) boxOk(); });
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
-      const text = form.querySelector('textarea').value.trim();
+      const text = box.value.trim();
       const emailInput = form.querySelector('input[name="email"]');
       const email = emailInput.value.trim() || null;
       msg.className = 'msg';
       msg.textContent = '';
       if (text.length < 3) {
-        msg.className = 'msg error';
-        msg.textContent = 'Write a few words about what happened first.';
-        form.querySelector('textarea').focus();
+        box.setAttribute('aria-invalid', 'true');
+        boxMsg.textContent = 'Write a few words about what happened first.';
+        boxMsg.hidden = false;
+        box.focus();
         return;
       }
+      boxOk();
       if (email && !EMAIL.test(email)) {
         emailInput.setAttribute('aria-invalid', 'true');
         msg.className = 'msg error';
