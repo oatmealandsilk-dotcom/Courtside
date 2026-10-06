@@ -1,7 +1,9 @@
 import React, {
   createContext,
+  startTransition,
   useCallback,
   useContext,
+  useDeferredValue,
   useEffect,
   useMemo,
   useRef,
@@ -1396,6 +1398,13 @@ function chatLockNoteFor(users: User[], userId: ID): string {
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
+const NO_USERS: User[] = [];
+/**
+ * Just the people, on their own: a part that only needs someone's photo or
+ * name (Avatar) reads this, so a like, a view or a message elsewhere in the
+ * app does not redraw it. The very same list as the app state's `users`.
+ */
+const UsersContext = createContext<User[]>(NO_USERS);
 
 const emptyBootstrap: Bootstrap = {
   users: [],
@@ -4295,12 +4304,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const me = stateRef.current.currentUserId;
     const story = stateRef.current.stories.find((st) => st.id === storyId);
     if (live(me, storyId) && story && !story.viewedBy.includes(me!)) remote.recordStoryView(storyId, me!);
-    setState((prev) => {
+    // Background work, like a like: this lands as the feed turns a page, and
+    // done at once it redrew every screen in the middle of the swipe.
+    startTransition(() => setState((prev) => {
       const me = prev.currentUserId;
       const story = prev.stories.find((s) => s.id === storyId);
       if (!me || !story || story.viewedBy.includes(me)) return prev;
       return { ...prev, stories: prev.stories.map((s) => (s.id === storyId ? { ...s, viewedBy: [...s.viewedBy, me] } : s)) };
-    });
+    }));
   }, []);
 
   const toggleLikeStory = useCallback(
@@ -5335,7 +5346,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (seenThisSession.current.has(key)) return;
     seenThisSession.current.add(key);
     if (targetKind === 'post' && live(stateRef.current.currentUserId, targetId)) { remote.bumpViews(targetId); return; }
-    setState((prev) =>
+    // A view count is never what you are looking at: background work, so the
+    // page turn that recorded it is not held up by every screen redrawing.
+    startTransition(() => setState((prev) =>
       targetKind === 'post'
         ? {
             ...prev,
@@ -5349,7 +5362,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
               q.id === targetId ? { ...q, views: (q.views ?? 0) + 1 } : q,
             ),
           },
-    );
+    ));
   }, []);
 
   const toggleSavePost = useCallback((postId: ID, quiet?: boolean) => {
@@ -6509,15 +6522,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setState((prev) => ({ ...prev, conversations: prev.conversations.map((c) => (c.id === conversationId ? { ...c, markedUnread: undefined } : c)) }));
       if (live(me, conversationId)) void remote.setChatUnread(conversationId, false).catch(() => null);
     }
-    setState(prev => {
+    // Background work: the chat opening is what you are waiting for; the
+    // unread dots and the badge clear a frame or two after it, not before it.
+    const openedAt = new Date().toISOString();
+    startTransition(() => setState(prev => {
       const conversation = prev.conversations.find(c => c.id === conversationId);
       const me = prev.currentUserId;
       if (!conversation || !me || !conversation.participantIds.includes(me)) return prev;
       const user = prev.users.find(u => u.id === me);
-      const messages = markMessagesOpened(prev.messages, conversation, me, user?.readReceiptsEnabled !== false, new Date().toISOString());
+      const messages = markMessagesOpened(prev.messages, conversation, me, user?.readReceiptsEnabled !== false, openedAt);
       if (messages === prev.messages && conversation.unreadCount === 0) return prev;
       return {...prev, messages, conversations: prev.conversations.map(c => c.id === conversationId ? {...c, unreadCount: 0} : c)};
-    });
+    }));
   }, []);
 
   /**
@@ -8373,7 +8389,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [state, unreported, currentUser, actions, seeing, shownAtCourt, ageSaysAdult],
   );
 
-  return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
+  return <AppContext.Provider value={value}><UsersContext.Provider value={value.users}>{children}</UsersContext.Provider></AppContext.Provider>;
 }
 
 function applyVote<T extends { votes: number; votedBy: Record<ID, 1 | -1> }>(
@@ -8397,6 +8413,26 @@ function applyVote<T extends { votes: number; votedBy: Record<ID, 1 | -1> }>(
   }
 
   return { ...item, votes: item.votes + delta, votedBy };
+}
+
+/**
+ * For a screen nobody is looking at (a tab slid off to the side, or under a
+ * page opened on top): while `hidden`, an app-wide change reaches the screens
+ * inside as background work, drawn after whatever is on screen has drawn,
+ * instead of all four tabs redrawing before a sent message can show. The
+ * moment it is on screen again it reads the live state, so what you see is
+ * never behind. See asTabRoute.
+ */
+export function AppStateLater({ hidden, children }: { hidden: boolean; children: ReactNode }) {
+  const live = useContext(AppContext);
+  const later = useDeferredValue(live);
+  const shown = hidden ? later : live;
+  return <AppContext.Provider value={shown}><UsersContext.Provider value={shown?.users ?? NO_USERS}>{children}</UsersContext.Provider></AppContext.Provider>;
+}
+
+/** Everyone the app knows about (the app state's `users`), for a part that needs nothing else. */
+export function useUsers(): User[] {
+  return useContext(UsersContext);
 }
 
 export function useApp(): AppContextValue {

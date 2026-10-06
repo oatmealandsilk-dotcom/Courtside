@@ -4,7 +4,7 @@ import React from 'react';
 import { Image, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
-import { useApp } from '@/store/AppContext';
+import { useUsers } from '@/store/AppContext';
 import { initials } from '@/lib/format';
 import { colors, inkOn, radius, font } from '@/theme';
 
@@ -39,9 +39,10 @@ interface Props {
  */
 const COACH_GREEN = '#4C9A5A';
 
-export function Avatar({ uri, name, seed, size = 40, style, ring = false, plain = false }: Props) {
+export const Avatar = React.memo(function Avatar({ uri, name, seed, size = 40, style, ring = false, plain = false }: Props) {
   const styles = useThemedStyles(styleDefinitions);
-  const { users } = useApp();
+  // Only the people list, not the whole app: a like or a message elsewhere does not redraw every face on screen.
+  const users = useUsers();
   const photo = uri ?? users.find(user => user.avatarSeed === seed || user.id === seed)?.avatarUrl;
   const tint = tintFor(seed);
   // The fill the initials actually sit on: a caller's own background (the profile's brand disc,
@@ -75,7 +76,7 @@ export function Avatar({ uri, name, seed, size = 40, style, ring = false, plain 
       ) : null}
     </View>
   );
-}
+});
 
 const styleDefinitions = StyleSheet.create({
   base: { alignItems: 'center', justifyContent: 'center' },

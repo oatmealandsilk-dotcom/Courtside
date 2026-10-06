@@ -52,7 +52,7 @@ const rgb = (g: Glow) => `rgb(${g[0]}, ${g[1]}, ${g[2]})`;
  * both feathered to nothing before the bottom edge. It sits behind a screen's
  * opening moment or inside a card. The colours are the court's own.
  */
-export function Wash({ height = 320, strength = 1, style, fade, theme: wanted }: Props) {
+export const Wash = React.memo(function Wash({ height = 320, strength = 1, style, fade, theme: wanted }: Props) {
   const { theme: current } = useTheme();
   const theme = wanted ?? current;
   const [l, r] = WASHES[theme] ?? WASHES.default;
@@ -84,7 +84,7 @@ export function Wash({ height = 320, strength = 1, style, fade, theme: wanted }:
       </Svg>
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   wrap: { position: 'absolute', top: 0, left: 0, right: 0, overflow: 'hidden' },
