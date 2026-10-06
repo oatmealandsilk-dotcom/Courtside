@@ -4,12 +4,10 @@ import React, { useEffect, useState } from 'react';
 import { BirthDateField } from '@/components/BirthDateField';
 import { blockDevice, carryBirthDate, dropCarriedBirthDate, isDeviceBlocked, toBirthDate, yearsOld } from '@/features/age/ageCheck';
 import { readableInk } from '@/lib/badges';
-import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { Submit } from '@/components/sheet/SheetForm';
 import * as AppleAuthentication from 'expo-apple-authentication';
-import { Image as ExpoImage } from 'expo-image';
-import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
@@ -28,6 +26,7 @@ import { KeyboardScrollContext, useKeyboardReveal } from '@/lib/keyboardScroll';
 import { KEYBOARD_ROOM, useKeyboardRoom } from '@/lib/keyboardRoom';
 import { useAndroidBack } from '@/lib/androidBack';
 import { StatusShade } from '@/components/StatusShade';
+import { Welcome } from '@/features/welcome/Welcome';
 import { colors, lift, radius, spacing, typography, font } from '@/theme';
 
 type Mode = 'sign-in' | 'sign-up';
@@ -52,18 +51,8 @@ export default function SignIn() {
   // they have already seen what CourtSide is, so the form opens straight away.
   const { add, mode: asked } = useLocalSearchParams<{ add?: string; mode?: string }>();
   const [mode, setMode] = useState<Mode>(asked === 'create' ? 'sign-up' : 'sign-in');
-  const { height: screenHeight } = useWindowDimensions();
   // Clear of the status bar at the top and the home bar at the bottom, the same as every page before the app.
   const space = useGateSpace();
-  // The welcome's preview of the app fills whatever height the name, the line,
-  // the gaps and the two buttons leave (about 297 points of them at the normal
-  // text size), between 240 and 440. Its real height is read once it is laid
-  // out, so a larger text size simply leaves the preview less room; this first
-  // guess only sizes the cards before that. On a small phone like an iPhone SE
-  // the cards also shrink a little, so the post still reads as a whole card
-  // fading out rather than a sliver of one. The buttons never shrink.
-  const [previewHeight, setPreviewHeight] = useState(() => Math.max(240, Math.min(440, screenHeight - space.top - space.bottom - 297)));
-  const cardScale = Math.max(0.8, Math.min(1, previewHeight / 330));
   // The phone scrolls the box you tapped above the keyboard, as every Screen does.
   const keyboard = useKeyboardReveal();
   // Android: room under the form for the keyboard, so the lowest box can be scrolled clear of it.
@@ -376,6 +365,18 @@ export default function SignIn() {
   const title = chooser ? 'Welcome back' : mode === 'sign-up' ? 'Create your account' : 'Sign in';
   const line = chooser ? 'Pick an account to carry on.' : mode === 'sign-up' ? 'Free, and it takes a minute.' : 'Tennis clips, people to hit with, and real coaches.';
 
+  // The first visit: one big court with the name on it, one line, two ways in (src/features/welcome).
+  if (welcome) {
+    return (
+      <View style={styles.root}>
+        <Welcome onCreate={() => begin('sign-up')} onLogIn={() => begin('sign-in')} />
+        {via ? <SigningInWith provider={via} /> : null}
+        {switchingAccount ? <SigningInAs name={switchingAccount.name} handle={switchingAccount.handle} avatarUrl={switchingAccount.avatarUrl} seed={switchingAccount.id} /> : null}
+        {curtain}
+      </View>
+    );
+  }
+
   return (
     <KeyboardScrollContext.Provider value={keyboard.reveal}>
     <View style={styles.root}>
@@ -433,45 +434,6 @@ export default function SignIn() {
                   </Pressable>
                 ) : null}
               </View>
-            </View>
-          ) : welcome ? (
-            // Fills the screen between the two safe edges, so the buttons sit low, where a thumb is.
-            <View style={[styles.welcome, { minHeight: screenHeight - space.top - space.bottom }]}>
-                <View style={styles.welcomeTop}>
-                  <Animated.View entering={FadeInDown.duration(520)} style={{ gap: spacing.md }}>
-                    <View style={[styles.brandRow, { gap: 12 }]}>
-                      <BrandMark size={42} />
-                      <Text style={[styles.bigName, { fontSize: 42, lineHeight: 46, letterSpacing: -1.8, marginTop: 0 }]}>CourtSide</Text>
-                    </View>
-                    <Text style={[styles.bigLine, { fontSize: 18, lineHeight: 25 }]}>Your tennis, all in one place. Post your clips, find people to hit with, and ask real coaches.</Text>
-                  </Animated.View>
-                  {/* Three real screens — the forum, a post, the courts map — fanned like cards and fading into the buttons. */}
-                  <View onLayout={(e) => setPreviewHeight(e.nativeEvent.layout.height)} style={styles.phoneWrap}>
-                    {/* Each side card's tilt and offset sit on a plain holder around it: on a
-                        phone, the fade-in would otherwise replace them, and both side cards
-                        would land straight behind the front one. */}
-                    <View style={[styles.phoneSlot, { zIndex: 1, transform: [{ translateX: -116 * cardScale }, { translateY: 32 * cardScale }, { rotate: '-7deg' }] }]}>
-                      <Animated.View entering={FadeInDown.delay(260).duration(600)} style={[styles.phone, { width: 206 * cardScale, borderRadius: 28 * cardScale }]}>
-                        <ExpoImage source={require('../../assets/welcome/forum-screen.jpg')} style={styles.phoneShot} contentFit="cover" accessibilityLabel="The Community forum: players' questions about gear and technique" />
-                      </Animated.View>
-                    </View>
-                    <View style={[styles.phoneSlot, { zIndex: 1, transform: [{ translateX: 116 * cardScale }, { translateY: 32 * cardScale }, { rotate: '7deg' }] }]}>
-                      <Animated.View entering={FadeInDown.delay(320).duration(600)} style={[styles.phone, { width: 206 * cardScale, borderRadius: 28 * cardScale }]}>
-                        <ExpoImage source={require('../../assets/welcome/map-screen.jpg')} style={styles.phoneShot} contentFit="cover" accessibilityLabel="The map: tennis courts around Raleigh" />
-                      </Animated.View>
-                    </View>
-                    <Animated.View entering={FadeInDown.delay(160).duration(600)} style={[styles.phoneSlot, styles.phone, { zIndex: 2, width: 258 * cardScale, borderRadius: 28 * cardScale }]}>
-                      <ExpoImage source={require('../../assets/welcome/post-screen.jpg')} style={[styles.phoneShot, { aspectRatio: 540 / 836 }]} contentFit="cover" accessibilityLabel="A post in CourtSide: photos from a tennis session" />
-                    </Animated.View>
-                    <LinearGradient pointerEvents="none" colors={[`${colors.bg}00`, colors.bg]} style={styles.phoneFade} />
-                  </View>
-                </View>
-              <Animated.View entering={FadeInDown.delay(320).duration(460)} style={styles.welcomeActions}>
-                <Submit label="Create an account" onPress={() => begin('sign-up')} />
-                <Pressable accessibilityRole="button" onPress={() => begin('sign-in')} style={({ pressed }) => [styles.secondary, pressed && styles.pressed]}>
-                  <Text style={styles.secondaryText}>I already have an account</Text>
-                </Pressable>
-              </Animated.View>
             </View>
           ) : (
             <>
@@ -646,24 +608,6 @@ const styleDefinitions = StyleSheet.create({
   scroll: { flexGrow: 1, paddingHorizontal: spacing.xl, justifyContent: 'center' },
   column: { width: '100%', maxWidth: 420, alignSelf: 'center', gap: spacing.xxl },
   hero: { gap: spacing.lg },
-  // The first visit: the name, the court, one line, two ways in.
-  welcome: { gap: spacing.xl, justifyContent: 'space-between' },
-  brandRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  welcomeActions: { gap: spacing.md },
-  // The name and line, then the preview. It grows into the free height rather
-  // than being told it (flexGrow, not flex), so when there is too little room
-  // the page scrolls instead of the buttons sliding over the preview.
-  welcomeTop: { flexGrow: 1, gap: spacing.xl },
-  // Three real screens, fanned, fading into the buttons; as tall as the room left, within 240 to 440.
-  phoneWrap: { flexGrow: 1, minHeight: 240, maxHeight: 440, alignItems: 'center', overflow: 'hidden', marginHorizontal: -spacing.xl, paddingTop: spacing.md },
-  // Where each card sits; the side cards' tilt goes on this holder, never on the card that fades in.
-  phoneSlot: { position: 'absolute', top: spacing.md },
-  // Width and corner radius are set where the cards are drawn: full size is 258 (front) and 206 (sides), scaled down on small phones.
-  phone: { overflow: 'hidden', borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, boxShadow: '0px 18px 40px rgba(42, 36, 24, 0.16)' },
-  phoneShot: { width: '100%', aspectRatio: 540 / 858 },
-  phoneFade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 120, zIndex: 3 },
-  bigName: { ...font('600'), fontSize: 56, lineHeight: 60, letterSpacing: -2.4, color: colors.brand, marginTop: spacing.sm },
-  bigLine: { ...typography.body, fontSize: 20, lineHeight: 28, letterSpacing: -0.3, color: colors.textMuted, maxWidth: 340 },
   back: { width: 36, height: 36, borderRadius: 18, marginBottom: -spacing.lg, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface, ...lift },
   title: { ...typography.display, fontSize: 32, letterSpacing: -1.1, color: colors.text },
   line: { ...typography.body, fontSize: 16, color: colors.textMuted, lineHeight: 23 },

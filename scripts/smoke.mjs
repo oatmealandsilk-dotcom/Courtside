@@ -687,7 +687,7 @@ const STEPS = [
     title: 'Sign in to the demo',
     async run(page) {
       await page.goto('/');
-      await page.tap('I already have an account', 45000);
+      await page.tap({ label: 'Log in' }, 45000);
       // The demo form, not the real one: proof this build has no database behind it.
       await page.waitFor({ text: /^Demo build — no accounts, no database/ });
       await page.tap({ text: 'Enter' });
