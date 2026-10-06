@@ -54,6 +54,7 @@ import { knownOpen, notKnownAdult, type AgeSource, type Openness, type OpennessM
 import type { TeenMap } from '@/features/players/mapPrivacy';
 import { show as showToast } from '@/lib/toast';
 import { opensAtFor } from '@/features/hits/audience';
+import { keepUnsentThread } from '@/features/community/unsentThread';
 import { forgetPushToken, registerForPush } from '@/features/push/push';
 import { stopWorkoutWatch } from '@/features/health/workoutWatch';
 import { framesAt } from '@/features/compose/frames';
@@ -4199,7 +4200,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
             questions: prev.questions.filter((q) => q.id !== question.id),
             notifications: prev.notifications.filter((n) => !(n.kind === 'posted' && n.targetId === question.id)),
           }));
-          showToast({ title: 'Your thread didn’t post', body: 'Check your connection and try again.', icon: 'alert-circle-outline' });
+          // What was typed is kept: "Post again" opens Ask the room with it filled in.
+          keepUnsentThread({ title: question.title, body: question.body, topic: question.topic, poll: options && options.length >= 2 ? options : undefined });
+          showToast({ title: 'Your thread didn’t post', body: 'Your words are kept. Check your connection, then post it again.', icon: 'alert-circle-outline', action: { label: 'Post again', onPress: () => router.push('/ask') } });
           return;
         }
         if (question.poll) void remote.insertPoll(question.id, question.poll.options);

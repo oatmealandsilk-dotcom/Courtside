@@ -193,6 +193,16 @@ function HitCardPublic({ preview }: { preview: SharePreview }) {
   const hit = preview.hit!;
   const over = !!preview.gone;
   const full = !over && hit.spotsLeft === 0;
+  // The level's scale (NTRP, UTR or ITF) is the poster's own, as on the hit
+  // in the app: their shared profile says which, the hit's preview doesn't.
+  const [scale, setScale] = useState<string | undefined>(undefined);
+  const posterId = preview.author?.id;
+  useEffect(() => {
+    if (!posterId || (hit.levelMin === undefined && hit.levelMax === undefined)) return undefined;
+    let live = true;
+    fetchSharePreview('profile', posterId).then((got) => { if (live) setScale(got?.profile?.skillSystem); }).catch(() => undefined);
+    return () => { live = false; };
+  }, [posterId, hit.levelMin, hit.levelMax]);
   return (
     <View style={styles.card}>
       <View style={styles.eyebrowRow}>
@@ -206,7 +216,7 @@ function HitCardPublic({ preview }: { preview: SharePreview }) {
       </View>
       <View style={styles.chips}>
         <View style={styles.chip}><Text style={styles.chipText}>{FORMAT_LABEL[hit.format]}</Text></View>
-        <View style={styles.chip}><Text style={styles.chipText}>{levelText(hit)}</Text></View>
+        <View style={styles.chip}><Text style={styles.chipText}>{levelText(hit, scale)}</Text></View>
         {!over && !full ? <View style={[styles.chip, styles.chipStrong]}><Text style={[styles.chipText, styles.chipStrongText]}>{hit.spotsLeft === 1 ? '1 spot left' : `${hit.spotsLeft} spots left`}</Text></View> : null}
       </View>
       {hit.note ? <Text style={styles.note}>“{hit.note}”</Text> : null}

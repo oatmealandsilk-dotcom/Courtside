@@ -1,5 +1,5 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -9,6 +9,7 @@ import { Field } from '@/components/ui';
 import { Chips, Section, SheetTitle, Submit, formBody } from '@/components/sheet/SheetForm';
 import { TOPIC_META } from '@/components/QuestionCard';
 import { BLOCKED_WORDS_NOTE } from '@/features/hiddenWords/hiddenWords';
+import { clearUnsentThread, peekUnsentThread } from '@/features/community/unsentThread';
 import * as haptics from '@/lib/haptics';
 import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
@@ -25,13 +26,16 @@ const TOPICS = Object.keys(TOPIC_META) as QuestionTopic[];
 export default function Ask() {
   const styles = useThemedStyles(styleDefinitions);
   const { actions } = useApp();
-  const [title, setTitle] = useState('');
-  const [body, setBody] = useState('');
-  const [topic, setTopic] = useState<QuestionTopic>('gear');
+  // A thread that didn't post comes back already typed (its toast's "Post again").
+  const [unsent] = useState(peekUnsentThread);
+  useEffect(() => { clearUnsentThread(); }, []);
+  const [title, setTitle] = useState(unsent?.title ?? '');
+  const [body, setBody] = useState(unsent?.body ?? '');
+  const [topic, setTopic] = useState<QuestionTopic>(unsent?.topic ?? 'gear');
   const [closeSignal, setCloseSignal] = useState(0);
   const [posted, setPosted] = useState<string | null>(null);
   // A poll: off until asked for, then two options to start, up to four.
-  const [poll, setPoll] = useState<string[] | null>(null);
+  const [poll, setPoll] = useState<string[] | null>(unsent?.poll ?? null);
   const pollOk = !poll || poll.filter((o) => o.trim()).length >= 2;
 
   const canSubmit = title.trim().length >= 3 && pollOk;

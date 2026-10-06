@@ -2600,6 +2600,21 @@ export const remote = {
    * question or reply, and why it was taken down. Null when it is gone.
    */
   async fetchReportedItem(kind: ReportedItemKind, id: ID): Promise<ReportedItem | null> {
+    // An open hit's own read rules have no exception for admins (a teen's,
+    // an invite-only one, someone blocked): the database hands over this one
+    // hit, and only once it is reported (migration 126), as for a chat.
+    if (kind === 'hit-request') {
+      const { data, error } = await need().rpc('report_hit_context', { hit: id });
+      if (!error) {
+        if (!data || typeof data !== 'object') return null;
+        const raw = data as { note?: unknown; place?: unknown };
+        const words = [typeof raw.note === 'string' ? raw.note : null, typeof raw.place === 'string' && raw.place.trim() ? `At ${raw.place}` : null]
+          .filter((x): x is string => !!x && !!x.trim()).join(' · ');
+        return { body: words, removed: false };
+      }
+      // Before migration 126: whatever the admin's own read rules let through.
+      if (!missingFunction(error)) { fail('reported hit')(error); return null; }
+    }
     const tables: Record<ReportedItemKind, string[]> = {
       post: ['posts'], hit: ['stories'], 'hit-request': ['hit_requests'], question: ['questions'], answer: ['answers'],
       // A comment is under a post or under a hit: whichever has it.

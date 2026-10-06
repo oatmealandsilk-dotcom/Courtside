@@ -33,6 +33,14 @@
 --    signed in or out. They still run on every report exactly as before: the
 --    database never asks for that permission when it runs them for a report.
 --
+-- 4. An admin can read a reported open hit (report_hit_context): its note,
+--    place and poster, for that one hit and only once someone has reported
+--    it, the way a reported chat already works. Before, the Reports page
+--    showed "This is gone" for a teen's hit, an invite-only hit or one from
+--    someone the admin blocked, since open hits' read rules have no admin
+--    exception (and shouldn't: the admin accounts would then see teens' hits
+--    on their own Find Players and map).
+--
 -- Before this runs: the app's Report on an open hit already works (the report
 -- is kept, with the poster's id as the app sends it, and the hit leaves the
 -- reporter's screens at once), but on the next app open the hit comes back
@@ -42,7 +50,7 @@
 -- Needs 124 (live on Oct 5). Written against the live database on Oct 5,
 -- after 124: stamp_report and notify_admins_of_report exactly as 124 left
 -- them, my_reported_targets as 115 did, checked below by md5 of each body.
--- Adds no table or column.
+-- Adds one function (report_hit_context), no table or column.
 --
 -- Tried on the live database on Oct 5, after 124, inside a transaction that
 -- was then undone (nothing was saved), run twice. As a signed-in player: a
@@ -101,6 +109,11 @@ begin
     where topic is null or topic not in ('gear', 'technique', 'strategy', 'injury', 'fitness', 'rules', 'mental');
   if bad is not null then
     raise exception 'Migration 126 stopped before changing anything: some threads have the topic %. Ask Claude to look.', bad;
+  end if;
+  -- The admins' reported-hit reader is new: its name is free, or this file's own.
+  if exists (select 1 from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname = 'report_hit_context'
+             and md5(p.prosrc) <> 'fecc7a429ccb72cdfa5c71839b0d8d1f') then
+    raise exception 'Migration 126 stopped before changing anything: there is already another report_hit_context. Ask Claude to look.';
   end if;
   -- The rule's name is free, or this file's own.
   if exists (select 1 from pg_constraint where conrelid = 'public.questions'::regclass and conname = 'questions_topic_check'
@@ -205,6 +218,38 @@ begin
   return new;
 end $$;
 
+-- ---------------------------- 2b. the admins can read a reported open hit
+-- An open hit's own read rules have no exception for admins: a teen's hit,
+-- an invite-only one or one from someone the admin blocked showed only "This
+-- is gone" on the Reports page, so the admin couldn't read what was
+-- reported. As for a reported chat (report_chat_context), the database hands
+-- an admin just this one hit's note, place and poster, and only once someone
+-- has reported it. Admins get no wider read on open hits: those would then
+-- show on the admin accounts' own Find Players and map.
+create or replace function public.report_hit_context(hit uuid)
+returns jsonb
+language plpgsql stable security definer set search_path = public
+as $
+declare
+  ctx jsonb;
+begin
+  if not public.is_admin() then raise exception 'not allowed'; end if;
+  if not exists (select 1 from public.reports r where r.target = 'hit-request:' || hit::text) then
+    raise exception 'not reported';
+  end if;
+  select jsonb_build_object(
+      'note', left(h.note, 280),
+      'place', left(h.place->>'name', 120),
+      'author', h.author_id,
+      'starts_at', h.starts_at,
+      'cancelled', h.cancelled)
+    into ctx
+    from public.hit_requests h where h.id = hit;
+  return ctx;
+end $;
+revoke all on function public.report_hit_context(uuid) from public, anon;
+grant execute on function public.report_hit_context(uuid) to authenticated;
+
 -- ------------------------------- 3. the reports table's own functions stay its own
 revoke all on function public.stamp_report() from public, anon, authenticated;
 revoke all on function public.notify_admins_of_report() from public, anon, authenticated;
@@ -215,7 +260,10 @@ begin
   if exists (select 1 from pg_proc p where p.pronamespace = 'public'::regnamespace
              and ((p.proname = 'stamp_report' and md5(p.prosrc) <> 'bca29d59ed094d2f5aee799083fbf1b6')
                or (p.proname = 'my_reported_targets' and md5(p.prosrc) <> 'f068be6c2df849a90cfa1a014b42892d')
-               or (p.proname = 'notify_admins_of_report' and md5(p.prosrc) <> '1bf03d1da6ea8de91012c582a4ddd780')))
+               or (p.proname = 'notify_admins_of_report' and md5(p.prosrc) <> '1bf03d1da6ea8de91012c582a4ddd780')
+               or (p.proname = 'report_hit_context' and md5(p.prosrc) <> 'fecc7a429ccb72cdfa5c71839b0d8d1f')))
+     or not exists (select 1 from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname = 'report_hit_context')
+     or has_function_privilege('anon', 'public.report_hit_context(uuid)', 'execute')
      or not exists (select 1 from pg_constraint where conrelid = 'public.questions'::regclass
                     and conname = 'questions_topic_check' and convalidated) then
     raise exception 'Migration 126 stopped: it did not come out as written. Nothing was changed.';
