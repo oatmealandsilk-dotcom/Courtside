@@ -44,7 +44,7 @@ export function StoriesRail({ onVideo = false }: { onVideo?: boolean }) {
           <Pressable
             key={user.id}
             accessibilityRole="button"
-            accessibilityLabel={mine ? (empty ? 'Take an instant' : 'Your instant') : `${user.name}'s instant${seen ? ', seen' : ''}`}
+            accessibilityLabel={mine ? (empty ? 'Take an Instant' : 'Your Instant') : `${user.name}'s Instant${seen ? ', seen' : ''}`}
             onPress={open}
             onLongPress={mine ? () => router.push('/hit') : undefined}
             style={styles.tile}
@@ -58,7 +58,7 @@ export function StoriesRail({ onVideo = false }: { onVideo?: boolean }) {
               ) : null}
             </View>
             <Text numberOfLines={1} style={[styles.name, onVideo && styles.nameOnVideo]}>
-              {mine ? 'Your instant' : user.name.split(' ')[0]}
+              {mine ? 'Your Instant' : user.name.split(' ')[0]}
             </Text>
             <Text numberOfLines={1} style={[styles.left, onVideo && styles.nameOnVideo]}>{left}</Text>
           </Pressable>
