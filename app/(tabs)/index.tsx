@@ -202,12 +202,12 @@ const RAIL_ICONS = [['heart-outline', 31], ['chatbubble-outline', 29], ['arrow-r
  */
 const RAIL_DROP = 10;
 /**
- * Something of yours taken down: the pill sits in the top row, and the band
- * under it ("Why? See the rules · Ask for a review") starts this far down;
- * your page's own top moves down this much so the band never sits on it.
+ * Something of yours taken down: the pill in the top row with "Why? See the
+ * rules · Ask for a review" under it. Your page starts below the two, by
+ * their measured height (this guess until they are drawn: a two-line pill
+ * and a one-line card).
  */
-const REMOVED_BAND_TOP = 54;
-const REMOVED_BAND_ROOM = 40;
+const REMOVED_GUESS = 92;
 
 /**
  * A hit's photo at its own shape. A tall one fills the page; a wide one (a
@@ -725,6 +725,11 @@ function Home({ scope, topRow, paused, onChrome }: {
   // The shape of a page before it is in: a round stand-in where the picture
   // will be, the name beside it, and the column of buttons down the right.
   const insets = useSafeAreaInsets();
+  // How tall the removed notice over each post of yours is, once drawn, so the post starts under it.
+  const [removedTall, setRemovedTall] = useState<Record<string, number>>({});
+  const noteRemovedTall = useCallback((id: string, h: number) => {
+    setRemovedTall((m) => (Math.abs((m[id] ?? -1) - h) < 1 ? m : { ...m, [id]: h }));
+  }, []);
   // A written or photo post's shape: who at the top, the picture in its frame
   // with the mark on it, the words, and the row of buttons under them.
   const skeletonPost = useMemo(() => (
@@ -1366,19 +1371,22 @@ function Home({ scope, topRow, paused, onChrome }: {
               const near = Platform.OS === 'web' ? (ahead === 0 || ahead === 1) && (!warming || ahead === 0) : distance <= 1 || (ahead > 0 && ahead <= AHEAD);
               const strip = index === suggestHost ? suggestStrip : null;
               // Taken down (migration 108): the reason in a pill over the top of the page, and for
-              // its author "Why? See the rules · Ask for a review" on the band under it (Oct 5).
-              const removedOver = (post: Post) => (post.removed ? (
-                <>
-                  <View pointerEvents="box-none" style={[styles.removedWrap, { top: insets.top + 12 }]}>
-                    <RemovedNote removed={post.removed} item={{ kind: 'post', id: post.id, authorId: post.authorId, clip: post.kind === 'clip' }} actions={false} />
+              // its author "Why? See the rules · Ask for a review" under it (Oct 5), the page's width.
+              const removedOver = (post: Post) => {
+                if (!post.removed) return null;
+                const item = { kind: 'post' as const, id: post.id, authorId: post.authorId, clip: post.kind === 'clip' };
+                const pill = <RemovedNote removed={post.removed} item={item} actions={false} />;
+                if (post.authorId !== currentUserId) return <View pointerEvents="box-none" style={[styles.removedWrap, { top: insets.top + 12 }]}>{pill}</View>;
+                return (
+                  <View pointerEvents="box-none" style={[styles.removedStack, { top: insets.top + 12 }]} onLayout={(e) => noteRemovedTall(post.id, e.nativeEvent.layout.height)}>
+                    <View pointerEvents="box-none" style={styles.removedPillRow}>{pill}</View>
+                    <RemovedActions removed={post.removed} item={item} card align="center" />
                   </View>
-                  <View pointerEvents="box-none" style={[styles.removedBand, { top: insets.top + REMOVED_BAND_TOP }]}>
-                    <RemovedActions removed={post.removed} item={{ kind: 'post', id: post.id, authorId: post.authorId, clip: post.kind === 'clip' }} card align="center" />
-                  </View>
-                </>
-              ) : null);
-              // That band has room of its own on the author's page: what is under it starts lower.
-              const bandRoom = (post: Post) => (post.removed && post.authorId === currentUserId ? REMOVED_BAND_ROOM : 0);
+                );
+              };
+              // Your own removed post starts under that notice; anyone else's page is as it was.
+              const clearOfRemoved = (post: Post, top: number) => (post.removed && post.authorId === currentUserId
+                ? Math.max(top, insets.top + 12 + (removedTall[post.id] ?? REMOVED_GUESS) + 12) : top);
 
               if (item.type === 'tip') return <TipPage key="tip" onSubmit={actions.submitTip} />;
               if (item.type === 'challenge') return <ChallengePage key="challenge" challenge={challenge} />;
@@ -1496,7 +1504,7 @@ function Home({ scope, topRow, paused, onChrome }: {
                       saved={isSaved}
                       active={playing && active === index && warmed && playable}
                       preload={near}
-                      topInset={insets.top + 66 + bandRoom(post)}
+                      topInset={clearOfRemoved(post, insets.top + 66)}
                       onDoubleTap={() => likeByTap(post.id, liked)}
                       onToggleLike={() => actions.toggleLike(post.id)}
                       onToggleSave={() => actions.toggleSavePost(post.id)}
@@ -1518,7 +1526,7 @@ function Home({ scope, topRow, paused, onChrome }: {
                 return (
                   // A session posted with no photo is its card: the page keeps clear of the
                   // floating tab bar, so the caption and buttons under the card stay in view.
-                  <View key={post.id} style={[styles.article, scopedBack && styles.articleScoped, !phone && styles.articleCentred, (topRow || rowed) && { paddingTop: insets.top + 64 + bandRoom(post) }, barInset > 0 && post.session && hasSessionStats(post.session) && !post.imageUrl && !post.videoUrl ? { paddingBottom: barInset + 8 } : null]}>
+                  <View key={post.id} style={[styles.article, scopedBack && styles.articleScoped, !phone && styles.articleCentred, (topRow || rowed) && { paddingTop: insets.top + 64 }, barInset > 0 && post.session && hasSessionStats(post.session) && !post.imageUrl && !post.videoUrl ? { paddingBottom: barInset + 8 } : null, post.removed && post.authorId === currentUserId ? { paddingTop: clearOfRemoved(post, topRow || rowed ? insets.top + 64 : scopedBack ? 116 : 64) } : null]}>
                     <Wash height={300} strength={0.6} />
                     {strip}
                     <View style={{ flex: 1, minHeight: 0, overflow: 'hidden', justifyContent: 'flex-start' }}>
@@ -1782,8 +1790,9 @@ const styleDefinitions = StyleSheet.create({
   // "Removed: <reason>" across the top of a page an admin took down (only its author and admins ever see
   // one, and only in a scoped feed): level with the back button, clear of it on both sides.
   removedWrap: { position: 'absolute', left: 64, right: 64, alignItems: 'center', zIndex: 6 },
-  // The author's line under the pill: the page's width, clear of the back button above it.
-  removedBand: { position: 'absolute', left: 16, right: 16, alignItems: 'center', zIndex: 6 },
+  // On your own: the pill in the same lane as everyone's (clear of the back button), its line under it at the page's width.
+  removedStack: { position: 'absolute', left: 16, right: 16, alignItems: 'center', gap: 8, zIndex: 6 },
+  removedPillRow: { alignSelf: 'stretch', paddingHorizontal: 48, alignItems: 'center' },
   holdPage: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg },
   holdWord: { ...typography.display, fontSize: 34, ...font('600'), color: colors.brand, letterSpacing: -1.2 },
   bone: { height: 12, borderRadius: 6, backgroundColor: colors.border },

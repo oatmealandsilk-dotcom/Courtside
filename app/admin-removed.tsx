@@ -191,8 +191,8 @@ export default function AdminRemoved() {
               {review ? (
                 // The author's own words, as they sent them.
                 <View style={styles.ask}>
-                  <Text style={styles.askHead}>{author ? `@${author.handle}` : 'The author'} asked {relativeTime(review.createdAt)}{review.note ? ':' : ', with no note.'}</Text>
-                  {review.note ? <Text style={styles.askNote}>“{review.note}”</Text> : null}
+                  <Text style={styles.askHead}>{author ? `@${author.handle}` : 'The author'} asked for a review · {relativeTime(review.createdAt)}</Text>
+                  {review.note ? <Text style={styles.askNote}>“{review.note}”</Text> : <Text style={styles.muted}>No note.</Text>}
                 </View>
               ) : null}
 

@@ -182,7 +182,10 @@ export default function Guidelines() {
         {rule === 'other' && why ? (
           // A plain "Removed for breaking CourtSide's rules" explained, first thing.
           <View style={styles.callout}>
-            <Text style={styles.calloutTitle}>{why}</Text>
+            <View style={styles.markRow}>
+              <Ionicons name="eye-off-outline" size={13} color={colors.danger} />
+              <Text style={styles.markText}>{why}</Text>
+            </View>
             <Text style={styles.body}>
               “Removed for breaking CourtSide’s rules” means it broke one of the guidelines on this page. When the notice doesn’t name one, it’s usually one of the rules under{' '}
               <Text accessibilityRole="link" onPress={() => jump('other', true)} style={styles.inlineLink}>Something else</Text>.
@@ -284,7 +287,6 @@ const styleDefinitions = StyleSheet.create({
   chipTextOn: { color: colors.bg },
   pressed: { opacity: 0.6 },
   callout: { gap: 6, padding: spacing.lg, borderRadius: radius.lg, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, marginBottom: spacing.xs },
-  calloutTitle: { ...typography.bodyStrong, color: colors.text },
   calloutFine: { ...typography.small, color: colors.textMuted, lineHeight: 19 },
   inlineLink: { ...font('600'), color: colors.brand, textDecorationLine: 'underline' },
   steps: { gap: spacing.md, paddingTop: 2 },
