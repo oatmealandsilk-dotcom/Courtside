@@ -141,14 +141,15 @@ export function RemovedActions({ removed, item, card = false, align = 'start', s
     ? { icon: 'time-outline' as const, words: 'Review asked · we’ll let you know' }
     : review?.status === 'kept' ? { icon: 'checkmark-done-outline' as const, words: 'Reviewed · it stays removed' } : null;
   return (
-    <View style={[styles.actions, card && styles.card, align === 'center' && styles.actionsCenter, style]}>
+    // Asked: where it stands goes on a line of its own under "Why? See the rules", never split across two.
+    <View style={[styles.actions, status && styles.actionsStacked, card && styles.card, align === 'center' && styles.actionsCenter, status && align === 'center' && styles.stackedCenter, style]}>
       <View style={styles.part}>
         <Text style={styles.muted}>Why? </Text>
         <Pressable accessibilityRole="link" accessibilityLabel={`Why? See the rules your ${thing} broke`} hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }} onPress={() => openRules(removed.reason, thing)} style={({ pressed }) => pressed && styles.pressed}>
           <Text style={styles.link}>See the rules</Text>
         </Pressable>
       </View>
-      <Text style={styles.dot} accessibilityElementsHidden importantForAccessibility="no">·</Text>
+      {status ? null : <Text style={styles.dot} accessibilityElementsHidden importantForAccessibility="no">·</Text>}
       {status ? (
         <View style={styles.part} accessibilityRole="text" accessibilityLabel={status.words}>
           <Ionicons name={status.icon} size={12} color={colors.textMuted} style={styles.statusIcon} />
@@ -200,6 +201,8 @@ const styleDefinitions = StyleSheet.create({
   // Words and links on one line, wrapping as a sentence would on a narrow phone.
   actions: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 0, rowGap: 2 },
   actionsCenter: { justifyContent: 'center', alignSelf: 'center' },
+  actionsStacked: { flexDirection: 'column', alignItems: 'flex-start', rowGap: 3 },
+  stackedCenter: { alignItems: 'center' },
   // Over a photo or clip: the page's own card, small and lifted, so the line reads on any picture.
   card: { ...lift, maxWidth: '92%', paddingHorizontal: 12, paddingVertical: 6, borderRadius: radius.lg, backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
   part: { flexDirection: 'row', alignItems: 'center' },

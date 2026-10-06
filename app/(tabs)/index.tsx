@@ -1386,7 +1386,7 @@ function Home({ scope, topRow, paused, onChrome }: {
               };
               // Your own removed post starts under that notice; anyone else's page is as it was.
               const clearOfRemoved = (post: Post, top: number) => (post.removed && post.authorId === currentUserId
-                ? Math.max(top, insets.top + 12 + (removedTall[post.id] ?? REMOVED_GUESS) + 12) : top);
+                ? Math.max(top, insets.top + 12 + (removedTall[post.id] ?? REMOVED_GUESS) + 16) : top);
 
               if (item.type === 'tip') return <TipPage key="tip" onSubmit={actions.submitTip} />;
               if (item.type === 'challenge') return <ChallengePage key="challenge" challenge={challenge} />;
