@@ -1,11 +1,13 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { PlayerName } from '@/components/PlayerName';
 import React, { useMemo, useRef } from 'react';
+import { useLocalSearchParams } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { goBack } from '@/lib/goBack';
 
 import { Screen } from '@/components/ui';
+import { JumpFlash, useJumpTo } from '@/components/JumpTo';
 import { TipComposer } from '@/components/TipComposer';
 import { voteCounts } from '@/components/VoteControls';
 import { RichText } from '@/components/RichText';
@@ -31,7 +33,10 @@ const ACTION_SLOP = { top: 13, bottom: 13, left: 10, right: 10 };
  */
 export default function Tips() {
   const styles = useThemedStyles(styleDefinitions);
-  const { tips, users, currentUserId, blockedIds, actions } = useApp();
+  const { tips, users, currentUserId, actions } = useApp();
+  // `at`: a tip to open the board at (a reported one, from Reports): scrolled to and lit up.
+  const { at } = useLocalSearchParams<{ at?: string }>();
+  const jump = useJumpTo(at);
   const opened = useRef(Date.now()).current;
   // Re-sorted when a tip arrives or leaves, not on every vote.
   const order = useMemo(() => {
@@ -44,7 +49,7 @@ export default function Tips() {
   const list = order.map((id) => byId.get(id)).filter((t): t is Tip => !!t);
 
   return (
-    <Screen title="Tips" compactTitle onBack={() => goBack()}>
+    <Screen title="Tips" compactTitle onBack={() => goBack()} scrollRef={jump.scrollRef}>
       <Text style={styles.lead}>Ideas for CourtSide from the people using it. Vote for the ones you want, and the top of this list gets built first.</Text>
       <TipComposer onSubmit={actions.submitTip} />
 
@@ -59,8 +64,10 @@ export default function Tips() {
               const mine = !!currentUserId && tip.authorId === currentUserId;
               const my = currentUserId ? tip.votedBy[currentUserId] : undefined;
               const net = score(tip);
+              const mark = jump.target(tip.id);
               return (
-                <View key={tip.id} style={[styles.row, index > 0 && styles.rowLine]}>
+                <View key={tip.id} style={[styles.row, index > 0 && styles.rowLine]} ref={mark?.ref} onLayout={mark?.onLayout} collapsable={mark ? false : undefined}>
+                  {mark ? <JumpFlash lit={mark.lit} square /> : null}
                   <View style={styles.rail}>
                     <VoteArrow direction={1} on={my === 1} onPress={() => actions.voteTip(tip.id, 1)} />
                     <Text style={[styles.score, my === 1 && styles.scoreUp, my === -1 && styles.scoreDown]} accessibilityLabel={`${net} votes`}>{net}</Text>
@@ -80,7 +87,7 @@ export default function Tips() {
                       ) : currentUserId ? (
                         <Pressable accessibilityRole="button" accessibilityLabel="Report this tip" onPress={() => confirmReport('tip', () => {
                           actions.reportUser(tip.authorId, `tip:${tip.id}`);
-                          thankForReport(author, author && !blockedIds.includes(author.id) ? () => actions.toggleBlock(author.id) : undefined);
+                          thankForReport(author, actions);
                         })} hitSlop={ACTION_SLOP} style={styles.action}>
                           <Ionicons name="flag-outline" size={14} color={colors.textFaint} />
                           <Text style={styles.time}>Report</Text>

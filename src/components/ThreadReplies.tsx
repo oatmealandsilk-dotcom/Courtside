@@ -16,6 +16,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { VoteControls } from '@/components/VoteControls';
 import { TOPIC_META } from '@/components/QuestionCard';
 import { Avatar, Button, Card, Chip, EmptyState, Field, Screen } from '@/components/ui';
+import { JumpFlash, useJumpTarget } from '@/components/JumpTo';
 import { relativeTime } from '@/lib/format';
 import { RichText } from '@/components/RichText';
 import { AttachButton, AttachedPreview, ReplyMediaView, type ReplyAttachment } from '@/components/ReplyMedia';
@@ -39,7 +40,7 @@ export function ThreadReply({ answer, thread, acceptedId, askerId, depth = 0, pr
   /** The asker's: marks this as the answer that solved it. */ onAccept?: (answerId: string) => void;
 }) {
   const styles = useThemedStyles(styleDefinitions);
-  const { users, currentUserId, currentUser, blockedIds, actions } = useApp();
+  const { users, currentUserId, currentUser, actions } = useApp();
   const [replying, setReplying] = useState(false);
   const [draft, setDraft] = useState('');
   const [media, setMedia] = useState<ReplyAttachment | null>(null);
@@ -69,6 +70,8 @@ export function ThreadReply({ answer, thread, acceptedId, askerId, depth = 0, pr
   const reveal = useRevealOnFocus();
   const lineRef = useRef<TextInput>(null);
   const responder = users.find(user => user.id === answer.authorId);
+  // The reply a thread was opened at (a reported one, from Reports): it is scrolled to and lights up for a moment.
+  const mark = useJumpTarget(answer.id);
   const streak = shownStreak(responder, currentUserId);
   const tag = useMentionDraft(draft, setDraft, lineRef);
   // Hold your own reply to delete it, as on Instagram; hold someone else's to report it (Oct 5).
@@ -79,7 +82,7 @@ export function ThreadReply({ answer, thread, acceptedId, askerId, depth = 0, pr
       haptics.tap();
       confirmReport('reply', () => {
         actions.reportUser(answer.authorId, `answer:${answer.id}`);
-        thankForReport(responder, responder && !blockedIds.includes(responder.id) ? () => actions.toggleBlock(responder.id) : undefined);
+        thankForReport(responder, actions);
       });
     } : undefined;
   // An admin's hold takes it down (or puts it back), with Delete still there on their own reply (migration 108).
@@ -99,7 +102,8 @@ export function ThreadReply({ answer, thread, acceptedId, askerId, depth = 0, pr
   const children = thread.filter(child => child.parentAnswerId === answer.id)
     .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
   return <View>
-    <View style={styles.answerCard}>
+    <View style={styles.answerCard} ref={mark?.ref} onLayout={mark?.onLayout} collapsable={mark ? false : undefined}>
+      {mark ? <JumpFlash lit={mark.lit} inset={8} /> : null}
       {!collapsed && children.length > 0 && <View pointerEvents="none" style={styles.avatarRail}/>}
       <Pressable accessibilityRole="button" accessibilityLabel={`${collapsed ? 'Expand' : 'Collapse'} reply by ${responder?.name ?? 'player'}${streakWords(streak)}`}
         onPress={() => setCollapsed(value => !value)} onLongPress={hold} style={styles.answerHead}>

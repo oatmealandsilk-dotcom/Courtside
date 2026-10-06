@@ -557,6 +557,7 @@ export default function Thread() {
         // Answering someone you blocked, whose words are folded away here: the quote keeps them hidden too.
         originalBlocked={!!original && group && original.senderId !== currentUserId && blockedIds.includes(original.senderId) && !shownIds.includes(original.id)}
         originalHidden={!!original && !!original.hiddenByWords && original.senderId !== currentUserId && !shownIds.includes(original.id)}
+        senderBlocked={m.senderId !== currentUserId && blockedIds.includes(m.senderId)}
         held={menuId === m.id}
         flashKey={flash?.id === m.id ? flash.n : undefined}
         readLine={m.id === lastRealId ? readLine : null}
@@ -816,10 +817,14 @@ export default function Thread() {
         void actions.reportChat(chatId, 'message', m.senderId, m.id).then((filed) => showToast(filed ? { title: REPORT_THANKS, icon: 'flag-outline' } : { title: 'Your report didn’t send', body: 'Check your connection and try again.', icon: 'alert-circle-outline' }));
       });
     },
+    // Blocking is a toggle underneath: someone already blocked is never sent
+    // through it (that would unblock them). Their row offers no Block, and
+    // this is checked again here, and again on yes.
     blockSender: (userId) => {
+      if (blockedIds.includes(userId)) return;
       const who = users.find((u) => u.id === userId);
       if (!who) return;
-      confirmBlock(who, () => actions.toggleBlock(userId));
+      confirmBlock(who, () => { if (!actions.isBlocked(userId)) actions.toggleBlock(userId); });
     },
     openPhoto: (m, index, rects) => { Keyboard.dismiss(); setViewing({ message: m, index, rects }); },
     // Asked once each while the app is open: one gone for good is not asked about on every draw.
@@ -1427,7 +1432,7 @@ const noop = () => {};
  * read line), an event line, or a folded run. Drawn again only when one of
  * its own values changes (see Thread's renderRow).
  */
-const MessageRow = memo(function MessageRow({ item, ctx, original, originalBlocked, originalHidden = false, held, flashKey, readLine, seenHidden, canWrite }: {
+const MessageRow = memo(function MessageRow({ item, ctx, original, originalBlocked, originalHidden = false, senderBlocked = false, held, flashKey, readLine, seenHidden, canWrite }: {
   item: ThreadRow;
   ctx: RowCtx;
   /** The message it answers, when it is here (undefined: gone, or not loaded yet). */
@@ -1436,6 +1441,8 @@ const MessageRow = memo(function MessageRow({ item, ctx, original, originalBlock
   originalBlocked: boolean;
   /** That message is hidden here by your Hidden words (migration 117): the quote keeps its words hidden too. */
   originalHidden?: boolean;
+  /** Whoever sent it is someone you blocked: no Block under it (it would unblock them). */
+  senderBlocked?: boolean;
   /** Its menu is open: the lifted copy stands in for it. */
   held: boolean;
   flashKey?: number;
@@ -1738,19 +1745,26 @@ const MessageRow = memo(function MessageRow({ item, ctx, original, originalBlock
     </Slide>
   ) : null;
 
-  // Shown after your Hidden words hid it: why it was hidden, and Report or Block right there, under it.
+  // Shown after your Hidden words hid it: why it was hidden, and Report or
+  // Block right there, under it. From someone you already blocked (a group
+  // you are both in, or your old chat with them), only Report: they are
+  // blocked already, and a Block here would have unblocked them.
   const wordsShown = !mine && message.hiddenByWords ? (
     <Slide mine={false}>
       <View style={[styles.wordsShown, gutter && styles.wordsShownBeside]}>
         <Text style={styles.wordsShownText}>Hidden by your Hidden words</Text>
         <Text style={styles.wordsShownDot}>·</Text>
-        <Pressable accessibilityRole="button" accessibilityLabel="Report this message" hitSlop={{ top: 12, bottom: 12, left: 6, right: 6 }} onPress={() => call.reportMessage(message)}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Report this message" hitSlop={{ top: 12, bottom: 12, left: 6, right: senderBlocked ? 12 : 6 }} onPress={() => call.reportMessage(message)}>
           <Text style={styles.wordsShownAction}>Report</Text>
         </Pressable>
-        <Text style={styles.wordsShownDot}>·</Text>
-        <Pressable accessibilityRole="button" accessibilityLabel="Block whoever sent it" hitSlop={{ top: 12, bottom: 12, left: 6, right: 12 }} onPress={() => call.blockSender(message.senderId)}>
-          <Text style={styles.wordsShownAction}>Block</Text>
-        </Pressable>
+        {senderBlocked ? null : (
+          <>
+            <Text style={styles.wordsShownDot}>·</Text>
+            <Pressable accessibilityRole="button" accessibilityLabel="Block whoever sent it" hitSlop={{ top: 12, bottom: 12, left: 6, right: 12 }} onPress={() => call.blockSender(message.senderId)}>
+              <Text style={styles.wordsShownAction}>Block</Text>
+            </Pressable>
+          </>
+        )}
       </View>
     </Slide>
   ) : null;

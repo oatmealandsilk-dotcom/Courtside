@@ -11,6 +11,7 @@ import { ClipVideo } from '@/components/ClipVideo';
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { Tappable } from '@/components/Tappable';
 import { Avatar, Button, Chip, EmptyState, Field, Screen } from '@/components/ui';
+import { JumpFlash, useJumpTo } from '@/components/JumpTo';
 import { relativeTime } from '@/lib/format';
 import { afterMenu, confirm, confirmAfterMenu, confirmReport } from '@/lib/confirm';
 import { RemovedNote } from '@/features/moderation/RemovedNote';
@@ -33,8 +34,9 @@ import { colors, radius, spacing, typography, font } from '@/theme';
  */
 export default function CoachQuestionDetail() {
   const styles = useThemedStyles(styleDefinitions);
-  const { id } = useLocalSearchParams<{ id: string }>();
-  const { coachQuestions, coachReplies, users, coaches, currentUser, currentUserId, blockedIds, error, actions } = useApp();
+  // `at`: a coach's reply to open the page at (a reported one, from Reports): scrolled to and lit up.
+  const { id, at } = useLocalSearchParams<{ id: string; at?: string }>();
+  const { coachQuestions, coachReplies, users, coaches, currentUser, currentUserId, error, actions } = useApp();
   const [draft, setDraft] = useState('');
   // What is in the box now, for an answer sent and then refused (see postAnswer).
   const latestDraft = useRef(draft);
@@ -49,6 +51,7 @@ export default function CoachQuestionDetail() {
   const leaving = useRef(false);
 
   const found = coachQuestions.find((q) => q.id === id);
+  const jump = useJumpTo(at, !!found);
   if (found) {
     shown.current = {
       question: found,
@@ -131,12 +134,12 @@ export default function CoachQuestionDetail() {
     actions.reportUser(question.authorId, `coach-question:${question.id}`);
     goBack('/coaches');
     const asker = users.find((u) => u.id === question.authorId);
-    thankForReport(asker, asker && !blockedIds.includes(asker.id) ? () => actions.toggleBlock(asker.id) : undefined);
+    thankForReport(asker, actions);
   }, true);
   const reportReply = (reply: CoachReply) => confirmReport('reply', () => {
     actions.reportUser(reply.coachUserId, `coach-reply:${reply.id}`);
     const coach = users.find((u) => u.id === reply.coachUserId);
-    thankForReport(coach, coach && !blockedIds.includes(coach.id) ? () => actions.toggleBlock(coach.id) : undefined);
+    thankForReport(coach, actions);
   });
 
   return (
@@ -144,6 +147,7 @@ export default function CoachQuestionDetail() {
       title="Ask a coach"
       compactTitle
       onBack={() => goBack()}
+      scrollRef={jump.scrollRef}
       right={mine || signedIn ? (
         <Tappable accessibilityRole="button" accessibilityLabel="More options" onPress={() => setMenuOpen(true)} hitSlop={10} style={styles.more}>
           <Ionicons name="ellipsis-horizontal" size={24} color={colors.text} />
@@ -202,8 +206,10 @@ export default function CoachQuestionDetail() {
         const coachUser = users.find((u) => u.id === reply.coachUserId);
         const coach = coaches.find((c) => c.userId === reply.coachUserId);
         const helpful = Boolean(currentUserId && reply.helpfulBy.includes(currentUserId));
+        const mark = jump.target(reply.id);
         return (
-          <View key={reply.id} style={styles.reply}>
+          <View key={reply.id} style={styles.reply} ref={mark?.ref} onLayout={mark?.onLayout} collapsable={mark ? false : undefined}>
+            {mark ? <JumpFlash lit={mark.lit} inset={8} /> : null}
             <Pressable
               accessibilityRole="link"
               onPress={() => (coach ? router.push(`/coach/${coach.id}`) : undefined)}

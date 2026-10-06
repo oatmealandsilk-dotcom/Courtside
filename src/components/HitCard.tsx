@@ -40,7 +40,7 @@ import { colors, font, lift, radius, spacing, typography } from '@/theme';
  */
 export function HitCard({ hit, miles, linked = true }: { hit: HitRequest; miles?: number; linked?: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
-  const { users, currentUserId, blockedIds, actions } = useApp();
+  const { users, currentUserId, actions } = useApp();
   const [busy, setBusy] = useState(false);
   const author = users.find((u) => u.id === hit.authorId);
   const joined = hit.joinedIds.map((id) => users.find((u) => u.id === id)).filter((u): u is NonNullable<typeof u> => !!u);
@@ -61,7 +61,7 @@ export function HitCard({ hit, miles, linked = true }: { hit: HitRequest; miles?
   // Reported, it leaves your screens at once (the hit's own page goes back, as a reported thread's does).
   const report = () => confirmReport('hit', () => {
     actions.reportUser(hit.authorId, `hit-request:${hit.id}`);
-    thankForReport(author, author && !blockedIds.includes(author.id) ? () => actions.toggleBlock(author.id) : undefined);
+    thankForReport(author, actions);
     if (!linked) goBack('/discuss');
   });
   const join = async () => {

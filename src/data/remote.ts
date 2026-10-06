@@ -2714,6 +2714,17 @@ export const remote = {
     return (data ?? []).length > 0;
   },
 
+  /**
+   * How many reports are open, for Settings' Reports row: the database counts
+   * them (no rows come back), on the status index. Only admins can read
+   * reports, so anyone else gets 0. Null when it could not be counted.
+   */
+  async countOpenReports(): Promise<number | null> {
+    const { count, error } = await need().from('reports').select('id', { count: 'exact', head: true }).eq('status', 'open');
+    if (error) { fail('open reports')(error); return null; }
+    return count ?? 0;
+  },
+
   /** Every report, newest first. Only admins can read them; for anyone else the list is empty. Null when they could not be loaded. */
   async fetchReports(): Promise<AdminReport[] | null> {
     const { data, error } = await need().from('reports').select('*').order('created_at', { ascending: false }).limit(300);

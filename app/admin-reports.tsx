@@ -58,9 +58,9 @@ function whereTo(report: AdminReport, item: ReportedItem | null | undefined): Hr
     case 'question': return id ? `/question/${id}` : null;
     case 'coach-question': return id ? `/coach-question/${id}` : null;
     case 'comment': return id && item?.parentId ? { pathname: '/comments', params: { kind: item.onHit ? 'hit' : 'post', id: item.parentId, at: id } } : null;
-    case 'answer': return item?.parentId ? `/question/${item.parentId}` : null;
-    case 'coach-reply': return item?.parentId ? `/coach-question/${item.parentId}` : null;
-    case 'tip': return '/tips';
+    case 'answer': return id && item?.parentId ? { pathname: '/question/[id]', params: { id: item.parentId, at: id } } : null;
+    case 'coach-reply': return id && item?.parentId ? { pathname: '/coach-question/[id]', params: { id: item.parentId, at: id } } : null;
+    case 'tip': return id ? { pathname: '/tips', params: { at: id } } : '/tips';
     case 'profile': return report.userId ? `/user/${report.userId}` : null;
     default: return null;
   }
@@ -78,9 +78,10 @@ const SUSPEND_NOTE = 'They can’t post, comment, reply or message until you uns
  * replying or messaging; asked first), or dismiss the report. Both taking
  * down and suspending can be undone from the same card.
  *
- * A tap on what was reported opens it where it sits: a comment in its
- * post's comments, a reply in its thread. What the AI coach wrote has
- * nowhere to open: its card is the words alone.
+ * A tap on what was reported opens it where it sits, scrolled to and lit
+ * up for a moment: a comment in its post's comments, a reply in its thread,
+ * a coach's reply under its question, a tip on the board. What the AI coach
+ * wrote has nowhere to open: its card is the words alone.
  *
  * A reported chat (a group, a one-to-one chat, or one message in either)
  * shows its name, who is in it and its last 30 messages, which admins can

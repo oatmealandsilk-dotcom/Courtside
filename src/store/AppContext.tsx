@@ -621,6 +621,12 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
   toggleMute: (userId: ID, quiet?: boolean) => void;
   /** Blocking is asked first, so only unblocking offers Undo. */
   toggleBlock: (userId: ID, quiet?: boolean) => void;
+  /**
+   * Whether you have blocked them, as of this moment. For a Block button
+   * tapped well after it was drawn (a toast's, a question's): it checks again
+   * first, so a Block never runs the toggle the other way and unblocks.
+   */
+  isBlocked: (userId: ID) => boolean;
   toggleAlerts: (userId: ID, quiet?: boolean) => void;
   /**
    * Reports someone to CourtSide, about one thing of theirs when `reason`
@@ -980,6 +986,8 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
   loadFollowsOf: (userId: ID) => Promise<void>;
   /** Admins only: every report, the reported post or hit, and a decision on one. Null when they could not be loaded. */
   loadReports: () => Promise<AdminReport[] | null>;
+  /** Admins only: how many reports are open, counted by the database (no rows fetched), for Settings' Reports row. Null when it could not say. */
+  countOpenReports: () => Promise<number | null>;
   /** Admins only: the waitlist and the waitlist page's feedback. */
   loadWaitlist: () => Promise<WaitlistEntry[]>;
   /** The pictures of posts the app has not loaded (older ones a notification is about). */
@@ -5024,6 +5032,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const loadedSaved = useRef(false);
   // Reports, for admins. The database decides who may read and act on them.
   const loadReports = useCallback(async (): Promise<AdminReport[] | null> => (live(stateRef.current.currentUserId) ? remote.fetchReports().catch(() => null) : []), []);
+  const countOpenReports = useCallback(async (): Promise<number | null> => (live(stateRef.current.currentUserId) ? remote.countOpenReports().catch(() => null) : 0), []);
   const loadWaitlist = useCallback(async () => (live(stateRef.current.currentUserId) ? remote.fetchWaitlist() : []), []);
   const loadPostThumbs = useCallback(async (ids: ID[]) => (live(stateRef.current.currentUserId) ? remote.fetchPostThumbs(ids).catch(() => ({})) : {}), []);
   const loadCourtPosts = useCallback(async (at: { lat: number; lng: number }) => {
@@ -7274,6 +7283,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const isBlocked = useCallback((userId: ID) => stateRef.current.blockedIds.includes(userId), []);
+
   const toggleAlerts = useCallback((userId: ID, quiet?: boolean) => {
     const turningOn = !stateRef.current.alertIds.includes(userId);
     setState((prev) => {
@@ -7961,6 +7972,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       unhideByWords,
       toggleMute,
       toggleBlock,
+      isBlocked,
       toggleAlerts,
       reportUser,
       acceptAnswer,
@@ -8083,6 +8095,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       isChatBlocked,
       loadFollowsOf,
       loadReports,
+      countOpenReports,
       loadWaitlist,
       loadCourtPosts,
       loadCourtPage,
@@ -8181,6 +8194,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       unhideByWords,
       toggleMute,
       toggleBlock,
+      isBlocked,
       toggleAlerts,
       reportUser,
       submitTip,
@@ -8297,6 +8311,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       isChatBlocked,
       loadFollowsOf,
       loadReports,
+      countOpenReports,
       loadWaitlist,
       loadCourtPosts,
       loadCourtPage,

@@ -135,18 +135,28 @@ function PlainSheet({
   latestSettled.current = onSettled;
   const settled = () => latestSettled.current?.();
 
+  // Where the sheet was last sent to rest (its top edge), so a change in its
+  // contents moves it only when that place really changes.
+  const restAt = useRef(openOffset);
   useEffect(() => {
     // Settled however the opening ends: at rest, or cut short by the keyboard
     // taking it up ("Add a comment") or a finger on the handle.
+    restAt.current = openOffset;
     translateY.value = withSpring(openOffset, SPRING, () => { runOnJS(settled)(); });
     backdropOpacity.value = withTiming(1, { duration: 260, easing: EASE });
     // Only the opening height depends on these; re-running on resize would
     // fight a drag in progress.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  // The contents measured after the opening began: it settles at their height instead.
+  // The contents measured after the opening began: it settles at their height
+  // instead, both ways. Contents that grow later (a list that arrives after
+  // the first layout: who joined through your invite, a post that was still
+  // loading) take it back up again, as far as the peek height, so a sheet
+  // that first fitted a short page is never left stuck short. The browser's
+  // twin measures again on every change for the same reason.
   useEffect(() => {
-    if (touched.current || dismissedRef.current || fitted === peekHeight) return;
+    if (touched.current || dismissedRef.current || openOffset === restAt.current) return;
+    restAt.current = openOffset;
     translateY.value = withSpring(openOffset, SPRING);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fitted]);

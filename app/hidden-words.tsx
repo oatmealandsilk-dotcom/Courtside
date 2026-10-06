@@ -24,9 +24,11 @@ import { colors, radius, spacing, typography } from '@/theme';
  * and are stricter; they show as on and cannot be turned off (the server
  * holds to it too).
  *
- * Short words throughout (Oct 6): one line under each switch. Your own words
- * come with their two switches first, then the list; only a word's × takes
- * it off, with Undo, so a stray tap while scrolling never loses one.
+ * Short words throughout (Oct 6): one line under each switch. Your own
+ * words come first and their two switches after them, as Instagram has it,
+ * so each switch reads as being about those words. Only a word's × takes it
+ * off, with Undo (back in its own place), so a stray tap while scrolling
+ * never loses one.
  */
 export default function HiddenWordsPage() {
   const styles = useThemedStyles(styleDefinitions);
@@ -80,6 +82,8 @@ export default function HiddenWordsPage() {
     input.current?.focus();
   };
   const remove = (word: string) => {
+    // Where it sat, so Undo puts it back exactly there, not at the end.
+    const at = words.indexOf(word);
     haptics.untap();
     save({ customWords: words.filter((w) => w !== word) });
     showToast({
@@ -91,7 +95,9 @@ export default function HiddenWordsPage() {
           const now = latest.current;
           if (!now || now.customWords.some((w) => w.toLowerCase() === word.toLowerCase())) return;
           const { locked: _locked, ...rest } = now;
-          void actions.saveHiddenWords({ ...rest, customWords: cleanWords([...now.customWords, word]) });
+          const back = [...now.customWords];
+          back.splice(Math.min(Math.max(at, 0), back.length), 0, word);
+          void actions.saveHiddenWords({ ...rest, customWords: cleanWords(back) });
         },
       },
     });
@@ -135,19 +141,15 @@ export default function HiddenWordsPage() {
       <Text style={styles.sectionTitle}>Offensive words and phrases</Text>
       <View style={styles.card}>
         {switchRow('chatbubble-outline', 'Hide offensive comments', 'From people you don’t follow', settings.hideOffensiveComments, (v) => save({ hideOffensiveComments: v }), true, locked)}
-        {switchRow('paper-plane-outline', 'Hide offensive messages', 'Shown as “Hidden message”', settings.hideOffensiveRequests, (v) => save({ hideOffensiveRequests: v }), false, locked)}
+        {switchRow('paper-plane-outline', 'Hide offensive messages', 'From people you don’t follow', settings.hideOffensiveRequests, (v) => save({ hideOffensiveRequests: v }), false, locked)}
       </View>
       <Text style={styles.note}>
         {locked ? 'Always on for accounts under 18.' : 'CourtSide keeps this list up to date.'}
       </Text>
 
       <Text style={styles.sectionTitle}>Your words and phrases</Text>
-      {/* The switches that make your words count come first, so a long list never pushes them out of reach. */}
+      {/* Your words first, then what they hide (Instagram's order): each switch then reads as being about them. */}
       <View style={styles.card}>
-        {switchRow('chatbubbles-outline', 'Hide comments', 'From people you don’t follow', settings.customInComments, (v) => save({ customInComments: v }), true)}
-        {switchRow('mail-outline', 'Hide messages', 'From people you don’t follow', settings.customInRequests, (v) => save({ customInRequests: v }), false)}
-      </View>
-      <View style={[styles.card, styles.cardGap]}>
         <View style={styles.addRow}>
           <View style={{ flex: 1 }}>
             <Field
@@ -182,7 +184,11 @@ export default function HiddenWordsPage() {
         ) : null}
         <Text style={styles.count}>{words.length ? `${words.length} of ${HIDDEN_WORDS_MAX}` : 'Nothing added yet'}</Text>
       </View>
-      <Text style={styles.note}>Only you can see your list. You can unhide anything it hides.</Text>
+      <View style={[styles.card, styles.cardGap]}>
+        {switchRow('chatbubbles-outline', 'Hide comments', 'With your words in them', settings.customInComments, (v) => save({ customInComments: v }), true)}
+        {switchRow('mail-outline', 'Hide messages', 'With your words in them', settings.customInRequests, (v) => save({ customInRequests: v }), false)}
+      </View>
+      <Text style={styles.note}>Only from people you don’t follow. Only you can see your list.</Text>
     </Screen>
   );
 }

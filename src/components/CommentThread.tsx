@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { CommentRow, replyIndent } from '@/components/CommentRow';
+import { JumpFlash, useJump } from '@/components/JumpTo';
 import type { Comment, ID } from '@/data/types';
 import { shownInList } from '@/features/hiddenWords/hiddenWords';
 import * as haptics from '@/lib/haptics';
@@ -113,6 +114,8 @@ export function CommentThread({ thread, big = false, open, onToggle, onReply, on
   isFresh?: (comment: Comment) => boolean;
 }) {
   const styles = useThemedStyles(styleDefinitions);
+  // The comment the sheet was opened at (a reported one, from Reports): it lights up for a moment as it is scrolled to.
+  const jump = useJump();
   const count = thread.replies.length;
   // Under a comment that was taken down (migration 108) nobody can reply any
   // more, the replies under it included (a reply joins its thread), so none
@@ -124,6 +127,7 @@ export function CommentThread({ thread, big = false, open, onToggle, onReply, on
       entering={isFresh?.(c) ? FadeInDown.duration(260) : undefined}
       onLayout={onRowLayout ? (e) => onRowLayout(c.id, e.nativeEvent.layout.y, e.nativeEvent.layout.height) : undefined}
     >
+      {jump && jump.at === c.id ? <JumpFlash lit={jump.lit} inset={8} /> : null}
       <CommentRow
         comment={c}
         big={big}

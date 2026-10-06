@@ -65,12 +65,16 @@ export default function Settings() {
   // How many joined through your link or code, for the Invites row (Oct 5, owner: partners looked for it in Settings).
   const [joined, setJoined] = useState<number | null>(null);
   useEffect(() => { void actions.countReferrals().then(setJoined).catch(() => setJoined(null)); }, [actions]);
-  // Admins: how many reports are waiting, on the Reports row (asked again each time Settings comes back into view).
+  // Admins: how many reports are waiting, on the Reports row. Asked again each
+  // time Settings comes back into view (back from Reports, say), as a count
+  // only: the database counts them, and no report itself is fetched for it.
   const [openReports, setOpenReports] = useState<number | null>(null);
   const admin = !!currentUser?.isAdmin;
   useFocusEffect(useCallback(() => {
-    if (!admin) return;
-    void actions.loadReports().then((list) => setOpenReports(list ? list.filter((r) => r.status === 'open').length : null)).catch(() => setOpenReports(null));
+    if (!admin) return undefined;
+    let on = true;
+    void actions.countOpenReports().then((n) => { if (on && n !== null) setOpenReports(n); }).catch(() => undefined);
+    return () => { on = false; };
   }, [actions, admin]));
   // One tap flips them, and the row says which way they are (Oct 5, owner: no switch, just say On or Off).
   const tipsRow: Row = { icon: 'bulb-outline', label: 'Tips', detail: 'A hint on first use', value: tipsOn ? 'On' : 'Off', flip: true, onPress: () => {

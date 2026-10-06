@@ -9,6 +9,7 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { FadeInDown, FadeOut, runOnJS, scrollTo, useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming, type AnimatedRef } from 'react-native-reanimated';
 
 import { CommentThread, threadOf, threadsOf, useReplyDraft } from '@/components/CommentThread';
+import { JumpProvider } from '@/components/JumpTo';
 import { CommentsCaption } from '@/components/CommentsCaption';
 import { CommentRow } from '@/components/CommentRow';
 import { HiddenComments } from '@/components/HiddenComments';
@@ -110,11 +111,19 @@ export default function CommentsSheet() {
   const frame = useRef<View>(null);
   const composer = useRef<View>(null);
   const heading = useRef<Text>(null);
+  // It lights up for a moment as it comes into view (the same light as a reported reply's in its thread).
+  const [atLit, setAtLit] = useState(0);
   useEffect(() => {
     if (!at) return;
-    const t = setTimeout(() => { const y = rowY.current[at]; if (y !== undefined) list.current?.scrollTo({ y: Math.max(0, y - 12), animated: true }); }, 420);
+    const t = setTimeout(() => {
+      const y = rowY.current[at];
+      if (y === undefined) return;
+      list.current?.scrollTo({ y: Math.max(0, y - 12), animated: true });
+      setAtLit(Date.now());
+    }, 420);
     return () => clearTimeout(t);
   }, [at]); // eslint-disable-line react-hooks/exhaustive-deps
+  const jumpCtx = useMemo(() => (at ? { at, ref: () => undefined, onLayout: () => undefined, lit: atLit } : null), [at, atLit]);
   useEffect(() => {
     if (!focus) return;
     const t = setTimeout(() => input.current?.focus(), 380);
@@ -374,18 +383,20 @@ export default function CommentsSheet() {
           >
             {/* The post itself first: who, the whole caption, its small line. */}
             <CommentsCaption kind={kind} id={id} />
-            {shownThreads.map((t) => (
-              <CommentThread
-                key={t.top.id}
-                thread={t}
-                big
-                open={openThreads.has(t.top.id)}
-                onToggle={() => toggleThread(t.top.id)}
-                onReply={exists && !takenDown ? replyTo : undefined}
-                onRowLayout={(commentId, y, height) => { rowY.current[commentId] = y; rowH.current[commentId] = height; }}
-                isFresh={(c) => Date.parse(c.createdAt) > openedAt.current}
-              />
-            ))}
+            <JumpProvider value={jumpCtx}>
+              {shownThreads.map((t) => (
+                <CommentThread
+                  key={t.top.id}
+                  thread={t}
+                  big
+                  open={openThreads.has(t.top.id)}
+                  onToggle={() => toggleThread(t.top.id)}
+                  onReply={exists && !takenDown ? replyTo : undefined}
+                  onRowLayout={(commentId, y, height) => { rowY.current[commentId] = y; rowH.current[commentId] = height; }}
+                  isFresh={(c) => Date.parse(c.createdAt) > openedAt.current}
+                />
+              ))}
+            </JumpProvider>
             {/* Only hidden ones so far: "Hidden comments" below says so, not "No comments yet" above it. */}
             {!threads.length && !(exists && hidden.length) ? <Text style={styles.empty}>{exists ? 'No comments yet. Start the conversation.' : looked ? 'This is no longer available.' : ''}</Text> : null}
             <HiddenComments count={hidden.length}>

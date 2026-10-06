@@ -54,7 +54,7 @@ export function CommentRow({ comment, big = false, reply = false, onPressBody, o
   onLayout?: (y: number) => void;
 }) {
   const styles = useThemedStyles(styleDefinitions);
-  const { users, posts, stories, currentUserId, currentUser, blockedIds, actions } = useApp();
+  const { users, posts, stories, currentUserId, currentUser, actions } = useApp();
   const who = users.find((u) => u.id === comment.authorId);
   // Admins only: hold the words to take it down, or put it back. A comment on an Instant is its own kind to the server.
   const moderate = currentUser?.isAdmin ? () => {
@@ -76,7 +76,7 @@ export function CommentRow({ comment, big = false, reply = false, onPressBody, o
   const canReport = !!currentUserId && comment.authorId !== currentUserId;
   const sendReport = () => {
     actions.reportUser(comment.authorId, `comment:${comment.id}`);
-    thankForReport(who, who && !blockedIds.includes(who.id) ? () => actions.toggleBlock(who.id) : undefined);
+    thankForReport(who, actions);
   };
   const report = canReport ? () => {
     haptics.tap();

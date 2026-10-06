@@ -136,7 +136,7 @@ function UserProfile() {
         { icon: 'people-outline', label: 'Add to group…', onPress: () => afterMenu(() => router.push({ pathname: '/pick-group', params: { user: user.id } })) },
         { icon: muted ? 'volume-high-outline' : 'volume-mute-outline', label: muted ? 'Unmute' : 'Mute', onPress: () => actions.toggleMute(user.id) },
         // Asked first, the same question as everywhere else; then thanks, with Block offered too.
-        { icon: 'flag-outline', label: 'Report', danger: true, onPress: () => confirmReport('profile', () => { actions.reportUser(user.id, 'profile'); thankForReport(user, () => actions.toggleBlock(user.id)); }, true) },
+        { icon: 'flag-outline', label: 'Report', danger: true, onPress: () => confirmReport('profile', () => { actions.reportUser(user.id, 'profile'); thankForReport(user, actions); }, true) },
         { icon: 'ban-outline', label: 'Block', danger: true, onPress: () => confirmBlock(user, () => { actions.toggleBlock(user.id); say(`Blocked ${user.name}`); }, true) },
       ];
 
