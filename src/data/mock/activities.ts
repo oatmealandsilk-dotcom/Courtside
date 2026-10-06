@@ -98,6 +98,32 @@ export const detectedActivities: DetectedActivity[] = [
   },
 ];
 
+/*
+ * The past week on the demo's WHOOP (owner, Oct 5: when someone first
+ * connects WHOOP, the past week's workouts show up in Notifications, each
+ * one tappable to log): what it hands over when WHOOP is connected again,
+ * or when every workout is turned on for it (a run and a gym session come
+ * only then). Each one the app does not hold yet gets its own row in
+ * Notifications; act-demo-3 (a week ago, logged) is already held, so it
+ * never comes back, and neither does any of these once held (a second
+ * connect files nothing new).
+ */
+const daysAgoAt = (days: number, h: number, m: number) => { const d = new Date(); d.setDate(d.getDate() - days); d.setHours(h, m, 0, 0); return d.toISOString(); };
+function whoopRow(id: string, sport: string, startedAt: string, minutes: number, more: Partial<DetectedActivity>): DetectedActivity {
+  return {
+    id, userId: CURRENT_USER_ID, source: 'whoop', sport, startedAt, endedAt: new Date(Date.parse(startedAt) + minutes * 60_000).toISOString(),
+    tzOffsetMin: -new Date().getTimezoneOffset(), minutes, device: 'WHOOP', externalId: id, status: 'new', createdAt: new Date().toISOString(), ...more,
+  };
+}
+export function whoopWeek(): DetectedActivity[] {
+  return [
+    whoopRow('act-wk-tennis-2', 'tennis', daysAgoAt(2, 17, 30), 88, { avgHr: 138, maxHr: 169, kcal: 640, strain: 13.8, zones: [12, 20, 26, 22, 8] }),
+    whoopRow('act-wk-run-3', 'run', daysAgoAt(3, 7, 15), 41, { avgHr: 155, maxHr: 176, kcal: 452, strain: 12.1, distanceM: 6840 }),
+    whoopRow('act-wk-strength-4', 'strength', daysAgoAt(4, 18, 40), 52, { avgHr: 118, maxHr: 151, kcal: 330, strain: 9.4 }),
+    whoopRow('act-wk-tennis-6', 'tennis', daysAgoAt(6, 9, 0), 75, { avgHr: 135, maxHr: 166, kcal: 548, strain: 12.9, zones: [15, 19, 22, 15, 4] }),
+  ];
+}
+
 export const activityNotifications: Notification[] = [
   {
     id: 'n-act-run',

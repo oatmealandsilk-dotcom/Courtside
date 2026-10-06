@@ -26,6 +26,25 @@ export function sportName(sport: string | undefined | null): string {
   return words ? words[0].toUpperCase() + words.slice(1) : 'Activity';
 }
 
+/**
+ * The words the server files a tracker's session under in Notifications
+ * (migration 107's note_detected_activity): "Run · Tue · 32 min · from your
+ * WHOOP"; tennis without its name ("1 hr 24 min · from your WHOOP"); the
+ * weekday only when it is found more than 20 hours after it ended. For the
+ * demo, which files its own.
+ */
+export function detectedNote(a: DetectedActivity, now = Date.now()): string {
+  const m = a.minutes;
+  const length = m < 60 ? `${m} min` : `${Math.floor(m / 60)} hr${m % 60 ? ` ${m % 60} min` : ''}`;
+  const day = Date.parse(a.endedAt) < now - 20 * 3_600_000 && a.tzOffsetMin != null
+    ? ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][new Date(Date.parse(a.startedAt) + a.tzOffsetMin * 60_000).getUTCDay()]
+    : null;
+  const who = a.source === 'whoop' ? 'your WHOOP'
+    : a.source === 'apple-health' ? (/^Watch[0-9]+,[0-9]+$/.test(a.device ?? '') ? 'your Apple Watch' : 'Apple Health')
+    : a.source === 'fitbit' ? 'your Fitbit' : a.source === 'oura' ? 'your Oura Ring' : a.source === 'polar' ? 'your Polar' : 'your tracker';
+  return `${[isTennisActivity(a) ? null : workoutName(a.sport), day, length].filter(Boolean).join(' · ')} · from ${who}`;
+}
+
 /** "Tennis", or a workout's name: "Run", "Strength training" (workouts.ts). */
 export const activityTitle = (a: Pick<DetectedActivity, 'sport'>) => (isTennisActivity(a) ? sportName(a.sport || 'tennis') : workoutName(a.sport));
 

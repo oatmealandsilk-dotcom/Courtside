@@ -29,12 +29,14 @@ const RECHECK_MS = 5 * 60 * 1000;
 /**
  * One per source for tennis, plus `workoutsApple`: every other workout from
  * Apple Health (a run, a lift, a ride…), 'flag:workouts-apple' (migration
- * 107; owner, Oct 5). Absent on a database before 107, so off there.
+ * 107; owner, Oct 5), and `workoutsWhoop`, the same from WHOOP,
+ * 'flag:workouts-whoop' (migration 135). Absent on a database without them,
+ * so off there.
  */
-export type TennisFlags = { apple: boolean; whoop: boolean; fitbit: boolean; oura: boolean; polar: boolean; workoutsApple: boolean };
-export const NO_FLAGS: TennisFlags = { apple: false, whoop: false, fitbit: false, oura: false, polar: false, workoutsApple: false };
+export type TennisFlags = { apple: boolean; whoop: boolean; fitbit: boolean; oura: boolean; polar: boolean; workoutsApple: boolean; workoutsWhoop: boolean };
+export const NO_FLAGS: TennisFlags = { apple: false, whoop: false, fitbit: false, oura: false, polar: false, workoutsApple: false, workoutsWhoop: false };
 const OFF = NO_FLAGS;
-const DEMO: TennisFlags = { apple: true, whoop: true, fitbit: true, oura: true, polar: true, workoutsApple: true };
+const DEMO: TennisFlags = { apple: true, whoop: true, fitbit: true, oura: true, polar: true, workoutsApple: true, workoutsWhoop: true };
 
 /** The last answer, per account. `failed`: the server could not be asked, and OFF stands in for it. */
 type Known = { me: string; flags: TennisFlags; at: number; failed: boolean };
@@ -50,7 +52,7 @@ export function knownTennisFlags(me: string | null): TennisFlags | null {
   return known && known.me === me ? known.flags : null;
 }
 
-const toFlags = (f: Record<string, boolean>): TennisFlags => ({ apple: f['tennis-apple'] === true, whoop: f['tennis-whoop'] === true, fitbit: f['tennis-fitbit'] === true, oura: f['tennis-oura'] === true, polar: f['tennis-polar'] === true, workoutsApple: f['workouts-apple'] === true });
+const toFlags = (f: Record<string, boolean>): TennisFlags => ({ apple: f['tennis-apple'] === true, whoop: f['tennis-whoop'] === true, fitbit: f['tennis-fitbit'] === true, oura: f['tennis-oura'] === true, polar: f['tennis-polar'] === true, workoutsApple: f['workouts-apple'] === true, workoutsWhoop: f['workouts-whoop'] === true });
 
 /** The server's answer, kept for a few minutes; `usable` says whether a kept one will do. */
 function ask(me: string, usable: (k: Known) => boolean): Promise<Known> {

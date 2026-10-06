@@ -15,7 +15,7 @@ import { demoGroupPosts } from './mock/groups';
 import { stories } from './mock/stories';
 import { conversations, messages } from './mock/messages';
 import { healthHistory, integrations } from './mock/health';
-import { activityNotifications, detectedActivities } from './mock/activities';
+import { activityNotifications, detectedActivities, whoopWeek } from './mock/activities';
 import { CURRENT_USER_ID, users } from './mock/users';
 import { demoHits } from './mock/hits';
 import { isMapCourtId } from '@/features/places/courtName';
@@ -163,6 +163,15 @@ export async function fetchBootstrap(): Promise<Bootstrap> {
       ...(supabase ? {} : { hitRequests: demoHits, lastSeen: demoLastSeen, followingIds: DEMO_FOLLOWING, sessions: demoSessions, sessionTags: demoSessionTags }),
     }),
   );
+}
+
+/**
+ * The demo's stand-in for WHOOP's look back over the past week (the whoop
+ * function's sync with {days: 7}): its workouts of the last seven days,
+ * tennis only, or every workout once `all` is on (migration 135).
+ */
+export async function fetchWhoopWeek(all: boolean): Promise<DetectedActivity[]> {
+  return delay(clone(whoopWeek().filter((a) => all || a.sport === 'tennis')));
 }
 
 /* ------------------------------------------- New on CourtSide (migration 63) */

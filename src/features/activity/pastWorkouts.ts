@@ -86,13 +86,16 @@ export function mergePast(rows: DetectedActivity[], health: HealthWorkout[], fla
   return out.sort((x, y) => y.startedAt.localeCompare(x.startedAt));
 }
 
-/** This phone's Health workouts of the last 30 days, of the kinds switched on, without heart rate (one ask of Health for the whole list). */
-export function readPastHealth(flags: TennisFlags, whoopTennis: boolean): Promise<HealthWorkout[]> {
+/**
+ * This phone's Health workouts of the last 30 days, of the kinds switched on, without heart rate (one ask of Health for the whole list).
+ * Those the WHOOP app copied into Health are left out when WHOOP sends its own: its tennis (`whoopTennis`), its other workouts (`whoopAll`).
+ */
+export function readPastHealth(flags: TennisFlags, whoopTennis: boolean, whoopAll = false): Promise<HealthWorkout[]> {
   const sports: ('tennis' | 'other')[] = [...(flags.apple ? ['tennis' as const] : []), ...(flags.workoutsApple ? ['other' as const] : [])];
   if (!sports.length) return Promise.resolve([]);
   // Ten minutes inside the 30 days, so the server never turns the oldest away.
   const since = new Date(Date.now() - PAST_DAYS * 86_400_000 + 10 * 60_000).toISOString();
-  return readWorkouts(since, { sports, skipWhoopTennis: whoopTennis, limit: 200, heartRate: false });
+  return readWorkouts(since, { sports, skipWhoopTennis: whoopTennis, skipWhoopOther: whoopAll, limit: 200, heartRate: false });
 }
 
 /** One Health workout read again, with its heart rate this time, to hand to the server. Null when Health no longer has it. */
