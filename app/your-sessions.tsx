@@ -13,6 +13,7 @@ import { Avatar, EmptyState, Screen } from '@/components/ui';
 import type { DetectedActivity, PracticeSession, SessionTag, User } from '@/data/types';
 import { activityTitle, activityWhen, dayWords, loggedLabel } from '@/features/activity/format';
 import { canTagKind, firstName, peopleText, peopleWords, yourResult } from '@/features/activity/sessionTags';
+import { canScore } from '@/features/activity/score';
 import { show as showToast } from '@/lib/toast';
 import { ATTACH_DAYS, pickSource, postOf, postedIndex, sourceOn, type SessionPick } from '@/features/activity/recent';
 import { useTennisFlags } from '@/features/activity/useTennisFlags';
@@ -68,8 +69,9 @@ function weekLabel(start: string, now = new Date()): string {
  *
  * Who you played (migration 62), by first name: a tag still waiting reads
  * "vs June · Waiting", an accepted one "vs Mira" with a small tick. A tap on
- * a match or a practice opens "Who you played" for it, to tag people after
- * the fact. Tags of you that you haven't answered sit at the very top, under
+ * a match or a practice opens its score and "Who you played", to add a score
+ * or tag people after the fact; on drills, its score (Oct 6). Tags of you
+ * that you haven't answered sit at the very top, under
  * "Tagged you", with Accept and Decline and your side of the result ("You
  * won"); a session you accepted into your log reads as yours, shared with
  * you ("Practice", labelled "with Mira"), with Post it to post it as your
@@ -253,7 +255,7 @@ export default function YourSessions() {
                     session={s}
                     people={people}
                     onOpen={from ? () => router.push({ pathname: '/session-tag', params: { tag: from.id } })
-                      : canTagKind(s.kind) && !s.fromSessionId ? () => router.push({ pathname: '/log-session', params: { edit: s.id } })
+                      : canScore(s.kind) && !s.fromSessionId ? () => router.push({ pathname: '/log-session', params: { edit: s.id } })
                       : undefined}
                     // Built from the tag, the title already says who it was with: no note line repeating it.
                     hideNote={!!(from && fromFirst)}
@@ -478,7 +480,7 @@ function Logged({ session: s, people, onOpen, hideNote = false, source, postId, 
       {/* The row itself, beside its button rather than around it: a button inside a button is not allowed in a browser. */}
       <Pressable
         accessibilityRole={onOpen ? 'button' : undefined}
-        accessibilityLabel={onOpen ? `${title}, ${duration(s.minutes)}, ${dayWords(s.day)}. ${s.fromSessionId ? 'Open the tag' : 'Who you played'}` : `${title}, ${duration(s.minutes)}, ${dayWords(s.day)}`}
+        accessibilityLabel={onOpen ? `${title}, ${duration(s.minutes)}, ${dayWords(s.day)}. ${s.fromSessionId ? 'Open the tag' : canTagKind(s.kind) ? 'Score and who you played' : 'Score'}` : `${title}, ${duration(s.minutes)}, ${dayWords(s.day)}`}
         accessibilityActions={[{ name: 'longpress', label: 'Remove' }]}
         onAccessibilityAction={(e) => { if (e.nativeEvent.actionName === 'longpress') onRemove(); }}
         onPress={onOpen}

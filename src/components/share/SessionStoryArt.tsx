@@ -6,6 +6,7 @@ import { BrandMark } from '@/components/BrandMark';
 import { SessionCard } from '@/components/session/SessionCard';
 import { SessionStamp } from '@/components/share/SessionStamp';
 import { duration } from '@/lib/format';
+import { scoreLine } from '@/features/activity/format';
 import { formatDistance } from '@/features/activity/workouts';
 import type { ID } from '@/data/types';
 import type { SessionStory } from '@/features/share/sessionStory';
@@ -36,9 +37,7 @@ export const STORY_DESIGNS: { key: StoryDesign; label: string }[] = [
  * Only what `story` carries is drawn: its maker (sessionStory.ts) has
  * already left out health numbers that were not shared and a teen's court.
  */
-export function SessionStoryArt({ design, story, width, photo, hidden = [], onPhotoLoad, score }: {
-  /** A match's score, typed on the Share page ("6–4 6–3"); only on the picture. */
-  score?: string;
+export function SessionStoryArt({ design, story, width, photo, hidden = [], onPhotoLoad }: {
   design: StoryDesign;
   story: SessionStory;
   width: number;
@@ -58,8 +57,8 @@ export function SessionStoryArt({ design, story, width, photo, hidden = [], onPh
     return (
       <View collapsable={false} style={{ width, height }}>
         {/* Instagram's own buttons cover roughly the top 13% and the bottom 17%: the numbers keep clear of both. */}
-        {/* The score as the Score box has it (prefilled from the log, migration 91): cleared there, gone here too. */}
-        <SessionCard {...common} score={score ?? ''} width={width} aspect={9 / 16} radius={0} scale={1.14} inset={{ top: Math.round(height * 0.12), bottom: Math.round(height * 0.11) }} />
+        {/* The session's saved score is on it by itself (Oct 6): added or changed in the session's edit, never here. */}
+        <SessionCard {...common} width={width} aspect={9 / 16} radius={0} scale={1.14} inset={{ top: Math.round(height * 0.12), bottom: Math.round(height * 0.11) }} />
       </View>
     );
   }
@@ -67,6 +66,7 @@ export function SessionStoryArt({ design, story, width, photo, hidden = [], onPh
   if (design === 'overlay') {
     // Strava's overlay (Oct 4): just the numbers and the mark in white on nothing, to lay over any story.
     const s = story.session;
+    const score = scoreLine(s);
     const stats = [
       score ? { label: 'Score', value: score } : null,
       { label: 'Time', value: duration(s.minutes) },
@@ -100,7 +100,7 @@ export function SessionStoryArt({ design, story, width, photo, hidden = [], onPh
     return (
       <View collapsable={false} style={[styles.centre, { width, height }]}>
         <View style={[styles.sticker, { borderRadius: Math.round(20 * (cardW / 300)) }]}>
-          <SessionStamp session={story.session} eyebrow={story.eyebrow} place={story.place} hidden={hidden} width={cardW} score={score} />
+          <SessionStamp session={story.session} eyebrow={story.eyebrow} place={story.place} hidden={hidden} width={cardW} />
         </View>
       </View>
     );
@@ -118,7 +118,7 @@ export function SessionStoryArt({ design, story, width, photo, hidden = [], onPh
       {/* A soft shade low down, so the card reads on a bright photo too. */}
       <LinearGradient colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.22)']} style={[styles.shade, { height: height * 0.35 }]} />
       <View style={[styles.sticker, { left: Math.round(width * 0.06), bottom: Math.round(height * 0.17), borderRadius: Math.round(20 * (cardW / 300)) }]}>
-        <SessionStamp session={story.session} eyebrow={story.eyebrow} place={story.place} hidden={hidden} width={cardW} score={score} />
+        <SessionStamp session={story.session} eyebrow={story.eyebrow} place={story.place} hidden={hidden} width={cardW} />
       </View>
     </View>
   );
