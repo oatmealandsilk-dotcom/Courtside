@@ -3058,6 +3058,21 @@ export const remote = {
   },
 
   /**
+   * Sessions posted to everyone in the last three weeks, newest first (any
+   * author; not archived, not shared to a group only), for Activities' "Near
+   * you" (features/activity/nearYou). What comes back is only what the
+   * posts table already lets this account read; the app then keeps only
+   * players near you whom the teen rules let it show.
+   */
+  async fetchRecentSessionPosts(): Promise<{ posts: Post[]; comments: Comment[] } | null> {
+    const since = new Date(Date.now() - 21 * 86_400_000).toISOString();
+    const { data, error } = await need().from('posts').select(POST_SELECT).not('session', 'is', null).is('group_id', null).eq('archived', false)
+      .gte('created_at', since).order('created_at', { ascending: false }).limit(80);
+    if (error) { fail('recent session posts')(error); return null; }
+    return toPostsHeld(data as FullPostRow[]);
+  },
+
+  /**
    * The posts this player bookmarked, however far back they go, so nothing
    * quietly drops off the Saved page once the app holds more than it opened
    * with.

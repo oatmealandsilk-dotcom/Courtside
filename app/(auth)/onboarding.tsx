@@ -380,7 +380,8 @@ function OnboardingSteps() {
     // Joined from a shared link: straight on to what they opened (see useShareLanding), not the first-move page.
     if (params.from === 'profile') goBack('/(tabs)/profile');
     else if (hasPosted || peekShareTarget()) replaceWithStart();
-    else router.replace('/first-move');
+    // Setup's last card first (Log your tennis automatically), which steps on to the first-move page itself.
+    else router.replace('/auto-log');
   };
 
   // Skip moves on along this page's own steps, the same as Continue. The

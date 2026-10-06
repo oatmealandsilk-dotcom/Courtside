@@ -758,6 +758,13 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
    * demo's are already loaded.
    */
   loadMySessionPosts: () => Promise<boolean>;
+  /**
+   * Recent sessions anyone posted to everyone (the last few weeks), kept
+   * with the rest, so Activities can show a new player sessions from players
+   * near them (features/activity/nearYou decides whose). The server only
+   * sends what this account may read; the demo's are already loaded.
+   */
+  loadRecentSessionPosts: () => Promise<boolean>;
 
   /* Session tags (migration 62) */
   /**
@@ -3662,6 +3669,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!live(me)) return true;
     const got = await remote.fetchMySessionPosts(me!).catch(() => null);
     if (!got) return false;
+    setState((prev) => addPosts(prev, got));
+    return true;
+  }, []);
+
+  const loadRecentSessionPosts = useCallback(async (): Promise<boolean> => {
+    const me = stateRef.current.currentUserId;
+    if (!live(me)) return true;
+    const got = await remote.fetchRecentSessionPosts().catch(() => null);
+    if (!got || stateRef.current.currentUserId !== me) return false;
     setState((prev) => addPosts(prev, got));
     return true;
   }, []);
@@ -8161,10 +8177,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
    * your sessions with its own row in Notifications, and a note says so. One
    * already held (logged, hidden, or picked up before) never comes back.
    */
-  const demoWhoopWeek = useCallback(async (all: boolean) => {
+  const demoWhoopWeek = useCallback(async (all: boolean, source: 'whoop' | 'apple-health' = 'whoop') => {
     const me = stateRef.current.currentUserId;
     if (!me) return;
-    const week = await demoApi.fetchWhoopWeek(all);
+    // Apple Health connected in the demo looks back over its week the same way (check.ts on a phone).
+    const week = await (source === 'apple-health' ? demoApi.fetchAppleWeek(all) : demoApi.fetchWhoopWeek(all));
     if (stateRef.current.currentUserId !== me) return;
     const held = new Set(stateRef.current.detectedActivities.map((a) => a.id));
     const fresh = week.filter((a) => !held.has(a.id)).map((a) => ({ ...a, userId: me }));
@@ -8212,8 +8229,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // The demo: switched on at once.
       setState((prev) => ({ ...prev, integrations: prev.integrations.map((i) => (i.provider === provider ? { ...i, connected: true, readsWorkouts: true, ...(all ? { readsAllWorkouts: true } : {}), lastSyncedAt: i.lastSyncedAt ?? new Date().toISOString() } : i)) }));
       haptics.commit();
-      // WHOOP's past week, as the server picks it up.
+      // WHOOP's past week, as the server picks it up; Apple Health's, as the phone's first look reads it.
       if (provider === 'whoop') void demoWhoopWeek(all);
+      else if (provider === 'apple-health') void demoWhoopWeek(all, 'apple-health');
       return;
     }
     // The past week the server filed while WHOOP was being connected.
@@ -8399,6 +8417,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       cancelHit,
       recentHits,
       loadMySessionPosts,
+      loadRecentSessionPosts,
       setSessionPlayers,
       respondSessionTag,
       removeSessionTag,
@@ -8622,6 +8641,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       cancelHit,
       recentHits,
       loadMySessionPosts,
+      loadRecentSessionPosts,
       setSessionPlayers,
       respondSessionTag,
       removeSessionTag,

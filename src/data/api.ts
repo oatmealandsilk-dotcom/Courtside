@@ -15,7 +15,7 @@ import { demoGroupPosts } from './mock/groups';
 import { stories } from './mock/stories';
 import { conversations, messages } from './mock/messages';
 import { healthHistory, integrations } from './mock/health';
-import { activityNotifications, demoFoundWorkouts, detectedActivities, whoopWeek } from './mock/activities';
+import { activityNotifications, demoFoundWorkouts, detectedActivities, foundWeek, whoopWeek } from './mock/activities';
 import { CURRENT_USER_ID, users } from './mock/users';
 import { demoHits } from './mock/hits';
 import { isMapCourtId } from '@/features/places/courtName';
@@ -130,9 +130,29 @@ function demoRecapNotification(): Notification[] {
   return [{ id: 'n-recap-demo', userId: CURRENT_USER_ID, actorId: CURRENT_USER_ID, kind: 'weekly-recap', targetId: week, targetKind: 'recap', createdAt: monday.toISOString(), read: false, preview: line }];
 }
 
+/**
+ * Demo build in a browser: `?new=1` (kept for the tab) plays a player who
+ * has just joined: following nobody, no tracker connected, nothing waiting
+ * to be logged. So Activities' first page, its "Near you" sessions and the
+ * Connect Apple Health row can be seen, and connecting brings in the week.
+ */
+function demoNewPlayer(): boolean {
+  try {
+    if (typeof window === 'undefined' || !window.location || !window.sessionStorage) return false;
+    if (new URLSearchParams(window.location.search).get('new') === '1') window.sessionStorage.setItem('courtside-demo-new', '1');
+    return window.sessionStorage.getItem('courtside-demo-new') === '1';
+  } catch {
+    return false;
+  }
+}
+
 export async function fetchBootstrap(): Promise<Bootstrap> {
   // The demo's catch-up, only with ?found=1 (mock/activities): five workouts found in one go.
   const found = supabase ? null : demoFoundWorkouts();
+  const fresh = !supabase && demoNewPlayer();
+  const sources = fresh
+    ? integrations.map((i) => (i.provider === 'apple-health' || i.provider === 'whoop' ? { ...i, connected: false, readsWorkouts: false, readsAllWorkouts: false, lastSyncedAt: undefined } : i))
+    : integrations;
   return delay(
     clone({
       users,
@@ -157,15 +177,15 @@ export async function fetchBootstrap(): Promise<Bootstrap> {
       // The demo's tracker session and its "Tennis detected" row, two of the
       // map's alerts and a tag of you. Only without a database: a real
       // account's come from the server.
-      notifications: supabase ? [] : [...demoRecapNotification(), ...activityNotifications, ...(found?.notifications ?? []), ...DEMO_MAP_ALERTS, ...demoSessionTagNotifications],
-      detectedActivities: supabase ? [] : [...detectedActivities, ...(found?.activities ?? [])],
+      notifications: supabase ? [] : [...demoRecapNotification(), ...(fresh ? [] : activityNotifications), ...(found?.notifications ?? []), ...DEMO_MAP_ALERTS, ...demoSessionTagNotifications],
+      detectedActivities: supabase ? [] : [...(fresh ? [] : detectedActivities), ...(found?.activities ?? [])],
       coachingRequests,
-      integrations,
+      integrations: sources,
       healthHistory,
       achievements,
       // Only without a database: with one, these come from the server, and an
       // account's real hits must never be covered by the demo's.
-      ...(supabase ? {} : { hitRequests: demoHits, lastSeen: demoLastSeen, followingIds: DEMO_FOLLOWING, sessions: demoSessions, sessionTags: demoSessionTags }),
+      ...(supabase ? {} : { hitRequests: demoHits, lastSeen: demoLastSeen, followingIds: fresh ? [] : DEMO_FOLLOWING, sessions: demoSessions, sessionTags: demoSessionTags }),
     }),
   );
 }
@@ -177,6 +197,11 @@ export async function fetchBootstrap(): Promise<Bootstrap> {
  */
 export async function fetchWhoopWeek(all: boolean): Promise<DetectedActivity[]> {
   return delay(clone(whoopWeek().filter((a) => all || a.sport === 'tennis')));
+}
+
+/** Apple Health connected in the demo: the past week its first look finds (tennis only, unless every workout is on). */
+export async function fetchAppleWeek(all: boolean): Promise<DetectedActivity[]> {
+  return delay(clone(foundWeek().activities.filter((a) => all || a.sport === 'tennis')));
 }
 
 /* ------------------------------------------- New on CourtSide (migration 63) */

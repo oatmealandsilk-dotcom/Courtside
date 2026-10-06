@@ -230,7 +230,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // Arriving from the password-reset email is its own calm page, with no app around it yet.
   // (The comments' own address says which clip they are about, for the stage below.)
   const { reset, kind: routeKind, id: routeId, stage: routeStage } = useGlobalSearchParams<{ reset?: string; kind?: string; id?: string; stage?: string }>();
-  const hideEverywhere = ['/sign-in', '/onboarding', '/agree', '/birthday', '/first-move', '/hit'].includes(pathname) || pathname.startsWith('/story/') || (pathname === '/account' && !!reset);
+  const hideEverywhere = ['/sign-in', '/onboarding', '/agree', '/birthday', '/auto-log', '/first-move', '/hit'].includes(pathname) || pathname.startsWith('/story/') || (pathname === '/account' && !!reset);
   // The splash shares Home's address ('/'); only the route's segments tell
   // them apart. The bar waits until the splash has handed over to the app.
   const segments = useSegments() as string[];

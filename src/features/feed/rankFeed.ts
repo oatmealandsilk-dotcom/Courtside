@@ -1,6 +1,8 @@
 import type { Post, Question, Comment, Story, User, ID } from '@/data/types';
 import { isNewHere } from '@/features/feed/newHere';
-export type FeedItem = { type: 'post'; post: Post } | { type: 'question'; question: Question } | { type: 'hit'; story: Story } | { type: 'tip' } | { type: 'challenge' };
+export type FeedItem = { type: 'post'; post: Post } | { type: 'question'; question: Question } | { type: 'hit'; story: Story } | { type: 'tip' } | { type: 'challenge' }
+  // Activities' first page for a new player (components/ActivitiesStart).
+  | { type: 'act-start' };
 
 /**
  * Off: the feed is ranked (see scorePost below). On: simply newest first,

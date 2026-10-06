@@ -17,6 +17,7 @@ import type { User } from '@/data/types';
 import { inviteLink } from '@/features/invite/referral';
 import { FRIENDS_LINE, FRIENDS_TITLE } from '@/features/invite/friendsWords';
 import { useInviteCourt } from '@/features/invite/useInviteCourt';
+import { useInviterToFollow } from '@/features/activity/nearYou';
 import { useFindable } from '@/features/people/findable';
 import { notKnownAdult } from '@/features/players/age';
 import { formatSpotMiles, milesBetween } from '@/features/players/geo';
@@ -48,7 +49,8 @@ const PICKS = 3;
  *   friends  a teen, or anyone not known to be an adult: add your friends (no court, no strangers)
  */
 type Lead = 'invite' | 'follow' | 'friends';
-interface Pick { user: User; miles: number; rough: boolean }
+/** `inviter`: whoever invited you, offered first (useInviterToFollow), with no distance. */
+interface Pick { user: User; miles: number; rough: boolean; inviter?: boolean }
 
 /**
  * Right after setup: one thing to do before the app opens, picked for where
@@ -87,6 +89,8 @@ export default function FirstMove() {
     return () => { on = false; };
   }, [adult, cityLat, cityLng, actions]);
   const [waited, setWaited] = useState(false);
+  // Whoever invited you, first (Oct 6, owner), by migration 84's rule: only when the two of you may be put in front of each other.
+  const inviter = useInviterToFollow();
   useEffect(() => { const t = setTimeout(() => setWaited(true), LOOK_MS); return () => clearTimeout(t); }, []);
 
   // Everyone sharing a spot within 30 miles of your city, nearest first.
@@ -113,9 +117,10 @@ export default function FirstMove() {
     if (!adult) { setLead('friends'); return; }
     const settled = heard || waited || (!city && !cityPending);
     if (!settled) return;
-    const fresh = near.filter((p) => !followingIds.includes(p.user.id)).slice(0, PICKS);
+    const first: Pick[] = inviter ? [{ user: inviter, miles: 0, rough: false, inviter: true }] : [];
+    const fresh = [...first, ...near.filter((p) => !followingIds.includes(p.user.id) && p.user.id !== inviter?.id)].slice(0, PICKS);
     if (fresh.length) { setPicks(fresh); setLead('follow'); } else setLead('invite');
-  }, [lead, currentUser, adult, heard, waited, city, cityPending, near, followingIds]);
+  }, [lead, currentUser, adult, heard, waited, city, cityPending, near, followingIds, inviter]);
 
   const nearCourts = useNearCourts(lead === 'invite' ? city : null);
   const court = useInviteCourt(city, nearCourts);
@@ -156,6 +161,7 @@ export default function FirstMove() {
 
   // Context only: the card under it says what to do.
   const line = lead === 'invite' ? (cityName ? `CourtSide is new in ${cityName}.` : null)
+    : lead === 'follow' && !near.length ? 'The player who invited you is here.'
     : lead === 'follow' ? `${near.length === 1 ? '1 player' : `${near.length} players`} near ${cityName ?? 'you'} ${near.length === 1 ? 'is' : 'are'} already here.`
       : lead === 'friends' ? 'Your map shows only your friends.'
         : ' ';
@@ -190,13 +196,13 @@ export default function FirstMove() {
               </View>
               {lead === 'follow' ? (
                 <View>
-                  {picks.map(({ user, miles, rough }, i) => (
+                  {picks.map(({ user, miles, rough, inviter: invited }, i) => (
                     <View key={user.id} style={[styles.person, i > 0 && styles.personLine]}>
                       <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={40} ring={user.isCoach} />
                       {/* The name gets the room; the level and how far sit under it. */}
                       <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
                         <Text style={styles.personName} numberOfLines={1}>{user.name}</Text>
-                        <View style={styles.personTop}><LevelPill profile={user.profile} small /><Text style={styles.personMeta} numberOfLines={1}>{formatSpotMiles(miles, rough)}</Text></View>
+                        <View style={styles.personTop}><LevelPill profile={user.profile} small /><Text style={styles.personMeta} numberOfLines={1}>{invited ? 'Invited you' : formatSpotMiles(miles, rough)}</Text></View>
                       </View>
                       <FollowPill small following={followingIds.includes(user.id)} userId={user.id} onPress={() => follow(user)} name={user.name.split(' ')[0]} />
                     </View>

@@ -27,7 +27,9 @@ import * as haptics from '@/lib/haptics';
 
 import { Avatar, Button, EmptyState } from '@/components/ui';
 import { LevelPill } from '@/components/LevelPill';
+import { ActivitiesStart, NearYouTag } from '@/components/ActivitiesStart';
 import { FollowPill } from '@/components/FollowPill';
+import { NEAR_UNDER, useNearYouAuthors } from '@/features/activity/nearYou';
 import { QuestionCard } from '@/components/QuestionCard';
 import { PostCard } from '@/components/PostCard';
 import { BrandMark } from '@/components/BrandMark';
@@ -83,9 +85,12 @@ import { useAndroidBack } from '@/lib/androidBack';
  */
 /** Media the internet can reach: a file:// link only ever worked on the phone that made it. */
 const reachable = (p: { imageUrl?: string; videoUrl?: string }) => [p.imageUrl, p.videoUrl].every((u) => !u || /^(https?:|data:|blob:)/.test(u));
-/** One for Activities: a session with its numbers, yours or by someone you follow, out on the feed (not archived, taken down or group-only). */
-const isActivity = (p: Post, me: string | null | undefined, follows: Set<string>) =>
-  !p.archived && !p.removed && !p.groupId && reachable(p) && !!p.session && hasSessionStats(p.session) && (p.authorId === me || follows.has(p.authorId));
+/**
+ * One for Activities: a session with its numbers, yours or by someone you follow, out on the feed (not archived, taken down or group-only).
+ * For a new player (following fewer than five), also one by a player near them (`near`, features/activity/nearYou), marked "Near you".
+ */
+const isActivity = (p: Post, me: string | null | undefined, follows: Set<string>, near: Set<string>) =>
+  !p.archived && !p.removed && !p.groupId && reachable(p) && !!p.session && hasSessionStats(p.session) && (p.authorId === me || follows.has(p.authorId) || near.has(p.authorId));
 
 /** When each page's post, thread or Instant was made, for putting new ones newest first. */
 /** What the ranking may know about you: who you follow, who follows you, profiles, and what you have seen this visit. */
@@ -334,6 +339,19 @@ function Home({ scope, topRow, paused, onChrome }: {
   const { theme } = useTheme();
   const app = useApp();
   const { posts, questions, comments, stories, users, currentUserId, saved, actions, ready, followingIds, mutedIds, blockedIds, conversations } = app;
+  // Activities for a new player: sessions posted by players near them too (features/activity/nearYou),
+  // and a first page with the ways in (ActivitiesStart). Read by rerank through a ref, as `latest` is.
+  const nearAuthors = useNearYouAuthors(!!scope?.activities);
+  const nearRef = useRef(nearAuthors);
+  nearRef.current = nearAuthors;
+  const actsStart = !!scope?.activities && ready && followingIds.length < NEAR_UNDER;
+  // Their sessions are asked for once a visit, as Activities opens (the feed's own load holds only the newest few posts).
+  const askedNear = useRef(false);
+  useEffect(() => {
+    if (!actsStart || askedNear.current) return;
+    askedNear.current = true;
+    void actions.loadRecentSessionPosts();
+  }, [actsStart, actions]);
   const currentUser = users.find((u) => u.id === currentUserId);
   // Everyone by id, so each page finds its author in one step rather than scanning every player.
   const usersById = useMemo(() => new Map(users.map((u) => [u.id, u])), [users]);
@@ -466,7 +484,7 @@ function Home({ scope, topRow, paused, onChrome }: {
         if (scope.activities) {
           const follows = new Set(data.followingIds);
           const acts = data.posts
-            .filter((p) => isActivity(p, data.currentUserId, follows))
+            .filter((p) => isActivity(p, data.currentUserId, follows, nearRef.current))
             .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
           actsDealt.current = acts.map((p) => p.id).sort().join(',');
           setOrder(acts.map((p) => `p:${p.id}`));
@@ -606,8 +624,8 @@ function Home({ scope, topRow, paused, onChrome }: {
   const actKeys = useMemo(() => {
     if (!scope?.activities) return '';
     const follows = new Set(followingIds);
-    return posts.filter((p) => isActivity(p, currentUserId, follows)).map((p) => p.id).sort().join(',');
-  }, [posts, followingIds, currentUserId, scope?.activities]);
+    return posts.filter((p) => isActivity(p, currentUserId, follows, nearAuthors)).map((p) => p.id).sort().join(',');
+  }, [posts, followingIds, currentUserId, scope?.activities, nearAuthors]);
   useEffect(() => {
     // Not until the first deal, and not when nothing changed since the last.
     if (!scope?.activities || actsDealt.current === null || actKeys === actsDealt.current) return;
@@ -883,6 +901,8 @@ function Home({ scope, topRow, paused, onChrome }: {
   // While the app is young, a page a few swipes in asks early users for a
   // tip; a few more in, the challenge, with its top clips straight after it.
   const feed = useMemo<FeedItem[]>(() => {
+    // Activities for a new player opens on its first page (ActivitiesStart), sessions under it.
+    if (scope?.activities && actsStart) return [{ type: 'act-start' as const }, ...feedItems];
     if (scope || !feedItems.length) return feedItems;
     const top = featured.current ?? [];
     const lead = top.flatMap((id) => feedItems.filter((i) => i.type === 'post' && i.post.id === id));
@@ -891,7 +911,7 @@ function Home({ scope, topRow, paused, onChrome }: {
     const withTip: FeedItem[] = [...rest.slice(0, tipAt), { type: 'tip' as const }, ...rest.slice(tipAt)];
     const at = Math.min(7, withTip.length);
     return [...withTip.slice(0, at), { type: 'challenge' as const }, ...lead, ...withTip.slice(at)];
-  }, [feedItems, scope]);
+  }, [feedItems, scope, actsStart]);
 
   // The page on the comments stage keeps playing while the comments are up
   // (the stage is this Home's, it is the page on screen, and nothing has been
@@ -1258,6 +1278,10 @@ function Home({ scope, topRow, paused, onChrome }: {
 
   // Whatever is settled on screen counts as watched, once per session.
   const showing = feed[active];
+  // A clip or a picture from a player near you (Activities, a new player): "Near you" with Follow, under the top row,
+  // for the page on screen. A written one carries it in its own flow (NearYouTag, below).
+  const showingNear = scope?.activities && showing?.type === 'post' && (showing.post.kind === 'clip' || !!showing.post.imageUrl || !!showing.post.videoUrl)
+    && nearAuthors.has(showing.post.authorId) && !followingIds.includes(showing.post.authorId) ? usersById.get(showing.post.authorId) : undefined;
   // A clip or a hit fills the page with a picture; a written post or thread does not.
   // Only clips and hits fill the screen with their picture; a photo or video post sits on the
   // page's own ground, so anything drawn at the top (the back arrow) stays dark there.
@@ -1279,7 +1303,7 @@ function Home({ scope, topRow, paused, onChrome }: {
     // An Instant seen here counts on its views, as in the full-screen viewer
     // (once per person; your own is left out of its count anyway).
     if (showing.type === 'hit') { if (showing.story.authorId !== currentUserId) actions.markStoryViewed(showing.story.id); return; }
-    if (showing.type === 'tip' || showing.type === 'challenge') return;
+    if (showing.type === 'tip' || showing.type === 'challenge' || showing.type === 'act-start') return;
     actions.recordView(
       showing.type === 'post' ? 'post' : 'question',
       showing.type === 'post' ? showing.post.id : showing.question.id,
@@ -1387,6 +1411,8 @@ function Home({ scope, topRow, paused, onChrome }: {
               // scrolling stays smooth.
               const near = Platform.OS === 'web' ? (ahead === 0 || ahead === 1) && (!warming || ahead === 0) : distance <= 1 || (ahead > 0 && ahead <= AHEAD);
               const strip = index === suggestHost ? suggestStrip : null;
+              // A session from a player near you, not followed yet: "Near you", with Follow.
+              const nearUser = scope?.activities && item.type === 'post' && nearAuthors.has(item.post.authorId) && !followingIds.includes(item.post.authorId) ? usersById.get(item.post.authorId) : undefined;
               // Taken down (migration 108): the reason in a pill over the top of the page, and for
               // its author "Why? See the rules · Ask for a review" under it (Oct 5), the page's width.
               const removedOver = (post: Post) => {
@@ -1406,6 +1432,7 @@ function Home({ scope, topRow, paused, onChrome }: {
                 ? Math.max(top, insets.top + 12 + (removedTall[post.id] ?? REMOVED_GUESS) + 16) : top);
 
               if (item.type === 'tip') return <TipPage key="tip" onSubmit={actions.submitTip} />;
+              if (item.type === 'act-start') return <ActivitiesStart key="act-start" topInset={insets.top + 64} bottomInset={barInset > 0 ? barInset + 8 : POST_BOTTOM} nearCount={feedItems.filter((i) => i.type === 'post' && nearAuthors.has(i.post.authorId)).length} />;
               if (item.type === 'challenge') return <ChallengePage key="challenge" challenge={challenge} />;
 
               if (item.type === 'hit') {
@@ -1548,6 +1575,7 @@ function Home({ scope, topRow, paused, onChrome }: {
                   <View key={post.id} style={[styles.article, scopedBack && styles.articleScoped, !phone && styles.articleCentred, (topRow || rowed) && { paddingTop: insets.top + 64 }, barInset > 0 ? { paddingBottom: barInset + 8 } : null, post.removed && post.authorId === currentUserId ? { paddingTop: clearOfRemoved(post, topRow || rowed ? insets.top + 64 : scopedBack ? 116 : 64) } : null]}>
                     <Wash height={300} strength={0.6} />
                     {strip}
+                    {nearUser ? <NearYouTag user={nearUser} /> : null}
                     <View style={{ flex: 1, minHeight: 0, overflow: 'hidden', justifyContent: 'flex-start' }}>
                       <PostCard
                         post={post}
@@ -1750,6 +1778,11 @@ function Home({ scope, topRow, paused, onChrome }: {
             }), ...(scope?.activities ? [caughtUp] : scope ? [] : [endPage])]}
           </VerticalPager>
 
+          {showingNear ? (
+            <View pointerEvents="box-none" style={[styles.nearLayer, { top: insets.top + TOP_BAND_TOP + TOP_BAND_HEIGHT + 10 }]}>
+              <NearYouTag user={showingNear} over />
+            </View>
+          ) : null}
           {scopedBack ? (
             // The same plain chevron every other page has. Over a picture it sits on the mark's tile, in
             // the mark's ink: a bare white arrow vanished on a bright sky or a white ceiling.
@@ -1809,6 +1842,7 @@ const styleDefinitions = StyleSheet.create({
   markPill: { width: 46, height: 46, borderRadius: 13, backgroundColor: `${colors.bg}E6`, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
   viewer: { flex: 1, width: '100%', minHeight: 0 },
   clip: { flex: 1, backgroundColor: colors.bg, overflow: 'hidden' },
+  nearLayer: { position: 'absolute', left: 0, right: 0, zIndex: 30 },
   // "Removed: <reason>" across the top of a page an admin took down (only its author and admins ever see
   // one, and only in a scoped feed): level with the back button, clear of it on both sides.
   removedWrap: { position: 'absolute', left: 64, right: 64, alignItems: 'center', zIndex: 6 },

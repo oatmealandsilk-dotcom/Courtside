@@ -165,6 +165,15 @@ export function demoFoundWorkouts(): { activities: DetectedActivity[]; notificat
   } catch {
     return null;
   }
+  return foundWeek();
+}
+
+/**
+ * The same five workouts, as Apple Health connected in the demo finds them
+ * (its first look goes back a week, features/activity/check.ts): the setup
+ * card's Connect Apple Health, and the Activities row's.
+ */
+export function foundWeek(): { activities: DetectedActivity[]; notifications: Notification[] } {
   const tz = -new Date().getTimezoneOffset();
   const at = (daysAgo: number, h: number, m: number) => { const d = new Date(); d.setDate(d.getDate() - daysAgo); d.setHours(h, m, 0, 0); return d; };
   const length = (mins: number) => (mins < 60 ? `${mins} min` : `${Math.floor(mins / 60)} hr${mins % 60 ? ` ${mins % 60} min` : ''}`);
