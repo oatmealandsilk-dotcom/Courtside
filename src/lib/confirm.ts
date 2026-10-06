@@ -2,14 +2,8 @@ import { useCallback, useEffect, useRef } from 'react';
 import { AccessibilityInfo, Platform } from 'react-native';
 
 export interface ConfirmOptions {
-  /**
-   * A short question, the way other apps ask it: "Delete post?" Empty for a
-   * plain list of choices with nothing over them (Delete, Report, Cancel on a
-   * comment held under your own post): each choice then asks its own question.
-   */
+  /** A short question, the way other apps ask it: "Delete post?" Or, for a card of choices, what they are about: "Mira Okafor's comment". */
   title: string;
-  /** What a screen reader calls the card when it has no title ("Mira's comment"). */
-  spoken?: string;
   /** One line on what happens next: "This can't be undone." */
   message?: string;
   /** The action's own word on its button ("Delete", "Block"), never "OK". */

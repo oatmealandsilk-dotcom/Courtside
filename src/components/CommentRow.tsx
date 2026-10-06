@@ -19,6 +19,20 @@ import { useApp } from '@/store/AppContext';
 import { colors, spacing, typography } from '@/theme';
 import { openPlayer } from '@/features/navigation/openPlayer';
 
+/**
+ * A comment's first few words, in quotes, so a card about it says which one
+ * it is ("“Stopping at 80 when the shoulder…”"); a photo with no words is "A photo".
+ */
+function commentGist(comment: Comment): string | undefined {
+  const words = comment.body.replace(/\s+/g, ' ').trim();
+  if (!words) return comment.imageUrl ? 'A photo' : undefined;
+  if (words.length <= 72) return `“${words}”`;
+  // Cut at a word, never mid-word, and without a comma or dash left hanging before the dots.
+  const cut = words.slice(0, 70);
+  const end = cut.lastIndexOf(' ');
+  return `“${(end > 30 ? cut.slice(0, end) : cut).replace(/[\s,.;:!?–—-]+$/, '')}…”`;
+}
+
 /** How far a reply sits in: its picture lines up with the words of the comment it is under. */
 export const replyIndent = (big: boolean) => (big ? 40 : 32) + spacing.md;
 
@@ -33,10 +47,10 @@ export const replyIndent = (big: boolean) => (big ? 40 : 32) + spacing.md;
  * gets anything on a hold.
  * Holding someone else's comment reports it (App Review 1.2, Oct 5).
  * Holding your own deletes it; under your own post or Instant, holding
- * anyone's offers Delete (migration 125) or Report, as a short list with no
- * question over it; each then asks its own. The words dim while held, so a
- * hold is felt before anything opens. Every question is taken back if the
- * row goes (the sheet closed under it).
+ * anyone's offers Delete (migration 125) or Report on a card that names the
+ * comment; Delete goes at once, Report asks its own question. The words dim
+ * while held, so a hold is felt before anything opens. Every question is
+ * taken back if the row goes (the sheet closed under it).
  */
 export function CommentRow({ comment, big = false, reply = false, onPressBody, onReply, onUnhide, onLayout }: {
   comment: Comment;
@@ -53,7 +67,7 @@ export function CommentRow({ comment, big = false, reply = false, onPressBody, o
   onLayout?: (y: number) => void;
 }) {
   const styles = useThemedStyles(styleDefinitions);
-  const { users, posts, stories, currentUserId, currentUser, actions } = useApp();
+  const { users, posts, stories, comments, currentUserId, currentUser, actions } = useApp();
   const ask = useScopedConfirm();
   const who = users.find((u) => u.id === comment.authorId);
   // Admins only: hold the words to take it down, or put it back. A comment on an Instant is its own kind to the server.
@@ -88,17 +102,22 @@ export function CommentRow({ comment, big = false, reply = false, onPressBody, o
     haptics.tap();
     ask({ title: 'Delete comment?', message: 'This can’t be undone.', confirmLabel: 'Delete', destructive: true, onConfirm: () => actions.deleteComment(comment.id) });
   } : undefined;
-  // Someone else's, under your own post or Instant: delete it for everyone, or report it. First the two
-  // choices on their own (no "Delete?" over Report), then the one chosen asks its own question.
+  // Someone else's, under your own post or Instant: delete it for everyone, or report it. Two taps to
+  // delete, as on Instagram (the deliberate hold is the safety): a card naming whose comment it is and
+  // its first words, with Delete, Report and Cancel. Delete removes it at once; Report asks its own question.
   const underMine = !!currentUserId && (posts.some((p) => p.id === comment.postId && p.authorId === currentUserId) || stories.some((st) => st.id === comment.postId && st.authorId === currentUserId));
   const deleteTheirs = canReport && underMine ? () => {
     haptics.tap();
+    // Its replies go with it (deleteComment), so the card says so when there are any.
+    const replies = comment.parentId ? 0 : comments.filter((c) => c.parentId === comment.id).length;
+    const gist = commentGist(comment);
+    const along = replies ? `Its ${replies === 1 ? 'reply goes' : `${replies} replies go`} with it.` : undefined;
     ask({
-      title: '',
-      spoken: `${who?.name ?? 'This'}'s comment`,
+      title: who ? `${who.name}’s comment` : 'This comment',
+      message: gist && along ? `${gist}\n${along}` : gist ?? along,
       confirmLabel: 'Delete',
       destructive: true,
-      onConfirm: () => ask({ title: 'Delete comment?', message: 'It’s removed for everyone.', confirmLabel: 'Delete', destructive: true, onConfirm: () => actions.deleteComment(comment.id) }),
+      onConfirm: () => actions.deleteComment(comment.id),
       also: { label: 'Report', destructive: true, onPress: askReport },
     });
   } : undefined;

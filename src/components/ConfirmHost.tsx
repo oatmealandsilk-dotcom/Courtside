@@ -175,15 +175,13 @@ export function ConfirmHost() {
   if (!request) return null;
 
   const web = Platform.OS === 'web';
-  // No question over it: a plain list of choices, the top one with no rule above it.
-  const bare = !request.title && !request.message;
   // In a browser it is announced as an alert dialog: the question, then the line under it.
   // The card itself can hold the focus (never by Tab) because a menu closing
   // underneath hands the focus back to the page; the browser's pop-up layer
   // then pulls it into the card, and the card passes it straight on to
   // Cancel, a beat later so that layer has finished moving it.
   const webDialog = web ? {
-    role: 'alertdialog' as const, 'aria-modal': true, 'aria-labelledby': bare ? undefined : TITLE_ID, 'aria-label': bare ? (request.spoken ?? 'Choices') : undefined, 'aria-describedby': request.message ? MESSAGE_ID : undefined,
+    role: 'alertdialog' as const, 'aria-modal': true, 'aria-labelledby': TITLE_ID, 'aria-describedby': request.message ? MESSAGE_ID : undefined,
     tabIndex: -1 as const,
     onFocus: (e: { target: unknown; currentTarget: unknown }) => {
       if (e.target === e.currentTarget) setTimeout(() => (cancelRef.current as unknown as HTMLElement | null)?.focus?.(), 0);
@@ -201,15 +199,10 @@ export function ConfirmHost() {
       >
         <Animated.View style={[styles.card, cardStyle]}>
           {/* Only scrolls if the phone's largest text would push the buttons off the screen. */}
-          {bare ? (
-            // Nothing to read: what a screen reader starts on is the card's name, said once.
-            <Text ref={titleRef} accessibilityRole="header" style={styles.spokenOnly}>{request.spoken ?? 'Choices'}</Text>
-          ) : (
-            <ScrollView style={styles.scroll} contentContainerStyle={styles.words} bounces={false} alwaysBounceVertical={false} showsVerticalScrollIndicator={false}>
-              <Text ref={titleRef} nativeID={TITLE_ID} accessibilityRole="header" style={styles.title}>{request.title}</Text>
-              {request.message ? <Text nativeID={MESSAGE_ID} style={styles.message}>{request.message}</Text> : null}
-            </ScrollView>
-          )}
+          <ScrollView style={styles.scroll} contentContainerStyle={styles.words} bounces={false} alwaysBounceVertical={false} showsVerticalScrollIndicator={false}>
+            <Text ref={titleRef} nativeID={TITLE_ID} accessibilityRole="header" style={styles.title}>{request.title}</Text>
+            {request.message ? <Text nativeID={MESSAGE_ID} style={styles.message}>{request.message}</Text> : null}
+          </ScrollView>
           {/* Cancel comes first for the keyboard and the browser's own focus, so the safe answer is
               the one already chosen; the column is turned over so the action still reads on top. */}
           <View style={styles.actions}>
@@ -239,7 +232,7 @@ export function ConfirmHost() {
               accessibilityLabel={request.confirmLabel}
               onPressIn={touchBegan}
               onPress={() => tapped('yes')}
-              style={({ pressed }) => [styles.row, bare && styles.rowFirst, pressed && styles.pressed]}
+              style={({ pressed }) => [styles.row, pressed && styles.pressed]}
             >
               <Text style={[styles.action, request.destructive && styles.danger]}>{request.confirmLabel}</Text>
             </Pressable>
@@ -299,10 +292,6 @@ const styleDefinitions = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.border,
   },
-  // The top choice of a card with no question over it: the card's own edge is its top.
-  rowFirst: { borderTopWidth: 0 },
-  // Heard, not seen: the name of a card with no question, for a screen reader to start on.
-  spokenOnly: { position: 'absolute', width: 1, height: 1, overflow: 'hidden', opacity: 0 },
   pressed: { backgroundColor: colors.surfaceAlt },
   action: { ...typography.body, ...font('600'), color: colors.brand, textAlign: 'center' },
   danger: { color: colors.danger },
