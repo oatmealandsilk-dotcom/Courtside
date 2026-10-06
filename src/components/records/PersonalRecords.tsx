@@ -44,7 +44,7 @@ function dayRange(from: string, to: string): string {
  * Built to stand alone (the records and your log), so the Tennis profile can
  * show it later.
  */
-export function PersonalRecords({ records, sessions, sessionTags, users, currentStreak, now = new Date(), privateNote = true }: {
+export function PersonalRecords({ records, sessions, sessionTags, users, currentStreak, now = new Date(), privateNote = true, heading = true }: {
   records: Records;
   sessions: PracticeSession[];
   sessionTags: SessionTag[];
@@ -54,6 +54,8 @@ export function PersonalRecords({ records, sessions, sessionTags, users, current
   now?: Date;
   /** "Only you" beside the heading; off where the page already says so (Your sessions). */
   privateNote?: boolean;
+  /** Its own "Personal records" heading; off where a row already names it (Your sessions' summary). */
+  heading?: boolean;
 }) {
   const styles = useThemedStyles(styleDefinitions);
   // Only the newest record wears gold, and only while it was reached in the last week:
@@ -106,7 +108,7 @@ export function PersonalRecords({ records, sessions, sessionTags, users, current
   const ongoing = streak && streak.to >= localDay(now.getTime() - 86_400_000) && currentStreak >= streak.value;
   return (
     <View>
-      <View style={styles.head}>
+      {heading ? <View style={styles.head}>
         <Text accessibilityRole="header" style={styles.sectionTitle}>Personal records</Text>
         {privateNote ? (
           <View style={styles.only}>
@@ -114,7 +116,7 @@ export function PersonalRecords({ records, sessions, sessionTags, users, current
             <Text style={styles.onlyText}>Only you</Text>
           </View>
         ) : null}
-      </View>
+      </View> : null}
       <View style={styles.grid}>{shown.map(tile)}</View>
       {streak ? (
         <View style={[styles.streak, styles.tileLike, fresh(streak) && { borderColor: colors.sun, borderWidth: 1.5 }]} accessible accessibilityLabel={`Longest streak: ${streak.value} days, ${dayRange(streak.from, streak.to)}${currentStreak && !ongoing ? `. Now on ${currentStreak}` : ''}`}>

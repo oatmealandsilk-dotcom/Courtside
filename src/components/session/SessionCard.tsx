@@ -122,6 +122,16 @@ export function cardLook(theme: ThemeName): CardLook {
 }
 
 /**
+ * The Share card's cream as a plain card's ground (Your sessions, Oct 6): the
+ * same warm cream on the default court, the court's own raised ground on the
+ * city courts (never the brand-filled card), the page's surface on a dark one.
+ */
+export function creamFill(theme: ThemeName): string {
+  if (pageIsDark()) return colors.surface;
+  return theme === 'default' ? mixHex(colors.bgElevated, colors.sun, 0.1) : colors.bgElevated;
+}
+
+/**
  * The fade inside a session box, laid as its first child: the brand's wash in
  * a green box, the shirt's in a cream one (with its hairline, unless `edge` is
  * off for a picture drawn edge to edge), nothing on a dark page.

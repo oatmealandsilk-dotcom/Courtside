@@ -667,8 +667,8 @@ async function expectAll(page, specs) {
 
 
 /**
- * Your sessions opens with the week's card and your personal records above
- * the sessions (Oct 5), so the first session can sit below the fold: brought
+ * Your sessions opens with the week's summary and To do above the sessions
+ * (Oct 6), so the first session can sit below the fold: brought
  * into view the way a person would scroll to it.
  */
 const showFirstSession = (page) => page.waitUntil(() => page.call(() => {

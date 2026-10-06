@@ -8,9 +8,10 @@ import type { PracticeSession } from '@/data/types';
 import { spokenDuration } from '@/features/activity/format';
 import { compareLine, weekRange, type WeekRecap } from '@/features/recap/recap';
 import { RECORD_ICON, RECORD_LABEL, recordValue } from '@/features/records/records';
+import { mixHex } from '@/features/activity/zones';
 import { duration } from '@/lib/format';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import { colors, font, lift, radius, spacing, typography } from '@/theme';
+import { colors, font, lift, pageIsDark, radius, spacing, typography, withAlpha } from '@/theme';
 
 const DAY_LETTERS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
@@ -186,49 +187,83 @@ function shortCompare(r: Pick<WeekRecap, 'minutes' | 'prevMinutes' | 'prevSessio
 }
 
 /**
- * "Last week" at the top of Your sessions, Monday to Wednesday (the in-app
- * recap, for anyone without the alert): the week's bars small, its time on
- * court, its sessions and how it compares ("Last week · 8h 23m" over "7
- * sessions · up 5h 23m"). A tap opens the whole card (the chevron says so,
- * as on every row on the page that opens something); × (its own column, a
- * full-size target) puts it away for that week. A quiet week shows the hit
- * mark instead of seven empty bars.
+ * The one summary at the top of Your sessions (Oct 6 redesign, owner: "too
+ * jumbled"; the Share page's look: a cream card, the figure in green). Its
+ * small line says which week ("LAST WEEK · SEP 28 – OCT 4", or "THIS WEEK"),
+ * then the week's time on court big, then its sessions and how it compares,
+ * with the week's bars small on the right. Last week's (the in-app recap,
+ * Monday to Wednesday) opens the whole recap and × puts it away for that
+ * week, the card then showing this week. A quiet week says so in words
+ * instead of a big zero. `children` sits under a hairline at the card's foot
+ * (Your sessions puts its Personal records row there).
  */
-export function YourWeekBanner({ recap, onOpen, onClose }: { recap: WeekRecap; onOpen: () => void; onClose?: () => void }) {
+export function WeekSummary({ recap, label, fill, onOpen, onClose, extra, children }: {
+  recap: WeekRecap;
+  /** The small line over the figure: "LAST WEEK · SEP 28 – OCT 4", "THIS WEEK". */
+  label: string;
+  /** The card's ground: the Share card's cream (creamFill), read from the live theme. */
+  fill: string;
+  onOpen?: () => void;
+  onClose?: () => void;
+  /** Said after the sessions on the small line ("10-day streak"), when there is no comparison to say. */
+  extra?: string | null;
+  children?: React.ReactNode;
+}) {
   const styles = useThemedStyles(styleDefinitions);
   const most = Math.max(...recap.days, 1);
-  const quiet = !recap.sessions;
+  const quiet = !recap.minutes;
   const sessionsText = `${recap.sessions} ${recap.sessions === 1 ? 'session' : 'sessions'}`;
   const otherwise = recap.bestStreak ? 'best streak yet' : recap.firstWeek ? 'your first week here' : recap.won ? `${recap.won} won` : null;
-  const after = shortCompare(recap) ?? otherwise;
-  const title = quiet ? 'A quiet week' : `Last week · ${duration(recap.minutes)}`;
-  const line = quiet ? 'Up for a hit this week?' : after ? `${sessionsText} · ${after}` : sessionsText;
-  // VoiceOver hears it as a sentence: "8 hours 23 minutes on court, 7 sessions, up 5 hours 23 minutes on the week before".
-  const spokenAfter = shortCompare(recap, true) ?? otherwise;
-  const spoken = quiet ? 'a quiet week' : [`${spokenDuration(recap.minutes)} on court`, sessionsText, spokenAfter].filter(Boolean).join(', ');
-  return (
-    <View style={styles.banner}>
-      <Pressable accessibilityRole="button" accessibilityLabel={`Your week, ${weekRange(recap.week).replace(' – ', ' to ')}: ${spoken}. Open`} onPress={onOpen} style={({ pressed }) => [styles.bannerMain, !onClose && styles.bannerMainEnd, pressed && styles.pressed]}>
+  const after = onOpen ? shortCompare(recap) ?? otherwise : extra ?? null;
+  const line = quiet ? (onOpen ? 'Up for a hit this week?' : extra ?? 'Log one after you play.') : [sessionsText, after].filter(Boolean).join(' · ');
+  const spokenAfter = onOpen ? shortCompare(recap, true) ?? otherwise : extra ?? null;
+  const spoken = quiet ? `nothing on court. ${line}` : [`${spokenDuration(recap.minutes)} on court`, sessionsText, spokenAfter].filter(Boolean).join(', ');
+  const eyebrowInk = pageIsDark() ? colors.textMuted : mixHex(colors.brand, colors.text, 0.2);
+  const body = (
+    <>
+      <View style={styles.sumTop}>
+        <Text style={[styles.sumLabel, { color: eyebrowInk }]} numberOfLines={1}>{label}</Text>
+        {onOpen ? <Ionicons name="chevron-forward" size={13} color={eyebrowInk} /> : null}
+      </View>
+      <View style={styles.sumRow}>
+        <View style={styles.sumWords}>
+          {quiet ? (
+            <Text style={styles.sumQuiet} numberOfLines={1}>{onOpen ? 'A quiet week' : 'No tennis yet'}</Text>
+          ) : (
+            <Text style={styles.sumBig} numberOfLines={1}>
+              {duration(recap.minutes)}
+              <Text style={styles.sumUnit}> on court</Text>
+            </Text>
+          )}
+          <Text style={styles.sumLine} numberOfLines={2}>{line}</Text>
+        </View>
         {quiet ? (
           <View style={styles.quietDisc}><HitGlyph size={20} color={colors.brand} /></View>
         ) : (
           <View style={styles.mini}>
             {recap.days.map((m, i) => (
-              <View key={i} style={[styles.miniBar, m ? { height: Math.max(6, Math.round((m / most) * 34)), backgroundColor: colors.brand } : styles.miniNone]} />
+              <View key={i} style={[styles.miniBar, m ? { height: Math.max(6, Math.round((m / most) * 40)), backgroundColor: colors.brand } : { backgroundColor: withAlpha(colors.text, 0.1) }]} />
             ))}
           </View>
         )}
-        <View style={styles.bannerWords}>
-          <Text style={styles.bannerTitle} numberOfLines={1}>{title}</Text>
-          <Text style={styles.bannerLine} numberOfLines={2}>{line}</Text>
-        </View>
-        <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
-      </Pressable>
+      </View>
+    </>
+  );
+  return (
+    <View style={[styles.summary, { backgroundColor: fill }]}>
+      {onOpen ? (
+        <Pressable accessibilityRole="button" accessibilityLabel={`Your week, ${weekRange(recap.week).replace(' – ', ' to ')}: ${spoken}. Open`} onPress={onOpen} style={({ pressed }) => [styles.sumMain, pressed && styles.pressed]}>
+          {body}
+        </Pressable>
+      ) : (
+        <View style={styles.sumMain} accessible accessibilityLabel={`This week: ${spoken}`}>{body}</View>
+      )}
       {onClose ? (
-        <Pressable accessibilityRole="button" accessibilityLabel="Hide this week's recap" onPress={onClose} style={({ pressed }) => [styles.bannerClose, pressed && styles.pressed]}>
-          <Ionicons name="close" size={18} color={colors.textMuted} />
+        <Pressable accessibilityRole="button" accessibilityLabel="Hide this week's recap" hitSlop={6} onPress={onClose} style={({ pressed }) => [styles.sumClose, pressed && styles.pressed]}>
+          <Ionicons name="close" size={16} color={colors.textMuted} />
         </Pressable>
       ) : null}
+      {children ? <View style={[styles.sumFoot, { borderTopColor: withAlpha(colors.text, 0.08) }]}>{children}</View> : null}
     </View>
   );
 }
@@ -278,17 +313,21 @@ const styleDefinitions = StyleSheet.create({
   // The lockup along the story card's foot, as on a session's picture.
   foot: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10, paddingTop: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   site: { ...font('500'), fontSize: 11.5, color: colors.textMuted },
-  // "Last week": the card's words and bars are one button; × is a column of its own on the right, a full 44 wide.
-  banner: { ...lift, flexDirection: 'row', borderRadius: 20, backgroundColor: colors.surface, marginTop: spacing.sm, overflow: 'hidden' },
-  bannerMain: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingLeft: spacing.lg, paddingVertical: 14 },
-  bannerMainEnd: { paddingRight: spacing.lg },
-  bannerClose: { width: 44, alignItems: 'center', justifyContent: 'center', marginRight: spacing.xs },
-  mini: { flexDirection: 'row', alignItems: 'flex-end', gap: 3, height: 34, width: 52 },
-  miniBar: { flex: 1, borderRadius: 2 },
-  miniNone: { height: 3, backgroundColor: colors.surfaceAlt },
+  // The summary: the Share card's cream (its fill given by the page), no shadow, the figure in green.
+  summary: { borderRadius: 22, marginTop: spacing.sm, overflow: 'hidden' },
+  sumMain: { paddingHorizontal: spacing.lg + 2, paddingTop: spacing.lg, paddingBottom: spacing.lg, gap: 6 },
+  sumTop: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingRight: 36 },
+  sumLabel: { ...typography.caption, fontSize: 11.5, letterSpacing: 1.1, flexShrink: 1 },
+  sumRow: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.lg },
+  sumWords: { flex: 1, minWidth: 0, gap: 4 },
+  sumBig: { ...font('600'), fontSize: 38, lineHeight: 44, letterSpacing: -1.4, color: colors.brand, fontVariant: ['tabular-nums'] },
+  sumUnit: { ...font('500'), fontSize: 15, letterSpacing: 0, color: colors.textMuted },
+  sumQuiet: { ...font('600'), fontSize: 22, lineHeight: 30, letterSpacing: -0.6, color: colors.text },
+  sumLine: { ...typography.small, fontSize: 14, color: colors.textMuted },
+  sumClose: { position: 'absolute', top: 8, right: 8, width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  sumFoot: { borderTopWidth: StyleSheet.hairlineWidth, marginHorizontal: spacing.lg + 2 },
+  mini: { flexDirection: 'row', alignItems: 'flex-end', gap: 4, height: 44, width: 74, marginBottom: 4 },
+  miniBar: { flex: 1, height: 3, borderRadius: 2 },
   // A quiet week: the hit mark on the brand's dim disc, the size of the bars it stands in for.
-  quietDisc: { width: 52, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.brandDim },
-  bannerWords: { flex: 1, minWidth: 0, gap: 2 },
-  bannerTitle: { ...font('600'), fontSize: 15.5, letterSpacing: -0.2, color: colors.text },
-  bannerLine: { ...typography.small, color: colors.textMuted },
+  quietDisc: { width: 56, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.brandDim },
 });

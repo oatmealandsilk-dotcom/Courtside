@@ -6,8 +6,9 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { FlybyPill } from '@/components/flyby/FlybyPill';
-import { YourWeekBanner } from '@/components/recap/RecapCard';
+import { WeekSummary } from '@/components/recap/RecapCard';
 import { PersonalRecords, RecordPill } from '@/components/records/PersonalRecords';
+import { creamFill } from '@/components/session/SessionCard';
 import { LoggedTitle, type PeopleLine } from '@/components/LoggedTitle';
 import { Avatar, EmptyState, Screen } from '@/components/ui';
 import type { DetectedActivity, PracticeSession, SessionTag, User } from '@/data/types';
@@ -19,14 +20,14 @@ import { useTennisFlags } from '@/features/activity/useTennisFlags';
 import { formatDistance, isTennisActivity, workoutIcon, WORKOUTS_ASK } from '@/features/activity/workouts';
 import { appleHealthAvailable } from '@/features/health/appleHealth';
 import { computeStats, localDay } from '@/features/practice/stats';
-import { lastWeekStart, showWeekCard, weekRecap } from '@/features/recap/recap';
-import { computeRecords, recordSessionIds } from '@/features/records/records';
+import { lastWeekStart, showWeekCard, weekRange, weekRecap } from '@/features/recap/recap';
+import { computeRecords, RECORD_ICON, recordSessionIds, weekStart } from '@/features/records/records';
 import { confirm } from '@/lib/confirm';
 import { goBack } from '@/lib/goBack';
 import { duration } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
-import { useThemedStyles } from '@/theme/ThemeProvider';
-import { colors, font, lift, radius, spacing, typography } from '@/theme';
+import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
+import { colors, font, radius, spacing, typography } from '@/theme';
 
 /** Weeks shown at first; "Show earlier weeks" adds as many again. */
 const WEEKS = 8;
@@ -40,6 +41,9 @@ function weekOf(day: string): string {
   d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
   return localDay(d);
 }
+
+/** A phrase kept whole ("Apple Watch", "1h 15m"): a small line then breaks only between its parts, never inside one. */
+const keep = (s: string) => s.replace(/ /g, ' ');
 
 /** "This week", "Last week", or "Sep 15 – 21" ("Sep 29 – Oct 5" across a month). */
 function weekLabel(start: string, now = new Date()): string {
@@ -162,18 +166,63 @@ export default function YourSessions() {
   // Flyby (Oct 5): today's and yesterday's sessions played at a court carry "3 others here today".
   const flybyDays = [localDay(new Date()), localDay(Date.now() - 86_400_000)];
 
+  // The page's cards wear the Share card's cream (Oct 6, owner: "those are better than green"), read from the live theme.
+  const { theme } = useTheme();
+  const fill = creamFill(theme);
+  // The summary is last week's recap while it is up (Monday to Wednesday, until put away), else this week so far.
+  const recapUp = !!recap && showWeekCard(recap);
+  const showRecap = recapUp && recapAway === false;
+  const thisWeek = useMemo(() => (currentUserId ? weekRecap(currentUserId, sessions, posts, stories, weekStart(localDay(new Date()))) : null), [currentUserId, sessions, posts, stories]);
+  // Personal records fold into one row at the summary's foot; a tap opens them under it.
+  const [recordsOpen, setRecordsOpen] = useState(false);
+  const recordList = Object.values(records).filter((r): r is NonNullable<typeof r> => !!r);
+  const recordsShown = tennisCount >= 3 && recordList.length > 0;
+  const freshRecord = recordList.some((r) => r.reached >= localDay(Date.now() - 7 * 86_400_000));
+
+  // The one filled green button on the page: everything else is a white outline or words.
   const logButton = (
     <Pressable accessibilityRole="button" accessibilityLabel="Log a session" hitSlop={10} onPress={() => router.push('/log-session')} style={({ pressed }) => [styles.log, pressed && styles.pressed]}>
-      <Ionicons name="add" size={16} color={colors.text} />
+      <Ionicons name="add" size={16} color={colors.brandInk} />
       <Text style={styles.logText}>Log</Text>
     </Pressable>
   );
 
+  const recordsRow = recordsShown ? (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Personal records, ${recordList.length}${freshRecord ? ', one new this week' : ''}`}
+      accessibilityState={{ expanded: recordsOpen }}
+      onPress={() => setRecordsOpen((o) => !o)}
+      style={({ pressed }) => [styles.recordsRow, pressed && styles.pressed]}
+    >
+      <Ionicons name={RECORD_ICON} size={16} color={colors.sun} />
+      <Text style={styles.recordsWord}>Personal records</Text>
+      {freshRecord ? <RecordPill label="New" /> : null}
+      <Text style={styles.recordsCount}>{recordList.length}</Text>
+      <Ionicons name={recordsOpen ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textMuted} />
+    </Pressable>
+  ) : null;
+
+  const todo = taggedYou.length + waiting.length;
+
   return (
     <Screen title="Your sessions" subtitle="Only you see this." compactTitle onBack={() => goBack('/profile')} right={logButton}>
-      {offerOn && currentUserId ? <WorkoutsOffer me={currentUserId} /> : null}
-      {recap && recapAway === false && showWeekCard(recap) ? (
-        <YourWeekBanner recap={recap} onOpen={() => router.push({ pathname: '/weekly-recap', params: { week: recap.week } })} onClose={putRecapAway} />
+      {/* 1. One summary: the week's time on court, big, with your records folded into its foot. */}
+      {groups.length && recap && thisWeek && (!recapUp || recapAway !== null) ? (
+        showRecap ? (
+          <WeekSummary recap={recap} fill={fill} label={`Last week · ${weekRange(recap.week)}`.toUpperCase()} onOpen={() => router.push({ pathname: '/weekly-recap', params: { week: recap.week } })} onClose={putRecapAway}>
+            {recordsRow}
+          </WeekSummary>
+        ) : (
+          <WeekSummary recap={thisWeek} fill={fill} label="THIS WEEK" extra={streakNow > 1 ? `${streakNow}-day streak` : null}>
+            {recordsRow}
+          </WeekSummary>
+        )
+      ) : null}
+      {recordsShown && recordsOpen ? (
+        <View style={styles.recordsOpen}>
+          <PersonalRecords records={records} sessions={sessions} sessionTags={sessionTags} users={users} currentStreak={streakNow} privateNote={false} heading={false} />
+        </View>
       ) : null}
       {!waiting.length && !groups.length && !taggedYou.length ? (
         <EmptyState
@@ -185,41 +234,21 @@ export default function YourSessions() {
         />
       ) : null}
 
-      {taggedYou.length ? (
+      {/* 2. One "To do": tags waiting on your answer, then what your trackers picked up, as compact rows with quiet buttons. */}
+      {todo ? (
         <>
-          <Text style={styles.sectionTitle}>Tagged you</Text>
-          <View style={styles.group}>
+          <View style={styles.weekHead}>
+            <Text style={[styles.sectionTitle, styles.weekName]}>To do</Text>
+            <Text style={styles.weekHours}>{todo}</Text>
+          </View>
+          <View style={[styles.group, { backgroundColor: fill }]}>
             {taggedYou.map((t, i) => <TaggedYou key={t.id} tag={t} tagger={users.find((u) => u.id === t.taggerId)!} line={i > 0} />)}
+            {waiting.map((a, i) => <Waiting key={a.id} activity={a} line={i > 0 || taggedYou.length > 0} />)}
           </View>
         </>
       ) : null}
 
-      {waiting.length ? (
-        <>
-          <Text style={styles.sectionTitle}>Not logged yet</Text>
-          <View style={styles.group}>
-            {waiting.map((a, i) => <Waiting key={a.id} activity={a} line={i > 0} />)}
-          </View>
-        </>
-      ) : null}
-
-      {/* Older workouts, after what is waiting on you: browsing never outranks the things to do. */}
-      {pastOn ? (
-        <Pressable accessibilityRole="button" accessibilityLabel={`Past workouts: the last 30 days from ${pastFrom}`} onPress={() => router.push('/workouts')} style={({ pressed }) => [styles.group, styles.pastRow, pressed && styles.pressed]}>
-          <View style={styles.pastIcon}><Ionicons name="fitness-outline" size={18} color={colors.court} /></View>
-          <View style={styles.words}>
-            <Text style={styles.title}>Past workouts</Text>
-            <Text style={styles.when} numberOfLines={1}>Last 30 days · {pastFrom}</Text>
-          </View>
-          <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
-        </Pressable>
-      ) : null}
-
-      {tennisCount >= 3 ? (
-        // The page already says only you see it: no lock note of its own here.
-        <PersonalRecords records={records} sessions={sessions} sessionTags={sessionTags} users={users} currentStreak={streakNow} privateNote={false} />
-      ) : null}
-
+      {/* 3. Your sessions, a week at a time. */}
       {groups.slice(0, weeks).map(({ start, list }) => {
         const onCourt = list.filter((s) => s.kind !== 'fitness').reduce((sum, s) => sum + s.minutes, 0);
         return (
@@ -229,7 +258,7 @@ export default function YourSessions() {
               {records.week?.from === start ? <View style={styles.bestWeek}><RecordPill label="Best week" /></View> : null}
               {onCourt ? <Text style={styles.weekHours}>{duration(onCourt)} on court</Text> : null}
             </View>
-            <View style={styles.group}>
+            <View style={[styles.group, { backgroundColor: fill }]}>
               {list.map((s, i) => {
                 const found = s.activityId ? detectedActivities.find((a) => a.id === s.activityId) : undefined;
                 // A tracker's session posts with its tracker numbers, and is named for its tracker, only while its source is switched on; otherwise as you logged it.
@@ -294,6 +323,19 @@ export default function YourSessions() {
       ) : null}
       {/* The one place that says how a session comes off the log (a hold, here or on the Tennis profile). */}
       {groups.length ? <Text style={styles.holdHint}>Hold a session to remove it.</Text> : null}
+
+      {/* 4. Older workouts, a quiet link at the foot: browsing never outranks the things to do. */}
+      {pastOn ? (
+        <Pressable accessibilityRole="button" accessibilityLabel={`Past workouts: the last 30 days from ${pastFrom}`} onPress={() => router.push('/workouts')} style={({ pressed }) => [styles.pastRow, pressed && styles.pressed]}>
+          <Ionicons name="fitness-outline" size={17} color={colors.textMuted} />
+          <View style={styles.words}>
+            <Text style={styles.pastText}>Past workouts</Text>
+            <Text style={styles.when} numberOfLines={1}>Last 30 days from {pastFrom}</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+        </Pressable>
+      ) : null}
+      {offerOn && currentUserId ? <WorkoutsOffer me={currentUserId} fill={fill} /> : null}
     </Screen>
   );
 }
@@ -310,7 +352,7 @@ const recapKey = (me: string, week: string) => `courtside-recap-away:${me}:${wee
  * the Health page), after the same explanation anyone new gets. "Not now"
  * puts it away on this phone; the Health page keeps offering it.
  */
-function WorkoutsOffer({ me }: { me: string }) {
+function WorkoutsOffer({ me, fill }: { me: string; fill: string }) {
   const styles = useThemedStyles(styleDefinitions);
   const { actions } = useApp();
   // Hidden until this phone has said whether it was put away, so it never flashes up and away.
@@ -341,9 +383,9 @@ function WorkoutsOffer({ me }: { me: string }) {
     },
   });
   return (
-    <View style={[styles.group, styles.offer]}>
+    <View style={[styles.group, styles.offer, { backgroundColor: fill }]}>
       <View style={styles.offerTop}>
-        <View style={styles.pastIcon}><Ionicons name="fitness-outline" size={18} color={colors.court} /></View>
+        <View style={styles.pastIcon}><Ionicons name="fitness-outline" size={18} color={colors.textMuted} /></View>
         <View style={styles.words}>
           <Text style={styles.title}>Also pick up runs, rides and the gym?</Text>
           <Text style={styles.when}>Your other workouts from Apple Health, ready to log like your tennis. Only you see them.</Text>
@@ -353,8 +395,8 @@ function WorkoutsOffer({ me }: { me: string }) {
         <Pressable accessibilityRole="button" accessibilityLabel="Not now" disabled={busy} hitSlop={8} onPress={later} style={({ pressed }) => [styles.offerLater, pressed && styles.pressed]}>
           <Text style={styles.offerLaterText}>Not now</Text>
         </Pressable>
-        <Pressable accessibilityRole="button" accessibilityLabel="Turn on every workout from Apple Health" accessibilityState={{ busy, disabled: busy }} disabled={busy} onPress={turnOn} style={({ pressed }) => [styles.action, styles.actionOn, styles.offerOn, pressed && styles.pressed]}>
-          {busy ? <ActivityIndicator size="small" color={colors.brandInk} /> : <Text style={[styles.actionText, styles.actionTextOn]}>Turn on</Text>}
+        <Pressable accessibilityRole="button" accessibilityLabel="Turn on every workout from Apple Health" accessibilityState={{ busy, disabled: busy }} disabled={busy} onPress={turnOn} style={({ pressed }) => [styles.action, styles.offerOn, pressed && styles.pressed]}>
+          {busy ? <ActivityIndicator size="small" color={colors.textMuted} /> : <Text style={styles.actionText}>Turn on</Text>}
         </Pressable>
       </View>
     </View>
@@ -362,56 +404,36 @@ function WorkoutsOffer({ me }: { me: string }) {
 }
 
 /**
- * The tracker a session waiting to be logged came from ("WHOOP", "Apple
- * Watch"), as a small quiet tag beside how long it was: worth knowing, never
- * worth reading first. (A logged session says it on its day's line.)
- */
-function SourceTag({ label }: { label: string }) {
-  const styles = useThemedStyles(styleDefinitions);
-  return (
-    <View style={styles.tag}>
-      <Text style={styles.tagText} numberOfLines={1}>{label}</Text>
-    </View>
-  );
-}
-
-/**
- * A tracker's session nobody has logged: how long first and big, then what
- * it was, then the day and the times on a short line of their own, with its
- * source as a small tag. Log it sits beside the big number, clear of the words.
+ * A tracker's session nobody has logged, as one compact row of To do: what
+ * it was and how long ("Tennis · 1h 24m"), then the day, the times and the
+ * tracker on a quiet line, and Log it as a white outline button at the right.
  */
 function Waiting({ activity, line }: { activity: DetectedActivity; line: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
   const source = pickSource({ type: 'tracker', activity });
   // A workout's distance beside its name: "Run · 3.1 mi".
   const far = isTennisActivity(activity) ? null : formatDistance(activity.distanceM);
+  const what = far ? `${activityTitle(activity)} · ${far}` : activityTitle(activity);
   return (
-    <View style={[styles.row, line && styles.line]}>
-      <View style={styles.rowMain}>
-        <View style={styles.icon}><Ionicons name={isTennisActivity(activity) ? 'stopwatch-outline' : workoutIcon(activity.sport)} size={18} color={colors.court} /></View>
-        <View style={styles.words}>
-          <View style={styles.heroLine}>
-            <Text style={styles.hero}>{duration(activity.minutes)}</Text>
-            <SourceTag label={source} />
-          </View>
-          <Text style={styles.title} numberOfLines={2}>{far ? `${activityTitle(activity)} · ${far}` : activityTitle(activity)}</Text>
-          <Text style={styles.when}>{activityWhen(activity, new Date(), ' · ')}</Text>
-        </View>
+    <View style={[styles.todoRow, line && styles.line]}>
+      <View style={styles.todoIcon}><Ionicons name={isTennisActivity(activity) ? 'stopwatch-outline' : workoutIcon(activity.sport)} size={18} color={colors.textMuted} /></View>
+      <View style={styles.words}>
+        <Text style={styles.title} numberOfLines={1}>{what} · {duration(activity.minutes)}</Text>
+        <Text style={styles.when} numberOfLines={2}>{activityWhen(activity, new Date(), ' · ')} · {keep(source)}</Text>
       </View>
-      <View style={styles.actionSpot}>
-        <Pressable accessibilityRole="button" accessibilityLabel={`Log it: ${activityTitle(activity)}, ${duration(activity.minutes)}`} hitSlop={8} onPress={() => router.push({ pathname: '/compose', params: { activity: activity.id } })} style={({ pressed }) => [styles.action, styles.actionOn, pressed && styles.pressed]}>
-          <Text style={[styles.actionText, styles.actionTextOn]}>Log it</Text>
-        </Pressable>
-      </View>
+      <Pressable accessibilityRole="button" accessibilityLabel={`Log it: ${activityTitle(activity)}, ${duration(activity.minutes)}`} hitSlop={8} onPress={() => router.push({ pathname: '/compose', params: { activity: activity.id } })} style={({ pressed }) => [styles.outline, pressed && styles.pressed]}>
+        <Text style={styles.actionText}>Log it</Text>
+      </Pressable>
     </View>
   );
 }
 
 /**
- * Someone tagged you and is waiting on your answer: who, what it was (your
- * side of a match's result), when and how long, with Accept (it goes in your
- * log too) and Decline. A tap on the rest opens the tag's sheet, which says
- * more and lets you accept without adding it to your log.
+ * Someone tagged you and is waiting on your answer, as one compact row of To
+ * do: who, your side of it ("You won"), when and how long, with Accept (it
+ * goes in your log too) as a white outline button and Decline as a round ×
+ * beside it. A tap on the rest opens the tag's sheet, which says more and
+ * lets you accept without adding it to your log.
  */
 function TaggedYou({ tag, tagger, line }: { tag: SessionTag; tagger: User; line: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
@@ -432,28 +454,25 @@ function TaggedYou({ tag, tagger, line }: { tag: SessionTag; tagger: User; line:
     }
   };
   return (
-    <View style={[styles.tagRow, line && styles.line]}>
+    <View style={[styles.todoRow, line && styles.line]}>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`${tagger.name} tagged you in a ${tag.kind === 'match' ? 'match' : 'practice'}. ${what}, ${dayWords(tag.day)}, ${duration(tag.minutes)}. Open`}
         onPress={() => router.push({ pathname: '/session-tag', params: { tag: tag.id } })}
-        style={({ pressed }) => [styles.rowMain, pressed && styles.pressed]}
+        style={({ pressed }) => [styles.todoOpen, pressed && styles.pressed]}
       >
-        <Avatar name={tagger.name} seed={tagger.avatarSeed} uri={tagger.avatarUrl} size={40} />
+        <Avatar name={tagger.name} seed={tagger.avatarSeed} uri={tagger.avatarUrl} size={32} />
         <View style={styles.words}>
-          <Text style={styles.tagTitle} numberOfLines={1}>{first} tagged you</Text>
-          <Text style={styles.sub} numberOfLines={1}>{what} · {dayWords(tag.day)} · {duration(tag.minutes)}</Text>
+          <Text style={styles.title} numberOfLines={1}>{first} tagged you</Text>
+          <Text style={styles.when} numberOfLines={2}>{[what, dayWords(tag.day), duration(tag.minutes)].map(keep).join(' · ')}</Text>
         </View>
       </Pressable>
-      {/* Accept and Decline under the words, the way a follow request asks in Notifications. */}
-      <View style={styles.answers}>
-        <Pressable accessibilityRole="button" accessibilityLabel={`Accept ${first}’s tag`} accessibilityState={{ busy: busy === 'accept' }} disabled={!!busy} hitSlop={5} onPress={() => { void answer(true); }} style={({ pressed }) => [styles.answer, styles.actionOn, pressed && styles.pressed]}>
-          {busy === 'accept' ? <ActivityIndicator size="small" color={colors.brandInk} /> : <Text style={[styles.actionText, styles.actionTextOn]}>Accept</Text>}
-        </Pressable>
-        <Pressable accessibilityRole="button" accessibilityLabel={`Decline ${first}’s tag`} accessibilityState={{ busy: busy === 'decline' }} disabled={!!busy} hitSlop={5} onPress={() => { void answer(false); }} style={({ pressed }) => [styles.answer, pressed && styles.pressed]}>
-          {busy === 'decline' ? <ActivityIndicator size="small" color={colors.textMuted} /> : <Text style={styles.actionText}>Decline</Text>}
-        </Pressable>
-      </View>
+      <Pressable accessibilityRole="button" accessibilityLabel={`Accept ${first}’s tag`} accessibilityState={{ busy: busy === 'accept' }} disabled={!!busy} hitSlop={5} onPress={() => { void answer(true); }} style={({ pressed }) => [styles.outline, pressed && styles.pressed]}>
+        {busy === 'accept' ? <ActivityIndicator size="small" color={colors.textMuted} /> : <Text style={styles.actionText}>Accept</Text>}
+      </Pressable>
+      <Pressable accessibilityRole="button" accessibilityLabel={`Decline ${first}’s tag`} accessibilityState={{ busy: busy === 'decline' }} disabled={!!busy} hitSlop={5} onPress={() => { void answer(false); }} style={({ pressed }) => [styles.circle, pressed && styles.pressed]}>
+        {busy === 'decline' ? <ActivityIndicator size="small" color={colors.textMuted} /> : <Ionicons name="close" size={16} color={colors.textMuted} />}
+      </Pressable>
     </View>
   );
 }
@@ -545,7 +564,7 @@ function Logged({ session: s, people, onOpen, openWord, hideNote = false, source
           row, so the share buttons stand in one line down the list, even on a row too old to post. */}
       <View style={[styles.actionSpot, styles.actionRow]}>
         <Pressable accessibilityRole="button" accessibilityLabel={`Share to Instagram: ${title}`} hitSlop={6} onPress={onShare} style={({ pressed }) => [styles.share, pressed && styles.pressed]}>
-          <Ionicons name="share-outline" size={18} color={colors.textMuted} />
+          <Ionicons name="share-outline" size={16} color={colors.text} />
         </Pressable>
         <View style={styles.postSlot}>
           {postId ? (
@@ -565,66 +584,69 @@ function Logged({ session: s, people, onOpen, openWord, hideNote = false, source
 }
 
 const styleDefinitions = StyleSheet.create({
-  // The grouped lists the Tennis profile used to have (profile-details): white cards on a soft shadow, rows parted by a hairline.
-  group: { ...lift, borderRadius: 20, backgroundColor: colors.surface, overflow: 'hidden', paddingHorizontal: spacing.lg },
-  sectionTitle: { ...typography.smallStrong, color: colors.textMuted, paddingHorizontal: spacing.sm, paddingTop: spacing.xl, paddingBottom: spacing.sm },
+  // A card of rows (To do, a week of sessions): the Share card's cream, given as the fill by the page, no shadow, rows parted by a hairline.
+  group: { borderRadius: 20, overflow: 'hidden', paddingHorizontal: spacing.lg },
+  sectionTitle: { ...typography.smallStrong, color: colors.textMuted, paddingHorizontal: spacing.sm, paddingTop: spacing.xxl, paddingBottom: spacing.sm },
   weekHead: { flexDirection: 'row', alignItems: 'flex-end' },
   weekName: { flex: 1 },
   weekHours: { ...typography.small, color: colors.textMuted, fontVariant: ['tabular-nums'], paddingHorizontal: spacing.sm, paddingBottom: spacing.sm },
   bestWeek: { paddingBottom: spacing.sm },
-  // A session: how long (big) with its source beside it, what it was, then when. The button rides the big number's line, top right.
+  // A session: how long (big, in green) with a gold Record beside it, what it was, then when. The buttons ride the big number's line, top right.
   row: { paddingVertical: ROW_PAD },
   rowMain: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
-  tagRow: { gap: spacing.sm, paddingVertical: 12 },
-  // Under the words, lined up with them (past the 40 of the face and the row's gap).
-  answers: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingLeft: 40 + spacing.md },
-  answer: { minWidth: 92, height: 34, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 14, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderStrong },
-  waiting: { ...typography.small, ...font('500'), color: colors.textFaint },
+  waiting: { ...typography.small, ...font('500'), color: colors.textMuted },
   line: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   // Centred on the big number's line.
   icon: { width: 22, height: HERO_LINE, alignItems: 'center', justifyContent: 'center' },
-  words: { flex: 1, minWidth: 0, gap: 3 },
-  // As tall as the button beside it, so the words under it run the full width without meeting it; kept clear of the button on the right.
-  heroLine: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: HERO_LINE, paddingRight: 96 },
-  hero: { fontSize: 21, lineHeight: 26, ...font('600'), letterSpacing: -0.5, color: colors.text, fontVariant: ['tabular-nums'], flexShrink: 0 },
+  words: { flex: 1, minWidth: 0, gap: 2 },
+  heroLine: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: HERO_LINE },
+  // The figure in the brand's green, as on the Share card.
+  hero: { fontSize: 19, lineHeight: 24, ...font('600'), letterSpacing: -0.4, color: colors.brand, fontVariant: ['tabular-nums'], flexShrink: 0 },
   // Flyby's pill, lined up with the words (past the icon and the gap).
-  flybyRow: { paddingLeft: 22 + spacing.md },
-  tag: { flexShrink: 1, paddingHorizontal: 7, paddingVertical: 2, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt },
-  tagText: { fontSize: 11, lineHeight: 15, ...font('600'), letterSpacing: 0.2, color: colors.textMuted },
+  flybyRow: { paddingLeft: 22 + spacing.md, paddingTop: 6 },
   title: { fontSize: 15, lineHeight: 20, ...font('500'), color: colors.text },
-  when: { fontSize: 14, lineHeight: 19, color: colors.textMuted, fontVariant: ['tabular-nums'] },
-  tagTitle: { ...typography.body, ...font('600'), color: colors.text },
-  sub: { ...typography.small, color: colors.textMuted },
+  when: { fontSize: 13.5, lineHeight: 18, color: colors.textMuted, fontVariant: ['tabular-nums'] },
   placeRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  note: { fontSize: 14, lineHeight: 19, color: colors.textFaint, flexShrink: 1 },
+  note: { fontSize: 13.5, lineHeight: 18, color: colors.textMuted, flexShrink: 1 },
   actionSpot: { position: 'absolute', right: 0, top: ROW_PAD, height: HERO_LINE, justifyContent: 'center' },
   // A logged session's share button sits before Post it / Posted; its big line keeps clear of both.
-  actionRow: { flexDirection: 'row', alignItems: 'center', gap: 2 },
-  heroLineShare: { paddingRight: 112 },
-  share: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  actionRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  heroLineShare: { paddingRight: 116 },
+  // The Share page's buttons: white, round, a hairline round them.
+  share: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.borderStrong },
+  circle: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.borderStrong },
   // As wide as Post it, its button at the right edge: the share buttons line up whatever is beside them.
   postSlot: { width: 76, alignItems: 'flex-end' },
-  // Post it: a small outlined pill, quieter than Log it (the one thing waiting on you).
-  action: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderStrong },
-  actionOn: { backgroundColor: colors.brand, borderColor: colors.brand },
+  // Post it, Log it, Accept, Turn on: a white outline pill. The page's one filled green button is Log, at the top.
+  action: { height: 32, justifyContent: 'center', paddingHorizontal: 14, borderRadius: radius.pill, backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.borderStrong },
+  outline: { height: 32, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 14, borderRadius: radius.pill, backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.borderStrong },
   actionText: { ...typography.smallStrong, color: colors.text },
-  actionTextOn: { color: colors.brandInk },
   posted: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 4, paddingVertical: 6 },
   postedText: { ...typography.smallStrong, color: colors.textMuted },
-  log: { flexDirection: 'row', alignItems: 'center', gap: 2, paddingLeft: 10, paddingRight: 14, paddingVertical: 7, borderRadius: radius.pill, backgroundColor: colors.surface, ...lift },
-  logText: { ...typography.smallStrong, color: colors.text },
+  log: { flexDirection: 'row', alignItems: 'center', gap: 2, paddingLeft: 10, paddingRight: 14, paddingVertical: 7, borderRadius: radius.pill, backgroundColor: colors.brand },
+  logText: { ...typography.smallStrong, color: colors.brandInk },
+  // To do: one compact row each, its buttons on the right.
+  todoRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: 12 },
+  todoOpen: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  todoIcon: { width: 32, alignItems: 'center', marginRight: spacing.xs },
+  // Personal records: one row at the summary's foot, opening the tiles under the card.
+  recordsRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: 13 },
+  recordsWord: { ...font('600'), fontSize: 14.5, color: colors.text, flex: 1 },
+  recordsCount: { ...typography.smallStrong, color: colors.textMuted, fontVariant: ['tabular-nums'] },
+  recordsOpen: { marginTop: spacing.md },
   more: { alignSelf: 'center', marginTop: spacing.lg, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
-  // Past workouts: one row of its own, the list's card look, under what is waiting to be logged.
-  pastRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: 14, marginTop: spacing.md },
+  moreText: { ...typography.smallStrong, color: colors.text },
+  holdHint: { ...typography.small, color: colors.textMuted, textAlign: 'center', marginTop: spacing.lg },
+  // Past workouts: a quiet link at the foot of the page, no card of its own.
+  pastRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.xl, paddingHorizontal: spacing.sm, paddingVertical: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  pastText: { ...font('500'), fontSize: 14.5, color: colors.text },
   pastIcon: { width: 22, alignItems: 'center', justifyContent: 'center' },
-  // The offer of every workout: the same card, its words, then Not now and Turn on at the right.
+  // The offer of every workout: the same cream card, its words, then Not now and Turn on at the right.
   offer: { paddingVertical: 14, marginTop: spacing.sm, gap: spacing.md },
   offerTop: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
   offerButtons: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: spacing.sm },
   offerLater: { paddingHorizontal: 12, paddingVertical: 7 },
   offerLaterText: { ...typography.smallStrong, color: colors.textMuted },
   offerOn: { minWidth: 84, alignItems: 'center' },
-  moreText: { ...typography.smallStrong, color: colors.brand },
-  holdHint: { ...typography.small, color: colors.textMuted, textAlign: 'center', marginTop: spacing.lg },
   pressed: { opacity: 0.6 },
 });
