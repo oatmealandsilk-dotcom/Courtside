@@ -2472,7 +2472,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!fresh.length || stateRef.current.currentUserId !== me) return;
     setState((prev) => {
       const add = fresh.filter((n) => !prev.notifications.some((x) => x.id === n.id));
-      return add.length ? { ...prev, notifications: [...add, ...prev.notifications] } : prev;
+      if (!add.length) return prev;
+      // An answer to an ask for a review: your asks are read again the next time one shows, so
+      // "Review asked" turns to how it went without closing the app.
+      const answered = add.some((n) => n.kind === 'review');
+      return { ...prev, notifications: [...add, ...prev.notifications], ...(answered ? { reviewRequests: null } : {}) };
     });
   }, []);
   useEffect(() => {
