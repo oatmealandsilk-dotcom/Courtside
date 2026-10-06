@@ -30,7 +30,7 @@ export function FlybyPill({ courtId, courtName, day, skip = [] }: { courtId: str
   if (!people.length) return null;
   const words = flybyPill(people, day);
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={`${words} at ${courtName}. See who`} hitSlop={7} onPress={() => openFlyby(courtId, courtName, day)} style={({ pressed }) => [styles.pill, pressed && styles.pressed]}>
+    <Pressable accessibilityRole="button" accessibilityLabel={`${words} at ${courtName}. See who`} hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }} onPress={() => openFlyby(courtId, courtName, day)} style={({ pressed }) => [styles.pill, pressed && styles.pressed]}>
       <View style={styles.faces}>
         {people.slice(0, 3).map((u, i) => (
           <View key={u.id} style={[styles.face, i > 0 && styles.faceOver]}>
@@ -45,7 +45,7 @@ export function FlybyPill({ courtId, courtName, day, skip = [] }: { courtId: str
 }
 
 const styleDefinitions = StyleSheet.create({
-  pill: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: spacing.sm, marginTop: 6, paddingLeft: 5, paddingRight: 10, paddingVertical: 4, borderRadius: radius.pill, backgroundColor: colors.brandDim, maxWidth: '100%' },
+  pill: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: spacing.sm, marginTop: 6, paddingLeft: 5, paddingRight: 10, paddingVertical: 5, borderRadius: radius.pill, backgroundColor: colors.brandDim, maxWidth: '100%' },
   pressed: { opacity: 0.7 },
   faces: { flexDirection: 'row', alignItems: 'center' },
   face: { borderWidth: 1.5, borderColor: colors.brandDim, borderRadius: 13 },

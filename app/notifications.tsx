@@ -517,7 +517,8 @@ export default function Notifications() {
             <Text style={styles.who}>Welcome, {currentUser.name.split(' ')[0]}.</Text>
             <Text style={styles.preview} numberOfLines={2}>{welcomeStep.line}</Text>
           </View>
-          <Pressable accessibilityRole="button" accessibilityLabel={welcomeStep.label} onPress={welcomeStep.go} style={styles.accept}>
+          {/* 32 drawn, 44 to the finger. */}
+          <Pressable accessibilityRole="button" accessibilityLabel={welcomeStep.label} hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }} onPress={welcomeStep.go} style={({ pressed }) => [styles.accept, pressed && { opacity: 0.8 }]}>
             <Text style={styles.acceptText}>{welcomeStep.label}</Text>
           </Pressable>
         </View>

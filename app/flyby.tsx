@@ -57,13 +57,17 @@ export default function FlybySheet() {
   const people = flybyPeople((list ?? []).filter((p) => !played.some((u) => u.id === p.userId)), users);
   const when = day ? flybyDay(day) : 'today';
   const close = () => setCloseSignal((n) => n + 1);
+  // One short line under the title, only when there is someone to count: with nobody, the sheet's body says so once.
   const line = list === undefined ? 'Looking…'
-    : `${people.length === 1 ? '1 player' : `${people.length} players`} who posted or checked in here ${when}.`
-      + (played.length ? ` ${andList(played.map((u) => firstName(u.name)))} ${played.length === 1 ? 'isn’t' : 'aren’t'} listed: you played ${played.length === 1 ? 'together' : 'them'}.` : '');
+    : people.length === 1 ? '1 other player was here'
+      : people.length ? `${people.length} other players were here`
+        : undefined;
+  // The people you played that day are on your session already: one quiet line says why they aren't here.
+  const playedNote = played.length ? `${andList(played.map((u) => firstName(u.name)))} ${played.length === 1 ? 'is' : 'are'} on your session already.` : null;
 
   return (
     <DragSheet fitContent closeSignal={closeSignal} onDismissed={() => router.back()} peekFraction={0.7} contentHeight={contentH || undefined}
-      header={<SheetTitle title={`At ${name} ${when}`} line={line} lines={3} onClose={close} />}>
+      header={<SheetTitle title={`At ${name} ${when}`} line={line} lines={2} onClose={close} />}>
       <ScrollView contentContainerStyle={styles.body} onContentSizeChange={(_, h) => { const r = Math.ceil(h); if (r !== contentH) setContentH(r); }}>
         {list === undefined ? (
           <View style={styles.wait}><CourtSpinner size={24} /></View>
@@ -92,9 +96,15 @@ export default function FlybySheet() {
         ) : (
           <Text style={styles.none}>Nobody else you can see was here {when}.</Text>
         )}
-        <View style={styles.fine}>
+        {playedNote ? (
+          <View style={styles.fine}>
+            <Ionicons name="people-outline" size={13} color={colors.textFaint} />
+            <Text style={styles.fineText}>{playedNote}</Text>
+          </View>
+        ) : null}
+        <View style={[styles.fine, playedNote ? styles.fineNext : null]}>
           <Ionicons name="lock-closed-outline" size={13} color={colors.textFaint} />
-          <Text style={styles.fineText}>Only people you can already see: friends, and public players who posted here. Check-ins show to friends only.</Text>
+          <Text style={styles.fineText}>Only friends and public players. Check-ins: friends only.</Text>
         </View>
       </ScrollView>
     </DragSheet>
@@ -113,5 +123,7 @@ const styleDefinitions = StyleSheet.create({
   meta: { ...typography.small, color: colors.textMuted },
   none: { ...typography.body, color: colors.textMuted, paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
   fine: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, paddingHorizontal: spacing.lg, paddingTop: spacing.sm },
+  // The second of two notes sits close under the first.
+  fineNext: { paddingTop: 0, marginTop: -spacing.xs },
   fineText: { flex: 1, ...typography.small, color: colors.textFaint, lineHeight: 18 },
 });

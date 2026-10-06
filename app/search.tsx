@@ -82,7 +82,10 @@ export default function Search() {
   const { isPhone, width: windowWidth } = useResponsive();
   const barInset = useBarInset();
   const { posts, questions, users, coaches, currentUserId, followingIds, followEdges, blockedIds, detectedLocation, detectedCoords, actions } = useApp();
-  const params = useLocalSearchParams<{ q?: string; scope?: string }>();
+  const params = useLocalSearchParams<{ q?: string; scope?: string; find?: string }>();
+  // "Find a friend by @handle" (the friends card, the first-move page): a search for one person,
+  // so it opens on People, says what to type, and leaves out this week's hashtags.
+  const findingFriend = params.find === 'friend';
   const [term, setTerm] = useState(params.q ?? '');
   // With an empty box the tab is remembered (Find players asks for People) and shows once typing starts.
   const [tab, setTab] = useState<Tab>(tabFor(params.scope));
@@ -446,11 +449,13 @@ export default function Search() {
 
   /* ---------------------------------- Bodies ---------------------------------- */
   const beforeTyping = () => {
-    const nothing = !shownRecents.length && !undo && !trending.length && !suggested.length;
+    const tags = findingFriend ? [] : trending;
+    const nothing = !shownRecents.length && !undo && !tags.length && !suggested.length;
     return (
       <ScrollView ref={scrollRef} {...scrolling} contentContainerStyle={bottom}>
-        {nothing ? (
-          <EmptyState icon="search-outline" title="Search CourtSide" body="Find a player by name or @handle, a clip by #tag, a thread or a court." />
+        {nothing ? (findingFriend
+          ? <EmptyState icon="person-add-outline" title="Find a friend" body="Type their name or @handle." />
+          : <EmptyState icon="search-outline" title="Search CourtSide" body="Find a player by name or @handle, a clip by #tag, a thread or a court." />
         ) : null}
         {undo ? (
           <View style={styles.head}>
@@ -470,13 +475,13 @@ export default function Search() {
             {shownRecents.map((r, i) => recentRow(r, i === 0))}
           </View>
         ) : null}
-        {trending.length ? (
+        {tags.length ? (
           <View style={(shownRecents.length || undo) ? styles.gapAbove : null}>
             {head('Trending this week')}
             {/* On a phone, one sideways row: three wrapped rows pushed the players below under the
                 keyboard. A computer has the room (and no keyboard), and wraps them where a mouse reaches. */}
             {(() => {
-              const chips = trending.map((t) => (
+              const chips = tags.map((t) => (
                 <Pressable key={t} accessibilityRole="button" accessibilityLabel={`Search #${t}`} onPress={() => pickTag(t)} style={({ pressed }) => [styles.chip, pressed && { opacity: 0.7 }]}>
                   <Text style={styles.chipHash}>#</Text>
                   <Text style={styles.chipText}>{t}</Text>
@@ -620,6 +625,7 @@ export default function Search() {
             onFocus={() => { focusedAt.current = offset.current; }}
             onBlur={() => { focusedAt.current = null; }}
             onKeyPress={(e) => { if (e.nativeEvent.key === 'Escape' && term) empty(); }}
+            {...(findingFriend ? { placeholder: 'Name or @handle', accessibilityLabel: 'Find a friend by name or @handle' } : {})}
           />
         </View>
         {showTabs ? (

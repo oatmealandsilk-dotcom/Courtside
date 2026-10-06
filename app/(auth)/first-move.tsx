@@ -32,7 +32,7 @@ import { useApp } from '@/store/AppContext';
 import { useGateSpace } from '@/lib/useGateSpace';
 import { StatusShade } from '@/components/StatusShade';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import { colors, radius, spacing, typography, lift } from '@/theme';
+import { colors, lift, spacing, typography } from '@/theme';
 
 const enter = (i: number) => FadeInDown.delay(80 + i * 80).duration(420).easing(Easing.out(Easing.cubic));
 
@@ -176,8 +176,8 @@ export default function FirstMove() {
           ) : (
             <Animated.View entering={FadeIn.duration(220)} style={{ gap: spacing.lg }}>
               <View style={styles.mainHead}>
-                <View style={styles.mainIcon}>
-                  <Ionicons name={lead === 'follow' ? 'person-add' : lead === 'friends' ? 'people' : 'paper-plane'} size={20} color={colors.brandInk} />
+                <View style={styles.tile}>
+                  <Ionicons name={lead === 'follow' ? 'person-add' : lead === 'friends' ? 'people' : 'paper-plane'} size={20} color={colors.brand} />
                 </View>
                 <View style={{ flex: 1, gap: 2 }}>
                   <Text style={styles.mainTitle}>{lead === 'follow' ? 'Follow players near you' : lead === 'friends' ? FRIENDS_TITLE : 'Bring your hitting partners'}</Text>
@@ -207,7 +207,7 @@ export default function FirstMove() {
                   <Button label="Share my link" onPress={() => { void share(); }} full />
                   {lead === 'friends' ? (
                     // Teen search (migration 118): by name or @handle, never by town.
-                    <Pressable accessibilityRole="link" accessibilityLabel="Find a friend by their @handle" hitSlop={8} onPress={() => done('find', () => router.push({ pathname: '/search', params: { scope: 'players' } }))} style={({ pressed }) => [styles.quiet, pressed && { opacity: 0.6 }]}>
+                    <Pressable accessibilityRole="link" accessibilityLabel="Find a friend by their @handle" hitSlop={8} onPress={() => done('find', () => router.push({ pathname: '/search', params: { scope: 'players', find: 'friend' } }))} style={({ pressed }) => [styles.quiet, pressed && { opacity: 0.6 }]}>
                       <Ionicons name="search" size={15} color={colors.textMuted} />
                       <Text style={styles.quietText}>Find a friend by @handle</Text>
                     </Pressable>
@@ -223,7 +223,7 @@ export default function FirstMove() {
           <Text style={styles.label}>Or post something</Text>
           <View style={styles.card}>
             <Pressable accessibilityRole="button" accessibilityLabel="Post a clip or photo" onPress={() => done('post', () => router.push('/compose'))} style={({ pressed }) => [styles.post, pressed && styles.pressed]}>
-              <View style={styles.postIcon}><Ionicons name="videocam" size={18} color={colors.brand} /></View>
+              <View style={styles.tile}><Ionicons name="videocam" size={20} color={colors.brand} /></View>
               <View style={{ flex: 1, gap: 2 }}>
                 <Text style={styles.postTitle}>Post a clip or photo</Text>
                 <Text style={styles.postBody}>A highlight, a good rally, a funny moment.</Text>
@@ -261,11 +261,13 @@ const styleDefinitions = StyleSheet.create({
   head: { gap: spacing.sm },
   title: { ...typography.display, color: colors.text },
   lead: { ...typography.body, color: colors.textMuted, lineHeight: 22 },
+  // The prompt card, the same as "You're early" and "Looking for someone to play?" on Find Players.
   card: { ...lift, borderRadius: 20, backgroundColor: colors.surface, overflow: 'hidden' },
   main: { padding: spacing.lg },
   waiting: { height: 120, alignItems: 'center', justifyContent: 'center' },
   mainHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  mainIcon: { width: 46, height: 46, borderRadius: 23, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
+  // The icon on Dim Green, one tile for both cards here and for the cards on Find Players.
+  tile: { width: 44, height: 44, borderRadius: 12, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
   mainTitle: { ...typography.heading, color: colors.text },
   mainBody: { ...typography.small, color: colors.textMuted, lineHeight: 19 },
   person: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: 10 },
@@ -273,13 +275,12 @@ const styleDefinitions = StyleSheet.create({
   personTop: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   personName: { ...typography.bodyStrong, color: colors.text, flexShrink: 1 },
   personMeta: { ...typography.small, color: colors.textMuted },
-  quiet: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'center', paddingVertical: spacing.xs },
+  quiet: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'center', minHeight: 44 },
   quietText: { ...typography.smallStrong, color: colors.textMuted },
   second: { gap: spacing.sm },
   label: { ...typography.smallStrong, color: colors.textMuted, paddingHorizontal: spacing.xs },
   pressed: { backgroundColor: colors.surfaceAlt },
   post: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.lg },
-  postIcon: { width: 40, height: 40, borderRadius: radius.pill, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
   postTitle: { ...typography.bodyStrong, color: colors.text },
   postBody: { ...typography.small, color: colors.textMuted },
   instant: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: 13, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },

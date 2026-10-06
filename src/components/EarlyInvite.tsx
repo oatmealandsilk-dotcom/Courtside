@@ -12,7 +12,7 @@ import { shareOutside } from '@/lib/shareOutside';
 import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import { colors, spacing, typography } from '@/theme';
+import { colors, lift, spacing, typography } from '@/theme';
 
 /**
  * "You're early in Columbus": Find Players with nobody sharing a spot
@@ -29,7 +29,10 @@ import { colors, spacing, typography } from '@/theme';
  * their @handle. Nothing about who sees whom changes.
  *
  * It sits right under the map, so its button shows without scrolling, and
- * the tutorial's first tip lights the whole card (`leadRef`).
+ * the tutorial's first tip lights the whole card (`leadRef`). It has the
+ * prompt card's look, the same as the first-move page's and "Looking for
+ * someone to play?" below it: a softly lifted card, a dim green tile with
+ * the icon, the title and one line beside it, then the one green pill.
  */
 export function EarlyInvite({ city, court, friends = false, leadRef }: { city: string | null; court: InviteCourt | null; friends?: boolean; /** The tutorial's target: the whole card. */ leadRef?: (node: View | null) => void }) {
   const styles = useThemedStyles(styleDefinitions);
@@ -50,16 +53,21 @@ export function EarlyInvite({ city, court, friends = false, leadRef }: { city: s
   return (
     // Never folded away by the phone's renderer, or the tutorial could not measure it.
     <View ref={leadRef} collapsable={false} style={styles.card}>
-      <Wash height={220} strength={0.6} fade={colors.surface} style={styles.wash} />
-      <Text style={styles.title}>{friends ? FRIENDS_TITLE : city ? `You’re early in ${city}` : 'You’re early here'}</Text>
-      <Text style={styles.body}>{friends ? FRIENDS_LINE : 'The map fills up with the people you already play with. Send them your link.'}</Text>
+      <View pointerEvents="none" style={styles.washClip}><Wash height={220} strength={0.6} fade={colors.surface} style={styles.wash} /></View>
+      <View style={styles.head}>
+        <View style={styles.tile}><Ionicons name={friends ? 'people' : 'paper-plane'} size={20} color={colors.brand} /></View>
+        <View style={styles.headWords}>
+          <Text style={styles.title}>{friends ? FRIENDS_TITLE : city ? `You’re early in ${city}` : 'You’re early here'}</Text>
+          <Text style={styles.body}>{friends ? FRIENDS_LINE : 'The map fills up with the people you already play with. Send them your link.'}</Text>
+        </View>
+      </View>
       {/* The feature card's shape: one primary pill, one quiet link under it. */}
       <View style={styles.actions}>
         <Button label="Share my link" onPress={() => { void share(); }} full />
       </View>
       {friends ? (
         // Teen search (migration 118): by name or @handle, never by town.
-        <Pressable accessibilityRole="link" accessibilityLabel="Find a friend by their @handle" hitSlop={8} onPress={() => router.push({ pathname: '/search', params: { scope: 'players' } })} style={({ pressed }) => [styles.link, pressed && { opacity: 0.6 }]}>
+        <Pressable accessibilityRole="link" accessibilityLabel="Find a friend by their @handle" hitSlop={8} onPress={() => router.push({ pathname: '/search', params: { scope: 'players', find: 'friend' } })} style={({ pressed }) => [styles.link, pressed && { opacity: 0.6 }]}>
           <Ionicons name="search" size={15} color={colors.textMuted} />
           <Text style={styles.linkText}>Find a friend by @handle</Text>
         </Pressable>
@@ -77,13 +85,20 @@ export function EarlyInvite({ city, court, friends = false, leadRef }: { city: s
 }
 
 const styleDefinitions = StyleSheet.create({
-  // The feature card: surface, 20px corners, a hairline, the wash inside it.
-  card: { borderRadius: 20, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, padding: spacing.xl, gap: spacing.sm, overflow: 'hidden' },
+  // The prompt card, as "Looking for someone to play?" below it: surface, 20px corners, the soft lift, the wash inside it.
+  card: { ...lift, borderRadius: 20, backgroundColor: colors.surface, padding: spacing.lg, gap: spacing.sm },
+  // The wash is clipped to the card's corners by a layer of its own, so the card's lift is not clipped with it.
+  washClip: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, borderRadius: 20, overflow: 'hidden' },
   wash: { position: 'absolute', left: 0, right: 0, top: 0 },
-  title: { ...typography.title, color: colors.text },
+  head: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
+  // The empty state's tile: the icon on Dim Green, as "Looking for someone to play?" and the first-move page hold theirs.
+  tile: { width: 44, height: 44, borderRadius: 12, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
+  headWords: { flex: 1, minWidth: 0, gap: 2, paddingTop: 2 },
+  title: { ...typography.heading, color: colors.text },
   body: { ...typography.small, color: colors.textMuted, lineHeight: 19, maxWidth: 420 },
   actions: { marginTop: spacing.sm, maxWidth: 440 },
-  link: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'center', paddingVertical: spacing.xs },
+  // 44 to the finger.
+  link: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'center', minHeight: 44 },
   linkText: { ...typography.smallStrong, color: colors.textMuted },
   fine: { ...typography.caption, letterSpacing: 0, color: colors.textFaint, textAlign: 'center' },
 });
