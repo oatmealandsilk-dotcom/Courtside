@@ -9,7 +9,7 @@ import { CitylessCard, CourtSheet, CourtsZoomNote, FilterChips, HitSheet, MapCre
 import { CardStage } from '@/components/map/CardStage';
 import { MapCanvas, type CanvasMarker, type MapCanvasHandle, type MapLoadStatus } from '@/components/map/MapCanvas';
 import { MapCardFailed, MapCardLoading, MapLoadPill } from '@/components/map/MapLoadState';
-import { CARD_HEIGHT, CARD_ZOOM, cardView } from '@/components/map/cardFit';
+import { CARD_HEIGHT, CARD_ZOOM, onCard } from '@/components/map/cardFit';
 import { cardLook, lookFor } from '@/components/map/look';
 import { clusterTemplates, courtLift, youLift } from '@/components/map/markers';
 import { mapMarkers } from '@/components/map/pinList';
@@ -114,15 +114,15 @@ export function NearbyMap(props: NearbyMapProps) {
   // Anything else picked (a search result, a pin) takes the place of your own card.
   useEffect(() => { if (model.selected || model.selectedCourt || model.selectedHit) setMeOpen(false); }, [model.selected, model.selectedCourt, model.selectedHit]);
   const { home, start } = model;
-  // The still card: your town (location on) or your profile's city, taking in
-  // everyone its "players around" counts, so the count never sits over an empty map (cardView).
+  // The full map opens where you are; the still card on your town (location on) or your profile's city.
+  const view = expanded ? { center: start.center, zoom: start.zoom ?? CITY_ZOOM } : { center: model.city ?? start.center, zoom: CARD_ZOOM };
+  // The still card's "N players around" counts only the faces on it (onCard), so the number and the map agree.
   const [cardW, setCardW] = useState(0);
-  const cardAt = useMemo(
-    () => (expanded || !model.city ? null : cardView(model.city, model.inCity.map((p) => p.at), cardW || windowW - 2 * spacing.lg)),
-    [expanded, model.city, model.inCity, cardW, windowW],
+  const cardCenter = model.city ?? start.center;
+  const onCardCount = useMemo(
+    () => (expanded ? 0 : model.inCity.filter((p) => onCard(cardCenter, p.at, cardW || windowW - 2 * spacing.lg)).length),
+    [expanded, model.inCity, cardCenter.lat, cardCenter.lng, cardW, windowW], // eslint-disable-line react-hooks/exhaustive-deps
   );
-  // The full map opens where you are.
-  const view = expanded ? { center: start.center, zoom: start.zoom ?? CITY_ZOOM } : cardAt ?? { center: start.center, zoom: CARD_ZOOM };
   // Zoomed out past about a city: the court pins step aside (pinList), and a note says so.
   const [far, setFar] = useState(() => view.zoom < COURTS_MIN_ZOOM);
   const weather = useWeather(home);
@@ -136,10 +136,9 @@ export function NearbyMap(props: NearbyMapProps) {
     // Opened on a tagged court or a hit, or looking at a place searched for, the map stays there; the still card stays on your city.
     if (expanded && model.homeKnown && !focusCourt && !focusHit && !focusSpot && !model.place && !model.selected) canvas.current?.flyTo(home, CITY_ZOOM, 600);
   }, [home]); // eslint-disable-line react-hooks/exhaustive-deps
-  // The still card follows a change of city on the profile, and players coming
-  // in further out than it shows (exact: it may need to go further out, which a fly never does by itself).
-  const cardKey = cardAt ? `${cardAt.center.lat.toFixed(5)},${cardAt.center.lng.toFixed(5)},${cardAt.zoom}` : '';
-  useEffect(() => { if (cardAt) canvas.current?.flyTo(cardAt.center, cardAt.zoom, 0, 0, true); }, [cardKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The still card follows a change of city on the profile.
+  const cityKey = model.city ? `${model.city.lat},${model.city.lng}` : '';
+  useEffect(() => { if (!expanded && model.city) canvas.current?.flyTo(model.city, CARD_ZOOM, 0); }, [cityKey]); // eslint-disable-line react-hooks/exhaustive-deps
   // Picking someone, a court, a hit, or typing a city takes the map there.
   // Keyed on who or what is picked, not the object: it is rebuilt on every data change, which must not pull the map back.
   useEffect(() => { if (model.selected) canvas.current?.flyTo(model.selected.at, CLOSE_ZOOM); }, [model.selected?.user.id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -227,7 +226,7 @@ export function NearbyMap(props: NearbyMapProps) {
         {/* Not yet drawn: covered, not tappable, and not read out (the city and its players come with the map). */}
         <Reanimated.View pointerEvents={cardUp ? 'auto' : 'none'} accessibilityElementsHidden={!cardUp} importantForAccessibility={cardUp ? 'auto' : 'no-hide-descendants'} style={[StyleSheet.absoluteFill, cardGrow]}>
           {mapView}
-          <PreviewOverlay cityName={cityName} count={model.inCity.length} placeCount={model.cardCourts.length} hitCount={hitCount !== undefined && model.cardFromYou ? hitCount : model.cardHits.length} weather={weather} locationOn={locationOn} locating={locating} onToggleLocation={onToggleLocation} lock={lock} inviting={inviting} />
+          <PreviewOverlay cityName={cityName} count={onCardCount} placeCount={model.cardCourts.length} hitCount={hitCount !== undefined && model.cardFromYou ? hitCount : model.cardHits.length} weather={weather} locationOn={locationOn} locating={locating} onToggleLocation={onToggleLocation} lock={lock} inviting={inviting} />
           <MapCredit align="right" style={{ position: 'absolute', right: 10, bottom: 10 }} />
         </Reanimated.View>
         {/* Over the map until it has drawn, then fading off it. */}

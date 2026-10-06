@@ -8,7 +8,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { CitylessCard, CourtSheet, CourtsZoomNote, FilterChips, HitSheet, MapCredit, YouSheet, MapButtons, MapTopBar, NearbyRail, PlaceSheet, PlayerSheet, PreviewOverlay, WhereCard } from '@/components/map/MapChrome';
 import { CardStage } from '@/components/map/CardStage';
-import { CARD_HEIGHT, CARD_ZOOM, cardView } from '@/components/map/cardFit';
+import { CARD_HEIGHT, CARD_ZOOM, onCard } from '@/components/map/cardFit';
 import type { NearbyMapProps } from '@/components/NearbyMap.types';
 import { placeZoom } from '@/features/places/geocode';
 import { milesBetween } from '@/features/players/geo';
@@ -105,15 +105,15 @@ export function NearbyMap(props: NearbyMapProps) {
   useEffect(() => { if (model.selected || model.selectedCourt || model.selectedHit) setMeOpen(false); }, [model.selected, model.selectedCourt, model.selectedHit]);
   const { home, start } = model;
   // The full map opens where you are; the still card on your town (location on) or your profile's city.
-  // The still card: your town (location on) or your profile's city, taking in
-  // everyone its "players around" counts, so the count never sits over an empty map (cardView, as on the phone).
+  const view = expanded ? { center: start.center, zoom: start.zoom ?? START_ZOOM } : { center: model.city ?? start.center, zoom: CARD_ZOOM };
+  // The still card's "N players around" counts only the faces on it (onCard, as on the phone), so the number and the map agree.
   const { width: windowW } = useWindowDimensions();
   const [cardW, setCardW] = useState(0);
-  const cardAt = useMemo(
-    () => (expanded || !model.city ? null : cardView(model.city, model.inCity.map((p) => p.at), cardW || windowW - 2 * spacing.lg)),
-    [expanded, model.city, model.inCity, cardW, windowW],
+  const cardCenter = model.city ?? start.center;
+  const onCardCount = useMemo(
+    () => (expanded ? 0 : model.inCity.filter((p) => onCard(cardCenter, p.at, cardW || windowW - 2 * spacing.lg)).length),
+    [expanded, model.inCity, cardCenter.lat, cardCenter.lng, cardW, windowW], // eslint-disable-line react-hooks/exhaustive-deps
   );
-  const view = expanded ? { center: start.center, zoom: start.zoom ?? START_ZOOM } : cardAt ?? { center: start.center, zoom: CARD_ZOOM };
   // Zoomed out past about a city: the court pins step aside (pinList), and a note says so.
   // Told the moment the zoom crosses it (as on the phone), kept in a ref so a pinch only sets it on the crossing.
   const [far, setFar] = useState(() => view.zoom < COURTS_MIN_ZOOM);
@@ -300,9 +300,9 @@ export function NearbyMap(props: NearbyMapProps) {
     lastHome.current = home;
     if (expanded && model.homeKnown && !focusCourt && !focusHit && !focusSpot && !model.place && !model.selected) map.current?.flyTo({ center: [home.lng, home.lat], zoom: START_ZOOM, duration: 600 });
   }, [home]); // eslint-disable-line react-hooks/exhaustive-deps
-  // The still card follows a change of city on the profile, and players coming in further out than it shows.
-  const cardKey = cardAt ? `${cardAt.center.lat.toFixed(5)},${cardAt.center.lng.toFixed(5)},${cardAt.zoom}` : '';
-  useEffect(() => { if (cardAt) map.current?.jumpTo({ center: [cardAt.center.lng, cardAt.center.lat], zoom: cardAt.zoom }); }, [cardKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The still card follows a change of city on the profile.
+  const cityKey = model.city ? `${model.city.lat},${model.city.lng}` : '';
+  useEffect(() => { if (!expanded && model.city) map.current?.jumpTo({ center: [model.city.lng, model.city.lat], zoom: CARD_ZOOM }); }, [cityKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Pins: the same list the phone's map draws (pinList), handed to the engine, which keeps
   // each pin between changes and gathers, splits and fades them (pinEngine).
@@ -369,7 +369,7 @@ export function NearbyMap(props: NearbyMapProps) {
           {canvas}
           {/* A still card: the tap goes to the full map, not to the tiles. */}
           <Pressable accessibilityRole={onExpand ? 'button' : undefined} accessibilityLabel="Map of players, courts and hits near you" onPress={onExpand} disabled={!onExpand} style={StyleSheet.absoluteFill} />
-          <PreviewOverlay cityName={cityName} count={model.inCity.length} placeCount={model.cardCourts.length} hitCount={hitCount !== undefined && model.cardFromYou ? hitCount : model.cardHits.length} weather={weather} locationOn={locationOn} locating={locating} onToggleLocation={onToggleLocation} lock={lock} inviting={inviting} />
+          <PreviewOverlay cityName={cityName} count={onCardCount} placeCount={model.cardCourts.length} hitCount={hitCount !== undefined && model.cardFromYou ? hitCount : model.cardHits.length} weather={weather} locationOn={locationOn} locating={locating} onToggleLocation={onToggleLocation} lock={lock} inviting={inviting} />
           <MapCredit align="right" style={{ position: 'absolute', right: 10, bottom: 10 }} />
         </View>
       </View>
