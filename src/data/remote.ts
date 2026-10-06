@@ -19,6 +19,7 @@ import { ANDROID_OAUTH_KEY, androidOAuthClient, supabase, throwawayAuthClient } 
 import { shrinkCover, shrinkPhoto, shrinkPhotoSized } from '@/lib/shrinkPhoto';
 import { COVER_MARK, smallName } from '@/lib/smallCover';
 import { canShrinkVideo, shrinkVideo } from '@/lib/shrinkVideo';
+import { tooBigReason } from '@/lib/uploads';
 import { blankVideoLocation } from '@/lib/videoLocation';
 import { noteStep } from '@/lib/crashReporting';
 import * as AppleAuthentication from 'expo-apple-authentication';
@@ -4568,7 +4569,7 @@ export async function uploadMedia(me: ID, original: string, kind: 'photo' | 'vid
     const size = await sizeOf(sent);
     if (size > MAX_UPLOAD_BYTES) {
       const mb = Math.round(size / 1024 / 1024);
-      throw new Error(`This ${kind} is ${mb} MB; the limit is ${Math.round(MAX_UPLOAD_BYTES / 1024 / 1024)} MB. Pick a shorter one — about a minute or less.`);
+      throw new Error(tooBigReason(kind, Math.round(MAX_UPLOAD_BYTES / 1024 / 1024), mb));
     }
     const contentType = Platform.OS === 'web'
       ? ((await fetch(sent, { method: 'HEAD' }).catch(() => null))?.headers.get('content-type') || guessType(sent, kind)).split(';')[0].trim()
@@ -4613,7 +4614,7 @@ export async function uploadMedia(me: ID, original: string, kind: 'photo' | 'vid
   } catch (error) {
     fail('media upload')(error);
     const message = error instanceof Error ? error.message : String(error);
-    throw new Error(/exceeded the maximum allowed size/i.test(message) ? `This ${kind} is over the ${Math.round(MAX_UPLOAD_BYTES / 1024 / 1024)} MB limit. Pick a shorter one — about a minute or less.` : message);
+    throw new Error(/exceeded the maximum allowed size/i.test(message) ? tooBigReason(kind, Math.round(MAX_UPLOAD_BYTES / 1024 / 1024)) : message);
   }
 }
 

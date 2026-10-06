@@ -4,12 +4,13 @@ import { Animated, Image, Pressable, StyleSheet, Text, View } from 'react-native
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Reanimated, { Easing as REasing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useBelowBanner } from '@/features/messages/bannerSpace';
 import { revealPost } from '@/features/navigation/scrollToTop';
 import { goHome } from '@/lib/goBack';
-import { useUploads, type UploadJob } from '@/lib/uploads';
+import { cancelUpload, offersTrim, useUploads, type UploadJob } from '@/lib/uploads';
 import { colors, radius, spacing, typography } from '@/theme';
 
 /**
@@ -96,6 +97,9 @@ export function UploadBar() {
   if (!shown || (job && awayKey === away)) return null;
   const pct = Math.round(displayed * 100);
   const title = shown.state === 'done' ? 'Posted' : shown.state === 'failed' ? 'Could not post' : `Posting… ${pct}%`;
+  // A clip too big to send, on an iPhone: not a dead end. Apple's trimmer cuts it to under a minute, then it posts.
+  const trimOffer = shown.state === 'failed' && offersTrim(shown.reason);
+  const trim = () => { cancelUpload(shown.id); router.push('/compose?trim=1'); };
   return (
     <GestureDetector gesture={swipe}>
     <Reanimated.View pointerEvents="box-none" style={[styles.wrap, { top: insets.top + spacing.xs }, slideStyle]}>
@@ -114,6 +118,12 @@ export function UploadBar() {
           <Reanimated.View style={[styles.fill, shown.state === 'failed' && { backgroundColor: colors.danger }, fillStyle]} />
         </View>
       </Pressable>
+      {trimOffer ? (
+        <Pressable accessibilityRole="button" accessibilityLabel="Trim to under a minute" onPress={trim} hitSlop={6} style={({ pressed }) => [styles.trim, pressed && { opacity: 0.7 }]}>
+          <Ionicons name="cut-outline" size={16} color={colors.brandInk} />
+          <Text style={styles.trimLabel}>Trim to under a minute</Text>
+        </Pressable>
+      ) : null}
     </Reanimated.View>
     </GestureDetector>
   );
@@ -130,4 +140,6 @@ const styleDefinitions = StyleSheet.create({
   pct: { ...typography.smallStrong, color: colors.brand, fontVariant: ['tabular-nums'] },
   track: { height: 3, backgroundColor: colors.surfaceAlt },
   fill: { height: 3, backgroundColor: colors.brand },
+  trim: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginTop: spacing.xs, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.pill, backgroundColor: colors.brand, shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 4 },
+  trimLabel: { ...typography.smallStrong, color: colors.brandInk },
 });

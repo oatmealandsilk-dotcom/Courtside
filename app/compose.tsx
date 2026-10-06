@@ -115,7 +115,7 @@ export default function Compose() {
   const { actions, posts, stories, currentUserId, currentUser, detectedCoords, lastSeen, locationEnabled, detectedActivities, sessions, sessionTags, users, hitRequests, blockedIds, feedGroups, feedGroupsOn } = useApp();
 
   // The story rail opens this straight at the library with ?mode=story.
-  const params = useLocalSearchParams<{ mode?: string; shot?: string; challenge?: string; courtId?: string; courtName?: string; lat?: string; lng?: string; activity?: string; session?: string; hit?: string; group?: string }>();
+  const params = useLocalSearchParams<{ mode?: string; shot?: string; challenge?: string; courtId?: string; courtName?: string; lat?: string; lng?: string; activity?: string; session?: string; hit?: string; group?: string; trim?: string }>();
   // A tracker's session (?activity=, from "Log it"): found among yours, or
   // waited for when the app was opened cold from an alert (useTrackerSession).
   const tracker = useTrackerSession(params.activity);
@@ -207,6 +207,8 @@ export default function Compose() {
   // the phone's videos open straight away, and a photo is never taken.
   const challenge = useMemo(() => challengeFor(), []);
   const entering = params.challenge === challenge.tag;
+  // From "Trim to under a minute" on the posting strip (a clip too big to send): straight into Apple's trimmer.
+  const trimming = params.trim === '1' && Platform.OS === 'ios';
   useEffect(() => { if (params.mode === 'story') router.replace('/hit'); }, [params.mode]);
   // A hit arrives here with its photo already taken: straight to the form.
   // The camera's photo travels in memory; the address only says one is waiting.
@@ -275,7 +277,7 @@ export default function Compose() {
   // asks "Discard post?". Without it Back threw the whole post away at once.
   const stageBack = useRef<() => boolean>(() => false);
   useAndroidBack(() => stageBack.current());
-  const [mode, setMode] = useState<Mode>(isHit ? 'hit' : params.mode === 'story' ? 'story' : entering ? 'clip' : 'post');
+  const [mode, setMode] = useState<Mode>(isHit ? 'hit' : params.mode === 'story' ? 'story' : entering || trimming ? 'clip' : 'post');
   const [media, setMedia] = useState<PickedMedia | null>(isHit ? { uri: shotUri as string, label: 'Instant', kind: 'photo', thumbnailUrl: shotUri as string, orientation: 'portrait' } : null);
   // A session's post goes where its picture goes (owner, Oct 2): with a video
   // it is a Clip (under Clips, in the reel), otherwise a Post.
@@ -885,14 +887,14 @@ export default function Compose() {
     if (entering && !chosen && !failed) closeMenu();
   };
 
-  // Entering the challenge on a phone: no menu, straight into your videos,
-  // once the box has finished arriving (the phone will not open its library
+  // Entering the challenge on a phone (or trimming a clip that was too big):
+  // no menu, straight into your videos, once the box has finished arriving (the phone will not open its library
   // over a page still on its way in). A browser opens its file box only from
   // a tap, so there the one clip button waits for that tap.
   useEffect(() => {
-    if (!entering || isHit || Platform.OS === 'web') return undefined;
+    if ((!entering && !trimming) || isHit || Platform.OS === 'web') return undefined;
     let opened = false;
-    const open = () => { if (opened) return; opened = true; void fetchMedia('video'); };
+    const open = () => { if (opened) return; opened = true; void fetchMedia('video', trimming ? 'trim' : 'library'); };
     const events = navigation as unknown as { addListener: (name: string, fn: (e?: { data?: { closing?: boolean } }) => void) => () => void };
     const stop = events.addListener('transitionEnd', (e) => { if (!e?.data?.closing) open(); });
     // In case the page never says it has arrived.

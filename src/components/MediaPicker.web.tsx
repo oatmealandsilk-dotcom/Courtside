@@ -179,9 +179,10 @@ export async function takePhoto(): Promise<PickedPhoto | null | 'denied'> {
 
 /**
  * Opens the browser's file dialog straight away. Must be called from a click,
- * which is why the + menu calls it directly rather than after a hop.
+ * which is why the + menu calls it directly rather than after a hop. A
+ * browser has no trimmer of its own, so `trimTo` (the phone app's) is not used.
  */
-export function pickFromDevice(selection: 'video' | 'photo' | 'all'): Promise<PickedMedia | null> {
+export function pickFromDevice(selection: 'video' | 'photo' | 'all', _options?: { trimTo?: number }): Promise<PickedMedia | null> {
   return chooseFile(selection === 'video' ? 'video/*' : selection === 'photo' ? 'image/*' : 'image/*,video/*', false);
 }
 

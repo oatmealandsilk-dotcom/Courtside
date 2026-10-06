@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react';
+import { Platform } from 'react-native';
 
 /**
  * What is on its way up right now, for the strip across the top of the
@@ -22,6 +23,22 @@ export interface UploadJob {
   /** The post's hashtags, so the weekly challenge can say "your entry is posting" before it lands. */
   tags?: string[];
 }
+
+/** The words every "too big to send" reason carries, so the strip knows to offer the trim. */
+const TOO_BIG = 'too big to send';
+
+/**
+ * Why a file was refused for its size, in plain words. On an iPhone a video
+ * says no more: the strip offers "Trim to under a minute" under it (Apple's
+ * trimmer cuts the file). Elsewhere it says what to do.
+ */
+export function tooBigReason(kind: 'photo' | 'video' | 'audio', limitMb: number, mb?: number): string {
+  const offered = kind === 'video' && Platform.OS === 'ios';
+  return `This ${kind} is ${mb ? `${mb} MB, ` : ''}${TOO_BIG} (the limit is ${limitMb} MB).${offered ? '' : ' Pick a shorter one — about a minute or less.'}`;
+}
+
+/** True for a video refused for its size on an iPhone, which the strip offers to trim. */
+export const offersTrim = (reason?: string) => Platform.OS === 'ios' && !!reason && reason.startsWith('This video') && reason.includes(TOO_BIG);
 
 let jobs: UploadJob[] = [];
 /** When a post from this phone last started or finished going up this session (0 = never). */
@@ -67,7 +84,8 @@ export function finishUpload(id: string, ok = true, reason?: string) {
   emit();
   const old = timers.get(id);
   if (old) clearTimeout(old);
-  timers.set(id, setTimeout(() => { jobs = jobs.filter((j) => j.id !== id); timers.delete(id); emit(); }, ok ? 4500 : 6000));
+  // One offering the trim stays long enough to read it and tap.
+  timers.set(id, setTimeout(() => { jobs = jobs.filter((j) => j.id !== id); timers.delete(id); emit(); }, ok ? 4500 : offersTrim(reason) ? 12000 : 6000));
 }
 
 /**

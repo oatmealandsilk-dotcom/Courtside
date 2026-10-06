@@ -4,8 +4,15 @@ import { captureFromCamera, pickFromDevice, type PickedMedia } from '@/component
 import { isDesktopBrowser } from '@/lib/browserDevice';
 import { confirm } from '@/lib/confirm';
 
-/** Where a post's photo or clip comes from: the camera now, or the library. */
-export type MediaSource = 'photo' | 'video' | 'library';
+/**
+ * Where a post's photo or clip comes from: the camera now, or the library.
+ * 'trim' is the library with Apple's trimmer, for a clip that was too big
+ * to send ("Trim to under a minute" on the posting strip).
+ */
+export type MediaSource = 'photo' | 'video' | 'library' | 'trim';
+
+/** How long "Trim to under a minute" lets a clip be. */
+const TRIM_SECONDS = 59;
 
 /**
  * Adding a photo or clip to a post asks where from first, the way Instagram
@@ -43,6 +50,7 @@ export async function fromSource(source: MediaSource, selection: 'video' | 'all'
   // waits for it to go. A browser must open its box inside the tap, so no wait.
   if (Platform.OS !== 'web') await new Promise((done) => setTimeout(done, 180));
   if (source === 'library') return pickFromDevice(selection);
+  if (source === 'trim') return pickFromDevice('video', { trimTo: TRIM_SECONDS });
   const got = await captureFromCamera(source);
   if (got === 'denied') { cameraOff(); return null; }
   return got;

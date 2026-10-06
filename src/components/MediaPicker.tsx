@@ -68,9 +68,16 @@ function describe(media: PickedMedia): string {
  */
 const ANDROID_PICKER = Platform.OS === 'android';
 
-/** Opens the phone's library straight away and resolves with the choice, or null if cancelled. */
-export async function pickFromDevice(selection: 'video' | 'photo' | 'all'): Promise<PickedMedia | null> {
+/**
+ * Opens the phone's library straight away and resolves with the choice, or
+ * null if cancelled. With `trimTo` (iPhone), a video opens in Apple's own
+ * trimmer, which will not let it be longer than that many seconds and cuts
+ * the file itself: what comes back is only the part kept, so it is small
+ * enough to send. CourtSide's own trim only marks the part to play.
+ */
+export async function pickFromDevice(selection: 'video' | 'photo' | 'all', options?: { trimTo?: number }): Promise<PickedMedia | null> {
   const kinds: ImagePicker.MediaType[] = selection === 'video' ? ['videos'] : selection === 'photo' ? ['images'] : ['images', 'videos'];
+  const trimTo = Platform.OS === 'ios' && selection === 'video' ? options?.trimTo : undefined;
   const perm = ANDROID_PICKER ? null : await ImagePicker.requestMediaLibraryPermissionsAsync().catch(() => null);
   // Photo access refused ("Don't Allow") or limited: Apple's current picker needs none and
   // hands over only what was chosen, so it opens instead of refusing (App Review 2.1 and
@@ -79,7 +86,10 @@ export async function pickFromDevice(selection: 'video' | 'photo' | 'all'): Prom
   // One picker, once. A failed pick used to open the library a second time
   // with the other picker, which read as the app losing your choice.
   try {
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: kinds, quality: 0.85, legacy: Platform.OS === 'ios' && selection !== 'photo' && full, ...AS_IS });
+    const result = await ImagePicker.launchImageLibraryAsync(trimTo
+      // Apple's trimmer belongs to the older picker, which converts with the same 1080p H.264 setting.
+      ? { mediaTypes: kinds, quality: 0.85, allowsEditing: true, videoMaxDuration: trimTo, videoQuality: ImagePicker.UIImagePickerControllerQualityType.High, ...AS_IS }
+      : { mediaTypes: kinds, quality: 0.85, legacy: Platform.OS === 'ios' && selection !== 'photo' && full, ...AS_IS });
     if (result.canceled) return null;
     const asset = result.assets[0];
     const isVideo = asset.type === 'video';
