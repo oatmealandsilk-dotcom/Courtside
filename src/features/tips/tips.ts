@@ -22,8 +22,11 @@ export const TIP_WORDS: Record<TipKey, string> = {
   'hold-to-edit': 'Hold to edit your time and distance.',
   // Were tips 5 and 6 of the first-run tutorial; now each shows the first time
   // a new player opens that place (Oct 5, owner: "Do all"). See forNewPlayer.
-  'ask-coach': 'Ask a coach anything here. It’s free.',
-  messages: 'Your chats live here. The bell shows your alerts.',
+  // Never "free": the heading beside the box already says it. Public, because
+  // asking is (the note under the box says so too).
+  'ask-coach': 'Ask a coach anything. Questions here are public.',
+  // The paper plane is on every tab's header, so not "live here".
+  messages: 'Tap the paper plane for your chats. The bell shows your alerts.',
 };
 
 /** How long an account counts as new for the tips that took over from the tutorial. */

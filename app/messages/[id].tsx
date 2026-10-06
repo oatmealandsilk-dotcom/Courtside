@@ -1296,7 +1296,7 @@ const Composer = memo(function Composer({ ref, styles, pickedCount, editingBody,
             </>
           )}
           {/* Tip (features/tips): the mic records only while held. */}
-          <TipBubble tip="hold-to-record" shown={micTip.shown} onClose={micTip.close} pointer="down" style={{ bottom: '100%', right: 0, marginBottom: 8, alignItems: 'flex-end' }} />
+          <TipBubble tip="hold-to-record" shown={micTip.shown} onClose={micTip.close} pointer="down" on="page" style={{ bottom: '100%', right: 0, marginBottom: 8, alignItems: 'flex-end' }} />
           <SendOrMic
             showSend={showSend || (voice.recording && recMode === 'locked')}
             ready={voice.recording ? true : sendReady}

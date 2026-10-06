@@ -58,6 +58,12 @@ export interface TourStep {
    * players already are, "I'm free". The same in both layouts.
    */
   byLead?: Partial<Record<MapLead, Words>>;
+  /**
+   * The bar's window only stands in for the page's (the map tip): lit when the
+   * thing on the page can't be found, never beside it, so two lights never
+   * compete on a page the player is already on.
+   */
+  barOnlyIfNotOnPage?: boolean;
   /** The page under the tip as it comes up; the tutorial slides the pages there. Left out, they stay where the last tip left them. */
   page?: PageStop;
   /** Where the pages slide on their own while the tip is up, the way a swipe would. */
@@ -70,20 +76,22 @@ const FEED: PageStop = { pathname: '/', section: '' };
 
 export const TOUR_STEPS: TourStep[] = [
   {
-    // The page the app opens on. The bar's Community button is lit (you are
-    // here), and on the page the one thing to do: the invite card in a city
-    // where nobody shares a spot yet, the friends card for a teen, "I'm
-    // free" where players already are. Not found (a search open, a small
-    // screen), the tip still shows, on the bar's button.
+    // The page the app opens on, with the one thing to do there lit: the
+    // invite card in a city where nobody shares a spot yet, the friends card
+    // for a teen, "I'm free" where players already are. The words point at
+    // it rather than repeat it. Not found (a search open, a small screen),
+    // the tip still shows, on the bar's Community button instead.
     key: 'map',
     target: { phone: { id: 'tab-discuss', shape: 'pill' }, wide: { id: 'tab-discuss', shape: 'row' } },
     onPage: { phone: { id: 'map-lead', shape: 'box' }, wide: { id: 'map-lead', shape: 'box' } },
+    barOnlyIfNotOnPage: true,
     page: MAP,
     phone: { title: 'Your map', body: 'Courts near you, and the players who shared their spot.' },
     wide: { title: 'Your map', body: 'Courts near you, and the players who shared their spot.' },
     byLead: {
-      invite: { title: 'Bring your players', body: 'You’re early here. Send your link, and the map fills up with the people you play with.' },
-      friends: { title: 'Bring your friends', body: 'Send your link. Friends who join can follow you, and you can follow them back.' },
+      // One line: the lit card says "Send them your link", and a shorter tip keeps clear of the map's own lines above it.
+      invite: { title: 'Start here', body: 'Anyone who joins follows you.' },
+      friends: { title: 'Start here', body: 'Share your link, or find a friend by @handle.' },
       free: { title: 'Up for a hit?', body: 'Tap I’m free, and players nearby see your green ring on the map.' },
       'free-friends': { title: 'Up for a hit?', body: 'Tap I’m free, and friends who follow you back see your green ring.' },
     },
@@ -95,7 +103,8 @@ export const TOUR_STEPS: TourStep[] = [
     target: { phone: null, wide: null },
     page: MAP,
     slidesTo: THREADS,
-    phone: { title: 'Swipe for more', body: 'Swipe left for Discussions, then your Feed of clips.' },
+    // True before the pages slide and after: they move while the tip is up.
+    phone: { title: 'Swipe for more', body: 'Swipe sideways between the map, Discussions and your Feed.' },
     // A computer has no swipe: its sidebar already names every page.
     wide: null,
     screenReader: { title: 'Pages side by side', body: 'The map, Discussions and your Feed sit side by side. The bar at the bottom moves between them.' },

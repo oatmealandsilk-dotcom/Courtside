@@ -249,10 +249,12 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   // a typed place from another city waits under "Further away". Measured from you, so a player away
   // from home with Location on sees the local players' hits near, not their home town's.
   const { openHits, furtherHits } = useMemo(() => {
-    // Nowhere to measure from (no city, no spot): only your own hits and those
-    // of people you follow, never a list from every city with no distances.
-    // The "Where do you play?" card above is the way to the rest.
-    if (!youAt) return { openHits: seenHits.filter((hit) => hit.authorId === currentUserId || followingIds.includes(hit.authorId)).map((hit) => ({ hit, miles: undefined as number | undefined })), furtherHits: [] };
+    // Yours, one you joined, or one by someone you follow: kept wherever it is.
+    const keep = (hit: (typeof seenHits)[number]) => hit.authorId === currentUserId || hit.joinedIds.includes(currentUserId ?? '') || followingIds.includes(hit.authorId);
+    // Nowhere to measure from (no city, no spot): only those, never a list
+    // from every city with no distances. The "Where do you play?" card above
+    // is the way to the rest.
+    if (!youAt) return { openHits: seenHits.filter(keep).map((hit) => ({ hit, miles: undefined as number | undefined })), furtherHits: [] };
     const near: { hit: (typeof seenHits)[number]; miles: number | undefined }[] = [];
     const typed: typeof near = [];
     const far: typeof near = [];
@@ -271,15 +273,15 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
           || (seen ? milesBetween(youAt, seen) <= NEAR_HIT_MILES
             : town ? milesBetween(youAt, town) <= IN_TOWN_MILES
               : !author || !myCity || !author.location?.trim() || sameCity(author));
-        // Known to be in another part of the country: not "further away", just elsewhere.
+        // Known to be in another part of the country: not "further away", just elsewhere (unless it is one to keep).
         const away = seen ? milesBetween(youAt, seen) : town ? milesBetween(youAt, town) : undefined;
-        if (!local && away !== undefined && away > FURTHER_MILES) continue;
+        if (!local && away !== undefined && away > FURTHER_MILES && !keep(hit)) continue;
         (local ? typed : farTyped).push({ hit, miles: undefined });
         continue;
       }
       const miles = milesBetween(youAt, spot);
-      // Your own stays, wherever you posted it.
-      if (miles > FURTHER_MILES && hit.authorId !== currentUserId) continue;
+      // Yours, one you joined, or a friend's stays, wherever it is.
+      if (miles > FURTHER_MILES && !keep(hit)) continue;
       (miles <= NEAR_HIT_MILES ? near : far).push({ hit, miles });
     }
     return { openHits: [...near, ...typed], furtherHits: [...far, ...farTyped] };
@@ -331,6 +333,11 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   }, [users, currentUser, currentUserId, blockedIds, followingIds, nearPlayers, newOnCourtside, ageSaysAdult, myCity]); // eslint-disable-line react-hooks/exhaustive-deps
   // Nobody new in your own town: the list says these are from other cities, rather than looking like your neighbours.
   const newElsewhere = !!myCity && newPlayers.length > 0 && !newPlayers.some(sameCity);
+  // And with players near you already listed above, those from other cities wait behind one quiet link
+  // (a second column of Follow buttons for strangers far away helps nobody). In an empty town they are
+  // the only people there are, so they show in full.
+  const [elsewhereOpen, setElsewhereOpen] = useState(false);
+  const newTucked = newElsewhere && nearPlayers.length > 0 && !elsewhereOpen;
   // "Open to hit" (was "Who's up today"): from the map's own pins only, measured from where you
   // are (the phone's fix, or your own last spot), never from a profile's city.
   const ownSpot = detectedCoords ?? ownLastSpot;
@@ -351,7 +358,10 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   // that their friends are not here yet. "Bring your friends" takes the
   // invite card's place: their link, carrying no court, and a friend found
   // by @handle. No city needed, and no rule about who sees whom changes.
-  const friendsEarly = !!currentUser && notKnownAdult(currentUser) && (lastSeenLoaded || !isSupabaseConfigured) && nearPlayers.length === 0;
+  // A friend on the map is one anywhere (map_players sends friends who follow each other from
+  // anywhere in the world, migration 98), not just within 30 miles, and needs no city of your own.
+  const friendOnMap = Object.entries(lastSeen).some(([id, seen]) => id !== currentUserId && !!seen.mutual && !blockedIds.includes(id));
+  const friendsEarly = !!currentUser && notKnownAdult(currentUser) && (lastSeenLoaded || !isSupabaseConfigured) && nearPlayers.length === 0 && !friendOnMap;
   // The one thing this page leads with, for the tutorial's first tip to light (mapLead.ts).
   const lead: MapLead | null = early ? 'invite' : friendsEarly ? 'friends' : showUpToday ? (teen ? 'free-friends' : 'free') : null;
   useEffect(() => { if (!previewSection) setMapLead(lead); }, [lead, previewSection]);
@@ -404,11 +414,13 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
     return false;
   }, !previewSection);
   const [shownCount, setShownCount] = useState(25);
-  const visible = useMemo(() => {
+  const { visible, anyInTopic } = useMemo(() => {
     // Nobody you have blocked or muted shows up here, the same as in the feed.
     // Nor does a thread an admin took down (migration 108): its author finds it from their notification.
     let list = questions.filter((q) => !q.removed && !blockedIds.includes(q.authorId) && !mutedIds.includes(q.authorId));
     if (topic !== 'all') list = list.filter((q) => q.topic === topic);
+    // Whether the topic has any thread at all, before Unanswered narrows it.
+    const any = list.length > 0;
 
     const newest = (a: typeof list[number], b: typeof list[number]) => Date.parse(b.createdAt) - Date.parse(a.createdAt);
     if (sort === 'unanswered') list = list.filter((q) => q.answerIds.length === 0);
@@ -418,7 +430,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
       const heat = (q: typeof list[number]) => (q.votes + 2 * q.answerIds.length + 1) / Math.pow((Date.now() - Date.parse(q.createdAt)) / 3_600_000 + 2, 1.5);
       list.sort((a, b) => heat(b) - heat(a));
     } else list.sort(newest);
-    return list;
+    return { visible: list, anyInTopic: any };
   }, [questions, topic, blockedIds, mutedIds, sort]);
   // A long list is drawn in slices: the first screenfuls at once, the rest on request.
   const slice = visible.slice(0, shownCount);
@@ -591,7 +603,12 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
           </View>
         ) : null}
         {/* New on CourtSide: who joined in the last two weeks (adults, and people you already follow), with Follow in one tap. */}
-        {!search && newPlayers.length ? (
+        {!search && newPlayers.length && newTucked ? (
+          <Pressable accessibilityRole="button" accessibilityState={{ expanded: false }} onPress={() => setElsewhereOpen(true)} hitSlop={6} style={({ pressed }) => [styles.further, pressed && { opacity: 0.6 }]}>
+            <Text style={styles.furtherText}>New players in other cities</Text>
+            <Ionicons name="chevron-down" size={14} color={colors.textMuted} />
+          </Pressable>
+        ) : !search && newPlayers.length ? (
           <View>
             <View style={styles.playersHead}>
               <Text style={styles.playersTitle}>New on CourtSide</Text>
@@ -660,7 +677,15 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
         </View>
       </View>
 
-      {visible.length === 0 ? (
+      {visible.length === 0 && sort === 'unanswered' && anyInTopic ? (
+        // Sorted to Unanswered and every question here has a reply: the topic is not empty, so never "be the first".
+        <EmptyState
+          icon="checkmark-circle-outline"
+          title="All caught up"
+          body="Every question here has a reply."
+          action={{ label: 'Show all', onPress: () => setSort('new') }}
+        />
+      ) : visible.length === 0 ? (
         <EmptyState
           icon="help-circle-outline"
           title="No questions here"

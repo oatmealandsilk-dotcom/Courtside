@@ -337,6 +337,10 @@ export default function Onboarding() {
 
   const last = position === order.length - 1;
   const canContinue = step === 0 ? (ratingOnly ? ratingValid : name.trim().length > 0 && ratingValid && !claiming) : true;
+  // Everything else is in and only the rating is still empty: Continue stays greyed, but a tap
+  // on it opens "Not sure?" (the levels in plain words) rather than doing nothing.
+  const ratingMissing = step === 0 && !canContinue && !ratingText.trim() && (ratingOnly || (name.trim().length > 0 && !claiming));
+  const askLevel = () => { haptics.tap(); setLevelsOpen(true); };
 
   return (
     <KeyboardScrollContext.Provider value={Platform.OS === 'android' ? keyboard.reveal : null}>
@@ -405,7 +409,7 @@ export default function Onboarding() {
                 </View>
               </View>
               <View style={styles.noteRow}>
-                <Text style={[styles.note, { flex: 1 }]}>{ratingValid ? band.label : ratingText.trim() ? `Enter ${scale.min.toFixed(1)}–${scale.max.toFixed(1)}` : 'So you’re matched at your level.'}</Text>
+                <Text style={[styles.note, { flex: 1 }]}>{ratingValid ? band.label : ratingText.trim() ? `Enter ${scale.min.toFixed(1)}–${scale.max.toFixed(1)}` : 'Add your rating to continue.'}</Text>
                 <Pressable accessibilityRole="button" accessibilityState={{ expanded: levelsOpen }} accessibilityLabel="Not sure of your rating? Pick your level" hitSlop={8} onPress={() => { haptics.tap(); setLevelsOpen((o) => !o); }}>
                   <Text style={styles.notSure}>{levelsOpen ? 'Close' : 'Not sure?'}</Text>
                 </Pressable>
@@ -583,14 +587,14 @@ export default function Onboarding() {
                   <Text style={styles.skipText}>Next</Text>
                 </Pressable>
               ) : null}
-              <Button label="Save" disabled={!canContinue} onPress={finish} />
+              <Button label="Save" disabled={!canContinue && !ratingMissing} dim={ratingMissing} onPress={ratingMissing ? askLevel : finish} />
             </>
           ) : STEPS[step].skip ? (
             <Pressable accessibilityRole="button" accessibilityLabel="Skip this step" onPress={skipStep} style={styles.skip}>
               <Text style={styles.skipText}>Skip</Text>
             </Pressable>
           ) : null}
-          {editing ? null : <Button label={last ? 'Finish' : 'Continue'} disabled={!canContinue} onPress={() => (last ? finish() : void next())} />}
+          {editing ? null : <Button label={last ? 'Finish' : 'Continue'} disabled={!canContinue && !ratingMissing} dim={ratingMissing} onPress={() => (ratingMissing ? askLevel() : last ? finish() : void next())} />}
         </View>
       </View>
     </View>

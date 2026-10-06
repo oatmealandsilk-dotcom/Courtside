@@ -30,13 +30,15 @@ import { useTourOpen } from '@/features/tour/tourStore';
 import { TipBubble } from '@/components/TipBubble';
 import { forNewPlayer, useTip } from '@/features/tips/tips';
 import { useWelcomeNote } from '@/features/welcome/welcomeNote';
+import { useFirstMoveDone } from '@/features/onboarding/firstMoveDone';
+import { notKnownAdult } from '@/features/players/age';
 import { useIsFocused } from '@/lib/useIsFocused';
 import { useResponsive } from '@/lib/useResponsive';
 import { isTaggedIn } from '@/features/activity/sessionTags';
 import { studioLine } from '@/features/coaching/studioSummary';
 
-/** The messages tip's pointer from the page's right edge: the menu button (38), the gap (14), then half the paper plane (35), less half the pointer. */
-const INBOX_POINTER = 38 + 14 + 17 - 8;
+/** The messages tip's pointer from the right edge of the page's content (the header's own right edge): the menu button (38), the gap (14), then half the paper plane (35), less half the pointer (12). */
+const INBOX_POINTER = 38 + 14 + 17 - 6;
 
 function Profile({ previewSection }: { previewSection?: string } = {}) {
  // December to mid-January: the year's recap sits at the top of your links.
@@ -46,8 +48,10 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
  // A coach's studio, first of your links: what is waiting there, or how far setup has got.
  const myCoach = coaches.find((c) => c.userId === currentUserId);
  const studio = myCoach ? studioLine(myCoach, coachingRequests, coachQuestions, currentUserId) : null;
- // Nothing posted, asked or answered yet: the profile offers the first move.
- const hasMoved = !currentUserId || posts.some((p) => p.authorId === currentUserId) || questions.some((q) => q.authorId === currentUserId) || answers.some((a) => a.authorId === currentUserId);
+ // Nothing posted, asked or answered yet, and no move made on the page after setup (a link shared,
+ // players followed: firstMoveDone): the profile offers the first move.
+ const movedAfterSetup = useFirstMoveDone(currentUserId);
+ const hasMoved = !currentUserId || movedAfterSetup || posts.some((p) => p.authorId === currentUserId) || questions.some((q) => q.authorId === currentUserId) || answers.some((a) => a.authorId === currentUserId);
  // Your own posts, however far back they go: the grid and the counts are
  // yours entirely, not just whichever of them the feed happens to hold.
  useEffect(() => { if (user?.id) void actions.loadPostsOf(user.id); }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -131,14 +135,15 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
        {/* Taken down by an admin (migration 108): still yours to see, dimmed and marked; nobody else sees it. */}
        {p.removed ? <TileRemoved /> : null}
      </Pressable>)}</View>
-     {/* Never a dead end (Oct 5): your own grid, empty, offers the first clip. */}
-     {!items.length && <EmptyState title={selected==='Tagged'?'No tagged posts yet':`No ${selected.toLowerCase()} yet`} body={selected==='Tagged' ? 'Posts you’re tagged in will appear here.' : 'Your shared moments will appear here.'} action={selected==='Tagged' ? undefined : { label: 'Share your first clip', onPress: () => router.push('/compose') }}/>}
+     {/* Never a dead end (Oct 5): your own grid, empty, offers the first clip, unless the
+         "Make your first move" card at the top of the page is already asking for it. */}
+     {!items.length && <EmptyState title={selected==='Tagged'?'No tagged posts yet':`No ${selected.toLowerCase()} yet`} body={selected==='Tagged' ? 'Posts you’re tagged in will appear here.' : 'Your shared moments will appear here.'} action={selected==='Tagged' || !hasMoved ? undefined : { label: 'Post your first clip', onPress: () => router.push('/compose') }}/>}
    </View>;
  };
  // The three grids are rebuilt only when the posts change, so switching
  // section (which re-renders this page) does not rebuild every tile.
  // eslint-disable-next-line react-hooks/exhaustive-deps
- const grids = useMemo(() => TABS.map((t) => content(t)), [posts, user?.id, styles, tileW]);
+ const grids = useMemo(() => TABS.map((t) => content(t)), [posts, user?.id, styles, tileW, hasMoved]);
  if (!user) {
    const remembered = savedAccounts.find((a) => a.id === currentUserId);
    return <Screen memoryKey="profile" title="Profile" wash subtitle={remembered?.handle ? `@${remembered.handle}` : ' '}><ProfileSkeleton name={remembered?.name} avatarUrl={remembered?.avatarUrl} seed={currentUserId ?? 'you'}/></Screen>;
@@ -148,11 +153,12 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
  const page = (selected: string, live: boolean) => {
   const index = TABS.indexOf(selected as typeof TABS[number]);
   const body = <>
-   {/* Hangs from the top of the page, its pointer under the paper plane in the header (the menu, a gap, then half the plane). */}
-   {live ? <TipBubble tip="messages" shown={inboxTip.shown} onClose={inboxTip.close} pointer="up" pointerRight={INBOX_POINTER} style={styles.inboxTip} /> : null}
+   {/* At the top of the page, in its flow, its pointer under the paper plane in the header: it lines up with the cards
+       and covers nothing (the first-move card included), and the page eases back up once it is closed. */}
+   {live ? <TipBubble tip="messages" shown={inboxTip.shown} onClose={inboxTip.close} pointer="up" pointerRight={INBOX_POINTER} inline on="page" style={styles.inboxTip} /> : null}
    {!hasMoved && <Pressable accessibilityRole="link" accessibilityLabel="Make your first move" onPress={() => router.push('/first-move')} style={styles.setup}>
      <Ionicons name="videocam-outline" size={20} color={colors.brand}/>
-     <View style={{ flex: 1 }}><Text style={styles.setupTitle}>Make your first move</Text><Text style={styles.meta}>Bring your hitting partners, or post your first clip.</Text></View>
+     <View style={{ flex: 1 }}><Text style={styles.setupTitle}>Make your first move</Text><Text style={styles.meta}>{user && notKnownAdult(user) ? 'Add your friends, or post your first clip.' : 'Bring your hitting partners, or post your first clip.'}</Text></View>
      <Ionicons name="chevron-forward" size={16} color={colors.textMuted}/>
    </Pressable>}
    {skipped.length > 0 && <Pressable accessibilityRole="link" accessibilityLabel="Finish setting up your profile" onPress={() => router.push({ pathname: '/onboarding', params: { step: String(SETUP_STEP_INDEX[skipped[0]]), from: 'profile' } })} style={styles.setup}>
@@ -267,8 +273,8 @@ function ProfileSkeleton({ name, avatarUrl, seed }: { name?: string; avatarUrl?:
 }
 
 const styleDefinitions = StyleSheet.create({
- // The messages tip, from the top of the page up to the paper plane in the header.
- inboxTip:{top:-2,left:0,right:0,alignItems:'flex-end'},
+ // The messages tip, at the top of the page, lined up on the right with the cards under it.
+ inboxTip:{alignItems:'flex-end',paddingTop:2},
  setup:{marginTop:16,marginHorizontal:0,padding:14,borderRadius:16,backgroundColor:colors.brandDim,flexDirection:'row',alignItems:'center',gap:12},setupTitle:{...typography.smallStrong,fontSize:14,color:colors.text},identity:{gap:12,paddingTop:16,paddingBottom:20,alignItems:'stretch'},identityRow:{flexDirection:'row',alignItems:'center',gap:16},identityWords:{flex:1,gap:6,minWidth:0},meta:{fontSize:12,color:colors.textMuted,lineHeight:19},nameRow:{flexDirection:'row',gap:10,alignItems:'center',flexWrap:'wrap'},name:{...typography.title,fontSize:22,color:colors.text},bio:{...typography.body,lineHeight:22,color:colors.text},followRow:{flexDirection:'row',alignItems:'center',gap:10},follow:{flexDirection:'row',alignItems:'baseline'},followCount:{...typography.bodyStrong,color:colors.text},followDot:{color:colors.textFaint,fontSize:14},tabCount:{...typography.smallStrong,fontSize:12,color:colors.textFaint},injury:{...typography.small,color:colors.danger},buttons:{flexDirection:'row',gap:8,alignSelf:'stretch',marginTop:6},settings:{borderWidth:1,borderColor:colors.border,borderRadius:10,padding:10,justifyContent:'center'},streak:{flexDirection:'row',alignItems:'center',gap:3,paddingHorizontal:8,paddingVertical:2,borderRadius:999,backgroundColor:colors.bgElevated},streakText:{...typography.caption,letterSpacing:0,fontWeight:'600',color:colors.clay},
  // "Log" beside the streak: the streak pill's size, in plain ink, so the streak stays the louder of the two.
  logPill:{flexDirection:'row',alignItems:'center',gap:2,paddingLeft:6,paddingRight:9,paddingVertical:2,borderRadius:999,borderWidth:StyleSheet.hairlineWidth,borderColor:colors.borderStrong},logPillText:{...typography.caption,letterSpacing:0,fontWeight:'600',color:colors.textMuted},pillPressed:{opacity:0.6},

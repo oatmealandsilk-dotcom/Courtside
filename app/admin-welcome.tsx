@@ -8,7 +8,7 @@ import { TileCover } from '@/components/TileCover';
 import { EmptyState, Avatar, Screen } from '@/components/ui';
 import { CourtSpinner } from '@/components/CourtSpinner';
 import type { Post } from '@/data/types';
-import type { FirstDayStats } from '@/data/remote';
+import type { FirstDayStats, FirstMove } from '@/data/remote';
 import { goBack } from '@/lib/goBack';
 import { relativeTime } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
@@ -78,6 +78,9 @@ export default function AdminWelcome() {
 
 const pct = (part: number, whole: number) => (whole ? `${Math.round((part / whole) * 100)}%` : '—');
 
+/** Each first move, as the Picked line names it. */
+const PICK_LABEL: Record<FirstMove, string> = { invite: 'Shared link', follow: 'Followed', find: 'Find a friend', post: 'Post', instant: 'Instant', answer: 'Answer', ask: 'Ask', later: 'Later' };
+
 /**
  * Whether the first-move step works. Day one: what share of new players
  * post, answer or ask within a day of joining. Week two: of players old
@@ -88,14 +91,15 @@ const pct = (part: number, whole: number) => (whole ? `${Math.round((part / whol
 function Numbers({ stats }: { stats: FirstDayStats }) {
   const styles = useThemedStyles(styleDefinitions);
   const others = stats.cohort - stats.movers;
-  const picks = (['post', 'instant', 'answer', 'ask', 'later'] as const).filter((k) => stats.picked[k] > 0);
+  // The first-move page's new moves (invite, follow, find) come with migration 124; before it they are not in the numbers at all.
+  const picks = (['invite', 'follow', 'find', 'post', 'instant', 'answer', 'ask', 'later'] as const).filter((k) => (stats.picked[k] ?? 0) > 0);
   return (
     <View style={styles.numbers}>
       <View style={styles.numRow}>
         <View style={styles.num}><Text style={styles.numValue}>{pct(stats.moved30, stats.new30)}</Text><Text style={styles.numLabel}>of new players moved on day one</Text><Text style={styles.numFoot}>{stats.moved30} of {stats.new30}, last 30 days</Text></View>
         <View style={styles.num}><Text style={styles.numValue}>{pct(stats.moversBack, stats.movers)} <Text style={styles.numVs}>vs {pct(stats.othersBack, others)}</Text></Text><Text style={styles.numLabel}>back in week two: movers vs the rest</Text><Text style={styles.numFoot}>{stats.cohort ? `${stats.cohort} players old enough to tell` : 'Needs players 2 weeks old'}</Text></View>
       </View>
-      {picks.length ? <Text style={styles.picks}>Picked: {picks.map((k) => `${k === 'later' ? 'Later' : k[0].toUpperCase() + k.slice(1)} ${stats.picked[k]}`).join(' · ')}</Text> : null}
+      {picks.length ? <Text style={styles.picks}>Picked: {picks.map((k) => `${PICK_LABEL[k]} ${stats.picked[k] ?? 0}`).join(' · ')}</Text> : null}
     </View>
   );
 }

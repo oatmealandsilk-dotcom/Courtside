@@ -42,9 +42,10 @@ import { colors, pageIsDark, radius, typography } from '@/theme';
  * sliding there under the dim from whichever tab the player was on, and the
  * pages move along under its tips the way a swipe moves them (see each tip's
  * page in steps.ts): on to Discussions while it shows the swipe, then on to
- * the Feed and its +. On the first tip a second window lights the one thing
- * to do on the map page (the invite card, the friends card or "I'm free":
- * mapLead.ts), while the bar's Community button stays lit too. The card
+ * the Feed and its +. On the first tip a window on the page lights the one
+ * thing to do on the map (the invite card, the friends card or "I'm free":
+ * mapLead.ts); only if it can't be found does the bar's Community button
+ * light instead (barOnlyIfNotOnPage). The card
  * steps aside while the pages turn and comes back once the page has landed,
  * pointing at it. The Feed's clips hold still under the dim while it is up
  * (app/(tabs)/index.tsx).
@@ -123,6 +124,8 @@ const BAR_AIR = 18;
 const PAGE_LOOK_MS = 300;
 const PAGE_POLL_MS = 60;
 const PAGE_WAIT_MAX = 800;
+/** How long the page's glide up from under the bar takes to land, before it is read again. */
+const NUDGE_MS = 380;
 /** At the end, the tutorial fades first and the pages glide back once it has mostly gone, so the glide is seen. */
 const LEAVE_MS = 200;
 /** The card stepping aside while the pages turn under it, and coming back once the page has landed. */
@@ -377,6 +380,16 @@ function useScreenReader(): boolean {
   return on;
 }
 
+/** A window cut off at `limit` (the top of the bar's part of the screen), keeping at least a sliver. */
+function aboveBar(h: Hole, limit: number): Hole {
+  if (h.y + h.h <= limit) return h;
+  const height = Math.max(24, limit - h.y);
+  return { ...h, h: height, r: Math.min(h.r, height / 2) };
+}
+
+/** The margin round a box on a page (holeFor's 'box'). */
+const HOLE_PAD = 8;
+
 /** The lit window around a target: round-ended around a tab, a circle around the +, a soft box around a sidebar row, round-ended with air around something on a page. */
 function holeFor(r: TourRect, shape: HoleShape, W: number): Hole {
   if (shape === 'round') {
@@ -385,7 +398,7 @@ function holeFor(r: TourRect, shape: HoleShape, W: number): Hole {
     return { x: r.x - pad, y: r.y - pad, w: r.width + pad * 2, h, r: h / 2 };
   }
   if (shape === 'box') {
-    const pad = 8;
+    const pad = HOLE_PAD;
     return { x: r.x - pad, y: r.y - pad, w: r.width + pad * 2, h: r.height + pad * 2, r: radius.lg + pad };
   }
   if (shape === 'circle') {
@@ -484,14 +497,23 @@ function TourLayer({ run, open, onGone }: { run: TourRun; open: boolean; onGone:
   here.current = pathname;
 
   const steps = useMemo(() => run.keys.map((k) => TOUR_STEPS.find((s) => s.key === k)).filter((s): s is TourStep => !!s), [run.keys]);
-  // A tip left out of this layout never reaches here; the phone's words stand in for the types' sake.
-  const wordsFor = (s: TourStep) => (reader && s.screenReader) || (lead ? s.byLead?.[lead] : undefined) || s[layout] || s.phone;
   const step = steps[run.step] ?? steps[0];
   const last = run.step >= run.total - 1;
-  // The bar's window (a sidebar row on a computer), and the second window on the page itself.
-  const spot = step.target[layout];
+  // The second window, on the page itself, and where it was found (below).
   const pageSpot: TourSpot | null = step.onPage?.[layout] ?? null;
+  const [pageRect, setPageRect] = useState<{ step: number; rect: TourRect | null } | null>(null);
+  const pageMeasured = !pageSpot || pageRect?.step === run.step;
+  const pageFound = pageSpot && pageRect?.step === run.step ? pageRect.rect : null;
+  // The bar's window (a sidebar row on a computer). One that only stands in
+  // for the page's (barOnlyIfNotOnPage) stays dark while the page is looked
+  // at and once the thing there is found: lit only when it isn't.
+  const standIn = !!(step.barOnlyIfNotOnPage && pageSpot);
+  const spot = standIn && (!pageMeasured || pageFound) ? null : step.target[layout];
   const parkId = spot ? null : parkingFor(steps, run.step, layout);
+  // A tip left out of this layout never reaches here; the phone's words stand in for the types' sake.
+  // The words for what the map leads with are about the thing lit on the page, so only while it is.
+  const leadWords = (s: TourStep) => (lead && !(s === step && standIn && pageMeasured && !pageFound) ? s.byLead?.[lead] : undefined);
+  const wordsFor = (s: TourStep) => (reader && s.screenReader) || leadWords(s) || s[layout] || s.phone;
 
   /* ---- Where the bar's targets are ---- */
   // Seeded with the measurements taken just before the tour opened, so the first tip can draw at once.
@@ -569,7 +591,10 @@ function TourLayer({ run, open, onGone }: { run: TourRun; open: boolean; onGone:
   // readings alike, all of it on screen (a page mid-slide is neither). Never
   // taken from an earlier visit, which may have been scrolled. Not found in
   // time, the tip shows on the bar's window alone.
-  const [pageRect, setPageRect] = useState<{ step: number; rect: TourRect | null } | null>(null);
+  //
+  // On a phone, a thing that runs down behind the bar (the invite card under
+  // the map, on a phone with a home bar) is brought up above it first: the
+  // page glides up just that far, once, and is read again where it lands.
   useEffect(() => {
     if (!pageSpot) return undefined;
     let alive = true;
@@ -577,12 +602,28 @@ function TourLayer({ run, open, onGone }: { run: TourRun; open: boolean; onGone:
     const at = run.step;
     let since = 0;
     let prev: TourRect | null = null;
+    let nudged = false;
+    const page = tourPageAt(steps, at);
+    // Where the page's part of the screen ends (the split, below), less the window's own margin and a little air.
+    const floor = origin.y + Math.round(H - Math.max(insets.bottom, 12) - TAB_BAR_H - BAR_AIR) - HOLE_PAD - 6;
     const poll = () => {
       if (!since) since = Date.now();
       void measureTourTarget(pageSpot.id).then((r) => {
         if (!alive) return;
         const whole = r && r.x >= -1 && r.y >= -1 && r.x + r.width <= W + 1 && r.y + r.height <= H + 1 ? r : null;
-        if (whole && prev && sameRect(whole, prev)) { setPageRect({ step: at, rect: whole }); return; }
+        if (whole && prev && sameRect(whole, prev)) {
+          const under = whole.y + whole.height - floor;
+          if (layout === 'phone' && page && under > 0 && !nudged) {
+            nudged = true;
+            prev = null;
+            since = Date.now();
+            requestScrollToTop(page.pathname, false, under);
+            timer = setTimeout(poll, NUDGE_MS);
+            return;
+          }
+          setPageRect({ step: at, rect: whole });
+          return;
+        }
         prev = whole;
         if (Date.now() - since > PAGE_WAIT_MAX) { setPageRect({ step: at, rect: null }); return; }
         timer = setTimeout(poll, PAGE_POLL_MS);
@@ -605,9 +646,9 @@ function TourLayer({ run, open, onGone }: { run: TourRun; open: boolean; onGone:
     barHole = pinhole(at.x + at.width / 2, at.y + at.height / 2);
   }
   const barMeasured = !spot || spotRect !== undefined;
-  const pageMeasured = !pageSpot || pageRect?.step === run.step;
-  const pageFound = pageSpot && pageRect?.step === run.step ? pageRect.rect : null;
-  const pageHole = pageSpot && pageFound ? holeFor(local(pageFound), pageSpot.shape, W) : null;
+  // Never down into the bar's part of the screen: a window that would run on under the bar
+  // (one too tall to be brought above it) ends just above the split instead.
+  const pageHole = pageSpot && pageFound ? aboveBar(holeFor(local(pageFound), pageSpot.shape, W), layout === 'phone' ? Math.round(H - Math.max(insets.bottom, 12) - TAB_BAR_H - BAR_AIR) - 6 : Infinity) : null;
   // The card points at the page's window when there is one, else at the bar's.
   const mainHole = pageHole ?? (barLit ? barHole : null);
   const mainShape = pageHole ? pageSpot?.shape : spot?.shape;

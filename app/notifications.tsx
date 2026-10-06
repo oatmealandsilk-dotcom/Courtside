@@ -26,6 +26,8 @@ import { showCourtOnMap } from '@/features/players/courtLink';
 import { isDesktopBrowser } from '@/lib/browserDevice';
 import { notKnownAdult } from '@/features/players/age';
 import { useWelcomeNote } from '@/features/welcome/welcomeNote';
+import { useMapLead } from '@/features/tour/mapLead';
+import { FRIENDS_LINE } from '@/features/invite/friendsWords';
 
 /**
  * One row per thing that happened to you, the way Instagram does it.
@@ -213,6 +215,16 @@ export default function Notifications() {
   const [welcomeTint] = useState(welcome.unread);
   const { markSeen: markWelcomeSeen } = welcome;
   useEffect(() => { if (welcome.shown) markWelcomeSeen(); }, [welcome.shown]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The welcome's one next step: what the map page leads with right now (mapLead.ts).
+  const mapLead = useMapLead();
+  const findPlayers = () => { requestSection('/discuss', 'players'); goToTab('/discuss'); };
+  // A teen's line is the same sentence as their friends card (friendsWords); the button is the
+  // short verb, so that sentence fits on two lines beside it.
+  const welcomeStep = currentUser && notKnownAdult(currentUser)
+    ? { line: FRIENDS_LINE, label: 'Add friends', go: findPlayers }
+    : mapLead === 'invite'
+      ? { line: 'Bring the people you play with.', label: 'Invite', go: () => router.push('/invite') }
+      : { line: 'See who plays near you.', label: 'Find players', go: findPlayers };
   // "New hit at Alder Park" opens the map on that court: where it is comes from the courts you follow.
   const courtRows = notifications.some((n) => n.kind === 'court-activity');
   useEffect(() => { if (courtRows && followedCourts === null) void actions.loadFollowedCourts(); }, [courtRows, followedCourts, actions]);
@@ -376,24 +388,18 @@ export default function Notifications() {
   return (
     <Screen title="Notifications" compactTitle onBack={() => goBack()} onRefresh={isDesktopBrowser() ? undefined : actions.refresh}>
       {welcome.shown && currentUser ? (
-        // From CourtSide itself, with one next step: the invite sheet for a
-        // teen (their friends), Find Players for everyone else.
+        // From CourtSide itself: who it is to, and one next step, the same one
+        // the map leads with. A teen's friends (on Find Players, where their
+        // friends card is; never the invite sheet's poster), the invite sheet
+        // where nobody near an adult is on the map yet, else Find Players.
         <View style={[styles.row, welcomeTint && styles.rowUnread, groups.length ? styles.welcomeGap : null]}>
-          <View>
-            <View style={styles.brandFace}><BrandMark size={24} /></View>
-            <View style={[styles.badge, { backgroundColor: colors.court }]}><Ionicons name="hand-right" size={11} color={colors.brandInk} /></View>
-          </View>
+          <View style={styles.brandFace}><BrandMark size={24} /></View>
           <View style={styles.body}>
-            <Text style={styles.text}><Text style={styles.who}>CourtSide</Text><Text> Welcome, {currentUser.name.split(' ')[0]}. Glad you’re here.</Text></Text>
-            <Text style={styles.preview} numberOfLines={2}>{notKnownAdult(currentUser) ? 'Add your friends to see who’s up for a hit.' : 'Find players near you, or invite your own.'}</Text>
-            <Text style={styles.time}>{relativeTime(currentUser.joinedAt)}</Text>
+            <Text style={styles.who}>Welcome, {currentUser.name.split(' ')[0]}.</Text>
+            <Text style={styles.preview} numberOfLines={2}>{welcomeStep.line}</Text>
           </View>
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => { if (notKnownAdult(currentUser)) router.push('/invite'); else { requestSection('/discuss', 'players'); goToTab('/discuss'); } }}
-            style={styles.accept}
-          >
-            <Text style={styles.acceptText}>{notKnownAdult(currentUser) ? 'Add friends' : 'Find players'}</Text>
+          <Pressable accessibilityRole="button" accessibilityLabel={welcomeStep.label} onPress={welcomeStep.go} style={styles.accept}>
+            <Text style={styles.acceptText}>{welcomeStep.label}</Text>
           </Pressable>
         </View>
       ) : null}

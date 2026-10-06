@@ -53,6 +53,7 @@ import { blockDevice, groupFor, rememberAnswered, yearsOld, type AgeGroup } from
 import { knownOpen, notKnownAdult, type AgeSource, type Openness, type OpennessMap } from '@/features/players/age';
 import type { TeenMap } from '@/features/players/mapPrivacy';
 import { placeFor } from '@/features/players/positions';
+import { markFirstMoveDone } from '@/features/onboarding/firstMoveDone';
 import { show as showToast } from '@/lib/toast';
 import { opensAtFor } from '@/features/hits/audience';
 import { forgetPushToken, registerForPush } from '@/features/push/push';
@@ -4654,6 +4655,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const loadFirstDayStats = useCallback(async () => (live(stateRef.current.currentUserId) ? remote.fetchFirstDayStats() : null), []);
   const noteFirstMove = useCallback((move: FirstMove) => {
     const me = stateRef.current.currentUserId;
+    // Kept on the phone too, so Profile stops asking for a first move once one is made (firstMoveDone).
+    if (me && move !== 'later') markFirstMoveDone(me);
     if (live(me)) void remote.updateProfile(me!, { firstMove: move }).catch(() => undefined);
   }, []);
   const loadFirstPosts = useCallback(async () => {

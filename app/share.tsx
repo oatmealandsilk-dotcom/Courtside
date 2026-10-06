@@ -246,7 +246,7 @@ export default function ShareSheet() {
   const outside = sending?.outside;
   const shareOut = async () => {
     if (!outside) return;
-    try { setFallbackNote(await shareOutside(outside.title, outside.url)); }
+    try { setFallbackNote((await shareOutside(outside.title, outside.url)) ?? ''); }
     catch { setFallbackNote(`Share this link: ${outside.url}`); }
   };
 

@@ -29,7 +29,8 @@ export default function Ask() {
   const [body, setBody] = useState('');
   // Opened from an empty topic in Discussions ("Ask a question"): that topic, picked.
   const asked = useLocalSearchParams<{ topic?: string }>().topic;
-  const [topic, setTopic] = useState<QuestionTopic>(asked && asked in TOPIC_META ? (asked as QuestionTopic) : 'gear');
+  // Only a real topic: `in` would also take a name every object has (?topic=constructor).
+  const [topic, setTopic] = useState<QuestionTopic>(asked && (TOPICS as string[]).includes(asked) ? (asked as QuestionTopic) : 'gear');
   const [closeSignal, setCloseSignal] = useState(0);
   const [posted, setPosted] = useState<string | null>(null);
   // A poll: off until asked for, then two options to start, up to four.

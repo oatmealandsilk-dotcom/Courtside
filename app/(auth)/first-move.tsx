@@ -14,6 +14,7 @@ import { Wash } from '@/components/Wash';
 import type { FirstMove } from '@/data/remote';
 import type { User } from '@/data/types';
 import { inviteLink } from '@/features/invite/referral';
+import { FRIENDS_LINE, FRIENDS_TITLE } from '@/features/invite/friendsWords';
 import { useInviteCourt } from '@/features/invite/useInviteCourt';
 import { useFindable } from '@/features/people/findable';
 import { notKnownAdult } from '@/features/players/age';
@@ -64,7 +65,7 @@ export default function FirstMove() {
   const styles = useThemedStyles(styleDefinitions);
   // Clear of the status bar and the home bar, the same as every page before the app.
   const space = useGateSpace();
-  const { currentUser, currentUserId, users, lastSeen, followingIds, blockedIds, actions } = useApp();
+  const { currentUser, currentUserId, users, lastSeen, followingIds, followRequests, blockedIds, actions } = useApp();
   const { findable } = useFindable();
   const { leave, curtain } = useLeave();
   const adult = !!currentUser && !notKnownAdult(currentUser);
@@ -124,25 +125,32 @@ export default function FirstMove() {
     actions.noteFirstMove(move);
     leave(() => { replaceWithStart(); if (then) setTimeout(then, 380); });
   };
+  // Shared the link: the page stays (a share sheet closed without sending looks the same as
+  // one that sent on Android, which never says), and "Later" becomes "Continue".
+  const [shared, setShared] = useState(false);
   const share = async () => {
     if (!currentUser) return;
     const carried = lead === 'invite' ? court : null;
     try {
       const said = await shareOutside(carried ? `Hit with me at ${carried.name} on CourtSide` : lead === 'friends' ? 'Join me on CourtSide' : 'Hit with me on CourtSide', inviteLink(currentUser.handle, carried));
+      // Closed without sending (an iPhone or a browser can tell): nothing happened.
+      if (said === null) return;
       haptics.commit();
       if (said) showToast({ title: said, icon: 'link-outline' });
-      done('invite');
-    } catch { /* the share sheet was closed: stay */ }
+      setShared(true);
+    } catch { /* the share sheet failed: stay */ }
   };
-  const followed = picks.filter((p) => followingIds.includes(p.user.id)).length;
+  // Followed (or, for a private account, asked to follow) one of the players offered.
+  const followed = picks.filter((p) => followingIds.includes(p.user.id) || followRequests.some((r) => r.fromId === currentUserId && r.toId === p.user.id)).length;
   const follow = (who: User) => {
     if (followingIds.includes(who.id)) confirmUnfollow(who, () => actions.toggleFollow(who.id));
     else actions.toggleFollow(who.id);
   };
 
-  const line = lead === 'invite' ? (cityName ? `CourtSide is new in ${cityName}. Start by bringing the people you play with.` : 'Start by bringing the people you play with.')
+  // Context only: the card under it says what to do.
+  const line = lead === 'invite' ? (cityName ? `CourtSide is new in ${cityName}.` : null)
     : lead === 'follow' ? `${near.length === 1 ? '1 player' : `${near.length} players`} near ${cityName ?? 'you'} ${near.length === 1 ? 'is' : 'are'} already here.`
-      : lead === 'friends' ? 'Add your friends, and see when they’re up for a hit.'
+      : lead === 'friends' ? 'Your map shows only your friends.'
         : ' ';
 
   return (
@@ -150,8 +158,8 @@ export default function FirstMove() {
       <Wash height={420} />
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={[styles.scroll, { paddingTop: space.top, paddingBottom: space.bottom }]}>
         <Animated.View entering={enter(0)} style={styles.head}>
-          <Text style={styles.title}>You're in{firstName ? `, ${firstName}` : ''}.</Text>
-          <Text style={styles.lead}>{line}</Text>
+          <Text style={styles.title}>You’re in{firstName ? `, ${firstName}` : ''}.</Text>
+          {line ? <Text style={styles.lead}>{line}</Text> : null}
         </Animated.View>
 
         {/* The one move for where you are. */}
@@ -165,11 +173,11 @@ export default function FirstMove() {
                   <Ionicons name={lead === 'follow' ? 'person-add' : lead === 'friends' ? 'people' : 'paper-plane'} size={20} color={colors.brandInk} />
                 </View>
                 <View style={{ flex: 1, gap: 2 }}>
-                  <Text style={styles.mainTitle}>{lead === 'follow' ? 'Follow players near you' : lead === 'friends' ? 'Add your friends' : 'Bring your hitting partners'}</Text>
+                  <Text style={styles.mainTitle}>{lead === 'follow' ? 'Follow players near you' : lead === 'friends' ? FRIENDS_TITLE : 'Bring your hitting partners'}</Text>
                   <Text style={styles.mainBody}>
                     {lead === 'follow' ? 'See their clips, and when they’re up for a hit.'
-                      : lead === 'friends' ? 'Send your link. When they join, follow each other.'
-                        : court ? `Send your link. Whoever joins lands on ${court.name}.` : 'Send your link. Whoever joins follows you.'}
+                      : lead === 'friends' ? FRIENDS_LINE
+                        : court ? `Send your link. It opens on ${court.name}.` : 'Send your link. Whoever joins follows you.'}
                   </Text>
                 </View>
               </View>
@@ -205,7 +213,7 @@ export default function FirstMove() {
 
         {/* The second option: a clip, with the Instant inside it for anyone without one. */}
         <Animated.View entering={enter(2)} style={styles.second}>
-          <Text style={styles.label}>Or share some tennis</Text>
+          <Text style={styles.label}>Or post something</Text>
           <View style={styles.card}>
             <Pressable accessibilityRole="button" accessibilityLabel="Post a clip or photo" onPress={() => done('post', () => router.push('/compose'))} style={({ pressed }) => [styles.post, pressed && styles.pressed]}>
               <View style={styles.postIcon}><Ionicons name="videocam" size={18} color={colors.brand} /></View>
@@ -223,9 +231,9 @@ export default function FirstMove() {
         </Animated.View>
 
         <Animated.View entering={enter(3)}>
-          {followed ? (
-            // Followed someone: that was the move, and the way on says so.
-            <Button label="Continue" onPress={() => done('follow')} full />
+          {followed || shared ? (
+            // Followed someone, or shared the link: that was the move, and the way on says so.
+            <Button label="Continue" onPress={() => done(followed ? 'follow' : 'invite')} full />
           ) : (
             <Pressable accessibilityRole="button" accessibilityLabel="Later" onPress={() => done('later')} hitSlop={8} style={styles.later}>
               <Text style={styles.laterText}>Later</Text>

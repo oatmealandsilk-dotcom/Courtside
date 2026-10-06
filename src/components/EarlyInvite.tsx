@@ -6,6 +6,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Button } from '@/components/ui';
 import { Wash } from '@/components/Wash';
 import { inviteLink, type InviteCourt } from '@/features/invite/referral';
+import { FRIENDS_LINE, FRIENDS_TITLE } from '@/features/invite/friendsWords';
 import * as haptics from '@/lib/haptics';
 import { shareOutside } from '@/lib/shareOutside';
 import { show as showToast } from '@/lib/toast';
@@ -28,9 +29,9 @@ import { colors, spacing, typography } from '@/theme';
  * their @handle. Nothing about who sees whom changes.
  *
  * It sits right under the map, so its button shows without scrolling, and
- * the tutorial's first tip lights its top half (`leadRef`).
+ * the tutorial's first tip lights the whole card (`leadRef`).
  */
-export function EarlyInvite({ city, court, friends = false, leadRef }: { city: string | null; court: InviteCourt | null; friends?: boolean; /** The tutorial's target: the title, the words and the button. */ leadRef?: (node: View | null) => void }) {
+export function EarlyInvite({ city, court, friends = false, leadRef }: { city: string | null; court: InviteCourt | null; friends?: boolean; /** The tutorial's target: the whole card. */ leadRef?: (node: View | null) => void }) {
   const styles = useThemedStyles(styleDefinitions);
   const { currentUser } = useApp();
   if (!currentUser) return null;
@@ -39,24 +40,22 @@ export function EarlyInvite({ city, court, friends = false, leadRef }: { city: s
   const share = async () => {
     try {
       const said = await shareOutside(carried ? `Hit with me at ${carried.name} on CourtSide` : friends ? 'Join me on CourtSide' : 'Hit with me on CourtSide', link);
+      // Closed without sending (an iPhone or a browser can tell): no buzz for nothing.
+      if (said === null) return;
       haptics.commit();
       if (said) showToast({ title: said, icon: 'link-outline' });
     } catch { /* the share sheet was closed */ }
   };
   const poster = () => router.push(court ? { pathname: '/club-poster', params: { court: court.id, name: court.name, lat: court.lat.toFixed(5), lng: court.lng.toFixed(5) } } : '/club-poster');
   return (
-    <View style={styles.card}>
+    // Never folded away by the phone's renderer, or the tutorial could not measure it.
+    <View ref={leadRef} collapsable={false} style={styles.card}>
       <Wash height={220} strength={0.6} fade={colors.surface} style={styles.wash} />
-      {/* Never folded away by the phone's renderer, or the tutorial could not measure it. */}
-      <View ref={leadRef} collapsable={false} style={styles.lead}>
-        <Text style={styles.title}>{friends ? 'Bring your friends' : city ? `You’re early in ${city}` : 'You’re early here'}</Text>
-        <Text style={styles.body}>{friends
-          ? 'Send your friends your link. When they join, follow each other to see who’s up for a hit.'
-          : 'The map fills up with the people you already play with. Send them your link.'}</Text>
-        {/* The feature card's shape: one primary pill, one quiet link under it. */}
-        <View style={styles.actions}>
-          <Button label="Share my link" onPress={() => { void share(); }} full />
-        </View>
+      <Text style={styles.title}>{friends ? FRIENDS_TITLE : city ? `You’re early in ${city}` : 'You’re early here'}</Text>
+      <Text style={styles.body}>{friends ? FRIENDS_LINE : 'The map fills up with the people you already play with. Send them your link.'}</Text>
+      {/* The feature card's shape: one primary pill, one quiet link under it. */}
+      <View style={styles.actions}>
+        <Button label="Share my link" onPress={() => { void share(); }} full />
       </View>
       {friends ? (
         // Teen search (migration 118): by name or @handle, never by town.
@@ -81,7 +80,6 @@ const styleDefinitions = StyleSheet.create({
   // The feature card: surface, 20px corners, a hairline, the wash inside it.
   card: { borderRadius: 20, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, padding: spacing.xl, gap: spacing.sm, overflow: 'hidden' },
   wash: { position: 'absolute', left: 0, right: 0, top: 0 },
-  lead: { gap: spacing.sm },
   title: { ...typography.title, color: colors.text },
   body: { ...typography.small, color: colors.textMuted, lineHeight: 19, maxWidth: 420 },
   actions: { marginTop: spacing.sm, maxWidth: 440 },

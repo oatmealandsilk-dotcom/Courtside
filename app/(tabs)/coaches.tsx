@@ -99,8 +99,10 @@ function Coaching() {
           <Text style={styles.sectionCount}>free</Text>
         </View>
       </View>
-      {/* The box, with the first-visit tip hanging under it: drawn above what follows, so the tip is never under the next row. */}
-      <View style={styles.askWrap}>
+      {/* The first-visit tip, in the page's flow just above the box and pointing down at it:
+          it covers nothing (not the note under the box, the one place the tab says asking is
+          public), and the box eases back up once it is closed. */}
+      <TipBubble tip="ask-coach" shown={askTip.shown} onClose={askTip.close} pointer="down" inline on="page" style={styles.askTip} />
       {/* Tapped, this box grows and lifts into the full question page (see ask-coach), where you type from the start. */}
       <Pressable
         ref={askPill}
@@ -112,8 +114,6 @@ function Coaching() {
         <Text style={styles.askPlaceholder}>Your question</Text>
         <View style={styles.askGo}><Ionicons name="arrow-forward" size={16} color={colors.brandInk} /></View>
       </Pressable>
-      <TipBubble tip="ask-coach" shown={askTip.shown} onClose={askTip.close} pointer="up" style={styles.askTip} />
-      </View>
       {/* No promise nobody can keep: until coaches are on, the note says what really happens.
           This is the one place the tab says asking is public (and, once coaches are on, that
           they are verified), so the header and the Coaches section don't repeat it. */}
@@ -274,9 +274,8 @@ function Coaching() {
 const styleDefinitions = StyleSheet.create({
   pressed: { opacity: 0.72 },
   askNote: { ...typography.small, color: colors.textMuted, lineHeight: 18, paddingTop: spacing.sm, paddingLeft: 2 },
-  // The tip under the box, its pointer at the box's bottom edge, over the line and the row below.
-  askWrap: { zIndex: 5 },
-  askTip: { top: '100%', left: 0, right: 0, marginTop: 4 },
+  // The tip above the box, a little air between its pointer and the box's top edge.
+  askTip: { paddingBottom: spacing.sm },
   // The way in is a question you could start typing, not a card about asking.
   askField: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.md,

@@ -3,12 +3,15 @@
  * scroller belongs to that tab glides back to the top. Keyed by the tab's
  * address so only that tab's page moves.
  */
-type Listener = (pathname: string, instant?: boolean) => void;
+type Listener = (pathname: string, instant?: boolean, below?: number) => void;
 const listeners = new Set<Listener>();
 
-/** `instant`: jump rather than glide (the page is arriving from another tab and not yet in view). */
-export function requestScrollToTop(pathname: string, instant = false) {
-  listeners.forEach((fn) => fn(pathname, instant));
+/**
+ * `instant`: jump rather than glide (the page is arriving from another tab and not yet in view).
+ * `below`: stop that far under the top instead (the tutorial, bringing a card up from behind the bar).
+ */
+export function requestScrollToTop(pathname: string, instant = false, below = 0) {
+  listeners.forEach((fn) => fn(pathname, instant, below));
 }
 
 export function subscribeScrollToTop(fn: Listener) {

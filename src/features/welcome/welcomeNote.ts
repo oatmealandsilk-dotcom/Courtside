@@ -30,8 +30,10 @@ function read(userId: string) {
   if (seen.has(userId) || reading.has(userId)) return;
   reading.add(userId);
   void AsyncStorage.getItem(key(userId))
-    // Storage that will not answer counts as seen, so the badge never sticks.
-    .then((raw) => { seen.set(userId, raw !== null); }, () => { seen.set(userId, true); })
+    // Storage that will not answer counts as seen, so the badge never sticks. Never
+    // turned back to unseen: Notifications may have marked it seen while this read was
+    // on its way (opened straight from a push or a link, before the read came back).
+    .then((raw) => { seen.set(userId, seen.get(userId) === true || raw !== null); }, () => { seen.set(userId, true); })
     .finally(() => { reading.delete(userId); emit(); });
 }
 

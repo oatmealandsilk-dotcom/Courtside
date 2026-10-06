@@ -290,15 +290,17 @@ export default function SignIn() {
       setError(/confirm/i.test(message) ? 'Not confirmed yet. Tap the link in the email first, then come back here.' : message || 'Could not sign in.');
     } finally { setBusy(false); }
   };
+  // Its own flag, so "Resend email" and Continue never both read as busy at once.
+  const [resending, setResending] = useState(false);
   const resendConfirm = async () => {
-    if (busy || !sent) return;
-    setBusy(true); setError(null); setNotice(null);
+    if (resending || !sent) return;
+    setResending(true); setError(null); setNotice(null);
     try {
       await remoteAuth.resendConfirmation(sent.to);
       setNotice('Sent again.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not send the email again.');
-    } finally { setBusy(false); }
+    } finally { setResending(false); }
   };
   const chooser = remembered.length > 0 && !sent;
   const welcome = !add && !started && !sent && !chooser && !useAnother;
@@ -360,9 +362,22 @@ export default function SignIn() {
                     <Text style={styles.secondaryText}>Back to sign in</Text>
                   </Pressable>
                 )}
-                <Pressable accessibilityRole="button" disabled={busy} onPress={() => { void (sent.kind === 'reset' ? forgot() : resendConfirm()); }} hitSlop={8} style={styles.linkButton}>
-                  <Text style={styles.link}>{busy ? 'Sending…' : 'Resend email'}</Text>
-                </Pressable>
+                {sent.kind === 'reset' ? (
+                  <Pressable accessibilityRole="button" disabled={busy} onPress={() => { void forgot(); }} hitSlop={8} style={styles.linkButton}>
+                    <Text style={styles.link}>{busy ? 'Sending…' : 'Resend email'}</Text>
+                  </Pressable>
+                ) : (
+                  <Pressable accessibilityRole="button" disabled={resending} onPress={() => { void resendConfirm(); }} hitSlop={8} style={styles.linkButton}>
+                    <Text style={styles.link}>{resending ? 'Sending…' : 'Resend email'}</Text>
+                  </Pressable>
+                )}
+                {/* With Continue in its place, still a way back to the form (a mistyped email, another
+                    account): an iPhone and a browser have no other back on this page. */}
+                {canContinue ? (
+                  <Pressable accessibilityRole="button" accessibilityLabel="Wrong email? Go back" disabled={busy} onPress={backToForm} hitSlop={8} style={styles.linkButton}>
+                    <Text style={styles.quietLink}>Wrong email? Go back</Text>
+                  </Pressable>
+                ) : null}
               </View>
             </View>
           ) : welcome ? (
@@ -601,6 +616,7 @@ const styleDefinitions = StyleSheet.create({
   form: { gap: spacing.md },
   forgot: { alignSelf: 'flex-end', paddingVertical: 2 },
   link: { ...typography.smallStrong, fontSize: 14, color: colors.brand },
+  quietLink: { ...typography.small, fontSize: 14, color: colors.textMuted },
   linkButton: { alignSelf: 'center', paddingVertical: spacing.sm },
   error: { ...typography.small, color: colors.danger },
   notice: { ...typography.small, color: colors.success },
