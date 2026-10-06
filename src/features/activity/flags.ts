@@ -32,11 +32,17 @@ const RECHECK_MS = 5 * 60 * 1000;
  * 107; owner, Oct 5), and `workoutsWhoop`, the same from WHOOP,
  * 'flag:workouts-whoop' (migration 135). Absent on a database without them,
  * so off there.
+ *
+ * Not about trackers, but read the same way: `courtKings`, King of the
+ * Court on a court's page, 'flag:court-kings' (migration 140). Held back
+ * until after launch (owner, Oct 6: boards look empty with few players), so
+ * it starts 'admins'. Off when the server can't be asked, and off in the
+ * demo, which has no admin account.
  */
-export type TennisFlags = { apple: boolean; whoop: boolean; fitbit: boolean; oura: boolean; polar: boolean; workoutsApple: boolean; workoutsWhoop: boolean };
-export const NO_FLAGS: TennisFlags = { apple: false, whoop: false, fitbit: false, oura: false, polar: false, workoutsApple: false, workoutsWhoop: false };
+export type TennisFlags = { apple: boolean; whoop: boolean; fitbit: boolean; oura: boolean; polar: boolean; workoutsApple: boolean; workoutsWhoop: boolean; courtKings: boolean };
+export const NO_FLAGS: TennisFlags = { apple: false, whoop: false, fitbit: false, oura: false, polar: false, workoutsApple: false, workoutsWhoop: false, courtKings: false };
 const OFF = NO_FLAGS;
-const DEMO: TennisFlags = { apple: true, whoop: true, fitbit: true, oura: true, polar: true, workoutsApple: true, workoutsWhoop: true };
+const DEMO: TennisFlags = { apple: true, whoop: true, fitbit: true, oura: true, polar: true, workoutsApple: true, workoutsWhoop: true, courtKings: false };
 
 /** The last answer, per account. `failed`: the server could not be asked, and OFF stands in for it. */
 type Known = { me: string; flags: TennisFlags; at: number; failed: boolean };
@@ -52,7 +58,7 @@ export function knownTennisFlags(me: string | null): TennisFlags | null {
   return known && known.me === me ? known.flags : null;
 }
 
-const toFlags = (f: Record<string, boolean>): TennisFlags => ({ apple: f['tennis-apple'] === true, whoop: f['tennis-whoop'] === true, fitbit: f['tennis-fitbit'] === true, oura: f['tennis-oura'] === true, polar: f['tennis-polar'] === true, workoutsApple: f['workouts-apple'] === true, workoutsWhoop: f['workouts-whoop'] === true });
+const toFlags = (f: Record<string, boolean>): TennisFlags => ({ apple: f['tennis-apple'] === true, whoop: f['tennis-whoop'] === true, fitbit: f['tennis-fitbit'] === true, oura: f['tennis-oura'] === true, polar: f['tennis-polar'] === true, workoutsApple: f['workouts-apple'] === true, workoutsWhoop: f['workouts-whoop'] === true, courtKings: f['court-kings'] === true });
 
 /** The server's answer, kept for a few minutes; `usable` says whether a kept one will do. */
 function ask(me: string, usable: (k: Known) => boolean): Promise<Known> {

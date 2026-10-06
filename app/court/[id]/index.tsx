@@ -210,7 +210,7 @@ function CourtPage() {
         {!lead && (!postHere || counting) ? <View style={styles.pill} /> : null}
       </View>
       <DottedRule />
-      {/* King of the Court (migration 130): signed in, at a court on the map, never at someone's home court. Brings its own rule below. */}
+      {/* King of the Court (migration 130): signed in, at a court on the map, never at someone's home court, and only while its switch is on for you (migration 140; admins for now). Brings its own rule below. */}
       {factsId && currentUserId && access !== 'private' ? <CourtKing courtId={factsId} name={name} refresh={kingTick} /> : null}
       {extras && factsId ? (
         <>

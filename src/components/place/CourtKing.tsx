@@ -7,6 +7,7 @@ import Animated, { FadeIn } from 'react-native-reanimated';
 import { CrownGlyph } from '@/components/place/CrownGlyph';
 import { Avatar, DottedRule } from '@/components/ui';
 import type { CourtKings, ID, User } from '@/data/types';
+import { useTennisFlags } from '@/features/activity/useTennisFlags';
 import { localDay } from '@/features/practice/stats';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
@@ -59,6 +60,12 @@ const wins = (n: number) => plural(n, 'win', 'wins');
  *
  * Built to stand alone (a court id and a name), so the Tennis profile can
  * show a crown with it later.
+ *
+ * Held back until after launch (owner, Oct 6): shown only when the server
+ * switch 'flag:court-kings' is on for you (migration 140; 'admins' for
+ * now), so nothing at all, not even the title, for everyone else, on a
+ * database without the switch, while it is asked, or in the demo. The
+ * server keeps working the boards out meanwhile.
  */
 export function CourtKing({ courtId, name, refresh = 0 }: { courtId: string; name: string; refresh?: number }) {
   const styles = useThemedStyles(styleDefinitions);
@@ -66,14 +73,17 @@ export function CourtKing({ courtId, name, refresh = 0 }: { courtId: string; nam
   // undefined while it is asked; null when it can't be (a database without it).
   const [kings, setKings] = useState<CourtKings | null | undefined>(undefined);
   const [info, setInfo] = useState(false);
+  const { courtKings: switchedOn } = useTennisFlags();
   useEffect(() => {
-    if (!currentUserId) { setKings(null); return undefined; }
+    if (!currentUserId || !switchedOn) { setKings(null); return undefined; }
     let on = true;
+    // Switched on after being off: its loading line, as on a first open.
+    setKings((k) => (k === null ? undefined : k));
     void actions.courtKings(courtId).then((got) => { if (on) setKings(got); }).catch(() => { if (on) setKings(null); });
     return () => { on = false; };
-  }, [courtId, currentUserId, refresh, actions]);
+  }, [courtId, currentUserId, refresh, actions, switchedOn]);
 
-  if (kings === null || !currentUserId) return null;
+  if (!switchedOn || kings === null || !currentUserId) return null;
   const place = courtShortName(name);
   const userOf = (id: ID) => users.find((u) => u.id === id);
   const top = kings ? kings.top.map((t) => ({ ...t, user: userOf(t.userId) })).filter((t): t is typeof t & { user: User } => !!t.user) : [];
