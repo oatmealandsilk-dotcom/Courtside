@@ -7,7 +7,7 @@ import { FullWindowOverlay } from 'react-native-screens';
 
 import { isDesktopBrowser } from '@/lib/browserDevice';
 import { useHoldTour } from '@/features/tour/tourHold';
-import { setConfirmHost, type ConfirmOptions } from '@/lib/confirm';
+import { alsoChoices, setConfirmHost, type ConfirmOptions } from '@/lib/confirm';
 import * as haptics from '@/lib/haptics';
 import { useReducedMotion } from '@/lib/useReducedMotion';
 import { colors, font, radius, spacing, typography } from '@/theme';
@@ -31,10 +31,11 @@ const TITLE_ID = 'courtside-confirm-title';
 const MESSAGE_ID = 'courtside-confirm-message';
 
 const sameQuestion = (a: ConfirmOptions, b: ConfirmOptions) =>
-  a.title === b.title && a.message === b.message && a.confirmLabel === b.confirmLabel && a.also?.label === b.also?.label;
+  a.title === b.title && a.message === b.message && a.confirmLabel === b.confirmLabel
+  && alsoChoices(a).map((c) => c.label).join('\n') === alsoChoices(b).map((c) => c.label).join('\n');
 
-/** Which row was tapped: Cancel, the action, or the second action (`also`). */
-type Answer = 'cancel' | 'yes' | 'also';
+/** Which row was tapped: Cancel, the action, or one of the other answers (`also`, by its place in the list). */
+type Answer = 'cancel' | 'yes' | number;
 
 /**
  * Every "are you sure?" in the app (`confirm` in src/lib/confirm.ts), drawn
@@ -122,7 +123,7 @@ export function ConfirmHost() {
     shown.value = withTiming(0, OUT, (done) => { if (done) runOnJS(gone)(); });
     // The action runs as the card leaves, the way Instagram's delete does.
     if (choice === 'yes') void asked.onConfirm();
-    else if (choice === 'also') void asked.also?.onPress();
+    else if (typeof choice === 'number') void alsoChoices(asked)[choice]?.onPress();
   };
 
   // A tap on a button or the dimmed screen counts only if it began once the card had settled (SETTLE_MS).
@@ -216,17 +217,19 @@ export function ConfirmHost() {
             >
               <Text style={styles.cancel}>Cancel</Text>
             </Pressable>
-            {request.also ? (
+            {/* The other answers, between the two; laid in backwards, as the column is turned over. */}
+            {alsoChoices(request).map((choice, at) => (
               <Pressable
+                key={`${at}-${choice.label}`}
                 accessibilityRole="button"
-                accessibilityLabel={request.also.label}
+                accessibilityLabel={choice.label}
                 onPressIn={touchBegan}
-                onPress={() => tapped('also')}
+                onPress={() => tapped(at)}
                 style={({ pressed }) => [styles.row, pressed && styles.pressed]}
               >
-                <Text style={[styles.action, request.also.destructive && styles.danger]}>{request.also.label}</Text>
+                <Text style={[styles.action, choice.destructive && styles.danger]}>{choice.label}</Text>
               </Pressable>
-            ) : null}
+            )).reverse()}
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={request.confirmLabel}

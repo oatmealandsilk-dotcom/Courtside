@@ -63,9 +63,10 @@ module.exports = {
         ITSAppUsesNonExemptEncryption: false,
         // Instagram Stories straight from Share (build 13, Facebook App ID in storyImage.ts).
         LSApplicationQueriesSchemes: ['instagram-stories', 'instagram'],
-        // The camera is used for instants and for photos sent in chats; both are named (Oct 5, App Review 5.1.1).
+        // The camera is used for photos and videos you post (Take photo / Record video), instants and
+        // photos sent in chats; all are named (Oct 6, App Review 5.1.1).
         // Purpose-string changes like these reach phones only with the next App Store build.
-        NSCameraUsageDescription: 'CourtSide uses the camera to take an instant after you play, and to take photos you send in chats.',
+        NSCameraUsageDescription: 'CourtSide uses the camera to take photos and videos you post, an instant after you play, and photos you send in chats.',
         NSPhotoLibraryUsageDescription: 'CourtSide uses your photo library to choose clips and photos to post or send in chats.',
         NSLocationWhenInUseUsageDescription: 'CourtSide uses your location while the app is open to show courts and players near you. You choose who can see you.',
         // Saving a chat photo to your camera roll from the share sheet (from build 11).
@@ -83,7 +84,7 @@ module.exports = {
       // safe zone. The Android 13+ "themed icon" gets the same mark without its soft shadow
       // (Android only uses its shape). The old android-icon-foreground.png stays in assets/.
       adaptiveIcon: { foregroundImage: './assets/icon-refined-android-foreground.png', monochromeImage: './assets/icon-refined-android-monochrome.png', backgroundColor: '#F5EEE4' },
-      // Only what the app uses (Oct 4): the camera (instants, hits), the microphone (voice notes),
+      // Only what the app uses (Oct 4): the camera (instants, hits, Take photo / Record video), the microphone (voice notes, video sound),
       // location while open (courts and players near you), contacts read-only (find friends) and
       // alerts. Photos need nothing on Android 13+: the system photo picker hands over only what
       // was chosen. Older phones get their storage permission from the picker itself.
@@ -121,10 +122,11 @@ module.exports = {
       // full-screen picture, so it gets the mark on its own, cream around it, as on the icon.
       ['expo-splash-screen', { image: './assets/splash.png', backgroundColor: '#F8F7F2', resizeMode: 'cover', enableFullScreenImage_legacy: true, android: { image: './assets/android-icon-foreground.png', imageWidth: 288, resizeMode: 'contain', backgroundColor: '#F8F7F2' } }],
       'expo-router',
-      // The microphone is only for voice notes in chats (expo-audio, below); the camera itself never records sound.
-      ['expo-camera', { cameraPermission: 'CourtSide uses the camera to take an instant after you play, and to take photos you send in chats.', microphonePermission: 'CourtSide uses the microphone for voice notes you send in chats.', recordAudioAndroid: false }],
+      // The microphone is for voice notes in chats (expo-audio, below) and the sound of a video
+      // recorded with Record video (expo-image-picker); the Instant camera itself never records sound.
+      ['expo-camera', { cameraPermission: 'CourtSide uses the camera to take photos and videos you post, an instant after you play, and photos you send in chats.', microphonePermission: 'CourtSide uses the microphone to record the sound of videos you post, and for voice notes you send in chats.', recordAudioAndroid: false }],
       // The same camera words as above, so the build never falls back to Apple's generic text.
-      ['expo-image-picker', { photosPermission: 'CourtSide uses your photo library to choose clips and photos to post or send in chats.', cameraPermission: 'CourtSide uses the camera to take an instant after you play, and to take photos you send in chats.', microphonePermission: 'CourtSide uses the microphone for voice notes you send in chats.' }],
+      ['expo-image-picker', { photosPermission: 'CourtSide uses your photo library to choose clips and photos to post or send in chats.', cameraPermission: 'CourtSide uses the camera to take photos and videos you post, an instant after you play, and photos you send in chats.', microphonePermission: 'CourtSide uses the microphone to record the sound of videos you post, and for voice notes you send in chats.' }],
       'expo-video',
       // Build 14 (Oct 4): find friends from your contacts. Only phone numbers and emails are checked, and nothing is kept.
       ['expo-contacts', { contactsPermission: 'CourtSide checks your contacts’ phone numbers and emails to show which friends are already on CourtSide. Nothing from your contacts is saved.' }],
@@ -158,7 +160,7 @@ module.exports = {
       // this the plugin quietly asks iOS for background audio, so a clip that
       // started a moment after you left could still be heard. Takes effect
       // from the next App Store build.
-      ['expo-audio', { microphonePermission: 'CourtSide uses the microphone for voice notes you send in chats.', enableBackgroundPlayback: false }],
+      ['expo-audio', { microphonePermission: 'CourtSide uses the microphone to record the sound of videos you post, and for voice notes you send in chats.', enableBackgroundPlayback: false }],
       // Apple Health, in the App Store build only (Expo Go has no HealthKit).
       // The reason shown on Apple's Health sheet must name everything asked
       // for: workouts (tennis and, since Oct 5, every other kind: runs, rides,

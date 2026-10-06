@@ -9,7 +9,8 @@ import { whenLanded } from '@/lib/uploads';
 import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import Reanimated, { Easing, FadeInDown, FadeOut, LinearTransition, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 
-import { MediaPicker, pickFromDevice, type PickedMedia } from '@/components/MediaPicker';
+import { MediaPicker, type PickedMedia } from '@/components/MediaPicker';
+import { askMediaSource, fromSource, type MediaSource } from '@/features/compose/mediaSource';
 import { MediaEditor, type EditedMedia } from '@/components/MediaEditor';
 import { takePendingShot } from '@/features/compose/pendingShot';
 import { registerCreateClose } from '@/features/compose/createMenu';
@@ -854,7 +855,9 @@ export default function Compose() {
   // One library at a time: a tap on the clip button in the moment before the
   // challenge opens the library by itself would otherwise ask for a second.
   const picking = useRef(false);
-  const openDevice = async (selection: 'video' | 'all') => {
+  // Where from first: "Take photo", "Record video" or "Choose from library" (see askMediaSource).
+  const openDevice = (selection: 'video' | 'all') => askMediaSource(selection, (source) => { void fetchMedia(selection, source); });
+  const fetchMedia = async (selection: 'video' | 'all', source: MediaSource = 'library') => {
     if (picking.current) return;
     picking.current = true;
     setPickError('');
@@ -865,7 +868,7 @@ export default function Compose() {
     let chosen: PickedMedia | null = null;
     let failed = false;
     try {
-      chosen = await pickFromDevice(selection);
+      chosen = await fromSource(source, selection);
       if (chosen) pick(chosen);
     } catch (err) {
       failed = true;
@@ -889,7 +892,7 @@ export default function Compose() {
   useEffect(() => {
     if (!entering || isHit || Platform.OS === 'web') return undefined;
     let opened = false;
-    const open = () => { if (opened) return; opened = true; void openDevice('video'); };
+    const open = () => { if (opened) return; opened = true; void fetchMedia('video'); };
     const events = navigation as unknown as { addListener: (name: string, fn: (e?: { data?: { closing?: boolean } }) => void) => () => void };
     const stop = events.addListener('transitionEnd', (e) => { if (!e?.data?.closing) open(); });
     // In case the page never says it has arrived.

@@ -95,6 +95,49 @@ export async function pickFromDevice(selection: 'video' | 'photo' | 'all'): Prom
   }
 }
 
+/** The longest video "Record video" takes: a minute, the length of a reel. */
+export const CAMERA_MAX_SECONDS = 60;
+
+/**
+ * "Take photo" and "Record video" when adding to a post (Instagram's and
+ * Strava's choice): the phone's own camera, one photo or up to a minute of
+ * video, then the same edit step a pick from the library goes to. Asks for
+ * the camera the first time; a video's sound needs the microphone, which the
+ * phone asks for itself on the first recording. The camera records ordinary
+ * (SDR) H.264, like the library's conversion, so it plays everywhere.
+ * Null when nothing was taken; 'denied' when the camera is off for CourtSide.
+ */
+export async function captureFromCamera(kind: 'photo' | 'video'): Promise<PickedMedia | null | 'denied'> {
+  const permission = await ImagePicker.requestCameraPermissionsAsync().catch(() => null);
+  if (!permission?.granted) return 'denied';
+  try {
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: [kind === 'video' ? 'videos' : 'images'],
+      quality: 0.85,
+      exif: false,
+      videoMaxDuration: CAMERA_MAX_SECONDS,
+      videoQuality: ImagePicker.UIImagePickerControllerQualityType.High,
+      presentationStyle: ImagePicker.UIImagePickerPresentationStyle.FULL_SCREEN,
+    });
+    if (result.canceled || !result.assets.length) return null;
+    const asset = result.assets[0];
+    const isVideo = asset.type === 'video' || kind === 'video';
+    // The length goes on the label ("Video · 0:24"), as a browser's pick has it.
+    const seconds = asset.duration ? Math.round(asset.duration / 1000) : 0;
+    return {
+      uri: asset.uri,
+      label: isVideo ? (seconds ? `Video · ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}` : 'Video') : 'Photo',
+      kind: isVideo ? 'video' : 'photo',
+      thumbnailUrl: isVideo ? undefined : asset.uri,
+      orientation: asset.width && asset.height && asset.width > asset.height ? 'landscape' : 'portrait',
+    };
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    // The Simulator, or a phone whose camera is in use by something else.
+    throw new Error(/simulator|not available|unavailable/i.test(reason) ? 'There’s no camera to open on this device.' : 'The camera couldn’t open. Try again in a moment.');
+  }
+}
+
 /** A photo picked for a chat: the file on this phone and its size in pixels. */
 export interface PickedPhoto { uri: string; width: number; height: number }
 

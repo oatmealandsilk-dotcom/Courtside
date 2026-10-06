@@ -15,8 +15,19 @@ export interface ConfirmOptions {
   /**
    * A second way to say yes, on its own row under the first ("Remove tag and
    * my session" under "Remove tag"). Rare: most questions have one answer.
+   * A list makes a card of choices, each on its own row in order under the
+   * first ("Take photo", then "Record video", then "Choose from library").
    */
-  also?: { label: string; destructive?: boolean; onPress: () => void | Promise<void> };
+  also?: ConfirmChoice | ConfirmChoice[];
+}
+
+/** One more answer on the card, on a row of its own. */
+export interface ConfirmChoice { label: string; destructive?: boolean; onPress: () => void | Promise<void> }
+
+/** The card's extra answers as a list, however they were given (none, one, or several). */
+export function alsoChoices(options: ConfirmOptions): ConfirmChoice[] {
+  const { also } = options;
+  return also ? (Array.isArray(also) ? also : [also]) : [];
 }
 
 /** The card's two doors: a question to ask, and one to take back unanswered (see withdrawConfirm). */

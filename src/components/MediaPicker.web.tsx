@@ -182,10 +182,28 @@ export async function takePhoto(): Promise<PickedPhoto | null | 'denied'> {
  * which is why the + menu calls it directly rather than after a hop.
  */
 export function pickFromDevice(selection: 'video' | 'photo' | 'all'): Promise<PickedMedia | null> {
+  return chooseFile(selection === 'video' ? 'video/*' : selection === 'photo' ? 'image/*' : 'image/*,video/*', false);
+}
+
+/**
+ * "Take photo" and "Record video" in a browser: a phone's browser opens its
+ * camera straight away (the file box's capture setting), for a photo or a
+ * video; a computer's has no such thing and shows the file dialog instead.
+ * Must be called from a click. The browser asks for the camera itself, so
+ * this never answers 'denied' (that is the phone app's).
+ */
+export function captureFromCamera(kind: 'photo' | 'video'): Promise<PickedMedia | null | 'denied'> {
+  return chooseFile(kind === 'video' ? 'video/*' : 'image/*', true);
+}
+
+/** The one file box behind both: reads the chosen file into a playable PickedMedia, or null if closed. */
+function chooseFile(accept: string, capture: boolean): Promise<PickedMedia | null> {
   return new Promise((resolve) => {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = selection === 'video' ? 'video/*' : selection === 'photo' ? 'image/*' : 'image/*,video/*';
+    input.accept = accept;
+    // The phone's back camera, the one for filming a rally.
+    if (capture) input.setAttribute('capture', 'environment');
     input.style.display = 'none';
     let settled = false;
     const finish = (value: PickedMedia | null) => { if (!settled) { settled = true; resolve(value); input.remove(); } };
