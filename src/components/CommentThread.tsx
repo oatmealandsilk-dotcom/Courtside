@@ -1,6 +1,6 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -157,8 +157,12 @@ export function CommentThread({ thread, big = false, open, onToggle, onReply, on
 }
 
 const styleDefinitions = StyleSheet.create({
-  peekScroll: { flexGrow: 0, flexShrink: 1, minHeight: 0 },
-  peekFade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 28 },
+  // Clips what does not fit; never scrolls (see CommentsPeek).
+  peek: { overflow: 'hidden' },
+  // The comments at their own full height, whatever room the box has: the box cuts them, they never squeeze.
+  peekInner: { flexShrink: 0 },
+  peekHidden: { opacity: 0 },
+  peekFade: { position: 'absolute', left: 0, right: 0, bottom: 0 },
   // Tucked up under the comment (or its last reply), closer than the gap
   // between comments. A full finger's height (44pt: a browser ignores
   // hitSlop), the extra hanging into the gap below, so the words sit where they did.
@@ -169,33 +173,43 @@ const styleDefinitions = StyleSheet.create({
 });
 
 /**
+ * Less room than this (a name and one line of words) and the comments are
+ * not shown at all: the top of a name under a fade reads as something
+ * broken, not as "more below".
+ */
+const PEEK_MIN = 46;
+
+/**
  * A post's comments on its own page in the feed (a photo post's, a written
- * post's), filling whatever room is left under it and scrolling inside it.
- * Where the room runs out mid-comment, the last lines fade into the page
- * rather than stop at a hard edge, so it reads as "more below", not as cut
- * off; scrolled to its end, the fade goes.
+ * post's): as many as fit between the buttons and "Add a comment…", newest
+ * first. It is a still preview, never a box that scrolls (Oct 6 review): one
+ * that scrolls inside the feed's own swipe caught the swipe meant for the
+ * next post, and once scrolled it cut its top comment off mid-letter. Where
+ * the room runs out mid-comment the last lines fade into the page, the way
+ * the Q&A thread's replies do in the feed: plainly more, a tap away. A tap on
+ * a comment (or "View 2 replies", or Reply) opens the comments sheet there.
  */
 export function CommentsPeek({ style, contentContainerStyle, children }: { style?: StyleProp<ViewStyle>; contentContainerStyle?: StyleProp<ViewStyle>; children: React.ReactNode }) {
   const styles = useThemedStyles(styleDefinitions);
   const [box, setBox] = useState(0);
   const [content, setContent] = useState(0);
-  const [atEnd, setAtEnd] = useState(false);
-  const cut = box > 0 && content > box + 1 && !atEnd;
+  const cut = box > 0 && content > box + 1;
+  // Only a sliver of room (a long post on a small phone): nothing rather than half a name.
+  // Still drawn, unseen, so it keeps its size and the page does not flicker between the two.
+  const sliver = cut && box < PEEK_MIN;
   return (
-    <View style={style}>
-      <ScrollView
-        style={styles.peekScroll}
-        contentContainerStyle={contentContainerStyle}
-        nestedScrollEnabled
-        showsVerticalScrollIndicator={false}
-        scrollEventThrottle={64}
-        onLayout={(e) => setBox(Math.round(e.nativeEvent.layout.height))}
-        onContentSizeChange={(_w, h) => setContent(Math.round(h))}
-        onScroll={(e) => { const { contentOffset, layoutMeasurement, contentSize } = e.nativeEvent; setAtEnd(contentOffset.y + layoutMeasurement.height >= contentSize.height - 4); }}
+    <View style={[style, styles.peek]} onLayout={(e) => setBox(Math.round(e.nativeEvent.layout.height))}>
+      <View
+        style={[contentContainerStyle, styles.peekInner, sliver && styles.peekHidden]}
+        pointerEvents={sliver ? 'none' : 'box-none'}
+        aria-hidden={sliver || undefined}
+        accessibilityElementsHidden={sliver}
+        importantForAccessibility={sliver ? 'no-hide-descendants' : 'auto'}
+        onLayout={(e) => setContent(Math.round(e.nativeEvent.layout.height))}
       >
         {children}
-      </ScrollView>
-      {cut ? <LinearGradient pointerEvents="none" colors={[withAlpha(colors.bg, 0), colors.bg]} style={styles.peekFade} /> : null}
+      </View>
+      {cut && !sliver ? <LinearGradient pointerEvents="none" colors={[withAlpha(colors.bg, 0), colors.bg]} style={[styles.peekFade, { height: Math.max(16, Math.min(48, Math.round(box * 0.3))) }]} /> : null}
     </View>
   );
 }

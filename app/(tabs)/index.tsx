@@ -202,6 +202,12 @@ const RAIL_ICONS = [['heart-outline', 31], ['chatbubble-outline', 29], ['arrow-r
  * crowding the tab bar); the gaps between its items stay even.
  */
 const RAIL_DROP = 10;
+/**
+ * A post's page bottom on a computer, where no tab bar floats over it: the
+ * same for a written post and a photo post, so "Add a comment…" sits on one
+ * line on both (on a phone both keep clear of the bar instead).
+ */
+const POST_BOTTOM = 32;
 
 /**
  * A hit's photo at its own shape. A tall one fills the page; a wide one (a
@@ -1486,6 +1492,8 @@ function Home({ scope, topRow, paused, onChrome }: {
                       active={playing && active === index && warmed && playable}
                       preload={near}
                       topInset={insets.top + 66}
+                      // The same bottom edge as a written post's page (below), so every post's "Add a comment…" sits on one line.
+                      bottomInset={barInset > 0 ? barInset + 8 : POST_BOTTOM}
                       onDoubleTap={() => likeByTap(post.id, liked)}
                       onToggleLike={() => actions.toggleLike(post.id)}
                       onToggleSave={() => actions.toggleSavePost(post.id)}
@@ -1833,7 +1841,7 @@ const styleDefinitions = StyleSheet.create({
   actionLabel: { color: 'white', fontSize: 13, lineHeight: 16, ...font('600'), letterSpacing: 0.1, fontVariant: ['tabular-nums'], ...COUNT_EDGE },
   // The feed's pages hold their size while the bar ducks, so the bottom few
   // points can sit under a full-size bar: written pages keep that much clear.
-  article: { flex: 1, backgroundColor: colors.bg, padding: 20, paddingTop: 64, paddingBottom: 32, gap: 20 },
+  article: { flex: 1, backgroundColor: colors.bg, padding: 20, paddingTop: 64, paddingBottom: POST_BOTTOM, gap: 20 },
   // In a scoped feed the back chevron has its own line above the words.
   articleScoped: { paddingTop: 116 },
   // On a computer a written post is a centred column like a photo post, not

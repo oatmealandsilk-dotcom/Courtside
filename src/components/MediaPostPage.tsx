@@ -57,6 +57,12 @@ interface Props {
   onMore: () => void;
   /** Room left above for the wordmark. */
   topInset: number;
+  /**
+   * Room kept clear at the bottom for the tab bar: the feed passes the same
+   * as under a written post, so "Add a comment…" sits on one line on every
+   * post. Left out, a full-size bar's worth.
+   */
+  bottomInset?: number;
   /** A play burst over the picture, drawn by the feed. */
   burst?: React.ReactNode;
   /** Counts up on each double tap, so the heart on the button pops with it. */
@@ -97,7 +103,7 @@ const LANE_MIN = 400;
 /** The buttons' one size: like, comment, send, save and more all read as a set. */
 const ICON = 26;
 
-function MediaPostPageInner({ post, author, liked, saved, active, preload = false, onDoubleTap, onToggleLike, onToggleSave, onComment, onShare, onMore, topInset, burst, pop = 0, discInk, onReady }: Props) {
+function MediaPostPageInner({ post, author, liked, saved, active, preload = false, onDoubleTap, onToggleLike, onToggleSave, onComment, onShare, onMore, topInset, bottomInset, burst, pop = 0, discInk, onReady }: Props) {
   // Fills on the tap; the store's own redraw follows without changing anything on screen.
   const like = useOptimisticToggle(`p:${post.id}`, liked, onToggleLike, pop);
   const likes = post.likedBy.length + like.delta;
@@ -245,11 +251,11 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
     : { width: '100%' as const, maxHeight: '62%' as const, aspectRatio: !post.videoUrl && shape ? shape : 4 / 5, ...(desktopWeb ? { maxWidth: LANE_MIN } : null) };
 
   return (
-    // Without comments there is nothing to fill the bottom, so the picture and
-    // its words sit in the middle of the page instead of leaving a gap below.
-    <View style={[styles.page, { paddingTop: topInset }]}>
+    // Top down, the way every post's page is laid out, so the name sits in the same place from one post
+    // to the next; "Add a comment…" closes the page at its bottom edge, comments or not (Oct 6 review).
+    <View style={[styles.page, { paddingTop: topInset }, bottomInset != null ? { paddingBottom: bottomInset } : null]}>
       <Wash height={300} strength={0.6} />
-     <View style={[styles.column, !thread.length && styles.pageCentred]} onLayout={(e) => { const { width, height } = e.nativeEvent.layout; if (width > 0 && height > 0) setRoom({ w: width, h: height }); }}>
+     <View style={styles.column} onLayout={(e) => { const { width, height } = e.nativeEvent.layout; if (width > 0 && height > 0) setRoom({ w: width, h: height }); }}>
       {/* Who and their level, in the space above the picture. */}
       <View style={[styles.whoRow, lane]} onLayout={measured(setHead, head)}>
         <Pressable accessibilityRole="link" accessibilityLabel={`View ${author.name}'s profile${streakWords(streak)}`} onPress={() => { actions.noteFeedSignal({ kind: 'post', id: post.id, profileTap: true }); openPlayer(author.id, currentUserId); }} style={styles.who}>
@@ -356,8 +362,8 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
           </View>
         </View>
 
-        {/* The comments, open on the page and filling whatever is left of it;
-            the line at the bottom opens the sheet to write one. */}
+        {/* The comments, a still preview in whatever room is left (CommentsPeek: never a box that scrolls
+            inside the feed's swipe); the line on the page's bottom edge opens the sheet to write one. */}
         {thread.length ? (
           <CommentsPeek style={styles.thread} contentContainerStyle={styles.threadInner}>
             {thread.map((t) => (
@@ -373,7 +379,7 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
             ))}
           </CommentsPeek>
         ) : null}
-        <Pressable accessibilityRole="button" accessibilityLabel="Add a comment" onPress={() => router.push({ pathname: '/comments', params: { kind: 'post', id: post.id, focus: '1' } })} onLayout={measured(setEntry, entry)} style={styles.addComment}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Add a comment" onPress={() => router.push({ pathname: '/comments', params: { kind: 'post', id: post.id, focus: '1' } })} onLayout={measured(setEntry, entry)} style={({ pressed }) => [styles.addComment, pressed && styles.addCommentPressed]}>
           {currentUser ? <Avatar name={currentUser.name} seed={currentUser.avatarSeed} uri={currentUser.avatarUrl} size={28} /> : null}
           <Text style={styles.addCommentText}>{thread.length ? 'Add a comment…' : 'Be the first to comment…'}</Text>
         </Pressable>
@@ -387,13 +393,13 @@ const styleDefinitions = StyleSheet.create({
   // The bottom keeps clear of the bar at its full size (see VerticalPager).
   page: { flex: 1, backgroundColor: colors.bg, paddingHorizontal: spacing.md, paddingBottom: spacing.md + BAR_OVERLAY_PX, alignItems: 'center' },
   column: { flex: 1, width: '100%', gap: spacing.md },
-  pageCentred: { justifyContent: 'center' },
   frame: { borderRadius: radius.lg, overflow: 'hidden', backgroundColor: '#000' },
   // Instagram's tall post: 4:5 by default, so the picture is big without taking the page.
   frameTall: { alignSelf: 'center' },
   // A wide video: the same rounding as every picture in the feed, the video's own shape.
   frameWide: { alignSelf: 'center' },
-  details: { gap: spacing.sm, flexShrink: 1, minHeight: 0 },
+  // Takes all the room under the picture, so "Add a comment…" can sit on the page's bottom edge.
+  details: { gap: spacing.sm, flexGrow: 1, flexShrink: 1, minHeight: 0 },
   // The stats, caption and buttons: close together, as one block under the picture.
   under: { gap: 10 },
   flex: { flex: 1 },
@@ -415,7 +421,9 @@ const styleDefinitions = StyleSheet.create({
   thread: { flexShrink: 1, minHeight: 0, marginTop: spacing.xs },
   threadInner: { gap: spacing.lg, paddingTop: spacing.xs, paddingBottom: spacing.sm },
   foot: { position: 'absolute', left: 0, right: 0, bottom: 0 },
-  addComment: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 44, paddingTop: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  // Pinned to the page's bottom edge, as under a written post (PostCard): marginTop auto takes the room left above it.
+  addComment: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 44, marginTop: 'auto', paddingTop: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  addCommentPressed: { opacity: 0.7 },
   addCommentText: { ...typography.body, color: colors.textFaint, flex: 1 },
   caption: { ...typography.body, color: colors.text, lineHeight: 21 },
   captionName: { ...typography.bodyStrong, color: colors.text },

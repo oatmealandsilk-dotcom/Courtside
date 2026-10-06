@@ -291,8 +291,9 @@ function PostCardInner({
         ) : null}
       </View>
 
-      {/* The comments, open on the page and filling whatever is left of it (they give way first when it
-          is short); the line under them opens the sheet to write one. Replies stay folded here. */}
+      {/* The comments, a still preview in whatever room is left (they give way first when the page is short),
+          then "Add a comment…" on the page's bottom edge, just above the tab bar, the way Threads keeps its
+          reply line: so a post with no comments yet ends where every post ends, not halfway down. Replies stay folded here. */}
       {thread.length ? (
         <CommentsPeek style={styles.thread} contentContainerStyle={styles.threadInner}>
           {thread.map((t) => (
@@ -379,7 +380,8 @@ const styleDefinitions = StyleSheet.create({
   // Gives way before anything else on the page when it is short.
   thread: { flexGrow: 0, flexShrink: 1000, minHeight: 0 },
   threadInner: { gap: spacing.lg, paddingTop: spacing.xs, paddingBottom: spacing.sm },
-  addComment: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 44, paddingTop: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  // Pinned to the page's bottom edge (marginTop auto takes up whatever room is left above it).
+  addComment: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 44, marginTop: 'auto', paddingTop: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   addCommentPressed: { opacity: 0.7 },
   addCommentText: { ...typography.body, color: colors.textFaint, flex: 1 },
 });
