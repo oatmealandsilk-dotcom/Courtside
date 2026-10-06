@@ -698,12 +698,13 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
    */
   flyby: (courtId: string, day: string) => Promise<FlybyPerson[] | null>;
   /**
-   * "Friends on a streak" for the weekly recap (migration 2026100600017): up
+   * "Friends on a streak" for the weekly recap (migration 20261006000017): up
    * to 5 people you follow on a streak, longest first, as the server allows
-   * (a teen only when they follow you back). Before the database has it, or
-   * when it cannot be asked, friends who follow each other with you only,
-   * from the streaks already loaded: an answer that says nothing about
-   * anyone's age. Never anyone blocked either way, muted or suspended.
+   * (a teen only when they follow you back, never anyone whose activity
+   * status is off). Before the database has it, or when it cannot be asked,
+   * friends who follow each other with you only, from the streaks already
+   * loaded (the flames beside their names): an answer that says nothing
+   * about anyone's age. Never anyone blocked either way, muted or suspended.
    */
   friendsOnStreak: () => Promise<FriendStreak[]>;
   deleteSession: (id: ID) => void;

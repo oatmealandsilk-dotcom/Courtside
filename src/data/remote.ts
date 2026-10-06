@@ -1561,9 +1561,9 @@ export const remote = {
 
   /**
    * "Friends on a streak" for the weekly recap (friends_on_streak, migration
-   * 2026100600017): up to 5 people you follow on a running streak, longest
-   * first, as the server allows (a teen only when they follow you back).
-   * `today` is this phone's day. Null on a database without it (asked once
+   * 20261006000017): up to 5 people you follow on a running streak, longest
+   * first, as the server allows (a teen only when they follow you back,
+   * never anyone whose activity status is off). `today` is this phone's day. Null on a database without it (asked once
    * a session) or when it could not be asked: the caller then keeps to
    * friends who follow each other with you.
    */

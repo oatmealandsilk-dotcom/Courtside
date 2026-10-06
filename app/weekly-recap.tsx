@@ -38,8 +38,9 @@ const ACTIONS: { key: StoryAction; label: string; spoken: string; icon: React.Co
  * session: the card as an Instagram story picture. Only you see it until you
  * share it. A rest week (nothing played, something the week before) is a
  * small card of its own instead: what you played the week before and "Find
- * a hit", never a big zero, and nothing to share. At the foot of both,
- * "Friends on a streak" (FriendsOnStreak), when anyone you follow is on one.
+ * a hit", never a big zero, and nothing to share. At the foot of each (and
+ * under "Nothing logged that week"), "Friends on a streak"
+ * (FriendsOnStreak), when anyone you follow is on one.
  */
 export default function WeeklyRecap() {
   const styles = useThemedStyles(styleDefinitions);
@@ -75,7 +76,10 @@ export default function WeeklyRecap() {
     return (
       <Screen title={title} subtitle={weekRange(week)} compactTitle onBack={() => goBack('/your-sessions')} bar={false}>
         {!ready ? <View style={styles.wait}><CourtSpinner size={28} /></View> : (
-          <EmptyState icon="stats-chart-outline" title="Nothing logged that week" body="Log your sessions and every Monday brings your week on court." />
+          <View style={styles.body}>
+            <EmptyState icon="stats-chart-outline" title="Nothing logged that week" body="Log your sessions and every Monday brings your week on court." />
+            <FriendsOnStreak />
+          </View>
         )}
       </Screen>
     );

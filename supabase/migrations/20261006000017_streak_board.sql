@@ -1,4 +1,4 @@
--- CourtSide · migration 2026100600017: "Friends on a streak" in the weekly
+-- CourtSide · migration 20261006000017: "Friends on a streak" in the weekly
 -- recap (owner, Oct 5: "go for streak board").
 --
 -- NOT APPLIED — needs the owner's OK, and the rolled-back test on the live
@@ -36,11 +36,17 @@
 --     only until the board has its 5, and at most 15 people a time; past
 --     that, people who do not follow you back are left off, whatever
 --     their age. Asking about the same person again that day is free.
+--   * Never someone who turned their activity status off (user_state's
+--     show_activity, as 130's Flyby): the board says who is playing, so
+--     it keeps to the same promise ("activity status off, it isn't shown").
 --   * Signed in only. Your own row never comes from here: the app adds you
 --     from your own count.
 --
 -- There is no "hide my streak" setting in the app today (Oct 5), so none is
 -- read here; a private account already shows its streak only to followers.
+-- Every friend on a streak is looked at (no cut-off before the rules), so a
+-- friend who follows you back is never crowded off by people further up
+-- who could not be shown; the looking stops once the board has its 5.
 
 begin;
 
@@ -57,7 +63,7 @@ declare
   ];
   -- Made by this file: absent before, or exactly as this file leaves it.
   made constant text[][] := array[
-    ['public.friends_on_streak',  '4b0812c16176dfa4dc776cd18747eae4']
+    ['public.friends_on_streak',  '7f6e17f73e931405486f693cbfd5fa83']
   ];
   i int;
   n int;
@@ -69,8 +75,9 @@ begin
            and column_name in ('user_id', 'days', 'through_day')) <> 3
      or to_regclass('public.follows') is null
      or to_regclass('public.age_rule_asks') is null
-     or not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'user_state' and column_name = 'muted_ids' and udt_name = '_text') then
-    raise exception 'Migration 2026100600017 stopped before changing anything: migrations 8, 109 and 134 have to run first.';
+     or not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'user_state' and column_name = 'muted_ids' and udt_name = '_text')
+     or not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'user_state' and column_name = 'show_activity' and udt_name = 'bool') then
+    raise exception 'Migration 20261006000017 stopped before changing anything: migrations 8, 109 and 134 have to run first.';
   end if;
   for i in 1 .. array_length(kept, 1) loop
     select count(*), max(md5(p.prosrc)) into n, now_is from pg_proc p join pg_namespace s on s.oid = p.pronamespace
@@ -87,7 +94,7 @@ begin
     end if;
   end loop;
   if cardinality(wrong) > 0 then
-    raise exception 'Migration 2026100600017 stopped before changing anything: % changed since it was written (Oct 5). This file must be brought up to date with that change first.', array_to_string(wrong, ', ');
+    raise exception 'Migration 20261006000017 stopped before changing anything: % changed since it was written (Oct 5). This file must be brought up to date with that change first.', array_to_string(wrong, ', ');
   end if;
 end $$;
 
@@ -126,8 +133,8 @@ begin
        and not public.is_blocked_between(me, s.user_id)
        and not public.is_suspended(s.user_id)
        and not (s.user_id::text = any (coalesce(muted, '{}')))
+       and coalesce((select us2.show_activity from public.user_state us2 where us2.user_id = s.user_id), true)
      order by s.days desc, s.through_day desc, s.user_id
-     limit 200
   loop
     if not c.follows_back then
       -- Someone who does not follow you back: only a known adult, asked within the day's budget, 15 at most here.
@@ -154,7 +161,7 @@ begin
      or not (select prosecdef from pg_proc where oid = to_regprocedure('public.friends_on_streak(date)'))
      or has_function_privilege('anon', 'public.friends_on_streak(date)', 'execute')
      or not has_function_privilege('authenticated', 'public.friends_on_streak(date)', 'execute') then
-    raise exception 'Migration 2026100600017 stopped: the result was not as planned; nothing was changed.';
+    raise exception 'Migration 20261006000017 stopped: the result was not as planned; nothing was changed.';
   end if;
 end $$;
 
@@ -170,24 +177,27 @@ commit;
 -- The rolled-back test that goes with this file (run before applying it):
 -- this whole file twice, then each rule tried as the people involved,
 -- inside one transaction that was then undone (nothing was saved; checked
--- after: no test account, no function left). Oct 5, live database, with
--- 345 made-up accounts. V follows: A1 (adult, one way, 12), A2 (adult,
+-- after: no test account, no function left). Oct 6, live database, with
+-- 558 made-up accounts. V follows: A1 (adult, one way, 12), A2 (adult,
 -- each other, 9 through yesterday), T1 (teen, one way, 20), T2 (teen, each
 -- other, 7), N (no age on file, one way, 15), P (private adult V follows,
 -- 6), F (each other, 8, through tomorrow: a time zone ahead), E1/E2 (5,
 -- today/yesterday), E3 (3); and, never on the board, S (suspended, 30),
--- B (blocked V, 25), B2 (V blocked, 24), M (V muted, 11), O (ran out 3 days
--- ago), L (2 days), U (40, not followed). V's board: A1, A2, F, T2, P; the
--- teen and the no-age player who do not follow V left off; V asked about 4
--- people (A1, N, P, T1), the same again later that day cost nothing. An
--- adult stranger following T1 never saw T1; T1's friend who follows each
--- other with T1 did; a teen saw an adult friend. 20 no-age players ahead of
--- one adult: 15 asked, then the adult left off and a friend shown. With the
--- day's 300 used up: a one-way adult left off, a friend shown, nothing more
--- asked. Undoing the block, the mute and the suspension, T1 following V
--- back, and V unfollowing A1 each changed the board as they should. The
--- phone's today a day either side worked; two days off and none refused;
--- signed out refused; anon can't run it, players can; 134's reading rule
+-- B (blocked V, 25), B2 (V blocked, 24), M (V muted, 11), HA (each other,
+-- 50, activity status off), O (ran out 3 days ago), L (2 days), U (40, not
+-- followed). V's board: A1, A2, F, T2, P; the teen and the no-age player
+-- who do not follow V left off; V asked about 4 people (A1, N, P, T1), the
+-- same again later that day cost nothing. An adult stranger following T1
+-- never saw T1; T1's friend who follows each other with T1 did; a teen saw
+-- an adult friend, never a one-way teen or no-age player. 20 no-age players
+-- ahead of one adult: 15 asked, then the adult left off and a friend shown.
+-- 210 no-age players ahead of a friend: 15 asked, the friend still shown.
+-- With the day's 300 used up: a one-way adult left off, a friend shown,
+-- nothing more asked. Undoing the block, the mute and the suspension, T1
+-- following V back, V unfollowing A1, and HA turning activity status back
+-- on each changed the board as they should. The phone's today a day either
+-- side worked; two days off and none refused; signed out refused; anon
+-- can't run it, players can, the helpers stay closed; 134's reading rule
 -- unchanged. And with a relied-on helper changed, it stopped before
 -- changing anything.
 --   RESULT 10_board_V=A1:12 A2:9@-1 F:8@1 T2:7 P:6 | 10_board_X=A1:12 |
@@ -199,4 +209,8 @@ commit;
 --   40_V_after_unblock_unmute_unsuspend=S:30 B:25 A1:12 M:11 A2:9@-1 |
 --   41_V_after_T1_follows_back=S:30 B:25 T1:20 A1:12 M:11 |
 --   42_V_after_unfollow_A1=S:30 B:25 T1:20 M:11 A2:9@-1 |
---   50_grants=anon=false players=true definer=true copies=1
+--   43_V_after_HA_shows_activity=HA:50 S:30 B:25 T1:20 M:11 |
+--   50_grants=anon=false players=true definer=true copies=1 |
+--   60_T2_teen_viewer_oneway_A1_N_T1=A1:12 V:8 |
+--   61_helpers_closed=budget=false known_adult=false |
+--   70_board_W3=MW3:3 | 71_W3_asks=15

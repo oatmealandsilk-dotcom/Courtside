@@ -334,7 +334,7 @@ export async function flyby({ courtId, day, me, sessions, tags }: { courtId: str
 }
 
 /**
- * The demo's friends_on_streak (migration 2026100600017): the people the
+ * The demo's friends_on_streak (migration 20261006000017): the people the
  * demo player follows on a streak of 3 days or more (each fixture's own
  * count, through today), longest first, at most 5. By the server's rules:
  * never anyone hidden (blocked, muted) or suspended, and someone who does

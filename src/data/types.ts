@@ -148,7 +148,7 @@ export interface PublicStreak {
 
 /**
  * Someone you follow who is on a streak, for "Friends on a streak" in the
- * weekly recap (migration 2026100600017): who, and their streak as others
+ * weekly recap (migration 20261006000017): who, and their streak as others
  * see it. Never anything else about them.
  */
 export interface FriendStreak extends PublicStreak {
