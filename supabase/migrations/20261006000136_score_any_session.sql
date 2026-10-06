@@ -1,5 +1,5 @@
--- CourtSide · score_any_session (Oct 6): a score on any tennis session, not
--- only a match.
+-- CourtSide · migration 136, score_any_session (Oct 6): a score on any
+-- tennis session, not only a match.
 --
 -- William (owner), Oct 5, on the Share page's Score box: "instead of having
 -- the score here, would it be better to just have the score in the card.
@@ -30,10 +30,12 @@
 --
 -- Three functions from migration 91 are replaced, each the same as before
 -- except where it said "only a match". Nothing else is touched, and no
--- table, column, rule or grant changes. Before this runs, a phone with the
--- new app saves a practice's score and the server quietly drops it (the
--- session itself saves as always).
+-- table, column, rule or grant changes. Before this runs, the server
+-- quietly drops a practice's score; the new app notices and says the score
+-- didn't save (the session itself saves as always).
 --
+-- Run it in the Supabase SQL editor as one piece, BEFORE the app that lets
+-- you score a practice goes out (a push to main or an update to phones).
 -- Needs 91 (live). Safe to run more than once. If any step fails, the whole
 -- file is undone.
 
@@ -49,10 +51,10 @@ begin
      or to_regprocedure('public.practice_session_score()') is null
      or to_regprocedure('public.session_score_changed()') is null
      or to_regprocedure('public.post_session_score()') is null then
-    raise exception 'score_any_session stopped before changing anything: migration 91 has to run first.';
+    raise exception 'Migration 136 (score_any_session) stopped before changing anything: migration 91 has to run first.';
   end if;
   if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'practice_sessions' and column_name = 'sets') then
-    raise exception 'score_any_session stopped before changing anything: migration 91 has to run first.';
+    raise exception 'Migration 136 (score_any_session) stopped before changing anything: migration 91 has to run first.';
   end if;
 end $$;
 

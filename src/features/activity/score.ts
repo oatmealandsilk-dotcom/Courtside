@@ -1,7 +1,7 @@
 import type { HeadToHead, MatchSet, PracticeSession } from '@/data/types';
 
 /*
- * A session's score (migration 91, Oct 4, for a match; score_any_session,
+ * A session's score (migration 91, Oct 4, for a match; migration 136,
  * Oct 6, for any tennis session): typed as one line ("6-4 3-6 10-7"), kept as sets
  * from the logger's side, and said back the same way everywhere (the log,
  * the card, the share picture, "Rematch?"). Plain functions, the same rules
@@ -16,6 +16,16 @@ import type { HeadToHead, MatchSet, PracticeSession } from '@/data/types';
  * win or a loss, and they never count toward the win rate or a head-to-head.
  */
 export const canScore = (kind: PracticeSession['kind'] | undefined): boolean => kind === 'practice' || kind === 'match' || kind === 'drills';
+
+/*
+ * Log entries whose score the server did not keep (a practice's or drills',
+ * while migration 136 has not run yet): the "Logged" note says so, once,
+ * instead of reading a score that is not there.
+ */
+const notKept = new Set<string>();
+export const scoreNotKept = (sessionId: string): void => { notKept.add(sessionId); };
+/** Whether this entry's score was not kept; true only the first time it is asked. */
+export const tookScoreNotKept = (sessionId: string | undefined): boolean => !!sessionId && notKept.delete(sessionId);
 
 /** Most sets a score can have, and most games in one (a long match tiebreak). */
 export const MAX_SETS = 5;

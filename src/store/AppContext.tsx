@@ -120,7 +120,7 @@ import type {
   PlayerProfile,
   MediaCrop, Tip, TaggedCourt, TrackerId, Invitee, ContactMatch, HealthShareKey, HeadToHead, CourtKings, FlybyPerson, MatchSet, Removed, RemovedItem, TakedownKind, TakedownReason, TournamentEntry, HiddenWords, HiddenWordsKind } from '@/data/types';
 import { HIDDEN_WORDS_MAX, HIDDEN_WORD_LENGTH, cleanWords, defaultHiddenWords } from '@/features/hiddenWords/hiddenWords';
-import { canScore, setsWinner } from '@/features/activity/score';
+import { canScore, scoreNotKept, setsWinner } from '@/features/activity/score';
 
 interface NewStoryInput {
   imageUrl?: string;
@@ -3204,9 +3204,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const before = stateRef.current.posts;
     setState((prev) => ({ ...prev, sessions: [session, ...prev.sessions], detectedActivities: markActivity(prev, { status: 'logged', sessionId: session.id }), posts: input.activityId ? postsFollowLog(prev.posts, me, input.activityId, session) : prev.posts }));
     if (!live(me)) return session.id;
-    try { await remote.insertSession(session); } catch (e) {
+    let saved: { scoreDropped: boolean };
+    try { saved = await remote.insertSession(session); } catch (e) {
       setState((prev) => ({ ...prev, sessions: prev.sessions.filter((x) => x.id !== session.id), detectedActivities: markActivity(prev, { status: had?.status ?? 'new', sessionId: had?.sessionId }), posts: prev.posts.map((p) => (input.activityId && p.authorId === me && p.session?.activityId === input.activityId ? before.find((b) => b.id === p.id) ?? p : p)) }));
       throw e;
+    }
+    if (saved.scoreDropped) {
+      // Saved, but the server didn't keep the score (a practice's, before migration 136): it comes off
+      // here too, so it never shows as saved, and the "Logged" note says so once (showLogged).
+      const { sets: _dropped, ...plain } = session;
+      setState((prev) => ({ ...prev, sessions: prev.sessions.map((x) => (x.id === session.id ? plain : x)), posts: input.activityId ? postsFollowLog(prev.posts, me, input.activityId, plain) : prev.posts }));
+      scoreNotKept(session.id);
     }
     return session.id;
   }, [requireUser]);

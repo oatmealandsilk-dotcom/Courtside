@@ -32,8 +32,8 @@ import { Chips } from '@/components/sheet/SheetForm';
 import { trackerName } from '@/features/activity/lengths';
 import { TrackedLength } from '@/components/session/TrackedLength';
 import { LogComposerTop, LogDock, DOCK_ROOM } from '@/components/session/LogComposer';
-import { ScoreField } from '@/components/session/ScoreField';
-import { canScore, readScore, setsWinner } from '@/features/activity/score';
+import { AddScore, ScoreField } from '@/components/session/ScoreField';
+import { canScore, readScore, scoreText, setsWinner, tookScoreNotKept } from '@/features/activity/score';
 import { ZoneGlyph } from '@/components/session/ZoneGlyph';
 import { HealthShareRow } from '@/components/session/HealthShareRow';
 import { availableShare, chosenShare } from '@/features/activity/healthShare';
@@ -151,6 +151,22 @@ export default function Compose() {
     setOpened({ type: 'tracker', activity, session: sessions.find((x) => x.activityId === activity.id) });
     setAttached(true);
   }, [tracker.activity?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The log entry being posted, as your log has it now: a score added from here ("Add score", Oct 6)
+  // goes on the card straight away. Only its score and result follow; which session it is stays held.
+  const heldLog = opened?.session;
+  const liveLog = heldLog ? sessions.find((x) => x.id === heldLog.id) : undefined;
+  useEffect(() => {
+    if (!liveLog) return;
+    setOpened((o) => {
+      if (!o?.session || o.session.id !== liveLog.id) return o;
+      if (scoreText(o.session.sets) === scoreText(liveLog.sets) && o.session.won === liveLog.won) return o;
+      const { sets: _s, won: _w, ...rest } = o.session;
+      const session: PracticeSession = { ...rest, ...(liveLog.won !== undefined ? { won: liveLog.won } : {}), ...(liveLog.sets?.length ? { sets: liveLog.sets } : {}) };
+      return o.type === 'tracker' ? { ...o, session } : { type: 'logged', session };
+    });
+  }, [liveLog?.id, scoreText(liveLog?.sets), liveLog?.won]); // eslint-disable-line react-hooks/exhaustive-deps
+  // A tennis session of yours with no score yet: a quiet "Add score" by its card (Oct 6), as on Share.
+  const addScoreTo = liveLog && liveLog.userId === currentUserId && canScore(liveLog.kind) && !liveLog.fromSessionId && !liveLog.sets?.length ? liveLog.id : undefined;
   // "Share health data" starts on for someone known to be an adult, off for
   // everyone else; anyone can switch it on (owner, Oct 3; migration 72).
   const adult = !!currentUser && !notKnownAdult(currentUser);
@@ -768,6 +784,11 @@ export default function Compose() {
       }
     }
     const firstPost = !posts.some((p) => p.authorId === currentUserId);
+    // Logged, but the server didn't keep the score (a practice's, before migration 136): the post goes
+    // up without it, as the server will show it, and the note after says so.
+    const scoreGone = freshLog && tookScoreNotKept(logId);
+    const postSession = sessionFor(logId);
+    if (postSession && scoreGone) delete postSession.sets;
     let postId: string | undefined;
     try {
       postId = actions.addPost({
@@ -784,7 +805,7 @@ export default function Compose() {
         videoUrl: media?.kind === 'video' ? media.uri : undefined,
         mediaLabel: media?.label,
         thumbnailUrl: media?.thumbnailUrl ?? (media?.kind === 'photo' ? media.uri : undefined),
-        session: sessionFor(logId) ?? undefined,
+        session: postSession ?? undefined,
       });
     } catch {
       // Logged, but the post did not go: the session waits in Your sessions, ready to post.
@@ -798,6 +819,7 @@ export default function Compose() {
     const record = freshLog ? next.record : null;
     // Said once the post has actually landed, never while it is still going up (or if it fails).
     if (firstPost) whenLanded(postId, () => setTimeout(() => showToast({ title: 'Your first post is up', body: 'Tap to invite the people you hit with.', icon: 'people-outline', href: '/invite' }), 1800));
+    else if (scoreGone) whenLanded(postId, () => setTimeout(() => showToast({ title: 'Posted without the score', body: 'Scores aren’t ready yet. Add it later from Your sessions.', icon: 'alert-circle-outline', long: true }), 600));
     // A beaten record is the moment: "New record!" on gold, with the same Instagram button.
     else if (record) whenLanded(postId, () => setTimeout(() => { haptics.reward(); showToast({ title: record.title, body: record.body, glyph: 'record', action: shareAction({ post: postId, session: logId }) }); }, 600));
     // Otherwise "Posted" with an Instagram button: the session as a story
@@ -1081,7 +1103,10 @@ export default function Compose() {
                 <Field bare accessibilityLabel="Caption" value={body} onChangeText={setBody} placeholder={`${logHint} — how did it go?`} multiline minHeight={44} mentions maxLength={POST_MAX} />
               </View>
             </View>
-            {openedLog || workoutLog ? null : (
+            {openedLog || workoutLog ? (
+              // Logged already ("Post it"): what it was is said; a tennis session with no score can still get one.
+              addScoreTo ? <AddScore sessionId={addScoreTo} style={styles.addScore} /> : null
+            ) : (
               <Reanimated.View layout={LinearTransition.duration(220)} style={styles.logChips}>
                 <Chips value={kind} onChange={(k) => { if (!k) return; setKind(k); if (k !== 'match') setWon(null); }} options={KINDS} />
                 {kind === 'match' ? (
@@ -1163,6 +1188,7 @@ export default function Compose() {
                 loggedMinutes={opened.type === 'tracker' ? sessions.find((x) => x.activityId === opened.activity.id)?.minutes : undefined}
               />
             ) : null}
+            {opened && withStats && addScoreTo ? <AddScore sessionId={addScoreTo} style={styles.addScoreStats} /> : null}
             <View style={styles.stage}>
               {opened && !media ? (
                 // No picture yet: an invitation to add one, not an empty frame to fill.
@@ -1367,6 +1393,8 @@ const styleDefinitions = StyleSheet.create({
   flex: { flex: 1 },
   logChips: { gap: spacing.md, marginTop: spacing.lg },
   scoreBox: { marginTop: spacing.md },
+  addScore: { alignSelf: 'flex-start', marginTop: spacing.lg },
+  addScoreStats: { alignSelf: 'flex-start', marginTop: -spacing.sm, marginBottom: spacing.lg },
   who: { flexDirection: 'row', alignItems: 'center', gap: 6, maxWidth: 170 },
   whoName: { ...font('600'), fontSize: 15, color: colors.text, flexShrink: 1 },
   whoAsked: { ...typography.small, color: colors.textFaint },

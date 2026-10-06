@@ -13,7 +13,7 @@ import { Duration } from '@/components/session/Duration';
 import { LENGTHS, lengthTile, trackerName } from '@/features/activity/lengths';
 import { TrackedLength } from '@/components/session/TrackedLength';
 import { ScoreField } from '@/components/session/ScoreField';
-import { canScore, readScore, scoreText, setsWinner } from '@/features/activity/score';
+import { canScore, readScore, scoreText, setsWinner, tookScoreNotKept } from '@/features/activity/score';
 import { computeStats } from '@/features/practice/stats';
 import { andList, canTagKind, firstName as firstOfName, isActive, tagsOnSession } from '@/features/activity/sessionTags';
 import { pickSource, postOf, postedIndex, sourceOn } from '@/features/activity/recent';
@@ -308,7 +308,10 @@ function LogSession() {
       // save went through, and says "Posted" when shared. A toast there would
       // sit over its Share button for a few seconds.
       if (post && fresh) next.current = fresh.id;
-      else if (asked) showToast({ title: 'Logged', body: `${asked} will be asked to accept.`, glyph: 'logged' });
+      // The server didn't keep the score (a practice's, before migration 136): said here too, never shown as saved.
+      else if (asked) showToast(tookScoreNotKept(id)
+        ? { title: 'Logged without the score', body: `Scores aren’t ready yet. ${asked} will be asked to accept.`, icon: 'alert-circle-outline', long: true }
+        : { title: 'Logged', body: `${asked} will be asked to accept.`, glyph: 'logged' });
       else {
         // "Logged · 1h 30m · Match · Won", and the streak once it is two days or more.
         const streak = currentUserId ? computeStats(currentUserId, [{ id: id, userId: currentUserId, day, minutes, kind, createdAt: new Date().toISOString() }, ...sessions], posts, stories).currentStreakDays : 0;

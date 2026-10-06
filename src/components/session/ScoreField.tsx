@@ -1,9 +1,11 @@
 import React, { useEffect, useRef } from 'react';
-import { StyleSheet, Text, View, type TextInput } from 'react-native';
+import { Pressable, StyleSheet, Text, View, type StyleProp, type TextInput, type ViewStyle } from 'react-native';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { router } from 'expo-router';
 
 import { Field } from '@/components/ui';
-import type { PracticeSession } from '@/data/types';
-import { readScore, setsWinner, spokenScore } from '@/features/activity/score';
+import type { ID, PracticeSession } from '@/data/types';
+import { readScore, scoreText, setsWinner, spokenScore } from '@/features/activity/score';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, typography } from '@/theme';
 
@@ -49,7 +51,8 @@ export function ScoreField({ value, onChange, kind = 'match', label, focus = fal
     ? problem
     : !match
       // A practice's sets are only the sets: never a win or a loss, never in the win rate.
-      ? read.sets ? `Sets ${mine}–${theirs}. Only matches count toward your win rate.` : 'Your games first, like 6-4 6-3. Only matches count toward your win rate.'
+      // Once it reads, just the score as it will show, kept short (Oct 6, review).
+      ? read.sets ? scoreText(read.sets) : 'Your games first, like 6-4 6-3. Not counted in your win rate.'
       : read.sets
         ? winner === undefined ? `Level at ${mine} set${mine === 1 ? '' : 's'} each: the result is the one you pick.` : `You ${winner ? 'won' : 'lost'}, ${Math.max(mine, theirs)} set${Math.max(mine, theirs) === 1 ? '' : 's'} to ${Math.min(mine, theirs)}.`
         : 'Your games first, like 6-4 3-6 10-7.';
@@ -72,8 +75,33 @@ export function ScoreField({ value, onChange, kind = 'match', label, focus = fal
   );
 }
 
+/**
+ * The quiet "Add score" link (Oct 6) for a tennis session of yours that has
+ * none yet, on Share and on the post being made from it: it opens the
+ * session's edit with the caret in the score box, and Save comes back here
+ * with the card showing it. A link, never a box: the score lives in the log.
+ */
+export function AddScore({ sessionId, style }: { sessionId: ID; style?: StyleProp<ViewStyle> }) {
+  const styles = useThemedStyles(styleDefinitions);
+  return (
+    <Pressable
+      accessibilityRole="link"
+      accessibilityLabel="Add score to this session"
+      hitSlop={8}
+      onPress={() => router.push({ pathname: '/log-session', params: { edit: sessionId, focus: 'score' } })}
+      style={({ pressed }) => [styles.addScore, style, pressed && styles.pressed]}
+    >
+      <Ionicons name="add" size={15} color={colors.textMuted} />
+      <Text style={styles.addScoreText}>Add score</Text>
+    </Pressable>
+  );
+}
+
 const styleDefinitions = StyleSheet.create({
   wrap: { gap: 6 },
+  addScore: { flexDirection: 'row', alignItems: 'center', alignSelf: 'center', gap: 3, paddingVertical: 2 },
+  addScoreText: { ...typography.smallStrong, color: colors.textMuted },
+  pressed: { opacity: 0.7 },
   line: { ...typography.small, color: colors.textFaint },
   problem: { color: colors.danger },
 });

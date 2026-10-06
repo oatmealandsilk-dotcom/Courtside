@@ -353,11 +353,11 @@ export function pillPieces(s: SessionDetail, hidden: ID[] = []): { time: string;
   const { opponents, partners } = sessionPeople(s, hidden);
   const lead = opponents[0] ?? partners[0];
   const first = lead ? (lead.name?.trim().split(/\s+/)[0] || `@${lead.handle}`) : '';
-  // A practice with a score keeps its name in front: "Practice 6–4 6–3" (Oct 6), as a match keeps "Won".
-  const score = s.kind === 'match' ? null : scoreLine(s);
   return {
     time: duration(s.minutes),
-    result: score ? `${kindWord(s)} ${score}` : resultWithScore(s) ?? kindWord(s),
+    // The pill on clips stays as it was (owner, Oct 5: leave it): a match's result and score, otherwise
+    // what it was. A practice's score (Oct 6) is on its card and in its stats, not on the pill.
+    result: (s.kind === 'match' ? resultWithScore(s) : null) ?? kindWord(s),
     third: s.maxHr ? `${s.maxHr} bpm` : lead ? `${opponents.length ? 'vs' : 'with'} ${first}` : null,
   };
 }

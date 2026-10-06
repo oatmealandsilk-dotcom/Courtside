@@ -8,7 +8,7 @@ import Reanimated, { Easing, useAnimatedStyle, useSharedValue, withDelay, withSe
 import { Tappable } from '@/components/Tappable';
 import type { ID, SessionDetail } from '@/data/types';
 import { pillPieces, resultWord, spokenDuration } from '@/features/activity/format';
-import { canScore, spokenScore } from '@/features/activity/score';
+import { spokenScore } from '@/features/activity/score';
 import { localDay } from '@/features/practice/stats';
 import * as haptics from '@/lib/haptics';
 import { useReducedMotion } from '@/lib/useReducedMotion';
@@ -45,8 +45,8 @@ export function StatsPill({ session, hidden = [], onPress, scale = 1, active = f
   const isDark = pageIsDark();
   const p = pillPieces(session, hidden);
   const result = resultWord(session);
-  // The pill shows a match's score beside the result (pillPieces, migration 91), a practice's beside its name (Oct 6); said here as "6 to 4".
-  const spoken = `Session stats: ${[spokenDuration(session.minutes), result?.toLowerCase(), canScore(session.kind) && session.sets?.length ? spokenScore(session.sets) : null, session.maxHr ? `max heart rate ${session.maxHr}` : p.third].filter(Boolean).join(', ')}`;
+  // The pill shows a match's score beside the result (pillPieces, migration 91); said here as "6 to 4".
+  const spoken = `Session stats: ${[spokenDuration(session.minutes), result?.toLowerCase(), session.kind === 'match' && session.sets?.length ? spokenScore(session.sets) : null, session.maxHr ? `max heart rate ${session.maxHr}` : p.third].filter(Boolean).join(', ')}`;
   // The room there is, so pieces drop out whole rather than being cut: heart
   // rate (or the player) first, then the result. The time and "See stats" stay.
   // Each version (all pieces, without the last, without both) is laid out

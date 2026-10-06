@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -12,6 +12,7 @@ import { postedIndex, sourceOn } from '@/features/activity/recent';
 import { useTennisFlags } from '@/features/activity/useTennisFlags';
 import { storyFromLog, storyFromPost, type SessionStory } from '@/features/share/sessionStory';
 import { canScore } from '@/features/activity/score';
+import { AddScore } from '@/components/session/ScoreField';
 import { canCopyStory, canSaveStory, exportStory, stageSize, warmStory, type StoryAction, type StoryLook } from '@/features/share/storyImage';
 import { mixHex } from '@/features/activity/zones';
 import { goBack } from '@/lib/goBack';
@@ -247,12 +248,7 @@ export default function ShareSession() {
               })}
             </View>
 
-            {addScore ? (
-              <Pressable accessibilityRole="link" accessibilityLabel="Add score to this session" hitSlop={8} onPress={() => router.push({ pathname: '/log-session', params: { edit: addScore, focus: 'score' } })} style={({ pressed }) => [styles.addScore, pressed && styles.pressed]}>
-                <Ionicons name="add" size={15} color={colors.textMuted} />
-                <Text style={styles.addScoreText}>Add score</Text>
-              </Pressable>
-            ) : null}
+            {addScore ? <AddScore sessionId={addScore} /> : null}
 
             {/* Strava's row of round buttons, in CourtSide's colours (Oct 4): Stories leads, the rest follow. */}
             <View style={styles.actions}>
@@ -293,8 +289,6 @@ const styleDefinitions = StyleSheet.create({
   designTextOn: { color: colors.text },
   designDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: 'transparent' },
   designDotOn: { backgroundColor: colors.brand },
-  addScore: { flexDirection: 'row', alignItems: 'center', alignSelf: 'center', gap: 3, paddingVertical: 2 },
-  addScoreText: { ...typography.smallStrong, color: colors.textMuted },
   actions: { flexDirection: 'row', justifyContent: 'center', gap: spacing.lg, paddingHorizontal: spacing.lg, marginTop: spacing.xs },
   action: { alignItems: 'center', gap: 6, width: 64 },
   actionCircle: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
