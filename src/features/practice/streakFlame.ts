@@ -20,6 +20,14 @@ export function shownStreak(user: Pick<User, 'id' | 'stats' | 'streak'> | null |
   return days >= STREAK_FLAME_FROM ? days : 0;
 }
 
+/**
+ * What others see of a streak put up as this (migration 134): its number and
+ * last day, or '' for no flame at all (under 3 days). Two that match need no
+ * new send; a server holding 2 days and a phone at 1 both show nothing.
+ */
+export const streakSeen = (streak: { days: number; through: string | null }) =>
+  (streak.days >= STREAK_FLAME_FROM && streak.through ? `${streak.days}:${streak.through}` : '');
+
 /** What a screen reader hears for it: "12-day streak". */
 export const streakLabel = (days: number) => `${days}-day streak`;
 

@@ -1545,16 +1545,18 @@ export const remote = {
    * the number and the last day it covers (your own calendar day), never the
    * sessions or posts behind it. A database without migration 134 is asked
    * once a session and then left alone; the flame then shows only on your
-   * own screens.
+   * own screens. True once the server holds it; false when it could not be
+   * put up (offline, or no migration 134), so the caller can try again.
    */
-  async setMyStreak(days: number, through: string | null): Promise<void> {
-    if (!supabase || missingThisSession.has('set_my_streak')) return;
+  async setMyStreak(days: number, through: string | null): Promise<boolean> {
+    if (!supabase || missingThisSession.has('set_my_streak')) return false;
     const streak = Math.max(0, Math.min(3650, Math.round(days)));
     const { error } = await supabase.rpc('set_my_streak', { streak, last_day: streak > 0 ? through : null })
       .then((r) => r, (e: unknown) => ({ error: { message: String(e) } as { code?: string; message: string } }));
-    if (!error) return;
-    if (missingFunction(error)) { missingThisSession.add('set_my_streak'); return; }
+    if (!error) return true;
+    if (missingFunction(error)) { missingThisSession.add('set_my_streak'); return false; }
     console.warn('[remote] streak not shared', error.message);
+    return false;
   },
 
   /* ------------------------------ hidden words ------------------------------ */

@@ -8,7 +8,8 @@
 -- and the last day that number covers (today, or yesterday while today has
 -- nothing yet), with set_my_streak(). Other phones show the flame while that
 -- last day is today or yesterday on their own calendar; after that it reads
--- as 0. Nothing about the sessions or posts behind it is stored here.
+-- as 0. Nothing about the sessions or posts behind it is stored here, and
+-- readers get only the number and that day, never the time it last changed.
 --
 -- Who sees a streak: signed-in players, where they could see that player's
 -- posts and stats. A private account's only to its followers, nobody's to
@@ -55,8 +56,12 @@ create index if not exists player_streaks_running_idx on public.player_streaks (
 
 alter table public.player_streaks enable row level security;
 -- Read only, signed in only. No one writes the table directly: set_my_streak() does.
+-- Only the number and its day can be read: updated_at (the minute a row last
+-- changed) would tell others when someone logged or removed a private session,
+-- so it stays with the server. Revoking the whole table also clears these
+-- column grants, so a second run starts clean.
 revoke all on table public.player_streaks from public, anon, authenticated;
-grant select on table public.player_streaks to authenticated;
+grant select (user_id, days, through_day) on public.player_streaks to authenticated;
 
 drop policy if exists "streaks show where stats do" on public.player_streaks;
 create policy "streaks show where stats do" on public.player_streaks

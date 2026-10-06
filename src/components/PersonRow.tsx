@@ -54,9 +54,16 @@ export function PersonRow({ user, reason, via, words = [], first = false, onPres
         <View style={styles.words}>
           <View style={styles.nameLine}>
             <Highlighted text={user.name} words={words} style={styles.name} strong={styles.nameMatch} lines={1} wordStart />
-            {/* The small flame here: the row also holds the level and Follow, and the name keeps what room it can. */}
+            {/* The small flame here, close after the name: the row also holds the level and Follow. */}
             <StreakFlame days={streak} size="small" style={styles.flame} />
-            <LevelPill profile={user.profile} small />
+            {streak ? (
+              // With a flame, the name and its flame keep their room and the level gives way: it shows
+              // when it fits beside them, and otherwise drops to a hidden second line (it is on their profile).
+              <View style={styles.levelRoom}>
+                <View style={styles.levelGate} />
+                <LevelPill profile={user.profile} small />
+              </View>
+            ) : <LevelPill profile={user.profile} small />}
           </View>
           <Text style={styles.meta} numberOfLines={1}>
             @{bold(highlightParts(user.handle, words, { inside: 2 }))}
@@ -90,6 +97,9 @@ const styleDefinitions = StyleSheet.create({
   nameLine: { flexDirection: 'row', alignItems: 'center', gap: 6, minWidth: 0 },
   name: { ...font('500'), fontSize: 16, color: colors.text, flexShrink: 1 },
   flame: { marginLeft: -2 },
+  // The rest of the line after the flame, one small level pill tall: a pill that does not fit wraps out of sight.
+  levelRoom: { flex: 1, minWidth: 0, height: 19, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', overflow: 'hidden' },
+  levelGate: { width: 0, height: 19 },
   nameMatch: { ...font('700') },
   meta: { ...typography.small, color: colors.textFaint },
   handleMatch: { ...font('600'), color: colors.textMuted },

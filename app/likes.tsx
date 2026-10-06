@@ -84,9 +84,9 @@ export default function Likes() {
                   <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={48} ring={user.isCoach} />
                   <View style={{ flex: 1, gap: 3 }}>
                     <View style={styles.nameLine}>
-                  <Text style={styles.name} numberOfLines={1}>{user.name}</Text>
-                  <StreakFlame days={shownStreak(user, currentUserId)} />
-                </View>
+                      <Text style={styles.name} numberOfLines={1}>{user.name}</Text>
+                      <StreakFlame days={shownStreak(user, currentUserId)} />
+                    </View>
                     <View style={styles.meta}>
                       <Text style={styles.handle} numberOfLines={1}>@{user.handle}</Text>
                       <LevelPill profile={user.profile} small />

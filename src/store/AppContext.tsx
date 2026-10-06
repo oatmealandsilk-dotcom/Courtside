@@ -12,7 +12,7 @@ import { AppState as DeviceState, Platform } from 'react-native';
 import { randomUUID } from 'expo-crypto';
 import { router } from 'expo-router';
 import { computeStats, localDay, publicStreak, streakAtRisk } from '@/features/practice/stats';
-import { STREAK_FLAME_FROM } from '@/features/practice/streakFlame';
+import { streakSeen } from '@/features/practice/streakFlame';
 import { planStreakReminder } from '@/features/practice/reminder';
 import { isMapCourtId } from '@/features/places/courtName';
 import { TERMS_VERSION } from '@/lib/legal';
@@ -2795,21 +2795,64 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // Your streak's number (never what is behind it) goes up for the flame
   // others see beside your name (migration 134): once the full load is in,
-  // and again whenever logging, posting or deleting changes it. Skipped when
-  // the server already holds the same, or when there is nothing to show and
-  // nothing showing.
-  const sharedStreak = useRef('');
+  // and again whenever logging, posting or deleting changes it. It is checked
+  // against what the server holds as far as this phone knows: what the last
+  // full load (or pull to refresh) brought down, then whatever each send that
+  // went through put there. Skipped only when others would already see the
+  // same: the same number and day, or no flame either way (under 3 days).
+  // One send at a time. One that fails is tried again when the app comes
+  // back to the front, or with the next change once a minute has passed; a
+  // different number goes straight away.
+  const streakHeld = useRef<{ me: ID; loaded: string; view: string } | null>(null);
+  const streakWanted = useRef<{ me: ID; days: number; through: string | null } | null>(null);
+  const streakSending = useRef(false);
+  const streakFailed = useRef<{ view: string; at: number } | null>(null);
+  const shareStreak = useCallback(async () => {
+    if (streakSending.current) return; // the send in flight looks again when it lands
+    streakSending.current = true;
+    try {
+      for (;;) {
+        const want = streakWanted.current;
+        const held = streakHeld.current;
+        if (!want || !held || held.me !== want.me || stateRef.current.currentUserId !== want.me) return;
+        const view = streakSeen(want);
+        if (view === held.view) return;
+        const failed = streakFailed.current;
+        if (failed && failed.view === view && Date.now() - failed.at < 60_000) return;
+        const ok = await remote.setMyStreak(want.days, want.through);
+        if (!ok) {
+          streakFailed.current = { view, at: Date.now() };
+          // A newer number that came in meanwhile still gets its own try.
+          const next = streakWanted.current;
+          if (next && next.me === want.me && streakSeen(next) !== view) continue;
+          return;
+        }
+        streakFailed.current = null;
+        if (streakHeld.current?.me === want.me) streakHeld.current = { ...streakHeld.current, view };
+      }
+    } finally {
+      streakSending.current = false;
+    }
+  }, []);
   useEffect(() => {
     const me = state.currentUserId;
     if (!isSupabaseConfigured || !me || !UUID.test(me) || !state.remoteLoaded) return;
-    const mine = publicStreak(me, state.sessions, state.posts, state.stories);
-    const key = `${me}:${mine.days}:${mine.through ?? ''}`;
-    if (sharedStreak.current === key) return;
-    const held = state.users.find((u) => u.id === me)?.streak;
-    sharedStreak.current = key;
-    if (held ? held.days === mine.days && held.through === mine.through : mine.days < STREAK_FLAME_FROM) return;
-    void remote.setMyStreak(mine.days, mine.through);
-  }, [state.currentUserId, state.sessions, state.posts, state.stories, state.users, state.remoteLoaded]);
+    // A fresh load says what the server holds now (only a running streak of 3 or more comes down): start from that.
+    const own = state.users.find((u) => u.id === me)?.streak;
+    const loaded = own ? streakSeen(own) : '';
+    if (streakHeld.current?.me !== me || streakHeld.current.loaded !== loaded) streakHeld.current = { me, loaded, view: loaded };
+    streakWanted.current = { me, ...publicStreak(me, state.sessions, state.posts, state.stories) };
+    void shareStreak();
+  }, [state.currentUserId, state.sessions, state.posts, state.stories, state.users, state.remoteLoaded, shareStreak]);
+  useEffect(() => {
+    if (!isSupabaseConfigured) return;
+    const sub = DeviceState.addEventListener('change', (st) => {
+      if (st !== 'active') return;
+      streakFailed.current = null;
+      void shareStreak();
+    });
+    return () => sub.remove();
+  }, [shareStreak]);
 
   // Read from the ref, not from this render: an action started just before a
   // sign-in (sign-up's birthday, say) must see the account that now exists.

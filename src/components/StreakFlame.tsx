@@ -19,15 +19,17 @@ const SIZES = {
  * pick, style 1 (Oct 5). Pass the days from `shownStreak`; under 3 it draws
  * nothing. The number wears the clay too where clay reads at 4.5:1 on the
  * court's page and cards (Night); elsewhere it takes the text colour and the
- * flame keeps the clay. Over a picture the number is white and the flame a
- * lighter clay, the way the level pill lightens its colour over a clip.
- * A screen reader hears "12-day streak".
+ * flame keeps the clay. Over a picture the number is white and the flame
+ * keeps the full clay (it reads on a light frame and a dark one alike), both
+ * with the clip's dark edge. A screen reader hears "12-day streak".
  */
-export function StreakFlame({ days, size = 'medium', onMedia = false, style, textStyle, maxFontSizeMultiplier }: {
+export function StreakFlame({ days, size = 'medium', onMedia = false, silent = false, style, textStyle, maxFontSizeMultiplier }: {
   days: number;
   size?: keyof typeof SIZES;
   /** Over a clip: a white number. */
   onMedia?: boolean;
+  /** Not read aloud: something right beside it already says the streak (your profile's streak pill). */
+  silent?: boolean;
   style?: StyleProp<ViewStyle>;
   /** Laid on the flame and the number both (a clip's text shadow). */
   textStyle?: StyleProp<TextStyle>;
@@ -36,7 +38,7 @@ export function StreakFlame({ days, size = 'medium', onMedia = false, style, tex
   const { theme } = useTheme();
   const palette = themes[theme];
   const { flameInk, numberInk } = useMemo(() => {
-    if (onMedia) return { flameInk: mix(palette.clay, palette.onMedia, 0.4), numberInk: palette.onMedia };
+    if (onMedia) return { flameInk: palette.clay, numberInk: palette.onMedia };
     const reads = [palette.bg, palette.surface, palette.bgElevated].every((ground) => contrast(palette.clay, ground) >= 4.5);
     return { flameInk: palette.clay, numberInk: reads ? palette.clay : palette.text };
   }, [onMedia, palette]);
@@ -44,10 +46,13 @@ export function StreakFlame({ days, size = 'medium', onMedia = false, style, tex
   const s = SIZES[size];
   return (
     <View
-      accessible
-      accessibilityLabel={streakLabel(days)}
+      accessible={!silent}
+      accessibilityLabel={silent ? undefined : streakLabel(days)}
       // A browser reads a labelled group only as an image; a phone reads the label as it is.
-      role={Platform.OS === 'web' ? 'img' : undefined}
+      role={!silent && Platform.OS === 'web' ? 'img' : undefined}
+      accessibilityElementsHidden={silent}
+      importantForAccessibility={silent ? 'no-hide-descendants' : 'auto'}
+      aria-hidden={silent || undefined}
       style={[styles.wrap, { gap: s.gap }, style]}
     >
       <Ionicons name="flame" size={s.icon} color={flameInk} style={textStyle} />
@@ -56,14 +61,6 @@ export function StreakFlame({ days, size = 'medium', onMedia = false, style, tex
       </Text>
     </View>
   );
-}
-
-/** `a` moved `t` of the way toward `b` (both #RRGGBB). */
-function mix(a: string, b: string, t: number): string {
-  const ok = (hex: string) => /^#[0-9a-f]{6}$/i.test(hex);
-  if (!ok(a) || !ok(b)) return a;
-  const at = (hex: string, i: number) => parseInt(hex.slice(1 + i * 2, 3 + i * 2), 16);
-  return `#${[0, 1, 2].map((i) => Math.round(at(a, i) + (at(b, i) - at(a, i)) * t).toString(16).padStart(2, '0')).join('')}`;
 }
 
 /** The contrast between two #RRGGBB colours, as WCAG counts it (1 to 21). */
