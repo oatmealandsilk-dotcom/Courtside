@@ -73,7 +73,7 @@ export default function Settings() {
     void actions.loadReports().then((list) => setOpenReports(list ? list.filter((r) => r.status === 'open').length : null)).catch(() => setOpenReports(null));
   }, [actions, admin]));
   // One tap flips them, and the row says which way they are (Oct 5, owner: no switch, just say On or Off).
-  const tipsRow: Row = { icon: 'bulb-outline', label: 'Tips', detail: 'A short hint the first time you reach something', value: tipsOn ? 'On' : 'Off', flip: true, onPress: () => {
+  const tipsRow: Row = { icon: 'bulb-outline', label: 'Tips', detail: 'A hint on first use', value: tipsOn ? 'On' : 'Off', flip: true, onPress: () => {
     haptics.tap();
     if (tipsOn) { turnOffTips(); showToast({ title: 'Tips are off', icon: 'bulb-outline' }); }
     else { resetTips(); showToast({ title: 'Tips will show again', icon: 'bulb-outline' }); }

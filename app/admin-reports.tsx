@@ -233,7 +233,7 @@ export default function AdminReports() {
           ) : null;
           // Dismiss: a quiet word at the row's far end, its letters on the card's own edge.
           const dismissButton = report.status === 'open'
-            ? <Button size="sm" label="Dismiss" variant="ghost" loading={waiting('dismiss')} onPress={() => void decide(report, 'dismiss')} style={styles.dismiss} />
+            ? <View style={styles.dismiss}><Button size="sm" label="Dismiss" variant="ghost" loading={waiting('dismiss')} onPress={() => void decide(report, 'dismiss')} style={styles.ghostPad} /></View>
             : null;
           if (report.kind === 'conversation') {
             const showAll = !!chatOpen[report.id];
@@ -295,7 +295,8 @@ export default function AdminReports() {
                   {item.picture ? <TileCover uri={item.picture} style={styles.thumb} accessibilityIgnoresInvertColors /> : <View style={[styles.thumb, styles.noThumb]}><Ionicons name="document-text-outline" size={18} color={colors.textMuted} /></View>}
                   <View style={{ flex: 1, gap: 2 }}>
                     <Text style={styles.body} numberOfLines={report.kind === 'post' || report.kind === 'hit' ? 2 : 6}>{item.body || 'No caption'}</Text>
-                    <Text style={styles.muted} numberOfLines={1}>{person ? `by @${person.handle}` : ''}{item.removed ? `${person ? ' · ' : ''}Removed${item.reason ? `: ${reasonLabel(item.reason)}` : ''}` : ''}</Text>
+                    <Text style={styles.muted} numberOfLines={1}>{person ? `by @${person.handle}` : ''}</Text>
+                    {item.removed ? <Text style={styles.removedLine} numberOfLines={1}>Removed{item.reason ? `: ${reasonLabel(item.reason)}` : ''}</Text> : null}
                   </View>
                 </>
               )}
@@ -425,7 +426,7 @@ function ReportedChatCard({ chat, showAll, lines, onShowAll, styles, users, busy
                 </View>
               ) : m.id ? (
                 <View style={styles.lineActions}>
-                  <Button size="sm" label="Remove this message" variant="ghost" loading={busy === `line:${m.id}`} onPress={() => onRemove(m.id!, 'message')} style={styles.lineGhost} />
+                  <View style={styles.lineGhost}><Button size="sm" label="Remove this message" variant="ghost" loading={busy === `line:${m.id}`} onPress={() => onRemove(m.id!, 'message')} style={styles.ghostPad} /></View>
                 </View>
               ) : null}
             </View>
@@ -500,11 +501,13 @@ const styleDefinitions = StyleSheet.create({
   name: { ...typography.bodyStrong, color: colors.text },
   body: { ...typography.body, color: colors.text },
   muted: { ...typography.small, color: colors.textMuted },
+  removedLine: { ...typography.smallStrong, color: colors.danger },
   // One row of compact buttons; Dismiss at its far end.
   actions: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.sm, paddingTop: 2 },
-  // Its words end on the card's content edge, not its own padding's.
-  dismiss: { marginLeft: 'auto', marginRight: -spacing.md, paddingHorizontal: spacing.md },
-  lineGhost: { marginLeft: -spacing.md, paddingHorizontal: spacing.md },
+  // Pushed to the row's far end, its word on the card's content edge rather than its own padding's.
+  dismiss: { marginLeft: 'auto', marginRight: -spacing.md },
+  lineGhost: { marginLeft: -spacing.md },
+  ghostPad: { paddingHorizontal: spacing.md },
   chatBox: { gap: 6, padding: spacing.sm, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border },
   chatLine: { ...typography.small, color: colors.text },
   chatItem: { gap: 6 },

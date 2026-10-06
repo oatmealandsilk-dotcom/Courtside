@@ -130,13 +130,13 @@ export function CommentRow({ comment, big = false, reply = false, onPressBody, o
         ) : null}
         {onUnhide ? (
           <View style={styles.hiddenActions}>
-            <Pressable accessibilityRole="button" accessibilityLabel={`Unhide ${who?.name ?? 'this'}'s comment`} hitSlop={{ top: 10, bottom: 12, left: 8, right: 8 }} onPress={onUnhide} style={styles.replyButton}>
+            <Pressable accessibilityRole="button" accessibilityLabel={`Unhide ${who?.name ?? 'this'}'s comment`} hitSlop={{ top: 16, bottom: 12, left: 8, right: 8 }} onPress={onUnhide}>
               <Text style={[styles.hiddenText, big && styles.replyTextBig]}>Unhide</Text>
             </Pressable>
             {deleteHidden ? (
               <>
                 <Text style={[styles.hiddenDot, big && styles.replyTextBig]}>·</Text>
-                <Pressable accessibilityRole="button" accessibilityLabel={`Delete ${who?.name ?? 'this'}'s comment`} hitSlop={{ top: 10, bottom: 12, left: 8, right: 16 }} onPress={deleteHidden} style={styles.replyButton}>
+                <Pressable accessibilityRole="button" accessibilityLabel={`Delete ${who?.name ?? 'this'}'s comment`} hitSlop={{ top: 16, bottom: 12, left: 8, right: 16 }} onPress={deleteHidden}>
                   <Text style={[styles.hiddenText, big && styles.replyTextBig]}>Delete</Text>
                 </Pressable>
               </>
@@ -180,9 +180,9 @@ const styleDefinitions = StyleSheet.create({
   replyText: { ...typography.smallStrong, fontSize: 12, color: colors.textFaint },
   replyTextBig: { fontSize: 13 },
   // Unhide · Delete, on one your Hidden words hid: a shade stronger than Reply, so they read as the actions here.
-  hiddenActions: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.sm },
+  hiddenActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingTop: 6 },
   hiddenText: { ...typography.smallStrong, color: colors.textMuted },
-  hiddenDot: { ...typography.small, color: colors.textFaint },
+  hiddenDot: { ...typography.smallStrong, color: colors.textFaint },
   // The viewer is a dark room whatever the theme: a photo reads best on black.
   viewer: { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', alignItems: 'center', justifyContent: 'center' },
   viewerImage: { width: '100%', height: '80%' },
