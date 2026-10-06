@@ -23,7 +23,7 @@ import { blankVideoLocation } from '@/lib/videoLocation';
 import { noteStep } from '@/lib/crashReporting';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
-import type { Answer, ChatEvent, ChatPhoto, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, DetectedActivity, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, HiddenWords, HiddenWordsKind, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, CourtNote, LastSeen, MapPlace, MapVisibility, TaggedCourt, Question, Removed, RemovedItem, Story, SurfacePreference, TakedownKind, TakedownReason, Tip, TournamentEntry, User, CoachApplication, CourtAccess, CourtAccessSource, CourtDayPart, CourtFacts, CourtFollowCount, CourtNow, CourtRegulars, CourtReview, CourtRightNow, CourtRing, FollowedCourt, SessionTag, SessionTagRefusal, SessionTagRole, FeedGroup, FeedGroupCard, DiscoverGroup, GroupLook, Invitee, ContactMatch, HeadToHead, MatchSet, SessionWith } from './types';
+import type { Answer, ChatEvent, ChatPhoto, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, DetectedActivity, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, HiddenWords, HiddenWordsKind, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, CourtNote, LastSeen, MapPlace, MapVisibility, TaggedCourt, Question, Removed, RemovedItem, Story, SurfacePreference, TakedownKind, TakedownReason, Tip, TournamentEntry, User, CoachApplication, CourtAccess, CourtAccessSource, CourtDayPart, CourtFacts, CourtFollowCount, CourtNow, CourtKings, CourtRegulars, CourtReview, CourtRightNow, CourtRing, FlybyPerson, FollowedCourt, SessionTag, SessionTagRefusal, SessionTagRole, FeedGroup, FeedGroupCard, DiscoverGroup, GroupLook, Invitee, ContactMatch, HeadToHead, MatchSet, SessionWith } from './types';
 import { validSets } from '@/features/activity/score';
 import { TERMS_VERSION } from '@/lib/legal';
 import { readinessOf, sessionTagNamesLive, sessionToSend, setSessionTagNamesLive, trustedSession } from './sessionTagGate';
@@ -490,7 +490,7 @@ export interface RemoteData {
   userStateFailed?: boolean;
 }
 
-interface SessionRow { id: string; user_id: string; day: string; minutes: number; kind: PracticeSession['kind']; won: boolean | null; opponent: string | null; note: string | null; created_at: string; activity_id?: string | null; from_session_id?: string | null; sets?: unknown; workout?: string | null }
+interface SessionRow { id: string; user_id: string; day: string; minutes: number; kind: PracticeSession['kind']; won: boolean | null; opponent: string | null; note: string | null; created_at: string; activity_id?: string | null; from_session_id?: string | null; sets?: unknown; workout?: string | null; court_id?: string | null }
 const toSession = (r: SessionRow): PracticeSession => {
   // A match's score (migration 91; absent before it runs), kept only when it is a good one.
   const sets = r.kind === 'match' ? validSets(r.sets) : undefined;
@@ -499,6 +499,8 @@ const toSession = (r: SessionRow): PracticeSession => {
     activityId: r.activity_id ?? undefined, fromSessionId: r.from_session_id ?? undefined, ...(sets ? { sets } : {}),
     // What a fitness session logged from a workout was (migration 107; absent before it runs).
     ...(r.kind === 'fitness' && r.workout ? { workout: r.workout } : {}),
+    // Where it was played (migration 130; absent before it runs).
+    ...(isMapCourtId(r.court_id ?? undefined) ? { courtId: r.court_id! } : {}),
     createdAt: r.created_at,
   };
 };
@@ -591,6 +593,8 @@ export interface UserState {
   pushMapFriends?: boolean; pushMapHits?: boolean; pushMapPlayers?: boolean; pushCourts?: boolean;
   /** "Let people find me from their contacts" (migration 89). Undefined on a database without it, which means on. */
   contactsFindable?: boolean;
+  /** The weekly recap's phone alert (migration 130). Undefined on a database without it, which means on. */
+  pushRecap?: boolean;
   /** What the coach works around (injuries, schedule, gear): kept in this private row, never on the public profile. Undefined on a database without migration 19. */
   constraints?: PlayerProfile['constraints'];
   /**
@@ -682,7 +686,7 @@ const toCoach = (r: CoachRow, services: CoachServiceRow[], me: ID): Coach => ({
 /** One pin from map_players (migration 63; `mutual` since 98). */
 interface MapPlayerRow { user_id: ID; lat: number; lng: number; place: MapPlace | string; court_id: string | null; court_name: string | null; city: string | null; seen_at: string | null; open_until: string | null; mutual?: boolean | null }
 interface NotificationRow { id: string; user_id: string; actor_id: string; kind: string; target_id: string; target_kind: string; preview: string | null; read: boolean; created_at: string }
-interface UserStateRow { muted_ids: string[]; blocked_ids: string[]; saved_question_ids: string[]; payment_methods: PaymentMethod[]; default_payment_id: string | null; show_activity: boolean; push_likes: boolean; push_coach: boolean; push_messages?: boolean | null; push_activity?: boolean | null; push_map_friends?: boolean | null; push_map_hits?: boolean | null; push_map_players?: boolean | null; push_courts?: boolean | null; contacts_findable?: boolean | null; private_profile?: { constraints?: PlayerProfile['constraints']; tournaments?: unknown } | null; map_visibility?: string | null;
+interface UserStateRow { muted_ids: string[]; blocked_ids: string[]; saved_question_ids: string[]; payment_methods: PaymentMethod[]; default_payment_id: string | null; show_activity: boolean; push_likes: boolean; push_coach: boolean; push_messages?: boolean | null; push_activity?: boolean | null; push_map_friends?: boolean | null; push_map_hits?: boolean | null; push_map_players?: boolean | null; push_courts?: boolean | null; contacts_findable?: boolean | null; push_recap?: boolean | null; private_profile?: { constraints?: PlayerProfile['constraints']; tournaments?: unknown } | null; map_visibility?: string | null;
   /** Your own age group, readable only by you (migration 64). Absent before it. */
   age_group?: string | null;
   /** Your birthday, readable only by you (migration 13). */
@@ -742,6 +746,7 @@ const toUserState = (r: UserStateRow): UserState => ({
   pushMapPlayers: typeof r.push_map_players === 'boolean' ? r.push_map_players : undefined,
   pushCourts: typeof r.push_courts === 'boolean' ? r.push_courts : undefined,
   contactsFindable: typeof r.contacts_findable === 'boolean' ? r.contacts_findable : undefined,
+  pushRecap: typeof r.push_recap === 'boolean' ? r.push_recap : undefined,
   constraints: Array.isArray(r.private_profile?.constraints) ? r.private_profile!.constraints : undefined,
   // The key is there only once migration 63 has run; null means never chosen.
   mapVisibility: 'map_visibility' in r ? asVisibility(r.map_visibility) : undefined,
@@ -1434,6 +1439,10 @@ let userStateLacksMapAlerts = false;
 let userStateLacksContactsFindable = false;
 /** A database without "Open to hit" distances (migration 120): not asked again this session. */
 let lacksOpenToHitMiles = false;
+/** A database without where a session was played (migration 130): not sent again this session. */
+let sessionsLackCourt = false;
+/** Set once a settings save finds no push_recap column (a database before migration 130). */
+let userStateLacksPushRecap = false;
 
 /** A note for whoever reads the logs: this needs the group chat update in Supabase first. */
 const needs75 = (what: string) => console.warn(`[remote] ${what} needs the messaging update. Open Supabase → SQL Editor → New query, paste the file supabase/migrations/20261003000075_messaging.sql and press Run. It is safe to run more than once.`);
@@ -1686,10 +1695,13 @@ export const remote = {
         ? { push_map_friends: s.pushMapFriends, push_map_hits: s.pushMapHits ?? true, push_map_players: s.pushMapPlayers ?? true, push_courts: s.pushCourts ?? true }
         : {}),
       ...(s.contactsFindable !== undefined && !userStateLacksContactsFindable ? { contacts_findable: s.contactsFindable } : {}),
+      // The weekly recap's alert (migration 130).
+      ...(s.pushRecap !== undefined && !userStateLacksPushRecap ? { push_recap: s.pushRecap } : {}),
     });
     let { error } = await send();
     for (let tries = 0; error && tries < 4; tries += 1) {
-      if (/contacts_findable/.test(error.message) && !userStateLacksContactsFindable) userStateLacksContactsFindable = true;
+      if (/push_recap/.test(error.message) && !userStateLacksPushRecap) userStateLacksPushRecap = true;
+      else if (/contacts_findable/.test(error.message) && !userStateLacksContactsFindable) userStateLacksContactsFindable = true;
       else if (/push_map_|push_courts/.test(error.message) && !userStateLacksMapAlerts) userStateLacksMapAlerts = true;
       else if (/push_activity/.test(error.message) && !userStateLacksPushActivity) userStateLacksPushActivity = true;
       else if (/push_messages/.test(error.message) && !userStateLacksPushMessages) { userStateLacksPushMessages = true; needs54('The Message alerts switch'); }
@@ -3067,7 +3079,15 @@ export const remote = {
     if (s.sets?.length) row.sets = s.sets;
     // What a workout was (migration 107), only when there is one, the same way.
     if (s.workout) row.workout = s.workout;
+    // Where it was played (migration 130), only when there is one and the database has it.
+    if (s.courtId && !sessionsLackCourt) row.court_id = s.courtId;
     let { error } = await db.from('practice_sessions').insert(s.activityId ? { ...row, activity_id: s.activityId } : row);
+    // A database before migration 130 has no court_id: the session still counts, without where it was.
+    if (error && row.court_id && /court_id/.test(error.message)) {
+      sessionsLackCourt = true;
+      delete row.court_id;
+      ({ error } = await db.from('practice_sessions').insert(s.activityId ? { ...row, activity_id: s.activityId } : row));
+    }
     // A database before migration 107 has no workout: the session still counts, as Fitness.
     if (error && row.workout && /\bworkout\b/.test(error.message)) {
       delete row.workout;
@@ -3611,6 +3631,49 @@ export const remote = {
     const { data, error } = await need().rpc('court_people_you_follow', { ids: ids.slice(0, 50) });
     if (error) { if (!missingFunction(error)) fail('court regulars')(error); return null; }
     return ((data ?? []) as { court_id: string; user_ids: string[] | null }[]).map((r) => ({ courtId: r.court_id, userIds: r.user_ids ?? [] }));
+  },
+  /**
+   * King of the Court at one court (court_kings, migration 130): the board
+   * and your own line, as the server ranks them for you. Null when it could
+   * not be asked (or the database has no board yet).
+   */
+  async fetchCourtKings(courtId: string): Promise<CourtKings | null> {
+    if (!isMapCourtId(courtId)) return null;
+    const { data, error } = await need().rpc('court_kings', { p_court: courtId });
+    if (error) { if (!missingFunction(error)) fail('court kings')(error); return null; }
+    const r = (data ?? {}) as { mode?: string; top?: { id?: string; n?: number; last?: string | null }[]; me?: { n?: number; rank?: number | null; ranked?: boolean; over?: boolean } };
+    const over = r.me?.over === true && !!r.me?.ranked;
+    const mode = r.mode === 'wins' || r.mode === 'regulars' ? r.mode : 'none';
+    return {
+      courtId, mode,
+      top: (Array.isArray(r.top) ? r.top : []).filter((t) => typeof t.id === 'string' && UUID_RE.test(t.id)).slice(0, 3)
+        .map((t) => ({ userId: t.id!, n: num(t.n), ...(typeof t.last === 'string' ? { last: t.last.slice(0, 10) } : {}) })),
+      me: { wins: num(r.me?.n), ...(typeof r.me?.rank === 'number' ? { rank: r.me.rank } : {}), ranked: !!r.me?.ranked && (typeof r.me?.rank === 'number' || over), ...(over ? { over: true } : {}) },
+    };
+  },
+  /**
+   * Who else was at a court on a day of yours (flyby, migration 130): only
+   * when you were there yourself, only people the app may show you, the part
+   * of the day in your own time. Null when it could not be asked.
+   */
+  async fetchFlyby(courtId: string, day: string, offsetMin: number): Promise<FlybyPerson[] | null> {
+    if (!isMapCourtId(courtId) || !/^\d{4}-\d{2}-\d{2}$/.test(day)) return null;
+    const { data, error } = await need().rpc('flyby', { p_court: courtId, p_day: day, p_offset_min: Math.round(offsetMin) });
+    if (error) { if (!missingFunction(error)) fail('flyby')(error); return null; }
+    return ((data ?? []) as { user_id: string; part: string; via: string; post_id: string | null }[])
+      .filter((r) => UUID_RE.test(r.user_id))
+      .map((r) => ({
+        userId: r.user_id,
+        part: r.part === 'afternoon' || r.part === 'evening' ? r.part : 'morning',
+        via: r.via === 'checkin' ? 'checkin' : 'post',
+        ...(r.post_id ? { postId: r.post_id } : {}),
+      }));
+  },
+  /** Your phone's time zone, for the weekly recap at 8am your time (migration 130). Null when it could not be said (or the database is older). */
+  async setMyTimeZone(tz: string): Promise<boolean | null> {
+    const { data, error } = await need().rpc('set_my_time_zone', { p_tz: tz });
+    if (error) { if (!missingFunction(error)) fail('time zone')(error); return null; }
+    return data === true;
   },
   async insertHit(h: HitRequest) {
     const { error } = await need().from('hit_requests').insert({

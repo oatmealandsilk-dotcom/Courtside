@@ -45,6 +45,9 @@ import { canTagKind } from '@/features/activity/sessionTags';
 import { shareAction, showLogged, useTrackerSession } from '@/features/activity/useTrackerSession';
 import { openWhoPlayed } from '@/features/activity/whoPlayedPicker';
 import { hitPrefill, prefillFor } from '@/features/hits/followUp';
+import { beatenBy, recordToast } from '@/features/records/records';
+import { flybyAfter } from '@/features/flyby/flyby';
+import { isMapCourtId } from '@/features/places/courtName';
 import { confirm } from '@/lib/confirm';
 import * as haptics from '@/lib/haptics';
 import type { ID, PracticeSession, SessionDetail, SessionPlayer, SessionTagStatus } from '@/data/types';
@@ -108,7 +111,7 @@ type Stage = 'choose' | 'library' | 'edit' | 'form';
  */
 export default function Compose() {
   const styles = useThemedStyles(styleDefinitions);
-  const { actions, posts, currentUserId, currentUser, detectedCoords, lastSeen, locationEnabled, detectedActivities, sessions, sessionTags, users, hitRequests, blockedIds, feedGroups, feedGroupsOn } = useApp();
+  const { actions, posts, stories, currentUserId, currentUser, detectedCoords, lastSeen, locationEnabled, detectedActivities, sessions, sessionTags, users, hitRequests, blockedIds, feedGroups, feedGroupsOn } = useApp();
 
   // The story rail opens this straight at the library with ?mode=story.
   const params = useLocalSearchParams<{ mode?: string; shot?: string; challenge?: string; courtId?: string; courtName?: string; lat?: string; lng?: string; activity?: string; session?: string; hit?: string; group?: string }>();
@@ -411,9 +414,40 @@ export default function Compose() {
     players: canTagKind(kind) ? players : [],
     // From a hit with nobody tagged and nothing typed, its people's names are kept as private words, as before.
     opponent: canTagKind(kind) ? (opponentText.trim() || (fromHit && !players.length ? fromHit.who : '')) : '',
-    note: fromHit ? `At ${fromHit.place}` : undefined,
+    // Where it was, as the note ("At Alder Park"): the hit's place, else the court tagged here, so Your sessions names it.
+    note: fromHit ? `At ${fromHit.place}` : loggedCourt() ? `At ${loggedCourt()!.name}` : undefined,
     ...(opened?.type === 'tracker' && logMinutes && logMinutes !== opened.activity.minutes ? { minutes: logMinutes } : {}),
+    // Where it was played, kept in your log (migration 130): the court on the post, else the hit's.
+    ...(loggedCourt() ? { courtId: loggedCourt()!.id } : {}),
   });
+  /** The court a session logged here was played at: the one tagged on the post, or the hit it came from. */
+  const loggedCourt = (): { id: string; name: string } | null => {
+    if (location.trim() && court && isMapCourtId(court.id)) return { id: court.id, name: court.name };
+    if (fromHit?.placeId && isMapCourtId(fromHit.placeId)) return { id: fromHit.placeId, name: fromHit.place };
+    return null;
+  };
+  /**
+   * What a session logged here does next (Oct 5, owner: personal records and
+   * Flyby): the "New record!" words when it beat one of your records, and,
+   * a few seconds after, who else was at that court that day.
+   */
+  const afterLog = (logId: string | undefined, input: ReturnType<typeof logInput>, day: string, minutes: number) => {
+    const me = currentUserId;
+    if (!me) return { record: null as { title: string; body: string } | null, flyby: () => undefined };
+    const sets = input.kind === 'match' ? input.sets : undefined;
+    const added: PracticeSession = {
+      id: logId ?? '__new', userId: me, day, minutes, kind: input.kind,
+      won: input.kind === 'match' ? setsWinner(sets) ?? input.won : undefined, ...(sets ? { sets } : {}), createdAt: new Date().toISOString(),
+    };
+    const before = sessions.filter((x) => x.id !== logId);
+    const record = recordToast(beatenBy(me, before, added, posts, stories), [added, ...before]);
+    const at = loggedCourt();
+    const people = users;
+    return {
+      record,
+      flyby: (delayMs?: number) => flybyAfter({ courtId: at?.id, courtName: at?.name, day, ask: actions.flyby, users: () => people, skip: input.players?.map((x) => x.id), delayMs }),
+    };
+  };
   /*
    * Who was there (owner, Oct 3: "on a session the tag functions more like a
    * group thing"). A Post or a Clip with no session has one people row, Tag
@@ -559,11 +593,14 @@ export default function Compose() {
       setBusy(null);
       setTicked(true);
       const streak = tracker.streakWith(activityDay(activity));
+      const next = afterLog(logId, input, activityDay(activity), input.minutes ?? activity.minutes);
       setTimeout(() => {
         haptics.reward();
         closeMenu();
-        // With an Instagram button on it: the session as a story picture.
-        showLogged(input.minutes ?? activity.minutes, { kind: input.kind, won: input.won, sets: input.sets, workout: input.kind === 'fitness' ? workoutSport : undefined }, streak, logId);
+        // With an Instagram button on it: the session as a story picture. A beaten record is the moment instead.
+        showLogged(input.minutes ?? activity.minutes, { kind: input.kind, won: input.won, sets: input.sets, workout: input.kind === 'fitness' ? workoutSport : undefined }, streak, logId, next.record);
+        // Then who else was at that court today, once the first note has been read.
+        next.flyby(next.record ? 5500 : undefined);
       }, 300);
     } catch {
       acting.current = false;
@@ -649,6 +686,8 @@ export default function Compose() {
       if (shareTo) openGroupFeed(shareTo); else landOnFeed();
       // Said once the post has actually landed, never while it is still going up (or if it fails).
       if (firstPost) whenLanded(postId, () => setTimeout(() => showToast({ title: 'Your first post is up', body: 'Tap to invite the people you hit with.', icon: 'people-outline', href: '/invite' }), 1800));
+      // A session posted at a court: who else was there that day, once it has landed (Flyby, migration 130).
+      if (stats) flybyForPost(postId, opened, firstPost);
       return;
     }
 
@@ -684,6 +723,16 @@ export default function Compose() {
     const firstPost = !posts.some((p) => p.authorId === currentUserId);
     if (shareTo) openGroupFeed(shareTo); else landOnFeed();
     if (firstPost) whenLanded(postId, () => setTimeout(() => showToast({ title: 'Your first post is up', body: 'Tap to invite the people you hit with.', icon: 'people-outline', href: '/invite' }), 1800));
+    if (stats && statsPick) flybyForPost(postId, statsPick, firstPost);
+  };
+
+  /** A post carrying a session, at a court (not a group's): Flyby for that session's day, once the post has landed. */
+  const flybyForPost = (postId: string | undefined, pick: SessionPick, firstPost: boolean) => {
+    if (!location.trim() || !court || groupPost || !isMapCourtId(court.id)) return;
+    const day = pick.type === 'tracker' ? activityDay(pick.activity) : pick.session.day;
+    const at = court;
+    const people = users;
+    whenLanded(postId, () => flybyAfter({ courtId: at.id, courtName: at.name, day, ask: actions.flyby, users: () => people, delayMs: firstPost ? 5400 : 1500 }));
   };
 
   // Share from "Log it": log it first (unless it already is), then post it with the log's
@@ -696,6 +745,9 @@ export default function Compose() {
     setBusy('share');
     setLogError('');
     let logId = openedLog?.id ?? tracker.logged?.id;
+    // Logged here and now (not before this page opened): it can beat a record.
+    const freshLog = !logId;
+    const shareInput = logInput();
     if (openedLog) applyWho();
     // Logged already from here (a Just log it that came back, say): the people picked go on it now.
     else if (logId && canTagKind(kind) && players.length) {
@@ -703,7 +755,7 @@ export default function Compose() {
       void actions.setSessionPlayers(id, players).catch(() => undefined);
     }
     if (!logId) {
-      try { logId = await tracker.save(logInput()); } catch (e) {
+      try { logId = await tracker.save(shareInput); } catch (e) {
         // Logged already on another phone: post it all the same; the server
         // finds that log and puts what it says on the post (migration 65).
         if (!(e instanceof Error && e.message === 'Already logged.')) {
@@ -741,11 +793,18 @@ export default function Compose() {
       return;
     }
     landOnFeed();
+    const day = activityDay(activity);
+    const next = afterLog(freshLog ? logId : undefined, shareInput, day, shareInput.minutes ?? activity.minutes);
+    const record = freshLog ? next.record : null;
     // Said once the post has actually landed, never while it is still going up (or if it fails).
     if (firstPost) whenLanded(postId, () => setTimeout(() => showToast({ title: 'Your first post is up', body: 'Tap to invite the people you hit with.', icon: 'people-outline', href: '/invite' }), 1800));
+    // A beaten record is the moment: "New record!" on gold, with the same Instagram button.
+    else if (record) whenLanded(postId, () => setTimeout(() => { haptics.reward(); showToast({ title: record.title, body: record.body, glyph: 'record', action: shareAction({ post: postId, session: logId }) }); }, 600));
     // Otherwise "Posted" with an Instagram button: the session as a story
     // picture, from the post once it has landed, from your log until then.
     else whenLanded(postId, () => setTimeout(() => showToast({ title: 'Posted', body: 'Share it to your Instagram story too.', icon: 'checkmark', action: shareAction({ post: postId, session: logId }) }), 600));
+    // Then who else was at that court today (the post, landed, is how the server knows you were there too).
+    whenLanded(postId, () => next.flyby(600 + (firstPost ? 4800 : record ? 5500 : 3000)));
   };
 
   const pick = (next: PickedMedia | null) => {

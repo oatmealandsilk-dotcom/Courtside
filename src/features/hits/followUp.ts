@@ -5,6 +5,7 @@ import { sourceOn } from '@/features/activity/recent';
 import { isTennisActivity } from '@/features/activity/workouts';
 import type { TennisFlags } from '@/features/activity/flags';
 import { localDay } from '@/features/practice/stats';
+import { isMapCourtId } from '@/features/places/courtName';
 
 /*
  * "How was the hit?": once a hit you posted or joined is over, the next
@@ -107,6 +108,8 @@ export interface HitPrefill {
   /** The day it was played, on this phone's clock. */
   day: string;
   place: string;
+  /** The map's id for the court, when the hit was at one: kept with the session in your log (migration 130), for Flyby. */
+  placeId?: string;
   /** First names of the others: "Mira", "Mira and Dev", "Mira, Dev and Sam". Empty when none are known. */
   who: string;
   /** The others who played, as CourtSide players: offered first in "Who you played", ready to tag. */
@@ -126,7 +129,11 @@ function namesOf(names: string[]): string {
 export function prefillFor(h: HitRequest, me: ID, users: User[]): HitPrefill {
   const others = [h.authorId, ...h.joinedIds].filter((id, i, all) => id !== me && all.indexOf(id) === i);
   const names = others.map((id) => users.find((u) => u.id === id)?.name.split(' ')[0]).filter((n): n is string => !!n);
-  return { hitId: h.id, kind: h.format === 'hit' ? 'practice' : 'match', minutes: HIT_MINUTES, day: localDay(h.startsAt), place: h.place.name, who: namesOf(names), playerIds: others.filter((id) => users.some((u) => u.id === id)) };
+  return {
+    hitId: h.id, kind: h.format === 'hit' ? 'practice' : 'match', minutes: HIT_MINUTES, day: localDay(h.startsAt), place: h.place.name,
+    ...(isMapCourtId(h.place.id) ? { placeId: h.place.id } : {}),
+    who: namesOf(names), playerIds: others.filter((id) => users.some((u) => u.id === id)),
+  };
 }
 
 /** A place name short enough for one line of a note at the top of the screen: "Riverside Park Tennis C…". */

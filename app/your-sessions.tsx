@@ -5,6 +5,9 @@ import { router, useLocalSearchParams } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { CourtGlyph } from '@/components/map/CourtGlyph';
+import { FlybyPill } from '@/components/flyby/FlybyPill';
+import { YourWeekBanner } from '@/components/recap/RecapCard';
+import { PersonalRecords, RecordPill } from '@/components/records/PersonalRecords';
 import { LoggedTitle, type PeopleLine } from '@/components/LoggedTitle';
 import { Avatar, EmptyState, Screen } from '@/components/ui';
 import type { DetectedActivity, PracticeSession, SessionTag, User } from '@/data/types';
@@ -15,7 +18,9 @@ import { ATTACH_DAYS, pickSource, postOf, postedIndex, sourceOn, type SessionPic
 import { useTennisFlags } from '@/features/activity/useTennisFlags';
 import { formatDistance, isTennisActivity, workoutIcon, WORKOUTS_ASK } from '@/features/activity/workouts';
 import { appleHealthAvailable } from '@/features/health/appleHealth';
-import { localDay } from '@/features/practice/stats';
+import { computeStats, localDay } from '@/features/practice/stats';
+import { lastWeekStart, showWeekCard, weekRecap } from '@/features/recap/recap';
+import { computeRecords, recordSessionIds } from '@/features/records/records';
 import { confirm } from '@/lib/confirm';
 import { goBack } from '@/lib/goBack';
 import { duration } from '@/lib/format';
@@ -75,7 +80,7 @@ function weekLabel(start: string, now = new Date()): string {
  */
 export default function YourSessions() {
   const styles = useThemedStyles(styleDefinitions);
-  const { currentUserId, sessions, detectedActivities, posts, sessionTags, users, actions, integrations } = useApp();
+  const { currentUserId, sessions, detectedActivities, posts, stories, sessionTags, users, actions, integrations } = useApp();
   const flags = useTennisFlags();
   const apple = integrations.find((i) => i.provider === 'apple-health');
   // Past workouts (Oct 5): once every workout is switched on and Apple Health reads them (their own yes
@@ -134,6 +139,29 @@ export default function YourSessions() {
   // Old enough that its tracker numbers are gone (30 days, migration 58) is too old to post: the same two weeks "Add session stats" offers.
   const firstPostable = localDay(Date.now() - ATTACH_DAYS * 86_400_000);
 
+  // Personal records (Oct 5): from 3 sessions on. The sessions holding one wear a gold "Record", the best week "Best week".
+  const tennisCount = useMemo(() => sessions.filter((s) => s.userId === currentUserId && s.kind !== 'fitness').length, [sessions, currentUserId]);
+  const records = useMemo(() => (currentUserId ? computeRecords(currentUserId, sessions, posts, stories) : {}), [currentUserId, sessions, posts, stories]);
+  const recordIds = useMemo(() => recordSessionIds(records), [records]);
+  const streakNow = useMemo(() => (currentUserId ? computeStats(currentUserId, sessions, posts, stories).currentStreakDays : 0), [currentUserId, sessions, posts, stories]);
+
+  // "Your week" (the weekly recap, in the app): Monday to Wednesday, until put away for that week.
+  const recap = useMemo(() => (currentUserId ? weekRecap(currentUserId, sessions, posts, stories, lastWeekStart()) : null), [currentUserId, sessions, posts, stories]);
+  const [recapAway, setRecapAway] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (!currentUserId || !recap) return undefined;
+    let on = true;
+    AsyncStorage.getItem(recapKey(currentUserId, recap.week)).then((v) => { if (on) setRecapAway(!!v); }).catch(() => { if (on) setRecapAway(false); });
+    return () => { on = false; };
+  }, [currentUserId, recap?.week]); // eslint-disable-line react-hooks/exhaustive-deps
+  const putRecapAway = () => {
+    setRecapAway(true);
+    if (currentUserId && recap) void AsyncStorage.setItem(recapKey(currentUserId, recap.week), '1').catch(() => undefined);
+  };
+
+  // Flyby (Oct 5): today's and yesterday's sessions played at a court carry "3 others here today".
+  const flybyDays = [localDay(new Date()), localDay(Date.now() - 86_400_000)];
+
   const logButton = (
     <Pressable accessibilityRole="button" accessibilityLabel="Log a session" hitSlop={10} onPress={() => router.push('/log-session')} style={({ pressed }) => [styles.log, pressed && styles.pressed]}>
       <Ionicons name="add" size={16} color={colors.text} />
@@ -154,6 +182,9 @@ export default function YourSessions() {
         </Pressable>
       ) : null}
       {offerOn && currentUserId ? <WorkoutsOffer me={currentUserId} /> : null}
+      {recap && recapAway === false && showWeekCard(recap) ? (
+        <YourWeekBanner recap={recap} onOpen={() => router.push({ pathname: '/weekly-recap', params: { week: recap.week } })} onClose={putRecapAway} />
+      ) : null}
       {!waiting.length && !groups.length && !taggedYou.length ? (
         <EmptyState
           icon="stopwatch-outline"
@@ -181,12 +212,17 @@ export default function YourSessions() {
         </>
       ) : null}
 
+      {tennisCount >= 3 ? (
+        <PersonalRecords records={records} sessions={sessions} sessionTags={sessionTags} users={users} currentStreak={streakNow} />
+      ) : null}
+
       {groups.slice(0, weeks).map(({ start, list }) => {
         const onCourt = list.filter((s) => s.kind !== 'fitness').reduce((sum, s) => sum + s.minutes, 0);
         return (
           <React.Fragment key={start}>
             <View style={styles.weekHead}>
               <Text style={[styles.sectionTitle, styles.weekName]}>{weekLabel(start)}</Text>
+              {records.week?.from === start ? <View style={styles.bestWeek}><RecordPill label="Best week" /></View> : null}
               {onCourt ? <Text style={styles.weekHours}>{duration(onCourt)} on court</Text> : null}
             </View>
             <View style={styles.group}>
@@ -204,6 +240,13 @@ export default function YourSessions() {
                 const people: PeopleLine | null = from && fromFirst
                   ? (s.kind === 'match' && from.role === 'opponent' ? { vs: [{ name: fromFirst, state: 'typed' }], with: [], allWaiting: false } : null)
                   : peopleWords(s, sessionTags, users);
+                // Where it was played: the log's own court, else the court on its post (migration 130).
+                const itsPost = postId ? posts.find((p) => p.id === postId) : undefined;
+                const courtId = s.courtId ?? itsPost?.court?.id;
+                const courtName = s.note?.startsWith('At ') ? s.note.slice(3).split(' · ')[0] : itsPost?.court?.name ?? 'this court';
+                const flyby = courtId && flybyDays.includes(s.day) && s.kind !== 'fitness'
+                  ? <FlybyPill courtId={courtId} courtName={courtName} day={s.day} />
+                  : null;
                 return (
                   <Logged
                     key={s.id}
@@ -221,6 +264,8 @@ export default function YourSessions() {
                     onShare={() => router.push({ pathname: '/share-session', params: postId ? { post: postId, session: s.id } : { session: s.id } })}
                     onRemove={() => confirm({ title: 'Remove this session?', message: 'It comes off your streak and totals.', confirmLabel: 'Remove', destructive: true, onConfirm: () => actions.deleteSession(s.id) })}
                     line={i > 0}
+                    record={recordIds.has(s.id)}
+                    flyby={flyby}
                   />
                 );
               })}
@@ -242,6 +287,8 @@ export default function YourSessions() {
 
 /** "Not now" on the offer below, kept on this phone per account. */
 const offerKey = (me: string) => `courtside-workouts-offer:${me}`;
+/** "Your week" put away, kept on this phone per account and week. */
+const recapKey = (me: string, week: string) => `courtside-recap-away:${me}:${week}`;
 
 /**
  * The offer of every workout (migration 107) to someone who turned on tennis
@@ -403,7 +450,7 @@ function TaggedYou({ tag, tagger, line }: { tag: SessionTag; tagger: User; line:
  * a share button beside it (the session as a picture for Instagram). A tap on
  * the rest opens who you played (or, for a copy from a tag, that tag).
  */
-function Logged({ session: s, people, onOpen, hideNote = false, source, postId, postable, onPost, onShare, onRemove, line }: {
+function Logged({ session: s, people, onOpen, hideNote = false, source, postId, postable, onPost, onShare, onRemove, line, record = false, flyby = null }: {
   session: PracticeSession;
   /** "vs Mira" (accepted), "vs June · Waiting", "with Dev", a name you typed. */
   people: PeopleLine | null;
@@ -414,6 +461,10 @@ function Logged({ session: s, people, onOpen, hideNote = false, source, postId, 
   /** A hold on the row: remove it from your log (after a yes). Offered to a screen reader as an action of its own. */
   onRemove: () => void;
   line: boolean;
+  /** It holds a personal record now: a small gold "Record" beside its length. */
+  record?: boolean;
+  /** "3 others here today" (Flyby), under the day. */
+  flyby?: React.ReactNode;
 }) {
   const styles = useThemedStyles(styleDefinitions);
   const title = `${loggedLabel(s)}${people ? ` ${peopleText(people)}` : ''}`;
@@ -444,7 +495,9 @@ function Logged({ session: s, people, onOpen, hideNote = false, source, postId, 
           {/* How long, big: the number you scan a week of sessions for. Where it came from, small beside it. */}
           <View style={[styles.heroLine, styles.heroLineShare]}>
             <Text style={styles.hero}>{duration(s.minutes)}</Text>
-            <SourceTag label={source} />
+            {record ? <RecordPill /> : null}
+            {/* "By hand" gives way to a record: the line has room for one small tag beside the number. */}
+            {record && source === 'By hand' ? null : <SourceTag label={source} />}
           </View>
           <LoggedTitle label={loggedLabel(s)} people={people} style={styles.title} faint={styles.waiting} numberOfLines={2} />
           {/* The day, and where, for a session logged from a hit ("At Alder Park"): "Yesterday · Alder Park" when that fits on the line, the place on its own line when it is long. */}
@@ -462,6 +515,8 @@ function Logged({ session: s, people, onOpen, hideNote = false, source, postId, 
           {note ? <Text style={styles.note} numberOfLines={2}>{note}</Text> : null}
         </View>
       </Pressable>
+      {/* Its own button under the words, outside the row's: a button inside a button is not allowed in a browser. */}
+      {flyby ? <View style={styles.flybyRow}>{flyby}</View> : null}
       {/* Beside the big number, outside the row's own button: a button inside a button is not allowed in a browser. */}
       <View style={[styles.actionSpot, styles.actionRow]}>
         <Pressable accessibilityRole="button" accessibilityLabel={`Share to Instagram: ${title}`} hitSlop={6} onPress={onShare} style={({ pressed }) => [styles.share, pressed && styles.pressed]}>
@@ -489,6 +544,7 @@ const styleDefinitions = StyleSheet.create({
   weekHead: { flexDirection: 'row', alignItems: 'flex-end' },
   weekName: { flex: 1 },
   weekHours: { ...typography.small, color: colors.textMuted, fontVariant: ['tabular-nums'], paddingHorizontal: spacing.sm, paddingBottom: spacing.sm },
+  bestWeek: { paddingBottom: spacing.sm },
   // A session: how long (big) with its source beside it, what it was, then when. The button rides the big number's line, top right.
   row: { paddingVertical: ROW_PAD },
   rowMain: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
@@ -503,7 +559,9 @@ const styleDefinitions = StyleSheet.create({
   words: { flex: 1, minWidth: 0, gap: 3 },
   // As tall as the button beside it, so the words under it run the full width without meeting it; kept clear of the button on the right.
   heroLine: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: HERO_LINE, paddingRight: 96 },
-  hero: { fontSize: 21, lineHeight: 26, ...font('600'), letterSpacing: -0.5, color: colors.text, fontVariant: ['tabular-nums'] },
+  hero: { fontSize: 21, lineHeight: 26, ...font('600'), letterSpacing: -0.5, color: colors.text, fontVariant: ['tabular-nums'], flexShrink: 0 },
+  // Flyby's pill, lined up with the words (past the icon and the gap).
+  flybyRow: { paddingLeft: 22 + spacing.md },
   tag: { flexShrink: 1, paddingHorizontal: 7, paddingVertical: 2, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt },
   tagText: { fontSize: 11, lineHeight: 15, ...font('600'), letterSpacing: 0.2, color: colors.textMuted },
   title: { fontSize: 15, lineHeight: 20, ...font('500'), color: colors.text },

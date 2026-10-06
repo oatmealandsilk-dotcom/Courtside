@@ -167,6 +167,13 @@ export interface PracticeSession {
    * like the rest of your log; a player tagged on it reads it from their side.
    */
   sets?: MatchSet[];
+  /**
+   * The court it was played at, by the map's id for it (migration 130,
+   * column court_id): the court tagged on its post, "Played at…", or the hit
+   * it was logged from. Private, like the rest of your log; it is how Flyby
+   * knows you were there. Absent when you didn't say.
+   */
+  courtId?: string;
   createdAt: string;
 }
 
@@ -1187,10 +1194,17 @@ export type NotificationKind =
    * "tagged you in a match" / "in a practice". Filed once per session and
    * person, so a tag taken off and put back never alerts twice.
    */
-  | 'session-tag';
+  | 'session-tag'
+  /**
+   * Your week on court (migration 130): Mondays at 8am your time. Actor is
+   * you; the target is the week's Monday ('YYYY-MM-DD', target kind
+   * 'recap'); the preview is the whole line ("6h 15m, 4 sessions — up 2h.
+   * Best streak yet.").
+   */
+  | 'weekly-recap';
 
-/** 'court': a court you follow, by the map's id for it (migration 60). */
-export type NotificationTarget = 'post' | 'hit' | 'question' | 'coach-question' | 'coach-reply' | 'coach-application' | 'report' | 'coaching-request' | 'profile' | 'hit-request' | 'activity' | 'court' | 'session-tag';
+/** 'court': a court you follow, by the map's id for it (migration 60). 'recap': a week, by its Monday (migration 130). */
+export type NotificationTarget = 'post' | 'hit' | 'question' | 'coach-question' | 'coach-reply' | 'coach-application' | 'report' | 'coaching-request' | 'profile' | 'hit-request' | 'activity' | 'court' | 'session-tag' | 'recap';
 
 /** A court a post is tagged with: the map's id for it, its name, and where it is. */
 export interface TaggedCourt { id: string; name: string; lat: number; lng: number }
@@ -1354,6 +1368,58 @@ export interface CourtRing { courtId: string; name?: string; lat: number; lng: n
 
 /** "Sam and Dev, who you follow, play here" (court_people_you_follow): up to 5 people, most recent first. */
 export interface CourtRegulars { courtId: string; userIds: ID[] }
+
+/**
+ * King of the Court (court_kings, migration 130): the most match wins
+ * posted at one court in the last 90 days. 'wins': the board is wins (n),
+ * `last` the day of the latest; 'regulars': nobody has won there yet, so the
+ * board is days with a session posted there (n); 'none': nothing posted
+ * there (or a home court). Only public adult accounts are on a board, and
+ * never anyone you are blocked with; the server decides who is.
+ */
+export interface CourtKings {
+  courtId: string;
+  mode: 'wins' | 'regulars' | 'none';
+  /** Up to three, best first. */
+  top: { userId: ID; n: number; last?: string }[];
+  /**
+   * Your own line: your wins here (the same counting), and your place when
+   * you are ranked. `over`: ranked, but more than ten are placed above you,
+   * so no number ("10+").
+   */
+  me: { wins: number; rank?: number; ranked: boolean; over?: boolean };
+}
+
+/**
+ * Someone else who was at the same court on the same day as you (flyby,
+ * migration 130): only people the app may show you there, and never a
+ * time, only the part of the day.
+ */
+export interface FlybyPerson {
+  userId: ID;
+  part: 'morning' | 'afternoon' | 'evening';
+  /** Posted there, or (for adults, friends only) checked in there. */
+  via: 'post' | 'checkin';
+  postId?: ID;
+}
+
+/** Which personal record (features/records/records.ts). */
+export type RecordKey = 'week' | 'streak' | 'month' | 'win' | 'match';
+
+/** One personal record: its number, and what holds it. Private to you. */
+export interface PersonalRecord {
+  key: RecordKey;
+  /** Minutes (week, match), days (streak), sessions (month), games (win: your games minus theirs). */
+  value: number;
+  /** The session that holds it (win, match). */
+  sessionId?: ID;
+  /** The first and last day it covers ('YYYY-MM-DD'): a week's Monday and Sunday, a streak's days, a month's first day, a session's day. */
+  from: string;
+  to: string;
+}
+
+/** Your personal records; one is absent until there is enough to count (a week of an hour, a streak of 3 days…). */
+export type Records = Partial<Record<RecordKey, PersonalRecord>>;
 
 /** One of "Your courts" on Find Players, with what is new there (my_courts). */
 export interface FollowedCourt {

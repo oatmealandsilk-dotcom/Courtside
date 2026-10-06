@@ -13,6 +13,7 @@ import { randomUUID } from 'expo-crypto';
 import { router } from 'expo-router';
 import { computeStats, localDay, streakAtRisk } from '@/features/practice/stats';
 import { planStreakReminder } from '@/features/practice/reminder';
+import { isMapCourtId } from '@/features/places/courtName';
 import { TERMS_VERSION } from '@/lib/legal';
 
 import { fetchBootstrap, searchPosts as apiSearchPosts, signIn as apiSignIn, type Bootstrap } from '@/data/api';
@@ -64,6 +65,7 @@ import { stopWorkoutWatch } from '@/features/health/workoutWatch';
 import { framesAt } from '@/features/compose/frames';
 import { noteStep, reportError } from '@/lib/crashReporting';
 import { noteAppOpen } from '@/features/usage/appOpens';
+import { noteTimeZone } from '@/features/recap/timeZone';
 import { learned as learnedTip } from '@/features/tips/tips';
 import { emptyCourtLife, useCourtLife, type CourtLifeActions, type CourtLifeState } from '@/store/courtLife';
 import { forgetLinkPreviews } from '@/features/messages/linkPreview';
@@ -113,7 +115,7 @@ import type {
   Story,
   User,
   PlayerProfile,
-  MediaCrop, Tip, TaggedCourt, TrackerId, Invitee, ContactMatch, HealthShareKey, HeadToHead, MatchSet, Removed, RemovedItem, TakedownKind, TakedownReason, TournamentEntry, HiddenWords, HiddenWordsKind } from '@/data/types';
+  MediaCrop, Tip, TaggedCourt, TrackerId, Invitee, ContactMatch, HealthShareKey, HeadToHead, CourtKings, FlybyPerson, MatchSet, Removed, RemovedItem, TakedownKind, TakedownReason, TournamentEntry, HiddenWords, HiddenWordsKind } from '@/data/types';
 import { HIDDEN_WORDS_MAX, HIDDEN_WORD_LENGTH, cleanWords, defaultHiddenWords } from '@/features/hiddenWords/hiddenWords';
 import { setsWinner } from '@/features/activity/score';
 
@@ -344,9 +346,11 @@ export interface Prefs {
   pushMapFriends: boolean; pushMapHits: boolean; pushMapPlayers: boolean; pushCourts: boolean;
   /** "Let people find me from their contacts" (migration 89): off, you never come up when someone checks their contacts. */
   contactsFindable: boolean;
+  /** The weekly recap's phone alert, Mondays at 8am (migration 130). Off, the row still lands in Notifications. */
+  pushRecap: boolean;
 }
 export type PrefKey = keyof Prefs;
-const DEFAULT_PREFS: Prefs = { showActivity: true, pushLikes: true, pushCoach: true, pushMessages: true, pushActivity: true, pushMapFriends: true, pushMapHits: true, pushMapPlayers: true, pushCourts: true, contactsFindable: true };
+const DEFAULT_PREFS: Prefs = { showActivity: true, pushLikes: true, pushCoach: true, pushMessages: true, pushActivity: true, pushMapFriends: true, pushMapHits: true, pushMapPlayers: true, pushCourts: true, contactsFindable: true, pushRecap: true };
 
 interface AppState extends Bootstrap, CourtLifeState, FeedGroupsState {
   ready: boolean;
@@ -509,6 +513,7 @@ function withServerSettings(s: AppState, base: string, got: UserState | null): P
     showActivity: got.showActivity, pushLikes: got.pushLikes, pushCoach: got.pushCoach, pushMessages: got.pushMessages ?? true, pushActivity: got.pushActivity ?? true,
     pushMapFriends: got.pushMapFriends ?? true, pushMapHits: got.pushMapHits ?? true, pushMapPlayers: got.pushMapPlayers ?? true, pushCourts: got.pushCourts ?? true,
     contactsFindable: got.contactsFindable ?? true,
+    pushRecap: got.pushRecap ?? true,
   };
   for (const k of Object.keys(prefs) as PrefKey[]) if (s.prefs[k] !== was.f[k]) prefs[k] = s.prefs[k];
   const cardsChanged = JSON.stringify(s.paymentMethods) !== JSON.stringify(was.p);
@@ -676,7 +681,19 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
    * `activityId`: the tracker session it was logged from, which then counts as logged.
    * `sets`: a match's score, your side first (migration 91); when one side took more sets, the result follows it.
    */
-  logSession: (input: { minutes: number; kind: PracticeSession['kind']; won?: boolean; sets?: MatchSet[]; opponent?: string; note?: string; day?: string; activityId?: ID; workout?: string }) => Promise<ID>;
+  logSession: (input: { minutes: number; kind: PracticeSession['kind']; won?: boolean; sets?: MatchSet[]; opponent?: string; note?: string; day?: string; activityId?: ID; workout?: string; courtId?: string }) => Promise<ID>;
+  /**
+   * King of the Court at one court (migration 130): the server's board for
+   * you, or the demo's. Null when it could not be asked (or the database has
+   * no board yet), so the card stays away.
+   */
+  courtKings: (courtId: string) => Promise<CourtKings | null>;
+  /**
+   * Who else was at a court on one of your days (Flyby, migration 130): only
+   * when you were there yourself, only people you may see. Asked again at
+   * most once a minute for the same court and day. Null when it could not be asked.
+   */
+  flyby: (courtId: string, day: string) => Promise<FlybyPerson[] | null>;
   deleteSession: (id: ID) => void;
   /** Post a "Looking for a hit". Throws a plain sentence if it cannot be posted. */
   /**
@@ -1538,6 +1555,7 @@ function snapshotOf(s: AppState, me: ID): RemoteData {
       pushActivity: s.prefs.pushActivity,
       pushMapFriends: s.prefs.pushMapFriends, pushMapHits: s.prefs.pushMapHits, pushMapPlayers: s.prefs.pushMapPlayers, pushCourts: s.prefs.pushCourts,
       contactsFindable: s.contactsFindableLive ? s.prefs.contactsFindable : undefined,
+      pushRecap: s.prefs.pushRecap,
       constraints: self?.profile.constraints,
     },
     tips: s.tips, coachApplications: s.coachApplications, coaches: s.coaches, coachReviews: s.coachReviews, coachResults: s.coachResults,
@@ -1653,6 +1671,7 @@ function mergeRemote(prev: AppState, data: RemoteData, me: ID, email: string | n
           showActivity: data.userState.showActivity, pushLikes: data.userState.pushLikes, pushCoach: data.userState.pushCoach, pushMessages: data.userState.pushMessages ?? true, pushActivity: data.userState.pushActivity ?? true,
           pushMapFriends: data.userState.pushMapFriends ?? true, pushMapHits: data.userState.pushMapHits ?? true, pushMapPlayers: data.userState.pushMapPlayers ?? true, pushCourts: data.userState.pushCourts ?? true,
           contactsFindable: data.userState.contactsFindable ?? true,
+          pushRecap: data.userState.pushRecap ?? true,
         }
         : prev.prefs,
       // The settings row carries contacts_findable only once migration 89 has run (with no row yet, the load asks on its own).
@@ -2124,9 +2143,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!isSupabaseConfigured || !remoteLoaded || !currentUserForLive || !UUID.test(currentUserForLive)) return;
     const me = currentUserForLive;
-    noteAppOpen(me);
-    const sub = DeviceState.addEventListener('change', (st) => { if (st === 'active') noteAppOpen(me); });
-    const onVisible = () => { if (typeof document !== 'undefined' && document.visibilityState === 'visible') noteAppOpen(me); };
+    // And, once a day, the phone's time zone when it changed, for the Monday recap at 8am your time (migration 130).
+    const opened = () => { noteAppOpen(me); noteTimeZone(me); };
+    opened();
+    const sub = DeviceState.addEventListener('change', (st) => { if (st === 'active') opened(); });
+    const onVisible = () => { if (typeof document !== 'undefined' && document.visibilityState === 'visible') opened(); };
     if (Platform.OS === 'web' && typeof document !== 'undefined') document.addEventListener('visibilitychange', onVisible);
     return () => { sub.remove(); if (Platform.OS === 'web' && typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisible); };
   }, [remoteLoaded, currentUserForLive]);
@@ -2350,6 +2371,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         pushMapFriends: s.prefs.pushMapFriends, pushMapHits: s.prefs.pushMapHits, pushMapPlayers: s.prefs.pushMapPlayers, pushCourts: s.prefs.pushCourts,
         // Sent only once the database is known to have it (migration 89).
         contactsFindable: s.contactsFindableLive ? s.prefs.contactsFindable : undefined,
+        // The weekly recap's alert (migration 130): a database without it leaves it out by itself.
+        pushRecap: s.prefs.pushRecap,
       }).finally(settled);
     }, 400);
     // Never sent (a newer change took its place, or the account changed): nothing of it is on its way up.
@@ -3083,7 +3106,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [patchCurrentUser],
   );
 
-  const logSession = useCallback(async (input: { minutes: number; kind: PracticeSession['kind']; won?: boolean; sets?: MatchSet[]; opponent?: string; note?: string; day?: string; activityId?: ID; workout?: string }) => {
+  const logSession = useCallback(async (input: { minutes: number; kind: PracticeSession['kind']; won?: boolean; sets?: MatchSet[]; opponent?: string; note?: string; day?: string; activityId?: ID; workout?: string; courtId?: string }) => {
     const me = requireUser();
     // A match's score (migration 91): the result follows the sets when one side took more, as the server makes it.
     const sets = input.kind === 'match' && input.sets?.length ? input.sets.slice(0, 5) : undefined;
@@ -3095,6 +3118,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ...(input.activityId ? { activityId: input.activityId } : {}),
       // What a fitness session logged from a workout was ('run', migration 107).
       ...(input.kind === 'fitness' && input.workout ? { workout: input.workout } : {}),
+      // Where it was played (migration 130): the map's id for the court, private like the rest of your log.
+      ...(isMapCourtId(input.courtId) ? { courtId: input.courtId } : {}),
       createdAt: new Date().toISOString(),
     };
     // A tracker session logged here counts as logged straight away (the database marks it too, migration 58).
@@ -3688,6 +3713,35 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!me || userId === me || s.blockedIds.includes(userId)) return null;
     if (live(me, userId)) return remote.headToHead(userId);
     return demoApi.headToHead({ me, other: userId, sessions: s.sessions, tags: s.sessionTags });
+  }, []);
+
+  const courtKings = useCallback(async (courtId: string): Promise<CourtKings | null> => {
+    const s = stateRef.current;
+    const me = s.currentUserId;
+    if (!me || !isMapCourtId(courtId)) return null;
+    if (live(me)) return remote.fetchCourtKings(courtId);
+    const self = s.users.find((u) => u.id === me);
+    return demoApi.courtKings({ courtId, me, sessions: s.sessions, ranked: !self?.isPrivate });
+  }, []);
+
+  // The same court and day asked again within a minute (the toast, the pill, the sheet) is answered from here.
+  const flybyAsked = useRef(new Map<string, { at: number; ask: Promise<FlybyPerson[] | null> }>());
+  const flyby = useCallback(async (courtId: string, day: string): Promise<FlybyPerson[] | null> => {
+    const s = stateRef.current;
+    const me = s.currentUserId;
+    if (!me || !isMapCourtId(courtId) || !/^\d{4}-\d{2}-\d{2}$/.test(day)) return null;
+    const key = `${me}|${courtId}|${day}`;
+    const had = flybyAsked.current.get(key);
+    if (had && Date.now() - had.at < 60_000) return had.ask;
+    // Your clock's minutes ahead of UTC (-420 in Los Angeles in summer): the server says morning, afternoon or evening in your time.
+    const offset = -new Date(`${day}T12:00:00`).getTimezoneOffset();
+    const ask = (live(me) ? remote.fetchFlyby(courtId, day, offset) : demoApi.flyby({ courtId, day, me, sessions: s.sessions, tags: s.sessionTags }))
+      .then((list) => (list ? list.filter((p) => !s.blockedIds.includes(p.userId)) : list))
+      .catch(() => null);
+    flybyAsked.current.set(key, { at: Date.now(), ask });
+    const got = await ask;
+    if (got === null) flybyAsked.current.delete(key);
+    return got;
   }, []);
 
   const cancelHit = useCallback(async (hitId: ID) => {
@@ -7863,6 +7917,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setSessionOpponent,
       setSessionScore,
       headToHead,
+      courtKings,
+      flyby,
       updateIdentity,
       toggleLike,
       addPost,
@@ -8075,6 +8131,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setSessionOpponent,
       setSessionScore,
       headToHead,
+      courtKings,
+      flyby,
       updateIdentity,
       toggleLike,
       addPost,
