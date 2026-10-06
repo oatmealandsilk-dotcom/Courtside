@@ -7,7 +7,6 @@ import { tierColor } from '@/lib/badges';
 import { show as showToast } from '@/lib/toast';
 import { mixHex } from '@/features/activity/zones';
 import { daysUntil } from '@/features/players/tennisProfile';
-import { deepenFor } from '@/components/tennis/PlayerCard';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, pageIsDark, spacing, typography, withAlpha } from '@/theme';
 
@@ -116,6 +115,31 @@ export function AddRow({ icon, title, sub, onPress, first = true }: { icon: Icon
   return (
     <Row first={first} lead={<Tile icon={icon} brand />} title={<Text style={styles.addTitle}>{title}</Text>} sub={sub} subLines={2} onPress={onPress} accessibilityLabel={sub ? `${title}. ${sub}` : title} />
   );
+}
+
+/** The contrast between two #RRGGBB colours, as WCAG counts it (1 to 21). */
+function contrast(a: string, b: string): number {
+  const lum = (hex: string) => {
+    const [r, g, bl] = [1, 3, 5].map((i) => {
+      const v = parseInt(hex.slice(i, i + 2), 16) / 255;
+      return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * r + 0.7152 * g + 0.0722 * bl;
+  };
+  const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x);
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+/**
+ * A fill deepened a twentieth at a time toward the page's text colour until
+ * `ink` on it reaches `target`: unchanged where it already does. Melbourne's
+ * light blue takes the most (white on it is only 4:1), London's green none.
+ */
+function deepenFor(fill: string, ink: string, target: number): string {
+  if (!/^#[0-9a-f]{6}$/i.test(fill) || !/^#[0-9a-f]{6}$/i.test(ink)) return fill;
+  let out = fill;
+  for (let step = 1; contrast(ink, out) < target && step <= 12; step++) out = mixHex(fill, colors.text, step * 0.05);
+  return out;
 }
 
 /** A small tag on a row ("Entered", "Watching"): radius 6, since a pill would read as something to press. */

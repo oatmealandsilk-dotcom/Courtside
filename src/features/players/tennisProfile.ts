@@ -129,10 +129,12 @@ export interface StripItem {
  * (only once a match is logged), hours on court (once there is a whole one),
  * sessions a week, and a streak of two days or more. Sessions are said once:
  * `week` (real with a tracker, else what they picked), and only when there
- * is neither, the count of sessions logged. Never a zero, and never a half
- * empty strip: whatever room is left is topped up from the facts they gave
- * (years playing, fitness), which then come off the facts line under it.
- * Labels are singular for a one ("1 Session"). Empty when there is nothing.
+ * is neither, the count of sessions logged. Never a zero, except a tracker's
+ * own count: a tracker that brought no tennis in four weeks says "0" a week,
+ * never the all-time total in its place (Oct 5, owner). Never a half empty
+ * strip: whatever room is left is topped up from the facts they gave (years
+ * playing, fitness), which then come off the facts line under it. Labels are
+ * singular for a one ("1 Session"). Empty when there is nothing.
  */
 export function stripItems(user: Pick<User, 'stats' | 'profile'>, max: number, week: PerWeek | null = pickedPerWeek(user.profile), now = new Date()): StripItem[] {
   const s = user.stats;
@@ -144,7 +146,7 @@ export function stripItems(user: Pick<User, 'stats' | 'profile'>, max: number, w
   }
   const hours = Math.round(s.hoursOnCourt);
   if (hours >= 1) items.push({ key: 'hours', figure: String(hours), label: hours === 1 ? 'Hour' : 'Hours', spoken: `${hours} ${hours === 1 ? 'hour' : 'hours'} on court` });
-  if (week && week.value > 0) {
+  if (week && (week.real || week.value > 0)) {
     const n = perWeekText(week.value);
     const one = n === '1';
     items.push({ key: 'week', figure: n, label: 'Per week', spoken: week.real ? `${n} ${one ? 'session' : 'sessions'} a week over the last 4 weeks` : `Plays ${n} ${one ? 'time' : 'times'} a week` });

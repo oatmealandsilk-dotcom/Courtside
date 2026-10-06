@@ -22,19 +22,32 @@ export function tennisTrackerOn(integrations: Integration[], flags: TennisFlags)
 }
 
 /**
- * The one sessions-a-week number on a player card. Your own, while a tracker
- * brings in your tennis: the real count, a week on average over the last
- * four weeks. Anyone else's, or yours without a tracker: what was picked in
- * setup (another player's sessions and trackers never reach this phone).
+ * Your own tennis sessions a week, counted from the last four weeks, while a
+ * tracker brings in your tennis (0 when it brought none); null without one.
+ * Setup shows it in place of the sessions-a-week picker (Oct 5, owner: "if
+ * you have tracker it's just tracker if no tracker then you can select").
  */
-export function usePerWeek(user: User): PerWeek | null {
+export function useTrackerPerWeek(): number | null {
   const { currentUserId, sessions, detectedActivities, integrations } = useApp();
   const flags = useTennisFlags();
-  const mine = !!currentUserId && user.id === currentUserId;
-  const tracker = mine && tennisTrackerOn(integrations, flags);
+  const tracker = !!currentUserId && tennisTrackerOn(integrations, flags);
   return useMemo(() => {
-    if (!tracker) return pickedPerWeek(user.profile);
+    if (!tracker || !currentUserId) return null;
     const waiting = detectedActivities.filter((a) => isTennisActivity(a) && sourceOn(a, flags));
-    return { value: realPerWeek(sessions, waiting, user.id), real: true };
-  }, [tracker, user.profile, user.id, sessions, detectedActivities, flags]);
+    return realPerWeek(sessions, waiting, currentUserId);
+  }, [tracker, currentUserId, sessions, detectedActivities, flags]);
+}
+
+/**
+ * The one sessions-a-week number on a player card. Your own, while a tracker
+ * brings in your tennis: the real count, a week on average over the last
+ * four weeks (0 when there were none). Anyone else's, or yours without a
+ * tracker: what was picked in setup (another player's sessions and trackers
+ * never reach this phone).
+ */
+export function usePerWeek(user: User): PerWeek | null {
+  const { currentUserId } = useApp();
+  const tracked = useTrackerPerWeek();
+  const mine = !!currentUserId && user.id === currentUserId;
+  return useMemo(() => (mine && tracked !== null ? { value: tracked, real: true } : pickedPerWeek(user.profile)), [mine, tracked, user.profile]);
 }

@@ -212,7 +212,7 @@ function UserProfile() {
       ) : (
         <>
           {/* Their tennis, as the player card's banner: the whole of it opens their Tennis profile. */}
-          <PlayerCard user={user} variant="banner" isMe={isMe} onPress={() => router.push(isMe ? { pathname: '/profile-details' } : { pathname: '/profile-details', params: { userId: user.id } })} />
+          <PlayerCard user={user} variant="banner" onPress={() => router.push(isMe ? { pathname: '/profile-details' } : { pathname: '/profile-details', params: { userId: user.id } })} />
 
           <View style={styles.tabs}>
             {TABS.map((t) => (

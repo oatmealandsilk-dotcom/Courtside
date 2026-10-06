@@ -98,7 +98,7 @@ function Mine({ user }: { user: User }) {
   const year = wrappedYear();
   return (
     <>
-      <View style={styles.cardSpot}><PlayerCard user={user} variant="full" isMe /></View>
+      <View style={styles.cardSpot}><PlayerCard user={user} variant="full" /></View>
       <View style={styles.buttons}>
         <View style={styles.primarySpot}>
           <Tappable accessibilityRole="button" accessibilityLabel="Log a session" onPress={() => router.push('/log-session')} scaleTo={0.97} hoverTo={1.02} style={[styles.primary, pageIsDark() ? styles.liftDark : styles.lift]}>

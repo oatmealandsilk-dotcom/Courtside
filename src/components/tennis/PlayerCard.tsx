@@ -3,11 +3,10 @@ import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-na
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { BrandMark } from '@/components/BrandMark';
-import { Avatar, BrandWash } from '@/components/ui';
+import { Avatar } from '@/components/ui';
 import { CardWash, cardLook, type CardLook } from '@/components/session/SessionCard';
 import { CountUp } from '@/components/session/CountUp';
 import type { SurfacePreference, User } from '@/data/types';
-import type { ThemeName } from '@/theme/ThemeProvider';
 import { mixHex } from '@/features/activity/zones';
 import { playStyleLabel } from '@/lib/badges';
 import { useReducedMotion } from '@/lib/useReducedMotion';
@@ -16,66 +15,21 @@ import {
 } from '@/features/players/tennisProfile';
 import { usePerWeek } from '@/features/players/usePerWeek';
 import { useTheme } from '@/theme/ThemeProvider';
-import { colors, font, withAlpha } from '@/theme';
+import { colors, font } from '@/theme';
 
 /** The rating's count: once per player per time the app is open, never on every visit. */
 const played = new Set<string>();
 
-/** The contrast between two #RRGGBB colours, as WCAG counts it (1 to 21). */
-function contrast(a: string, b: string): number {
-  const lum = (hex: string) => {
-    const [r, g, bl] = [1, 3, 5].map((i) => {
-      const v = parseInt(hex.slice(i, i + 2), 16) / 255;
-      return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
-    });
-    return 0.2126 * r + 0.7152 * g + 0.0722 * bl;
-  };
-  const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x);
-  return (hi + 0.05) / (lo + 0.05);
-}
-
 /**
- * A fill deepened a twentieth at a time toward the page's text colour until
- * `ink` on it reaches `target`: unchanged where it already does. Melbourne's
- * light blue takes the most (white on it is only 4:1), London's green none.
- */
-export function deepenFor(fill: string, ink: string, target: number): string {
-  if (!/^#[0-9a-f]{6}$/i.test(fill) || !/^#[0-9a-f]{6}$/i.test(ink)) return fill;
-  let out = fill;
-  for (let step = 1; contrast(ink, out) < target && step <= 12; step++) out = mixHex(fill, colors.text, step * 0.05);
-  return out;
-}
-
-/**
- * The card's colours: the session box's look (cardLook), except on the
- * light city courts. There the brand fill carries small words across the
- * whole card, so it is deepened until the court's ink on it reads at 6:1,
- * the small words are that ink at 90% (a step down by size and weight, not
- * by fading), and its glow is a whisper (PlayerWash), so every word stays
- * at 4.5:1 or better wherever it falls.
- */
-export function playerCardLook(theme: ThemeName): CardLook {
-  const look = cardLook(theme);
-  if (look.wash !== 'brand') return look;
-  const ink = colors.brandInk;
-  const soft = withAlpha(ink, 0.9);
-  return { ...look, fill: deepenFor(colors.brand, ink, 6), figure: ink, ink, muted: soft, faint: soft, eyebrow: ink, lines: withAlpha(ink, 0.16) };
-}
-
-/** The card's fade: the cream box's own on the CourtSide court; on a filled card, a quarter of the brand glow, over the deepened fill. */
-export function PlayerWash({ look, radius }: { look: CardLook; radius: number }) {
-  if (look.wash === 'brand') return <BrandWash radius={radius} strength={0.25} base={look.fill} />;
-  return <CardWash look={look} radius={radius} />;
-}
-
-/**
- * A player's card: the sibling of the cream session box (same fill, fade and
- * hairline from cardLook), with the rating once, big, its system beside it,
- * how they play, and the few numbers worth knowing. `full` heads the Tennis
- * profile page; `banner` is the smaller one on a profile, the whole of it a
- * link to the page. Colour comes from the court's own look: cream on the
- * CourtSide court, the brand colour on the light city courts, the raised
- * surface with brand figures on a dark page.
+ * A player's card: the session box's twin, coloured by the very same look
+ * (cardLook) and fade (CardWash) in every court, so the two always match
+ * (Oct 5, owner: "The tennis profile card should be the same as activity
+ * card. Like the colors and stuff"): cream on the CourtSide court, the brand
+ * colour on the light city courts, the raised surface with brand figures on
+ * a dark page. On it the rating once, big, its system beside it, how they
+ * play, and the few numbers worth knowing. `full` heads the Tennis profile
+ * page; `banner` is the smaller one on a profile, the whole of it a link to
+ * the page.
  *
  * Oct 5, owner: no level words under the rating ("Advanced junior / D3"),
  * and no ruler of ticks under it: the number and its system say it.
@@ -83,13 +37,11 @@ export function PlayerWash({ look, radius }: { look: CardLook; radius: number })
 export function PlayerCard({ user, variant, onPress }: {
   user: User;
   variant: 'full' | 'banner';
-  /** Your own card. (Sessions a week knows by itself whose card it is: see usePerWeek.) */
-  isMe?: boolean;
   /** The banner's link. */
   onPress?: () => void;
 }) {
   const { theme } = useTheme();
-  const look = playerCardLook(theme);
+  const look = cardLook(theme);
   const reduced = useReducedMotion();
   const week = usePerWeek(user);
   const key = `${variant}:${user.id}`;
@@ -108,8 +60,8 @@ export function PlayerCard({ user, variant, onPress }: {
     const items: StripItem[] = next ? [...stripItems(user, 2, week), nextItem(next)] : stripItems(user, 3, week);
     const spoken = `${user.name}'s tennis profile. ${system} ${ratingText(p)}. ${playStyleLabel[p.playStyle]}, ${surfaceWord[p.preferredSurface]}. ${items.map((i) => i.spoken).join(', ')}`;
     return (
-      <Pressable accessibilityRole="link" accessibilityLabel={spoken} onPress={onPress} style={({ pressed }) => [styles.banner, { backgroundColor: look.fill, borderColor: look.border }, look.border !== 'transparent' && styles.bordered, pressed && styles.pressed]}>
-        <PlayerWash look={look} radius={16} />
+      <Pressable accessibilityRole="link" accessibilityLabel={spoken} onPress={onPress} style={({ pressed }) => [styles.banner, { backgroundColor: look.fill, borderColor: look.border }, look.dark && styles.bordered, pressed && styles.pressed]}>
+        <CardWash look={look} radius={16} />
         <View style={styles.headRow}>
           <Text style={[styles.bannerTitle, { color: look.ink }]}>Tennis profile</Text>
           <Ionicons name="chevron-forward" size={15} color={look.muted} />
@@ -137,8 +89,8 @@ export function PlayerCard({ user, variant, onPress }: {
     items.length ? `${items.map((i) => i.spoken).join(', ')}.` : '',
   ].filter(Boolean).join(' ');
   return (
-    <View accessible accessibilityRole="summary" accessibilityLabel={spoken} style={[styles.card, { backgroundColor: look.fill, borderColor: look.border }, look.border !== 'transparent' && styles.bordered]}>
-      <PlayerWash look={look} radius={20} />
+    <View accessible accessibilityRole="summary" accessibilityLabel={spoken} style={[styles.card, { backgroundColor: look.fill, borderColor: look.border }, look.dark && styles.bordered]}>
+      <CardWash look={look} radius={20} />
       <View style={styles.identity}>
         {/* The brand disc their profile page gives them, so the same person wears one colour; on a filled card,
             a deeper shade of the card instead (a brand disc would vanish into it). */}
@@ -235,7 +187,8 @@ function Strip({ items, look, size, filled }: { items: StripItem[]; look: CardLo
 
 const styles = StyleSheet.create({
   card: { borderRadius: 20, padding: 20, overflow: 'hidden' },
-  bordered: { borderWidth: StyleSheet.hairlineWidth },
+  // The session box's edge: a 1-point line on a dark page, none on a light one.
+  bordered: { borderWidth: 1 },
   banner: { borderRadius: 16, paddingVertical: 14, paddingHorizontal: 16, overflow: 'hidden' },
   pressed: { transform: [{ scale: 0.98 }] },
   headRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },

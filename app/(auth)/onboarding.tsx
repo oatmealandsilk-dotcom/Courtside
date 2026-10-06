@@ -9,7 +9,8 @@ import { LocationField } from '@/components/LocationField';
 import { PermissionRows } from '@/components/PermissionRows';
 import { Button, Collapse, Field, SegmentedControl, Toggle } from '@/components/ui';
 import { SCALES } from '@/features/players/ratingScales';
-import { playingFor, startedYearBounds, yearsFromStarted, yearsWords } from '@/features/players/tennisProfile';
+import { perWeekText, playingFor, startedYearBounds, yearsFromStarted, yearsWords } from '@/features/players/tennisProfile';
+import { useTrackerPerWeek } from '@/features/players/usePerWeek';
 import { experienceLabel } from '@/lib/format';
 import { writeSkipped, type SetupStep } from '@/features/onboarding/setupProgress';
 import { replaceWithStart } from '@/features/navigation/startTab';
@@ -136,6 +137,11 @@ export default function Onboarding() {
   const [surface, setSurface] = useState<SurfacePreference>(existing?.preferredSurface ?? 'hard');
   const [fitnessLevel, setFitnessLevel] = useState<FitnessLevel>(existing?.fitnessLevel ?? 'recreational');
   const [sessionsPerWeek, setSessionsPerWeek] = useState<number | undefined>(existing?.sessionsPerWeek);
+  // With a tracker bringing in your tennis, sessions a week is its count, not a pick (Oct 5, owner: "Let's only do
+  // one. Maybe if you have tracker it's just tracker if no tracker then you can select"). The picked number stays
+  // stored as it was, for the coach's plan.
+  const trackedPerWeek = useTrackerPerWeek();
+  const trackerLine = trackedPerWeek === null ? null : `From your tracker: ${perWeekText(trackedPerWeek)} a week (last 4 weeks)`;
   const [goalOne, setGoalOne] = useState(existing?.goals[0]?.label ?? '');
   const [tournamentName, setTournamentName] = useState(existing?.tournaments[0]?.name ?? '');
   // Back in setup with a tournament already saved: count from its real date, not a fresh 30 days.
@@ -495,11 +501,13 @@ export default function Onboarding() {
                 <SegmentedControl<FitnessLevel> value={fitnessLevel} onChange={pick(setFitnessLevel)} segments={FITNESS} wrap />
               </Group>
               <Group label="Sessions per week">
-                <SegmentedControl<string>
-                  value={sessionsPerWeek === undefined ? '' : String(sessionsPerWeek)}
-                  onChange={(v) => pick(setSessionsPerWeek)(Number(v))}
-                  segments={[1, 2, 3, 4, 5, 6, 7].map((n) => ({ value: String(n), label: String(n) }))}
-                />
+                {trackerLine ? <Text style={styles.fixed}>{trackerLine}</Text> : (
+                  <SegmentedControl<string>
+                    value={sessionsPerWeek === undefined ? '' : String(sessionsPerWeek)}
+                    onChange={(v) => pick(setSessionsPerWeek)(Number(v))}
+                    segments={[1, 2, 3, 4, 5, 6, 7].map((n) => ({ value: String(n), label: String(n) }))}
+                  />
+                )}
               </Group>
               <Field label="Goal" value={goalOne} onChangeText={setGoalOne} />
               <View style={styles.chips}>
@@ -555,7 +563,7 @@ export default function Onboarding() {
                   ['Hand', `${handedness === 'left' ? 'Left' : 'Right'} · ${backhand === 'one-handed' ? 'one-handed' : 'two-handed'} backhand`],
                   ['Surface', SURFACES.find((s) => s.value === surface)?.label ?? ''],
                   ['Fitness', FITNESS.find((f) => f.value === fitnessLevel)?.label ?? ''],
-                  ['Sessions', sessionsPerWeek === undefined ? 'Not set' : `${sessionsPerWeek} per week`],
+                  ['Sessions', trackerLine ?? (sessionsPerWeek === undefined ? 'Not set' : `${sessionsPerWeek} per week`)],
                   ['Goal', goalOne.trim() || 'Play more consistently'],
                   tournamentName.trim() ? ['Tournament', `${tournamentName.trim()} · ${tournamentDays} days`] : null,
                 ].filter((r): r is [string, string] => r !== null).map(([label, value], i) => (
@@ -646,6 +654,8 @@ const styleDefinitions = StyleSheet.create({
   group: { gap: spacing.sm },
   groupLabel: { ...typography.smallStrong, color: colors.textMuted },
   note: { ...typography.small, color: colors.textFaint, lineHeight: 18 },
+  // A number setup does not ask, said as it is (sessions a week from a tracker).
+  fixed: { ...typography.body, color: colors.text },
   twoCol: { flexDirection: 'row', gap: spacing.md, alignItems: 'flex-end' },
   // A year is four figures: a short box, not the full width.
   yearBox: { width: 160 },

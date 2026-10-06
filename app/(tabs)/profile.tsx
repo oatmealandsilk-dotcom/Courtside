@@ -19,7 +19,8 @@ import { reportSection, requestSection, subscribeSectionRequest, swipeDestinatio
 import { LevelPill } from '@/components/LevelPill';
 import { useApp } from '@/store/AppContext';
 import { InboxButton, UnreadBadge } from '@/components/InboxButton';
-import { PlayerCard, PlayerWash, playerCardLook } from '@/components/tennis/PlayerCard';
+import { PlayerCard } from '@/components/tennis/PlayerCard';
+import { CardWash, cardLook } from '@/components/session/SessionCard';
 import { compactNumber } from '@/lib/format';
 import { TileViews } from '@/components/TileViews';
 import { TilePin } from '@/components/TilePin';
@@ -164,7 +165,7 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
      {!!shareError && <Text style={styles.meta}>{shareError}</Text>}
    </View>
    {/* Your tennis, as the player card's banner: the whole of it opens the Tennis profile, your tennis hub. */}
-   <PlayerCard user={user} variant="banner" isMe onPress={() => router.push('/profile-details')} />
+   <PlayerCard user={user} variant="banner" onPress={() => router.push('/profile-details')} />
    {/* One grouped list, the way Settings reads, instead of three boxes. */}
    <View style={styles.links}>
      {studio ? <Pressable accessibilityRole="link" accessibilityLabel={`Coach studio. ${studio.line}`} onPress={() => router.push('/coach-studio')} style={({ pressed }) => [styles.linkRow, pressed && styles.linkPressed]}><Ionicons name="ribbon-outline" size={20} color={colors.brand}/><Text style={styles.linkText}>Coach studio</Text>{studio.waiting ? <Text style={styles.linkValue}>{studio.waiting} waiting</Text> : studio.doneCount < 4 ? <Text style={styles.linkValue}>{studio.doneCount} of 4</Text> : null}<Ionicons name="chevron-forward" size={16} color={colors.textFaint}/></Pressable> : null}
@@ -246,8 +247,8 @@ function ProfileMenu({ groupsAsking, groupCount }: { groupsAsking: number; group
 function ProfileSkeleton({ name, avatarUrl, seed }: { name?: string; avatarUrl?: string; seed: string }) {
   const styles = useThemedStyles(styleDefinitions);
   const { theme } = useTheme();
-  // The banner's own colours (cream here, the deepened court colour on the city courts), so it fades into the real one in place.
-  const look = playerCardLook(theme);
+  // The banner's own colours (the session box's: cream here, the court colour on the city courts), so it fades into the real one in place.
+  const look = cardLook(theme);
   const breathe = useSharedValue(0);
   useEffect(() => {
     breathe.value = withRepeat(withTiming(1, { duration: 900, easing: Easing.inOut(Easing.quad) }), -1, true);
@@ -269,8 +270,8 @@ function ProfileSkeleton({ name, avatarUrl, seed }: { name?: string; avatarUrl?:
      <View style={styles.buttons}><View style={{ flex: 1 }}><Button label="Edit Profile" variant="secondary" disabled onPress={() => undefined} full/></View><View style={{ flex: 1 }}><Button label="Share" variant="secondary" disabled onPress={() => undefined} full/></View></View>
    </View>
    {/* The Tennis profile banner's shape: its heading, the rating, the line under it and three numbers. */}
-   <View style={[styles.bannerBlank, { backgroundColor: look.fill }]}>
-     <PlayerWash look={look} radius={16} />
+   <View style={[styles.bannerBlank, { backgroundColor: look.fill, borderColor: look.border, borderWidth: look.dark ? 1 : 0 }]}>
+     <CardWash look={look} radius={16} />
      <Blank w={120} h={17} on={ink} />
      <View style={styles.bannerBlankHero}><Blank w={64} h={36} on={ink} /></View>
      <Blank w={140} h={14} on={ink} />
