@@ -10,10 +10,11 @@ export interface ToastMessage {
   href?: string;
   /**
    * A mark drawn in a brand-coloured disc instead of the plain icon:
-   * 'session' (the zone bars, "Tennis detected") or 'logged' (a tick that
-   * draws itself, "Logged").
+   * 'session' (the zone bars, "Tennis detected"), 'logged' (a tick that
+   * draws itself, "Logged"), 'flyby' (two people, "3 others were at Alder
+   * Park today"), or 'record' (a trophy in a gold disc, "New record!").
    */
-  glyph?: 'session' | 'logged';
+  glyph?: 'session' | 'logged' | 'flyby' | 'record';
   /**
    * A number on the right, under a thin rule: "10 day streak". It rolls up
    * from the one before as the toast lands.

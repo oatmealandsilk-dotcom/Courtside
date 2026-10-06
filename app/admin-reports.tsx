@@ -25,11 +25,11 @@ const CHAT_PREVIEW = 8;
 
 /** What each kind of report says on its card. */
 const KIND_NAME: Record<AdminReport['kind'], string> = {
-  post: 'Post', hit: 'Instant', question: 'Thread', answer: 'Reply', comment: 'Comment',
-  'coach-question': 'Coach question', 'coach-reply': 'Coach reply', profile: 'Profile', conversation: 'Chat',
+  post: 'Post', hit: 'Instant', 'hit-request': 'Open hit', question: 'Thread', answer: 'Reply', comment: 'Comment',
+  'coach-question': 'Coach question', 'coach-reply': 'Coach reply', tip: 'Tip', profile: 'Profile', conversation: 'Chat', 'ai-coach': 'AI coach',
 };
-/** Things a report can point at, besides an account or a chat. */
-const isItem = (kind: AdminReport['kind']): kind is ReportedItemKind => kind !== 'profile' && kind !== 'conversation';
+/** Things a report can point at, besides an account, a chat or something the AI coach wrote. */
+const isItem = (kind: AdminReport['kind']): kind is ReportedItemKind => kind !== 'profile' && kind !== 'conversation' && kind !== 'ai-coach';
 
 /**
  * Reports, for admins only (the database will not hand them to anyone else).
@@ -167,6 +167,7 @@ export default function AdminReports() {
           const openTarget = () => {
             if (report.kind === 'post' && report.targetId) router.push(`/post/${report.targetId}`);
             else if (report.kind === 'hit' && report.targetId) router.push(`/hits/${report.targetId}`);
+            else if (report.kind === 'hit-request' && report.targetId) router.push(`/hit-request/${report.targetId}`);
             else if (report.kind === 'question' && report.targetId) router.push(`/question/${report.targetId}`);
             else if (report.kind === 'coach-question' && report.targetId) router.push(`/coach-question/${report.targetId}`);
             else if (report.userId) router.push(`/user/${report.userId}`);
@@ -214,7 +215,12 @@ export default function AdminReports() {
               </View>
 
               <Pressable accessibilityRole="link" accessibilityLabel="Open what was reported" onPress={openTarget} style={styles.target}>
-                {report.kind === 'profile' || !item ? (
+                {report.kind === 'ai-coach' ? (
+                  // Nobody's account and nothing to open: what the AI coach wrote is the whole report.
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.body} numberOfLines={6}>{report.reason}</Text>
+                  </View>
+                ) : report.kind === 'profile' || !item ? (
                   <>
                     <Avatar name={person?.name ?? '?'} seed={person?.avatarSeed ?? report.userId ?? 'x'} uri={person?.avatarUrl} size={44} />
                     <View style={{ flex: 1 }}>
@@ -234,7 +240,7 @@ export default function AdminReports() {
                 <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
               </Pressable>
 
-              <Text style={styles.muted}>Reported by {reporter ? `@${reporter.handle}` : 'someone'}{report.reason ? ` · ${report.reason}` : ''}</Text>
+              <Text style={styles.muted}>Reported by {reporter ? `@${reporter.handle}` : 'someone'}{report.reason && report.kind !== 'ai-coach' ? ` · ${report.reason}` : ''}</Text>
 
               <View style={styles.actions}>
                 {(report.kind === 'post' || report.kind === 'hit') && item ? (

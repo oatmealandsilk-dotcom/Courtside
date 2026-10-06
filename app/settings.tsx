@@ -149,6 +149,8 @@ export default function Settings() {
           detail: tennis.whoop && appleAlerts ? 'From WHOOP and Apple Health' : appleAlerts ? 'From Apple Health' : 'From WHOOP',
           toggle: { value: prefs.pushActivity, onChange: (v: boolean) => actions.setPref('pushActivity', v) },
         }] : []),
+        // Mondays at 8am your time (migration 130): last week on court. Off, it still lands in Notifications.
+        { icon: 'stats-chart-outline' as const, label: 'Weekly recap', detail: 'Mondays at 8am: your week on court', toggle: { value: prefs.pushRecap, onChange: (v: boolean) => actions.setPref('pushRecap', v) } },
       ],
     }]),
     // The map's own alerts, each with its own switch. On a computer too: they also land in your Notifications.

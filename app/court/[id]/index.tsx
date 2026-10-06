@@ -7,6 +7,7 @@ import { CourtSpinner } from '@/components/CourtSpinner';
 import { CourtDisc } from '@/components/place/CourtDisc';
 import { CourtGrid } from '@/components/place/CourtGrid';
 import { CourtHits } from '@/components/place/CourtHits';
+import { CourtKing } from '@/components/place/CourtKing';
 import { CourtSays } from '@/components/place/CourtSays';
 import { AccessTag, FollowHeart, NowTags } from '@/components/place/CourtLife';
 import { Avatar, Button, DottedRule, EmptyState, Screen } from '@/components/ui';
@@ -99,7 +100,10 @@ function CourtPage() {
   const ownHref = useMemo(() => ({ pathname: '/court/[id]' as const, params: Object.fromEntries(Object.entries({ id: params.id, name: params.name, lat: params.lat, lng: params.lng }).filter(([, v]) => v !== undefined)) }), [params.id, params.name, params.lat, params.lng]);
   useCourtOpen('page', place ? { id: noteId, lat: place.lat, lng: place.lng } : null, ownHref);
 
+  // King of the Court asks again on a pull, with the rest of the page.
+  const [kingTick, setKingTick] = useState(0);
   const refresh = useCallback(async () => {
+    setKingTick((n) => n + 1);
     await Promise.all([court.refresh(), factsId ? actions.loadCourtInfo([factsId]).catch(() => undefined) : undefined, askArea()]);
   }, [court.refresh, factsId, actions, askArea]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -202,6 +206,8 @@ function CourtPage() {
         {!lead && (!postHere || counting) ? <View style={styles.pill} /> : null}
       </View>
       <DottedRule />
+      {/* King of the Court (migration 130): signed in, at a court on the map, never at someone's home court. Brings its own rule below. */}
+      {factsId && currentUserId && access !== 'private' ? <CourtKing courtId={factsId} name={name} refresh={kingTick} /> : null}
       {extras && factsId ? (
         <>
           <CourtSays courtId={factsId} name={name} />

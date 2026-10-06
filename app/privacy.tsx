@@ -61,6 +61,18 @@ export default function PrivacyCentre() {
         {link('time-outline', 'Your activity', undefined, () => router.push('/activity'))}
       </View>
 
+      {/* Flyby (migration 130): what "I'm playing here" leaves behind, said plainly. */}
+      <Text style={styles.sectionTitle}>Courts</Text>
+      <View style={styles.card}>
+        <View style={styles.row}>
+          <Ionicons name="people-outline" size={19} color={colors.textMuted} />
+          <View style={{ flex: 1, gap: 1 }}>
+            <Text style={styles.rowLabel}>Check-ins are kept for 2 days</Text>
+            <Text style={styles.rowDetail}>So friends who were at the same court that day can see you in Flyby. Never a time, only morning, afternoon or evening. Location off or “Only me”, it’s gone; activity status off, it isn’t shown.</Text>
+          </View>
+        </View>
+      </View>
+
       <Pressable accessibilityRole="link" onPress={() => openLegal('privacy')} hitSlop={8} style={styles.policy}>
         <Text style={styles.policyText}>{isSupabaseConfigured ? 'Read the full privacy policy' : 'Demo build: nothing leaves this device. Privacy policy'}</Text>
         <Ionicons name="open-outline" size={14} color={colors.textFaint} />

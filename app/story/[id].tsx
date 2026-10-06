@@ -15,6 +15,7 @@ import { MediaPlaceholder } from '@/components/MediaPlaceholder';
 import { Avatar, Button, EmptyState } from '@/components/ui';
 import { hitClock, isLive } from '@/features/stories/stories';
 import { RemovedNote } from '@/features/moderation/RemovedNote';
+import { confirm } from '@/lib/confirm';
 import { relativeTime } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing, typography } from '@/theme';
@@ -81,6 +82,17 @@ export default function StoryViewer() {
     });
     return () => { stopped = true; run?.stop(); };
   }, [current?.id, index, list.length, focused, progress]);
+  // What the viewer shows right now. A delete waits on its question while the
+  // bar keeps running, so by the yes the viewer may have moved on or closed.
+  const live = useRef({ mounted: true, index, list, currentId: current?.id });
+  live.current.index = index;
+  live.current.list = list;
+  live.current.currentId = current?.id;
+  useEffect(() => {
+    const now = live.current;
+    now.mounted = true;
+    return () => { now.mounted = false; };
+  }, []);
 
   if (!user || !current) {
     return (
@@ -100,10 +112,34 @@ export default function StoryViewer() {
     setIndex(next);
   };
 
-  const archive = () => {
-    actions.toggleArchiveStory(current.id);
+  // Off the list on show: back out when it was the only one, or step back from the last.
+  const leaveCurrent = () => {
     if (only || list.length === 1) goBack('/');
     else if (index >= list.length - 1) setIndex(Math.max(0, index - 1));
+  };
+  const archive = () => {
+    actions.toggleArchiveStory(current.id);
+    leaveCurrent();
+  };
+  const remove = () => {
+    const goingId = current.id;
+    confirm({
+      title: 'Delete this instant?', message: "Its likes and comments go with it. This can't be undone.", confirmLabel: 'Delete', destructive: true,
+      onConfirm: () => {
+        actions.deleteStory(goingId);
+        // The viewer already closed itself: nothing more to do here.
+        const now = live.current;
+        if (!now.mounted || !focusedRef.current) return;
+        if (now.currentId === goingId) {
+          if (only || now.list.length === 1) goBack('/');
+          else if (now.index >= now.list.length - 1) setIndex(Math.max(0, now.index - 1));
+          return;
+        }
+        // It moved past the deleted one: step back so the next Instant isn't skipped.
+        const at = now.list.findIndex((s) => s.id === goingId);
+        if (at >= 0 && at < now.index) setIndex(now.index - 1);
+      },
+    });
   };
 
   const viewers = current.viewedBy.filter((v) => v !== current.authorId).length;
@@ -141,7 +177,7 @@ export default function StoryViewer() {
         </View>
         <View style={styles.head}>
           <Pressable accessibilityRole="link" onPress={() => router.push(`/user/${user.id}`)} style={styles.who}>
-            <Avatar name={user.name} seed={user.avatarSeed} size={34} />
+            <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={34} />
             <Text style={styles.name}>{mine ? 'Your instant' : user.name}</Text>
             <Text style={styles.time}>{relativeTime(current.createdAt)} · {hitClock(current)}</Text>
           </Pressable>
@@ -171,15 +207,20 @@ export default function StoryViewer() {
               <Ionicons name="stats-chart" size={14} color="#FFFFFF" />
               <Text style={styles.viewsText}>{viewers} {viewers === 1 ? 'view' : 'views'}</Text>
             </View>
-            {current.removed ? null : isLive(current) || current.archived ? (
-              <Button
-                label={current.archived ? 'Unarchive' : 'Archive'}
-                variant="secondary"
-                onPress={archive}
-              />
-            ) : (
-              <Text style={styles.viewsText}>Expired · in your archive</Text>
-            )}
+            <View style={styles.ownActions}>
+              <Pressable accessibilityRole="button" accessibilityLabel="Delete this instant" onPress={remove} hitSlop={6} style={styles.views}>
+                <Ionicons name="trash-outline" size={15} color="#FFFFFF" />
+              </Pressable>
+              {current.removed ? null : isLive(current) || current.archived ? (
+                <Button
+                  label={current.archived ? 'Unarchive' : 'Archive'}
+                  variant="secondary"
+                  onPress={archive}
+                />
+              ) : (
+                <Text style={styles.viewsText}>Expired · in your archive</Text>
+              )}
+            </View>
           </View>
         ) : null}
       </View>
@@ -208,6 +249,7 @@ const styleDefinitions = StyleSheet.create({
     textShadowColor: '#000A', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4,
   },
   ownRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
+  ownActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   reactRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   views: {
     flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: spacing.md, paddingVertical: 6,

@@ -2,6 +2,7 @@ import { isoDaysAgo } from '@/lib/format';
 import { localDay } from '@/features/practice/stats';
 import type { Notification, PracticeSession, SessionTag } from '../types';
 import { CURRENT_USER_ID } from './users';
+import { DEMO_PARK } from './courts';
 
 /*
  * The demo's own log (?as=you), three weeks of it, so "Your sessions", the
@@ -19,17 +20,19 @@ import { CURRENT_USER_ID } from './users';
  */
 
 const dayAgo = (n: number) => localDay(Date.now() - n * 86_400_000);
+/** Where a demo session was played (migration 130): the map's id of a demo park. */
+const at = (park: number) => DEMO_PARK(park).id;
 /** When it was logged: that evening (or morning), n days ago. */
 const loggedAt = (n: number, hour: number) => { const d = new Date(); d.setDate(d.getDate() - n); d.setHours(hour, 10, 0, 0); return d.toISOString(); };
 
 export const demoSessions: PracticeSession[] = [
-  { id: 'ses-demo-1', userId: CURRENT_USER_ID, day: dayAgo(1), minutes: 90, kind: 'match', won: true, sets: [[6, 4], [3, 6], [10, 7]], note: 'At Alder Park', createdAt: loggedAt(1, 20) },
+  { id: 'ses-demo-1', userId: CURRENT_USER_ID, day: dayAgo(1), minutes: 90, kind: 'match', won: true, sets: [[6, 4], [3, 6], [10, 7]], note: 'At Alder Park', courtId: at(1), createdAt: loggedAt(1, 20) },
   { id: 'ses-demo-2', userId: CURRENT_USER_ID, day: dayAgo(2), minutes: 62, kind: 'practice', activityId: 'act-demo-2', createdAt: loggedAt(2, 19) },
-  { id: 'ses-demo-10', userId: CURRENT_USER_ID, day: dayAgo(3), minutes: 75, kind: 'match', won: true, sets: [[6, 3], [7, 5]], note: 'At Alder Park', createdAt: loggedAt(3, 19) },
+  { id: 'ses-demo-10', userId: CURRENT_USER_ID, day: dayAgo(3), minutes: 75, kind: 'match', won: true, sets: [[6, 3], [7, 5]], note: 'At Alder Park', courtId: at(1), createdAt: loggedAt(3, 19) },
   { id: 'ses-demo-3', userId: CURRENT_USER_ID, day: dayAgo(4), minutes: 45, kind: 'drills', createdAt: loggedAt(4, 8) },
   // Mira's practice, from her tag: accepted with "Add to my sessions".
   { id: 'ses-demo-11', userId: CURRENT_USER_ID, day: dayAgo(5), minutes: 60, kind: 'practice', opponent: 'Mira', fromSessionId: 'ses-mira-1', createdAt: isoDaysAgo(4, 2) },
-  { id: 'ses-demo-4', userId: CURRENT_USER_ID, day: dayAgo(6), minutes: 75, kind: 'practice', note: 'At Cypress Hollow Park · with Dev', createdAt: loggedAt(6, 18) },
+  { id: 'ses-demo-4', userId: CURRENT_USER_ID, day: dayAgo(6), minutes: 75, kind: 'practice', note: 'At Cypress Hollow Park · with Dev', courtId: at(3), createdAt: loggedAt(6, 18) },
   // A week ago from WHOOP (act-demo-3), a match won against Mira: on your post p-demo-whoop.
   { id: 'ses-demo-13', userId: CURRENT_USER_ID, day: dayAgo(7), minutes: 96, kind: 'match', won: true, activityId: 'act-demo-3', createdAt: loggedAt(7, 20) },
   { id: 'ses-demo-5', userId: CURRENT_USER_ID, day: dayAgo(8), minutes: 50, kind: 'fitness', createdAt: loggedAt(8, 7) },

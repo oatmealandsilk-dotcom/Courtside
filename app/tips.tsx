@@ -10,6 +10,8 @@ import { TipComposer } from '@/components/TipComposer';
 import { voteCounts } from '@/components/VoteControls';
 import { RichText } from '@/components/RichText';
 import { relativeTime } from '@/lib/format';
+import { confirmDelete, confirmReport } from '@/lib/confirm';
+import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
 import type { Tip } from '@/data/types';
 import { colors, font, spacing, typography, lift } from '@/theme';
@@ -67,6 +69,21 @@ export default function Tips() {
                     <View style={styles.meta}>
                       <PlayerName userId={author?.id} style={styles.name}>{mine ? 'You' : author?.name ?? 'Player'}</PlayerName>
                       <Text style={styles.time}>· {relativeTime(tip.createdAt)}</Text>
+                      {/* Your own tip can be deleted; anyone else's reported (App Review 1.2), the way a coach's reply is. */}
+                      {mine ? (
+                        <Pressable accessibilityRole="button" accessibilityLabel="Delete your tip" onPress={() => confirmDelete(() => actions.deleteTip(tip.id), 'your tip')} hitSlop={8} style={styles.action}>
+                          <Ionicons name="trash-outline" size={14} color={colors.textFaint} />
+                          <Text style={styles.time}>Delete</Text>
+                        </Pressable>
+                      ) : currentUserId ? (
+                        <Pressable accessibilityRole="button" accessibilityLabel="Report this tip" onPress={() => confirmReport('tip', () => {
+                          actions.reportUser(tip.authorId, `tip:${tip.id}`);
+                          showToast({ title: 'Thanks — a person will review this', icon: 'flag-outline' });
+                        })} hitSlop={8} style={styles.action}>
+                          <Ionicons name="flag-outline" size={14} color={colors.textFaint} />
+                          <Text style={styles.time}>Report</Text>
+                        </Pressable>
+                      ) : null}
                     </View>
                   </View>
                 </View>
@@ -118,5 +135,7 @@ const styleDefinitions = StyleSheet.create({
   meta: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   name: { ...typography.small, color: colors.textMuted, ...font('600') },
   time: { ...typography.small, color: colors.textFaint },
+  // Delete or Report, at the far end of the line.
+  action: { flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: 'auto' },
   foot: { ...typography.caption, color: colors.textFaint, textAlign: 'center', paddingTop: spacing.md },
 });

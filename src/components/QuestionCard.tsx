@@ -26,6 +26,21 @@ export const TOPIC_META: Record<QuestionTopic, { label: string; tint: string; ic
   mental: { label: 'Mental', tint: '#8A6BE0', icon: 'bulb-outline' },
 };
 
+/** A thread's topic as the app knows it: one it doesn't (a row written outside the app) reads as Technique, never a crash. */
+export function topicMeta(topic: string): (typeof TOPIC_META)[QuestionTopic] {
+  return TOPIC_META[topic as QuestionTopic] ?? TOPIC_META.technique;
+}
+
+/**
+ * A topic's colour, read from the theme as the card draws. TOPIC_META's own
+ * tints are the default palette's, copied when the app started, so on any
+ * other court they were the wrong colour.
+ */
+export function topicTint(topic: string): string {
+  const live: Record<string, string> = { gear: colors.clay, technique: colors.hard, strategy: colors.brand, injury: colors.danger, fitness: colors.court, rules: colors.warning, mental: TOPIC_META.mental.tint };
+  return live[topic] ?? colors.hard;
+}
+
 interface Props {
   showBody?: boolean;
   /** The home feed: the page carries the CourtSide mark up by its eyebrow, so no date here. */
@@ -51,7 +66,7 @@ function QuestionCardInner({
   brandCorner = false,
 }: Props) {
   const styles = useThemedStyles(styleDefinitions);
-  const meta = TOPIC_META[question.topic];
+  const meta = topicMeta(question.topic);
   const { currentUserId, actions } = useApp();
 
   return (
@@ -77,14 +92,15 @@ function QuestionCardInner({
       {showBody && !!question.body && <RichText style={styles.preview}>{question.body}</RichText>}
       {question.poll ? <PollView question={question} compact /> : null}
       <View style={styles.metaRow}>
-        {/* The topic is a tag in its own colour: a tap shows every thread under it. */}
-        <Pressable accessibilityRole="button" accessibilityLabel={`${meta.label} threads`} onPress={() => openTopic(question.topic)} hitSlop={6} style={({ pressed }) => [styles.tag, { borderColor: meta.tint }, pressed && { opacity: 0.7 }]}>
-          <Text style={[styles.tagText, { color: meta.tint }]}>{meta.label}</Text>
+        {/* The topic is a tag ringed in its own colour: a tap shows every thread under it.
+            Its words are the page's quiet ink: the topic colours alone fell short of 4.5:1 on several courts. */}
+        <Pressable accessibilityRole="button" accessibilityLabel={`${meta.label} threads`} onPress={() => openTopic(question.topic)} hitSlop={6} style={({ pressed }) => [styles.tag, { borderColor: topicTint(question.topic) }, pressed && { opacity: 0.7 }]}>
+          <Text style={styles.tagText}>{meta.label}</Text>
         </Pressable>
         {answered ? (
           <View style={[styles.tag, styles.tagDone]}>
-            <Ionicons name="checkmark" size={11} color={colors.court} />
-            <Text style={[styles.tagText, { color: colors.court }]}>Answered</Text>
+            <Ionicons name="checkmark" size={11} color={colors.text} />
+            <Text style={[styles.tagText, styles.tagDoneText]}>Answered</Text>
           </View>
         ) : null}
       </View>
@@ -151,7 +167,8 @@ const styleDefinitions = StyleSheet.create({
   sourceText: { ...typography.caption, color: colors.textMuted, letterSpacing: 0 },
   tag: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 9, paddingVertical: 3, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border },
   tagDone: { borderColor: colors.brandDim, backgroundColor: colors.brandDim },
-  tagText: { ...typography.caption, fontSize: 12, letterSpacing: 0 },
+  tagText: { ...typography.caption, fontSize: 12, letterSpacing: 0, color: colors.textMuted },
+  tagDoneText: { color: colors.text },
   spacer: { flex: 1 },
 });
 

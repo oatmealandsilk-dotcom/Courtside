@@ -73,7 +73,7 @@ export function useUpToday({ users, lastSeen, me, from, blockedIds }: { users: U
  * faces are friends who follow each other with them, and their own ring is
  * seen only by those friends; the words say so.
  */
-export function UpToday({ me, people, teen = false, locationOn, onLocation, onToggle }: { me: User; people: Up[]; /** Not known to be an adult, with the map's teen rule on: friends only. */ teen?: boolean; locationOn: boolean; /** No spot of yours yet: the way to give one. */ onLocation?: () => void; onToggle: (on: boolean) => void }) {
+export function UpToday({ me, people, teen = false, locationOn, finding = false, onLocation, onToggle }: { me: User; people: Up[]; /** Not known to be an adult, with the map's teen rule on: friends only. */ teen?: boolean; locationOn: boolean; /** Location is on, but this phone has no spot yet: the row says it is looking. */ finding?: boolean; /** Location off and no spot of yours: the way to give one. */ onLocation?: () => void; /** Resolves false when the ring did not go on (a teen who closed "Who can see you?" without an answer). */ onToggle: (on: boolean) => Promise<boolean> }) {
   const styles = useThemedStyles(styleDefinitions);
   // Your ring goes out by itself at the time you picked.
   useOpenClock([me.openToHitUntil]);
@@ -86,9 +86,10 @@ export function UpToday({ me, people, teen = false, locationOn, onLocation, onTo
     const next = !up;
     haptics.tap();
     setTapped(true);
-    onToggle(next);
-    // Up, but not on the map: say so, and leave Location to them.
-    if (next && !locationOn) showToast({ title: 'You’re open to hit', body: teen ? 'Turn on Location to show your friends who follow you back.' : 'Turn on Location to show on the map.', icon: 'navigate-outline' });
+    // Up, but not on the map: say so, and leave Location to them. Only once the ring is really on.
+    void onToggle(next).then((on) => {
+      if (on && next && !locationOn) showToast({ title: 'You’re open to hit', body: teen ? 'Turn on Location to show your friends who follow you back.' : 'Turn on Location to show on the map.', icon: 'navigate-outline' });
+    });
   };
   // Holding it: until when, and how far (the sheet's Save turns the ring on).
   const edit = () => {
@@ -135,7 +136,8 @@ export function UpToday({ me, people, teen = false, locationOn, onLocation, onTo
                 <Text style={styles.emptyLink}>Turn on Location</Text>
                 {teen ? <Text style={styles.emptyNote}>Only friends who follow you back see you.</Text> : null}
               </Pressable>
-            ) : <Text style={styles.emptyText}>{teen ? 'No friends up near you yet today.' : 'No one near you yet today.'}</Text>}
+            ) : finding ? <Text style={styles.emptyText}>Finding you…</Text>
+              : <Text style={styles.emptyText}>{teen ? 'No friends up near you yet today.' : 'No one near you yet today.'}</Text>}
           </View>
         ) : null}
       </ScrollView>

@@ -1,9 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { clock } from '@/features/voice/useVoiceRecorder';
+import { show as showToast } from '@/lib/toast';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, spacing } from '@/theme';
 
@@ -30,12 +31,28 @@ export function VoiceNote({ url, ms, mine, sentAt }: {
   );
 }
 
+/** How long a voice note may take to start before it counts as one this phone can't play. */
+const LOAD_LIMIT_MS = 10_000;
+
 function Playing({ url, ms, mine, onDone }: { url: string; ms: number; mine: boolean; onDone: () => void }) {
   const styles = useThemedStyles(styleDefinitions);
   const player = useAudioPlayer(url);
   const status = useAudioPlayerStatus(player);
   const ink = mine ? colors.brandInk : colors.text;
-  useEffect(() => { player.play(); }, [player]);
+  // A note this phone can't play (one recorded in a browser in a kind an
+  // iPhone can't read, or one gone from the server) never loads: rather than
+  // a play button that does nothing, it says so and goes back to how it was.
+  const started = useRef(false);
+  started.current = started.current || status.isLoaded || status.duration > 0 || status.currentTime > 0;
+  const failed = /fail|error/i.test(status.playbackState ?? '') || !!(status as { error?: unknown }).error;
+  const cantPlay = useRef(() => {});
+  cantPlay.current = () => { showToast({ title: 'Can’t play this voice note', body: 'It may have been removed, or recorded in a way this device can’t play.', icon: 'alert-circle-outline' }); onDone(); };
+  useEffect(() => {
+    try { player.play(); } catch { cantPlay.current(); return undefined; }
+    const timer = setTimeout(() => { if (!started.current) cantPlay.current(); }, LOAD_LIMIT_MS);
+    return () => clearTimeout(timer);
+  }, [player]);
+  useEffect(() => { if (failed && !started.current) cantPlay.current(); }, [failed]);
   useEffect(() => { if (status.didJustFinish) onDone(); }, [status.didJustFinish]); // eslint-disable-line react-hooks/exhaustive-deps
   const total = status.duration > 0 ? status.duration * 1000 : ms;
   const at = status.currentTime * 1000;

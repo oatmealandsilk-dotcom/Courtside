@@ -45,7 +45,7 @@ const INBOX_POINTER = 38 + 14 + 17 - 6;
 
 function Profile({ previewSection }: { previewSection?: string } = {}) {
   const styles = useThemedStyles(styleDefinitions);
- const { currentUser: user, posts, questions, answers, saved, notifications, currentUserId, savedAccounts, coaches, coachingRequests, coachQuestions, actions, feedGroups } = useApp();
+ const { currentUser: user, posts, questions, answers, saved, notifications, currentUserId, savedAccounts, coaches, coachingRequests, coachQuestions, actions, feedGroups, blockedIds } = useApp();
  // A coach's studio, first of your links: what is waiting there, or how far setup has got.
  const myCoach = coaches.find((c) => c.userId === currentUserId);
  const studio = myCoach ? studioLine(myCoach, coachingRequests, coachQuestions, currentUserId) : null;
@@ -104,7 +104,8 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
  const groupsAsking = feedGroups.reduce((n, g) => n + (g.members.some((m) => m.id === currentUserId && m.admin) ? g.requests.length : 0), 0);
  // CourtSide's own welcome counts too, until Notifications is first opened (welcomeNote).
  const welcome = useWelcomeNote(user);
- const unseen = notifications.filter(n => n.userId === currentUserId && !n.read).length + (welcome.unread ? 1 : 0);
+ // Never anything from someone you blocked (the Notifications page leaves those out too).
+ const unseen = notifications.filter(n => n.userId === currentUserId && !n.read && !blockedIds.includes(n.actorId)).length + (welcome.unread ? 1 : 0);
  const savedCount = saved.postIds.length + saved.questionIds.length;
  const swipe = (direction: 1 | -1) => {
    const next = swipeDestination('/profile', tab, direction);
@@ -157,7 +158,7 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
    {/* At the top of the page, in its flow, its pointer under the paper plane in the header: it lines up with the cards
        and covers nothing (the first-move card included), and the page eases back up once it is closed. */}
    {live ? <TipBubble tip="messages" shown={inboxTip.shown} onClose={inboxTip.close} pointer="up" pointerRight={INBOX_POINTER} inline on="page" style={styles.inboxTip} /> : null}
-   {!hasMoved && <Pressable accessibilityRole="link" accessibilityLabel="Make your first move" onPress={() => router.push('/first-move')} style={styles.setup}>
+   {!hasMoved && <Pressable accessibilityRole="link" accessibilityLabel="Make your first move" onPress={() => router.push({ pathname: '/first-move', params: { from: 'profile' } })} style={styles.setup}>
      <Ionicons name="videocam-outline" size={20} color={colors.brand}/>
      <View style={{ flex: 1 }}><Text style={styles.setupTitle}>Make your first move</Text><Text style={styles.meta}>{user && notKnownAdult(user) ? 'Add your friends, or post your first clip.' : 'Bring your hitting partners, or post your first clip.'}</Text></View>
      <Ionicons name="chevron-forward" size={16} color={colors.textMuted}/>

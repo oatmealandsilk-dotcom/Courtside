@@ -42,6 +42,7 @@ import { usePlaceSearch } from '@/features/places/usePlaceSearch';
 import { openCourt, playHere } from '@/features/players/courtLink';
 import { formatMiles, formatSpotMiles, milesBetween } from '@/features/players/geo';
 import { isRoughSpot, placeFor } from '@/features/players/positions';
+import { nearestPlace } from '@/data/locations';
 import { useMyCity } from '@/features/players/useMyCity';
 import { useFindable } from '@/features/people/findable';
 import { isOpenToHit as isOpenToHitNow } from '@/features/players/openToHit';
@@ -371,6 +372,15 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   // A hit posted by a teen (or anyone not known to be an adult) reaches only their followers (hits/visible), so the prompt says so.
   const hitsForFriends = !!currentUser && notKnownAdult(currentUser);
   const myCityName = (currentUser?.location ?? '').split(',')[0].trim() || null;
+  // "You're early in …" names where "early" was judged from (nearFrom): your profile's
+  // city when that is where you are (or all we know), else the big city you are near,
+  // the way the map card names it; far from any the app knows, just "here".
+  const earlyCity = useMemo(() => {
+    const spot = detectedCoords ?? ownLastSpot;
+    if (!spot || (myCityAt && milesBetween(spot, myCityAt) <= IN_TOWN_MILES)) return myCityName;
+    const known = nearestPlace(spot.lat, spot.lng);
+    return milesBetween(spot, known) <= IN_TOWN_MILES ? known.name.split(',')[0] : null;
+  }, [detectedCoords, ownLastSpot, myCityAt, myCityName]);
   // The court the invite carries (useInviteCourt, shared with the first-move
   // page): one you follow in town, else a public one near you. Never for a teen.
   const inviteCourt = useInviteCourt(youAt, nearCourts);
@@ -457,20 +467,21 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
           ) : null}
         </View>
         {currentUser && !search ? (section === 'players'
-          ? <NearbyMap me={currentUser} players={players} at={detectedCoords} locationOn={location.locationOn} locating={location.locating} onToggleLocation={location.toggle} onOpen={id => router.push(`/user/${id}`)} onExpand={() => router.push('/map')} />
+          ? <NearbyMap me={currentUser} players={players} at={detectedCoords} locationOn={location.locationOn} locating={location.locating} onToggleLocation={location.toggle} onOpen={id => router.push(`/user/${id}`)} onExpand={() => router.push('/map')} hitCount={openHits.length} />
           // The same footprint, empty: keeps the list from jumping when the map mounts on arrival.
           : <View style={styles.mapStandIn} />) : null}
         {/* Nobody sharing a spot within 30 miles: the way to fill the map,
             right under it, so its button shows without scrolling (Oct 5: it
             sat under the bar, below Open to hit). For a teen with no friend
             on their map yet, the same card as "Bring your friends". */}
-        {!search && early ? <EarlyInvite city={myCityName} court={inviteCourt} leadRef={leadRef} /> : null}
+        {!search && early ? <EarlyInvite city={earlyCity} court={inviteCourt} leadRef={leadRef} /> : null}
         {!search && friendsEarly ? <EarlyInvite friends city={myCityName} court={null} leadRef={leadRef} /> : null}
         {/* Open to hit: you first (one tap, never Location; hold to pick until when and how far), then who near you is open. */}
         {currentUser && !search && showUpToday ? (
           // Never folded away by the phone's renderer: with players around, the tutorial's first tip lights this row.
           <View ref={early || friendsEarly ? undefined : leadRef} collapsable={false}>
-            <UpToday me={currentUser} people={upToday} teen={teen} locationOn={location.locationOn} onLocation={ownSpot ? undefined : location.toggle} onToggle={(on) => { void toggleOpen(on); }} />
+            {/* "Turn on Location" only while it is off: with it on and no spot yet, the row waits for one (the switch would have turned it off). */}
+            <UpToday me={currentUser} people={upToday} teen={teen} locationOn={location.locationOn} finding={location.locationOn && !ownSpot} onLocation={ownSpot || location.locationOn ? undefined : location.toggle} onToggle={toggleOpen} />
           </View>
         ) : null}
         {/* A quiet area leads with where to play (your courts, then the others

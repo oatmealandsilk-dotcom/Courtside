@@ -75,6 +75,8 @@ const ICON: Record<NotificationKind, { name: keyof typeof Ionicons.glyphMap | 'h
   // The court's own heart: the one you tapped to follow it.
   'court-activity': { name: 'heart', tint: 'court' },
   'session-tag': { name: 'pricetag', tint: 'court' },
+  // Your week on court (migration 130): the recap's bars.
+  'weekly-recap': { name: 'stats-chart', tint: 'brand' },
 };
 // The hit mark fills the badge's inside (19 less its 2pt rim on each side), drawn bold for that size.
 const HIT_BADGE = 14;
@@ -116,6 +118,8 @@ const VERB: Record<NotificationKind, string> = {
   'court-activity': 'posted at a court you follow',
   // "in a match" or "in a practice" comes from the row's preview (migration 62); see verbFor.
   'session-tag': 'tagged you in a session',
+  // The whole line comes from the row's preview (migration 130); see verbFor.
+  'weekly-recap': 'is ready',
 };
 
 interface Group {
@@ -136,6 +140,8 @@ function routeFor(group: Group): string {
   if (group.kind === 'map-new-hit') return `/map?hit=${group.targetId}`;
   // A tennis session a tracker picked up opens a new post with it on: post it, or just log it.
   if (group.kind === 'activity') return `/compose?activity=${group.targetId}`;
+  // Your week on court: the recap card for that week (its target is the week's Monday).
+  if (group.kind === 'weekly-recap') return `/weekly-recap?week=${encodeURIComponent(group.targetId)}`;
   // Tagged in someone's session: the tag's sheet (its target is their session).
   if (group.kind === 'session-tag') return `/session-tag?session=${group.targetId}`;
   // A coach application update opens the application, which shows where it stands.
@@ -209,7 +215,7 @@ function detectedWho(preview: string | undefined, sport: string | undefined): st
 
 export default function Notifications() {
   const styles = useThemedStyles(styleDefinitions);
-  const { notifications, users, posts, stories, comments, hitRequests, conversations, questions, currentUserId, currentUser, followRequests, followingIds, followedCourts, sessionTags, detectedActivities, actions } = useApp();
+  const { notifications, users, posts, stories, comments, hitRequests, conversations, questions, currentUserId, currentUser, followRequests, followingIds, followedCourts, sessionTags, detectedActivities, actions, blockedIds } = useApp();
   // CourtSide's own welcome, for a new player (welcomeNote): seen once this page opens, though its tint stays until you leave.
   const welcome = useWelcomeNote(currentUser);
   const [welcomeTint] = useState(welcome.unread);
@@ -275,6 +281,10 @@ export default function Notifications() {
     // From CourtSide: "removed your clip for breaking its rules"; the reason goes on the line under it.
     if (group.kind === 'removed') return `removed your ${removedNotice(group.preview).thing} for breaking its rules`;
     if (group.kind === 'session-tag') return `tagged you in a ${group.preview === 'match' ? 'match' : 'practice'}`;
+    // A workout you have since logged: no longer "Tap to log it" (the tap opens the post for it).
+    if (group.kind === 'activity' && detectedActivities.find((a) => a.id === group.targetId)?.status === 'logged') return 'Logged. Tap to post it.';
+    // "Your week on court 6h 15m, 4 sessions — up 2h. Best streak yet.": the server's line, as the phone alert said it.
+    if (group.kind === 'weekly-recap') return group.preview ?? 'is ready';
     // Someone who joined through a link you shared (migration 68).
     if (group.kind === 'follow' && group.preview === INVITE_LINE) return 'joined CourtSide from your link';
     if (group.kind === 'follow-request' && group.preview === INVITE_LINE) return 'joined CourtSide from your link and asked to follow you';
@@ -295,9 +305,10 @@ export default function Notifications() {
     return `${act} your ${thing}`;
   };
 
+  // Nothing from someone you blocked: their likes, follows and comments go with them.
   const mine = useMemo(
-    () => notifications.filter((n) => n.userId === currentUserId),
-    [notifications, currentUserId],
+    () => notifications.filter((n) => n.userId === currentUserId && !blockedIds.includes(n.actorId)),
+    [notifications, currentUserId, blockedIds],
   );
 
   // Snapshot on first render so rows do not lose their tint as we mark them read.
@@ -422,6 +433,7 @@ export default function Notifications() {
                 : group.kind === 'posted'
                 ? (group.preview?.startsWith('Instant') || group.preview?.startsWith('Hit')) ? 'Your instant' : group.targetKind === 'question' ? 'Your question' : 'Your post'
                 : group.kind === 'coach-application' || group.kind === 'refund' || group.kind === 'removed' ? 'CourtSide'
+                : group.kind === 'weekly-recap' ? 'Your week on court'
                 : group.kind === 'activity' ? detectedWho(group.preview, detectedActivities.find((a) => a.id === group.targetId)?.sport)
                 : rest.length === 0
                 ? nameOf(first)
@@ -452,7 +464,10 @@ export default function Notifications() {
               >
                 <View>
                   {/* Two faces, overlapped, when more than one person did it. */}
-                  {group.kind === 'coach-application' || group.kind === 'refund' || group.kind === 'activity' || group.kind === 'removed' ? (
+                  {group.kind === 'weekly-recap' ? (
+                    // Your own week: its bars in a brand disc, no badge.
+                    <View style={[styles.brandFace, styles.recapFace]}><Ionicons name="stats-chart" size={20} color={colors.brandInk} /></View>
+                  ) : group.kind === 'coach-application' || group.kind === 'refund' || group.kind === 'activity' || group.kind === 'removed' ? (
                     // From CourtSide itself: the mark, not a person's face.
                     <View style={styles.brandFace}><BrandMark size={24} /></View>
                   ) : rest.length ? (
@@ -461,11 +476,13 @@ export default function Notifications() {
                       <View style={styles.pairFront}><Avatar name={nameOf(first)} seed={seedOf(first)} uri={photoOf(first)} size={32} /></View>
                     </View>
                   ) : <Avatar name={nameOf(first)} seed={seedOf(first)} uri={photoOf(first)} size={44} />}
-                  <View style={[styles.badge, { backgroundColor: colors[icon.tint] }]}>
-                    {icon.name === 'hit'
-                      ? <HitGlyph size={HIT_BADGE} color={colors.brandInk} rim={colors[icon.tint]} />
-                      : <Ionicons name={icon.name} size={11} color={colors.brandInk} />}
-                  </View>
+                  {group.kind === 'weekly-recap' ? null : (
+                    <View style={[styles.badge, { backgroundColor: colors[icon.tint] }]}>
+                      {icon.name === 'hit'
+                        ? <HitGlyph size={HIT_BADGE} color={colors.brandInk} rim={colors[icon.tint]} />
+                        : <Ionicons name={icon.name} size={11} color={colors.brandInk} />}
+                    </View>
+                  )}
                 </View>
 
                 <View style={styles.body}>
@@ -485,7 +502,7 @@ export default function Notifications() {
                     removedNotice(group.preview).reason ? (
                       <Text style={styles.preview} numberOfLines={2}>Reason: {removedNotice(group.preview).reason}</Text>
                     ) : null
-                  ) : group.preview && group.kind !== 'milestone' && group.preview !== INVITE_LINE ? (
+                  ) : group.preview && group.kind !== 'milestone' && group.kind !== 'weekly-recap' && group.preview !== INVITE_LINE ? (
                     <Text style={styles.preview} numberOfLines={1}>
                       {group.preview}
                     </Text>
@@ -560,6 +577,7 @@ export default function Notifications() {
 const styleDefinitions = StyleSheet.create({
   list: { gap: 2 },
   brandFace: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.brandDim },
+  recapFace: { backgroundColor: colors.brand },
   heading: { ...typography.smallStrong, color: colors.text, paddingHorizontal: spacing.sm, paddingBottom: spacing.xs },
   pair: { width: 44, height: 44 },
   pairBack: { position: 'absolute', right: 0, top: 0 },

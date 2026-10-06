@@ -53,7 +53,12 @@ const LAG = 6 * 3_600_000;
 /** What a look found: the ids just filed (each with its row in Notifications), and whether anything new reached the server at all. */
 export type CheckResult = { filed: ID[]; news: boolean };
 
-let running: Promise<CheckResult> | null = null;
+/**
+ * The look under way, per account: a second call while one runs gets the same
+ * answer. Kept per account, so switching accounts mid-look neither hands the
+ * new account the other's workouts (its toast) nor skips its own look.
+ */
+const running = new Map<ID, Promise<CheckResult>>();
 
 /** Apple Health workouts already handed to the server in this app session ('<account>:<Health id>' → when it ended). */
 const handed = new Map<string, number>();
@@ -127,7 +132,9 @@ export type CheckSources = { apple: boolean; appleWorkouts?: boolean; whoop: boo
 
 /** New tennis sessions and workouts: Apple Health read on this phone, WHOOP and the other trackers asked of the server. Never throws. */
 export function checkForTennis(me: ID, src: CheckSources, force = false): Promise<CheckResult> {
-  running ??= (async () => {
+  const under = running.get(me);
+  if (under) return under;
+  const look = (async () => {
     const filed: ID[] = [];
     /** Each Apple Health workout filed in this look: the server's id → Health's. */
     const fromHealth = new Map<ID, string>();
@@ -208,6 +215,7 @@ export function checkForTennis(me: ID, src: CheckSources, force = false): Promis
 
     // One whose alert was just tapped is filed all the same, without its note (see openingFromAlert).
     return { filed: filed.filter((id) => !openedFromAlert.has(fromHealth.get(id) ?? '')), news };
-  })().catch((): CheckResult => ({ filed: [], news: false })).finally(() => { running = null; });
-  return running;
+  })().catch((): CheckResult => ({ filed: [], news: false })).finally(() => { running.delete(me); });
+  running.set(me, look);
+  return look;
 }

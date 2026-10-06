@@ -1,7 +1,7 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { goBack } from '@/lib/goBack';
 
 import { LevelPill } from '@/components/LevelPill';
@@ -13,6 +13,7 @@ import { PeopleSkeleton } from '@/components/Skeleton';
 import { useApp } from '@/store/AppContext';
 import { confirmUnfollow } from '@/lib/confirm';
 import { colors, spacing, typography } from '@/theme';
+import { openPlayer } from '@/features/navigation/openPlayer';
 
 /**
  * Who liked a post or a hit, the way Instagram shows it: opened by holding
@@ -79,7 +80,7 @@ export default function Likes() {
               const isMe = user.id === currentUserId;
               const following = followingIds.includes(user.id);
               return (
-                <Pressable key={user.id} accessibilityRole="link" onPress={() => router.push(isMe ? '/profile' : `/user/${user.id}`)} style={styles.row}>
+                <Pressable key={user.id} accessibilityRole="link" onPress={() => openPlayer(user.id, currentUserId)} style={styles.row}>
                   <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={48} ring={user.isCoach} />
                   <View style={{ flex: 1, gap: 3 }}>
                     <View style={styles.nameLine}>

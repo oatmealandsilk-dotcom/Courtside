@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import Animated, { Easing, FadeIn, FadeInDown } from 'react-native-reanimated';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { useLeave } from '@/components/LeaveCurtain';
-import { replaceWithStart } from '@/features/navigation/startTab';
+import { goToStart, replaceWithStart } from '@/features/navigation/startTab';
+import { goBack } from '@/lib/goBack';
 import { FollowPill } from '@/components/FollowPill';
 import { LevelPill } from '@/components/LevelPill';
 import { useNearCourts } from '@/components/place/CourtsNear';
@@ -121,9 +122,15 @@ export default function FirstMove() {
 
   // Whatever was picked, the app opens on its start page (Community, on the
   // map: see startTab); a post, an Instant or a search then opens over it.
+  // Opened from the profile's "Make your first move", the app is already
+  // underneath: this page closes down to it (never a second copy of the tabs
+  // on top), and Later simply goes back to the profile.
+  const { from: openedFrom } = useLocalSearchParams<{ from?: string }>();
+  const overApp = openedFrom === 'profile';
   const done = (move: FirstMove, then?: () => void) => {
     actions.noteFirstMove(move);
-    leave(() => { replaceWithStart(); if (then) setTimeout(then, 380); });
+    if (overApp && move === 'later') { goBack('/(tabs)/profile'); return; }
+    leave(() => { if (overApp) goToStart(); else replaceWithStart(); if (then) setTimeout(then, 380); });
   };
   // Shared the link: the page stays (a share sheet closed without sending looks the same as
   // one that sent on Android, which never says), and "Later" becomes "Continue".

@@ -97,10 +97,11 @@ function CoachMemoryScreen() {
               </View>
             ))}
           </View>
-          {error ? <Text style={styles.error}>{error}</Text> : null}
           <Button label="Clear everything the coach remembers" variant="danger" loading={busy} onPress={clear} full />
         </>
       )}
+      {/* Said whatever is above: a Stop that did not go through, with nothing remembered yet, said nothing before. */}
+      {error ? <Text style={[styles.error, { paddingTop: spacing.md }]}>{error}</Text> : null}
       {consent.agreed ? (
         <View style={{ paddingTop: spacing.lg }}>
           <Button label="Stop using the AI coach" variant="secondary" loading={stopping} onPress={stop} full />

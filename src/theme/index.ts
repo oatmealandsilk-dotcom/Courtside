@@ -49,6 +49,22 @@ export function pageIsDark(): boolean {
 }
 
 /**
+ * Words on a coloured fill (a thread's topic chip, the initials on a default
+ * picture): white where white reads at 4.5:1 or better on it, else black,
+ * which then always does. Read the fill from the live theme as you draw.
+ */
+export function inkOn(fill: string): string {
+  const hex = fill.replace('#', '');
+  if (!/^[0-9a-f]{6}$/i.test(hex)) return '#FFFFFF';
+  const [r, g, b] = [0, 2, 4].map((i) => {
+    const unit = parseInt(hex.slice(i, i + 2), 16) / 255;
+    return unit <= 0.03928 ? unit / 12.92 : Math.pow((unit + 0.055) / 1.055, 2.4);
+  });
+  const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return 1.05 / (luminance + 0.05) >= 4.5 ? '#FFFFFF' : '#000000';
+}
+
+/**
  * The lift under a grouped list or card: a soft, wide shadow, so a box a
  * shade lighter than the page reads as sitting on it, not as a smudge.
  * (On a dark court it all but disappears, which is right.)

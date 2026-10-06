@@ -18,6 +18,7 @@ import { confirmUnfollow } from '@/lib/confirm';
 import { relativeTime, timeLeft } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
 import { colors, font, spacing, typography } from '@/theme';
+import { openPlayer } from '@/features/navigation/openPlayer';
 
 /**
  * The post itself, at the top of its comments: who, the whole caption (never
@@ -49,7 +50,7 @@ export function CommentsCaption({ kind, id }: { kind: 'post' | 'hit'; id: string
   const words = post
     ? [post.body?.trim(), tagsNotInCaption(post.body, post.tags).map((t) => `#${t}`).join(' ')].filter(Boolean).join(' ')
     : story?.caption?.trim() ?? '';
-  const openProfile = () => router.push(author.id === currentUserId ? '/profile' : `/user/${author.id}`);
+  const openProfile = () => openPlayer(author.id, currentUserId);
   const following = followingIds.includes(author.id);
   const streak = shownStreak(author, currentUserId);
   const tagged = (post?.taggedUserIds ?? []).filter((uid) => !blockedIds.includes(uid)).map((uid) => users.find((u) => u.id === uid)).filter((u): u is User => !!u);

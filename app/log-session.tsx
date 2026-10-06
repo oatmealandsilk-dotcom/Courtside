@@ -20,6 +20,8 @@ import { pickSource, postOf, postedIndex, sourceOn } from '@/features/activity/r
 import { isTennisActivity, workoutIcon } from '@/features/activity/workouts';
 import { useTennisFlags } from '@/features/activity/useTennisFlags';
 import { hitPrefill, prefillFor } from '@/features/hits/followUp';
+import { beatenBy, recordToast } from '@/features/records/records';
+import { flybyAfter } from '@/features/flyby/flyby';
 import { localDay } from '@/features/practice/stats';
 import type { DetectedActivity, ID, PracticeSession, SessionPlayer, SessionTagStatus } from '@/data/types';
 import { confirm } from '@/lib/confirm';
@@ -280,8 +282,9 @@ function LogSession() {
       const id = await actions.logSession({
         minutes, kind, won: shownWon === 'won' ? true : shownWon === 'lost' ? false : undefined, ...(sets ? { sets } : {}), opponent: typed, day,
         ...(fresh ? { activityId: fresh.id } : {}),
-        // From a hit: where it was, as the note.
+        // From a hit: where it was, as the note, and the court itself in your log (migration 130).
         ...(fromHit ? { note: `At ${fromHit.place}` } : {}),
+        ...(fromHit?.placeId ? { courtId: fromHit.placeId } : {}),
       });
       // Each person tagged is asked to accept; anyone the server turns away is said after.
       if (tagging.length) {
@@ -298,7 +301,16 @@ function LogSession() {
       else {
         // "Logged · 1h 30m · Match · Won", and the streak once it is two days or more.
         const streak = currentUserId ? computeStats(currentUserId, [{ id: id, userId: currentUserId, day, minutes, kind, createdAt: new Date().toISOString() }, ...sessions], posts, stories).currentStreakDays : 0;
-        showLogged(minutes, { kind, won: kind === 'match' && shownWon ? shownWon === 'won' : undefined, sets: kind === 'match' ? scored.sets : undefined }, streak, id);
+        const won = kind === 'match' && shownWon ? shownWon === 'won' : undefined;
+        // A personal record it beat is the moment instead (records.ts).
+        const added: PracticeSession = { id, userId: currentUserId ?? '', day, minutes, kind, won, ...(kind === 'match' && scored.sets ? { sets: scored.sets } : {}), createdAt: new Date().toISOString() };
+        const record = currentUserId ? recordToast(beatenBy(currentUserId, sessions, added, posts, stories), [added, ...sessions]) : null;
+        showLogged(minutes, { kind, won, sets: kind === 'match' ? scored.sets : undefined }, streak, id, record);
+        // Logged from a hit at a court: who else was there that day, a few seconds on.
+        if (fromHit?.placeId) {
+          const people = users;
+          flybyAfter({ courtId: fromHit.placeId, courtName: fromHit.place, day, ask: actions.flyby, users: () => people, skip: fromHit.playerIds, delayMs: record ? 5500 : undefined });
+        }
       }
       close();
     } catch (e) {
@@ -335,7 +347,7 @@ function LogSession() {
   ) : fromHit ? (
     <SheetTitle title="How was the hit?" line={`${fromHit.place}${fromHit.who ? ` · with ${fromHit.who}` : ''}. Only you see this.`} lines={2} onClose={close} />
   ) : (
-    <SheetTitle title="Log a session" line="Keeps your streak, hours and win rate. Only you see it." onClose={close} />
+    <SheetTitle title="Log a session" line="Keeps your streak, hours and win rate. Only you see it." lines={2} onClose={close} />
   );
   const numbers = fresh ? privateLine(fresh) : '';
   // Once the sheet is gone: the new post with this session's stats, in this page's place, or back where it was opened from.

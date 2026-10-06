@@ -77,7 +77,8 @@ export function NavBar({ state, navigation }: NavBarProps) {
   const { conversations, notifications, currentUserId, currentUser, blockedIds } = useApp();
   // Chats with something new, not messages (Instagram's count); a muted chat never counts.
   const unread = unreadChatCount(conversations, currentUserId, blockedIds);
-  const alerts = notifications.filter((n) => n.userId === currentUserId && !n.read).length;
+  // Never anything from someone you blocked (the Notifications page leaves those out too).
+  const alerts = notifications.filter((n) => n.userId === currentUserId && !n.read && !blockedIds.includes(n.actorId)).length;
   // The sidebar's bell counts CourtSide's own welcome too, until Notifications is first opened
   // (welcomeNote). Only the bell: it never adds to Profile's number in the bar, so a new
   // player is not met with a red badge for something nobody did.
@@ -176,7 +177,7 @@ export function NavBar({ state, navigation }: NavBarProps) {
                     />
                     {item.route === 'profile' && profileAlerts > 0 ? (
                       <View style={styles.bottomBadge}>
-                        <Text style={styles.bottomBadgeText}>{profileAlerts > 9 ? '9+' : profileAlerts}</Text>
+                        <Text style={[styles.bottomBadgeText, { color: colors.onDanger }]}>{profileAlerts > 9 ? '9+' : profileAlerts}</Text>
                       </View>
                     ) : null}
                   </View>
@@ -349,7 +350,8 @@ const styleDefinitions = StyleSheet.create({
     minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 5,
     backgroundColor: colors.danger, alignItems: 'center', justifyContent: 'center',
   },
-  bottomBadgeText: { color: 'white', fontSize: 11, lineHeight: 13, ...font('700'), fontVariant: ['tabular-nums'], includeFontPadding: false, textAlign: 'center' },
+  // Its colour is colors.onDanger, given where it is drawn (white, or dark on the two dark courts' lighter red).
+  bottomBadgeText: { fontSize: 11, lineHeight: 13, ...font('700'), fontVariant: ['tabular-nums'], includeFontPadding: false, textAlign: 'center' },
   bottomLabel: { ...typography.smallStrong, fontSize: 11, color: colors.textFaint, letterSpacing: 0.15 },
 
   sidebar: {

@@ -1,8 +1,27 @@
 import { useEffect, useRef, useState } from 'react';
-import { RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync, useAudioRecorder } from 'expo-audio';
+import { Platform } from 'react-native';
+import { RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync, useAudioRecorder, type RecordingOptions } from 'expo-audio';
 
 /** Longest voice note: two minutes, then it stops by itself. */
 export const VOICE_LIMIT_MS = 120_000;
+
+/*
+ * What a browser records in. Left to itself it records WebM, which an iPhone
+ * cannot play at all (the note sat silent there), so it is asked for MP4 with
+ * AAC sound, which every phone plays: Safari makes it, and Chrome and Edge do
+ * on most computers. A browser that can't (Firefox, say) offers no mic, so it
+ * never sends a voice note half the chat can't hear. Phones record M4A (AAC)
+ * already.
+ */
+const WEB_VOICE_TYPES = ['audio/mp4;codecs=mp4a.40.2', 'audio/mp4;codecs="mp4a.40.2"'];
+const webVoiceType = Platform.OS === 'web' && typeof MediaRecorder !== 'undefined' && typeof MediaRecorder.isTypeSupported === 'function'
+  ? WEB_VOICE_TYPES.find((type) => { try { return MediaRecorder.isTypeSupported(type); } catch { return false; } })
+  : undefined;
+/** Whether voice notes can be recorded here: always on a phone; in a browser, only one that records MP4 (see above). */
+export const canRecordVoice = Platform.OS !== 'web' || !!webVoiceType;
+const VOICE_OPTIONS: RecordingOptions = webVoiceType
+  ? { ...RecordingPresets.HIGH_QUALITY, web: { ...RecordingPresets.HIGH_QUALITY.web, mimeType: webVoiceType } }
+  : RecordingPresets.HIGH_QUALITY;
 
 /**
  * Recording a voice note, on the phone or in a browser. The microphone is
@@ -10,7 +29,7 @@ export const VOICE_LIMIT_MS = 120_000;
  * (anything under half a second counts as a slip and is dropped).
  */
 export function useVoiceRecorder() {
-  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  const recorder = useAudioRecorder(VOICE_OPTIONS);
   const [recording, setRecording] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const startedAt = useRef(0);
@@ -28,6 +47,8 @@ export function useVoiceRecorder() {
     const mine = ++gen.current;
     lastStart.current = mine;
     const stale = () => gen.current !== mine;
+    // A browser that can only record what an iPhone can't play records nothing (the mic isn't offered there).
+    if (!canRecordVoice) return 'failed';
     try {
       const permission = await requestRecordingPermissionsAsync();
       if (!permission.granted) return 'denied';

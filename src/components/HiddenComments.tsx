@@ -1,7 +1,6 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { Avatar } from '@/components/ui/Avatar';
@@ -11,6 +10,7 @@ import * as haptics from '@/lib/haptics';
 import { relativeTime } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
 import { colors, spacing, typography } from '@/theme';
+import { openPlayer } from '@/features/navigation/openPlayer';
 
 /**
  * "Hidden comments (2)" at the end of the comments on something of yours,
@@ -61,7 +61,7 @@ export function HiddenReplyRow({ authorId, body, createdAt, onUnhide }: { author
   const styles = useThemedStyles(styleDefinitions);
   const { users, currentUserId } = useApp();
   const who = users.find((u) => u.id === authorId);
-  const open = () => { if (who) router.push(who.id === currentUserId ? '/profile' : `/user/${who.id}`); };
+  const open = () => { if (who) openPlayer(who.id, currentUserId); };
   return (
     <View style={styles.row}>
       <Pressable accessibilityRole="link" accessibilityLabel={who ? `Open ${who.name}'s profile` : undefined} onPress={open}>

@@ -4,7 +4,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { Avatar, Field } from '@/components/ui';
 import type { ID, PracticeSession, SessionPlayer, SessionTagStatus, User } from '@/data/types';
-import { flipRole, maxTagsFor, nameFor, nextRole, refusalWords, rolesForMatch } from '@/features/activity/sessionTags';
+import { OPPONENT_MAX, flipRole, maxTagsFor, nameFor, nextRole, refusalWords, rolesForMatch } from '@/features/activity/sessionTags';
 import { useMentionCandidates, type MentionCandidate } from '@/features/mentions/useMentionCandidates';
 import * as haptics from '@/lib/haptics';
 import { useRevealOnFocus } from '@/lib/keyboardScroll';
@@ -221,6 +221,8 @@ export function WhoYouPlayed({ kind, players, onPlayers, text, onText, search, s
         accessibilityLabel={search ? 'Who was there: search CourtSide players or type a name' : placeholder}
         autoCapitalize="words"
         autoCorrect={false}
+        // The names typed here are kept as the session's opponent, which holds 60 characters (a longer one never saved).
+        maxLength={OPPONENT_MAX}
         onFocus={() => { if (closing.current) clearTimeout(closing.current); setFocused(true); reveal(block.current); }}
         onBlur={() => { closing.current = setTimeout(() => setFocused(false), 220); }}
       />

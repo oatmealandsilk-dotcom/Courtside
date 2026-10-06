@@ -214,13 +214,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   if (shown === paths.index) selected.current = TAB_ORDER.indexOf(paths.index);
   else if (shown === paths.discuss || shown.startsWith('/question/') || shown.startsWith('/user/')) selected.current = TAB_ORDER.indexOf(paths.discuss);
   else if (shown === paths.coaches || shown.startsWith('/coach/') || shown.startsWith('/coach-') || shown === '/ai-coach' || shown === '/booking-done') selected.current = TAB_ORDER.indexOf(paths.coaches);
-  else if (shown === paths.profile || ownTennisProfile || ['/settings', '/edit-profile', '/change-handle', '/your-sessions', '/workouts'].includes(shown)) selected.current = TAB_ORDER.indexOf(paths.profile);
+  else if (shown === paths.profile || ownTennisProfile || ['/settings', '/edit-profile', '/change-handle', '/your-sessions', '/workouts', '/weekly-recap'].includes(shown)) selected.current = TAB_ORDER.indexOf(paths.profile);
   // Pages with their own bottom controls (a composer, an editor, a thread's
   // message box) run without the phone's floating bar. On a computer the
   // menu sits at the side, out of their way, so it stays, the way
   // Instagram's does behind its Create box. Sign-in, setup and the camera
   // hide it everywhere.
-  const phoneOnlyHide = ['/compose', '/edit-post', '/ask', '/ask-coach', '/coach-apply', '/pick-location', '/pick-court', '/invite', '/comments', '/session-stats', '/who-played', '/share', '/pick-group', '/find-groups', '/group-form', '/group-invite', '/likes', '/post-menu', '/log-session', '/pick-session', '/session-tag', '/hit-request/new', '/court-report', '/court-now', '/map-visibility', '/open-to-hit', '/wrapped', '/health-share', '/share-session', '/tennis-sheet'].includes(pathname) || pathname === '/messages' || pathname.startsWith('/messages/');
+  const phoneOnlyHide = ['/compose', '/edit-post', '/ask', '/ask-coach', '/coach-apply', '/pick-location', '/pick-court', '/invite', '/comments', '/session-stats', '/who-played', '/share', '/pick-group', '/find-groups', '/group-form', '/group-invite', '/likes', '/post-menu', '/log-session', '/pick-session', '/session-tag', '/hit-request/new', '/court-report', '/court-now', '/map-visibility', '/open-to-hit', '/wrapped', '/health-share', '/share-session', '/tennis-sheet', '/flyby', '/weekly-recap'].includes(pathname) || pathname === '/messages' || pathname.startsWith('/messages/');
   // Arriving from the password-reset email is its own calm page, with no app around it yet.
   // (The comments' own address says which clip they are about, for the stage below.)
   const { reset, kind: routeKind, id: routeId, stage: routeStage } = useGlobalSearchParams<{ reset?: string; kind?: string; id?: string; stage?: string }>();

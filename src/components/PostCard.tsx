@@ -2,12 +2,10 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import { PlaceLine } from '@/components/PlaceLine';
 import { TaggedLine } from '@/components/TaggedLine';
 import React, { useEffect, useState, memo } from 'react';
-import { Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
-import { useModalOpenWhile } from '@/lib/modalOpen';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import { router } from 'expo-router';
 import * as haptics from '@/lib/haptics';
-import { confirmAfterMenu } from '@/lib/confirm';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { ClipVideo } from '@/components/ClipVideo';
@@ -31,7 +29,6 @@ import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { hasSessionStats } from '@/features/activity/format';
 import { requestSection } from '@/features/navigation/swipeOrder';
 import { goToTab } from '@/features/navigation/startTab';
-import { useHoldTour } from '@/features/tour/tourHold';
 import { colors, radius, spacing, typography } from '@/theme';
 import { tagsNotInCaption } from '@/features/feed/tags';
 
@@ -54,9 +51,11 @@ interface Props {
   clamp?: number;
   /** False in a list of many (search results): the video shows its cover instead of every one playing at once. */
   playing?: boolean;
-  /** Shown as ••• on your own posts: archive or delete. */
-  onArchive?: () => void;
-  onDelete?: () => void;
+  /**
+   * The ••• at the end of the row of buttons, as under a photo post: the post's
+   * menu (yours: edit, pin, archive, delete; anyone else's: report, mute, block).
+   */
+  onMore?: () => void;
   /** This post's page is the one on show: a session card counts its numbers up, once per post per app run. */
   active?: boolean;
 }
@@ -98,8 +97,7 @@ function PostCardInner({
   onToggleSave,
   onShare,
   clamp,
-  onArchive,
-  onDelete,
+  onMore,
   playing = true,
   active = false,
 }: Props) {
@@ -118,10 +116,6 @@ function PostCardInner({
     setPlay(true);
   }, [sessionCard, active, post.id]);
   const openStats = () => router.push({ pathname: '/session-stats', params: { kind: 'post', id: post.id } });
-  const [menuOpen, setMenuOpen] = useState(false);
-  useModalOpenWhile(menuOpen);
-  // The tutorial never starts under this menu.
-  useHoldTour(menuOpen);
   // A post carrying a tennis session (a tracker's, or one from your log) is labelled for the game itself, not as a generic session:
   // the court, as in Your sessions; the stopwatch stays for the time and stats under it.
   const kind = post.session?.activityId || (post.session?.sessionId && post.session.kind !== 'fitness') ? TENNIS_META : KIND_META[post.kind];
@@ -150,35 +144,8 @@ function PostCardInner({
           {/* Where, on its own line under the name, as Instagram sets it: the whole place, a tap opens the court. */}
           <PlaceLine court={post.court} location={post.location} />
         </View>
-        {onDelete || onArchive ? (
-          <Pressable accessibilityRole="button" accessibilityLabel="Post options" hitSlop={10} onPress={() => setMenuOpen(true)} style={styles.more}>
-            <Ionicons name="ellipsis-horizontal" size={20} color={colors.textMuted} />
-          </Pressable>
-        ) : (
-          <LevelPill profile={author.profile} small />
-        )}
+        <LevelPill profile={author.profile} small />
       </Pressable>
-      {menuOpen ? (
-        <Modal visible transparent animationType="fade" onRequestClose={() => setMenuOpen(false)}>
-          <Pressable accessibilityLabel="Close" onPress={() => setMenuOpen(false)} style={styles.backdrop}>
-            <View style={styles.sheet}>
-              <View style={styles.grabber} />
-              {onArchive ? (
-                <Pressable accessibilityRole="button" onPress={() => { setMenuOpen(false); onArchive(); }} style={styles.menuRow}>
-                  <Ionicons name={post.archived ? 'arrow-undo-outline' : 'archive-outline'} size={21} color={colors.text} />
-                  <Text style={styles.menuLabel}>{post.archived ? 'Unarchive' : 'Archive'}</Text>
-                </Pressable>
-              ) : null}
-              {onDelete ? (
-                <Pressable accessibilityRole="button" onPress={() => { setMenuOpen(false); confirmAfterMenu({ title: 'Delete post?', message: "This can't be undone.", confirmLabel: 'Delete', destructive: true, onConfirm: onDelete }); }} style={[styles.menuRow, styles.menuBorder]}>
-                  <Ionicons name="trash-outline" size={21} color={colors.danger} />
-                  <Text style={[styles.menuLabel, { color: colors.danger }]}>Delete</Text>
-                </Pressable>
-              ) : null}
-            </View>
-          </Pressable>
-        </Modal>
-      ) : null}
 
       {post.imageUrl && <ExpoImage accessibilityLabel={post.mediaLabel ?? "Post photo"} source={{uri:post.imageUrl}} style={styles.photo} contentFit="cover" cachePolicy="memory-disk"/>}
       {/* The player fills whatever box it is given, so the card gives it one in the post's own shape. */}
@@ -300,20 +267,27 @@ function PostCardInner({
             <Ionicons name="arrow-redo-outline" size={ICON} color={colors.textMuted} />
           </Tappable>
         ) : null}
-        {onToggleSave ? (
-          <View style={{ marginLeft: 'auto' }}>
-            <Tappable
-              onPress={onToggleSave}
-              scaleTo={0.8}
-              style={styles.action}
-              accessibilityLabel={saved ? 'Remove from saved' : 'Save this post'}
-            >
-              <Ionicons
-                name={saved ? 'bookmark' : 'bookmark-outline'}
-                size={ICON - 1}
-                color={saved ? colors.brand : colors.textMuted}
-              />
-            </Tappable>
+        {onToggleSave || onMore ? (
+          <View style={styles.actionsEnd}>
+            {onToggleSave ? (
+              <Tappable
+                onPress={onToggleSave}
+                scaleTo={0.8}
+                style={styles.action}
+                accessibilityLabel={saved ? 'Remove from saved' : 'Save this post'}
+              >
+                <Ionicons
+                  name={saved ? 'bookmark' : 'bookmark-outline'}
+                  size={ICON - 1}
+                  color={saved ? colors.brand : colors.textMuted}
+                />
+              </Tappable>
+            ) : null}
+            {onMore ? (
+              <Tappable onPress={onMore} scaleTo={0.8} hitSlop={6} style={styles.action} accessibilityLabel="More options">
+                <Ionicons name="ellipsis-horizontal" size={ICON - 2} color={colors.textMuted} />
+              </Tappable>
+            ) : null}
           </View>
         ) : null}
       </View>
@@ -327,13 +301,6 @@ const styleDefinitions = StyleSheet.create({
   // buttons is never sliced through the middle.
   card: { gap: spacing.md, borderRadius: 0, borderWidth: 0, borderBottomWidth: 1, paddingHorizontal: 0, paddingBottom: spacing.xl, backgroundColor: 'transparent', flexShrink: 1, minHeight: 0 },
   header: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  more: { padding: 4 },
-  backdrop: { flex: 1, backgroundColor: colors.overlay, justifyContent: 'flex-end' },
-  sheet: { backgroundColor: colors.bg, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, paddingBottom: spacing.xxl, paddingTop: spacing.sm, maxWidth: 520, width: '100%', alignSelf: 'center' },
-  grabber: { width: 36, height: 4, borderRadius: 2, backgroundColor: colors.borderStrong, alignSelf: 'center', marginBottom: spacing.md },
-  menuRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg, paddingHorizontal: spacing.xl, paddingVertical: spacing.lg },
-  menuBorder: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
-  menuLabel: { ...typography.body, color: colors.text },
   headerText: { flex: 1, gap: 1 },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   name: { ...typography.bodyStrong, color: colors.text, flexShrink: 1 },
@@ -384,6 +351,8 @@ const styleDefinitions = StyleSheet.create({
     paddingTop: spacing.md,
   },
   action: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 28 },
+  // Save and the ••• on the right, as under a photo post.
+  actionsEnd: { marginLeft: 'auto', flexDirection: 'row', alignItems: 'center', gap: spacing.lg },
   actionText: { ...typography.bodyStrong, fontSize: 14, color: colors.textMuted },
   // Browsers ignore hitSlop, so on a computer the number gets a real, bigger click area (without moving anything) and underlines on hover.
   countHit: Platform.OS === 'web' ? ({ padding: 8, margin: -8, cursor: 'pointer' } as object) : {},

@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type ViewStyle } from 'react-native';
+import Reanimated, { useAnimatedKeyboard, useAnimatedStyle } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { BLOCKED_WORDS_NOTE } from '@/features/hiddenWords/hiddenWords';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -14,6 +16,22 @@ import { useApp, type GroupOutcome } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, lift, spacing, typography } from '@/theme';
 
+
+/**
+ * On a phone (iPhone and Android), the room the keyboard takes at the bottom
+ * of the screen, following it frame by frame: the Chat / Create group button
+ * rides up on it rather than sitting underneath. `less` is the room the
+ * button already keeps under it (the home strip's), which the keyboard
+ * covers anyway. A browser has no keyboard to follow. Which version runs is
+ * fixed per platform, so the hooks inside never change between draws.
+ */
+const NO_LIFT: ViewStyle = {};
+const useFooterLift: (less: number) => ViewStyle = Platform.OS === 'web'
+  ? () => NO_LIFT
+  : function useNativeFooterLift(less: number) {
+    const keyboard = useAnimatedKeyboard();
+    return useAnimatedStyle(() => ({ bottom: Math.max(0, keyboard.height.value - less) })) as ViewStyle;
+  };
 
 /**
  * Starting a chat. On a computer it is a small box over your inbox, the way
@@ -42,6 +60,10 @@ export default function NewMessage() {
   const { isPhone } = useResponsive();
   const params = useLocalSearchParams<{ with?: string }>();
   const { users, conversations, currentUserId, blockedIds, actions } = useApp();
+  // On a phone the button keeps clear of the home strip, and rides up on the keyboard (the To box opens it).
+  const insets = useSafeAreaInsets();
+  const footerBottom = Math.max(spacing.xl, insets.bottom + spacing.sm);
+  const footerLift = useFooterLift(footerBottom - spacing.lg);
   const [query, setQuery] = useState('');
   // Instagram's way: tick people, then Chat (one) or Create group (two or more).
   const [picked, setPicked] = useState<string[]>(() => {
@@ -166,8 +188,8 @@ export default function NewMessage() {
   const blockersText = blockers.length ? groupLockNote(namesOf(blockers), true) : null;
   const notes = [blockersText, note && note.text !== blockersText ? note.text : null].filter((t): t is string => !!t);
   const held = !!blockers.length || busy;
-  const footer = picked.length || notes.length ? (
-    <View style={styles.footer}>
+  const footer = (phone: boolean) => (picked.length || notes.length ? (
+    <Reanimated.View style={[styles.footer, phone && { paddingBottom: footerBottom }, phone && footerLift]}>
       {notes.map((text) => (
         <LockNote key={text} text={text} tone={note?.alert && text === note.text ? 'alert' : 'lock'} onClose={text === note?.text ? () => setNote(null) : undefined} />
       ))}
@@ -181,8 +203,8 @@ export default function NewMessage() {
           <Text style={styles.startText}>{picked.length === 1 ? 'Chat' : sameGroup ? 'Open group' : busy ? 'Creating group…' : `Create group · ${picked.length + 1} people`}</Text>
         </Pressable>
       ) : null}
-    </View>
-  ) : null;
+    </Reanimated.View>
+  ) : null);
 
   const list = (
     <>
@@ -265,7 +287,7 @@ export default function NewMessage() {
           {/* Room under the list for the footer pinned over it (taller with a note in it). */}
           <View style={{ height: picked.length || notes.length ? 140 + notes.length * 90 : 0 }} />
         </Screen>
-        {footer}
+        {footer(true)}
       </View>
     );
   }
@@ -287,7 +309,7 @@ export default function NewMessage() {
         </View>
         {chips}
         <ScrollView style={styles.scroll} contentContainerStyle={[styles.scrollBody, picked.length || notes.length ? { paddingBottom: 150 + notes.length * 90 } : null]}>{list}</ScrollView>
-        {footer}
+        {footer(false)}
       </View>
     </View>
   );

@@ -10,6 +10,8 @@ import { LocationLink } from '@/components/LocationChip';
 import { HealthShareRow } from '@/components/session/HealthShareRow';
 import type { DetectedActivity, TaggedCourt } from '@/data/types';
 import { availableShare, chosenShare, choiceFromTicks, postShare, type HealthChoice } from '@/features/activity/healthShare';
+import { POST_MAX } from '@/features/feed/limits';
+import { notKnownAdult } from '@/features/players/age';
 import { openPlacePicker } from '@/features/places/picker';
 import { TagPlayers } from '@/components/TagPlayers';
 import { Button, Field, Toggle } from '@/components/ui';
@@ -30,8 +32,8 @@ import { colors, spacing, typography } from '@/theme';
  */
 export default function EditPost() {
   const styles = useThemedStyles(styleDefinitions);
-  const { id = '', kind: rawKind, pickPlace } = useLocalSearchParams<{ id?: string; kind?: string; pickPlace?: string }>();
-  const { posts, questions, currentUserId, detectedActivities, actions } = useApp();
+  const { id = '', kind: rawKind, pickPlace: pickParam } = useLocalSearchParams<{ id?: string; kind?: string; pickPlace?: string }>();
+  const { posts, questions, currentUserId, currentUser, detectedActivities, actions } = useApp();
   const isQuestion = rawKind === 'question';
   const post = isQuestion ? undefined : posts.find((p) => p.id === id);
   const question = isQuestion ? questions.find((q) => q.id === id) : undefined;
@@ -43,6 +45,11 @@ export default function EditPost() {
   const [location, setLocation] = useState(post?.location ?? '');
   const [court, setCourt] = useState<TaggedCourt | null>(post?.court ?? null);
   const [feature, setFeature] = useState(post ? post.featureOk !== false : true);
+  // A court goes on a post only for someone known to be an adult (owner
+  // decision 7), and never on a group-only post (the server keeps those off
+  // every court's page). Otherwise the place stays as words.
+  const courtOk = !!currentUser && !notKnownAdult(currentUser) && !post?.groupId;
+  const pickPlace = (typed: string) => openPlacePicker((value, picked) => { setLocation(value); setCourt(courtOk ? picked ?? null : null); }, typed);
   const [closeSignal, setCloseSignal] = useState(0);
   // Opened before the post had loaded (a reload, a link): the fields fill in
   // once, when it arrives, and Save stays off until then, so saving can
@@ -63,10 +70,10 @@ export default function EditPost() {
   // once the post is here, a beat after the sheet is up.
   const picked = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    if (pickPlace !== '1' || picked.current || !filled || !post || !mine) return;
+    if (pickParam !== '1' || picked.current || !filled || !post || !mine) return;
     const typed = post.location ?? '';
-    picked.current = setTimeout(() => openPlacePicker((value, court) => { setLocation(value); setCourt(court ?? null); }, typed), 350);
-  }, [pickPlace, filled, post, mine]);
+    picked.current = setTimeout(() => pickPlace(typed), 350);
+  }, [pickParam, filled, post, mine]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => { if (picked.current) clearTimeout(picked.current); }, []);
 
   // "Share health data" (Oct 4, owner): only on a post from your own tracker
@@ -107,7 +114,7 @@ export default function EditPost() {
         showToast({ title: BLOCKED_WORDS_NOTE, body: 'Change them and save again.', icon: 'alert-circle-outline', long: true });
         return;
       }
-      if (post) actions.editPost(post.id, { body: body.trim(), taggedUserIds: tagged, location, court, ...(health && available.length ? { share: chosenShare(health, available) } : {}), ...(featurable ? { featureOk: feature } : {}) });
+      if (post) actions.editPost(post.id, { body: body.trim(), taggedUserIds: tagged, location, court: courtOk ? court : null, ...(health && available.length ? { share: chosenShare(health, available) } : {}), ...(featurable ? { featureOk: feature } : {}) });
       if (question) actions.editQuestion(question.id, { title: title.trim(), body: body.trim() });
       setCloseSignal((n) => n + 1);
     });
@@ -132,12 +139,12 @@ export default function EditPost() {
           <Text style={styles.note}>Only the person who posted this can change it.</Text>
         ) : isQuestion ? (
           <>
-            <Field label="Question" value={title} onChangeText={setTitle} />
-            <Field label="Details" value={body} onChangeText={setBody} multiline minHeight={120} mentions />
+            <Field label="Question" value={title} onChangeText={setTitle} maxLength={300} />
+            <Field label="Details" value={body} onChangeText={setBody} multiline minHeight={120} mentions maxLength={10000} />
           </>
         ) : (
           <>
-            <Field label="Caption" labelRight={<LocationLink value={location} court={!!court} onPress={() => openPlacePicker((value, picked) => { setLocation(value); setCourt(picked ?? null); }, location)} onClear={() => { setLocation(''); setCourt(null); }} />} value={body} onChangeText={setBody} multiline minHeight={80} mentions />
+            <Field label="Caption" labelRight={<LocationLink value={location} court={!!court && courtOk} onPress={() => pickPlace(location)} onClear={() => { setLocation(''); setCourt(null); }} />} value={body} onChangeText={setBody} multiline minHeight={80} mentions maxLength={POST_MAX} />
             <TagPlayers tagged={tagged} onChange={setTagged} />
             {tracker && available.length ? <HealthShareRow activity={tracker} choice={healthShown} onChoice={setHealth} /> : null}
             {/* The composer's switch, word for word: the Terms ("When CourtSide features your post") and the privacy policy quote it. */}

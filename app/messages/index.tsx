@@ -107,7 +107,9 @@ export default function Inbox() {
     })
     // A group stays even when everyone else has gone (or is not loaded yet);
     // a one-to-one needs the other person, and goes when they are blocked.
-    .filter((t) => t.group || (Boolean(t.other) && !blockedIds.includes(t.other!.id))),
+    // One with nothing in it yet is not listed (Instagram's way): a chat opened
+    // and left without a word is only a chat once someone writes in it.
+    .filter((t) => t.group || (Boolean(t.other) && !blockedIds.includes(t.other!.id) && t.conversation.messageIds.length > 0)),
   [conversations, byId, usersById, users, currentUserId, blockedIds]);
 
   const threads = useMemo(() => {
@@ -174,7 +176,8 @@ export default function Inbox() {
     isCoach ? { value: 'clients', label: 'Clients' } : { value: 'coaches', label: 'Coaches' },
   ];
 
-  const pinnedCount = conversations.filter((c) => c.pinnedAt).length;
+  // Only the pinned chats the inbox shows count (a chat with someone you blocked is not one of them).
+  const pinnedCount = all.filter((t) => t.conversation.pinnedAt).length;
   const askDelete = (conversation: Conversation, after = false) => (after ? confirmAfterMenu : confirm)({
     title: 'Delete this chat?',
     message: 'It leaves your inbox, and what was said so far is cleared for you. Nobody else’s copy changes, and a new message brings the chat back.',
