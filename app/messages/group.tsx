@@ -613,7 +613,8 @@ const styleDefinitions = StyleSheet.create({
   headAdd: { paddingHorizontal: 14, height: 32, borderRadius: radius.pill, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
   headAddOff: { opacity: 0.4 },
   headAddText: { ...typography.smallStrong, color: colors.brandInk },
-  search: { ...typography.body, color: colors.text, height: 44, paddingHorizontal: 14, borderRadius: radius.pill, backgroundColor: colors.surface, outlineStyle: 'none' } as object,
+  // Sized by its padding, not a fixed height (a fixed one drew "Search" low and cut off on an iPhone).
+  search: { ...typography.body, fontSize: 16, color: colors.text, minHeight: 44, paddingHorizontal: 14, paddingVertical: 10, borderRadius: radius.pill, backgroundColor: colors.surface, outlineStyle: 'none' } as object,
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   chip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: 5, paddingRight: 9, height: 30, borderRadius: 15, backgroundColor: colors.brandDim },
   chipText: { ...typography.smallStrong, color: colors.brand, maxWidth: 120 },

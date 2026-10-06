@@ -143,8 +143,9 @@ export function CourtSearch({ home, nearby, chosen, onChoose, typed, onType }: {
 
 const styleDefinitions = StyleSheet.create({
   // The same lifted pill as the Coaching page's ask box.
-  search: { ...lift, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: spacing.lg, height: 50, borderRadius: radius.pill, backgroundColor: colors.surface },
-  searchInput: { flex: 1, minWidth: 0, height: 50, fontSize: 16, color: colors.text, outlineStyle: 'none' } as object,
+  search: { ...lift, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: spacing.lg, minHeight: 50, borderRadius: radius.pill, backgroundColor: colors.surface },
+  // Sized by its padding, not a fixed height (that drew the words low and cut off on an iPhone).
+  searchInput: { flex: 1, minWidth: 0, fontSize: 16, color: colors.text, minHeight: 50, paddingVertical: 12, outlineStyle: 'none' } as object,
   list: { borderRadius: 16, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, paddingHorizontal: spacing.md, overflow: 'hidden' },
   listHead: { ...typography.caption, color: colors.textFaint, letterSpacing: 0.4, paddingTop: 10, paddingBottom: 2 },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: 10 },

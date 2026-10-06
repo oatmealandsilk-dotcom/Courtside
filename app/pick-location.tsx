@@ -347,8 +347,9 @@ export default function PickLocation() {
 }
 
 const styleDefinitions = StyleSheet.create({
-  search: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, height: 46, paddingHorizontal: 14, borderRadius: radius.pill, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, marginBottom: spacing.sm },
-  input: { flex: 1, ...typography.body, color: colors.text, paddingVertical: 0 },
+  // Sized by the text box's padding, not a fixed height with none (that drew "Search" low and cut off on an iPhone).
+  search: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 46, paddingHorizontal: 14, borderRadius: radius.pill, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, marginBottom: spacing.sm },
+  input: { flex: 1, ...typography.body, fontSize: 16, color: colors.text, minHeight: 44, paddingVertical: 10 },
   list: { paddingBottom: spacing.xxl },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: 11, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
   rowPressed: { opacity: 0.6 },

@@ -322,9 +322,10 @@ const styleDefinitions = StyleSheet.create({
   head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.lg, height: 52, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
   headSide: { width: 32, alignItems: 'flex-end' },
   title: { ...typography.bodyStrong, color: colors.text },
-  toRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, height: 50, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
+  toRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, minHeight: 50, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
   to: { ...typography.bodyStrong, color: colors.text },
-  toInput: { flex: 1, ...typography.body, color: colors.text, paddingVertical: 0, outlineStyle: 'none' } as object,
+  // Sized by its padding, not squeezed to no padding in a fixed-height row (that drew "Search" low and cut off on an iPhone).
+  toInput: { flex: 1, ...typography.body, fontSize: 16, color: colors.text, minHeight: 50, paddingVertical: 10, outlineStyle: 'none' } as object,
   scroll: { flex: 1 },
   scrollBody: { paddingBottom: spacing.lg },
   label: { ...typography.smallStrong, color: colors.textMuted, paddingHorizontal: spacing.lg, paddingTop: spacing.lg, paddingBottom: spacing.sm },
@@ -345,7 +346,7 @@ const styleDefinitions = StyleSheet.create({
   // Someone you can't pick right now, dimmed the way the Send-to sheet's locked tiles are.
   locked: { opacity: 0.45 },
   footer: { position: 'absolute', left: 0, right: 0, bottom: 0, gap: spacing.sm, padding: spacing.lg, paddingBottom: spacing.xl, backgroundColor: colors.bg, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
-  groupName: { ...typography.body, color: colors.text, height: 44, paddingHorizontal: 14, borderRadius: 12, backgroundColor: colors.bgElevated, outlineStyle: 'none' } as object,
+  groupName: { ...typography.body, fontSize: 16, color: colors.text, minHeight: 44, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12, backgroundColor: colors.bgElevated, outlineStyle: 'none' } as object,
   start: { height: 50, borderRadius: 25, backgroundColor: colors.brand, flexDirection: 'row', gap: spacing.sm, alignItems: 'center', justifyContent: 'center' },
   startGroup: { boxShadow: '0px 6px 18px rgba(0, 0, 0, 0.16)' },
   toPinned: { paddingBottom: spacing.xs },

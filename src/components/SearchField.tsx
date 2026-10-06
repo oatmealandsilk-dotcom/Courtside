@@ -95,7 +95,9 @@ const styleDefinitions = StyleSheet.create({
     borderRadius: radius.pill,
     paddingLeft: 42,
     paddingRight: 40,
-    paddingVertical: 12,
+    // At least the box's 46, with room to spare around the line: an iPhone centres the words in it.
+    minHeight: 46,
+    paddingVertical: 10,
     ...(Platform.OS === 'web' ? { outlineStyle: 'none' } : null),
   } as object,
   inputFocused: { borderColor: colors.borderStrong },

@@ -140,10 +140,11 @@ export default function PickCourt() {
 const styleDefinitions = StyleSheet.create({
   searchRow: { paddingHorizontal: spacing.lg, paddingTop: spacing.xs, paddingBottom: spacing.sm },
   search: {
-    flexDirection: 'row', alignItems: 'center', gap: spacing.sm, height: 42, paddingHorizontal: 14,
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 42, paddingHorizontal: 14,
     borderRadius: radius.pill, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border,
   },
-  searchInput: { flex: 1, minWidth: 0, ...typography.body, color: colors.text, outlineStyle: 'none' } as object,
+  // Sized by its padding inside a row with no fixed height (a fixed one drew the words low and cut off on an iPhone).
+  searchInput: { flex: 1, minWidth: 0, ...typography.body, fontSize: 16, color: colors.text, minHeight: 40, paddingVertical: 8, outlineStyle: 'none' } as object,
   body: { paddingHorizontal: spacing.sm, paddingBottom: spacing.xxl },
   loading: { paddingVertical: 48, alignItems: 'center' },
   section: { ...typography.caption, color: colors.textFaint, textTransform: 'uppercase', paddingHorizontal: spacing.sm, paddingTop: spacing.sm, paddingBottom: spacing.xs },

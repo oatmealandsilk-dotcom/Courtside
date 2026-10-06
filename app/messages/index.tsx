@@ -1,6 +1,6 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { goBack } from '@/lib/goBack';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -17,9 +17,10 @@ import { relativeTime } from '@/lib/format';
 import { isOnlyLink } from '@/lib/links';
 import { useApp } from '@/store/AppContext';
 import { StreakFlame } from '@/components/StreakFlame';
+import { SearchField } from '@/components/SearchField';
 import { shownStreak, streakWords } from '@/features/practice/streakFlame';
 import type { Conversation, Message, User } from '@/data/types';
-import { colors, spacing, typography, font, radius } from '@/theme';
+import { colors, spacing, typography, font } from '@/theme';
 import { isDesktopBrowser } from '@/lib/browserDevice';
 import { learned } from '@/features/tips/tips';
 
@@ -245,18 +246,7 @@ export default function Inbox() {
         </Pressable>
       }
     >
-      <View style={styles.searchWrap}>
-        <Ionicons name="search" size={17} color={colors.textFaint} style={styles.searchIcon} />
-        <TextInput
-          accessibilityLabel="Search messages"
-          value={search}
-          onChangeText={setSearch}
-          placeholder="Search"
-          placeholderTextColor={colors.textFaint}
-          autoCapitalize="none"
-          style={styles.search}
-        />
-      </View>
+      <SearchField value={search} onChangeText={setSearch} placeholder="Search" accessibilityLabel="Search messages" style={styles.searchWrap} />
       {upToday.length && !search.trim() ? (
         // Instagram has notes here; CourtSide has who is up to hit today. A tap opens the chat with them.
         <View style={styles.upToday}>
@@ -433,13 +423,8 @@ function InboxRow({ thread, first, styles, line, typing, onOpen, onHold, rowActi
 }
 
 const styleDefinitions = StyleSheet.create({
-  searchWrap: { position: 'relative', justifyContent: 'center', marginBottom: spacing.md },
-  searchIcon: { position: 'absolute', left: 16, zIndex: 1 },
-  search: {
-    ...typography.body, fontSize: 16, color: colors.text,
-    backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: radius.pill,
-    paddingLeft: 42, paddingRight: spacing.lg, paddingVertical: 11,
-  },
+  // The search box is the app's own (SearchField): sized by its padding, so "Search" sits in the middle on an iPhone too.
+  searchWrap: { marginBottom: spacing.md },
   // Who is up to hit today: a row of faces in the live green ring.
   upToday: { marginBottom: spacing.sm },
   upTodayTitle: { ...typography.caption, color: colors.textFaint, marginBottom: spacing.sm },
