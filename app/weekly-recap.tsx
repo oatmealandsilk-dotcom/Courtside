@@ -127,7 +127,7 @@ export default function WeeklyRecap() {
             </View>
             {note ? <Text style={styles.note}>{note}</Text> : null}
             <View style={styles.only}>
-              <Ionicons name="lock-closed-outline" size={13} color={colors.textMuted} />
+              <Ionicons name="eye-off-outline" size={13} color={colors.textMuted} />
               <Text style={styles.onlyText}>Only you see this until you share it.</Text>
             </View>
           </View>
