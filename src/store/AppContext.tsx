@@ -24,6 +24,7 @@ import * as demoApi from '@/data/api';
 import { BLOCKED_WORDS_NOTE, CHAT_PHOTO_UNREADABLE, REVIEW_NOTE_MAX, auth as remoteAuth, fetchRemote, isLocalMedia, onWordsRefused, queueFeedSignal, remote, uploadChatPhoto, uploadMedia, emptyProfile, type GroupRefusal, type AdminReport, type ModerationResult, type ReviewAskResult, type ReportedChat, type ReportedItem, type ReportedItemKind, type ReportEvidence, type FeedSignal, type SiteFeedback, type WaitlistEntry, type BetaInviteStatus, type FirstDayStats, type FirstMove, type HandleStatus, type InviteCodeResult, type MyInviter, type RemoteData, type UserState } from '@/data/remote';
 import { clearSnapshot, markSnapshotOpened, markSnapshotOpening, readSnapshot, saveSnapshot, snapshotFailedBefore } from '@/data/snapshot';
 import { forgetAccount, listSavedAccounts, rememberAccount, type SavedAccount } from '@/features/accounts/savedAccounts';
+import { isAuthRetryableFetchError } from '@supabase/supabase-js';
 import { isSupabaseConfigured, storedLoginId, supabase } from '@/lib/supabase';
 import { markMessagesOpened } from '@/features/messaging/readReceipts';
 import { GROUP_CAP, MAX_PINNED_CHATS, chatLockNote, eventText, findDirectChat, groupName, isDirectChat, isGroupAdmin, isGroupChat, named } from '@/features/messages/groupRules';
@@ -2715,9 +2716,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setTimeout(() => { void markSnapshotOpened(early.id); }, 8000);
       });
     }
-    supabase.auth.getSession().then(({ data }) => {
+    supabase.auth.getSession().then(({ data, error }) => {
       if (cancelled) return;
       checked = true;
+      // Opened on the copy, and the check could not reach the server to renew the login (no signal at the
+      // courts, an hour or more after the last open): the login is still kept on the phone, so this is not
+      // a sign-out. The copy stays up, saying so, and the account loads once the login renews (the
+      // listener's TOKEN_REFRESHED, below) or the app comes back to the front. Signing out here used to
+      // flash your feed and then drop you on the sign-in page.
+      if (shownEarly && !data.session && error && isAuthRetryableFetchError(error)) {
+        setState((prev) => ({ ...prev, authResolved: true }));
+        showToast({ title: 'Can’t refresh right now', body: 'Showing what you saw last. It updates once the connection is back.', icon: 'cloud-offline-outline' });
+        return;
+      }
       // Opened on the copy, and the login turned out not to be that account's after all: signed out, as before.
       if (shownEarly && data.session?.user.id !== shownEarly) {
         snapshotIds.current = null;
