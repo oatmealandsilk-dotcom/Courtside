@@ -19,11 +19,11 @@ import { useOptimisticToggle } from '@/lib/useOptimisticToggle';
 import { Avatar, Card, Chip } from '@/components/ui';
 import { LevelPill } from '@/components/LevelPill';
 import { MediaPlaceholder } from '@/components/MediaPlaceholder';
-import { compactNumber, duration, relativeTime } from '@/lib/format';
+import { compactNumber, relativeTime } from '@/lib/format';
 import type { Post, QuestionTopic, User } from '@/data/types';
 import { RichText } from '@/components/RichText';
-import { SessionStats } from '@/components/SessionStats';
 import { SessionCard } from '@/components/session/SessionCard';
+import { SessionStrip } from '@/components/session/SessionStrip';
 import { useApp } from '@/store/AppContext';
 import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { hasSessionStats } from '@/features/activity/format';
@@ -210,13 +210,19 @@ function PostCardInner({
           </View>
         ) : null}
 
+        {/* Any other session is the same box in the same look (Oct 5, owner: one look, not two):
+            a session with stats that is not the card opens them; "Minutes on court", or an old
+            written plan, says what it was and how long, its drills listed under it. */}
         {sessionCard ? null : post.session && hasSessionStats(post.session) ? (
-          <SessionStats session={post.session} />
+          <SessionStrip session={post.session} hidden={blockedIds} onPress={openStats} flat />
         ) : post.session ? (
-          <View style={styles.detailBox}>
-            <Text style={styles.detailTitle}>
-              {post.session.focus} · {duration(post.session.minutes)}{post.session.intensity ? ` · intensity ${post.session.intensity}/5` : ''}
-            </Text>
+          <View style={styles.planned}>
+            <SessionStrip
+              flat
+              session={post.session}
+              title={post.session.focus && post.session.focus !== 'On court' ? post.session.focus : undefined}
+              sub={post.session.intensity ? `Intensity ${post.session.intensity}/5` : undefined}
+            />
             {(post.session.drills ?? []).map((drill) => (
               <Text key={drill} style={styles.drill}>
                 • {drill}
@@ -342,6 +348,8 @@ const styleDefinitions = StyleSheet.create({
   setText: { ...typography.smallStrong, color: colors.text },
   surfaceText: { ...typography.caption, color: colors.textFaint },
   drill: { ...typography.small, color: colors.textMuted, lineHeight: 20 },
+  // A written plan's drills, under its session box.
+  planned: { gap: spacing.xs },
   tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   actions: {
     flexDirection: 'row',

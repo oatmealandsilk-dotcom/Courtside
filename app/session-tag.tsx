@@ -8,11 +8,11 @@ import { DragSheet } from '@/components/DragSheet';
 import { FormRow } from '@/components/FormRow';
 import { SheetTitle, Submit, formBody } from '@/components/sheet/SheetForm';
 import { Avatar, BrandWash, Toggle } from '@/components/ui';
+import { SessionStrip } from '@/components/session/SessionStrip';
 import type { SessionTag } from '@/data/types';
 import { KIND_LABEL, shortDay } from '@/features/activity/format';
 import { isClosed } from '@/features/activity/sessionTags';
 import { confirm } from '@/lib/confirm';
-import { duration } from '@/lib/format';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
@@ -140,14 +140,11 @@ export default function SessionTagSheet() {
     ? <SheetTitle title={`${first} tagged you`} line={line} lines={2} onClose={close} />
     : <SheetTitle title="Tagged" onClose={close} />;
 
-  // What it was, from your side: a match's result is the other side of theirs when you were across the net.
-  const tiles = tag ? [
-    tag.kind === 'match'
-      ? { top: 'Your result', main: tag.won === true ? 'Won' : tag.won === false ? 'Lost' : 'Played' }
-      : { top: 'Session', main: KIND_LABEL[tag.kind] },
-    { top: 'On court', main: duration(tag.minutes) },
-    { top: 'When', main: shortDay(tag.day) },
-  ] : [];
+  // What it was, from your side (a match's result is the other side of theirs when you were across
+  // the net), in the session box every other screen uses (Oct 5, owner: one look, not two).
+  const what = !tag ? '' : tag.kind === 'match'
+    ? `Match · ${tag.won === true ? 'You won' : tag.won === false ? 'You lost' : 'Played'}`
+    : KIND_LABEL[tag.kind];
 
   return (
     <DragSheet fitContent closeSignal={closeSignal} onDismissed={() => router.back()} peekFraction={height < 720 ? 0.8 : 0.62} header={header}>
@@ -182,14 +179,7 @@ export default function SessionTagSheet() {
             <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
           </Pressable>
 
-          <View style={styles.tiles} accessible accessibilityLabel={tiles.map((t) => `${t.top}: ${t.main}`).join(', ')}>
-            {tiles.map((t) => (
-              <View key={t.top} style={styles.tile}>
-                <Text style={styles.tileTop} numberOfLines={1}>{t.top}</Text>
-                <Text style={styles.tileMain} numberOfLines={1} adjustsFontSizeToFit>{t.main}</Text>
-              </View>
-            ))}
-          </View>
+          <SessionStrip session={{ focus: what, minutes: tag.minutes, drills: [], kind: tag.kind, won: tag.won, day: tag.day }} title={what} sub={shortDay(tag.day)} />
 
           {post ? (
             <Pressable accessibilityRole="link" accessibilityLabel={`See ${first}’s post`} hitSlop={6} onPress={() => router.push(`/post/${post.id}`)} style={({ pressed }) => [styles.seePost, pressed && styles.pressed]}>
@@ -272,11 +262,6 @@ const styleDefinitions = StyleSheet.create({
   whoWords: { flex: 1, minWidth: 0, gap: 2 },
   whoName: { ...typography.body, ...font('600'), color: colors.text },
   whoSub: { ...typography.small, color: colors.textMuted },
-  // What it was, in the log sheet's tiles: a small line on top, the big word under it.
-  tiles: { flexDirection: 'row', gap: spacing.sm },
-  tile: { ...lift, flex: 1, height: 60, borderRadius: 18, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', gap: 2, paddingHorizontal: 6 },
-  tileTop: { fontSize: 12, ...font('500'), color: colors.textMuted },
-  tileMain: { fontSize: 18, ...font('600'), letterSpacing: -0.3, color: colors.text, fontVariant: ['tabular-nums'] },
   seePost: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', paddingHorizontal: spacing.xs, marginTop: -spacing.xs },
   seePostText: { ...typography.smallStrong, color: colors.brand },
   rows: { gap: 2 },
