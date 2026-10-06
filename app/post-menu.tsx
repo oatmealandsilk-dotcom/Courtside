@@ -56,6 +56,13 @@ type Row = {
 /** What the sheet says once something has happened: a tick when it went, a warning (and Try again) when it did not. */
 type Done = { text: string; ok: boolean; retry?: () => void };
 
+/**
+ * The sheet's widest: a phone's full width, and on a computer a column about
+ * as wide as the post it is about, centred, rather than a strip across the
+ * whole window with its buttons at the far left (Oct 6 review).
+ */
+const SHEET_MAX_W = 480;
+
 /** How far down a drag must carry the sheet (or how fast) before letting go closes it. */
 const DRAG_CLOSE_PX = 90;
 const DRAG_CLOSE_SPEED = 0.9;
@@ -63,7 +70,7 @@ const DRAG_CLOSE_SPEED = 0.9;
 /**
  * The "…" menu on a post or an Instant: a short sheet that slides up from the
  * bottom, shaped the way Instagram's is (Oct 5 polish). Across the top, a row
- * of round buttons for the ways to share a post (Send, Story, Link, Image,
+ * of round buttons for the ways to share a post (Send, Story or Instagram, Link, Image,
  * Download); under them a short list, what can't be undone last, after a
  * hairline. Your own post can be edited, pinned, archived or deleted; anyone
  * else's can be reported, and its author muted or blocked. Admins also get
@@ -259,14 +266,22 @@ export default function PostMenu() {
   if (post && !removed) {
     // A group-only post goes only to people in that group (the Send sheet lists no one else).
     tiles.push({ key: 'send', icon: 'paper-plane-outline', label: 'Send', spoken: 'Send to someone on CourtSide', onPress: () => router.replace({ pathname: '/share', params: { kind: 'post', id: post.id } }) });
+    // Your own post with a session on it goes to Instagram as the session's story picture (share-session,
+    // whose first button is Instagram Stories), the way Strava does. Said as "Instagram", with its logo,
+    // second in the row (Oct 6 review: Instagram is how the app grows, and "Image" hid it). Where Story
+    // already holds that place (your clip, straight into Instagram's story editor), the session's picture
+    // is "Image" further along instead, so the row never shows two Instagram buttons.
+    const sessionShare = mine && !!post.session;
+    const toSession = () => router.replace({ pathname: '/share-session', params: { post: post.id } });
     if (storyMedia) tiles.push({ key: 'story', icon: 'logo-instagram', label: 'Story', spoken: storyMedia.kind === 'video' ? 'Share your clip to your Instagram story' : 'Share your photo to your Instagram story', busy: working, onPress: toStory });
+    else if (sessionShare) tiles.push({ key: 'instagram', icon: 'logo-instagram', label: 'Instagram', spoken: 'Share your session to Instagram', onPress: toSession });
     // A group-only post stays in its group: no link to it goes outside.
     if (!post.groupId) tiles.push({ key: 'link', icon: 'link-outline', label: 'Link', spoken: 'Share a link to this post', onPress: shareTheLink });
-    // Your own post with a session on it shares as the session's story picture (share-session), the way
-    // Strava does; any other post as its own card. Settled before the sheet rises (openOutside.ts); still
-    // asking, it waits at the end of the row, so nothing moves if the answer is no.
-    if (mine && post.session) tiles.push({ key: 'image', icon: 'image-outline', label: 'Image', spoken: 'Share your session as a picture', onPress: () => router.replace({ pathname: '/share-session', params: { post: post.id } }) });
-    else if (openOutside !== false) tiles.push({ key: 'image', icon: 'image-outline', label: 'Image', spoken: 'Share this post as a picture', waiting: openOutside === null, onPress: () => router.replace({ pathname: '/share-card', params: { id: post.id } }) });
+    // Beside Story, your session's picture; any other post shares as its own card. Settled before the
+    // sheet rises (openOutside.ts); still asking, it waits at the end of the row, so nothing moves if the answer is no.
+    if (sessionShare) {
+      if (storyMedia) tiles.push({ key: 'image', icon: 'image-outline', label: 'Image', spoken: 'Share your session to Instagram as a picture', onPress: toSession });
+    } else if (openOutside !== false) tiles.push({ key: 'image', icon: 'image-outline', label: 'Image', spoken: 'Share this post as a picture', waiting: openOutside === null, onPress: () => router.replace({ pathname: '/share-card', params: { id: post.id } }) });
     // The original file, for the owner and for CourtSide's own channels (an admin): one tap to the camera roll, then Instagram.
     // Android's share sheet has no "Save to gallery" (a real save needs a new build: docs/android-setup.md), so there it says what it does.
     if ((post.videoUrl || post.imageUrl) && (mine || (admin && post.featureOk !== false))) {
@@ -323,7 +338,7 @@ export default function PostMenu() {
   }
 
   // Each button's width: 72 where the row has room, narrower so five still fit a small phone.
-  const tileW = Math.min(72, Math.floor((Math.min(windowWidth, 640) - spacing.md * 2) / Math.max(4, tiles.length)));
+  const tileW = Math.min(72, Math.floor((Math.min(windowWidth, SHEET_MAX_W) - spacing.md * 2) / Math.max(4, tiles.length)));
 
   const listRow = (row: Row) => (
     <Pressable
@@ -475,7 +490,8 @@ export default function PostMenu() {
 const styleDefinitions = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'transparent', justifyContent: 'flex-end' },
   // A drag with a mouse moves the sheet rather than selecting its words.
-  sheet: { backgroundColor: colors.bg, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: spacing.md, userSelect: 'none' },
+  // A drag moves the whole sheet (its transform), centred and capped on a wide window, so pulling it down still closes it there.
+  sheet: { width: '100%', maxWidth: SHEET_MAX_W, alignSelf: 'center', backgroundColor: colors.bg, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: spacing.md, userSelect: 'none' },
   // The same grabber as the comments sheet's, in a strip a finger can find.
   grabberStrip: { height: 24, alignItems: 'center', justifyContent: 'center', marginBottom: 2 },
   grabber: { width: 40, height: 4, borderRadius: 2, backgroundColor: colors.borderStrong },
