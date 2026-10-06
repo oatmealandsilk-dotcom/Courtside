@@ -177,7 +177,9 @@ export function CourtKing({ courtId, name, refresh = 0 }: { courtId: string; nam
               </View>
               <View style={styles.kingWords}>
                 <Text style={styles.kingName} numberOfLines={1}>{firstIsMe ? 'You' : first.user.name}</Text>
-                <Text style={styles.kingWhen} numberOfLines={1}>{[`@${first.user.handle}`, first.last ? `last win ${lastWin(first.last)}` : ''].filter(Boolean).join(' · ')}</Text>
+                {/* The handle, then the last win on a line of its own: side by side they were cut off on a small phone. */}
+                <Text style={styles.kingWhen} numberOfLines={1}>@{first.user.handle}</Text>
+                {first.last ? <Text style={styles.kingWhen} numberOfLines={1}>{`Last win ${lastWin(first.last)}`}</Text> : null}
               </View>
               <View style={styles.kingCount}>
                 <Text style={styles.kingNumber}>{first.n}</Text>
