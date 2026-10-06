@@ -175,15 +175,20 @@ export function Toast() {
 }
 
 /**
- * A session's mark in a brand disc: the zone bars ("Tennis detected"), or a
+ * A session's mark in a brand disc: the zone bars ("Tennis detected"), a
  * tick that draws itself in from the left a moment after the toast lands
- * ("Logged"), with a light buzz as it finishes.
+ * ("Logged"), two people ("3 others were at Alder Park today"), or a trophy
+ * in gold ("New record!").
  */
-function Disc({ glyph, token }: { glyph: 'session' | 'logged'; token: number }) {
+function Disc({ glyph, token }: { glyph: NonNullable<ToastMessage['glyph']>; token: number }) {
   const styles = useThemedStyles(styleDefinitions);
+  // A new record wears gold (the court's decoration colour), everything else the brand.
   return (
-    <View style={[styles.disc, { backgroundColor: colors.brand }]}>
-      {glyph === 'session' ? <ZoneGlyph size={15} color={colors.brandInk} /> : <DrawnTick size={16} color={colors.brandInk} delay={250} duration={320} token={token} />}
+    <View style={[styles.disc, { backgroundColor: glyph === 'record' ? colors.sun : colors.brand }]}>
+      {glyph === 'session' ? <ZoneGlyph size={15} color={colors.brandInk} />
+        : glyph === 'record' ? <Ionicons name="trophy" size={14} color={colors.brandInk} />
+          : glyph === 'flyby' ? <Ionicons name="people-outline" size={15} color={colors.brandInk} />
+            : <DrawnTick size={16} color={colors.brandInk} delay={250} duration={320} token={token} />}
     </View>
   );
 }

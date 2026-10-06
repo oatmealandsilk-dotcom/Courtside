@@ -650,6 +650,19 @@ async function expectAll(page, specs) {
   for (const spec of specs) { await page.waitFor(spec); log('saw', describe(spec)); }
 }
 
+
+/**
+ * Your sessions opens with the week's card and your personal records above
+ * the sessions (Oct 5), so the first session can sit below the fold: brought
+ * into view the way a person would scroll to it.
+ */
+const showFirstSession = (page) => page.waitUntil(() => page.call(() => {
+  const el = document.querySelector('[aria-label^="Share to Instagram: "]');
+  if (!el) return false;
+  el.scrollIntoView({ block: 'center' });
+  return true;
+}), 15000, 'a session in Your sessions');
+
 const STEPS = [
   {
     name: 'sign-in',
@@ -740,6 +753,7 @@ const STEPS = [
     title: 'Your sessions',
     async run(page) {
       await page.tap({ label: /^Your sessions/ });
+      await showFirstSession(page);
     },
     expect: [{ label: /^Share to Instagram: / }],
   },
@@ -750,7 +764,7 @@ const STEPS = [
       await page.tap({ label: /^Share to Instagram: / });
     },
     expect: [{ label: 'Share to Instagram Stories' }, { label: 'Save the picture' }, { text: 'Card' }],
-    after: async (page) => { await page.tap({ label: 'Go back' }); await page.waitFor({ label: /^Share to Instagram: / }); },
+    after: async (page) => { await page.tap({ label: 'Go back' }); await showFirstSession(page); await page.waitFor({ label: /^Share to Instagram: / }); },
   },
   {
     name: 'post',

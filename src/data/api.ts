@@ -22,6 +22,9 @@ import { isMapCourtId } from '@/features/places/courtName';
 import { demoLastSeen } from './mock/presence';
 import { DEMO_FOLLOWING, DEMO_MAP_ALERTS } from './mock/courtLife';
 import { demoSessionTagNotifications, demoSessionTags, demoSessions } from './mock/sessions';
+import { DEMO_COURT_REGULARS, DEMO_COURT_WINS, DEMO_FLYBY } from './mock/strava';
+import { localDay } from '@/features/practice/stats';
+import { lastWeekStart, weekRecap } from '@/features/recap/recap';
 import { supabase } from '@/lib/supabase';
 import { canTagKind, isActive, isClosed, maxTagsFor, mirrorCopy } from '@/features/activity/sessionTags';
 import type {
@@ -36,7 +39,9 @@ import type {
   CoachReview,
   Comment,
   Conversation,
+  CourtKings,
   DailyHealth,
+  FlybyPerson,
   DetectedActivity,
   Integration,
   Message,
@@ -108,6 +113,20 @@ export interface Bootstrap {
   sessionTags?: SessionTag[];
 }
 
+/**
+ * The demo's Monday recap row (migration 130 files it at 8am your time):
+ * last week from the demo log, by the same rules as the server, filed this
+ * Monday at 8. Nothing when there is nothing to say.
+ */
+function demoRecapNotification(): Notification[] {
+  const week = lastWeekStart();
+  const line = weekRecap(CURRENT_USER_ID, demoSessions, posts, stories, week).line;
+  if (!line) return [];
+  const monday = new Date(`${week}T08:00:00`);
+  monday.setDate(monday.getDate() + 7);
+  return [{ id: 'n-recap-demo', userId: CURRENT_USER_ID, actorId: CURRENT_USER_ID, kind: 'weekly-recap', targetId: week, targetKind: 'recap', createdAt: monday.toISOString(), read: false, preview: line }];
+}
+
 export async function fetchBootstrap(): Promise<Bootstrap> {
   return delay(
     clone({
@@ -133,7 +152,7 @@ export async function fetchBootstrap(): Promise<Bootstrap> {
       // The demo's tracker session and its "Tennis detected" row, two of the
       // map's alerts and a tag of you. Only without a database: a real
       // account's come from the server.
-      notifications: supabase ? [] : [...activityNotifications, ...DEMO_MAP_ALERTS, ...demoSessionTagNotifications],
+      notifications: supabase ? [] : [...demoRecapNotification(), ...activityNotifications, ...DEMO_MAP_ALERTS, ...demoSessionTagNotifications],
       detectedActivities: supabase ? [] : detectedActivities,
       coachingRequests,
       integrations,
@@ -268,6 +287,45 @@ export async function headToHead({ me, other, sessions, tags }: { me: ID; other:
     losses: once.filter((g) => !g.won).length,
     ...(last ? { last: { sessionId: last.sessionId, day: last.day, won: last.won, sets: clone(last.sets) } } : {}),
   };
+}
+
+/**
+ * The demo's court_kings (migration 130): the board at a demo court from
+ * the fixtures (mock/strava.ts), with your own wins there from your demo log
+ * (a match won, logged at that court). Ties go to the latest win; only the
+ * top three come back, and your place when you are on the board.
+ */
+export async function courtKings({ courtId, me, sessions, ranked = true }: { courtId: string; me: ID; sessions: PracticeSession[]; ranked?: boolean }): Promise<CourtKings> {
+  await delay(null, 160);
+  const since = localDay(Date.now() - 90 * 86_400_000);
+  const mine = sessions.filter((s) => s.userId === me && s.courtId === courtId && s.kind === 'match' && s.won === true && s.day >= since);
+  const myLast = mine.map((s) => s.day).sort().pop() ?? '';
+  const wins = DEMO_COURT_WINS[courtId] ?? [];
+  if (wins.length || mine.length) {
+    const board = [...wins.filter((w) => w.userId !== me), ...(ranked && mine.length ? [{ userId: me, n: mine.length, last: myLast }] : [])]
+      .sort((a, b) => b.n - a.n || b.last.localeCompare(a.last));
+    const rank = board.findIndex((w) => w.userId === me);
+    return { courtId, mode: board.length ? 'wins' : 'none', top: clone(board.slice(0, 3)), me: { wins: mine.length, ...(rank >= 0 ? { rank: rank + 1 } : {}), ranked: rank >= 0 } };
+  }
+  const regulars = DEMO_COURT_REGULARS[courtId] ?? [];
+  if (regulars.length) return { courtId, mode: 'regulars', top: clone(regulars.slice(0, 3)), me: { wins: 0, ranked: false } };
+  return { courtId, mode: 'none', top: [], me: { wins: 0, ranked: false } };
+}
+
+/**
+ * The demo's flyby (migration 130): who else was at a demo court on a day,
+ * from the fixtures, only when your own log has a session there that day,
+ * and never anyone tagged on your sessions that day (the server's rules).
+ */
+export async function flyby({ courtId, day, me, sessions, tags }: { courtId: string; day: string; me: ID; sessions: PracticeSession[]; tags: SessionTag[] }): Promise<FlybyPerson[]> {
+  await delay(null, 160);
+  if (!sessions.some((s) => s.userId === me && s.courtId === courtId && s.day === day)) return [];
+  const ago = Math.round((Date.parse(localDay(Date.now()) + 'T12:00:00') - Date.parse(day + 'T12:00:00')) / 86_400_000);
+  const mySessions = new Set(sessions.filter((s) => s.userId === me && s.day === day).map((s) => s.id));
+  const played = new Set(tags
+    .filter((t) => t.status !== 'declined' && t.status !== 'removed' && (mySessions.has(t.sessionId) || (t.taggedId === me && t.day === day)))
+    .flatMap((t) => [t.taggerId, t.taggedId]));
+  return clone((DEMO_FLYBY[courtId]?.[ago] ?? []).filter((p) => p.userId !== me && !played.has(p.userId)));
 }
 
 /**

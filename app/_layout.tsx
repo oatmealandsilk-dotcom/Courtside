@@ -101,6 +101,8 @@ export default function RootLayout() {
           <Stack.Screen name="session-tag" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
           <Stack.Screen name="court-report" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
           <Stack.Screen name="court-now" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
+          {/* Flyby's list, "At Alder Park today" (migration 130): a sheet over the page it came from (DragSheet). */}
+          <Stack.Screen name="flyby" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
           <Stack.Screen name="map-visibility" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
           {/* Holding your own ring in Community's Open to hit row: until when, and how far (DragSheet). */}
           <Stack.Screen name="open-to-hit" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />

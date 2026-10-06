@@ -9,6 +9,7 @@ import { useTennisFlags } from '@/features/activity/useTennisFlags';
 import { computeStats } from '@/features/practice/stats';
 import { duration } from '@/lib/format';
 import { isSupabaseConfigured } from '@/lib/supabase';
+import * as haptics from '@/lib/haptics';
 import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
 import { loggedLabel } from './format';
@@ -25,6 +26,8 @@ export interface LogInput {
   note?: string;
   /** The length in your log when it differs from the tracker's (a break taken off). Left out: the tracker's time. */
   minutes?: number;
+  /** The court it was played at, by the map's id (the court tagged on the post, or the hit it came from): kept in your log (migration 130). */
+  courtId?: string;
 }
 
 /**
@@ -103,6 +106,7 @@ export function useTrackerSession(activityId: ID | undefined) {
         day: activityDay(activity),
         activityId: activity.id,
         ...(input.note ? { note: input.note } : {}),
+        ...(input.courtId ? { courtId: input.courtId } : {}),
         // A workout logged as fitness keeps what it was ("Run"), so the log says so after the workout's own row goes (migration 107).
         ...(!isTennisActivity(activity) && input.kind === 'fitness' ? { workout: activity.sport } : {}),
       });
@@ -133,8 +137,18 @@ export function useTrackerSession(activityId: ID | undefined) {
  * on: the note after a session goes into your log without a post. Given the
  * session's id, it carries an "Instagram" button: the session as a story
  * picture (share-session), the way Strava offers it once you save.
+ *
+ * When the session beat a personal record you already had (records.ts), the
+ * moment is that instead, in one note, not two: "New record! Longest match ·
+ * 2h 40m · beat 2h 5m" on a gold trophy, with a reward buzz and the same
+ * Instagram button.
  */
-export function showLogged(minutes: number, s: Pick<PracticeSession, 'kind' | 'won' | 'sets'> & { workout?: string }, streak: number, sessionId?: string) {
+export function showLogged(minutes: number, s: Pick<PracticeSession, 'kind' | 'won' | 'sets'> & { workout?: string }, streak: number, sessionId?: string, record?: { title: string; body: string } | null) {
+  if (record) {
+    haptics.reward();
+    showToast({ title: record.title, body: record.body, glyph: 'record', ...(sessionId ? { action: shareAction({ session: sessionId }) } : {}) });
+    return;
+  }
   showToast({
     title: 'Logged',
     body: `${duration(minutes)} · ${loggedLabel(s)}`,
