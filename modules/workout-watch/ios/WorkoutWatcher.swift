@@ -21,11 +21,16 @@ import UserNotifications
  * - Only one that ended in the last 12 hours, 5 minutes to 10 hours long
  *   (the server keeps no other), never between 10pm and 7am here, tennis
  *   only unless the person said yes to every workout, no tennis at all when
- *   WHOOP already sends its own tennis alert (one session, one alert), none
+ *   WHOOP already sends its own tennis alert (one session, one alert), and
+ *   no other workout when WHOOP sends those too (its every-workout switch), none
  *   when Settings' alert switch for sessions is off, and each session once
  *   (also when two apps saved it: the Watch's run and Strava's copy of it).
  * - With CourtSide open on screen, no alert: the app is told instead, and
  *   its own check puts up its own "Activity detected" note at once.
+ * - Several at once (a watch catching up; owner, Oct 5, "grouped noti"): up
+ *   to three in one go keep an alert each; a fourth folds the go into ONE
+ *   "4 workouts found" / "Tap to log them on CourtSide." alert in place of
+ *   its single ones, whose tap opens their list in the app (see Burst).
  *
  * A locked phone: Health keeps its data sealed until the phone is unlocked,
  * which is the usual state when a Watch workout reaches a phone in a pocket.
@@ -63,17 +68,20 @@ final class WorkoutWatcher: @unchecked Sendable {
     var workouts: Bool
     /** WHOOP sends its own tennis alert (its server push): no tennis alert from here at all, so one session never buzzes twice. */
     var skipWhoopTennis: Bool
+    /** WHOOP sends its own alert for every other workout too (its every-workout switch): none from here for those either. */
+    var skipWhoopOther: Bool
     /** Settings' alert switch for sessions (push_activity). Off: no alert, the app still finds them. */
     var alerts: Bool
 
     var asDictionary: [String: Bool] {
-      ["tennis": tennis, "workouts": workouts, "skipWhoopTennis": skipWhoopTennis, "alerts": alerts]
+      ["tennis": tennis, "workouts": workouts, "skipWhoopTennis": skipWhoopTennis, "skipWhoopOther": skipWhoopOther, "alerts": alerts]
     }
 
-    init(tennis: Bool, workouts: Bool, skipWhoopTennis: Bool, alerts: Bool) {
+    init(tennis: Bool, workouts: Bool, skipWhoopTennis: Bool, skipWhoopOther: Bool = false, alerts: Bool) {
       self.tennis = tennis
       self.workouts = workouts
       self.skipWhoopTennis = skipWhoopTennis
+      self.skipWhoopOther = skipWhoopOther
       self.alerts = alerts
     }
 
@@ -83,6 +91,7 @@ final class WorkoutWatcher: @unchecked Sendable {
         tennis: d["tennis"] as? Bool ?? false,
         workouts: d["workouts"] as? Bool ?? false,
         skipWhoopTennis: d["skipWhoopTennis"] as? Bool ?? false,
+        skipWhoopOther: d["skipWhoopOther"] as? Bool ?? false,
         alerts: d["alerts"] as? Bool ?? true
       )
     }
@@ -96,6 +105,8 @@ final class WorkoutWatcher: @unchecked Sendable {
     static let pending = "courtside.workoutWatch.pending"
     /** When the app last confirmed the switches (start). */
     static let confirmedAt = "courtside.workoutWatch.confirmedAt"
+    /** The workouts alerted in the latest go (see Burst), to fold a fourth into one alert. */
+    static let burst = "courtside.workoutWatch.burst"
   }
 
   /** How long ago a workout may have ended and still get an alert (the server's rule). */
@@ -104,8 +115,18 @@ final class WorkoutWatcher: @unchecked Sendable {
   private static let minutes = 5...600
   /** The workouts already announced (see Seen), newest last, at most this many. */
   private static let rememberAtMost = 200
-  /** Several saved at once (a watch catching up): alerts for the newest few only. */
+  /**
+   * Several saved at once (a watch catching up; owner, Oct 5, "grouped
+   * noti"): up to this many keep an alert each, as before; more than this in
+   * one go fold into ONE "4 workouts found" alert, which takes the place of
+   * that go's single alerts. The app and the server fold the same way
+   * (src/features/activity/found.ts, migration 20261006000138).
+   */
   private static let alertsAtOnce = 3
+  /** Alerts this close together (Health can wake the app several times as a watch catches up) are one go. */
+  private static let burstWindow: TimeInterval = 10 * 60
+  /** The most workouts one folded alert carries for its tap (a look hands over at most 40 at a time). */
+  private static let burstAtMost = 40
   /** Apple Health waits for each wake to be finished; it is finished by this many seconds at the latest. */
   private static let wakeBudget: TimeInterval = 20
   /** Switches not confirmed by the app for this long count as off (see the note at the top). */
@@ -379,11 +400,14 @@ final class WorkoutWatcher: @unchecked Sendable {
     // here. Runs and the rest still do, and the app's own check files the tennis all the same. (Fitbit, Oura
     // and Polar never push from the server, so their copies need no such rule.)
     if tennis && prefs.skipWhoopTennis { return false }
+    // The same for every other workout once WHOOP sends those too (its every-workout switch): a run from
+    // the Watch and WHOOP's copy of it buzz once, and a catch-up gives one "4 workouts found", not two.
+    if !tennis && prefs.skipWhoopOther { return false }
     return true
   }
 
   private func announce(_ fresh: [HKWorkout], now: Date, done: @escaping @Sendable () -> Void) {
-    let newest = Array(fresh.sorted { $0.endDate > $1.endDate }.prefix(WorkoutWatcher.alertsAtOnce))
+    let newest = fresh.sorted { $0.endDate > $1.endDate }
     DispatchQueue.main.async {
       // On screen (open, or opening: a launch the person made is "inactive" for its first moments).
       let onScreen = MainActor.assumeIsolated { UIApplication.shared.applicationState != .background }
@@ -401,7 +425,14 @@ final class WorkoutWatcher: @unchecked Sendable {
     }
   }
 
-  /** The lock-screen alerts, with the app in the background or closed. */
+  /**
+   * The lock-screen alerts, with the app in the background or closed, newest
+   * first: one each while the go they belong to (this wake's and any alerted
+   * in the last ten minutes) is three or fewer, as before. A fourth folds the
+   * whole go into ONE "4 workouts found" alert: the go's single alerts are
+   * taken down, and the one alert stays up, brought up to date (without
+   * another buzz) as more of the same go arrive.
+   */
   private func alert(_ newest: [HKWorkout], now: Date, done: @escaping @Sendable () -> Void) {
     // Night where the phone is, or the person turned these alerts off: in the app only, as on the server.
     let hour = Calendar.current.component(.hour, from: now)
@@ -419,17 +450,46 @@ final class WorkoutWatcher: @unchecked Sendable {
           return
         }
         let center = UNUserNotificationCenter.current()
+        var burst = self.loadBurst(now: now)
+        let firstFold = !burst.folded
+        burst.add(newest.map(WorkoutWatcher.payload), at: now)
+        if burst.workouts.count > WorkoutWatcher.alertsAtOnce { burst.folded = true }
+        self.saveBurst(burst)
         let group = DispatchGroup()
-        for w in newest {
+        if burst.folded {
+          // More than three in one go: the go's single alerts come down, and its one alert goes up (or is brought up to date).
+          let singles = burst.workouts.compactMap { $0["workoutId"] as? String }.map { "courtside-workout-\($0)" }
+          center.removeDeliveredNotifications(withIdentifiers: singles)
+          center.removePendingNotificationRequests(withIdentifiers: singles)
           group.enter()
-          center.add(WorkoutWatcher.request(for: w)) { error in
+          center.add(WorkoutWatcher.foundRequest(burst, sound: firstFold)) { error in
             if let error { NSLog("[WorkoutWatch] alert failed: %@", String(describing: error)) }
             group.leave()
+          }
+        } else {
+          for w in newest {
+            group.enter()
+            center.add(WorkoutWatcher.request(for: w)) { error in
+              if let error { NSLog("[WorkoutWatch] alert failed: %@", String(describing: error)) }
+              group.leave()
+            }
           }
         }
         group.notify(queue: self.queue) { done() }
       }
     }
+  }
+
+  /** The go under way: the alerts put up in the last `burstWindow`, or a new one. On `queue`. */
+  private func loadBurst(now: Date) -> Burst {
+    guard let d = defaults.dictionary(forKey: Key.burst), let b = Burst(d), now.timeIntervalSince(b.lastAt) < WorkoutWatcher.burstWindow, b.lastAt <= now.addingTimeInterval(60) else {
+      return Burst(id: UUID().uuidString, lastAt: now, folded: false, workouts: [])
+    }
+    return b
+  }
+
+  private func saveBurst(_ b: Burst) {
+    defaults.set(b.asDictionary, forKey: Key.burst)
   }
 
   // MARK: - The alert
@@ -461,6 +521,25 @@ final class WorkoutWatcher: @unchecked Sendable {
     content.userInfo = payload(w)
     // Named after the workout, so the same one can never show twice.
     return UNNotificationRequest(identifier: "courtside-workout-\(w.uuid.uuidString)", content: content, trigger: nil)
+  }
+
+  /**
+   * The one alert for a go of more than three: "4 workouts found" ("4 tennis
+   * sessions found" when all were tennis) / "Tap to log them on CourtSide.",
+   * the same words as the server's (migration 20261006000138) and the row in
+   * Notifications. No times or stats on the lock screen. Its tap opens their
+   * list in the app (useWorkoutWatch), from `workouts`, newest first. Named
+   * after the go, so bringing it up to date replaces it rather than adding one.
+   */
+  private static func foundRequest(_ b: Burst, sound: Bool) -> UNNotificationRequest {
+    let content = UNMutableNotificationContent()
+    let allTennis = b.workouts.allSatisfy { ($0["tennis"] as? Bool) == true }
+    content.title = "\(b.workouts.count) \(allTennis ? "tennis sessions" : "workouts") found"
+    content.body = "Tap to log them on CourtSide."
+    content.sound = sound ? .default : nil
+    content.threadIdentifier = "courtside-workouts"
+    content.userInfo = ["courtside": "workouts-found", "workouts": Array(b.workouts.prefix(WorkoutWatcher.burstAtMost))]
+    return UNNotificationRequest(identifier: "courtside-workouts-found-\(b.id)", content: content, trigger: nil)
   }
 
   private static func iso(_ date: Date) -> String {
@@ -541,7 +620,7 @@ final class WorkoutWatcher: @unchecked Sendable {
 
   /** Everything kept for the watching gone, the observer stopped, and Health's wakes switched off. On `queue`. */
   private func forget() {
-    for key in [Key.prefs, Key.anchor, Key.notified, Key.pending, Key.confirmedAt] { defaults.removeObject(forKey: key) }
+    for key in [Key.prefs, Key.anchor, Key.notified, Key.pending, Key.confirmedAt, Key.burst] { defaults.removeObject(forKey: key) }
     if let observer {
       store.stop(observer)
       self.observer = nil
@@ -595,6 +674,42 @@ private struct Seen {
     if abs(start - other.start) <= 600 { return true }
     let overlap = min(end, other.end) - max(start, other.start)
     return overlap >= 0.5 * min(end - start, other.end - other.start)
+  }
+}
+
+/**
+ * One go of alerts, as kept on the phone: the workouts alerted (each one's
+ * payload, newest first), when the last went up, and whether they were
+ * folded into one "workouts found" alert. A go ends ten minutes after its
+ * last alert (`burstWindow`).
+ */
+private struct Burst {
+  let id: String
+  var lastAt: Date
+  var folded: Bool
+  var workouts: [[String: Any]]
+
+  init(id: String, lastAt: Date, folded: Bool, workouts: [[String: Any]]) {
+    self.id = id
+    self.lastAt = lastAt
+    self.folded = folded
+    self.workouts = workouts
+  }
+
+  init?(_ d: [String: Any]) {
+    guard let id = d["id"] as? String, let lastAt = d["lastAt"] as? Date else { return nil }
+    self.init(id: id, lastAt: lastAt, folded: d["folded"] as? Bool ?? false, workouts: d["workouts"] as? [[String: Any]] ?? [])
+  }
+
+  var asDictionary: [String: Any] { ["id": id, "lastAt": lastAt, "folded": folded, "workouts": workouts] }
+
+  /** These workouts join the go (each once), newest first by when they ended. */
+  mutating func add(_ payloads: [[String: Any]], at now: Date) {
+    let known = Set(workouts.compactMap { $0["workoutId"] as? String })
+    workouts += payloads.filter { ($0["workoutId"] as? String).map { !known.contains($0) } ?? false }
+    // ISO times, all written the same way (UTC): their order as text is their order in time.
+    workouts.sort { ($0["endedAt"] as? String ?? "") > ($1["endedAt"] as? String ?? "") }
+    lastAt = now
   }
 }
 

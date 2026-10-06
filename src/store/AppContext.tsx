@@ -37,6 +37,7 @@ import { checkForTennis, reportFromAlert } from '@/features/activity/check';
 import { pickSource } from '@/features/activity/recent';
 import { isTennisActivity, workoutLine, workoutName } from '@/features/activity/workouts';
 import { detectedNote } from '@/features/activity/format';
+import { FOLD_OVER, allTennis as allTennisFound, foundBursts, foundHref, foundLine, foundTitle } from '@/features/activity/found';
 import { mergePast, readOneWithHeartRate, readPastHealth, type PastWorkout } from '@/features/activity/pastWorkouts';
 import { postShare, reshare, sameShare } from '@/features/activity/healthShare';
 import { OPPONENT_MAX, REFUSALS, maxTagsFor, canTagKind, firstName, isActive, localRefusal, mirrorCopy, nameFor, patchWith, reconcileWith, refusalWords, roleOn, tagsOnSession, withEntry, withOnNewPost } from '@/features/activity/sessionTags';
@@ -119,7 +120,7 @@ import type {
   Story,
   User,
   PlayerProfile,
-  MediaCrop, Tip, TaggedCourt, TrackerId, Invitee, ContactMatch, HealthShareKey, HeadToHead, CourtKings, FlybyPerson, MatchSet, Removed, RemovedItem, ReviewRequest, ReviewStatus, TakedownKind, TakedownReason, TournamentEntry, HiddenWords, HiddenWordsKind } from '@/data/types';
+  MediaCrop, Tip, TaggedCourt, TrackerId, Invitee, ContactMatch, HealthShareKey, HeadToHead, CourtKings, FlybyPerson, FriendStreak, MatchSet, Removed, RemovedItem, ReviewRequest, ReviewStatus, TakedownKind, TakedownReason, TournamentEntry, HiddenWords, HiddenWordsKind } from '@/data/types';
 import { HIDDEN_WORDS_MAX, HIDDEN_WORD_LENGTH, cleanWords, defaultHiddenWords } from '@/features/hiddenWords/hiddenWords';
 import { canScore, scoreNotKept, setsWinner } from '@/features/activity/score';
 
@@ -718,6 +719,16 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
    * most once a minute for the same court and day. Null when it could not be asked.
    */
   flyby: (courtId: string, day: string) => Promise<FlybyPerson[] | null>;
+  /**
+   * "Friends on a streak" for the weekly recap (migration 20261006000137): up
+   * to 5 people you follow on a streak, longest first, as the server allows
+   * (a teen only when they follow you back, never anyone whose activity
+   * status is off). Before the database has it, or when it cannot be asked,
+   * friends who follow each other with you only, from the streaks already
+   * loaded (the flames beside their names): an answer that says nothing
+   * about anyone's age. Never anyone blocked either way, muted or suspended.
+   */
+  friendsOnStreak: () => Promise<FriendStreak[]>;
   deleteSession: (id: ID) => void;
   /** Post a "Looking for a hit". Throws a plain sentence if it cannot be posted. */
   /**
@@ -887,6 +898,14 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
    */
   reportWorkoutFromAlert: (w: { id: string; startedAt: string; endedAt: string }) => Promise<ID | null>;
   /**
+   * A tap on this iPhone's one "4 workouts found" alert (more than three
+   * saved to Health at once; modules/workout-watch): each is read from
+   * Health and handed to the server as reportWorkoutFromAlert hands one
+   * over, then your sessions and Notifications are read once. The ids to
+   * list (app/workouts-found), newest first; empty when none could be.
+   */
+  reportWorkoutsFromAlert: (list: { id: string; startedAt: string; endedAt: string }[]) => Promise<ID[]>;
+  /**
    * Asks the source for workouts (Apple Health's sheet, or WHOOP's, Fitbit's,
    * Oura's or Polar's sign-in again), then turns tennis sessions on for it.
    * `workouts` (Apple Health or WHOOP; the person said yes to "Workouts from
@@ -969,6 +988,8 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
   catchUpNotifications: () => Promise<void>;
   markNotificationsRead: () => void;
   markNotificationRead: (notificationId: ID) => void;
+  /** The "Tennis detected" and "Activity detected" rows of these workouts, read together (Workouts found opened them all). */
+  markActivityNotesRead: (activityIds: ID[]) => void;
 
   /* Counting */
   recordView: (targetKind: 'post' | 'question', targetId: ID) => void;
@@ -1966,13 +1987,29 @@ const demoActivityToast: 'tennis' | 'workout' | null = (() => {
  * The note when a check files sessions. One: "Tennis detected" with its
  * time, heart rate and source, as always, or "Activity detected" ("Run · 32
  * min · 3.1 mi"; owner, Oct 5), each with Log it, which opens the composer
- * with it on (Oct 2): post it, or just log it. More than one at once (the past week,
- * picked up once after the Oct 5 update, or a few since the app was last
- * open): how many, and See them, which opens Notifications, where each one
- * waits with its own row. Your own numbers, for you only: the lock-screen
- * push never carries them (migration 58).
+ * with it on (Oct 2): post it, or just log it. Two or three at once: how
+ * many, and See them, which opens Notifications, where each one waits with
+ * its own row. More than three (the past week, picked up once after the Oct
+ * 5 update, or a watch or strap catching up; owner, Oct 5, "grouped noti"):
+ * "5 workouts found", what they were and where from, and See them, which
+ * opens their list (app/workouts-found), as their one row in Notifications
+ * does. Your own numbers, for you only: the lock-screen push never carries
+ * them (migration 58).
  */
 function activityToast(count: number, newestFirst: DetectedActivity[], holdMs?: number) {
+  if (count > FOLD_OVER) {
+    const ids = newestFirst.map((a) => a.id);
+    const href = ids.length ? foundHref(ids) : '/workouts-found';
+    showToast({
+      title: foundTitle(count, newestFirst.length === count && allTennisFound(ids, [], newestFirst)),
+      body: ids.length ? `${foundLine(ids, [], newestFirst)}. Tap to log.` : 'Tap to log them.',
+      glyph: 'session',
+      href,
+      action: { label: 'See them', onPress: () => router.push(href as never) },
+      ...(holdMs ? { holdMs } : {}),
+    });
+    return;
+  }
   if (count > 1) {
     const allTennis = newestFirst.length === count && newestFirst.every(isTennisActivity);
     showToast({
@@ -3889,6 +3926,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return got;
   }, []);
 
+  const friendsOnStreak = useCallback(async (): Promise<FriendStreak[]> => {
+    const s = stateRef.current;
+    const me = s.currentUserId;
+    if (!me) return [];
+    const hiddenIds = [...s.blockedIds, ...s.blockedMeIds, ...s.mutedIds];
+    const keep = (list: FriendStreak[]) => {
+      const now = stateRef.current;
+      const hidden = new Set([...now.blockedIds, ...now.blockedMeIds, ...now.mutedIds]);
+      return list.filter((f) => f.userId !== me && now.followingIds.includes(f.userId) && !hidden.has(f.userId)
+        && !now.users.find((u) => u.id === f.userId)?.suspended);
+    };
+    if (!live(me)) {
+      return keep(await demoApi.friendsOnStreak({ me, users: s.users, followingIds: s.followingIds, followEdges: s.followEdges, hiddenIds }).catch(() => []));
+    }
+    const got = await remote.fetchFriendsOnStreak(localDay(new Date())).catch(() => null);
+    if (got) return keep(got);
+    // Friends who follow each other with you, from the streaks the open brought (migration 134).
+    const now = stateRef.current;
+    const back = new Set(now.followEdges.filter((e) => e.followingId === me).map((e) => e.followerId));
+    return keep(now.users.flatMap((u) => (u.streak && back.has(u.id) ? [{ userId: u.id, ...u.streak }] : [])));
+  }, []);
+
   const cancelHit = useCallback(async (hitId: ID) => {
     const me = requireUser();
     const had = stateRef.current.hitRequests.find((h) => h.id === hitId);
@@ -5070,6 +5129,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
         n.id === notificationId ? { ...n, read: true } : n,
       ),
     }));
+  }, []);
+
+  // Several workouts found at once, opened as their list: their rows read in one go, one ask of the server.
+  // Every row of the go they were found in too (one about a copy, or a workout since taken back), so its one row is read.
+  const markActivityNotesRead = useCallback((activityIds: ID[]) => {
+    const me = stateRef.current.currentUserId;
+    const theirs = stateRef.current.notifications.filter((n) => n.userId === me);
+    const rows = new Set(theirs.filter((n) => n.kind === 'activity' && activityIds.includes(n.targetId)).map((n) => n.id));
+    for (const b of foundBursts(theirs, stateRef.current.detectedActivities)) {
+      if (b.activityIds.some((id) => activityIds.includes(id))) for (const id of b.rowIds) rows.add(id);
+    }
+    const ofThese = (n: Notification) => !n.read && n.userId === me && rows.has(n.id);
+    const unread = stateRef.current.notifications.filter((n) => ofThese(n) && UUID.test(n.id)).map((n) => n.id);
+    if (me && live(me) && unread.length) void remote.markNotificationsRead(unread);
+    setState((prev) => (prev.notifications.some(ofThese) ? { ...prev, notifications: prev.notifications.map((n) => (ofThese(n) ? { ...n, read: true } : n)) } : prev));
   }, []);
 
   /**
@@ -8019,6 +8093,31 @@ export function AppProvider({ children }: { children: ReactNode }) {
     activityToast(fresh.length, [...fresh].sort((x, y) => (x.startedAt < y.startedAt ? 1 : -1)));
   }, []);
 
+  const reportWorkoutsFromAlert = useCallback(async (ws: { id: string; startedAt: string; endedAt: string }[]): Promise<ID[]> => {
+    const me = stateRef.current.currentUserId;
+    if (!live(me) || !appleHealthAvailable()) return [];
+    // Newest first, a few at a time (a catch-up can be dozens: one after another kept the list waiting).
+    const sorted = [...ws].sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt));
+    const got: (ID | null)[] = sorted.map(() => null);
+    let next = 0;
+    await Promise.all(Array.from({ length: Math.min(4, sorted.length) }, async () => {
+      while (next < sorted.length && stateRef.current.currentUserId === me) {
+        const i = next;
+        next += 1;
+        const r = await reportFromAlert(me!, sorted[i]);
+        if (r && r !== 'error') got[i] = r;
+      }
+    }));
+    if (stateRef.current.currentUserId !== me) return [];
+    const ids = [...new Set(got.filter((id): id is ID => !!id))];
+    // Your sessions and Notifications read once for them all, as after a check.
+    const [list, notes] = await Promise.all([remote.fetchActivities(me!).catch(() => null), remote.fetchActivityNotes(me!).catch(() => [])]);
+    if (stateRef.current.currentUserId !== me) return [];
+    if (list) setState((prev) => ({ ...prev, detectedActivities: list }));
+    if (notes.length) setState((prev) => ({ ...prev, notifications: [...notes.filter((n) => !prev.notifications.some((x) => x.id === n.id)), ...prev.notifications] }));
+    return ids;
+  }, []);
+
   const turnOnTennis = useCallback(async (provider: 'apple-health' | 'whoop' | TrackerId, opts: { workouts?: boolean } = {}) => {
     const me = stateRef.current.currentUserId;
     // Every workout too: Apple Health and WHOOP (migrations 107 and 135), and only on the person's own yes to it.
@@ -8223,6 +8322,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       headToHead,
       courtKings,
       flyby,
+      friendsOnStreak,
       updateIdentity,
       toggleLike,
       addPost,
@@ -8257,6 +8357,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       pastWorkouts,
       logPastWorkout,
       reportWorkoutFromAlert,
+      reportWorkoutsFromAlert,
       turnOnTennis,
       turnOffTennis,
       claimPendingReferral,
@@ -8282,6 +8383,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       catchUpNotifications,
       markNotificationsRead,
       markNotificationRead,
+      markActivityNotesRead,
       recordView,
       noteFeedSignal,
       loadOlderMessages,
@@ -8441,6 +8543,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       headToHead,
       courtKings,
       flyby,
+      friendsOnStreak,
       updateIdentity,
       toggleLike,
       addPost,
@@ -8475,6 +8578,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       pastWorkouts,
       logPastWorkout,
       reportWorkoutFromAlert,
+      reportWorkoutsFromAlert,
       turnOnTennis,
       turnOffTennis,
       claimPendingReferral,
@@ -8500,6 +8604,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       catchUpNotifications,
       markNotificationsRead,
       markNotificationRead,
+      markActivityNotesRead,
       recordView,
       noteFeedSignal,
       loadOlderMessages,

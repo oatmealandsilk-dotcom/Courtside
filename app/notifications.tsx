@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { requestScrollToTop } from '@/features/navigation/scrollToTop';
 import { router } from 'expo-router';
@@ -15,6 +15,7 @@ import { BrandMark } from '@/components/BrandMark';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { duration, relativeTime } from '@/lib/format';
 import { shortDay } from '@/features/activity/format';
+import { allTennis, foundBursts, foundHref, foundLine, foundTitle } from '@/features/activity/found';
 import { tagState, yourResult } from '@/features/activity/sessionTags';
 import { useApp } from '@/store/AppContext';
 import { confirmUnfollow } from '@/lib/confirm';
@@ -141,9 +142,17 @@ interface Group {
   createdAt: string;
   preview?: string;
   unread: boolean;
+  /**
+   * More than three workouts found in one go (a watch or a strap catching
+   * up): one row for them all, "4 workouts found. Tap to log.", opening
+   * their list (features/activity/found). Each workout once, newest first.
+   */
+  found?: { activityIds: string[]; previews: (string | undefined)[] };
 }
 
 function routeFor(group: Group): string {
+  // Several workouts found at once: their list, each with its own Log it.
+  if (group.found) return foundHref(group.found.activityIds);
   // The map's alerts open the map: on the player, or on the hit with its card up.
   if (group.kind === 'map-friend-hit' || group.kind === 'map-new-player') return `/map?user=${group.actorIds[0]}`;
   if (group.kind === 'map-new-hit') return `/map?hit=${group.targetId}`;
@@ -325,6 +334,12 @@ export default function Notifications() {
   };
   // "liked your clip", "liked your photo": the verb names what was liked, not just "post".
   const verbFor = (group: Group) => {
+    // Several found at once: "Tap to log.", until none is waiting any more.
+    if (group.found) {
+      const statuses = group.found.activityIds.map((id) => detectedActivities.find((a) => a.id === id)?.status);
+      if (statuses.every((st) => st === 'logged')) return 'All logged.';
+      return statuses.every((st) => st === 'logged' || st === 'dismissed') ? 'Nothing left to log.' : 'Tap to log.';
+    }
     if (group.kind === 'milestone') return `just passed ${group.preview ?? 'a milestone'}`;
     // From CourtSide: "removed your clip for breaking its rules"; the reason goes on the line under it.
     if (group.kind === 'removed') return `removed your ${removedNotice(group.preview).thing} for breaking its rules`;
@@ -368,12 +383,40 @@ export default function Notifications() {
     [notifications, currentUserId, blockedIds],
   );
 
+  // Every row that was new while this page has been open keeps its tint until you leave, however
+  // often the rows are put together again (more rows coming in, or your sessions loading after them).
+  const newWhileOpen = useRef(new Set<string>());
+  for (const n of mine) if (!n.read) newWhileOpen.current.add(n.id);
+  const fresh = (n: Notification) => !n.read || newWhileOpen.current.has(n.id);
+
   // Snapshot on first render so rows do not lose their tint as we mark them read.
   const groups = useMemo<Group[]>(() => {
     const byTarget = new Map<string, Group>();
+    // More than three workouts found in one go: one row for them all (features/activity/found).
+    // Put together again once your sessions load: a copy of one folds into it, one WHOOP took back is left out.
+    const bursts = foundBursts(mine, detectedActivities);
+    const burstOf = new Map(bursts.flatMap((b) => b.rowIds.map((id) => [id, b] as const)));
     for (const n of [...mine].sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
     )) {
+      const burst = burstOf.get(n.id);
+      if (burst) {
+        if (!byTarget.has(burst.key)) {
+          const unread = burst.unread || burst.rowIds.some((id) => newWhileOpen.current.has(id));
+          byTarget.set(burst.key, {
+            key: burst.key,
+            section: sectionFor(unread, burst.createdAt),
+            kind: 'activity',
+            targetId: burst.activityIds[0],
+            targetKind: 'activity',
+            actorIds: [n.actorId],
+            createdAt: burst.createdAt,
+            unread,
+            found: { activityIds: burst.activityIds, previews: burst.previews },
+          });
+        }
+        continue;
+      }
       // Follows are one row per person, never bundled. A like not yet seen is
       // its own row too; once seen it folds in with the other likes on that thing.
       // The way Instagram's inbox reads: every comment, reply, mention and
@@ -384,17 +427,17 @@ export default function Notifications() {
       const key = n.kind === 'follow' || n.kind === 'follow-request' || n.kind === 'follow-accepted'
         ? `${n.kind}:${n.actorId}`
         : n.kind === 'like' || n.kind === 'upvote' || n.kind === 'share' || n.kind === 'helpful'
-          ? (!n.read ? `${n.kind}-new:${n.targetKind}:${n.targetId}:${day}` : `${n.kind}:${n.targetKind}:${n.targetId}:${day}`)
+          ? (fresh(n) ? `${n.kind}-new:${n.targetKind}:${n.targetId}:${day}` : `${n.kind}:${n.targetKind}:${n.targetId}:${day}`)
           : `one:${n.id}`;
       const existing = byTarget.get(key);
       if (existing) {
         if (!existing.actorIds.includes(n.actorId)) existing.actorIds.push(n.actorId);
-        existing.unread = existing.unread || !n.read;
+        existing.unread = existing.unread || fresh(n);
         continue;
       }
       byTarget.set(key, {
         key,
-        section: sectionFor(!n.read, n.createdAt),
+        section: sectionFor(fresh(n), n.createdAt),
         kind: n.kind,
         targetId: n.targetId,
         targetKind: n.targetKind,
@@ -402,14 +445,14 @@ export default function Notifications() {
         createdAt: n.createdAt,
         // The server's stand-in for an Instant with no caption; the row already says what it was.
         preview: n.preview === 'your hit' ? undefined : n.kind === 'activity' && n.preview ? shortLength(n.preview) : n.preview,
-        unread: !n.read,
+        unread: fresh(n),
       });
     }
     return [...byTarget.values()].sort((a, b) => SECTIONS.indexOf(a.section) - SECTIONS.indexOf(b.section) || Date.parse(b.createdAt) - Date.parse(a.createdAt));
-    // Deliberately keyed on length only: re-grouping as rows are marked read
-    // would wipe the tint mid-view.
+    // Deliberately keyed on length only: re-grouping on every row marked read is
+    // not needed (the tint is kept above either way).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mine.length, followRequests.length]);
+  }, [mine.length, followRequests.length, detectedActivities.length]);
 
   // The post each row is about, small on the right the way Instagram's inbox
   // shows it, so "liked your clip" says which clip. Posts the app hasn't
@@ -492,8 +535,8 @@ export default function Notifications() {
           {groups.map((group, index) => {
             const icon = ICON[group.kind] ?? { name: 'notifications', tint: 'brand' };
             const [first, ...rest] = group.actorIds;
-            // A tracker's session this row is about, when the app holds it.
-            const activity = group.kind === 'activity' ? detectedActivities.find((a) => a.id === group.targetId) : undefined;
+            // A tracker's session this row is about, when the app holds it (never for a row of several found at once).
+            const activity = group.kind === 'activity' && !group.found ? detectedActivities.find((a) => a.id === group.targetId) : undefined;
             const who =
               group.kind === 'milestone'
                 ? (posts.find((p) => p.id === group.targetId)?.kind === 'clip' ? 'Your clip' : 'Your post')
@@ -502,6 +545,7 @@ export default function Notifications() {
                 : group.kind === 'coach-application' || group.kind === 'refund' || group.kind === 'removed' || group.kind === 'review' ? 'CourtSide'
                 : group.kind === 'review-request' ? reviewAsk(group.preview).who
                 : group.kind === 'weekly-recap' ? 'Your week on court'
+                : group.found ? `${foundTitle(group.found.activityIds.length, allTennis(group.found.activityIds, group.found.previews, detectedActivities))}.`
                 : group.kind === 'activity' ? (activityNow(activity)?.who ?? detectedWho(group.preview, activity?.sport))
                 : rest.length === 0
                 ? nameOf(first)
@@ -572,6 +616,9 @@ export default function Notifications() {
                         {[tagState(tag), yourResult(tag), shortDay(tag.day), duration(tag.minutes)].filter(Boolean).join(' · ')}
                       </Text>
                     ) : null
+                  ) : group.found ? (
+                    // What they were, newest first, and where from: "Run, Tennis, Walk and 2 more · from your Apple Watch".
+                    <Text style={styles.preview} numberOfLines={2}>{foundLine(group.found.activityIds, group.found.previews, detectedActivities)}</Text>
                   ) : group.kind === 'removed' || (group.kind === 'review' && !reviewNotice(group.preview).restored) ? (
                     // The reason (the whole sentence is already the row's words), then the way to the rule
                     // it broke: "Something else" opens the rules at the top, where a plain removal is explained.

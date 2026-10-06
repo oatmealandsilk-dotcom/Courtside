@@ -5,6 +5,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { HitGlyph } from '@/components/HitGlyph';
+import { FriendsOnStreak } from '@/components/recap/FriendsOnStreak';
 import { RecapCard, RecapHighlights } from '@/components/recap/RecapCard';
 import { RecapStoryArt } from '@/components/recap/RecapStoryArt';
 import { Button, Screen } from '@/components/ui';
@@ -38,7 +39,9 @@ const ACTIONS: { key: StoryAction; label: string; spoken: string; icon: React.Co
  * share it. A rest week (nothing played, something the week before) is a
  * small card of its own instead: what you played the week before and "Find
  * a hit", never a big zero, and nothing to share. An empty week (nothing in
- * it or the week before) is the same card, saying how the recap comes.
+ * it or the week before) is the same card, saying how the recap comes. At the
+ * foot of each, "Friends on a streak" (FriendsOnStreak), when anyone you
+ * follow is on one.
  */
 export default function WeeklyRecap() {
   const styles = useThemedStyles(styleDefinitions);
@@ -81,6 +84,7 @@ export default function WeeklyRecap() {
         <Text style={styles.restLine}>{words}</Text>
         <View style={styles.restButton}><Button label="Find a hit" onPress={() => { requestSection('/discuss', 'players'); goToTab('/discuss'); }} full /></View>
       </View>
+      <FriendsOnStreak />
     </View>
   );
   if (!recap || (!recap.sessions && !recap.prevSessions)) {
@@ -132,6 +136,8 @@ export default function WeeklyRecap() {
               <Ionicons name="eye-off-outline" size={13} color={colors.textMuted} />
               <Text style={styles.onlyText}>Only you see this until you share it.</Text>
             </View>
+            {/* Friends on a streak: only here, never on the picture above. */}
+            <FriendsOnStreak />
           </View>
         </Screen>
       </View>

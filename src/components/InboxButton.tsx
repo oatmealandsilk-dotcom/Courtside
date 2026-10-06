@@ -7,6 +7,7 @@ import { Tappable } from '@/components/Tappable';
 import { useApp } from '@/store/AppContext';
 import { useWelcomeNote } from '@/features/welcome/welcomeNote';
 import { blockedDirect, isGroupChat, isMuted, unreadChatCount } from '@/features/messages/groupRules';
+import { unseenCount } from '@/features/activity/found';
 import { colors, typography } from '@/theme';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 
@@ -93,11 +94,12 @@ export function InboxButton({ variant = 'plain', size = 24, ink, style, coaching
  */
 export function NotificationButton({ size = 24 }: { size?: number }) {
   const styles = useThemedStyles(styleDefinitions);
-  const { notifications, currentUserId, currentUser, blockedIds } = useApp();
+  const { notifications, detectedActivities, currentUserId, currentUser, blockedIds } = useApp();
   // CourtSide's own welcome counts too, until Notifications is first opened (welcomeNote).
   const welcome = useWelcomeNote(currentUser);
   // Never anything from someone you blocked (the Notifications page leaves those out too).
-  const unseen = notifications.filter((n) => n.userId === currentUserId && !n.read && !blockedIds.includes(n.actorId)).length + (welcome.unread ? 1 : 0);
+  // Several workouts found at once are one row there, so they count once (features/activity/found).
+  const unseen = unseenCount(notifications.filter((n) => n.userId === currentUserId && !blockedIds.includes(n.actorId)), detectedActivities) + (welcome.unread ? 1 : 0);
   const slop = Math.max(8, Math.ceil((44 - (size + 8)) / 2));
   return (
     <Tappable accessibilityRole="link" accessibilityLabel={unseen ? `Notifications, ${unseen} new` : 'Notifications'} onPress={() => router.push('/notifications')} hitSlop={slop} style={styles.plain}>

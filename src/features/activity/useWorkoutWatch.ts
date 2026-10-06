@@ -1,8 +1,10 @@
 import { router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 
+import type { ID } from '@/data/types';
 import { openingFromAlert } from '@/features/activity/check';
 import { isDemo, tennisFlagsKnown } from '@/features/activity/flags';
+import { handOver } from '@/features/activity/found';
 import { listenForWorkoutAlertTaps, onWorkoutInFront, startWorkoutWatch, stopWorkoutWatch, workoutWatchAvailable, type WatchedWorkout } from '@/features/health/workoutWatch';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { useApp } from '@/store/AppContext';
@@ -26,7 +28,10 @@ import { useApp } from '@/store/AppContext';
  * - A tap on the alert hands that workout to the server, as the check does,
  *   then opens Log it on it: the same page as the note's Log it and the row
  *   in Notifications. Once the app is signed in, loaded and past its opening
- *   page; Past workouts instead, if it can't be logged.
+ *   page; Past workouts instead, if it can't be logged. A tap on the one
+ *   "4 workouts found" alert (more than three saved at once, Oct 5) opens
+ *   their list (Workouts found) at once, each with Log it, which waits
+ *   there while each is handed over.
  *
  * On a build without the watching (14 and older, Android, a browser) it does nothing.
  */
@@ -41,6 +46,7 @@ export function useWorkoutWatch({ settled }: { settled: boolean }) {
   const appleTennis = !!apple?.connected && !!apple.readsWorkouts;
   const appleAll = appleTennis && !!apple?.readsAllWorkouts;
   const whoopTennis = !!whoop?.connected && !!whoop.readsWorkouts;
+  const whoopAll = whoopTennis && !!whoop?.readsAllWorkouts;
   const alerts = prefs.pushActivity;
   // A real account, loaded, with its Health connections read (only then are the switches above its own).
   const ready = isSupabaseConfigured && !!currentUserId && !isDemo(currentUserId) && remoteLoaded && onboardingComplete && !!healthIsReal;
@@ -57,11 +63,12 @@ export function useWorkoutWatch({ settled }: { settled: boolean }) {
       // The same rules as the check's (checkWith in AppContext): tennis, and every workout only on its own yes.
       const tennis = f.apple;
       const workouts = f.workoutsApple && appleAll;
-      if (tennis || workouts) void startWorkoutWatch({ tennis, workouts, skipWhoopTennis: f.whoop && whoopTennis, alerts });
+      // WHOOP alerts its own sessions from the server (tennis, and every workout on its own switch): none twice.
+      if (tennis || workouts) void startWorkoutWatch({ tennis, workouts, skipWhoopTennis: f.whoop && whoopTennis, skipWhoopOther: f.workoutsWhoop && whoopAll, alerts });
       else void stopWorkoutWatch();
     });
     return () => { stale = true; };
-  }, [available, currentUserId, ready, appleTennis, appleAll, whoopTennis, alerts]);
+  }, [available, currentUserId, ready, appleTennis, appleAll, whoopTennis, whoopAll, alerts]);
 
   // Open on screen: look now (Apple Health's look is otherwise held to once every two minutes).
   useEffect(() => {
@@ -70,12 +77,21 @@ export function useWorkoutWatch({ settled }: { settled: boolean }) {
   }, [available, ready]);
 
   // The alert's tap: held until the app can act on it (a tap that opened the app arrives before sign-in is read).
-  const [tapped, setTapped] = useState<WatchedWorkout | null>(null);
-  useEffect(() => (available ? listenForWorkoutAlertTaps((w) => { openingFromAlert(w.id); setTapped(w); }) : undefined), [available]);
+  const [tapped, setTapped] = useState<{ list: WatchedWorkout[]; grouped: boolean } | null>(null);
+  useEffect(() => (available ? listenForWorkoutAlertTaps((list, grouped) => { for (const w of list) openingFromAlert(w.id); setTapped({ list, grouped }); }) : undefined), [available]);
   useEffect(() => {
     if (!tapped || !ready || !settled) return;
-    const w = tapped;
+    const { list, grouped } = tapped;
     setTapped(null);
+    // "4 workouts found" (more than three at once): their list opens at once, each with its own Log it,
+    // and waits there while each is handed over (a big catch-up takes a few seconds).
+    if (grouped) {
+      const key = handOver(actionsRef.current.reportWorkoutsFromAlert(list).catch((): ID[] => []));
+      router.push(`/workouts-found?handing=${key}` as never);
+      return;
+    }
+    const w = list[0];
+    if (!w) return;
     void actionsRef.current.reportWorkoutFromAlert(w).catch(() => null).then((id) => {
       if (id) router.push(`/compose?activity=${id}` as never);
       else router.push('/workouts');

@@ -20,9 +20,11 @@ const park = (n: number): TaggedCourt => { const c = DEMO_PARK(n); return { id: 
 /**
  * The demo player follows Sam and Marcus, so the Following chip and "who
  * you follow plays here" have someone to show, and Omar, who follows back
- * (his pin is exact on the map, presence.ts).
+ * (his pin is exact on the map, presence.ts). And Tomás, Nadia and June,
+ * who are on streaks, so the weekly recap's "Friends on a streak" has a
+ * board (none of the three shares a spot on the map).
  */
-export const DEMO_FOLLOWING: ID[] = ['u-sam', 'u-marcus', 'u-omar'];
+export const DEMO_FOLLOWING: ID[] = ['u-sam', 'u-marcus', 'u-omar', 'u-tomas', 'u-nadia', 'u-june'];
 
 const blankFacts = (courtId: string): CourtFacts => ({
   courtId, access: 'unknown', players: 0, lights: { yes: 0, no: 0 }, nets: { good: 0, bad: 0 }, surface: { good: 0, cracked: 0, wetProne: 0 }, busy: {}, busyAnswers: 0, busyNever: 0, notes: [],

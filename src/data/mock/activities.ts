@@ -148,3 +148,64 @@ export const activityNotifications: Notification[] = [
     preview: '1 hr 24 min · from your WHOOP', // the server's words; the row shows 1h 24m
   },
 ];
+
+/**
+ * The demo's catch-up (owner, Oct 5: "grouped noti"): with `?found=1` on the
+ * address (a browser only, kept for the tab), five workouts from the past
+ * week that an Apple Watch handed over in one go a few minutes ago, each
+ * with its row in Notifications as the server words it, so the one "5
+ * workouts found" row and its list (app/workouts-found) can be seen.
+ * Nothing without it.
+ */
+export function demoFoundWorkouts(): { activities: DetectedActivity[]; notifications: Notification[] } | null {
+  try {
+    if (typeof window === 'undefined' || !window.location || !window.sessionStorage) return null;
+    if (new URLSearchParams(window.location.search).get('found') === '1') window.sessionStorage.setItem('courtside-demo-found', '1');
+    if (window.sessionStorage.getItem('courtside-demo-found') !== '1') return null;
+  } catch {
+    return null;
+  }
+  const tz = -new Date().getTimezoneOffset();
+  const at = (daysAgo: number, h: number, m: number) => { const d = new Date(); d.setDate(d.getDate() - daysAgo); d.setHours(h, m, 0, 0); return d; };
+  const length = (mins: number) => (mins < 60 ? `${mins} min` : `${Math.floor(mins / 60)} hr${mins % 60 ? ` ${mins % 60} min` : ''}`);
+  const list: { sport: string; name: string | null; start: Date; mins: number; distanceM?: number; avgHr: number; maxHr: number; kcal: number }[] = [
+    { sport: 'run', name: 'Run', start: at(1, 7, 10), mins: 41, distanceM: 6840, avgHr: 154, maxHr: 176, kcal: 452 },
+    { sport: 'strength', name: 'Strength training', start: at(2, 12, 30), mins: 48, avgHr: 118, maxHr: 149, kcal: 286 },
+    { sport: 'tennis', name: null, start: at(3, 17, 30), mins: 75, avgHr: 138, maxHr: 167, kcal: 598 },
+    { sport: 'walk', name: 'Walk', start: at(4, 8, 0), mins: 35, distanceM: 2930, avgHr: 102, maxHr: 121, kcal: 151 },
+    { sport: 'ride', name: 'Bike ride', start: at(5, 9, 15), mins: 62, distanceM: 21400, avgHr: 131, maxHr: 158, kcal: 540 },
+  ];
+  // Handed over one after another, a few seconds apart, six minutes ago.
+  const filed = Date.now() - 6 * 60_000;
+  const activities: DetectedActivity[] = list.map((w, i) => ({
+    id: `act-demo-found-${i + 1}`,
+    userId: CURRENT_USER_ID,
+    source: 'apple-health',
+    sport: w.sport,
+    startedAt: w.start.toISOString(),
+    endedAt: new Date(w.start.getTime() + w.mins * 60_000).toISOString(),
+    tzOffsetMin: tz,
+    minutes: w.mins,
+    ...(w.distanceM ? { distanceM: w.distanceM } : {}),
+    avgHr: w.avgHr,
+    maxHr: w.maxHr,
+    kcal: w.kcal,
+    device: 'Watch7,1',
+    externalId: `demo-hk-found-${i + 1}`,
+    status: 'new',
+    createdAt: new Date(filed + i * 2000).toISOString(),
+  }));
+  // The server's words (migration 107): found long after it ended, so the weekday too.
+  const notifications: Notification[] = list.map((w, i) => ({
+    id: `n-act-found-${i + 1}`,
+    userId: CURRENT_USER_ID,
+    actorId: CURRENT_USER_ID,
+    kind: 'activity',
+    targetId: `act-demo-found-${i + 1}`,
+    targetKind: 'activity',
+    createdAt: new Date(filed + i * 2000).toISOString(),
+    read: false,
+    preview: [w.name, w.start.toLocaleDateString('en-US', { weekday: 'short' }), length(w.mins)].filter(Boolean).join(' · ') + ' · from your Apple Watch',
+  }));
+  return { activities, notifications };
+}

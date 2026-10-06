@@ -175,7 +175,9 @@ export function checkForTennis(me: ID, src: CheckSources, force = false): Promis
           if (r?.notify) { filed.push(r.id); fromHealth.set(r.id, w.id); }
         }
         // Those alerts' workouts are with the server now (each with its row in Notifications): off the lock screen.
-        dismissWorkoutAlerts(shown.filter((a) => handed.has(`${me}:${a.workoutId}`)).map((a) => a.alertId));
+        // A "4 workouts found" alert only once every one of its workouts is.
+        const waiting = new Set(shown.filter((a) => !handed.has(`${me}:${a.workoutId}`)).map((a) => a.alertId));
+        dismissWorkoutAlerts([...new Set(shown.map((a) => a.alertId))].filter((id) => !waiting.has(id)));
         // A workout that did not get through is read again next time.
         if (!failed) {
           await noteLook(key, now);

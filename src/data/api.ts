@@ -15,7 +15,7 @@ import { demoGroupPosts } from './mock/groups';
 import { stories } from './mock/stories';
 import { conversations, messages } from './mock/messages';
 import { healthHistory, integrations } from './mock/health';
-import { activityNotifications, detectedActivities, whoopWeek } from './mock/activities';
+import { activityNotifications, demoFoundWorkouts, detectedActivities, whoopWeek } from './mock/activities';
 import { CURRENT_USER_ID, users } from './mock/users';
 import { demoHits } from './mock/hits';
 import { isMapCourtId } from '@/features/places/courtName';
@@ -24,6 +24,8 @@ import { DEMO_FOLLOWING, DEMO_MAP_ALERTS } from './mock/courtLife';
 import { demoSessionTagNotifications, demoSessionTags, demoSessions } from './mock/sessions';
 import { DEMO_COURT_REGULARS, DEMO_COURT_WINS, DEMO_FLYBY } from './mock/strava';
 import { localDay } from '@/features/practice/stats';
+import { STREAK_FLAME_FROM } from '@/features/practice/streakFlame';
+import { notKnownAdult } from '@/features/players/age';
 import { lastWeekStart, weekRecap } from '@/features/recap/recap';
 import { supabase } from '@/lib/supabase';
 import { canTagKind, isActive, isClosed, maxTagsFor, mirrorCopy } from '@/features/activity/sessionTags';
@@ -42,6 +44,7 @@ import type {
   CourtKings,
   DailyHealth,
   FlybyPerson,
+  FriendStreak,
   DetectedActivity,
   Integration,
   Message,
@@ -128,6 +131,8 @@ function demoRecapNotification(): Notification[] {
 }
 
 export async function fetchBootstrap(): Promise<Bootstrap> {
+  // The demo's catch-up, only with ?found=1 (mock/activities): five workouts found in one go.
+  const found = supabase ? null : demoFoundWorkouts();
   return delay(
     clone({
       users,
@@ -152,8 +157,8 @@ export async function fetchBootstrap(): Promise<Bootstrap> {
       // The demo's tracker session and its "Tennis detected" row, two of the
       // map's alerts and a tag of you. Only without a database: a real
       // account's come from the server.
-      notifications: supabase ? [] : [...demoRecapNotification(), ...activityNotifications, ...DEMO_MAP_ALERTS, ...demoSessionTagNotifications],
-      detectedActivities: supabase ? [] : detectedActivities,
+      notifications: supabase ? [] : [...demoRecapNotification(), ...activityNotifications, ...(found?.notifications ?? []), ...DEMO_MAP_ALERTS, ...demoSessionTagNotifications],
+      detectedActivities: supabase ? [] : [...detectedActivities, ...(found?.activities ?? [])],
       coachingRequests,
       integrations,
       healthHistory,
@@ -337,6 +342,26 @@ export async function flyby({ courtId, day, me, sessions, tags }: { courtId: str
     .filter((t) => t.status !== 'declined' && t.status !== 'removed' && (mySessions.has(t.sessionId) || (t.taggedId === me && t.day === day)))
     .flatMap((t) => [t.taggerId, t.taggedId]));
   return clone((DEMO_FLYBY[courtId]?.[ago] ?? []).filter((p) => p.userId !== me && !played.has(p.userId)));
+}
+
+/**
+ * The demo's friends_on_streak (migration 20261006000137): the people the
+ * demo player follows on a streak of 3 days or more (each fixture's own
+ * count, through today), longest first, at most 5. By the server's rules:
+ * never anyone hidden (blocked, muted) or suspended, and someone who does
+ * not follow you back only when not a teen (the demo's own ages, as
+ * features/players/age reads them).
+ */
+export async function friendsOnStreak({ me, users: everyone, followingIds, followEdges, hiddenIds }: { me: ID; users: User[]; followingIds: ID[]; followEdges: { followerId: ID; followingId: ID }[]; hiddenIds: ID[] }): Promise<FriendStreak[]> {
+  await delay(null, 160);
+  const today = localDay(new Date());
+  const back = new Set(followEdges.filter((e) => e.followingId === me).map((e) => e.followerId));
+  return clone(everyone
+    .filter((u) => u.id !== me && followingIds.includes(u.id) && !hiddenIds.includes(u.id) && !u.suspended
+      && u.stats.currentStreakDays >= STREAK_FLAME_FROM && (back.has(u.id) || !notKnownAdult(u)))
+    .map((u) => ({ userId: u.id, days: u.stats.currentStreakDays, through: today }))
+    .sort((a, b) => b.days - a.days || a.userId.localeCompare(b.userId))
+    .slice(0, 5));
 }
 
 /**

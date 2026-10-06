@@ -21,6 +21,7 @@ import { StreakFlame } from '@/components/StreakFlame';
 import { shownStreak } from '@/features/practice/streakFlame';
 import { useApp } from '@/store/AppContext';
 import { InboxButton, UnreadBadge } from '@/components/InboxButton';
+import { unseenCount } from '@/features/activity/found';
 import { PlayerCard } from '@/components/tennis/PlayerCard';
 import { CardWash, cardLook } from '@/components/session/SessionCard';
 import { compactNumber } from '@/lib/format';
@@ -45,7 +46,7 @@ const INBOX_POINTER = 38 + 14 + 17 - 6;
 
 function Profile({ previewSection }: { previewSection?: string } = {}) {
   const styles = useThemedStyles(styleDefinitions);
- const { currentUser: user, posts, questions, answers, saved, notifications, currentUserId, savedAccounts, coaches, coachingRequests, coachQuestions, actions, feedGroups, blockedIds } = useApp();
+ const { currentUser: user, posts, questions, answers, saved, notifications, detectedActivities, currentUserId, savedAccounts, coaches, coachingRequests, coachQuestions, actions, feedGroups, blockedIds } = useApp();
  // A coach's studio, first of your links: what is waiting there, or how far setup has got.
  const myCoach = coaches.find((c) => c.userId === currentUserId);
  const studio = myCoach ? studioLine(myCoach, coachingRequests, coachQuestions, currentUserId) : null;
@@ -105,7 +106,8 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
  // CourtSide's own welcome counts too, until Notifications is first opened (welcomeNote).
  const welcome = useWelcomeNote(user);
  // Never anything from someone you blocked (the Notifications page leaves those out too).
- const unseen = notifications.filter(n => n.userId === currentUserId && !n.read && !blockedIds.includes(n.actorId)).length + (welcome.unread ? 1 : 0);
+ // Several workouts found at once are one row there, so they count once, as on the tab bar's bell (features/activity/found).
+ const unseen = unseenCount(notifications.filter(n => n.userId === currentUserId && !blockedIds.includes(n.actorId)), detectedActivities) + (welcome.unread ? 1 : 0);
  const savedCount = saved.postIds.length + saved.questionIds.length;
  const swipe = (direction: 1 | -1) => {
    const next = swipeDestination('/profile', tab, direction);

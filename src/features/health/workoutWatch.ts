@@ -35,6 +35,13 @@ export type WatchPrefs = {
   workouts: boolean;
   /** WHOOP sends its own tennis alert: its copy in Health gets none. */
   skipWhoopTennis: boolean;
+  /**
+   * WHOOP sends its own alert for every other workout too (its every-workout
+   * switch, migration 135): no alert from here for those either, so one run
+   * never buzzes twice, nor a catch-up twice ("4 workouts found" from each).
+   * Only a build after this change knows it (see startWorkoutWatch).
+   */
+  skipWhoopOther: boolean;
   /** Settings' alert switch for sessions (push_activity). */
   alerts: boolean;
 };
@@ -44,6 +51,8 @@ export type WatchedWorkout = { id: string; startedAt: string; endedAt: string; t
 
 type Native = {
   start(tennis: boolean, workouts: boolean, skipWhoopTennis: boolean, alerts: boolean): Promise<void>;
+  /** The same with every switch by name (skipWhoopOther too); missing on a build that has only start. */
+  startWith?(prefs: Record<string, boolean>): Promise<void>;
   stop(): Promise<void>;
   addListener(event: 'onWorkout', listener: (payload: Record<string, unknown>) => void): EventSubscription;
 };
@@ -64,7 +73,11 @@ export const workoutWatchAvailable = () => mod() !== null;
 export async function startWorkoutWatch(p: WatchPrefs): Promise<void> {
   const m = mod();
   if (!m) return;
-  try { await m.start(p.tennis, p.workouts, p.skipWhoopTennis, p.alerts); } catch { /* tried again next launch */ }
+  try {
+    // A build that knows every switch by name; an older one (build 15) is told the four it knows.
+    if (typeof m.startWith === 'function') await m.startWith({ tennis: p.tennis, workouts: p.workouts, skipWhoopTennis: p.skipWhoopTennis, skipWhoopOther: p.skipWhoopOther, alerts: p.alerts });
+    else await m.start(p.tennis, p.workouts, p.skipWhoopTennis, p.alerts);
+  } catch { /* tried again next launch */ }
 }
 
 /** Switched off, or signed out: no more alerts, and what the module kept is forgotten. Never throws. */
@@ -91,6 +104,23 @@ function workoutOf(data: unknown): WatchedWorkout | null {
 }
 
 /**
+ * Every workout an alert is about: one for "Activity detected", or each of
+ * the "4 workouts found" alert's (more than three saved at once, owner Oct
+ * 5; its `workouts`, newest first). Empty when it is not one of the module's.
+ */
+function workoutsOf(data: unknown): { list: WatchedWorkout[]; grouped: boolean } {
+  const one = workoutOf(data);
+  if (one) return { list: [one], grouped: false };
+  const d = data as Record<string, unknown> | null | undefined;
+  if (!d || d.courtside !== 'workouts-found' || !Array.isArray(d.workouts)) return { list: [], grouped: false };
+  const list = d.workouts.flatMap((w) => {
+    const got = workoutOf({ ...(w as Record<string, unknown>), courtside: 'workout-detected' });
+    return got ? [got] : [];
+  });
+  return { list, grouped: list.length > 0 };
+}
+
+/**
  * While the app listens (open and signed in), a workout saved to Health with
  * the app on screen comes here instead of a lock-screen alert, so the app
  * can look at once and put up its own note. Returns the way to stop listening.
@@ -109,17 +139,15 @@ export function onWorkoutInFront(listener: (w: WatchedWorkout) => void): () => v
 /**
  * The module's alerts still showing on the lock screen and in Notification
  * Center (the person opened CourtSide from its icon instead of tapping one):
- * each one's workout (Health's id) and the alert's own id. Empty on a build
- * without the watching. Never throws.
+ * each one's workout (Health's id) and the alert's own id. A "4 workouts
+ * found" alert gives one line for each of its workouts, all with its id.
+ * Empty on a build without the watching. Never throws.
  */
 export async function presentedWorkoutAlerts(): Promise<{ workoutId: string; alertId: string }[]> {
   if (!mod()) return [];
   try {
     const shown = await Notifications.getPresentedNotificationsAsync();
-    return shown.flatMap((n) => {
-      const w = workoutOf(n.request.content.data);
-      return w ? [{ workoutId: w.id, alertId: n.request.identifier }] : [];
-    });
+    return shown.flatMap((n) => workoutsOf(n.request.content.data).list.map((w) => ({ workoutId: w.id, alertId: n.request.identifier })));
   } catch {
     return [];
   }
@@ -141,16 +169,17 @@ const LAST_TAP_KEY = 'courtside-last-workout-tap';
 
 /**
  * A tap on one of the module's alerts, also when the tap is what opened the
- * app: the workout it was about, once. (The server's alerts, which carry a
- * page to open, are push.ts's; these carry a workout instead.)
+ * app: the workout it was about, once, or (`grouped`) the workouts of its
+ * one "4 workouts found" alert, newest first. (The server's alerts, which
+ * carry a page to open, are push.ts's; these carry workouts instead.)
  */
-export function listenForWorkoutAlertTaps(listener: (w: WatchedWorkout) => void): () => void {
+export function listenForWorkoutAlertTaps(listener: (list: WatchedWorkout[], grouped: boolean) => void): () => void {
   if (!mod()) return () => undefined;
   let opened: string | null = null;
   const take = async (response: Notifications.NotificationResponse | null) => {
     if (!response) return;
-    const w = workoutOf(response.notification.request.content.data);
-    if (!w) return;
+    const { list, grouped } = workoutsOf(response.notification.request.content.data);
+    if (!list.length) return;
     // At launch the same tap can arrive both ways (asked for, and as an event): one is used.
     const id = `${response.notification.request.identifier}@${response.notification.date ?? ''}`;
     if (id === opened) return;
@@ -159,7 +188,7 @@ export function listenForWorkoutAlertTaps(listener: (w: WatchedWorkout) => void)
     if (last === id) return;
     void AsyncStorage.setItem(LAST_TAP_KEY, id).catch(() => undefined);
     try { Notifications.clearLastNotificationResponse(); } catch { /* an older build */ }
-    listener(w);
+    listener(list, grouped);
   };
   void Notifications.getLastNotificationResponseAsync().then(take).catch(() => undefined);
   const sub = Notifications.addNotificationResponseReceivedListener((response) => { void take(response); });
