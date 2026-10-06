@@ -1,143 +1,129 @@
-import React, { useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
-import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import React from 'react';
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import Animated, { FadeIn, FadeInUp, ReduceMotion } from 'react-native-reanimated';
+import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
 
 import { BrandMark } from '@/components/BrandMark';
 import { Submit } from '@/components/sheet/SheetForm';
-import { holdLightStatusBar } from '@/lib/statusBarStyle';
-import { useThemedStyles } from '@/theme/ThemeProvider';
-import { colors, font, spacing } from '@/theme';
-import { COURT_ART, CourtHero, courtGeometry } from './CourtHero';
+import { useGateSpace } from '@/lib/useGateSpace';
+import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
+import { colors, font, pageIsDark, spacing } from '@/theme';
 
-/** Side by side (the court on the left, the words on the right) from this width up: a desktop, a tablet on its side. */
-const WIDE = 900;
+/** From this width up (a desktop, a tablet) everything is one centred group, rather than the buttons sitting at the foot of a tall window. */
+const WIDE = 768;
 
 /**
- * The first thing anyone sees: one big picture of a court with the name on
- * it, one line, and two ways in. On a phone the court fills the top of the
- * screen, under the status bar, and the words sit on a sheet that overlaps
- * it; on a wide screen the court is a panel on the left.
+ * An oval glow. Phones draw an SVG radial gradient's rx/ry as an oval; browsers ignore
+ * rx/ry and draw a circle, so on the web the same oval is drawn with a gradientTransform.
  */
-export function Welcome({ onCreate, onLogIn }: { onCreate: () => void; onLogIn: () => void }) {
-  const styles = useThemedStyles(styleDefinitions);
-  const { width: screenWidth } = useWindowDimensions();
-  const insets = useSafeAreaInsets();
-  const wide = screenWidth >= WIDE;
-  const [box, setBox] = useState<{ width: number; height: number } | null>(null);
-  const measure = (e: LayoutChangeEvent) => {
-    const { width, height } = e.nativeEvent.layout;
-    if (!box || Math.abs(box.width - width) > 0.5 || Math.abs(box.height - height) > 0.5) setBox({ width, height });
-  };
-  // The court runs under the status bar on a phone, so its clock and battery are drawn light while this shows.
-  useEffect(() => (wide ? undefined : holdLightStatusBar()), [wide]);
+const oval = (cx: number, cy: number, rx: number, ry: number) => (Platform.OS === 'web'
+  ? { cx: 0, cy: 0, r: 1, gradientTransform: `translate(${cx} ${cy}) scale(${rx} ${ry})` }
+  : { cx, cy, rx, ry });
 
-  // The name sits in the empty backcourt, clear of the lines and of the status bar.
-  const court = box ? courtGeometry(box.width, box.height, wide) : null;
-  const logoTop = court ? Math.max(wide ? spacing.xxl : insets.top + spacing.sm, court.baselineY + court.line) : 0;
-  const logoBottom = court ? court.serviceY - court.line : 0;
-  const markSize = wide ? 60 : 46;
-
-  const hero = (
-    <View onLayout={measure} style={wide ? styles.wideHero : styles.hero}>
-      {box && court ? (
-        <>
-          <Animated.View entering={FadeIn.duration(700)} style={StyleSheet.absoluteFill}>
-            <CourtHero width={box.width} height={box.height} wide={wide} />
-          </Animated.View>
-          <View pointerEvents="none" style={[styles.logoRoom, { top: logoTop, height: Math.max(0, logoBottom - logoTop) }]}>
-            <Animated.View entering={FadeInDown.delay(180).duration(640)} style={[styles.lockup, { gap: markSize * 0.26 }]}>
-              <BrandMark size={markSize} color={COURT_ART.line} />
-              <Text allowFontScaling={false} accessibilityRole="header" style={[styles.wordmark, wide && styles.wordmarkWide]}>CourtSide</Text>
-            </Animated.View>
-          </View>
-        </>
-      ) : null}
-    </View>
-  );
-
-  const words = (
-    <>
-      <Animated.View entering={FadeInDown.delay(260).duration(560)} style={styles.copy}>
-        <Text maxFontSizeMultiplier={1.6} style={[styles.headline, wide && styles.headlineWide]}>
-          Your tennis,{'\n'}<Text style={styles.accent}>all in one place.</Text>
-        </Text>
-        <Text maxFontSizeMultiplier={1.8} style={[styles.line, wide && styles.lineWide]}>
-          Post your clips, find people to hit with, and ask real coaches.
-        </Text>
-      </Animated.View>
-      <Animated.View entering={FadeInDown.delay(360).duration(560)} style={styles.actions}>
-        <Submit label="Create an account" onPress={onCreate} />
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Log in"
-          accessibilityHint="For an account you already have"
-          onPress={onLogIn}
-          hitSlop={6}
-          style={({ pressed }) => [styles.logIn, pressed && styles.pressed]}
-        >
-          <Text maxFontSizeMultiplier={1.8} style={styles.logInText}>
-            Already have an account? <Text style={styles.logInLink}>Log in</Text>
-          </Text>
-        </Pressable>
-      </Animated.View>
-    </>
-  );
-
-  if (wide) {
-    return (
-      // A tablet on its side keeps the panel clear of its status bar and rounded corners.
-      <View style={[styles.wideRoot, { paddingTop: insets.top + spacing.lg, paddingBottom: insets.bottom + spacing.lg, paddingLeft: insets.left + spacing.lg, paddingRight: insets.right + spacing.lg }]}>
-        {hero}
-        <ScrollView style={styles.wideSide} contentContainerStyle={styles.wideSideInner} showsVerticalScrollIndicator={false}>
-          <View style={styles.wideColumn}>{words}</View>
-        </ScrollView>
-      </View>
-    );
-  }
+/**
+ * The page's ground: the cream (or the dark page), with the same two corner
+ * glows as the app's session cards, sage high on the right and peach low on
+ * the left, barely there.
+ */
+function Glow() {
+  const { theme } = useTheme();
+  // The court's name is in the ids: iOS keeps a gradient by id and would not repaint one whose colours changed.
+  const id = theme.replace(/[^a-zA-Z0-9]/g, '');
+  // On a dark page the same glows read stronger, so they are drawn at about half.
+  const a = pageIsDark() ? 0.5 : 1;
   return (
-    <ScrollView style={styles.root} contentContainerStyle={styles.scroll} bounces={false} showsVerticalScrollIndicator={false}>
-      {hero}
-      <View style={[styles.sheet, { paddingBottom: insets.bottom + spacing.lg }]}>{words}</View>
-    </ScrollView>
+    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+      <Svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
+        <Defs>
+          <RadialGradient id={`welcome-top-${id}`} {...oval(100, 0, 95, 60)} gradientUnits="userSpaceOnUse">
+            <Stop offset="0" stopColor={colors.cardGlowTop} stopOpacity={0.6 * a} />
+            <Stop offset="1" stopColor={colors.cardGlowTop} stopOpacity={0} />
+          </RadialGradient>
+          <RadialGradient id={`welcome-bottom-${id}`} {...oval(0, 100, 95, 60)} gradientUnits="userSpaceOnUse">
+            <Stop offset="0" stopColor={colors.cardGlowBottom} stopOpacity={0.5 * a} />
+            <Stop offset="1" stopColor={colors.cardGlowBottom} stopOpacity={0} />
+          </RadialGradient>
+        </Defs>
+        <Rect x="0" y="0" width="100" height="100" fill={`url(#welcome-top-${id})`} />
+        <Rect x="0" y="0" width="100" height="100" fill={`url(#welcome-bottom-${id})`} />
+      </Svg>
+    </View>
   );
 }
 
-const SHEET_RADIUS = 30;
+/**
+ * The first thing anyone sees, in Instagram's rhythm: the name, centred a
+ * little above the middle with plenty of room round it, one line under it,
+ * and the two ways in at the foot of the screen where a thumb is: the green
+ * "Create an account" and a quiet "Log in".
+ */
+export function Welcome({ onCreate, onLogIn }: { onCreate: () => void; onLogIn: () => void }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const { width, height } = useWindowDimensions();
+  const space = useGateSpace();
+  const wide = width >= WIDE;
+
+  const name = (
+    <View style={styles.name}>
+      {/* One gentle entrance: the name rises into place; still for Reduce Motion. */}
+      <Animated.View entering={FadeInUp.duration(700).reduceMotion(ReduceMotion.System)} style={styles.lockup}>
+        <BrandMark size={wide ? 52 : 46} />
+        <Text allowFontScaling={false} accessibilityRole="header" style={[styles.wordmark, wide && styles.wordmarkWide]}>CourtSide</Text>
+      </Animated.View>
+      <Animated.Text entering={FadeIn.delay(250).duration(700).reduceMotion(ReduceMotion.System)} maxFontSizeMultiplier={1.8} style={styles.line}>
+        Your tennis, all in one place.
+      </Animated.Text>
+    </View>
+  );
+  const actions = (
+    <Animated.View entering={FadeIn.delay(400).duration(700).reduceMotion(ReduceMotion.System)} style={styles.actions}>
+      <Submit label="Create an account" onPress={onCreate} />
+      <Pressable accessibilityRole="button" accessibilityLabel="Log in" onPress={onLogIn} hitSlop={6} style={({ pressed }) => [styles.logIn, pressed && styles.pressed]}>
+        <Text maxFontSizeMultiplier={1.8} style={styles.logInText}>Log in</Text>
+      </Pressable>
+    </Animated.View>
+  );
+
+  return (
+    <View style={styles.root}>
+      <Glow />
+      <ScrollView
+        contentContainerStyle={[styles.page, { paddingTop: space.top, paddingBottom: space.footer }]}
+        bounces={false}
+        showsVerticalScrollIndicator={false}
+      >
+        {wide ? (
+          // A desktop: one centred column, the name and the buttons together.
+          <View style={styles.wideColumn}>
+            {name}
+            {actions}
+          </View>
+        ) : (
+          <>
+            {/* The name sits a little above the middle of the room the buttons leave. */}
+            <View style={[styles.middle, { paddingBottom: height * 0.08 }]}>{name}</View>
+            {actions}
+          </>
+        )}
+      </ScrollView>
+    </View>
+  );
+}
 
 const styleDefinitions = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
-  scroll: { flexGrow: 1 },
-  // Takes whatever height the words leave, never less than enough for the name and the T; larger text sizes scroll.
-  hero: { flexGrow: 1, minHeight: 320, overflow: 'hidden', backgroundColor: COURT_ART.deep, marginBottom: -SHEET_RADIUS },
-  logoRoom: { position: 'absolute', left: 0, right: 0, alignItems: 'center', justifyContent: 'center' },
-  lockup: { flexDirection: 'row', alignItems: 'center' },
-  wordmark: {
-    ...font('600'), fontSize: 44, lineHeight: 50, letterSpacing: -1.9, color: COURT_ART.line,
-    textShadowColor: 'rgba(8, 26, 14, 0.28)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 14,
-  },
-  wordmarkWide: { fontSize: 60, lineHeight: 66, letterSpacing: -2.6 },
-  sheet: {
-    backgroundColor: colors.bg, borderTopLeftRadius: SHEET_RADIUS, borderTopRightRadius: SHEET_RADIUS,
-    paddingTop: spacing.xxl, paddingHorizontal: spacing.xl, gap: spacing.xl,
-    boxShadow: '0px -10px 30px rgba(8, 26, 14, 0.14)',
-  },
-  copy: { gap: spacing.md },
-  headline: { ...font('600'), fontSize: 34, lineHeight: 38, letterSpacing: -1.3, color: colors.text },
-  headlineWide: { fontSize: 52, lineHeight: 56, letterSpacing: -2.2 },
-  accent: { color: colors.brand },
-  line: { ...font('400'), fontSize: 17, lineHeight: 24, letterSpacing: -0.2, color: colors.textMuted, maxWidth: 340 },
-  lineWide: { fontSize: 19, lineHeight: 28, maxWidth: 380 },
-  actions: { gap: spacing.xs },
+  // Larger text sizes make the page scroll rather than squash the buttons.
+  page: { flexGrow: 1, paddingHorizontal: spacing.xl, justifyContent: 'center' },
+  middle: { flexGrow: 1, justifyContent: 'center' },
+  name: { alignItems: 'center', gap: spacing.md },
+  lockup: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  wordmark: { ...font('600'), fontSize: 42, lineHeight: 48, letterSpacing: -1.8, color: colors.brand },
+  wordmarkWide: { fontSize: 48, lineHeight: 54, letterSpacing: -2.1 },
+  line: { ...font('400'), fontSize: 17, lineHeight: 24, letterSpacing: -0.2, color: colors.textMuted, textAlign: 'center' },
+  actions: { gap: spacing.xs, width: '100%' },
   // A text link, not a second button: tall enough to tap, quieter than the green one.
-  logIn: { minHeight: 48, alignSelf: 'center', justifyContent: 'center', paddingHorizontal: spacing.md },
-  logInText: { ...font('400'), fontSize: 15, lineHeight: 21, color: colors.textMuted, textAlign: 'center' },
-  logInLink: { ...font('600'), color: colors.brand },
+  logIn: { minHeight: 48, alignSelf: 'center', justifyContent: 'center', paddingHorizontal: spacing.lg },
+  logInText: { ...font('600'), fontSize: 16, lineHeight: 22, color: colors.brand, textAlign: 'center' },
   pressed: { opacity: 0.6 },
-  // Wide: the court is a rounded panel inset from the window, the words a column beside it.
-  wideRoot: { flex: 1, flexDirection: 'row', padding: spacing.lg, gap: spacing.lg, backgroundColor: colors.bg },
-  wideHero: { flex: 1.1, borderRadius: 28, overflow: 'hidden', backgroundColor: COURT_ART.deep },
-  wideSide: { flex: 1 },
-  wideSideInner: { flexGrow: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xxxl, paddingVertical: spacing.xxxl },
-  wideColumn: { width: '100%', maxWidth: 420, gap: spacing.xxl },
+  wideColumn: { width: '100%', maxWidth: 360, alignSelf: 'center', alignItems: 'center', gap: 56 },
 });
