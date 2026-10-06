@@ -53,12 +53,12 @@ export function SectionHead({ title, onlyYou = false, count, line, link }: {
   );
 }
 
-/** "Only you", small and quiet, with a lock: said once per private tab, in plain words. Read as part of the heading it sits beside. */
+/** "Only you", small and quiet, with a crossed-out eye (a lock read as "not unlocked yet", Oct 6): said once per private tab, in plain words. Read as part of the heading it sits beside. */
 export function OnlyYou() {
   const styles = useThemedStyles(styleDefinitions);
   return (
     <View style={styles.onlyYou} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-      <Ionicons name="lock-closed" size={10} color={colors.textMuted} />
+      <Ionicons name="eye-off-outline" size={10} color={colors.textMuted} />
       <Text style={styles.onlyYouText}>Only you</Text>
     </View>
   );
