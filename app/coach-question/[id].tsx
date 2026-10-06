@@ -26,6 +26,7 @@ import { useApp } from '@/store/AppContext';
 import type { CoachQuestion, CoachReply } from '@/data/types';
 import { SPECIALTY_LABEL } from '@/features/coaching/bookings';
 import { colors, radius, spacing, typography, font } from '@/theme';
+import { useModalSheetBottom } from '@/lib/modalSheet';
 
 /**
  * One Ask-a-Coach thread: the player's question and every coach reply. An
@@ -42,6 +43,8 @@ export default function CoachQuestionDetail() {
   const latestDraft = useRef(draft);
   latestDraft.current = draft;
   const [menuOpen, setMenuOpen] = useState(false);
+  // The menu clears Android's navigation bar, and a message meanwhile shows as the phone's own alert (modalSheet).
+  const menuBottom = useModalSheetBottom(menuOpen, spacing.xxl);
   // A link opened cold waits for the data before saying the question is gone;
   // a load that failed stops the wait, so it never spins for ever.
   const loading = useStillLoading() && !error;
@@ -319,7 +322,7 @@ export default function CoachQuestionDetail() {
         {/* The backdrop is a plain surface, not a button: a button here would
             wrap the menu's button, which the web refuses to nest. */}
         <Pressable accessibilityLabel="Close menu" onPress={() => setMenuOpen(false)} style={styles.backdrop}>
-          <View style={styles.sheet}>
+          <View style={[styles.sheet, { paddingBottom: menuBottom }]}>
             <View style={styles.grabber} />
             {mine ? (
               <Pressable

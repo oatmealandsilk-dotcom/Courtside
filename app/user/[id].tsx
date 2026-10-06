@@ -33,6 +33,7 @@ import { ProfileSkeleton } from '@/components/Skeleton';
 import { isDesktopBrowser } from '@/lib/browserDevice';
 import { isTaggedIn } from '@/features/activity/sessionTags';
 import { publicRoute } from '@/features/share/publicRoute';
+import { useModalSheetBottom } from '@/lib/modalSheet';
 
 const TABS = ['Posts', 'Clips', 'Tagged'] as const;
 
@@ -56,6 +57,8 @@ function UserProfile() {
   const { loadTournamentPlans } = actions;
   useEffect(() => { if (otherId) void loadTournamentPlans(); }, [otherId, loadTournamentPlans]);
   const [menuOpen, setMenuOpen] = useState(false);
+  // The menu clears Android's navigation bar, and a message meanwhile shows as the phone's own alert (modalSheet).
+  const menuBottom = useModalSheetBottom(menuOpen, spacing.xxl);
   const [notice, setNotice] = useState('');
   const [tab, setTab] = useState<typeof TABS[number]>('Posts');
   const { width: windowWidth } = useWindowDimensions();
@@ -239,7 +242,7 @@ function UserProfile() {
         {/* The backdrop is a plain surface, not a button: a button here would
             wrap the menu's buttons, which the web refuses to nest. */}
         <Pressable accessibilityLabel="Close menu" onPress={() => setMenuOpen(false)} style={styles.backdrop}>
-          <View style={styles.sheet}>
+          <View style={[styles.sheet, { paddingBottom: menuBottom }]}>
             <View style={styles.grabber} />
             <Text style={styles.sheetTitle}>{user.name}</Text>
             {menu.map((item, index) => (

@@ -24,6 +24,7 @@ import { KeyboardScrollContext, useKeyboardReveal } from '@/lib/keyboardScroll';
 import { KEYBOARD_ROOM, useKeyboardRoom } from '@/lib/keyboardRoom';
 import { StatusShade } from '@/components/StatusShade';
 import { colors, radius, spacing, typography, lift } from '@/theme';
+import { useModalSheetBottom } from '@/lib/modalSheet';
 
 type Sheet = 'password' | 'email' | 'delete' | null;
 
@@ -40,6 +41,8 @@ export default function AccountCentre() {
   const paidBooking = usePaidBooking();
   const [info, setInfo] = useState<Awaited<ReturnType<typeof actions.accountInfo>>>(null);
   const [sheet, setSheet] = useState<Sheet>(null);
+  // The sheets clear Android's navigation bar, and a message meanwhile shows as the phone's own alert (modalSheet).
+  const sheetBottom = useModalSheetBottom(sheet !== null, spacing.xxl);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
@@ -203,7 +206,7 @@ export default function AccountCentre() {
         {/* Android (edge to edge) does not shrink the sheet's window for the keyboard either, so it is lifted the same way. */}
         <KeyboardAvoidingView behavior={Platform.OS === 'web' ? undefined : 'padding'} style={styles.backdrop}>
           <Pressable accessibilityLabel="Close" onPress={() => !busy && setSheet(null)} style={StyleSheet.absoluteFill} />
-          <View style={styles.sheet}>
+          <View style={[styles.sheet, { paddingBottom: sheetBottom }]}>
             <Wash height={240} strength={0.8} />
             {sheet === 'password' ? (
               <>

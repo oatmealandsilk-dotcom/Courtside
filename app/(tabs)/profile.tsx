@@ -40,6 +40,7 @@ import { useIsFocused } from '@/lib/useIsFocused';
 import { useResponsive } from '@/lib/useResponsive';
 import { isTaggedIn } from '@/features/activity/sessionTags';
 import { studioLine } from '@/features/coaching/studioSummary';
+import { useModalOpenWhile } from '@/lib/modalOpen';
 
 /** The messages tip's pointer from the right edge of the page's content (the header's own right edge): the menu button (38), the gap (14), then half the paper plane (35), less half the pointer (12). */
 const INBOX_POINTER = 38 + 14 + 17 - 6;
@@ -245,6 +246,8 @@ function ProfileMenu({ groupsAsking, groupCount }: { groupsAsking: number; group
   const open = () => anchor.current?.measureInWindow((x, y, w, h) => setAt({ top: y + h + 6, right: Math.max(8, width - (x + w)) }));
   const close = () => setAt(null);
   const go = (path: '/groups' | '/settings') => { close(); router.push(path); };
+  // Android: a message that arrives while the menu is open shows as the phone's own alert, not under it (see modalOpen).
+  useModalOpenWhile(!!at);
   return <>
     <View ref={anchor} collapsable={false}>
       <Tappable accessibilityRole="button" accessibilityLabel={groupsAsking ? `Menu: groups and settings. ${groupsAsking} asking to join your groups` : 'Menu: groups and settings'} onPress={open} hitSlop={10} style={styles.headerButton}>
