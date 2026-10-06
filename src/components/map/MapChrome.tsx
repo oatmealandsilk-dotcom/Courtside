@@ -1007,13 +1007,11 @@ export function HitSheet({ hit, miles, onClose }: { hit: HitRequest; miles?: num
 }
 
 /**
- * What sits on the still card in the Find Players tab: your city's name at
- * the top of its own map, the way Snapchat's map names where you are, with
+ * What sits on the still card in the Find Players tab: your city's name in
+ * the middle of its own map, the way Snapchat's map names where you are, with
  * who is around under it; a round location switch, and the weather. Nothing
- * says "open" — a map is plainly a thing you tap. The name used to sit in
- * the middle, right over the players gathered in the middle of town, whose
- * faces peeked out from behind the words (Oct 5); at the top it leaves the
- * middle to them.
+ * says "open" — a map is plainly a thing you tap. (Oct 5 moved the name to
+ * the top; Oct 6 the owner wanted it back in the middle, as it always was.)
  */
 export function PreviewOverlay({ cityName, count, placeCount = 0, hitCount = 0, weather, locationOn, locating, onToggleLocation, lock = null, inviting = false }: { cityName: string; count: number; /** Places to play in town (one per park, not single courts). */ placeCount?: number; /** Open hits in town. */ hitCount?: number; weather: Weather | null; locationOn?: boolean; locating?: boolean; onToggleLocation?: () => void; /** What keeps "Players nearby" from you (nearbyLock). */ lock?: NearbyLock; /** The "You're early" card sits right under this one, asking for the first players already. */ inviting?: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
@@ -1275,8 +1273,8 @@ const styleDefinitions = StyleSheet.create({
   postedPressed: { opacity: 0.85 },
   postedPlay: { position: 'absolute', right: 5, bottom: 5, width: 20, height: 20, borderRadius: 10, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center' },
   // The still card's overlay: the city named the way a map names it, with a soft halo of the page colour so it reads over roads.
-  // At the top, clear of the location switch in the corner (12 in, 32 wide), so the middle of town shows its players.
-  cityMark: { position: 'absolute', left: 52, right: 52, top: 0, paddingTop: 10, alignItems: 'center', zIndex: 10, elevation: 10 },
+  // In the middle of the card, where it always sat (Oct 6, owner: the Oct 5 move to the top was unasked).
+  cityMark: { position: 'absolute', left: spacing.xl, right: spacing.xl, top: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', zIndex: 10, elevation: 10 },
   // Holds the words and their haze (CityHaze, drawn behind them). Oct 2, William: "more of a
   // rectangle with like a shadow fade" but "it shouldn't be clear that it is a rectangle".
   cityGlow: { alignItems: 'center', gap: 2, paddingHorizontal: 12, paddingVertical: 6 },
