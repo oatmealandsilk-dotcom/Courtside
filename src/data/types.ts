@@ -130,6 +130,20 @@ export interface User {
   profile: PlayerProfile;
   achievementIds: ID[];
   stats: PlayerStats;
+  /**
+   * Their streak as their own app last put it up (migration 134): how many
+   * days in a row, and the last of those days in their own time zone. Only
+   * the number is shared; the sessions and posts behind it stay theirs.
+   * Absent for yourself (your own comes from `stats`), for anyone whose
+   * streak is under 3 days or over, and before migration 134.
+   */
+  streak?: PublicStreak;
+}
+
+/** A streak as others see it: the number, and the last day it covers ("2026-10-05"). */
+export interface PublicStreak {
+  days: number;
+  through: string;
 }
 
 /** One session you logged: what kind, how long, and for a match whether you won. Private to you. */

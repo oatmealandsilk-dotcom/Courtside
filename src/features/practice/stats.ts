@@ -1,4 +1,4 @@
-import type { PlayerStats, Post, PracticeSession, Story } from '@/data/types';
+import type { PlayerStats, Post, PracticeSession, PublicStreak, Story } from '@/data/types';
 
 /** A moment as a calendar day in this phone's own time zone: "2026-09-27". */
 export function localDay(at: Date | string | number): string {
@@ -49,6 +49,27 @@ export function computeStats(me: string, sessions: PracticeSession[], posts: Pos
     currentStreakDays: current,
     longestStreakDays: Math.max(longest, current),
   };
+}
+
+/**
+ * Your streak as others may see it beside your name (migration 134): the
+ * number, and the last day it covers: today, or yesterday while today has
+ * nothing yet. Nothing about what you logged or posted goes with it.
+ */
+export function publicStreak(me: string, sessions: PracticeSession[], posts: Post[], stories: Story[], now = new Date()): { days: number; through: string | null } {
+  const days = computeStats(me, sessions, posts, stories, now).currentStreakDays;
+  if (days <= 0) return { days: 0, through: null };
+  const today = localDay(now);
+  return { days, through: activeDays(me, sessions, posts, stories).has(today) ? today : previous(today) };
+}
+
+/**
+ * Someone else's streak as it stands on this phone's today. The same rule as
+ * your own: it lasts through the day after its last day (today is not over
+ * yet), and is gone once that last day is before yesterday.
+ */
+export function streakToday(streak: PublicStreak, now = new Date()): number {
+  return streak.through >= previous(localDay(now)) ? streak.days : 0;
 }
 
 /** Whether the streak is alive but today has nothing yet: the moment for a gentle reminder. */

@@ -24,6 +24,8 @@ import { useLightStatusWhile } from '@/lib/statusBarStyle';
 import { allowTurning, stayUpright } from '@/lib/orientation';
 import { Tappable } from '@/components/Tappable';
 import { NewHereTag } from '@/components/NewHereTag';
+import { StreakFlame } from '@/components/StreakFlame';
+import { shownStreak, streakWords } from '@/features/practice/streakFlame';
 import { isNewHere } from '@/features/feed/newHere';
 import { useOptimisticToggle } from '@/lib/useOptimisticToggle';
 import { Avatar, Chip } from '@/components/ui';
@@ -100,6 +102,7 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
   const likes = post.likedBy.length + like.delta;
   const styles = useThemedStyles(styleDefinitions);
   const { comments, currentUser, currentUserId, actions, blockedIds } = useApp();
+  const streak = shownStreak(author, currentUserId);
   const footZones = postZones(post.session);
   // The strip's numbers count up the first time its page is on show this run.
   const [stripPlay, setStripPlay] = useState(false);
@@ -248,12 +251,13 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
      <View style={[styles.column, !thread.length && styles.pageCentred]} onLayout={(e) => { const { width, height } = e.nativeEvent.layout; if (width > 0 && height > 0) setRoom({ w: width, h: height }); }}>
       {/* Who and their level, in the space above the picture. */}
       <View style={[styles.whoRow, lane]} onLayout={measured(setHead, head)}>
-        <Pressable accessibilityRole="link" accessibilityLabel={`View ${author.name}'s profile`} onPress={() => { actions.noteFeedSignal({ kind: 'post', id: post.id, profileTap: true }); router.push(author.id === currentUserId ? '/profile' : `/user/${author.id}`); }} style={styles.who}>
+        <Pressable accessibilityRole="link" accessibilityLabel={`View ${author.name}'s profile${streakWords(streak)}`} onPress={() => { actions.noteFeedSignal({ kind: 'post', id: post.id, profileTap: true }); router.push(author.id === currentUserId ? '/profile' : `/user/${author.id}`); }} style={styles.who}>
           <Avatar name={author.name} seed={author.avatarSeed} uri={author.avatarUrl} size={40} />
           <View style={{ flex: 1, gap: 1 }}>
             <View style={styles.nameRow}>
               {/* The name keeps some room: the badges beside it never squeeze it down to a letter ("New" is the short tag here, the lane can be narrow). */}
               <Text style={styles.name} numberOfLines={1}>{author.name}</Text>
+              <StreakFlame days={streak} />
               {author.isCoach ? <Ionicons name="shield-checkmark" size={14} color={colors.brand} /> : null}
               <LevelPill profile={author.profile} small />
               {isNewHere(post) ? <NewHereTag short /> : null}

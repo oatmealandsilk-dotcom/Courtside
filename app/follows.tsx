@@ -7,6 +7,8 @@ import { goToTab } from '@/features/navigation/startTab';
 import { goBack } from '@/lib/goBack';
 
 import { LevelPill } from '@/components/LevelPill';
+import { StreakFlame } from '@/components/StreakFlame';
+import { shownStreak } from '@/features/practice/streakFlame';
 import { Avatar, Button, EmptyState, Field, Screen, SegmentedControl } from '@/components/ui';
 import { useApp } from '@/store/AppContext';
 import { confirmUnfollow } from '@/lib/confirm';
@@ -74,7 +76,10 @@ export default function Follows() {
             <Pressable key={user.id} accessibilityRole="link" onPress={() => router.push(`/user/${user.id}`)} style={styles.row}>
               <Avatar name={user.name} seed={user.avatarSeed} size={48} ring={user.isCoach} />
               <View style={{ flex: 1, gap: 3 }}>
-                <Text style={styles.name} numberOfLines={1}>{user.name}</Text>
+                <View style={styles.nameLine}>
+                  <Text style={styles.name} numberOfLines={1}>{user.name}</Text>
+                  <StreakFlame days={shownStreak(user, currentUserId)} />
+                </View>
                 <View style={styles.meta}>
                   <Text style={styles.handle} numberOfLines={1}>@{user.handle}</Text>
                   <LevelPill profile={user.profile} small />
@@ -95,7 +100,9 @@ const styleDefinitions = StyleSheet.create({
   tabs: { paddingBottom: spacing.md },
   searchWrap: { paddingBottom: spacing.sm },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
-  name: { ...typography.bodyStrong, color: colors.text },
+  // The name and their streak's flame (3 days or more), the name giving way first.
+  nameLine: { flexDirection: 'row', alignItems: 'center', gap: 6, minWidth: 0 },
+  name: { ...typography.bodyStrong, color: colors.text, flexShrink: 1 },
   meta: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   handle: { ...typography.small, color: colors.textFaint },
 });

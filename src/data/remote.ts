@@ -22,7 +22,7 @@ import { blankVideoLocation } from '@/lib/videoLocation';
 import { noteStep } from '@/lib/crashReporting';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
-import type { Answer, ChatEvent, ChatPhoto, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, DetectedActivity, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, HiddenWords, HiddenWordsKind, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, CourtNote, LastSeen, MapPlace, MapVisibility, TaggedCourt, Question, Removed, RemovedItem, Story, SurfacePreference, TakedownKind, TakedownReason, Tip, TournamentEntry, User, CoachApplication, CourtAccess, CourtAccessSource, CourtDayPart, CourtFacts, CourtFollowCount, CourtNow, CourtRegulars, CourtReview, CourtRightNow, CourtRing, FollowedCourt, SessionTag, SessionTagRefusal, SessionTagRole, FeedGroup, FeedGroupCard, DiscoverGroup, GroupLook, Invitee, ContactMatch, HeadToHead, MatchSet, SessionWith } from './types';
+import type { Answer, ChatEvent, ChatPhoto, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, DetectedActivity, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, HiddenWords, HiddenWordsKind, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, CourtNote, LastSeen, MapPlace, MapVisibility, TaggedCourt, Question, Removed, RemovedItem, Story, SurfacePreference, TakedownKind, TakedownReason, Tip, TournamentEntry, User, PublicStreak, CoachApplication, CourtAccess, CourtAccessSource, CourtDayPart, CourtFacts, CourtFollowCount, CourtNow, CourtRegulars, CourtReview, CourtRightNow, CourtRing, FollowedCourt, SessionTag, SessionTagRefusal, SessionTagRole, FeedGroup, FeedGroupCard, DiscoverGroup, GroupLook, Invitee, ContactMatch, HeadToHead, MatchSet, SessionWith } from './types';
 import { validSets } from '@/features/activity/score';
 import { TERMS_VERSION } from '@/lib/legal';
 import { readinessOf, sessionTagNamesLive, sessionToSend, setSessionTagNamesLive, trustedSession } from './sessionTagGate';
@@ -32,6 +32,7 @@ import { asHitMiles } from '@/features/players/openToHit';
 import { lookFrom } from '@/features/groups/look';
 import { asKind, asReason } from '@/features/moderation/reasons';
 import { BLOCKED_WORDS_NOTE } from '@/features/hiddenWords/hiddenWords';
+import { STREAK_FLAME_FROM } from '@/features/practice/streakFlame';
 
 /** What a new player did first, after setup. */
 /** What the live handle check says about a handle. */
@@ -1007,6 +1008,41 @@ async function fetchPlans(): Promise<Map<ID, TournamentEntry[]> | undefined> {
   }
 }
 /**
+ * player_streaks (migration 134): each streak of 3 days or more whose last
+ * day is recent enough that it may still be running somewhere, by person.
+ * Only the number and that day: the sessions and posts behind it stay with
+ * their owner. The database leaves out private accounts you do not follow
+ * and anyone you are blocked with. Undefined on a database without it (or
+ * when it could not be read): then nobody else's flame shows.
+ */
+async function fetchStreaks(): Promise<Map<ID, PublicStreak> | undefined> {
+  if (missingThisSession.has('player_streaks')) return undefined;
+  try {
+    // Two days back, in UTC: wide enough for yesterday on any phone's clock; each phone then applies its own today.
+    const since = new Date(Date.now() - 2 * 86_400_000).toISOString().slice(0, 10);
+    const { data, error } = await allRows<{ user_id: string; days: number; through_day: string | null }>((from, to) =>
+      need().from('player_streaks').select('user_id, days, through_day').gte('days', STREAK_FLAME_FROM).gte('through_day', since).range(from, to), 5000);
+    if (error) {
+      if (missingTable(error as { code?: string; message: string })) missingThisSession.add('player_streaks');
+      return undefined;
+    }
+    const streaks = new Map<ID, PublicStreak>();
+    for (const row of data) {
+      if (typeof row?.user_id === 'string' && typeof row.days === 'number' && typeof row.through_day === 'string') {
+        streaks.set(row.user_id, { days: row.days, through: row.through_day.slice(0, 10) });
+      }
+    }
+    return streaks;
+  } catch {
+    return undefined;
+  }
+}
+/** A player with the streak they put up, when there is one. */
+const withStreak = (user: User, streaks: Map<ID, PublicStreak> | undefined): User => {
+  const streak = streaks?.get(user.id);
+  return streak ? { ...user, streak } : user;
+};
+/**
  * Every row of a read, fetched 1,000 at a time (the most the database hands
  * back at once) until there are no more, up to `cap` rows.
  */
@@ -1117,6 +1153,9 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
       return undefined;
     }
   })();
+  // Streaks of 3 days or more that may still be running (migration 134), for
+  // the flame beside names: only the number and its last day ever come.
+  const streaksLoad = fetchStreaks();
   // Comments your Hidden words hid on what you posted (migration 117), read before any comment is mapped.
   const commentHolds = refreshHeld(me);
   // Messages your Hidden words hid (migration 117), newest first: none on a database without them.
@@ -1173,6 +1212,7 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
   const blockedMeIds = await blockedMeLoad;
   const ownCity = await cityLoad;
   const plans = await plansLoad;
+  const streaks = await streaksLoad;
   setSessionTagNamesLive(tagsReady);
   if (qs.error) console.warn('[remote] community tables missing; run the pending migrations', qs.error.message);
   const byTime = <T extends { created_at: string }>(a: T, b: T) => (a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0);
@@ -1250,9 +1290,9 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
     // Your own "up for a hit" when it is kept privately (migration 78: not a known adult) comes from your settings row.
     // And how far you'd like to go for a hit (migration 120), kept only in that row too.
     // Nobody else's town position is read (PROFILE_COLUMNS); yours comes on its own (cityLoad).
-    users: profileRows.map(withPlans).map((row) => toUser(row.id === me
+    users: profileRows.map(withPlans).map((row) => withStreak(toUser(row.id === me
       ? { ...row, ...(ownCity ?? {}), age_group: ownAge, open_to_hit_until: row.open_to_hit_until ?? ownState?.open_to_hit_until ?? null, open_to_hit_miles: ownState?.open_to_hit_miles ?? null }
-      : { ...row, city_lat: null, city_lng: null }, followers.get(row.id) ?? 0, following.get(row.id) ?? 0)),
+      : { ...row, city_lat: null, city_lng: null }, followers.get(row.id) ?? 0, following.get(row.id) ?? 0), streaks)),
     posts: postRows.map(toPost),
     comments: [
       ...postRows.flatMap((row) => (row.comments ?? []).map(toComment)),
@@ -1469,6 +1509,25 @@ async function markHeld(me: ID, messages: Message[]): Promise<Message[]> {
 }
 
 export const remote = {
+  /* --------------------------------- streak --------------------------------- */
+
+  /**
+   * Puts your streak up beside your name for others (migration 134): only
+   * the number and the last day it covers (your own calendar day), never the
+   * sessions or posts behind it. A database without migration 134 is asked
+   * once a session and then left alone; the flame then shows only on your
+   * own screens.
+   */
+  async setMyStreak(days: number, through: string | null): Promise<void> {
+    if (!supabase || missingThisSession.has('set_my_streak')) return;
+    const streak = Math.max(0, Math.min(3650, Math.round(days)));
+    const { error } = await supabase.rpc('set_my_streak', { streak, last_day: streak > 0 ? through : null })
+      .then((r) => r, (e: unknown) => ({ error: { message: String(e) } as { code?: string; message: string } }));
+    if (!error) return;
+    if (missingFunction(error)) { missingThisSession.add('set_my_streak'); return; }
+    console.warn('[remote] streak not shared', error.message);
+  },
+
   /* ------------------------------ hidden words ------------------------------ */
 
   /** Your Hidden words as they really work (migration 117). 'not_ready' on a database without it; null when it could not be asked. */

@@ -4,6 +4,8 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Highlighted } from '@/components/CourtSearch';
 import { FollowPill } from '@/components/FollowPill';
 import { LevelPill } from '@/components/LevelPill';
+import { StreakFlame } from '@/components/StreakFlame';
+import { shownStreak, streakWords } from '@/features/practice/streakFlame';
 import { Avatar } from '@/components/ui';
 import type { User } from '@/data/types';
 import { levelBadge } from '@/lib/badges';
@@ -37,13 +39,14 @@ export function PersonRow({ user, reason, via, words = [], first = false, onPres
   onFollowed?: (userId: string) => void;
 }) {
   const styles = useThemedStyles(styleDefinitions);
-  const { followingIds, actions } = useApp();
+  const { followingIds, currentUserId, actions } = useApp();
   const following = followingIds.includes(user.id);
+  const streak = shownStreak(user, currentUserId);
   // The reason only, never their town: a search row says nothing about where
   // anyone is (the same for every account, so it says nothing about age).
   const why = reason ?? '';
   const bold = (parts: { s: string; on: boolean }[]) => parts.map((p, i) => (p.on ? <Text key={i} style={styles.handleMatch}>{p.s}</Text> : p.s));
-  const label = `${user.name}, @${user.handle}, ${levelBadge(user.profile).label}${user.isCoach ? ', coach' : ''}`;
+  const label = `${user.name}${streakWords(streak)}, @${user.handle}, ${levelBadge(user.profile).label}${user.isCoach ? ', coach' : ''}`;
   return (
     <Pressable accessibilityRole="link" accessibilityLabel={label} onPress={onPress} style={({ pressed }) => [styles.row, pressed && styles.pressed]}>
       <Avatar uri={user.avatarUrl} name={user.name} seed={user.avatarSeed} size={44} ring={user.isCoach} />
@@ -51,6 +54,8 @@ export function PersonRow({ user, reason, via, words = [], first = false, onPres
         <View style={styles.words}>
           <View style={styles.nameLine}>
             <Highlighted text={user.name} words={words} style={styles.name} strong={styles.nameMatch} lines={1} wordStart />
+            {/* The small flame here: the row also holds the level and Follow, and the name keeps what room it can. */}
+            <StreakFlame days={streak} size="small" style={styles.flame} />
             <LevelPill profile={user.profile} small />
           </View>
           <Text style={styles.meta} numberOfLines={1}>
@@ -84,6 +89,7 @@ const styleDefinitions = StyleSheet.create({
   words: { flex: 1, minWidth: 0, gap: 2 },
   nameLine: { flexDirection: 'row', alignItems: 'center', gap: 6, minWidth: 0 },
   name: { ...font('500'), fontSize: 16, color: colors.text, flexShrink: 1 },
+  flame: { marginLeft: -2 },
   nameMatch: { ...font('700') },
   meta: { ...typography.small, color: colors.textFaint },
   handleMatch: { ...font('600'), color: colors.textMuted },

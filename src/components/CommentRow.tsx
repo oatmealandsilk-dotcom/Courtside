@@ -7,6 +7,8 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { Avatar } from '@/components/ui/Avatar';
 import { RichText } from '@/components/RichText';
+import { StreakFlame } from '@/components/StreakFlame';
+import { shownStreak } from '@/features/practice/streakFlame';
 import type { Comment, TakedownKind } from '@/data/types';
 import { RemovedNote } from '@/features/moderation/RemovedNote';
 import { confirm } from '@/lib/confirm';
@@ -59,6 +61,7 @@ export function CommentRow({ comment, big = false, reply = false, onPressBody, o
     }
   } : undefined;
   const liked = !!currentUserId && comment.likedBy.includes(currentUserId);
+  const streak = shownStreak(who, currentUserId);
   const openProfile = () => { if (who) router.push(who.id === currentUserId ? '/profile' : `/user/${who.id}`); };
   // A photo in the comment opens to the whole screen; a tap anywhere puts it away.
   const [viewing, setViewing] = useState(false);
@@ -78,10 +81,12 @@ export function CommentRow({ comment, big = false, reply = false, onPressBody, o
       </Pressable>
       <View style={styles.body}>
         <Pressable accessibilityRole={onPressBody || moderate ? 'button' : undefined} accessibilityHint={moderate ? (comment.removed ? 'Hold to restore it' : 'Hold to take it down') : report ? 'Hold to report' : undefined} onPress={onPressBody} onLongPress={moderate ?? report} delayLongPress={400} disabled={!onPressBody && !moderate && !report} style={styles.bodyPress}>
-          <Text style={[styles.meta, big && styles.metaBig]}>
-            <Text style={[styles.name, big && styles.nameBig]} onPress={openProfile}>{who?.name ?? 'Unknown'}</Text>
-            {'  '}{relativeTime(comment.createdAt)}
-          </Text>
+          {/* Who, their streak's flame (3 days or more), when: one line, the name giving way first. */}
+          <View style={styles.metaLine}>
+            <Text style={[styles.name, big && styles.nameBig]} numberOfLines={1} onPress={openProfile}>{who?.name ?? 'Unknown'}</Text>
+            <StreakFlame days={streak} size="small" style={styles.flame} />
+            <Text style={[styles.meta, big && styles.metaBig]}>{relativeTime(comment.createdAt)}</Text>
+          </View>
           {comment.body.trim() ? <RichText style={[styles.text, big && styles.textBig]}>{comment.body}</RichText> : null}
           {comment.imageUrl ? (
             <Pressable accessibilityRole="imagebutton" accessibilityLabel="Photo in the comment. Open it larger" onPress={() => setViewing(true)} style={styles.photo}>
@@ -121,8 +126,10 @@ const styleDefinitions = StyleSheet.create({
   row: { flexDirection: 'row', gap: spacing.md, alignItems: 'flex-start' },
   body: { flex: 1 },
   bodyPress: { gap: 3 },
-  meta: { ...typography.caption, color: colors.textFaint, letterSpacing: 0 },
-  name: { ...typography.smallStrong, color: colors.text },
+  metaLine: { flexDirection: 'row', alignItems: 'baseline', gap: 6, minWidth: 0 },
+  meta: { ...typography.caption, color: colors.textFaint, letterSpacing: 0, flexShrink: 0 },
+  name: { ...typography.smallStrong, color: colors.text, flexShrink: 1 },
+  flame: { marginLeft: -2 },
   text: { ...typography.small, color: colors.text, lineHeight: 20 },
   metaBig: { fontSize: 12 },
   nameBig: { ...typography.bodyStrong, fontSize: 15 },

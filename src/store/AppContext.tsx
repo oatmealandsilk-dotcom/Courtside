@@ -11,7 +11,8 @@ import React, {
 import { AppState as DeviceState, Platform } from 'react-native';
 import { randomUUID } from 'expo-crypto';
 import { router } from 'expo-router';
-import { computeStats, localDay, streakAtRisk } from '@/features/practice/stats';
+import { computeStats, localDay, publicStreak, streakAtRisk } from '@/features/practice/stats';
+import { STREAK_FLAME_FROM } from '@/features/practice/streakFlame';
 import { planStreakReminder } from '@/features/practice/reminder';
 import { TERMS_VERSION } from '@/lib/legal';
 
@@ -2712,6 +2713,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const t = setTimeout(() => { void planStreakReminder(streakAtRisk(me, state.sessions, state.posts, state.stories)); }, 1500);
     return () => clearTimeout(t);
   }, [state.currentUserId, state.sessions, state.posts, state.stories, state.users, state.remoteLoaded, state.snapshotShown]);
+
+  // Your streak's number (never what is behind it) goes up for the flame
+  // others see beside your name (migration 134): once the full load is in,
+  // and again whenever logging, posting or deleting changes it. Skipped when
+  // the server already holds the same, or when there is nothing to show and
+  // nothing showing.
+  const sharedStreak = useRef('');
+  useEffect(() => {
+    const me = state.currentUserId;
+    if (!isSupabaseConfigured || !me || !UUID.test(me) || !state.remoteLoaded) return;
+    const mine = publicStreak(me, state.sessions, state.posts, state.stories);
+    const key = `${me}:${mine.days}:${mine.through ?? ''}`;
+    if (sharedStreak.current === key) return;
+    const held = state.users.find((u) => u.id === me)?.streak;
+    sharedStreak.current = key;
+    if (held ? held.days === mine.days && held.through === mine.through : mine.days < STREAK_FLAME_FROM) return;
+    void remote.setMyStreak(mine.days, mine.through);
+  }, [state.currentUserId, state.sessions, state.posts, state.stories, state.users, state.remoteLoaded]);
 
   // Read from the ref, not from this render: an action started just before a
   // sign-in (sign-up's birthday, say) must see the account that now exists.

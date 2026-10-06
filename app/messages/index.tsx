@@ -16,6 +16,8 @@ import { confirm, confirmAfterMenu } from '@/lib/confirm';
 import { relativeTime } from '@/lib/format';
 import { isOnlyLink } from '@/lib/links';
 import { useApp } from '@/store/AppContext';
+import { StreakFlame } from '@/components/StreakFlame';
+import { shownStreak, streakWords } from '@/features/practice/streakFlame';
 import type { Conversation, Message, User } from '@/data/types';
 import { colors, spacing, typography, font, radius } from '@/theme';
 import { isDesktopBrowser } from '@/lib/browserDevice';
@@ -375,10 +377,13 @@ function InboxRow({ thread, first, styles, line, typing, onOpen, onHold, rowActi
   const pinned = !!conversation.pinnedAt;
   // A muted chat's news is still news, but quiet: no bold, no brand colour.
   const loud = unread && !muted;
+  // The flame after the name: a one-to-one chat's other player only, never a group (3 days or more).
+  const { currentUserId } = useApp();
+  const streak = group ? 0 : shownStreak(other, currentUserId);
   return (
     <Pressable
       accessibilityRole="link"
-      accessibilityLabel={`${group ? `Open ${name}` : `Open conversation with ${name}`}${pinned ? ', pinned' : ''}${muted ? ', muted' : ''}${unread ? ', new messages' : ''}`}
+      accessibilityLabel={`${group ? `Open ${name}` : `Open conversation with ${name}`}${streakWords(streak)}${pinned ? ', pinned' : ''}${muted ? ', muted' : ''}${unread ? ', new messages' : ''}`}
       accessibilityHint="Swipe or hold for pin, mute and more"
       accessibilityActions={rowActions.map(({ name, label }) => ({ name, label }))}
       onAccessibilityAction={(e) => rowActions.find((a) => a.name === e.nativeEvent.actionName)?.run()}
@@ -390,7 +395,10 @@ function InboxRow({ thread, first, styles, line, typing, onOpen, onHold, rowActi
       {group ? <GroupAvatar people={people} size={52} photoUrl={conversation.photoUrl} name={name} /> : <Avatar name={other?.name ?? '?'} seed={other?.avatarSeed ?? conversation.id} uri={other?.avatarUrl} size={52} />}
       <View style={[styles.rowBody, !first && styles.rowLine]}>
         <View style={styles.rowTop}>
-          <Text style={[styles.name, loud && styles.unreadName]} numberOfLines={1}>{name}</Text>
+          <View style={styles.nameLine}>
+            <Text style={[styles.name, loud && styles.unreadName]} numberOfLines={1}>{name}</Text>
+            <StreakFlame days={streak} />
+          </View>
           <View style={styles.when}>
             {pinned ? <Ionicons name="pin" size={12} color={colors.textFaint} accessibilityLabel="Pinned" /> : null}
             <Text style={[styles.time, loud && styles.unreadTime]}>{relativeTime(conversation.updatedAt)}</Text>
@@ -433,6 +441,8 @@ const styleDefinitions = StyleSheet.create({
   rowLine: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   rowTop: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: spacing.md },
   rowBottom: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  // The name and its streak's flame, the name giving way first.
+  nameLine: { flexDirection: 'row', alignItems: 'center', gap: 5, flexShrink: 1, minWidth: 0 },
   name: { ...typography.body, ...font('500'), fontSize: 16, color: colors.text, flexShrink: 1 },
   unreadName: { ...font('700') },
   when: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, flexShrink: 0 },

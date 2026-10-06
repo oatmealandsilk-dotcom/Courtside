@@ -10,6 +10,8 @@ import { router } from 'expo-router';
 import { Avatar } from '@/components/ui';
 import { LevelPill } from '@/components/LevelPill';
 import { NewHereTag } from '@/components/NewHereTag';
+import { StreakFlame } from '@/components/StreakFlame';
+import { shownStreak, streakWords } from '@/features/practice/streakFlame';
 import { isNewHere } from '@/features/feed/newHere';
 import { RichText } from '@/components/RichText';
 import type { Post, User } from '@/data/types';
@@ -177,6 +179,8 @@ function spokenWhen(iso: string): string {
  */
 function Who({ author, onAuthor, newHere = false, place = '', court }: { author: User; onAuthor: () => void; newHere?: boolean; place?: string; court?: Post['court'] }) {
   const { currentUserId, followingIds, followRequests, actions } = useApp();
+  // The streak flame after the handle, white number over the clip (3 days or more).
+  const streak = shownStreak(author, currentUserId);
   // Instagram's Follow beside the name, for someone you do not follow yet (Oct 4); asked once, it steps away.
   const canFollow = !!currentUserId && author.id !== currentUserId && !followingIds.includes(author.id)
     && !followRequests.some((r) => r.fromId === currentUserId && r.toId === author.id);
@@ -191,8 +195,9 @@ function Who({ author, onAuthor, newHere = false, place = '', court }: { author:
           <Avatar name={author.name} seed={author.avatarSeed} uri={author.avatarUrl} size={32} />
         </Pressable>
         <View style={styles.whoWords}>
-          <Pressable accessibilityRole="link" accessibilityLabel={`${author.name}${newHere ? ', new to CourtSide' : ''}, open profile`} onPress={onAuthor} style={styles.nameRow} hitSlop={NAME_SLOP}>
+          <Pressable accessibilityRole="link" accessibilityLabel={`${author.name}${newHere ? ', new to CourtSide' : ''}${streakWords(streak)}, open profile`} onPress={onAuthor} style={styles.nameRow} hitSlop={NAME_SLOP}>
             <Text style={styles.handle} numberOfLines={1} maxFontSizeMultiplier={MAX_GROW}>{author.handle}</Text>
+            <StreakFlame days={streak} onMedia textStyle={EDGE_SMALL} maxFontSizeMultiplier={MAX_GROW} style={styles.flame} />
             <LevelPill profile={author.profile} small onMedia style={styles.badge} />
             {newHere && tagFits ? <View style={styles.badge}><NewHereTag onMedia short /></View> : null}
             {canFollow ? (
@@ -227,6 +232,7 @@ function Who({ author, onAuthor, newHere = false, place = '', court }: { author:
         >
           <View style={styles.avatarSpace} />
           <Text style={[styles.handle, styles.keep]} numberOfLines={1} maxFontSizeMultiplier={MAX_GROW}>{author.handle}</Text>
+          <StreakFlame days={streak} onMedia textStyle={EDGE_SMALL} maxFontSizeMultiplier={MAX_GROW} style={styles.flame} />
           <LevelPill profile={author.profile} small onMedia style={styles.badge} />
           <View style={styles.badge}><NewHereTag onMedia short /></View>
         </View>
@@ -483,6 +489,8 @@ const styles = StyleSheet.create({
   avatarSpace: { width: 34, height: 34 },
   // The level and the welcome tag never shrink and sit centred on the name's line, 6 apart.
   badge: { alignSelf: 'center', flexShrink: 0, marginLeft: -2 },
+  // The flame sits close after the handle, as it does after a name on the page.
+  flame: { alignSelf: 'center', marginLeft: -3 },
   // A copy of the who-line that may wrap: one line tall means "New" fits beside the level.
   whoMeasure: { position: 'absolute', left: 0, right: 0, top: 0, opacity: 0, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 },
   keep: { flexShrink: 0 },

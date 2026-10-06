@@ -5,6 +5,8 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { goBack } from '@/lib/goBack';
 
 import { LevelPill } from '@/components/LevelPill';
+import { StreakFlame } from '@/components/StreakFlame';
+import { shownStreak } from '@/features/practice/streakFlame';
 import { Avatar, Button, EmptyState, Field, Screen } from '@/components/ui';
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { PeopleSkeleton } from '@/components/Skeleton';
@@ -80,7 +82,10 @@ export default function Likes() {
                 <Pressable key={user.id} accessibilityRole="link" onPress={() => router.push(isMe ? '/profile' : `/user/${user.id}`)} style={styles.row}>
                   <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={48} ring={user.isCoach} />
                   <View style={{ flex: 1, gap: 3 }}>
-                    <Text style={styles.name} numberOfLines={1}>{user.name}</Text>
+                    <View style={styles.nameLine}>
+                  <Text style={styles.name} numberOfLines={1}>{user.name}</Text>
+                  <StreakFlame days={shownStreak(user, currentUserId)} />
+                </View>
                     <View style={styles.meta}>
                       <Text style={styles.handle} numberOfLines={1}>@{user.handle}</Text>
                       <LevelPill profile={user.profile} small />
@@ -103,7 +108,9 @@ const styleDefinitions = StyleSheet.create({
   count: { ...typography.small, color: colors.textMuted, paddingBottom: spacing.sm },
   searchWrap: { paddingBottom: spacing.sm },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
-  name: { ...typography.bodyStrong, color: colors.text },
+  // The name and their streak's flame (3 days or more), the name giving way first.
+  nameLine: { flexDirection: 'row', alignItems: 'center', gap: 6, minWidth: 0 },
+  name: { ...typography.bodyStrong, color: colors.text, flexShrink: 1 },
   meta: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   handle: { ...typography.small, color: colors.textFaint },
   you: { ...typography.smallStrong, color: colors.textMuted, paddingHorizontal: spacing.sm },
