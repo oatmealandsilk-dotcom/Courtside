@@ -35,6 +35,7 @@ export {
   groupLockNote,
   othersIn,
   seenByLabel,
+  sharesReceipts,
   unreadChatCount,
 } from './groupRules';
 

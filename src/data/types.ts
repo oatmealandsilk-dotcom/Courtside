@@ -1134,6 +1134,12 @@ export interface Conversation {
   adminIds?: ID[];
   /** A group's photo, in our own media bucket. */
   photoUrl?: string;
+  /**
+   * Who in it turned Read receipts off for this chat alone (its Details page;
+   * migration 141), you included. Their reading here is never shown, on top
+   * of the Privacy switch that turns it off for every chat.
+   */
+  receiptsOffIds?: ID[];
   /** You muted this chat until then: no alerts, and it stays off the unread badge. Only you can see it. */
   mutedUntil?: string;
   /** You pinned it to the top of your inbox (up to 3), then. Only you can see it (migration 75). */

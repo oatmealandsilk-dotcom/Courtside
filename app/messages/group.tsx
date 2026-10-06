@@ -33,7 +33,8 @@ type Notice = { kind: 'room' } | { kind: 'filled' } | { kind: 'said'; text: stri
  * A chat's details, opened from the (i) in its header, the way Instagram's
  * read.
  *
- * A group: its photo and name (anyone in it can change either), Mute, the
+ * A group: its photo and name (anyone in it can change either), Mute, Read
+ * receipts (for this chat alone), the
  * hit it is for if it is a hit's chat, then "Add people" (anyone in it can;
  * several at once, up to GROUP_CAP in all) and who is in it (admins first;
  * tap someone for their profile, a message, and, for an admin, making them
@@ -51,7 +52,7 @@ type Notice = { kind: 'room' } | { kind: 'filled' } | { kind: 'said'; text: stri
  * A refusal from the server is said at the top with the picks still ticked,
  * so the one in the way can be taken out.
  *
- * A one-to-one chat: the other person, Mute, their profile, starting a group
+ * A one-to-one chat: the other person, Mute, Read receipts, their profile, starting a group
  * with them, Report and Block.
  */
 export default function ChatDetails() {
@@ -127,8 +128,13 @@ export default function ChatDetails() {
     router.push(`/messages/${actions.openConversationWith(u.id)}`);
   };
 
-  // Mute is the same for a group and a one-to-one chat: switching it on asks for how long.
-  const muteCard = (
+  // Read receipts for this chat alone, Instagram's way (owner, Oct 6). With
+  // the Privacy switch off they are off in every chat: shown off and greyed,
+  // with the way to Privacy under it.
+  const receiptsEverywhere = currentUser?.readReceiptsEnabled !== false;
+  const receiptsHere = !!currentUserId && !conversation.receiptsOffIds?.includes(currentUserId);
+  // Mute and Read receipts are the same for a group and a one-to-one chat: switching Mute on asks for how long.
+  const settingsCard = (
     <View style={styles.group}>
       <View style={styles.row}>
         <View style={styles.lead}><Ionicons name={muted ? 'notifications-off-outline' : 'notifications-outline'} size={20} color={colors.text} /></View>
@@ -137,6 +143,18 @@ export default function ChatDetails() {
           {muted ? <Text style={styles.meta}>{mutedLabel(conversation.mutedUntil)}</Text> : null}
         </View>
         <Toggle value={muted} onChange={(on) => (on ? setAskMute(true) : actions.muteChat(conversation.id, null))} accessibilityLabel="Mute messages" />
+      </View>
+      <View style={[styles.row, styles.line]}>
+        <View style={[styles.lead, !receiptsEverywhere && styles.off]}><Ionicons name="checkmark-done-outline" size={20} color={colors.text} /></View>
+        <View style={styles.words}>
+          <Text style={[styles.label, !receiptsEverywhere && styles.off]}>Read receipts</Text>
+          {receiptsEverywhere ? null : (
+            <Text style={styles.meta}>
+              Off for all chats in <Text accessibilityRole="link" onPress={() => router.push('/privacy')} style={styles.link}>Privacy</Text>
+            </Text>
+          )}
+        </View>
+        <Toggle value={receiptsEverywhere && receiptsHere} disabled={!receiptsEverywhere} onChange={(on) => actions.setChatReadReceipts(conversation.id, on)} accessibilityLabel="Read receipts" />
       </View>
     </View>
   );
@@ -167,7 +185,7 @@ export default function ChatDetails() {
             <Text style={styles.meta}>@{other.handle}</Text>
           </Pressable>
         ) : null}
-        {draft ? null : muteCard}
+        {draft ? null : settingsCard}
         {other ? (
           <>
             <View style={[styles.group, styles.gap]}>
@@ -472,7 +490,7 @@ export default function ChatDetails() {
         </View>
       </View>
 
-      {controls ? muteCard : null}
+      {controls ? settingsCard : null}
 
       {hit ? (
         <View style={[styles.group, styles.gap]}>
@@ -585,6 +603,7 @@ const styleDefinitions = StyleSheet.create({
   line: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   pressed: { backgroundColor: colors.surfaceAlt },
   off: { opacity: 0.45 },
+  link: { ...typography.smallStrong, color: colors.brand },
   // A member: the row itself, then (for an admin) Remove and ⋯ beside it.
   memberRow: { flexDirection: 'row', alignItems: 'center' },
   memberMain: { flex: 1, minWidth: 0 },

@@ -1178,6 +1178,12 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
    */
   muteChat: (conversationId: ID, until: string | null, quiet?: boolean) => void;
   /**
+   * This chat's own Read receipts switch, for you (its Details page): on
+   * unless you turn it off. Your reading shows here only with both it and
+   * your Privacy switch on; the server holds it back otherwise (migration 141).
+   */
+  setChatReadReceipts: (conversationId: ID, on: boolean) => void;
+  /**
    * Reports a chat to CourtSide for a person to review: the admin can then
    * read it. `aboutUserId` is the person reported (the other person in a
    * one-to-one chat, or a message's sender); `messageId`, one message in it.
@@ -2356,7 +2362,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
         });
       }
       // Someone read your messages: "Read" shows under them straight away.
-      offReads = remote.onReads((conversationId, userId, readAt) => {
+      offReads = remote.onReads((conversationId, userId, readAt, receipts) => {
+        // Their Read receipts switch for this chat, when it changed (migration 141).
+        if (receipts !== undefined) {
+          setState((prev) => {
+            const chat = prev.conversations.find((c) => c.id === conversationId);
+            if (!chat || !chat.receiptsOffIds?.includes(userId) === receipts) return prev;
+            const rest = (chat.receiptsOffIds ?? []).filter((id) => id !== userId);
+            const next = receipts ? rest : [...rest, userId];
+            return { ...prev, conversations: prev.conversations.map((c) => (c.id === conversationId ? { ...c, receiptsOffIds: next.length ? next : undefined } : c)) };
+          });
+        }
+        if (!readAt) return;
         const upTo = Date.parse(readAt);
         // You read it on another device (the web app, say): what you read there stops counting as unread here.
         if (userId === me) {
@@ -6469,6 +6486,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
     });
   }, [requireUser]);
 
+  const setChatReadReceipts = useCallback((conversationId: ID, on: boolean) => {
+    const me = requireUser();
+    const find = () => stateRef.current.conversations.find((c) => c.id === conversationId);
+    const isOn = () => !find()?.receiptsOffIds?.includes(me);
+    if (!find() || isOn() === on) return;
+    haptics.tap();
+    const put = (receipts: boolean) => setState((prev) => ({ ...prev, conversations: prev.conversations.map((c) => {
+      if (c.id !== conversationId) return c;
+      const rest = (c.receiptsOffIds ?? []).filter((id) => id !== me);
+      const next = receipts ? rest : [...rest, me];
+      return { ...c, receiptsOffIds: next.length ? next : undefined };
+    }) }));
+    put(on);
+    if (!live(me, conversationId)) return;
+    void remote.setChatReadReceipts(conversationId, on).catch(() => false).then((ok) => {
+      if (ok) return;
+      if (isOn() === on) put(!on);
+      showToast({ title: on ? 'Read receipts didn’t turn on' : 'Read receipts didn’t turn off', body: 'Try again in a moment.', icon: 'alert-circle-outline' });
+    });
+  }, [requireUser]);
+
   /**
    * Reports a chat to CourtSide; a person reviews it. Always as the chat
    * ("conversation:<id>"), so the admin can read it (report_chat_context)
@@ -6856,7 +6894,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const me = prev.currentUserId;
       if (!conversation || !me || !conversation.participantIds.includes(me)) return prev;
       const user = prev.users.find(u => u.id === me);
-      const messages = markMessagesOpened(prev.messages, conversation, me, user?.readReceiptsEnabled !== false, openedAt);
+      const messages = markMessagesOpened(prev.messages, conversation, me, user?.readReceiptsEnabled !== false && !conversation.receiptsOffIds?.includes(me), openedAt);
       if (messages === prev.messages && conversation.unreadCount === 0) return prev;
       return {...prev, messages, conversations: prev.conversations.map(c => c.id === conversationId ? {...c, unreadCount: 0} : c)};
     }));
@@ -8545,6 +8583,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       leaveGroup,
       removedChat,
       muteChat,
+      setChatReadReceipts,
       pinChat,
       markChatUnread,
       hideChat,
@@ -8769,6 +8808,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       leaveGroup,
       removedChat,
       muteChat,
+      setChatReadReceipts,
       pinChat,
       markChatUnread,
       hideChat,

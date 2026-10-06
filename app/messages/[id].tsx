@@ -33,7 +33,7 @@ import * as Clipboard from 'expo-clipboard';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 
 import { Avatar, BrandWash, EmptyState } from '@/components/ui';
-import { GROUP_CAP, GroupAvatar, eventText, groupName, isGroupChat, isMuted, leaveGroupMessage, othersIn } from '@/features/messages/groups';
+import { GROUP_CAP, GroupAvatar, eventText, groupName, isGroupChat, isMuted, leaveGroupMessage, othersIn, sharesReceipts } from '@/features/messages/groups';
 import { HitGlyph } from '@/components/HitGlyph';
 import { joinedCount } from '@/features/hits/audience';
 import { hitWhen } from '@/features/hits/format';
@@ -413,8 +413,9 @@ export default function Thread() {
     setOlderLoading(false);
   }, [conversation, removed, actions]);
 
-  // In a group, whose read position is shown as faces: the others who let read receipts show (never someone you blocked).
-  const readers = useMemo(() => (group ? people.filter((u) => u.readReceiptsEnabled !== false && !blockedIds.includes(u.id)) : []), [group, people, blockedIds]);
+  // In a group, whose read position is shown as faces: the others who let read receipts show here (never someone you blocked).
+  const receiptsOff = conversation?.receiptsOffIds;
+  const readers = useMemo(() => (group ? people.filter((u) => sharesReceipts(u, { receiptsOffIds: receiptsOff }) && !blockedIds.includes(u.id)) : []), [group, people, blockedIds, receiptsOff]);
   // The rows, each kept as the same object while nothing about it changes, so its row is not drawn again.
   const rowCache = useRef(new Map<string, ThreadRow>());
   const rows = useMemo(
@@ -523,7 +524,7 @@ export default function Thread() {
   const readLine = !typers.length && lastReal && lastReal.senderId === currentUserId && !lastReal.failed
     ? lastSending || lastReal.sending ? 'Sending…' : group
       ? (rows.some((r) => r.seenBy?.length && r.message.id === lastReal.id) ? null : 'Sent')
-      : other && other.readReceiptsEnabled !== false && lastReal.readAtBy?.[other.id] ? 'Seen' : 'Sent'
+      : other && sharesReceipts(other, conversation) && lastReal.readAtBy?.[other.id] ? 'Seen' : 'Sent'
     : null;
 
   // The calls the rows and the box make, made once (see Calls).
@@ -845,7 +846,7 @@ export default function Thread() {
   // Who could have read a message, with when, for its Info sheet; who keeps read receipts off, as that.
   const readersOf = (m: Message) => (group ? people : other ? [other] : [])
     .filter((u) => u.id !== m.senderId && !blockedIds.includes(u.id))
-    .map((u) => ({ user: u, at: u.readReceiptsEnabled !== false ? m.readAtBy?.[u.id] : undefined, off: u.readReceiptsEnabled === false }));
+    .map((u) => ({ user: u, at: sharesReceipts(u, conversation) ? m.readAtBy?.[u.id] : undefined, off: !sharesReceipts(u, conversation) }));
 
   const listHeader = (
     // The list is upside down: its header is the bottom of the chat. Someone typing shows there, under the newest message.

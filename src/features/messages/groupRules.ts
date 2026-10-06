@@ -248,6 +248,14 @@ export function eventText(m: Message, users: User[], me: ID | null): string {
 }
 
 /**
+ * Whether someone lets their reading show in this chat: only with both their
+ * Privacy switch and this chat's own Read receipts switch on.
+ */
+export function sharesReceipts(u: Pick<User, 'id' | 'readReceiptsEnabled'> | undefined, c: Pick<Conversation, 'receiptsOffIds'> | undefined): boolean {
+  return !!u && u.readReceiptsEnabled !== false && !c?.receiptsOffIds?.includes(u.id);
+}
+
+/**
  * The line under your last message in a group: "Seen by Mira, Dev",
  * "Seen by Mira, Dev, June +2", "Seen by everyone", or "Sent". Someone who
  * keeps read receipts off is never listed, so "everyone" only shows when
@@ -257,7 +265,7 @@ export function seenByLabel(m: Message, c: Conversation, users: User[], me: ID |
   const others = c.participantIds.filter((id) => id !== me && id !== m.senderId);
   const readers = others
     .map((id) => users.find((u) => u.id === id))
-    .filter((u): u is User => !!u && u.readReceiptsEnabled !== false && !!m.readAtBy?.[u.id]);
+    .filter((u): u is User => !!u && sharesReceipts(u, c) && !!m.readAtBy?.[u.id]);
   if (!readers.length) return 'Sent';
   // With only one other person there, their name says more than "everyone".
   if (readers.length === others.length && others.length > 1) return 'Seen by everyone';

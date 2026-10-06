@@ -772,7 +772,7 @@ const toCoachApplication = (r: CoachApplicationRow): CoachApplication => ({
 });
 
 /** A chat member's row. `role` came with migration 54 (admin or member); a database without it leaves it out. */
-interface MemberRow { user_id: string; last_read_at: string | null; role?: string | null }
+interface MemberRow { user_id: string; last_read_at: string | null; role?: string | null; read_receipts?: boolean | null }
 interface ConversationRow { id: string; updated_at: string; title?: string | null; is_group?: boolean | null; created_by?: string | null; photo_url?: string | null; conversation_members?: MemberRow[]; messages?: MessageRow[] }
 interface MessageRow { id: string; conversation_id: string; sender_id: string; body: string; kind: string; shared_id: string | null; reactions: Record<string, string> | null; created_at: string; edited_at?: string | null; place?: { id?: string; name: string; lat: number; lng: number; count?: unknown } | null; audio_url?: string | null; audio_ms?: number | null; event?: { type?: string; targets?: unknown; title?: string | null; on?: boolean | null } | null; photos?: unknown; reply_to_id?: string | null }
 
@@ -813,7 +813,13 @@ function toChatEvent(raw: MessageRow['event']): ChatEvent | undefined {
  */
 export function toConversations(me: ID, convRows: ConversationRow[], messageRows: MessageRow[], prefs?: Map<ID, ChatPrefs>, heldIds?: Set<ID>): { conversations: Conversation[]; messages: Message[] } {
   const readAt = new Map<string, Map<string, string>>();
-  for (const c of convRows) readAt.set(c.id, new Map((c.conversation_members ?? []).filter((m) => m.last_read_at).map((m) => [m.user_id, m.last_read_at as string])));
+  for (const c of convRows) {
+    const at = new Map((c.conversation_members ?? []).filter((m) => m.last_read_at).map((m) => [m.user_id, m.last_read_at as string]));
+    // How far you really read: with read receipts off, the server keeps it in your own chat settings (migration 141).
+    const own = prefs?.get(c.id)?.readAt;
+    if (own && own > (at.get(me) ?? '')) at.set(me, own);
+    readAt.set(c.id, at);
+  }
   const messages: Message[] = messageRows.map((row) => {
     const system = row.kind === 'system';
     const readers = system ? undefined : readAt.get(row.conversation_id);
@@ -854,6 +860,7 @@ export function toConversations(me: ID, convRows: ConversationRow[], messageRows
       title: c.title ?? undefined,
       createdBy: c.created_by ?? undefined,
       adminIds: hasRoles && c.is_group ? admins : undefined,
+      receiptsOffIds: members.some((m) => m.read_receipts === false) ? members.filter((m) => m.read_receipts === false).map((m) => m.user_id) : undefined,
       photoUrl: c.photo_url ?? undefined,
       mutedUntil: muted && Date.parse(muted) > Date.now() ? muted : undefined,
       pinnedAt: pref?.pinnedAt,
@@ -873,11 +880,12 @@ export function toConversations(me: ID, convRows: ConversationRow[], messageRows
  * database without it refuses the whole ask, so the chats are asked for
  * again without it (and still load).
  */
-const MEMBERS_NOW = 'conversation_members(user_id, last_read_at, role)';
+const MEMBERS_NOW = 'conversation_members(user_id, last_read_at, role, read_receipts)';
+const MEMBERS_BEFORE_141 = 'conversation_members(user_id, last_read_at, role)';
 const MEMBERS_BEFORE_54 = 'conversation_members(user_id, last_read_at)';
 
 /** Your own settings for one chat: mute (migration 54), and pin, mark unread and delete from the inbox (migration 75). */
-export interface ChatPrefs { mutedUntil?: string; pinnedAt?: string; markedUnread?: boolean; hiddenAt?: string }
+export interface ChatPrefs { mutedUntil?: string; pinnedAt?: string; markedUnread?: boolean; hiddenAt?: string; readAt?: string }
 
 /**
  * Your own chat settings, by chat id. The rows are asked for whole (`*`),
@@ -887,10 +895,10 @@ export interface ChatPrefs { mutedUntil?: string; pinnedAt?: string; markedUnrea
 function toMutes(rows: unknown): Map<ID, ChatPrefs> {
   const out = new Map<ID, ChatPrefs>();
   const at = (v: unknown) => (typeof v === 'string' && v ? v : undefined);
-  for (const r of (Array.isArray(rows) ? rows : []) as { conversation_id?: string; muted_until?: string | null; pinned_at?: string | null; marked_unread?: boolean | null; hidden_at?: string | null }[]) {
+  for (const r of (Array.isArray(rows) ? rows : []) as { conversation_id?: string; muted_until?: string | null; pinned_at?: string | null; marked_unread?: boolean | null; hidden_at?: string | null; read_at?: string | null }[]) {
     if (!r.conversation_id) continue;
-    const pref: ChatPrefs = { mutedUntil: at(r.muted_until), pinnedAt: at(r.pinned_at), markedUnread: r.marked_unread === true || undefined, hiddenAt: at(r.hidden_at) };
-    if (pref.mutedUntil || pref.pinnedAt || pref.markedUnread || pref.hiddenAt) out.set(r.conversation_id, pref);
+    const pref: ChatPrefs = { mutedUntil: at(r.muted_until), pinnedAt: at(r.pinned_at), markedUnread: r.marked_unread === true || undefined, hiddenAt: at(r.hidden_at), readAt: at(r.read_at) };
+    if (pref.mutedUntil || pref.pinnedAt || pref.markedUnread || pref.hiddenAt || pref.readAt) out.set(r.conversation_id, pref);
   }
   return out;
 }
@@ -1118,7 +1126,9 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
     .limit(MESSAGE_PAGE, { referencedTable: 'messages' });
   const chatsLoad = (async () => {
     const now = await chatList(MEMBERS_NOW);
-    return now.error ? chatList(MEMBERS_BEFORE_54) : now;
+    if (!now.error) return now;
+    const before141 = await chatList(MEMBERS_BEFORE_141);
+    return before141.error ? chatList(MEMBERS_BEFORE_54) : before141;
   })();
   // Whether this server tags players on sessions (migration 62), asked alongside
   // everything else so it is known before any post is read: until it is, the
@@ -1967,6 +1977,14 @@ export const remote = {
     return toConversations(me, [{ id: row.conversation_id, updated_at: row.created_at }], [row]).messages[0] ?? null;
   },
 
+  /** This chat's own Read receipts switch, for you (migration 141). */
+  async setChatReadReceipts(conversationId: ID, on: boolean): Promise<boolean> {
+    const { error } = await need().rpc('set_chat_read_receipts', { conv: conversationId, receipts: on });
+    if (!error) return true;
+    fail('chat read receipts')(error);
+    return false;
+  },
+
   async setChatMute(conversationId: ID, until: string | null): Promise<boolean> {
     const { error } = await need().rpc('set_chat_mute', { conv: conversationId, until });
     if (!error) return true;
@@ -2197,7 +2215,8 @@ export const remote = {
       db.from('conversation_prefs').select('*').eq('conversation_id', conversationId),
     ]);
     // A database without member roles (migration 54) is asked again without them.
-    const conv = first.error ? await chat(MEMBERS_BEFORE_54) : first;
+    const second = first.error ? await chat(MEMBERS_BEFORE_141) : first;
+    const conv = second.error ? await chat(MEMBERS_BEFORE_54) : second;
     if (conv.error || msgs.error) return null;
     if (!conv.data) return 'gone';
     const rows = ((msgs.data ?? []) as MessageRow[]).reverse();
@@ -3117,13 +3136,17 @@ export const remote = {
    * Live changes to messages in the conversations you are in: new ones, ones
    * edited or reacted to, and ones their sender unsent. Returns the unsubscribe.
    */
-  /** Live: someone in one of your chats has read up to a moment. Returns the unsubscribe. */
-  onReads(handle: (conversationId: ID, userId: ID, readAt: string) => void): () => void {
+  /**
+   * Live: someone in one of your chats has read up to a moment, with their
+   * Read receipts switch for that chat (migration 141). Returns the unsubscribe.
+   */
+  onReads(handle: (conversationId: ID, userId: ID, readAt: string | null, receipts?: boolean) => void): () => void {
     const db = need();
     const channel = db.channel('reads-live')
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'conversation_members' }, (payload) => {
-        const row = payload.new as { conversation_id?: string; user_id?: string; last_read_at?: string | null };
-        if (row.conversation_id && row.user_id && row.last_read_at) handle(row.conversation_id, row.user_id, row.last_read_at);
+        const row = payload.new as { conversation_id?: string; user_id?: string; last_read_at?: string | null; read_receipts?: boolean | null };
+        const receipts = typeof row.read_receipts === 'boolean' ? row.read_receipts : undefined;
+        if (row.conversation_id && row.user_id && (row.last_read_at || receipts !== undefined)) handle(row.conversation_id, row.user_id, row.last_read_at ?? null, receipts);
       })
       .subscribe();
     return () => { void db.removeChannel(channel); };
