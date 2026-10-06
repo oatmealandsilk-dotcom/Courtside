@@ -19,7 +19,6 @@ import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { removedLine } from '@/features/moderation/reasons';
 import { canShareMediaStory, shareMediaToStory, type StoryMediaKind } from '@/features/share/mediaStory';
 import { stageSize } from '@/features/share/storyImage';
-import { storyFromPost } from '@/features/share/sessionStory';
 import { StoryOverlayCanvas } from '@/components/share/StoryOverlay';
 import { CourtSpinner } from '@/components/CourtSpinner';
 import type { Post, Story } from '@/data/types';
@@ -112,9 +111,6 @@ export default function PostMenu() {
   // Closing the menu (a tap above it, Done, the back button) while the file is still coming down
   // cancels the share: Instagram does not open on its own a moment later.
   const cancelled = () => closing.current || gone.current;
-  // The overlay's session numbers and place: a session post's own (its clip), the place only for a known adult (storyFromPost).
-  const overlaySession = post?.session;
-  const overlayPlace = post && currentUser && overlaySession ? storyFromPost(post, currentUser)?.place : undefined;
   // A photo with the overlay drawn onto it, out of sight: answers with the picture once the photo
   // has drawn (two frames later, so it is on screen), or null if it will not load within 8 seconds.
   const bake = (photo: string) => new Promise<View | null>((resolve) => {
@@ -238,11 +234,11 @@ export default function PostMenu() {
             <View pointerEvents="none" aria-hidden accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.stickerClip}>
               <View style={[styles.stickerStage, stage]}>
                 <View ref={sticker} collapsable={false} style={stage}>
-                  <StoryOverlayCanvas width={stage.width} handle={currentUser.handle} session={overlaySession} place={overlayPlace} />
+                  <StoryOverlayCanvas width={stage.width} handle={currentUser.handle} />
                 </View>
                 {baking ? (
                   <View ref={baked} collapsable={false} style={[StyleSheet.absoluteFill, stage]}>
-                    <StoryOverlayCanvas width={stage.width} handle={currentUser.handle} session={overlaySession} place={overlayPlace} photo={baking} onPhotoLoad={(ok) => photoDrawn.current?.(ok)} />
+                    <StoryOverlayCanvas width={stage.width} handle={currentUser.handle} photo={baking} onPhotoLoad={(ok) => photoDrawn.current?.(ok)} />
                   </View>
                 ) : null}
               </View>

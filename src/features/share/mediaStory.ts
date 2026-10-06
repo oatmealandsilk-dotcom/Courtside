@@ -9,8 +9,8 @@ import { storyFill } from './storyOverlay';
 /*
  * A clip or photo post of your own, straight into Instagram's story editor
  * (build 15 extras, Oct 5), with the CourtSide overlay on it (StoryOverlay:
- * the mark, "@handle", "on CourtSide", and the session's numbers when the
- * post has one) low on the left, clear of Instagram's own buttons. The
+ * the mark beside "@handle" over "on CourtSide", never a session's numbers)
+ * low on the left, clear of Instagram's own buttons. The
  * session Share page does the same for a session's picture (storyImage.ts);
  * this is the post's own media.
  *

@@ -87,15 +87,13 @@ picture's own **Share to Instagram**). Code: `src/features/share/mediaStory.ts`.
 - On it goes the CourtSide overlay (`src/components/share/StoryOverlay.tsx`,
   Oct 5, owner: "Can't be in the middle of the screen", then "Make it better
   like how like Strava would do"): no box, white type with a soft shadow,
-  low on the left and clear of Instagram's buttons. The CourtSide mark beside
-  "@handle" over "on CourtSide"; on a clip with a session, Strava's stats
-  sticker above it (a small label over each big figure: "Match 1h 24m",
-  "Won 6–4 6–3", where it was played, "Data by WHOOP" for a tracker's
-  numbers) and a fine rule. What the numbers show is in
-  `src/features/share/storyOverlay.ts`: at most two, the time first. The
-  two sit side by side at the largest size that fits (`overlayFit`); a
-  score too long for that ("6–4 3–6 10–7", a five-setter) goes under the
-  time instead of being cut off with "…".
+  low on the left and clear of Instagram's buttons. The signature alone:
+  the CourtSide mark beside "@handle" over "on CourtSide", on every clip and
+  photo, session or not. Never a session's numbers or where it was played
+  (Oct 5, owner, shown "Clip with a match" with Strava-style numbers above
+  the signature beside "Clip, no session": "Clip no session"). A session's
+  numbers go to Instagram through the session's own picture instead
+  (**Share to Instagram** on the same menu).
 - Instagram's Sharing to Stories has no way to say where a sticker goes: it
   puts it in the middle (Meta documents only a recommended 640 × 480 sticker,
   which the person can then move or resize). So:
@@ -141,8 +139,8 @@ To check on build 15 (or 14, over the air): your own clip → ••• → Shar
 Instagram Story, then the same on a photo post. Instagram should open on its
 story editor with the clip or photo filling it and the overlay in the lower
 left, not the middle; on the clip, pinching should grab the whole story-sized
-sticker. Try a clip with a match on it too (the numbers above the handle),
-on an iPhone and on Android.
+sticker. Try a clip on a session post too: it should carry the same
+signature, with no numbers, on an iPhone and on Android.
 
 ## Measuring the sticker (do once, on a phone)
 
