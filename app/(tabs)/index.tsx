@@ -57,6 +57,7 @@ import { RemovedActions, RemovedNote } from '@/features/moderation/RemovedNote';
 import { show as showToast } from '@/lib/toast';
 import { ClipPlayback } from '@/components/ClipPlayback';
 import { NEWEST_FIRST, rankFeed, type FeedItem, type RankContext } from '@/features/feed/rankFeed';
+import { feedScores, loadFeedScores } from '@/features/feed/feedScores';
 import { challengeFor, entriesFor } from '@/features/challenge/weekly';
 import { ChallengePage } from '@/components/ChallengePage';
 import { lockPageSwipe } from '@/features/navigation/swipeLock';
@@ -94,9 +95,11 @@ const isActivity = (p: Post, me: string | null | undefined, follows: Set<string>
   !p.archived && !p.removed && !p.groupId && reachable(p) && !!p.session && hasSessionStats(p.session) && (p.authorId === me || follows.has(p.authorId) || near.has(p.authorId));
 
 /** When each page's post, thread or Instant was made, for putting new ones newest first. */
-/** What the ranking may know about you: who you follow, who follows you, profiles, and what you have seen this visit. */
+/** What the ranking may know: who you follow, who follows you, profiles, what you have seen this visit, and how posts have been watched. */
 function rankContext(data: Pick<RankContext, 'users'> & { followingIds: string[]; followEdges: { followerId: string; followingId: string }[] }, seen: Set<string>): RankContext {
-  return { followingIds: data.followingIds, followEdges: data.followEdges, users: data.users, seen };
+  // How posts have been watched, as last loaded; asked again (once a minute old) for the next deal.
+  void loadFeedScores();
+  return { followingIds: data.followingIds, followEdges: data.followEdges, users: data.users, seen, scores: feedScores() };
 }
 
 function madeAt(data: { posts: { id: string; createdAt: string }[]; questions: { id: string; createdAt: string }[]; stories: { id: string; createdAt: string }[] }) {

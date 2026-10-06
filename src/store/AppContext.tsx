@@ -57,6 +57,7 @@ import * as WebBrowser from 'expo-web-browser';
 import * as toast from '@/lib/toast';
 import { anyUploading, cancelUpload, finishUpload, holdQuietUpload, setUploadProgress, simulateUpload, startUpload } from '@/lib/uploads';
 import { requestFeedRefresh } from '@/features/feed/feedBus';
+import { loadFeedScores } from '@/features/feed/feedScores';
 import { blockDevice, groupFor, isDeviceBlocked, rememberAnswered, yearsOld, type AgeGroup } from '@/features/age/ageCheck';
 import { knownOpen, notKnownAdult, type AgeSource, type Openness, type OpennessMap } from '@/features/players/age';
 import type { TeenMap } from '@/features/players/mapPrivacy';
@@ -2591,6 +2592,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // The network can miss on a cold open; the load is tried a few times
       // before giving up, and giving up never means "start the quiz again".
       let data: Awaited<ReturnType<typeof fetchRemote>> | null = null;
+      // How posts have been watched, for the feed's first deal: asked alongside the load, not after it.
+      void loadFeedScores();
       for (let attempt = 0; ; attempt += 1) {
         try { data = await fetchRemote(me); break; } catch (e) {
           if (attempt >= 3) throw e;

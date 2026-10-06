@@ -1,4 +1,4 @@
-import type { Post, Question, Comment, Story, User, ID } from '@/data/types';
+import type { Post, Question, Comment, Story, User, ID, FeedScore } from '@/data/types';
 import { isNewHere } from '@/features/feed/newHere';
 export type FeedItem = { type: 'post'; post: Post } | { type: 'question'; question: Question } | { type: 'hit'; story: Story } | { type: 'tip' } | { type: 'challenge' }
   // Activities' first page for a new player (components/ActivitiesStart).
@@ -20,6 +20,8 @@ export type RankContext = {
   users?: User[];
   /** Pages already shown this visit, as feed keys ("p:<id>", "q:<id>", "h:<id>"). */
   seen?: Set<string>;
+  /** How each post has done in feeds, by id (feedScores, migration 143). */
+  scores?: Record<ID, FeedScore>;
   /** The clock to rank against; fixed in the sanity check. */
   now?: number;
 };
@@ -29,6 +31,10 @@ const DAY = 86_400_000;
 const AUTHOR_GAP = 5;
 /** Every Nth slot is a thread or a hit. */
 const MIX_EVERY = 4;
+/** A clip or video post's lift over a photo or words (Oct 6, owner: "push videos to top"). */
+const VIDEO_BOOST = 6;
+/** Looks from this many people before how it was watched counts; fewer is chance. */
+const WATCH_MIN_VIEWERS = 3;
 
 const newest = <T extends { createdAt: string }>(list: T[]) => [...list].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
 const cityOf = (location?: string) => (location ?? '').split(',')[0].trim().toLowerCase();
@@ -40,10 +46,12 @@ const orderHits = (hits: Story[], userId: string | null) =>
 const recency = (createdAt: string, now: number) => 10 * Math.pow(0.5, Math.max(0, now - Date.parse(createdAt)) / DAY);
 
 /**
- * The feed, ranked. Each post gets a score from what is already on the
- * phone — how new it is, how much people liked, commented on and saved it,
- * how close you are to its author, whether its author is new here, whether
- * it matches what you engage with, and whether you have seen it this visit —
+ * The feed, ranked. Each post gets a score — how new it is, how much people
+ * liked, commented on, saved and shared it, how close you are to its author,
+ * whether its author is new here, whether it matches what you engage with,
+ * whether it is a clip (clips lead), how people watched it (held on it or
+ * swiped away, from the server's totals), and whether you have seen it,
+ * this visit or before —
  * then it is dealt so no author appears twice within five pages, with a
  * thread or a hit in every fourth slot. The same data always deals the same
  * order: nothing here is random.
@@ -97,9 +105,22 @@ export function rankFeed(posts: Post[], questions: Question[], comments: Comment
     const joined = Date.parse(usersById.get(p.authorId)?.joinedAt ?? '');
     return isNewHere(p) || (!Number.isNaN(joined) && now - joined < 7 * DAY) ? 4 : 0;
   };
-  const engagement = (p: Post) => 3 * Math.log2(1 + p.likedBy.length + 2 * p.commentIds.length + 3 * (p.savedBy?.length ?? 0));
+  const engagement = (p: Post) => 3 * Math.log2(1 + p.likedBy.length + 2 * p.commentIds.length + 3 * (p.savedBy?.length ?? 0) + 3 * (p.shares ?? 0));
+  const scores = ctx.scores ?? {};
+  const isVideo = (p: Post) => !!p.videoUrl || p.kind === 'clip';
+  // How it was watched, once enough people have seen it: the share of looks that were not a
+  // quick swipe-away (-5 to +5), seconds on screen per look, and taps through to its author.
+  const watched = (p: Post) => {
+    const sc = scores[p.id];
+    if (!sc || sc.viewers < WATCH_MIN_VIEWERS || !sc.looks) return 0;
+    const held = 1 - Math.min(1, sc.skips / sc.looks);
+    return 10 * (held - 0.5) + 3 * Math.log2(1 + Math.min(60, sc.watchSeconds / sc.looks)) + 2 * Math.log2(1 + sc.profileTaps);
+  };
+  // Seen this visit, or on an earlier one: either way it gives way to something new.
+  const seenBefore = (p: Post) => seen.has(`p:${p.id}`) || !!scores[p.id]?.seenByMe;
   const scorePost = (p: Post) =>
-    recency(p.createdAt, now) + engagement(p) + closeness(p) + newCreator(p) + taste([p.kind, ...p.tags]) - (seen.has(`p:${p.id}`) ? 8 : 0);
+    recency(p.createdAt, now) + engagement(p) + closeness(p) + newCreator(p) + taste([p.kind, ...p.tags])
+    + (isVideo(p) ? VIDEO_BOOST : 0) + watched(p) - (seenBefore(p) ? 8 : 0);
   const scoreQuestion = (q: Question) =>
     recency(q.createdAt, now) + taste([q.topic, ...q.tags]) - (seen.has(`q:${q.id}`) ? 8 : 0);
 

@@ -43,6 +43,7 @@ import type {
   Conversation,
   CourtKings,
   DailyHealth,
+  FeedScore,
   FlybyPerson,
   FriendStreak,
   DetectedActivity,
@@ -397,6 +398,22 @@ export async function friendsOnStreak({ me, users: everyone, followingIds, follo
  */
 export async function searchPosts(_term: string): Promise<{ posts: Post[]; comments: Comment[] } | null> {
   return null;
+}
+
+/**
+ * How every post has done in feeds, by post id, for the ranking (migration
+ * 143). Empty when it could not be asked (offline, or the server is a
+ * version behind): the feed then ranks as before. The demo has no looks.
+ */
+export async function fetchFeedScores(): Promise<Record<ID, FeedScore>> {
+  if (!supabase) return {};
+  const { data, error } = await supabase.rpc('feed_post_scores');
+  if (error || !Array.isArray(data)) return {};
+  const out: Record<ID, FeedScore> = {};
+  for (const r of data as { post_id: string; viewers: number; looks: number; watch_seconds: number; skips: number; profile_taps: number; seen_by_me: boolean }[]) {
+    out[r.post_id] = { viewers: r.viewers ?? 0, looks: r.looks ?? 0, watchSeconds: r.watch_seconds ?? 0, skips: r.skips ?? 0, profileTaps: r.profile_taps ?? 0, seenByMe: !!r.seen_by_me };
+  }
+  return out;
 }
 
 /* ------------------------------ Shared links ------------------------------ */

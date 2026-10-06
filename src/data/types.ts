@@ -364,6 +364,21 @@ export interface Achievement {
 
 /* ---------------------------------- Feed --------------------------------- */
 
+/**
+ * How a post has done in feeds (feed_post_scores, migration 143), for the
+ * ranking: how many people saw it, how many looks, seconds on screen, quick
+ * swipe-aways (under 1.5 s), taps through to its author, and whether you saw
+ * it on an earlier visit. Totals only, the author's own looks left out.
+ */
+export interface FeedScore {
+  viewers: number;
+  looks: number;
+  watchSeconds: number;
+  skips: number;
+  profileTaps: number;
+  seenByMe: boolean;
+}
+
 export type PostKind = 'clip' | 'match' | 'session' | 'note' | 'gear' | 'milestone';
 
 export interface MatchResult {
