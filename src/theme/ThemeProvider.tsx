@@ -68,10 +68,12 @@ const aoColors: Palette = {
   link: '#1F64A0', onMedia: '#FFFFFF',
   bubble: '#D9EAF6',
   bubbleMine: '#2471A6', onDanger: '#FFFFFF',
-  // The Melbourne shirt, deepened so its cream lettering holds: court blue, a lighter blue top right,
-  // the aqua shirt's aqua glowing bottom left (Oct 6, owner's blue-to-aqua Melbourne shirt).
-  cardFill: '#1C67A0', cardGlowTop: '#1E71A9', cardGlowBottom: '#147873',
-  cardFigure: '#FAF8F0', cardInk: '#FAF8F0', cardMuted: '#EFF1EC',
+  // The Melbourne shirt as light as the shirt itself (Oct 6, owner: "AO card could be more light the
+  // color of her shirt"): its light court blue, a sky sheen top right, the aqua shirt's aqua bottom left.
+  // Cream can't hold on a blue this light, so the lettering is the court's deep navy: small and quiet
+  // words 4.7:1 or more on the fill and both corners, the big numbers 5.7:1.
+  cardFill: '#6EA8D5', cardGlowTop: '#9CCBEC', cardGlowBottom: '#8FE3DD',
+  cardFigure: '#0B2A47', cardInk: '#0E2F4F', cardMuted: '#143858',
 };
 
 /**
@@ -111,10 +113,11 @@ const wimbledonColors: Palette = {
   link: '#245E93', onMedia: '#FFFFFF',
   bubble: '#E2EBD6',
   bubbleMine: '#246A39', onDanger: '#FFFFFF',
-  // The London shirt, deepened so its cream lettering holds: grass green, a fresher green top right,
-  // the club's purple bottom left.
-  cardFill: '#326F37', cardGlowTop: '#377A34', cardGlowBottom: '#615782',
-  cardFigure: '#FAF8F0', cardInk: '#FAF8F0', cardMuted: '#F0F1E7',
+  // The London shirt's purple as a soft lilac (Oct 6, owner: "Try Wimbledon theme where its purple/
+  // lilac color"): the shirt's green glowing top right, its purple, lifted, bottom left, all the words
+  // in a deep aubergine: small and quiet words 4.7:1 or more on the fill and both corners.
+  cardFill: '#B9A7D6', cardGlowTop: '#8DC48A', cardGlowBottom: '#A28FCB',
+  cardFigure: '#2A1E45', cardInk: '#2E1F4A', cardMuted: '#33284C',
 };
 
 /**

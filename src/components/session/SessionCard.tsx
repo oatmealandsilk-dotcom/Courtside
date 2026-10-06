@@ -66,8 +66,11 @@ const BRAND_BOX: ReadonlySet<ThemeName> = new Set<ThemeName>(['clean']);
  *   sage and peach corners, the figures in the brand green, the small words
  *   that green a fifth toward the text, the quiet words in the page's muted
  *   ink, a hairline round it so it holds on the page.
- * - Paris, Melbourne, London: the shirt's colour deepened so its cream
- *   lettering holds, all the words in that cream.
+ * - Paris: the shirt's colour deepened so its cream lettering holds, all
+ *   the words in that cream.
+ * - Melbourne, London (Oct 6): light as the shirt (Melbourne's light blue,
+ *   London's purple as a soft lilac), all the words in a deep ink of the
+ *   court (navy, aubergine), the pill in that ink with the fill's colour.
  * - Night, New York (dark pages): the shirt's own dark ground with its
  *   lettering colour, and the page's hairline border.
  * - Clean: the green box with the brand's ink (BRAND_BOX).
