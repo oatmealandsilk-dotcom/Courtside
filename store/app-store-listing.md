@@ -626,7 +626,7 @@ Send any email to **support@courtsidebase.com** from your phone. If it doesn't r
 
 **What you said (Oct 5):** "Let's just make it on for everyone and then we have it listed inside of the terms and agreement."
 
-**What that means:** every new post has a "Let CourtSide feature this on its Instagram" switch (it used to say "Feature on CourtSide's Instagram"). It starts **on** for everyone, teens included, and people can switch it off before they post, or any time after on the post itself (••• → Edit, the same switch). Posts shared only to a group, posts with a logged or tracked session's stats attached (including "Log it" posts), and instants have no switch and are never featured.
+**What that means:** most new posts have a "Let CourtSide feature this on its Instagram" switch (it used to say "Feature on CourtSide's Instagram"). It starts **on** for everyone, teens included, and people can switch it off before they post, or any time after on the post itself (••• → Edit, the same switch). Posts shared only to a group, posts with a logged or tracked session's stats attached (including "Log it" posts), and instants have no switch and are never featured.
 
 **What Claude did:**
 
