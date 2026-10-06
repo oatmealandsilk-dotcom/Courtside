@@ -135,7 +135,7 @@ export default function Invite() {
               <Text style={styles.groupLabel}>{`Joined · ${list.length}`}</Text>
               <View style={styles.groupCounted} accessible accessibilityLabel={`${counted} counted`}>
                 {counted ? <Ionicons name="checkmark-circle" size={15} color={colors.brand} /> : null}
-                <Text style={[styles.groupLabel, counted ? styles.countedText : null]}>{`Counted · ${counted}`}</Text>
+                <Text style={styles.groupLabel}>{`Counted · ${counted}`}</Text>
               </View>
             </View>
             {list.map((p) => {
@@ -145,7 +145,8 @@ export default function Invite() {
                   <Avatar name={p.name || p.handle} seed={p.id} uri={p.avatarUrl} size={36} />
                   <View style={styles.personText}>
                     <Text style={styles.personName} numberOfLines={1}>{name}</Text>
-                    <Text style={styles.personNote} numberOfLines={1}>{p.name ? `@${p.handle} · ` : ''}{joinedOn(p.joinedAt)}</Text>
+                    {/* The date first: on a small phone a long handle gives way, never the date. */}
+                    <Text style={styles.personNote} numberOfLines={1}>{joinedOn(p.joinedAt)}{p.name ? ` · @${p.handle}` : ''}</Text>
                   </View>
                   {p.countedAt ? (
                     <View style={styles.status}>
@@ -197,9 +198,11 @@ const styleDefinitions = StyleSheet.create({
   personText: { flex: 1, minWidth: 0 },
   personName: { ...typography.bodyStrong, color: colors.text },
   personNote: { ...typography.small, color: colors.textMuted },
-  // At the row's far end, lined up down the list: a quiet check for each one that counted.
+  // At the row's far end, lined up down the list: a quiet check for each one that counted. The
+  // check carries the court's colour; the word is in the text colour, which reads at 4.5:1 on
+  // every court (Melbourne's blue falls short for small words).
   status: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  countedText: { ...typography.smallStrong, color: colors.brand },
+  countedText: { ...typography.smallStrong, color: colors.text },
   waitingText: { ...typography.small, color: colors.textFaint },
   later: { alignSelf: 'center', minHeight: 44, minWidth: 88, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.lg },
   laterText: { ...typography.smallStrong, color: colors.textMuted },

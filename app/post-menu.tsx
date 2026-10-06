@@ -239,7 +239,7 @@ export default function PostMenu() {
       // Unblocking is one tap; blocking asks first and says what it does.
       { key: 'block', icon: 'ban-outline', label: blocked ? `Unblock @${author.handle}` : `Block @${author.handle}`, danger: !blocked, onPress: () => {
         if (blocked) { actions.toggleBlock(author.id); close(); return; }
-        confirmBlock(author, () => { actions.toggleBlock(author.id); close(); });
+        confirmBlock(author, () => { if (!actions.isBlocked(author.id)) actions.toggleBlock(author.id); close(); });
       } },
     );
   }
@@ -287,7 +287,7 @@ export default function PostMenu() {
             <View style={styles.doneActions}>
               {/* Instagram's next step after a report: block them too (asked first, as blocking always is). */}
               {reportedNow && author && !blockedIds.includes(author.id) ? (
-                <Pressable accessibilityRole="button" accessibilityLabel={`Block @${author.handle}`} onPress={() => confirmBlock(author, () => { actions.toggleBlock(author.id); close(); })} style={({ pressed }) => [styles.blockButton, pressed && { opacity: 0.7 }]}>
+                <Pressable accessibilityRole="button" accessibilityLabel={`Block @${author.handle}`} onPress={() => confirmBlock(author, () => { if (!actions.isBlocked(author.id)) actions.toggleBlock(author.id); close(); })} style={({ pressed }) => [styles.blockButton, pressed && { opacity: 0.7 }]}>
                   <Text style={styles.blockButtonText} numberOfLines={1}>Block @{author.handle}</Text>
                 </Pressable>
               ) : null}

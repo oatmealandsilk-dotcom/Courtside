@@ -217,7 +217,7 @@ export default function ChatDetails() {
               <Pressable
                 accessibilityRole="button"
                 // Blocking takes the one-to-one chat away, so this page goes back to the inbox.
-                onPress={() => (blocked ? actions.toggleBlock(other.id) : confirmBlock(other, () => { actions.toggleBlock(other.id); toInbox(); }))}
+                onPress={() => (blocked ? actions.toggleBlock(other.id) : confirmBlock(other, () => { if (!actions.isBlocked(other.id)) actions.toggleBlock(other.id); toInbox(); }))}
                 style={({ pressed }) => [styles.row, styles.line, pressed && styles.pressed]}
               >
                 <View style={styles.lead}><Ionicons name={blocked ? 'checkmark-circle-outline' : 'ban-outline'} size={20} color={colors.danger} /></View>
