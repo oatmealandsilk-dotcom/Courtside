@@ -33,7 +33,6 @@ export function HiddenComments({ count, noun = 'comments', children }: {
         accessibilityRole="button"
         accessibilityState={{ expanded: open }}
         accessibilityLabel={`Hidden ${noun}, ${count}`}
-        hitSlop={{ top: 6, bottom: 6 }}
         onPress={() => { haptics.tap(); setOpen((o) => !o); }}
         style={({ pressed }) => [styles.toggle, pressed && styles.pressed]}
       >
@@ -44,7 +43,9 @@ export function HiddenComments({ count, noun = 'comments', children }: {
       {open ? (
         <View style={styles.list}>
           <Text style={styles.note}>
-            Your Hidden words hid {count === 1 ? 'this' : 'these'}. Only you and whoever wrote {count === 1 ? 'it' : 'each one'} can see {count === 1 ? 'it' : 'them'}. Unhide one to show it to everyone.
+            {count === 1
+              ? 'Hidden by your Hidden words. Only you and its writer see it. Unhide it to show everyone.'
+              : 'Hidden by your Hidden words. Only you and each writer see them. Unhide one to show everyone.'}
           </Text>
           {children}
         </View>
@@ -73,7 +74,7 @@ export function HiddenReplyRow({ authorId, body, createdAt, onUnhide }: { author
           {'  '}{relativeTime(createdAt)}
         </Text>
         {body.trim() ? <RichText style={styles.text}>{body}</RichText> : null}
-        <Pressable accessibilityRole="button" accessibilityLabel={`Unhide ${who?.name ?? 'this'}'s reply`} hitSlop={{ top: 6, bottom: 8, left: 8, right: 16 }} onPress={onUnhide} style={styles.unhide}>
+        <Pressable accessibilityRole="button" accessibilityLabel={`Unhide ${who?.name ?? 'this'}'s reply`} hitSlop={{ top: 10, bottom: 12, left: 8, right: 16 }} onPress={onUnhide} style={styles.unhide}>
           <Text style={styles.unhideText}>Unhide</Text>
         </Pressable>
       </View>
@@ -84,7 +85,8 @@ export function HiddenReplyRow({ authorId, body, createdAt, onUnhide }: { author
 const styleDefinitions = StyleSheet.create({
   wrap: { gap: spacing.md },
   // A quiet line at the end of the list, the way "View 2 replies" sits under a comment.
-  toggle: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, alignSelf: 'flex-start', paddingVertical: 6 },
+  // 44pt tall, the line itself still quiet.
+  toggle: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, alignSelf: 'flex-start', minHeight: 44 },
   pressed: { opacity: 0.6 },
   toggleText: { ...typography.smallStrong, color: colors.textMuted },
   list: { gap: spacing.lg },
@@ -95,5 +97,6 @@ const styleDefinitions = StyleSheet.create({
   name: { ...typography.smallStrong, color: colors.text },
   text: { ...typography.small, color: colors.text, lineHeight: 20 },
   unhide: { alignSelf: 'flex-start', paddingTop: 6 },
-  unhideText: { ...typography.smallStrong, fontSize: 12, color: colors.textFaint },
+  // A shade stronger than the time beside the name, so it reads as the action here.
+  unhideText: { ...typography.smallStrong, color: colors.textMuted },
 });

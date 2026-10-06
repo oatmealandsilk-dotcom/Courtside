@@ -26,6 +26,11 @@ interface Props {
   loading?: boolean;
   style?: StyleProp<ViewStyle>;
   full?: boolean;
+  /**
+   * 'sm': a compact pill (40pt tall, a touch more to the finger) for a row
+   * of actions on a card, where full-size buttons wrap and weigh it down.
+   */
+  size?: 'md' | 'sm';
 }
 
 export function Button({
@@ -37,6 +42,7 @@ export function Button({
   loading = false,
   style,
   full = false,
+  size = 'md',
 }: Props) {
   const styles = useThemedStyles(styleDefinitions);
   const palette = paletteFor(variant);
@@ -51,8 +57,10 @@ export function Button({
       scaleTo={0.97}
       hoverTo={1.04}
       accessibilityLabel={label}
+      hitSlop={size === 'sm' ? 4 : undefined}
       style={[
         styles.base,
+        size === 'sm' && styles.small,
         variant === 'primary' && !faded && (pageIsDark() ? styles.liftDark : styles.lift),
         full && styles.full,
         { backgroundColor: palette.bg, borderColor: palette.border, opacity: faded ? 0.5 : 1 },
@@ -61,8 +69,8 @@ export function Button({
     >
       {variant === 'primary' ? <BrandWash /> : null}
       <View style={styles.inner}>
-        {loading ? <CourtSpinner size={18} ink={palette.fg} /> : null}
-        <Text style={[styles.label, { color: palette.fg }]}>{label}</Text>
+        {loading ? <CourtSpinner size={size === 'sm' ? 15 : 18} ink={palette.fg} /> : null}
+        <Text style={[styles.label, size === 'sm' && styles.smallLabel, { color: palette.fg }]} numberOfLines={size === 'sm' ? 1 : undefined}>{label}</Text>
       </View>
     </Tappable>
   );
@@ -90,6 +98,8 @@ const styleDefinitions = StyleSheet.create({
     alignItems: 'center',
   },
   full: { alignSelf: 'stretch' },
+  small: { paddingVertical: 0, minHeight: 40, justifyContent: 'center', paddingHorizontal: spacing.lg },
+  smallLabel: { ...typography.smallStrong, fontSize: 14 },
   // The one shadow on the page: the primary action, in its own colour, soft.
   lift: { shadowColor: colors.brand, shadowOpacity: 0.28, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 3 },
   // On a dark page a shadow in the button's own colour turns into a halo; a plain dark one just lifts it.

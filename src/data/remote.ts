@@ -1456,7 +1456,13 @@ function moderationResult(error: { code?: string; message: string } | null, what
   return 'failed';
 }
 /** A reported post or Instant as the Reports screen shows it. */
-export interface ReportedItem { body: string; picture?: string; removed: boolean; reason?: TakedownReason }
+export interface ReportedItem {
+  body: string; picture?: string; removed: boolean; reason?: TakedownReason;
+  /** What it sits under, so the report opens it in place: a comment's post or Instant, a reply's thread or coach question. */
+  parentId?: ID;
+  /** A comment on an Instant (story_comments), not on a post: its own kind to take down. */
+  onHit?: boolean;
+}
 /**
  * The database does not have the function asked for: it has not had the
  * migration that adds it yet. PostgREST answers "Could not find the function
@@ -2708,10 +2714,10 @@ export const remote = {
     return (data ?? []).length > 0;
   },
 
-  /** Every report, newest first. Only admins can read them; for anyone else the list is empty. */
-  async fetchReports(): Promise<AdminReport[]> {
+  /** Every report, newest first. Only admins can read them; for anyone else the list is empty. Null when they could not be loaded. */
+  async fetchReports(): Promise<AdminReport[] | null> {
     const { data, error } = await need().from('reports').select('*').order('created_at', { ascending: false }).limit(300);
-    if (error) { fail('reports')(error); return []; }
+    if (error) { fail('reports')(error); return null; }
     return ((data ?? []) as ReportRow[]).map((r) => {
       const [kind, id] = (r.target ?? '').split(':');
       // A report about one message names it in the reason ("message:<id>"); the card points at it.
@@ -2721,7 +2727,8 @@ export const remote = {
       return {
         id: r.id, reporterId: r.reporter_id ?? undefined, userId: r.target_user_id ?? undefined,
         kind: aiWords !== undefined ? 'ai-coach' : (ITEM_KINDS as string[]).includes(kind) || kind === 'conversation' ? kind as AdminReport['kind'] : 'profile', targetId: aiWords === undefined ? id || undefined : undefined,
-        messageId, reason: messageId ? 'one message' : aiWords !== undefined ? `AI coach ${kind === 'ai-plan' ? 'week' : 'answer'}: “${aiWords}”` : r.reason || undefined,
+        // A message report's reason is only its id: the card marks the message itself.
+        messageId, reason: messageId ? undefined : aiWords !== undefined ? `AI coach ${kind === 'ai-plan' ? 'week' : 'answer'}: “${aiWords}”` : r.reason || undefined,
         createdAt: r.created_at, status: (r.status ?? 'open') as AdminReport['status'], reviewedAt: r.reviewed_at ?? undefined,
       };
     });
@@ -2757,12 +2764,17 @@ export const remote = {
     for (const table of tables[kind]) {
       const { data, error } = await need().from(table).select('*').eq('id', id).maybeSingle();
       if (error || !data) continue;
-      const row = data as { title?: string | null; body?: string | null; caption?: string | null; image_url?: string | null; thumbnail_url?: string | null; note?: string | null; place?: { name?: unknown } | null } & RemovedColumns;
+      const row = data as { title?: string | null; body?: string | null; caption?: string | null; image_url?: string | null; thumbnail_url?: string | null; note?: string | null; place?: { name?: unknown } | null; post_id?: string | null; story_id?: string | null; question_id?: string | null } & RemovedColumns;
       // An open hit has no words but its note, so its place goes with them.
       const where = table === 'hit_requests' && typeof row.place?.name === 'string' ? `At ${row.place.name}` : null;
       const words = [row.title, row.body ?? row.caption ?? row.note, where].filter((x): x is string => !!x && !!x.trim()).join(' · ');
       const removed = removedOf(row);
-      return { body: words, picture: row.thumbnail_url ?? row.image_url ?? undefined, removed: !!removed, ...(removed ? { reason: removed.reason } : {}) };
+      // A comment, reply or coach reply opens where it sits: its post or Instant, its thread, its question.
+      const parentId = kind === 'comment' ? row.story_id ?? row.post_id ?? undefined : kind === 'answer' || kind === 'coach-reply' ? row.question_id ?? undefined : undefined;
+      return {
+        body: words, picture: row.thumbnail_url ?? row.image_url ?? undefined, removed: !!removed, ...(removed ? { reason: removed.reason } : {}),
+        ...(parentId ? { parentId } : {}), ...(table === 'story_comments' ? { onHit: true } : {}),
+      };
     }
     return null;
   },
@@ -3780,10 +3792,13 @@ export const remote = {
   async leaveHit(hitId: ID) { const { error } = await need().rpc('leave_hit', { hit: hitId }); if (error) fail('leave hit')(error); },
   /** Throws when it does not go through, so the hit can come back on screen. */
   async cancelHit(hitId: ID) { const { error } = await need().from('hit_requests').update({ cancelled: true }).eq('id', hitId); if (error) { fail('cancel hit')(error); throw error; } },
+  /** 'blocked' when refused for its words (the box says so itself, not a toast), 'failed' for anything else. */
   async insertTip(tip: Tip) {
     const { error } = await need().from('tips').insert({ id: tip.id, user_id: tip.authorId, body: tip.body, created_at: tip.createdAt });
-    if (error) fail('tip')(error);
-    return refusedFor(error);
+    if (!error) return undefined;
+    if (isBlockedWords(error)) return 'blocked' as const;
+    fail('tip')(error);
+    return 'failed' as const;
   },
   async voteTip(tipId: ID, dir: 1 | -1) { const { error } = await need().rpc('vote_tip', { t: tipId, dir }); if (error) fail('tip vote')(error); },
   /** Your own tip, off the board. Throws when it was not deleted (before migration 128 nobody could delete one). */

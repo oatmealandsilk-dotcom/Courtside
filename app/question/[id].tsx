@@ -13,7 +13,7 @@ import { Linking, Platform, Pressable, StyleSheet, Text, TextInput, View } from 
 import { router, useLocalSearchParams } from 'expo-router';
 import { goBack } from '@/lib/goBack';
 import { confirmReport } from '@/lib/confirm';
-import { show as showToast } from '@/lib/toast';
+import { thankForReport } from '@/features/moderation/reportThanks';
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { ThreadSkeleton } from '@/components/Skeleton';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -41,7 +41,7 @@ import { openPlayer } from '@/features/navigation/openPlayer';
 function QuestionDetail() {
   const styles = useThemedStyles(styleDefinitions);
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { questions, answers, users, currentUserId, currentUser, actions } = useApp();
+  const { questions, answers, users, currentUserId, currentUser, blockedIds, actions } = useApp();
   const view = actions.recordView;
   useEffect(() => { view('question', String(id)); }, [view, id]);
   // The app arrives with each thread's newest replies; opening one brings them all.
@@ -102,7 +102,8 @@ function QuestionDetail() {
   const theirs = !!currentUserId && question.authorId !== currentUserId;
   const report = () => confirmReport('thread', () => {
     actions.reportUser(question.authorId, `question:${question.id}`);
-    showToast({ title: 'Thanks — a person will review this', icon: 'flag-outline' });
+    const asker = users.find((u) => u.id === question.authorId);
+    thankForReport(asker, asker && !blockedIds.includes(asker.id) ? () => actions.toggleBlock(asker.id) : undefined);
     goBack('/discuss');
   });
 
@@ -197,7 +198,8 @@ function QuestionDetail() {
           {thread.length > 0 ? <Text style={styles.sectionCount}>{thread.length}</Text> : null}
         </View>
 
-        {thread.length === 0 ? (
+        {/* Only hidden replies so far: "Hidden replies" below says so, not "No answers yet". */}
+        {thread.length === 0 && !hidden.length ? (
           question.source ? (
             <EmptyState
               icon="chatbubble-ellipses-outline"

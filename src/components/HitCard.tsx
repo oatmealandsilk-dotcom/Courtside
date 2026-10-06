@@ -13,6 +13,7 @@ import { formatMiles } from '@/features/players/geo';
 import { confirm, confirmReport } from '@/lib/confirm';
 import { goBack } from '@/lib/goBack';
 import { show as showToast } from '@/lib/toast';
+import { thankForReport } from '@/features/moderation/reportThanks';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, lift, radius, spacing, typography } from '@/theme';
@@ -39,7 +40,7 @@ import { colors, font, lift, radius, spacing, typography } from '@/theme';
  */
 export function HitCard({ hit, miles, linked = true }: { hit: HitRequest; miles?: number; linked?: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
-  const { users, currentUserId, actions } = useApp();
+  const { users, currentUserId, blockedIds, actions } = useApp();
   const [busy, setBusy] = useState(false);
   const author = users.find((u) => u.id === hit.authorId);
   const joined = hit.joinedIds.map((id) => users.find((u) => u.id === id)).filter((u): u is NonNullable<typeof u> => !!u);
@@ -60,7 +61,7 @@ export function HitCard({ hit, miles, linked = true }: { hit: HitRequest; miles?
   // Reported, it leaves your screens at once (the hit's own page goes back, as a reported thread's does).
   const report = () => confirmReport('hit', () => {
     actions.reportUser(hit.authorId, `hit-request:${hit.id}`);
-    showToast({ title: 'Thanks — a person will review this', icon: 'flag-outline' });
+    thankForReport(author, author && !blockedIds.includes(author.id) ? () => actions.toggleBlock(author.id) : undefined);
     if (!linked) goBack('/discuss');
   });
   const join = async () => {

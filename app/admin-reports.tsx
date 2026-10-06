@@ -1,10 +1,11 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useCallback, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { router, useFocusEffect } from 'expo-router';
+import { router, useFocusEffect, type Href } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { goBack } from '@/lib/goBack';
 
+import { CourtSpinner } from '@/components/CourtSpinner';
 import { TileCover } from '@/components/TileCover';
 import { Avatar, Button, EmptyState, Screen, SegmentedControl } from '@/components/ui';
 import type { AdminReport, ReportEvidence, ReportedChat, ReportedItem, ReportedItemKind } from '@/data/remote';
@@ -13,7 +14,7 @@ import { ChatPhotoImage, PhotoViewer } from '@/features/messages/ChatPhotoViews'
 import { confirm } from '@/lib/confirm';
 import { relativeTime } from '@/lib/format';
 import { reasonLabel } from '@/features/moderation/reasons';
-import type { ChatPhoto, User } from '@/data/types';
+import type { ChatPhoto, TakedownKind, User } from '@/data/types';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing, typography } from '@/theme';
 
@@ -31,14 +32,55 @@ const KIND_NAME: Record<AdminReport['kind'], string> = {
 /** Things a report can point at, besides an account, a chat or something the AI coach wrote. */
 const isItem = (kind: AdminReport['kind']): kind is ReportedItemKind => kind !== 'profile' && kind !== 'conversation' && kind !== 'ai-coach';
 
+/** The kind to take down for a reported thing, or null for one that can't be taken down (an open hit, a tip, an account). */
+function takedownKindOf(report: AdminReport, item: ReportedItem | null | undefined): TakedownKind | null {
+  switch (report.kind) {
+    case 'post': case 'hit': case 'question': case 'answer': case 'coach-question': case 'coach-reply': return report.kind;
+    // A comment under an Instant is its own kind to the server.
+    case 'comment': return item ? (item.onHit ? 'hit-comment' : 'comment') : null;
+    default: return null;
+  }
+}
+
+/**
+ * Where a report's card opens: the thing itself, in place (a comment in its
+ * post's comments, a reply in its thread or under its coach question), the
+ * board for a tip, or the account for a profile, or for something since
+ * deleted (the card then shows the person). Null when there is nowhere to go.
+ */
+function whereTo(report: AdminReport, item: ReportedItem | null | undefined): Href | null {
+  const id = report.targetId;
+  if (isItem(report.kind) && item === null) return report.userId ? `/user/${report.userId}` : null;
+  switch (report.kind) {
+    case 'post': return id ? `/post/${id}` : null;
+    case 'hit': return id ? `/hits/${id}` : null;
+    case 'hit-request': return id ? `/hit-request/${id}` : null;
+    case 'question': return id ? `/question/${id}` : null;
+    case 'coach-question': return id ? `/coach-question/${id}` : null;
+    case 'comment': return id && item?.parentId ? { pathname: '/comments', params: { kind: item.onHit ? 'hit' : 'post', id: item.parentId, at: id } } : null;
+    case 'answer': return item?.parentId ? `/question/${item.parentId}` : null;
+    case 'coach-reply': return item?.parentId ? `/coach-question/${item.parentId}` : null;
+    case 'tip': return '/tips';
+    case 'profile': return report.userId ? `/user/${report.userId}` : null;
+    default: return null;
+  }
+}
+
+/** What Suspend does, said the same way on every card. */
+const SUSPEND_NOTE = 'They can’t post, comment, reply or message until you unsuspend them.';
+
 /**
  * Reports, for admins only (the database will not hand them to anyone else).
  * Each one shows what was reported and by whom; from it an admin can take
- * the post or hit down (one tap to the Take down page, which asks why; it is
+ * the thing down (one tap to the Take down page, which asks why; it is
  * hidden from everyone but its author, kept, its author told, and the report
  * marked done: migration 108), suspend the account (no posting, commenting,
- * replying or messaging), or dismiss the report. Both taking down and
- * suspending can be undone from the same card.
+ * replying or messaging; asked first), or dismiss the report. Both taking
+ * down and suspending can be undone from the same card.
+ *
+ * A tap on what was reported opens it where it sits: a comment in its
+ * post's comments, a reply in its thread. What the AI coach wrote has
+ * nowhere to open: its card is the words alone.
  *
  * A reported chat (a group, a one-to-one chat, or one message in either)
  * shows its name, who is in it and its last 30 messages, which admins can
@@ -47,15 +89,13 @@ const isItem = (kind: AdminReport['kind']): kind is ReportedItemKind => kind !==
  * (migration 61: chat photos sit on a private shelf, which admins may open
  * only for a reported chat). The person a chat report is about can be
  * suspended from its card, and so can anyone in a reported group.
- *
- * Threads, replies, comments and coach questions and replies show their
- * words; their author can be suspended from the card (Oct 5).
  */
 export default function AdminReports() {
   const styles = useThemedStyles(styleDefinitions);
   const { users, currentUser, actions } = useApp();
   const [tab, setTab] = useState<Tab>('open');
-  const [reports, setReports] = useState<AdminReport[] | null>(null);
+  // Null while the first load is on its way; 'failed' when it could not load (never shown as "nothing to review").
+  const [reports, setReports] = useState<AdminReport[] | null | 'failed'>(null);
   const [items, setItems] = useState<Record<string, ReportedItem | null>>({});
   // Reported chats, by report, and which of them show every message.
   const [chats, setChats] = useState<Record<string, ReportedChat | null>>({});
@@ -70,6 +110,8 @@ export default function AdminReports() {
 
   const load = useCallback(async () => {
     const list = await actions.loadReports();
+    // A list already on screen stays there if a reload fails; the pull can try again.
+    if (!list) { setReports((was) => (Array.isArray(was) ? was : 'failed')); return false; }
     setReports(list);
     const wanted = list.filter((r) => isItem(r.kind) && r.targetId);
     const chatReports = list.filter((r) => r.kind === 'conversation' && r.targetId);
@@ -81,6 +123,7 @@ export default function AdminReports() {
     setItems(Object.fromEntries(wanted.map((r, i) => [r.id, got[i]])));
     setChats(Object.fromEntries(chatReports.map((r, i) => [r.id, gotChats[i]])));
     setEvidence(Object.fromEntries(chatReports.map((r, i) => [r.id, gotCopies[i]])));
+    return true;
   }, [actions]);
   // Again each time the page comes back into view: a take-down from here closes its report on the server.
   useFocusEffect(useCallback(() => { void load(); }, [load]));
@@ -102,17 +145,17 @@ export default function AdminReports() {
   // Restore goes the same way as Restore everywhere else (actions.restoreContent):
   // the app's own copy loses its "Removed" mark at once, a failure puts it back
   // and says why, and the server opens the report again (migration 108).
-  const restore = async (report: AdminReport) => {
-    if ((report.kind !== 'post' && report.kind !== 'hit') || !report.targetId) return;
+  const restore = async (report: AdminReport, kind: TakedownKind) => {
+    if (!report.targetId) return;
     setBusy(`${report.id}:restore`);
-    await actions.restoreContent(report.kind, report.targetId, { reportId: report.id });
+    await actions.restoreContent(kind, report.targetId, { reportId: report.id });
     await load();
     setBusy(null);
   };
   // Someone in a reported chat, suspended from its card (a group's report names nobody).
   const suspendMember = (user: User, conversationId: string) => confirm({
     title: `Suspend @${user.handle}?`,
-    message: 'They can no longer post, comment, reply or message. You can undo it under Done.',
+    message: SUSPEND_NOTE,
     confirmLabel: 'Suspend',
     destructive: true,
     onConfirm: async () => {
@@ -131,21 +174,30 @@ export default function AdminReports() {
     await load();
     setBusy(null);
   };
+  // Suspending stops someone posting, commenting and messaging: asked first, naming who, as a group's Suspend is.
+  const askSuspend = (report: AdminReport, person: User | undefined) => confirm({
+    title: person ? `Suspend @${person.handle}?` : 'Suspend this account?',
+    message: SUSPEND_NOTE,
+    confirmLabel: 'Suspend',
+    destructive: true,
+    onConfirm: () => decide(report, 'suspend'),
+  });
 
   if (!currentUser?.isAdmin) {
     return (
       <Screen title="Reports" compactTitle onBack={() => goBack()}>
-        <EmptyState icon="lock-closed-outline" title="Only admins can see reports" body="An admin is set from Supabase." />
+        <EmptyState icon="lock-closed-outline" title="Only admins can see reports" />
       </Screen>
     );
   }
 
-  const open = (reports ?? []).filter((r) => r.status === 'open');
-  const done = (reports ?? []).filter((r) => r.status !== 'open');
+  const list = Array.isArray(reports) ? reports : [];
+  const open = list.filter((r) => r.status === 'open');
+  const done = list.filter((r) => r.status !== 'open');
   const shown = tab === 'open' ? open : done;
 
   return (
-    <Screen title="Reports" compactTitle onBack={() => goBack()}>
+    <Screen title="Reports" compactTitle onBack={() => goBack()} onRefresh={load}>
       <View style={styles.tabs}>
         <SegmentedControl<Tab>
           value={tab}
@@ -154,7 +206,14 @@ export default function AdminReports() {
         />
       </View>
       {reports === null ? (
-        <Text style={styles.muted}>Loading reports…</Text>
+        <View style={styles.wait}><CourtSpinner size={28} /></View>
+      ) : reports === 'failed' ? (
+        <EmptyState
+          icon="cloud-offline-outline"
+          title="Couldn’t load reports"
+          body="Check your connection and try again."
+          action={{ label: 'Try again', onPress: () => { setReports(null); void load(); } }}
+        />
       ) : shown.length === 0 ? (
         <EmptyState icon="flag-outline" title={tab === 'open' ? 'Nothing to review' : 'No decisions yet'} body={tab === 'open' ? 'New reports show up here, and you get a notification for each one.' : 'Reports you act on move here.'} />
       ) : (
@@ -164,15 +223,18 @@ export default function AdminReports() {
           const item = items[report.id];
           const chat = report.kind === 'conversation' ? chats[report.id] : undefined;
           const isSuspended = report.userId ? suspended[report.userId] ?? !!person?.suspended : false;
-          const openTarget = () => {
-            if (report.kind === 'post' && report.targetId) router.push(`/post/${report.targetId}`);
-            else if (report.kind === 'hit' && report.targetId) router.push(`/hits/${report.targetId}`);
-            else if (report.kind === 'hit-request' && report.targetId) router.push(`/hit-request/${report.targetId}`);
-            else if (report.kind === 'question' && report.targetId) router.push(`/question/${report.targetId}`);
-            else if (report.kind === 'coach-question' && report.targetId) router.push(`/coach-question/${report.targetId}`);
-            else if (report.userId) router.push(`/user/${report.userId}`);
-          };
           const waiting = (d: Decision) => busy === `${report.id}:${d}`;
+          const reportedBy = `Reported by ${reporter ? `@${reporter.handle}` : 'someone'}`;
+          // Suspend (or Unsuspend), the same compact button on every card.
+          const suspendButton = report.userId ? (
+            isSuspended
+              ? <Button size="sm" label="Unsuspend" variant="secondary" loading={waiting('unsuspend')} onPress={() => void decide(report, 'unsuspend')} />
+              : <Button size="sm" label="Suspend" variant="secondary" loading={waiting('suspend')} onPress={() => askSuspend(report, person)} />
+          ) : null;
+          // Dismiss: a quiet word at the row's far end, its letters on the card's own edge.
+          const dismissButton = report.status === 'open'
+            ? <Button size="sm" label="Dismiss" variant="ghost" loading={waiting('dismiss')} onPress={() => void decide(report, 'dismiss')} style={styles.dismiss} />
+            : null;
           if (report.kind === 'conversation') {
             const showAll = !!chatOpen[report.id];
             const lines = chat ? (showAll ? chat.messages : chat.messages.slice(-CHAT_PREVIEW)) : [];
@@ -194,18 +256,52 @@ export default function AdminReports() {
                   onSuspend={chat?.isGroup && !report.userId && report.targetId ? (user) => suspendMember(user, report.targetId!) : undefined}
                   isSuspended={(user) => suspended[user.id] ?? !!user.suspended}
                 />
-                <Text style={styles.muted}>Reported by {reporter ? `@${reporter.handle}` : 'someone'}{person ? ` · about @${person.handle}` : ''}{report.reason ? ` · ${report.reason}` : ''}</Text>
-                <View style={styles.actions}>
-                  {report.userId ? (
-                    isSuspended
-                      ? <Button label="Unsuspend" variant="secondary" loading={waiting('unsuspend')} onPress={() => void decide(report, 'unsuspend')} />
-                      : <Button label={person ? `Suspend @${person.handle}` : 'Suspend'} variant="secondary" loading={waiting('suspend')} onPress={() => void decide(report, 'suspend')} />
-                  ) : null}
-                  {report.status === 'open' ? <Button label="Dismiss" variant="ghost" loading={waiting('dismiss')} onPress={() => void decide(report, 'dismiss')} /> : null}
-                </View>
+                <Text style={styles.muted}>{reportedBy}{person ? ` · about @${person.handle}` : ''}{report.reason ? ` · ${report.reason}` : ''}</Text>
+                {suspendButton || dismissButton ? <View style={styles.actions}>{suspendButton}{dismissButton}</View> : null}
               </View>
             );
           }
+          const target = whereTo(report, item);
+          const kind = takedownKindOf(report, item);
+          const takeDownButton = kind && item && report.targetId ? (
+            item.removed
+              ? <Button size="sm" label="Restore" variant="secondary" loading={waiting('restore')} onPress={() => void restore(report, kind)} />
+              // The reason is picked on the Take down page; the report is marked done there too (migration 108).
+              : <Button size="sm" label="Take down" variant="danger" onPress={() => router.push({ pathname: '/take-down', params: { kind, id: report.targetId!, report: report.id, ...(report.userId ? { who: report.userId } : {}) } })} />
+          ) : null;
+          const what = report.kind === 'ai-coach' ? (
+            // Nobody's account and nothing to open: what the AI coach wrote is the whole report.
+            <View style={styles.quote}>
+              <Text style={styles.body} numberOfLines={8}>{report.reason}</Text>
+            </View>
+          ) : (
+            <Pressable
+              accessibilityRole={target ? 'link' : undefined}
+              accessibilityLabel={target ? 'Open what was reported' : undefined}
+              disabled={!target}
+              onPress={target ? () => router.push(target) : undefined}
+              style={({ pressed }) => [styles.target, pressed && target ? styles.targetPressed : null]}
+            >
+              {report.kind === 'profile' || !item ? (
+                <>
+                  <Avatar name={person?.name ?? '?'} seed={person?.avatarSeed ?? report.userId ?? 'x'} uri={person?.avatarUrl} size={44} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.name} numberOfLines={1}>{person?.name ?? 'Unknown account'}</Text>
+                    <Text style={styles.muted} numberOfLines={1}>{person ? `@${person.handle}` : ''}{report.kind !== 'profile' && item === null ? `${person ? ' · ' : ''}This is gone` : ''}</Text>
+                  </View>
+                </>
+              ) : (
+                <>
+                  {item.picture ? <TileCover uri={item.picture} style={styles.thumb} accessibilityIgnoresInvertColors /> : <View style={[styles.thumb, styles.noThumb]}><Ionicons name="document-text-outline" size={18} color={colors.textMuted} /></View>}
+                  <View style={{ flex: 1, gap: 2 }}>
+                    <Text style={styles.body} numberOfLines={report.kind === 'post' || report.kind === 'hit' ? 2 : 6}>{item.body || 'No caption'}</Text>
+                    <Text style={styles.muted} numberOfLines={1}>{person ? `by @${person.handle}` : ''}{item.removed ? `${person ? ' · ' : ''}Removed${item.reason ? `: ${reasonLabel(item.reason)}` : ''}` : ''}</Text>
+                  </View>
+                </>
+              )}
+              {target ? <Ionicons name="chevron-forward" size={16} color={colors.textFaint} /> : null}
+            </Pressable>
+          );
           return (
             <View key={report.id} style={styles.card}>
               <View style={styles.head}>
@@ -214,48 +310,13 @@ export default function AdminReports() {
                 {report.status !== 'open' ? <Text style={styles.status}>{report.status === 'removed' ? 'Removed' : report.status === 'suspended' ? 'Suspended' : 'Dismissed'}</Text> : null}
               </View>
 
-              <Pressable accessibilityRole="link" accessibilityLabel="Open what was reported" onPress={openTarget} style={styles.target}>
-                {report.kind === 'ai-coach' ? (
-                  // Nobody's account and nothing to open: what the AI coach wrote is the whole report.
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.body} numberOfLines={6}>{report.reason}</Text>
-                  </View>
-                ) : report.kind === 'profile' || !item ? (
-                  <>
-                    <Avatar name={person?.name ?? '?'} seed={person?.avatarSeed ?? report.userId ?? 'x'} uri={person?.avatarUrl} size={44} />
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.name} numberOfLines={1}>{person?.name ?? 'Unknown account'}</Text>
-                      <Text style={styles.muted} numberOfLines={1}>{person ? `@${person.handle}` : report.kind === 'profile' ? '' : 'This is gone'}</Text>
-                    </View>
-                  </>
-                ) : (
-                  <>
-                    {item.picture ? <TileCover uri={item.picture} style={styles.thumb} accessibilityIgnoresInvertColors /> : <View style={[styles.thumb, styles.noThumb]}><Ionicons name="document-text-outline" size={18} color={colors.textMuted} /></View>}
-                    <View style={{ flex: 1, gap: 2 }}>
-                      <Text style={styles.body} numberOfLines={report.kind === 'post' || report.kind === 'hit' ? 2 : 6}>{item.body || 'No caption'}</Text>
-                      <Text style={styles.muted} numberOfLines={1}>{person ? `by @${person.handle}` : ''}{item.removed ? ` · Removed${item.reason ? `: ${reasonLabel(item.reason)}` : ''}` : ''}</Text>
-                    </View>
-                  </>
-                )}
-                <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
-              </Pressable>
+              {what}
 
-              <Text style={styles.muted}>Reported by {reporter ? `@${reporter.handle}` : 'someone'}{report.reason && report.kind !== 'ai-coach' ? ` · ${report.reason}` : ''}</Text>
+              <Text style={styles.muted}>{reportedBy}{report.reason && report.kind !== 'ai-coach' ? ` · ${report.reason}` : ''}</Text>
 
-              <View style={styles.actions}>
-                {(report.kind === 'post' || report.kind === 'hit') && item ? (
-                  item.removed
-                    ? <Button label="Restore" variant="secondary" loading={waiting('restore')} onPress={() => void restore(report)} />
-                    // The reason is picked on the Take down page; the report is marked done there too (migration 108).
-                    : <Button label="Take down" variant="danger" onPress={() => router.push({ pathname: '/take-down', params: { kind: report.kind, id: report.targetId!, report: report.id, ...(report.userId ? { who: report.userId } : {}) } })} />
-                ) : null}
-                {report.userId ? (
-                  isSuspended
-                    ? <Button label="Unsuspend" variant="secondary" loading={waiting('unsuspend')} onPress={() => void decide(report, 'unsuspend')} />
-                    : <Button label="Suspend" variant="secondary" loading={waiting('suspend')} onPress={() => void decide(report, 'suspend')} />
-                ) : null}
-                {report.status === 'open' ? <Button label="Dismiss" variant="ghost" loading={waiting('dismiss')} onPress={() => void decide(report, 'dismiss')} /> : null}
-              </View>
+              {takeDownButton || suspendButton || dismissButton ? (
+                <View style={styles.actions}>{takeDownButton}{suspendButton}{dismissButton}</View>
+              ) : null}
             </View>
           );
         })
@@ -298,12 +359,12 @@ function ReportedChatCard({ chat, showAll, lines, onShowAll, styles, users, busy
   onSuspend?: (user: User) => void;
   isSuspended: (user: User) => boolean;
 }) {
-  if (chat === undefined) return <Text style={styles.muted}>Loading the chat…</Text>;
+  if (chat === undefined) return <View style={styles.chatWait}><CourtSpinner size={22} /></View>;
   if (chat === null) {
     return (
       <View style={styles.target}>
         <View style={[styles.thumb, styles.noThumb]}><Ionicons name="chatbubbles-outline" size={18} color={colors.textMuted} /></View>
-        <Text style={[styles.muted, { flex: 1 }]}>This chat is gone, or can’t be read yet (run migration 54).</Text>
+        <Text style={[styles.muted, { flex: 1 }]}>This chat can’t be shown.</Text>
       </View>
     );
   }
@@ -325,7 +386,7 @@ function ReportedChatCard({ chat, showAll, lines, onShowAll, styles, users, busy
         <View style={styles.actions}>
           {people.map((u) => (isSuspended(u)
             ? <Text key={u.id} style={styles.muted}>@{u.handle} is suspended</Text>
-            : <Button key={u.id} label={`Suspend @${u.handle}`} variant="secondary" loading={busy === `member:${u.id}`} onPress={() => onSuspend(u)} />))}
+            : <Button key={u.id} size="sm" label={`Suspend @${u.handle}`} variant="secondary" loading={busy === `member:${u.id}`} onPress={() => onSuspend(u)} />))}
         </View>
       ) : null}
       <View style={styles.chatBox}>
@@ -360,11 +421,11 @@ function ReportedChatCard({ chat, showAll, lines, onShowAll, styles, users, busy
               {/* Any message can be taken out, words as well as photos (remove_reported_message allows both). */}
               {m.id && m.kind === 'photo' ? (
                 <View style={styles.lineActions}>
-                  <Button label={m.photos && m.photos.length > 1 ? 'Remove these photos' : 'Remove this photo'} variant="danger" loading={busy === `line:${m.id}`} onPress={() => onRemove(m.id!, m.photos && m.photos.length > 1 ? 'message and its photos' : 'photo')} />
+                  <Button size="sm" label={m.photos && m.photos.length > 1 ? 'Remove these photos' : 'Remove this photo'} variant="danger" loading={busy === `line:${m.id}`} onPress={() => onRemove(m.id!, m.photos && m.photos.length > 1 ? 'message and its photos' : 'photo')} />
                 </View>
               ) : m.id ? (
                 <View style={styles.lineActions}>
-                  <Button label="Remove this message" variant="ghost" loading={busy === `line:${m.id}`} onPress={() => onRemove(m.id!, 'message')} />
+                  <Button size="sm" label="Remove this message" variant="ghost" loading={busy === `line:${m.id}`} onPress={() => onRemove(m.id!, 'message')} style={styles.lineGhost} />
                 </View>
               ) : null}
             </View>
@@ -422,18 +483,28 @@ function SavedCopy({ chat, copies, flagged, styles, users, onOpenPhotos }: {
 
 const styleDefinitions = StyleSheet.create({
   tabs: { paddingBottom: spacing.md },
+  wait: { paddingTop: spacing.xxxl, alignItems: 'center' },
+  chatWait: { paddingVertical: spacing.lg, alignItems: 'center' },
   card: { gap: spacing.sm, padding: spacing.md, marginBottom: spacing.md, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
   head: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  kind: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.pill, backgroundColor: colors.brandDim },
-  kindText: { ...typography.caption, color: colors.brand },
+  // What was reported, as a small tag: the court's own tint, its words dark enough to read on it in every court.
+  kind: { paddingHorizontal: 9, paddingVertical: 3, borderRadius: radius.pill, backgroundColor: colors.brandDim },
+  kindText: { ...typography.caption, fontSize: 12, letterSpacing: 0.2, color: colors.textMuted },
   status: { ...typography.smallStrong, color: colors.textMuted, marginLeft: 'auto' },
   target: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.sm, borderRadius: radius.md, backgroundColor: colors.surfaceAlt },
+  targetPressed: { opacity: 0.75 },
+  // What the AI coach wrote: the words alone, nothing to open.
+  quote: { padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.surfaceAlt },
   thumb: { width: 44, height: 55, borderRadius: radius.sm, backgroundColor: colors.border },
   noThumb: { alignItems: 'center', justifyContent: 'center' },
   name: { ...typography.bodyStrong, color: colors.text },
   body: { ...typography.body, color: colors.text },
   muted: { ...typography.small, color: colors.textMuted },
-  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  // One row of compact buttons; Dismiss at its far end.
+  actions: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.sm, paddingTop: 2 },
+  // Its words end on the card's content edge, not its own padding's.
+  dismiss: { marginLeft: 'auto', marginRight: -spacing.md, paddingHorizontal: spacing.md },
+  lineGhost: { marginLeft: -spacing.md, paddingHorizontal: spacing.md },
   chatBox: { gap: 6, padding: spacing.sm, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border },
   chatLine: { ...typography.small, color: colors.text },
   chatItem: { gap: 6 },
@@ -444,5 +515,6 @@ const styleDefinitions = StyleSheet.create({
   chatEvent: { ...typography.small, color: colors.textMuted, fontStyle: 'italic', textAlign: 'center' },
   showAll: { ...typography.smallStrong, color: colors.brand },
   flagged: { padding: 6, borderRadius: radius.sm, backgroundColor: colors.brandDim },
-  flagText: { ...typography.caption, color: colors.brand },
+  // Dark enough on the tint, and on the card, in every court.
+  flagText: { ...typography.caption, fontSize: 12, letterSpacing: 0.2, color: colors.textMuted },
 });

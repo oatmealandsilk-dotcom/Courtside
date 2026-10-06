@@ -4,19 +4,19 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
+import { CourtSpinner } from '@/components/CourtSpinner';
 import { DragSheet } from '@/components/DragSheet';
 import { FormRow } from '@/components/FormRow';
 import { LocationLink } from '@/components/LocationChip';
 import { HealthShareRow } from '@/components/session/HealthShareRow';
 import type { DetectedActivity, TaggedCourt } from '@/data/types';
-import { availableShare, chosenShare, choiceFromTicks, postShare, type HealthChoice } from '@/features/activity/healthShare';
+import { availableShare, chosenShare, choiceFromTicks, postShare, sameShare, type HealthChoice } from '@/features/activity/healthShare';
 import { POST_MAX } from '@/features/feed/limits';
 import { notKnownAdult } from '@/features/players/age';
 import { openPlacePicker } from '@/features/places/picker';
 import { TagPlayers } from '@/components/TagPlayers';
 import { Button, Field, Toggle } from '@/components/ui';
 import { canBeFeatured } from '@/features/compose/featuring';
-import { BLOCKED_WORDS_NOTE } from '@/features/hiddenWords/hiddenWords';
 import * as haptics from '@/lib/haptics';
 import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
@@ -25,7 +25,8 @@ import { colors, spacing, typography } from '@/theme';
 /**
  * Editing something of yours after it is up: a post's caption, who is in it
  * and where it was, or a thread's question and details. Saving stamps it
- * "Edited" next to the date. A tracker session's post also has "Share health
+ * "Edited" next to the date, so Save wakes only once something has changed.
+ * Opened before the post is here (a link, a reload), it is fetched first. A tracker session's post also has "Share health
  * data" (Oct 4, owner), as in the composer. A post that can be featured has
  * the composer's "Let CourtSide feature this on its Instagram" switch, so it
  * can be switched off any time after posting (Oct 5, owner).
@@ -33,7 +34,7 @@ import { colors, spacing, typography } from '@/theme';
 export default function EditPost() {
   const styles = useThemedStyles(styleDefinitions);
   const { id = '', kind: rawKind, pickPlace: pickParam } = useLocalSearchParams<{ id?: string; kind?: string; pickPlace?: string }>();
-  const { posts, questions, currentUserId, currentUser, detectedActivities, actions } = useApp();
+  const { posts, questions, currentUserId, currentUser, detectedActivities, ready, actions } = useApp();
   const isQuestion = rawKind === 'question';
   const post = isQuestion ? undefined : posts.find((p) => p.id === id);
   const question = isQuestion ? questions.find((q) => q.id === id) : undefined;
@@ -65,6 +66,19 @@ export default function EditPost() {
     setFeature(post ? post.featureOk !== false : true);
     setFilled(true);
   }, [filled, post, question]);
+
+  // Not here yet (a link, a reload): asked for once the app is up; until the answer, a spinner, never "not yours".
+  const [looked, setLooked] = useState(false);
+  const here = !!(post || question);
+  useEffect(() => {
+    if (!ready || here || looked || !id) return undefined;
+    let on = true;
+    const ask: Promise<unknown> = isQuestion ? actions.loadThread(id) : actions.loadPost(id);
+    void ask.catch(() => undefined).finally(() => { if (on) setLooked(true); });
+    return () => { on = false; };
+  }, [ready, here, looked, id, isQuestion, actions]);
+  // The sheet opens only as tall as what is in it.
+  const [contentH, setContentH] = useState(0);
 
   // Opened from "Add the court" in the post's menu: straight to the place picker
   // once the post is here, a beat after the sheet is up.
@@ -99,7 +113,19 @@ export default function EditPost() {
   // Never on a group post or one with a session's stats: those are never featured.
   const featurable = !!post && canBeFeatured(post);
 
-  const canSave = filled && mine && (isQuestion ? title.trim().length >= 3 : true);
+  // Something anyone would see changed (or a switch on it): until then Save stays asleep, and nothing is marked "Edited".
+  const sameList = (a: string[], b: string[]) => a.length === b.length && a.every((x) => b.includes(x));
+  const dirty = question
+    ? title.trim() !== question.title.trim() || body.trim() !== (question.body ?? '').trim()
+    : !!post && (
+      body.trim() !== (post.body ?? '').trim()
+      || !sameList(tagged, post.taggedUserIds ?? [])
+      || location.trim() !== (post.location ?? '').trim()
+      || (courtOk && (court?.id ?? null) !== (post.court?.id ?? null))
+      || (!!health && available.length > 0 && !sameShare(chosenShare(health, available), postShare(post.session)))
+      || (featurable && feature !== (post.featureOk !== false))
+    );
+  const canSave = filled && mine && dirty && (isQuestion ? title.trim().length >= 3 : true);
   // A quick second tap on Save would ask twice.
   const [checking, setChecking] = useState(false);
   const save = () => {
@@ -111,7 +137,7 @@ export default function EditPost() {
       setChecking(false);
       if (refused) {
         haptics.reject();
-        showToast({ title: BLOCKED_WORDS_NOTE, body: 'Change them and save again.', icon: 'alert-circle-outline', long: true });
+        showToast({ title: 'Not saved', body: 'It has words that break CourtSide’s rules. Change them and save again.', icon: 'alert-circle-outline', long: true });
         return;
       }
       if (post) actions.editPost(post.id, { body: body.trim(), taggedUserIds: tagged, location, court: courtOk ? court : null, ...(health && available.length ? { share: chosenShare(health, available) } : {}), ...(featurable ? { featureOk: feature } : {}) });
@@ -125,6 +151,7 @@ export default function EditPost() {
       closeSignal={closeSignal}
       onDismissed={() => router.back()}
       peekFraction={0.72}
+      contentHeight={contentH || undefined}
       header={
         <View style={styles.headerRow}>
           <Text style={styles.heading}>{isQuestion ? 'Edit thread' : post?.kind === 'clip' ? 'Edit clip' : 'Edit post'}</Text>
@@ -134,8 +161,12 @@ export default function EditPost() {
         </View>
       }
     >
-      <ScrollView contentContainerStyle={styles.form} keyboardShouldPersistTaps="handled">
-        {!mine ? (
+      <ScrollView contentContainerStyle={styles.form} keyboardShouldPersistTaps="handled" onContentSizeChange={(_, h) => { const r = Math.ceil(h); if (r !== contentH) setContentH(r); }}>
+        {!filled ? (
+          looked
+            ? <Text style={styles.note}>{isQuestion ? 'This thread isn’t available.' : 'This post isn’t available.'} It may have been deleted.</Text>
+            : <View style={styles.wait}><CourtSpinner size={26} /></View>
+        ) : !mine ? (
           <Text style={styles.note}>Only the person who posted this can change it.</Text>
         ) : isQuestion ? (
           <>
@@ -162,8 +193,12 @@ export default function EditPost() {
             ) : null}
           </>
         )}
-        {mine ? <Button label="Save" onPress={save} disabled={!canSave} loading={checking} full /> : null}
-        <Text style={styles.note}>It will say “Edited” next to the date.</Text>
+        {filled && mine ? (
+          <>
+            <Button label="Save" onPress={save} disabled={!canSave} loading={checking} full />
+            <Text style={styles.note}>It will say “Edited” next to the date.</Text>
+          </>
+        ) : null}
       </ScrollView>
     </DragSheet>
   );
@@ -174,4 +209,5 @@ const styleDefinitions = StyleSheet.create({
   heading: { ...typography.title, color: colors.text },
   form: { padding: spacing.lg, paddingTop: spacing.sm, gap: spacing.md, paddingBottom: spacing.xxl },
   note: { ...typography.small, color: colors.textFaint, textAlign: 'center' },
+  wait: { paddingVertical: spacing.xl, alignItems: 'center' },
 });

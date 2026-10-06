@@ -5,7 +5,7 @@ import { shownStreak, streakWords } from '@/features/practice/streakFlame';
 import React, { useRef, useState } from 'react';
 import { confirm, confirmDelete, confirmReport } from '@/lib/confirm';
 import { RemovedNote } from '@/features/moderation/RemovedNote';
-import { show as showToast } from '@/lib/toast';
+import { thankForReport } from '@/features/moderation/reportThanks';
 import * as haptics from '@/lib/haptics';
 import { MentionSuggestions } from '@/components/MentionSuggestions';
 import { useMentionDraft } from '@/features/mentions/useMentionDraft';
@@ -39,7 +39,7 @@ export function ThreadReply({ answer, thread, acceptedId, askerId, depth = 0, pr
   /** The asker's: marks this as the answer that solved it. */ onAccept?: (answerId: string) => void;
 }) {
   const styles = useThemedStyles(styleDefinitions);
-  const { users, currentUserId, currentUser, actions } = useApp();
+  const { users, currentUserId, currentUser, blockedIds, actions } = useApp();
   const [replying, setReplying] = useState(false);
   const [draft, setDraft] = useState('');
   const [media, setMedia] = useState<ReplyAttachment | null>(null);
@@ -79,7 +79,7 @@ export function ThreadReply({ answer, thread, acceptedId, askerId, depth = 0, pr
       haptics.tap();
       confirmReport('reply', () => {
         actions.reportUser(answer.authorId, `answer:${answer.id}`);
-        showToast({ title: 'Thanks — a person will review this', icon: 'flag-outline' });
+        thankForReport(responder, responder && !blockedIds.includes(responder.id) ? () => actions.toggleBlock(responder.id) : undefined);
       });
     } : undefined;
   // An admin's hold takes it down (or puts it back), with Delete still there on their own reply (migration 108).
@@ -89,7 +89,10 @@ export function ThreadReply({ answer, thread, acceptedId, askerId, depth = 0, pr
     if (answer.removed) {
       confirm({ title: 'Restore this reply?', message: 'Everyone who could see it before sees it again.', confirmLabel: 'Restore', onConfirm: () => { void actions.restoreContent('answer', answer.id); }, ...deleteToo });
     } else {
-      confirm({ title: 'Take down this reply?', message: 'Choose which of CourtSide’s rules it breaks on the next page.', confirmLabel: 'Choose a reason', destructive: true, onConfirm: () => router.push({ pathname: '/take-down', params: { kind: 'answer', id: answer.id } }), ...deleteToo });
+      // Someone else's: straight to the page that asks which rule it breaks (it asks once more before anything happens).
+      // Your own: asked first, as Delete is the likelier wish.
+      if (mine) confirm({ title: 'Take down this reply?', message: 'Choose which of CourtSide’s rules it breaks on the next page.', confirmLabel: 'Choose a reason', destructive: true, onConfirm: () => router.push({ pathname: '/take-down', params: { kind: 'answer', id: answer.id } }), ...deleteToo });
+      else router.push({ pathname: '/take-down', params: { kind: 'answer', id: answer.id } });
     }
   } : undefined;
   const hold = askModerate ?? askDelete;

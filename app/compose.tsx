@@ -685,7 +685,7 @@ export default function Compose() {
       const firstPost = !posts.some((p) => p.authorId === currentUserId);
       if (shareTo) openGroupFeed(shareTo); else landOnFeed();
       // Said once the post has actually landed, never while it is still going up (or if it fails).
-      if (firstPost) whenLanded(postId, () => setTimeout(() => showToast({ title: 'Your first post is up', body: 'Tap to invite the people you hit with.', icon: 'people-outline', href: '/invite' }), 1800));
+      if (firstPost) whenLanded(postId, () => setTimeout(() => showToast({ title: 'Your first post is up', body: 'Tap to invite the people you hit with.', icon: 'people-outline', href: '/invite?first=1' }), 1800));
       // A session posted at a court: who else was there that day, once it has landed (Flyby, migration 130).
       if (stats) flybyForPost(postId, opened, firstPost);
       return;
@@ -722,7 +722,7 @@ export default function Compose() {
     // they have seen it go up: a light nudge on the feed, not a whole screen.
     const firstPost = !posts.some((p) => p.authorId === currentUserId);
     if (shareTo) openGroupFeed(shareTo); else landOnFeed();
-    if (firstPost) whenLanded(postId, () => setTimeout(() => showToast({ title: 'Your first post is up', body: 'Tap to invite the people you hit with.', icon: 'people-outline', href: '/invite' }), 1800));
+    if (firstPost) whenLanded(postId, () => setTimeout(() => showToast({ title: 'Your first post is up', body: 'Tap to invite the people you hit with.', icon: 'people-outline', href: '/invite?first=1' }), 1800));
     if (stats && statsPick) flybyForPost(postId, statsPick, firstPost);
   };
 
@@ -797,7 +797,7 @@ export default function Compose() {
     const next = afterLog(freshLog ? logId : undefined, shareInput, day, shareInput.minutes ?? activity.minutes);
     const record = freshLog ? next.record : null;
     // Said once the post has actually landed, never while it is still going up (or if it fails).
-    if (firstPost) whenLanded(postId, () => setTimeout(() => showToast({ title: 'Your first post is up', body: 'Tap to invite the people you hit with.', icon: 'people-outline', href: '/invite' }), 1800));
+    if (firstPost) whenLanded(postId, () => setTimeout(() => showToast({ title: 'Your first post is up', body: 'Tap to invite the people you hit with.', icon: 'people-outline', href: '/invite?first=1' }), 1800));
     // A beaten record is the moment: "New record!" on gold, with the same Instagram button.
     else if (record) whenLanded(postId, () => setTimeout(() => { haptics.reward(); showToast({ title: record.title, body: record.body, glyph: 'record', action: shareAction({ post: postId, session: logId }) }); }, 600));
     // Otherwise "Posted" with an Instagram button: the session as a story

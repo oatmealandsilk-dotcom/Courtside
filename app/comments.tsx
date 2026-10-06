@@ -386,7 +386,8 @@ export default function CommentsSheet() {
                 isFresh={(c) => Date.parse(c.createdAt) > openedAt.current}
               />
             ))}
-            {!threads.length ? <Text style={styles.empty}>{exists ? 'No comments yet. Start the conversation.' : looked ? 'This is no longer available.' : ''}</Text> : null}
+            {/* Only hidden ones so far: "Hidden comments" below says so, not "No comments yet" above it. */}
+            {!threads.length && !(exists && hidden.length) ? <Text style={styles.empty}>{exists ? 'No comments yet. Start the conversation.' : looked ? 'This is no longer available.' : ''}</Text> : null}
             <HiddenComments count={hidden.length}>
               {hidden.map((c) => (
                 <CommentRow key={c.id} comment={c} big onUnhide={() => actions.unhideByWords(kind === 'hit' ? 'hit-comment' : 'comment', c.id)} />

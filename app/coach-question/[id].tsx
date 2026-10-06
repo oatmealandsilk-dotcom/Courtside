@@ -18,6 +18,7 @@ import { HiddenComments, HiddenReplyRow } from '@/components/HiddenComments';
 import { hiddenCoachRepliesOn, shownInList } from '@/features/hiddenWords/hiddenWords';
 import * as haptics from '@/lib/haptics';
 import { show as showToast } from '@/lib/toast';
+import { thankForReport } from '@/features/moderation/reportThanks';
 import { useStillLoading } from '@/lib/useStillLoading';
 import { RichText } from '@/components/RichText';
 import { useApp } from '@/store/AppContext';
@@ -33,7 +34,7 @@ import { colors, radius, spacing, typography, font } from '@/theme';
 export default function CoachQuestionDetail() {
   const styles = useThemedStyles(styleDefinitions);
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { coachQuestions, coachReplies, users, coaches, currentUser, currentUserId, error, actions } = useApp();
+  const { coachQuestions, coachReplies, users, coaches, currentUser, currentUserId, blockedIds, error, actions } = useApp();
   const [draft, setDraft] = useState('');
   // What is in the box now, for an answer sent and then refused (see postAnswer).
   const latestDraft = useRef(draft);
@@ -103,7 +104,8 @@ export default function CoachQuestionDetail() {
     if (reply.removed) {
       confirm({ title: 'Restore this reply?', message: 'Everyone who could see it before sees it again.', confirmLabel: 'Restore', onConfirm: () => { void actions.restoreContent('coach-reply', reply.id); } });
     } else {
-      confirm({ title: 'Take down this reply?', message: 'Choose which of CourtSide’s rules it breaks on the next page.', confirmLabel: 'Choose a reason', destructive: true, onConfirm: () => router.push({ pathname: '/take-down', params: { kind: 'coach-reply', id: reply.id } }) });
+      // Straight to the page that asks which rule it breaks: it asks once more before anything happens.
+      router.push({ pathname: '/take-down', params: { kind: 'coach-reply', id: reply.id } });
     }
   };
 
@@ -128,11 +130,13 @@ export default function CoachQuestionDetail() {
     leaving.current = true;
     actions.reportUser(question.authorId, `coach-question:${question.id}`);
     goBack('/coaches');
-    showToast({ title: 'Thanks — a person will review this', icon: 'flag-outline' });
+    const asker = users.find((u) => u.id === question.authorId);
+    thankForReport(asker, asker && !blockedIds.includes(asker.id) ? () => actions.toggleBlock(asker.id) : undefined);
   }, true);
   const reportReply = (reply: CoachReply) => confirmReport('reply', () => {
     actions.reportUser(reply.coachUserId, `coach-reply:${reply.id}`);
-    showToast({ title: 'Thanks — a person will review this', icon: 'flag-outline' });
+    const coach = users.find((u) => u.id === reply.coachUserId);
+    thankForReport(coach, coach && !blockedIds.includes(coach.id) ? () => actions.toggleBlock(coach.id) : undefined);
   });
 
   return (
@@ -179,7 +183,8 @@ export default function CoachQuestionDetail() {
               ? 'Answered'
               : replies.length
                 ? `${replies.length} coach ${replies.length === 1 ? 'reply' : 'replies'}`
-                : 'Waiting on a coach'}
+                // Only a reply your Hidden words hid: a coach did reply, it is under Hidden replies.
+                : hiddenReplies.length ? 'A coach replied' : 'Waiting on a coach'}
           </Text>
           {question.authorId === currentUserId && replies.length ? (
             <Pressable accessibilityRole="button" accessibilityLabel={question.resolved ? 'Reopen the question' : 'This answered it'} onPress={() => actions.resolveCoachQuestion(question.id)} hitSlop={8} style={{ marginLeft: 'auto' }}>
@@ -190,7 +195,7 @@ export default function CoachQuestionDetail() {
       </View>
 
       <Text style={styles.sectionTitle}>
-        {replies.length ? 'Coach replies' : 'No replies yet'}
+        {replies.length || hiddenReplies.length ? 'Coach replies' : 'No replies yet'}
       </Text>
 
       {replies.map((reply) => {
@@ -260,12 +265,10 @@ export default function CoachQuestionDetail() {
         );
       })}
 
-      {!replies.length ? (
+      {!replies.length && !hiddenReplies.length ? (
         <Text style={styles.waiting}>
-          {hiddenReplies.length
-            ? 'A coach replied. It’s under Hidden replies below.'
-            // Only the asker is told when a coach replies; anyone else reading is not promised a notification.
-            : mine ? 'Coaches usually reply within a day. You will get a notification when they do.' : 'Coaches usually reply within a day.'}
+          {/* Only the asker is told when a coach replies; anyone else reading is not promised a notification. */}
+          {mine ? 'Coaches usually reply within a day. You will get a notification when they do.' : 'Coaches usually reply within a day.'}
         </Text>
       ) : null}
 

@@ -11,7 +11,7 @@ import { voteCounts } from '@/components/VoteControls';
 import { RichText } from '@/components/RichText';
 import { relativeTime } from '@/lib/format';
 import { confirmDelete, confirmReport } from '@/lib/confirm';
-import { show as showToast } from '@/lib/toast';
+import { thankForReport } from '@/features/moderation/reportThanks';
 import { useApp } from '@/store/AppContext';
 import type { Tip } from '@/data/types';
 import { colors, font, spacing, typography, lift } from '@/theme';
@@ -19,6 +19,8 @@ import { colors, font, spacing, typography, lift } from '@/theme';
 /** A tip sent in the last few minutes is yours to see at the top, whatever its votes. */
 const FRESH_MS = 10 * 60 * 1000;
 const score = (tip: Tip) => { const c = voteCounts(tip); return c.up - c.down; };
+/** Delete and Report sit on a line of small words: reached from 44pt tall, the line itself unchanged. */
+const ACTION_SLOP = { top: 13, bottom: 13, left: 10, right: 10 };
 
 /**
  * The board: every tip from early users, most wanted first. A box to add
@@ -29,7 +31,7 @@ const score = (tip: Tip) => { const c = voteCounts(tip); return c.up - c.down; }
  */
 export default function Tips() {
   const styles = useThemedStyles(styleDefinitions);
-  const { tips, users, currentUserId, actions } = useApp();
+  const { tips, users, currentUserId, blockedIds, actions } = useApp();
   const opened = useRef(Date.now()).current;
   // Re-sorted when a tip arrives or leaves, not on every vote.
   const order = useMemo(() => {
@@ -71,15 +73,15 @@ export default function Tips() {
                       <Text style={styles.time}>· {relativeTime(tip.createdAt)}</Text>
                       {/* Your own tip can be deleted; anyone else's reported (App Review 1.2), the way a coach's reply is. */}
                       {mine ? (
-                        <Pressable accessibilityRole="button" accessibilityLabel="Delete your tip" onPress={() => confirmDelete(() => actions.deleteTip(tip.id), 'your tip')} hitSlop={8} style={styles.action}>
+                        <Pressable accessibilityRole="button" accessibilityLabel="Delete your tip" onPress={() => confirmDelete(() => actions.deleteTip(tip.id), 'your tip')} hitSlop={ACTION_SLOP} style={styles.action}>
                           <Ionicons name="trash-outline" size={14} color={colors.textFaint} />
                           <Text style={styles.time}>Delete</Text>
                         </Pressable>
                       ) : currentUserId ? (
                         <Pressable accessibilityRole="button" accessibilityLabel="Report this tip" onPress={() => confirmReport('tip', () => {
                           actions.reportUser(tip.authorId, `tip:${tip.id}`);
-                          showToast({ title: 'Thanks — a person will review this', icon: 'flag-outline' });
-                        })} hitSlop={8} style={styles.action}>
+                          thankForReport(author, author && !blockedIds.includes(author.id) ? () => actions.toggleBlock(author.id) : undefined);
+                        })} hitSlop={ACTION_SLOP} style={styles.action}>
                           <Ionicons name="flag-outline" size={14} color={colors.textFaint} />
                           <Text style={styles.time}>Report</Text>
                         </Pressable>

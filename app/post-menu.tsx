@@ -1,7 +1,7 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Dimensions, Easing, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -13,7 +13,8 @@ import { goBack } from '@/lib/goBack';
 import { colors, radius, spacing, typography } from '@/theme';
 import { shareLink } from '@/lib/shareLink';
 import { postShareText } from '@/features/share/shareText';
-import { confirm, confirmBlock } from '@/lib/confirm';
+import { confirm, confirmBlock, confirmReport } from '@/lib/confirm';
+import { REPORT_THANKS } from '@/features/moderation/reportThanks';
 import { notKnownAdult } from '@/features/players/age';
 import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { removedLine } from '@/features/moderation/reasons';
@@ -64,6 +65,9 @@ export default function PostMenu() {
   const mine = !!item && item.authorId === currentUserId;
   const isSaved = saved.postIds.includes(id);
   const [done, setDone] = useState('');
+  // Reported from here: the note thanks you and offers to block them too (Instagram's way).
+  const [reportedNow, setReportedNow] = useState(false);
+  const navigation = useNavigation();
   // Share to Instagram Story: on its way (the file coming down), and the overlay photographed for it:
   // on a see-through story-sized canvas for a clip's sticker, or drawn onto a photo (`baking`, its address).
   const [working, setWorking] = useState(false);
@@ -103,7 +107,12 @@ export default function PostMenu() {
     // Moves on the tap itself, fastest in its first frames (an easing that
     // starts slowly reads as a delay), with the dim fading alongside.
     setLeaving(true);
-    Animated.timing(rise, { toValue: 1, duration: 220, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start(() => goBack('/'));
+    // Reported from the author's own feed of posts (a post's page): that feed would
+    // only move on to their next post, so it closes too, back to where you came from.
+    const routes = navigation.getState()?.routes ?? [];
+    const under = routes[routes.length - 2];
+    const leaveTheirFeed = reportedNow && !!author && under?.name === 'posts/[userId]' && (under.params as { userId?: string } | undefined)?.userId === author.id && router.canDismiss();
+    Animated.timing(rise, { toValue: 1, duration: 220, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start(() => (leaveTheirFeed ? router.dismiss(2) : goBack('/')));
   };
 
   if (!item) return <View style={styles.backdrop}><SheetBackdrop /><Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={() => goBack('/')} style={StyleSheet.absoluteFill} /></View>;
@@ -191,7 +200,7 @@ export default function PostMenu() {
   if (mine && story) {
     rows.push(
       { key: 'archive', icon: 'archive-outline', label: story.archived ? 'Unarchive' : 'Archive', onPress: () => { actions.toggleArchiveStory(story.id); close(); } },
-      { key: 'delete', icon: 'trash-outline', label: 'Delete', danger: true, onPress: () => confirm({ title: 'Delete this instant?', message: "Its likes and comments go with it. This can't be undone.", confirmLabel: 'Delete', destructive: true, onConfirm: () => { void actions.deleteStory(story.id); close(); } }) },
+      { key: 'delete', icon: 'trash-outline', label: 'Delete', danger: true, onPress: () => confirm({ title: 'Delete this Instant?', message: "Its likes and comments go with it. This can't be undone.", confirmLabel: 'Delete', destructive: true, onConfirm: () => { void actions.deleteStory(story.id); close(); } }) },
     );
   }
   // The original file, for the owner and for CourtSide's own channels (an admin): one tap to the camera roll, then Instagram.
@@ -219,7 +228,13 @@ export default function PostMenu() {
     const muted = mutedIds.includes(author.id);
     const blocked = blockedIds.includes(author.id);
     rows.push(
-      { key: 'report', icon: 'flag-outline', label: 'Report', note: 'Spam, harassment or something that should not be here.', onPress: () => { reported.current = { post, story }; actions.reportUser(author.id, `${isHit ? 'hit' : 'post'}:${item.id}`); setDone('Thanks — we will take a look.'); } },
+      // Asked first, the same question as everywhere else; the menu stays up behind it, so Cancel leaves you on it.
+      { key: 'report', icon: 'flag-outline', label: 'Report', note: 'Spam, harassment or something that should not be here.', onPress: () => confirmReport(isHit ? 'Instant' : post?.kind === 'clip' ? 'clip' : 'post', () => {
+        reported.current = { post, story };
+        actions.reportUser(author.id, `${isHit ? 'hit' : 'post'}:${item.id}`);
+        setReportedNow(true);
+        setDone(REPORT_THANKS);
+      }) },
       { key: 'mute', icon: muted ? 'volume-high-outline' : 'volume-mute-outline', label: muted ? `Unmute @${author.handle}` : `Mute @${author.handle}`, note: muted ? undefined : 'Their posts stop showing up for you. They are not told.', onPress: () => { actions.toggleMute(author.id); close(); } },
       // Unblocking is one tap; blocking asks first and says what it does.
       { key: 'block', icon: 'ban-outline', label: blocked ? `Unblock @${author.handle}` : `Block @${author.handle}`, danger: !blocked, onPress: () => {
@@ -229,8 +244,9 @@ export default function PostMenu() {
     );
   }
   // Admins only (the database refuses anyone else): take it down, with a
-  // reason, on its own page; or, once down, put it back.
-  if (admin) {
+  // reason, on its own page; or, once down, put it back. Never on your own:
+  // Delete and Archive are there for that.
+  if (admin && !mine) {
     const what = isHit ? 'hit' as const : 'post' as const;
     rows.push(removed
       ? { key: 'restore', icon: 'eye-outline', label: 'Restore', note: 'Everyone who could see it before sees it again.', onPress: () => { void actions.restoreContent(what, item.id); close(); } }
@@ -268,7 +284,15 @@ export default function PostMenu() {
           <View style={styles.doneBox}>
             <Ionicons name="checkmark-circle" size={22} color={colors.brand} />
             <Text style={styles.doneText}>{done}</Text>
-            <Pressable accessibilityRole="button" onPress={close} style={styles.doneButton}><Text style={styles.doneButtonText}>Done</Text></Pressable>
+            <View style={styles.doneActions}>
+              {/* Instagram's next step after a report: block them too (asked first, as blocking always is). */}
+              {reportedNow && author && !blockedIds.includes(author.id) ? (
+                <Pressable accessibilityRole="button" accessibilityLabel={`Block @${author.handle}`} onPress={() => confirmBlock(author, () => { actions.toggleBlock(author.id); close(); })} style={({ pressed }) => [styles.blockButton, pressed && { opacity: 0.7 }]}>
+                  <Text style={styles.blockButtonText} numberOfLines={1}>Block @{author.handle}</Text>
+                </Pressable>
+              ) : null}
+              <Pressable accessibilityRole="button" onPress={close} style={({ pressed }) => [styles.doneButton, pressed && { opacity: 0.85 }]}><Text style={styles.doneButtonText}>Done</Text></Pressable>
+            </View>
           </View>
         ) : (
           <ScrollView style={{ maxHeight: Math.max(240, windowHeight - insets.top - insets.bottom - 64) }} contentContainerStyle={styles.list} bounces={false} showsVerticalScrollIndicator={false}>
@@ -317,12 +341,15 @@ const styleDefinitions = StyleSheet.create({
   stickerClip: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, overflow: 'hidden', borderTopLeftRadius: 24, borderTopRightRadius: 24 },
   stickerStage: { position: 'absolute', left: 0, bottom: 0 },
   stickerCover: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: colors.bg, borderTopLeftRadius: 24, borderTopRightRadius: 24 },
-  label: { ...typography.body, fontWeight: '600', color: colors.text },
+  label: { ...typography.bodyStrong, color: colors.text },
   note: { ...typography.small, color: colors.textMuted, marginTop: 2 },
   removedBox: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 12, paddingHorizontal: spacing.md, marginBottom: 4, borderRadius: radius.md, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
-  removedTitle: { ...typography.body, fontWeight: '600', color: colors.danger },
-  doneBox: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.lg },
+  removedTitle: { ...typography.bodyStrong, color: colors.danger },
+  doneBox: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.lg, paddingHorizontal: spacing.md },
   doneText: { ...typography.body, color: colors.text, textAlign: 'center' },
-  doneButton: { marginTop: spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: 10, borderRadius: radius.pill, backgroundColor: colors.brand },
-  doneButtonText: { ...typography.smallStrong, color: colors.brandInk },
+  doneActions: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: spacing.sm, marginTop: spacing.sm },
+  doneButton: { minHeight: 44, minWidth: 96, paddingHorizontal: spacing.xl, borderRadius: radius.pill, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
+  doneButtonText: { ...typography.smallStrong, fontSize: 14, color: colors.brandInk },
+  blockButton: { minHeight: 44, maxWidth: 220, paddingHorizontal: spacing.lg, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.danger, alignItems: 'center', justifyContent: 'center' },
+  blockButtonText: { ...typography.smallStrong, fontSize: 14, color: colors.danger },
 });
