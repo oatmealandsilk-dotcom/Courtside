@@ -82,6 +82,17 @@ export default function StoryViewer() {
     });
     return () => { stopped = true; run?.stop(); };
   }, [current?.id, index, list.length, focused, progress]);
+  // What the viewer shows right now. A delete waits on its question while the
+  // bar keeps running, so by the yes the viewer may have moved on or closed.
+  const live = useRef({ mounted: true, index, list, currentId: current?.id });
+  live.current.index = index;
+  live.current.list = list;
+  live.current.currentId = current?.id;
+  useEffect(() => {
+    const now = live.current;
+    now.mounted = true;
+    return () => { now.mounted = false; };
+  }, []);
 
   if (!user || !current) {
     return (
@@ -112,7 +123,23 @@ export default function StoryViewer() {
   };
   const remove = () => {
     const goingId = current.id;
-    confirm({ title: 'Delete this instant?', message: "Its likes and comments go with it. This can't be undone.", confirmLabel: 'Delete', destructive: true, onConfirm: () => { actions.deleteStory(goingId); leaveCurrent(); } });
+    confirm({
+      title: 'Delete this instant?', message: "Its likes and comments go with it. This can't be undone.", confirmLabel: 'Delete', destructive: true,
+      onConfirm: () => {
+        actions.deleteStory(goingId);
+        // The viewer already closed itself: nothing more to do here.
+        const now = live.current;
+        if (!now.mounted || !focusedRef.current) return;
+        if (now.currentId === goingId) {
+          if (only || now.list.length === 1) goBack('/');
+          else if (now.index >= now.list.length - 1) setIndex(Math.max(0, now.index - 1));
+          return;
+        }
+        // It moved past the deleted one: step back so the next Instant isn't skipped.
+        const at = now.list.findIndex((s) => s.id === goingId);
+        if (at >= 0 && at < now.index) setIndex(now.index - 1);
+      },
+    });
   };
 
   const viewers = current.viewedBy.filter((v) => v !== current.authorId).length;

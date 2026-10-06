@@ -3900,6 +3900,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // Refused for its words (migration 117; that toast says why), or not
       // saved at all: the post goes back to what it said.
       if (r === 'failed') showToast({ title: 'Your changes didn’t save', body: 'Check your connection and try again.', icon: 'alert-circle-outline' });
+      if (r === 'too-many-tagged') showToast({ title: 'Your changes didn’t save', body: 'A post can tag up to 20 people. Take some off and save it again.', icon: 'alert-circle-outline' });
       setState((prev) => ({ ...prev, posts: prev.posts.map((p) => (p.id === postId && p.editedAt === editedAt ? { ...p, body: post.body, tags: post.tags, taggedUserIds: post.taggedUserIds, location: post.location, court: post.court, editedAt: post.editedAt } : p)) }));
     });
     setState((prev) => {

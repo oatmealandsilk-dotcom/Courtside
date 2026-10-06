@@ -3713,14 +3713,19 @@ export const remote = {
     return !error;
   },
   /** The author's edit: words, tags, who is in it, where it was — and when. */
-  /** Resolves 'blocked' when the new words were refused (migration 117), 'failed' when it did not save at all. */
-  async updatePost(postId: ID, patch: { body: string; tags: string[]; taggedUserIds: ID[]; location?: string; court?: TaggedCourt | null; editedAt: string }): Promise<'blocked' | 'failed' | undefined> {
+  /**
+   * Resolves 'blocked' when the new words were refused (migration 117),
+   * 'too-many-tagged' past the database's limit on tagged people
+   * (posts_tags_count), and 'failed' when it did not save at all.
+   */
+  async updatePost(postId: ID, patch: { body: string; tags: string[]; taggedUserIds: ID[]; location?: string; court?: TaggedCourt | null; editedAt: string }): Promise<'blocked' | 'failed' | 'too-many-tagged' | undefined> {
     const base = { body: patch.body, tags: patch.tags.slice(0, TAGS_MAX), tagged_user_ids: patch.taggedUserIds };
     const court = patch.court === undefined ? {} : { court_id: patch.court?.id ?? null, court_name: patch.court?.name ?? null, court_lat: patch.court?.lat ?? null, court_lng: patch.court?.lng ?? null };
     let { error } = await need().from('posts').update({ ...base, location: patch.location ?? null, ...court, edited_at: patch.editedAt }).eq('id', postId);
     // Before migration 51 there is nowhere to keep the court: save the rest.
     if (error && /court_/.test(error.message)) ({ error } = await need().from('posts').update({ ...base, location: patch.location ?? null, edited_at: patch.editedAt }).eq('id', postId));
     if (!error) return undefined;
+    if (error.code === '23514' && /posts_tags_count/.test(error.message)) return 'too-many-tagged';
     if (/location|edited_at/.test(error.message)) {
       console.warn('[remote] edit columns missing; run the pending migration — saving the words only');
       const retry = await need().from('posts').update(base).eq('id', postId);

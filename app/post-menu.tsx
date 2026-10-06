@@ -27,6 +27,8 @@ type Row = {
   label: string;
   note?: string;
   danger?: boolean;
+  /** Shown dimmed and not tappable yet (still asking the server whether it may). */
+  waiting?: boolean;
   onPress: () => void | Promise<void>;
 };
 
@@ -101,7 +103,8 @@ export default function PostMenu() {
     // Your own post with a session on it shares as the session's story picture (share-session), the way Strava does; any other post as its own card.
     ...(mine && post.session
       ? [{ key: 'story', icon: 'logo-instagram' as const, label: 'Share to Instagram', note: 'Your session as a story picture.', onPress: () => router.replace({ pathname: '/share-session', params: { post: post.id } }) }]
-      : openOutside ? [{ key: 'card', icon: 'image-outline' as const, label: 'Share as image', onPress: () => router.replace({ pathname: '/share-card', params: { id: post.id } }) }] : []),
+      // Still asking (null): the row holds its place dimmed, so the rows below don't jump when the answer comes.
+      : openOutside !== false ? [{ key: 'card', icon: 'image-outline' as const, label: 'Share as image', waiting: openOutside === null, onPress: () => router.replace({ pathname: '/share-card', params: { id: post.id } }) }] : []),
     ...(post.groupId ? [] : [{ key: 'link', icon: 'link-outline' as const, label: 'Share link', onPress: async () => { try { const note = await shareOutside(postShareText(post, users.find((u) => u.id === post.authorId), currentUserId), url); if (note) setDone(note); else close(); } catch { setDone(`Share this link: ${url}`); } } }]),
   ] : [];
   if (mine && story) {
@@ -178,7 +181,7 @@ export default function PostMenu() {
               </View>
             ) : null}
             {rows.map((row) => (
-              <Pressable key={row.key} accessibilityRole="button" accessibilityLabel={row.label} onPress={() => { void row.onPress(); }} style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}>
+              <Pressable key={row.key} accessibilityRole="button" accessibilityLabel={row.label} disabled={row.waiting} onPress={() => { void row.onPress(); }} style={({ pressed }) => [styles.row, pressed && styles.rowPressed, row.waiting && { opacity: 0.4 }]}>
                 {row.icon === 'court'
                   ? <View style={styles.glyph}><CourtGlyph size={17} color={row.danger ? colors.danger : colors.text} /></View>
                   : <Ionicons name={row.icon} size={22} color={row.danger ? colors.danger : colors.text} />}
