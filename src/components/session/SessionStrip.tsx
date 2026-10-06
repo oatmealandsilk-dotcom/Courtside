@@ -66,8 +66,8 @@ export function SessionStrip({ session, hidden = [], play = false, scale = 1, on
   const source = tracker ? sourceLabel(session.source ?? 'apple-health') : null;
   const spoken = [`${spokenDuration(session.minutes)}, ${(titleAs ?? what).toLowerCase()}`, far ? `${far.value} miles` : null, hr && session.avgHr ? `average heart rate ${session.avgHr}` : null, hr ? `max ${session.maxHr}` : null, kcal ? `${kcal} calories` : null, sub ?? (lead ? `${vs} @${lead.handle}` : null), sub ? null : source].filter(Boolean).join(', ');
   const small = { fontSize: 13 * k, lineHeight: Math.round(17 * k) };
-  // The session card's own look (Oct 4, owner: "looks a bit flat"): the theme's colour and its wash, white numbers; glass-dark on dark themes;
-  // the shirt's cream with green numbers on the CourtSide court (Oct 5).
+  // The session card's own look (Oct 4, owner: "looks a bit flat"): the court's shirt, its fade and its lettering (Oct 6),
+  // the cream with green numbers on the CourtSide court (Oct 5).
   const look = cardLook(theme);
   const stats = [
     kcal != null ? { key: 'kcal', label: 'Calories', node: <Figure value={kcal} baseline size={19 * k} color={look.figure} unitColor={look.muted} play={play} delay={200} duration={600} /> } : null,

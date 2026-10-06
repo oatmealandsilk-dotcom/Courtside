@@ -229,7 +229,7 @@ export function WeekSummary({ recap, label, look, onOpen, onClose, extra, childr
       <View style={styles.sumRow}>
         <View style={styles.sumWords}>
           {quiet ? (
-            <Text style={[styles.sumQuiet, { color: look.wash === 'brand' ? look.ink : colors.text }]} numberOfLines={1}>{onOpen ? 'A quiet week' : 'No tennis yet'}</Text>
+            <Text style={[styles.sumQuiet, { color: look.filled ? look.ink : colors.text }]} numberOfLines={1}>{onOpen ? 'A quiet week' : 'No tennis yet'}</Text>
           ) : (
             <Text style={[styles.sumBig, { color: look.figure }]} numberOfLines={1}>
               {duration(recap.minutes)}

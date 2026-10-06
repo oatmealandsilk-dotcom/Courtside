@@ -10,7 +10,7 @@ import { WeekSummary } from '@/components/recap/RecapCard';
 import { PersonalRecords, RecordPill } from '@/components/records/PersonalRecords';
 import { cardLook, creamFill } from '@/components/session/SessionCard';
 import { LoggedTitle, type PeopleLine } from '@/components/LoggedTitle';
-import { Avatar, CreamWash, EmptyState, Screen } from '@/components/ui';
+import { Avatar, EmptyState, Screen, ShirtWash } from '@/components/ui';
 import type { DetectedActivity, PracticeSession, SessionTag, User } from '@/data/types';
 import { activityTitle, activityWhen, dayWords, loggedLabel } from '@/features/activity/format';
 import { canTagKind, firstName, peopleText, peopleWords, yourResult } from '@/features/activity/sessionTags';
@@ -173,7 +173,8 @@ export default function YourSessions() {
   const fill = creamFill(theme);
   // The summary is one of the session boxes (Oct 6, owner: "they need the wash"): their look and wash, from cardLook.
   const look = cardLook(theme);
-  const onBrand = look.wash === 'brand';
+  // A full-colour box (a city court's shirt, the green box): the records row takes the box's own ink.
+  const onBrand = look.filled;
   // The summary is last week's recap while it is up (Monday to Wednesday, until put away), else this week so far.
   const recapUp = !!recap && showWeekCard(recap);
   const showRecap = recapUp && recapAway === false;
@@ -347,15 +348,19 @@ export default function YourSessions() {
 
 /**
  * A card of rows (To do, a week of sessions, the offer): the cream, with the
- * session boxes' wash laid lighter (CreamWash at a little over half), so the
- * page has the boxes' soft corner glow without a wall of colour. None on a
- * dark page, as the boxes there.
+ * session boxes' wash laid lighter (ShirtWash at a little over half), so the
+ * page has the boxes' soft corner glow without a wall of colour. On a city
+ * court (a filled shirt box) the card is the court's own light ground and the
+ * shirt's corners come in lifted toward it, a tint of that court's colours
+ * under dark words. None on a dark page, as the boxes there.
  */
 function SoftCard({ fill, style, children }: { fill: string; style?: object; children: React.ReactNode }) {
   const styles = useThemedStyles(styleDefinitions);
+  const { theme } = useTheme();
+  const lift = cardLook(theme).filled ? 0.8 : 0;
   return (
     <View style={[styles.group, { backgroundColor: fill }, style]}>
-      {pageIsDark() ? null : <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.softWash]}><CreamWash radius={20} /></View>}
+      {pageIsDark() ? null : <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.softWash]}><ShirtWash radius={20} lift={lift} /></View>}
       {children}
     </View>
   );
