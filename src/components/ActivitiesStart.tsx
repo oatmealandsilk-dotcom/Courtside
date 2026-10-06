@@ -122,17 +122,18 @@ export function ActivitiesStart({ topInset, bottomInset, nearCount }: { topInset
 /**
  * "Near you" on a session from a player you don't follow yet, with Follow:
  * in the page's own flow over a written post, or as a small tile over a
- * picture (`over`).
+ * picture (`over`). `follow` false: the label alone, where the page already
+ * has its own Follow beside the name (a clip's caption), so there is one.
  */
-export function NearYouTag({ user, over = false }: { user: User; over?: boolean }) {
+export function NearYouTag({ user, over = false, follow = true }: { user: User; over?: boolean; follow?: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
   const { followingIds, actions } = useApp();
   const following = followingIds.includes(user.id);
   return (
-    <View style={[styles.near, over && styles.nearOver]}>
+    <View style={[styles.near, over && styles.nearOver, over && !follow && styles.nearOverLabel]}>
       <Ionicons name="location" size={14} color={colors.brand} />
       <Text style={styles.nearText}>Near you</Text>
-      <FollowPill small following={following} userId={user.id} name={user.name.split(' ')[0]} onPress={() => (following ? confirmUnfollow(user, () => actions.toggleFollow(user.id)) : actions.toggleFollow(user.id))} />
+      {follow ? <FollowPill small following={following} userId={user.id} name={user.name.split(' ')[0]} onPress={() => (following ? confirmUnfollow(user, () => actions.toggleFollow(user.id)) : actions.toggleFollow(user.id))} /> : null}
     </View>
   );
 }
@@ -159,5 +160,6 @@ const styleDefinitions = StyleSheet.create({
   moreText: { ...typography.small, color: colors.textFaint },
   near: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', marginBottom: spacing.sm },
   nearOver: { position: 'absolute', left: spacing.lg, zIndex: 5, backgroundColor: colors.surface, borderRadius: 999, paddingLeft: 10, paddingRight: 4, paddingVertical: 4, marginBottom: 0, ...lift },
+  nearOverLabel: { paddingRight: 10, paddingVertical: 7 },
   nearText: { ...typography.smallStrong, color: colors.text, marginRight: 4 },
 });

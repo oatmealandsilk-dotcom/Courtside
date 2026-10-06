@@ -1780,7 +1780,8 @@ function Home({ scope, topRow, paused, onChrome }: {
 
           {showingNear ? (
             <View pointerEvents="box-none" style={[styles.nearLayer, { top: insets.top + TOP_BAND_TOP + TOP_BAND_HEIGHT + 10 }]}>
-              <NearYouTag user={showingNear} over />
+              {/* A clip's caption has its own Follow beside the name (ReelCaption): the label alone there. */}
+              <NearYouTag user={showingNear} over follow={!(showing?.type === 'post' && showing.post.kind === 'clip')} />
             </View>
           ) : null}
           {scopedBack ? (

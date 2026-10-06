@@ -43,7 +43,8 @@ export default function AutoLog() {
   const offering = auto.ready && !auto.connected && (auto.apple || auto.whoop);
   const [shown, setShown] = useState(false);
   useEffect(() => { if (offering) setShown(true); }, [offering]);
-  if (!shown && !offering && (auto.ready || gaveUp)) return <Redirect href="/first-move" />;
+  // Nothing this phone could connect (Android or a browser, WHOOP not switched on): straight on, with no page flashing first.
+  if (!shown && !offering && (auto.ready || gaveUp || (auto.known && !auto.apple && !auto.whoop))) return <Redirect href="/first-move" />;
 
   const connect = async (source: AutoLogSource) => {
     if (busy) return;

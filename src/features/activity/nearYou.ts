@@ -89,12 +89,14 @@ const inviters = new Map<ID, Promise<ID | null>>();
  * same rule as migration 84's automatic follow: only when the two of you
  * may be put in front of each other (both known adults, or they follow
  * you). A teen's inviter of their own age is already followed (migration
- * 84). Null when there is none to suggest, or you already follow them.
+ * 84). Null when there is none to suggest, or you already follow them;
+ * undefined until the server has answered (the first-move page waits for it,
+ * so the inviter is never missed by a page that settles first).
  */
-export function useInviterToFollow(): User | null {
+export function useInviterToFollow(): User | null | undefined {
   const { currentUserId, users, followingIds, actions } = useApp();
   const { findable } = useFindable();
-  const [id, setId] = useState<ID | null>(null);
+  const [id, setId] = useState<ID | null | undefined>(undefined);
   useEffect(() => {
     if (!currentUserId) return undefined;
     let on = true;
@@ -107,6 +109,7 @@ export function useInviterToFollow(): User | null {
     return () => { on = false; };
   }, [currentUserId, actions]);
   return useMemo(() => {
+    if (id === undefined) return undefined;
     const u = id ? users.find((x) => x.id === id) : undefined;
     if (!findable(u) || followingIds.includes(u.id) || !actions.canAddToGroup(u.id)) return null;
     return u;

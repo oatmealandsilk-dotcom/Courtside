@@ -25,6 +25,8 @@ export type AutoLogSource = 'apple-health' | 'whoop';
 export interface AutoLog {
   /** The server's switches and your connections are known (or this is the demo). Until then nothing is offered. */
   ready: boolean;
+  /** The server's switches are known (connections may not be yet): enough to tell there is nothing to offer here. */
+  known: boolean;
   /** Apple Health can be connected here: an iPhone build that carries HealthKit (or the demo), with its switch on. */
   apple: boolean;
   /** WHOOP's switch is on for this person (admins only, for now). */
@@ -53,5 +55,5 @@ export function useAutoLog(): AutoLog {
     await actions.turnOnTennis(source, { workouts: source === 'apple-health' ? workoutsApple : workoutsWhoop });
   }, [actions, workoutsApple, workoutsWhoop]);
   // A real account's connections are known once its Health page data has loaded (healthIsReal); the demo's at once.
-  return { ready: !!flags && (demo || !!healthIsReal), apple, whoop, connected, connect };
+  return { ready: !!flags && (demo || !!healthIsReal), known: !!flags, apple, whoop, connected, connect };
 }

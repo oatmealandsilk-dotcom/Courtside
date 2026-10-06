@@ -115,7 +115,8 @@ export default function FirstMove() {
   useEffect(() => {
     if (lead || !currentUser) return;
     if (!adult) { setLead('friends'); return; }
-    const settled = heard || waited || (!city && !cityPending);
+    // Whoever invited you is waited for too (never past LOOK_MS), so they are not left off a page that settled first.
+    const settled = (heard || waited || (!city && !cityPending)) && (inviter !== undefined || waited);
     if (!settled) return;
     const first: Pick[] = inviter ? [{ user: inviter, miles: 0, rough: false, inviter: true }] : [];
     const fresh = [...first, ...near.filter((p) => !followingIds.includes(p.user.id) && p.user.id !== inviter?.id)].slice(0, PICKS);
