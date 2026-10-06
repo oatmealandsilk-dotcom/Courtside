@@ -229,7 +229,7 @@ end $$;
 create or replace function public.report_hit_context(hit uuid)
 returns jsonb
 language plpgsql stable security definer set search_path = public
-as $
+as $$
 declare
   ctx jsonb;
 begin
@@ -246,7 +246,7 @@ begin
     into ctx
     from public.hit_requests h where h.id = hit;
   return ctx;
-end $;
+end $$;
 revoke all on function public.report_hit_context(uuid) from public, anon;
 grant execute on function public.report_hit_context(uuid) to authenticated;
 
