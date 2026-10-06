@@ -5,16 +5,32 @@ import { captureRef } from 'react-native-view-shot';
 
 import { mixHex } from '@/features/activity/zones';
 import { colors, pageIsDark } from '@/theme';
-import { FACEBOOK_APP_ID, STORIES_URL } from './storyImage';
+import { FACEBOOK_APP_ID, STORIES_URL, STORY_PX, stageSize } from './storyImage';
 
 /*
  * A clip or photo post of your own, straight into Instagram's story editor
- * (build 15 extras, Oct 5): the post's original file as the story's
- * background, a video for a clip and a picture for a photo, with a small
- * CourtSide sticker on it (the mark, "@handle", "on CourtSide";
- * HandleSticker) that can be moved, resized or deleted there. The session
- * Share page does the same for a session's picture (storyImage.ts); this
- * is the post's own media.
+ * (build 15 extras, Oct 5), with the CourtSide overlay on it (StoryOverlay:
+ * the mark, "@handle", "on CourtSide", and the session's numbers when the
+ * post has one) low on the left, clear of Instagram's own buttons. The
+ * session Share page does the same for a session's picture (storyImage.ts);
+ * this is the post's own media.
+ *
+ * Where the overlay lands (Oct 5, owner: "Can't be in the middle of the
+ * screen"). Instagram's Sharing to Stories takes a background and a sticker,
+ * and nothing that says where the sticker goes: it puts it in the middle
+ * (Meta's only guidance is a 640 × 480 sticker, which the person can then
+ * move or resize). So:
+ *
+ * - A clip goes as the background video, and the sticker is a see-through
+ *   picture the size of the story itself (1080 × 1920) with the overlay
+ *   drawn low on the left. Laid over the story it lines up with it, so the
+ *   overlay sits where it was drawn; shown smaller, it still lands in the
+ *   lower left, not the middle. It stays a sticker: moved, pinched or
+ *   deleted in Instagram like any other.
+ * - A photo has the overlay drawn onto it here, and goes as the background
+ *   picture with no sticker at all: exactly where it was drawn. Should that
+ *   picture not come out (the photo would not load), the photo goes as it
+ *   is with the see-through sticker, as a clip does.
  *
  * Only where the phone's build carries react-native-share (iPhone build 13
  * on, Android from its first build), so it is safe as an instant update:
@@ -66,6 +82,25 @@ async function onThisPhone(url: string, id: string, kind: StoryMediaKind): Promi
   }
 }
 
+/** What Instagram is handed: the story's background (a clip, or a picture) and, for a clip, the overlay as a sticker. */
+type StoryAssets = { backgroundVideo?: string; backgroundImage?: string; stickerImage?: string };
+
+/**
+ * The overlay's picture, as base64: the see-through sticker as a PNG (it has to
+ * stay see-through), a photo with the overlay on it as a JPEG. At exactly
+ * Instagram's 1080 × 1920, as the session pictures are (storyImage.ts).
+ * Nothing when there is no picture to take or it could not be taken.
+ */
+async function photograph(view: View | null, format: 'png' | 'jpg'): Promise<string | undefined> {
+  if (!view) return undefined;
+  try {
+    const size = Platform.OS === 'android' ? STORY_PX : stageSize();
+    return await captureRef(view, { format, quality: format === 'jpg' ? 0.92 : 1, result: 'base64', ...size });
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * Into Instagram: 'sent', or 'no-instagram' when the phone has none (the
  * builds that carry react-native-share can ask truthfully: iPhone's
@@ -73,7 +108,7 @@ async function onThisPhone(url: string, id: string, kind: StoryMediaKind): Promi
  * or 'unavailable' when the hand-over failed, or 'cancelled' when the menu
  * was closed before the hand-over.
  */
-async function toInstagram(uri: string, kind: StoryMediaKind, sticker: string | undefined, cancelled: () => boolean): Promise<'sent' | 'no-instagram' | 'unavailable' | 'cancelled'> {
+async function toInstagram(assets: StoryAssets, cancelled: () => boolean): Promise<'sent' | 'no-instagram' | 'unavailable' | 'cancelled'> {
   if (!canShareMediaStory()) return 'unavailable';
   try {
     const Share_ = (require('react-native-share') as typeof import('react-native-share')).default;
@@ -84,17 +119,16 @@ async function toInstagram(uri: string, kind: StoryMediaKind, sticker: string | 
       return 'no-instagram';
     }
     if (cancelled()) return 'cancelled';
-    // Round a photo that is not 9:16, Instagram fills with these two (left
-    // out, react-native-share sends its own purple): the court's darkest
-    // colour, faintly tinted with the court at the top, as the session's
-    // Overlay design uses.
+    // Round a clip or photo that is not 9:16, Instagram fills with these two
+    // (left out, react-native-share sends its own purple): the court's
+    // darkest colour, faintly tinted with the court at the top, as the
+    // session's Overlay design uses.
     const deep = (pageIsDark() ? colors.bg : colors.text).slice(0, 7);
     await Share_.shareSingle({
       social: 'instagramstories' as never,
       appId: FACEBOOK_APP_ID,
       ...(Platform.OS === 'android' ? { useInternalStorage: true } : {}),
-      ...(kind === 'video' ? { backgroundVideo: uri } : { backgroundImage: uri }),
-      ...(sticker ? { stickerImage: `data:image/png;base64,${sticker}` } : {}),
+      ...assets,
       backgroundTopColor: mixHex(deep, colors.court.slice(0, 7), 0.15),
       backgroundBottomColor: deep,
     } as never);
@@ -105,30 +139,53 @@ async function toInstagram(uri: string, kind: StoryMediaKind, sticker: string | 
 }
 
 /**
- * Share to Instagram Story, from a post's ••• menu. `sticker` is the
- * out-of-sight HandleSticker, photographed first (a story without it is
- * still sent if that fails). Says nothing back once Instagram (or the
- * share sheet) has opened; a sentence when it could not.
+ * Share to Instagram Story, from a post's ••• menu. Says nothing back once
+ * Instagram (or the share sheet) has opened; a sentence when it could not.
+ *
+ * `sticker` is the out-of-sight see-through canvas with the overlay on it
+ * (StoryOverlayCanvas), photographed for a clip (a story without it is
+ * still sent if that fails). `bake`, for a photo, draws the photo with the
+ * overlay on it out of sight and answers once the photo is there (null when
+ * it would not load); that picture goes as the whole story.
  *
  * `cancelled`: true once the menu has been closed while the file was still
  * coming down. Then nothing opens: Instagram arriving on its own a moment
  * after you closed the menu would be a surprise. Asked again just before
  * each hand-over.
  */
-export async function shareMediaToStory({ url, kind, id, sticker, cancelled = () => false }: { url: string; kind: StoryMediaKind; id: string; sticker: View | null; cancelled?: () => boolean }): Promise<string | null> {
-  let stickerPng: string | undefined;
-  try {
-    if (sticker) stickerPng = await captureRef(sticker, { format: 'png', quality: 1, result: 'base64' });
-  } catch {
-    // Without the sticker: the clip or photo alone.
+export async function shareMediaToStory({ url, kind, id, sticker, bake, cancelled = () => false }: {
+  url: string;
+  kind: StoryMediaKind;
+  id: string;
+  sticker: View | null;
+  bake?: () => Promise<View | null>;
+  cancelled?: () => boolean;
+}): Promise<string | null> {
+  let sent: Awaited<ReturnType<typeof toInstagram>> | undefined;
+  let file: { uri: string; ext: string } | undefined;
+  // A photo: the overlay drawn onto it, handed over as the story's one picture.
+  if (kind === 'photo' && bake) {
+    const baked = await photograph(await bake(), 'jpg');
+    if (cancelled()) return null;
+    if (baked) sent = await toInstagram({ backgroundImage: `data:image/jpeg;base64,${baked}` }, cancelled);
   }
-  if (cancelled()) return null;
-  const file = await onThisPhone(url, id, kind);
-  if (cancelled()) return null;
-  const sent = await toInstagram(file.uri, kind, stickerPng, cancelled);
+  // A clip, or a photo that could not be drawn or handed over drawn: the file as uploaded,
+  // the overlay as a story-sized sticker.
+  if (!sent || sent === 'unavailable') {
+    const stickerPng = await photograph(sticker, 'png');
+    if (cancelled()) return null;
+    file = await onThisPhone(url, id, kind);
+    if (cancelled()) return null;
+    sent = await toInstagram({
+      ...(kind === 'video' ? { backgroundVideo: file.uri } : { backgroundImage: file.uri }),
+      ...(stickerPng ? { stickerImage: `data:image/png;base64,${stickerPng}` } : {}),
+    }, cancelled);
+  }
   if (sent === 'sent' || sent === 'cancelled') return null;
   // No Instagram, or a hand-over that failed: the share sheet, with the file.
   if (!(await Sharing.isAvailableAsync())) return 'Sharing is not available on this phone.';
+  if (cancelled()) return null;
+  file = file ?? await onThisPhone(url, id, kind);
   if (cancelled()) return null;
   await Sharing.shareAsync(file.uri, { mimeType: TYPES[file.ext], dialogTitle: 'Share to Instagram Stories' });
   return null;
