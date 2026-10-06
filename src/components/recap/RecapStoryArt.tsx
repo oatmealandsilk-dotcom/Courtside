@@ -2,7 +2,6 @@ import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { RecapCard, RecapHighlights } from '@/components/recap/RecapCard';
-import type { PracticeSession } from '@/data/types';
 import { weekRange, type WeekRecap } from '@/features/recap/recap';
 import { useTheme } from '@/theme/ThemeProvider';
 import { colors, font } from '@/theme';
@@ -14,18 +13,14 @@ const BASE = 360;
  * The weekly recap as an Instagram story picture (9:16), the way the
  * share-session pictures are made (storyImage.ts photographs it): the
  * recap card on the court's own page colour, the week's dates over it, what
- * stood out under it (the first of the recap's highlights: your biggest week
- * yet, a record), and the CourtSide lockup with courtsidebase.com along the
- * card's foot, as a session's picture has. Nothing sits in the top and bottom
- * strips Instagram covers with its own buttons. Only your own numbers, and
- * only once you choose to share them.
+ * stood out under it (the first of the recap's highlights, in your own
+ * voice: "My biggest week yet", a record), and the CourtSide lockup with
+ * courtsidebase.com along the card's foot, as a session's picture has.
+ * Nothing sits in the top and bottom strips Instagram covers with its own
+ * buttons. Only your own numbers (never who a record was against, nor its
+ * day), and only once you choose to share them.
  */
-export function RecapStoryArt({ recap, sessions, width }: {
-  recap: WeekRecap;
-  /** Your log, for what stood out (a record names its day and who it was against). */
-  sessions: PracticeSession[];
-  width: number;
-}) {
+export function RecapStoryArt({ recap, width }: { recap: WeekRecap; width: number }) {
   useTheme();
   const height = Math.round((width * 16) / 9);
   const k = width / BASE;
@@ -43,7 +38,7 @@ export function RecapStoryArt({ recap, sessions, width }: {
           <Text style={[styles.week, { color: colors.brandInk }]}>{`My week on court · ${weekRange(recap.week)}`}</Text>
           {/* The week's own dates say which week it was over the card, so an older week never goes out as "last week". */}
           <RecapCard recap={recap} story />
-          <RecapHighlights recap={recap} sessions={sessions} limit={1} compact />
+          <RecapHighlights recap={recap} limit={1} compact story />
         </View>
       </View>
     </View>

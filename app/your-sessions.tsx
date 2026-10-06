@@ -179,7 +179,8 @@ export default function YourSessions() {
         <EmptyState
           icon="stopwatch-outline"
           title="No sessions yet"
-          body="Log one after you play. It keeps your streak going, and only you see it."
+          // The page's subtitle already says only you see it. One sentence a line: no word left on its own under the rest.
+          body={'Log one after you play.\nIt keeps your streak going.'}
           action={{ label: 'Log a session', onPress: () => router.push('/log-session') }}
         />
       ) : null}

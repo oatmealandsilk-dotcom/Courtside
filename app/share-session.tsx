@@ -103,11 +103,11 @@ export default function ShareSession() {
   const [score, setScore] = useState(saved);
   const scoreTyped = useRef(false);
   useEffect(() => { if (!scoreTyped.current && saved) setScore(saved); }, [saved]);
-  // A workout (a run, the gym: migration 107) or Fitness logged by hand has no score: no Score box, and
-  // nothing typed goes on its picture. Tennis keeps the box as before.
-  const workout = !!story?.session.workout || story?.session.kind === 'fitness';
+  // Only a match or a practice is scored (practice sets and tiebreaks too, Oct 4). Drills, a workout (a run,
+  // the gym: migration 107) and Fitness logged by hand have none: no Score box, and nothing typed goes on the picture.
+  const scored = !story?.session.workout && (story?.session.kind === 'match' || story?.session.kind === 'practice');
   // "6-4 6-3" reads as a score with proper dashes and single spaces.
-  const shownScore = !workout && score.trim() ? score.trim().replace(/\s*[-–]\s*/g, '–').replace(/\s+/g, ' ') : undefined;
+  const shownScore = scored && score.trim() ? score.trim().replace(/\s*[-–]\s*/g, '–').replace(/\s+/g, ' ') : undefined;
   const photo = picked ?? story?.photo;
   const [index, setIndex] = useState<number | null>(null);
   // What the last button said ("Saved to your downloads…"); a new design clears it.
@@ -251,8 +251,8 @@ export default function ShareSession() {
               })}
             </View>
 
-            {/* Any tennis session can carry a score (Oct 4): practice sets and tiebreaks are scored too. A workout has none. */}
-            {!workout ? (
+            {/* A match or a practice can carry a score (Oct 4): practice sets and tiebreaks are scored too. Drills and workouts have none. */}
+            {scored ? (
               <View style={styles.scoreRow}>
                 <Text style={styles.scoreLabel}>Score</Text>
                 <TextInput

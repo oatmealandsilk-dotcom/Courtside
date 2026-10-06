@@ -19,7 +19,7 @@ import { tagState, yourResult } from '@/features/activity/sessionTags';
 import { useApp } from '@/store/AppContext';
 import { confirmUnfollow } from '@/lib/confirm';
 import type { DetectedActivity, Notification, NotificationKind, PostKind } from '@/data/types';
-import { isTennisActivity, workoutName } from '@/features/activity/workouts';
+import { isTennisActivity } from '@/features/activity/workouts';
 import { colors, radius, spacing, surfaceColorFor, typography } from '@/theme';
 import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { HitGlyph } from '@/components/HitGlyph';
@@ -215,17 +215,20 @@ function detectedWho(preview: string | undefined, sport: string | undefined): st
 }
 
 /**
- * A tracker's session the app holds, by how it stands now: logged ("Run
- * logged." and "Tap to post it."), hidden, or gone from the tracker, which
- * open nothing (there is nothing left to log). Undefined while it is still
+ * A tracker's session the app holds, by how it stands now: logged ("Activity
+ * logged." and "Tap to post it."), hidden ("Activity detected." and "You hid
+ * it.") or gone from the tracker, which open nothing (there is nothing left
+ * to log). The heading keeps the owner's words (Oct 5): "Tennis" or
+ * "Activity", never the workout's own name, which the line under it already
+ * gives ("Run · 32 min · …"), so it is said once. Undefined while it is still
  * waiting, or not held here: the row reads as the alert did.
  */
 function activityNow(a: DetectedActivity | undefined): { who: string; verb: string; opens: boolean } | undefined {
   if (!a) return undefined;
-  const name = isTennisActivity(a) ? 'Tennis' : workoutName(a.sport);
-  if (a.status === 'logged') return { who: `${name} logged.`, verb: 'Tap to post it.', opens: true };
-  if (a.status === 'dismissed') return { who: `${name} detected.`, verb: 'You hid it.', opens: false };
-  if (a.status === 'withdrawn') return { who: `${name} detected.`, verb: 'No longer on your tracker.', opens: false };
+  const what = isTennisActivity(a) ? 'Tennis' : 'Activity';
+  if (a.status === 'logged') return { who: `${what} logged.`, verb: 'Tap to post it.', opens: true };
+  if (a.status === 'dismissed') return { who: `${what} detected.`, verb: 'You hid it.', opens: false };
+  if (a.status === 'withdrawn') return { who: `${what} detected.`, verb: 'No longer on your tracker.', opens: false };
   return undefined;
 }
 

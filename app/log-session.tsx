@@ -17,7 +17,7 @@ import { readScore, scoreText, setsWinner } from '@/features/activity/score';
 import { computeStats } from '@/features/practice/stats';
 import { andList, canTagKind, firstName as firstOfName, isActive, tagsOnSession } from '@/features/activity/sessionTags';
 import { pickSource, postOf, postedIndex, sourceOn } from '@/features/activity/recent';
-import { formatDistance, isTennisActivity, workoutIcon } from '@/features/activity/workouts';
+import { formatDistance, isTennisActivity, workoutIcon, workoutName } from '@/features/activity/workouts';
 import { useTennisFlags } from '@/features/activity/useTennisFlags';
 import { hitPrefill, prefillFor } from '@/features/hits/followUp';
 import { beatenBy, recordToast } from '@/features/records/records';
@@ -41,16 +41,14 @@ const KINDS: { value: PracticeSession['kind']; label: string }[] = [
 ];
 
 /**
- * What a fitness session logged by hand was, kept as the same short names a
+ * What a fitness session logged by hand was, kept as the same slugs a
  * tracker's workouts use (migration 107), so it reads "Run", "Gym" in your
- * sessions like one from the Watch. Nothing picked stays "Fitness".
+ * sessions like one from the Watch. Each chip says the name it saves as
+ * (workoutName, the same list as the server's): what you tap is what the
+ * row, the note and the picture say ("Bike ride", never "Ride" then "Bike
+ * ride"). Nothing picked stays "Fitness".
  */
-const WORKOUT_KINDS: { value: string; label: string }[] = [
-  { value: 'run', label: 'Run' },
-  { value: 'ride', label: 'Ride' },
-  { value: 'swim', label: 'Swim' },
-  { value: 'gym', label: 'Gym' },
-];
+const WORKOUT_KINDS: { value: string; label: string }[] = ['run', 'ride', 'swim', 'gym'].map((value) => ({ value, label: workoutName(value) }));
 
 /**
  * Log a session in two taps: what it was (practice is picked already) and

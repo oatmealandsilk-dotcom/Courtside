@@ -116,22 +116,41 @@ export function RecapCard({ recap, label = 'LAST WEEK', story = false }: { recap
   );
 }
 
-/** What stood out: "Best streak yet · 5 days in a row, Wed – Sun", "New record: longest match · 2h 40m vs Dev, Saturday". */
-export function RecapHighlights({ recap, sessions, limit, compact = false }: { recap: WeekRecap; sessions: PracticeSession[]; /** Only the first few (the Instagram picture has room for one). */ limit?: number; /** A little tighter, for the picture. */ compact?: boolean }) {
+/**
+ * What stood out: "Your biggest week yet · Beat your old best, 3h (Sep 21 –
+ * 27)", "Best streak yet · 5 days in a row, Wed – Sun", "New record: longest
+ * match · 2h 40m vs Dev, Saturday".
+ *
+ * On the Instagram picture (`story`) strangers read it, so it is said in your
+ * own voice under "My week on court" and holds only your own numbers: "My
+ * biggest week yet · Beat my old best, 3h", "My best streak yet · 5 days in
+ * a row", "New record: longest match · 2h 40m · beat 2h 5m". Never who it was
+ * against (a typed name may be someone who never agreed to be on it) and no
+ * days or dates: the week's dates are over the card already.
+ */
+export function RecapHighlights({ recap, sessions = [], limit, compact = false, story = false }: { recap: WeekRecap; /** Your log, for the day and who a record was against (not needed for the picture). */ sessions?: PracticeSession[]; /** Only the first few (the Instagram picture has room for one). */ limit?: number; /** A little tighter, for the picture. */ compact?: boolean; /** The Instagram picture's words: first person, no names, no days. */ story?: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
   const rows: { key: string; icon: 'flame' | typeof RECORD_ICON | 'stats-chart'; tint: string; title: string; line: string }[] = [];
   // The number is big on the card already: here, the best it beat.
-  if (recap.bestWeek) rows.push({ key: 'week', icon: 'stats-chart', tint: colors.brand, title: 'Your biggest week yet', line: `Beat your old best, ${duration(recap.bestBefore)}${recap.bestBeforeWeek ? ` (${weekRange(recap.bestBeforeWeek)})` : ''}` });
+  if (recap.bestWeek) {
+    rows.push(story
+      ? { key: 'week', icon: 'stats-chart', tint: colors.brand, title: 'My biggest week yet', line: `Beat my old best, ${duration(recap.bestBefore)}` }
+      : { key: 'week', icon: 'stats-chart', tint: colors.brand, title: 'Your biggest week yet', line: `Beat your old best, ${duration(recap.bestBefore)}${recap.bestBeforeWeek ? ` (${weekRange(recap.bestBeforeWeek)})` : ''}` });
+  }
   if (recap.bestStreak && recap.streakFrom && recap.streakTo) {
     const inWeek = recap.streakFrom < recap.week ? recap.week : recap.streakFrom;
-    rows.push({ key: 'streak', icon: 'flame', tint: colors.clay, title: 'Best streak yet', line: `${recap.streak} days in a row, ${weekdaySpan(inWeek, recap.streakTo)}` });
+    rows.push({ key: 'streak', icon: 'flame', tint: colors.clay, title: story ? 'My best streak yet' : 'Best streak yet', line: story ? `${recap.streak} days in a row` : `${recap.streak} days in a row, ${weekdaySpan(inWeek, recap.streakTo)}` });
   }
   for (const b of recap.records) {
     if (b.key === 'streak' || b.key === 'week') continue;
+    const title = `New record: ${RECORD_LABEL[b.key].charAt(0).toLowerCase()}${RECORD_LABEL[b.key].slice(1)}`;
+    if (story) {
+      rows.push({ key: `rec-${b.key}`, icon: RECORD_ICON, tint: colors.sun, title, line: `${recordValue(b.now)} · beat ${recordValue(b.was)}` });
+      continue;
+    }
     const s = b.now.sessionId ? sessions.find((x) => x.id === b.now.sessionId) : undefined;
     rows.push({
-      key: `rec-${b.key}`, icon: RECORD_ICON, tint: colors.sun,
-      title: `New record: ${RECORD_LABEL[b.key].charAt(0).toLowerCase()}${RECORD_LABEL[b.key].slice(1)}`,
+      key: `rec-${b.key}`, icon: RECORD_ICON, tint: colors.sun, title,
       line: `${recordValue(b.now)}${s?.opponent ? ` vs ${s.opponent.split(/\s+/)[0]}` : ''}${s ? `, ${new Date(`${s.day}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long' })}` : ''}`,
     });
   }
@@ -152,32 +171,44 @@ export function RecapHighlights({ recap, sessions, limit, compact = false }: { r
   );
 }
 
-/** "up 2h", "down 45 min", "same as the week before": the comparison, short enough for the card's line. */
-function shortCompare(r: Pick<WeekRecap, 'minutes' | 'prevMinutes' | 'prevSessions'>): string | null {
+/**
+ * "up 2h", "down 45 min", "same as the week before": the comparison, short
+ * enough for the card's line. `spoken` says it in words for VoiceOver ("up 5
+ * hours 23 minutes on the week before"), never "5h 23m".
+ */
+function shortCompare(r: Pick<WeekRecap, 'minutes' | 'prevMinutes' | 'prevSessions'>, spoken = false): string | null {
   if (!r.prevSessions) return null;
   if (r.minutes === r.prevMinutes) return 'same as the week before';
-  return r.minutes > r.prevMinutes ? `up ${duration(r.minutes - r.prevMinutes)}` : `down ${duration(r.prevMinutes - r.minutes)}`;
+  const up = r.minutes > r.prevMinutes;
+  const diff = Math.abs(r.minutes - r.prevMinutes);
+  if (spoken) return `${up ? 'up' : 'down'} ${spokenDuration(diff)} on the week before`;
+  return `${up ? 'up' : 'down'} ${duration(diff)}`;
 }
 
 /**
  * "Last week" at the top of Your sessions, Monday to Wednesday (the in-app
  * recap, for anyone without the alert): the week's bars small, its time on
  * court, its sessions and how it compares ("Last week · 8h 23m" over "7
- * sessions · up 5h 23m"). A tap opens the whole card; × (its own column,
- * a full-size target) puts it away for that week. A quiet week shows the
- * hit mark instead of seven empty bars.
+ * sessions · up 5h 23m"). A tap opens the whole card (the chevron says so,
+ * as on every row on the page that opens something); × (its own column, a
+ * full-size target) puts it away for that week. A quiet week shows the hit
+ * mark instead of seven empty bars.
  */
 export function YourWeekBanner({ recap, onOpen, onClose }: { recap: WeekRecap; onOpen: () => void; onClose?: () => void }) {
   const styles = useThemedStyles(styleDefinitions);
   const most = Math.max(...recap.days, 1);
   const quiet = !recap.sessions;
   const sessionsText = `${recap.sessions} ${recap.sessions === 1 ? 'session' : 'sessions'}`;
-  const after = shortCompare(recap) ?? (recap.bestStreak ? 'best streak yet' : recap.firstWeek ? 'your first week here' : recap.won ? `${recap.won} won` : null);
+  const otherwise = recap.bestStreak ? 'best streak yet' : recap.firstWeek ? 'your first week here' : recap.won ? `${recap.won} won` : null;
+  const after = shortCompare(recap) ?? otherwise;
   const title = quiet ? 'A quiet week' : `Last week · ${duration(recap.minutes)}`;
   const line = quiet ? 'Up for a hit this week?' : after ? `${sessionsText} · ${after}` : sessionsText;
+  // VoiceOver hears it as a sentence: "8 hours 23 minutes on court, 7 sessions, up 5 hours 23 minutes on the week before".
+  const spokenAfter = shortCompare(recap, true) ?? otherwise;
+  const spoken = quiet ? 'a quiet week' : [`${spokenDuration(recap.minutes)} on court`, sessionsText, spokenAfter].filter(Boolean).join(', ');
   return (
     <View style={styles.banner}>
-      <Pressable accessibilityRole="button" accessibilityLabel={`Your week, ${weekRange(recap.week)}: ${quiet ? 'a quiet week' : `${spokenDuration(recap.minutes)} on court, ${line}`}. Open`} onPress={onOpen} style={({ pressed }) => [styles.bannerMain, !onClose && styles.bannerMainEnd, pressed && styles.pressed]}>
+      <Pressable accessibilityRole="button" accessibilityLabel={`Your week, ${weekRange(recap.week).replace(' – ', ' to ')}: ${spoken}. Open`} onPress={onOpen} style={({ pressed }) => [styles.bannerMain, !onClose && styles.bannerMainEnd, pressed && styles.pressed]}>
         {quiet ? (
           <View style={styles.quietDisc}><HitGlyph size={20} color={colors.brand} /></View>
         ) : (
@@ -191,6 +222,7 @@ export function YourWeekBanner({ recap, onOpen, onClose }: { recap: WeekRecap; o
           <Text style={styles.bannerTitle} numberOfLines={1}>{title}</Text>
           <Text style={styles.bannerLine} numberOfLines={2}>{line}</Text>
         </View>
+        <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
       </Pressable>
       {onClose ? (
         <Pressable accessibilityRole="button" accessibilityLabel="Hide this week's recap" onPress={onClose} style={({ pressed }) => [styles.bannerClose, pressed && styles.pressed]}>
