@@ -68,8 +68,22 @@ export interface PlayerProfile {
   preferredSurface: SurfacePreference;
   /** Sessions the player can realistically commit to each week. Missing when they haven't said. */
   sessionsPerWeek?: number;
-  /** Missing when they haven't said: a skipped answer is never filled in for them. */
+  /**
+   * Years playing as setup used to ask it, a range kept as one number (under
+   * 1 → 0, 1–3 → 2, 4–9 → 6, 10+ → 12; see experienceLabel). Since Oct 5
+   * setup asks for `startedYear` instead and fills this in from it (this
+   * year minus that one), so an older app still reads something close.
+   * Missing when they haven't said: a skipped answer is never filled in for them.
+   */
   yearsPlaying?: number;
+  /**
+   * The year they started playing (Oct 5, owner: "Years playing should be
+   * able to say specific year"). Kept in the profile's own bundle, like the
+   * rest of it. When set, it is what the app shows ("Playing 9 years, since
+   * 2017"); a profile saved before has only `yearsPlaying`, shown as it was
+   * until they edit it.
+   */
+  startedYear?: number;
   goals: PlayerGoal[];
   /** What is in the bag, in the player's own words. Every part optional; nothing shown until something is filled in. */
   gear?: { racket?: string; strings?: string; tension?: string; shoes?: string };

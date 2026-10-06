@@ -47,6 +47,8 @@ export const users: User[] = [
       preferredSurface: 'hard',
       sessionsPerWeek: 4,
       yearsPlaying: 11,
+      // The year they started (Oct 5), shown as "Playing 11 years, since …". The others keep only the old number, as a profile saved before does.
+      startedYear: new Date().getFullYear() - 11,
       goals: [
         { id: 'g1', label: 'Second serve above 55% in matches', targetDate: isoDaysAhead(75), done: false },
         { id: 'g2', label: 'Reach 4.5 NTRP', targetDate: isoDaysAhead(300), done: false },
@@ -120,6 +122,7 @@ export const users: User[] = [
       preferredSurface: 'hard',
       sessionsPerWeek: 6,
       yearsPlaying: 22,
+      startedYear: new Date().getFullYear() - 22,
       goals: [],
       constraints: [],
       tournaments: [],

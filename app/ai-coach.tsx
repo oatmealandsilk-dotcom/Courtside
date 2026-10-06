@@ -18,6 +18,7 @@ import { openLegal } from '@/lib/legal';
 import { planRemindersSupported, readPlanReminders, schedulePlanReminders, setPlanReminders } from '@/features/aiCoach/planReminder';
 import { show as showToast } from '@/lib/toast';
 import { duration, formatDate, experienceLabel, hoursAndMinutes } from '@/lib/format';
+import { playingFor } from '@/features/players/tennisProfile';
 import { healthSignal, withoutSource } from '@/lib/integrations';
 import { useApp } from '@/store/AppContext';
 import type { AiMessage, PlayerProfile, TrainingBlockKind, TrainingPlan } from '@/data/types';
@@ -64,10 +65,17 @@ function healthLine(signal: ReturnType<typeof healthSignal>, whoop: boolean) {
   return signal.hasWearable ? 'No recent wearable numbers.' : 'No wearable connected.';
 }
 
+/** Years playing for the coach: from the year they started when they gave one, else the range setup used to ask. */
+function yearsLine(p: PlayerProfile) {
+  const play = playingFor(p);
+  if (!play) return 'years playing not given';
+  return play.since !== undefined ? `playing since ${play.since} (${play.years === 1 ? '1 year' : `${play.years} years`})` : `${experienceLabel(play.years)} playing`;
+}
+
 /** The profile part of what the coach is told: everything you set yourself. */
 function profileLines(p: PlayerProfile) {
   return [
-    `Rating: ${p.skillSystem} ${p.rating}. Style: ${p.playStyle}, ${p.handedness}-handed, ${p.backhand} backhand. Prefers ${p.preferredSurface}. Fitness: ${p.fitnessLevel}. ${p.sessionsPerWeek !== undefined ? `${p.sessionsPerWeek} sessions a week` : 'Sessions a week not given'}, ${p.yearsPlaying !== undefined ? `${experienceLabel(p.yearsPlaying)} playing` : 'years playing not given'}.`,
+    `Rating: ${p.skillSystem} ${p.rating}. Style: ${p.playStyle}, ${p.handedness}-handed, ${p.backhand} backhand. Prefers ${p.preferredSurface}. Fitness: ${p.fitnessLevel}. ${p.sessionsPerWeek !== undefined ? `${p.sessionsPerWeek} sessions a week` : 'Sessions a week not given'}, ${yearsLine(p)}.`,
     `Goals: ${p.goals.map((g) => g.label).join('; ') || 'none set'}.`,
     `Injury and schedule notes: ${p.constraints.filter((c) => c.active).map((c) => `${c.kind}: ${c.label}`).join('; ') || 'none'}.`,
     p.tournaments[0] ? `Next tournament: ${p.tournaments[0].name} on ${formatDate(p.tournaments[0].startsAt)}.` : 'No tournament scheduled.',
