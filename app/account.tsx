@@ -69,6 +69,27 @@ export default function AccountCentre() {
     }
   };
 
+  // Link Google. On a phone the Google sheet has already closed (linked or
+  // not) by the time this resolves, so the row and the line under the title
+  // say which at once; before, they said to follow a prompt that had gone,
+  // and the row said Link until the page was opened again. On the web the
+  // page itself goes to Google and comes back here.
+  const linkGoogle = async () => {
+    if (Platform.OS === 'web') { await run(() => actions.linkGoogle(), 'Follow the Google prompt to finish linking.'); return; }
+    setBusy(true);
+    setError('');
+    try {
+      await actions.linkGoogle();
+      const next = await actions.accountInfo().catch(() => null);
+      if (next) setInfo(next);
+      say(next?.providers.includes('google') ? 'Google linked.' : 'Google was not linked.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Something went wrong.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const hasGoogle = info?.providers.includes('google') ?? false;
   const hasEmail = info?.providers.includes('email') ?? false;
   // On an iPhone, deleting an account made with Apple asks Apple to confirm once more (so CourtSide leaves the Apple ID too).
@@ -153,7 +174,7 @@ export default function AccountCentre() {
         {row('key-outline', hasEmail ? 'Change password' : 'Set a password', undefined, isSupabaseConfigured ? () => { setPassword(''); setPassword2(''); setSheet('password'); } : undefined, false, 0)}
         {/* Android (Oct 5): linking Google there would bring the login back in an address any
             Android app can claim, so the row only shows once it is linked (on an iPhone or the website). */}
-        {Platform.OS !== 'android' || hasGoogle ? row('logo-google', 'Google', hasGoogle ? 'Connected' : 'Link', !hasGoogle && isSupabaseConfigured ? () => run(() => actions.linkGoogle(), 'Follow the Google prompt to finish linking.') : undefined, false, 1) : null}
+        {Platform.OS !== 'android' || hasGoogle ? row('logo-google', 'Google', hasGoogle ? 'Connected' : 'Link', !hasGoogle && isSupabaseConfigured ? () => { void linkGoogle(); } : undefined, false, 1) : null}
         {row('time-outline', 'Last sign-in', info?.lastSignInAt ? formatDate(info.lastSignInAt) : undefined, undefined, false, 2)}
         {row('log-out-outline', 'Log out everywhere', undefined, () => confirm({ title: 'Log out everywhere?', message: "You'll be logged out on every phone and computer, this one included.", confirmLabel: 'Log out', destructive: true, onConfirm: () => run(async () => { await actions.signOutEverywhere(); router.replace('/sign-in'); }, 'Signed out everywhere.') }), false, 3)}
       </View>

@@ -26,6 +26,12 @@ export interface NearbyMapProps {
   focusSpot?: LatLng | null;
   /** Opened on a place picked in Find Players' search (?place=…): the map starts there with that place's courts listed. */
   focusPlace?: FoundPlace | null;
+  /**
+   * The still card's "N open hits nearby", as the Open hits list under it counts
+   * them (places only typed included, which have no flag). Used while the card
+   * counts from where you are; otherwise the card counts its own town's.
+   */
+  hitCount?: number;
   /** "Who can see you on the map?" is up (or about to be) over the full map: its first pins wait to come in until it has gone. */
   holdPins?: boolean;
 }

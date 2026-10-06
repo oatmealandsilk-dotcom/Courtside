@@ -6,8 +6,9 @@ import { requestSection } from '@/features/navigation/swipeOrder';
 import { goToTab } from '@/features/navigation/startTab';
 import { goBack } from '@/lib/goBack';
 
+import { FollowPill } from '@/components/FollowPill';
 import { LevelPill } from '@/components/LevelPill';
-import { Avatar, Button, EmptyState, Field, Screen, SegmentedControl } from '@/components/ui';
+import { Avatar, EmptyState, Field, Screen, SegmentedControl } from '@/components/ui';
 import { useApp } from '@/store/AppContext';
 import { confirmUnfollow } from '@/lib/confirm';
 import { colors, spacing, typography } from '@/theme';
@@ -60,12 +61,17 @@ export default function Follows() {
         <Field value={search} onChangeText={setSearch} placeholder="Search" autoCapitalize="none" />
       </View>
       {list.length === 0 ? (
-        <EmptyState
-          icon="people-outline"
-          title={tab === 'followers' ? 'No followers yet' : 'Not following anyone yet'}
-          body={tab === 'followers' ? 'Post a clip or answer a thread. That is how players find you.' : 'Follow players from Community or their profile.'}
-          action={tab === 'followers' ? { label: 'Post a clip', onPress: () => router.push('/compose') } : { label: 'Find players', onPress: () => { requestSection('/discuss', 'players'); goToTab('/discuss'); } }}
-        />
+        // Your own empty list says how to change that; someone else's simply says it is empty.
+        userId === currentUserId ? (
+          <EmptyState
+            icon="people-outline"
+            title={tab === 'followers' ? 'No followers yet' : 'Not following anyone yet'}
+            body={tab === 'followers' ? 'Post a clip or answer a thread. That is how players find you.' : 'Follow players from Community or their profile.'}
+            action={tab === 'followers' ? { label: 'Post a clip', onPress: () => router.push('/compose') } : { label: 'Find players', onPress: () => { requestSection('/discuss', 'players'); goToTab('/discuss'); } }}
+          />
+        ) : (
+          <EmptyState icon="people-outline" title={tab === 'followers' ? 'No followers yet' : 'Not following anyone yet'} />
+        )
       ) : (
         list.map((user) => {
           const isMe = user.id === currentUserId;
@@ -81,7 +87,8 @@ export default function Follows() {
                 </View>
               </View>
               {isMe ? null : (
-                <Button label={following ? 'Following' : 'Follow'} variant={following ? 'secondary' : 'primary'} onPress={following ? () => confirmUnfollow(user, () => actions.toggleFollow(user.id)) : () => actions.toggleFollow(user.id)} />
+                // The pill knows about a request sent to a private account: it says Requested, not Follow.
+                <FollowPill following={following} userId={user.id} name={user.name} small onPress={following ? () => confirmUnfollow(user, () => actions.toggleFollow(user.id)) : () => actions.toggleFollow(user.id)} />
               )}
             </Pressable>
           );

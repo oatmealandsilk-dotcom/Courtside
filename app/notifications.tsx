@@ -209,7 +209,7 @@ function detectedWho(preview: string | undefined, sport: string | undefined): st
 
 export default function Notifications() {
   const styles = useThemedStyles(styleDefinitions);
-  const { notifications, users, posts, stories, comments, hitRequests, conversations, questions, currentUserId, currentUser, followRequests, followingIds, followedCourts, sessionTags, detectedActivities, actions } = useApp();
+  const { notifications, users, posts, stories, comments, hitRequests, conversations, questions, currentUserId, currentUser, followRequests, followingIds, followedCourts, sessionTags, detectedActivities, actions, blockedIds } = useApp();
   // CourtSide's own welcome, for a new player (welcomeNote): seen once this page opens, though its tint stays until you leave.
   const welcome = useWelcomeNote(currentUser);
   const [welcomeTint] = useState(welcome.unread);
@@ -275,6 +275,8 @@ export default function Notifications() {
     // From CourtSide: "removed your clip for breaking its rules"; the reason goes on the line under it.
     if (group.kind === 'removed') return `removed your ${removedNotice(group.preview).thing} for breaking its rules`;
     if (group.kind === 'session-tag') return `tagged you in a ${group.preview === 'match' ? 'match' : 'practice'}`;
+    // A workout you have since logged: no longer "Tap to log it" (the tap opens the post for it).
+    if (group.kind === 'activity' && detectedActivities.find((a) => a.id === group.targetId)?.status === 'logged') return 'Logged. Tap to post it.';
     // Someone who joined through a link you shared (migration 68).
     if (group.kind === 'follow' && group.preview === INVITE_LINE) return 'joined CourtSide from your link';
     if (group.kind === 'follow-request' && group.preview === INVITE_LINE) return 'joined CourtSide from your link and asked to follow you';
@@ -295,9 +297,10 @@ export default function Notifications() {
     return `${act} your ${thing}`;
   };
 
+  // Nothing from someone you blocked: their likes, follows and comments go with them.
   const mine = useMemo(
-    () => notifications.filter((n) => n.userId === currentUserId),
-    [notifications, currentUserId],
+    () => notifications.filter((n) => n.userId === currentUserId && !blockedIds.includes(n.actorId)),
+    [notifications, currentUserId, blockedIds],
   );
 
   // Snapshot on first render so rows do not lose their tint as we mark them read.

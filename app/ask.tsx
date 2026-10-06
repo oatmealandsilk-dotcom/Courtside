@@ -1,5 +1,5 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -9,6 +9,7 @@ import { Field } from '@/components/ui';
 import { Chips, Section, SheetTitle, Submit, formBody } from '@/components/sheet/SheetForm';
 import { TOPIC_META } from '@/components/QuestionCard';
 import { BLOCKED_WORDS_NOTE } from '@/features/hiddenWords/hiddenWords';
+import { clearUnsentThread, peekUnsentThread } from '@/features/community/unsentThread';
 import * as haptics from '@/lib/haptics';
 import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
@@ -25,16 +26,19 @@ const TOPICS = Object.keys(TOPIC_META) as QuestionTopic[];
 export default function Ask() {
   const styles = useThemedStyles(styleDefinitions);
   const { actions } = useApp();
-  const [title, setTitle] = useState('');
-  const [body, setBody] = useState('');
+  // A thread that didn't post comes back already typed (its toast's "Post again").
+  const [unsent] = useState(peekUnsentThread);
+  useEffect(() => { clearUnsentThread(); }, []);
+  const [title, setTitle] = useState(unsent?.title ?? '');
+  const [body, setBody] = useState(unsent?.body ?? '');
   // Opened from an empty topic in Discussions ("Ask a question"): that topic, picked.
   const asked = useLocalSearchParams<{ topic?: string }>().topic;
   // Only a real topic: `in` would also take a name every object has (?topic=constructor).
-  const [topic, setTopic] = useState<QuestionTopic>(asked && (TOPICS as string[]).includes(asked) ? (asked as QuestionTopic) : 'gear');
+  const [topic, setTopic] = useState<QuestionTopic>(unsent?.topic ?? (asked && (TOPICS as string[]).includes(asked) ? (asked as QuestionTopic) : 'gear'));
   const [closeSignal, setCloseSignal] = useState(0);
   const [posted, setPosted] = useState<string | null>(null);
   // A poll: off until asked for, then two options to start, up to four.
-  const [poll, setPoll] = useState<string[] | null>(null);
+  const [poll, setPoll] = useState<string[] | null>(unsent?.poll ?? null);
   const pollOk = !poll || poll.filter((o) => o.trim()).length >= 2;
 
   const canSubmit = title.trim().length >= 3 && pollOk;
@@ -75,13 +79,14 @@ export default function Ask() {
         <ScrollView contentContainerStyle={formBody} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}>
           <Section title="Your question">
             {/* The section title already says what goes here, so the box stays empty. */}
-            <Field soft value={title} onChangeText={setTitle} accessibilityLabel="Your question" />
+            {/* The most the database keeps (300 for the question, 10,000 for the details): longer looked posted and was lost. */}
+            <Field soft value={title} onChangeText={setTitle} accessibilityLabel="Your question" maxLength={300} />
           </Section>
           <Section title="Topic">
             <Chips options={TOPICS.map((t) => ({ value: t, label: TOPIC_META[t].label }))} value={topic} onChange={(t) => { if (t) setTopic(t); }} />
           </Section>
           <Section title="Details">
-            <Field soft value={body} onChangeText={setBody} placeholder="Optional" accessibilityLabel="Details" multiline minHeight={96} mentions />
+            <Field soft value={body} onChangeText={setBody} placeholder="Optional" accessibilityLabel="Details" multiline minHeight={96} mentions maxLength={10000} />
           </Section>
           {poll ? (
             <Section title="Poll" right={<Pressable accessibilityRole="button" accessibilityLabel="Remove the poll" hitSlop={8} onPress={() => setPoll(null)}><Text style={styles.remove}>Remove</Text></Pressable>}>

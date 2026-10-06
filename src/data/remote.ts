@@ -14,7 +14,8 @@ import * as WebBrowser from 'expo-web-browser';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
-import { ANDROID_OAUTH_KEY, androidOAuthClient, supabase } from '@/lib/supabase';
+import { isAuthRetryableFetchError } from '@supabase/supabase-js';
+import { ANDROID_OAUTH_KEY, androidOAuthClient, supabase, throwawayAuthClient } from '@/lib/supabase';
 import { shrinkCover, shrinkPhoto, shrinkPhotoSized } from '@/lib/shrinkPhoto';
 import { COVER_MARK, smallName } from '@/lib/smallCover';
 import { canShrinkVideo, shrinkVideo } from '@/lib/shrinkVideo';
@@ -702,8 +703,10 @@ function withPolls(questions: Question[], polls: PollRow[], mine: { question_id:
     return p ? { ...q, poll: { options: p.options, counts: (p.counts ?? []).slice(0, p.options.length), myVote: myVote.get(q.id) } } : q;
   });
 }
+/** The topics the app draws. A row with any other (written around the app) reads as Technique, never a crash. */
+const QUESTION_TOPICS: ReadonlySet<string> = new Set<Question['topic']>(['gear', 'technique', 'strategy', 'injury', 'fitness', 'rules', 'mental']);
 const toQuestion = (r: QuestionRow, answers: AnswerRow[]): Question => withRemoved<Question>({
-  id: r.id, authorId: r.author_id, title: r.title, body: r.body, topic: r.topic as Question['topic'], tags: r.tags ?? [],
+  id: r.id, authorId: r.author_id, title: r.title, body: r.body, topic: QUESTION_TOPICS.has(r.topic) ? r.topic as Question['topic'] : 'technique', tags: r.tags ?? [],
   createdAt: r.created_at, votes: r.votes, votedBy: r.voted_by ?? {}, answerIds: answers.filter((a) => a.question_id === r.id && !heldHere(a.id, a.parent_answer_id)).map((a) => a.id),
   acceptedAnswerId: r.accepted_answer_id ?? undefined, editedAt: r.edited_at ?? undefined,
 }, r);
@@ -896,9 +899,9 @@ export interface SiteFeedback { id: string; message: string; email?: string; cre
 /** Where the beta invite email stands: live once Apple has approved the beta. */
 export interface BetaInviteStatus { live: boolean; total: number; invited: number; waiting: number; sent: number; failed: string[] }
 
-/** The kinds of thing a report can be about, besides an account or a chat. */
-export type ReportedItemKind = 'post' | 'hit' | 'question' | 'answer' | 'comment' | 'coach-question' | 'coach-reply';
-const ITEM_KINDS: ReportedItemKind[] = ['post', 'hit', 'question', 'answer', 'comment', 'coach-question', 'coach-reply'];
+/** The kinds of thing a report can be about, besides an account or a chat ('hit-request': an open hit on Find Players, since migration 126; 'tip': the tips board, since 128). */
+export type ReportedItemKind = 'post' | 'hit' | 'hit-request' | 'question' | 'answer' | 'comment' | 'coach-question' | 'coach-reply' | 'tip';
+const ITEM_KINDS: ReportedItemKind[] = ['post', 'hit', 'hit-request', 'question', 'answer', 'comment', 'coach-question', 'coach-reply', 'tip'];
 
 export interface AdminReport {
   id: ID;
@@ -907,7 +910,7 @@ export interface AdminReport {
   /** The account the report is about. */
   userId?: ID;
   /** What was reported: a post, a hit, a thread, a reply, a comment, a coach question or reply, an account, or a chat. */
-  kind: ReportedItemKind | 'profile' | 'conversation';
+  kind: ReportedItemKind | 'profile' | 'conversation' | 'ai-coach';
   targetId?: ID;
   /** One message in a reported chat ("Report" on a message). */
   messageId?: ID;
@@ -1357,6 +1360,23 @@ export function onWordsRefused(fn: () => void): () => void {
 }
 /** A save refused for its words, so the app takes back what it showed. */
 const refusedFor = (error: unknown) => (isBlockedWords(error) ? ('blocked' as const) : undefined);
+/** The most #tags a post files, and people it tags (posts_tags_count). */
+const TAGS_MAX = 20;
+/** Whether a row is there (read as you, so only one you may see). Errors count as there: nothing is put back wrongly. */
+async function rowThere(table: 'stories' | 'comments' | 'story_comments', id: ID): Promise<boolean> {
+  try {
+    const { data, error } = await need().from(table).select('id').eq('id', id).maybeSingle();
+    return !!error || !!data;
+  } catch { return true; }
+}
+/** A comment whose answer was lost on the way back (no connection) may still have been saved: looked for before saying it failed. */
+async function commentLanded(table: 'comments' | 'story_comments', id: ID, error: { code?: string; message: string }): Promise<boolean> {
+  if (error.code || !/network|fetch|timed? ?out|abort/i.test(error.message)) return false;
+  try {
+    const { data } = await need().from(table).select('id').eq('id', id).maybeSingle();
+    return !!data;
+  } catch { return false; }
+}
 /** Why your Hidden words did not save, as set_hidden_words says it. */
 export type HiddenWordsRefusal = 'too_many_words' | 'word_too_long' | 'not_ready' | 'failed';
 
@@ -1539,8 +1559,9 @@ export const remote = {
       edited_at: q.editedAt ?? null, created_at: q.createdAt,
     });
     if (error) fail('thread save')(error);
-    // 'blocked': refused for its words (migration 117); the app takes it back.
-    return refusedFor(error);
+    // 'blocked': refused for its words (migration 117); 'failed': not saved for any other reason
+    // (offline, too long). Either way the app takes it back and says so.
+    return refusedFor(error) ?? (error ? 'failed' as const : undefined);
   },
   /**
    * A change to a thread already up (an edit, an accepted answer): those
@@ -1552,7 +1573,7 @@ export const remote = {
     const { data, error } = await need().from('questions').update({
       title: q.title, body: q.body, tags: q.tags, accepted_answer_id: q.acceptedAnswerId ?? null, edited_at: q.editedAt ?? null,
     }).eq('id', q.id).select('id');
-    if (error) { fail('thread save')(error); return refusedFor(error); }
+    if (error) { fail('thread save')(error); return refusedFor(error) ?? 'failed' as const; }
     if (!(data ?? []).length) return remote.upsertQuestion(q);
     return undefined;
   },
@@ -1563,7 +1584,8 @@ export const remote = {
       ...(a.media ? { media_url: a.media.url, media_kind: a.media.kind, media_thumb: a.media.thumb ?? null } : {}),
     });
     if (error) fail('answer save')(error);
-    return refusedFor(error);
+    // As for a thread: 'blocked' for its words, 'failed' for anything else.
+    return refusedFor(error) ?? (error ? 'failed' as const : undefined);
   },
   async voteQuestion(questionId: ID, dir: 1 | -1) { const { error } = await need().rpc('vote_question', { q: questionId, dir }); if (error) fail('vote')(error); },
   async voteAnswer(answerId: ID, dir: 1 | -1) { const { error } = await need().rpc('vote_answer', { a: answerId, dir }); if (error) fail('vote')(error); },
@@ -1572,7 +1594,8 @@ export const remote = {
       id: q.id, author_id: q.authorId, title: q.title, body: q.body, specialty: q.specialty, video_url: q.videoUrl ?? null, media_label: q.mediaLabel ?? null, resolved: q.resolved, created_at: q.createdAt,
     });
     if (error) fail('coach question save')(error);
-    return refusedFor(error);
+    // 'blocked' for its words; 'failed' for anything else (no connection, a rule that said no), so the app takes it back rather than show a question no coach will ever see.
+    return error ? (refusedFor(error) ?? ('failed' as const)) : undefined;
   },
   /** "This answered it" / "Reopen": just that, so the question keeps its date (see updateQuestion). */
   async setCoachQuestionResolved(q: CoachQuestion) {
@@ -1600,7 +1623,8 @@ export const remote = {
   async insertCoachReply(r: CoachReply) {
     const { error } = await need().from('coach_replies').upsert({ id: r.id, question_id: r.questionId, coach_user_id: r.coachUserId, body: r.body, created_at: r.createdAt });
     if (error) fail('coach reply save')(error);
-    return refusedFor(error);
+    // As upsertCoachQuestion: 'blocked' for its words, 'failed' for anything else.
+    return error ? (refusedFor(error) ?? ('failed' as const)) : undefined;
   },
   async toggleReplyHelpful(replyId: ID) { const { error } = await need().rpc('toggle_reply_helpful', { r: replyId }); if (error) fail('helpful')(error); },
   async insertCoachingRequest(r: CoachingRequest) {
@@ -1630,6 +1654,12 @@ export const remote = {
     const { error } = await need().from('reports').insert(row);
     if (error) fail('report')(error);
     return null;
+  },
+  /** Files a report, as insertReport, resolving whether it was filed (so the thanks shows only then). */
+  async fileReport(me: ID, targetUserId: ID | null, target: string, reason: string): Promise<boolean> {
+    const { error } = await need().from('reports').insert({ reporter_id: me, target_user_id: targetUserId, target, reason });
+    if (error) { fail('report')(error); return false; }
+    return true;
   },
   /** Your settings row as the server has it now (blocks, mutes, saved threads made on another device included). Null when there is none; throws when it could not be read. */
   async fetchUserState(me: ID): Promise<UserState | null> {
@@ -1671,8 +1701,12 @@ export const remote = {
 
   /* ------------------------------ messages ------------------------------ */
 
-  /** The 1:1 you already have with someone, or a new one under the id the app chose. Returns the id that stands. */
-  async openConversation(other: ID, wanted: ID): Promise<ID | null | 'blocked' | 'limit'> {
+  /**
+   * The 1:1 you already have with someone, or a new one under the id the app
+   * chose. Returns the id that stands; 'failed' when there was no answer (no
+   * signal), so the chat is not taken to be there when it may not be.
+   */
+  async openConversation(other: ID, wanted: ID): Promise<ID | null | 'blocked' | 'limit' | 'failed'> {
     const { data, error } = await need().rpc('open_conversation', { other, wanted });
     // Past the day's limit of new people (migration 109): no chat, whoever it was.
     if (error && /age_rule_limit/.test(error.message)) return 'limit';
@@ -1680,7 +1714,7 @@ export const remote = {
     if (error && /teen_closed/.test(error.message)) return null;
     // Nor can someone you are blocked with, either way.
     if (error && /blocked/.test(error.message)) return 'blocked';
-    if (error) { fail('open conversation')(error); return wanted; }
+    if (error) { fail('open conversation')(error); return 'failed'; }
     return (data as string) || wanted;
   },
 
@@ -1952,16 +1986,20 @@ export const remote = {
     return !!data?.length;
   },
 
-  /** Unsend: gone for everyone in the chat. */
-  async unsendMessage(messageId: ID) {
+  /** Unsend: gone for everyone in the chat. Resolves whether the server took it (one already gone counts). */
+  async unsendMessage(messageId: ID): Promise<boolean> {
     const { error } = await need().from('messages').delete().eq('id', messageId);
-    if (error) fail('message unsend')(error);
+    if (error) { fail('message unsend')(error); return false; }
+    return true;
   },
 
-  /** Delete for yourself: hidden from your view only. */
-  async hideMessage(me: ID, messageId: ID) {
+  /** Delete for yourself: hidden from your view only. Resolves whether it was saved (one already hidden counts). */
+  async hideMessage(me: ID, messageId: ID): Promise<boolean> {
     const { error } = await need().from('hidden_messages').insert({ user_id: me, message_id: messageId });
-    if (error) fail('message delete')(error);
+    // Already hidden, or not on the server at all (yours that never went): nothing more to hide.
+    if (error && (error.code === '23505' || error.code === '23503')) return true;
+    if (error) { fail('message delete')(error); return false; }
+    return true;
   },
 
   /**
@@ -1999,6 +2037,22 @@ export const remote = {
     if (!paths.length) return;
     const { error } = await need().storage.from(CHAT_PHOTOS).remove(paths);
     if (error) fail('chat photo remove')(error);
+  },
+
+  /**
+   * Takes files of yours down from the public media shelf by their links (a
+   * voice note unsent, or one whose message never went). Only links into
+   * your own folder (the shelf lets you delete only those): a voice note
+   * forwarded from someone else points at theirs, and is left alone. Best effort.
+   */
+  async removeMedia(me: ID, urls: string[]) {
+    const mark = '/object/public/media/';
+    const paths = urls
+      .map((url) => { const at = url.indexOf(mark); return at < 0 ? '' : decodeURIComponent(url.slice(at + mark.length).split(/[?#]/)[0]); })
+      .filter((path) => path.startsWith(`${me}/`));
+    if (!paths.length) return;
+    const { error } = await need().storage.from('media').remove(paths);
+    if (error) fail('media remove')(error);
   },
 
   /** One conversation with its messages — for one that just started on another phone. Null when it cannot be had, for whatever reason. */
@@ -2589,10 +2643,12 @@ export const remote = {
       const [kind, id] = (r.target ?? '').split(':');
       // A report about one message names it in the reason ("message:<id>"); the card points at it.
       const messageId = /^message:([0-9a-f-]{36})$/i.exec(r.reason ?? '')?.[1];
+      // A reported AI coach answer or week (ai-coach.tsx) has nothing to open: the card says what it said.
+      const aiWords = kind === 'ai-reply' || kind === 'ai-plan' ? (r.target ?? '').slice(kind.length + 1) : undefined;
       return {
         id: r.id, reporterId: r.reporter_id ?? undefined, userId: r.target_user_id ?? undefined,
-        kind: (ITEM_KINDS as string[]).includes(kind) || kind === 'conversation' ? kind as AdminReport['kind'] : 'profile', targetId: id || undefined,
-        messageId, reason: messageId ? 'one message' : r.reason || undefined,
+        kind: aiWords !== undefined ? 'ai-coach' : (ITEM_KINDS as string[]).includes(kind) || kind === 'conversation' ? kind as AdminReport['kind'] : 'profile', targetId: aiWords === undefined ? id || undefined : undefined,
+        messageId, reason: messageId ? 'one message' : aiWords !== undefined ? `AI coach ${kind === 'ai-plan' ? 'week' : 'answer'}: “${aiWords}”` : r.reason || undefined,
         createdAt: r.created_at, status: (r.status ?? 'open') as AdminReport['status'], reviewedAt: r.reviewed_at ?? undefined,
       };
     });
@@ -2603,16 +2659,35 @@ export const remote = {
    * question or reply, and why it was taken down. Null when it is gone.
    */
   async fetchReportedItem(kind: ReportedItemKind, id: ID): Promise<ReportedItem | null> {
+    // An open hit's own read rules have no exception for admins (a teen's,
+    // an invite-only one, someone blocked): the database hands over this one
+    // hit, and only once it is reported (migration 126), as for a chat.
+    if (kind === 'hit-request') {
+      const { data, error } = await need().rpc('report_hit_context', { hit: id });
+      if (!error) {
+        if (!data || typeof data !== 'object') return null;
+        const raw = data as { note?: unknown; place?: unknown };
+        const words = [typeof raw.note === 'string' ? raw.note : null, typeof raw.place === 'string' && raw.place.trim() ? `At ${raw.place}` : null]
+          .filter((x): x is string => !!x && !!x.trim()).join(' · ');
+        return { body: words, removed: false };
+      }
+      // Before migration 126: whatever the admin's own read rules let through.
+      if (!missingFunction(error)) { fail('reported hit')(error); return null; }
+    }
     const tables: Record<ReportedItemKind, string[]> = {
-      post: ['posts'], hit: ['stories'], question: ['questions'], answer: ['answers'],
+      post: ['posts'], hit: ['stories'], 'hit-request': ['hit_requests'], question: ['questions'], answer: ['answers'],
       // A comment is under a post or under a hit: whichever has it.
       comment: ['comments', 'story_comments'], 'coach-question': ['coach_questions'], 'coach-reply': ['coach_replies'],
+      // A tip on the tips board (account sweep, Oct 5).
+      tip: ['tips'],
     };
     for (const table of tables[kind]) {
       const { data, error } = await need().from(table).select('*').eq('id', id).maybeSingle();
       if (error || !data) continue;
-      const row = data as { title?: string | null; body?: string | null; caption?: string | null; image_url?: string | null; thumbnail_url?: string | null } & RemovedColumns;
-      const words = [row.title, row.body ?? row.caption].filter((x): x is string => !!x && !!x.trim()).join(' · ');
+      const row = data as { title?: string | null; body?: string | null; caption?: string | null; image_url?: string | null; thumbnail_url?: string | null; note?: string | null; place?: { name?: unknown } | null } & RemovedColumns;
+      // An open hit has no words but its note, so its place goes with them.
+      const where = table === 'hit_requests' && typeof row.place?.name === 'string' ? `At ${row.place.name}` : null;
+      const words = [row.title, row.body ?? row.caption ?? row.note, where].filter((x): x is string => !!x && !!x.trim()).join(' · ');
       const removed = removedOf(row);
       return { body: words, picture: row.thumbnail_url ?? row.image_url ?? undefined, removed: !!removed, ...(removed ? { reason: removed.reason } : {}) };
     }
@@ -2926,7 +3001,8 @@ export const remote = {
   async fetchMyReported(): Promise<ID[]> {
     const { data, error } = await need().rpc('my_reported_targets');
     if (error || !Array.isArray(data)) return [];
-    return (data as unknown[]).map((t) => /^(?:post|hit|question|answer|comment|coach-question|coach-reply):(.+)$/.exec(String(t))?.[1]).filter((id): id is string => !!id);
+    // An open hit ('hit-request') since migration 126, a tip since 128; before them the server never hands one back, and nothing changes.
+    return (data as unknown[]).map((t) => /^(?:post|hit|hit-request|question|answer|comment|coach-question|coach-reply|tip):(.+)$/.exec(String(t))?.[1]).filter((id): id is string => !!id);
   },
   async fetchHits(me?: ID | null): Promise<HitRequest[] | null> {
     const { data, error } = await need().from('hit_requests').select('*, hit_joins(user_id)').eq('cancelled', false)
@@ -3586,6 +3662,12 @@ export const remote = {
     return refusedFor(error);
   },
   async voteTip(tipId: ID, dir: 1 | -1) { const { error } = await need().rpc('vote_tip', { t: tipId, dir }); if (error) fail('tip vote')(error); },
+  /** Your own tip, off the board. Throws when it was not deleted (before migration 128 nobody could delete one). */
+  async deleteTip(id: ID) {
+    const { data, error } = await need().from('tips').delete().eq('id', id).select('id');
+    if (error) throw new Error(error.message);
+    if (!(data ?? []).length) throw new Error('tip not deleted');
+  },
 
   /** Resolves false when it was not saved (most callers need not ask). */
   async updateProfile(me: ID, patch: ProfilePatch): Promise<boolean> {
@@ -3653,7 +3735,8 @@ export const remote = {
       match: post.match ?? null,
       // The names on a session are the server's to write (migration 62); a list shown here early is never sent.
       session: sessionToSend(post.session),
-      tags: post.tags,
+      // The database files 20 #tags at most (posts_tags_count): any more stay in the words, just not filed.
+      tags: post.tags.slice(0, TAGS_MAX),
       tagged_user_ids: post.taggedUserIds ?? [],
       created_at: post.createdAt,
       // A group post must never go up without its group (it would be public),
@@ -3718,6 +3801,9 @@ export const remote = {
       }
       // Refused for its words (migration 117): saying so is the whole message.
       if (isBlockedWords(error)) throw new Error(BLOCKED_WORDS_NOTE);
+      // Past the database's own limits (posts_tags_count, posts_body_len): said as it is, not as a connection problem.
+      if (error.code === '23514' && /posts_tags_count/.test(error.message)) throw new Error(`A post can tag up to ${TAGS_MAX} people. Take some off and post it again.`);
+      if (error.code === '23514' && /posts_body_len/.test(error.message)) throw new Error('The caption is too long. Shorten it and post it again.');
       // Before saying it failed (and you post it again, as a second post): is it there after all?
       if (await landed()) return;
       fail('post insert')(error);
@@ -3727,31 +3813,41 @@ export const remote = {
     throw new Error('Your post could not be saved. Try again in a moment.');
   },
 
-  async deletePost(postId: ID) {
+  /** False when it did not go through (no connection, say): the app puts the post back. */
+  async deletePost(postId: ID): Promise<boolean> {
     const { error } = await need().from('posts').delete().eq('id', postId);
     if (error) fail('delete post')(error);
+    return !error;
   },
-  async setPostArchived(postId: ID, archived: boolean) {
+  /** False when it did not go through: the app puts the post back as it was. */
+  async setPostArchived(postId: ID, archived: boolean): Promise<boolean> {
     const { error } = await need().from('posts').update({ archived }).eq('id', postId);
     if (error) fail('post archive')(error);
+    return !error;
   },
   /** The author's edit: words, tags, who is in it, where it was — and when. */
-  /** Resolves 'blocked' when the new words were refused (migration 117). */
-  async updatePost(postId: ID, patch: { body: string; tags: string[]; taggedUserIds: ID[]; location?: string; court?: TaggedCourt | null; editedAt: string }): Promise<'blocked' | undefined> {
-    const base = { body: patch.body, tags: patch.tags, tagged_user_ids: patch.taggedUserIds };
+  /**
+   * Resolves 'blocked' when the new words were refused (migration 117),
+   * 'too-many-tagged' past the database's limit on tagged people
+   * (posts_tags_count), and 'failed' when it did not save at all.
+   */
+  async updatePost(postId: ID, patch: { body: string; tags: string[]; taggedUserIds: ID[]; location?: string; court?: TaggedCourt | null; editedAt: string }): Promise<'blocked' | 'failed' | 'too-many-tagged' | undefined> {
+    const base = { body: patch.body, tags: patch.tags.slice(0, TAGS_MAX), tagged_user_ids: patch.taggedUserIds };
     const court = patch.court === undefined ? {} : { court_id: patch.court?.id ?? null, court_name: patch.court?.name ?? null, court_lat: patch.court?.lat ?? null, court_lng: patch.court?.lng ?? null };
     let { error } = await need().from('posts').update({ ...base, location: patch.location ?? null, ...court, edited_at: patch.editedAt }).eq('id', postId);
     // Before migration 51 there is nowhere to keep the court: save the rest.
     if (error && /court_/.test(error.message)) ({ error } = await need().from('posts').update({ ...base, location: patch.location ?? null, edited_at: patch.editedAt }).eq('id', postId));
     if (!error) return undefined;
+    if (error.code === '23514' && /posts_tags_count/.test(error.message)) return 'too-many-tagged';
     if (/location|edited_at/.test(error.message)) {
       console.warn('[remote] edit columns missing; run the pending migration — saving the words only');
       const retry = await need().from('posts').update(base).eq('id', postId);
-      if (retry.error) fail('post edit')(retry.error);
-      return refusedFor(retry.error);
+      if (!retry.error) return undefined;
+      fail('post edit')(retry.error);
+      return refusedFor(retry.error) ?? 'failed';
     }
     fail('post edit')(error);
-    return refusedFor(error);
+    return refusedFor(error) ?? 'failed';
   },
   /**
    * "Share health data" changed on a post already up (Oct 4, owner). Only the
@@ -3779,40 +3875,48 @@ export const remote = {
     const row = data as { feature_ok: boolean | null } | null;
     return row ? row.feature_ok !== false : null;
   },
-  async setPostPinned(postId: ID, pinned: boolean) {
+  /** False when it did not go through: the app puts the pin back as it was. */
+  async setPostPinned(postId: ID, pinned: boolean): Promise<boolean> {
     const { error } = await need().from('posts').update({ pinned }).eq('id', postId);
     if (error) fail('post pin')(error);
+    return !error;
   },
 
   // Likes, saves, views and follows are one row per person: a repeat (another
   // phone, a tap that raced a refresh) leaves the row already there alone
   // (ignoreDuplicates). A plain upsert tries to rewrite it, which these tables'
   // rules never allow, so a second like or follow came back refused.
-  async setLike(postId: ID, me: ID, liked: boolean) {
+  /** False when it did not go through (no connection, say). */
+  async setLike(postId: ID, me: ID, liked: boolean): Promise<boolean> {
     const db = need();
     const { error } = liked
       ? await db.from('post_likes').upsert({ post_id: postId, user_id: me }, { ignoreDuplicates: true })
       : await db.from('post_likes').delete().match({ post_id: postId, user_id: me });
     if (error) fail('like')(error);
+    return !error;
   },
 
-  async setSaved(postId: ID, me: ID, saved: boolean) {
+  /** False when it did not go through (no connection, say). */
+  async setSaved(postId: ID, me: ID, saved: boolean): Promise<boolean> {
     const db = need();
     const { error } = saved
       ? await db.from('post_saves').upsert({ post_id: postId, user_id: me }, { ignoreDuplicates: true })
       : await db.from('post_saves').delete().match({ post_id: postId, user_id: me });
     if (error) fail('save')(error);
+    return !error;
   },
 
-  async insertComment(comment: Comment) {
+  async insertComment(comment: Comment): Promise<'blocked' | 'failed' | undefined> {
     const row = { id: comment.id, post_id: comment.postId, author_id: comment.authorId, body: comment.body, created_at: comment.createdAt };
     const insert = (r: Record<string, unknown>) => insertReplying('comments', r, comment);
     let { error } = await insert({ ...row, ...(comment.imageUrl ? { image_url: comment.imageUrl } : {}) });
     // Before migration 52 there is nowhere for the photo: the words still go up.
     if (error && comment.imageUrl && /image_url/.test(error.message)) ({ error } = await insert(row));
-    if (error) fail('comment insert')(error);
-    // 'blocked': refused for its words (migration 117); the app takes it back off the list.
-    return refusedFor(error);
+    if (!error || error.code === '23505' || await commentLanded('comments', comment.id, error)) return undefined;
+    fail('comment insert')(error);
+    // 'blocked': refused for its words (migration 117); 'failed': not saved at all
+    // (no connection; a photo with no words before migration 125). Either way the app takes it back off the list.
+    return refusedFor(error) ?? 'failed';
   },
 
   /** The same as insertPost: saved under the phone's own id, safe to send twice, throws when it could not be saved. */
@@ -3848,6 +3952,25 @@ export const remote = {
     if (error) fail('story archive')(error);
   },
 
+  /** Your own Instant, gone for good with its likes, views and comments. False when it is still there. */
+  async deleteStory(storyId: ID): Promise<boolean> {
+    const { data, error } = await need().from('stories').delete().eq('id', storyId).select('id');
+    if (error) { fail('delete instant')(error); return false; }
+    return !!data?.length || !(await rowThere('stories', storyId));
+  },
+
+  /**
+   * A comment (or one on an Instant), with its replies: your own, or anyone's
+   * under something of yours (migration 125). False when it is still there:
+   * no connection, or a database from before 125 refusing a post's author.
+   */
+  async deleteComment(commentId: ID, onHit: boolean): Promise<boolean> {
+    const table = onHit ? 'story_comments' : 'comments';
+    const { data, error } = await need().from(table).delete().eq('id', commentId).select('id');
+    if (error) { fail('delete comment')(error); return false; }
+    return !!data?.length || !(await rowThere(table, commentId));
+  },
+
   async setStoryLike(storyId: ID, me: ID, liked: boolean) {
     const db = need();
     const { error } = liked
@@ -3866,12 +3989,13 @@ export const remote = {
     if (error) fail('comment like')(error);
   },
 
-  async insertStoryComment(comment: Comment) {
+  async insertStoryComment(comment: Comment): Promise<'blocked' | 'failed' | undefined> {
     const { error } = await insertReplying('story_comments', {
       id: comment.id, story_id: comment.postId, author_id: comment.authorId, body: comment.body, created_at: comment.createdAt,
     }, comment);
-    if (error) fail('hit comment insert')(error);
-    return refusedFor(error);
+    if (!error || error.code === '23505' || await commentLanded('story_comments', comment.id, error)) return undefined;
+    fail('hit comment insert')(error);
+    return refusedFor(error) ?? 'failed';
   },
 
   /**
@@ -4349,14 +4473,41 @@ export const auth = {
     // then failed with "Invalid Refresh Token".
     await forgetLocalSession();
   },
-  /** Signs in as a remembered account from its refresh token, replacing whoever is signed in now. */
-  async resumeAccount(refreshToken: string) {
-    const client = need();
-    // The account being left stays valid too, so switching back is a tap.
+  /**
+   * Logs out and ends this login on the server too (only this one: the
+   * account's other phones and computers stay signed in), so its saved token
+   * stops working. For a browser, which may be shared (see signOut).
+   */
+  async endSession() {
+    // Supabase takes the login off this device even when the server cannot be reached.
+    await need().auth.signOut({ scope: 'local' }).catch(() => undefined);
     await forgetLocalSession();
-    const { data, error } = await client.auth.refreshSession({ refresh_token: refreshToken });
-    if (error || !data.session) throw new Error('That login has expired on this phone. Sign in with your email to add it again.');
-    return data.session;
+  },
+  /**
+   * Signs in as a remembered account from its refresh token, replacing whoever
+   * is signed in now. The saved login is renewed on a throwaway client that
+   * keeps nothing, and only a renewed one replaces the account on screen: an
+   * expired login, or no connection, leaves you signed in exactly as you
+   * were. (Renewing on the app's own client wiped the current login first,
+   * so a failure signed you out of both.) The account being left stays valid
+   * on the server too, so switching back is a tap. An expired login's error
+   * is marked `expired`, so only that one is dropped from the saved list.
+   * Renewing spends the old token, so `keep` saves the new one at once,
+   * before anything else can fail: the saved list never holds a spent one.
+   */
+  async resumeAccount(refreshToken: string, keep?: (renewed: { userId: string; email?: string; refreshToken: string }) => Promise<unknown>) {
+    const client = need();
+    const check = throwawayAuthClient();
+    if (!check) throw new Error('Supabase is not configured');
+    const { data, error } = await check.auth.refreshSession({ refresh_token: refreshToken });
+    if (error || !data.session) {
+      if (error && isAuthRetryableFetchError(error)) throw new Error('Could not reach CourtSide. Check your connection and try again.');
+      throw Object.assign(new Error('That login has expired on this phone. Sign in with your email to add it again.'), { expired: true });
+    }
+    if (keep) await keep({ userId: data.session.user.id, email: data.session.user.email ?? undefined, refreshToken: data.session.refresh_token }).catch(() => undefined);
+    const set = await client.auth.setSession({ access_token: data.session.access_token, refresh_token: data.session.refresh_token });
+    if (set.error || !set.data.session) throw new Error('Could not switch accounts. Check your connection and try again.');
+    return set.data.session;
   },
   /**
    * Google, through Supabase. On the web the whole page goes to Google and

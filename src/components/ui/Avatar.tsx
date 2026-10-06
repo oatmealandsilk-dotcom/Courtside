@@ -6,7 +6,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { useApp } from '@/store/AppContext';
 import { initials } from '@/lib/format';
-import { colors, radius, font } from '@/theme';
+import { colors, inkOn, radius, font } from '@/theme';
 
 /**
  * A default picture takes one of the theme's own accents, chosen by the
@@ -58,7 +58,8 @@ export function Avatar({ uri, name, seed, size = 40, style, ring = false, plain 
         style,
       ]}
     >
-      {plain ? null : <Text style={[styles.label, { fontSize: size * 0.38 }]}>{initials(name)}</Text>}
+      {/* White initials where white reads on the tint, else black: white alone fell to 1.5:1 on New York's yellow. */}
+      {plain ? null : <Text style={[styles.label, { fontSize: size * 0.38, color: inkOn(tint) }]}>{initials(name)}</Text>}
       {photo && <ExpoImage source={{uri:photo}} accessibilityLabel={`${name} profile photo`} contentFit="cover" recyclingKey={photo} style={{position:"absolute",width:size,height:size,borderRadius:size/2}}/>}
       {ring ? (
         <View

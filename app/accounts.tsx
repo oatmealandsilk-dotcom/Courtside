@@ -70,7 +70,7 @@ export default function Accounts() {
           );
         })}
         {/* Adding means signing in as someone else: this login is kept in the list, but has to step aside first. */}
-        <Pressable accessibilityRole="button" accessibilityLabel="Add an account" onPress={() => leaveGently(() => { actions.signOut(); router.replace('/sign-in?add=1'); })} style={[styles.row, savedAccounts.length > 0 && styles.rowBorder]}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Add an account" onPress={() => leaveGently(() => { actions.signOut({ keepLogin: true }); router.replace('/sign-in?add=1'); })} style={[styles.row, savedAccounts.length > 0 && styles.rowBorder]}>
           <View style={styles.plus}><Ionicons name="add" size={22} color={colors.brand} /></View>
           <Text style={[styles.name, { flex: 1 }]}>Add account</Text>
           <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
@@ -16,10 +16,15 @@ import { colors, lift, spacing, typography } from '@/theme';
  * same cards as Find Players. "Play here" posts a hit at this court; with
  * none open, the whole prompt does. A members-only or private court is
  * never suggested for a hit: no Play here, and nothing at all with none open.
+ * The soonest three show; any more are a tap away ("More open hits (2)"),
+ * the way Find Players does it, so one you were invited to is never cut off.
  */
 export function CourtHits({ place, closed = false }: { place: { id?: string; name: string; lat: number; lng: number }; closed?: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
-  const hits = useCourtHits(place).slice(0, 3);
+  const all = useCourtHits(place);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const more = Math.max(0, all.length - HITS_SHOWN);
+  const hits = moreOpen ? all : all.slice(0, HITS_SHOWN);
   const { currentUser } = useApp();
   const forFriends = !!currentUser && notKnownAdult(currentUser);
   if (closed && !hits.length) return null;
@@ -44,9 +49,18 @@ export function CourtHits({ place, closed = false }: { place: { id?: string; nam
           <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
         </Pressable>
       )}
+      {more ? (
+        <Pressable accessibilityRole="button" accessibilityState={{ expanded: moreOpen }} onPress={() => setMoreOpen((o) => !o)} hitSlop={6} style={({ pressed }) => [styles.more, pressed && styles.pressed]}>
+          <Text style={styles.moreText}>{moreOpen ? 'Fewer open hits' : `More open hits (${more})`}</Text>
+          <Ionicons name={moreOpen ? 'chevron-up' : 'chevron-down'} size={14} color={colors.textMuted} />
+        </Pressable>
+      ) : null}
     </View>
   );
 }
+
+/** How many of a court's open hits show before "More open hits". */
+const HITS_SHOWN = 3;
 
 const styleDefinitions = StyleSheet.create({
   wrap: { gap: spacing.md },
@@ -55,6 +69,9 @@ const styleDefinitions = StyleSheet.create({
   title: { ...typography.heading, color: colors.text },
   headLink: { ...typography.smallStrong, color: colors.brand },
   pressed: { opacity: 0.6 },
+  // The same "More open hits" row as Find Players.
+  more: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start', paddingVertical: 4 },
+  moreText: { ...typography.smallStrong, color: colors.textMuted },
   // The same prompt as Find Players' empty Open hits.
   prompt: { ...lift, flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.lg, borderRadius: 20, backgroundColor: colors.surface },
   promptTile: { width: 44, height: 44, borderRadius: 12, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },

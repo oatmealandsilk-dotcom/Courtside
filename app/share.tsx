@@ -1,5 +1,5 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -75,7 +75,7 @@ export default function ShareSheet() {
   const kind: Kind = KINDS.includes(params.kind as Kind) ? (params.kind as Kind) : 'post';
   const id = params.id ?? '';
 
-  const { users, posts, questions, hitRequests, messages, conversations, currentUserId, blockedIds, followingIds, actions } = useApp();
+  const { users, posts, questions, hitRequests, messages, conversations, currentUserId, blockedIds, followingIds, feedGroups, actions } = useApp();
   const [selected, setSelected] = useState<string[]>([]);
   const [note, setNote] = useState('');
   const [search, setSearch] = useState('');
@@ -101,7 +101,9 @@ export default function ShareSheet() {
       const post = posts.find((p) => p.id === id);
       if (!post) return null;
       const label = post.body.trim() || (post.kind === 'clip' ? 'A clip' : 'A post');
-      return { item: { kind: 'post', id }, label, icon: glyph(post.kind === 'clip' ? 'play-circle-outline' : 'image-outline'), outside: { title: postShareText(post, users.find((u) => u.id === post.authorId), currentUserId), url: shareLink('post', id, me?.handle) } };
+      // Shared to a group only: it never leaves the group, so there is no link to share outside (the server locks it too, migration 68).
+      const outside = post.groupId ? undefined : { title: postShareText(post, users.find((u) => u.id === post.authorId), currentUserId), url: shareLink('post', id, me?.handle) };
+      return { item: { kind: 'post', id }, label, icon: glyph(post.kind === 'clip' ? 'play-circle-outline' : 'image-outline'), outside };
     }
     if (kind === 'question') {
       const question = questions.find((q) => q.id === id);
@@ -148,6 +150,13 @@ export default function ShareSheet() {
 
   const term = search.trim().replace(/^@/, '').toLowerCase();
 
+  // A post shared to a group only goes only to people in that group: a chat
+  // with anyone else is not offered (they could not open it anyway).
+  const groupOnly = kind === 'post' ? posts.find((p) => p.id === id)?.groupId : undefined;
+  const members = useMemo(() => (groupOnly ? new Set((feedGroups.find((g) => g.id === groupOnly)?.members ?? []).map((m) => m.id)) : null), [groupOnly, feedGroups]);
+  // Opened before your groups were read (a notification, a link): read them, so its members are listed.
+  useEffect(() => { if (groupOnly && currentUserId && !feedGroups.some((g) => g.id === groupOnly)) void actions.loadFeedGroups().catch(() => undefined); }, [groupOnly, currentUserId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   /**
    * Your chats, newest first: every group you are in, and the people you
    * have actually talked to. Someone you blocked is left out (a group they
@@ -159,6 +168,7 @@ export default function ShareSheet() {
     const seen = new Set<string>();
     for (const c of [...conversations].sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))) {
       if (!c.participantIds.includes(currentUserId)) continue;
+      if (members && !c.participantIds.every((p) => p === currentUserId || members.has(p))) continue;
       if (isGroupChat(c)) {
         const people = othersIn(c, users, currentUserId);
         const name = groupName(c, users, currentUserId);
@@ -172,7 +182,7 @@ export default function ShareSheet() {
       list.push({ key: `u:${other.id}`, name: other.name, user: other, words: `${other.name} ${other.handle}`.toLowerCase() });
     }
     return list;
-  }, [conversations, users, currentUserId, blockedIds]);
+  }, [conversations, users, currentUserId, blockedIds, members]);
 
   /**
    * Everyone else: people you follow first, then the rest by name. Someone
@@ -182,10 +192,10 @@ export default function ShareSheet() {
   const people = useMemo((): Target[] => {
     const inRecent = new Set(recent.map((t) => t.key));
     return users
-      .filter((u) => u.id !== currentUserId && !blockedIds.includes(u.id) && !inRecent.has(`u:${u.id}`))
+      .filter((u) => u.id !== currentUserId && !blockedIds.includes(u.id) && !inRecent.has(`u:${u.id}`) && (!members || members.has(u.id)))
       .sort((a, b) => Number(followingIds.includes(b.id)) - Number(followingIds.includes(a.id)) || a.name.localeCompare(b.name))
       .map((u) => ({ key: `u:${u.id}`, name: u.name, user: u, words: `${u.name} ${u.handle}`.toLowerCase() }));
-  }, [users, currentUserId, blockedIds, followingIds, recent]);
+  }, [users, currentUserId, blockedIds, followingIds, recent, members]);
 
   /**
    * What shows: what matches the search, or the top of each list. A chat
