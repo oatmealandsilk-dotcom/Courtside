@@ -132,8 +132,8 @@ export default function EditPost() {
           <Text style={styles.note}>Only the person who posted this can change it.</Text>
         ) : isQuestion ? (
           <>
-            <Field label="Question" value={title} onChangeText={setTitle} />
-            <Field label="Details" value={body} onChangeText={setBody} multiline minHeight={120} mentions />
+            <Field label="Question" value={title} onChangeText={setTitle} maxLength={300} />
+            <Field label="Details" value={body} onChangeText={setBody} multiline minHeight={120} mentions maxLength={10000} />
           </>
         ) : (
           <>

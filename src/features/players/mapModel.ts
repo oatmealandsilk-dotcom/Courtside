@@ -437,16 +437,17 @@ export function useMapModel(me: User, players: User[], fix?: LatLng | null, focu
     fixLat !== undefined && fixLng !== undefined ? { lat: fixLat, lng: fixLng } : mineLat !== undefined && mineLng !== undefined ? { lat: mineLat, lng: mineLng } : null,
     profileCity,
   ), [fixLat, fixLng, mineLat, mineLng, profileCity]);
-  const cardHits = useMemo(() => {
-    const from = nearYou && city && milesBetween(nearYou, city) > IN_TOWN_MILES ? city : nearYou;
-    return from ? hits.filter((h) => milesBetween(from, h.at) <= NEAR_HIT_MILES) : [];
-  }, [nearYou, city, hits]);
+  // Counting from where you are (not a far-off card town): then Find Players hands the card
+  // its list's own count instead (hitCount), which has the hits at places only typed too.
+  const cardFrom = nearYou && city && milesBetween(nearYou, city) > IN_TOWN_MILES ? city : nearYou;
+  const cardFromYou = !!nearYou && cardFrom === nearYou;
+  const cardHits = useMemo(() => (cardFrom ? hits.filter((h) => milesBetween(cardFrom, h.at) <= NEAR_HIT_MILES) : []), [cardFrom, hits]);
   const cardFlags = useMemo(() => cardHits.slice(0, CARD_FLAGS), [cardHits]);
   return {
     home, homeKnown, homeView, mePos, city, cityName, cityPending, inCity, start, ranked, inTown, filter, setFilter, query, setQuery, shown, tray, selected, select, loadPlayersIn,
     place, pickPlace, clearPlace, placeSearch, placeRows: placeCourts.rows, placeLoading: placeCourts.loading, placeFailed: placeCourts.failed, retryPlace: placeCourts.retry,
     courtsOn, toggleCourts, courts: card ? [] : pins, ringed, ringFor, courtsLoading, loadCourts, loadRings, selectedCourt, selectCourt,
-    cardCourts, cardRinged, cardHits, cardFlags, courtResults, pickCourt, hits, selectedHit, selectHit, nearestCourts,
+    cardCourts, cardRinged, cardHits, cardFlags, cardFromYou, courtResults, pickCourt, hits, selectedHit, selectHit, nearestCourts,
   };
 }
 

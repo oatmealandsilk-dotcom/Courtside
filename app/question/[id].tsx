@@ -19,7 +19,7 @@ import { ThreadSkeleton } from '@/components/Skeleton';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { VoteControls } from '@/components/VoteControls';
-import { TOPIC_META } from '@/components/QuestionCard';
+import { topicMeta, topicTint } from '@/components/QuestionCard';
 import { openTopic } from '@/features/community/openTopic';
 import { Avatar, Card, Chip, EmptyState, Screen } from '@/components/ui';
 import { relativeTime } from '@/lib/format';
@@ -28,7 +28,7 @@ import { PollView } from '@/components/PollView';
 import { useRevealOnFocus } from '@/lib/keyboardScroll';
 import { useApp } from '@/store/AppContext';
 import type { Answer } from '@/data/types';
-import { colors, radius, spacing, typography } from '@/theme';
+import { colors, inkOn, radius, spacing, typography } from '@/theme';
 import { isDesktopBrowser } from '@/lib/browserDevice';
 import { RemovedNote } from '@/features/moderation/RemovedNote';
 import { HiddenComments, HiddenReplyRow } from '@/components/HiddenComments';
@@ -69,7 +69,9 @@ function QuestionDetail() {
     );
   }
 
-  const meta = TOPIC_META[question.topic];
+  const meta = topicMeta(question.topic);
+  // The topic's colour on this court, with words that read on it (a fixed dark ink fell short of 4.5:1 on the darker topics).
+  const tint = topicTint(question.topic);
   // One hidden by your Hidden words (migration 117) shows only to whoever wrote it;
   // you find it under "Hidden replies" at the end, as the asker.
   const hidden = hiddenAnswersOn(answers, question.id, currentUserId, question.authorId);
@@ -111,7 +113,8 @@ function QuestionDetail() {
     // box opens again with what you wrote (and its photo or clip), unless
     // you have started another reply since.
     void actions.addAnswer(question.id, text, undefined, attached ?? undefined).then((result) => {
-      if (result !== 'blocked' || latest.current.draft.trim() || latest.current.media) return;
+      // Not saved at all ('failed', offline say) gets the words back the same way.
+      if (!result || latest.current.draft.trim() || latest.current.media) return;
       setDraft(text);
       setMedia(attached);
       setReplying(true);
@@ -134,7 +137,7 @@ function QuestionDetail() {
               <Text style={styles.time}>{asker ? `@${asker.handle}` : ''} · {relativeTime(question.createdAt)}{question.editedAt ? ' · Edited' : ''}</Text>
             </View>
           </Pressable>
-          <Chip label={meta.label} selected tint={meta.tint} ink="#0A1120" small onPress={() => openTopic(question.topic)} />
+          <Chip label={meta.label} selected tint={tint} ink={inkOn(tint)} small onPress={() => openTopic(question.topic)} />
         </View>
         <Text style={styles.title}>{question.title}</Text>
         <RichText style={styles.body}>{question.body}</RichText>
@@ -170,7 +173,7 @@ function QuestionDetail() {
           <View style={{ gap: 8 }}>
           <MentionSuggestions candidates={tag.rows} onPick={tag.pick} maxHeight={176} />
           <View style={styles.composer}>
-            <TextInput ref={replyInput} autoFocus onFocus={() => reveal(replyInput.current)} accessibilityLabel="Reply to this thread" placeholder="Add your reply… (@ to tag)" placeholderTextColor={colors.textFaint} multiline value={draft} onChangeText={setDraft} onSelectionChange={tag.onSelectionChange} style={styles.replyInput}
+            <TextInput ref={replyInput} autoFocus onFocus={() => reveal(replyInput.current)} accessibilityLabel="Reply to this thread" placeholder="Add your reply… (@ to tag)" placeholderTextColor={colors.textFaint} multiline maxLength={10000} value={draft} onChangeText={setDraft} onSelectionChange={tag.onSelectionChange} style={styles.replyInput}
               blurOnSubmit={Platform.OS === 'web' ? true : undefined}
               onSubmitEditing={Platform.OS === 'web' ? submit : undefined} />
             {media ? <AttachedPreview media={media} onRemove={() => setMedia(null)} /> : null}

@@ -25,7 +25,7 @@ const CHAT_PREVIEW = 8;
 
 /** What each kind of report says on its card. */
 const KIND_NAME: Record<AdminReport['kind'], string> = {
-  post: 'Post', hit: 'Instant', question: 'Thread', answer: 'Reply', comment: 'Comment',
+  post: 'Post', hit: 'Instant', 'hit-request': 'Open hit', question: 'Thread', answer: 'Reply', comment: 'Comment',
   'coach-question': 'Coach question', 'coach-reply': 'Coach reply', profile: 'Profile', conversation: 'Chat',
 };
 /** Things a report can point at, besides an account or a chat. */
@@ -167,6 +167,7 @@ export default function AdminReports() {
           const openTarget = () => {
             if (report.kind === 'post' && report.targetId) router.push(`/post/${report.targetId}`);
             else if (report.kind === 'hit' && report.targetId) router.push(`/hits/${report.targetId}`);
+            else if (report.kind === 'hit-request' && report.targetId) router.push(`/hit-request/${report.targetId}`);
             else if (report.kind === 'question' && report.targetId) router.push(`/question/${report.targetId}`);
             else if (report.kind === 'coach-question' && report.targetId) router.push(`/coach-question/${report.targetId}`);
             else if (report.userId) router.push(`/user/${report.userId}`);
