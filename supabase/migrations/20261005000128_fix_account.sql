@@ -25,6 +25,15 @@
 -- leaves it, or as this file leaves it. If 126 hasn't run, this stops.
 --
 -- Needs migrations 11, 115, 124 and 126.
+--
+-- Tried on the live database on Oct 5, in one transaction that was then
+-- undone (nothing was saved), after 125 and 126 and each run twice: a
+-- player deleted their own tip and not someone else's, signed-out visitors
+-- deleted nothing; a tip report naming the wrong person on purpose came
+-- out naming the tip's author, both admins got "Reported a tip", and
+-- my_reported_targets handed back the reporter's tip and open-hit reports.
+-- Reports of an AI coach answer or week ('ai-reply:', 'ai-plan:', naming
+-- nobody) were kept, and the admins heard about them.
 
 begin;
 

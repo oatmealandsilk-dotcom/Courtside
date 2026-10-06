@@ -68,6 +68,13 @@
 --   md5 my_reported_targets=f068be6c2df849a90cfa1a014b42892d
 --   notify_admins_of_report=1bf03d1da6ea8de91012c582a4ddd780
 --   stamp_report=bca29d59ed094d2f5aee799083fbf1b6
+--
+-- Tried again on Oct 5 with the admins' reader added, in one undone
+-- transaction with 125 before it and 128 after it (each run twice): a
+-- player calling report_hit_context was refused ('not allowed'), and so
+-- was a hit nobody reported ('not reported'); signed-out visitors can't
+-- call it. A teen's open hit that the admin's own read rules hide (0 rows)
+-- came back through it with its note, place and poster.
 
 begin;
 
