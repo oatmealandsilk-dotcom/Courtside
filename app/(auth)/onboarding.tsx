@@ -120,10 +120,11 @@ function OnboardingSteps() {
   const { currentUser, currentUserId, posts, questions, answers, actions } = useApp();
   // The progress bar sits a calm step below the status bar; the buttons clear the home bar.
   const space = useGateSpace();
-  // Android: the box you tap is scrolled clear of the keyboard, with room
-  // under the form to scroll into (the app is drawn under the keyboard there
-  // and the window never shrinks). The iPhone is left as it was: the
-  // provider below hands the scrolling to Android only.
+  // The box you tap is scrolled clear of the keyboard, on every step. Android:
+  // with room under the form to scroll into (the app is drawn under the
+  // keyboard there and the window never shrinks). iPhone (Oct 6, owner: "The
+  // keyboard covers text box"): the page makes room for the keys itself
+  // (automaticallyAdjustKeyboardInsets) and the same reveal scrolls the box up.
   const keyboard = useKeyboardReveal();
   const keyboardRoom = useKeyboardRoom(space.footer);
   // The profile's "finish setting up" card lands straight on the step it names.
@@ -153,9 +154,12 @@ function OnboardingSteps() {
   const [rating, setRating] = useState(existing?.rating && existing.skillSystem !== 'ITF' ? existing.rating : 3.5);
   const [ratingText, setRatingText] = useState(joining ? '' : String(existing?.rating && existing.skillSystem !== 'ITF' ? existing.rating : '3.5'));
   const [levelsOpen, setLevelsOpen] = useState(false);
-  // The year they started playing, typed (Oct 5, owner: "Years playing should be able to say specific
-  // year"). A profile from before has only the old range: the box starts empty and the range stays until a year is typed.
-  const [startedText, setStartedText] = useState(existing?.startedYear != null ? String(existing.startedYear) : '');
+  // How many years they have played, typed (Oct 6, owner: "maybe we just say how many years they've been
+  // playing I feel like that's easier"; before, it asked the year they started). It is still kept as the
+  // year they started (this year less the years), so the profile and everything else reading it are
+  // unchanged; editing shows it back as years. A profile from before with only the old range: the box
+  // starts empty and the range stays until a number is typed.
+  const [yearsText, setYearsText] = useState(existing?.startedYear != null ? String(yearsFromStarted(Number(existing.startedYear))) : '');
   const [playStyle, setPlayStyle] = useState<PlayStyle>(existing?.playStyle ?? 'all-court');
   const [styleOpen, setStyleOpen] = useState(false);
   const chevronTurn = useRef(new Animated.Value(0)).current;
@@ -248,20 +252,24 @@ function OnboardingSteps() {
   const parsed = Number(ratingText.replace(',', '.'));
   const ratingValid = ratingText.trim() !== '' && Number.isFinite(parsed) && parsed >= scale.min && parsed <= scale.max;
 
-  // The started year: empty (not said), or four figures from 1940 (later for a teen) to this year.
+  // Years played: empty (not said), or a whole number from 0 (less than a year) to 80 (15 for a teen).
   const years = startedYearBounds(currentUser?.ageGroup);
-  const typedYear = /^\d{4}$/.test(startedText) ? Number(startedText) : NaN;
-  const yearOk = typedYear >= years.min && typedYear <= years.max;
-  const yearValid = startedText === '' || yearOk;
-  // What gets saved: the year typed; nothing once the box is emptied of one saved before; and while
-  // what is typed is not a year yet, whatever was saved stays as it was.
-  const startedYear = yearOk ? typedYear : startedText === '' ? undefined : existing?.startedYear;
+  const maxYears = Math.min(80, years.max - years.min);
+  const typedYears = /^\d{1,2}$/.test(yearsText) ? Number(yearsText) : NaN;
+  const yearsOk = typedYears >= 0 && typedYears <= maxYears;
+  const yearValid = yearsText === '' || yearsOk;
+  const underOne = yearsText === '0';
+  // What gets saved: the year they started, this year less the years typed (the one saved before
+  // when the number is the same); nothing once the box is emptied of one saved before; and while
+  // what is typed is not a number in range, whatever was saved stays as it was.
+  const savedYears = existing?.startedYear != null ? yearsFromStarted(Number(existing.startedYear)) : undefined;
+  const startedYear = yearsOk ? (typedYears === savedYears ? existing?.startedYear : years.max - typedYears) : yearsText === '' ? undefined : existing?.startedYear;
   const oldRange = existing?.startedYear == null ? existing?.yearsPlaying : undefined;
-  const yearsPlaying = startedYear !== undefined ? yearsFromStarted(startedYear) : startedText === '' && existing?.startedYear != null ? undefined : oldRange;
+  const yearsPlaying = startedYear !== undefined ? yearsFromStarted(startedYear) : yearsText === '' && existing?.startedYear != null ? undefined : oldRange;
   const playing = playingFor({ startedYear, yearsPlaying });
-  const yearNote = startedText !== '' && !yearOk ? `Enter a year from ${years.min} to ${years.max}`
-    : playing ? (playing.since !== undefined ? yearsWords(playing) : `Your profile says ${experienceLabel(playing.years).toLowerCase()}. Add the year you started.`)
-    : 'The year you first played.';
+  const yearNote = yearsText !== '' && !yearsOk ? `Enter a number from 0 to ${maxYears}`
+    : playing ? (playing.since !== undefined ? yearsWords(playing) : `Your profile says ${experienceLabel(playing.years).toLowerCase()}. Add how many years you've played.`)
+    : 'A rough number is fine.';
 
   /* ------------------------------ Animation ------------------------------ */
 
@@ -282,7 +290,8 @@ function OnboardingSteps() {
     if (text.trim() !== '' && Number.isFinite(n) && n >= scale.min && n <= scale.max) setRating(round(n, scale.decimals));
   };
   // Figures only, four at most: a year.
-  const typeStarted = (text: string) => setStartedText(text.replace(/\D/g, '').slice(0, 4));
+  const typeYears = (text: string) => setYearsText(text.replace(/\D/g, '').slice(0, 2));
+  const pickUnderOne = () => { haptics.tap(); setYearsText(underOne ? '' : '0'); };
   const changeSystem = (next: 'NTRP' | 'UTR') => {
     if (next === skillSystem) return;
     haptics.tap();
@@ -403,7 +412,7 @@ function OnboardingSteps() {
   const askLevel = () => { haptics.tap(); setLevelsOpen(true); };
 
   return (
-    <KeyboardScrollContext.Provider value={Platform.OS === 'android' ? keyboard.reveal : null}>
+    <KeyboardScrollContext.Provider value={Platform.OS === 'web' ? null : keyboard.reveal}>
     <View style={[styles.root, { paddingTop: space.header }]}>
       <View style={styles.head}>
         {ratingOnly ? null : (
@@ -427,7 +436,9 @@ function OnboardingSteps() {
         contentContainerStyle={[styles.body, ratingOnly && styles.bodyTop]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
-        keyboardDismissMode={Platform.OS === 'android' ? 'on-drag' : undefined}
+        automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
+        // The number pad has no return key: a drag down the page puts the keys away.
+        keyboardDismissMode={Platform.OS === 'android' ? 'on-drag' : Platform.OS === 'ios' ? 'interactive' : undefined}
       >
         <Animated.View style={{ gap: spacing.lg, opacity: fade }}>
           {step === 0 ? (
@@ -483,17 +494,24 @@ function OnboardingSteps() {
                 </View>
               </Collapse>
               {ratingOnly ? null : <>
-              {/* The year they started, typed: four figures on the number pad, how long that is said under it. */}
-              <View style={styles.yearBox}>
-                <Field
-                  label="Started playing"
-                  accessibilityLabel="Year you started playing"
-                  value={startedText}
-                  onChangeText={typeStarted}
-                  keyboardType="number-pad"
-                  selectTextOnFocus
-                />
-              </View>
+              {/* How many years they have played: a number on the number pad, or one tap for less than a year. */}
+              <Group label="How many years have you played?">
+                <View style={styles.yearsRow}>
+                  <View style={styles.yearBox}>
+                    <Field
+                      accessibilityLabel="How many years have you played?"
+                      placeholder="e.g. 5"
+                      value={yearsText}
+                      onChangeText={typeYears}
+                      keyboardType="number-pad"
+                      selectTextOnFocus
+                    />
+                  </View>
+                  <Pressable accessibilityRole="button" accessibilityState={{ selected: underOne }} accessibilityLabel="Less than 1 year" onPress={pickUnderOne} style={[styles.chip, underOne && styles.chipOn]}>
+                    <Text style={[styles.chipText, underOne && { color: colors.brandInk }]}>Less than 1</Text>
+                  </Pressable>
+                </View>
+              </Group>
               <Text style={styles.note} accessibilityLiveRegion="polite">{yearNote}</Text>
               {asksInviter && inviter?.handle && !inviter.canSet ? (
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
@@ -727,7 +745,8 @@ const styleDefinitions = StyleSheet.create({
   fixed: { ...typography.body, color: colors.text },
   twoCol: { flexDirection: 'row', gap: spacing.md, alignItems: 'flex-end' },
   // A year is four figures: a short box, not the full width.
-  yearBox: { width: 160 },
+  yearBox: { width: 112 },
+  yearsRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
 
   list: { borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, overflow: 'hidden' },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.md, paddingVertical: 13, minHeight: 52 },

@@ -11,6 +11,7 @@ import { useApp } from '@/store/AppContext';
 import { useGateSpace } from '@/lib/useGateSpace';
 import { useAndroidBack } from '@/lib/androidBack';
 import { StatusShade } from '@/components/StatusShade';
+import { KeyboardScrollContext, useKeyboardReveal } from '@/lib/keyboardScroll';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, spacing, typography } from '@/theme';
 
@@ -24,6 +25,8 @@ export default function Birthday() {
   const styles = useThemedStyles(styleDefinitions);
   // Clear of the status bar and the home bar, the same as every page before the app.
   const space = useGateSpace();
+  // The date boxes are scrolled clear of the keyboard as they are tapped (a short phone, a big keyboard).
+  const keyboard = useKeyboardReveal();
   const { currentUserId, currentUser, actions } = useApp();
   const [date, setDate] = useState({ month: '', day: '', year: '' });
   const [busy, setBusy] = useState(false);
@@ -79,8 +82,9 @@ export default function Birthday() {
   }
 
   return (
+    <KeyboardScrollContext.Provider value={Platform.OS === 'web' ? null : keyboard.reveal}>
     <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'web' ? undefined : 'padding'}>
-      <ScrollView contentContainerStyle={[styles.scroll, { paddingTop: space.top, paddingBottom: space.bottom }]} keyboardShouldPersistTaps="handled">
+      <ScrollView ref={keyboard.scroller} onScroll={keyboard.onScroll} scrollEventThrottle={16} contentContainerStyle={[styles.scroll, { paddingTop: space.top, paddingBottom: space.bottom }]} keyboardShouldPersistTaps="handled">
         <BrandMark size={44} />
         <Text style={styles.title}>When's your birthday?</Text>
         <Text style={styles.lead}>It stays private and never shows on your profile.</Text>
@@ -92,6 +96,7 @@ export default function Birthday() {
       <StatusShade />
       {curtain}
     </KeyboardAvoidingView>
+    </KeyboardScrollContext.Provider>
   );
 }
 
