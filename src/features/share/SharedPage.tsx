@@ -9,6 +9,7 @@ import { BrandMark } from '@/components/BrandMark';
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { HitGlyph } from '@/components/HitGlyph';
 import { MediaPlaceholder } from '@/components/MediaPlaceholder';
+import { SessionStrip } from '@/components/session/SessionStrip';
 import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { Avatar, Button } from '@/components/ui';
 import { fetchSharePreview, fetchShareReferrer } from '@/data/api';
@@ -167,7 +168,8 @@ function PostCard({ preview }: { preview: SharePreview }) {
   const picture = post.thumbnailUrl || post.imageUrl;
   const moving = !!post.videoUrl || post.kind === 'clip';
   const where = post.courtName || post.location;
-  const session = post.session?.minutes ? [`${post.session.minutes} min`, post.session.kind === 'match' ? 'Match' : post.session.kind === 'practice' ? 'Practice' : post.session.focus].filter(Boolean).join(' · ') : '';
+  // The session in the app's own session box (Oct 5, owner: one look): what it was and how long, all a link is given.
+  const session = post.session?.minutes ? { focus: post.session.focus ?? '', minutes: post.session.minutes, drills: [], kind: post.session.kind } : null;
   return (
     <View style={styles.card}>
       {preview.author ? <Person person={preview.author} line={where ? `at ${where}` : undefined} /> : null}
@@ -180,8 +182,8 @@ function PostCard({ preview }: { preview: SharePreview }) {
         <View style={styles.mediaPlain}><MediaPlaceholder label={post.mediaLabel} seed={post.id} /></View>
       ) : null}
       {post.body ? <Text style={styles.body}>{post.body}</Text> : null}
+      {session ? <SessionStrip session={session} title={!session.kind && session.focus && session.focus !== 'On court' ? session.focus : undefined} /> : null}
       <View style={styles.meta}>
-        {session ? <View style={styles.chip}><CourtGlyph size={12} color={colors.brand} /><Text style={styles.chipText}>{session}</Text></View> : null}
         <Text style={styles.metaText}>{count(post.likes, 'like')} · {count(post.comments, 'comment')}</Text>
       </View>
     </View>

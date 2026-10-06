@@ -145,7 +145,7 @@ export function LogDock({ canJustLog, busy, ticked, error, onJustLog, onShare, s
               <DrawnTick size={22} color={colors.brand} />
             ) : busy === 'log' ? <ActivityIndicator size="small" color={colors.text} /> : (
               <>
-                <Ionicons name="lock-closed-outline" size={16} color={colors.textMuted} />
+                <Ionicons name="eye-off-outline" size={16} color={colors.textMuted} />
                 <Text style={styles.quietText}>Just log it</Text>
               </>
             )}

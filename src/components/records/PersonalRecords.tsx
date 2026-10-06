@@ -112,7 +112,7 @@ export function PersonalRecords({ records, sessions, sessionTags, users, current
         <Text accessibilityRole="header" style={styles.sectionTitle}>Personal records</Text>
         {privateNote ? (
           <View style={styles.only}>
-            <Ionicons name="lock-closed-outline" size={13} color={colors.textMuted} />
+            <Ionicons name="eye-off-outline" size={13} color={colors.textMuted} />
             <Text style={styles.onlyText}>Only you</Text>
           </View>
         ) : null}

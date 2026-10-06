@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View, type ScrollView } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -10,25 +10,26 @@ import { LiveDot } from '@/components/LiveDot';
 import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { Duration } from '@/components/session/Duration';
 import { PlayerCard, Swatch, upcoming } from '@/components/tennis/PlayerCard';
-import { AddRow, Box, CountdownTile, MedalRow, NextMedal, Row, SectionHead, Tag, Tile } from '@/components/tennis/ProfileParts';
+import { AddRow, Box, Chip, DateTile, EmptyRow, MedalGrid, NextMedal, Row, SectionHead, Summary, Tile } from '@/components/tennis/ProfileParts';
 import { PIN_GAP, ProfileTabs } from '@/components/tennis/ProfileTabs';
 import { WeekBars } from '@/components/tennis/WeekBars';
 import { Tappable } from '@/components/Tappable';
 import { BrandWash, EmptyState, Screen } from '@/components/ui';
-import type { PracticeSession, User } from '@/data/types';
+import type { PracticeSession, TournamentEntry, User } from '@/data/types';
 import { KIND_LABEL, activityDay, loggedLabel, spokenDuration } from '@/features/activity/format';
 import { pickSource, sourceOn, sourceWord } from '@/features/activity/recent';
 import { canTagKind, firstName, peopleText, peopleWords } from '@/features/activity/sessionTags';
 import { useTennisFlags } from '@/features/activity/useTennisFlags';
 import { isTennisActivity, workoutIcon } from '@/features/activity/workouts';
 import { type ProfileTab, useProfileTab } from '@/features/players/profileTab';
-import { dayLabel, eventDate, newestFirst, shortDate, shortLength, surfaceSlot, weekDays, weekNumbers } from '@/features/players/tennisProfile';
+import { dayLabel, dayNumbers, daysUntil, eventDate, newestFirst, shortDate, shortLength, surfaceSlot, tournamentName, weekDays, weekNumbers, weekdayDate } from '@/features/players/tennisProfile';
 import { localDay } from '@/features/practice/stats';
 import { wrappedYear } from '@/features/wrapped/yearInTennis';
 import { evaluateAchievements, surfaceLabel } from '@/lib/badges';
 import { confirm } from '@/lib/confirm';
 import { relativeTime } from '@/lib/format';
 import { goBack } from '@/lib/goBack';
+import * as haptics from '@/lib/haptics';
 import { useStillLoading } from '@/lib/useStillLoading';
 import { useApp } from '@/store/AppContext';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
@@ -214,42 +215,66 @@ function Theirs({ user }: { user: User }) {
  * The last seven days (only you see them): time on court in big figures, a
  * small bar a day, then sessions, matches and the longest. Fitness is left
  * out, as on the card.
+ *
+ * Tap a day's bar (Oct 6, owner: "almost like iphone screen time") and the
+ * big figures count up to that day's time, the line under them names the
+ * day, and the three numbers are that day's. Tap the same bar again, or
+ * anywhere else on the card, and it counts back up to the week. Until the
+ * first tap the week's time stands still, as it always has.
  */
 function ThisWeek({ user }: { user: User }) {
   const styles = useThemedStyles(styleDefinitions);
   const { sessions } = useApp();
   const days = useMemo(() => weekDays(sessions, user.id), [sessions, user.id]);
-  const n = useMemo(() => weekNumbers(sessions, user.id), [sessions, user.id]);
+  const week = useMemo(() => weekNumbers(sessions, user.id), [sessions, user.id]);
   const total = days.reduce((sum, d) => sum + d.minutes, 0);
+  const [selected, setSelected] = useState<string | null>(null);
+  // Off until the first tap, so the page opens on the week's time standing still.
+  const [counting, setCounting] = useState(false);
+  // The tapped day, while it is still one of the seven (past midnight it drops off).
+  const pick = selected ? days.find((d) => d.day === selected) ?? null : null;
+  const dayN = useMemo(() => (pick ? dayNumbers(sessions, user.id, pick.day) : null), [pick, sessions, user.id]);
+  const n = dayN ?? week;
+  const choose = (day: string | null) => {
+    setSelected(day);
+    setCounting(true);
+    if (day) haptics.tap(); else haptics.untap();
+  };
+  const minutes = pick ? pick.minutes : total;
+  const when = !pick ? 'in the last 7 days' : pick.today ? 'today' : dayLabel(pick.day) === 'Yesterday' ? 'yesterday' : `on ${weekdayDate(pick.day)}`;
   const matches = n.matches && n.told ? `${n.won}–${n.lost}` : String(n.matches);
   const matchesSpoken = n.matches && n.told ? `${n.matches} ${n.matches === 1 ? 'match' : 'matches'}, ${n.won} won, ${n.lost} lost` : `${n.matches} ${n.matches === 1 ? 'match' : 'matches'}`;
   return (
     <View>
       <SectionHead title="This week" onlyYou />
       <Box padded>
-        {total > 0 ? (
-          <View accessible accessibilityLabel={`${spokenDuration(total)} on court in the last 7 days`}>
-            <Duration minutes={total} size={34} color={colors.text} unitColor={colors.textMuted} />
-            <Text style={styles.weekCaption}>on court in the last 7 days</Text>
-          </View>
-        ) : <Text style={styles.weekNone}>Nothing on court in the last 7 days</Text>}
-        <WeekBars days={days} />
-        {n.sessions ? (
-          <View style={styles.weekStats}>
-            <View style={styles.weekStat} accessible accessibilityLabel={`${n.sessions} ${n.sessions === 1 ? 'session' : 'sessions'}`}>
-              <Text maxFontSizeMultiplier={1.25} style={styles.weekFigure}>{n.sessions}</Text>
-              <Text style={styles.weekLabel}>{n.sessions === 1 ? 'Session' : 'Sessions'}</Text>
+        {/* A tap anywhere on the card but a bar goes back to the whole week. */}
+        <Pressable accessible={false} focusable={false} disabled={!pick} onPress={() => choose(null)} style={styles.weekCard}>
+          {total > 0 ? (
+            <View accessible accessibilityLabel={`${spokenDuration(minutes)} on court ${when}`} accessibilityLiveRegion="polite">
+              {/* A new key for each day, so the figures count up afresh with every tap. */}
+              <Duration key={pick?.day ?? 'week'} minutes={minutes} size={34} color={colors.text} unitColor={colors.textMuted} play={counting} />
+              <Text style={styles.weekCaption}>{`on court ${when}`}</Text>
             </View>
-            <View style={[styles.weekStat, styles.weekDivide]} accessible accessibilityLabel={matchesSpoken}>
-              <Text maxFontSizeMultiplier={1.25} style={styles.weekFigure}>{matches}</Text>
-              <Text style={styles.weekLabel}>{n.matches === 1 && !n.told ? 'Match' : 'Matches'}</Text>
+          ) : <Text style={styles.weekNone}>Nothing on court in the last 7 days</Text>}
+          <WeekBars days={days} selected={pick?.day ?? null} onSelect={total > 0 ? (day) => choose(day === pick?.day ? null : day) : undefined} />
+          {week.sessions ? (
+            <View style={styles.weekStats}>
+              <View style={styles.weekStat} accessible accessibilityLabel={`${n.sessions} ${n.sessions === 1 ? 'session' : 'sessions'}`}>
+                <Text maxFontSizeMultiplier={1.25} style={styles.weekFigure}>{n.sessions}</Text>
+                <Text style={styles.weekLabel}>{n.sessions === 1 ? 'Session' : 'Sessions'}</Text>
+              </View>
+              <View style={[styles.weekStat, styles.weekDivide]} accessible accessibilityLabel={matchesSpoken}>
+                <Text maxFontSizeMultiplier={1.25} style={styles.weekFigure}>{matches}</Text>
+                <Text style={styles.weekLabel}>{n.matches === 1 && !n.told ? 'Match' : 'Matches'}</Text>
+              </View>
+              <View style={[styles.weekStat, styles.weekDivide]} accessible accessibilityLabel={`Longest, ${spokenDuration(n.longest)}`}>
+                <Duration minutes={n.longest} size={20} color={colors.text} unitColor={colors.textMuted} unitScale={0.65} />
+                <Text style={styles.weekLabel}>Longest</Text>
+              </View>
             </View>
-            <View style={[styles.weekStat, styles.weekDivide]} accessible accessibilityLabel={`Longest, ${spokenDuration(n.longest)}`}>
-              <Duration minutes={n.longest} size={20} color={colors.text} unitColor={colors.textMuted} unitScale={0.65} />
-              <Text style={styles.weekLabel}>Longest</Text>
-            </View>
-          </View>
-        ) : null}
+          ) : null}
+        </Pressable>
       </Box>
     </View>
   );
@@ -442,118 +467,203 @@ function Limits({ user }: { user: User }) {
   );
 }
 
-/** Tournaments still to come, each counting down in its court's colour. */
+/*
+ * The Game tab (Oct 6, owner: "the game sections ui has to be a lot
+ * better"): four sections with the same head (a title and one link, no
+ * stray counts under it), each in its white box. Tournaments lead with the
+ * next one as a hero card; goals and achievements open on a summary line
+ * with a thin bar; an empty section is one tidy row with an Add button.
+ */
+
+const TOURNAMENTS_EDIT = { pathname: '/onboarding', params: { from: 'edit', step: '4' } } as const;
+
+/** "49 days to go" in words, for a screen reader and the rows under the hero. */
+function whenWords(days: number): string {
+  return days <= 0 ? 'today' : days === 1 ? 'tomorrow' : `in ${days} days`;
+}
+
+/** Tournaments still to come: the next as a hero card, any after it on rows under it. */
 function Tournaments({ user, mine = false }: { user: User; mine?: boolean }) {
-  const styles = useThemedStyles(styleDefinitions);
   const list = upcoming(user);
-  const entered = list.filter((t) => t.registered).length;
-  const watching = list.length - entered;
-  const edit = () => router.push({ pathname: '/onboarding', params: { from: 'edit', step: '4' } });
-  const line = list.length ? [entered ? `${entered} entered` : '', watching ? `${watching} watching` : ''].filter(Boolean).join(' · ') : undefined;
+  const edit = () => router.push(TOURNAMENTS_EDIT);
+  const [next, ...later] = list;
   return (
     <View>
-      <SectionHead title="Tournaments" line={line} link={mine && list.length ? { label: 'Edit', accessibilityLabel: 'Edit your tournaments', onPress: edit } : undefined} />
-      <Box>
-        {list.length ? list.map((t, i) => (
-          <Row key={t.id} first={i === 0} minHeight={80} leadWidth={56}
-            lead={<CountdownTile iso={t.startsAt} slot={surfaceSlot(t.surface)} />}
-            // The tag beside the name, so the date and place under it have the box's whole width.
-            title={(
-              <View style={styles.eventTop}>
-                <Text style={[styles.eventName, styles.shrink]} numberOfLines={2}>{t.name}</Text>
-                <Tag label={t.registered ? 'Entered' : 'Watching'} on={t.registered} />
-              </View>
-            )}
-            sub={(
-              <View style={styles.eventLine}>
-                <Text style={[styles.eventMeta, styles.keep]}>{eventDate(t.startsAt)} · </Text>
-                <Swatch surface={t.surface} look={{ wash: null, ink: colors.text }} size={8} />
-                <Text style={[styles.eventMeta, styles.shrink]} numberOfLines={1}>{surfaceLabel[t.surface]}{t.location ? ` · ${t.location.split(',')[0]}` : ''}</Text>
-              </View>
-            )}
-            accessibilityLabel={`${t.name}, ${eventDate(t.startsAt)}, ${surfaceLabel[t.surface]} court${t.location ? `, ${t.location}` : ''}. ${t.registered ? 'Entered' : 'Watching'}`}
-          />
-        )) : mine ? <AddRow icon="trophy-outline" title="Add a tournament" sub="A date on the calendar gives your training a target." onPress={edit} /> : null}
-      </Box>
-    </View>
-  );
-}
-
-/** Goals, open ones first; yours to tick off, change or add to. */
-function Goals({ user, mine = false }: { user: User; mine?: boolean }) {
-  const styles = useThemedStyles(styleDefinitions);
-  const goals = [...user.profile.goals].sort((a, b) => Number(a.done) - Number(b.done));
-  const open = goals.filter((g) => !g.done).length;
-  const done = goals.length - open;
-  const line = goals.length ? [open ? `${open} in progress` : 'All done', done && open ? `${done} done` : ''].filter(Boolean).join(' · ') : undefined;
-  const add = () => router.push({ pathname: '/tennis-sheet', params: { kind: 'goal' } });
-  return (
-    <View>
-      <SectionHead title="Goals" line={line} link={mine && goals.length ? { label: 'Add', accessibilityLabel: 'Add a goal', onPress: add } : undefined} />
-      <Box>
-        {goals.map((g, i) => (
-          <Row key={g.id} first={i === 0}
-            lead={<Ionicons name={g.done ? 'checkmark-circle' : 'flag-outline'} size={g.done ? 20 : 18} color={g.done ? colors.brand : colors.textFaint} />}
-            title={<Text style={[styles.goal, g.done && styles.goalDone]} numberOfLines={3}>{g.label}</Text>}
-            right={g.targetDate ? <Text style={styles.goalBy}>by {shortDate(g.targetDate)}</Text> : undefined}
-            onPress={mine ? () => router.push({ pathname: '/tennis-sheet', params: { kind: 'goal', id: g.id } }) : undefined}
-            accessibilityLabel={`${g.label}${g.targetDate ? `, by ${shortDate(g.targetDate)}` : ''}${g.done ? ', done' : ''}${mine ? '. Mark done, edit or remove' : ''}`}
-          />
-        ))}
-        {mine && !goals.length ? <AddRow icon="flag-outline" title="Add a goal" sub="Something to aim at. Coaches plan toward it." onPress={add} /> : null}
-      </Box>
-    </View>
-  );
-}
-
-/** What they play with: the racket and its strings on one row, the shoes on another. */
-function Gear({ user, mine = false }: { user: User; mine?: boolean }) {
-  const styles = useThemedStyles(styleDefinitions);
-  const g = user.profile.gear ?? {};
-  const tension = g.tension ? (/^\d+(\.\d+)?$/.test(g.tension.trim()) ? `${g.tension.trim()} lbs` : g.tension.trim()) : '';
-  const strung = g.strings ? `${g.strings}${tension ? ` at ${tension}` : ''}` : tension ? `Strung at ${tension}` : '';
-  const rows: { key: string; icon: 'tennisball-outline' | 'footsteps-outline'; title: string; sub: string }[] = [];
-  if (g.racket) rows.push({ key: 'racket', icon: 'tennisball-outline', title: g.racket, sub: ['Racket', strung].filter(Boolean).join(' · ') });
-  else if (strung) rows.push({ key: 'strings', icon: 'tennisball-outline', title: g.strings || strung, sub: g.strings && tension ? `Strings at ${tension}` : 'Strings' });
-  if (g.shoes) rows.push({ key: 'shoes', icon: 'footsteps-outline', title: g.shoes, sub: 'Shoes' });
-  return (
-    <View>
-      <SectionHead title="Gear bag" link={mine && rows.length ? { label: 'Edit', accessibilityLabel: 'Edit your gear bag', onPress: () => router.push('/edit-gear') } : undefined} />
-      <Box>
-        {rows.length ? rows.map((r, i) => (
-          <Row key={r.key} first={i === 0} lead={<Tile icon={r.icon} />} title={<Text style={styles.gearName} numberOfLines={2}>{r.title}</Text>} sub={r.sub} subLines={2} accessibilityLabel={`${r.sub.split(' · ')[0]}: ${r.title}${r.sub.includes(' · ') ? `, ${r.sub.split(' · ').slice(1).join(', ')}` : ''}`} />
-        )) : mine ? <AddRow icon="tennisball-outline" title="Add your racket, strings and shoes" sub="Players always ask." onPress={() => router.push('/edit-gear')} /> : null}
-      </Box>
+      <SectionHead title="Tournaments" link={mine && list.length ? { label: 'Edit', accessibilityLabel: 'Edit your tournaments', onPress: edit } : undefined} />
+      {next ? (
+        <Box>
+          <NextUp t={next} onPress={mine ? edit : undefined} />
+          {later.map((t) => <LaterEvent key={t.id} t={t} onPress={mine ? edit : undefined} />)}
+        </Box>
+      ) : mine ? (
+        <Box>
+          <EmptyRow icon="trophy-outline" title="No tournament yet" sub="A date on the calendar gives your training a target." accessibilityLabel="Add a tournament" onPress={edit} />
+        </Box>
+      ) : null}
     </View>
   );
 }
 
 /**
- * Medals won, in a row that scrolls sideways; yours also show the one
- * nearest to winning, with a bar, and open the full set. Before the first,
- * the first medal waits, faint.
+ * The next tournament as the tab's hero: how many days to go as the one big
+ * figure in the brand colour, the name as it is written on the card (short
+ * initials in capitals: "RRC"), the court and the date with the court's
+ * colour as a dot, and whether you are in as a quiet chip. Yours opens your
+ * tournaments to change.
+ */
+function NextUp({ t, onPress }: { t: TournamentEntry; onPress?: () => void }) {
+  const styles = useThemedStyles(styleDefinitions);
+  useTheme();
+  const days = daysUntil(t.startsAt);
+  const name = tournamentName(t.name);
+  const place = t.location ? t.location.split(',')[0] : '';
+  const status = t.registered ? 'Entered' : 'Watching';
+  const spoken = `Next up: ${name}, ${whenWords(days)}, ${eventDate(t.startsAt)}, ${surfaceLabel[t.surface]} court${place ? `, ${place}` : ''}. ${status}`;
+  const body = (
+    <>
+      <View style={styles.heroTop}>
+        <Text style={styles.eyebrow}>Next up</Text>
+        <Chip label={status} icon={t.registered ? 'checkmark' : 'eye-outline'} on={t.registered} />
+      </View>
+      <View style={styles.heroCount}>
+        <Text maxFontSizeMultiplier={1.2} style={[styles.heroFigure, { color: colors.brand }]}>{days <= 0 ? 'Today' : String(days)}</Text>
+        {days > 0 ? <Text style={styles.heroUnit}>{days === 1 ? 'day to go' : 'days to go'}</Text> : null}
+      </View>
+      <View style={styles.heroFoot}>
+        <View style={styles.heroWords}>
+          <Text style={styles.heroName} numberOfLines={2}>{name}</Text>
+          <View style={styles.eventLine}>
+            <View style={[styles.surfaceDot, { backgroundColor: colors[surfaceSlot(t.surface)] }]} />
+            <Text style={[styles.eventMeta, styles.shrink]} numberOfLines={1}>{surfaceLabel[t.surface]} · {eventDate(t.startsAt)}{place ? ` · ${place}` : ''}</Text>
+          </View>
+        </View>
+        {onPress ? <Ionicons name="chevron-forward" size={16} color={colors.textFaint} /> : null}
+      </View>
+    </>
+  );
+  if (!onPress) return <View style={styles.hero} accessible accessibilityLabel={spoken}>{body}</View>;
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={spoken} accessibilityHint="Edit your tournaments" onPress={onPress} style={({ pressed }) => [styles.hero, pressed && styles.pressed]}>
+      {body}
+    </Pressable>
+  );
+}
+
+/** A tournament after the next: its date as a small calendar tile, the name, the court with its dot and how far off. */
+function LaterEvent({ t, onPress }: { t: TournamentEntry; onPress?: () => void }) {
+  const styles = useThemedStyles(styleDefinitions);
+  useTheme();
+  const days = daysUntil(t.startsAt);
+  const name = tournamentName(t.name);
+  const place = t.location ? t.location.split(',')[0] : '';
+  const status = t.registered ? 'Entered' : 'Watching';
+  return (
+    <Row
+      lead={<DateTile iso={t.startsAt} />}
+      title={<Text style={styles.eventName} numberOfLines={2}>{name}</Text>}
+      sub={(
+        <View style={styles.eventLine}>
+          <View style={[styles.surfaceDot, { backgroundColor: colors[surfaceSlot(t.surface)] }]} />
+          <Text style={[styles.eventMeta, styles.shrink]} numberOfLines={1}>{surfaceLabel[t.surface]} · {whenWords(days)}{place ? ` · ${place}` : ''}</Text>
+        </View>
+      )}
+      right={<Chip label={status} on={t.registered} />}
+      onPress={onPress}
+      accessibilityLabel={`${name}, ${eventDate(t.startsAt)}, ${whenWords(days)}, ${surfaceLabel[t.surface]} court${t.location ? `, ${t.location}` : ''}. ${status}`}
+    />
+  );
+}
+
+/** How long until a goal's date, in a few words: "75 days left", "2 months left", "date passed". */
+function goalLeft(iso: string): string {
+  const d = daysUntil(iso);
+  if (d < 0) return 'date passed';
+  if (d === 0) return 'due today';
+  if (d === 1) return '1 day left';
+  return d < 60 ? `${d} days left` : `${Math.floor(d / 30)} months left`;
+}
+
+/** Goals, open ones first, under how many are done; yours to tick off, change or add to. */
+function Goals({ user, mine = false }: { user: User; mine?: boolean }) {
+  const styles = useThemedStyles(styleDefinitions);
+  useTheme();
+  const goals = [...user.profile.goals].sort((a, b) => Number(a.done) - Number(b.done));
+  const open = goals.filter((g) => !g.done).length;
+  const done = goals.length - open;
+  const add = () => router.push({ pathname: '/tennis-sheet', params: { kind: 'goal' } });
+  return (
+    <View>
+      <SectionHead title="Goals" link={mine && goals.length ? { label: 'Add', accessibilityLabel: 'Add a goal', onPress: add } : undefined} />
+      <Box>
+        {goals.length ? <Summary label={done ? `${done} of ${goals.length} done` : `${open} in progress`} share={done / goals.length} /> : null}
+        {goals.map((g, i) => {
+          const by = g.targetDate ? `By ${shortDate(g.targetDate)}${g.done ? '' : ` · ${goalLeft(g.targetDate)}`}` : '';
+          return (
+            <Row key={g.id} first={i === 0} leadWidth={24}
+              lead={<Ionicons name={g.done ? 'checkmark-circle' : 'ellipse-outline'} size={24} color={g.done ? colors.brand : colors.borderStrong} />}
+              title={<Text style={[styles.goal, g.done && styles.goalDone]} numberOfLines={3}>{g.label}</Text>}
+              sub={g.done ? (by ? `Done · ${by}` : 'Done') : by || undefined}
+              chevron={mine}
+              onPress={mine ? () => router.push({ pathname: '/tennis-sheet', params: { kind: 'goal', id: g.id } }) : undefined}
+              accessibilityLabel={`${g.label}${g.targetDate ? `, by ${shortDate(g.targetDate)}` : ''}${g.done ? ', done' : ''}${mine ? '. Mark done, edit or remove' : ''}`}
+            />
+          );
+        })}
+        {mine && !goals.length ? <EmptyRow icon="flag-outline" title="No goals yet" sub="Something to aim at. Coaches plan toward it." accessibilityLabel="Add a goal" onPress={add} /> : null}
+      </Box>
+    </View>
+  );
+}
+
+/** What they play with: the racket, the strings (and their tension) and the shoes, a row each. */
+function Gear({ user, mine = false }: { user: User; mine?: boolean }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const g = user.profile.gear ?? {};
+  const tension = g.tension ? (/^\d+(\.\d+)?$/.test(g.tension.trim()) ? `${g.tension.trim()} lbs` : g.tension.trim()) : '';
+  const rows: { key: string; icon: React.ComponentProps<typeof Ionicons>['name']; title: string; sub: string }[] = [];
+  if (g.racket) rows.push({ key: 'racket', icon: 'tennisball-outline', title: g.racket, sub: 'Racket' });
+  if (g.strings) rows.push({ key: 'strings', icon: 'grid-outline', title: g.strings, sub: tension ? `Strings · ${tension}` : 'Strings' });
+  else if (tension) rows.push({ key: 'strings', icon: 'grid-outline', title: `Strung at ${tension}`, sub: 'Strings' });
+  if (g.shoes) rows.push({ key: 'shoes', icon: 'footsteps-outline', title: g.shoes, sub: 'Shoes' });
+  const edit = () => router.push('/edit-gear');
+  return (
+    <View>
+      <SectionHead title="Gear bag" link={mine && rows.length ? { label: 'Edit', accessibilityLabel: 'Edit your gear bag', onPress: edit } : undefined} />
+      {rows.length ? (
+        <Box>
+          {rows.map((r, i) => (
+            <Row key={r.key} first={i === 0} lead={<Tile icon={r.icon} />} title={<Text style={styles.gearName} numberOfLines={2}>{r.title}</Text>} sub={r.sub}
+              onPress={mine ? edit : undefined}
+              accessibilityLabel={`${r.sub.split(' · ')[0]}: ${r.title}${r.sub.includes(' · ') ? `, ${r.sub.split(' · ').slice(1).join(', ')}` : ''}`}
+            />
+          ))}
+        </Box>
+      ) : mine ? (
+        <Box>
+          <EmptyRow icon="bag-handle-outline" title="Your bag is empty" sub="Racket, strings and shoes. Players always ask." accessibilityLabel="Add your racket, strings and shoes" onPress={edit} />
+        </Box>
+      ) : null}
+    </View>
+  );
+}
+
+/**
+ * Medals as a grid under how many are won: yours show the won ones in
+ * colour and then the nearest still to win, greyed and named, so the box is
+ * never half-empty, with the bar to the next one under them; someone
+ * else's show only what they have won.
  */
 function Achievements({ user, mine = false }: { user: User; mine?: boolean }) {
-  const styles = useThemedStyles(styleDefinitions);
   const all = evaluateAchievements(user);
   const won = all.filter((a) => a.unlocked);
   const next = mine ? all.filter((a) => !a.unlocked).sort((a, b) => b.progress - a.progress)[0] : undefined;
-  const firstMedal = (all.find((a) => a.achievement.id === 'ach-first-serve') ?? all[0])?.achievement;
-  const line = mine ? `${won.length} of ${all.length} unlocked` : `${won.length} unlocked`;
   return (
     <View>
-      <SectionHead title="Achievements" line={won.length || !mine ? line : undefined} link={mine ? { label: 'See all', accessibilityLabel: 'See all achievements', onPress: () => router.push({ pathname: '/tennis-sheet', params: { kind: 'achievements' } }) } : undefined} />
+      <SectionHead title="Achievements" link={mine ? { label: 'See all', accessibilityLabel: 'See all achievements', onPress: () => router.push({ pathname: '/tennis-sheet', params: { kind: 'achievements' } }) } : undefined} />
       <Box>
-        {/* Before the first medal: not a third way to log a session (the button and Your sessions have that), the medal it unlocks, still faint. */}
-        {won.length ? <View style={styles.medals}><MedalRow items={all} /></View> : mine && firstMedal ? (
-          <Row first
-            lead={<View style={styles.medalWaiting}><Ionicons name={firstMedal.icon as keyof typeof Ionicons.glyphMap} size={18} color={colors.textFaint} /></View>}
-            title={<Text style={styles.medalWaitingName}>{firstMedal.name}</Text>}
-            sub="Your first session unlocks it"
-            accessibilityLabel={`${firstMedal.name}, locked. Your first session unlocks it`}
-          />
-        ) : null}
-        {won.length && next ? <NextMedal next={next} /> : null}
+        <Summary label={mine ? `${won.length} of ${all.length} unlocked` : `${won.length} unlocked`} share={mine && all.length ? won.length / all.length : undefined} />
+        <MedalGrid items={all} locked={mine} />
+        {next ? <NextMedal next={next} /> : null}
       </Box>
     </View>
   );
@@ -586,6 +696,8 @@ const styleDefinitions = StyleSheet.create({
   ghost: { minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing.md },
   ghostText: { ...typography.smallStrong, color: colors.textMuted },
   allShared: { ...typography.small, color: colors.textFaint, textAlign: 'center', paddingTop: spacing.xxl },
+  // The card's own tap (back to the week) shows no hand pointer: only the bars are buttons.
+  weekCard: { cursor: 'auto' },
   weekCaption: { ...typography.small, color: colors.textMuted, marginTop: 4 },
   weekNone: { ...typography.body, ...font('500'), color: colors.textMuted },
   weekStats: { flexDirection: 'row', marginTop: spacing.lg, paddingTop: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
@@ -601,16 +713,21 @@ const styleDefinitions = StyleSheet.create({
   healthFigure: { ...font('600'), fontSize: 26, lineHeight: 31, letterSpacing: -1.2, color: colors.text, fontVariant: ['tabular-nums'] },
   healthUnit: { ...font('500'), fontSize: 14, letterSpacing: 0, color: colors.textMuted },
   healthLabel: { fontSize: 12, lineHeight: 16, color: colors.textMuted },
-  eventTop: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: spacing.sm },
-  keep: { flexShrink: 0 },
   eventName: { ...font('500'), fontSize: 16, lineHeight: 21, color: colors.text },
-  eventLine: { flexDirection: 'row', alignItems: 'center', minWidth: 0 },
+  eventLine: { flexDirection: 'row', alignItems: 'center', gap: 6, minWidth: 0 },
+  surfaceDot: { width: 8, height: 8, borderRadius: 4 },
+  // The next tournament: an eyebrow and its chip, the days to go as the tab's one big figure, then the name and when.
+  hero: { paddingTop: 14, paddingBottom: 16 },
+  heroTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm, minHeight: 24 },
+  eyebrow: { ...typography.caption, letterSpacing: 0.6, textTransform: 'uppercase', color: colors.textMuted },
+  heroCount: { flexDirection: 'row', alignItems: 'baseline', gap: 8, marginTop: 6 },
+  heroFigure: { ...font('600'), fontSize: 44, lineHeight: 50, letterSpacing: -1.8, fontVariant: ['tabular-nums'] },
+  heroUnit: { ...typography.body, ...font('500'), color: colors.textMuted },
+  heroFoot: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: 10, paddingTop: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  heroWords: { flex: 1, minWidth: 0, gap: 3 },
+  heroName: { ...font('600'), fontSize: 19, lineHeight: 24, letterSpacing: -0.4, color: colors.text },
   eventMeta: { ...typography.small, lineHeight: 18, color: colors.textMuted },
   goal: { ...typography.body, lineHeight: 20, color: colors.text },
   goalDone: { color: colors.textMuted },
-  goalBy: { ...typography.small, color: colors.textMuted, fontVariant: ['tabular-nums'] },
-  medals: { paddingTop: spacing.sm, paddingBottom: spacing.xs },
-  medalWaiting: { width: 40, height: 40, borderRadius: 20, borderWidth: 1.5, borderStyle: 'dashed', borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center' },
-  medalWaitingName: { ...typography.body, ...font('500'), lineHeight: 20, color: colors.textMuted },
   gearName: { ...font('500'), fontSize: 16, lineHeight: 21, color: colors.text },
 });

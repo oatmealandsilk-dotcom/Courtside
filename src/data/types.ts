@@ -287,10 +287,11 @@ export interface DetectedActivity {
   /**
    * What it was, as a short name: 'tennis', or since migration 107 any
    * workout from Apple Health ('run', 'walk', 'ride', 'strength', 'hiit',
-   * 'yoga', 'swim'…). Put into words by workoutName (features/activity/workouts.ts).
+   * 'yoga', 'swim'…), and since migration 135 from WHOOP too. Put into
+   * words by workoutName (features/activity/workouts.ts).
    */
   sport: string;
-  /** Its distance in metres, when Health had one (runs, walks, rides, swims; migration 107). */
+  /** Its distance in metres, when Health or WHOOP had one (runs, walks, rides, swims; migration 107). */
   distanceM?: number;
   /** The tracker's own id for it (Apple Health's workout id), to match it against the phone's Health list. */
   externalId?: string;

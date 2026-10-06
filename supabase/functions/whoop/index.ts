@@ -3,7 +3,9 @@
 // The app never holds WHOOP's client secret. Six jobs, by path:
 //   /start      — (signed-in) sends the browser to WHOOP to say yes, within
 //                 ten minutes. With {tennis: true} it also asks to read
-//                 workouts, and that yes turns tennis sessions on (migration 58)
+//                 workouts, and that yes turns tennis sessions on (migration 58);
+//                 {workouts: true} as well turns every workout on (a run, the
+//                 gym: migration 135), when the app's screen said so
 //   /callback   — WHOOP sends the browser back here; the code becomes tokens,
 //                 which are parked (?whoop=pending&n=…) for /finish. Every
 //                 sign-in, tennis or not, since the security review (Oct 5):
@@ -12,13 +14,15 @@
 //                 WHOOP health data on THEIR account
 //   /finish     — (signed-in) the phone that started a sign-in collects it, as
 //                 the same player: only then is it put on the account, and the
-//                 last week is pulled (and the last week of tennis, quietly)
+//                 last week is pulled (and the last week of workouts, quietly,
+//                 each with its row in Notifications). Answers {ok, fresh}
 //   /sync       — (signed-in) pulls the last week again. {only: 'workouts'}
-//                 just looks for tennis in the last 36 hours (or {days: 1–7}
+//                 just looks for workouts in the last 36 hours (or {days: 1–7}
 //                 back: the app asks for the past week once): the app's check
 //                 when it opens, at most hourly. Answers {days, fresh,
-//                 workoutDays}, fresh being the tennis sessions it just filed
-//                 and workoutDays how far back it looked
+//                 workoutDays, allWorkouts}, fresh being the sessions it just
+//                 filed, workoutDays how far back it looked, and allWorkouts
+//                 whether it looked for every workout or tennis only
 //   /disconnect — (signed-in) revokes CourtSide's access at WHOOP (which also
 //                 stops its webhooks), removes what WHOOP sent, forgets the tokens
 //   /webhook    — (POST, signed by WHOOP, no app token) WHOOP saying a
@@ -39,7 +43,7 @@
 //            webhook URL = https://<project>.supabase.co/functions/v1/whoop/webhook, model version v2
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { verifyWhoop } from './verify.ts';
-import { isTennis, toPayload, type WhoopWorkout } from './workout.ts';
+import { isTennis, sportOf, toPayload, type WhoopWorkout } from './workout.ts';
 
 /** Supabase's runtime: keeps the function alive for work that finishes after the answer. */
 declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void } | undefined;
@@ -79,7 +83,7 @@ const key = crypto.subtle.importKey('raw', new TextEncoder().encode(Deno.env.get
 const b64 = (b: ArrayBuffer | Uint8Array) => btoa(String.fromCharCode(...new Uint8Array(b))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 const unb64 = (s: string) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0));
 async function sign(payload: object) { const body = b64(new TextEncoder().encode(JSON.stringify(payload))); const mac = b64(await crypto.subtle.sign('HMAC', await key, new TextEncoder().encode(body))); return `${body}.${mac}`; }
-async function open(state: string): Promise<{ uid: string; back: string; tennis?: boolean; exp?: number } | null> {
+async function open(state: string): Promise<{ uid: string; back: string; tennis?: boolean; workouts?: boolean; exp?: number } | null> {
   const [body, mac] = state.split('.');
   if (!body || !mac) return null;
   const ok = await crypto.subtle.verify('HMAC', await key, unb64(mac), new TextEncoder().encode(body));
@@ -215,11 +219,28 @@ async function sweep() {
   if (error && error.code !== NO_FUNCTION) console.error('[whoop] sweep', error.message);
 }
 
-/** Files each tennis workout. Returns the ids of those that just got their alert. */
-async function recordWorkouts(uid: string, list: WhoopWorkout[], quiet: boolean): Promise<string[]> {
+/**
+ * What this person has switched on from WHOOP: tennis (migration 58), and
+ * every other workout (activity_allowed: the 'workouts-whoop' switch and
+ * their own yes to every workout, migrations 107 and 135). A database
+ * without activity_allowed answers tennis only, as before.
+ */
+type Wants = { tennis: boolean; all: boolean };
+async function wants(uid: string): Promise<Wants> {
+  const [t, a] = await Promise.all([
+    admin.rpc('tennis_allowed', { u: uid, src: 'whoop' }),
+    admin.rpc('activity_allowed', { u: uid, src: 'whoop', a_sport: 'workout' }),
+  ]);
+  return { tennis: t.data === true, all: a.data === true };
+}
+/** A workout to keep: tennis with tennis on; anything else that is a workout (never a sauna or meditation) with every workout on. */
+const keeps = (w: WhoopWorkout, on: Wants) => (isTennis(w) ? on.tennis : on.all && sportOf(w) !== null);
+
+/** Files each workout this person keeps. Returns the ids of those that just got their alert. */
+async function recordWorkouts(uid: string, list: WhoopWorkout[], quiet: boolean, on: Wants): Promise<string[]> {
   const fresh: string[] = [];
   for (const w of list) {
-    if (!isTennis(w)) { if (w.sport_name) console.log('[whoop] not tennis:', w.sport_name); continue; }
+    if (!keeps(w, on)) { if (w.sport_name && !isTennis(w)) console.log('[whoop] not kept:', w.sport_name); continue; }
     const { data, error } = await admin.rpc('record_activity', { u: uid, src: 'whoop', ext: w.id, p: toPayload(w), quiet });
     if (error) { console.error('[whoop] record', error.message); continue; }
     if (data?.note === 'filed' || data?.note === 'pushed') fresh.push(data.id);
@@ -228,52 +249,59 @@ async function recordWorkouts(uid: string, list: WhoopWorkout[], quiet: boolean)
 }
 
 /**
- * Tennis in the last `hours` (36 unless asked for more: the past week once,
- * when WHOOP is connected and the first time the app asks after the Oct 5
- * update), filed quietly (the app shows its own banner). Also the safety net
+ * Tennis (and, once switched on, every other workout) in the last `hours`
+ * (36 unless asked for more: the past week when WHOOP is connected, once
+ * after the Oct 5 update, the first time after every workout is turned on,
+ * and whenever the app holds none of WHOOP's), filed quietly (the app shows
+ * its own banner), each with its row in Notifications. Also the safety net
  * for a webhook that never came or failed after its answer: a workout WHOOP
- * deleted, or that stopped being tennis, is taken back.
+ * deleted, or that is no longer one this person keeps, is taken back.
+ * `all`: every workout was looked for, not only tennis.
  */
-async function workoutsFor(uid: string, hours = 36): Promise<string[]> {
-  const { data: ok } = await admin.rpc('tennis_allowed', { u: uid, src: 'whoop' });
-  if (ok !== true) return [];
+async function workoutsFor(uid: string, hours = 36): Promise<{ fresh: string[]; all: boolean }> {
+  const none = { fresh: [], all: false };
+  const on = await wants(uid);
+  if (!on.tennis && !on.all) return none;
   const t = await tokensFor(uid);
   // No member: this WHOOP came from a plain sign-in, which no phone collected, or a newer link took
-  // the member. Such a key may belong to someone else's WHOOP, so it never brings in tennis.
-  if (!t || t.member == null) return [];
-  if (lacksWorkouts(t.scope)) { await setReadsWorkouts(uid, false); return []; }
+  // the member. Such a key may belong to someone else's WHOOP, so it never brings in workouts.
+  if (!t || t.member == null) return none;
+  if (lacksWorkouts(t.scope)) { await setReadsWorkouts(uid, false); return none; }
   const end = new Date();
   const since = new Date(end.getTime() - hours * 3_600_000).toISOString();
   // 25 to a page: two pages for a day and a half, more for a week.
   const r = await page(uid, '/activity/workout', since, end.toISOString(), hours > 36 ? 6 : 2);
   // WHOOP says this key may not read workouts.
-  if (r.status === 403) { await setReadsWorkouts(uid, false); return []; }
-  const fresh = await recordWorkouts(uid, r.records, true);
+  if (r.status === 403) { await setReadsWorkouts(uid, false); return none; }
+  const fresh = await recordWorkouts(uid, r.records, true, on);
   // Only from WHOOP's whole list, and never a session filed in the last 10 minutes (the list can lag the webhook).
   if (r.complete) {
-    const tennis = new Set((r.records as WhoopWorkout[]).filter(isTennis).map((w) => String(w.id)));
+    const kept = new Set((r.records as WhoopWorkout[]).filter((w) => keeps(w, on)).map((w) => String(w.id)));
     const { data: mine, error } = await admin.from('detected_activities').select('external_id').eq('user_id', uid).eq('source', 'whoop')
       .in('status', ['new', 'duplicate']).gte('started_at', since).lt('created_at', new Date(Date.now() - 10 * 60_000).toISOString());
     if (error) console.error('[whoop] reconcile', error.message);
-    for (const m of (mine ?? []) as { external_id: string }[]) if (!tennis.has(m.external_id)) await withdraw(uid, m.external_id);
+    for (const m of (mine ?? []) as { external_id: string }[]) if (!kept.has(m.external_id)) await withdraw(uid, m.external_id);
   }
-  return fresh;
+  return { fresh, all: on.all };
 }
 
 /**
- * The last week from WHOOP, folded into a row per day, plus any new tennis.
- * With only = 'workouts', just the tennis. `workoutDays` (1 to 7) looks that
- * far back for tennis instead of the last 36 hours; the answer's
- * `workoutDays` says how far it looked, so the app knows this version did.
+ * The last week from WHOOP, folded into a row per day, plus any new
+ * workouts. With only = 'workouts', just the workouts. `workoutDays` (1 to 7)
+ * looks that far back for them instead of the last 36 hours; the answer's
+ * `workoutDays` says how far it looked, so the app knows this version did,
+ * and `allWorkouts` whether that was every workout or tennis only.
  */
-async function sync(uid: string, only?: 'workouts', workoutDays?: number): Promise<{ days: number; fresh: string[]; workoutDays: number }> {
+type Synced = { days: number; fresh: string[]; workoutDays: number; allWorkouts: boolean };
+async function sync(uid: string, only?: 'workouts', workoutDays?: number): Promise<Synced> {
   const { data: have } = await admin.from('whoop_tokens').select('user_id').eq('user_id', uid).maybeSingle();
   if (!have) throw new Error('not connected');
   const looked = workoutDays && workoutDays > 0 ? Math.min(7, workoutDays) : 1.5;
   let fresh: string[] = [];
-  try { fresh = await workoutsFor(uid, Math.round(looked * 24)); } catch (e) { console.error('[whoop] workouts', e); }
+  let allWorkouts = false;
+  try { ({ fresh, all: allWorkouts } = await workoutsFor(uid, Math.round(looked * 24))); } catch (e) { console.error('[whoop] workouts', e); }
   await sweep();
-  if (only === 'workouts') return { days: 0, fresh, workoutDays: looked };
+  if (only === 'workouts') return { days: 0, fresh, workoutDays: looked, allWorkouts };
   // As before: a key WHOOP will no longer refresh means connecting again.
   if (!(await tokensFor(uid))) throw new Error('not connected');
   const end = new Date();
@@ -308,7 +336,7 @@ async function sync(uid: string, only?: 'workouts', workoutDays?: number): Promi
   }
   const rows = [...days.values()];
   // Disconnected while this ran: write nothing back (no WHOOP numbers, no 'connected' row).
-  if (!(await stillConnected(uid))) return { days: 0, fresh, workoutDays: looked };
+  if (!(await stillConnected(uid))) return { days: 0, fresh, workoutDays: looked, allWorkouts };
   if (rows.length) {
     // Other sources' numbers on the same day are kept: only WHOOP's columns are written.
     for (const row of rows) {
@@ -317,21 +345,23 @@ async function sync(uid: string, only?: 'workouts', workoutDays?: number): Promi
       await admin.from('health_days').upsert({ ...row, sources, updated_at: new Date().toISOString() });
     }
   }
-  if (!(await stillConnected(uid))) return { days: 0, fresh, workoutDays: looked };
+  if (!(await stillConnected(uid))) return { days: 0, fresh, workoutDays: looked, allWorkouts };
   await admin.from('health_connections').upsert({ user_id: uid, provider: 'whoop', last_synced_at: new Date().toISOString() });
-  return { days: rows.length, fresh, workoutDays: looked };
+  return { days: rows.length, fresh, workoutDays: looked, allWorkouts };
 }
 const stillConnected = async (uid: string) => !!(await admin.from('whoop_tokens').select('user_id').eq('user_id', uid).maybeSingle()).data;
 
-/** WHOOP's answer to a sign-in, as kept until it is put on an account. */
-type Answer = { access_token: string; refresh_token: string; expires_at: string; scope: string; member: number | null };
+/** WHOOP's answer to a sign-in, as kept until it is put on an account. `workouts`: every workout was asked for too, not only tennis. */
+type Answer = { access_token: string; refresh_token: string; expires_at: string; scope: string; member: number | null; workouts?: boolean };
 
 /**
  * Puts a WHOOP sign-in on this account. `bound`: the phone that started it,
  * signed in as this player, collected it (/finish). Only then is the WHOOP
- * member remembered (so its webhooks reach this account) and tennis turned on.
+ * member remembered (so its webhooks reach this account) and tennis turned
+ * on, and every workout too when the app asked for that. Answers an error,
+ * or the ids of the past week's sessions it just filed.
  */
-async function link(uid: string, a: Answer, bound: boolean): Promise<string | null> {
+async function link(uid: string, a: Answer, bound: boolean): Promise<{ error: string } | { fresh: string[] }> {
   const member = bound ? a.member : null;
   if (member != null) {
     // One CourtSide account per WHOOP member: an older link elsewhere stops hearing about its workouts.
@@ -342,14 +372,17 @@ async function link(uid: string, a: Answer, bound: boolean): Promise<string | nu
     }
   }
   const error = await writeTokens(uid, 'upsert', { access_token: a.access_token, refresh_token: a.refresh_token, expires_at: a.expires_at, updated_at: new Date().toISOString() }, { scope: a.scope, refresh_lock_until: null, whoop_user_id: member });
-  if (error) return error.message;
+  if (error) return { error: error.message };
   const tennis = member != null && a.scope.split(' ').includes('read:workout');
   await admin.from('health_connections').upsert({ user_id: uid, provider: 'whoop', connected_at: new Date().toISOString(), ...(tennis ? { reads_workouts: true } : {}) });
+  // Every workout is its own yes (migration 107): on only when this sign-in asked for it, never carried over from
+  // an older one. Apart from the row above, so a database without the column (before 107) still connects.
+  if (tennis) await admin.from('health_connections').update({ reads_all_workouts: a.workouts === true }).match({ user_id: uid, provider: 'whoop' });
   // Any other sign-in leaves tennis off (the app offers 'Turn on tennis sessions' again).
   if (!tennis) await setReadsWorkouts(uid, false);
-  // The past week of tennis too, each one in Notifications to log (Oct 5).
-  try { await sync(uid, undefined, 7); } catch { /* the app can ask again */ }
-  return null;
+  // The past week of workouts too, each one in Notifications to log (Oct 5).
+  try { return { fresh: (await sync(uid, undefined, 7)).fresh }; } catch { /* the app can ask again */ }
+  return { fresh: [] };
 }
 
 /** WHOOP took a workout back (deleted, or no longer tennis): so does CourtSide, unless it was logged. */
@@ -375,7 +408,8 @@ async function onEvent(e: { user_id: number; id: string | number; type: string }
     if (res.status === 403) { await res.body?.cancel(); await setReadsWorkouts(u, false); continue; }
     if (!res.ok) { await res.body?.cancel(); throw new Error('WHOOP ' + res.status); }
     const w = await res.json() as WhoopWorkout;
-    if (!isTennis(w)) { console.log('[whoop] sport', w.sport_name); await withdraw(u, ext); continue; }
+    // Not one this person keeps (or no longer: renamed from tennis to a run with only tennis on): taken back.
+    if (!keeps(w, await wants(u))) { console.log('[whoop] sport', w.sport_name); await withdraw(u, ext); continue; }
     const { error: bad } = await admin.rpc('record_activity', { u, src: 'whoop', ext: w.id, p: toPayload(w), quiet: false });
     if (bad) throw new Error(bad.message);
   }
@@ -414,10 +448,12 @@ Deno.serve(async (req) => {
   if (path === '/start') {
     const uid = await whoIs(req);
     if (!uid) return json({ error: 'Sign in first.' }, 401);
-    const posted = await req.json().catch(() => ({})) as { back?: string; tennis?: boolean };
+    const posted = await req.json().catch(() => ({})) as { back?: string; tennis?: boolean; workouts?: boolean };
     const back = safeBack(posted.back ?? new URL(req.url).searchParams.get('back') ?? 'courtside://health');
     const tennis = posted.tennis === true;
-    const state = await sign({ uid, back, tennis, n: crypto.randomUUID(), exp: Date.now() + SIGN_IN_MS });
+    // Every workout, not only tennis: same WHOOP permission, the app's own yes (migration 135).
+    const workouts = tennis && posted.workouts === true;
+    const state = await sign({ uid, back, tennis, workouts, n: crypto.randomUUID(), exp: Date.now() + SIGN_IN_MS });
     const q = new URLSearchParams({ response_type: 'code', client_id: clientId, redirect_uri: redirectUri, scope: tennis ? SCOPES : BASE_SCOPES, state });
     return json({ url: `${AUTH}?${q}` });
   }
@@ -433,7 +469,7 @@ Deno.serve(async (req) => {
     if (!res.ok) return go('failed');
     const t = await res.json();
     const scope: string = typeof t.scope === 'string' ? t.scope : opened.tennis ? SCOPES : BASE_SCOPES;
-    const answer: Answer = { access_token: t.access_token, refresh_token: t.refresh_token, expires_at: new Date(Date.now() + t.expires_in * 1000).toISOString(), scope, member: null };
+    const answer: Answer = { access_token: t.access_token, refresh_token: t.refresh_token, expires_at: new Date(Date.now() + t.expires_in * 1000).toISOString(), scope, member: null, workouts: opened.tennis === true && opened.workouts === true };
     if (opened.tennis) {
       // Tennis: webhooks name only the WHOOP member, so learn which one this is.
       const prof = await fetch(API + '/user/profile/basic', { headers: { authorization: 'Bearer ' + t.access_token } }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
@@ -453,7 +489,7 @@ Deno.serve(async (req) => {
   if (!uid) return json({ error: 'Sign in first.' }, 401);
   if (path === '/sync') {
     const posted = await req.json().catch(() => ({})) as { only?: string; days?: unknown };
-    // {days: 1–7}: how far back to look for tennis (the app asks for the past week once).
+    // {days: 1–7}: how far back to look for workouts (the app asks for the past week once).
     const days = typeof posted.days === 'number' && Number.isFinite(posted.days) && posted.days > 0 ? Math.min(7, posted.days) : undefined;
     try { return json(await sync(uid, posted.only === 'workouts' ? 'workouts' : undefined, days)); } catch (e) { return json({ error: e instanceof Error ? e.message : 'sync failed' }, 400); }
   }
@@ -471,9 +507,10 @@ Deno.serve(async (req) => {
       if ((theirs ?? []).length) return json({ error: 'That WHOOP sign-in was started on another account.' });
     }
     if (!got || Date.parse(got.expires_at) < Date.now()) return json({ error: 'That WHOOP sign-in has expired. Try again.' });
-    const bad = await link(uid, got.answer, true);
-    if (bad) { console.error('[whoop] link', bad); return json({ error: 'Could not connect WHOOP right now. Try again.' }); }
-    return json({ ok: true });
+    const linked = await link(uid, got.answer, true);
+    if ('error' in linked) { console.error('[whoop] link', linked.error); return json({ error: 'Could not connect WHOOP right now. Try again.' }); }
+    // The past week's sessions it just filed, so the app can say they are in Notifications.
+    return json({ ok: true, fresh: linked.fresh });
   }
   if (path === '/disconnect') {
     // Tennis off first, so no webhook or sync files a WHOOP session while the rest is removed.

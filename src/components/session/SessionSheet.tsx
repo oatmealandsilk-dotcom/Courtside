@@ -219,9 +219,9 @@ export function SessionSheet({ post, me, users, sessions, sessionTags, activitie
       ) : null}
 
       {activity && (owner.length || started || privateHr) ? (
-        <Pop delay={play ? 400 : 0} duration={260} from={1} rise={8} style={[styles.only, { backgroundColor: withAlpha(colors.text, 0.045), borderColor: withAlpha(colors.text, 0.18) }]}>
+        <Pop delay={play ? 400 : 0} duration={260} from={1} rise={8} style={styles.only}>
           <View style={styles.onlyHead}>
-            <Ionicons name="lock-closed-outline" size={12} color={colors.textMuted} />
+            <Ionicons name="eye-off-outline" size={12} color={colors.textMuted} />
             <Text style={styles.label} maxFontSizeMultiplier={1.2}>ONLY YOU</Text>
           </View>
           <View style={styles.onlyRow}>
@@ -304,7 +304,8 @@ const styleDefinitions = StyleSheet.create({
   column: { gap: 3 },
   label: { ...font('600'), fontSize: 11, letterSpacing: 0.66, color: colors.textMuted },
   zones: { gap: 6, marginTop: 4 },
-  only: { borderRadius: 18, borderWidth: 1, borderStyle: 'dashed', padding: 16, gap: 12, marginTop: 4 },
+  // A calm filled tile, no outline: the dashed edge read as unfinished (Oct 6, owner). 17 = the old 16 plus its 1pt border, so nothing moves.
+  only: { borderRadius: 18, backgroundColor: colors.bgElevated, padding: 17, gap: 12, marginTop: 4 },
   onlyHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   onlyRow: { flexDirection: 'row', gap: 26 },
   clock: { flexDirection: 'row', alignItems: 'flex-end' },
