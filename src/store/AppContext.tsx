@@ -1010,6 +1010,8 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
    * screen opened on the old id follows it here. Any other id comes back as it is.
    */
   resolveChatId: (conversationId: ID) => ID;
+  /** True while a one-to-one chat is only on this phone (nothing sent in it yet): the server can't mute or take a report on it. */
+  isDraftChat: (conversationId: ID) => boolean;
   /** Sends words in a chat; `replyToId` answers one of its messages (quoted above the new one). */
   /** Resolves 'blocked' when its words were refused (migration 117): it is taken back, so the chat can put the words back in the box. */
   sendMessage: (conversationId: ID, body: string, replyToId?: ID) => Promise<'blocked' | undefined>;
@@ -5106,6 +5108,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return at;
   }, []);
 
+  const isDraftChat = useCallback((conversationId: ID) => draftChats.current.has(resolveChatId(conversationId)), [resolveChatId]);
+
   /** Returns the existing 1:1 thread with a user, creating one if needed. A group with just the two of you is never it. */
   const openConversationWith = useCallback(
     (userId: ID): ID => {
@@ -5243,6 +5247,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // can't be stopped, so each is unsent the moment the server has it (see
   // calledBack), and it never reaches anyone.
   const withdrawn = useRef(new Set<ID>());
+  /** Voice recordings this phone put up itself (deliverVoice): only these are ever taken down if their message never lands. */
+  const voiceUploads = useRef(new Set<string>());
   /** After a message's save: true when it was deleted meanwhile, and it is then taken back off the server (its photos too). */
   const calledBack = (messageId: ID, result: 'refused' | 'blocked' | 'failed' | 'gone' | void, photos: ChatPhoto[] = []) => {
     if (!withdrawn.current.delete(messageId)) return false;
@@ -5354,15 +5360,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
         patchMessage(message.id, { sending: undefined, failed: true });
         return;
       }
+      voiceUploads.current.add(url);
       // Kept on the message as soon as it is up, so a retry after this only saves it.
       patchMessage(message.id, { audio: { url, ms: audio.ms } });
     }
+    // The recording comes down again only when this phone put it up for this
+    // message and nothing else here plays it. A forward (or its retry) reuses
+    // another message's recording, which must keep playing there.
+    const dropRecording = () => {
+      if (voiceUploads.current.has(url) && !stateRef.current.messages.some((m) => m.id !== message.id && m.audio?.url === url)) void remote.removeMedia(me, [url]);
+    };
     // Unsent while it went up: nothing is saved, and the recording comes down again.
-    if (!stillThere()) { withdrawn.current.delete(message.id); void remote.removeMedia(me, [url]); return; }
+    if (!stillThere()) { withdrawn.current.delete(message.id); dropRecording(); return; }
     const result = await saveMessage({ ...message, audio: { url, ms: audio.ms } }).catch(() => 'failed' as const);
     // Deleted meanwhile (unsent as it lands), or its chat refused: the recording, already up, comes down again.
-    if (calledBack(message.id, result) || result === 'gone') { void remote.removeMedia(me, [url]); return; }
-    if (result === 'blocked') { void remote.removeMedia(me, [url]); takeBackRefused(message); return; }
+    if (calledBack(message.id, result) || result === 'gone') { dropRecording(); return; }
+    if (result === 'blocked') { dropRecording(); takeBackRefused(message); return; }
     patchMessage(message.id, { sending: undefined, ...(result === 'failed' || result === 'refused' ? { failed: true } : null) });
     if (result === 'refused') void refreshChat(resolveChatId(message.conversationId));
   }, [refreshChat, patchMessage, saveMessage, resolveChatId]);
@@ -7680,6 +7693,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       loadRemoved,
       openConversationWith,
       resolveChatId,
+      isDraftChat,
       sendMessage,
       sendCourt,
       sendVoice,
@@ -7887,6 +7901,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       loadRemoved,
       openConversationWith,
       resolveChatId,
+      isDraftChat,
       sendMessage,
       sendCourt,
       sendVoice,

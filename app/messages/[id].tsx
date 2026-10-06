@@ -24,7 +24,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import { useIsFocused } from '@/lib/useIsFocused';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import Svg, { Path } from 'react-native-svg';
@@ -192,7 +192,9 @@ export default function Thread() {
   // (the server already had one with them): followed to that id, and the
   // address changed to match, so a reload or a link opens the same chat.
   const id = routeId ? actions.resolveChatId(routeId) : routeId;
-  useEffect(() => { if (routeId && id && id !== routeId) router.setParams({ id }); }, [routeId, id]);
+  // This screen's own address: the chat may be under another page by then.
+  const navigation = useNavigation();
+  useEffect(() => { if (routeId && id && id !== routeId) navigation.setParams({ id } as never); }, [routeId, id, navigation]);
   // The message box keeps its own words, cursor and recording (Composer, below):
   // a key typed redraws the box alone, never the chat above it.
   const composer = useRef<ComposerHandle>(null);
@@ -331,6 +333,9 @@ export default function Thread() {
   // seconds after the last word of it if their phone goes quiet.
   const [typing, setTyping] = useState<Record<string, number>>({});
   const typingLink = useRef<{ ping: () => void; stop: () => void; off: () => void } | null>(null);
+  // A new chat is only on the server once its first message lands (startChat),
+  // and its private typing channel refuses anyone not yet in it: joined again then.
+  const onServer = thread.some((m) => m.kind !== 'system' && !m.sending && !m.failed);
   useEffect(() => {
     if (!id || removed) return;
     setTyping({});
@@ -341,7 +346,7 @@ export default function Thread() {
     }));
     typingLink.current = link;
     return () => { if (draftNow.current.trim()) link.stop(); link.off(); typingLink.current = null; };
-  }, [id, actions, removed]);
+  }, [id, actions, removed, onServer]);
   useEffect(() => {
     if (!Object.keys(typing).length) return;
     const t = setInterval(() => setTyping((cur) => {
