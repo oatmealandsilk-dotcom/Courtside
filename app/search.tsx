@@ -626,6 +626,7 @@ export default function Search() {
             onBlur={() => { focusedAt.current = null; }}
             onKeyPress={(e) => { if (e.nativeEvent.key === 'Escape' && term) empty(); }}
             {...(findingFriend ? { placeholder: 'Name or @handle', accessibilityLabel: 'Find a friend by name or @handle' } : {})}
+            style={styles.field}
           />
         </View>
         {showTabs ? (
@@ -655,6 +656,7 @@ const styleDefinitions = StyleSheet.create({
   flex: { flex: 1 },
   bar: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: spacing.sm },
   barWide: { paddingTop: spacing.xl },
+  field: { flex: 1 },
   back: { width: 32, height: 44, marginLeft: -6, alignItems: 'center', justifyContent: 'center' },
   tabs: { flexDirection: 'row', height: 40, paddingHorizontal: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
   tab: { flex: 1, alignItems: 'center', justifyContent: 'center' },

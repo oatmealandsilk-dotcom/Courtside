@@ -55,6 +55,8 @@ export default function FindGroups() {
   const minedAtOpen = useRef(new Set(feedGroups.map((g) => g.id)));
 
   const [search, setSearch] = useState('');
+  // The sheet opens only as tall as what is in it (once the list is in), so a short one has no empty half.
+  const [contentH, setContentH] = useState(0);
   const [rows, setRows] = useState<DiscoverGroup[] | null | undefined>(undefined);
   const asked = useRef(0);
   useEffect(() => {
@@ -79,6 +81,11 @@ export default function FindGroups() {
       };
     }), [rows, feedGroups, feedGroupsAsked, feedGroupsOn]);
   const searching = !!search.trim();
+  // While you search it may grow (more found) but never shrinks under you letter by letter:
+  // it keeps the height it had before the first letter (on a phone the keyboard has opened it all the way anyway).
+  const restH = useRef(0);
+  if (!searching) restH.current = contentH;
+  const fitH = searching ? Math.max(restH.current, contentH) : contentH;
   const near = searching ? [] : listed.filter((r) => r.near);
   const rest = searching ? listed : listed.filter((r) => !r.near);
 
@@ -155,12 +162,19 @@ export default function FindGroups() {
 
   return (
     <DragSheet
+      fitContent
       closeSignal={closeSignal}
       onDismissed={done}
       peekFraction={0.86}
+      contentHeight={(rows !== undefined || !open || off) && fitH ? fitH : undefined}
       header={<SheetTitle title="Groups" line="A feed only the group sees" onClose={dismiss} />}
     >
-      <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
+      <ScrollView
+        contentContainerStyle={styles.body}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        onContentSizeChange={(_, h) => { const r = Math.ceil(h); if (r !== contentH) setContentH(r); }}
+      >
         {!open ? (
           <View style={[styles.card, styles.ageCard]}>
             <View style={styles.ageIcon}><Ionicons name="lock-closed-outline" size={18} color={colors.textMuted} /></View>
@@ -233,9 +247,16 @@ export default function FindGroups() {
                   </View>
                 ) : null}
                 {!near.length && !rest.length ? (
-                  <Text style={styles.note}>
-                    {searching ? `No group matches “${search.trim()}”.` : 'No groups to find yet. Start the first one.'}
-                  </Text>
+                  // Nothing to join: a quiet word in the middle, under the one thing to do here (Create a group, above).
+                  <View style={styles.empty}>
+                    <View style={styles.emptyDisc}>
+                      <Ionicons name={searching ? 'search-outline' : 'people-outline'} size={26} color={colors.brand} />
+                    </View>
+                    <Text style={styles.emptyTitle}>{searching ? `No group matches “${search.trim()}”` : 'No groups to join yet'}</Text>
+                    <Text style={styles.emptyLine}>
+                      {searching ? 'Try another word, or start it yourself.' : 'Open groups near you show up here. Start one for your crew and they can find it.'}
+                    </Text>
+                  </View>
                 ) : null}
               </>
             )}
@@ -258,7 +279,7 @@ const styleDefinitions = StyleSheet.create({
   createIcon: { width: 44, height: 44, borderRadius: 13, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
   createTitle: { ...typography.bodyStrong, color: colors.brand },
   part: { gap: spacing.sm },
-  partHead: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', paddingHorizontal: spacing.xs },
+  partHead: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', paddingRight: spacing.xs },
   section: { ...typography.smallStrong, color: colors.textMuted, paddingHorizontal: spacing.xs },
   link: { ...typography.smallStrong, color: colors.brand },
   mine: { gap: spacing.sm, paddingHorizontal: 2, paddingVertical: 2 },
@@ -285,6 +306,10 @@ const styleDefinitions = StyleSheet.create({
   btnTextJoin: { color: colors.brandInk },
   btnTextRequest: { color: colors.brand },
   btnTextQuiet: { color: colors.textMuted },
+  empty: { alignItems: 'center', gap: spacing.xs, paddingTop: spacing.lg, paddingBottom: spacing.sm, paddingHorizontal: spacing.xl },
+  emptyDisc: { width: 56, height: 56, borderRadius: 28, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.sm },
+  emptyTitle: { ...typography.bodyStrong, color: colors.text, textAlign: 'center' },
+  emptyLine: { ...typography.small, color: colors.textMuted, lineHeight: 19, textAlign: 'center', maxWidth: 280 },
   ageCard: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.lg },
   ageIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
   ageLine: { ...typography.body, color: colors.text, flex: 1 },

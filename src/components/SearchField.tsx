@@ -1,5 +1,5 @@
 import React, { forwardRef, useState } from 'react';
-import { Platform, Pressable, StyleSheet, TextInput, View, type NativeSyntheticEvent, type TextInputKeyPressEventData } from 'react-native';
+import { Platform, Pressable, StyleSheet, TextInput, View, type NativeSyntheticEvent, type StyleProp, type TextInputKeyPressEventData, type ViewStyle } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { useThemedStyles } from '@/theme/ThemeProvider';
@@ -17,6 +17,8 @@ interface Props {
   onKeyPress?: (e: NativeSyntheticEvent<TextInputKeyPressEventData>) => void;
   placeholder?: string;
   accessibilityLabel?: string;
+  /** Where the page puts it: in a row beside a Back button, `{ flex: 1 }`; in a column it needs nothing. */
+  style?: StyleProp<ViewStyle>;
 }
 
 /**
@@ -26,15 +28,21 @@ interface Props {
  * keyboard's key says Search, nothing is autocorrected or capitalised (it
  * offered "grinding" for "griffin"), and the text is 16 so a phone browser
  * never zooms in on it.
+ *
+ * Sized by its padding, the way the inbox's and Find Players' boxes are, not
+ * by a fixed height: on an iPhone a fixed-height box with no padding, in a
+ * column that stretched it (the Groups sheet, Oct 6), drew "Search groups"
+ * half below its bottom edge. The border is on the text box itself, so the
+ * words sit in the middle of what you see on every phone and in a browser.
  */
 export const SearchField = forwardRef<TextInput, Props>(function SearchField(
-  { value, onChangeText, onSubmit, onClear, onFocus, onBlur, onKeyPress, placeholder = 'Search', accessibilityLabel = 'Search CourtSide' },
+  { value, onChangeText, onSubmit, onClear, onFocus, onBlur, onKeyPress, placeholder = 'Search', accessibilityLabel = 'Search CourtSide', style },
   ref,
 ) {
   const styles = useThemedStyles(styleDefinitions);
   const [focused, setFocused] = useState(false);
   return (
-    <View style={[styles.wrap, focused && styles.wrapFocused]}>
+    <View style={[styles.wrap, style]}>
       <Ionicons name="search" size={17} color={colors.textFaint} style={styles.glass} />
       <TextInput
         ref={ref}
@@ -57,7 +65,7 @@ export const SearchField = forwardRef<TextInput, Props>(function SearchField(
         // A search field to VoiceOver; on the web the role would make the box a page landmark instead.
         accessibilityRole={Platform.OS === 'web' ? undefined : 'search'}
         accessibilityLabel={accessibilityLabel}
-        style={styles.input}
+        style={[styles.input, focused && styles.inputFocused]}
       />
       {value ? (
         <Pressable
@@ -75,18 +83,21 @@ export const SearchField = forwardRef<TextInput, Props>(function SearchField(
 });
 
 const styleDefinitions = StyleSheet.create({
-  wrap: { flex: 1, height: 46, borderRadius: radius.pill, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, justifyContent: 'center' },
-  wrapFocused: { borderColor: colors.borderStrong },
+  wrap: { position: 'relative', justifyContent: 'center' },
   glass: { position: 'absolute', left: 16, zIndex: 1 },
   input: {
     ...typography.body,
     fontSize: 16,
     color: colors.text,
-    height: 44,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.pill,
     paddingLeft: 42,
     paddingRight: 40,
-    paddingVertical: 0,
+    paddingVertical: 12,
     ...(Platform.OS === 'web' ? { outlineStyle: 'none' } : null),
   } as object,
-  clear: { position: 'absolute', right: 12, height: 44, justifyContent: 'center' },
+  inputFocused: { borderColor: colors.borderStrong },
+  clear: { position: 'absolute', right: 12, top: 0, bottom: 0, justifyContent: 'center' },
 });

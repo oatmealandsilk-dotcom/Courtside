@@ -1,6 +1,6 @@
 import { themes, useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as maplibregl from 'maplibre-gl';
@@ -8,6 +8,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { CitylessCard, CourtSheet, CourtsZoomNote, FilterChips, HitSheet, MapCredit, YouSheet, MapButtons, MapTopBar, NearbyRail, PlaceSheet, PlayerSheet, PreviewOverlay, WhereCard } from '@/components/map/MapChrome';
 import { CardStage } from '@/components/map/CardStage';
+import { CARD_HEIGHT, CARD_ZOOM, cardView } from '@/components/map/cardFit';
 import type { NearbyMapProps } from '@/components/NearbyMap.types';
 import { placeZoom } from '@/features/places/geocode';
 import { milesBetween } from '@/features/players/geo';
@@ -39,10 +40,8 @@ import { useStartMapHold } from '@/features/feed/warmup';
 // for everyone, sign-in page included. One door in keeps it out.
 export { snapshotMap } from '@/components/map/snapshotWeb';
 
-const HEIGHT = 330;
+const HEIGHT = CARD_HEIGHT;
 const START_ZOOM = 11.5;
-/** The still card shows the whole metro (see NearbyMap). */
-const CARD_ZOOM = 10.4;
 /**
  * The pins' engine: the very text the phone's map runs inside its web view
  * (pinEngine), made into a function here, so the browser and the phone
@@ -106,7 +105,15 @@ export function NearbyMap(props: NearbyMapProps) {
   useEffect(() => { if (model.selected || model.selectedCourt || model.selectedHit) setMeOpen(false); }, [model.selected, model.selectedCourt, model.selectedHit]);
   const { home, start } = model;
   // The full map opens where you are; the still card on your town (location on) or your profile's city.
-  const view = expanded ? { center: start.center, zoom: start.zoom ?? START_ZOOM } : { center: model.city ?? start.center, zoom: CARD_ZOOM };
+  // The still card: your town (location on) or your profile's city, taking in
+  // everyone its "players around" counts, so the count never sits over an empty map (cardView, as on the phone).
+  const { width: windowW } = useWindowDimensions();
+  const [cardW, setCardW] = useState(0);
+  const cardAt = useMemo(
+    () => (expanded || !model.city ? null : cardView(model.city, model.inCity.map((p) => p.at), cardW || windowW - 2 * spacing.lg)),
+    [expanded, model.city, model.inCity, cardW, windowW],
+  );
+  const view = expanded ? { center: start.center, zoom: start.zoom ?? START_ZOOM } : cardAt ?? { center: start.center, zoom: CARD_ZOOM };
   // Zoomed out past about a city: the court pins step aside (pinList), and a note says so.
   // Told the moment the zoom crosses it (as on the phone), kept in a ref so a pinch only sets it on the crossing.
   const [far, setFar] = useState(() => view.zoom < COURTS_MIN_ZOOM);
@@ -293,9 +300,9 @@ export function NearbyMap(props: NearbyMapProps) {
     lastHome.current = home;
     if (expanded && model.homeKnown && !focusCourt && !focusHit && !focusSpot && !model.place && !model.selected) map.current?.flyTo({ center: [home.lng, home.lat], zoom: START_ZOOM, duration: 600 });
   }, [home]); // eslint-disable-line react-hooks/exhaustive-deps
-  // The still card follows a change of city on the profile.
-  const cityKey = model.city ? `${model.city.lat},${model.city.lng}` : '';
-  useEffect(() => { if (!expanded && model.city) map.current?.jumpTo({ center: [model.city.lng, model.city.lat], zoom: CARD_ZOOM }); }, [cityKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The still card follows a change of city on the profile, and players coming in further out than it shows.
+  const cardKey = cardAt ? `${cardAt.center.lat.toFixed(5)},${cardAt.center.lng.toFixed(5)},${cardAt.zoom}` : '';
+  useEffect(() => { if (cardAt) map.current?.jumpTo({ center: [cardAt.center.lng, cardAt.center.lat], zoom: cardAt.zoom }); }, [cardKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Pins: the same list the phone's map draws (pinList), handed to the engine, which keeps
   // each pin between changes and gathers, splits and fades them (pinEngine).
@@ -346,7 +353,7 @@ export function NearbyMap(props: NearbyMapProps) {
   if (!expanded) {
     const failed = load.status === 'failed' && !cardShown;
     return (
-      <View style={styles.card}>
+      <View style={styles.card} onLayout={(e) => { const w = Math.round(e.nativeEvent.layout.width); if (w > 0 && w !== cardW) setCardW(w); }}>
         {/* Under the map, until it has drawn and faded in over it. Given up on, a tap tries again; still loading, it opens the full map. */}
         {!loaderGone ? (failed ? <MapCardFailed /> : <MapCardLoading />) : null}
         {!cardShown ? (

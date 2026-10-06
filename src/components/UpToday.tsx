@@ -199,7 +199,13 @@ export function UpToday({ me, people, teen = false, locationOn, finding = false,
                 <Text style={styles.emptyLink}>Turn on Location</Text>
               </Pressable>
             ) : finding ? <Text style={styles.emptyText}>Finding you…</Text>
-              : <Text style={styles.emptyText}>{teen ? 'No friends up near you yet today.' : 'No one near you yet today.'}</Text>}
+              // Who is missing, in the section's own words, then (your ring off) what the "+" on your face is for.
+              : (
+                <>
+                  <Text style={styles.emptyText}>{teen ? 'No friends open near you yet' : 'No one’s open near you yet'}</Text>
+                  {up ? null : <Text style={styles.emptyHint}>Tap I’m free when you want a hit</Text>}
+                </>
+              )}
           </View>
         ) : null}
       </ScrollView>
@@ -232,7 +238,8 @@ const styleDefinitions = StyleSheet.create({
   // one line; its 44pt runs on down past the item (the row's BELOW room), never up over the switch.
   tillLink: { flexDirection: 'row', alignItems: 'center', gap: 1, marginTop: 1, paddingTop: TILL_PAD_TOP, paddingBottom: TILL_PAD_BOTTOM, marginBottom: TILL_ROOM - 1 - 44 },
   empty: { justifyContent: 'center', height: FACE + 18, paddingLeft: spacing.sm, maxWidth: 210 },
-  emptyText: { ...typography.small, color: colors.textMuted },
+  emptyText: { ...typography.small, ...font('500'), color: colors.text },
+  emptyHint: { ...typography.small, color: colors.textMuted, marginTop: 2 },
   emptyLink: { ...typography.smallStrong, color: colors.brand, marginTop: 2 },
   tip: { bottom: '100%', left: 0, right: 0, alignItems: 'flex-start' },
 });
