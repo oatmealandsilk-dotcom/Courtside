@@ -9,7 +9,7 @@ import { CitylessCard, CourtSheet, CourtsZoomNote, FilterChips, HitSheet, MapCre
 import { CardStage } from '@/components/map/CardStage';
 import { MapCanvas, type CanvasMarker, type MapCanvasHandle, type MapLoadStatus } from '@/components/map/MapCanvas';
 import { MapCardFailed, MapCardLoading, MapLoadPill } from '@/components/map/MapLoadState';
-import { CARD_HEIGHT, CARD_ZOOM, onCard, underCardSwitch } from '@/components/map/cardFit';
+import { CARD_HEIGHT, CARD_ZOOM, onCard } from '@/components/map/cardFit';
 import { cardLook, lookFor } from '@/components/map/look';
 import { clusterTemplates, courtLift, youLift } from '@/components/map/markers';
 import { mapMarkers } from '@/components/map/pinList';
@@ -119,12 +119,7 @@ export function NearbyMap(props: NearbyMapProps) {
   // The still card's "N players around" counts only the faces on it (onCard), so the number and the map agree.
   const [cardW, setCardW] = useState(0);
   const cardCenter = model.city ?? start.center;
-  // A pin that would sit under the card's location switch (top right) is left off the card, so the two never overlap.
-  const switchOn = !!onToggleLocation;
-  const cardPlayers = useMemo(
-    () => (expanded ? model.inCity : model.inCity.filter((p) => !(switchOn && underCardSwitch(cardCenter, p.at, cardW || windowW - 2 * spacing.lg)))),
-    [expanded, model.inCity, cardCenter.lat, cardCenter.lng, cardW, windowW, switchOn], // eslint-disable-line react-hooks/exhaustive-deps
-  );
+  const cardPlayers = model.inCity;
   const onCardCount = useMemo(
     () => (expanded ? 0 : cardPlayers.filter((p) => onCard(cardCenter, p.at, cardW || windowW - 2 * spacing.lg)).length),
     [expanded, cardPlayers, cardCenter.lat, cardCenter.lng, cardW, windowW], // eslint-disable-line react-hooks/exhaustive-deps

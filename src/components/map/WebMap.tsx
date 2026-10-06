@@ -8,7 +8,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { CitylessCard, CourtSheet, CourtsZoomNote, FilterChips, HitSheet, MapCredit, YouSheet, MapButtons, MapTopBar, NearbyRail, PlaceSheet, PlayerSheet, PreviewOverlay, WhereCard } from '@/components/map/MapChrome';
 import { CardStage } from '@/components/map/CardStage';
-import { CARD_HEIGHT, CARD_ZOOM, onCard, underCardSwitch } from '@/components/map/cardFit';
+import { CARD_HEIGHT, CARD_ZOOM, onCard } from '@/components/map/cardFit';
 import type { NearbyMapProps } from '@/components/NearbyMap.types';
 import { placeZoom } from '@/features/places/geocode';
 import { milesBetween } from '@/features/players/geo';
@@ -110,12 +110,7 @@ export function NearbyMap(props: NearbyMapProps) {
   const { width: windowW } = useWindowDimensions();
   const [cardW, setCardW] = useState(0);
   const cardCenter = model.city ?? start.center;
-  // A pin that would sit under the card's location switch (top right) is left off the card, so the two never overlap.
-  const switchOn = !!onToggleLocation;
-  const cardPlayers = useMemo(
-    () => (expanded ? model.inCity : model.inCity.filter((p) => !(switchOn && underCardSwitch(cardCenter, p.at, cardW || windowW - 2 * spacing.lg)))),
-    [expanded, model.inCity, cardCenter.lat, cardCenter.lng, cardW, windowW, switchOn], // eslint-disable-line react-hooks/exhaustive-deps
-  );
+  const cardPlayers = model.inCity;
   const onCardCount = useMemo(
     () => (expanded ? 0 : cardPlayers.filter((p) => onCard(cardCenter, p.at, cardW || windowW - 2 * spacing.lg)).length),
     [expanded, cardPlayers, cardCenter.lat, cardCenter.lng, cardW, windowW], // eslint-disable-line react-hooks/exhaustive-deps

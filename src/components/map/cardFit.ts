@@ -30,21 +30,3 @@ export function onCard(center: LatLng, spot: LatLng, width: number, height = CAR
   const dy = Math.abs(p.y - c.y) * scale;
   return dx <= width / 2 - EDGE && dy <= height / 2 - EDGE;
 }
-
-/** The card's location switch, top right (MapChrome previewSwitch: 32 round, 12 in from each edge), with half a face round it. */
-const SWITCH_CORNER = 12 + 32 + 16;
-
-/**
- * Whether a player's pin would land under the card's location switch: such
- * a pin is left off the card (and out of its count), so a far face never
- * sits on top of the switch, half covering "Turn location on" (Oct 6 sweep).
- */
-export function underCardSwitch(center: LatLng, spot: LatLng, width: number, height = CARD_HEIGHT): boolean {
-  if (width <= 0) return false;
-  const c = project(center);
-  const p = project(spot);
-  const scale = 2 ** CARD_ZOOM;
-  const x = width / 2 + (p.x - c.x) * scale;
-  const y = height / 2 + (p.y - c.y) * scale;
-  return x >= width - SWITCH_CORNER && y <= SWITCH_CORNER;
-}
