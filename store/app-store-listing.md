@@ -4,7 +4,9 @@ Everything you type into Apple's forms to send CourtSide to the App Store, in th
 
 **What changed from the previous version of this file:** Sign in with Apple is in the app (but still switched off on the server), the Reddit and Talk Tennis threads and the sample people are gone, location is now shared (rough area for strangers, exact spot only for friends who follow each other), Apple Health, contacts matching, phone linking, voice notes and the `app_opens` record are in the app and on the privacy label, paid booking and the AI coach are switched off for review, the age rating follows Apple's 2025 questionnaire, and the screenshots are the 8 in `~/Desktop/CourtSide-Store-Screenshots-B` (the 4 in `store/screenshots/` are out of date). Where `~/Desktop/CourtSide-AppStore-Checklist.md` (Oct 5, morning) disagrees, this file is newer.
 
-**Updated Oct 5, evening:** Hidden words is live (database update 117 was applied at about 8pm), so it's marked done and named in the description and the review notes. The demo-account steps no longer let the made-up accounts reach real players (no city, Location off, follows only your own accounts). The "Feature on CourtSide's Instagram" switch is now an open decision for you (section 8, item J), and the rest of the pack works with either answer. Smaller fixes: when the app asks for notifications, the sign-up box's name ("Username"), the location wording in the description, and the Device ID row (the privacy policy gains one matching line with Claude's next website update).
+**Updated Oct 5, evening:** Hidden words is live (database update 117 was applied at about 8pm), so it's marked done and named in the description and the review notes. The demo-account steps no longer let the made-up accounts reach real players (no city, Location off, follows only your own accounts). The Instagram switch was an open decision; it's now decided (see the next note). Smaller fixes: when the app asks for notifications, the sign-up box's name ("Username"), the location wording in the description, and the Device ID row (the privacy policy gains one matching line with Claude's next website update).
+
+**Updated Oct 5, late:** you decided the Instagram switch (section 8, item J): it stays **on for everyone** and is now written into the Terms and the privacy policy. On the post screen it now reads "Let CourtSide feature this on its Instagram" (it used to say "Feature on CourtSide's Instagram"). The two marketing boxes in section 4 are ticked for good, and the item is gone from section 0. Later still: the same switch is now on the **Edit post** screen too, so people can switch it off any time after posting, and the Terms, the privacy policy and the short "I agree" page say so.
 
 **How to use it**
 
@@ -36,10 +38,9 @@ Each of these would likely get the app rejected. Details are in the sections nam
 1. **Sign in with Apple works.** Checked tonight (Oct 5): Supabase still has Apple sign-in **off**. The Apple button shows on every iPhone, and tapping it gives an error. Reviewers almost always tap it. Steps in section 8, item A.
 2. **The Sign in with Apple key is in Supabase.** Apple requires that deleting an account made with Apple also removes CourtSide from that person's Apple ID (Apple calls it "revoking the token"). The code is ready; it needs your key. Steps in section 8, item B.
 3. **Hidden words is live. Done** (Oct 5, about 8pm). Apple's rule 1.2 says apps where people post **must** have "a method for filtering objectionable material". Hidden words is that filter, and it's on (section 8, item C).
-4. **You've decided what the "Feature on CourtSide's Instagram" switch means, and Claude has done it before build 15 is made** (section 8, item J). Today the switch is on for every new post, but the Terms and privacy policy never mention reposting, so until this is settled the privacy label can't match both the app and the website. Apple checks that they match (rule 5.1.1).
-5. **Build 15 is in TestFlight and you have tried it** (section 8, item D).
-6. **The two demo accounts exist, with something in them** (section 6).
-7. **Every row a reviewer can tap works**, or is hidden for the review: Phone number, WHOOP, Google sign-in (section 8, items E to G).
+4. **Build 15 is in TestFlight and you have tried it** (section 8, item D).
+5. **The two demo accounts exist, with something in them** (section 6).
+6. **Every row a reviewer can tap works**, or is hidden for the review: Phone number, WHOOP, Google sign-in (section 8, items E to G).
 
 ---
 
@@ -194,9 +195,7 @@ And for each one it asks **what it is used for** (the purpose). Four purposes ap
 - **App Functionality:** making the app work.
 - **Product Personalization:** changing what someone sees based on them (the feed's order, "Players you might know", players near you).
 - **Analytics:** CourtSide's own count of how many people open the app each day (`app_opens`), kept in its own database. Tick it only where the table says.
-- **Developer's Advertising or Marketing:** depends on your answer in section 8, item J.
-  - **Option 1, keep the "Feature on CourtSide's Instagram" switch:** tick it on **Photos or Videos** and **User ID** only. CourtSide may then repost a member's photo or clip, credited to their @handle, on its own Instagram to promote the app. That's marketing use, and Apple wants it declared.
-  - **Option 2, remove the switch:** don't tick it anywhere.
+- **Developer's Advertising or Marketing:** tick it on **Photos or Videos** and **User ID** only. Most posts have a "Let CourtSide feature this on its Instagram" switch, on unless the person turns it off (before posting, or later in Edit post), so CourtSide may repost a member's photo or clip, credited to their @handle, on its own Instagram to promote the app. That's marketing use, and Apple wants it declared (section 8, item J).
 
 Never tick **Third-Party Advertising** or **Other Purposes**.
 
@@ -229,11 +228,11 @@ Never tick **Third-Party Advertising** or **Other Purposes**.
 | **Coarse Location** | Yes | No | App Functionality, Product Personalization | The town on a profile; the rough (about 1 km) area kept for teens and "Only me"; the rounded point sent for the weather; players and open hits near you |
 | **Contacts** | Yes | No | App Functionality, Product Personalization | Who follows whom (Apple counts a follow list as a "social graph"). Find friends from contacts sends phone numbers and emails from the phone's contacts, checks them, then throws them away. |
 | **Emails or Text Messages** | Yes | No | App Functionality | Direct messages and group chats |
-| **Photos or Videos** | Yes | No | App Functionality; add **Developer's Advertising or Marketing** only with option 1 in 8J | Posts, clips, instants, chat photos, profile photos. Marketing (option 1 only): posts left on "Feature on CourtSide's Instagram" may be reposted on CourtSide's Instagram. |
+| **Photos or Videos** | Yes | No | App Functionality, **Developer's Advertising or Marketing** | Posts, clips, instants, chat photos, profile photos. Marketing: a post left on "Let CourtSide feature this on its Instagram" (on by default) may be reposted on CourtSide's Instagram and in its own marketing. |
 | **Audio Data** | Yes | No | App Functionality | Voice notes, and the sound on clips |
 | **Other User Content** | Yes | No | App Functionality | Captions, comments, threads, replies, polls, questions to coaches, tips, bios, court reports, reports people send, Hidden words lists, coach applications and résumés, and conversations with the AI coach once it's on |
 | **Search History** | Yes | No | App Functionality | Post searches go to CourtSide's server and place searches to Photon (komoot's map search). CourtSide doesn't save them, but the services' request logs keep them for a few days, and the server's log knows which account searched. Declaring it is the safe side. |
-| **User ID** | Yes | No | App Functionality; add **Developer's Advertising or Marketing** only with option 1 in 8J | The account ID and @handle. Marketing (option 1 only): the @handle credits a reposted post. |
+| **User ID** | Yes | No | App Functionality, **Developer's Advertising or Marketing** | The account ID and @handle. Marketing: the @handle credits a reposted post. |
 | **Device ID** | Yes | No | App Functionality | The phone's push address, so alerts reach it. A scrambled copy of each phone's push address is also kept (`device_sightings`) until the account is deleted, to catch invite fraud: someone counting a second account on the same phone as a player they invited. Apple counts fraud prevention as App Functionality. **Not** the advertising ID. |
 | **Product Interaction** | Yes | No | App Functionality, Product Personalization, **Analytics** | Likes, saves, votes, follows, views; how long each post stayed on screen (orders the feed, kept about two months); when a chat was last read; which days someone opens the app (only ever counted as daily totals) |
 | **Crash Data** | Yes | No | App Functionality | Error reports saved to CourtSide's own database (`app_errors`) with the account ID |
@@ -259,7 +258,7 @@ Never tick **Third-Party Advertising** or **Other Purposes**.
 **Three things to know:**
 
 - Sharing to Instagram Stories hands the picture to the Instagram app only when the person taps Share. That's the person's own choice, not CourtSide collecting anything, so it isn't on the label.
-- **The two marketing boxes follow your answer in section 8, item J.** Option 1 (keep the switch): Developer's Advertising or Marketing stays ticked on Photos or Videos and User ID, and Claude adds the reposting to the Terms and privacy policy. Option 2 (remove the switch): untick it on both rows. Either way, the label must match the app and the privacy policy on the day you submit.
+- **The two marketing boxes stay ticked** (Developer's Advertising or Marketing on Photos or Videos and User ID), because the Instagram switch is on for everyone (section 8, item J). The Terms ("When CourtSide features your post") and the privacy policy say the same, so the label, the app and the website match.
 - **Update the label before** any version that switches on paid lessons (add **Purchase History**: Yes, linked, App Functionality) or adds any outside analytics or advertising tool. The AI coach is already covered.
 
 ---
@@ -349,7 +348,7 @@ Privacy Policy: https://app.courtsidebase.com/privacy.html
 - **Apple Health is named** because Apple rejects apps that use Health without saying so in the description (rule 2.5.1).
 - **Location is described exactly:** other players see your rough area from any distance, or the court you've checked in at (for up to two hours); only friends who follow each other see your exact spot; or nobody. The old listing's "Nobody's exact position is ever shown" is no longer true.
 - **Hidden words is named** in SAFETY FIRST because it's live and it's the filter Apple's rule 1.2 asks for.
-- **Left out on purpose:** the AI coach and paid lessons (both switched off in this version), WHOOP, Fitbit, Oura and Polar (not open to everyone), tournament names (trademarks: the themes use city names), and the Instagram repost switch (it depends on your answer in section 8, item J; the description can only change with a new version).
+- **Left out on purpose:** the AI coach and paid lessons (both switched off in this version), WHOOP, Fitbit, Oura and Polar (not open to everyone), tournament names (trademarks: the themes use city names), and the Instagram repost switch (the Terms and privacy policy explain it, and the description links to both).
 
 **Optional coaching paragraph.** Add it only if at least one real coach is listed on the Coaching tab. Paste it between the TALK TENNIS and APPLE HEALTH sections, with an empty line above and below. It adds 152 characters (150, plus the empty line), making the description 3,291.
 
@@ -451,7 +450,7 @@ Do these while signed in as the account named. To switch: **Profile** → gear �
 | As | Do this | So the reviewer sees |
 |---|---|---|
 | A | Follow B, **@oatmealandsilk** and **@mrdinosaur62**, and nobody else (every follow alerts the person followed). | A Feed with posts in it |
-| A | **+** → **post** → pick a **photo** of a court or your racquet, add a caption. Don't add a place or a court. If the post screen shows "Feature on CourtSide's Instagram", switch it off. | A post to like, comment on and report |
+| A | **+** → **post** → pick a **photo** of a court or your racquet, add a caption. Don't add a place or a court. Switch off "Let CourtSide feature this on its Instagram" (older builds call it "Feature on CourtSide's Instagram"). | A post to like, comment on and report |
 | A | **+** → **post** → pick a **video** from your camera roll (your own tennis, no one in it who hasn't said yes). Same as the photo: no place or court, and the Instagram switch off if it's there. | The clip player |
 | A | **+** → **Log a session** (Practice, 60 minutes) and keep it private | Your sessions and a streak |
 | A | **+** → **thread or question** → for example "What string tension do you use with poly?" | A thread to reply to and report |
@@ -587,7 +586,7 @@ Or say: **"Yes, turn on Sign in with Apple in Supabase"** and Claude does steps 
 
 ### D. Build 15 (you start it, then test it) — must
 
-1. Build 15 must include everything above, your answer to item J, and today's fixes. When Claude says main is ready, start it yourself (Claude can't start builds): in the Terminal tab, paste the line Claude gives you. It's normally `cd ~/Desktop/Courtside && npx eas-cli@latest build --platform ios --profile production --auto-submit`. It may ask for your Apple ID password when it uploads to TestFlight.
+1. Build 15 must include everything above, the new Instagram switch words and the same switch on Edit post (item J), and today's fixes. When Claude says main is ready, start it yourself (Claude can't start builds): in the Terminal tab, paste the line Claude gives you. It's normally `cd ~/Desktop/Courtside && npx eas-cli@latest build --platform ios --profile production --auto-submit`. It may ask for your Apple ID password when it uploads to TestFlight.
    - **Cost:** free within Expo's monthly build allowance; past it, Expo bills you.
 2. When it reaches TestFlight, install it and try, in this order: Sign in with Apple, Continue with Google, email sign-in with demo A, post a photo, take an instant, report a comment, block account B then unblock, the map with Location on, Apple Health → Connect, a message with a voice note, and delete a throwaway account (never a demo one).
 3. If you can borrow an iPad, try sign-in and a photo there too. Apple often tests iPhone-only apps on an iPad.
@@ -623,30 +622,27 @@ Send any email to **support@courtsidebase.com** from your phone. If it doesn't r
 | **AI coach during review** | **Keep it off** (don't add the Anthropic key until after approval, then switch it on with the next reviewed update). | Fewer things for the reviewer to question, no cost. If you want it at launch instead, add the key **and** a monthly spend limit in the Anthropic console **before** you submit, and use the swap in section 7. Never add the key between Submit and approval. |
 | **Every workout from Apple Health, for everyone** | **Yes, before you submit**, if your brother's runs came through. Say "Turn on workouts from Apple Health for everyone." | Build 15's Health permission text says "tennis, runs, rides, the gym and more". Today that's only on for admins and the people you named, so a reviewer would get tennis only. |
 
-### J. OPEN DECISION: what "Feature on CourtSide's Instagram" means (you decide, Claude does it) — must, before build 15
+### J. Decided: the Instagram switch is on for everyone — done
 
-**Why it can't wait:** every new post has a "Feature on CourtSide's Instagram" switch, and it starts **on** for everyone, teens included. But the Terms say CourtSide uses posts "only so the app can work", and neither the Terms nor the privacy policy mention reposting. As things stand, the app allows something (reposting) the website never mentions, so no privacy label in section 4 can match both. Apple can reject that mismatch (rule 5.1.1), and reposting someone's photo without the Terms allowing it is a legal problem too. Both answers below fix it; Claude hasn't picked one for you.
+**What you said (Oct 5):** "Let's just make it on for everyone and then we have it listed inside of the terms and agreement."
 
-**Option 1: keep the switch (CourtSide may repost members' posts)**
+**What that means:** most new posts have a "Let CourtSide feature this on its Instagram" switch (it used to say "Feature on CourtSide's Instagram"). It starts **on** for everyone, teens included, and people can switch it off before they post, or any time after on the post itself (••• → Edit, the same switch). Posts shared only to a group, posts with a logged or tracked session's stats attached (including "Log it" posts), and instants have no switch and are never featured.
 
-- **What Claude does:** adds a plain sentence to the Terms and the privacy policy: a post left on "Feature on CourtSide's Instagram" may be reposted on CourtSide's Instagram, credited to the person's @handle, and switching it off stops that. The switch also starts **off** for teen accounts. The website change is public (app.courtsidebase.com); the teen change goes into build 15.
-- **Section 4:** keep **Developer's Advertising or Marketing** ticked on Photos or Videos and User ID.
-- **Send Claude:** **"8J option 1: keep the Instagram switch. Add it to the Terms and privacy policy, and start it off for teen accounts."**
-- Starting it off for adults too (people opt in) is still option 1: anyone who switches it on can be reposted, so the Terms, privacy policy and marketing boxes still need it. If you want that, add "and off for adults too" to the sentence.
+**What Claude did:**
 
-**Option 2: remove the switch (CourtSide never reposts members' posts)**
+- **Terms:** a new section, "When CourtSide features your post". While the switch is on, the person gives CourtSide a free, non-exclusive licence to show that post (photo or clip, caption, @handle) on CourtSide's own social media and marketing, credited to their @handle. Switching it off (before posting, or any time after on Edit post), deleting the post, or emailing support@ to have it switched off stops any new use; anything already up can be taken down on request. Nothing is sold to anyone.
+- **Privacy policy:** the same thing in one line of "What we collect" (next to what you post), a line in "Your choices" on how to switch it off, a sentence each in "Private accounts" and the teen rules saying a featured post is public even from a private or teen account, a line under "Some things stay" for posts already featured when an account is deleted, and Instagram (Meta) in "Services we rely on".
+- **The switch's words** on the post screen are plainer now, and the same switch is on **Edit post** (••• → Edit on your own post), so it can be switched off after posting. It isn't there on group posts or posts with a session's stats, which are never featured.
+- **The short terms** (the "I agree" page) gained one line: "Featured posts: CourtSide may feature your posts on its Instagram, credited to you. Switch it off on any post when you share it, or later in Edit post."
+- **Section 4:** **Developer's Advertising or Marketing** stays ticked on Photos or Videos and User ID.
 
-- **What Claude does:** takes the switch off the post screen, in build 15. The Terms' "only so the app can work" is then simply true, so the website doesn't change.
-- **Section 4:** **untick** Developer's Advertising or Marketing on Photos or Videos and User ID. No row has a marketing purpose then.
-- **Send Claude:** **"8J option 2: remove the Feature on CourtSide's Instagram switch."**
-
-Nothing else in this pack changes with your answer: the description, the review notes and the demo-account steps work either way.
+**Still for you:** the Terms and privacy policy go live with the next website update (public, on app.courtsidebase.com). People who agreed to the Terms before today aren't asked again unless Claude bumps the Terms version, which shows everyone the "I agree" page once more on their next open. Say **"Ask everyone to agree to the new Terms"** if you want that.
 
 ### K. The forms (you, about 45 minutes)
 
 - [ ] **App Information:** Name, Subtitle, Category, Content Rights (section 1). **Save.**
 - [ ] **Age Rating:** questionnaire done, shows **13+** (section 3).
-- [ ] **App Privacy:** URL saved, 19 types set up, the marketing boxes match your answer to item J, **Publish** pressed (section 4).
+- [ ] **App Privacy:** URL saved, 19 types set up, the two marketing boxes ticked (item J), **Publish** pressed (section 4).
 - [ ] **Pricing and Availability:** Free, United States only (section 2).
 - [ ] **Version page:** 8 screenshots in order, Promotional Text, Description, Keywords, Support URL, Marketing URL, Copyright (section 5).
 - [ ] **Build:** **15** selected.
@@ -670,7 +666,7 @@ Nothing else in this pack changes with your answer: the description, the review 
 ## 9. Your to-do
 
 1. **Tonight or tomorrow morning:** switch on Sign in with Apple (8A), or tell Claude to.
-2. **Tomorrow (Tue Oct 6):** pick option 1 or 2 for the Instagram switch and send Claude that sentence (8J; it has to be in before build 15). Send your two calls (8I). Make the Sign in with Apple key (8B). Publish Google sign-in (8G). Email support@ (8H). Hidden words (8C) is already done.
+2. **Tomorrow (Tue Oct 6):** send your two calls (8I). Make the Sign in with Apple key (8B). Publish Google sign-in (8G). Email support@ (8H). Hidden words (8C) is already done.
 3. **When Claude says main is ready:** start build 15 (8D).
 4. **Wed Oct 7:** install build 15, test it, test Phone number and WHOOP (8E, 8F), and make the two demo accounts (section 6, starting with Location off).
 5. **Wed or Thu:** fill in the forms (8K), paste the notes with the demo logins, and press **Submit for Review** by **Thu Oct 8**.

@@ -24,6 +24,8 @@ const RULES = [
   { head: 'Be respectful', body: 'No harassment, hate speech, threats or sexual content. CourtSide has zero tolerance for objectionable content or abusive users.' },
   { head: 'Report problems', body: 'Tap ••• on any post or profile to report it. We review every report within 24 hours.' },
   { head: 'Enforcement', body: 'Content that breaks these rules is removed, and accounts that break them may be suspended.' },
+  // The Terms' "When CourtSide features your post" in one line (owner, Oct 5: on for everyone, disclosed).
+  { head: 'Featured posts', body: 'CourtSide may feature your posts on its Instagram, credited to you. Switch it off on any post when you share it, or later in Edit post.' },
 ];
 
 /** Each part arrives a beat after the one above it. */
