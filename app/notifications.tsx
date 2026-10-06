@@ -108,7 +108,7 @@ const VERB: Record<NotificationKind, string> = {
   report: 'sent a report',
   // The words come from the row's preview (migration 108); see verbFor.
   removed: 'removed something of yours',
-  // The words come from the row's preview (migration 2026100600016); see verbFor.
+  // The words come from the row's preview (migration 20261006000139); see verbFor.
   review: 'looked again at something of yours',
   'review-request': 'asked for a review',
   booking: 'booked you',
@@ -194,7 +194,7 @@ function removedNotice(preview: string | undefined): { thing: string; reason?: s
 
 /**
  * The server's notice about an ask for a review (migration
- * 2026100600016): "Your post was restored." or "We looked again and your
+ * 20261006000139): "Your post was restored." or "We looked again and your
  * clip stays removed: Spam or scams.", in its parts.
  */
 function reviewNotice(preview: string | undefined): { restored: boolean; thing: string; reason?: string } {

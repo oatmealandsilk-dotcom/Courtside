@@ -86,7 +86,7 @@ const RULES: Record<TakedownReason, { lead: string; list?: string[]; after?: str
   },
 };
 
-/** What happens to something taken down, as the app and the database actually do it (migrations 23, 108, 115 and 2026100600016). */
+/** What happens to something taken down, as the app and the database actually do it (migrations 23, 108, 115 and 20261006000139). */
 const AFTER: { icon: keyof typeof Ionicons.glyphMap; text: string; review?: true }[] = [
   { icon: 'eye-off-outline', text: 'Only you and CourtSide’s admins can still see it. It’s gone from feeds, profiles, search and shared links for everyone else, and so are the comments under it.' },
   { icon: 'archive-outline', text: 'Nothing is deleted. It stays on your profile, marked Removed, with the reason. You can still delete or archive it, but not edit it while it’s down.' },

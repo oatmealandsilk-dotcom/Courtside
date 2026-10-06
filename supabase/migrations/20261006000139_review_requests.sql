@@ -1,4 +1,4 @@
--- CourtSide · migration 2026100600016: asking CourtSide to look again at
+-- CourtSide · migration 20261006000139: asking CourtSide to look again at
 -- something taken down (Oct 5, 11:19pm, owner, looking at his own removed
 -- post: "why was this removed. what rules. should we have smth that explain
 -- the guidelines if someones post is removed").
@@ -65,7 +65,7 @@ begin
      or to_regclass('public.notifications') is null
      or not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'coach_replies' and column_name = 'removed_reason')
      or not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'story_comments' and column_name = 'removed_reason') then
-    raise exception 'Migration 2026100600016 stopped before changing anything: migration 108 (taking things down) has to run first.';
+    raise exception 'Migration 20261006000139 stopped before changing anything: migration 108 (taking things down) has to run first.';
   end if;
 end $$;
 

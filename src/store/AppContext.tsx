@@ -488,13 +488,13 @@ interface AppState extends Bootstrap, CourtLifeState, FeedGroupsState {
   hiddenWords: HiddenWords | null;
   /**
    * Your own asks for a review of something taken down (migration
-   * 2026100600016): null until something removed of yours first shows and
+   * 20261006000139): null until something removed of yours first shows and
    * asks for them. The demo keeps its own on this phone.
    */
   reviewRequests: ReviewRequest[] | null;
   /**
    * Asking for a review is not on this database yet (no migration
-   * 2026100600016): "Ask for a review" stays hidden, and "Why? See the
+   * 20261006000139): "Ask for a review" stays hidden, and "Why? See the
    * rules" shows alone. Read again on the next full refresh.
    */
   reviewsOff: boolean;
@@ -1080,7 +1080,7 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
   /** Admins only: Settings → Admin → Removed. 'not_ready' before migration 108; null when it could not load. */
   loadRemoved: () => Promise<RemovedItem[] | 'not_ready' | null>;
   /**
-   * Your own asks for a review (migration 2026100600016), into
+   * Your own asks for a review (migration 20261006000139), into
    * `reviewRequests`. Asked once, the first time something removed of yours
    * shows; a database without the migration counts as none asked.
    */
@@ -5316,7 +5316,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
   restoreRef.current = restoreContent;
   const loadRemoved = useCallback(async () => (live(stateRef.current.currentUserId) ? remote.fetchRemoved() : []), []);
-  // Asking for a review (migration 2026100600016). Your own asks are read
+  // Asking for a review (migration 20261006000139). Your own asks are read
   // once, the first time something removed of yours shows; the demo keeps
   // its asks on this phone. A read that fails is tried again a few times,
   // further apart each time, while "Ask for a review" works meanwhile.
@@ -5405,7 +5405,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
     showToast({
       title: result === 'refused' ? 'Only admins can do that' : result === 'not_ready' ? 'Reviews aren’t switched on yet' : result === 'gone' ? 'It’s already gone' : 'Couldn’t save that. Try again.',
-      body: result === 'not_ready' ? 'It needs the database update (migration 2026100600016) first.' : undefined,
+      body: result === 'not_ready' ? 'It needs the database update (migration 20261006000139) first.' : undefined,
       icon: 'alert-circle-outline', long: true,
     });
     return result;

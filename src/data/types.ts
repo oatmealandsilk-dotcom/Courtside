@@ -609,7 +609,7 @@ export interface RemovedItem {
 }
 
 /**
- * Where an author's "Ask for a review" stands (migration 2026100600016):
+ * Where an author's "Ask for a review" stands (migration 20261006000139):
  * waiting for an admin, looked at again and kept down, or put back.
  */
 export type ReviewStatus = 'open' | 'kept' | 'restored';
@@ -1215,7 +1215,7 @@ export type NotificationKind =
    */
   | 'removed'
   /**
-   * How your "Ask for a review" went (migration 2026100600016). Actor is
+   * How your "Ask for a review" went (migration 20261006000139). Actor is
    * you, from CourtSide; the target is what opens it, as for 'removed'; the
    * preview is the whole sentence: "Your post was restored." or "We looked
    * again and your post stays removed: Spam or scams."

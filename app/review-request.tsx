@@ -21,7 +21,7 @@ import { colors, font, lift, radius, spacing, typography } from '@/theme';
  * that was taken down. A line on what happens, an optional note (up to 300
  * characters, read only by CourtSide's admins) and one button. Once per
  * take-down: asked before, it says so instead. The server checks all of it
- * again (request_review, migration 2026100600016).
+ * again (request_review, migration 20261006000139).
  *
  * Address: /review-request?kind=post|hit|comment|hit-comment|question|answer|coach-question|coach-reply&id=…
  */

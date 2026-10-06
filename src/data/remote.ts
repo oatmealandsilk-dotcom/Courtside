@@ -1460,7 +1460,7 @@ export const REVIEW_NOTE_MAX = 300;
 /**
  * How "Ask for a review" went: 'done', 'already' (asked about this take-down
  * before), 'not_removed' (put back meanwhile), 'not_yours', 'gone' (deleted),
- * 'not_ready' (a database without migration 2026100600016) or 'failed'.
+ * 'not_ready' (a database without migration 20261006000139) or 'failed'.
  */
 export type ReviewAskResult = 'done' | 'already' | 'not_removed' | 'not_yours' | 'gone' | 'not_ready' | 'failed';
 /** Never closed_by: the app is not told which admin answered (the database does not hand it out either). */
@@ -2902,7 +2902,7 @@ export const remote = {
     });
   },
   /**
-   * Your own asks for a review (review_requests, migration 2026100600016),
+   * Your own asks for a review (review_requests, migration 20261006000139),
    * newest first; or, for an admin with `open`, every ask still waiting.
    * 'not_ready' on a database without that migration; null when it failed.
    */

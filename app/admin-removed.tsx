@@ -47,7 +47,7 @@ function openRemoved(item: RemovedItem) {
  * else"), who took it down and when. "Restore" puts it back exactly as it
  * was: the card leaves at once, and comes back if the server says no.
  *
- * An author who asked for a review (migration 2026100600016) puts their card
+ * An author who asked for a review (migration 20261006000139) puts their card
  * at the top, marked "Review asked" with their note. Restore answers it
  * ("Your post was restored."); "Keep removed" answers it the other way ("We
  * looked again and your post stays removed."). Either way its author is told.

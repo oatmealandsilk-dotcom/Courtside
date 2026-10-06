@@ -196,7 +196,7 @@ export default function PostMenu() {
     const what = isHit ? 'hit' as const : 'post' as const;
     const thing = thingWord(what, post?.kind === 'clip');
     rows.push({ key: 'rules', icon: 'book-outline', label: 'See the rules', note: `Why your ${thing} was removed.`, onPress: () => router.replace({ pathname: '/guidelines', params: { rule: removed.reason, what: thing } }) });
-    // No ask to offer before reviews are on this database (migration 2026100600016).
+    // No ask to offer before reviews are on this database (migration 20261006000139).
     if (!reviewsOff) rows.push(
       review?.status === 'open'
         ? { key: 'review', icon: 'time-outline', label: 'Review asked', note: 'We’ll let you know.', waiting: true, onPress: () => undefined }
