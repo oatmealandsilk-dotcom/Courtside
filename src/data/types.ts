@@ -146,6 +146,15 @@ export interface PublicStreak {
   through: string;
 }
 
+/**
+ * Someone you follow who is on a streak, for "Friends on a streak" in the
+ * weekly recap (migration 2026100600017): who, and their streak as others
+ * see it. Never anything else about them.
+ */
+export interface FriendStreak extends PublicStreak {
+  userId: ID;
+}
+
 /** One session you logged: what kind, how long, and for a match whether you won. Private to you. */
 export interface PracticeSession {
   id: ID;

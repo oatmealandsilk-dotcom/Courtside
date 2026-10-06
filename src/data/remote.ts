@@ -23,7 +23,7 @@ import { blankVideoLocation } from '@/lib/videoLocation';
 import { noteStep } from '@/lib/crashReporting';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
-import type { Answer, ChatEvent, ChatPhoto, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, DetectedActivity, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, HiddenWords, HiddenWordsKind, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, CourtNote, LastSeen, MapPlace, MapVisibility, TaggedCourt, Question, Removed, RemovedItem, Story, SurfacePreference, TakedownKind, TakedownReason, Tip, TournamentEntry, User, PublicStreak, CoachApplication, CourtAccess, CourtAccessSource, CourtDayPart, CourtFacts, CourtFollowCount, CourtNow, CourtKings, CourtRegulars, CourtReview, CourtRightNow, CourtRing, FlybyPerson, FollowedCourt, SessionTag, SessionTagRefusal, SessionTagRole, FeedGroup, FeedGroupCard, DiscoverGroup, GroupLook, Invitee, ContactMatch, HeadToHead, MatchSet, SessionWith } from './types';
+import type { Answer, FriendStreak, ChatEvent, ChatPhoto, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, DetectedActivity, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, HiddenWords, HiddenWordsKind, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, CourtNote, LastSeen, MapPlace, MapVisibility, TaggedCourt, Question, Removed, RemovedItem, Story, SurfacePreference, TakedownKind, TakedownReason, Tip, TournamentEntry, User, PublicStreak, CoachApplication, CourtAccess, CourtAccessSource, CourtDayPart, CourtFacts, CourtFollowCount, CourtNow, CourtKings, CourtRegulars, CourtReview, CourtRightNow, CourtRing, FlybyPerson, FollowedCourt, SessionTag, SessionTagRefusal, SessionTagRole, FeedGroup, FeedGroupCard, DiscoverGroup, GroupLook, Invitee, ContactMatch, HeadToHead, MatchSet, SessionWith } from './types';
 import { validSets } from '@/features/activity/score';
 import { TERMS_VERSION } from '@/lib/legal';
 import { readinessOf, sessionTagNamesLive, sessionToSend, setSessionTagNamesLive, trustedSession } from './sessionTagGate';
@@ -1557,6 +1557,28 @@ export const remote = {
     if (missingFunction(error)) { missingThisSession.add('set_my_streak'); return false; }
     console.warn('[remote] streak not shared', error.message);
     return false;
+  },
+
+  /**
+   * "Friends on a streak" for the weekly recap (friends_on_streak, migration
+   * 2026100600017): up to 5 people you follow on a running streak, longest
+   * first, as the server allows (a teen only when they follow you back).
+   * `today` is this phone's day. Null on a database without it (asked once
+   * a session) or when it could not be asked: the caller then keeps to
+   * friends who follow each other with you.
+   */
+  async fetchFriendsOnStreak(today: string): Promise<FriendStreak[] | null> {
+    if (!supabase || missingThisSession.has('friends_on_streak') || !/^\d{4}-\d{2}-\d{2}$/.test(today)) return null;
+    const { data, error } = await supabase.rpc('friends_on_streak', { p_today: today })
+      .then((r) => r, (e: unknown) => ({ data: null, error: { message: String(e) } as { code?: string; message: string } }));
+    if (error) {
+      if (missingFunction(error)) missingThisSession.add('friends_on_streak');
+      else console.warn('[remote] friends on a streak', error.message);
+      return null;
+    }
+    return ((Array.isArray(data) ? data : []) as { user_id?: unknown; days?: unknown; through_day?: unknown }[])
+      .filter((r) => typeof r.user_id === 'string' && UUID_RE.test(r.user_id) && typeof r.through_day === 'string' && num(r.days) > 0)
+      .map((r) => ({ userId: r.user_id as string, days: num(r.days), through: (r.through_day as string).slice(0, 10) }));
   },
 
   /* ------------------------------ hidden words ------------------------------ */

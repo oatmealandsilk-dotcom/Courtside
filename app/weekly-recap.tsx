@@ -5,6 +5,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { HitGlyph } from '@/components/HitGlyph';
+import { FriendsOnStreak } from '@/components/recap/FriendsOnStreak';
 import { RecapCard, RecapHighlights } from '@/components/recap/RecapCard';
 import { RecapStoryArt } from '@/components/recap/RecapStoryArt';
 import { Button, EmptyState, Screen } from '@/components/ui';
@@ -37,7 +38,8 @@ const ACTIONS: { key: StoryAction; label: string; spoken: string; icon: React.Co
  * session: the card as an Instagram story picture. Only you see it until you
  * share it. A rest week (nothing played, something the week before) is a
  * small card of its own instead: what you played the week before and "Find
- * a hit", never a big zero, and nothing to share.
+ * a hit", never a big zero, and nothing to share. At the foot of both,
+ * "Friends on a streak" (FriendsOnStreak), when anyone you follow is on one.
  */
 export default function WeeklyRecap() {
   const styles = useThemedStyles(styleDefinitions);
@@ -92,6 +94,7 @@ export default function WeeklyRecap() {
             <Text style={styles.restLine}>{`You played ${duration(recap.prevMinutes)} the week before.`}</Text>
             <Button label="Find a hit" onPress={findHit} style={styles.restButton} />
           </View>
+          <FriendsOnStreak />
         </View>
       </Screen>
     );
@@ -130,6 +133,8 @@ export default function WeeklyRecap() {
               <Ionicons name="lock-closed-outline" size={13} color={colors.textMuted} />
               <Text style={styles.onlyText}>Only you see this until you share it.</Text>
             </View>
+            {/* Friends on a streak: only here, never on the picture above. */}
+            <FriendsOnStreak />
           </View>
         </Screen>
       </View>
