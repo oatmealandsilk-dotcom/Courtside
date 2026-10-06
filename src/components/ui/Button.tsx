@@ -21,6 +21,8 @@ interface Props {
   onPress: () => void;
   variant?: Variant;
   disabled?: boolean;
+  /** Looks greyed out like `disabled`, but still takes a tap (to say what is missing). */
+  dim?: boolean;
   loading?: boolean;
   style?: StyleProp<ViewStyle>;
   full?: boolean;
@@ -31,6 +33,7 @@ export function Button({
   onPress,
   variant = 'primary',
   disabled = false,
+  dim = false,
   loading = false,
   style,
   full = false,
@@ -38,6 +41,7 @@ export function Button({
   const styles = useThemedStyles(styleDefinitions);
   const palette = paletteFor(variant);
   const inactive = disabled || loading;
+  const faded = inactive || dim;
 
   return (
     <Tappable
@@ -49,9 +53,9 @@ export function Button({
       accessibilityLabel={label}
       style={[
         styles.base,
-        variant === 'primary' && !inactive && (pageIsDark() ? styles.liftDark : styles.lift),
+        variant === 'primary' && !faded && (pageIsDark() ? styles.liftDark : styles.lift),
         full && styles.full,
-        { backgroundColor: palette.bg, borderColor: palette.border, opacity: inactive ? 0.5 : 1 },
+        { backgroundColor: palette.bg, borderColor: palette.border, opacity: faded ? 0.5 : 1 },
         style,
       ]}
     >

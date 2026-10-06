@@ -1,12 +1,15 @@
 import type { PageStop } from '@/features/navigation/pageSlide';
+import type { MapLead } from './mapLead';
 
 /**
- * The first-run tutorial, as words. Six short tips, one thing each, in the
- * strip's order, and the pages slide along under them to every page they
- * talk about: the map the app opens on, then swiping, which slides the pages
- * on to the threads, then the Feed and the +, then Coaching, then Profile.
- * When it ends the pages glide back to the map (TourOverlay). This is the
- * only place the tutorial's copy lives, and where each tip sits.
+ * The first-run tutorial, as words. Three short tips, one thing each (Oct 5,
+ * owner: "Do all"): the one thing to do on the map the app opens on, then
+ * swiping, which slides the pages on to Discussions, then the + over the
+ * Feed. When it ends the pages glide back to the map (TourOverlay). Asking a
+ * coach and where messages live are no longer tips here: each is a small
+ * tip the first time a new player opens that place (features/tips), so
+ * Settings → Tips turns them off too. This is the only place the
+ * tutorial's copy lives, and where each tip sits.
  *
  * "Phone" is the bottom-bar layout (the iPhone app, and a phone-width
  * browser). "Wide" is the sidebar layout (a computer or tablet browser),
@@ -14,8 +17,8 @@ import type { PageStop } from '@/features/navigation/pageSlide';
  */
 export type TourTargetId =
   | 'tab-discuss' | 'tab-home' | 'create' | 'tab-coaches' | 'tab-profile' | 'side-messages'
-  // On the pages themselves: the Ask a coach box with its note, and the bell and paper plane at the top of Profile.
-  | 'coach-ask' | 'profile-inbox';
+  // On the map page: the one thing to do there (see mapLead.ts).
+  | 'map-lead';
 
 /**
  * The shape of a lit window: round-ended for a tab, a circle for the +, a
@@ -29,7 +32,7 @@ export type TourSpot = { id: TourTargetId; shape: HoleShape };
 type Words = { title: string; body: string };
 
 export interface TourStep {
-  key: 'map' | 'swipe' | 'feed' | 'create' | 'coaching' | 'you';
+  key: 'map' | 'swipe' | 'create';
   /** The window in the bar (the sidebar on a computer); null is no window there. */
   target: {
     phone: TourSpot | null;
@@ -49,6 +52,18 @@ export interface TourStep {
   wide: Words | null;
   /** For VoiceOver and TalkBack, where "swipe up" means something else. */
   screenReader?: Words;
+  /**
+   * Words for the one thing the map page leads with right now (mapLead.ts):
+   * in a new city, sharing your link; for a teen, bringing friends; where
+   * players already are, "I'm free". The same in both layouts.
+   */
+  byLead?: Partial<Record<MapLead, Words>>;
+  /**
+   * The bar's window only stands in for the page's (the map tip): lit when the
+   * thing on the page can't be found, never beside it, so two lights never
+   * compete on a page the player is already on.
+   */
+  barOnlyIfNotOnPage?: boolean;
   /** The page under the tip as it comes up; the tutorial slides the pages there. Left out, they stay where the last tip left them. */
   page?: PageStop;
   /** Where the pages slide on their own while the tip is up, the way a swipe would. */
@@ -58,70 +73,49 @@ export interface TourStep {
 const MAP: PageStop = { pathname: '/discuss', section: 'players' };
 const THREADS: PageStop = { pathname: '/discuss', section: 'discussions' };
 const FEED: PageStop = { pathname: '/', section: '' };
-const COACHING: PageStop = { pathname: '/coaches', section: '' };
-const PROFILE: PageStop = { pathname: '/profile', section: 'Posts' };
 
 export const TOUR_STEPS: TourStep[] = [
   {
-    // The page the app opens on, so no window: the whole screen is the subject.
+    // The page the app opens on, with the one thing to do there lit: the
+    // invite card in a city where nobody shares a spot yet, the friends card
+    // for a teen, "I'm free" where players already are. The words point at
+    // it rather than repeat it. Not found (a search open, a small screen),
+    // the tip still shows, on the bar's Community button instead.
     key: 'map',
-    target: { phone: null, wide: null },
+    target: { phone: { id: 'tab-discuss', shape: 'pill' }, wide: { id: 'tab-discuss', shape: 'row' } },
+    onPage: { phone: { id: 'map-lead', shape: 'box' }, wide: { id: 'map-lead', shape: 'box' } },
+    barOnlyIfNotOnPage: true,
     page: MAP,
-    // What the map always has, even in a new city: courts, the players who shared their spot, open hits.
-    phone: { title: 'Your map', body: 'Courts near you, players who shared their spot, and open hits to join.' },
-    wide: { title: 'Your map', body: 'Courts near you, players who shared their spot, and open hits to join.' },
+    phone: { title: 'Your map', body: 'Courts near you, and the players who shared their spot.' },
+    wide: { title: 'Your map', body: 'Courts near you, and the players who shared their spot.' },
+    byLead: {
+      // One line: the lit card says "Send them your link", and a shorter tip keeps clear of the map's own lines above it.
+      invite: { title: 'Start here', body: 'Anyone who joins follows you.' },
+      friends: { title: 'Start here', body: 'Share your link, or find a friend by @handle.' },
+      free: { title: 'Up for a hit?', body: 'Tap I’m free, and players nearby see your green ring on the map.' },
+      'free-friends': { title: 'Up for a hit?', body: 'Tap I’m free, and friends who follow you back see your green ring.' },
+    },
   },
   {
-    // The pages slide from the map to the threads on their own under this
+    // The pages slide from the map to Discussions on their own under this
     // tip, while a fingertip above the card shows the swipe that does it.
     key: 'swipe',
     target: { phone: null, wide: null },
     page: MAP,
     slidesTo: THREADS,
-    phone: { title: 'Swipe between pages', body: 'Swipe left and right to move between the map, threads and your feed.' },
+    // True before the pages slide and after: they move while the tip is up.
+    phone: { title: 'Swipe for more', body: 'Swipe sideways between the map, Discussions and your Feed.' },
     // A computer has no swipe: its sidebar already names every page.
     wide: null,
-    screenReader: { title: 'Pages side by side', body: 'The map, threads and your feed sit side by side. The bar at the bottom moves between them.' },
+    screenReader: { title: 'Pages side by side', body: 'The map, Discussions and your Feed sit side by side. The bar at the bottom moves between them.' },
   },
   {
-    // The pages slide on to the Feed as this tip comes up, so it is what's underneath.
-    key: 'feed',
-    target: { phone: { id: 'tab-home', shape: 'pill' }, wide: { id: 'tab-home', shape: 'row' } },
-    page: FEED,
-    phone: { title: 'Your feed', body: 'Clips, photos and posts from players. Swipe up for more; double-tap a clip to like it.' },
-    wide: { title: 'Your feed', body: 'Clips, photos and posts from players. Double-click a clip to like it.' },
-    screenReader: { title: 'Your feed', body: 'Clips, photos and threads from players, one at a time.' },
-  },
-  {
-    // Still over the Feed: the + is in the bar, the same on every page.
+    // On to the Feed, with the + lit in the bar: the same on every page.
     key: 'create',
     target: { phone: { id: 'create', shape: 'circle' }, wide: { id: 'create', shape: 'row' } },
-    // "A photo after you play" is the Create menu's own line for an Instant.
-    phone: { title: 'Share your tennis', body: 'Clips, posts, threads, or an Instant: a photo after you play.' },
-    wide: { title: 'Share your tennis', body: 'Clips, posts, threads, or an Instant: a photo after you play.' },
-  },
-  {
-    // On to Coaching. The box you type a question in (and the line under it
-    // saying who answers) gets the light, and the bar's Coaching button stays
-    // lit with it, so you know where you are.
-    key: 'coaching',
-    target: { phone: { id: 'tab-coaches', shape: 'pill' }, wide: { id: 'tab-coaches', shape: 'row' } },
-    onPage: { phone: { id: 'coach-ask', shape: 'box' }, wide: { id: 'coach-ask', shape: 'box' } },
-    page: COACHING,
-    phone: { title: 'Ask a coach', body: 'Type your question here. It goes to our coaches, and asking is free.' },
-    wide: { title: 'Ask a coach', body: 'Type your question here. It goes to our coaches, and asking is free.' },
-  },
-  {
-    // On to Profile, where messages really live: the bell and the paper plane
-    // in its top-right corner get the light, with the bar's Profile button.
-    // A computer's sidebar has its own Messages row, so there that row is lit.
-    key: 'you',
-    target: { phone: { id: 'tab-profile', shape: 'pill' }, wide: { id: 'side-messages', shape: 'row' } },
-    onPage: { phone: { id: 'profile-inbox', shape: 'round' }, wide: null },
-    page: PROFILE,
-    phone: { title: 'Messages live here', body: 'The paper plane opens your chats. The bell shows your alerts.' },
-    wide: { title: 'Messages and alerts', body: 'Chats with players and coaches. Alerts sit just above.' },
-    screenReader: { title: 'Messages live here', body: 'At the top of your profile: Notifications, then Messages for your chats.' },
+    page: FEED,
+    phone: { title: 'Share your tennis', body: 'Post a clip, log a session, or ask a question.' },
+    wide: { title: 'Share your tennis', body: 'Post a clip, log a session, or ask a question.' },
   },
 ];
 
@@ -138,9 +132,5 @@ export function tourPageAt(steps: TourStep[], at: number): PageStop | null {
   return null;
 }
 
-/**
- * The last tip's button. Not "Start watching" or "Start exploring": the last
- * tip is about messages, so a plain "Got it" closes it, and the pages glide
- * back to the map the app opens on.
- */
+/** The last tip's button: a plain "Got it", and the pages glide back to the map the app opens on. */
 export const LAST_BUTTON = 'Got it';

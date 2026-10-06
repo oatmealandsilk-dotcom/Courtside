@@ -432,10 +432,10 @@ export function Screen({
 
   // "Top" is just under the pull-to-refresh strip: landing on the strip by a
   // tap rather than a pull would show the spinner with nothing to dismiss it.
-  useEffect(() => subscribeScrollToTop((tab, instant) => {
+  useEffect(() => subscribeScrollToTop((tab, instant, below = 0) => {
     if (TAB_FOR_KEY[key] !== tab && key !== tab) return;
-    scroller.current?.scrollTo({ y: strip, animated: !instant });
-    if (instant) scrollMemory.set(key, 0);
+    scroller.current?.scrollTo({ y: strip + below, animated: !instant });
+    if (instant) scrollMemory.set(key, below);
   }), [key, strip]);
 
   // Under the header, over the top of the page: a small note once a pull has fetched.

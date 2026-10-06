@@ -17,7 +17,7 @@ import { BrandMark } from '@/components/BrandMark';
 import { TermsCheck } from '@/components/TermsCheck';
 import { Avatar, Button, Field } from '@/components/ui';
 import { isSupabaseConfigured } from '@/lib/supabase';
-import { remote, type HandleStatus } from '@/data/remote';
+import { auth as remoteAuth, remote, type HandleStatus } from '@/data/remote';
 import { BLOCKED_WORDS_NOTE } from '@/features/hiddenWords/hiddenWords';
 import { SigningInAs, SigningInWith } from '@/components/SigningInAs';
 import { useLeave } from '@/components/LeaveCurtain';
@@ -30,6 +30,13 @@ import { StatusShade } from '@/components/StatusShade';
 import { colors, lift, radius, spacing, typography, font } from '@/theme';
 
 type Mode = 'sign-in' | 'sign-up';
+
+/** A username made from a name: "Alex Reed" → "alexreed" (accents off, letters and numbers only, 20 at most); too short to use, nothing. */
+function suggestedHandle(name: string): string {
+  const plainName = typeof name.normalize === 'function' ? name.normalize('NFD').replace(/[\u0300-\u036f]/g, '') : name;
+  const handle = plainName.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 20);
+  return handle.length >= 3 ? handle : '';
+}
 
 /**
  * Email and password against Supabase. If the project is not configured the
@@ -126,6 +133,17 @@ export default function SignIn() {
     } catch { /* No storage, no message to show. */ }
   }, []);
 
+  // The username follows the name until it is typed in itself (Oct 5): "Alex
+  // Reed" offers @alexreed, and if that is taken, @alexreed2 and on. Typing
+  // in the box makes it yours, and it stops following.
+  const [handleTyped, setHandleTyped] = useState(false);
+  const [handleTry, setHandleTry] = useState(0);
+  const handleBase = suggestedHandle(name);
+  useEffect(() => { setHandleTry(0); }, [handleBase]);
+  useEffect(() => {
+    if (handleTyped || mode !== 'sign-up') return;
+    setHandle(handleBase ? (handleTry ? `${handleBase.slice(0, 18)}${handleTry + 1}` : handleBase) : '');
+  }, [handleBase, handleTry, handleTyped, mode]);
   const cleanHandle = handle.trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
   // The live check on a new handle: a beat after typing stops, ask whether it is free.
   const [handleStatus, setHandleStatus] = useState<HandleStatus | null>(null);
@@ -137,6 +155,10 @@ export default function SignIn() {
     return () => { stale = true; clearTimeout(timer); };
   }, [cleanHandle, mode]);
   const handleGone = handleStatus === 'taken' || handleStatus === 'held';
+  // A suggested username already taken: the next one along, a few times, before leaving it to them.
+  useEffect(() => {
+    if (!handleTyped && (handleGone || handleStatus === 'words') && handleTry < 5) setHandleTry((n) => n + 1);
+  }, [handleGone, handleStatus, handleTyped]); // eslint-disable-line react-hooks/exhaustive-deps
   // 3 to 20 characters: new handles need at least 3, and the sign-up itself keeps only the first 20.
   // 'words': CourtSide refuses words in it (migration 117); said here, so a new account is never quietly given another handle.
   const handleFits = /^[a-z0-9_]{3,20}$/.test(cleanHandle) && handleStatus !== 'invalid' && handleStatus !== 'words';
@@ -253,6 +275,33 @@ export default function SignIn() {
     }
   };
 
+  // Confirm email on (an owner switch in Supabase): the account waits for the
+  // link in the email. Once it is tapped (here or anywhere), Continue signs in
+  // with the email and password typed a moment ago, so nobody signs in twice.
+  const canContinue = sent?.kind === 'confirm' && password.length >= 6;
+  const confirmed = async () => {
+    if (busy || !sent) return;
+    setBusy(true); setError(null); setNotice(null);
+    try {
+      await actions.signIn(sent.to, password);
+      leave(() => router.replace('/'));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '';
+      setError(/confirm/i.test(message) ? 'Not confirmed yet. Tap the link in the email first, then come back here.' : message || 'Could not sign in.');
+    } finally { setBusy(false); }
+  };
+  // Its own flag, so "Resend email" and Continue never both read as busy at once.
+  const [resending, setResending] = useState(false);
+  const resendConfirm = async () => {
+    if (resending || !sent) return;
+    setResending(true); setError(null); setNotice(null);
+    try {
+      await remoteAuth.resendConfirmation(sent.to);
+      setNotice('Sent again.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not send the email again.');
+    } finally { setResending(false); }
+  };
   const chooser = remembered.length > 0 && !sent;
   const welcome = !add && !started && !sent && !chooser && !useAnother;
   // Android's Back goes back a step on this page, the same as its own back
@@ -298,17 +347,35 @@ export default function SignIn() {
               <Text style={styles.title}>Check your inbox</Text>
               <Text style={styles.inboxBody}>
                 We sent a {sent.kind === 'reset' ? 'password reset link' : 'confirmation link'} to <Text style={styles.inboxTo}>{sent.to}</Text>.{' '}
-                {sent.kind === 'reset' ? 'Follow the link to create a new password. It expires in one hour.' : 'Follow the link to confirm your email, then sign in here.'}
+                {sent.kind === 'reset' ? 'Follow the link to create a new password. It expires in one hour.'
+                  : canContinue ? 'Tap the link in it, then come back here and tap Continue.' : 'Follow the link to confirm your email, then sign in here.'}
               </Text>
-              <Text style={styles.inboxHint}>Didn’t get it? Check your spam folder{sent.kind === 'reset' ? ', or resend the email.' : '.'}</Text>
+              <Text style={styles.inboxHint}>Didn’t get it? Check your spam folder, or resend the email.</Text>
               {error ? <Text style={styles.error}>{error}</Text> : null}
+              {notice ? <Text style={styles.notice}>{notice}</Text> : null}
               <View style={styles.inboxActions}>
-                <Pressable accessibilityRole="button" onPress={backToForm} style={({ pressed }) => [styles.secondary, pressed && styles.pressed]}>
-                  <Text style={styles.secondaryText}>Back to sign in</Text>
-                </Pressable>
+                {canContinue ? (
+                  // Confirmed in the email (on any phone or browser): straight in, with the password typed a moment ago.
+                  <Button label={busy ? 'Signing in…' : 'Continue'} disabled={busy} onPress={() => { void confirmed(); }} full />
+                ) : (
+                  <Pressable accessibilityRole="button" onPress={backToForm} style={({ pressed }) => [styles.secondary, pressed && styles.pressed]}>
+                    <Text style={styles.secondaryText}>Back to sign in</Text>
+                  </Pressable>
+                )}
                 {sent.kind === 'reset' ? (
                   <Pressable accessibilityRole="button" disabled={busy} onPress={() => { void forgot(); }} hitSlop={8} style={styles.linkButton}>
                     <Text style={styles.link}>{busy ? 'Sending…' : 'Resend email'}</Text>
+                  </Pressable>
+                ) : (
+                  <Pressable accessibilityRole="button" disabled={resending} onPress={() => { void resendConfirm(); }} hitSlop={8} style={styles.linkButton}>
+                    <Text style={styles.link}>{resending ? 'Sending…' : 'Resend email'}</Text>
+                  </Pressable>
+                )}
+                {/* With Continue in its place, still a way back to the form (a mistyped email, another
+                    account): an iPhone and a browser have no other back on this page. */}
+                {canContinue ? (
+                  <Pressable accessibilityRole="button" accessibilityLabel="Wrong email? Go back" disabled={busy} onPress={backToForm} hitSlop={8} style={styles.linkButton}>
+                    <Text style={styles.quietLink}>Wrong email? Go back</Text>
                   </Pressable>
                 ) : null}
               </View>
@@ -441,7 +508,7 @@ export default function SignIn() {
                   <Field
                     soft
                     value={handle}
-                    onChangeText={setHandle}
+                    onChangeText={(t) => { setHandleTyped(true); setHandle(t); }}
                     placeholder="Username"
                     autoCapitalize="none"
                     autoComplete={fill('username-new')}
@@ -549,6 +616,7 @@ const styleDefinitions = StyleSheet.create({
   form: { gap: spacing.md },
   forgot: { alignSelf: 'flex-end', paddingVertical: 2 },
   link: { ...typography.smallStrong, fontSize: 14, color: colors.brand },
+  quietLink: { ...typography.small, fontSize: 14, color: colors.textMuted },
   linkButton: { alignSelf: 'center', paddingVertical: spacing.sm },
   error: { ...typography.small, color: colors.danger },
   notice: { ...typography.small, color: colors.success },

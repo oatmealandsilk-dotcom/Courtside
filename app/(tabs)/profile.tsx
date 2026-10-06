@@ -4,8 +4,8 @@ import { PlayerName } from '@/components/PlayerName';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { onSkippedSaved, readSkipped, type SetupStep } from '@/features/onboarding/setupProgress';
-import { Modal, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
-import { router } from 'expo-router';
+import { Image, Modal, Pressable, Share, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { router, usePathname } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Avatar, Button, EmptyState, Screen } from '@/components/ui';
 import { SectionPager } from '@/components/SectionPager';
@@ -25,9 +25,20 @@ import { TileViews } from '@/components/TileViews';
 import { TilePin } from '@/components/TilePin';
 import { TileRemoved } from '@/features/moderation/RemovedNote';
 import { colors, spacing, typography, font, lift, withAlpha } from '@/theme';
-import { useTourTarget } from '@/features/tour/tourStore';
+import { useTourOpen, useTourTarget } from '@/features/tour/tourStore';
+import { wrappedYear } from '@/features/wrapped/yearInTennis';
+import { TipBubble } from '@/components/TipBubble';
+import { forNewPlayer, useTip } from '@/features/tips/tips';
+import { useWelcomeNote } from '@/features/welcome/welcomeNote';
+import { useFirstMoveDone } from '@/features/onboarding/firstMoveDone';
+import { notKnownAdult } from '@/features/players/age';
+import { useIsFocused } from '@/lib/useIsFocused';
+import { useResponsive } from '@/lib/useResponsive';
 import { isTaggedIn } from '@/features/activity/sessionTags';
 import { studioLine } from '@/features/coaching/studioSummary';
+
+/** The messages tip's pointer from the right edge of the page's content (the header's own right edge): the menu button (38), the gap (14), then half the paper plane (35), less half the pointer (12). */
+const INBOX_POINTER = 38 + 14 + 17 - 6;
 
 function Profile({ previewSection }: { previewSection?: string } = {}) {
   const styles = useThemedStyles(styleDefinitions);
@@ -35,14 +46,21 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
  // A coach's studio, first of your links: what is waiting there, or how far setup has got.
  const myCoach = coaches.find((c) => c.userId === currentUserId);
  const studio = myCoach ? studioLine(myCoach, coachingRequests, coachQuestions, currentUserId) : null;
- // Nothing posted, asked or answered yet: the profile offers the first move.
- const hasMoved = !currentUserId || posts.some((p) => p.authorId === currentUserId) || questions.some((q) => q.authorId === currentUserId) || answers.some((a) => a.authorId === currentUserId);
+ // Nothing posted, asked or answered yet, and no move made on the page after setup (a link shared,
+ // players followed: firstMoveDone): the profile offers the first move.
+ const movedAfterSetup = useFirstMoveDone(currentUserId);
+ const hasMoved = !currentUserId || movedAfterSetup || posts.some((p) => p.authorId === currentUserId) || questions.some((q) => q.authorId === currentUserId) || answers.some((a) => a.authorId === currentUserId);
  // Your own posts, however far back they go: the grid and the counts are
  // yours entirely, not just whichever of them the feed happens to hold.
  useEffect(() => { if (user?.id) void actions.loadPostsOf(user.id); }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
  const { width: windowWidth } = useWindowDimensions();
- // The tutorial's last tip lights the bell and the paper plane together, so they share one box it can find.
- const tourInbox = useTourTarget('profile-inbox');
+ // The first time a new player opens Profile on a phone, a tip at the paper plane (Oct 5: it was
+ // the tutorial's last tip). Only on this tab, never a picture of it sliding in, never under the tutorial.
+ const pathname = usePathname();
+ const focused = useIsFocused();
+ const tourOpen = useTourOpen();
+ const { isPhone } = useResponsive();
+ const inboxTip = useTip('messages', focused && pathname === '/profile' && isPhone && !tourOpen && previewSection === undefined && forNewPlayer(user?.joinedAt));
  // The section lives here, not in the address (see discuss.tsx for why).
  const [localTab, setLocalTab] = useState<'Posts' | 'Clips' | 'Tagged'>('Posts');
  const section = previewSection ?? localTab;
@@ -81,7 +99,9 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
  };
  // People asking to join the groups you run.
  const groupsAsking = feedGroups.reduce((n, g) => n + (g.members.some((m) => m.id === currentUserId && m.admin) ? g.requests.length : 0), 0);
- const unseen = notifications.filter(n => n.userId === currentUserId && !n.read).length;
+ // CourtSide's own welcome counts too, until Notifications is first opened (welcomeNote).
+ const welcome = useWelcomeNote(user);
+ const unseen = notifications.filter(n => n.userId === currentUserId && !n.read).length + (welcome.unread ? 1 : 0);
  const savedCount = saved.postIds.length + saved.questionIds.length;
  const swipe = (direction: 1 | -1) => {
    const next = swipeDestination('/profile', tab, direction);
@@ -113,13 +133,15 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
        {/* Taken down by an admin (migration 108): still yours to see, dimmed and marked; nobody else sees it. */}
        {p.removed ? <TileRemoved /> : null}
      </Pressable>)}</View>
-     {!items.length && <EmptyState title={selected==='Tagged'?'No tagged posts yet':`No ${selected.toLowerCase()} yet`} body="Your shared moments will appear here."/>}
+     {/* Never a dead end (Oct 5): your own grid, empty, offers the first clip, unless the
+         "Make your first move" card at the top of the page is already asking for it. */}
+     {!items.length && <EmptyState title={selected==='Tagged'?'No tagged posts yet':`No ${selected.toLowerCase()} yet`} body={selected==='Tagged' ? 'Posts you’re tagged in will appear here.' : 'Your shared moments will appear here.'} action={selected==='Tagged' || !hasMoved ? undefined : { label: 'Post your first clip', onPress: () => router.push('/compose') }}/>}
    </View>;
  };
  // The three grids are rebuilt only when the posts change, so switching
  // section (which re-renders this page) does not rebuild every tile.
  // eslint-disable-next-line react-hooks/exhaustive-deps
- const grids = useMemo(() => TABS.map((t) => content(t)), [posts, user?.id, styles, tileW]);
+ const grids = useMemo(() => TABS.map((t) => content(t)), [posts, user?.id, styles, tileW, hasMoved]);
  if (!user) {
    const remembered = savedAccounts.find((a) => a.id === currentUserId);
    return <Screen memoryKey="profile" title="Profile" wash subtitle={remembered?.handle ? `@${remembered.handle}` : ' '}><ProfileSkeleton name={remembered?.name} avatarUrl={remembered?.avatarUrl} seed={currentUserId ?? 'you'}/></Screen>;
@@ -129,9 +151,12 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
  const page = (selected: string, live: boolean) => {
   const index = TABS.indexOf(selected as typeof TABS[number]);
   const body = <>
+   {/* At the top of the page, in its flow, its pointer under the paper plane in the header: it lines up with the cards
+       and covers nothing (the first-move card included), and the page eases back up once it is closed. */}
+   {live ? <TipBubble tip="messages" shown={inboxTip.shown} onClose={inboxTip.close} pointer="up" pointerRight={INBOX_POINTER} inline on="page" style={styles.inboxTip} /> : null}
    {!hasMoved && <Pressable accessibilityRole="link" accessibilityLabel="Make your first move" onPress={() => router.push('/first-move')} style={styles.setup}>
      <Ionicons name="videocam-outline" size={20} color={colors.brand}/>
-     <View style={{ flex: 1 }}><Text style={styles.setupTitle}>Make your first move</Text><Text style={styles.meta}>Post a clip, or answer someone's question. It's how players near you find you.</Text></View>
+     <View style={{ flex: 1 }}><Text style={styles.setupTitle}>Make your first move</Text><Text style={styles.meta}>{user && notKnownAdult(user) ? 'Add your friends, or post your first clip.' : 'Bring your hitting partners, or post your first clip.'}</Text></View>
      <Ionicons name="chevron-forward" size={16} color={colors.textMuted}/>
    </Pressable>}
    {skipped.length > 0 && <Pressable accessibilityRole="link" accessibilityLabel="Finish setting up your profile" onPress={() => router.push({ pathname: '/onboarding', params: { step: String(SETUP_STEP_INDEX[skipped[0]]), from: 'profile' } })} style={styles.setup}>
@@ -186,8 +211,7 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
   return body;
  };
  return <Screen memoryKey="profile" title="Profile" wash subtitle={`@${user.handle}`} onRefresh={previewSection === undefined && !isDesktopBrowser() ? actions.refresh : undefined} right={<View style={styles.headerActions}>
-   {/* Never folded away by the phone's renderer (a plain box can be), or the tutorial could not measure it. */}
-   <View ref={tourInbox} collapsable={false} style={styles.headerActions}>
+   <View style={styles.headerActions}>
      <Tappable accessibilityRole="link" accessibilityLabel={unseen ? `Notifications, ${unseen} new` : 'Notifications'} onPress={() => router.push('/notifications')} hitSlop={10} style={styles.headerButton}>
        <Ionicons name={unseen ? 'notifications' : 'notifications-outline'} size={27} color={colors.text}/>
        <UnreadBadge count={unseen} />
@@ -285,6 +309,8 @@ function ProfileSkeleton({ name, avatarUrl, seed }: { name?: string; avatarUrl?:
 }
 
 const styleDefinitions = StyleSheet.create({
+ // The messages tip, at the top of the page, lined up on the right with the cards under it.
+ inboxTip:{alignItems:'flex-end',paddingTop:2},
  // The ☰ menu: a small card on the overlay's shadow (it floats over the page), rows 48 tall.
  menu:{position:'absolute',minWidth:220,borderRadius:16,backgroundColor:colors.surface,borderWidth:StyleSheet.hairlineWidth,borderColor:colors.border,overflow:'hidden',boxShadow:'0px 6px 16px rgba(0, 0, 0, 0.18)'},
  menuRow:{flexDirection:'row',alignItems:'center',gap:12,minHeight:48,paddingHorizontal:16},

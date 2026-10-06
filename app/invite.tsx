@@ -9,6 +9,8 @@ import { DragSheet } from '@/components/DragSheet';
 import { Avatar } from '@/components/ui';
 import type { Invitee, InviteeMissing } from '@/data/types';
 import { inviteLink } from '@/features/invite/referral';
+import { FRIENDS_LINE } from '@/features/invite/friendsWords';
+import { notKnownAdult } from '@/features/players/age';
 import * as haptics from '@/lib/haptics';
 import { shareOutside } from '@/lib/shareOutside';
 import { useApp } from '@/store/AppContext';
@@ -36,6 +38,8 @@ const NEXT: Record<InviteeMissing, string> = {
 export default function Invite() {
   const styles = useThemedStyles(styleDefinitions);
   const { currentUser, actions } = useApp();
+  // A teen, or anyone not known to be an adult: their friends, no poster.
+  const friendsOnly = !currentUser || notKnownAdult(currentUser);
   const [closeSignal, setCloseSignal] = useState(0);
   const [copied, setCopied] = useState(false);
   const [joined, setJoined] = useState<number | null>(null);
@@ -47,7 +51,7 @@ export default function Invite() {
   const open = (id: string) => { setCloseSignal((n) => n + 1); router.push(`/user/${id}`); };
   const link = currentUser ? inviteLink(currentUser.handle) : '';
   const share = async () => {
-    try { await shareOutside('Hit with me on CourtSide', link); haptics.commit(); } catch { /* the sheet was closed */ }
+    try { if ((await shareOutside('Hit with me on CourtSide', link)) !== null) haptics.commit(); } catch { /* the sheet was closed */ }
   };
   const copy = async () => { await Clipboard.setStringAsync(link); haptics.tap(); setCopied(true); setTimeout(() => setCopied(false), 1600); };
   return (
@@ -60,7 +64,7 @@ export default function Invite() {
       </View>
     }>
       <View style={styles.body}>
-        <Text style={styles.lead}>Send them your link. When they join, they follow you, and you can follow them back.</Text>
+        <Text style={styles.lead}>{friendsOnly ? FRIENDS_LINE : 'Send them your link. When they join, they follow you, and you can follow them back.'}</Text>
         <View style={styles.linkBox}>
           <Ionicons name="link-outline" size={16} color={colors.textMuted} />
           <Text style={styles.link} numberOfLines={1}>{link.replace('https://', '')}</Text>
@@ -81,11 +85,15 @@ export default function Invite() {
             <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
           </Pressable>
         ) : null}
-        <Pressable accessibilityRole="link" accessibilityLabel="Print a poster for your club" onPress={() => router.replace('/club-poster')} style={({ pressed }) => [styles.poster, pressed && { opacity: 0.7 }]}>
-          <Ionicons name="print-outline" size={18} color={colors.text} />
-          <Text style={styles.posterText}>Print a poster for your club</Text>
-          <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
-        </Pressable>
+        {/* Never for a teen (or anyone not known to be an adult): a poster naming where they
+            play would put them in front of strangers (the same rule as EarlyInvite's card). */}
+        {friendsOnly ? null : (
+          <Pressable accessibilityRole="link" accessibilityLabel="Print a poster for your club" onPress={() => router.replace('/club-poster')} style={({ pressed }) => [styles.poster, pressed && { opacity: 0.7 }]}>
+            <Ionicons name="print-outline" size={18} color={colors.text} />
+            <Text style={styles.posterText}>Print a poster for your club</Text>
+            <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
+          </Pressable>
+        )}
         {people && people.length > 0 ? (
           <View style={styles.people}>
             {counted.length > 0 ? <Text style={styles.groupLabel}>{`Counted · ${counted.length}`}</Text> : null}

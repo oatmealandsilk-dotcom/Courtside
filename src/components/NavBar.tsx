@@ -19,6 +19,7 @@ import { LAYOUT, useResponsive } from '@/lib/useResponsive';
 import { Glass } from '@/components/ui/Glass';
 import { TAB_BAR_H } from '@/features/navigation/barInset';
 import { useApp } from '@/store/AppContext';
+import { useWelcomeNote } from '@/features/welcome/welcomeNote';
 import { unreadChatCount } from '@/features/messages/groupRules';
 import { colors, pageIsDark, radius, spacing, typography, font, withAlpha } from '@/theme';
 import { useTourOpen, useTourTarget } from '@/features/tour/tourStore';
@@ -73,16 +74,21 @@ const ITEMS: NavItem[] = [
 export function NavBar({ state, navigation }: NavBarProps) {
   const styles = useThemedStyles(styleDefinitions);
   const { isPhone, isCompactSidebar } = useResponsive();
-  const { conversations, notifications, currentUserId, blockedIds } = useApp();
+  const { conversations, notifications, currentUserId, currentUser, blockedIds } = useApp();
   // Chats with something new, not messages (Instagram's count); a muted chat never counts.
   const unread = unreadChatCount(conversations, currentUserId, blockedIds);
-  const unseen = notifications.filter((n) => n.userId === currentUserId && !n.read).length;
+  const alerts = notifications.filter((n) => n.userId === currentUserId && !n.read).length;
+  // The sidebar's bell counts CourtSide's own welcome too, until Notifications is first opened
+  // (welcomeNote). Only the bell: it never adds to Profile's number in the bar, so a new
+  // player is not met with a red badge for something nobody did.
+  const welcome = useWelcomeNote(currentUser);
+  const unseen = alerts + (welcome.unread ? 1 : 0);
   const insets = useSafeAreaInsets();
   const activeRoute = state.routes[state.index]?.name ?? 'index';
   // Everything waiting for you, in one number. The phone bar has no room for
   // separate bell and inbox entries the way the sidebar does, so Profile
   // carries the lot — it is where both of those live.
-  const profileAlerts = unread + unseen;
+  const profileAlerts = unread + alerts;
   // The first-run tour points at these; each button puts itself on its list. Nothing here looks any different.
   const tourDiscuss = useTourTarget('tab-discuss');
   const tourHome = useTourTarget('tab-home');

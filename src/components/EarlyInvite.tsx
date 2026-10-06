@@ -6,6 +6,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Button } from '@/components/ui';
 import { Wash } from '@/components/Wash';
 import { inviteLink, type InviteCourt } from '@/features/invite/referral';
+import { FRIENDS_LINE, FRIENDS_TITLE } from '@/features/invite/friendsWords';
 import * as haptics from '@/lib/haptics';
 import { shareOutside } from '@/lib/shareOutside';
 import { show as showToast } from '@/lib/toast';
@@ -19,34 +20,58 @@ import { colors, spacing, typography } from '@/theme';
  * link and a poster for your court. When there is a court to name (one you
  * follow, else the nearest public one), the link carries it, so a friend who
  * joins lands on that court's page.
+ *
+ * `friends` (Oct 5, owner: "Do all"): the same card for a teen, or anyone
+ * not known to be an adult, with no friend on their map yet. Their map only
+ * ever shows friends who follow each other with them, so the way to fill it
+ * is the same link, carrying no court (a link or poster naming where a teen
+ * plays would put them in front of strangers), and finding a friend by
+ * their @handle. Nothing about who sees whom changes.
+ *
+ * It sits right under the map, so its button shows without scrolling, and
+ * the tutorial's first tip lights the whole card (`leadRef`).
  */
-export function EarlyInvite({ city, court }: { city: string | null; court: InviteCourt | null }) {
+export function EarlyInvite({ city, court, friends = false, leadRef }: { city: string | null; court: InviteCourt | null; friends?: boolean; /** The tutorial's target: the whole card. */ leadRef?: (node: View | null) => void }) {
   const styles = useThemedStyles(styleDefinitions);
   const { currentUser } = useApp();
   if (!currentUser) return null;
-  const link = inviteLink(currentUser.handle, court);
+  const carried = friends ? null : court;
+  const link = inviteLink(currentUser.handle, carried);
   const share = async () => {
     try {
-      const said = await shareOutside(court ? `Hit with me at ${court.name} on CourtSide` : 'Hit with me on CourtSide', link);
+      const said = await shareOutside(carried ? `Hit with me at ${carried.name} on CourtSide` : friends ? 'Join me on CourtSide' : 'Hit with me on CourtSide', link);
+      // Closed without sending (an iPhone or a browser can tell): no buzz for nothing.
+      if (said === null) return;
       haptics.commit();
       if (said) showToast({ title: said, icon: 'link-outline' });
     } catch { /* the share sheet was closed */ }
   };
   const poster = () => router.push(court ? { pathname: '/club-poster', params: { court: court.id, name: court.name, lat: court.lat.toFixed(5), lng: court.lng.toFixed(5) } } : '/club-poster');
   return (
-    <View style={styles.card}>
+    // Never folded away by the phone's renderer, or the tutorial could not measure it.
+    <View ref={leadRef} collapsable={false} style={styles.card}>
       <Wash height={220} strength={0.6} fade={colors.surface} style={styles.wash} />
-      <Text style={styles.title}>{city ? `You’re early in ${city}` : 'You’re early here'}</Text>
-      <Text style={styles.body}>The map fills up with the people you already play with. Send them your link.</Text>
+      <Text style={styles.title}>{friends ? FRIENDS_TITLE : city ? `You’re early in ${city}` : 'You’re early here'}</Text>
+      <Text style={styles.body}>{friends ? FRIENDS_LINE : 'The map fills up with the people you already play with. Send them your link.'}</Text>
       {/* The feature card's shape: one primary pill, one quiet link under it. */}
       <View style={styles.actions}>
         <Button label="Share my link" onPress={() => { void share(); }} full />
       </View>
-      <Pressable accessibilityRole="link" accessibilityLabel={court ? `Print a poster for ${court.name}` : 'Print a poster'} hitSlop={8} onPress={poster} style={({ pressed }) => [styles.link, pressed && { opacity: 0.6 }]}>
-        <Ionicons name="print-outline" size={15} color={colors.textMuted} />
-        <Text style={styles.linkText}>{court ? 'Print a poster for my court' : 'Print a poster'}</Text>
-      </Pressable>
-      {court ? <Text style={styles.fine} numberOfLines={2}>Both open on {court.name} for whoever joins.</Text> : null}
+      {friends ? (
+        // Teen search (migration 118): by name or @handle, never by town.
+        <Pressable accessibilityRole="link" accessibilityLabel="Find a friend by their @handle" hitSlop={8} onPress={() => router.push({ pathname: '/search', params: { scope: 'players' } })} style={({ pressed }) => [styles.link, pressed && { opacity: 0.6 }]}>
+          <Ionicons name="search" size={15} color={colors.textMuted} />
+          <Text style={styles.linkText}>Find a friend by @handle</Text>
+        </Pressable>
+      ) : (
+        <>
+          <Pressable accessibilityRole="link" accessibilityLabel={court ? `Print a poster for ${court.name}` : 'Print a poster'} hitSlop={8} onPress={poster} style={({ pressed }) => [styles.link, pressed && { opacity: 0.6 }]}>
+            <Ionicons name="print-outline" size={15} color={colors.textMuted} />
+            <Text style={styles.linkText}>{court ? 'Print a poster for my court' : 'Print a poster'}</Text>
+          </Pressable>
+          {court ? <Text style={styles.fine} numberOfLines={2}>Both open on {court.name} for whoever joins.</Text> : null}
+        </>
+      )}
     </View>
   );
 }

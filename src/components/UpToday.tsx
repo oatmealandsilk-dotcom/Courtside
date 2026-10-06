@@ -140,7 +140,7 @@ export function UpToday({ me, people, teen = false, locationOn, onLocation, onTo
         ) : null}
       </ScrollView>
       {/* Over the row, pointing down at your own face (the hand that tapped it is below). */}
-      <TipBubble tip="hold-to-edit" shown={holdTip.shown} onClose={holdTip.close} pointer="down" pointerInset={MINE_CENTER - 6} style={styles.tip} />
+      <TipBubble tip="hold-to-edit" shown={holdTip.shown} onClose={holdTip.close} pointer="down" pointerInset={MINE_CENTER - 6} on="page" style={styles.tip} />
       </View>
     </View>
   );
