@@ -29,6 +29,18 @@ public class WorkoutWatchModule: Module {
       WorkoutWatcher.shared.start(WorkoutWatcher.Prefs(tennis: tennis, workouts: workouts, skipWhoopTennis: skipWhoopTennis, alerts: alerts))
     }
 
+    // Every switch by name (skipWhoopOther too). The app's code uses it when the build has it, and
+    // start otherwise, so a newer version of that code never breaks on an older build.
+    AsyncFunction("startWith") { (prefs: [String: Any]) in
+      WorkoutWatcher.shared.start(WorkoutWatcher.Prefs(
+        tennis: prefs["tennis"] as? Bool ?? false,
+        workouts: prefs["workouts"] as? Bool ?? false,
+        skipWhoopTennis: prefs["skipWhoopTennis"] as? Bool ?? false,
+        skipWhoopOther: prefs["skipWhoopOther"] as? Bool ?? false,
+        alerts: prefs["alerts"] as? Bool ?? true
+      ))
+    }
+
     AsyncFunction("stop") {
       WorkoutWatcher.shared.stop()
     }

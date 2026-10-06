@@ -21,6 +21,7 @@ import { TAB_BAR_H } from '@/features/navigation/barInset';
 import { useApp } from '@/store/AppContext';
 import { useWelcomeNote } from '@/features/welcome/welcomeNote';
 import { unreadChatCount } from '@/features/messages/groupRules';
+import { unseenCount } from '@/features/activity/found';
 import { colors, pageIsDark, radius, spacing, typography, font, withAlpha } from '@/theme';
 import { useTourOpen, useTourTarget } from '@/features/tour/tourStore';
 
@@ -74,11 +75,12 @@ const ITEMS: NavItem[] = [
 export function NavBar({ state, navigation }: NavBarProps) {
   const styles = useThemedStyles(styleDefinitions);
   const { isPhone, isCompactSidebar } = useResponsive();
-  const { conversations, notifications, currentUserId, currentUser, blockedIds } = useApp();
+  const { conversations, notifications, detectedActivities, currentUserId, currentUser, blockedIds } = useApp();
   // Chats with something new, not messages (Instagram's count); a muted chat never counts.
   const unread = unreadChatCount(conversations, currentUserId, blockedIds);
   // Never anything from someone you blocked (the Notifications page leaves those out too).
-  const alerts = notifications.filter((n) => n.userId === currentUserId && !n.read && !blockedIds.includes(n.actorId)).length;
+  // Several workouts found at once are one row there, so they count once (features/activity/found).
+  const alerts = unseenCount(notifications.filter((n) => n.userId === currentUserId && !blockedIds.includes(n.actorId)), detectedActivities);
   // The sidebar's bell counts CourtSide's own welcome too, until Notifications is first opened
   // (welcomeNote). Only the bell: it never adds to Profile's number in the bar, so a new
   // player is not met with a red badge for something nobody did.

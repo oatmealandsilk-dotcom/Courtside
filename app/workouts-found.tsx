@@ -1,0 +1,151 @@
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { router, useLocalSearchParams } from 'expo-router';
+
+import { CourtSpinner } from '@/components/CourtSpinner';
+import { EmptyState, Screen } from '@/components/ui';
+import { WorkoutCard, WorkoutRow, type WorkoutRowItem } from '@/components/WorkoutRow';
+import type { DetectedActivity, ID } from '@/data/types';
+import { allTennis, foundBursts, foundTitle, handedOver } from '@/features/activity/found';
+import { goBack } from '@/lib/goBack';
+import { useApp } from '@/store/AppContext';
+import { useThemedStyles } from '@/theme/ThemeProvider';
+import { colors, spacing, typography } from '@/theme';
+
+/** Without a list (the lock-screen alert's tap), those waiting that were found in the last eight days: the server's catch-up window. */
+const WAITING_DAYS = 8;
+
+/**
+ * Workouts found (owner, Oct 5: grouped notifications): what one "4 workouts
+ * found" row in Notifications, or one such alert on the lock screen, stands
+ * for, as a list, newest first, each with its own Log it (the same page as
+ * a single "Activity detected" row's tap: post it, or just log it). Logged
+ * ones say Logged, hidden ones Hidden, as on Past workouts, whose rows these
+ * are. Only you see this page.
+ *
+ * `ids`: the workouts of that one row or alert (features/activity/found),
+ * and any more found in the same go since (an alert tells of the first
+ * four; the row counts them all). `handing`: the phone's own alert was
+ * tapped and its workouts are still being handed to the server; the list
+ * waits for them. Without either, every workout still waiting to be logged
+ * that was found in the last eight days. Opening it marks their rows in
+ * Notifications read, together.
+ */
+export default function WorkoutsFound() {
+  const styles = useThemedStyles(styleDefinitions);
+  const { ids: idsParam, handing } = useLocalSearchParams<{ ids?: string; handing?: string }>();
+  const { detectedActivities, notifications, currentUserId, ready, actions } = useApp();
+
+  // The phone's own alert, tapped: open at once, and wait here while its workouts are handed over.
+  const [handed, setHanded] = useState<ID[] | null>(null);
+  useEffect(() => {
+    if (!handing) return undefined;
+    let on = true;
+    void handedOver(handing).then((got) => { if (on) setHanded(got); });
+    return () => { on = false; };
+  }, [handing]);
+  const busy = !!handing && handed === null;
+
+  const askedFor = useMemo(
+    () => (handed?.length ? handed : (idsParam ?? '').split(',').map((s) => s.trim()).filter(Boolean)).slice(0, 200),
+    [handed, idsParam],
+  );
+  // The whole go they were found in, as its one row in Notifications counts it.
+  const myRows = useMemo(() => notifications.filter((n) => n.userId === currentUserId && n.kind === 'activity'), [notifications, currentUserId]);
+  const asked = useMemo(() => {
+    if (!askedFor.length) return askedFor;
+    const go = foundBursts(myRows, detectedActivities).find((b) => b.activityIds.some((id) => askedFor.includes(id)));
+    return go ? [...new Set([...askedFor, ...go.activityIds])].slice(0, 200) : askedFor;
+  }, [askedFor, myRows, detectedActivities]);
+
+  // A session the app no longer holds (older than the two weeks it keeps): read on its own, while the server keeps it.
+  const [extra, setExtra] = useState<Record<ID, DetectedActivity | null>>({});
+  const missing = useMemo(() => asked.filter((id) => !detectedActivities.some((a) => a.id === id) && !(id in extra)), [asked, detectedActivities, extra]);
+  useEffect(() => {
+    if (!ready || !missing.length) return undefined;
+    let on = true;
+    void Promise.all(missing.map((id) => actions.fetchActivity(id).catch(() => null))).then((got) => {
+      if (on) setExtra((e) => ({ ...e, ...Object.fromEntries(missing.map((id, i) => [id, got[i]])) }));
+    });
+    return () => { on = false; };
+  }, [ready, missing, actions]);
+
+  // Opened from the lock screen: what the server filed since the app last read it, the
+  // sessions and their rows in Notifications both (so those rows are read with the list).
+  const fetched = useRef(false);
+  useEffect(() => {
+    if (!ready || fetched.current) return;
+    fetched.current = true;
+    void actions.refreshActivities().catch(() => undefined);
+    void actions.catchUpNotifications().catch(() => undefined);
+  }, [ready, actions]);
+
+  const list = useMemo(() => {
+    const mine = (a: DetectedActivity | null | undefined): a is DetectedActivity => !!a && a.userId === currentUserId && a.status !== 'withdrawn' && a.status !== 'duplicate';
+    const held = (id: ID) => detectedActivities.find((a) => a.id === id) ?? extra[id];
+    // The same session from WHOOP and the Watch: the one that carries it, once.
+    const one = (a: DetectedActivity | null | undefined) => (a?.status === 'duplicate' && a.duplicateOf ? held(a.duplicateOf) ?? a : a);
+    const picked = asked.length
+      ? asked.map((id) => one(held(id))).filter(mine).filter((a, i, all) => all.findIndex((x) => x.id === a.id) === i)
+      : detectedActivities.filter((a) => mine(a) && a.status === 'new' && Date.parse(a.createdAt) > Date.now() - WAITING_DAYS * 86_400_000);
+    return [...picked].sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt));
+  }, [asked, detectedActivities, extra, currentUserId]);
+  const waitingFor = asked.length > 0 && missing.length > 0 && list.length < asked.length;
+
+  // Their rows in Notifications, read together (the bell's number drops by one).
+  // (Those asked for too: a row about a copy that turned out to be the same session as another.)
+  // Again whenever more of their rows arrive (opened from an alert before the app had them).
+  const listIds = [...new Set([...asked, ...list.map((a) => a.id)])].join(',');
+  const unreadRows = myRows.filter((n) => !n.read).length;
+  useEffect(() => {
+    if (listIds && !busy) actions.markActivityNotesRead(listIds.split(','));
+  }, [listIds, unreadRows, busy, actions]);
+
+  const row = (a: DetectedActivity): WorkoutRowItem => ({ ...a, status: a.status === 'logged' ? 'logged' : a.status === 'dismissed' ? 'hidden' : 'new' });
+  const waiting = list.filter((a) => a.status === 'new').length;
+  const title = list.length > 1 ? foundTitle(list.length, allTennis(list.map((a) => a.id), [], list)) : 'Workouts found';
+  const subtitle = !list.length ? 'Only you see this.' : waiting ? `${waiting} to log · only you see this` : 'All logged · only you see this';
+
+  return (
+    <Screen title={title} subtitle={subtitle} compactTitle onBack={() => goBack('/notifications')}>
+      {busy || (list.length === 0 && (waitingFor || !ready)) ? (
+        <View style={styles.wait}><CourtSpinner size={34} /></View>
+      ) : list.length === 0 ? (
+        <EmptyState
+          icon="checkmark-done-outline"
+          title="Nothing waiting to log"
+          body="Every workout found is logged or hidden."
+          action={{ label: 'Past workouts', onPress: () => router.push('/workouts') }}
+        />
+      ) : (
+        <>
+          <Text style={styles.note}>Newest first. Log the ones you want; the rest wait in Past workouts.</Text>
+          <WorkoutCard>
+            {list.map((a, i) => (
+              <WorkoutRow
+                key={a.id}
+                w={row(a)}
+                line={i > 0}
+                busy={false}
+                disabled={false}
+                // The same Log it as a single "Activity detected" row: post it, or just log it.
+                onLog={() => router.push({ pathname: '/compose', params: { activity: a.id } })}
+              />
+            ))}
+          </WorkoutCard>
+          <Pressable accessibilityRole="link" accessibilityLabel="Past workouts" onPress={() => router.push('/workouts')} hitSlop={8} style={({ pressed }) => [styles.more, pressed && styles.pressed]}>
+            <Text style={styles.moreText}>Past workouts</Text>
+          </Pressable>
+        </>
+      )}
+    </Screen>
+  );
+}
+
+const styleDefinitions = StyleSheet.create({
+  note: { ...typography.small, color: colors.textMuted, lineHeight: 20, paddingHorizontal: spacing.sm, paddingBottom: spacing.xs },
+  wait: { paddingVertical: spacing.xxl, alignItems: 'center' },
+  more: { alignSelf: 'center', paddingVertical: spacing.md, paddingHorizontal: spacing.lg, marginTop: spacing.sm },
+  moreText: { ...typography.smallStrong, color: colors.brand },
+  pressed: { opacity: 0.6 },
+});

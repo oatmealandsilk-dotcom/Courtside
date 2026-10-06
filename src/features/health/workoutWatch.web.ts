@@ -4,7 +4,7 @@
  * nothing, and the phone's notification module is never loaded here.
  */
 
-export type WatchPrefs = { tennis: boolean; workouts: boolean; skipWhoopTennis: boolean; alerts: boolean };
+export type WatchPrefs = { tennis: boolean; workouts: boolean; skipWhoopTennis: boolean; skipWhoopOther: boolean; alerts: boolean };
 export type WatchedWorkout = { id: string; startedAt: string; endedAt: string; tennis: boolean };
 
 export const workoutWatchAvailable = () => false;
@@ -14,4 +14,4 @@ export async function stopWorkoutWatch(): Promise<void> { /* nothing to stop */ 
 export async function presentedWorkoutAlerts(): Promise<{ workoutId: string; alertId: string }[]> { return []; }
 export function dismissWorkoutAlerts(_alertIds: string[]) { /* no alerts in a browser */ }
 export function onWorkoutInFront(_listener: (w: WatchedWorkout) => void): () => void { return () => undefined; }
-export function listenForWorkoutAlertTaps(_listener: (w: WatchedWorkout) => void): () => void { return () => undefined; }
+export function listenForWorkoutAlertTaps(_listener: (list: WatchedWorkout[], grouped: boolean) => void): () => void { return () => undefined; }
