@@ -119,7 +119,7 @@ import type {
   Story,
   User,
   PlayerProfile,
-  MediaCrop, Tip, TaggedCourt, TrackerId, Invitee, ContactMatch, HealthShareKey, HeadToHead, CourtKings, FlybyPerson, MatchSet, Removed, RemovedItem, TakedownKind, TakedownReason, TournamentEntry, HiddenWords, HiddenWordsKind } from '@/data/types';
+  MediaCrop, Tip, TaggedCourt, TrackerId, Invitee, ContactMatch, HealthShareKey, HeadToHead, CourtKings, FlybyPerson, FriendStreak, MatchSet, Removed, RemovedItem, TakedownKind, TakedownReason, TournamentEntry, HiddenWords, HiddenWordsKind } from '@/data/types';
 import { HIDDEN_WORDS_MAX, HIDDEN_WORD_LENGTH, cleanWords, defaultHiddenWords } from '@/features/hiddenWords/hiddenWords';
 import { canScore, scoreNotKept, setsWinner } from '@/features/activity/score';
 
@@ -700,6 +700,16 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
    * most once a minute for the same court and day. Null when it could not be asked.
    */
   flyby: (courtId: string, day: string) => Promise<FlybyPerson[] | null>;
+  /**
+   * "Friends on a streak" for the weekly recap (migration 20261006000137): up
+   * to 5 people you follow on a streak, longest first, as the server allows
+   * (a teen only when they follow you back, never anyone whose activity
+   * status is off). Before the database has it, or when it cannot be asked,
+   * friends who follow each other with you only, from the streaks already
+   * loaded (the flames beside their names): an answer that says nothing
+   * about anyone's age. Never anyone blocked either way, muted or suspended.
+   */
+  friendsOnStreak: () => Promise<FriendStreak[]>;
   deleteSession: (id: ID) => void;
   /** Post a "Looking for a hit". Throws a plain sentence if it cannot be posted. */
   /**
@@ -3831,6 +3841,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const got = await ask;
     if (got === null) flybyAsked.current.delete(key);
     return got;
+  }, []);
+
+  const friendsOnStreak = useCallback(async (): Promise<FriendStreak[]> => {
+    const s = stateRef.current;
+    const me = s.currentUserId;
+    if (!me) return [];
+    const hiddenIds = [...s.blockedIds, ...s.blockedMeIds, ...s.mutedIds];
+    const keep = (list: FriendStreak[]) => {
+      const now = stateRef.current;
+      const hidden = new Set([...now.blockedIds, ...now.blockedMeIds, ...now.mutedIds]);
+      return list.filter((f) => f.userId !== me && now.followingIds.includes(f.userId) && !hidden.has(f.userId)
+        && !now.users.find((u) => u.id === f.userId)?.suspended);
+    };
+    if (!live(me)) {
+      return keep(await demoApi.friendsOnStreak({ me, users: s.users, followingIds: s.followingIds, followEdges: s.followEdges, hiddenIds }).catch(() => []));
+    }
+    const got = await remote.fetchFriendsOnStreak(localDay(new Date())).catch(() => null);
+    if (got) return keep(got);
+    // Friends who follow each other with you, from the streaks the open brought (migration 134).
+    const now = stateRef.current;
+    const back = new Set(now.followEdges.filter((e) => e.followingId === me).map((e) => e.followerId));
+    return keep(now.users.flatMap((u) => (u.streak && back.has(u.id) ? [{ userId: u.id, ...u.streak }] : [])));
   }, []);
 
   const cancelHit = useCallback(async (hitId: ID) => {
@@ -8071,6 +8103,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       headToHead,
       courtKings,
       flyby,
+      friendsOnStreak,
       updateIdentity,
       toggleLike,
       addPost,
@@ -8285,6 +8318,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       headToHead,
       courtKings,
       flyby,
+      friendsOnStreak,
       updateIdentity,
       toggleLike,
       addPost,
