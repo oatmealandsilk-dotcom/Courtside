@@ -6,7 +6,8 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Button } from '@/components/ui';
 import { Wash } from '@/components/Wash';
 import { inviteLink, type InviteCourt } from '@/features/invite/referral';
-import { FRIENDS_LINE, FRIENDS_TITLE } from '@/features/invite/friendsWords';
+import { canReadContacts } from '@/features/contacts/phoneContacts';
+import { CONTACTS_LABEL, FRIENDS_LINE, FRIENDS_TITLE } from '@/features/invite/friendsWords';
 import * as haptics from '@/lib/haptics';
 import { shareOutside } from '@/lib/shareOutside';
 import { show as showToast } from '@/lib/toast';
@@ -65,6 +66,13 @@ export function EarlyInvite({ city, court, friends = false, leadRef }: { city: s
       <View style={styles.actions}>
         <Button label="Share my link" onPress={() => { void share(); }} full />
       </View>
+      {/* The people you already know who are here (owner, Oct 6). A phone app with contacts only; the Find friends page keeps its own rules. */}
+      {canReadContacts() ? (
+        <Pressable accessibilityRole="link" accessibilityLabel={CONTACTS_LABEL} hitSlop={8} onPress={() => router.push('/find-contacts')} style={({ pressed }) => [styles.link, pressed && { opacity: 0.6 }]}>
+          <Ionicons name="people-outline" size={15} color={colors.textMuted} />
+          <Text style={styles.linkText}>{CONTACTS_LABEL}</Text>
+        </Pressable>
+      ) : null}
       {friends ? (
         // Teen search (migration 118): by name or @handle, never by town.
         <Pressable accessibilityRole="link" accessibilityLabel="Find a friend by their @handle" hitSlop={8} onPress={() => router.push({ pathname: '/search', params: { scope: 'players', find: 'friend' } })} style={({ pressed }) => [styles.link, pressed && { opacity: 0.6 }]}>

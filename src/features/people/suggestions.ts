@@ -38,11 +38,12 @@ const ASK_AT_MOST = 24;
  * with no birthday yet) is suggested only the people who follow them. The
  * app never learns anyone's age to do this, only that yes or no.
  */
-export function useSuggestedPlayers({ keep = [], near, exclude = [] }: { keep?: string[]; near?: string; exclude?: string[] } = {}): Suggestion[] {
+export function useSuggestedPlayers({ keep = [], near, exclude = [], friendsOf = [] }: { keep?: string[]; near?: string; exclude?: string[]; /** People whose follows come first, "Followed by Om" (setup's People you may know: whoever invited you, then those you follow). Who may be shown is unchanged. */ friendsOf?: string[] } = {}): Suggestion[] {
   const { users, posts, comments, conversations, currentUserId, followingIds, followEdges, openness, agesOnProfiles, actions } = useApp();
   const { findable } = useFindable();
   const keepKey = keep.join(',');
   const excludeKey = exclude.join(',');
+  const friendsKey = friendsOf.join(',');
   return useMemo(() => {
     if (!currentUserId) return [];
     const me = users.find((u) => u.id === currentUserId);
@@ -63,17 +64,26 @@ export function useSuggestedPlayers({ keep = [], near, exclude = [] }: { keep?: 
     for (const conversation of conversations) conversation.participantIds.forEach((id) => interacted.add(id));
     const myTown = me ? townOf(me.location) : '';
     const theirTown = near ? townOf(near) : '';
+    // Who each of `friendsOf` follows, so a friend of theirs reads "Followed by Om" (the first of them to follow).
+    const via = new Map<string, string>();
+    (friendsKey ? friendsKey.split(',') : []).forEach((friendId) => {
+      const name = users.find((u) => u.id === friendId)?.name.split(' ')[0];
+      if (!name) return;
+      followEdges.forEach((e) => { if (e.followerId === friendId && !via.has(e.followingId)) via.set(e.followingId, name); });
+    });
     const ranked = users
       .filter((u) => findable(u) && !left.has(u.id) && (!following.has(u.id) || kept.has(u.id)))
       .map((user) => {
         const town = townOf(user.location);
         const local = !!town && town === myTown;
         const sameAsThem = !!town && town === theirTown;
+        const friendName = via.get(user.id);
         const reason = interacted.has(user.id) ? 'Interacted with you'
+          : friendName ? `Followed by ${friendName}`
           : user.isCoach ? 'Coach on CourtSide'
           : local || sameAsThem ? `Plays in ${town}`
           : 'Suggested for you';
-        return { user, reason, score: (interacted.has(user.id) ? 2 : 0) + (local ? 1 : 0) + (sameAsThem ? 1 : 0) + (user.isCoach ? 0.5 : 0) };
+        return { user, reason, score: (interacted.has(user.id) ? 2 : 0) + (friendName ? 3 : 0) + (local ? 1 : 0) + (sameAsThem ? 1 : 0) + (user.isCoach ? 0.5 : 0) };
       })
       .sort((a, b) => b.score - a.score);
     // Who may be shown (see above): a follow back always; anyone else only to
@@ -95,5 +105,5 @@ export function useSuggestedPlayers({ keep = [], near, exclude = [] }: { keep?: 
     return shown;
     // agesOnProfiles: canAddToGroup reads it, so the list is worked out again
     // when the first load says which database this is.
-  }, [users, posts, comments, conversations, currentUserId, followingIds, followEdges, openness, agesOnProfiles, actions, findable, keepKey, excludeKey, near]);
+  }, [users, posts, comments, conversations, currentUserId, followingIds, followEdges, openness, agesOnProfiles, actions, findable, keepKey, excludeKey, friendsKey, near]);
 }

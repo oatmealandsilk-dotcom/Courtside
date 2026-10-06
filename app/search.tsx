@@ -20,6 +20,8 @@ import { SearchField } from '@/components/SearchField';
 import { Avatar, DottedRule, EmptyState } from '@/components/ui';
 import type { Post, Question, User } from '@/data/types';
 import { useBarInset } from '@/features/navigation/barInset';
+import { canReadContacts } from '@/features/contacts/phoneContacts';
+import { CONTACTS_LABEL, CONTACTS_NOTE } from '@/features/invite/friendsWords';
 import { useFindable } from '@/features/people/findable';
 import { useSuggestedPlayers } from '@/features/people/suggestions';
 import { openCourt as openCourtPage } from '@/features/players/courtLink';
@@ -453,6 +455,16 @@ export default function Search() {
     const nothing = !shownRecents.length && !undo && !tags.length && !suggested.length;
     return (
       <ScrollView ref={scrollRef} {...scrolling} contentContainerStyle={bottom}>
+        {/* Looking for a player or a friend: the ones already in your contacts, first (owner, Oct 6). A phone app with contacts only. */}
+        {(findingFriend || tab === 'people') && canReadContacts() ? (
+          <Pressable accessibilityRole="link" accessibilityLabel={CONTACTS_LABEL} onPress={() => router.push('/find-contacts')} style={({ pressed }) => [styles.row, pressed && styles.pressed]}>
+            <View style={[styles.circle, styles.circleCourt]}><Ionicons name="people" size={20} color={colors.brand} /></View>
+            <View style={styles.rowBody}>
+              <Text style={styles.rowName} numberOfLines={1}>{CONTACTS_LABEL}</Text>
+              <Text style={styles.rowMeta} numberOfLines={1}>{CONTACTS_NOTE}</Text>
+            </View>
+          </Pressable>
+        ) : null}
         {nothing ? (findingFriend
           ? <EmptyState icon="person-add-outline" title="Find a friend" body="Type their name or @handle." />
           : <EmptyState icon="search-outline" title="Search CourtSide" body="Find a player by name or @handle, a clip by #tag, a thread or a court." />

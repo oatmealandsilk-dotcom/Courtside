@@ -29,7 +29,8 @@ import { Avatar, Button, EmptyState } from '@/components/ui';
 import { LevelPill } from '@/components/LevelPill';
 import { ActivitiesStart, NearYouTag } from '@/components/ActivitiesStart';
 import { FollowPill } from '@/components/FollowPill';
-import { NEAR_UNDER, useNearYouAuthors } from '@/features/activity/nearYou';
+import { START_UNDER, useNearYouAuthors } from '@/features/activity/nearYou';
+import { useConnectRow } from '@/features/activity/autoLog';
 import { QuestionCard } from '@/components/QuestionCard';
 import { PostCard } from '@/components/PostCard';
 import { BrandMark } from '@/components/BrandMark';
@@ -344,7 +345,13 @@ function Home({ scope, topRow, paused, onChrome }: {
   const nearAuthors = useNearYouAuthors(!!scope?.activities);
   const nearRef = useRef(nearAuthors);
   nearRef.current = nearAuthors;
-  const actsStart = !!scope?.activities && ready && followingIds.length < NEAR_UNDER;
+  // Also, however many you follow, while the slim "Connect Apple Health" row has something to offer (owner, Oct 6).
+  // Once there, it stays for the visit: following your tenth player, or connecting, from it never pulls it out from under you.
+  const connectRow = useConnectRow();
+  const actsStartNow = !!scope?.activities && ready && (followingIds.length < START_UNDER || connectRow.offer);
+  const actsStartKept = useRef(false);
+  if (actsStartNow) actsStartKept.current = true;
+  const actsStart = actsStartNow || (!!scope?.activities && actsStartKept.current);
   // Their sessions are asked for once a visit, as Activities opens (the feed's own load holds only the newest few posts).
   const askedNear = useRef(false);
   useEffect(() => {

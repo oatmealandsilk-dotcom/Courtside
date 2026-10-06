@@ -8,8 +8,10 @@ import { LevelPill } from '@/components/LevelPill';
 import { Avatar } from '@/components/ui';
 import { Wash } from '@/components/Wash';
 import type { User } from '@/data/types';
-import { useAutoLog } from '@/features/activity/autoLog';
-import { useInviterToFollow } from '@/features/activity/nearYou';
+import { useConnectRow } from '@/features/activity/autoLog';
+import { START_UNDER, useInviterToFollow } from '@/features/activity/nearYou';
+import { canReadContacts } from '@/features/contacts/phoneContacts';
+import { CONTACTS_LABEL } from '@/features/invite/friendsWords';
 import { useSuggestedPlayers } from '@/features/people/suggestions';
 import { confirmUnfollow } from '@/lib/confirm';
 import * as haptics from '@/lib/haptics';
@@ -22,33 +24,38 @@ import { colors, lift, spacing, typography } from '@/theme';
 const PICKS = 3;
 
 /**
- * Activities' first page for a new player (following fewer than five people,
- * owner Oct 6): the two ways in, then people to follow.
+ * Activities' first page for a new player (following fewer than ten people,
+ * owner Oct 6), or for anyone with Apple Health still to connect: the two
+ * ways in, then people to follow.
  *  - "Connect Apple Health to log automatically" (or WHOOP), a slim row,
- *    while nothing brings sessions in: the setup card's quiet second home
- *    after "Not now" (features/activity/autoLog).
+ *    while nothing brings sessions in, however many you follow, until its ×
+ *    closes it: the setup card's quiet second home after "Not now"
+ *    (features/activity/autoLog).
  *  - "Log a session", for anything played without a watch.
- *  - A few people to follow, whoever invited you first (by migration 84's
- *    rule, see useInviterToFollow), then the suggestions' own (teen-safe).
+ *  - While you follow fewer than ten: a few people to follow, whoever
+ *    invited you first (by migration 84's rule, see useInviterToFollow),
+ *    then the suggestions' own (teen-safe), and "Find friends from your
+ *    contacts" under them (in a browser, or a build without contacts, your
+ *    invite link instead).
  * Below it, the sessions of the people you follow and, marked "Near you",
  * players in your town (features/activity/nearYou).
  */
 export function ActivitiesStart({ topInset, bottomInset, nearCount }: { topInset: number; bottomInset: number; nearCount: number }) {
   const styles = useThemedStyles(styleDefinitions);
   const { followingIds, actions } = useApp();
-  const auto = useAutoLog();
+  const { auto, source, offer, close } = useConnectRow();
   const [busy, setBusy] = useState(false);
   const inviter = useInviterToFollow();
   // Someone followed from here stays, saying Following (as the feed's strip does).
   const [kept, setKept] = useState<string[]>([]);
   const suggested = useSuggestedPlayers({ keep: kept, exclude: inviter ? [inviter.id] : [] });
-  const people: { user: User; reason: string }[] = [
+  // Settled as the page opens, so following your tenth player from here never takes the list away.
+  const [few] = useState(() => followingIds.length < START_UNDER);
+  const people: { user: User; reason: string }[] = few ? [
     ...(inviter ? [{ user: inviter, reason: 'Invited you' }] : []),
     ...suggested,
-  ].slice(0, PICKS);
-
-  const source = auto.apple ? 'apple-health' : auto.whoop ? 'whoop' : null;
-  const offer = auto.ready && !auto.connected && !!source;
+  ].slice(0, PICKS) : [];
+  const contacts = canReadContacts();
   const connect = async () => {
     if (!source || busy) return;
     haptics.tap();
@@ -78,11 +85,16 @@ export function ActivitiesStart({ topInset, bottomInset, nearCount }: { topInset
 
       <View style={styles.card}>
         {offer ? (
-          <Pressable accessibilityRole="button" accessibilityLabel={`Connect ${source === 'whoop' ? 'WHOOP' : 'Apple Health'} to log automatically`} disabled={busy} onPress={() => { void connect(); }} style={({ pressed }) => [styles.row, pressed && styles.pressed]}>
-            <View style={styles.tile}><Ionicons name="pulse" size={18} color={colors.brand} /></View>
-            <Text style={styles.rowText} numberOfLines={2}>{busy ? 'Connecting…' : `Connect ${source === 'whoop' ? 'WHOOP' : 'Apple Health'} to log automatically`}</Text>
-            <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
-          </Pressable>
+          <View style={styles.connect}>
+            <Pressable accessibilityRole="button" accessibilityLabel={`Connect ${source === 'whoop' ? 'WHOOP' : 'Apple Health'} to log automatically`} disabled={busy} onPress={() => { void connect(); }} style={({ pressed }) => [styles.row, styles.connectTap, pressed && styles.pressed]}>
+              <View style={styles.tile}><Ionicons name="pulse" size={18} color={colors.brand} /></View>
+              <Text style={styles.rowText} numberOfLines={2}>{busy ? 'Connecting…' : `Connect ${source === 'whoop' ? 'WHOOP' : 'Apple Health'} to log automatically`}</Text>
+            </Pressable>
+            {/* Closed here, it stays closed on this phone; Settings → Health and nutrition still connects. */}
+            <Pressable accessibilityRole="button" accessibilityLabel="Hide connect row" disabled={busy} hitSlop={6} onPress={() => { haptics.tap(); close(); }} style={({ pressed }) => [styles.close, pressed && { opacity: 0.5 }]}>
+              <Ionicons name="close" size={18} color={colors.textFaint} />
+            </Pressable>
+          </View>
         ) : null}
         <Pressable accessibilityRole="button" accessibilityLabel="Log a session" onPress={() => router.push('/log-session')} style={({ pressed }) => [styles.row, offer && styles.rowLine, pressed && styles.pressed]}>
           <View style={styles.tile}><Ionicons name="add" size={20} color={colors.brand} /></View>
@@ -91,9 +103,9 @@ export function ActivitiesStart({ topInset, bottomInset, nearCount }: { topInset
         </Pressable>
       </View>
 
-      {people.length ? (
+      {few ? (
         <View style={styles.people}>
-          <Text style={styles.label}>People to follow</Text>
+          <Text style={styles.label}>{people.length ? 'People to follow' : 'Find people to follow'}</Text>
           <View style={styles.card}>
             {people.map(({ user, reason }, i) => (
               <View key={user.id} style={[styles.person, i > 0 && styles.rowLine]}>
@@ -107,6 +119,12 @@ export function ActivitiesStart({ topInset, bottomInset, nearCount }: { topInset
                 <FollowPill small following={followingIds.includes(user.id)} userId={user.id} onPress={() => follow(user)} name={user.name.split(' ')[0]} />
               </View>
             ))}
+            {/* Where to find the people you already know (owner, Oct 6). The teen rules are the Find friends page's own. */}
+            <Pressable accessibilityRole="link" accessibilityLabel={contacts ? CONTACTS_LABEL : 'Share your invite link'} onPress={() => router.push(contacts ? '/find-contacts' : '/invite')} style={({ pressed }) => [styles.row, people.length > 0 && styles.rowLine, pressed && styles.pressed]}>
+              <View style={styles.tile}><Ionicons name={contacts ? 'people' : 'paper-plane'} size={18} color={colors.brand} /></View>
+              <Text style={styles.rowText} numberOfLines={1}>{contacts ? 'Find friends from contacts' : 'Share your invite link'}</Text>
+              <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
+            </Pressable>
           </View>
         </View>
       ) : null}
@@ -149,6 +167,9 @@ const styleDefinitions = StyleSheet.create({
   pressed: { backgroundColor: colors.surfaceAlt },
   tile: { width: 34, height: 34, borderRadius: 10, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
   rowText: { ...typography.bodyStrong, color: colors.text, flex: 1 },
+  connect: { flexDirection: 'row', alignItems: 'center' },
+  connectTap: { flex: 1, paddingRight: 0 },
+  close: { width: 44, height: 56, alignItems: 'center', justifyContent: 'center', marginRight: spacing.xs },
   people: { gap: spacing.sm },
   label: { ...typography.smallStrong, color: colors.textMuted, paddingHorizontal: spacing.xs },
   person: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: 10 },

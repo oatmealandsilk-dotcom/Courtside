@@ -7,3 +7,12 @@
  */
 export const FRIENDS_TITLE = 'Add your friends';
 export const FRIENDS_LINE = 'Send your link. When they join, follow each other.';
+
+/**
+ * Under every "Find friends from your contacts" (setup's last page,
+ * Activities, Find Players, search; Oct 6, owner: "he was asking where can I
+ * find ppl to follow"). The full word, before the phone's own question, is
+ * on the Find friends page itself.
+ */
+export const CONTACTS_LABEL = 'Find friends from your contacts';
+export const CONTACTS_NOTE = 'Only checks who’s already on CourtSide. Nothing is saved.';

@@ -27,6 +27,8 @@ import { hasSessionStats } from './format';
 
 /** Following fewer than this many people: Activities also shows sessions from players near you. */
 export const NEAR_UNDER = 5;
+/** Following fewer than this many people: Activities opens on its first page, with people to follow and Find friends (owner, Oct 6: 10, was 5). */
+export const START_UNDER = 10;
 /** At most this many people the list asks the server about (open_to_you counts toward a daily limit, migration 109). */
 const ASK_AT_MOST = 24;
 

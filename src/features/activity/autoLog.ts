@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 import { Platform } from 'react-native';
 
 import { appleHealthAvailable } from '@/features/health/appleHealth';
@@ -56,4 +57,53 @@ export function useAutoLog(): AutoLog {
   }, [actions, workoutsApple, workoutsWhoop]);
   // A real account's connections are known once its Health page data has loaded (healthIsReal); the demo's at once.
   return { ready: !!flags && (demo || !!healthIsReal), known: !!flags, apple, whoop, connected, connect };
+}
+
+/*
+ * Activities' slim "Connect Apple Health to log automatically" row (owner,
+ * Oct 6: a friend who joined that day followed six people, so he never saw
+ * it). Now it shows whenever nothing brings sessions in, however many people
+ * you follow, until its × closes it on this phone. Settings → Health and
+ * nutrition still connects.
+ */
+const closedKey = (userId: string) => `courtside.autoLogRow.closed:${userId}`;
+/** Per account: true closed, false open, missing still being read. */
+const closedRows = new Map<string, boolean>();
+const readingRows = new Set<string>();
+const rowListeners = new Set<() => void>();
+const emitRows = () => rowListeners.forEach((fn) => fn());
+const subscribeRows = (fn: () => void) => { rowListeners.add(fn); return () => { rowListeners.delete(fn); }; };
+
+function readClosed(userId: string) {
+  if (closedRows.has(userId) || readingRows.has(userId)) return;
+  readingRows.add(userId);
+  void AsyncStorage.getItem(closedKey(userId))
+    .then((raw) => { closedRows.set(userId, closedRows.get(userId) === true || raw !== null); }, () => { if (!closedRows.has(userId)) closedRows.set(userId, false); })
+    .finally(() => { readingRows.delete(userId); emitRows(); });
+}
+
+export interface ConnectRow {
+  auto: AutoLog;
+  /** What the row connects: Apple Health where it can, else WHOOP. */
+  source: AutoLogSource | null;
+  /** The row shows: something to connect, nothing connected, and not closed on this phone. */
+  offer: boolean;
+  /** The row's ×. */
+  close: () => void;
+}
+
+export function useConnectRow(): ConnectRow {
+  const auto = useAutoLog();
+  const { currentUserId } = useApp();
+  useEffect(() => { if (currentUserId) readClosed(currentUserId); }, [currentUserId]);
+  // Not offered until this phone has said whether it was closed, so it never flashes up and away.
+  const closed = useSyncExternalStore(subscribeRows, () => (currentUserId ? closedRows.get(currentUserId) ?? true : true), () => true);
+  const close = useCallback(() => {
+    if (!currentUserId) return;
+    closedRows.set(currentUserId, true);
+    void AsyncStorage.setItem(closedKey(currentUserId), new Date().toISOString()).catch(() => undefined);
+    emitRows();
+  }, [currentUserId]);
+  const source: AutoLogSource | null = auto.apple ? 'apple-health' : auto.whoop ? 'whoop' : null;
+  return { auto, source, offer: auto.ready && !auto.connected && !!source && !closed, close };
 }
