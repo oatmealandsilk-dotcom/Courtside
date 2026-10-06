@@ -10,6 +10,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { MediaPicker, type PickedMedia } from '@/components/MediaPicker';
 import { Screen } from '@/components/ui';
 import { BLOCKED_WORDS_NOTE } from '@/features/hiddenWords/hiddenWords';
+import { clearUnsentCoachQuestion, peekUnsentCoachQuestion } from '@/features/coaching/unsentQuestion';
 import * as haptics from '@/lib/haptics';
 import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
@@ -57,10 +58,13 @@ export default function AskCoach() {
   const origin = typeof from === 'string' ? from.split(',').map(Number) : null;
   const hero = !!origin && origin.length === 4 && origin.every((n) => Number.isFinite(n) && n >= 0) && origin[2] > 0 && origin[3] > 0;
   const web = Platform.OS === 'web';
-  const [title, setTitle] = useState('');
+  // A question that didn't post comes back already typed (its toast's "Ask again").
+  const [unsent] = useState(peekUnsentCoachQuestion);
+  useEffect(() => { clearUnsentCoachQuestion(); }, []);
+  const [title, setTitle] = useState(unsent?.title ?? '');
   const titleBox = useRef<TextInput>(null);
-  const [body, setBody] = useState('');
-  const [specialty, setSpecialty] = useState<CoachSpecialty>('serve');
+  const [body, setBody] = useState(unsent?.body ?? '');
+  const [specialty, setSpecialty] = useState<CoachSpecialty>(unsent?.specialty ?? 'serve');
   const [media, setMedia] = useState<PickedMedia | null>(null);
   const [footage, setFootage] = useState(false);
   const bodyBox = useRef<TextInput>(null);

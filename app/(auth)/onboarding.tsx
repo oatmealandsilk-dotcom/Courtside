@@ -314,9 +314,11 @@ function OnboardingSteps() {
       return;
     }
     if (forCoach) {
-      // The coach's own questions, answered: straight into the coach.
+      // The coach's own questions, answered: back down to the coach they
+      // were opened from (it moves on to the week by itself), not a second
+      // copy of it on top, which Back then had to close as well.
       actions.completeOnboarding({ ...profile, onboardedAt: existing?.onboardedAt });
-      router.replace('/ai-coach');
+      goBack('/ai-coach');
       return;
     }
     actions.completeOnboarding(profile);

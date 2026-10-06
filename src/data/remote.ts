@@ -903,7 +903,7 @@ export interface AdminReport {
   /** The account the report is about. */
   userId?: ID;
   /** What was reported: a post, a hit, a thread, a reply, a comment, a coach question or reply, an account, or a chat. */
-  kind: ReportedItemKind | 'profile' | 'conversation';
+  kind: ReportedItemKind | 'profile' | 'conversation' | 'ai-coach';
   targetId?: ID;
   /** One message in a reported chat ("Report" on a message). */
   messageId?: ID;
@@ -1570,7 +1570,8 @@ export const remote = {
       id: q.id, author_id: q.authorId, title: q.title, body: q.body, specialty: q.specialty, video_url: q.videoUrl ?? null, media_label: q.mediaLabel ?? null, resolved: q.resolved, created_at: q.createdAt,
     });
     if (error) fail('coach question save')(error);
-    return refusedFor(error);
+    // 'blocked' for its words; 'failed' for anything else (no connection, a rule that said no), so the app takes it back rather than show a question no coach will ever see.
+    return error ? (refusedFor(error) ?? ('failed' as const)) : undefined;
   },
   /** "This answered it" / "Reopen": just that, so the question keeps its date (see updateQuestion). */
   async setCoachQuestionResolved(q: CoachQuestion) {
@@ -1598,7 +1599,8 @@ export const remote = {
   async insertCoachReply(r: CoachReply) {
     const { error } = await need().from('coach_replies').upsert({ id: r.id, question_id: r.questionId, coach_user_id: r.coachUserId, body: r.body, created_at: r.createdAt });
     if (error) fail('coach reply save')(error);
-    return refusedFor(error);
+    // As upsertCoachQuestion: 'blocked' for its words, 'failed' for anything else.
+    return error ? (refusedFor(error) ?? ('failed' as const)) : undefined;
   },
   async toggleReplyHelpful(replyId: ID) { const { error } = await need().rpc('toggle_reply_helpful', { r: replyId }); if (error) fail('helpful')(error); },
   async insertCoachingRequest(r: CoachingRequest) {
@@ -2617,10 +2619,12 @@ export const remote = {
       const [kind, id] = (r.target ?? '').split(':');
       // A report about one message names it in the reason ("message:<id>"); the card points at it.
       const messageId = /^message:([0-9a-f-]{36})$/i.exec(r.reason ?? '')?.[1];
+      // A reported AI coach answer or week (ai-coach.tsx) has nothing to open: the card says what it said.
+      const aiWords = kind === 'ai-reply' || kind === 'ai-plan' ? (r.target ?? '').slice(kind.length + 1) : undefined;
       return {
         id: r.id, reporterId: r.reporter_id ?? undefined, userId: r.target_user_id ?? undefined,
-        kind: (ITEM_KINDS as string[]).includes(kind) || kind === 'conversation' ? kind as AdminReport['kind'] : 'profile', targetId: id || undefined,
-        messageId, reason: messageId ? 'one message' : r.reason || undefined,
+        kind: aiWords !== undefined ? 'ai-coach' : (ITEM_KINDS as string[]).includes(kind) || kind === 'conversation' ? kind as AdminReport['kind'] : 'profile', targetId: aiWords === undefined ? id || undefined : undefined,
+        messageId, reason: messageId ? 'one message' : aiWords !== undefined ? `AI coach ${kind === 'ai-plan' ? 'week' : 'answer'}: “${aiWords}”` : r.reason || undefined,
         createdAt: r.created_at, status: (r.status ?? 'open') as AdminReport['status'], reviewedAt: r.reviewed_at ?? undefined,
       };
     });

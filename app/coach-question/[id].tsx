@@ -81,10 +81,11 @@ export default function CoachQuestionDetail() {
   const postAnswer = () => {
     const text = draft.trim();
     if (text.length < 20) return;
-    // Refused for its words (migration 117): the toast says why, and your
-    // answer comes back into the box (if you haven't started another since).
+    // Refused for its words (migration 117), or not saved at all: the toast
+    // says why, and your answer comes back into the box (if you haven't
+    // started another since).
     void actions.replyToCoachQuestion(question.id, text).then((result) => {
-      if (result === 'blocked' && !latestDraft.current.trim()) setDraft(text);
+      if ((result === 'blocked' || result === 'failed') && !latestDraft.current.trim()) setDraft(text);
     });
     setDraft('');
   };
@@ -263,7 +264,8 @@ export default function CoachQuestionDetail() {
         <Text style={styles.waiting}>
           {hiddenReplies.length
             ? 'A coach replied. It’s under Hidden replies below.'
-            : 'Coaches usually reply within a day. You will get a notification when they do.'}
+            // Only the asker is told when a coach replies; anyone else reading is not promised a notification.
+            : mine ? 'Coaches usually reply within a day. You will get a notification when they do.' : 'Coaches usually reply within a day.'}
         </Text>
       ) : null}
 

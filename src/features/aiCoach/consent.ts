@@ -20,6 +20,13 @@ import { useApp } from '@/store/AppContext';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** The last answer, and whose: someone else signing in on this phone is asked afresh. */
 let known: { user: string; agreed: boolean } | null = null;
+/**
+ * Every screen asking, told when the answer changes: "Stop using the AI
+ * coach" is pressed on Coach memory, opened on top of the coach, and the
+ * coach underneath must go back to asking first, not stay open with every
+ * question refused.
+ */
+const listeners = new Set<(user: string, agreed: boolean) => void>();
 
 export function useAiCoachConsent(): { agreed: boolean | undefined; agree: () => Promise<boolean>; withdraw: () => Promise<boolean> } {
   const { currentUserId } = useApp();
@@ -35,10 +42,16 @@ export function useAiCoachConsent(): { agreed: boolean | undefined; agree: () =>
     });
     return () => { current = false; };
   }, [demo, currentUserId]);
+  useEffect(() => {
+    if (demo || !currentUserId) return;
+    const heard = (user: string, yes: boolean) => { if (user === currentUserId) setAgreed(yes); };
+    listeners.add(heard);
+    return () => { listeners.delete(heard); };
+  }, [demo, currentUserId]);
   const set = useCallback(async (yes: boolean) => {
     if (demo || !currentUserId) { setAgreed(true); return true; }
     const ok = await remote.setAiCoachConsent(currentUserId, yes);
-    if (ok) { known = { user: currentUserId, agreed: yes }; setAgreed(yes); }
+    if (ok) { known = { user: currentUserId, agreed: yes }; setAgreed(yes); listeners.forEach((fn) => fn(currentUserId, yes)); }
     return ok;
   }, [demo, currentUserId]);
   return { agreed, agree: () => set(true), withdraw: () => set(false) };

@@ -311,12 +311,13 @@ export default function Health() {
             {stat('Recovery', latest.recovery ? `${latest.recovery}%` : null)}
             {stat('Sleep', latest.sleepHours ? hoursAndMinutes(latest.sleepHours) : null)}
             {stat('HRV', latest.hrvMs ? `${latest.hrvMs}` : null)}
-            {stat('Resting HR', latest.restingHeartRate ? `${latest.restingHeartRate}` : null)}
+            {/* Four tiles a row leave a phone about 58 points for each: "Resting HR" and "11,432" were cut off. */}
+            {stat('RHR', latest.restingHeartRate ? `${latest.restingHeartRate}` : null)}
           </View>
           <View style={styles.stats}>
             {stat('Calories', latest.calories ? `${latest.calories}` : null)}
             {stat('Protein', latest.proteinGrams ? `${latest.proteinGrams}g` : null)}
-            {stat('Steps', latest.steps ? latest.steps.toLocaleString() : null)}
+            {stat('Steps', latest.steps ? (latest.steps >= 10000 ? `${+(latest.steps / 1000).toFixed(1)}k` : latest.steps.toLocaleString()) : null)}
             {stat('Days', `${healthHistory.length}`)}
           </View>
         </View>

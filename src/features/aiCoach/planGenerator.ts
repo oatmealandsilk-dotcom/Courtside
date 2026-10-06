@@ -200,10 +200,15 @@ export function generatePlan({ profile, health, now = new Date() }: PlanInputs):
     summaryParts.push('Recovery numbers are down, so the hardest session moved later in the week.');
   }
 
+  // The week's Monday, as the coach's own week has it (fetchAiPlan): "Week of" over a Mon–Sun strip.
+  const monday = new Date(now);
+  monday.setHours(0, 0, 0, 0);
+  monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+
   return {
     id: `plan-${now.toISOString().slice(0, 10)}`,
     generatedAt: now.toISOString(),
-    weekOf: now.toISOString(),
+    weekOf: monday.toISOString(),
     headline,
     summary: summaryParts.join(' '),
     focusAreas,

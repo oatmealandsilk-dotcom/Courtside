@@ -256,6 +256,8 @@ export default function Notifications() {
     // From CourtSide: "removed your clip for breaking its rules"; the reason goes on the line under it.
     if (group.kind === 'removed') return `removed your ${removedNotice(group.preview).thing} for breaking its rules`;
     if (group.kind === 'session-tag') return `tagged you in a ${group.preview === 'match' ? 'match' : 'practice'}`;
+    // A workout you have since logged: no longer "Tap to log it" (the tap opens the post for it).
+    if (group.kind === 'activity' && detectedActivities.find((a) => a.id === group.targetId)?.status === 'logged') return 'Logged. Tap to post it.';
     // Someone who joined through a link you shared (migration 68).
     if (group.kind === 'follow' && group.preview === INVITE_LINE) return 'joined CourtSide from your link';
     if (group.kind === 'follow-request' && group.preview === INVITE_LINE) return 'joined CourtSide from your link and asked to follow you';
