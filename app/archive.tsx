@@ -97,7 +97,7 @@ export default function Archive() {
           ))}
         </View>
       ) : (
-        <EmptyState icon="time-outline" title="No instants yet" body="Instants you share are kept here after their day is up." />
+        <EmptyState icon="time-outline" title="No Instants yet" body="Instants you share are kept here after their day is up." />
       )}
     </Section>
   );
@@ -117,8 +117,9 @@ export default function Archive() {
                 style={styles.postBody}
               >
                 <View style={styles.postThumb}>
-                  {post.thumbnailUrl ? (
-                    <TileCover accessibilityIgnoresInvertColors uri={post.thumbnailUrl} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" />
+                  {/* A photo post is often its own cover: no thumbnail of its own, the photo instead. */}
+                  {post.thumbnailUrl || post.imageUrl ? (
+                    <TileCover accessibilityIgnoresInvertColors uri={(post.thumbnailUrl || post.imageUrl)!} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" />
                   ) : (
                     <Ionicons name={post.kind === 'clip' ? 'play' : 'document-text-outline'} size={18} color={colors.textMuted} />
                   )}
@@ -249,7 +250,8 @@ const styleDefinitions = StyleSheet.create({
   postThumb: { width: 52, height: 52, borderRadius: radius.md, overflow: 'hidden', backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
   postKind: { ...typography.small, color: colors.textMuted },
   postText: { ...typography.small, color: colors.text, lineHeight: 19 },
-  restore: { paddingHorizontal: spacing.md, paddingVertical: 8, borderRadius: radius.pill, backgroundColor: colors.bgElevated },
+  // A full 44-point pill, the same height as the app's other small buttons.
+  restore: { minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing.lg, borderRadius: radius.pill, backgroundColor: colors.bgElevated },
   restoreText: { ...typography.smallStrong, color: colors.text },
 });
 

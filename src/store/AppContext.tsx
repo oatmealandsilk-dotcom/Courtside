@@ -4283,15 +4283,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const me = requireUser();
     haptics.commit();
     const story = stateRef.current.stories.find((st) => st.id === storyId);
-    if (live(me, storyId)) {
-      if (story?.authorId === me) remote.setStoryArchived(storyId, !story.archived);
+    const archiving = !story?.archived;
+    if (live(me, storyId) && story?.authorId === me) {
+      void remote.setStoryArchived(storyId, archiving).then((ok) => {
+        if (ok || stateRef.current.currentUserId !== me) return;
+        // It didn't go through: back as it was (unless it has changed again since), and said, as a post's archive does.
+        setState((prev) => ({ ...prev, stories: prev.stories.map((st) => (st.id === storyId && !!st.archived === archiving ? { ...st, archived: !archiving } : st)) }));
+        showToast({ title: archiving ? 'Couldn’t archive your Instant' : 'Couldn’t unarchive your Instant', body: 'Check your connection and try again.', icon: 'alert-circle-outline' });
+      });
     }
     setState((prev) => ({
       ...prev,
-      stories: prev.stories.map((s) => (s.id === storyId && s.authorId === me ? { ...s, archived: !s.archived } : s)),
+      stories: prev.stories.map((s) => (s.id === storyId && s.authorId === me ? { ...s, archived: archiving } : s)),
     }));
     if (quiet || story?.authorId !== me) return;
-    const archiving = !story.archived;
     offerUndo(
       archiving ? 'Archived' : 'Unarchived',
       () => { const st = stateRef.current.stories.find((x) => x.id === storyId); return !!st && !!st.archived === archiving; },
@@ -4364,6 +4369,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
   );
 
   /**
+   * Photo comments still on their way up (the photo uploads first, then the
+   * comment is saved), and any of those deleted meanwhile: a delete during the
+   * upload is remembered, so the upload finishing never puts the comment back.
+   */
+  const uploadingComments = useRef(new Set<ID>()).current;
+  const withdrawnComments = useRef(new Set<ID>()).current;
+
+  /**
    * A comment refused for its words (migration 117), or not saved at all,
    * comes off the list again; says which, so the box can have the words back.
    * Not saved is said here (the refusal says itself). `photoOnly`: a photo
@@ -4424,19 +4437,30 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (live(me, postId) && (!comment.parentId || live(comment.parentId))) {
         // Refused for its words (migration 117): it comes off the list again (the toast says why), and the box gets the words back.
         if (!photo) saved = remote.insertComment(comment).then((r) => takeBackComment(comment.id, r), () => undefined);
-        else saved = (async (): Promise<'blocked' | 'failed' | undefined> => {
-          // Shrunk first (about 1080 px, a couple of hundred KB), then uploaded, then saved with its address.
-          let imageUrl: string | undefined;
-          // The words beyond the "@them" a reply starts with: a reply that was only a photo has none.
-          const said = (comment.parentId ? body.replace(/^@[A-Za-z0-9_]+\s*/, '') : body).trim();
-          try { imageUrl = await uploadMedia(me, await shrinkPhoto(photo), 'photo'); }
-          catch { showToast({ title: 'The photo didn’t upload', body: said ? 'Your comment was posted without it.' : 'Your comment wasn’t posted. Try again in a moment.', icon: 'alert-circle-outline' }); }
-          // A comment that was only a photo, which did not upload, is not saved
-          // empty, and leaves the thread rather than staying as a blank row.
-          if (!imageUrl && !said) { setState((prev) => dropComment(prev, comment.id)); return undefined; }
-          setState((prev) => ({ ...prev, comments: imageUrl ? prev.comments.map((c) => (c.id === comment.id ? { ...c, imageUrl } : c)) : prev.comments.map((c) => (c.id === comment.id ? { ...c, imageUrl: undefined } : c)) }));
-          return takeBackComment(comment.id, await remote.insertComment({ ...comment, imageUrl }), !said);
-        })().catch(() => undefined);
+        else {
+          uploadingComments.add(comment.id);
+          saved = (async (): Promise<'blocked' | 'failed' | undefined> => {
+            // Shrunk first (about 1080 px, a couple of hundred KB), then uploaded, then saved with its address.
+            let imageUrl: string | undefined;
+            // The words beyond the "@them" a reply starts with: a reply that was only a photo has none.
+            const said = (comment.parentId ? body.replace(/^@[A-Za-z0-9_]+\s*/, '') : body).trim();
+            try { imageUrl = await uploadMedia(me, await shrinkPhoto(photo), 'photo'); }
+            catch {
+              if (!withdrawnComments.has(comment.id)) showToast({ title: 'The photo didn’t upload', body: said ? 'Your comment was posted without it.' : 'Your comment wasn’t posted. Try again in a moment.', icon: 'alert-circle-outline' });
+            }
+            // Deleted while its photo was uploading: never saved.
+            if (withdrawnComments.has(comment.id)) return undefined;
+            // A comment that was only a photo, which did not upload, is not saved
+            // empty: it leaves the thread rather than staying as a blank row, and
+            // its photo goes back into the box ('failed') to try again.
+            if (!imageUrl && !said) { setState((prev) => dropComment(prev, comment.id)); return 'failed'; }
+            setState((prev) => ({ ...prev, comments: imageUrl ? prev.comments.map((c) => (c.id === comment.id ? { ...c, imageUrl } : c)) : prev.comments.map((c) => (c.id === comment.id ? { ...c, imageUrl: undefined } : c)) }));
+            const result = await remote.insertComment({ ...comment, imageUrl });
+            // Deleted while it was being saved: taken off the server again once it is there.
+            if (withdrawnComments.has(comment.id)) { if (!result) void remote.deleteComment(comment.id, false); return undefined; }
+            return takeBackComment(comment.id, result, !said);
+          })().catch(() => undefined).finally(() => { uploadingComments.delete(comment.id); withdrawnComments.delete(comment.id); });
+        }
       }
       setState((prev) => {
         const post = prev.posts.find((p) => p.id === postId);
@@ -4470,6 +4494,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     haptics.commit();
     const gone = s.comments.filter((c) => c.id === commentId || c.parentId === commentId);
     setState((prev) => dropComment(prev, commentId));
+    // Still uploading its photo: there is nothing on the server yet, and the upload is told to stop short (addComment).
+    if (uploadingComments.has(commentId)) { withdrawnComments.add(commentId); return; }
     if (!live(me, commentId)) return;
     void remote.deleteComment(commentId, onHit).then((ok) => {
       if (ok || stateRef.current.currentUserId !== me) return;
@@ -4498,7 +4524,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const have = new Set(prev.comments.map((c) => c.id));
         return { ...prev, stories, comments: [...prev.comments, ...itsComments.filter((c) => !have.has(c.id))] };
       });
-      showToast({ title: 'Couldn’t delete your instant', body: 'Check your connection and try again.', icon: 'alert-circle-outline' });
+      showToast({ title: 'Couldn’t delete your Instant', body: 'Check your connection and try again.', icon: 'alert-circle-outline' });
     });
   }, [requireUser]);
 
