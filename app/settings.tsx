@@ -133,7 +133,7 @@ export default function Settings() {
         { icon: 'person-circle-outline', label: 'Account center', detail: 'Password, sign-in and payments', onPress: () => router.push('/account') },
         { icon: 'shield-checkmark-outline', label: 'Privacy center', onPress: () => router.push('/privacy') },
         // Oct 5 (owner: "Do word feature like how Instagram does"): Instagram's Hidden words (migration 117).
-        { icon: 'eye-off-outline', label: 'Hidden words', detail: 'Hide offensive comments and messages', onPress: () => router.push('/hidden-words') },
+        { icon: 'eye-off-outline', label: 'Hidden words', detail: 'Offensive comments and messages', onPress: () => router.push('/hidden-words') },
         // Oct 4 (owner): link a number so friends can find you, and find friends from your contacts.
         { icon: 'link-outline', label: 'Invites', detail: 'Your link', value: joined ? `${joined} joined` : undefined, onPress: () => router.push('/invite') },
         { icon: 'call-outline', label: 'Phone number', detail: 'So friends can find you', onPress: () => router.push('/link-phone') },
