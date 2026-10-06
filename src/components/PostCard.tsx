@@ -214,10 +214,11 @@ function PostCardInner({
             a session with stats that is not the card opens them; "Minutes on court", or an old
             written plan, says what it was and how long, its drills listed under it. */}
         {sessionCard ? null : post.session && hasSessionStats(post.session) ? (
-          <SessionStrip session={post.session} hidden={blockedIds} onPress={openStats} />
+          <SessionStrip session={post.session} hidden={blockedIds} onPress={openStats} flat />
         ) : post.session ? (
           <View style={styles.planned}>
             <SessionStrip
+              flat
               session={post.session}
               title={post.session.focus && post.session.focus !== 'On court' ? post.session.focus : undefined}
               sub={post.session.intensity ? `Intensity ${post.session.intensity}/5` : undefined}

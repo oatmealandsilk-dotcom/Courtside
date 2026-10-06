@@ -31,7 +31,7 @@ import { ZoneGlyph } from './ZoneGlyph';
  * lines where the session has no log behind it (a written plan) or the
  * page already names the person (the tag).
  */
-export function SessionStrip({ session, hidden = [], play = false, scale = 1, onPress, title: titleAs, sub }: {
+export function SessionStrip({ session, hidden = [], play = false, scale = 1, onPress, title: titleAs, sub, flat = false }: {
   session: SessionDetail;
   hidden?: ID[];
   play?: boolean;
@@ -41,6 +41,8 @@ export function SessionStrip({ session, hidden = [], play = false, scale = 1, on
   title?: string;
   /** In place of who and where the numbers came from. */
   sub?: string;
+  /** No shadow under it, inside something that clips at its edges (a post's words), where a shadow would be cut square. */
+  flat?: boolean;
 }) {
   const styles = useThemedStyles(styleDefinitions);
   const { theme } = useTheme();
@@ -82,7 +84,7 @@ export function SessionStrip({ session, hidden = [], play = false, scale = 1, on
       accessibilityHint={onPress ? 'Opens the stats' : undefined}
       disabled={!onPress}
       onPress={onPress}
-      style={({ pressed }) => [styles.panel, { backgroundColor: look.fill, borderColor: look.border, borderRadius: 18 * k, paddingHorizontal: 16 * k, paddingVertical: 14 * k, gap: 12 * k }, pressed && onPress ? styles.pressed : null]}
+      style={({ pressed }) => [styles.panel, { backgroundColor: look.fill, borderColor: look.border, borderRadius: 18 * k, paddingHorizontal: 16 * k, paddingVertical: 14 * k, gap: 12 * k }, flat ? styles.flat : null, pressed && onPress ? styles.pressed : null]}
     >
       <CardWash look={look} radius={18 * k} />
       <View style={[styles.row, { gap: 8 * k }]}>
@@ -127,6 +129,7 @@ export function SessionStrip({ session, hidden = [], play = false, scale = 1, on
 const styleDefinitions = StyleSheet.create({
   pressed: { opacity: 0.7 },
   panel: { overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, boxShadow: '0px 6px 18px rgba(20, 30, 24, 0.14)' },
+  flat: { boxShadow: 'none' },
   badge: { alignItems: 'center', justifyContent: 'center', backgroundColor: withAlpha(colors.brand, 0.12) },
   title: { ...font('700'), color: colors.text, letterSpacing: -0.2 },
   sub: { ...font('500'), color: colors.textMuted },
