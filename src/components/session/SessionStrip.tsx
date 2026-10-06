@@ -23,13 +23,24 @@ import { ZoneGlyph } from './ZoneGlyph';
  * migration 72) and who it was against sit on a quiet second line, the
  * player on a line of their own when two or more numbers are shared. `scale` draws it smaller, for the composer's preview. A tap anywhere
  * on it opens the stats.
+ *
+ * It is also the one compact session box everywhere else a single session
+ * is summed up (Oct 5, owner: one look, not two): the session's stats on a
+ * new post, a post with only its minutes on court, a tag someone sent you,
+ * and a shared link's page. `title` and `sub` stand in for its own two
+ * lines where the session has no log behind it (a written plan) or the
+ * page already names the person (the tag).
  */
-export function SessionStrip({ session, hidden = [], play = false, scale = 1, onPress }: {
+export function SessionStrip({ session, hidden = [], play = false, scale = 1, onPress, title: titleAs, sub }: {
   session: SessionDetail;
   hidden?: ID[];
   play?: boolean;
   scale?: number;
   onPress?: () => void;
+  /** In place of what it was ("Match · Won"). */
+  title?: string;
+  /** In place of who and where the numbers came from. */
+  sub?: string;
 }) {
   const styles = useThemedStyles(styleDefinitions);
   const { theme } = useTheme();
@@ -44,14 +55,14 @@ export function SessionStrip({ session, hidden = [], play = false, scale = 1, on
   // "Match · Won 6–4 3–6 10–7" when the log has a score (migration 91).
   const result = resultWithScore(session);
   const what = [whatWord(session), result].filter(Boolean).join(' · ');
-  const title = far ? `${what} · ${formatDistance(session.distanceM)}` : what;
+  const title = titleAs ?? (far ? `${what} · ${formatDistance(session.distanceM)}` : what);
   const { opponents, partners } = sessionPeople(session, hidden);
   const all = [...opponents, ...partners];
   const lead = all[0];
   const vs = lead ? (opponents.length ? 'vs' : 'with') : '';
   const tracker = !!session.activityId;
   const source = tracker ? sourceLabel(session.source ?? 'apple-health') : null;
-  const spoken = [`${spokenDuration(session.minutes)}, ${what.toLowerCase()}`, far ? `${far.value} miles` : null, hr && session.avgHr ? `average heart rate ${session.avgHr}` : null, hr ? `max ${session.maxHr}` : null, kcal ? `${kcal} calories` : null, lead ? `${vs} @${lead.handle}` : null, source].filter(Boolean).join(', ');
+  const spoken = [`${spokenDuration(session.minutes)}, ${(titleAs ?? what).toLowerCase()}`, far ? `${far.value} miles` : null, hr && session.avgHr ? `average heart rate ${session.avgHr}` : null, hr ? `max ${session.maxHr}` : null, kcal ? `${kcal} calories` : null, sub ?? (lead ? `${vs} @${lead.handle}` : null), sub ? null : source].filter(Boolean).join(', ');
   const small = { fontSize: 13 * k, lineHeight: Math.round(17 * k) };
   // The session card's own look (Oct 4, owner: "looks a bit flat"): the theme's colour and its wash, white numbers; glass-dark on dark themes;
   // the shirt's cream with green numbers on the CourtSide court (Oct 5).
@@ -66,9 +77,9 @@ export function SessionStrip({ session, hidden = [], play = false, scale = 1, on
   // what it was and who with, then the numbers in even columns; with only the time shared, one line.
   return (
     <Pressable
-      accessibilityRole="button"
+      accessibilityRole={onPress ? 'button' : 'summary'}
       accessibilityLabel={`Session stats: ${spoken}`}
-      accessibilityHint="Opens the stats"
+      accessibilityHint={onPress ? 'Opens the stats' : undefined}
       disabled={!onPress}
       onPress={onPress}
       style={({ pressed }) => [styles.panel, { backgroundColor: look.fill, borderColor: look.border, borderRadius: 18 * k, paddingHorizontal: 16 * k, paddingVertical: 14 * k, gap: 12 * k }, pressed && onPress ? styles.pressed : null]}
@@ -80,7 +91,9 @@ export function SessionStrip({ session, hidden = [], play = false, scale = 1, on
         </View>
         <View style={[styles.flex, { gap: 1 * k }]}>
           <Text style={[styles.title, { color: look.ink }, { fontSize: 14.5 * k, lineHeight: Math.round(19 * k) }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>{title}</Text>
-          {lead || source ? (
+          {sub ? (
+            <Text style={[styles.sub, small, { color: look.muted }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>{sub}</Text>
+          ) : lead || source ? (
             <Text style={[styles.sub, small, { color: look.muted }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>
               {lead ? (
                 <>
