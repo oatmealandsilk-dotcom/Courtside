@@ -67,7 +67,7 @@ maplibregl.setWorkerUrl(`${BASE}/maplibre/maplibre-gl-worker.mjs`);
  * marks. The controls laid over it are shared with the phone.
  */
 export function NearbyMap(props: NearbyMapProps) {
-  const { me, players, onOpen, onExpand, expanded = false, onBack, at, locationOn, locating = false, onToggleLocation, focusCourt, focusHit, focusUser, focusSpot, focusPlace, holdPins = false, hitCount } = props;
+  const { me, players, onOpen, onExpand, expanded = false, onBack, at, locationOn, locating = false, onToggleLocation, focusCourt, focusHit, focusUser, focusSpot, focusPlace, holdPins = false, hitCount, inviting = false } = props;
   const styles = useThemedStyles(styleDefinitions);
   const { theme, night } = useTheme();
   const insets = useSafeAreaInsets();
@@ -362,7 +362,7 @@ export function NearbyMap(props: NearbyMapProps) {
           {canvas}
           {/* A still card: the tap goes to the full map, not to the tiles. */}
           <Pressable accessibilityRole={onExpand ? 'button' : undefined} accessibilityLabel="Map of players, courts and hits near you" onPress={onExpand} disabled={!onExpand} style={StyleSheet.absoluteFill} />
-          <PreviewOverlay cityName={cityName} count={model.inCity.length} placeCount={model.cardCourts.length} hitCount={hitCount !== undefined && model.cardFromYou ? hitCount : model.cardHits.length} weather={weather} locationOn={locationOn} locating={locating} onToggleLocation={onToggleLocation} lock={lock} />
+          <PreviewOverlay cityName={cityName} count={model.inCity.length} placeCount={model.cardCourts.length} hitCount={hitCount !== undefined && model.cardFromYou ? hitCount : model.cardHits.length} weather={weather} locationOn={locationOn} locating={locating} onToggleLocation={onToggleLocation} lock={lock} inviting={inviting} />
           <MapCredit align="right" style={{ position: 'absolute', right: 10, bottom: 10 }} />
         </View>
       </View>

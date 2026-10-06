@@ -32,6 +32,12 @@ export interface NearbyMapProps {
    * counts from where you are; otherwise the card counts its own town's.
    */
   hitCount?: number;
+  /**
+   * The "You're early" card is right under the still card (Find Players, a
+   * known adult with nobody sharing nearby): it already asks for the first
+   * players, so the card's own "Be the first player on the map" stays out.
+   */
+  inviting?: boolean;
   /** "Who can see you on the map?" is up (or about to be) over the full map: its first pins wait to come in until it has gone. */
   holdPins?: boolean;
 }

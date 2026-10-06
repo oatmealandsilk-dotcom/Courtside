@@ -74,22 +74,28 @@ export function HitCard({ hit, miles, linked = true }: { hit: HitRequest; miles?
   };
   return (
     <Pressable accessible={linked} accessibilityRole={linked ? 'link' : undefined} disabled={!linked} onPress={linked ? () => router.push(`/hit-request/${hit.id}`) : undefined} style={({ pressed }) => [styles.card, pressed && { opacity: 0.92 }]}>
+      {/* Who, with the paper plane and the flag beside the name; when, under it, across the
+          card's full width, so "Tomorrow 9:00 AM" stays on one line on a small phone and the
+          name is never cut to "Sam Ortiz is lookin…" (Oct 5). The section says it is a hit. */}
       <View style={styles.head}>
         <Pressable accessibilityRole={openPoster ? 'link' : undefined} accessibilityLabel={openPoster ? `Open ${author!.name}'s profile` : undefined} disabled={!openPoster} onPress={(e) => { e.stopPropagation?.(); openPoster?.(); }}>
-          <Avatar name={author?.name ?? '?'} seed={author?.avatarSeed ?? hit.id} uri={author?.avatarUrl} size={36} />
+          <Avatar name={author?.name ?? '?'} seed={author?.avatarSeed ?? hit.id} uri={author?.avatarUrl} size={40} />
         </Pressable>
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <Pressable accessibilityRole={openPoster ? 'link' : undefined} disabled={!openPoster} onPress={(e) => { e.stopPropagation?.(); openPoster?.(); }} style={styles.whoPress}>
-            <Text style={styles.who} numberOfLines={1}>{mine ? 'Your hit' : author?.name ?? 'A player'}{mine ? null : <Text style={styles.wants}> is looking for a hit</Text>}</Text>
-          </Pressable>
-          <Text style={styles.when}>{hitWhen(hit.startsAt)}</Text>
+        <View style={styles.headWords}>
+          <View style={styles.whoRow}>
+            <Pressable accessibilityRole={openPoster ? 'link' : undefined} accessibilityLabel={openPoster ? `${author!.name} is looking for a hit. Open profile` : undefined} disabled={!openPoster} onPress={(e) => { e.stopPropagation?.(); openPoster?.(); }} style={styles.whoPress}>
+              <Text style={styles.who} numberOfLines={1}>{mine ? 'Your hit' : author?.name ?? 'A player'}</Text>
+            </Pressable>
+            <View style={styles.spacer} />
+            {open ? <Pressable accessibilityRole="button" accessibilityLabel="Send this hit to a chat" hitSlop={6} onPress={(e) => { e.stopPropagation?.(); router.push({ pathname: '/share', params: { kind: 'hit-request', id: hit.id } }); }} style={({ pressed }) => [styles.send, pressed && { opacity: 0.6 }]}>
+              <Ionicons name="paper-plane-outline" size={17} color={colors.textMuted} />
+            </Pressable> : null}
+            {theirs ? <Pressable accessibilityRole="button" accessibilityLabel="Report this hit" hitSlop={6} onPress={(e) => { e.stopPropagation?.(); report(); }} style={({ pressed }) => [styles.send, pressed && { opacity: 0.6 }]}>
+              <Ionicons name="flag-outline" size={16} color={colors.textMuted} />
+            </Pressable> : null}
+          </View>
+          <Text style={styles.when} numberOfLines={1}>{hitWhen(hit.startsAt)}</Text>
         </View>
-        {open ? <Pressable accessibilityRole="button" accessibilityLabel="Send this hit to a chat" hitSlop={8} onPress={(e) => { e.stopPropagation?.(); router.push({ pathname: '/share', params: { kind: 'hit-request', id: hit.id } }); }} style={({ pressed }) => [styles.send, pressed && { opacity: 0.6 }]}>
-          <Ionicons name="paper-plane-outline" size={18} color={colors.textMuted} />
-        </Pressable> : null}
-        {theirs ? <Pressable accessibilityRole="button" accessibilityLabel="Report this hit" hitSlop={8} onPress={(e) => { e.stopPropagation?.(); report(); }} style={({ pressed }) => [styles.send, pressed && { opacity: 0.6 }]}>
-          <Ionicons name="flag-outline" size={17} color={colors.textMuted} />
-        </Pressable> : null}
       </View>
       <Pressable accessibilityRole="link" accessibilityLabel={`${hit.place.name}${miles !== undefined ? `, ${formatMiles(miles)}` : ''}. See the court`} disabled={hit.place.lat === undefined} onPress={(e) => { e.stopPropagation?.(); if (hit.place.lat !== undefined && hit.place.lng !== undefined) openCourt({ id: hit.place.id, name: hit.place.name, lat: hit.place.lat, lng: hit.place.lng }); }} style={styles.place}>
         <CourtGlyph size={13} color={colors.brand} />
@@ -143,11 +149,14 @@ export function HitCard({ hit, miles, linked = true }: { hit: HitRequest; miles?
 const styleDefinitions = StyleSheet.create({
   card: { ...lift, gap: spacing.md, padding: spacing.lg, borderRadius: 20, backgroundColor: colors.surface },
   head: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  send: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bgElevated },
-  whoPress: { alignSelf: 'flex-start', maxWidth: '100%' },
+  headWords: { flex: 1, minWidth: 0 },
+  whoRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  // 32 drawn, 44 to the finger.
+  send: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bgElevated },
+  whoPress: { flexShrink: 1, minWidth: 0 },
+  spacer: { flex: 1 },
   who: { ...typography.bodyStrong, color: colors.text },
-  wants: { ...typography.body, color: colors.textMuted },
-  when: { ...typography.title, fontSize: 20, color: colors.text, marginTop: 2 },
+  when: { ...typography.title, fontSize: 20, color: colors.text, marginTop: -2 },
   place: { flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'flex-start', paddingHorizontal: 12, paddingVertical: 7, borderRadius: radius.pill, backgroundColor: colors.brandDim, maxWidth: '100%' },
   placeText: { ...typography.smallStrong, color: colors.brand, flexShrink: 1 },
   placeMiles: { ...typography.small, color: colors.brand },
