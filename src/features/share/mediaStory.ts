@@ -3,9 +3,8 @@ import { Directory, File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { captureRef } from 'react-native-view-shot';
 
-import { mixHex } from '@/features/activity/zones';
-import { colors, pageIsDark } from '@/theme';
 import { FACEBOOK_APP_ID, STORIES_URL, STORY_PX, stageSize } from './storyImage';
+import { storyFill } from './storyOverlay';
 
 /*
  * A clip or photo post of your own, straight into Instagram's story editor
@@ -90,12 +89,20 @@ type StoryAssets = { backgroundVideo?: string; backgroundImage?: string; sticker
  * stay see-through), a photo with the overlay on it as a JPEG. At exactly
  * Instagram's 1080 × 1920, as the session pictures are (storyImage.ts).
  * Nothing when there is no picture to take or it could not be taken.
+ *
+ * The photo on an iPhone is drawn layer by layer (useRenderInContext) rather
+ * than as it shows on screen: its hidden copy is taller than the menu that
+ * hides it (and, on a smaller iPhone, than the screen), and an on-screen
+ * snapshot could leave the part the menu cuts off blank. The sticker keeps
+ * the on-screen snapshot the session Share page uses: its overlay sits in
+ * the part on screen, and the rest is see-through either way.
  */
 async function photograph(view: View | null, format: 'png' | 'jpg'): Promise<string | undefined> {
   if (!view) return undefined;
   try {
     const size = Platform.OS === 'android' ? STORY_PX : stageSize();
-    return await captureRef(view, { format, quality: format === 'jpg' ? 0.92 : 1, result: 'base64', ...size });
+    const whole = Platform.OS === 'ios' && format === 'jpg' ? { useRenderInContext: true } : {};
+    return await captureRef(view, { format, quality: format === 'jpg' ? 0.92 : 1, result: 'base64', ...size, ...whole });
   } catch {
     return undefined;
   }
@@ -121,16 +128,15 @@ async function toInstagram(assets: StoryAssets, cancelled: () => boolean): Promi
     if (cancelled()) return 'cancelled';
     // Round a clip or photo that is not 9:16, Instagram fills with these two
     // (left out, react-native-share sends its own purple): the court's
-    // darkest colour, faintly tinted with the court at the top, as the
-    // session's Overlay design uses.
-    const deep = (pageIsDark() ? colors.bg : colors.text).slice(0, 7);
+    // darkest colour, faintly tinted with the court at the top (storyFill).
+    const fill = storyFill();
     await Share_.shareSingle({
       social: 'instagramstories' as never,
       appId: FACEBOOK_APP_ID,
       ...(Platform.OS === 'android' ? { useInternalStorage: true } : {}),
       ...assets,
-      backgroundTopColor: mixHex(deep, colors.court.slice(0, 7), 0.15),
-      backgroundBottomColor: deep,
+      backgroundTopColor: fill.top,
+      backgroundBottomColor: fill.bottom,
     } as never);
     return 'sent';
   } catch {
