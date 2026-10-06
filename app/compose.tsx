@@ -927,7 +927,7 @@ export default function Compose() {
         {preparing === 'all' ? <PreparingRing size={choiceIcon} done={prepDone} /> : <Ionicons name="images-outline" size={choiceIcon} color={colors.textMuted}/>}<Text style={styles.choiceLabel}>Post</Text><Text style={styles.note}>{preparing === 'all' ? 'Getting it ready…' : 'Choose from your photos and videos.'}</Text>
       </Pressable></Reanimated.View>}
       {pickError ? <Text style={styles.pickError}>{pickError}</Text> : null}
-      {entering ? null : <Reanimated.View entering={arrive(2)}><Pressable accessibilityRole="button" accessibilityLabel="Take an instant" onPress={() => router.replace('/hit')} style={[styles.choiceOption, tight && styles.choiceOptionTight, tighter && styles.choiceOptionTighter]}>
+      {entering ? null : <Reanimated.View entering={arrive(2)}><Pressable accessibilityRole="button" accessibilityLabel="Take an Instant" onPress={() => router.replace('/hit')} style={[styles.choiceOption, tight && styles.choiceOptionTight, tighter && styles.choiceOptionTighter]}>
         <Ionicons name="camera-outline" size={choiceIcon} color={colors.textMuted}/><Text style={styles.choiceLabel}>Instant</Text><Text style={styles.note}>A photo after you play. Up on the feed for a day.</Text>
       </Pressable></Reanimated.View>}
       {entering ? null : <Reanimated.View entering={arrive(3)}><Pressable accessibilityRole="button" accessibilityLabel="Create a thread or question" onPress={() => router.replace('/ask')} style={[styles.choiceOption, tight && styles.choiceOptionTight, tighter && styles.choiceOptionTighter]}>
@@ -1139,10 +1139,10 @@ export default function Compose() {
       {mode === 'hit' ? null : <SheetBackdrop />}
       <View style={styles.sheet}>
         <Screen
-          title={mode === 'clip' || openedClip ? 'New clip' : mode === 'post' ? 'New post' : mode === 'story' ? 'New story' : 'New instant'}
+          title={mode === 'clip' || openedClip ? 'New clip' : mode === 'post' ? 'New post' : mode === 'story' ? 'New story' : 'New Instant'}
           compactTitle
           onBack={formBack}
-          right={<Button label={mode === 'story' || mode === 'hit' ? 'Post instant' : 'Share'} variant="secondary" onPress={submit} disabled={!canSubmit || groupWaiting || groupGone} />}
+          right={<Button label={mode === 'story' || mode === 'hit' ? 'Post Instant' : 'Share'} variant="secondary" onPress={submit} disabled={!canSubmit || groupWaiting || groupGone} />}
         >
           <View style={mode === 'story' || mode === 'hit' ? styles.form : null}>
             {/* Opened for a tracker's session that never came (hidden, gone after 30 days): a plain new post. */}
@@ -1177,7 +1177,7 @@ export default function Compose() {
               ) : mode === 'hit' && media?.uri ? (
                 // The hit is what the camera took, full stop: shown plainly, nothing to click.
                 <View style={styles.hitFrame}>
-                  <Image source={{ uri: media.uri }} style={StyleSheet.absoluteFill} resizeMode="cover" accessibilityLabel="Your instant" />
+                  <Image source={{ uri: media.uri }} style={StyleSheet.absoluteFill} resizeMode="cover" accessibilityLabel="Your Instant" />
                 </View>
               ) : (
                 <MediaPicker bare orientation={orientation} portraitRatio={portraitRatio} selection={mode === 'clip' ? 'video' : 'all'} value={media} onChange={setMedia} trim={edit} onCoverAt={(at) => setEdit((was) => ({ ...was, coverAt: at }))} />

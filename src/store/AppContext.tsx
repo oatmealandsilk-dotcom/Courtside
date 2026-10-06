@@ -4246,7 +4246,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // strip across the top counts the upload up, and a failure says so
       // instead of leaving a hit only this phone can see. Once it lands it
       // goes to the very top of Home.
-      startUpload(story.id, 'Posting instant', story.thumbnailUrl ?? story.imageUrl);
+      startUpload(story.id, 'Posting Instant', story.thumbnailUrl ?? story.imageUrl);
       (async () => {
         try {
           const local = [isLocalMedia(story.imageUrl), isLocalMedia(story.videoUrl), isLocalMedia(story.thumbnailUrl) && story.thumbnailUrl !== story.imageUrl];
