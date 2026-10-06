@@ -1,7 +1,8 @@
-import React, { useEffect, useMemo } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useMemo, useRef } from 'react';
+import { Pressable, StyleSheet, Text, View, type ScrollView } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { type SharedValue, useSharedValue } from 'react-native-reanimated';
 
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { FollowPill } from '@/components/FollowPill';
@@ -9,16 +10,19 @@ import { LiveDot } from '@/components/LiveDot';
 import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { Duration } from '@/components/session/Duration';
 import { PlayerCard, Swatch, upcoming } from '@/components/tennis/PlayerCard';
-import { AddRow, CountdownTile, MedalRow, Row, SectionHead, Tag, Tile } from '@/components/tennis/ProfileParts';
+import { AddRow, Box, CountdownTile, MedalRow, NextMedal, Row, SectionHead, Tag, Tile } from '@/components/tennis/ProfileParts';
+import { PIN_GAP, ProfileTabs } from '@/components/tennis/ProfileTabs';
+import { WeekBars } from '@/components/tennis/WeekBars';
 import { Tappable } from '@/components/Tappable';
-import { BrandWash, DottedRule, EmptyState, Screen } from '@/components/ui';
+import { BrandWash, EmptyState, Screen } from '@/components/ui';
 import type { PracticeSession, User } from '@/data/types';
-import { activityDay, loggedLabel } from '@/features/activity/format';
-import { pickSource, sourceOn } from '@/features/activity/recent';
+import { KIND_LABEL, activityDay, loggedLabel, spokenDuration } from '@/features/activity/format';
+import { pickSource, sourceOn, sourceWord } from '@/features/activity/recent';
 import { canTagKind, firstName, peopleText, peopleWords } from '@/features/activity/sessionTags';
 import { useTennisFlags } from '@/features/activity/useTennisFlags';
 import { isTennisActivity, workoutIcon } from '@/features/activity/workouts';
-import { dayLabel, eventDate, newestFirst, shortDate, shortLength, surfaceSlot, weekOnCourt } from '@/features/players/tennisProfile';
+import { type ProfileTab, useProfileTab } from '@/features/players/profileTab';
+import { dayLabel, eventDate, newestFirst, shortDate, shortLength, surfaceSlot, weekDays, weekNumbers } from '@/features/players/tennisProfile';
 import { wrappedYear } from '@/features/wrapped/yearInTennis';
 import { evaluateAchievements, surfaceLabel } from '@/lib/badges';
 import { confirm } from '@/lib/confirm';
@@ -31,21 +35,29 @@ import { colors, font, pageIsDark, spacing, typography } from '@/theme';
 
 /**
  * The Tennis profile (Oct 5): a player's tennis in one place, yours or
- * anyone's. It opens on their player card (the rating on its own ruler, how
- * they play, the numbers worth knowing) and then reads as a page of quiet
- * sections on dotted rules.
+ * anyone's. It opens on their player card (the rating, how they play, the
+ * numbers worth knowing).
  *
- * Yours is your tennis hub: Log a session and Edit under the card, your year
- * in tennis while it is out, then what only you see (your sessions, your
- * health numbers, the injuries and limits coaches plan around, each marked
- * with a lock), then tournaments, goals, your gear bag and achievements, each
- * with its own Add or Edit.
+ * Yours (Oct 5, owner: "A is best sectioning for tennis profile") keeps Log a
+ * session and Edit under the card, then sorts everything else into three
+ * tabs, one showing at a time, each section in a white box of its own:
+ *   Activity: this week (time on court, a small chart, sessions, matches and
+ *     the longest), what is waiting on you (tags to answer, workouts to
+ *     log), your last three sessions; and your year in tennis while it is out.
+ *   Health: today's recovery, sleep and HRV with the way to your trackers,
+ *     then the injuries and limits coaches plan around.
+ *   Game: tournaments, goals, your gear bag and achievements, each with its
+ *     own Add or Edit.
+ * Activity and Health are yours alone, each saying so once ("Only you").
+ * The tabs stay pinned at the top as you scroll, and the page opens on the
+ * one you used last.
  *
- * Someone else's shows only what they could see before: a private account
- * you don't follow is a locked page with Follow, a blocked or suspended one
- * says the player isn't available, and sessions, health and injuries are
- * never drawn for anyone but their owner. Their tournaments are whatever the
- * data layer shares (plans only reach friends who follow each other).
+ * Someone else's has no buttons and no tabs: their card, then only the Game
+ * sections they have filled in, in the same boxes. A private account you
+ * don't follow is a locked page with Follow, a blocked or suspended one says
+ * the player isn't available, and sessions, health and injuries are never
+ * drawn for anyone but their owner. Their tournaments are whatever the data
+ * layer shares (plans only reach friends who follow each other).
  */
 export default function TennisProfile() {
   const styles = useThemedStyles(styleDefinitions);
@@ -53,6 +65,9 @@ export default function TennisProfile() {
   const { userId } = useLocalSearchParams<{ userId?: string }>();
   const { currentUser, currentUserId, users, followingIds, followRequests, blockedIds, actions } = useApp();
   const loading = useStillLoading();
+  // The page's scroll, for the tabs to pin themselves at the top and to jump back up to when switched there.
+  const offsetY = useSharedValue(0);
+  const scrollRef = useRef<ScrollView | null>(null);
   const user = userId ? users.find((u) => u.id === userId) ?? null : currentUser;
   const isMe = !!user && user.id === currentUser?.id;
   // Someone else's tournament plans show only while you follow each other
@@ -62,7 +77,7 @@ export default function TennisProfile() {
   const { loadTournamentPlans } = actions;
   useEffect(() => { if (otherId) void loadTournamentPlans(); }, [otherId, loadTournamentPlans]);
 
-  const shell = (children: React.ReactNode) => <Screen title="Tennis profile" compactTitle onBack={() => goBack()}>{children}</Screen>;
+  const shell = (children: React.ReactNode) => <Screen title="Tennis profile" compactTitle onBack={() => goBack()} offsetY={offsetY} scrollRef={scrollRef}>{children}</Screen>;
 
   if (!user) {
     return shell(loading ? <View style={styles.wait}><CourtSpinner size={28} /></View> : <EmptyState icon="person-outline" title="No such player" />);
@@ -89,13 +104,22 @@ export default function TennisProfile() {
     );
   }
 
-  return shell(isMe ? <Mine user={user} /> : <Theirs user={user} />);
+  return shell(isMe ? <Mine user={user} offsetY={offsetY} scrollRef={scrollRef} /> : <Theirs user={user} />);
 }
 
-/** Your own page, top to bottom. */
-function Mine({ user }: { user: User }) {
+/** Your own page: the card, the two buttons, the tabs, and the open tab's sections. */
+function Mine({ user, offsetY, scrollRef }: { user: User; offsetY: SharedValue<number>; scrollRef: React.MutableRefObject<ScrollView | null> }) {
   const styles = useThemedStyles(styleDefinitions);
-  const year = wrappedYear();
+  const { tab, choose, ready } = useProfileTab(user.id);
+  // Where the tabs sit on the page, once laid out.
+  const tabsAt = useRef<number | null>(null);
+  const pick = (next: ProfileTab) => {
+    if (next === tab) return;
+    // Switched while the tabs ride pinned at the top: the new tab starts just under them, not part way down it.
+    const at = tabsAt.current;
+    if (at !== null && offsetY.value > at - PIN_GAP) scrollRef.current?.scrollTo({ y: Math.max(0, at - PIN_GAP), animated: false });
+    choose(next);
+  };
   return (
     <>
       <View style={styles.cardSpot}><PlayerCard user={user} variant="full" /></View>
@@ -116,31 +140,55 @@ function Mine({ user }: { user: User }) {
           </View>
         </Tappable>
       </View>
-      {/* December to mid-January: the year's recap, a row of its own. */}
-      {year ? (
-        <View style={styles.yearRow}>
-          <Row first lead={<Tile><Ionicons name="sparkles-outline" size={18} color={colors.brand} /></Tile>} title={`Your ${year} in tennis`} chevron accessibilityRole="link" onPress={() => router.push('/wrapped')} />
-        </View>
-      ) : null}
-      <DottedRule />
-      <Sessions user={user} />
-      <DottedRule />
-      <Health />
-      <DottedRule />
-      <Limits user={user} />
-      <DottedRule />
-      <Tournaments user={user} mine />
-      <DottedRule />
-      <Goals user={user} mine />
-      <DottedRule />
-      <Gear user={user} mine />
-      <DottedRule />
-      <Achievements user={user} mine />
+      <ProfileTabs value={ready ? tab : null} onChange={pick} offsetY={offsetY} onPlaced={(y) => { tabsAt.current = y; }} />
+      {!ready ? null : tab === 'activity' ? <ActivityTab user={user} /> : tab === 'health' ? <HealthTab user={user} /> : <GameTab user={user} />}
     </>
   );
 }
 
-/** Someone else's: their card, then only the sections they have filled in. Never their sessions, health or injuries. */
+/** This week, what is waiting on you, your last sessions; in December and early January your year in tennis first. */
+function ActivityTab({ user }: { user: User }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const year = wrappedYear();
+  return (
+    <View style={styles.tabBody}>
+      {year ? (
+        <Box>
+          <Row first lead={<Tile><Ionicons name="sparkles-outline" size={18} color={colors.brand} /></Tile>} title={`Your ${year} in tennis`} chevron accessibilityRole="link" onPress={() => router.push('/wrapped')} />
+        </Box>
+      ) : null}
+      <ThisWeek user={user} />
+      <Waiting user={user} />
+      <Recent user={user} />
+    </View>
+  );
+}
+
+/** Today's numbers from your tracker, then the injuries and limits coaches plan around. */
+function HealthTab({ user }: { user: User }) {
+  const styles = useThemedStyles(styleDefinitions);
+  return (
+    <View style={styles.tabBody}>
+      <Health />
+      <Limits user={user} />
+    </View>
+  );
+}
+
+/** What other players see of yours, with your Add and Edit on each. */
+function GameTab({ user }: { user: User }) {
+  const styles = useThemedStyles(styleDefinitions);
+  return (
+    <View style={styles.tabBody}>
+      <Tournaments user={user} mine />
+      <Goals user={user} mine />
+      <Gear user={user} mine />
+      <Achievements user={user} mine />
+    </View>
+  );
+}
+
+/** Someone else's: their card, then only the Game sections they have filled in. Never their sessions, health or injuries. */
 function Theirs({ user }: { user: User }) {
   const styles = useThemedStyles(styleDefinitions);
   const p = user.profile;
@@ -151,26 +199,79 @@ function Theirs({ user }: { user: User }) {
     gear && (gear.racket || gear.strings || gear.shoes) ? <Gear key="b" user={user} /> : null,
     evaluateAchievements(user).some((a) => a.unlocked) ? <Achievements key="a" user={user} /> : null,
   ].filter(Boolean) as React.ReactElement[];
+  const first = firstName(user.name);
   return (
     <>
       <View style={styles.cardSpot}><PlayerCard user={user} variant="full" /></View>
-      {parts.length ? parts.map((part) => <React.Fragment key={part.key}><DottedRule />{part}</React.Fragment>) : (
-        <Text style={styles.allShared}>That’s everything {firstName(user.name)} has shared so far.</Text>
-      )}
+      {parts.length ? <View style={styles.theirBody}>{parts}</View> : null}
+      <Text style={styles.allShared}>{parts.length ? `That’s everything ${first} shares.` : `That’s everything ${first} has shared so far.`}</Text>
     </>
   );
 }
 
 /**
- * Your last three sessions (only you see them): someone's tag waiting for
- * your yes first, then a tracker's workout waiting to be logged. "See all"
- * is always there, since Your sessions also keeps the tags, past workouts
- * and the every-workout offer. Hold a session to remove it.
+ * The last seven days (only you see them): time on court in big figures, a
+ * small bar a day, then sessions, matches and the longest. Fitness is left
+ * out, as on the card.
  */
-function Sessions({ user }: { user: User }) {
-  const { sessions, sessionTags, users, detectedActivities, currentUserId, actions } = useApp();
+function ThisWeek({ user }: { user: User }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const { sessions } = useApp();
+  const days = useMemo(() => weekDays(sessions, user.id), [sessions, user.id]);
+  const n = useMemo(() => weekNumbers(sessions, user.id), [sessions, user.id]);
+  const total = days.reduce((sum, d) => sum + d.minutes, 0);
+  const matches = n.matches && n.told ? `${n.won}–${n.lost}` : String(n.matches);
+  const matchesSpoken = n.matches && n.told ? `${n.matches} ${n.matches === 1 ? 'match' : 'matches'}, ${n.won} won, ${n.lost} lost` : `${n.matches} ${n.matches === 1 ? 'match' : 'matches'}`;
+  return (
+    <View>
+      <SectionHead title="This week" onlyYou />
+      <Box padded>
+        {total > 0 ? (
+          <View accessible accessibilityLabel={`${spokenDuration(total)} on court in the last 7 days`}>
+            <Duration minutes={total} size={34} color={colors.text} unitColor={colors.textMuted} />
+            <Text style={styles.weekCaption}>on court in the last 7 days</Text>
+          </View>
+        ) : <Text style={styles.weekNone}>Nothing on court in the last 7 days</Text>}
+        <WeekBars days={days} />
+        {n.sessions ? (
+          <View style={styles.weekStats}>
+            <View style={styles.weekStat} accessible accessibilityLabel={`${n.sessions} ${n.sessions === 1 ? 'session' : 'sessions'}`}>
+              <Text maxFontSizeMultiplier={1.25} style={styles.weekFigure}>{n.sessions}</Text>
+              <Text style={styles.weekLabel}>{n.sessions === 1 ? 'Session' : 'Sessions'}</Text>
+            </View>
+            <View style={[styles.weekStat, styles.weekDivide]} accessible accessibilityLabel={matchesSpoken}>
+              <Text maxFontSizeMultiplier={1.25} style={styles.weekFigure}>{matches}</Text>
+              <Text style={styles.weekLabel}>{n.matches === 1 && !n.told ? 'Match' : 'Matches'}</Text>
+            </View>
+            <View style={[styles.weekStat, styles.weekDivide]} accessible accessibilityLabel={`Longest, ${spokenDuration(n.longest)}`}>
+              <Duration minutes={n.longest} size={20} color={colors.text} unitColor={colors.textMuted} unitScale={0.65} />
+              <Text style={styles.weekLabel}>Longest</Text>
+            </View>
+          </View>
+        ) : null}
+      </Box>
+    </View>
+  );
+}
+
+/** "Yesterday’s match", "Saturday’s practice", "Match on Sep 28": a tagged session, said the short way. */
+function taggedWhat(kind: PracticeSession['kind'], day: string): string {
+  const what = kind === 'fitness' ? 'workout' : KIND_LABEL[kind].toLowerCase();
+  const when = dayLabel(day);
+  return /\d/.test(when) ? `${what.charAt(0).toUpperCase()}${what.slice(1)} on ${when}` : `${when}’s ${what}`;
+}
+
+/** "WHOOP", "WHOOP and Apple Watch", "WHOOP, Oura and Apple Watch". */
+const andList = (words: string[]) => (words.length <= 1 ? words.join('') : `${words.slice(0, -1).join(', ')} and ${words[words.length - 1]}`);
+
+/**
+ * What is waiting on you (only you see it): someone's tag waiting for your
+ * yes, then a tracker's workout waiting to be logged. Nothing at all while
+ * nothing waits.
+ */
+function Waiting({ user }: { user: User }) {
+  const { sessionTags, users, detectedActivities, currentUserId } = useApp();
   const flags = useTennisFlags();
-  const recent = useMemo(() => sessions.filter((s) => s.userId === user.id).sort(newestFirst).slice(0, 3), [sessions, user.id]);
   const waiting = useMemo(
     () => detectedActivities.filter((a) => a.userId === user.id && a.status === 'new' && sourceOn(a, flags)).sort((a, b) => b.startedAt.localeCompare(a.startedAt)),
     [detectedActivities, user.id, flags],
@@ -180,38 +281,57 @@ function Sessions({ user }: { user: User }) {
     () => sessionTags.filter((t) => t.taggedId === currentUserId && t.status === 'pending' && !t.dropped && users.some((u) => u.id === t.taggerId)).sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
     [sessionTags, currentUserId, users],
   );
-  const week = weekOnCourt(sessions, user.id);
-  const nothing = !recent.length && !waiting.length && !asking.length;
-  // An empty section says one thing, on its row; the line is for what is there.
-  const line = week > 0 ? `${shortLength(week)} on court in the last 7 days` : nothing ? undefined : 'Nothing on court in the last 7 days';
-  const w = waiting[0];
-  const what = w && isTennisActivity(w) ? 'session' : 'workout';
   const tagger = asking[0] ? users.find((u) => u.id === asking[0].taggerId) : undefined;
+  const ask = asking.length && tagger ? asking[0] : undefined;
+  const w = waiting[0];
+  if (!ask && !w) return null;
+  const what = w && isTennisActivity(w) ? 'session' : 'workout';
+  const sources = andList([...new Set(waiting.map((a) => sourceWord(a)))]);
+  return (
+    <View>
+      <SectionHead title="Waiting on you" count={(ask ? asking.length : 0) + waiting.length} />
+      <Box>
+        {ask && tagger ? (
+          <Row first
+            lead={<Tile icon="pricetag-outline" />}
+            title={asking.length === 1 ? `${firstName(tagger.name)} tagged you` : `${asking.length} players tagged you`}
+            sub={asking.length === 1 ? `${taggedWhat(ask.kind, ask.day)} · Accept or decline` : 'Accept or decline'}
+            chevron
+            accessibilityRole="link"
+            onPress={() => router.push('/your-sessions')}
+          />
+        ) : null}
+        {w ? (
+          <Row first={!ask}
+            lead={<Tile><LiveDot size={8} /></Tile>}
+            title={waiting.length === 1 ? `1 ${what} from ${pickSource({ type: 'tracker', activity: w })} to log` : `${waiting.length} workouts to log`}
+            sub={waiting.length === 1 ? `${dayLabel(activityDay(w))} · ${shortLength(w.minutes)}` : `From ${sources || 'your trackers'}`}
+            chevron
+            onPress={() => (waiting.length === 1 ? router.push({ pathname: '/compose', params: { activity: w.id } }) : router.push('/your-sessions'))}
+          />
+        ) : null}
+      </Box>
+    </View>
+  );
+}
+
+/**
+ * Your last three sessions (only you see them). "See all" is always there,
+ * since Your sessions also keeps the tags, past workouts and the
+ * every-workout offer. Hold a session to remove it.
+ */
+function Recent({ user }: { user: User }) {
+  const { sessions, sessionTags, users, currentUserId, actions } = useApp();
+  const recent = useMemo(() => sessions.filter((s) => s.userId === user.id).sort(newestFirst).slice(0, 3), [sessions, user.id]);
   const remove = (s: PracticeSession) => confirm({ title: 'Remove this session?', message: 'It comes off your streak and totals.', confirmLabel: 'Remove', destructive: true, onConfirm: () => actions.deleteSession(s.id) });
   return (
     <View>
-      <SectionHead title="Your sessions" lock line={line} link={{ label: 'See all', accessibilityLabel: 'See all your sessions', onPress: () => router.push('/your-sessions') }} />
-      {asking.length && tagger ? (
-        <Row first
-          lead={<Tile icon="pricetag-outline" />}
-          title={asking.length === 1 ? `${firstName(tagger.name)} tagged you` : `${asking.length} players tagged you`}
-          sub="Accept or decline"
-          chevron
-          accessibilityRole="link"
-          onPress={() => router.push('/your-sessions')}
-        />
-      ) : null}
-      {w ? (
-        <Row first={!asking.length}
-          lead={<Tile><LiveDot size={8} /></Tile>}
-          title={waiting.length === 1 ? `1 ${what} from ${pickSource({ type: 'tracker', activity: w })} to log` : `${waiting.length} workouts to log`}
-          sub={waiting.length === 1 ? `${dayLabel(activityDay(w))} · ${shortLength(w.minutes)}` : 'From your trackers'}
-          chevron
-          onPress={() => (waiting.length === 1 ? router.push({ pathname: '/compose', params: { activity: w.id } }) : router.push('/your-sessions'))}
-        />
-      ) : null}
-      {recent.map((s, i) => <SessionRow key={s.id} session={s} first={!w && !asking.length && i === 0} me={currentUserId} sessionTags={sessionTags} users={users} onRemove={() => remove(s)} />)}
-      {nothing ? <AddRow icon="stopwatch-outline" title="Log your first session" sub="It builds your record, hours and streak." onPress={() => router.push('/log-session')} /> : null}
+      <SectionHead title="Recent sessions" link={{ label: 'See all', accessibilityLabel: 'See all your sessions', onPress: () => router.push('/your-sessions') }} />
+      <Box>
+        {recent.length
+          ? recent.map((s, i) => <SessionRow key={s.id} session={s} first={i === 0} me={currentUserId} sessionTags={sessionTags} users={users} onRemove={() => remove(s)} />)
+          : <AddRow icon="stopwatch-outline" title="Log your first session" sub="It builds your record, hours and streak." onPress={() => router.push('/log-session')} />}
+      </Box>
     </View>
   );
 }
@@ -243,7 +363,11 @@ function SessionRow({ session: s, first, me, sessionTags, users, onRemove }: { s
   );
 }
 
-/** Today's recovery, sleep and HRV from your tracker, and the way to the Health page. Numbers only; never advice. */
+/**
+ * Today's recovery, sleep and HRV from your tracker (only you see them), and
+ * the way to the Health page. Numbers only; never advice. A reading from an
+ * earlier day says which day, under "Latest".
+ */
 function Health() {
   const styles = useThemedStyles(styleDefinitions);
   const { healthHistory, integrations } = useApp();
@@ -251,36 +375,46 @@ function Health() {
   if (!latest) {
     return (
       <View>
-        <SectionHead title="Health" lock />
-        <AddRow icon="pulse-outline" title="Connect a tracker" sub="Recovery, sleep and food from WHOOP, Apple Watch, Fitbit, Oura or Polar." onPress={() => router.push('/health')} />
+        <SectionHead title="Recovery and sleep" onlyYou />
+        <Box>
+          <AddRow icon="pulse-outline" title="Connect a tracker" sub="Recovery, sleep and food from WHOOP, Apple Watch, Fitbit, Oura or Polar." onPress={() => router.push('/health')} />
+        </Box>
       </View>
     );
   }
   const source = integrations.filter((i) => i.connected && i.category === 'wearable').sort((a, b) => (b.lastSyncedAt ?? '').localeCompare(a.lastSyncedAt ?? ''))[0];
   const ago = source?.lastSyncedAt ? relativeTime(source.lastSyncedAt) : '';
-  const synced = !ago ? '' : ago === 'just now' ? ' · synced just now' : /\d[mh]$/.test(ago) ? ` · synced ${ago} ago` : ` · synced ${ago}`;
+  const synced = !ago ? '' : ago === 'just now' ? 'synced just now' : /\d[mh]$/.test(ago) ? `synced ${ago} ago` : `synced ${ago}`;
   // The day is a plain YYYY-MM-DD: read as it is, never through a Date (which takes it as UTC midnight, a day early in America).
   const dayWord = dayLabel(latest.date.slice(0, 10));
+  const recent = dayWord === 'Today' || dayWord === 'Yesterday';
+  const from = source ? (recent ? `From ${source.label}` : `${dayWord}, from ${source.label}`) : recent ? '' : dayWord;
+  const line = [from, synced].filter(Boolean).join(' · ');
   const sleepMin = Math.round((latest.sleepHours || 0) * 60);
-  const cells: { label: string; parts: [string, string][]; spoken: string }[] = [
-    { label: 'Recovery', parts: latest.recovery ? [[String(latest.recovery), '%']] : [], spoken: latest.recovery ? `Recovery ${latest.recovery} percent` : 'Recovery not read' },
-    { label: 'Sleep', parts: sleepMin ? (sleepMin >= 60 ? [[String(Math.floor(sleepMin / 60)), 'h'], ...(sleepMin % 60 ? [[String(sleepMin % 60).padStart(2, '0'), 'm'] as [string, string]] : [])] : [[String(sleepMin), 'm']]) : [], spoken: sleepMin ? `Sleep ${shortLength(sleepMin)}` : 'Sleep not read' },
-    { label: 'HRV', parts: latest.hrvMs ? [[String(latest.hrvMs), ' ms']] : [], spoken: latest.hrvMs ? `HRV ${latest.hrvMs} milliseconds` : 'HRV not read' },
+  const cells: { label: string; icon: 'pulse-outline' | 'moon-outline' | 'heart-outline'; parts: [string, string][]; spoken: string }[] = [
+    { label: 'Recovery', icon: 'pulse-outline', parts: latest.recovery ? [[String(latest.recovery), '%']] : [], spoken: latest.recovery ? `Recovery ${latest.recovery} percent` : 'Recovery not read' },
+    { label: 'Sleep', icon: 'moon-outline', parts: sleepMin ? (sleepMin >= 60 ? [[String(Math.floor(sleepMin / 60)), 'h'], ...(sleepMin % 60 ? [[String(sleepMin % 60).padStart(2, '0'), 'm'] as [string, string]] : [])] : [[String(sleepMin), 'm']]) : [], spoken: sleepMin ? `Sleep ${shortLength(sleepMin)}` : 'Sleep not read' },
+    { label: 'HRV', icon: 'heart-outline', parts: latest.hrvMs ? [[String(latest.hrvMs), ' ms']] : [], spoken: latest.hrvMs ? `HRV ${latest.hrvMs} milliseconds` : 'HRV not read' },
   ];
   return (
     <View>
-      <SectionHead title="Health" lock line={`${dayWord}${source ? `, from ${source.label}` : ''}${synced}`} />
-      <View style={styles.healthRow}>
-        {cells.map((c, i) => (
-          <View key={c.label} accessible accessibilityLabel={c.spoken} style={[styles.healthCell, i > 0 && styles.healthDivide]}>
-            <Text maxFontSizeMultiplier={1.25} style={styles.healthFigure}>
-              {c.parts.length ? c.parts.map(([n, u], j) => <React.Fragment key={j}>{j > 0 ? ' ' : ''}{n}<Text style={styles.healthUnit}>{u}</Text></React.Fragment>) : '—'}
-            </Text>
-            <Text style={styles.healthLabel}>{c.label}</Text>
-          </View>
-        ))}
-      </View>
-      <Row minHeight={52} title="Trackers, sleep and food" chevron accessibilityRole="link" onPress={() => router.push('/health')} />
+      <SectionHead title={recent ? dayWord : 'Latest'} onlyYou line={line || undefined} />
+      <Box>
+        <View style={styles.healthRow}>
+          {cells.map((c, i) => (
+            <View key={c.label} accessible accessibilityLabel={c.spoken} style={[styles.healthCell, i > 0 && styles.healthDivide]}>
+              <View style={styles.healthLabelRow}>
+                <Ionicons name={c.icon} size={12} color={colors.textMuted} />
+                <Text style={styles.healthLabel}>{c.label}</Text>
+              </View>
+              <Text maxFontSizeMultiplier={1.25} style={styles.healthFigure}>
+                {c.parts.length ? c.parts.map(([n, u], j) => <React.Fragment key={j}>{j > 0 ? ' ' : ''}{n}<Text style={styles.healthUnit}>{u}</Text></React.Fragment>) : '—'}
+              </Text>
+            </View>
+          ))}
+        </View>
+        <Row minHeight={52} title="Trackers, sleep and food" chevron accessibilityRole="link" onPress={() => router.push('/health')} />
+      </Box>
     </View>
   );
 }
@@ -291,13 +425,15 @@ function Limits({ user }: { user: User }) {
   const add = () => router.push({ pathname: '/tennis-sheet', params: { kind: 'limit' } });
   return (
     <View>
-      <SectionHead title="Injuries and limits" lock line={shown.length ? 'Coaches plan around these.' : undefined} link={shown.length ? { label: 'Add', accessibilityLabel: 'Add an injury or a time limit', onPress: add } : undefined} />
-      {shown.length ? shown.map((c, i) => (
-        <Row key={c.id} first={i === 0} lead={<Tile icon={c.kind === 'injury' ? 'bandage-outline' : 'calendar-outline'} />} title={c.label} sub={c.note} subLines={2}
-          onPress={() => router.push({ pathname: '/tennis-sheet', params: { kind: 'limit', id: c.id } })}
-          accessibilityLabel={`${c.kind === 'injury' ? 'Injury' : 'Limit'}: ${c.label}${c.note ? `. ${c.note}` : ''}. Edit or remove`}
-        />
-      )) : <AddRow icon="bandage-outline" title="Add an injury or a time limit" sub="A sore shoulder, or courts only before 8am: coaches plan around it." onPress={add} />}
+      <SectionHead title="Injuries and limits" line={shown.length ? 'Coaches plan around these.' : undefined} link={shown.length ? { label: 'Add', accessibilityLabel: 'Add an injury or a time limit', onPress: add } : undefined} />
+      <Box>
+        {shown.length ? shown.map((c, i) => (
+          <Row key={c.id} first={i === 0} lead={<Tile icon={c.kind === 'injury' ? 'bandage-outline' : 'calendar-outline'} />} title={c.label} sub={c.note} subLines={3}
+            onPress={() => router.push({ pathname: '/tennis-sheet', params: { kind: 'limit', id: c.id } })}
+            accessibilityLabel={`${c.kind === 'injury' ? 'Injury' : 'Limit'}: ${c.label}${c.note ? `. ${c.note}` : ''}. Edit or remove`}
+          />
+        )) : <AddRow icon="bandage-outline" title="Add an injury or a time limit" sub="A sore shoulder, or courts only before 8am: coaches plan around it." onPress={add} />}
+      </Box>
     </View>
   );
 }
@@ -313,21 +449,28 @@ function Tournaments({ user, mine = false }: { user: User; mine?: boolean }) {
   return (
     <View>
       <SectionHead title="Tournaments" line={line} link={mine && list.length ? { label: 'Edit', accessibilityLabel: 'Edit your tournaments', onPress: edit } : undefined} />
-      {list.length ? list.map((t, i) => (
-        <Row key={t.id} first={i === 0} minHeight={80} leadWidth={56}
-          lead={<CountdownTile iso={t.startsAt} slot={surfaceSlot(t.surface)} />}
-          title={<Text style={styles.eventName} numberOfLines={2}>{t.name}</Text>}
-          sub={(
-            <View style={styles.eventLine}>
-              <Text style={styles.eventMeta}>{eventDate(t.startsAt)} · </Text>
-              <Swatch surface={t.surface} look={{ wash: null, ink: colors.text }} size={8} />
-              <Text style={[styles.eventMeta, styles.shrink]} numberOfLines={1}>{surfaceLabel[t.surface]}{t.location ? ` · ${t.location.split(',')[0]}` : ''}</Text>
-            </View>
-          )}
-          right={<Tag label={t.registered ? 'Entered' : 'Watching'} on={t.registered} />}
-          accessibilityLabel={`${t.name}, ${eventDate(t.startsAt)}, ${surfaceLabel[t.surface]} court${t.location ? `, ${t.location}` : ''}. ${t.registered ? 'Entered' : 'Watching'}`}
-        />
-      )) : mine ? <AddRow icon="trophy-outline" title="Add a tournament" sub="A date on the calendar gives your training a target." onPress={edit} /> : null}
+      <Box>
+        {list.length ? list.map((t, i) => (
+          <Row key={t.id} first={i === 0} minHeight={80} leadWidth={56}
+            lead={<CountdownTile iso={t.startsAt} slot={surfaceSlot(t.surface)} />}
+            // The tag beside the name, so the date and place under it have the box's whole width.
+            title={(
+              <View style={styles.eventTop}>
+                <Text style={[styles.eventName, styles.shrink]} numberOfLines={2}>{t.name}</Text>
+                <Tag label={t.registered ? 'Entered' : 'Watching'} on={t.registered} />
+              </View>
+            )}
+            sub={(
+              <View style={styles.eventLine}>
+                <Text style={[styles.eventMeta, styles.keep]}>{eventDate(t.startsAt)} · </Text>
+                <Swatch surface={t.surface} look={{ wash: null, ink: colors.text }} size={8} />
+                <Text style={[styles.eventMeta, styles.shrink]} numberOfLines={1}>{surfaceLabel[t.surface]}{t.location ? ` · ${t.location.split(',')[0]}` : ''}</Text>
+              </View>
+            )}
+            accessibilityLabel={`${t.name}, ${eventDate(t.startsAt)}, ${surfaceLabel[t.surface]} court${t.location ? `, ${t.location}` : ''}. ${t.registered ? 'Entered' : 'Watching'}`}
+          />
+        )) : mine ? <AddRow icon="trophy-outline" title="Add a tournament" sub="A date on the calendar gives your training a target." onPress={edit} /> : null}
+      </Box>
     </View>
   );
 }
@@ -343,16 +486,18 @@ function Goals({ user, mine = false }: { user: User; mine?: boolean }) {
   return (
     <View>
       <SectionHead title="Goals" line={line} link={mine && goals.length ? { label: 'Add', accessibilityLabel: 'Add a goal', onPress: add } : undefined} />
-      {goals.map((g, i) => (
-        <Row key={g.id} first={i === 0}
-          lead={<Ionicons name={g.done ? 'checkmark-circle' : 'flag-outline'} size={g.done ? 20 : 18} color={g.done ? colors.brand : colors.textFaint} />}
-          title={<Text style={[styles.goal, g.done && styles.goalDone]} numberOfLines={3}>{g.label}</Text>}
-          right={g.targetDate ? <Text style={styles.goalBy}>by {shortDate(g.targetDate)}</Text> : undefined}
-          onPress={mine ? () => router.push({ pathname: '/tennis-sheet', params: { kind: 'goal', id: g.id } }) : undefined}
-          accessibilityLabel={`${g.label}${g.targetDate ? `, by ${shortDate(g.targetDate)}` : ''}${g.done ? ', done' : ''}${mine ? '. Mark done, edit or remove' : ''}`}
-        />
-      ))}
-      {mine && !goals.length ? <AddRow icon="flag-outline" title="Add a goal" sub="Something to aim at. Coaches plan toward it." onPress={add} /> : null}
+      <Box>
+        {goals.map((g, i) => (
+          <Row key={g.id} first={i === 0}
+            lead={<Ionicons name={g.done ? 'checkmark-circle' : 'flag-outline'} size={g.done ? 20 : 18} color={g.done ? colors.brand : colors.textFaint} />}
+            title={<Text style={[styles.goal, g.done && styles.goalDone]} numberOfLines={3}>{g.label}</Text>}
+            right={g.targetDate ? <Text style={styles.goalBy}>by {shortDate(g.targetDate)}</Text> : undefined}
+            onPress={mine ? () => router.push({ pathname: '/tennis-sheet', params: { kind: 'goal', id: g.id } }) : undefined}
+            accessibilityLabel={`${g.label}${g.targetDate ? `, by ${shortDate(g.targetDate)}` : ''}${g.done ? ', done' : ''}${mine ? '. Mark done, edit or remove' : ''}`}
+          />
+        ))}
+        {mine && !goals.length ? <AddRow icon="flag-outline" title="Add a goal" sub="Something to aim at. Coaches plan toward it." onPress={add} /> : null}
+      </Box>
     </View>
   );
 }
@@ -370,35 +515,42 @@ function Gear({ user, mine = false }: { user: User; mine?: boolean }) {
   return (
     <View>
       <SectionHead title="Gear bag" link={mine && rows.length ? { label: 'Edit', accessibilityLabel: 'Edit your gear bag', onPress: () => router.push('/edit-gear') } : undefined} />
-      {rows.length ? rows.map((r, i) => (
-        <Row key={r.key} first={i === 0} lead={<Tile icon={r.icon} />} title={<Text style={styles.gearName} numberOfLines={2}>{r.title}</Text>} sub={r.sub} subLines={2} accessibilityLabel={`${r.sub.split(' · ')[0]}: ${r.title}${r.sub.includes(' · ') ? `, ${r.sub.split(' · ').slice(1).join(', ')}` : ''}`} />
-      )) : mine ? <AddRow icon="tennisball-outline" title="Add your racket, strings and shoes" sub="Players always ask." onPress={() => router.push('/edit-gear')} /> : null}
+      <Box>
+        {rows.length ? rows.map((r, i) => (
+          <Row key={r.key} first={i === 0} lead={<Tile icon={r.icon} />} title={<Text style={styles.gearName} numberOfLines={2}>{r.title}</Text>} sub={r.sub} subLines={2} accessibilityLabel={`${r.sub.split(' · ')[0]}: ${r.title}${r.sub.includes(' · ') ? `, ${r.sub.split(' · ').slice(1).join(', ')}` : ''}`} />
+        )) : mine ? <AddRow icon="tennisball-outline" title="Add your racket, strings and shoes" sub="Players always ask." onPress={() => router.push('/edit-gear')} /> : null}
+      </Box>
     </View>
   );
 }
 
-/** Medals won, in a row; yours also say what is next and open the full set. Before the first, the first medal waits, faint. */
+/**
+ * Medals won, in a row that scrolls sideways; yours also show the one
+ * nearest to winning, with a bar, and open the full set. Before the first,
+ * the first medal waits, faint.
+ */
 function Achievements({ user, mine = false }: { user: User; mine?: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
   const all = evaluateAchievements(user);
   const won = all.filter((a) => a.unlocked);
   const next = mine ? all.filter((a) => !a.unlocked).sort((a, b) => b.progress - a.progress)[0] : undefined;
   const firstMedal = (all.find((a) => a.achievement.id === 'ach-first-serve') ?? all[0])?.achievement;
-  const line = mine
-    ? `${won.length} of ${all.length}${next ? ` · next: ${next.achievement.name}, ${next.current} of ${next.target}${next.unit ? ` ${next.unit}` : ''}` : ''}`
-    : `${won.length} unlocked`;
+  const line = mine ? `${won.length} of ${all.length} unlocked` : `${won.length} unlocked`;
   return (
     <View>
       <SectionHead title="Achievements" line={won.length || !mine ? line : undefined} link={mine ? { label: 'See all', accessibilityLabel: 'See all achievements', onPress: () => router.push({ pathname: '/tennis-sheet', params: { kind: 'achievements' } }) } : undefined} />
-      {/* Before the first medal: not a third way to log a session (the button and Your sessions have that), the medal it unlocks, still faint. */}
-      {won.length ? <MedalRow items={all} /> : mine && firstMedal ? (
-        <Row first
-          lead={<View style={styles.medalWaiting}><Ionicons name={firstMedal.icon as keyof typeof Ionicons.glyphMap} size={18} color={colors.textFaint} /></View>}
-          title={<Text style={styles.medalWaitingName}>{firstMedal.name}</Text>}
-          sub="Your first session unlocks it"
-          accessibilityLabel={`${firstMedal.name}, locked. Your first session unlocks it`}
-        />
-      ) : null}
+      <Box>
+        {/* Before the first medal: not a third way to log a session (the button and Your sessions have that), the medal it unlocks, still faint. */}
+        {won.length ? <View style={styles.medals}><MedalRow items={all} /></View> : mine && firstMedal ? (
+          <Row first
+            lead={<View style={styles.medalWaiting}><Ionicons name={firstMedal.icon as keyof typeof Ionicons.glyphMap} size={18} color={colors.textFaint} /></View>}
+            title={<Text style={styles.medalWaitingName}>{firstMedal.name}</Text>}
+            sub="Your first session unlocks it"
+            accessibilityLabel={`${firstMedal.name}, locked. Your first session unlocks it`}
+          />
+        ) : null}
+        {won.length && next ? <NextMedal next={next} /> : null}
+      </Box>
     </View>
   );
 }
@@ -418,7 +570,9 @@ const styleDefinitions = StyleSheet.create({
   primaryText: { ...typography.bodyStrong, color: colors.brandInk },
   secondary: { height: 50, paddingHorizontal: 20, borderRadius: 999, backgroundColor: colors.surfaceAlt, borderWidth: 1, borderColor: colors.borderStrong, justifyContent: 'center' },
   secondaryText: { ...typography.bodyStrong, color: colors.text },
-  yearRow: { marginTop: spacing.md },
+  // A tab's sections, each in its box, with room between them.
+  tabBody: { gap: spacing.xxl, paddingTop: spacing.xl },
+  theirBody: { gap: spacing.xxl, paddingTop: spacing.xxl },
   gone: { ...typography.body, color: colors.textMuted, textAlign: 'center', paddingVertical: 64 },
   locked: { alignItems: 'center', paddingTop: 56, paddingHorizontal: spacing.xl, gap: spacing.sm },
   lockTile: { width: 56, height: 56, borderRadius: 16, backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.sm },
@@ -428,19 +582,30 @@ const styleDefinitions = StyleSheet.create({
   ghost: { minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing.md },
   ghostText: { ...typography.smallStrong, color: colors.textMuted },
   allShared: { ...typography.small, color: colors.textFaint, textAlign: 'center', paddingTop: spacing.xxl },
-  healthRow: { flexDirection: 'row', paddingTop: 4, paddingBottom: 14 },
-  healthCell: { flex: 1, gap: 2 },
+  weekCaption: { ...typography.small, color: colors.textMuted, marginTop: 4 },
+  weekNone: { ...typography.body, ...font('500'), color: colors.textMuted },
+  weekStats: { flexDirection: 'row', marginTop: spacing.lg, paddingTop: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  weekStat: { flex: 1, gap: 2 },
+  weekDivide: { borderLeftWidth: StyleSheet.hairlineWidth, borderLeftColor: colors.border, paddingLeft: spacing.md },
+  weekFigure: { ...font('600'), fontSize: 20, lineHeight: 22, letterSpacing: -0.8, color: colors.text, fontVariant: ['tabular-nums'] },
+  weekLabel: { fontSize: 12, lineHeight: 16, color: colors.textMuted },
+  healthRow: { flexDirection: 'row', paddingTop: 14, paddingBottom: 14 },
+  healthCell: { flex: 1, gap: 4 },
   healthDivide: { borderLeftWidth: StyleSheet.hairlineWidth, borderLeftColor: colors.border, paddingLeft: spacing.md },
+  healthLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   // Health in the page's own ink, not the brand's: it is not a tennis score.
   healthFigure: { ...font('600'), fontSize: 26, lineHeight: 31, letterSpacing: -1.2, color: colors.text, fontVariant: ['tabular-nums'] },
   healthUnit: { ...font('500'), fontSize: 14, letterSpacing: 0, color: colors.textMuted },
   healthLabel: { fontSize: 12, lineHeight: 16, color: colors.textMuted },
+  eventTop: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: spacing.sm },
+  keep: { flexShrink: 0 },
   eventName: { ...font('500'), fontSize: 16, lineHeight: 21, color: colors.text },
   eventLine: { flexDirection: 'row', alignItems: 'center', minWidth: 0 },
   eventMeta: { ...typography.small, lineHeight: 18, color: colors.textMuted },
   goal: { ...typography.body, lineHeight: 20, color: colors.text },
   goalDone: { color: colors.textMuted },
   goalBy: { ...typography.small, color: colors.textMuted, fontVariant: ['tabular-nums'] },
+  medals: { paddingTop: spacing.sm, paddingBottom: spacing.xs },
   medalWaiting: { width: 40, height: 40, borderRadius: 20, borderWidth: 1.5, borderStyle: 'dashed', borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center' },
   medalWaitingName: { ...typography.body, ...font('500'), lineHeight: 20, color: colors.textMuted },
   gearName: { ...font('500'), fontSize: 16, lineHeight: 21, color: colors.text },

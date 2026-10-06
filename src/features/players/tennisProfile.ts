@@ -218,6 +218,36 @@ export function weekOnCourt(sessions: PracticeSession[], me: string | null, now 
   return sessions.filter((s) => s.userId === me && s.kind !== 'fitness' && s.day >= from).reduce((sum, s) => sum + s.minutes, 0);
 }
 
+/** One day of the last seven: its calendar day, minutes on court (fitness left out), and whether it is today. */
+export interface WeekDay { day: string; minutes: number; today: boolean }
+
+/** The last seven days, oldest first and today last, each with its minutes on court: the This week chart's bars. */
+export function weekDays(sessions: PracticeSession[], me: string | null, now = new Date()): WeekDay[] {
+  const days: WeekDay[] = [];
+  for (let back = 6; back >= 0; back--) days.push({ day: localDay(now.getTime() - back * 86_400_000), minutes: 0, today: back === 0 });
+  for (const s of sessions) {
+    if (s.userId !== me || s.kind === 'fitness') continue;
+    const slot = days.find((d) => d.day === s.day);
+    if (slot) slot.minutes += s.minutes;
+  }
+  return days;
+}
+
+/**
+ * The week's few numbers under its chart, from the same seven days: sessions
+ * on court, matches (won and lost when every one says, otherwise how many),
+ * and the longest session.
+ */
+export function weekNumbers(sessions: PracticeSession[], me: string | null, now = new Date()): { sessions: number; matches: number; won: number; lost: number; told: boolean; longest: number } {
+  const from = localDay(now.getTime() - 6 * 86_400_000);
+  const to = localDay(now);
+  const list = sessions.filter((s) => s.userId === me && s.kind !== 'fitness' && s.day >= from && s.day <= to);
+  const matches = list.filter((s) => s.kind === 'match');
+  const won = matches.filter((s) => s.won === true).length;
+  const lost = matches.filter((s) => s.won === false).length;
+  return { sessions: list.length, matches: matches.length, won, lost, told: won + lost === matches.length, longest: list.reduce((most, s) => Math.max(most, s.minutes), 0) };
+}
+
 /** Your newest sessions first, the way Your sessions lists them. */
 export const newestFirst = (a: PracticeSession, b: PracticeSession) => (a.day < b.day ? 1 : a.day > b.day ? -1 : b.createdAt.localeCompare(a.createdAt));
 

@@ -8,39 +8,87 @@ import { show as showToast } from '@/lib/toast';
 import { mixHex } from '@/features/activity/zones';
 import { daysUntil } from '@/features/players/tennisProfile';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
-import { colors, font, pageIsDark, spacing, typography, withAlpha } from '@/theme';
+import { colors, font, lift, pageIsDark, spacing, typography, withAlpha } from '@/theme';
 
 /*
  * The pieces the Tennis profile page is built from (Oct 5): a section's head,
- * a row on a hairline (the hairline starting at the words, not the tile), the
- * countdown to a tournament and the row of medals. Everything from the
- * theme's slots, so every court draws them in its own colours.
+ * the white box each section sits in, a row on a hairline (the hairline
+ * starting at the words, not the tile), the countdown to a tournament, the
+ * row of medals and the bar to the next one. Everything from the theme's
+ * slots, so every court draws them in its own colours.
  */
 
 type IconName = keyof typeof Ionicons.glyphMap;
 
-/** A section's title at 22, a lock after it on what only you see, one muted line under it, and a link on the right. */
-export function SectionHead({ title, lock = false, line, link }: {
+/**
+ * A section's title at 22, one muted line under it, and on the right either
+ * a link or, on the first section of a tab only you see, the "Only you"
+ * label (Oct 5, option A: it replaced a lock after every private heading).
+ * `count` is a small number after the title ("Waiting on you 2").
+ */
+export function SectionHead({ title, onlyYou = false, count, line, link }: {
   title: string;
-  lock?: boolean;
+  onlyYou?: boolean;
+  count?: number;
   line?: string;
   link?: { label: string; onPress: () => void; accessibilityLabel?: string };
 }) {
   const styles = useThemedStyles(styleDefinitions);
+  const spoken = [title, count ? String(count) : '', onlyYou ? 'Only you see this' : ''].filter(Boolean).join('. ');
   return (
     <View style={styles.head}>
       <View style={styles.headRow}>
-        <View style={styles.headTitle} accessible accessibilityRole="header" accessibilityLabel={lock ? `${title}. Only you see this` : title}>
+        <View style={styles.headTitle} accessible accessibilityRole="header" accessibilityLabel={spoken}>
           <Text style={styles.title}>{title}</Text>
-          {lock ? <Ionicons name="lock-closed-outline" size={14} color={colors.textFaint} style={styles.lock} /> : null}
+          {count ? <View style={styles.count}><Text style={styles.countText}>{count}</Text></View> : null}
         </View>
         {link ? (
           <Pressable accessibilityRole="button" accessibilityLabel={link.accessibilityLabel ?? link.label} onPress={link.onPress} hitSlop={{ left: 12, right: 12 }} style={({ pressed }) => [styles.link, pressed && styles.pressed]}>
             <Text style={styles.linkText}>{link.label}</Text>
           </Pressable>
-        ) : null}
+        ) : onlyYou ? <OnlyYou /> : null}
       </View>
       {line ? <Text style={styles.line}>{line}</Text> : null}
+    </View>
+  );
+}
+
+/** "Only you", small and quiet, with a lock: said once per private tab, in plain words. Read as part of the heading it sits beside. */
+export function OnlyYou() {
+  const styles = useThemedStyles(styleDefinitions);
+  return (
+    <View style={styles.onlyYou} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+      <Ionicons name="lock-closed" size={10} color={colors.textMuted} />
+      <Text style={styles.onlyYouText}>Only you</Text>
+    </View>
+  );
+}
+
+/** A section's white box: rounded, lifted a touch off the page, its rows inside on the page's 16-point gutter. */
+export function Box({ children, padded = false }: { children: React.ReactNode; padded?: boolean }) {
+  const styles = useThemedStyles(styleDefinitions);
+  return <View style={[styles.box, padded && styles.boxPadded]}>{children}</View>;
+}
+
+/**
+ * The medal nearest to winning, under the row of medals: its name, how far
+ * along ("21 of 30 days") and a bar in the metal it will be.
+ */
+export function NextMedal({ next }: { next: AchievementProgress }) {
+  const styles = useThemedStyles(styleDefinitions);
+  useTheme();
+  const a = next.achievement;
+  const share = Math.max(0, Math.min(1, next.target > 0 ? next.current / next.target : next.progress));
+  const far = `${next.current} of ${next.target}${next.unit ? ` ${next.unit}` : ''}`;
+  return (
+    <View style={styles.next} accessible accessibilityLabel={`Next medal: ${a.name}, ${far}`}>
+      <View style={styles.nextRow}>
+        <Text style={styles.nextName} numberOfLines={1}>Next: {a.name}</Text>
+        <Text style={styles.nextFar}>{far}</Text>
+      </View>
+      <View style={styles.nextTrack}>
+        <View style={[styles.nextFill, { width: `${Math.round(share * 100)}%`, backgroundColor: medalTint(a.tier) }]} />
+      </View>
     </View>
   );
 }
@@ -213,7 +261,19 @@ const styleDefinitions = StyleSheet.create({
   headRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   headTitle: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6 },
   title: { ...typography.title, color: colors.text },
-  lock: { marginTop: 2 },
+  count: { minWidth: 20, height: 20, paddingHorizontal: 6, borderRadius: 10, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center', marginTop: 2 },
+  countText: { ...font('600'), fontSize: 11, lineHeight: 14, color: colors.brandInk, fontVariant: ['tabular-nums'] },
+  onlyYou: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999, backgroundColor: colors.bgElevated, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
+  onlyYouText: { ...font('600'), fontSize: 11, lineHeight: 14, color: colors.textMuted },
+  // The house's grouped box (Your sessions, Log a session): white on the page, radius 20, the soft lift.
+  box: { ...lift, borderRadius: 20, backgroundColor: colors.surface, overflow: 'hidden', paddingHorizontal: spacing.lg, paddingVertical: spacing.xs },
+  boxPadded: { paddingVertical: spacing.lg },
+  next: { gap: 8, paddingTop: 12, paddingBottom: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, marginTop: 6 },
+  nextRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  nextName: { flex: 1, ...typography.smallStrong, color: colors.text },
+  nextFar: { ...typography.small, color: colors.textMuted, fontVariant: ['tabular-nums'] },
+  nextTrack: { height: 6, borderRadius: 3, backgroundColor: colors.surfaceAlt, overflow: 'hidden' },
+  nextFill: { height: 6, borderRadius: 3 },
   // A 44-point target round a small link, without the header growing to fit it.
   link: { minHeight: 44, justifyContent: 'center', marginVertical: -12 },
   linkText: { ...typography.smallStrong, color: colors.brand },

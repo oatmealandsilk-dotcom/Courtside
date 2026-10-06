@@ -416,6 +416,16 @@ const PAGE_HELPERS = String.raw`
       }
       return found[spec.index || 0] || covered;
     },
+    /** Scrolls the first drawn match into the middle of the screen, as a thumb would; false while there is none. */
+    reveal(spec) {
+      const el = candidates(spec).find((e) => {
+        const r = e.getBoundingClientRect();
+        return r.width >= 2 && r.height >= 2 && e.checkVisibility({ opacityProperty: true, visibilityProperty: true });
+      });
+      if (!el) return false;
+      el.scrollIntoView({ block: 'center' });
+      return true;
+    },
     /** Tips ("Tip: … Tap to close.") that sit over what we want to tap. */
     tips() {
       return candidates({ label: { re: '^Tip: .*Tap to close' } })
@@ -549,6 +559,11 @@ class Page {
   }
 
   find(spec) { return this.call((s) => window.__smoke.find(s), normalise(spec)); }
+  /** Scrolls down (or up) to something further along the page, once it is there. */
+  async reveal(spec, timeout = TIMEOUT) {
+    await this.waitUntil(() => this.call((s) => window.__smoke.reveal(s), normalise(spec)), timeout, `${describe(spec)} to scroll into view`);
+    await sleep(300);
+  }
 
   /**
    * Waits for something to be on screen and on top, and returns where it is.
@@ -741,8 +756,10 @@ const STEPS = [
     name: 'your-sessions',
     title: 'Your sessions',
     async run(page) {
-      // Your sessions lives inside the Tennis profile since the redesign.
+      // Your sessions lives inside the Tennis profile since the redesign: its
+      // Activity tab (the first, on a fresh browser), under This week.
       await page.tap({ label: /tennis profile\./ });
+      await page.reveal({ label: 'See all your sessions' });
       await page.tap({ label: 'See all your sessions' });
     },
     expect: [{ label: /^Share to Instagram: / }],
