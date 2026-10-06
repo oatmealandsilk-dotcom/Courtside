@@ -18,7 +18,8 @@ import { notKnownAdult } from '@/features/players/age';
 import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { removedLine } from '@/features/moderation/reasons';
 import { canShareMediaStory, shareMediaToStory, type StoryMediaKind } from '@/features/share/mediaStory';
-import { HandleSticker } from '@/components/share/HandleSticker';
+import { stageSize } from '@/features/share/storyImage';
+import { StoryOverlayCanvas } from '@/components/share/StoryOverlay';
 import { CourtSpinner } from '@/components/CourtSpinner';
 import type { Post, Story } from '@/data/types';
 
@@ -55,9 +56,14 @@ export default function PostMenu() {
   const mine = !!item && item.authorId === currentUserId;
   const isSaved = saved.postIds.includes(id);
   const [done, setDone] = useState('');
-  // Share to Instagram Story: on its way (the file coming down), and the sticker photographed for it.
+  // Share to Instagram Story: on its way (the file coming down), and the overlay photographed for it:
+  // on a see-through story-sized canvas for a clip's sticker, or drawn onto a photo (`baking`, its address).
   const [working, setWorking] = useState(false);
   const sticker = useRef<View>(null);
+  const baked = useRef<View>(null);
+  const [baking, setBaking] = useState<string | null>(null);
+  const photoDrawn = useRef<((ok: boolean) => void) | null>(null);
+  const stage = stageSize();
   // Gone: the menu has left the screen (the back button or a swipe, not only close()), so a share
   // still on its way stops before it opens Instagram. Set false again on mount for React's dev double-mount.
   const gone = useRef(false);
@@ -105,11 +111,30 @@ export default function PostMenu() {
   // Closing the menu (a tap above it, Done, the back button) while the file is still coming down
   // cancels the share: Instagram does not open on its own a moment later.
   const cancelled = () => closing.current || gone.current;
+  // A photo with the overlay drawn onto it, out of sight: answers with the picture once the photo
+  // has drawn (two frames later, so it is on screen), or null if it will not load within 8 seconds.
+  const bake = (photo: string) => new Promise<View | null>((resolve) => {
+    let settled = false;
+    const finish = (ok: boolean) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      photoDrawn.current = null;
+      if (!ok) { resolve(null); return; }
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve(baked.current)));
+    };
+    const timer = setTimeout(() => finish(false), 8000);
+    photoDrawn.current = finish;
+    setBaking(photo);
+  });
   const toStory = async () => {
     if (!post || !storyMedia || working) return;
     setWorking(true);
     try {
-      const said = await shareMediaToStory({ url: storyMedia.url, kind: storyMedia.kind, id: post.id, sticker: sticker.current, cancelled });
+      const said = await shareMediaToStory({
+        url: storyMedia.url, kind: storyMedia.kind, id: post.id, sticker: sticker.current, cancelled,
+        ...(storyMedia.kind === 'photo' ? { bake: () => bake(storyMedia.url) } : {}),
+      });
       if (cancelled()) return;
       if (said) setDone(said);
       else close();
@@ -117,7 +142,7 @@ export default function PostMenu() {
       if (cancelled()) return;
       setDone(err instanceof Error && err.message ? err.message : 'Instagram could not be opened. Try again.');
     } finally {
-      if (!gone.current) setWorking(false);
+      if (!gone.current) { setWorking(false); setBaking(null); }
     }
   };
   // What Instagram gets is the file as uploaded (mediaStory.ts): "posted without sound" and a trim
@@ -202,9 +227,21 @@ export default function PostMenu() {
       <Animated.View onLayout={(e) => { const h = Math.ceil(e.nativeEvent.layout.height); if (h > 0) setSheetH(h + 24); }} style={[styles.sheet, { paddingBottom: insets.bottom + spacing.md, transform: [{ translateY: rise.interpolate({ inputRange: [0, 1], outputRange: [0, sheetH] }) }] }]}>
         {storyMedia && currentUser ? (
           <>
-            {/* The sticker for Share to Instagram Story, drawn out of sight under the sheet's own colour and photographed when tapped (mediaStory.ts). */}
-            <View pointerEvents="none" aria-hidden accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.stickerStage}>
-              <View ref={sticker} collapsable={false}><HandleSticker handle={currentUser.handle} /></View>
+            {/* The overlay for Share to Instagram Story, drawn story-sized (1080 × 1920 on this screen) out of sight under the
+                sheet's own colour and photographed when tapped (mediaStory.ts). Its bottom sits on the sheet's bottom, so the
+                overlay itself (in the story's lower part) is on screen under the cover; the sheet clips the rest, so a photo
+                being drawn on never shows above the sheet. */}
+            <View pointerEvents="none" aria-hidden accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.stickerClip}>
+              <View style={[styles.stickerStage, stage]}>
+                <View ref={sticker} collapsable={false} style={stage}>
+                  <StoryOverlayCanvas width={stage.width} handle={currentUser.handle} />
+                </View>
+                {baking ? (
+                  <View ref={baked} collapsable={false} style={[StyleSheet.absoluteFill, stage]}>
+                    <StoryOverlayCanvas width={stage.width} handle={currentUser.handle} photo={baking} onPhotoLoad={(ok) => photoDrawn.current?.(ok)} />
+                  </View>
+                ) : null}
+              </View>
             </View>
             <View pointerEvents="none" style={styles.stickerCover} />
           </>
@@ -257,8 +294,9 @@ const styleDefinitions = StyleSheet.create({
   glyph: { width: 22, alignItems: 'center' },
   rowPressed: { backgroundColor: colors.surface },
   rowDimmed: { opacity: 0.45 },
-  // The Instagram sticker's hidden copy, and the sheet-coloured cover over it (the rows draw on top).
-  stickerStage: { position: 'absolute', left: 0, top: 0 },
+  // The Instagram overlay's hidden copy, clipped to the sheet, and the sheet-coloured cover over it (the rows draw on top).
+  stickerClip: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, overflow: 'hidden', borderTopLeftRadius: 24, borderTopRightRadius: 24 },
+  stickerStage: { position: 'absolute', left: 0, bottom: 0 },
   stickerCover: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: colors.bg, borderTopLeftRadius: 24, borderTopRightRadius: 24 },
   label: { ...typography.body, fontWeight: '600', color: colors.text },
   note: { ...typography.small, color: colors.textMuted, marginTop: 2 },

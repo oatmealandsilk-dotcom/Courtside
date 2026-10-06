@@ -84,12 +84,39 @@ post's **•••** menu has **Share to Instagram Story** (on a session post wi
 a clip it reads **Share clip to Instagram Story**, beside the session
 picture's own **Share to Instagram**). Code: `src/features/share/mediaStory.ts`.
 
-- The post's original file is downloaded into the app's cache, then handed
-  to Instagram's story editor as the story's background: a clip as
-  `backgroundVideo`, a photo as `backgroundImage`.
-- On it goes a small sticker, `HandleSticker`: the CourtSide mark, "@handle"
-  and "on CourtSide", on a pill in the court's page colour. It can be moved,
-  resized or deleted in Instagram.
+- On it goes the CourtSide overlay (`src/components/share/StoryOverlay.tsx`,
+  Oct 5, owner: "Can't be in the middle of the screen", then "Make it better
+  like how like Strava would do"): no box, white type with a soft shadow,
+  low on the left and clear of Instagram's buttons. The signature alone:
+  the CourtSide mark beside "@handle" over "on CourtSide", on every clip and
+  photo, session or not. Never a session's numbers or where it was played
+  (Oct 5, owner, shown "Clip with a match" with Strava-style numbers above
+  the signature beside "Clip, no session": "Clip no session"). A session's
+  numbers go to Instagram through the session's own picture instead
+  (**Share to Instagram** on the same menu).
+- Instagram's Sharing to Stories has no way to say where a sticker goes: it
+  puts it in the middle (Meta documents only a recommended 640 × 480 sticker,
+  which the person can then move or resize). So:
+  - **A clip** goes as the story's `backgroundVideo` (the file as uploaded,
+    downloaded into the app's cache), and the sticker is a see-through
+    picture the size of the story itself, 1080 × 1920, with the overlay drawn
+    low on the left. Laid over the story it lines up with it; if Instagram
+    shows it smaller, it still lands in the lower left. It is still a
+    sticker: it can be moved, pinched or deleted in Instagram.
+  - **A photo** has the overlay drawn onto it in the app and goes as the
+    story's `backgroundImage`, with no sticker: exactly where it was drawn.
+    A tall photo (portrait, about 6:7 or taller) fills the story, cropped to
+    9:16 as the session's Photo design does, with a faint shade low down. A
+    square or landscape photo would lose most of its width that way, so it
+    is shown whole, the full width of the story, over the same two court
+    colours Instagram puts round a clip, with the overlay below it. If the
+    photo will not load (8 seconds), it goes as before, the original with
+    the see-through sticker.
+  - How the photo is taken: on Android the photo is drawn at once (no
+    fade-in) over a solid dark ground, so the picture never catches it half
+    faded in. On an iPhone it is drawn layer by layer (`useRenderInContext`)
+    rather than as it shows on screen, because its hidden copy is taller
+    than the menu hiding it.
 - Only your own posts, and only where the build carries react-native-share
   (iPhone build 13 on, Android from its first build), so it is safe as an
   instant update. A browser does not offer it. No Instagram on the phone:
@@ -110,7 +137,31 @@ picture's own **Share to Instagram**). Code: `src/features/share/mediaStory.ts`.
 
 To check on build 15 (or 14, over the air): your own clip → ••• → Share to
 Instagram Story, then the same on a photo post. Instagram should open on its
-story editor with the clip or photo filling it and the sticker on top.
+story editor with the clip or photo filling it and the overlay in the lower
+left, not the middle; on the clip, pinching should grab the whole story-sized
+sticker. Try a clip on a session post too: it should carry the same
+signature, with no numbers, on an iPhone and on Android.
+
+## Measuring the sticker (do once, on a phone)
+
+Meta does not say how big Instagram shows a shared sticker, and the clip's
+sticker is the size of the whole story (1080 × 1920). The overlay is drawn
+assuming Instagram shows it filling the story. To check, on an iPhone and
+on an Android phone: share one of your clips with **Share to Instagram
+Story** and look at where the overlay lands. If it sits low on the left,
+about a thumb's width in from the edge, nothing needs changing. If the whole
+sticker comes in smaller (the overlay further in from the corner and
+smaller), note roughly how much smaller, for example "about 70%", and set
+`STICKER_SHOWN_AT` in `src/components/share/StoryOverlay.tsx` to that
+(0.7): the overlay is then drawn bigger and further out so it still lands
+in the corner at the right size.
+
+One trade-off stays whatever the scale: because the sticker covers the whole
+story, a touch anywhere in Instagram's editor grabs it, so pinching the clip
+moves the sticker, and tapping empty space to add text does not work until
+the sticker is moved or deleted. Keeping the overlay out of the middle
+cannot be done any other way, since Instagram gives no say in where a
+sticker goes.
 
 ## Not done yet
 
