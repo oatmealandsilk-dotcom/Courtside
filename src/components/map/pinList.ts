@@ -1,6 +1,7 @@
 import type { User } from '@/data/types';
 import type { CanvasMarker } from '@/components/map/pinEngine';
 import { HIT_LIFT, agoShort, courtPinHtml, discSize, hitPinHtml, mePinHtml, playerPinClass, playerPinHtml } from '@/components/map/markers';
+import { hitShort } from '@/features/hits/format';
 import { COURTS_MIN_ZOOM, type MapModel, type Placed } from '@/features/players/mapModel';
 import { isOpenToHit } from '@/features/players/openToHit';
 
@@ -48,10 +49,28 @@ export function mapMarkers({ model, expanded, me, shown, selectedId, selectedCou
   // Courts show only from about a city in (COURTS_MIN_ZOOM, the same zoom they load from):
   // zoomed out on a country they fade away (the map says "Zoom in to see courts"), and
   // none of them is drawn there. The picked court stays with its card.
+  // What is on at each court right now, its glow and its label (Oct 6, owner): players standing
+  // on it ("3 playing"), else its soonest open hit ("Hit 6pm"), whose flag then folds into it.
+  const playing = new Map<string, number>();
+  const hitAt = new Map<string, string>();
+  if (expanded) {
+    for (const p of shown) if (p.court) playing.set(p.court.id, (playing.get(p.court.id) ?? 0) + 1);
+    for (const h of model.hits) {
+      const id = h.hit.place.id;
+      if (id && (!hitAt.has(id) || h.hit.startsAt < hitAt.get(id)!)) hitAt.set(id, h.hit.startsAt);
+    }
+  }
+  const drawn = new Set<string>();
   const list: CanvasMarker[] = (expanded ? model.courts : []).map((c, i) => {
     const on = c.id === selectedCourtId;
     const ringed = model.ringed.has(c.id);
-    return { id: `c:${c.id}`, lat: c.lat, lng: c.lng, html: courtPinHtml(c, on, ringed), z: on ? 4 : 1, k: 'c' as const, r: (ringed ? 0 : 1e6) - c.count * 1000 + i, sel: on, g: 'c' as const, role: 'button', label: c.name, mz: on ? undefined : COURTS_MIN_ZOOM };
+    drawn.add(c.id);
+    const n = playing.get(c.id) ?? 0;
+    const hit = hitAt.get(c.id);
+    const tag = n ? `${n} playing` : hit ? `Hit ${hitShort(hit).replace(/^Today /, '')}` : undefined;
+    // Something on: never gathered into an "11 courts", above the others, and shown at every zoom (as its hit's flag was).
+    // `n`: how many courts it is, for the count on a crowd.
+    return { id: `c:${c.id}`, lat: c.lat, lng: c.lng, html: courtPinHtml(c, on, ringed, tag), z: on ? 4 : tag ? 2 : 1, k: 'c' as const, r: (ringed ? 0 : 1e6) - c.count * 1000 + i, sel: on, solo: !!tag, n: c.count, g: 'c' as const, role: 'button', label: tag ? `${c.name}, ${tag}` : c.name, mz: on || tag ? undefined : COURTS_MIN_ZOOM };
   });
   // The still card: your city's courts as quiet dots, under everything.
   // The still card shows people and hits only; courts live on the full map (Oct 3, owner).
@@ -60,6 +79,8 @@ export function mapMarkers({ model, expanded, me, shown, selectedId, selectedCou
   // middle, and the hits are listed just below it anyway (Oct 2).
   for (const h of expanded ? model.hits : []) {
     const on = h.hit.id === selectedHitId;
+    // A hit at a court on the map is that court's "Hit 6pm" (its card lists it); picked, its flag shows.
+    if (!on && h.hit.place.id && drawn.has(h.hit.place.id)) continue;
     // Crowded flags gather behind the soonest one.
     list.push({ id: `h:${h.hit.id}`, lat: h.at.lat, lng: h.at.lng, html: hitPinHtml(h.hit, on), anchor: 'bottom', offsetY: HIT_LIFT, z: on ? 5 : 2, k: 'h', r: Date.parse(h.hit.startsAt) || 0, sel: on, g: 'h', role: 'button', label: `Open hit at ${h.hit.place.name}` });
   }

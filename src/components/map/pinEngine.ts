@@ -66,6 +66,12 @@ export interface CanvasMarker {
   sel?: boolean;
   /** You: like `sel`, never gathered; players crowding you gather beside you. */
   fix?: boolean;
+  /** Never gathered with its kind, though it still makes room like one (a court with something on: its glow and label stay in sight). */
+  solo?: boolean;
+  /** How many it stands for in a gathered pin's count (a court pin: its courts). Absent: one. */
+  n?: number;
+  /** Half its width, where wider than a court's square (a crowd's "11 courts"), so room for players counts all of it. */
+  cw?: number;
   /** A player's disc, across (for room and for lifting what stands under it). */
   ds?: number;
   /** About how wide a player's pin is with its name (`fw`), and without the "· 2h" it drops below zoom 12 (`fws`), so two short names may stand closer than two long ones. */
@@ -122,7 +128,8 @@ export interface PinEngineOptions {
 export type PinEngineFactory = (map: unknown, maplibre: unknown, options: PinEngineOptions) => PinEngine;
 
 /** The room each kind needs on the full map, where players' names show: a name is about 100 wide, a disc and its name about 70 tall. */
-export const FULL_MAP_BOX: NonNullable<PinEngineOptions['box']> = { p: [100, 70], pFar: [74, 70], c: [30, 30], h: [92, 28] };
+/** Courts: a crowd of them says "11 courts", about 80 wide, so they gather a little sooner than their 30-wide squares alone would. */
+export const FULL_MAP_BOX: NonNullable<PinEngineOptions['box']> = { p: [100, 70], pFar: [74, 70], c: [56, 30], h: [92, 28] };
 /** On the still card: faces only. */
 export const CARD_BOX: NonNullable<PinEngineOptions['box']> = { p: [48, 48], pFar: [48, 48], c: [22, 22], h: [92, 28] };
 
@@ -153,7 +160,7 @@ return function(map,ml,o){
   function build(){
     tree={};
     ['p','c','h'].forEach(function(k){
-      var list=[];for(var id in items){var it=items[id];if(it.k===k&&!(it.sel&&k!=='p'))list.push(it)}
+      var list=[];for(var id in items){var it=items[id];if(it.k===k&&!it.solo&&!(it.sel&&k!=='p'))list.push(it)}
       if(list.length<2){tree[k]=null;return}
       list.sort(function(a,b){return ((fixed(b)?1:0)-(fixed(a)?1:0))||((a.r||0)-(b.r||0))||(a.id<b.id?-1:1)});
       var groups=list.map(function(it){return {lead:it.id,fx:fixed(it),m:[it.id],x:wx(it.lng),y:wy(it.lat)}});
@@ -191,7 +198,7 @@ return function(map,ml,o){
       // In rows just under the spot (under the picked player, if there is one), a name's width apart: the court's badge stays in sight on the spot.
       live.forEach(function(id,i){var row=Math.floor(i/cols),inRow=Math.min(cols,n-row*cols),col=i-row*cols;inFan[id]=1;
         out[id]=ext(items[id],{lat:fan.lat,lng:fan.lng,fx:Math.round((col-(inRow-1)/2)*FAN_W),fy:top+row*FAN_H,z:(items[id].z||0)+1});own[id]=id})}
-    for(var id in items){var it=items[id];if(inFan[id]||off(id))continue;if(!it.k||!tree[it.k]||(it.sel&&it.k!=='p')){out[id]=it;own[id]=id}}
+    for(var id in items){var it=items[id];if(inFan[id]||off(id))continue;if(!it.k||!tree[it.k]||it.solo||(it.sel&&it.k!=='p')){out[id]=it;own[id]=id}}
     ['p','c','h'].forEach(function(k){var per=tree[k];if(!per)return;per[lvl].forEach(function(g){
       var m=g.m.filter(function(id){return !inFan[id]&&!off(id)});if(!m.length)return;
       if(m.length===1){out[m[0]]=items[m[0]];own[m[0]]=m[0];return}
@@ -205,8 +212,9 @@ return function(map,ml,o){
       }
       if(!lead||inFan[g.lead]||off(g.lead))lead=items[m[0]];
       if(k==='p'||k==='h')html=lead.html.replace(BADGE,tpl.badge.replace('{n}','+'+(m.length-1))).replace(STACK,k==='p'?tpl.stack:'');
-      else html=tpl.court.replace('{n}',String(m.length));
-      out[cid]={id:cid,lat:lead.lat,lng:lead.lng,html:html,anchor:lead.anchor,offsetY:lead.offsetY,z:lead.z,cls:k==='p'?lead.cls:'',g:lead.g,k:k,ds:lead.ds,
+      else{var total=m.reduce(function(t,id){return t+((items[id]&&items[id].n)||1)},0);html=tpl.court.replace('{n}',String(total))}
+      // A court crowd's "11 courts" is wide (cw: half its width), so room for players' faces and names counts all of it.
+      out[cid]={id:cid,lat:lead.lat,lng:lead.lng,html:html,anchor:lead.anchor,offsetY:lead.offsetY,z:lead.z,cls:k==='p'?lead.cls:'',g:lead.g,k:k,ds:lead.ds,cw:k==='c'?Math.round((42+6.8*(String(total).length+7))/2):undefined,
         role:o.quiet?undefined:'button',label:o.quiet?undefined:(k==='p'?(lead.label||'A player')+' and '+(m.length-1)+' more here':k==='h'?m.length+' open hits here':m.length+' places to play here')+'. Show them',cl:{k:k,m:m}};
       m.forEach(function(id){own[id]=cid});
     })});
@@ -225,13 +233,14 @@ return function(map,ml,o){
     var cs={};for(id in out){it=out[id];if(it.k==='c'){var q1=lp(it.lat,it.lng);cs[id]={x:q1.x,y:q1.y}}}
     function clear(id,x,y){for(var o2 in cs){if(o2===id)continue;if(Math.abs(cs[o2].x-x)<30&&Math.abs(cs[o2].y-y)<30)return false}return true}
     for(id in out){it=out[id];if(it.k!=='c'||it.sel)continue;
-      var c=lp(it.lat,it.lng),lift=0,shift=0,gone=false;
+      // A crowd's wide "11 courts" (cw) counts its whole width; on a player's very spot it moves aside rather than up.
+      var c=lp(it.lat,it.lng),lift=0,shift=0,gone=false,cw=it.cw||14;
       ps.forEach(function(p){var dx=c.x-p.x,dy=c.y-p.y;
-        if(Math.abs(dx)<8&&Math.abs(dy)<8){lift=Math.min(lift,-(p.r+13))}
-        else if(Math.abs(dx)<p.w+12&&dy>-p.r-12&&dy<p.r+(p.chip?12:36)){var need=(p.w+14)-Math.abs(dx);if(need>60)gone=true;else shift=(dx>=0?1:-1)*Math.max(Math.abs(shift),need)}});
-      if(gone&&zoomOf(lvl)<15){delete out[id];delete cs[id];continue}
+        if(Math.abs(dx)<8&&Math.abs(dy)<8&&cw<=14){lift=Math.min(lift,-(p.r+13))}
+        else if(Math.abs(dx)<p.w+cw-2&&dy>-p.r-12&&dy<p.r+(p.chip?12:36)){var need=(p.w+cw)-Math.abs(dx);if(need>46+cw)gone=true;else shift=(dx>=0?1:-1)*Math.max(Math.abs(shift),need)}});
+      if(gone&&zoomOf(lvl)<15&&!it.solo){delete out[id];delete cs[id];continue}
       // Moved aside only into clear room; with none, zoomed out it folds away until there is room (closer in it stays, under the name).
-      if(shift&&!clear(id,c.x+shift,c.y+lift)){shift=0;if(zoomOf(lvl)<14){delete out[id];delete cs[id];continue}}
+      if(shift&&!clear(id,c.x+shift,c.y+lift)){shift=0;if(zoomOf(lvl)<14&&!it.solo){delete out[id];delete cs[id];continue}}
       if(lift||shift){out[id]=ext(it,{fx:shift,offsetY:(it.offsetY||0)+lift});cs[id]={x:c.x+shift,y:c.y+lift}}}
     // A flag (about 92 wide, 26 tall, hung above its spot) overlapping a court or a player (their disc and name): zoomed out it folds in as a dot; closer, it lifts clear above the highest of them.
     var hosts=[];for(id in out){it=out[id];if(it.k==='p'||it.fix||it.k==='c'){var q2=lp(it.lat,it.lng),isC=it.k==='c',r2=isC?14:(it.ds||48)/2;

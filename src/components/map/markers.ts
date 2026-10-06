@@ -75,6 +75,9 @@ export function agoShort(iso?: string): string {
 export const MAP_PIN_CSS = `
 .cs-court-name{display:none}
 .cs-close .cs-court-name,.cs-court.cs-on .cs-court-name{display:block}
+.cs-court-nm{display:none}
+.cs-close .cs-court-nm,.cs-court.cs-on .cs-court-nm{display:inline}
+.cs-far .cs-court.cs-live{transform:none}
 .cs-far .cs-court{transform:scale(.72)}
 .cs-pin{transition:transform .15s ease-out}
 .cs-pin:active{transform:scale(.94)}
@@ -208,20 +211,27 @@ const storyRing = (gap: number, width: number) => `0 0 0 ${gap}px ${colors.bg},0
  * quieter than the players; its name beside it once you zoom in (or when
  * picked). The count lives on its card, not on the pin. `ring`: played on
  * this week. A members-only or private court is greyed: there, but not a
- * place to suggest.
+ * place to suggest. `live`: something on there now, in a few words ("3
+ * playing", "Hit 6pm"; Oct 6, owner): the court glows, a green ring and a
+ * soft halo, and the words sit beside it at every zoom (with its name
+ * before them, close in); it never shrinks when zoomed out.
  */
-export function courtPinHtml(court: Court, on: boolean, ring = false): string {
+export function courtPinHtml(court: Court, on: boolean, ring = false, live?: string): string {
   // A light rounded square with the court drawn in its colour: a place, not a person (Oct 5, owner: courts and
   // players looked too alike). Picked, it fills in. People stay round, bigger, with their faces.
   const size = on ? 28 : 22;
   const closed = isClosedCourt(court);
-  const nameStyle = `position:absolute;left:calc(100% + ${ring ? 9 : 5}px);top:50%;transform:translateY(-50%);max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:2px 7px;border-radius:999px;background:${colors.bg};color:${closed ? colors.textMuted : colors.text};box-shadow:0 1px 3px rgba(0,0,0,.14);${FONT}`;
-  const name = court.name && court.name !== 'Tennis courts' ? `<span class="cs-court-name" style="${nameStyle}">${court.name.replace(/[<>&"]/g, '')}${closed ? ` · ${court.access === 'private' ? 'private' : 'members'}` : ''}</span>` : '';
+  const nameText = court.name && court.name !== 'Tennis courts' ? `${esc(court.name)}${closed ? ` · ${court.access === 'private' ? 'private' : 'members'}` : ''}` : '';
+  const pill = `position:absolute;left:calc(100% + ${live ? 10 : ring ? 9 : 5}px);top:50%;transform:translateY(-50%);max-width:${live ? 190 : 150}px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:2px 7px;border-radius:999px;background:${colors.bg};box-shadow:0 1px 3px rgba(0,0,0,.14);${FONT}`;
+  const name = live
+    ? `<span style="${pill};color:${colors.text}"><i style="display:inline-block;width:6px;height:6px;margin-right:4px;border-radius:3px;vertical-align:1px;background:${colors.open}"></i>${nameText ? `<span class="cs-court-nm" style="color:${colors.textMuted};font-weight:500">${nameText} · </span>` : ''}${esc(live)}</span>`
+    : nameText ? `<span class="cs-court-name" style="${pill};color:${closed ? colors.textMuted : colors.text}">${nameText}</span>` : '';
+  const glow = live ? `0 0 0 2px ${colors.bg},0 0 0 4px ${colors.open},0 0 12px 4px ${colors.open}66,` : ring ? storyRing(2, 2.5) : '';
   const tone = closed ? colors.borderStrong : colors.court;
   const fill = on ? tone : colors.bg;
   const glyph = on ? (closed ? colors.bg : colors.brandInk) : closed ? colors.textMuted : colors.court;
   const edge = on ? `2px solid ${colors.bg}` : `1.5px solid ${tone}`;
-  return `<div class="cs-court cs-pin${on ? ' cs-on' : ''}" style="position:relative;width:${size}px;height:${size}px;border-radius:${on ? 8 : 6}px;background:${fill};border:${edge};box-sizing:border-box;display:flex;align-items:center;justify-content:center;box-shadow:${ring ? storyRing(2, 2.5) : ''}0 2px 6px rgba(0,0,0,${on ? '.3' : '.2'});cursor:pointer${closed && !on ? ';opacity:.75' : ''}">${courtGlyph(glyph)}${name}${hitDot()}</div>`;
+  return `<div class="cs-court cs-pin${on ? ' cs-on' : ''}${live ? ' cs-live' : ''}" style="position:relative;width:${size}px;height:${size}px;border-radius:${on ? 8 : 6}px;background:${fill};border:${edge};box-sizing:border-box;display:flex;align-items:center;justify-content:center;box-shadow:${glow}0 2px 6px rgba(0,0,0,${on ? '.3' : '.2'});cursor:pointer${closed && !on ? ';opacity:.75' : ''}">${courtGlyph(glyph)}${name}${hitDot()}</div>`;
 }
 
 /** The dot an open hit folds into on a pin when zoomed out (pinEngine puts "cs-hit" on the pin). */
@@ -275,8 +285,9 @@ export const youLift = (mapHeight: number) => Math.round(Math.min(150, mapHeight
  * crowd of players is the leading player's own pin with a second disc
  * peeking out behind it and a small ink badge, "+4"; so when it splits the
  * leader's pin is left exactly where it was. A crowd of courts is a court
- * disc a size up, with how many places it holds where the little court
- * would be: never mistaken for players. Players crowding your own pin (or
+ * square stretched to say what it holds, the little court and "11 courts"
+ * (every court at those places, not how many places; Oct 6, owner: a bare
+ * number could mean courts or players). Never mistaken for players. Players crowding your own pin (or
  * whoever is picked) gather into a small "+3" beside it instead (`chip`).
  */
 export function clusterTemplates(): { badge: string; stack: string; court: string; chip: string } {
@@ -286,7 +297,7 @@ export function clusterTemplates(): { badge: string; stack: string; court: strin
   return {
     badge: `<div style="position:absolute;right:-7px;top:-3px;min-width:22px;height:20px;padding:0 6px;box-sizing:border-box;border-radius:999px;background:${colors.text};color:${colors.bg};border:2px solid ${colors.bg};display:flex;align-items:center;justify-content:center;${FONT};font-size:11px;box-shadow:0 1px 4px rgba(0,0,0,.2)">{n}</div>`,
     stack: `<div style="position:absolute;left:${at - 9}px;top:${at - 2}px;width:${inner}px;height:${inner}px;border-radius:999px;background:${colors.surfaceAlt};border:1.5px solid ${colors.bg};box-sizing:border-box;box-shadow:0 2px 7px rgba(0,0,0,.2)"></div>`,
-    court: `<div class="cs-court cs-pin" style="position:relative;width:30px;height:30px;border-radius:8px;background:${colors.court};border:2px solid ${colors.bg};box-sizing:border-box;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 3px ${colors.court}40,0 2px 6px rgba(0,0,0,.22);color:${colors.brandInk};${FONT};font-size:12px;cursor:pointer">{n}${hitDot()}</div>`,
+    court: `<div class="cs-pin" style="position:relative;display:flex;align-items:center;gap:4px;height:30px;padding:0 10px 0 8px;border-radius:8px;background:${colors.court};border:2px solid ${colors.bg};box-sizing:border-box;box-shadow:0 0 0 3px ${colors.court}40,0 2px 6px rgba(0,0,0,.22);color:${colors.brandInk};white-space:nowrap;${FONT};font-size:12px;cursor:pointer">${courtGlyph(colors.brandInk)}{n} courts${hitDot()}</div>`,
     // Beside you (or whoever is picked): the others crowding your spot, as a small ink "+3" with a disc peeking behind it.
     chip: `<div class="cs-pin" style="position:relative;width:40px;height:30px;cursor:pointer"><div style="position:absolute;left:12px;top:2px;width:26px;height:26px;border-radius:999px;background:${colors.surfaceAlt};border:1.5px solid ${colors.bg};box-sizing:border-box;box-shadow:0 2px 6px rgba(0,0,0,.18)"></div><div style="position:absolute;left:0;top:2px;min-width:28px;height:26px;padding:0 7px;box-sizing:border-box;border-radius:999px;background:${colors.text};color:${colors.bg};border:2px solid ${colors.bg};display:flex;align-items:center;justify-content:center;${FONT};box-shadow:0 2px 6px rgba(0,0,0,.22)">{n}</div></div>`,
   };
