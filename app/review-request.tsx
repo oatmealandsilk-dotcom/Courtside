@@ -52,7 +52,7 @@ export default function ReviewRequestSheet() {
       default: return {};
     }
   }, [kind, id, posts, stories, comments, questions, answers, coachQuestions, coachReplies]);
-  const { mine, review, known } = useReviewOf(kind && id ? { kind, id, authorId: item.authorId, clip: item.clip } : undefined, item.removed);
+  const { mine, review, known, off } = useReviewOf(kind && id ? { kind, id, authorId: item.authorId, clip: item.clip } : undefined, item.removed);
   const thing = kind ? thingWord(kind, item.clip) : 'post';
   const removed = item.removed;
 
@@ -73,8 +73,8 @@ export default function ReviewRequestSheet() {
     setSending(false);
   };
 
-  // Nothing to ask about here: not yours, not removed (any more), or a broken link.
-  const blocked = !kind || !removed || !mine;
+  // Nothing to ask about here: not yours, not removed (any more), a broken link, or reviews not on this database yet.
+  const blocked = !kind || !removed || !mine || off;
   // Asked already about this take-down: where it stands, and no second ask.
   const answered = !blocked && review ? review : null;
 
@@ -86,7 +86,7 @@ export default function ReviewRequestSheet() {
         {blocked ? (
           <View style={styles.empty}>
             <Ionicons name="eye-outline" size={22} color={colors.textMuted} />
-            <Text style={styles.body}>{!removed ? `This ${thing} isn’t removed, so there’s nothing to review.` : 'Only whoever posted it can ask for a review.'}</Text>
+            <Text style={styles.body}>{!removed ? `This ${thing} isn’t removed, so there’s nothing to review.` : !mine ? 'Only whoever posted it can ask for a review.' : 'Reviews aren’t switched on yet. Try again later.'}</Text>
           </View>
         ) : (
           <>

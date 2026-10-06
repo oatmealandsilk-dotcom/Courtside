@@ -2896,7 +2896,7 @@ export const remote = {
    * take-down. See ReviewAskResult for the answers.
    */
   async requestReview(kind: TakedownKind, id: ID, note?: string): Promise<ReviewAskResult> {
-    const words = note?.replace(/\s+/g, ' ').trim().slice(0, REVIEW_NOTE_MAX);
+    const words = note?.replace(/\s+/g, ' ').trim().slice(0, REVIEW_NOTE_MAX).trim();
     const { error } = await need().rpc('request_review', { p_kind: kind, p_id: id, p_note: words || null });
     if (!error) return 'done';
     if (missingFunction(error)) return 'not_ready';

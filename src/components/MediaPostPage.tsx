@@ -196,6 +196,8 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
   const [head, setHead] = useState(0);
   const [foot, setFoot] = useState(0);
   const [entry, setEntry] = useState(0);
+  // Taken down (migration 108): nothing new can be added under it, so there is no line inviting a comment.
+  const closed = !!post.removed;
   const measured = (set: (n: number) => void, prev: number) => (e: { nativeEvent: { layout: { height: number } } }) => {
     const h = Math.ceil(e.nativeEvent.layout.height);
     if (h > 0 && Math.abs(h - prev) >= 1) set(h);
@@ -209,7 +211,7 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
     // Until the words have measured, the old share of the page; after, the
     // page less its words (and a comment's worth of room when there are some),
     // never under 40% of it, so a long caption cannot shrink the picture away.
-    const rest = head && foot && entry ? head + foot + entry + spacing.md * 2 + spacing.sm * (thread.length ? 2 : 1) + (thread.length ? 72 : 0) : 0;
+    const rest = head && foot && (entry || closed) ? head + foot + (closed ? 0 : entry) + spacing.md * 2 + spacing.sm * (thread.length ? 2 : 1) + (thread.length ? 72 : 0) : 0;
     const tall = rest ? Math.max(room.h * 0.4, room.h - rest) : room.h * 0.62;
     const full = room.w - inset * 2;
     const h = Math.min(tall, full / ratio);
@@ -341,10 +343,13 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
               <Ionicons name="chatbubble-outline" size={ICON - 1} color={colors.text} />
               {post.commentIds.length ? <Text style={styles.actionText}>{compactNumber(post.commentIds.length)}</Text> : null}
             </Tappable>
-            <Tappable onPress={onShare} scaleTo={0.78} hitSlop={6} style={styles.action} accessibilityLabel="Send this post to someone">
-              <Ionicons name="arrow-redo-outline" size={ICON} color={colors.text} />
-              {post.shares ? <Text style={styles.actionText}>{compactNumber(post.shares)}</Text> : null}
-            </Tappable>
+            {/* Nobody else can open something taken down, so there is nothing to send. */}
+            {closed ? null : (
+              <Tappable onPress={onShare} scaleTo={0.78} hitSlop={6} style={styles.action} accessibilityLabel="Send this post to someone">
+                <Ionicons name="arrow-redo-outline" size={ICON} color={colors.text} />
+                {post.shares ? <Text style={styles.actionText}>{compactNumber(post.shares)}</Text> : null}
+              </Tappable>
+            )}
             <View style={styles.flex} />
             <Tappable onPress={onToggleSave} scaleTo={0.78} hitSlop={6} style={styles.action} accessibilityLabel={saved ? 'Remove from saved' : 'Save this post'}>
               <Ionicons name={saved ? 'bookmark' : 'bookmark-outline'} size={ICON - 1} color={colors.text} />
@@ -373,10 +378,12 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
             ))}
           </ScrollView>
         ) : null}
-        <Pressable accessibilityRole="button" accessibilityLabel="Add a comment" onPress={() => router.push({ pathname: '/comments', params: { kind: 'post', id: post.id, focus: '1' } })} onLayout={measured(setEntry, entry)} style={styles.addComment}>
-          {currentUser ? <Avatar name={currentUser.name} seed={currentUser.avatarSeed} uri={currentUser.avatarUrl} size={28} /> : null}
-          <Text style={styles.addCommentText}>{thread.length ? 'Add a comment…' : 'Be the first to comment…'}</Text>
-        </Pressable>
+        {closed ? null : (
+          <Pressable accessibilityRole="button" accessibilityLabel="Add a comment" onPress={() => router.push({ pathname: '/comments', params: { kind: 'post', id: post.id, focus: '1' } })} onLayout={measured(setEntry, entry)} style={styles.addComment}>
+            {currentUser ? <Avatar name={currentUser.name} seed={currentUser.avatarSeed} uri={currentUser.avatarUrl} size={28} /> : null}
+            <Text style={styles.addCommentText}>{thread.length ? 'Add a comment…' : 'Be the first to comment…'}</Text>
+          </Pressable>
+        )}
       </View>
      </View>
     </View>

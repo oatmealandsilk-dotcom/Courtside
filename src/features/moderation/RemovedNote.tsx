@@ -22,7 +22,7 @@ export interface RemovedRef {
 /**
  * The Community Guidelines at this reason's own part (app/guidelines.tsx).
  * "Something else" opens at the top, where the page says what a plain
- * "Removed for breaking CourtSide's rules" means.
+ * "Removed for breaking our rules" means.
  */
 export function openRules(reason: TakedownReason, thing?: string) {
   const what = asRuleThing(thing);
@@ -37,16 +37,19 @@ export function openReviewAsk(kind: TakedownKind, id: ID) {
 /**
  * Whether this is yours, and where your ask for a review of this take-down
  * stands: undefined while not asked (or not known yet). Your asks are read
- * once, the first time something removed of yours shows.
+ * once, the first time something removed of yours shows. `known`: the ask
+ * can be offered (your asks are in, or their read failed: the server turns
+ * a second ask away all the same). `off`: reviews are not on this database
+ * yet, so there is no ask to offer at all.
  */
-export function useReviewOf(item: RemovedRef | undefined, removed: Removed | undefined): { mine: boolean; review?: ReviewRequest; known: boolean } {
-  const { currentUserId, reviewRequests, actions } = useApp();
+export function useReviewOf(item: RemovedRef | undefined, removed: Removed | undefined): { mine: boolean; review?: ReviewRequest; known: boolean; off: boolean } {
+  const { currentUserId, reviewRequests, reviewsOff, reviewsFailed, actions } = useApp();
   const mine = !!item && !!removed && !!currentUserId && item.authorId === currentUserId;
   useEffect(() => {
     if (mine && reviewRequests === null) void actions.loadReviewRequests();
   }, [mine, reviewRequests, actions]);
-  if (!mine || !item || !removed) return { mine: false, known: false };
-  return { mine, review: reviewFor(reviewRequests, item.kind, item.id, removed.at), known: reviewRequests !== null };
+  if (!mine || !item || !removed) return { mine: false, known: false, off: false };
+  return { mine, review: reviewFor(reviewRequests, item.kind, item.id, removed.at), known: reviewRequests !== null || reviewsFailed, off: reviewsOff };
 }
 
 /**
@@ -134,12 +137,14 @@ export function RemovedActions({ removed, item, card = false, align = 'start', s
   style?: StyleProp<ViewStyle>;
 }) {
   const styles = useThemedStyles(styleDefinitions);
-  const { mine, review, known } = useReviewOf(item, removed);
+  const { mine, review, known, off } = useReviewOf(item, removed);
   if (!mine) return null;
   const thing = thingWord(item.kind, item.clip);
   const status = review?.status === 'open'
     ? { icon: 'time-outline' as const, words: 'Review asked · we’ll let you know' }
     : review?.status === 'kept' ? { icon: 'checkmark-done-outline' as const, words: 'Reviewed · it stays removed' } : null;
+  // Reviews not on this database yet: the way to the rules alone, never an ask that can't go anywhere.
+  const ask = !off;
   return (
     // Asked: where it stands goes on a line of its own under "Why? See the rules", never split across two.
     <View style={[styles.actions, status && styles.actionsStacked, card && styles.card, align === 'center' && styles.actionsCenter, status && align === 'center' && styles.stackedCenter, style]}>
@@ -149,8 +154,8 @@ export function RemovedActions({ removed, item, card = false, align = 'start', s
           <Text style={styles.link}>See the rules</Text>
         </Pressable>
       </View>
-      {status ? null : <Text style={styles.dot} accessibilityElementsHidden importantForAccessibility="no">·</Text>}
-      {status ? (
+      {status || !ask ? null : <Text style={styles.dot} accessibilityElementsHidden importantForAccessibility="no">·</Text>}
+      {!ask && !status ? null : status ? (
         <View style={styles.part} accessibilityRole="text" accessibilityLabel={status.words}>
           <Ionicons name={status.icon} size={12} color={colors.textMuted} style={styles.statusIcon} />
           <Text style={styles.muted}>{status.words}</Text>
@@ -161,7 +166,7 @@ export function RemovedActions({ removed, item, card = false, align = 'start', s
           accessibilityLabel="Ask for a review"
           accessibilityHint={`Asks CourtSide to look at your ${thing} again`}
           accessibilityState={{ disabled: !known }}
-          // Waits until your earlier asks are known, so a second ask is never offered by mistake.
+          // Waits for your earlier asks (a moment), so a second ask is never offered by mistake; if they can't be read, the server still turns one away.
           disabled={!known}
           hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}
           onPress={() => openReviewAsk(item.kind, item.id)}
@@ -189,7 +194,8 @@ export function TileRemoved() {
 }
 
 const styleDefinitions = StyleSheet.create({
-  pill: { flexDirection: 'row', alignItems: 'center', alignSelf: 'center', gap: 6, maxWidth: '86%', paddingHorizontal: spacing.md, paddingVertical: 7, borderRadius: radius.pill },
+  // As wide as its row allows, so every reason reads on one line beside a page's back button.
+  pill: { flexDirection: 'row', alignItems: 'center', alignSelf: 'center', gap: 6, maxWidth: '100%', paddingHorizontal: spacing.md, paddingVertical: 7, borderRadius: radius.pill },
   pillStart: { alignSelf: 'flex-start' },
   pillText: { ...typography.smallStrong, flexShrink: 1 },
   // The pill and its line as one piece: the pill on top, the quieter card under it.

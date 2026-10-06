@@ -33,10 +33,11 @@ export function reasonLabel(code: TakedownReason): string {
 /**
  * What the author reads on their own removed thing: "Removed: Violence or
  * weapons". "Something else" is never named to them; it reads as breaking
- * CourtSide's rules, as their notice does.
+ * the rules, as their notice does, in words short enough for the pill's one
+ * line on a phone (the Community Guidelines explain it).
  */
 export function removedLine(removed: Removed): string {
-  return removed.reason === 'other' ? 'Removed for breaking CourtSide’s rules' : `Removed: ${reasonLabel(removed.reason)}`;
+  return removed.reason === 'other' ? 'Removed for breaking our rules' : `Removed: ${reasonLabel(removed.reason)}`;
 }
 
 /** What each kind is called in a sentence: "Take down this comment?" */

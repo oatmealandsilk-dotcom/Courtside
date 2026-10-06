@@ -491,6 +491,18 @@ interface AppState extends Bootstrap, CourtLifeState, FeedGroupsState {
    * asks for them. The demo keeps its own on this phone.
    */
   reviewRequests: ReviewRequest[] | null;
+  /**
+   * Asking for a review is not on this database yet (no migration
+   * 2026100600016): "Ask for a review" stays hidden, and "Why? See the
+   * rules" shows alone. Read again on the next full refresh.
+   */
+  reviewsOff: boolean;
+  /**
+   * The last read of your asks did not come back (no signal, say). "Ask for
+   * a review" still works meanwhile (the server turns a second ask away) and
+   * the read is tried again in the background.
+   */
+  reviewsFailed: boolean;
   /** Whether the app may ask the device where you are, and the city it found. */
   locationEnabled: boolean;
   /**
@@ -564,7 +576,7 @@ function freshAccountSettings(): Partial<AppState> {
 function signedOut(prev: AppState): AppState {
   return {
     ...prev, currentUserId: null, onboardingComplete: false, healthIsReal: false, healthHistory: [], detectedActivities: [],
-    ...emptyCourtLife, ...emptyFeedGroups, lastSeenLoaded: false, sessionTags: [], newOnCourtside: null, reviewRequests: null,
+    ...emptyCourtLife, ...emptyFeedGroups, lastSeenLoaded: false, sessionTags: [], newOnCourtside: null, reviewRequests: null, reviewsOff: false, reviewsFailed: false,
     mapVisibility: isSupabaseConfigured ? undefined : prev.mapVisibility, teenMap: isSupabaseConfigured ? 'off' : prev.teenMap,
     ...freshAccountSettings(),
   };
@@ -1696,6 +1708,10 @@ function mergeRemote(prev: AppState, data: RemoteData, me: ID, email: string | n
       // Which database this is (migration 64), from what the profiles came down with; a saved copy does not say.
       agesOnProfiles: !fromSnapshot && data.agesOnProfiles !== undefined ? data.agesOnProfiles : prev.agesOnProfiles,
       notifications: [...data.notifications, ...prev.notifications.filter((n) => !data.notifications.some((x) => x.id === n.id) && !gone(n.id))],
+      // An answer to an ask for a review that came with this load (a pull to refresh, say), or reviews
+      // not on the database at the last read: your asks are read again the next time one shows, so
+      // "Review asked" turns to how it went (catchUpNotifications does the same for one that comes alone).
+      reviewRequests: prev.reviewsOff || data.notifications.some((n) => n.kind === 'review' && !prev.notifications.some((x) => x.id === n.id)) ? null : prev.reviewRequests,
       tips: [...data.tips, ...prev.tips.filter((t) => !data.tips.some((x) => x.id === t.id) && !gone(t.id))],
       coachApplications: [...data.coachApplications, ...prev.coachApplications.filter((a) => !data.coachApplications.some((x) => x.id === a.id))],
       mutedIds: data.userState ? data.userState.mutedIds : prev.mutedIds,
@@ -2014,6 +2030,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     contactsFindableLive: false,
     hiddenWords: null,
     reviewRequests: null,
+    reviewsOff: false,
+    reviewsFailed: false,
     tips: [],
     sessions: [],
     sessionTags: [],
@@ -5226,8 +5244,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const loadRemoved = useCallback(async () => (live(stateRef.current.currentUserId) ? remote.fetchRemoved() : []), []);
   // Asking for a review (migration 2026100600016). Your own asks are read
   // once, the first time something removed of yours shows; the demo keeps
-  // its asks on this phone.
+  // its asks on this phone. A read that fails is tried again a few times,
+  // further apart each time, while "Ask for a review" works meanwhile.
   const reviewsAsking = useRef<Promise<void> | null>(null);
+  const reviewsRetry = useRef<{ timer: ReturnType<typeof setTimeout> | null; tries: number; who: ID | null }>({ timer: null, tries: 0, who: null });
   const loadReviewRequests = useCallback(async (): Promise<void> => {
     const me = stateRef.current.currentUserId;
     if (!me) return;
@@ -5236,21 +5256,40 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return;
     }
     if (reviewsAsking.current) return reviewsAsking.current;
+    const retry = reviewsRetry.current;
+    if (retry.timer) { clearTimeout(retry.timer); retry.timer = null; }
+    if (retry.who !== me) { retry.who = me; retry.tries = 0; }
     const ask = (async () => {
       const got = await remote.fetchReviewRequests({ mine: me }).catch(() => null);
-      // A failure leaves it unknown (the button waits); a database without the migration has none.
-      if (got === null || stateRef.current.currentUserId !== me) return;
-      setState((prev) => ({ ...prev, reviewRequests: got === 'not_ready' ? [] : got }));
+      if (stateRef.current.currentUserId !== me) return;
+      if (got === null) {
+        // Unknown for now: the ask still works (the server refuses a second one), and the read goes again
+        // in 10, 30 and 90 seconds while it is still needed.
+        setState((prev) => (prev.reviewsFailed ? prev : { ...prev, reviewsFailed: true }));
+        if (retry.tries < 3) {
+          const wait = [10, 30, 90][retry.tries] * 1000;
+          retry.tries += 1;
+          retry.timer = setTimeout(() => {
+            retry.timer = null;
+            if (stateRef.current.currentUserId === me && stateRef.current.reviewRequests === null) void loadReviewRequests();
+          }, wait);
+        }
+        return;
+      }
+      retry.tries = 0;
+      // A database without the migration: none asked, and the ask stays hidden until it is there.
+      setState((prev) => ({ ...prev, reviewRequests: got === 'not_ready' ? [] : got, reviewsOff: got === 'not_ready', reviewsFailed: false }));
     })().finally(() => { reviewsAsking.current = null; });
     reviewsAsking.current = ask;
     return ask;
   }, []);
+  useEffect(() => () => { const t = reviewsRetry.current.timer; if (t) clearTimeout(t); }, []);
   const askForReview = useCallback(async (kind: TakedownKind, id: ID, note?: string): Promise<ReviewAskResult> => {
     const me = stateRef.current.currentUserId;
     if (!me) return 'failed';
     const held = heldItem(stateRef.current, kind, id);
     const removedAt = held?.removed?.at;
-    const words = note?.replace(/\s+/g, ' ').trim().slice(0, REVIEW_NOTE_MAX) || undefined;
+    const words = note?.replace(/\s+/g, ' ').trim().slice(0, REVIEW_NOTE_MAX).trim() || undefined;
     // Kept here at once (the demo's only copy; for a real account, until the server's own row is read back).
     const keep = () => {
       if (!removedAt) return;
@@ -5266,10 +5305,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
     const result = await remote.requestReview(kind, id, words);
     if (result === 'done') { haptics.commit(); keep(); }
+    // Not on this database yet: the ask is hidden everywhere until a refresh finds it there.
+    if (result === 'not_ready') setState((prev) => (prev.currentUserId !== me ? prev : { ...prev, reviewsOff: true, reviewRequests: prev.reviewRequests ?? [] }));
     if (result === 'done' || result === 'already') {
       // The server's own rows, so "Review asked" says what it holds.
       const got = await remote.fetchReviewRequests({ mine: me }).catch(() => null);
-      if (Array.isArray(got) && stateRef.current.currentUserId === me) setState((prev) => ({ ...prev, reviewRequests: got }));
+      if (Array.isArray(got) && stateRef.current.currentUserId === me) setState((prev) => ({ ...prev, reviewRequests: got, reviewsFailed: false }));
     }
     return result;
   }, []);

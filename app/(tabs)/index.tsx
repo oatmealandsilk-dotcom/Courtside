@@ -1537,7 +1537,7 @@ function Home({ scope, topRow, paused, onChrome }: {
                         onToggleLike={() => actions.toggleLike(post.id)}
                         saved={isSaved}
                         onToggleSave={() => actions.toggleSavePost(post.id)}
-                        onShare={() => share('post', post.id)}
+                        onShare={post.removed ? undefined : () => share('post', post.id)}
                         onComment={() => router.push({ pathname: '/comments', params: { kind: 'post', id: post.id } })}
                         onPress={() => router.push(`/post/${post.id}`)}
                         onPressAuthor={() => router.push(`/user/${author.id}`)}
@@ -1644,15 +1644,18 @@ function Home({ scope, topRow, paused, onChrome }: {
                       <Ionicons name="chatbubble-outline" size={RAIL_ICONS[1][1]} color="white" style={styles.actionGlyph} />
                       {(post.commentIds.length) > 0 ? <Text style={styles.actionLabel} maxFontSizeMultiplier={MAX_GROW}>{railCount(post.commentIds.length)}</Text> : null}
                     </Tappable>
-                    <Tappable
-                      accessibilityLabel="Send this clip to someone"
-                      onPress={() => share('post', post.id)}
-                      scaleTo={0.78}
-                      style={styles.action}
-                    >
-                      <Ionicons name="arrow-redo-outline" size={RAIL_ICONS[2][1]} color="white" style={styles.actionGlyph} />
-                      {(post.shares ?? 0) > 0 ? <Text style={styles.actionLabel} maxFontSizeMultiplier={MAX_GROW}>{railCount(post.shares ?? 0)}</Text> : null}
-                    </Tappable>
+                    {/* Taken down, nobody else could open it: nothing to send. */}
+                    {post.removed ? null : (
+                      <Tappable
+                        accessibilityLabel="Send this clip to someone"
+                        onPress={() => share('post', post.id)}
+                        scaleTo={0.78}
+                        style={styles.action}
+                      >
+                        <Ionicons name="arrow-redo-outline" size={RAIL_ICONS[2][1]} color="white" style={styles.actionGlyph} />
+                        {(post.shares ?? 0) > 0 ? <Text style={styles.actionLabel} maxFontSizeMultiplier={MAX_GROW}>{railCount(post.shares ?? 0)}</Text> : null}
+                      </Tappable>
+                    )}
                     <Tappable
                       accessibilityLabel={isSaved ? 'Remove from saved' : 'Save this clip'}
                       onPress={() => actions.toggleSavePost(post.id)}

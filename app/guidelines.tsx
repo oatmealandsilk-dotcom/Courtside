@@ -8,6 +8,7 @@ import type { TakedownReason } from '@/data/types';
 import { TAKEDOWN_REASONS, asRuleThing, reasonLabel } from '@/features/moderation/reasons';
 import { goBack } from '@/lib/goBack';
 import { openLegal } from '@/lib/legal';
+import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, radius, spacing, typography } from '@/theme';
 
@@ -75,7 +76,7 @@ const RULES: Record<TakedownReason, { lead: string; list?: string[]; after?: str
     after: 'If you’re a teen and someone makes you uncomfortable, block them, report them, and tell an adult you trust.',
   },
   other: {
-    lead: 'A few rules come up less often. When something breaks one of these, its notice says only “Removed for breaking CourtSide’s rules”:',
+    lead: 'A few rules come up less often. When something breaks one of these, it’s marked only “Removed for breaking our rules”:',
     list: [
       'Sharing someone’s private information, like their address, phone number, school, or photos of them they didn’t agree to share',
       'Posting other people’s footage, photos or music without their OK',
@@ -86,11 +87,11 @@ const RULES: Record<TakedownReason, { lead: string; list?: string[]; after?: str
 };
 
 /** What happens to something taken down, as the app and the database actually do it (migrations 23, 108, 115 and 2026100600016). */
-const AFTER: { icon: keyof typeof Ionicons.glyphMap; text: string }[] = [
+const AFTER: { icon: keyof typeof Ionicons.glyphMap; text: string; review?: true }[] = [
   { icon: 'eye-off-outline', text: 'Only you and CourtSide’s admins can still see it. It’s gone from feeds, profiles, search and shared links for everyone else, and so are the comments under it.' },
   { icon: 'archive-outline', text: 'Nothing is deleted. It stays on your profile, marked Removed, with the reason. You can still delete or archive it, but not edit it while it’s down.' },
   { icon: 'notifications-outline', text: 'You get a notice in the app (and on your phone, if notifications are on) saying what was removed and why.' },
-  { icon: 'refresh-outline', text: 'You can ask for a review, once for each removal. A person on our team looks again and lets you know. If we got it wrong, it comes back exactly as it was.' },
+  { icon: 'refresh-outline', review: true, text: 'You can ask for a review, once for each removal. A person on our team looks again and lets you know. If we got it wrong, it comes back exactly as it was.' },
   { icon: 'person-remove-outline', text: 'Breaking the rules again and again, or one serious break, can get an account suspended. A suspended account can’t post, comment, like, follow or send messages, and other people can’t see it.' },
 ];
 
@@ -120,11 +121,13 @@ const asAnchor = (raw: unknown): Anchor | null => (typeof raw === 'string' && (A
  * "Why? See the rules" on something removed: the page opens at that rule,
  * marked "Why your post was removed". "Something else" (rule=other, also
  * what a removal from before reasons existed shows as) opens at the top,
- * which says what a plain "Removed for breaking CourtSide's rules" means.
+ * which says what a plain "Removed for breaking our rules" means.
  * In a browser each part also has its own #id (#violence, #report…).
  */
 export default function Guidelines() {
   const styles = useThemedStyles(styleDefinitions);
+  // Asking for a review isn't on this database yet (known once your asks were read): the page doesn't promise it.
+  const { reviewsOff } = useApp();
   const params = useLocalSearchParams<{ rule?: string; what?: string }>();
   const hash = Platform.OS === 'web' && typeof window !== 'undefined' ? window.location.hash.replace(/^#/, '') : '';
   const rule = asAnchor(params.rule) ?? asAnchor(hash);
@@ -180,17 +183,17 @@ export default function Guidelines() {
         </View>
 
         {rule === 'other' && why ? (
-          // A plain "Removed for breaking CourtSide's rules" explained, first thing.
+          // A plain "Removed for breaking our rules" explained, first thing.
           <View style={styles.callout}>
             <View style={styles.markRow}>
               <Ionicons name="eye-off-outline" size={13} color={colors.danger} />
               <Text style={styles.markText}>{why}</Text>
             </View>
             <Text style={styles.body}>
-              “Removed for breaking CourtSide’s rules” means it broke one of the guidelines on this page. When the notice doesn’t name one, it’s usually one of the rules under{' '}
+              “Removed for breaking our rules” means it broke one of the guidelines on this page. When the notice doesn’t name one, it’s usually one of the rules under{' '}
               <Text accessibilityRole="link" onPress={() => jump('other', true)} style={styles.inlineLink}>Something else</Text>.
             </Text>
-            <Text style={styles.calloutFine}>Think we got it wrong? Ask for a review from the {what} itself.</Text>
+            {reviewsOff ? null : <Text style={styles.calloutFine}>Think we got it wrong? Ask for a review from the {what} itself.</Text>}
           </View>
         ) : null}
 
@@ -232,7 +235,7 @@ export default function Guidelines() {
         <View nativeID="removed" onLayout={place('removed')} style={[styles.section, styles.sectionBreak]}>
           <Text style={styles.h2} accessibilityRole="header">What happens when something is removed</Text>
           <View style={styles.steps}>
-            {AFTER.map((step) => (
+            {AFTER.filter((step) => !(step.review && reviewsOff)).map((step) => (
               <View key={step.text} style={styles.step}>
                 <View style={styles.stepIcon}><Ionicons name={step.icon} size={16} color={colors.brand} /></View>
                 <Text style={[styles.body, styles.stepText]}>{step.text}</Text>

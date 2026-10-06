@@ -82,7 +82,7 @@ export default function PostMenu() {
   }, []);
   const openOutside = useOpenOutside(post, currentUserId);
   // Your own, taken down: why (the rules) and "Ask for a review", once per take-down.
-  const { mine: ownRemoved, review, known: reviewKnown } = useReviewOf(item ? { kind: isHit ? 'hit' : 'post', id: item.id, authorId: item.authorId } : undefined, item?.removed);
+  const { mine: ownRemoved, review, known: reviewKnown, off: reviewsOff } = useReviewOf(item ? { kind: isHit ? 'hit' : 'post', id: item.id, authorId: item.authorId } : undefined, item?.removed);
   // A long menu (an admin's own post, bigger text on a small phone) scrolls
   // rather than running off the top of the screen.
   const { height: windowHeight } = useWindowDimensions();
@@ -195,8 +195,9 @@ export default function PostMenu() {
   if (removed && ownRemoved) {
     const what = isHit ? 'hit' as const : 'post' as const;
     const thing = thingWord(what, post?.kind === 'clip');
-    rows.push(
-      { key: 'rules', icon: 'book-outline', label: 'See the rules', note: `Why your ${thing} was removed.`, onPress: () => router.replace({ pathname: '/guidelines', params: { rule: removed.reason, what: thing } }) },
+    rows.push({ key: 'rules', icon: 'book-outline', label: 'See the rules', note: `Why your ${thing} was removed.`, onPress: () => router.replace({ pathname: '/guidelines', params: { rule: removed.reason, what: thing } }) });
+    // No ask to offer before reviews are on this database (migration 2026100600016).
+    if (!reviewsOff) rows.push(
       review?.status === 'open'
         ? { key: 'review', icon: 'time-outline', label: 'Review asked', note: 'We’ll let you know.', waiting: true, onPress: () => undefined }
         : review?.status === 'kept'

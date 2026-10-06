@@ -63,6 +63,8 @@ jobs:
           # join.html at /join, query string and all, with no redirect.
           cp dist/index.html dist/join.html
           cp dist/index.html dist/account.html
+          # The Community Guidelines, linked from terms.html and open to anyone signed out.
+          cp dist/index.html dist/guidelines.html
           touch dist/.nojekyll
 
       # A browser can hold the old index.html for up to ten minutes after a

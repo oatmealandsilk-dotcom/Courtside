@@ -34,6 +34,10 @@
 --     Reports screen) closes an open request about it as restored and tells
 --     the author "Your post was restored." A Restore with no request open
 --     tells nobody, as before.
+--   review_on_delete (a trigger on the eight kinds' own tables): an author
+--     who deletes something while their ask is still open takes the ask
+--     with it, so it never waits on the admins' Removed page for something
+--     that is no longer there. Answered asks stay as they were.
 --   review_target(kind, id): server only. Who posted something, when it
 --     came down and why, what opens it and what it is called, for the steps
 --     above.
@@ -186,7 +190,8 @@ returns text language plpgsql security definer set search_path = public as $$
 declare
   me uuid := auth.uid();
   t record;
-  v_note text := nullif(left(btrim(regexp_replace(coalesce(p_note, ''), '\s+', ' ', 'g')), 300), '');
+  -- Tidied: one space between words, none at either end, even after the cut to 300 characters.
+  v_note text := nullif(btrim(left(btrim(regexp_replace(coalesce(p_note, ''), '\s+', ' ', 'g')), 300)), '');
   v_who text;
   v_words text;
   a uuid;
@@ -270,16 +275,43 @@ drop trigger if exists review_on_restore on public.moderation_actions;
 create trigger review_on_restore after insert on public.moderation_actions
   for each row when (new.action = 'restore') execute function public.review_on_restore();
 
+-- Deleted by its author (or with its post, thread or account) while an ask
+-- about it is still open: the ask goes too. Nothing is left to look at, and
+-- nobody is told. Answered asks (kept, restored) stay as a record.
+create or replace function public.review_on_delete()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  delete from public.review_requests
+  where target_id = old.id and status = 'open'
+    and target_kind = case tg_table_name
+      when 'posts' then 'post' when 'stories' then 'hit' when 'comments' then 'comment'
+      when 'story_comments' then 'hit-comment' when 'questions' then 'question' when 'answers' then 'answer'
+      when 'coach_questions' then 'coach-question' else 'coach-reply' end;
+  return null;
+end $$;
+revoke all on function public.review_on_delete() from public, anon, authenticated;
+
+do $$
+declare
+  t text;
+begin
+  foreach t in array array['posts', 'stories', 'comments', 'story_comments', 'questions', 'answers', 'coach_questions', 'coach_replies'] loop
+    execute format('drop trigger if exists review_on_delete on public.%I', t);
+    execute format('create trigger review_on_delete after delete on public.%I for each row execute function public.review_on_delete()', t);
+  end loop;
+end $$;
+
 commit;
 
 -- ------------------------------------------------------------ 5. checks to run afterwards
 -- Read-only. Paste one at a time into the SQL editor (remove the leading "-- ").
 --
--- (a) The table, its rule and the steps (expect true, 1, 3, 1):
+-- (a) The table, its rule and the steps (expect true, 1, 4, 1, 8):
 -- select (select relrowsecurity from pg_class where oid = 'public.review_requests'::regclass) as rls,
 --        (select count(*) from pg_policies where schemaname = 'public' and tablename = 'review_requests') as policies,
---        (select count(*) from pg_proc where pronamespace = 'public'::regnamespace and proname in ('request_review', 'keep_removed', 'review_on_restore')) as steps,
---        (select count(*) from pg_trigger where tgname = 'review_on_restore' and not tgisinternal) as triggers;
+--        (select count(*) from pg_proc where pronamespace = 'public'::regnamespace and proname in ('request_review', 'keep_removed', 'review_on_restore', 'review_on_delete')) as steps,
+--        (select count(*) from pg_trigger where tgname = 'review_on_restore' and not tgisinternal) as restore_trigger,
+--        (select count(*) from pg_trigger where tgname = 'review_on_delete' and not tgisinternal) as delete_triggers;
 --
 -- (b) Who may call what (expect true, true, false, false, false, false):
 -- select has_function_privilege('authenticated', 'public.request_review(text, uuid, text)', 'execute'),
