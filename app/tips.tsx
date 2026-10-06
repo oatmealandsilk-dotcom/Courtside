@@ -1,17 +1,19 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { PlayerName } from '@/components/PlayerName';
 import React, { useMemo, useRef } from 'react';
+import { useLocalSearchParams } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { goBack } from '@/lib/goBack';
 
 import { Screen } from '@/components/ui';
+import { JumpFlash, useJumpTo } from '@/components/JumpTo';
 import { TipComposer } from '@/components/TipComposer';
 import { voteCounts } from '@/components/VoteControls';
 import { RichText } from '@/components/RichText';
 import { relativeTime } from '@/lib/format';
 import { confirmDelete, confirmReport } from '@/lib/confirm';
-import { show as showToast } from '@/lib/toast';
+import { thankForReport } from '@/features/moderation/reportThanks';
 import { useApp } from '@/store/AppContext';
 import type { Tip } from '@/data/types';
 import { colors, font, spacing, typography, lift } from '@/theme';
@@ -19,6 +21,8 @@ import { colors, font, spacing, typography, lift } from '@/theme';
 /** A tip sent in the last few minutes is yours to see at the top, whatever its votes. */
 const FRESH_MS = 10 * 60 * 1000;
 const score = (tip: Tip) => { const c = voteCounts(tip); return c.up - c.down; };
+/** Delete and Report sit on a line of small words: reached from 44pt tall, the line itself unchanged. */
+const ACTION_SLOP = { top: 13, bottom: 13, left: 10, right: 10 };
 
 /**
  * The board: every tip from early users, most wanted first. A box to add
@@ -30,6 +34,9 @@ const score = (tip: Tip) => { const c = voteCounts(tip); return c.up - c.down; }
 export default function Tips() {
   const styles = useThemedStyles(styleDefinitions);
   const { tips, users, currentUserId, actions } = useApp();
+  // `at`: a tip to open the board at (a reported one, from Reports): scrolled to and lit up.
+  const { at } = useLocalSearchParams<{ at?: string }>();
+  const jump = useJumpTo(at);
   const opened = useRef(Date.now()).current;
   // Re-sorted when a tip arrives or leaves, not on every vote.
   const order = useMemo(() => {
@@ -42,7 +49,7 @@ export default function Tips() {
   const list = order.map((id) => byId.get(id)).filter((t): t is Tip => !!t);
 
   return (
-    <Screen title="Tips" compactTitle onBack={() => goBack()}>
+    <Screen title="Tips" compactTitle onBack={() => goBack()} scrollRef={jump.scrollRef}>
       <Text style={styles.lead}>Ideas for CourtSide from the people using it. Vote for the ones you want, and the top of this list gets built first.</Text>
       <TipComposer onSubmit={actions.submitTip} />
 
@@ -57,8 +64,10 @@ export default function Tips() {
               const mine = !!currentUserId && tip.authorId === currentUserId;
               const my = currentUserId ? tip.votedBy[currentUserId] : undefined;
               const net = score(tip);
+              const mark = jump.target(tip.id);
               return (
-                <View key={tip.id} style={[styles.row, index > 0 && styles.rowLine]}>
+                <View key={tip.id} style={[styles.row, index > 0 && styles.rowLine]} ref={mark?.ref} onLayout={mark?.onLayout} collapsable={mark ? false : undefined}>
+                  {mark ? <JumpFlash lit={mark.lit} square /> : null}
                   <View style={styles.rail}>
                     <VoteArrow direction={1} on={my === 1} onPress={() => actions.voteTip(tip.id, 1)} />
                     <Text style={[styles.score, my === 1 && styles.scoreUp, my === -1 && styles.scoreDown]} accessibilityLabel={`${net} votes`}>{net}</Text>
@@ -71,15 +80,15 @@ export default function Tips() {
                       <Text style={styles.time}>· {relativeTime(tip.createdAt)}</Text>
                       {/* Your own tip can be deleted; anyone else's reported (App Review 1.2), the way a coach's reply is. */}
                       {mine ? (
-                        <Pressable accessibilityRole="button" accessibilityLabel="Delete your tip" onPress={() => confirmDelete(() => actions.deleteTip(tip.id), 'your tip')} hitSlop={8} style={styles.action}>
+                        <Pressable accessibilityRole="button" accessibilityLabel="Delete your tip" onPress={() => confirmDelete(() => actions.deleteTip(tip.id), 'your tip')} hitSlop={ACTION_SLOP} style={styles.action}>
                           <Ionicons name="trash-outline" size={14} color={colors.textFaint} />
                           <Text style={styles.time}>Delete</Text>
                         </Pressable>
                       ) : currentUserId ? (
                         <Pressable accessibilityRole="button" accessibilityLabel="Report this tip" onPress={() => confirmReport('tip', () => {
                           actions.reportUser(tip.authorId, `tip:${tip.id}`);
-                          showToast({ title: 'Thanks — a person will review this', icon: 'flag-outline' });
-                        })} hitSlop={8} style={styles.action}>
+                          thankForReport(author, actions);
+                        })} hitSlop={ACTION_SLOP} style={styles.action}>
                           <Ionicons name="flag-outline" size={14} color={colors.textFaint} />
                           <Text style={styles.time}>Report</Text>
                         </Pressable>

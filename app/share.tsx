@@ -80,6 +80,8 @@ export default function ShareSheet() {
   const [note, setNote] = useState('');
   const [search, setSearch] = useState('');
   const [sent, setSent] = useState(false);
+  // The note is checked for refused words before anything goes (a quick second tap would ask twice).
+  const [checking, setChecking] = useState(false);
   const [fallbackNote, setFallbackNote] = useState('');
   const { width: windowWidth } = useWindowDimensions();
   const [gridWidth, setGridWidth] = useState(0);
@@ -229,8 +231,20 @@ export default function ShareSheet() {
     if (term) setSearch('');
   };
 
-  const send = () => {
-    if (!selected.length || !sending || sent) return;
+  const send = async () => {
+    if (!selected.length || !sending || sent || checking) return;
+    // A note with words CourtSide refuses (migration 117) is said here, before
+    // anything goes: the sheet stays open with the note, to change and send.
+    if (note.trim()) {
+      setChecking(true);
+      const refused = await actions.wordsRefused([note]);
+      setChecking(false);
+      if (refused) {
+        haptics.reject();
+        showToast({ title: 'Not sent', body: 'Your message has words that break CourtSide’s rules. Change them and send again.', icon: 'alert-circle-outline', long: true });
+        return;
+      }
+    }
     actions.shareToChats(
       {
         conversationIds: selected.filter((k) => k.startsWith('c:')).map((k) => k.slice(2)),
@@ -347,7 +361,8 @@ export default function ShareSheet() {
               send() itself ignores a second tap. */}
           <Button
             label={sent ? 'Sent' : many ? `Send separately · ${selected.length}` : 'Send'}
-            onPress={send}
+            onPress={() => { void send(); }}
+            loading={checking}
             disabled={!selected.length || !sending}
             full
           />

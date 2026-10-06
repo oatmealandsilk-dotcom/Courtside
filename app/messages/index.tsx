@@ -29,6 +29,8 @@ interface Thread {
   conversation: Conversation;
   other?: User;
   last?: Message;
+  /** When it last had news: a message your Hidden words hid is not news (it moves nothing, as it alerted nobody). */
+  at: string;
   group: boolean;
   muted: boolean;
   unread: boolean;
@@ -95,11 +97,22 @@ export default function Inbox() {
     .map((conversation) => {
       const otherId = conversation.participantIds.find((id) => id !== currentUserId);
       const other = otherId ? usersById.get(otherId) : undefined;
+      // The newest message that isn't one your Hidden words hid (migration 117): those stay out of the
+      // inbox's line, its time and its order. Only when every message is hidden does the line say so.
       let last: Message | undefined;
-      for (let i = conversation.messageIds.length - 1; i >= 0 && !last; i -= 1) last = byId.get(conversation.messageIds[i]);
+      let newest: Message | undefined;
+      for (let i = conversation.messageIds.length - 1; i >= 0 && !last; i -= 1) {
+        const m = byId.get(conversation.messageIds[i]);
+        if (!m) continue;
+        newest ??= m;
+        if (!(m.hiddenByWords && m.senderId !== currentUserId)) last = m;
+      }
+      const hiddenNewest = !!newest && newest !== last;
+      const at = hiddenNewest && last ? last.createdAt : conversation.updatedAt;
+      last ??= newest;
       const group = isGroupChat(conversation);
       return {
-        conversation, other, last, group, muted: isMuted(conversation),
+        conversation, other, last, at, group, muted: isMuted(conversation),
         unread: conversation.unreadCount > 0 || !!conversation.markedUnread,
         name: group ? groupName(conversation, users, currentUserId) : other?.name ?? '',
         people: othersIn(conversation, users, currentUserId),
@@ -126,7 +139,7 @@ export default function Inbox() {
       .sort((a, b) => {
         const pa = a.conversation.pinnedAt, pb = b.conversation.pinnedAt;
         if (pa || pb) return !pa ? 1 : !pb ? -1 : Date.parse(pa) - Date.parse(pb);
-        return Date.parse(b.conversation.updatedAt) - Date.parse(a.conversation.updatedAt);
+        return Date.parse(b.at) - Date.parse(a.at);
       });
   }, [all, search, section]);
 
@@ -372,7 +385,7 @@ interface RowAction { name: string; label: string; run: () => void }
 function InboxRow({ thread, first, styles, line, typing, onOpen, onHold, rowActions }: {
   thread: Thread; first: boolean; styles: any; line: (said: string) => string; typing?: string; onOpen: () => void; onHold: () => void; rowActions: RowAction[];
 }) {
-  const { conversation, other, last, group, muted, unread, name, people } = thread;
+  const { conversation, other, last, at, group, muted, unread, name, people } = thread;
   const link = last?.kind === 'text' ? isOnlyLink(last.body) : null;
   // Read so the line changes from "Sent a link" to the page's title as soon as it is known.
   useLinkPreview(link ? link.url : null);
@@ -404,7 +417,7 @@ function InboxRow({ thread, first, styles, line, typing, onOpen, onHold, rowActi
           </View>
           <View style={styles.when}>
             {pinned ? <Ionicons name="pin" size={12} color={colors.textFaint} accessibilityLabel="Pinned" /> : null}
-            <Text style={[styles.time, loud && styles.unreadTime]}>{relativeTime(conversation.updatedAt)}</Text>
+            <Text style={[styles.time, loud && styles.unreadTime]}>{relativeTime(at)}</Text>
             {muted ? <Ionicons name="notifications-off-outline" size={13} color={colors.textFaint} accessibilityLabel="Muted" /> : null}
           </View>
         </View>

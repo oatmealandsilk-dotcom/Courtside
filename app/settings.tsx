@@ -3,12 +3,12 @@ import { resetTips, turnOffTips, useTipsOn } from '@/features/tips/tips';
 import * as haptics from '@/lib/haptics';
 import { show as showToast } from '@/lib/toast';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { AppState, Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import { registerForPush } from '@/features/push/push';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { goBack } from '@/lib/goBack';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
@@ -65,6 +65,23 @@ export default function Settings() {
   // How many joined through your link or code, for the Invites row (Oct 5, owner: partners looked for it in Settings).
   const [joined, setJoined] = useState<number | null>(null);
   useEffect(() => { void actions.countReferrals().then(setJoined).catch(() => setJoined(null)); }, [actions]);
+  // Admins: how many reports are waiting, on the Reports row. Asked again each
+  // time Settings comes back into view (back from Reports, say), as a count
+  // only: the database counts them, and no report itself is fetched for it.
+  const [openReports, setOpenReports] = useState<number | null>(null);
+  const admin = !!currentUser?.isAdmin;
+  useFocusEffect(useCallback(() => {
+    if (!admin) return undefined;
+    let on = true;
+    void actions.countOpenReports().then((n) => { if (on && n !== null) setOpenReports(n); }).catch(() => undefined);
+    return () => { on = false; };
+  }, [actions, admin]));
+  // One tap flips them, and the row says which way they are (Oct 5, owner: no switch, just say On or Off).
+  const tipsRow: Row = { icon: 'bulb-outline', label: 'Tips', detail: 'A hint on first use', value: tipsOn ? 'On' : 'Off', flip: true, onPress: () => {
+    haptics.tap();
+    if (tipsOn) { turnOffTips(); showToast({ title: 'Tips are off', icon: 'bulb-outline' }); }
+    else { resetTips(); showToast({ title: 'Tips will show again', icon: 'bulb-outline' }); }
+  } };
   // The tennis-session alert switch shows once WHOOP's tennis sessions are switched on (migration 58),
   // and on an iPhone that puts up its own alert after each Apple Health workout (build 15,
   // features/health/workoutWatch), which obeys the same switch.
@@ -110,6 +127,8 @@ export default function Settings() {
       rows: [
         { icon: 'color-palette-outline', label: 'Theme', leading: <ThemeTile name={theme} />, value: themeList.find((t) => t.name === theme)?.label, onPress: () => router.push('/theme') },
         { icon: 'archive-outline', label: 'Archive', onPress: () => router.push('/archive') },
+        // How the app behaves, so it sits with Theme rather than under Account.
+        tipsRow,
       ],
     },
     {
@@ -118,20 +137,14 @@ export default function Settings() {
         { icon: 'person-circle-outline', label: 'Account center', detail: 'Password, sign-in and payments', onPress: () => router.push('/account') },
         { icon: 'shield-checkmark-outline', label: 'Privacy center', onPress: () => router.push('/privacy') },
         // Oct 5 (owner: "Do word feature like how Instagram does"): Instagram's Hidden words (migration 117).
-        { icon: 'eye-off-outline', label: 'Hidden words', detail: 'Hide offensive comments and messages', onPress: () => router.push('/hidden-words') },
+        { icon: 'eye-off-outline', label: 'Hidden words', detail: 'Offensive comments and messages', onPress: () => router.push('/hidden-words') },
         // Oct 4 (owner): link a number so friends can find you, and find friends from your contacts.
-        { icon: 'person-add-outline', label: 'Invites', detail: 'Your link, and who joined through it', value: joined ? `${joined} joined` : undefined, onPress: () => router.push('/invite') },
+        { icon: 'link-outline', label: 'Invites', detail: 'Your link', value: joined ? `${joined} joined` : undefined, onPress: () => router.push('/invite') },
         { icon: 'call-outline', label: 'Phone number', detail: 'So friends can find you', onPress: () => router.push('/link-phone') },
         ...(Platform.OS === 'web' ? [] : [{ icon: 'people-outline' as const, label: 'Find friends from contacts', onPress: () => router.push('/find-contacts') }]),
         // Oct 4: the way out of being found that way (migration 89). In a browser too: it is about other people's phones.
         // Shown only once the database has it; before that it would do nothing.
         ...(contactsFindableLive ? [{ icon: 'person-add-outline' as const, label: 'Let people find me from their contacts', detail: 'By your phone number or email', toggle: { value: prefs.contactsFindable, onChange: (v: boolean) => actions.setPref('contactsFindable', v) } }] : []),
-        // One tap flips them, and the row says which way they are (Oct 5, owner: no switch, just say On or Off).
-        { icon: 'bulb-outline', label: 'Tips', detail: 'A short hint the first time you reach something', value: tipsOn ? 'On' : 'Off', flip: true, onPress: () => {
-          haptics.tap();
-          if (tipsOn) { turnOffTips(); showToast({ title: 'Tips are off', icon: 'bulb-outline' }); }
-          else { resetTips(); showToast({ title: 'Tips will show again', icon: 'bulb-outline' }); }
-        } },
       ],
     },
     // Phone alerts only exist in the app on a phone; a browser can't receive them, so it doesn't offer switches for them.
@@ -183,9 +196,9 @@ export default function Settings() {
       title: 'Admin',
       rows: [
         { icon: 'hand-left-outline' as const, label: 'Welcome new players', onPress: () => router.push('/admin-welcome') },
-        { icon: 'flag-outline' as const, label: 'Reports', onPress: () => router.push('/admin-reports') },
-        // Everything taken down, with Restore (migration 108).
-        { icon: 'eye-off-outline' as const, label: 'Removed', onPress: () => router.push('/admin-removed') },
+        { icon: 'flag-outline' as const, label: 'Reports', value: openReports ? `${openReports} open` : undefined, onPress: () => router.push('/admin-reports') },
+        // Everything taken down, with Restore (migration 108). Its own icon: Hidden words has the eye.
+        { icon: 'shield-outline' as const, label: 'Removed', onPress: () => router.push('/admin-removed') },
         { icon: 'mail-outline' as const, label: 'Waitlist', onPress: () => router.push('/admin-waitlist') },
         { icon: 'people-outline' as const, label: 'Invites', onPress: () => router.push('/admin-invites') },
         { icon: 'school-outline' as const, label: 'Coaches and payments', onPress: () => router.push('/admin-coaches') },

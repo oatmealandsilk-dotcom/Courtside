@@ -23,6 +23,12 @@ import { colors, radius, spacing, typography } from '@/theme';
  * Under 18 (not known to be an adult), the two offensive switches stay on
  * and are stricter; they show as on and cannot be turned off (the server
  * holds to it too).
+ *
+ * Short words throughout (Oct 6): one line under each switch. Your own
+ * words come first and their two switches after them, as Instagram has it,
+ * so each switch reads as being about those words. Only a word's × takes it
+ * off, with Undo (back in its own place), so a stray tap while scrolling
+ * never loses one.
  */
 export default function HiddenWordsPage() {
   const styles = useThemedStyles(styleDefinitions);
@@ -32,6 +38,9 @@ export default function HiddenWordsPage() {
   useEffect(load, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [draft, setDraft] = useState('');
   const input = useRef<TextInput>(null);
+  // The settings as they are now, for an Undo that comes after other changes.
+  const latest = useRef(hiddenWords);
+  latest.current = hiddenWords;
 
   if (!hiddenWords) {
     return (
@@ -73,8 +82,25 @@ export default function HiddenWordsPage() {
     input.current?.focus();
   };
   const remove = (word: string) => {
+    // Where it sat, so Undo puts it back exactly there, not at the end.
+    const at = words.indexOf(word);
     haptics.untap();
     save({ customWords: words.filter((w) => w !== word) });
+    showToast({
+      title: `Removed “${word}”`,
+      icon: 'eye-outline',
+      action: {
+        label: 'Undo',
+        onPress: () => {
+          const now = latest.current;
+          if (!now || now.customWords.some((w) => w.toLowerCase() === word.toLowerCase())) return;
+          const { locked: _locked, ...rest } = now;
+          const back = [...now.customWords];
+          back.splice(Math.min(Math.max(at, 0), back.length), 0, word);
+          void actions.saveHiddenWords({ ...rest, customWords: cleanWords(back) });
+        },
+      },
+    });
   };
   const addNote = tooLong ? `Up to ${HIDDEN_WORD_LENGTH} characters each.`
     : already ? 'That one is on your list already.'
@@ -109,21 +135,20 @@ export default function HiddenWordsPage() {
   return (
     <Screen title="Hidden words" compactTitle onBack={() => goBack()}>
       <Text style={styles.intro}>
-        Hide comments and messages you’d rather not see. Nobody is told when something of theirs is hidden from you.
+        Hide comments and messages you’d rather not see. Nobody is told.
       </Text>
 
       <Text style={styles.sectionTitle}>Offensive words and phrases</Text>
       <View style={styles.card}>
-        {switchRow('chatbubble-outline', 'Hide offensive comments', 'Comments from people you don’t follow that may be offensive go to Hidden comments, at the end of the comments on your posts, Instants, threads and questions.', settings.hideOffensiveComments, (v) => save({ hideOffensiveComments: v }), true, locked)}
-        {switchRow('paper-plane-outline', 'Hide offensive message requests', 'A message from someone you don’t follow that may be offensive shows as “Hidden message” until you tap it, and doesn’t alert you.', settings.hideOffensiveRequests, (v) => save({ hideOffensiveRequests: v }), false, locked)}
+        {switchRow('chatbubble-outline', 'Hide offensive comments', 'From people you don’t follow', settings.hideOffensiveComments, (v) => save({ hideOffensiveComments: v }), true, locked)}
+        {switchRow('paper-plane-outline', 'Hide offensive messages', 'From people you don’t follow', settings.hideOffensiveRequests, (v) => save({ hideOffensiveRequests: v }), false, locked)}
       </View>
       <Text style={styles.note}>
-        {locked
-          ? 'These stay on for accounts under 18, and hide a few more things too.'
-          : 'CourtSide keeps the list of offensive words, phrases and emojis up to date for you.'}
+        {locked ? 'Always on for accounts under 18.' : 'CourtSide keeps this list up to date.'}
       </Text>
 
-      <Text style={styles.sectionTitle}>Custom words and phrases</Text>
+      <Text style={styles.sectionTitle}>Your words and phrases</Text>
+      {/* Your words first, then what they hide (Instagram's order): each switch then reads as being about them. */}
       <View style={styles.card}>
         <View style={styles.addRow}>
           <View style={{ flex: 1 }}>
@@ -147,20 +172,23 @@ export default function HiddenWordsPage() {
         {words.length ? (
           <View style={styles.words}>
             {words.map((word) => (
-              <Pressable key={word} accessibilityRole="button" accessibilityLabel={`Remove ${word}`} onPress={() => remove(word)} hitSlop={4} style={({ pressed }) => [styles.word, pressed && { opacity: 0.7 }]}>
+              // Only the × takes a word off: a tap on the word itself does nothing, so scrolling past never loses one.
+              <View key={word} style={styles.word}>
                 <Text style={styles.wordText} numberOfLines={1}>{word}</Text>
-                <Ionicons name="close" size={13} color={colors.textMuted} />
-              </Pressable>
+                <Pressable accessibilityRole="button" accessibilityLabel={`Remove ${word}`} onPress={() => remove(word)} hitSlop={{ top: 12, bottom: 12, left: 8, right: 10 }} style={({ pressed }) => [styles.wordX, pressed && { opacity: 0.5 }]}>
+                  <Ionicons name="close" size={14} color={colors.textMuted} />
+                </Pressable>
+              </View>
             ))}
           </View>
         ) : null}
-        <Text style={styles.count}>{words.length ? `${words.length} of ${HIDDEN_WORDS_MAX} · tap one to remove it` : 'Nothing added yet'}</Text>
+        <Text style={styles.count}>{words.length ? `${words.length} of ${HIDDEN_WORDS_MAX}` : 'Nothing added yet'}</Text>
       </View>
       <View style={[styles.card, styles.cardGap]}>
-        {switchRow('chatbubbles-outline', 'Hide comments', 'From people you don’t follow, with your words and phrases in them.', settings.customInComments, (v) => save({ customInComments: v }), true)}
-        {switchRow('mail-outline', 'Hide message requests', 'From people you don’t follow, with your words and phrases in them.', settings.customInRequests, (v) => save({ customInRequests: v }), false)}
+        {switchRow('chatbubbles-outline', 'Hide comments', 'With your words in them', settings.customInComments, (v) => save({ customInComments: v }), true)}
+        {switchRow('mail-outline', 'Hide messages', 'With your words in them', settings.customInRequests, (v) => save({ customInRequests: v }), false)}
       </View>
-      <Text style={styles.note}>Only you can see your list. Hidden comments stay hidden from everyone but you and the person who wrote them, and you can unhide any of them.</Text>
+      <Text style={styles.note}>Only from people you don’t follow. Only you can see your list.</Text>
     </Screen>
   );
 }
@@ -178,12 +206,13 @@ const styleDefinitions = StyleSheet.create({
   rowDetail: { ...typography.small, fontSize: 13, color: colors.textFaint, lineHeight: 18 },
   note: { ...typography.small, color: colors.textFaint, paddingHorizontal: spacing.sm, paddingTop: spacing.sm, lineHeight: 19 },
   addRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, paddingTop: spacing.md },
-  addButton: { height: 40, paddingHorizontal: 16, borderRadius: radius.pill, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
+  addButton: { height: 44, paddingHorizontal: 18, borderRadius: radius.pill, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
   addButtonOff: { opacity: 0.4 },
   addText: { ...typography.smallStrong, color: colors.brandInk },
   addNote: { ...typography.small, color: colors.textMuted, paddingHorizontal: spacing.lg, paddingTop: spacing.sm },
   words: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, paddingHorizontal: spacing.md, paddingTop: spacing.md },
-  word: { flexDirection: 'row', alignItems: 'center', gap: 6, maxWidth: '100%', paddingLeft: 12, paddingRight: 10, paddingVertical: 7, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt, borderWidth: 1, borderColor: colors.border },
+  word: { flexDirection: 'row', alignItems: 'center', gap: 4, maxWidth: '100%', paddingLeft: 12, paddingRight: 6, paddingVertical: 4, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt, borderWidth: 1, borderColor: colors.border },
+  wordX: { width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
   wordText: { ...typography.smallStrong, color: colors.text, flexShrink: 1 },
   count: { ...typography.small, color: colors.textFaint, paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
 });

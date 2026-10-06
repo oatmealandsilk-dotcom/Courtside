@@ -4,10 +4,11 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
+import { CourtSpinner } from '@/components/CourtSpinner';
 import { TileCover } from '@/components/TileCover';
 import { Avatar, Button, EmptyState, Screen } from '@/components/ui';
 import type { RemovedItem, ReviewRequest, TakedownKind } from '@/data/types';
-import { reasonLabel, thingWord } from '@/features/moderation/reasons';
+import { KIND_WORD, reasonLabel, thingWord } from '@/features/moderation/reasons';
 import { confirm } from '@/lib/confirm';
 import { relativeTime } from '@/lib/format';
 import { goBack } from '@/lib/goBack';
@@ -73,7 +74,7 @@ export default function AdminRemoved() {
   if (!currentUser?.isAdmin) {
     return (
       <Screen title="Removed" compactTitle onBack={() => goBack()}>
-        <EmptyState icon="lock-closed-outline" title="Only admins can see this" body="An admin is set from Supabase." />
+        <EmptyState icon="lock-closed-outline" title="Only admins can see this" />
       </Screen>
     );
   }
@@ -82,7 +83,8 @@ export default function AdminRemoved() {
   // What its author's notice calls it ("clip" for a clip this phone holds), as the server's words do.
   const thingOf = (item: RemovedItem) => thingWord(item.kind, item.kind === 'post' && posts.find((p) => p.id === item.id)?.kind === 'clip');
   const restore = (item: RemovedItem) => confirm({
-    title: `Restore this ${KIND_LABEL[item.kind].toLowerCase()}?`,
+    // "Restore this Instant?", "Restore this comment?": the kind's own word, capitals kept.
+    title: `Restore this ${KIND_WORD[item.kind]}?`,
     message: reviews.has(`${item.kind}:${item.id}`)
       ? `Everyone who could see it before sees it again. ${handleOf(item)} asked for this review and is told: “Your ${thingOf(item)} was restored.”`
       : 'Everyone who could see it before sees it again. Its author isn’t told.',
@@ -136,11 +138,11 @@ export default function AdminRemoved() {
 
   return (
     <Screen title="Removed" compactTitle onBack={() => goBack()} onRefresh={load}>
-      <Text style={styles.intro}>Everything taken down for breaking CourtSide’s rules. Only its author and admins can see these. Nothing here is deleted.{asked ? ` ${asked === 1 ? 'One author has' : `${asked} authors have`} asked for a review: ${asked === 1 ? 'that card is' : 'those cards are'} first.` : ''}</Text>
+      <Text style={styles.intro}>Taken down for breaking CourtSide’s rules. Only the author and admins see these, and nothing is deleted.{asked ? ` ${asked === 1 ? 'One author has' : `${asked} authors have`} asked for a review: ${asked === 1 ? 'that card is' : 'those cards are'} first.` : ''}</Text>
       {items === null ? (
-        <Text style={styles.muted}>Loading…</Text>
+        <View style={styles.wait}><CourtSpinner size={28} /></View>
       ) : items === 'not_ready' ? (
-        <EmptyState icon="construct-outline" title="Not switched on yet" body="Taking things down needs the database update (migration 108) first." />
+        <EmptyState icon="construct-outline" title="Not switched on yet" body="Check back soon." />
       ) : items === 'failed' ? (
         <EmptyState icon="cloud-offline-outline" title="Couldn’t load the list" body="Check your connection, then pull down to try again." />
       ) : items.length === 0 ? (
@@ -149,6 +151,7 @@ export default function AdminRemoved() {
         shown.map((item) => {
           const author = users.find((u) => u.id === item.authorId);
           const admin = item.removedBy ? users.find((u) => u.id === item.removedBy) : undefined;
+          const byWho = item.removedBy === currentUser.id ? 'by you' : admin ? `by @${admin.handle}` : item.removedBy ? 'by an admin' : 'from Reports';
           const key = `${item.kind}:${item.id}`;
           const review = reviews.get(key);
           return (
@@ -164,7 +167,7 @@ export default function AdminRemoved() {
                 <Text style={[styles.muted, styles.when]}>{relativeTime(item.removedAt)}</Text>
               </View>
 
-              <Pressable accessibilityRole="link" accessibilityLabel={`Open the removed ${KIND_LABEL[item.kind].toLowerCase()}`} onPress={() => openRemoved(item)} style={styles.target}>
+              <Pressable accessibilityRole="link" accessibilityLabel={`Open the removed ${KIND_WORD[item.kind]}`} onPress={() => openRemoved(item)} style={({ pressed }) => [styles.target, pressed && styles.targetPressed]}>
                 {item.picture ? (
                   <TileCover uri={item.picture} style={styles.thumb} accessibilityIgnoresInvertColors />
                 ) : (
@@ -180,12 +183,11 @@ export default function AdminRemoved() {
                 <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
               </Pressable>
 
+              {/* Why, then who: the date is in the card's top line already. */}
               <View style={{ gap: 2 }}>
                 <Text style={styles.reason}>{reasonLabel(item.reason)}</Text>
                 {item.note ? <Text style={styles.note}>“{item.note}”</Text> : null}
-                <Text style={styles.muted}>
-                  Taken down {admin ? `by @${admin.handle}` : item.removedBy ? 'by an admin' : 'from Reports, before this list'} · {new Date(item.removedAt).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}
-                </Text>
+                <Text style={styles.muted}>Taken down {byWho}</Text>
               </View>
 
               {review ? (
@@ -197,8 +199,8 @@ export default function AdminRemoved() {
               ) : null}
 
               <View style={styles.actions}>
-                <Button label="Restore" variant="secondary" loading={busy === key} onPress={() => restore(item)} />
-                {review ? <Button label="Keep removed" variant="ghost" loading={busy === `keep:${key}`} onPress={() => keep(item)} /> : null}
+                <Button size="sm" label="Restore" variant="secondary" loading={busy === key} onPress={() => restore(item)} />
+                {review ? <Button size="sm" label="Keep removed" variant="ghost" loading={busy === `keep:${key}`} onPress={() => keep(item)} /> : null}
               </View>
             </View>
           );
@@ -210,6 +212,7 @@ export default function AdminRemoved() {
 
 const styleDefinitions = StyleSheet.create({
   intro: { ...typography.small, color: colors.textMuted, lineHeight: 20, paddingBottom: spacing.md },
+  wait: { paddingTop: spacing.xxxl, alignItems: 'center' },
   card: { gap: spacing.sm, padding: spacing.md, marginBottom: spacing.md, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
   // Waiting on an answer: the card's edge in the "asked" colour, nothing louder.
   cardAsked: { borderColor: colors.warning },
@@ -220,9 +223,11 @@ const styleDefinitions = StyleSheet.create({
   ask: { gap: 4, padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.bgElevated },
   askHead: { ...typography.smallStrong, color: colors.text },
   askNote: { ...typography.body, color: colors.text, lineHeight: 21 },
-  kind: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.pill, backgroundColor: colors.brandDim },
-  kindText: { ...typography.caption, color: colors.brand },
+  // The same small tag as Reports: dark enough to read on the tint in every court.
+  kind: { paddingHorizontal: 9, paddingVertical: 3, borderRadius: radius.pill, backgroundColor: colors.brandDim },
+  kindText: { ...typography.caption, fontSize: 12, letterSpacing: 0.2, color: colors.textMuted },
   target: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.sm, borderRadius: radius.md, backgroundColor: colors.surfaceAlt },
+  targetPressed: { opacity: 0.75 },
   thumb: { width: 44, height: 55, borderRadius: radius.sm, backgroundColor: colors.border },
   noThumb: { alignItems: 'center', justifyContent: 'center' },
   byRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },

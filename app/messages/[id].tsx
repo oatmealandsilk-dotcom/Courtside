@@ -77,7 +77,8 @@ import { useMentionCandidates } from '@/features/mentions/useMentionCandidates';
 import { activeMention, applyMention } from '@/lib/mentions';
 import { show as showToast } from '@/lib/toast';
 import { useReducedMotion } from '@/lib/useReducedMotion';
-import { afterMenu, confirm, confirmAfterMenu, confirmReport } from '@/lib/confirm';
+import { afterMenu, confirm, confirmAfterMenu, confirmBlock, confirmReport } from '@/lib/confirm';
+import { REPORT_THANKS } from '@/features/moderation/reportThanks';
 import * as haptics from '@/lib/haptics';
 import type { HitRequest, ID, Message, Post, Question, User } from '@/data/types';
 import Reanimated, { Easing, FadeIn, FadeInDown, FadeInUp, FadeOut, ZoomIn, cancelAnimation, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming, type SharedValue } from 'react-native-reanimated';
@@ -125,6 +126,9 @@ interface Calls {
   openReactions: (message: Message) => void;
   jumpTo: (messageId: ID) => void;
   showFolded: (ids: ID[]) => void;
+  /** Report or block from under a message your Hidden words hid, once shown. */
+  reportMessage: (message: Message) => void;
+  blockSender: (userId: ID) => void;
   openPhoto: (message: Message, index: number, rects: (TileRect | undefined)[]) => void;
   /** A shared clip this phone hasn't loaded: fetched, so its card can show it. */
   loadPost: (postId: ID) => void;
@@ -142,7 +146,7 @@ interface Calls {
   escape: () => void;
 }
 const CALL_NAMES: (keyof Calls)[] = [
-  'openMenu', 'startReply', 'react', 'anyEmoji', 'copy', 'retry', 'openReactions', 'jumpTo', 'showFolded', 'openPhoto', 'loadPost',
+  'openMenu', 'startReply', 'react', 'anyEmoji', 'copy', 'retry', 'openReactions', 'jumpTo', 'showFolded', 'reportMessage', 'blockSender', 'openPhoto', 'loadPost',
   'send', 'sendVoice', 'recording', 'typed', 'focused', 'toggleEmoji', 'plusToggled', 'camera', 'photos', 'court', 'escape',
 ];
 
@@ -553,6 +557,7 @@ export default function Thread() {
         // Answering someone you blocked, whose words are folded away here: the quote keeps them hidden too.
         originalBlocked={!!original && group && original.senderId !== currentUserId && blockedIds.includes(original.senderId) && !shownIds.includes(original.id)}
         originalHidden={!!original && !!original.hiddenByWords && original.senderId !== currentUserId && !shownIds.includes(original.id)}
+        senderBlocked={m.senderId !== currentUserId && blockedIds.includes(m.senderId)}
         held={menuId === m.id}
         flashKey={flash?.id === m.id ? flash.n : undefined}
         readLine={m.id === lastRealId ? readLine : null}
@@ -804,6 +809,23 @@ export default function Thread() {
     openReactions: (m) => setReactionsOf(m),
     jumpTo: (messageId) => { void jumpTo(messageId); },
     showFolded: (ids) => setShownIds((s) => [...s, ...ids]),
+    // Asked first, then thanks, as the message menu's Report.
+    reportMessage: (m) => {
+      if (!conversation) return;
+      const chatId = conversation.id;
+      confirmReport('message', () => {
+        void actions.reportChat(chatId, 'message', m.senderId, m.id).then((filed) => showToast(filed ? { title: REPORT_THANKS, icon: 'flag-outline' } : { title: 'Your report didn’t send', body: 'Check your connection and try again.', icon: 'alert-circle-outline' }));
+      });
+    },
+    // Blocking is a toggle underneath: someone already blocked is never sent
+    // through it (that would unblock them). Their row offers no Block, and
+    // this is checked again here, and again on yes.
+    blockSender: (userId) => {
+      if (blockedIds.includes(userId)) return;
+      const who = users.find((u) => u.id === userId);
+      if (!who) return;
+      confirmBlock(who, () => { if (!actions.isBlocked(userId)) actions.toggleBlock(userId); });
+    },
     openPhoto: (m, index, rects) => { Keyboard.dismiss(); setViewing({ message: m, index, rects }); },
     // Asked once each while the app is open: one gone for good is not asked about on every draw.
     loadPost: (postId) => { if (askedPosts.has(postId)) return; askedPosts.add(postId); void actions.loadPost(postId); },
@@ -1015,7 +1037,7 @@ export default function Thread() {
           onUnsend={() => { const messageId = menuMessage.id; confirmAfterMenu({ title: 'Unsend message?', message: "It's removed for everyone in the chat.", confirmLabel: 'Unsend', destructive: true, onConfirm: () => actions.unsendMessage(messageId) }); }}
           // Someone else's message: reported as the chat, naming them and pointing at this one message,
           // so an admin can read it in place and act on it (App Review 1.2, Oct 5).
-          onReport={conversation ? () => { const m = menuMessage; const chatId = conversation.id; confirmReport('message', () => { void actions.reportChat(chatId, 'message', m.senderId, m.id).then((filed) => showToast(filed ? { title: 'Thanks — a person will review this', icon: 'flag-outline' } : { title: 'Your report didn’t send', body: 'Check your connection and try again.', icon: 'alert-circle-outline' })); }, true); } : undefined}
+          onReport={conversation ? () => { const m = menuMessage; const chatId = conversation.id; confirmReport('message', () => { void actions.reportChat(chatId, 'message', m.senderId, m.id).then((filed) => showToast(filed ? { title: REPORT_THANKS, icon: 'flag-outline' } : { title: 'Your report didn’t send', body: 'Check your connection and try again.', icon: 'alert-circle-outline' })); }, true); } : undefined}
           onDelete={() => { const messageId = menuMessage.id; confirmAfterMenu({ title: 'Delete message?', message: menuPending ? 'It hasn’t been sent, so it’s simply removed.' : menu.mine ? "It's removed for you. Others in the chat still see it." : "It's removed for you only.", confirmLabel: 'Delete', destructive: true, onConfirm: () => actions.deleteMessageForMe(messageId) }); }}
           // The Send-to sheet, once the menu has gone: pick chats (groups too) and it goes to each as it is.
           onForward={() => { const messageId = menuMessage.id; afterMenu(() => router.push({ pathname: '/share', params: { kind: 'message', id: messageId } })); }}
@@ -1410,7 +1432,7 @@ const noop = () => {};
  * read line), an event line, or a folded run. Drawn again only when one of
  * its own values changes (see Thread's renderRow).
  */
-const MessageRow = memo(function MessageRow({ item, ctx, original, originalBlocked, originalHidden = false, held, flashKey, readLine, seenHidden, canWrite }: {
+const MessageRow = memo(function MessageRow({ item, ctx, original, originalBlocked, originalHidden = false, senderBlocked = false, held, flashKey, readLine, seenHidden, canWrite }: {
   item: ThreadRow;
   ctx: RowCtx;
   /** The message it answers, when it is here (undefined: gone, or not loaded yet). */
@@ -1419,6 +1441,8 @@ const MessageRow = memo(function MessageRow({ item, ctx, original, originalBlock
   originalBlocked: boolean;
   /** That message is hidden here by your Hidden words (migration 117): the quote keeps its words hidden too. */
   originalHidden?: boolean;
+  /** Whoever sent it is someone you blocked: no Block under it (it would unblock them). */
+  senderBlocked?: boolean;
   /** Its menu is open: the lifted copy stands in for it. */
   held: boolean;
   flashKey?: number;
@@ -1457,6 +1481,7 @@ const MessageRow = memo(function MessageRow({ item, ctx, original, originalBlock
             accessibilityRole="button"
             accessibilityLabel={`${run.length === 1 ? 'A message' : `${run.length} messages`} from someone you blocked. Show`}
             onPress={() => call.showFolded(run)}
+            hitSlop={{ top: 4, bottom: 4 }}
             style={({ pressed }) => [styles.folded, pressed && { opacity: 0.7 }]}
           >
             <Ionicons name="eye-off-outline" size={14} color={colors.textFaint} />
@@ -1481,11 +1506,12 @@ const MessageRow = memo(function MessageRow({ item, ctx, original, originalBlock
             accessibilityRole="button"
             accessibilityLabel="Hidden message. Show"
             onPress={() => call.showFolded([message.id])}
+            hitSlop={{ top: 4, bottom: 4 }}
             style={({ pressed }) => [styles.folded, pressed && { opacity: 0.7 }]}
           >
             <Ionicons name="eye-off-outline" size={14} color={colors.textFaint} />
             <Text style={styles.foldedText}>
-              Hidden message · <Text style={styles.foldedShow}>tap to show</Text>
+              Hidden message · <Text style={styles.foldedShow}>Show</Text>
             </Text>
           </Pressable>
         </Row>
@@ -1719,11 +1745,36 @@ const MessageRow = memo(function MessageRow({ item, ctx, original, originalBlock
     </Slide>
   ) : null;
 
+  // Shown after your Hidden words hid it: why it was hidden, and Report or
+  // Block right there, under it. From someone you already blocked (a group
+  // you are both in, or your old chat with them), only Report: they are
+  // blocked already, and a Block here would have unblocked them.
+  const wordsShown = !mine && message.hiddenByWords ? (
+    <Slide mine={false}>
+      <View style={[styles.wordsShown, gutter && styles.wordsShownBeside]}>
+        <Text style={styles.wordsShownText}>Hidden by your Hidden words</Text>
+        <Text style={styles.wordsShownDot}>·</Text>
+        <Pressable accessibilityRole="button" accessibilityLabel="Report this message" hitSlop={{ top: 12, bottom: 12, left: 6, right: senderBlocked ? 12 : 6 }} onPress={() => call.reportMessage(message)}>
+          <Text style={styles.wordsShownAction}>Report</Text>
+        </Pressable>
+        {senderBlocked ? null : (
+          <>
+            <Text style={styles.wordsShownDot}>·</Text>
+            <Pressable accessibilityRole="button" accessibilityLabel="Block whoever sent it" hitSlop={{ top: 12, bottom: 12, left: 6, right: 12 }} onPress={() => call.blockSender(message.senderId)}>
+              <Text style={styles.wordsShownAction}>Block</Text>
+            </Pressable>
+          </>
+        )}
+      </View>
+    </Slide>
+  ) : null;
+
   return (
     <View>
       {stamp}
       {who}
       <Arrive mode={arrive} mine={mine}>{body}</Arrive>
+      {wordsShown}
       {readUnder}
       {seen}
     </View>
@@ -2760,6 +2811,12 @@ const styleDefinitions = StyleSheet.create({
   folded: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border, borderStyle: 'dashed' },
   foldedText: { ...typography.small, color: colors.textFaint, flexShrink: 1 },
   foldedShow: { ...font('600'), color: colors.textMuted },
+  // Under a message shown after your Hidden words hid it: why, then Report · Block.
+  wordsShown: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4, paddingLeft: 6 },
+  wordsShownBeside: { paddingLeft: FACE + spacing.sm + 6 },
+  wordsShownText: { ...typography.caption, letterSpacing: 0, color: colors.textFaint },
+  wordsShownDot: { ...typography.caption, letterSpacing: 0, color: colors.textFaint },
+  wordsShownAction: { ...typography.caption, letterSpacing: 0, color: colors.textMuted },
   blockedBanner: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, maxWidth: 700, width: '100%', alignSelf: 'center' },
   blockedBannerText: { ...typography.small, color: colors.textMuted, flex: 1 },
   blockedBannerLink: { ...typography.smallStrong, color: colors.danger },

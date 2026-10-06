@@ -5,7 +5,7 @@ import { shownStreak, streakWords } from '@/features/practice/streakFlame';
 import React, { useRef, useState } from 'react';
 import { confirm, confirmDelete, confirmReport } from '@/lib/confirm';
 import { RemovedNote } from '@/features/moderation/RemovedNote';
-import { show as showToast } from '@/lib/toast';
+import { thankForReport } from '@/features/moderation/reportThanks';
 import * as haptics from '@/lib/haptics';
 import { MentionSuggestions } from '@/components/MentionSuggestions';
 import { useMentionDraft } from '@/features/mentions/useMentionDraft';
@@ -16,6 +16,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { VoteControls } from '@/components/VoteControls';
 import { TOPIC_META } from '@/components/QuestionCard';
 import { Avatar, Button, Card, Chip, EmptyState, Field, Screen } from '@/components/ui';
+import { JumpFlash, useJumpTarget } from '@/components/JumpTo';
 import { relativeTime } from '@/lib/format';
 import { RichText } from '@/components/RichText';
 import { AttachButton, AttachedPreview, ReplyMediaView, type ReplyAttachment } from '@/components/ReplyMedia';
@@ -69,6 +70,8 @@ export function ThreadReply({ answer, thread, acceptedId, askerId, depth = 0, pr
   const reveal = useRevealOnFocus();
   const lineRef = useRef<TextInput>(null);
   const responder = users.find(user => user.id === answer.authorId);
+  // The reply a thread was opened at (a reported one, from Reports): it is scrolled to and lights up for a moment.
+  const mark = useJumpTarget(answer.id);
   const streak = shownStreak(responder, currentUserId);
   const tag = useMentionDraft(draft, setDraft, lineRef);
   // Hold your own reply to delete it, as on Instagram; hold someone else's to report it (Oct 5).
@@ -79,7 +82,7 @@ export function ThreadReply({ answer, thread, acceptedId, askerId, depth = 0, pr
       haptics.tap();
       confirmReport('reply', () => {
         actions.reportUser(answer.authorId, `answer:${answer.id}`);
-        showToast({ title: 'Thanks — a person will review this', icon: 'flag-outline' });
+        thankForReport(responder, actions);
       });
     } : undefined;
   // An admin's hold takes it down (or puts it back), with Delete still there on their own reply (migration 108).
@@ -89,14 +92,18 @@ export function ThreadReply({ answer, thread, acceptedId, askerId, depth = 0, pr
     if (answer.removed) {
       confirm({ title: 'Restore this reply?', message: 'Everyone who could see it before sees it again.', confirmLabel: 'Restore', onConfirm: () => { void actions.restoreContent('answer', answer.id); }, ...deleteToo });
     } else {
-      confirm({ title: 'Take down this reply?', message: 'Choose which of CourtSide’s rules it breaks on the next page.', confirmLabel: 'Choose a reason', destructive: true, onConfirm: () => router.push({ pathname: '/take-down', params: { kind: 'answer', id: answer.id } }), ...deleteToo });
+      // Someone else's: straight to the page that asks which rule it breaks (it asks once more before anything happens).
+      // Your own: asked first, as Delete is the likelier wish.
+      if (mine) confirm({ title: 'Take down this reply?', message: 'Choose which of CourtSide’s rules it breaks on the next page.', confirmLabel: 'Choose a reason', destructive: true, onConfirm: () => router.push({ pathname: '/take-down', params: { kind: 'answer', id: answer.id } }), ...deleteToo });
+      else router.push({ pathname: '/take-down', params: { kind: 'answer', id: answer.id } });
     }
   } : undefined;
   const hold = askModerate ?? askDelete;
   const children = thread.filter(child => child.parentAnswerId === answer.id)
     .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
   return <View>
-    <View style={styles.answerCard}>
+    <View style={styles.answerCard} ref={mark?.ref} onLayout={mark?.onLayout} collapsable={mark ? false : undefined}>
+      {mark ? <JumpFlash lit={mark.lit} inset={8} /> : null}
       {!collapsed && children.length > 0 && <View pointerEvents="none" style={styles.avatarRail}/>}
       <Pressable accessibilityRole="button" accessibilityLabel={`${collapsed ? 'Expand' : 'Collapse'} reply by ${responder?.name ?? 'player'}${streakWords(streak)}`}
         onPress={() => setCollapsed(value => !value)} onLongPress={hold} style={styles.answerHead}>

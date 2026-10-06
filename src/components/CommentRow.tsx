@@ -11,11 +11,10 @@ import { StreakFlame } from '@/components/StreakFlame';
 import { shownStreak } from '@/features/practice/streakFlame';
 import type { Comment, TakedownKind } from '@/data/types';
 import { RemovedActions, RemovedNote } from '@/features/moderation/RemovedNote';
-import { confirm } from '@/lib/confirm';
+import { confirm, confirmReport } from '@/lib/confirm';
 import { relativeTime } from '@/lib/format';
-import { confirmReport } from '@/lib/confirm';
 import * as haptics from '@/lib/haptics';
-import { show as showToast } from '@/lib/toast';
+import { thankForReport } from '@/features/moderation/reportThanks';
 import { useApp } from '@/store/AppContext';
 import { colors, spacing, typography } from '@/theme';
 import { openPlayer } from '@/features/navigation/openPlayer';
@@ -36,6 +35,10 @@ export const replyIndent = (big: boolean) => (big ? 40 : 32) + spacing.md;
  * Holding someone else's comment reports it (App Review 1.2, Oct 5).
  * Holding your own deletes it; under your own post or Instant, holding
  * anyone's offers Delete (migration 125) or Report.
+ *
+ * One your Hidden words hid (`onUnhide`, under "Hidden comments") has no
+ * heart: liking it would tell its writer, which undoes "hidden". It has
+ * "Unhide · Delete" under its words instead.
  */
 export function CommentRow({ comment, big = false, reply = false, onPressBody, onReply, onUnhide, onLayout }: {
   comment: Comment;
@@ -47,7 +50,7 @@ export function CommentRow({ comment, big = false, reply = false, onPressBody, o
   onPressBody?: () => void;
   /** Shows "Reply" under the words. */
   onReply?: () => void;
-  /** Shows "Unhide" under the words: one your Hidden words hid, on something of yours (migration 117). */
+  /** Shows "Unhide · Delete" under the words, and no heart: one your Hidden words hid, on something of yours (migration 117). */
   onUnhide?: () => void;
   onLayout?: (y: number) => void;
 }) {
@@ -62,7 +65,8 @@ export function CommentRow({ comment, big = false, reply = false, onPressBody, o
     if (comment.removed) {
       confirm({ title: 'Restore this comment?', message: 'Everyone who could see it before sees it again.', confirmLabel: 'Restore', onConfirm: () => { void actions.restoreContent(kind, comment.id); } });
     } else {
-      confirm({ title: 'Take down this comment?', message: 'Choose which of CourtSide’s rules it breaks on the next page.', confirmLabel: 'Choose a reason', destructive: true, onConfirm: () => router.push({ pathname: '/take-down', params: { kind, id: comment.id } }) });
+      // Straight to the page that asks which rule it breaks: it asks once more before anything happens.
+      router.push({ pathname: '/take-down', params: { kind, id: comment.id } });
     }
   } : undefined;
   const liked = !!currentUserId && comment.likedBy.includes(currentUserId);
@@ -74,7 +78,7 @@ export function CommentRow({ comment, big = false, reply = false, onPressBody, o
   const canReport = !!currentUserId && comment.authorId !== currentUserId;
   const sendReport = () => {
     actions.reportUser(comment.authorId, `comment:${comment.id}`);
-    showToast({ title: 'Thanks — a person will review this', icon: 'flag-outline' });
+    thankForReport(who, actions);
   };
   const report = canReport ? () => {
     haptics.tap();
@@ -91,6 +95,11 @@ export function CommentRow({ comment, big = false, reply = false, onPressBody, o
   const deleteTheirs = canReport && underMine ? () => {
     haptics.tap();
     confirm({ title: 'Delete this comment?', message: 'It’s removed for everyone.', confirmLabel: 'Delete', destructive: true, onConfirm: () => actions.deleteComment(comment.id), also: { label: 'Report', destructive: true, onPress: sendReport } });
+  } : undefined;
+  // Hidden by your Hidden words: deleted from its own "Delete", without the Report choice of a hold.
+  const deleteHidden = canReport && underMine ? () => {
+    haptics.tap();
+    confirm({ title: 'Delete this comment?', message: 'It’s removed for everyone.', confirmLabel: 'Delete', destructive: true, onConfirm: () => actions.deleteComment(comment.id) });
   } : undefined;
   const hold = deleteOwn ?? moderate ?? deleteTheirs ?? report;
   const holdHint = deleteOwn ? 'Hold to delete it' : moderate ? (comment.removed ? 'Hold to restore it' : 'Hold to take it down') : deleteTheirs ? 'Hold to delete or report it' : report ? 'Hold to report' : undefined;
@@ -124,9 +133,19 @@ export function CommentRow({ comment, big = false, reply = false, onPressBody, o
           </Pressable>
         ) : null}
         {onUnhide ? (
-          <Pressable accessibilityRole="button" accessibilityLabel={`Unhide ${who?.name ?? 'this'}'s comment`} hitSlop={{ top: 6, bottom: 8, left: 8, right: 16 }} onPress={onUnhide} style={styles.replyButton}>
-            <Text style={[styles.replyText, big && styles.replyTextBig]}>Unhide</Text>
-          </Pressable>
+          <View style={styles.hiddenActions}>
+            <Pressable accessibilityRole="button" accessibilityLabel={`Unhide ${who?.name ?? 'this'}'s comment`} hitSlop={{ top: 16, bottom: 12, left: 8, right: 8 }} onPress={onUnhide}>
+              <Text style={[styles.hiddenText, big && styles.replyTextBig]}>Unhide</Text>
+            </Pressable>
+            {deleteHidden ? (
+              <>
+                <Text style={[styles.hiddenDot, big && styles.replyTextBig]}>·</Text>
+                <Pressable accessibilityRole="button" accessibilityLabel={`Delete ${who?.name ?? 'this'}'s comment`} hitSlop={{ top: 16, bottom: 12, left: 8, right: 16 }} onPress={deleteHidden}>
+                  <Text style={[styles.hiddenText, big && styles.replyTextBig]}>Delete</Text>
+                </Pressable>
+              </>
+            ) : null}
+          </View>
         ) : null}
       </View>
       {comment.imageUrl ? (
@@ -136,10 +155,12 @@ export function CommentRow({ comment, big = false, reply = false, onPressBody, o
           </Pressable>
         </Modal>
       ) : null}
-      <Pressable accessibilityRole="button" accessibilityLabel={liked ? 'Unlike comment' : 'Like comment'} accessibilityState={{ selected: liked }} hitSlop={8} onPress={() => actions.toggleLikeComment(comment.id)} style={styles.like}>
-        <Ionicons name={liked ? 'heart' : 'heart-outline'} size={16} color={liked ? colors.danger : colors.textFaint} />
-        {comment.likedBy.length ? <Text style={[styles.count, liked && { color: colors.danger }]}>{comment.likedBy.length}</Text> : null}
-      </Pressable>
+      {onUnhide ? null : (
+        <Pressable accessibilityRole="button" accessibilityLabel={liked ? 'Unlike comment' : 'Like comment'} accessibilityState={{ selected: liked }} hitSlop={8} onPress={() => actions.toggleLikeComment(comment.id)} style={styles.like}>
+          <Ionicons name={liked ? 'heart' : 'heart-outline'} size={16} color={liked ? colors.danger : colors.textFaint} />
+          {comment.likedBy.length ? <Text style={[styles.count, liked && { color: colors.danger }]}>{comment.likedBy.length}</Text> : null}
+        </Pressable>
+      )}
     </View>
   );
 }
@@ -163,6 +184,10 @@ const styleDefinitions = StyleSheet.create({
   removedActions: { paddingTop: 2 },
   replyText: { ...typography.smallStrong, fontSize: 12, color: colors.textFaint },
   replyTextBig: { fontSize: 13 },
+  // Unhide · Delete, on one your Hidden words hid: a shade stronger than Reply, so they read as the actions here.
+  hiddenActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingTop: 6 },
+  hiddenText: { ...typography.smallStrong, color: colors.textMuted },
+  hiddenDot: { ...typography.smallStrong, color: colors.textFaint },
   // The viewer is a dark room whatever the theme: a photo reads best on black.
   viewer: { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', alignItems: 'center', justifyContent: 'center' },
   viewerImage: { width: '100%', height: '80%' },

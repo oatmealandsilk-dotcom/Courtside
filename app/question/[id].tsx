@@ -13,7 +13,7 @@ import { Linking, Platform, Pressable, StyleSheet, Text, TextInput, View } from 
 import { router, useLocalSearchParams } from 'expo-router';
 import { goBack } from '@/lib/goBack';
 import { confirmReport } from '@/lib/confirm';
-import { show as showToast } from '@/lib/toast';
+import { thankForReport } from '@/features/moderation/reportThanks';
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { ThreadSkeleton } from '@/components/Skeleton';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -22,6 +22,7 @@ import { VoteControls } from '@/components/VoteControls';
 import { topicMeta, topicTint } from '@/components/QuestionCard';
 import { openTopic } from '@/features/community/openTopic';
 import { Avatar, Card, Chip, EmptyState, Screen } from '@/components/ui';
+import { JumpProvider, useJumpTo } from '@/components/JumpTo';
 import { relativeTime } from '@/lib/format';
 import { RichText } from '@/components/RichText';
 import { PollView } from '@/components/PollView';
@@ -40,7 +41,8 @@ import { openPlayer } from '@/features/navigation/openPlayer';
 
 function QuestionDetail() {
   const styles = useThemedStyles(styleDefinitions);
-  const { id } = useLocalSearchParams<{ id: string }>();
+  // `at`: a reply to open the thread at (a reported one, from Reports): scrolled to once the thread is in, and lit up.
+  const { id, at } = useLocalSearchParams<{ id: string; at?: string }>();
   const { questions, answers, users, currentUserId, currentUser, actions } = useApp();
   const view = actions.recordView;
   useEffect(() => { view('question', String(id)); }, [view, id]);
@@ -49,6 +51,7 @@ function QuestionDetail() {
   const { ready } = useApp();
   const [looked, setLooked] = useState(false);
   useEffect(() => { if (ready) void loadThread(String(id)).finally(() => setLooked(true)); }, [loadThread, id, ready]);
+  const jump = useJumpTo(at, looked);
   const [draft, setDraft] = useState('');
   const [media, setMedia] = useState<ReplyAttachment | null>(null);
   const [replying, setReplying] = useState(false);
@@ -102,7 +105,8 @@ function QuestionDetail() {
   const theirs = !!currentUserId && question.authorId !== currentUserId;
   const report = () => confirmReport('thread', () => {
     actions.reportUser(question.authorId, `question:${question.id}`);
-    showToast({ title: 'Thanks — a person will review this', icon: 'flag-outline' });
+    const asker = users.find((u) => u.id === question.authorId);
+    thankForReport(asker, actions);
     goBack('/discuss');
   });
 
@@ -126,7 +130,7 @@ function QuestionDetail() {
   };
 
   return (
-    <SwipeSurface onSwipe={direction=>{if(direction===-1) { requestSection('/discuss', 'discussions'); goToTab('/discuss', true); }}} renderPreview={direction=>direction===-1 ? <Discuss previewSection="discussions"/> : null}><Screen title="Thread" compactTitle onBack={() => goBack()} onRefresh={isDesktopBrowser() ? undefined : () => loadThread(String(id))} right={<View style={{ flexDirection: 'row', alignItems: 'center', gap: 18 }}>{moderate ? <Pressable accessibilityRole="button" accessibilityLabel={removed ? 'Restore this thread' : 'Take down this thread'} hitSlop={10} onPress={moderate}><Ionicons name={removed ? 'eye-outline' : 'eye-off-outline'} size={23} color={removed ? colors.text : colors.danger} /></Pressable> : null}{question.authorId === currentUserId && !removed ? <Pressable accessibilityRole="button" accessibilityLabel="Edit this thread" hitSlop={10} onPress={() => router.push({ pathname: '/edit-post', params: { id: question.id, kind: 'question' } })}><Ionicons name="create-outline" size={23} color={colors.text} /></Pressable> : null}{removed ? null : <Pressable accessibilityRole="button" accessibilityLabel="Share this thread" hitSlop={10} onPress={() => router.push(`/share?kind=question&id=${question.id}`)}><Ionicons name="arrow-redo-outline" size={23} color={colors.text} /></Pressable>}{theirs && !removed ? <Pressable accessibilityRole="button" accessibilityLabel="Report this thread" hitSlop={10} onPress={report}><Ionicons name="flag-outline" size={22} color={colors.text} /></Pressable> : null}</View>}>
+    <SwipeSurface onSwipe={direction=>{if(direction===-1) { requestSection('/discuss', 'discussions'); goToTab('/discuss', true); }}} renderPreview={direction=>direction===-1 ? <Discuss previewSection="discussions"/> : null}><Screen title="Thread" compactTitle onBack={() => goBack()} scrollRef={jump.scrollRef} onRefresh={isDesktopBrowser() ? undefined : () => loadThread(String(id))} right={<View style={{ flexDirection: 'row', alignItems: 'center', gap: 18 }}>{moderate ? <Pressable accessibilityRole="button" accessibilityLabel={removed ? 'Restore this thread' : 'Take down this thread'} hitSlop={10} onPress={moderate}><Ionicons name={removed ? 'eye-outline' : 'eye-off-outline'} size={23} color={removed ? colors.text : colors.danger} /></Pressable> : null}{question.authorId === currentUserId && !removed ? <Pressable accessibilityRole="button" accessibilityLabel="Edit this thread" hitSlop={10} onPress={() => router.push({ pathname: '/edit-post', params: { id: question.id, kind: 'question' } })}><Ionicons name="create-outline" size={23} color={colors.text} /></Pressable> : null}{removed ? null : <Pressable accessibilityRole="button" accessibilityLabel="Share this thread" hitSlop={10} onPress={() => router.push(`/share?kind=question&id=${question.id}`)}><Ionicons name="arrow-redo-outline" size={23} color={colors.text} /></Pressable>}{theirs && !removed ? <Pressable accessibilityRole="button" accessibilityLabel="Report this thread" hitSlop={10} onPress={report}><Ionicons name="flag-outline" size={22} color={colors.text} /></Pressable> : null}</View>}>
       <Card style={styles.questionCard}>
         {removed ? <RemovedNote removed={removed} align="start" item={{ kind: 'question', id: question.id, authorId: question.authorId }} /> : null}
         {/* Who asked, up top and at full size — the way a reply shows its author. */}
@@ -197,7 +201,8 @@ function QuestionDetail() {
           {thread.length > 0 ? <Text style={styles.sectionCount}>{thread.length}</Text> : null}
         </View>
 
-        {thread.length === 0 ? (
+        {/* Only hidden replies so far: "Hidden replies" below says so, not "No answers yet". */}
+        {thread.length === 0 && !hidden.length ? (
           question.source ? (
             <EmptyState
               icon="chatbubble-ellipses-outline"
@@ -213,9 +218,11 @@ function QuestionDetail() {
           )
         ) : null}
 
-        {thread.filter(answer => !answer.parentAnswerId || !thread.some(parent => parent.id === answer.parentAnswerId)).map(answer => (
-          <ThreadReply key={answer.id} answer={answer} thread={thread} acceptedId={question.acceptedAnswerId} askerId={question.authorId} closed={!!removed} onAccept={question.authorId === currentUserId ? (aid) => actions.acceptAnswer(question.id, aid) : undefined} />
-        ))}
+        <JumpProvider value={jump.ctx}>
+          {thread.filter(answer => !answer.parentAnswerId || !thread.some(parent => parent.id === answer.parentAnswerId)).map(answer => (
+            <ThreadReply key={answer.id} answer={answer} thread={thread} acceptedId={question.acceptedAnswerId} askerId={question.authorId} closed={!!removed} onAccept={question.authorId === currentUserId ? (aid) => actions.acceptAnswer(question.id, aid) : undefined} />
+          ))}
+        </JumpProvider>
 
         <HiddenComments count={hidden.length} noun="replies">
           {hidden.map((a) => <HiddenReplyRow key={a.id} authorId={a.authorId} body={a.body} createdAt={a.createdAt} onUnhide={() => actions.unhideByWords('answer', a.id)} />)}

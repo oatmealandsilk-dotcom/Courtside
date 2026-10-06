@@ -7,7 +7,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { TileCover } from '@/components/TileCover';
 import { Avatar, Button, EmptyState, Field, Screen } from '@/components/ui';
 import type { ID, TakedownKind, TakedownReason } from '@/data/types';
-import { KIND_WORD, TAKEDOWN_REASONS, asKind, noticeFor, reasonLabel } from '@/features/moderation/reasons';
+import { KIND_WORD, TAKEDOWN_REASONS, asKind, noticeFor } from '@/features/moderation/reasons';
 import { confirm } from '@/lib/confirm';
 import { goBack } from '@/lib/goBack';
 import { useApp } from '@/store/AppContext';
@@ -32,10 +32,11 @@ const RESTORE_FROM: Record<TakedownKind, string> = {
  * Take down, for admins only (migration 108): opened from the "…" menu of a
  * post or Instant, a long press on a comment or reply, a thread's or coach
  * question's own menu, or a report. First why (one of eight reasons, with a
- * short note for "Something else"), then a plain-words question before
- * anything happens. Once it goes through, the page closes on "Taken down ·
- * Undo". The database refuses anyone who is not an admin, whatever this
- * page shows.
+ * short note for "Something else"), then one short question before anything
+ * happens. What it does is said once, in two lines above the button: who is
+ * told (word for word), and that nothing is deleted. Once it goes through,
+ * the page closes on "Taken down · Undo". The database refuses anyone who is
+ * not an admin, whatever this page shows.
  *
  * Address: /take-down?kind=post|hit|comment|hit-comment|question|answer|coach-question|coach-reply&id=…
  * (&who=<author id> when the app may not hold the item, and &report=<id> from a report).
@@ -72,7 +73,7 @@ export default function TakeDown() {
   if (!currentUser?.isAdmin || !kind || !id) {
     return (
       <Screen title="Take down" compactTitle onBack={() => goBack()}>
-        <EmptyState icon="lock-closed-outline" title={currentUser?.isAdmin ? 'Nothing to take down here' : 'Only admins can take things down'} body={currentUser?.isAdmin ? 'This link is missing what to take down.' : 'An admin is set from Supabase.'} />
+        <EmptyState icon="lock-closed-outline" title={currentUser?.isAdmin ? 'Nothing to take down here' : 'Only admins can take things down'} body={currentUser?.isAdmin ? 'This link is missing what to take down.' : undefined} />
       </Screen>
     );
   }
@@ -95,15 +96,12 @@ export default function TakeDown() {
     if (result === 'done') goBack();
     else setSent(false);
   };
+  // The page has said what happens; the question only names who hears what.
   const ask = () => {
     if (!reason) return;
     confirm({
       title: `Take down this ${word}?`,
-      message: [
-        mine ? 'Only CourtSide’s admins will see it from now on.' : `Only ${handle} and CourtSide’s admins will see it from now on.`,
-        mine ? null : `${author ? author.name.split(' ')[0] : 'They'} will be told: “${told}”`,
-        'Nothing is deleted. You can put it back from Settings → Admin → Removed.',
-      ].filter(Boolean).join('\n\n'),
+      message: mine ? 'Only admins will see it.' : `${author ? `@${author.handle}` : 'Its author'} is told: “${told}”`,
       confirmLabel: 'Take down',
       destructive: true,
       onConfirm: run,
@@ -164,13 +162,17 @@ export default function TakeDown() {
             />
           ) : null}
 
-          {/* What happens, before the button: no surprises. */}
+          {/* What happens, once, before the button: who is told (word for word), and that it can come back. */}
           <View style={styles.what}>
-            <Text style={styles.whatTitle}>What happens</Text>
-            <Text style={styles.body}>• It disappears for everyone except {mine ? 'you' : handle} and CourtSide’s admins, wherever it shows: feeds, profiles, search, comments, shared links.</Text>
-            {mine ? null : <Text style={styles.body}>• {author ? author.name.split(' ')[0] : 'They'} {told ? <>get{author ? 's' : ''} a notification: <Text style={styles.quote}>“{told}”</Text></> : <>get{author ? 's' : ''} a notification with the reason you pick.</>}</Text>}
-            <Text style={styles.body}>• Nothing is deleted, so you can put it back from Settings → Admin → Removed.</Text>
-            {reason ? <Text style={styles.muted}>Reason: {reasonLabel(reason)}</Text> : null}
+            <Ionicons name={mine ? 'eye-off-outline' : 'notifications-outline'} size={18} color={colors.textMuted} style={styles.whatIcon} />
+            <View style={{ flex: 1, gap: 4 }}>
+              {mine
+                ? <Text style={styles.body}>Only admins will see it.</Text>
+                : told
+                  ? <Text style={styles.body}>{handle} is told: <Text style={styles.quote}>“{told}”</Text></Text>
+                  : <Text style={styles.body}>{handle === 'whoever posted it' ? 'Whoever posted it' : handle} is told which rule it breaks.</Text>}
+              <Text style={styles.muted}>Hidden from everyone else. Nothing is deleted, and you can restore it from Admin → Removed.</Text>
+            </View>
           </View>
 
           <Button label={busy ? 'Taking it down…' : `Take down this ${word}`} variant="danger" loading={busy} disabled={!ready} onPress={ask} full />
@@ -191,11 +193,11 @@ const styleDefinitions = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 12, paddingHorizontal: spacing.md, borderRadius: radius.md, borderWidth: 1, borderColor: 'transparent' },
   rowOn: { borderColor: colors.danger, backgroundColor: colors.surface },
   rowPressed: { backgroundColor: colors.surfaceAlt },
-  label: { ...typography.body, fontWeight: '600', color: colors.text },
+  label: { ...typography.bodyStrong, color: colors.text },
   muted: { ...typography.small, color: colors.textMuted },
   body: { ...typography.small, color: colors.text, lineHeight: 20 },
   quote: { ...typography.smallStrong, color: colors.text },
-  what: { gap: 6, padding: spacing.md, borderRadius: radius.lg, backgroundColor: colors.bgElevated, marginVertical: spacing.lg },
-  whatTitle: { ...typography.smallStrong, color: colors.text },
+  what: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md, paddingHorizontal: spacing.xs, marginTop: spacing.sm, marginBottom: spacing.xl },
+  whatIcon: { marginTop: 1 },
   already: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, padding: spacing.md, borderRadius: radius.lg, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
 });

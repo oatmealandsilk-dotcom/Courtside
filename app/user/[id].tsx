@@ -26,7 +26,8 @@ import { HeadToHeadCard } from '@/components/HeadToHeadCard';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing, typography, font } from '@/theme';
 import { useStillLoading } from '@/lib/useStillLoading';
-import { afterMenu, confirmBlock, confirmUnfollow } from '@/lib/confirm';
+import { afterMenu, confirmBlock, confirmReport, confirmUnfollow } from '@/lib/confirm';
+import { thankForReport } from '@/features/moderation/reportThanks';
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { ProfileSkeleton } from '@/components/Skeleton';
 import { isDesktopBrowser } from '@/lib/browserDevice';
@@ -134,8 +135,9 @@ function UserProfile() {
         { icon: 'paper-plane-outline', label: 'Send profile…', onPress: () => afterMenu(() => router.push({ pathname: '/share', params: { kind: 'profile', id: user.id } })) },
         { icon: 'people-outline', label: 'Add to group…', onPress: () => afterMenu(() => router.push({ pathname: '/pick-group', params: { user: user.id } })) },
         { icon: muted ? 'volume-high-outline' : 'volume-mute-outline', label: muted ? 'Unmute' : 'Mute', onPress: () => actions.toggleMute(user.id) },
-        { icon: 'flag-outline', label: 'Report', danger: true, onPress: () => { actions.reportUser(user.id, 'profile'); say('Thanks — a person will review this'); } },
-        { icon: 'ban-outline', label: 'Block', danger: true, onPress: () => confirmBlock(user, () => { actions.toggleBlock(user.id); say(`Blocked ${user.name}`); }, true) },
+        // Asked first, the same question as everywhere else; then thanks, with Block offered too.
+        { icon: 'flag-outline', label: 'Report', danger: true, onPress: () => confirmReport('profile', () => { actions.reportUser(user.id, 'profile'); thankForReport(user, actions); }, true) },
+        { icon: 'ban-outline', label: 'Block', danger: true, onPress: () => confirmBlock(user, () => { if (!actions.isBlocked(user.id)) actions.toggleBlock(user.id); say(`Blocked ${user.name}`); }, true) },
       ];
 
   return (

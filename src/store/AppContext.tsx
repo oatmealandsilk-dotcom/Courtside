@@ -643,6 +643,12 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
   toggleMute: (userId: ID, quiet?: boolean) => void;
   /** Blocking is asked first, so only unblocking offers Undo. */
   toggleBlock: (userId: ID, quiet?: boolean) => void;
+  /**
+   * Whether you have blocked them, as of this moment. For a Block button
+   * tapped well after it was drawn (a toast's, a question's): it checks again
+   * first, so a Block never runs the toggle the other way and unblocks.
+   */
+  isBlocked: (userId: ID) => boolean;
   toggleAlerts: (userId: ID, quiet?: boolean) => void;
   /**
    * Reports someone to CourtSide, about one thing of theirs when `reason`
@@ -1023,8 +1029,10 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
   isChatBlocked: (conversationId: ID) => Promise<boolean>;
   /** Someone's followers and following, loaded when their list is opened. */
   loadFollowsOf: (userId: ID) => Promise<void>;
-  /** Admins only: every report, the reported post or hit, and a decision on one. */
-  loadReports: () => Promise<AdminReport[]>;
+  /** Admins only: every report, the reported post or hit, and a decision on one. Null when they could not be loaded. */
+  loadReports: () => Promise<AdminReport[] | null>;
+  /** Admins only: how many reports are open, counted by the database (no rows fetched), for Settings' Reports row. Null when it could not say. */
+  countOpenReports: () => Promise<number | null>;
   /** Admins only: the waitlist and the waitlist page's feedback. */
   loadWaitlist: () => Promise<WaitlistEntry[]>;
   /** The pictures of posts the app has not loaded (older ones a notification is about). */
@@ -1817,7 +1825,7 @@ function closeReview(prev: AppState, kind: TakedownKind, id: ID, status: Exclude
 /** Why a take-down or restore did not go through, for its toast. */
 function moderationRefusal(result: ModerationResult, restoring: boolean): { title: string; body?: string } {
   if (result === 'refused') return { title: 'Only admins can do that' };
-  if (result === 'not_ready') return { title: 'Taking things down isn’t switched on yet', body: 'It needs the database update (migration 108) first.' };
+  if (result === 'not_ready') return { title: 'Taking things down isn’t switched on yet', body: 'Try again later.' };
   if (result === 'gone') return { title: 'It’s already gone', body: 'Whoever posted it has deleted it.' };
   return { title: restoring ? 'Couldn’t put it back. Try again.' : 'Couldn’t take it down. Try again.' };
 }
@@ -2316,7 +2324,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
             messages: [...prev.messages, message],
             conversations: prev.conversations.map((c) => c.id === message.conversationId
               // Never one your Hidden words hid (migration 117): no alert came for it, and it raises no badge.
-              ? { ...c, messageIds: [...c.messageIds, message.id], updatedAt: message.createdAt, unreadCount: message.senderId === me || system || message.hiddenByWords ? c.unreadCount : c.unreadCount + 1 }
+              // Nor does it move the chat up the inbox: nothing about it should call for you.
+              ? { ...c, messageIds: [...c.messageIds, message.id], updatedAt: message.hiddenByWords ? c.updatedAt : message.createdAt, unreadCount: message.senderId === me || system || message.hiddenByWords ? c.unreadCount : c.unreadCount + 1 }
               : c),
           });
           // It also means the group itself changed (its people, name, photo
@@ -4264,7 +4273,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // "Edited" (nothing anyone sees on it changed).
     const sameTagged = patch.taggedUserIds.length === (post.taggedUserIds ?? []).length && patch.taggedUserIds.every((id) => (post.taggedUserIds ?? []).includes(id));
     const sameCourt = court === undefined || (court?.id ?? undefined) === post.court?.id;
-    if (featureNow !== undefined && patch.body === post.body && sameTagged && location === (post.location || undefined) && sameCourt && !healthNow) {
+    // Nothing anyone sees changed (only the switch, or nothing at all): never marked "Edited".
+    if (patch.body === post.body && sameTagged && location === (post.location || undefined) && sameCourt && !healthNow) {
       saveFeature();
       return;
     }
@@ -4297,8 +4307,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const editQuestion = useCallback((questionId: ID, patch: { title: string; body: string }) => {
     const me = requireUser();
-    haptics.commit();
     const was = stateRef.current.questions.find((q) => q.id === questionId && q.authorId === me);
+    // Saved with nothing changed: left as it is, never marked "Edited".
+    if (was && was.title === patch.title && (was.body ?? '') === patch.body) return;
+    haptics.commit();
     const tags = Array.from(new Set((patch.body.match(/#[\p{L}\p{N}_]+/gu) ?? []).map((tag) => tag.slice(1).toLowerCase())));
     setState((prev) => ({
       ...prev,
@@ -5167,7 +5179,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const searchedTerms = useRef(new Set<string>());
   const loadedSaved = useRef(false);
   // Reports, for admins. The database decides who may read and act on them.
-  const loadReports = useCallback(async () => (live(stateRef.current.currentUserId) ? remote.fetchReports() : []), []);
+  const loadReports = useCallback(async (): Promise<AdminReport[] | null> => (live(stateRef.current.currentUserId) ? remote.fetchReports().catch(() => null) : []), []);
+  const countOpenReports = useCallback(async (): Promise<number | null> => (live(stateRef.current.currentUserId) ? remote.countOpenReports().catch(() => null) : 0), []);
   const loadWaitlist = useCallback(async () => (live(stateRef.current.currentUserId) ? remote.fetchWaitlist() : []), []);
   const loadPostThumbs = useCallback(async (ids: ID[]) => (live(stateRef.current.currentUserId) ? remote.fetchPostThumbs(ids).catch(() => ({})) : {}), []);
   const loadCourtPosts = useCallback(async (at: { lat: number; lng: number }) => {
@@ -5283,7 +5296,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // out of their list, but an alert that reached their phone stays seen.
       const held = heldItem(stateRef.current, kind, id);
       const authorId = held?.authorId ?? held?.coachUserId;
-      const body = authorId === me ? 'Only admins can see it now.' : 'Its author has been told why. Undo puts it back and clears that notice from their list.';
+      const author = authorId ? stateRef.current.users.find((u) => u.id === authorId) : undefined;
+      const body = authorId === me ? 'Only admins can see it now.' : author ? `@${author.handle} was told why.` : 'Its author was told why.';
       offerUndo(title, () => {
         // Still down (or never here to see): Undo puts it back.
         const now = heldItem(stateRef.current, kind, id);
@@ -5871,7 +5885,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }));
     const hosted = photos.map((p) => p.path).filter((path) => !isLocalMedia(path));
     if (hosted.length) void remote.removeChatPhotos(hosted);
-    showToast({ title: BLOCKED_WORDS_NOTE, body: 'It wasn’t sent.', icon: 'alert-circle-outline', long: true });
+    showToast({ title: 'Not sent', body: 'It has words that break CourtSide’s rules.', icon: 'alert-circle-outline', long: true });
   };
 
   const sendMessage = useCallback(
@@ -6439,7 +6453,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // Not saved: the words go back to what they were, unless they have been changed again since.
       setState((prev) => ({ ...prev, messages: prev.messages.map((m) => (m.id === messageId && m.body === words && m.editedAt === editedAt ? { ...m, body: message.body, editedAt: message.editedAt } : m)) }));
       // Refused for its words (migration 117): the toast says why, and the chat puts the new words back in the box.
-      if (saved === 'blocked') { showToast({ title: BLOCKED_WORDS_NOTE, icon: 'alert-circle-outline', long: true }); return 'blocked'; }
+      if (saved === 'blocked') { showToast({ title: 'Not saved', body: 'It has words that break CourtSide’s rules. Change them and try again.', icon: 'alert-circle-outline', long: true }); return 'blocked'; }
       showToast({ title: 'Your edit didn’t save', body: 'Try again in a moment.', icon: 'alert-circle-outline' });
       return undefined;
     });
@@ -7513,6 +7527,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const isBlocked = useCallback((userId: ID) => stateRef.current.blockedIds.includes(userId), []);
+
   const toggleAlerts = useCallback((userId: ID, quiet?: boolean) => {
     const turningOn = !stateRef.current.alertIds.includes(userId);
     setState((prev) => {
@@ -7529,14 +7545,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
     );
   }, []);
 
-  /** A report goes nowhere in the mock build; the feedback is what matters. */
+  /**
+   * A tip on the board at once. Refused for its words (migration 117), or not
+   * saved at all, it comes off again and this throws with why, so the box
+   * keeps what was written and says so under it.
+   */
   const submitTip = useCallback(async (body: string) => {
     const me = requireUser();
-    haptics.commit();
     const tip: Tip = { id: nextId('tip'), authorId: me, body, createdAt: new Date().toISOString(), votes: 0, votedBy: {} };
     setState((prev) => ({ ...prev, tips: [tip, ...prev.tips] }));
-    // Refused for its words (migration 117): it comes off the board again (the toast says why).
-    if (live(me, tip.id) && (await remote.insertTip(tip)) === 'blocked') setState((prev) => ({ ...prev, tips: prev.tips.filter((t) => t.id !== tip.id) }));
+    const result = live(me, tip.id) ? await remote.insertTip(tip).catch(() => 'failed' as const) : undefined;
+    if (!result) { haptics.commit(); return; }
+    setState((prev) => ({ ...prev, tips: prev.tips.filter((t) => t.id !== tip.id) }));
+    haptics.reject();
+    throw new Error(result === 'blocked' ? 'It has words that break CourtSide’s rules. Change them and send it again.' : 'That didn’t send. Check your connection and try again.');
   }, [requireUser]);
   const voteTip = useCallback((tipId: ID, direction: 1 | -1) => {
     haptics.tap();
@@ -7762,7 +7784,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // Words refused anywhere they were written (migration 117): said once, in plain words.
-  useEffect(() => onWordsRefused(() => showToast({ title: BLOCKED_WORDS_NOTE, icon: 'alert-circle-outline', long: true })), []);
+  // Outcome first, then why and what to do; the same words for a comment, a reply or an edit.
+  useEffect(() => onWordsRefused(() => showToast({ title: 'That didn’t go through', body: 'It has words that break CourtSide’s rules. Change them and try again.', icon: 'alert-circle-outline', long: true })), []);
 
   /* ------------------------------------------------------------- health */
   // The three real sources: Apple Health (read on the phone), WHOOP (through
@@ -8274,6 +8297,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       unhideByWords,
       toggleMute,
       toggleBlock,
+      isBlocked,
       toggleAlerts,
       reportUser,
       acceptAnswer,
@@ -8399,6 +8423,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       isChatBlocked,
       loadFollowsOf,
       loadReports,
+      countOpenReports,
       loadWaitlist,
       loadCourtPosts,
       loadCourtPage,
@@ -8501,6 +8526,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       unhideByWords,
       toggleMute,
       toggleBlock,
+      isBlocked,
       toggleAlerts,
       reportUser,
       submitTip,
@@ -8620,6 +8646,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       isChatBlocked,
       loadFollowsOf,
       loadReports,
+      countOpenReports,
       loadWaitlist,
       loadCourtPosts,
       loadCourtPage,
