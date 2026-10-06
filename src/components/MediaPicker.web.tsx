@@ -12,6 +12,7 @@ import { cropCss } from '@/lib/crop';
 import { show as showToast } from '@/lib/toast';
 import { framesAt } from '@/features/compose/frames';
 import { CoverPage } from './CoverPage';
+import { MediaThumb } from './MediaThumb';
 
 export type { PickedMedia, MediaPickerProps } from './MediaPicker';
 
@@ -237,7 +238,7 @@ function chooseFile(accept: string, capture: boolean): Promise<PickedMedia | nul
   });
 }
 
-export function MediaPicker({ value, onChange, compact, selection = 'all', label, bare = false, orientation = 'portrait', portraitRatio = 9 / 16, trim, noCover = false, onCoverAt }: MediaPickerProps) {
+export function MediaPicker({ value, onChange, compact, selection = 'all', label, bare = false, orientation = 'portrait', thumb, portraitRatio = 9 / 16, trim, noCover = false, onCoverAt }: MediaPickerProps) {
   const styles = useThemedStyles(styleDefinitions);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const coverInputRef = useRef<HTMLInputElement | null>(null);
@@ -418,7 +419,10 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
     return (
       <View style={bare ? styles.bare : styles.preview}>
         {hiddenInput}
-        {bare ? (
+        {bare && thumb ? (
+          // Small, beside the caption: the same larger preview and Cover page.
+          <MediaThumb kind={value.kind} poster={value.kind === 'photo' ? value.uri : value.thumbnailUrl} width={thumb.width} height={thumb.height} crop={trim?.crop} onOpen={() => setExpanded(true)} onEditCover={value.kind === 'video' && !noCover && value.uri ? openCover : undefined} />
+        ) : bare ? (
           // The media is the whole box: the clip playing edge to edge, the
           // way it will sit in the feed, with the Edit cover pill. Tap to watch it.
           <div

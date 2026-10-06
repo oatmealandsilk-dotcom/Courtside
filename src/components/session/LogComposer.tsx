@@ -114,8 +114,10 @@ function Tile({ icon, label, height, busy, done, disabled, onPress }: { icon: Re
  * The two buttons pinned to the bottom of the composer: "Just log it"
  * (private: it goes in your log and your streak, nothing is posted) and
  * Share. Already logged, Share alone. A tick replaces the words once logged.
+ * Every posting screen has this green Share (a New post or New clip too,
+ * with Share alone; an Instant's says "Post Instant").
  */
-export function LogDock({ canJustLog, busy, ticked, error, onJustLog, onShare, shareDisabled }: {
+export function LogDock({ canJustLog, busy, ticked, error, onJustLog, onShare, shareDisabled, label = 'Share' }: {
   canJustLog: boolean;
   busy: null | 'log' | 'share';
   ticked: boolean;
@@ -123,6 +125,8 @@ export function LogDock({ canJustLog, busy, ticked, error, onJustLog, onShare, s
   onJustLog: () => void;
   onShare: () => void;
   shareDisabled?: boolean;
+  /** The green button's word: Share, or "Post Instant". */
+  label?: string;
 }) {
   const styles = useThemedStyles(styleDefinitions);
   const insets = useSafeAreaInsets();
@@ -153,13 +157,13 @@ export function LogDock({ canJustLog, busy, ticked, error, onJustLog, onShare, s
         ) : null}
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Share"
+          accessibilityLabel={label}
           accessibilityState={{ disabled: off || shareDisabled, busy: busy === 'share' }}
           disabled={off || shareDisabled}
           onPress={onShare}
           style={({ pressed }) => [styles.pill, styles.share, { flex: canJustLog ? 1.25 : 1 }, pressed && styles.pressed, (off || shareDisabled) && busy !== 'share' && styles.off]}
         >
-          {busy === 'share' ? <ActivityIndicator size="small" color={colors.brandInk} /> : <Text style={styles.shareText}>Share</Text>}
+          {busy === 'share' ? <ActivityIndicator size="small" color={colors.brandInk} /> : <Text style={styles.shareText}>{label}</Text>}
         </Pressable>
       </View>
     </View>
