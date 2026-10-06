@@ -28,6 +28,16 @@ export const lightColors = {
   // where white on their lighter red fell short. Read from `colors` when drawing, not from a style sheet:
   // white is also a page colour, so a style sheet would recolour it as the page.
   onDanger: '#FFFFFF',
+  // The session box (a session's card, its photo strip and tile, the share stamp, the Tennis profile
+  // card): each court's shirt (Oct 6, owner: "make those the darker full color card. like how we did
+  // with the default"). Its fill; the shirt's two-colour fade as it shows at the very corner, top right
+  // and bottom left (the box fades from these into the fill); the shirt's lettering for the big numbers
+  // and the mark; the small words; and the quieter words. Every word holds 4.5:1 on the fill and on
+  // both corners. Here, the Classic shirt: a clean light cream with fresh sage and peach corners (Oct 6,
+  // owner: the old gold-grey cream "looks a bit damp"), the brand green lettering, the small words the
+  // green a fifth of the way to the text, the quiet ones the page's muted ink.
+  cardFill: '#F6F0E2', cardGlowTop: '#D6E2CA', cardGlowBottom: '#F2D9BD',
+  cardFigure: '#3F7049', cardInk: '#3A6141', cardMuted: '#5D584C',
 } as const;
 
 export const colors: Record<keyof typeof lightColors, string> = { ...lightColors };

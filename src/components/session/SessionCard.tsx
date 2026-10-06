@@ -5,12 +5,12 @@ import Reanimated, { FadeIn, FadeOut, LinearTransition } from 'react-native-rean
 import Svg, { Line } from 'react-native-svg';
 
 import { BrandMark } from '@/components/BrandMark';
-import { Avatar, BrandWash, CreamWash } from '@/components/ui';
+import { Avatar, BrandWash, ShirtWash } from '@/components/ui';
 import type { ID, SessionDetail } from '@/data/types';
 import { onCourtWord, resultWord, scoreLine, sessionEyebrow, sourceLabel, spokenDuration } from '@/features/activity/format';
 import { spokenScore } from '@/features/activity/score';
 import { sessionPeople } from '@/features/activity/sessionTags';
-import { mixHex, postZones, zoneColors } from '@/features/activity/zones';
+import { postZones, zoneColors } from '@/features/activity/zones';
 import { distanceFigure } from '@/features/activity/workouts';
 import { useTheme, type ThemeName } from '@/theme/ThemeProvider';
 import { colors, font, pageIsDark, withAlpha } from '@/theme';
@@ -24,8 +24,13 @@ export type CardPerson = { id: ID; handle: string; name: string; role: 'opponent
 /** The colours of a session box (the card, the tile, the photo post's stats panel, the share stamp). */
 export type CardLook = {
   dark: boolean;
-  /** The fade laid inside the box: the brand's own on a green box, the shirt's on a cream one, none on a dark page. */
-  wash: 'brand' | 'cream' | null;
+  /** The fade laid inside the box: the court's shirt's, or the brand's own on the plain green box (Clean). */
+  wash: 'brand' | 'shirt';
+  /**
+   * A full-colour box with light words on it (the city shirts, the green box): small marks on it take
+   * the card's ink rather than their own colours, which would fight the fill.
+   */
+  filled: boolean;
   fill: string;
   border: string;
   /** A hairline just inside the edge, drawn over the box so nothing moves: only the cream box has one. */
@@ -42,34 +47,67 @@ export type CardLook = {
 };
 
 /**
- * How a session box is coloured on this court. On a light page it is the
- * brand colour, with the brand's ink on it. On a dark page (New York, Night)
- * a full brand fill is too loud, so it is the page's raised surface with the
- * figures in the brand colour (owner, Oct 2).
+ * Courts whose session box is the plain green box with the brand's own wash
+ * rather than a shirt: Clean has no shirt. (Adding 'wimbledon' here puts
+ * London back on its green box, as it was before Oct 6.)
+ */
+const BRAND_BOX: ReadonlySet<ThemeName> = new Set<ThemeName>(['clean']);
+
+/**
+ * How a session box is coloured on this court: as the court's shirt (Oct 6,
+ * owner: "make those the darker full color card. like how we did with the
+ * default"). Its fill, the shirt's two-colour fade (ShirtWash), the shirt's
+ * lettering for the big numbers and the mark, and the small and quiet words
+ * all come from the palette's card slots (cardFill … cardMuted in the theme),
+ * each checked at 4.5:1 or more on the fill and on both fade corners.
  *
- * On the CourtSide court itself it is cream, not green (Oct 5, owner: "more
- * like our banner and our shirt"): the Classic shirt's cream with its soft
- * sage and clay fade, the figures and the CourtSide mark in the brand green
- * as on the banner, the eyebrow and other small green words a shade deeper so
- * they stay easy to read over the fade, the grey words in the page's muted
- * ink (the banner's "Growing the game"), and the result pill green with cream
- * words. The cream is the page's raised ground warmed with a touch of gold
- * (about #EAE3D2), so it holds as a box on the page with only a hairline
- * round it.
+ * - CourtSide (Oct 5, "more like our banner and our shirt"): the Classic
+ *   shirt's cream, lightened and cleaned Oct 6 (it "looks a bit damp"), with
+ *   sage and peach corners, the figures in the brand green, the small words
+ *   that green a fifth toward the text, the quiet words in the page's muted
+ *   ink, a hairline round it so it holds on the page.
+ * - Paris, Melbourne, London: the shirt's colour deepened so its cream
+ *   lettering holds, all the words in that cream.
+ * - Night, New York (dark pages): the shirt's own dark ground with its
+ *   lettering colour, and the page's hairline border.
+ * - Clean: the green box with the brand's ink (BRAND_BOX).
  */
 export function cardLook(theme: ThemeName): CardLook {
+  if (BRAND_BOX.has(theme)) {
+    return {
+      dark: pageIsDark(),
+      wash: 'brand',
+      filled: true,
+      fill: colors.brand,
+      border: 'transparent',
+      rim: null,
+      figure: colors.brandInk,
+      ink: colors.brandInk,
+      muted: withAlpha(colors.brandInk, 0.7),
+      faint: withAlpha(colors.brandInk, 0.62),
+      eyebrow: withAlpha(colors.brandInk, 0.78),
+      pillFill: colors.brandInk,
+      pillInk: colors.brand,
+      lines: withAlpha(colors.brandInk, 0.1),
+      zones: zoneColors('brand'),
+    };
+  }
+  const shirt = {
+    wash: 'shirt' as const,
+    fill: colors.cardFill,
+    figure: colors.cardFigure,
+    ink: colors.cardInk,
+    eyebrow: colors.cardInk,
+    muted: colors.cardMuted,
+    faint: colors.cardMuted,
+  };
   if (pageIsDark()) {
     return {
+      ...shirt,
       dark: true,
-      wash: null,
-      fill: colors.surface,
+      filled: false,
       border: colors.border,
       rim: null,
-      figure: colors.brand,
-      ink: colors.text,
-      muted: colors.textMuted,
-      faint: colors.textFaint,
-      eyebrow: colors.textMuted,
       pillFill: colors.brand,
       pillInk: colors.brandInk,
       lines: withAlpha(colors.text, 0.08),
@@ -77,59 +115,42 @@ export function cardLook(theme: ThemeName): CardLook {
     };
   }
   if (theme === 'default') {
-    // The small green words (the eyebrow, "vs @handle", the CourtSide word) a
-    // fifth of the way toward the text colour: still the shirt's green, and
-    // 4.5:1 or more even where the fade is strongest under them (the brand
-    // green itself drops to about 3.8:1 there, fine only for the big numbers).
-    const smallGreen = mixHex(colors.brand, colors.text, 0.2);
     return {
+      ...shirt,
       dark: false,
-      wash: 'cream',
-      fill: mixHex(colors.bgElevated, colors.sun, 0.1),
+      filled: false,
       border: 'transparent',
-      rim: withAlpha(colors.brand, 0.2),
-      figure: colors.brand,
-      ink: smallGreen,
-      muted: colors.textMuted,
-      // The page's faint ink is under 4.5:1 on the cream, so the source line and the address take the muted one.
-      faint: colors.textMuted,
-      eyebrow: smallGreen,
+      rim: withAlpha(colors.cardFigure, 0.2),
       pillFill: colors.brand,
       pillInk: colors.brandInk,
-      lines: withAlpha(colors.brand, 0.14),
+      lines: withAlpha(colors.cardFigure, 0.14),
       // Faint ink for the easy zones rising to the full green, in even steps on
       // the cream (the page's own set has Light and Moderate almost the same
       // here; the page and the stats sheet keep theirs).
-      zones: [withAlpha(colors.text, 0.13), withAlpha(colors.text, 0.24), withAlpha(colors.brand, 0.6), withAlpha(colors.brand, 0.8), colors.brand],
+      zones: [withAlpha(colors.text, 0.13), withAlpha(colors.text, 0.24), withAlpha(colors.cardFigure, 0.6), withAlpha(colors.cardFigure, 0.8), colors.cardFigure],
     };
   }
   return {
+    ...shirt,
     dark: false,
-    wash: 'brand',
-    fill: colors.brand,
+    filled: true,
     border: 'transparent',
     rim: null,
-    figure: colors.brandInk,
-    ink: colors.brandInk,
-    muted: withAlpha(colors.brandInk, 0.7),
-    faint: withAlpha(colors.brandInk, 0.62),
-    eyebrow: withAlpha(colors.brandInk, 0.78),
-    pillFill: colors.brandInk,
-    pillInk: colors.brand,
-    lines: withAlpha(colors.brandInk, 0.1),
-    zones: zoneColors('brand'),
+    pillFill: colors.cardFigure,
+    pillInk: colors.cardFill,
+    lines: withAlpha(colors.cardFigure, 0.14),
+    zones: [0.22, 0.36, 0.52, 0.74, 1].map((a) => withAlpha(colors.cardFigure, a)),
   };
 }
 
 /**
- * The fade inside a session box, laid as its first child: the brand's wash in
- * a green box, the shirt's in a cream one (with its hairline, unless `edge` is
- * off for a picture drawn edge to edge), nothing on a dark page.
+ * The fade inside a session box, laid as its first child: the court's shirt
+ * (with the cream box's hairline, unless `edge` is off for a picture drawn
+ * edge to edge), or the brand's wash in the plain green box.
  */
 export function CardWash({ look, radius, edge = true }: { look: CardLook; radius: number; edge?: boolean }) {
   if (look.wash === 'brand') return <BrandWash radius={radius} />;
-  if (look.wash === 'cream') return <CreamWash radius={radius} rim={edge ? look.rim : null} />;
-  return null;
+  return <ShirtWash radius={radius} rim={edge ? look.rim : null} />;
 }
 
 

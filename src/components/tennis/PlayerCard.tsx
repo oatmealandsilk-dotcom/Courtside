@@ -24,9 +24,9 @@ const played = new Set<string>();
  * A player's card: the session box's twin, coloured by the very same look
  * (cardLook) and fade (CardWash) in every court, so the two always match
  * (Oct 5, owner: "The tennis profile card should be the same as activity
- * card. Like the colors and stuff"): cream on the CourtSide court, the brand
- * colour on the light city courts, the raised surface with brand figures on
- * a dark page. On it the rating once, big, its system beside it, how they
+ * card. Like the colors and stuff"): each court's shirt (Oct 6), the cream
+ * one on the CourtSide court, the shirt's own colour and lettering on the
+ * city courts. On it the rating once, big, its system beside it, how they
  * play, and the few numbers worth knowing. `full` heads the Tennis profile
  * page; `banner` is the smaller one on a profile, the whole of it a link to
  * the page.
@@ -53,7 +53,7 @@ export function PlayerCard({ user, variant, onPress }: {
   // The system's name in the card's small ink (the deeper green on cream, the muted ink on a dark page): the level pill
   // beside the name already wears the system's own colour, and NTRP green beside New York's yellow figures fought them.
   const systemInk = look.eyebrow;
-  const filled = look.wash === 'brand';
+  const filled = look.filled;
 
   if (variant === 'banner') {
     const next = upcoming(user)[0];
@@ -149,8 +149,8 @@ function nextItem(t: User['profile']['tournaments'][number]): StripItem {
 }
 
 /** A court surface's colour as a small square; on a filled card, a ring in the card's own ink (the surface colours would fight the fill). */
-export function Swatch({ surface, look, size = 9 }: { surface: SurfacePreference; look: Pick<CardLook, 'wash' | 'ink'>; size?: number }) {
-  const ring = look.wash === 'brand';
+export function Swatch({ surface, look, size = 9 }: { surface: SurfacePreference; look: Pick<CardLook, 'filled' | 'ink'>; size?: number }) {
+  const ring = look.filled;
   return <View style={{ width: size, height: size, borderRadius: 2, marginRight: 5, backgroundColor: ring ? 'transparent' : colors[surfaceSlot(surface)], borderWidth: ring ? 1.5 : 0, borderColor: look.ink }} />;
 }
 

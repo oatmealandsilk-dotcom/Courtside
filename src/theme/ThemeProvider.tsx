@@ -24,6 +24,10 @@ export const darkColors: Palette = {
   link: '#8EBEDD', onMedia: '#FFFFFF',
   bubble: '#232D28',
   bubbleMine: '#6EB382', onDanger: '#0C1710',
+  // The Night shirt: its near-black green, a deeper green glowing top right, a warm clay-gold bottom
+  // left, green lettering; the quiet words in the page's muted grey.
+  cardFill: '#15251D', cardGlowTop: '#22412D', cardGlowBottom: '#413425',
+  cardFigure: '#6FB483', cardInk: '#6FB483', cardMuted: '#A6B1AB',
 };
 
 /**
@@ -43,6 +47,10 @@ const cleanColors: Palette = {
   link: '#1B6699', onMedia: '#FFFFFF',
   bubble: '#EEF0F1',
   bubbleMine: '#2B7345', onDanger: '#FFFFFF',
+  // No shirt for Clean: its session box stays the green box with the brand's own wash (cardLook).
+  // These only fill the slots, with that box's colours.
+  cardFill: '#2C7446', cardGlowTop: '#2C7446', cardGlowBottom: '#2C7446',
+  cardFigure: '#FFFFFF', cardInk: '#FFFFFF', cardMuted: '#FFFFFF',
 };
 
 /**
@@ -60,6 +68,10 @@ const aoColors: Palette = {
   link: '#1F64A0', onMedia: '#FFFFFF',
   bubble: '#D9EAF6',
   bubbleMine: '#2471A6', onDanger: '#FFFFFF',
+  // The Melbourne shirt, deepened so its cream lettering holds: court blue, a lighter blue top right,
+  // the aqua shirt's aqua glowing bottom left (Oct 6, owner's blue-to-aqua Melbourne shirt).
+  cardFill: '#1C67A0', cardGlowTop: '#1E71A9', cardGlowBottom: '#147873',
+  cardFigure: '#FAF8F0', cardInk: '#FAF8F0', cardMuted: '#EFF1EC',
 };
 
 /**
@@ -78,6 +90,10 @@ const rolandGarrosColors: Palette = {
   link: '#2F6587', onMedia: '#FFFFFF',
   bubble: '#F0E2D5',
   bubbleMine: '#AB4D2D', onDanger: '#FFFFFF',
+  // The Paris shirt, deepened so its cream lettering holds: brick clay, a brighter clay top right, the
+  // shirt's gold glow bottom left.
+  cardFill: '#A44627', cardGlowTop: '#B24D25', cardGlowBottom: '#A4570A',
+  cardFigure: '#FAF8F0', cardInk: '#FAF8F0', cardMuted: '#F6EFE6',
 };
 
 /**
@@ -95,6 +111,10 @@ const wimbledonColors: Palette = {
   link: '#245E93', onMedia: '#FFFFFF',
   bubble: '#E2EBD6',
   bubbleMine: '#246A39', onDanger: '#FFFFFF',
+  // The London shirt, deepened so its cream lettering holds: grass green, a fresher green top right,
+  // the club's purple bottom left.
+  cardFill: '#326F37', cardGlowTop: '#377A34', cardGlowBottom: '#615782',
+  cardFigure: '#FAF8F0', cardInk: '#FAF8F0', cardMuted: '#F0F1E7',
 };
 
 /**
@@ -114,6 +134,10 @@ const usOpenColors: Palette = {
   link: '#A4CCF4', onMedia: '#FFFFFF',
   bubble: '#24425F',
   bubbleMine: '#F4D35F', onDanger: '#1B1A0A',
+  // The New York shirt: night blue, a lighter blue top right, the ball's yellow glowing bottom left
+  // (held low, so the yellow lettering holds on it); the quiet words a shade lighter than the page's.
+  cardFill: '#22497B', cardGlowTop: '#325D91', cardGlowBottom: '#675A38',
+  cardFigure: '#F5D460', cardInk: '#F5D460', cardMuted: '#CBD8E6',
 };
 
 export type ThemeName = 'default' | 'clean' | 'night' | 'ao' | 'roland-garros' | 'wimbledon' | 'us-open';

@@ -90,35 +90,35 @@ export const BrandWash = React.memo(function BrandWash({ radius = 999, strength 
 });
 
 /**
- * The Classic shirt's fade, for a cream box (the session boxes on the
- * CourtSide court, Oct 5): a faint sage green breathing in from the top
- * right corner and a soft clay peach from the bottom left, as on the shirt's
- * front, both falling away well before the middle so the cream carries the
- * box. Both are the court's own colours lifted toward its surface (the green,
- * and the clay warmed with a little gold), so nothing here is a new colour.
- * `rim`, when given, is a hairline just inside the edge, drawn over the box
- * so the box's own size never changes. Lay it as the first child, as
- * BrandWash.
+ * The court's shirt fade, for a session box (Oct 5, the Classic shirt on the
+ * CourtSide court; Oct 6, every court's own shirt): one colour breathing in
+ * from the top right corner and another from the bottom left, as on the
+ * shirt's front. Both are the palette's card corners (cardGlowTop,
+ * cardGlowBottom), drawn full at the corner and gone well before the middle,
+ * so the box's own fill carries it (Oct 6, owner: the wider, weaker fade of
+ * the first cream "looks a bit damp"). `rim`, when given, is a hairline just
+ * inside the edge, drawn over the box so the box's own size never changes.
+ * Lay it as the first child, as BrandWash.
  */
-export const CreamWash = React.memo(function CreamWash({ radius = 999, rim }: { radius?: number; rim?: string | null }) {
+export const ShirtWash = React.memo(function ShirtWash({ radius = 999, rim }: { radius?: number; rim?: string | null }) {
   const { theme } = useTheme();
   // The court's name in the ids, as above: iOS would not repaint a gradient kept under the same name.
-  const id = `${useId().replace(/[^a-zA-Z0-9]/g, '')}cream${theme.replace(/-/g, '')}`;
-  const sage = mix(colors.brand, colors.surface, 0.55);
-  const peach = mix(mix(colors.clay, colors.sun, 0.35), colors.surface, 0.5);
+  const id = `${useId().replace(/[^a-zA-Z0-9]/g, '')}shirt${theme.replace(/-/g, '')}`;
+  const top = colors.cardGlowTop;
+  const bottom = colors.cardGlowBottom;
   return (
     <View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderRadius: radius, overflow: 'hidden' }]}>
       <Svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
         <Defs>
-          <RadialGradient id={`s${id}`} {...ellipse(106, -6, 96, 84)} gradientUnits="userSpaceOnUse">
-            <Stop offset="0" stopColor={sage} stopOpacity={0.4} />
-            <Stop offset="0.5" stopColor={sage} stopOpacity={0.16} />
-            <Stop offset="1" stopColor={sage} stopOpacity={0} />
+          <RadialGradient id={`s${id}`} {...ellipse(106, -6, 84, 76)} gradientUnits="userSpaceOnUse">
+            <Stop offset="0" stopColor={top} stopOpacity={1} />
+            <Stop offset="0.35" stopColor={top} stopOpacity={0.42} />
+            <Stop offset="0.8" stopColor={top} stopOpacity={0} />
           </RadialGradient>
-          <RadialGradient id={`p${id}`} {...ellipse(-6, 106, 96, 84)} gradientUnits="userSpaceOnUse">
-            <Stop offset="0" stopColor={peach} stopOpacity={0.44} />
-            <Stop offset="0.5" stopColor={peach} stopOpacity={0.17} />
-            <Stop offset="1" stopColor={peach} stopOpacity={0} />
+          <RadialGradient id={`p${id}`} {...ellipse(-6, 106, 84, 76)} gradientUnits="userSpaceOnUse">
+            <Stop offset="0" stopColor={bottom} stopOpacity={1} />
+            <Stop offset="0.35" stopColor={bottom} stopOpacity={0.42} />
+            <Stop offset="0.8" stopColor={bottom} stopOpacity={0} />
           </RadialGradient>
         </Defs>
         <Rect x="0" y="0" width="100" height="100" fill={`url(#s${id})`} />

@@ -467,7 +467,7 @@ function Tournaments({ user, mine = false }: { user: User; mine?: boolean }) {
             sub={(
               <View style={styles.eventLine}>
                 <Text style={[styles.eventMeta, styles.keep]}>{eventDate(t.startsAt)} · </Text>
-                <Swatch surface={t.surface} look={{ wash: null, ink: colors.text }} size={8} />
+                <Swatch surface={t.surface} look={{ filled: false, ink: colors.text }} size={8} />
                 <Text style={[styles.eventMeta, styles.shrink]} numberOfLines={1}>{surfaceLabel[t.surface]}{t.location ? ` · ${t.location.split(',')[0]}` : ''}</Text>
               </View>
             )}
