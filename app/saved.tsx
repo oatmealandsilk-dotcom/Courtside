@@ -7,6 +7,8 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { QuestionCard } from '@/components/QuestionCard';
 import { TileCover } from '@/components/TileCover';
+import { SessionTile } from '@/components/session/SessionTile';
+import { hasSessionStats } from '@/features/activity/format';
 import Reanimated from 'react-native-reanimated';
 
 import { EmptyState, Screen } from '@/components/ui';
@@ -61,6 +63,8 @@ export default function Saved() {
               const author = users.find((u) => u.id === post.authorId);
               const picture = post.thumbnailUrl ?? post.imageUrl;
               const video = post.kind === 'clip' || !!post.videoUrl;
+              // A session post with no picture: the same session tile the profile grid shows for it.
+              const sessionTile = !picture && !!post.session && hasSessionStats(post.session) && !post.videoUrl;
               return (
                 <Pressable
                   key={post.id}
@@ -72,8 +76,10 @@ export default function Saved() {
                   <View style={[StyleSheet.absoluteFill, styles.tileBlank]}>
                     <Text numberOfLines={6} style={styles.tileText}>{post.body}</Text>
                   </View>
-                  {picture ? <TileCover accessibilityIgnoresInvertColors uri={picture} style={StyleSheet.absoluteFill} contentFit="cover" recyclingKey={post.id} transition={120} /> : null}
-                  {video ? <Ionicons name="play" size={15} color="#FFFFFF" style={styles.tileMark} /> : null}
+                  {picture ? <TileCover accessibilityIgnoresInvertColors uri={picture} style={StyleSheet.absoluteFill} contentFit="cover" recyclingKey={post.id} transition={120} />
+                    : sessionTile && post.session ? <SessionTile session={post.session} width={tileW} /> : null}
+                  {/* White on a picture; on the pale text tile, the muted ink, so it still shows. */}
+                  {video ? <Ionicons name="play" size={15} color={picture || sessionTile ? '#FFFFFF' : colors.textMuted} style={[styles.tileMark, !(picture || sessionTile) && styles.tileMarkFlat]} /> : null}
                 </Pressable>
               );
             })}
@@ -125,4 +131,5 @@ const styleDefinitions = StyleSheet.create({
   tileBlank: { padding: 10, justifyContent: 'center' },
   tileText: { fontSize: 11, lineHeight: 15, color: colors.textMuted },
   tileMark: { position: 'absolute', top: 6, right: 6, textShadowColor: 'rgba(0,0,0,0.6)', textShadowRadius: 3 },
+  tileMarkFlat: { textShadowColor: 'transparent', textShadowRadius: 0 },
 });

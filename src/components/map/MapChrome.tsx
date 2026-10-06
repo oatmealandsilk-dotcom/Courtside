@@ -108,7 +108,8 @@ export function MapTopBar({ onBack, query, onQuery, locationOn, locating, onTogg
         <Ionicons name="search" size={16} color={colors.textFaint} />
         <TextInput
           accessibilityLabel="Search players, courts, or a city, address or park"
-          placeholder="Search a city, address or park"
+          // Short enough not to be cut off on a phone; the label keeps the full wording.
+          placeholder="Search a place or park"
           placeholderTextColor={colors.textFaint}
           value={query}
           onChangeText={onQuery}
@@ -831,7 +832,8 @@ export function CourtSheet({ court, miles, ringed = false, onClose }: { court: C
           <View style={[styles.courtDisc, closed && styles.courtDiscClosed]}>{closed ? null : <BrandWash />}<CourtGlyph size={16} color={closed ? colors.textMuted : colors.brandInk} /></View>
         </Pressable>
         <Pressable accessibilityRole="link" accessibilityLabel={`Open ${court.name}'s page`} onPress={() => openCourt(place)} style={({ pressed }) => [styles.personWords, pressed && styles.postedPressed]}>
-          <Text style={styles.personName} numberOfLines={1}>{court.name}</Text>
+          {/* Two lines: the court's name is the card's main news, so it is never cut short for want of width. */}
+          <Text style={styles.personName} numberOfLines={2}>{court.name}</Text>
           <Text style={styles.personMeta} numberOfLines={1}>{meta}</Text>
         </Pressable>
         {/* The heart and Send sit beside Close, the way a maps app's place card puts Save and Share there. */}

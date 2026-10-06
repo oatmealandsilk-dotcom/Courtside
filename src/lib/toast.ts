@@ -52,6 +52,8 @@ type Listener = (toast: ToastMessage) => void;
 const listeners = new Set<Listener>();
 const withdrawers = new Set<(id: number) => void>();
 let counter = 0;
+/** The toast up now, until the shell says it has gone (`closed`). */
+let upId: number | null = null;
 
 /**
  * A tiny announcement bus. Anything can `show()` a toast — the shell renders
@@ -62,8 +64,23 @@ let counter = 0;
 export function show(toast: Omit<ToastMessage, 'id'>): number {
   counter += 1;
   const message = { ...toast, id: counter };
+  if (listeners.size) upId = message.id;
   listeners.forEach((fn) => fn(message));
   return message.id;
+}
+
+/**
+ * Whether a toast is up right now. A note that can wait (How was the hit?)
+ * checks first, so it never pushes away one that has to be read, such as
+ * "You're open to hit · Off the map until Location is on".
+ */
+export function isShowing(): boolean {
+  return upId !== null;
+}
+
+/** For the shell's toast: told when one has gone, however it went. */
+export function closed(id: number) {
+  if (upId === id) upId = null;
 }
 
 /** Puts a toast away early if it is still up (a question that should not sit over a page where someone is busy). */

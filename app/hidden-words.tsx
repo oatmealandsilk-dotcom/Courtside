@@ -32,10 +32,13 @@ import { colors, radius, spacing, typography } from '@/theme';
  */
 export default function HiddenWordsPage() {
   const styles = useThemedStyles(styleDefinitions);
-  const { hiddenWords, actions } = useApp();
+  const { hiddenWords, currentUserId, actions } = useApp();
   const [status, setStatus] = useState<'loading' | 'ok' | 'not_ready' | 'failed'>(hiddenWords ? 'ok' : 'loading');
   const load = () => { void actions.loadHiddenWords().then(setStatus); };
-  useEffect(load, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // Asked once you are signed in: opened straight from its address (a browser
+  // reload), the page comes up before sign-in finishes, and asking then
+  // always answered "Couldn’t load" (Oct 6 sweep).
+  useEffect(() => { if (currentUserId) load(); }, [currentUserId]); // eslint-disable-line react-hooks/exhaustive-deps
   const [draft, setDraft] = useState('');
   const input = useRef<TextInput>(null);
   // The settings as they are now, for an Undo that comes after other changes.

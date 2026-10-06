@@ -20,7 +20,7 @@ import { CURRENT_USER_ID, users } from './mock/users';
 import { demoHits } from './mock/hits';
 import { isMapCourtId } from '@/features/places/courtName';
 import { demoLastSeen } from './mock/presence';
-import { DEMO_FOLLOWING, DEMO_MAP_ALERTS } from './mock/courtLife';
+import { DEMO_FOLLOWERS, DEMO_FOLLOWING, DEMO_MAP_ALERTS } from './mock/courtLife';
 import { demoSessionTagNotifications, demoSessionTags, demoSessions } from './mock/sessions';
 import { DEMO_COURT_REGULARS, DEMO_COURT_WINS, DEMO_FLYBY } from './mock/strava';
 import { localDay } from '@/features/practice/stats';
@@ -108,6 +108,8 @@ export interface Bootstrap {
   lastSeen?: Record<ID, LastSeen>;
   /** Demo only: the people the demo player follows, for the map's Following chip and court cards. */
   followingIds?: ID[];
+  /** Demo only: some of the people who follow the demo player, for their Followers list. */
+  followEdges?: { followerId: ID; followingId: ID }[];
   /** Tennis sessions a tracker picked up, waiting to be logged (migration 58). */
   detectedActivities: DetectedActivity[];
   /** Demo only: your own log, so Your sessions and Add session stats have something on them. */
@@ -185,7 +187,7 @@ export async function fetchBootstrap(): Promise<Bootstrap> {
       achievements,
       // Only without a database: with one, these come from the server, and an
       // account's real hits must never be covered by the demo's.
-      ...(supabase ? {} : { hitRequests: demoHits, lastSeen: demoLastSeen, followingIds: fresh ? [] : DEMO_FOLLOWING, sessions: demoSessions, sessionTags: demoSessionTags }),
+      ...(supabase ? {} : { hitRequests: demoHits, lastSeen: demoLastSeen, followingIds: fresh ? [] : DEMO_FOLLOWING, followEdges: fresh ? [] : DEMO_FOLLOWERS.map((id) => ({ followerId: id, followingId: CURRENT_USER_ID })), sessions: demoSessions, sessionTags: demoSessionTags }),
     }),
   );
 }

@@ -9,7 +9,7 @@ import { duration } from '@/lib/format';
 import { useCurtainDown } from '@/features/feed/warmup';
 import { dueHits, keepHitPrefill, markAsked, nextHitEnd, prefillFor, readAsked, shortPlace, trackerFor } from '@/features/hits/followUp';
 import { useTourBusy } from '@/features/tour/tourStore';
-import { show as showToast, withdraw as withdrawToast } from '@/lib/toast';
+import { isShowing as toastShowing, show as showToast, withdraw as withdrawToast } from '@/lib/toast';
 import { useAnyUploading } from '@/lib/uploads';
 import { useApp } from '@/store/AppContext';
 
@@ -108,6 +108,9 @@ export function HitFollowUp({ enabled }: { enabled: boolean }) {
     if (!clear || !first || !currentUserId || !flags || showing.current) return undefined;
     const ids = due.map((h) => h.id);
     const t = setTimeout(() => {
+      // Another note is up (such as "You're open to hit · Off the map until
+      // Location is on"): it is not pushed away; asked again a little later.
+      if (toastShowing()) { setRetry((n) => n + 1); return; }
       showing.current = true;
       const prefill = prefillFor(first, currentUserId, users);
       keepHitPrefill(prefill);

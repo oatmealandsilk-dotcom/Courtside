@@ -107,7 +107,7 @@ export function ThreadReply({ answer, thread, acceptedId, askerId, depth = 0, pr
       {!collapsed && children.length > 0 && <View pointerEvents="none" style={styles.avatarRail}/>}
       <Pressable accessibilityRole="button" accessibilityLabel={`${collapsed ? 'Expand' : 'Collapse'} reply by ${responder?.name ?? 'player'}${streakWords(streak)}`}
         onPress={() => setCollapsed(value => !value)} onLongPress={hold} style={styles.answerHead}>
-        <Avatar name={responder?.name ?? '?'} seed={responder?.avatarSeed ?? answer.authorId} size={30}/>
+        <Avatar name={responder?.name ?? '?'} seed={responder?.avatarSeed ?? answer.authorId} uri={responder?.avatarUrl} size={30}/>
         <PlayerName userId={responder?.id} style={styles.answerName}>{responder?.name ?? 'Unknown'}</PlayerName>
         <StreakFlame days={streak} size="small" style={styles.flame} />
         <Text style={styles.time}>{relativeTime(answer.createdAt)}</Text>
@@ -203,7 +203,8 @@ const styleDefinitions = StyleSheet.create({
   replyActions: { flexDirection: 'row', alignItems: 'center', gap: 12, flexWrap: 'wrap',paddingLeft:42 },
   replyButton: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 36 },
   acceptedRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  acceptedText: { ...typography.caption, color: colors.court },
+  // Lined up with the reply's text under the name, not the avatar.
+  acceptedText: { ...typography.caption, color: colors.court, paddingLeft: 42 },
   answerHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   answerMeta: { flex: 1, gap: 2 },
   answerNameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },

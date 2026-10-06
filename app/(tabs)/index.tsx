@@ -1879,20 +1879,26 @@ const styleDefinitions = StyleSheet.create({
   },
   net: { position: 'absolute', top: '50%', height: 1, width: '100%', backgroundColor: colors.court },
   service: { position: 'absolute', top: '20%', bottom: '20%', left: '50%', width: 1, backgroundColor: colors.court },
+  // On the theme's own pale green (dark green at night), so the theme's text reads on it in every theme.
   previewTitle: {
     color: colors.text,
     fontSize: 16,
     ...font('600'),
     textAlign: 'center',
-    backgroundColor: '#203E2ACC',
+    backgroundColor: colors.brandDim,
     padding: 8,
+    borderRadius: radius.sm,
+    overflow: 'hidden',
   },
   previewNote: {
     color: colors.textMuted,
     fontSize: 11,
     textAlign: 'center',
     maxWidth: 230,
-    backgroundColor: '#203E2ACC',
+    backgroundColor: colors.brandDim,
+    paddingHorizontal: 8,
+    borderRadius: radius.sm,
+    overflow: 'hidden',
   },
   // The words' column: 16 in from the left, as Reels and Shorts sit, and
   // stopping 72 from the right (the rail's 48, its 12 from the edge, 12 of

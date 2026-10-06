@@ -1,6 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useState, useSyncExternalStore } from 'react';
 
+import { isDesktopBrowser } from '@/lib/browserDevice';
+
 /*
  * Just-in-time tips (Oct 4, owner): a small bubble the first time someone
  * reaches a thing they would not find on their own. Each tip shows once;
@@ -28,6 +30,12 @@ export const TIP_WORDS: Record<TipKey, string> = {
   // The paper plane is on every tab's header, so not "live here".
   messages: 'Tap the paper plane for your chats. The bell shows your alerts.',
 };
+
+/** A tip's words on this device: in a computer's browser a clip is liked with a double-click, not a double-tap. */
+export function tipWords(tip: TipKey): string {
+  if (tip === 'double-tap' && isDesktopBrowser()) return 'Double-click a clip to like it.';
+  return TIP_WORDS[tip];
+}
 
 /** How long an account counts as new for the tips that took over from the tutorial. */
 const NEW_PLAYER_DAYS = 14;

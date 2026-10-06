@@ -9,7 +9,7 @@ import { CitylessCard, CourtSheet, CourtsZoomNote, FilterChips, HitSheet, MapCre
 import { CardStage } from '@/components/map/CardStage';
 import { MapCanvas, type CanvasMarker, type MapCanvasHandle, type MapLoadStatus } from '@/components/map/MapCanvas';
 import { MapCardFailed, MapCardLoading, MapLoadPill } from '@/components/map/MapLoadState';
-import { CARD_HEIGHT, CARD_ZOOM, onCard } from '@/components/map/cardFit';
+import { CARD_HEIGHT, CARD_ZOOM, onCard, underCardSwitch } from '@/components/map/cardFit';
 import { cardLook, lookFor } from '@/components/map/look';
 import { clusterTemplates, courtLift, youLift } from '@/components/map/markers';
 import { mapMarkers } from '@/components/map/pinList';
@@ -119,9 +119,15 @@ export function NearbyMap(props: NearbyMapProps) {
   // The still card's "N players around" counts only the faces on it (onCard), so the number and the map agree.
   const [cardW, setCardW] = useState(0);
   const cardCenter = model.city ?? start.center;
+  // A pin that would sit under the card's location switch (top right) is left off the card, so the two never overlap.
+  const switchOn = !!onToggleLocation;
+  const cardPlayers = useMemo(
+    () => (expanded ? model.inCity : model.inCity.filter((p) => !(switchOn && underCardSwitch(cardCenter, p.at, cardW || windowW - 2 * spacing.lg)))),
+    [expanded, model.inCity, cardCenter.lat, cardCenter.lng, cardW, windowW, switchOn], // eslint-disable-line react-hooks/exhaustive-deps
+  );
   const onCardCount = useMemo(
-    () => (expanded ? 0 : model.inCity.filter((p) => onCard(cardCenter, p.at, cardW || windowW - 2 * spacing.lg)).length),
-    [expanded, model.inCity, cardCenter.lat, cardCenter.lng, cardW, windowW], // eslint-disable-line react-hooks/exhaustive-deps
+    () => (expanded ? 0 : cardPlayers.filter((p) => onCard(cardCenter, p.at, cardW || windowW - 2 * spacing.lg)).length),
+    [expanded, cardPlayers, cardCenter.lat, cardCenter.lng, cardW, windowW], // eslint-disable-line react-hooks/exhaustive-deps
   );
   // Zoomed out past about a city: the court pins step aside (pinList), and a note says so.
   const [far, setFar] = useState(() => view.zoom < COURTS_MIN_ZOOM);
@@ -144,14 +150,14 @@ export function NearbyMap(props: NearbyMapProps) {
   useEffect(() => { if (model.selected) canvas.current?.flyTo(model.selected.at, CLOSE_ZOOM); }, [model.selected?.user.id]); // eslint-disable-line react-hooks/exhaustive-deps
   // A court's card is tall (who may play, right now, what players say): its court lands above it, not under it.
   useEffect(() => { if (model.selectedCourt) canvas.current?.flyTo(model.selectedCourt, CLOSE_ZOOM, 500, -courtLift(windowH)); }, [model.selectedCourt?.id]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { if (model.selectedHit) canvas.current?.flyTo(model.selectedHit.at, CLOSE_ZOOM); }, [model.selectedHit?.hit.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (model.selectedHit) canvas.current?.flyTo(model.selectedHit.at, CLOSE_ZOOM, 500, -courtLift(windowH)); }, [model.selectedHit?.hit.id]); // eslint-disable-line react-hooks/exhaustive-deps
   // Your card up: your pin glides into the clear strip above it, so the ring switching on is there to see.
   useEffect(() => { if (meOpen && model.mePos) canvas.current?.flyTo(model.mePos, undefined, 500, -youLift(windowH)); }, [meOpen]); // eslint-disable-line react-hooks/exhaustive-deps
   // A place picked from the search: exactly as close as it needs (placeZoom), out as well as in, so its court pins show;
   // set in the clear above its list of courts, the way a court sits above its card.
   useEffect(() => { if (model.place) canvas.current?.flyTo(model.place, placeZoom(model.place, COURTS_MIN_ZOOM), 700, -courtLift(windowH), true); }, [model.place]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const shown = expanded ? model.shown : model.inCity;
+  const shown = expanded ? model.shown : cardPlayers;
   const selectedId = model.selected?.user.id ?? null;
   const selectedCourtId = model.selectedCourt?.id ?? null;
   const selectedHitId = model.selectedHit?.hit.id ?? null;

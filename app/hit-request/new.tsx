@@ -13,6 +13,7 @@ import { opensAtFor } from '@/features/hits/audience';
 import { AudienceCards, GroupsCard, InviteRow } from '@/features/hits/WhoSeesFirst';
 import { isMapCourtId } from '@/features/places/courtName';
 import { fetchCourts, isClosedCourt, type Court } from '@/features/players/courts';
+import { notKnownAdult } from '@/features/players/age';
 import { milesBetween } from '@/features/players/geo';
 import { clockWords, hitsWithinLine } from '@/features/players/openToHit';
 import { homeFor } from '@/features/players/positions';
@@ -94,6 +95,8 @@ export default function NewHit() {
   const [typed, setTyped] = useState('');
   const [courts, setCourts] = useState<Court[]>([]);
   // A typed town ("Cary, NC") is looked up first, as the map does, so the courts are never another city's in the same state.
+  // Not known to be an adult: a hit reaches only the people who follow you (hits/visible), and the sheet says so.
+  const forFriends = !!currentUser && notKnownAdult(currentUser);
   const { town, pending: townPending } = useMyCity(currentUser);
   const home = useMemo(() => (currentUser && !(townPending && !detectedCoords) ? homeFor(currentUser, detectedCoords, town) : null), [currentUser, detectedCoords, town, townPending]);
   // Members-only and private courts are never suggested for a hit (a search by name still finds them).
@@ -187,7 +190,8 @@ export default function NewHit() {
     }
     showToast({
       title: 'Your hit is up',
-      body: 'Players nearby see it on Find Players',
+      // Short enough to sit beside "Send to a chat" on a phone without being cut off.
+      body: forFriends ? 'Your followers can see it.' : 'Players nearby can see it.',
       icon: 'checkmark-circle-outline',
       action: { label: 'Send to a chat', onPress: () => router.push({ pathname: '/share', params: { kind: 'hit-request', id } }) },
     });
@@ -242,7 +246,7 @@ export default function NewHit() {
         </View>
 
         <Section title="Who sees it first">
-          <AudienceCards value={audience} onChange={setAudience} />
+          <AudienceCards value={audience} onChange={setAudience} forFriends={forFriends} />
         </Section>
         {inviting ? (
           <Section title="Invite" hint={pickedUsers.length ? `${pickedUsers.length} picked · each gets it in your chat` : 'Tick who gets it in your chat'}>
@@ -269,7 +273,9 @@ export default function NewHit() {
             ? `${recipients.length ? recipientNames : 'Your groups'} ${recipients.length === 1 && !groupsOn ? 'gets' : 'get'} the first go${groupsOn && recipients.length ? ', with your groups' : ''}. If there’s still a spot ${opensText}, it goes on Find Players.`
             : asked.length
               ? `It goes to ${askedNames} in your chat. It’s an open hit, so it shows on Find Players too, and someone nearby may take the spot first.`
-              : 'Players nearby see it on Find Players. Whoever joins gets a chat with you.'}</Fine>
+              : forFriends
+                ? 'Friends who follow you see it. Whoever joins gets a chat with you.'
+                : 'Players nearby see it on Find Players. Whoever joins gets a chat with you.'}</Fine>
       </ScrollView>
     </DragSheet>
   );

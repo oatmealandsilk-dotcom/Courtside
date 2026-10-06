@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Platform, StyleSheet, Text, TextInput, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router } from 'expo-router';
 
@@ -170,7 +170,8 @@ const styleDefinitions = StyleSheet.create({
   field: { flexDirection: 'row', alignItems: 'center', gap: 2, height: 52, paddingHorizontal: spacing.lg, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
   fieldLocked: { opacity: 0.55 },
   at: { fontSize: 17, ...font('600'), color: colors.textMuted },
-  input: { flex: 1, fontSize: 17, color: colors.text, paddingVertical: 0 },
+  // The field's own rounded box shows where you are typing: no browser focus ring on top of it.
+  input: { flex: 1, fontSize: 17, color: colors.text, paddingVertical: 0, ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : {}) },
   noteRow: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 20, paddingHorizontal: spacing.xs },
   note: { ...typography.small, flexShrink: 1 },
   muted: { color: colors.textFaint },

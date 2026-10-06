@@ -17,7 +17,7 @@ import { RECORD_ICON } from '@/features/records/records';
 import { useBelowBanner } from '@/features/messages/bannerSpace';
 import { requestScrollToTop } from '@/features/navigation/scrollToTop';
 import { goHome } from '@/lib/goBack';
-import { onWithdraw, useToast, type ToastClosed, type ToastMessage } from '@/lib/toast';
+import { closed, onWithdraw, useToast, type ToastClosed, type ToastMessage } from '@/lib/toast';
 import { colors, font, spacing, typography } from '@/theme';
 
 const SHOW_MS = 2800;
@@ -58,6 +58,7 @@ export function Toast() {
   const settle = (how: ToastClosed) => {
     const was = live.current;
     live.current = null;
+    if (was) closed(was.id);
     was?.onClosed?.(how, Date.now() - shownAt.current);
   };
   // A message banner on the same strip: the toast sits just under it, never hidden behind it.

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, type LayoutChangeEvent, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 
-import { TIP_WORDS, type TipKey } from '@/features/tips/tips';
+import { tipWords, type TipKey } from '@/features/tips/tips';
 import { colors, font, pageIsDark } from '@/theme';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 
@@ -48,8 +48,8 @@ export function TipBubble({ tip, shown, onClose, style, pointer = 'down', pointe
   const body = (
     <>
       {pointer === 'up' ? <Animated.View style={[pointerStyle, styles.pointerUp, lifted && styles.pointerUpLifted]} /> : null}
-      <Pressable accessibilityRole="button" accessibilityLabel={`Tip: ${TIP_WORDS[tip]} Tap to close.`} onPress={onClose} style={[styles.bubble, lifted && styles.bubbleLifted]}>
-        <Text style={[styles.text, lifted && styles.textLifted]}>{TIP_WORDS[tip]}</Text>
+      <Pressable accessibilityRole="button" accessibilityLabel={`Tip: ${tipWords(tip)} Tap to close.`} onPress={onClose} style={[styles.bubble, lifted && styles.bubbleLifted]}>
+        <Text style={[styles.text, lifted && styles.textLifted]}>{tipWords(tip)}</Text>
         <Text style={[styles.ok, lifted && styles.okLifted]}>Got it</Text>
       </Pressable>
       {pointer === 'down' ? <Animated.View style={[pointerStyle, styles.pointerDown, lifted && styles.pointerDownLifted]} /> : null}

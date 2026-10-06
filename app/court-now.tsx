@@ -43,6 +43,8 @@ export default function CourtNowSheet() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [thanks, setThanks] = useState<CourtNow | null>(null);
+  // How tall the sheet's contents are, so it opens just that tall rather than at 70% with a gap under them (as Open to hit does).
+  const [contentH, setContentH] = useState(0);
   useEffect(() => { if (courtId && currentUserId) void actions.loadCourtInfo([courtId]); }, [courtId, currentUserId, actions]);
   const now = courtId ? courtNow[courtId] : undefined;
   const standing = nowStatus(now);
@@ -82,9 +84,9 @@ export default function CourtNowSheet() {
   };
 
   return (
-    <DragSheet fitContent closeSignal={closeSignal} onDismissed={() => router.back()} peekFraction={0.7}
+    <DragSheet fitContent closeSignal={closeSignal} onDismissed={() => router.back()} peekFraction={0.7} contentHeight={contentH || undefined}
       header={<SheetTitle title="How is it right now?" line={standing ? `${name} · ${standing.line}` : name} onClose={() => setCloseSignal((n) => n + 1)} />}>
-      <ScrollView contentContainerStyle={formBody} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={formBody} keyboardShouldPersistTaps="handled" onContentSizeChange={(_, h) => { const r = Math.ceil(h); if (r !== contentH) setContentH(r); }}>
         <View style={styles.choices} accessibilityRole="radiogroup">
           {CHOICES.map((c) => {
             const on = standing?.status === c;

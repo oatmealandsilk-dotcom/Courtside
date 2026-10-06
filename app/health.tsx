@@ -332,9 +332,10 @@ export default function Health() {
         ? (connected ? 'If you use the AI coach, it plans around these.' : 'Connect a source and, if you use the AI coach, it plans around how recovered you are.')
         : 'Your sleep and recovery, from the sources you connect.'}</Text>
 
+      {/* A plain day ("2026-10-06") is read as that day here, at noon: read alone it is midnight in London, the day before in America. */}
       {latest ? (
         <View style={styles.today}>
-          <Text style={styles.todayTitle}>Latest<Text style={styles.todayDate}> · {new Date(latest.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</Text></Text>
+          <Text style={styles.todayTitle}>Latest<Text style={styles.todayDate}> · {new Date(latest.date.length === 10 ? `${latest.date}T12:00:00` : latest.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</Text></Text>
           <View style={styles.stats}>
             {stat('Recovery', latest.recovery ? `${latest.recovery}%` : null)}
             {stat('Sleep', latest.sleepHours ? hoursAndMinutes(latest.sleepHours) : null)}

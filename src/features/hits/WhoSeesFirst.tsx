@@ -9,7 +9,7 @@ import * as haptics from '@/lib/haptics';
 import { useApp } from '@/store/AppContext';
 import { colors, font, lift, radius, spacing, typography } from '@/theme';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import { AUDIENCES } from './audience';
+import { AUDIENCES, EVERYONE_FRIENDS_LINE } from './audience';
 
 /*
  * "Who sees it first" on the hit form (migration 76): three cards you tap,
@@ -23,11 +23,13 @@ import { AUDIENCES } from './audience';
 
 export const HIT_INVITE_MAX = 20;
 
-export function AudienceCards({ value, onChange }: { value: HitAudience; onChange: (v: HitAudience) => void }) {
+/** `forFriends`: the poster is not known to be an adult, so "Everyone" reaches only their followers and says so. */
+export function AudienceCards({ value, onChange, forFriends = false }: { value: HitAudience; onChange: (v: HitAudience) => void; forFriends?: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
   return (
     <View style={styles.list} accessibilityRole="radiogroup" accessibilityLabel="Who sees it first">
-      {AUDIENCES.map((o) => {
+      {AUDIENCES.map((option) => {
+        const o = forFriends && option.value === 'everyone' ? { ...option, line: EVERYONE_FRIENDS_LINE } : option;
         const on = o.value === value;
         return (
           <Pressable

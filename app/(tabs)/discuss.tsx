@@ -40,7 +40,7 @@ import { useCourtSearch } from '@/features/places/useCourtSearch';
 import { handPlace, type FoundPlace } from '@/features/places/geocode';
 import { usePlaceSearch } from '@/features/places/usePlaceSearch';
 import { openCourt, playHere } from '@/features/players/courtLink';
-import { formatMiles, formatSpotMiles, milesBetween } from '@/features/players/geo';
+import { formatMiles, formatSpotMiles, milesBetween, spotMilesKey } from '@/features/players/geo';
 import { isRoughSpot, placeFor } from '@/features/players/positions';
 import { nearestPlace } from '@/data/locations';
 import { useMyCity } from '@/features/players/useMyCity';
@@ -301,7 +301,8 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
     return users
       .filter((u) => u.id !== currentUserId && !blockedIds.includes(u.id))
       .flatMap((user) => { const seen = lastSeen[user.id]; if (!seen) return []; const miles = milesBetween(nearFrom, seen); return miles <= IN_TOWN_MILES ? [{ user, miles, seenAt: seen.seenAt, rough: isRoughSpot(seen) }] : []; })
-      .sort((a, b) => a.miles - b.miles);
+      // In the order the distances read: a rough "~1 mi" never after "1.1 mi".
+      .sort((a, b) => spotMilesKey(a.miles, a.rough) - spotMilesKey(b.miles, b.rough) || a.miles - b.miles);
   }, [users, lastSeen, currentUserId, blockedIds, nearFrom?.lat, nearFrom?.lng]); // eslint-disable-line react-hooks/exhaustive-deps
   // "New on CourtSide": who joined in the last two weeks, newest first. With
   // the map's round 2 on the database (migration 63) the server decides who
@@ -589,7 +590,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
           <Text style={styles.playersBody}>{foundPlayers.length ? `${foundPlayers.length} ${foundPlayers.length === 1 ? 'match' : 'matches'}` : `No players named “${search.trim()}”`}</Text>
         </View> : null}
         {search ? foundPlayers.map((user, index) => <Pressable key={user.id} accessibilityRole="link" onPress={() => router.push(`/user/${user.id}`)} style={({ pressed }) => [styles.player, pressed && styles.playerPressed]}>
-          <Avatar name={user.name} seed={user.avatarSeed} size={52} ring={user.isCoach} />
+          <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={52} ring={user.isCoach} />
           <View style={[styles.playerBody, index > 0 && styles.playerLine]}>
             <View style={styles.playerTop}><Text style={styles.playerName} numberOfLines={1}>{user.name}</Text><LevelPill profile={user.profile} small /></View>
             <Text style={styles.playerMeta} numberOfLines={1}>@{user.handle}</Text>
@@ -657,7 +658,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
             // The picked topic is filled in the section's own colour, so it is plain which one is on.
             <View key={t} onLayout={(e) => { chipX.current[t] = e.nativeEvent.layout.x; }}>
               <Chip
-                label={t === 'all' ? 'All' : t === 'injury' ? 'Injuries' : t.charAt(0).toUpperCase() + t.slice(1)}
+                label={t === 'all' ? 'All' : TOPIC_META[t].label}
                 selected={topic === t}
                 tint={colors.text}
                 ink={colors.brandInk}

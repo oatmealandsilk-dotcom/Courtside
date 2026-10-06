@@ -8,7 +8,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { CitylessCard, CourtSheet, CourtsZoomNote, FilterChips, HitSheet, MapCredit, YouSheet, MapButtons, MapTopBar, NearbyRail, PlaceSheet, PlayerSheet, PreviewOverlay, WhereCard } from '@/components/map/MapChrome';
 import { CardStage } from '@/components/map/CardStage';
-import { CARD_HEIGHT, CARD_ZOOM, onCard } from '@/components/map/cardFit';
+import { CARD_HEIGHT, CARD_ZOOM, onCard, underCardSwitch } from '@/components/map/cardFit';
 import type { NearbyMapProps } from '@/components/NearbyMap.types';
 import { placeZoom } from '@/features/places/geocode';
 import { milesBetween } from '@/features/players/geo';
@@ -110,9 +110,15 @@ export function NearbyMap(props: NearbyMapProps) {
   const { width: windowW } = useWindowDimensions();
   const [cardW, setCardW] = useState(0);
   const cardCenter = model.city ?? start.center;
+  // A pin that would sit under the card's location switch (top right) is left off the card, so the two never overlap.
+  const switchOn = !!onToggleLocation;
+  const cardPlayers = useMemo(
+    () => (expanded ? model.inCity : model.inCity.filter((p) => !(switchOn && underCardSwitch(cardCenter, p.at, cardW || windowW - 2 * spacing.lg)))),
+    [expanded, model.inCity, cardCenter.lat, cardCenter.lng, cardW, windowW, switchOn], // eslint-disable-line react-hooks/exhaustive-deps
+  );
   const onCardCount = useMemo(
-    () => (expanded ? 0 : model.inCity.filter((p) => onCard(cardCenter, p.at, cardW || windowW - 2 * spacing.lg)).length),
-    [expanded, model.inCity, cardCenter.lat, cardCenter.lng, cardW, windowW], // eslint-disable-line react-hooks/exhaustive-deps
+    () => (expanded ? 0 : cardPlayers.filter((p) => onCard(cardCenter, p.at, cardW || windowW - 2 * spacing.lg)).length),
+    [expanded, cardPlayers, cardCenter.lat, cardCenter.lng, cardW, windowW], // eslint-disable-line react-hooks/exhaustive-deps
   );
   // Zoomed out past about a city: the court pins step aside (pinList), and a note says so.
   // Told the moment the zoom crosses it (as on the phone), kept in a ref so a pinch only sets it on the crossing.
@@ -152,6 +158,8 @@ export function NearbyMap(props: NearbyMapProps) {
     const el = host.current;
     if (!el) return;
     const opening = (expanded && camera.current) || { center: [view.center.lng, view.center.lat] as [number, number], zoom: view.zoom };
+    // Opened on a court: its pin lands in the clear above its card, not under it (as when a court is picked).
+    const liftOpening = expanded && !camera.current && !!focusCourt;
     let instance: maplibregl.Map;
     try {
       instance = new maplibregl.Map({
@@ -272,7 +280,11 @@ export function NearbyMap(props: NearbyMapProps) {
     });
     map.current = instance;
     setMapGen((n) => n + 1);
-    const settle = setTimeout(() => { instance.resize(); instance.jumpTo({ center: opening.center }); }, 60);
+    const settle = setTimeout(() => {
+      instance.resize();
+      if (liftOpening) instance.easeTo({ center: opening.center, duration: 0, offset: [0, -courtLift(el.clientHeight || 800)] });
+      else instance.jumpTo({ center: opening.center });
+    }, 60);
     const watcher = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => instance.resize()) : null;
     watcher?.observe(el);
     return () => {
@@ -306,7 +318,7 @@ export function NearbyMap(props: NearbyMapProps) {
 
   // Pins: the same list the phone's map draws (pinList), handed to the engine, which keeps
   // each pin between changes and gathers, splits and fades them (pinEngine).
-  const shown = expanded ? model.shown : model.inCity;
+  const shown = expanded ? model.shown : cardPlayers;
   const selectedId = model.selected?.user.id ?? null;
   const selectedCourtId = model.selectedCourt?.id ?? null;
   const selectedHitId = model.selectedHit?.hit.id ?? null;
@@ -330,7 +342,7 @@ export function NearbyMap(props: NearbyMapProps) {
   // A court's card is tall (who may play, right now, what players say): its court lands above it, not under it.
   // Keyed on which court or hit is picked, not the object: courts and hits reloading must not pull the map back.
   useEffect(() => { if (model.selectedCourt) map.current?.flyTo({ center: [model.selectedCourt.lng, model.selectedCourt.lat], zoom: Math.max(map.current.getZoom(), CLOSE_ZOOM), duration: 500, offset: [0, -courtLift(host.current?.clientHeight ?? 800)] }); }, [model.selectedCourt?.id]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { if (model.selectedHit) map.current?.flyTo({ center: [model.selectedHit.at.lng, model.selectedHit.at.lat], zoom: Math.max(map.current.getZoom(), CLOSE_ZOOM), duration: 500 }); }, [model.selectedHit?.hit.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (model.selectedHit) map.current?.flyTo({ center: [model.selectedHit.at.lng, model.selectedHit.at.lat], zoom: Math.max(map.current.getZoom(), CLOSE_ZOOM), duration: 500, offset: [0, -courtLift(host.current?.clientHeight ?? 800)] }); }, [model.selectedHit?.hit.id]); // eslint-disable-line react-hooks/exhaustive-deps
   // Your card up: your pin glides into the clear strip above it, so the ring switching on is there to see.
   useEffect(() => { if (meOpen && model.mePos) map.current?.flyTo({ center: [model.mePos.lng, model.mePos.lat], zoom: map.current.getZoom(), duration: 500, offset: [0, -youLift(host.current?.clientHeight ?? 800)] }); }, [meOpen]); // eslint-disable-line react-hooks/exhaustive-deps
   // A place picked from the search: exactly as close as it needs (placeZoom), out as well as in, so its court pins show;

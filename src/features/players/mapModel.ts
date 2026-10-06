@@ -11,7 +11,7 @@ import { usePlaceCourts } from '@/features/places/usePlaceCourts';
 import { usePlaceSearch } from '@/features/places/usePlaceSearch';
 import { useCourtSearch } from '@/features/places/useCourtSearch';
 import { courtRows, fetchCourts, isClosedCourt, peekCourts, type Court, type CourtRow } from '@/features/players/courts';
-import { milesBetween } from '@/features/players/geo';
+import { milesBetween, spotMilesKey } from '@/features/players/geo';
 import { homeFor, homeIsKnown, isRoughSpot, positionFor, wideView, type LatLng, type ViewBounds } from '@/features/players/positions';
 import { useMyCity } from '@/features/players/useMyCity';
 import { useApp } from '@/store/AppContext';
@@ -205,9 +205,13 @@ export function useMapModel(me: User, players: User[], fix?: LatLng | null, focu
         const at = positionFor(user, seen);
         if (!at) return [];
         const court = seen?.place === 'court' && seen.courtId ? { id: seen.courtId, name: seen.courtName || 'Tennis courts' } : undefined;
-        return [{ user, at, miles: milesBetween(home, at), seenAt: seen?.seenAt, seenCity: seen?.city, rough: isRoughSpot(seen), court, mutual: !!seen?.mutual }];
+        // Miles to the spot they shared, not to the nudged pin, so a player
+        // reads the same distance here as under Near you on Community.
+        const miles = seen ? milesBetween(home, { lat: seen.lat, lng: seen.lng }) : milesBetween(home, at);
+        return [{ user, at, miles, seenAt: seen?.seenAt, seenCity: seen?.city, rough: isRoughSpot(seen), court, mutual: !!seen?.mutual }];
       })
-      .sort((a, b) => a.miles - b.miles),
+      // In the order the distances read: a rough "~1 mi" never after "1.1 mi".
+      .sort((a, b) => spotMilesKey(a.miles, a.rough) - spotMilesKey(b.miles, b.rough) || a.miles - b.miles),
     [players, home, lastSeen],
   );
   const inTown = useMemo(() => ranked.filter((p) => p.miles <= IN_TOWN_MILES), [ranked]);

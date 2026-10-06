@@ -39,8 +39,16 @@ export function Chip({ label, selected = false, onPress, tint, ink, small = fals
   );
 
   if (!onPress) return body;
+  // A small chip is well under a finger's 44 points: a wider reach than it looks
+  // (no visual change), and a screen reader hears which one is on.
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => (pressed ? { opacity: 0.7 } : undefined)}>
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityState={{ selected }}
+      hitSlop={small ? { top: 10, bottom: 10, left: 4, right: 4 } : 6}
+      style={({ pressed }) => (pressed ? { opacity: 0.7 } : undefined)}
+    >
       {body}
     </Pressable>
   );

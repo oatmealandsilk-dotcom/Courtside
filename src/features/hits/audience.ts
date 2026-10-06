@@ -17,6 +17,12 @@ export const AUDIENCES: { value: HitAudience; icon: 'people-outline' | 'mail-unr
   { value: 'invite_only', icon: 'lock-closed-outline', title: 'Only people I invite', line: 'Never shows to anyone else.' },
 ];
 
+/**
+ * "Everyone" for someone not known to be an adult: their hit reaches only
+ * the people who follow them (hits/visible), so the card says that instead.
+ */
+export const EVERYONE_FRIENDS_LINE = 'Friends who follow you see it.';
+
 /** When an invite-first hit posted now opens to everyone: an hour from now, or three hours before it starts if that is sooner (the server's rule). */
 export function opensAtFor(startsAt: string, now = Date.now()): string {
   return new Date(Math.min(now + HOUR, Date.parse(startsAt) - 3 * HOUR)).toISOString();

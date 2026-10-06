@@ -41,7 +41,8 @@ export function HeadToHeadCard({ userId, name }: { userId: ID; name: string }) {
       <View accessible accessibilityLabel={`Head to head with ${first}: ${line}.${last ? ` Last match, you ${last.won ? 'won' : 'lost'} ${spokenScore(last.sets)}, ${dayWords(last.day)}.` : ''}`} style={styles.words}>
         <Text style={styles.eyebrow}>Head to head</Text>
         <Text style={styles.record} numberOfLines={1}>{line}</Text>
-        {lastWords ? <Text style={styles.last} numberOfLines={1}>{lastWords}</Text> : null}
+        {/* Two lines: one cut the day off a three-set score ("· Yes…"). */}
+        {lastWords ? <Text style={styles.last} numberOfLines={2}>{lastWords}</Text> : null}
       </View>
       {canAsk ? (
         <Pressable

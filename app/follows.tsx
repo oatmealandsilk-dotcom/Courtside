@@ -1,6 +1,6 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { requestSection } from '@/features/navigation/swipeOrder';
 import { goToTab } from '@/features/navigation/startTab';
@@ -13,6 +13,7 @@ import { shownStreak } from '@/features/practice/streakFlame';
 import { Avatar, EmptyState, Field, Screen, SegmentedControl } from '@/components/ui';
 import { useApp } from '@/store/AppContext';
 import { confirmUnfollow } from '@/lib/confirm';
+import { compactNumber } from '@/lib/format';
 import { colors, spacing, typography } from '@/theme';
 
 type Tab = 'followers' | 'following';
@@ -28,7 +29,15 @@ export default function Follows() {
   const subject = users.find((u) => u.id === userId);
   // Their followers and following come in when the list opens.
   const loadFollowsOf = actions.loadFollowsOf;
-  useEffect(() => { if (userId) void loadFollowsOf(userId); }, [loadFollowsOf, userId]);
+  // Until they have come in, a spinner: never "No followers yet" over someone with 9.1k.
+  const [loaded, setLoaded] = useState(false);
+  useEffect(() => {
+    if (!userId) return undefined;
+    let current = true;
+    setLoaded(false);
+    void loadFollowsOf(userId).catch(() => undefined).then(() => { if (current) setLoaded(true); });
+    return () => { current = false; };
+  }, [loadFollowsOf, userId]);
 
   const ids = useMemo(() => {
     const edges = followEdges.filter((e) => !blockedIds.includes(e.followerId) && !blockedIds.includes(e.followingId));
@@ -54,15 +63,18 @@ export default function Follows() {
           value={tab}
           onChange={setTab}
           segments={[
-            { value: 'followers', label: `${counts.followers} followers` },
-            { value: 'following', label: `${counts.following} following` },
+            // Written the way the profile writes them: "9.1k followers".
+            { value: 'followers', label: `${compactNumber(counts.followers)} followers` },
+            { value: 'following', label: `${compactNumber(counts.following)} following` },
           ]}
         />
       </View>
       <View style={styles.searchWrap}>
         <Field value={search} onChangeText={setSearch} placeholder="Search" autoCapitalize="none" />
       </View>
-      {list.length === 0 ? (
+      {list.length === 0 && !loaded ? (
+        <View style={styles.loading}><ActivityIndicator color={colors.textMuted} /></View>
+      ) : list.length === 0 ? (
         // Your own empty list says how to change that; someone else's simply says it is empty.
         userId === currentUserId ? (
           <EmptyState
@@ -106,6 +118,7 @@ export default function Follows() {
 const styleDefinitions = StyleSheet.create({
   tabs: { paddingBottom: spacing.md },
   searchWrap: { paddingBottom: spacing.sm },
+  loading: { paddingVertical: spacing.xl, alignItems: 'center' },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
   // The name and their streak's flame (3 days or more), the name giving way first.
   nameLine: { flexDirection: 'row', alignItems: 'center', gap: 6, minWidth: 0 },

@@ -80,7 +80,8 @@ export function YourCourts({ from = null }: { from?: LatLng | null }) {
               {here ? <HereTag small onCheckOut={() => { void actions.checkOutOfCourt(); }} /> : null}
               {quiet ? <Text style={styles.meta}>Nothing new this week</Text> : (() => {
                 const rest = [news.now, news.hit ? news.posts : null].filter(Boolean).join(' · ');
-                return rest ? <Text style={styles.meta} numberOfLines={1}>{rest}</Text> : null;
+                // Two lines: on a phone one cut off the new-posts count, the news the card is for.
+                return rest ? <Text style={styles.meta} numberOfLines={2}>{rest}</Text> : null;
               })()}
             </Pressable>
           );

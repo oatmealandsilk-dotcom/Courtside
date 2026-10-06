@@ -213,7 +213,10 @@ function QuestionDetail() {
             <EmptyState
               icon="chatbubble-ellipses-outline"
               title="No answers yet"
-              body="Know this one? A specific answer beats three vague ones."
+              // Your own thread: the asker is told what happens next, not asked to answer it.
+              body={question.authorId === currentUserId
+                ? 'We’ll let you know when a player or coach answers.'
+                : 'Know this one? A specific answer beats three vague ones.'}
             />
           )
         ) : null}

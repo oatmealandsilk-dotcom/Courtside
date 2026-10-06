@@ -193,9 +193,11 @@ export default function Search() {
   const [followedHere, setFollowedHere] = useState<string[]>([]);
   const noteFollowed = useCallback((id: string) => setFollowedHere((cur) => (cur.includes(id) ? cur : [...cur, id])), []);
   const suggested = useSuggestedPlayers({ keep: followedHere }).slice(0, 5);
-  const nearAny = suggested.some((s) => !!myTown && townOf(s.user.location) === myTown);
+  // "Players near you" only when every one of them is: one in your town under it, the rest for other reasons, read wrong.
+  const allNear = suggested.length > 0 && suggested.every((s) => !!myTown && townOf(s.user.location) === myTown);
+  // Short enough to fit beside the Follow button on a phone.
   const suggestionReason = (user: User, reason: string) =>
-    myTown && townOf(user.location) === myTown ? 'Near you' : user.isCoach ? 'Coach' : reason === 'Interacted with you' ? reason : '';
+    myTown && townOf(user.location) === myTown ? 'Near you' : user.isCoach ? 'Coach' : reason === 'Interacted with you' ? 'Knows you' : '';
 
   /* ---------------------------------- Courts --------------------------------- */
   // Once, as the page opens: the courts about 15 miles around you, or none after eight seconds.
@@ -507,7 +509,7 @@ export default function Search() {
         ) : null}
         {suggested.length ? (
           <View style={styles.gapAbove}>
-            {head(nearAny ? 'Players near you' : 'Suggested players')}
+            {head(allNear ? 'Players near you' : 'Suggested players')}
             {suggested.map((s, i) => (
               <PersonRow key={s.user.id} user={s.user} reason={suggestionReason(s.user, s.reason)} first={i === 0} onPress={() => openPerson(s.user)} onFollowed={noteFollowed} />
             ))}
@@ -570,7 +572,7 @@ export default function Search() {
         </>
       ) : suggested.length ? (
         <>
-          {head(nearAny ? 'Players near you' : 'Suggested players')}
+          {head(allNear ? 'Players near you' : 'Suggested players')}
           {suggested.map((sg, i) => <PersonRow key={sg.user.id} user={sg.user} reason={suggestionReason(sg.user, sg.reason)} first={i === 0} onPress={() => openPerson(sg.user)} onFollowed={noteFollowed} />)}
         </>
       ) : (

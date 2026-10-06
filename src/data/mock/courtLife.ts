@@ -26,6 +26,14 @@ const park = (n: number): TaggedCourt => { const c = DEMO_PARK(n); return { id: 
  */
 export const DEMO_FOLLOWING: ID[] = ['u-sam', 'u-marcus', 'u-omar', 'u-tomas', 'u-nadia', 'u-june'];
 
+/**
+ * Some of the people who follow the demo player, so Followers has someone in
+ * it under "184 followers" rather than "No followers yet": Omar (who follows
+ * back) and five more adults. None of them has a post in the demo feed, so
+ * the feed's order is as it was.
+ */
+export const DEMO_FOLLOWERS: ID[] = ['u-omar', 'u-rosa', 'u-kai', 'u-noor', 'u-theo', 'u-lena'];
+
 const blankFacts = (courtId: string): CourtFacts => ({
   courtId, access: 'unknown', players: 0, lights: { yes: 0, no: 0 }, nets: { good: 0, bad: 0 }, surface: { good: 0, cracked: 0, wetProne: 0 }, busy: {}, busyAnswers: 0, busyNever: 0, notes: [],
 });

@@ -827,7 +827,7 @@ export default function Compose() {
     else if (record) whenLanded(postId, () => setTimeout(() => { haptics.reward(); showToast({ title: record.title, body: record.body, glyph: 'record', action: shareAction({ post: postId, session: logId }) }); }, 600));
     // Otherwise "Posted" with an Instagram button: the session as a story
     // picture, from the post once it has landed, from your log until then.
-    else whenLanded(postId, () => setTimeout(() => showToast({ title: 'Posted', body: 'Share it to your Instagram story too.', icon: 'checkmark', action: shareAction({ post: postId, session: logId }) }), 600));
+    else whenLanded(postId, () => setTimeout(() => showToast({ title: 'Posted', body: 'Share it to your story too.', icon: 'checkmark', action: shareAction({ post: postId, session: logId }) }), 600));
     // Then who else was at that court today (the post, landed, is how the server knows you were there too).
     whenLanded(postId, () => next.flyby(600 + (firstPost ? 4800 : record ? 5500 : 3000)));
   };

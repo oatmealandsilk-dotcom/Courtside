@@ -268,9 +268,10 @@ const styleDefinitions = StyleSheet.create({
   topicTextOn: { color: colors.bg },
   // One sheet of paper: the question in large type, hairlines between the parts.
   sheet: { marginHorizontal: spacing.lg, borderRadius: radius.xl, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, paddingHorizontal: spacing.lg, paddingTop: spacing.sm },
-  question: { ...typography.title, color: colors.text, paddingVertical: spacing.md, lineHeight: 30 },
+  // No browser focus ring in a browser: the sheet is the box, as in every other field.
+  question: { ...typography.title, color: colors.text, paddingVertical: spacing.md, lineHeight: 30, ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : {}) },
   rule: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
-  detail: { ...typography.body, color: colors.text, lineHeight: 23, minHeight: 150, paddingVertical: spacing.md },
+  detail: { ...typography.body, color: colors.text, lineHeight: 23, minHeight: 150, paddingVertical: spacing.md, ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : {}) },
   footage: { paddingVertical: spacing.md },
   addRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: 14 },
   addText: { ...typography.bodyStrong, color: colors.text },
