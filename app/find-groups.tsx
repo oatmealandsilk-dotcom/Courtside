@@ -55,7 +55,8 @@ export default function FindGroups() {
   const minedAtOpen = useRef(new Set(feedGroups.map((g) => g.id)));
 
   const [search, setSearch] = useState('');
-  // The sheet opens only as tall as what is in it (once the list is in), so a short one has no empty half.
+  // On a phone the sheet opens only as tall as what is in it (once the list is in), so a short one has no empty half.
+  // (No fitContent: the computer's centred box keeps its fixed height, so the search box doesn't jump as results change.)
   const [contentH, setContentH] = useState(0);
   const [rows, setRows] = useState<DiscoverGroup[] | null | undefined>(undefined);
   const asked = useRef(0);
@@ -162,7 +163,6 @@ export default function FindGroups() {
 
   return (
     <DragSheet
-      fitContent
       closeSignal={closeSignal}
       onDismissed={done}
       peekFraction={0.86}
