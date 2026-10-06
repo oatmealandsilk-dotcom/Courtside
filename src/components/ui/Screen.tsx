@@ -58,6 +58,11 @@ interface Props {
   padded?: boolean;
   onBack?: () => void;
   compactTitle?: boolean;
+  /**
+   * A title that can run long (a court's name): at most this many lines, a
+   * step smaller, cut with "…" past them. Left out, a title takes the lines it needs.
+   */
+  titleLines?: number;
   /** Desktop-only right-hand column, Instagram style. Ignored below the desktop breakpoint. */
   rail?: ReactNode;
   headerWrapper?: (header: ReactNode) => ReactNode;
@@ -104,6 +109,7 @@ export function Screen({
   padded = true,
   onBack,
   compactTitle = false,
+  titleLines,
   rail,
   headerWrapper,
   memoryKey,
@@ -476,7 +482,7 @@ export function Screen({
             </Pressable>
           ) : null}
           <View style={styles.headerText}>
-            <Text style={compactTitle || !isPhone ? styles.titleCompact : styles.title}>{title}</Text>
+            <Text style={[compactTitle || !isPhone ? styles.titleCompact : styles.title, titleLines ? styles.titleCapped : null]} numberOfLines={titleLines}>{title}</Text>
             {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
           </View>
           {right}
@@ -613,6 +619,8 @@ const styleDefinitions = StyleSheet.create({
   headerText: { flex: 1, gap: 4 },
   title: { ...typography.display, color: colors.text },
   titleCompact: { ...typography.title, color: colors.text },
+  // A long name held to its lines: a step down from the compact title, the same tight tracking.
+  titleCapped: { fontSize: 18, lineHeight: 23, letterSpacing: -0.4 },
   back: { paddingRight: spacing.xs, paddingVertical: spacing.xs },
   subtitle: { ...typography.small, color: colors.textMuted },
   padded: { paddingHorizontal: spacing.lg },
