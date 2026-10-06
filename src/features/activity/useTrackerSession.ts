@@ -13,6 +13,7 @@ import * as haptics from '@/lib/haptics';
 import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
 import { loggedLabel } from './format';
+import { canScore, tookScoreNotKept } from './score';
 import { isTennisActivity } from './workouts';
 
 /** What logging a session takes: what it was, a match's result, who you played (tagged, or a name typed). */
@@ -101,7 +102,8 @@ export function useTrackerSession(activityId: ID | undefined) {
         minutes: input.minutes && input.minutes > 0 ? input.minutes : activity.minutes,
         kind: input.kind,
         won: input.kind === 'match' ? input.won : undefined,
-        ...(input.kind === 'match' && input.sets?.length ? { sets: input.sets } : {}),
+        // A score on any tennis session (Oct 6), never a workout.
+        ...(canScore(input.kind) && input.sets?.length ? { sets: input.sets } : {}),
         opponent: canTagKind(input.kind) ? input.opponent ?? '' : '',
         day: activityDay(activity),
         activityId: activity.id,
@@ -150,6 +152,11 @@ export function useTrackerSession(activityId: ID | undefined) {
  * Instagram button.
  */
 export function showLogged(minutes: number, s: Pick<PracticeSession, 'kind' | 'won' | 'sets'> & { workout?: string }, streak: { now: number; before: number }, sessionId?: string, record?: { title: string; body: string } | null) {
+  // Logged, but the score didn't save (the server isn't ready for a practice's yet): said plainly, never shown as saved.
+  if (tookScoreNotKept(sessionId)) {
+    showToast({ title: 'Logged without the score', body: 'Scores aren’t ready yet. Add it later from Your sessions.', icon: 'alert-circle-outline', long: true });
+    return;
+  }
   if (record) {
     haptics.reward();
     showToast({ title: record.title, body: record.body, glyph: 'record', ...(sessionId ? { action: shareAction({ session: sessionId }) } : {}) });

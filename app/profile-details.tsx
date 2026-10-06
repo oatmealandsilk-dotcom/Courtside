@@ -18,7 +18,8 @@ import { BrandWash, EmptyState, Screen } from '@/components/ui';
 import type { PracticeSession, TournamentEntry, User } from '@/data/types';
 import { KIND_LABEL, activityDay, loggedLabel, spokenDuration } from '@/features/activity/format';
 import { pickSource, sourceOn, sourceWord } from '@/features/activity/recent';
-import { canTagKind, firstName, peopleText, peopleWords } from '@/features/activity/sessionTags';
+import { firstName, peopleText, peopleWords } from '@/features/activity/sessionTags';
+import { canScore } from '@/features/activity/score';
 import { useTennisFlags } from '@/features/activity/useTennisFlags';
 import { isTennisActivity, workoutIcon } from '@/features/activity/workouts';
 import { type ProfileTab, useProfileTab } from '@/features/players/profileTab';
@@ -375,7 +376,7 @@ function SessionRow({ session: s, first, me, sessionTags, users, onRemove }: { s
   const place = note.startsWith('At ') ? note.slice(3).split(' · ')[0] : '';
   const sub = [who, dayLabel(s.day), place].filter(Boolean).join(' · ');
   const onOpen = from ? () => router.push({ pathname: '/session-tag', params: { tag: from.id } })
-    : canTagKind(s.kind) && !s.fromSessionId ? () => router.push({ pathname: '/log-session', params: { edit: s.id } })
+    : canScore(s.kind) && !s.fromSessionId ? () => router.push({ pathname: '/log-session', params: { edit: s.id } })
     : undefined;
   const icon = s.kind === 'match' ? <Ionicons name="trophy-outline" size={18} color={colors.textMuted} />
     : s.kind === 'practice' ? <CourtGlyph size={15} color={colors.textMuted} />

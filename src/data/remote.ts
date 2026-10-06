@@ -24,7 +24,7 @@ import { noteStep } from '@/lib/crashReporting';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
 import type { Answer, ChatEvent, ChatPhoto, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, DetectedActivity, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, HiddenWords, HiddenWordsKind, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, CourtNote, LastSeen, MapPlace, MapVisibility, TaggedCourt, Question, Removed, RemovedItem, Story, SurfacePreference, TakedownKind, TakedownReason, Tip, TournamentEntry, User, PublicStreak, CoachApplication, CourtAccess, CourtAccessSource, CourtDayPart, CourtFacts, CourtFollowCount, CourtNow, CourtKings, CourtRegulars, CourtReview, CourtRightNow, CourtRing, FlybyPerson, FollowedCourt, SessionTag, SessionTagRefusal, SessionTagRole, FeedGroup, FeedGroupCard, DiscoverGroup, GroupLook, Invitee, ContactMatch, HeadToHead, MatchSet, SessionWith } from './types';
-import { validSets } from '@/features/activity/score';
+import { canScore, validSets } from '@/features/activity/score';
 import { TERMS_VERSION } from '@/lib/legal';
 import { readinessOf, sessionTagNamesLive, sessionToSend, setSessionTagNamesLive, trustedSession } from './sessionTagGate';
 import { isMapCourtId } from '@/features/places/courtName';
@@ -493,8 +493,8 @@ export interface RemoteData {
 
 interface SessionRow { id: string; user_id: string; day: string; minutes: number; kind: PracticeSession['kind']; won: boolean | null; opponent: string | null; note: string | null; created_at: string; activity_id?: string | null; from_session_id?: string | null; sets?: unknown; workout?: string | null; court_id?: string | null }
 const toSession = (r: SessionRow): PracticeSession => {
-  // A match's score (migration 91; absent before it runs), kept only when it is a good one.
-  const sets = r.kind === 'match' ? validSets(r.sets) : undefined;
+  // A tennis session's score (migration 91 for a match, 136 for a practice or drills; absent before they run), kept only when it is a good one.
+  const sets = canScore(r.kind) ? validSets(r.sets) : undefined;
   return {
     id: r.id, userId: r.user_id, day: r.day, minutes: r.minutes, kind: r.kind, won: r.won ?? undefined, opponent: r.opponent ?? undefined, note: r.note ?? undefined,
     activityId: r.activity_id ?? undefined, fromSessionId: r.from_session_id ?? undefined, ...(sets ? { sets } : {}),
@@ -3133,33 +3133,47 @@ export const remote = {
     return () => { void db.removeChannel(channel); };
   },
 
-  async insertSession(s: PracticeSession) {
+  /**
+   * Saves a new log entry. Says whether a score sent with it was dropped:
+   * before migration 136 the server keeps a score on a match only and
+   * quietly clears a practice's or drills', so the app can say so rather
+   * than show a score that is not there.
+   */
+  async insertSession(s: PracticeSession): Promise<{ scoreDropped: boolean }> {
     const db = need();
     const row: Record<string, unknown> = { id: s.id, user_id: s.userId, day: s.day, minutes: s.minutes, kind: s.kind, won: s.won ?? null, opponent: s.opponent ?? null, note: s.note ?? null, created_at: s.createdAt };
-    // A match's score only when there is one (migration 91), so a session with none saves on a database without it.
+    // A score only when there is one (migration 91), so a session with none saves on a database without it.
     if (s.sets?.length) row.sets = s.sets;
     // What a workout was (migration 107), only when there is one, the same way.
     if (s.workout) row.workout = s.workout;
     // Where it was played (migration 130), only when there is one and the database has it.
     if (s.courtId && !sessionsLackCourt) row.court_id = s.courtId;
-    let { error } = await db.from('practice_sessions').insert(s.activityId ? { ...row, activity_id: s.activityId } : row);
+    // With a score, the row comes back as the server kept it.
+    let keptSets: unknown = null;
+    const send = async (body: Record<string, unknown>) => {
+      if (!body.sets) return db.from('practice_sessions').insert(body);
+      const res = await db.from('practice_sessions').insert(body).select('sets');
+      if (!res.error) keptSets = (res.data as { sets?: unknown }[] | null)?.[0]?.sets ?? null;
+      return res;
+    };
+    let { error } = await send(s.activityId ? { ...row, activity_id: s.activityId } : row);
     // A database before migration 130 has no court_id: the session still counts, without where it was.
     if (error && row.court_id && /court_id/.test(error.message)) {
       sessionsLackCourt = true;
       delete row.court_id;
-      ({ error } = await db.from('practice_sessions').insert(s.activityId ? { ...row, activity_id: s.activityId } : row));
+      ({ error } = await send(s.activityId ? { ...row, activity_id: s.activityId } : row));
     }
     // A database before migration 107 has no workout: the session still counts, as Fitness.
     if (error && row.workout && /\bworkout\b/.test(error.message)) {
       delete row.workout;
-      ({ error } = await db.from('practice_sessions').insert(s.activityId ? { ...row, activity_id: s.activityId } : row));
+      ({ error } = await send(s.activityId ? { ...row, activity_id: s.activityId } : row));
     }
     // A database before migration 58 has no activity_id: the session still counts, just without the link.
-    if (error && s.activityId && /activity_id/.test(error.message)) ({ error } = await db.from('practice_sessions').insert(row));
+    if (error && s.activityId && /activity_id/.test(error.message)) ({ error } = await send(row));
     // A database before migration 91 has no sets: the match still counts, with its result, and the score is dropped.
     if (error && row.sets && /\bsets\b/.test(error.message)) {
       delete row.sets;
-      ({ error } = await db.from('practice_sessions').insert(s.activityId ? { ...row, activity_id: s.activityId } : row));
+      ({ error } = await send(s.activityId ? { ...row, activity_id: s.activityId } : row));
     }
     if (error) {
       fail('session')(error);
@@ -3167,23 +3181,30 @@ export const remote = {
       if (error.code === '23505') throw new Error('Already logged.');
       throw new Error(error.message.includes('a lot of sessions') ? error.message : 'That session didn’t save. Try again.');
     }
+    return { scoreDropped: !!s.sets?.length && (!row.sets || keptSets == null) };
   },
   async deleteSession(id: ID) {
     const { error } = await need().from('practice_sessions').delete().eq('id', id);
     if (error) fail('session delete')(error);
   },
   /**
-   * A match's score, set, changed or cleared on a session already in your log
-   * (migration 91), with the result it gives. The server works the result out
-   * again from the sets, so the two never disagree. Throws a plain sentence.
+   * A session's score, set, changed or cleared on a session already in your
+   * log (migration 91), with the result it gives on a match. The server works
+   * the result out again from the sets, so the two never disagree. A practice
+   * or drills (Oct 6) has no result: `won` is left out and only the sets go.
+   * Throws a plain sentence.
    */
-  async updateSessionScore(id: ID, sets: MatchSet[] | null, won: boolean | null) {
-    const { error } = await need().from('practice_sessions').update({ sets, won }).eq('id', id);
+  async updateSessionScore(id: ID, sets: MatchSet[] | null, won?: boolean | null) {
+    const { data, error } = await need().from('practice_sessions').update(won === undefined ? { sets } : { sets, won }).eq('id', id).select('sets');
     if (error) {
       fail('session score')(error);
       if (/\bsets\b/.test(error.message) && /column|schema/i.test(error.message)) throw new Error('Scores aren’t ready yet. Try again later.');
       throw new Error(/bad_score/.test(error.message) ? 'That score doesn’t look right.' : 'That didn’t save. Try again.');
     }
+    // A score sent and none kept: before migration 136 the server clears a practice's or drills' (a match's
+    // stays). Said plainly, so the app puts it back rather than showing a score that is not saved.
+    const row = (data as { sets?: unknown }[] | null)?.[0];
+    if (sets?.length && row && row.sets == null) throw new Error('Scores aren’t ready yet. Try again later.');
   },
   /**
    * Your record against one player (head_to_head, migration 91): only scored

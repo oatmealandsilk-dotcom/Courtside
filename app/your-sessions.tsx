@@ -14,6 +14,7 @@ import { Avatar, CreamWash, EmptyState, Screen } from '@/components/ui';
 import type { DetectedActivity, PracticeSession, SessionTag, User } from '@/data/types';
 import { activityTitle, activityWhen, dayWords, loggedLabel } from '@/features/activity/format';
 import { canTagKind, firstName, peopleText, peopleWords, yourResult } from '@/features/activity/sessionTags';
+import { canScore } from '@/features/activity/score';
 import { show as showToast } from '@/lib/toast';
 import { ATTACH_DAYS, pickSource, postOf, postedIndex, sourceOn, type SessionPick } from '@/features/activity/recent';
 import { useTennisFlags } from '@/features/activity/useTennisFlags';
@@ -72,8 +73,9 @@ function weekLabel(start: string, now = new Date()): string {
  *
  * Who you played (migration 62), by first name: a tag still waiting reads
  * "vs June · Waiting", an accepted one "vs Mira" with a small tick. A tap on
- * a match or a practice opens "Who you played" for it, to tag people after
- * the fact. Tags of you that you haven't answered sit at the very top, under
+ * a match or a practice opens its score and "Who you played", to add a score
+ * or tag people after the fact; on drills, its score (Oct 6). Tags of you
+ * that you haven't answered sit at the very top, under
  * "Tagged you", with Accept and Decline and your side of the result ("You
  * won"); a session you accepted into your log reads as yours, shared with
  * you ("Practice", labelled "with Mira"), with Post it to post it as your
@@ -295,9 +297,9 @@ export default function YourSessions() {
                     people={people}
                     // A match or a practice opens who you played (a tag's copy, its tag); drills and fitness open their picture to share.
                     onOpen={from ? () => router.push({ pathname: '/session-tag', params: { tag: from.id } })
-                      : canTagKind(s.kind) && !s.fromSessionId ? () => router.push({ pathname: '/log-session', params: { edit: s.id } })
+                      : canScore(s.kind) && !s.fromSessionId ? () => router.push({ pathname: '/log-session', params: { edit: s.id } })
                       : share}
-                    openWord={from ? 'Open the tag' : canTagKind(s.kind) && !s.fromSessionId ? 'Who you played' : 'Share'}
+                    openWord={from ? 'Open the tag' : canScore(s.kind) && !s.fromSessionId ? (canTagKind(s.kind) ? 'Score and who you played' : 'Score') : 'Share'}
                     // Built from the tag, the title already says who it was with: no note line repeating it.
                     hideNote={!!(from && fromFirst)}
                     source={source}
