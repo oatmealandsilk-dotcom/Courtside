@@ -113,11 +113,10 @@ const wimbledonColors: Palette = {
   link: '#245E93', onMedia: '#FFFFFF',
   bubble: '#E2EBD6',
   bubbleMine: '#246A39', onDanger: '#FFFFFF',
-  // The London shirt's purple as a soft lilac (Oct 6, owner: "Try Wimbledon theme where its purple/
-  // lilac color"): the shirt's green glowing top right, its purple, lifted, bottom left, all the words
-  // in a deep aubergine: small and quiet words 4.7:1 or more on the fill and both corners.
-  cardFill: '#B9A7D6', cardGlowTop: '#8DC48A', cardGlowBottom: '#A28FCB',
-  cardFigure: '#2A1E45', cardInk: '#2E1F4A', cardMuted: '#33284C',
+  // The London shirt, deepened so its cream lettering holds: grass green, a fresher green top right,
+  // the club's purple bottom left. (Oct 6: lilac was tried; owner: "for the London one green looks better".)
+  cardFill: '#326F37', cardGlowTop: '#377A34', cardGlowBottom: '#615782',
+  cardFigure: '#FAF8F0', cardInk: '#FAF8F0', cardMuted: '#F0F1E7',
 };
 
 /**
