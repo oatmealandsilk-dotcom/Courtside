@@ -54,6 +54,7 @@ import { knownOpen, notKnownAdult, type AgeSource, type Openness, type OpennessM
 import type { TeenMap } from '@/features/players/mapPrivacy';
 import { show as showToast } from '@/lib/toast';
 import { opensAtFor } from '@/features/hits/audience';
+import { keepUnsentCoachQuestion } from '@/features/coaching/unsentQuestion';
 import { forgetPushToken, registerForPush } from '@/features/push/push';
 import { stopWorkoutWatch } from '@/features/health/workoutWatch';
 import { framesAt } from '@/features/compose/frames';
@@ -4366,7 +4367,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // says why for the first; this one for the rest.
       const saveQuestion = (q: CoachQuestion) => remote.upsertCoachQuestion(q).catch(() => 'failed' as const).then((r) => {
         if (r === 'blocked' || r === 'failed') setState((prev) => ({ ...prev, coachQuestions: prev.coachQuestions.filter((x) => x.id !== q.id) }));
-        if (r === 'failed') showToast({ title: 'Your question didn’t post', body: 'Check your connection and try again.', icon: 'alert-circle-outline' });
+        if (r === 'failed') {
+          // What was typed is kept: "Ask again" opens Ask a coach with it filled in.
+          keepUnsentCoachQuestion({ title: q.title, body: q.body, specialty: q.specialty });
+          showToast({ title: 'Your question didn’t post', body: 'Your words are kept. Check your connection, then ask again.', icon: 'alert-circle-outline', action: { label: 'Ask again', onPress: () => router.push('/ask-coach') } });
+        }
         return r;
       });
       if (live(me, question.id)) {

@@ -317,7 +317,7 @@ export default function Health() {
           <View style={styles.stats}>
             {stat('Calories', latest.calories ? `${latest.calories}` : null)}
             {stat('Protein', latest.proteinGrams ? `${latest.proteinGrams}g` : null)}
-            {stat('Steps', latest.steps ? (latest.steps >= 10000 ? `${(latest.steps / 1000).toFixed(1)}k` : latest.steps.toLocaleString()) : null)}
+            {stat('Steps', latest.steps ? (latest.steps >= 10000 ? `${+(latest.steps / 1000).toFixed(1)}k` : latest.steps.toLocaleString()) : null)}
             {stat('Days', `${healthHistory.length}`)}
           </View>
         </View>

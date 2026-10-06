@@ -878,7 +878,7 @@ export interface AdminReport {
   /** The account the report is about. */
   userId?: ID;
   /** What was reported: a post, a hit, a thread, a reply, a comment, a coach question or reply, an account, or a chat. */
-  kind: ReportedItemKind | 'profile' | 'conversation';
+  kind: ReportedItemKind | 'profile' | 'conversation' | 'ai-coach';
   targetId?: ID;
   /** One message in a reported chat ("Report" on a message). */
   messageId?: ID;
@@ -2562,12 +2562,12 @@ export const remote = {
       const [kind, id] = (r.target ?? '').split(':');
       // A report about one message names it in the reason ("message:<id>"); the card points at it.
       const messageId = /^message:([0-9a-f-]{36})$/i.exec(r.reason ?? '')?.[1];
-      // A reported AI coach answer (ai-coach.tsx) has nothing to open: the card says what it said.
-      const aiReply = kind === 'ai-reply' ? (r.target ?? '').slice('ai-reply:'.length) : undefined;
+      // A reported AI coach answer or week (ai-coach.tsx) has nothing to open: the card says what it said.
+      const aiWords = kind === 'ai-reply' || kind === 'ai-plan' ? (r.target ?? '').slice(kind.length + 1) : undefined;
       return {
         id: r.id, reporterId: r.reporter_id ?? undefined, userId: r.target_user_id ?? undefined,
-        kind: (ITEM_KINDS as string[]).includes(kind) || kind === 'conversation' ? kind as AdminReport['kind'] : 'profile', targetId: aiReply === undefined ? id || undefined : undefined,
-        messageId, reason: messageId ? 'one message' : aiReply !== undefined ? `AI coach answer: “${aiReply}”` : r.reason || undefined,
+        kind: aiWords !== undefined ? 'ai-coach' : (ITEM_KINDS as string[]).includes(kind) || kind === 'conversation' ? kind as AdminReport['kind'] : 'profile', targetId: aiWords === undefined ? id || undefined : undefined,
+        messageId, reason: messageId ? 'one message' : aiWords !== undefined ? `AI coach ${kind === 'ai-plan' ? 'week' : 'answer'}: “${aiWords}”` : r.reason || undefined,
         createdAt: r.created_at, status: (r.status ?? 'open') as AdminReport['status'], reviewedAt: r.reviewed_at ?? undefined,
       };
     });

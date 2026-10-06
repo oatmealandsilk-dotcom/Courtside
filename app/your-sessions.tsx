@@ -212,6 +212,8 @@ export default function YourSessions() {
                     onOpen={from ? () => router.push({ pathname: '/session-tag', params: { tag: from.id } })
                       : canTagKind(s.kind) && !s.fromSessionId ? () => router.push({ pathname: '/log-session', params: { edit: s.id } })
                       : undefined}
+                    // One you logged yourself, however old: held, it can be removed (a copy from someone's tag is theirs to change).
+                    onRemove={s.fromSessionId ? undefined : () => confirm({ title: 'Remove this session?', message: 'It comes off your streak and totals.', confirmLabel: 'Remove', destructive: true, onConfirm: () => actions.deleteSession(s.id) })}
                     // Built from the tag, the title already says who it was with: no note line repeating it.
                     hideNote={!!(from && fromFirst)}
                     source={s.fromSessionId ? (fromFirst ? `with ${fromFirst}` : 'Shared with you') : pickSource(pick)}
@@ -400,11 +402,13 @@ function TaggedYou({ tag, tagger, line }: { tag: SessionTag; tagger: User; line:
  * a share button beside it (the session as a picture for Instagram). A tap on
  * the rest opens who you played (or, for a copy from a tag, that tag).
  */
-function Logged({ session: s, people, onOpen, hideNote = false, source, postId, postable, onPost, onShare, line }: {
+function Logged({ session: s, people, onOpen, onRemove, hideNote = false, source, postId, postable, onPost, onShare, line }: {
   session: PracticeSession;
   /** "vs Mira" (accepted), "vs June · Waiting", "with Dev", a name you typed. */
   people: PeopleLine | null;
   onOpen?: () => void;
+  /** Held: asks, then removes the session (one you logged yourself). */
+  onRemove?: () => void;
   /** The note says nothing the title doesn't (a copy from a tag). */
   hideNote?: boolean;
   source: string; postId?: string; postable: boolean; onPost: () => void; onShare: () => void; line: boolean;
@@ -420,10 +424,14 @@ function Logged({ session: s, people, onOpen, hideNote = false, source, postId, 
     <View style={[styles.row, line && styles.line]}>
       {/* The row itself, beside its button rather than around it: a button inside a button is not allowed in a browser. */}
       <Pressable
-        accessibilityRole={onOpen ? 'button' : undefined}
-        accessibilityLabel={onOpen ? `${title}, ${duration(s.minutes)}, ${dayWords(s.day)}. ${s.fromSessionId ? 'Open the tag' : 'Who you played'}` : undefined}
-        disabled={!onOpen}
+        accessibilityRole={onOpen || onRemove ? 'button' : undefined}
+        accessibilityLabel={onOpen ? `${title}, ${duration(s.minutes)}, ${dayWords(s.day)}. ${s.fromSessionId ? 'Open the tag' : 'Who you played'}` : onRemove ? `${title}, ${duration(s.minutes)}, ${dayWords(s.day)}` : undefined}
+        accessibilityHint={onRemove ? 'Hold to remove it' : undefined}
+        accessibilityActions={onRemove ? [{ name: 'longpress', label: 'Remove this session' }] : undefined}
+        onAccessibilityAction={(e) => { if (e.nativeEvent.actionName === 'longpress') onRemove?.(); }}
+        disabled={!onOpen && !onRemove}
         onPress={onOpen}
+        onLongPress={onRemove}
         style={({ pressed }) => [styles.rowMain, pressed && onOpen && styles.pressed]}
       >
         <View style={styles.icon}>

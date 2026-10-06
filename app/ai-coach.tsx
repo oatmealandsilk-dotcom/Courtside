@@ -108,7 +108,7 @@ export default function AiCoachRoute() {
           <View style={introStyles.mark}><Ionicons name="sparkles" size={20} color={colors.brand} /></View>
           <Text style={introStyles.title}>Two quick questions first</Text>
           <Text style={introStyles.body}>How fit you are, how often you can play, and what you’re working toward. The coach plans your week around them.</Text>
-          <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: '/onboarding', params: { from: 'coach', step: '3' } })} style={({ pressed }) => [introStyles.go, pressed && { opacity: 0.85 }]}>
+          <Pressable accessibilityRole="button" onPress={() => { setLater(true); router.push({ pathname: '/onboarding', params: { from: 'coach', step: '3' } }); }} style={({ pressed }) => [introStyles.go, pressed && { opacity: 0.85 }]}>
             <Text style={introStyles.goText}>Start</Text>
           </Pressable>
           <Pressable accessibilityRole="button" onPress={() => setLater(true)} hitSlop={8}><Text style={introStyles.later}>Skip for now</Text></Pressable>
@@ -352,6 +352,22 @@ function Train() {
             <Text style={styles.weekOf}>Week of {formatDate(plan.weekOf)}{written ? '' : live ? ' · a simpler plan, the coach could not be reached' : ''}</Text>
             <Text style={styles.headline}>{plan.headline}</Text>
             <Text style={styles.summary}>{plan.summary}</Text>
+            {/* The week the AI wrote can be reported, as its answers can (Google Play's
+                AI-generated content rule). Never the simpler plan the app writes itself. */}
+            {written ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Report this week"
+                hitSlop={8}
+                style={styles.report}
+                onPress={() => confirmReport('week', () => {
+                  actions.reportUser('ai-coach', `ai-plan:${plan.headline.slice(0, 180)}`);
+                  showToast({ title: 'Thanks — a person will review this', icon: 'flag-outline' });
+                })}
+              >
+                <Text style={styles.reportText}>Report</Text>
+              </Pressable>
+            ) : null}
             <View style={styles.tileRow}>
               <Stat label="Sessions" value={String(onCourtDays)} hint="this week" />
               <Stat label="Volume" value={duration(totalMinutes)} hint="planned" />
