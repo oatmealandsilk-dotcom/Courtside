@@ -14,6 +14,10 @@ const GAP = 3;
 const RING = 2.5;
 /** One slow breath out from the face, the map pins' beat. */
 const BEAT = 2800;
+/** How far the halo breathes out (its scale, less 1): the map's, or a smaller one for a row of faces side by side. */
+const REACH = { full: 0.85, small: 0.4 } as const;
+/** Reduce Motion: the halo held still, this big. */
+const REST = { full: 1.3, small: 1.2 } as const;
 
 /**
  * A face wearing the Open to hit look, the same one the map's pins wear:
@@ -23,11 +27,15 @@ const BEAT = 2800;
  * hairline takes its place (`hairline`). Reduce Motion: the ring fades in
  * and the halo holds still.
  *
+ * `halo="small"`: in a row of faces (Community's Open to hit), the halo
+ * breathes out about half as far (1.4x; the map’s is 1.85x), so it stays
+ * clear of the faces beside it and inside the room the row gives it.
+ *
  * On the phone this runs on the animation thread; the browser's twin
  * (OpenRing.web) does the same with the browser's own animations, like the
  * map's pins, so nothing ticks on the page's main thread while a card is up.
  */
-export function OpenRing({ open, size, hairline = false, children }: { open: boolean; /** The face's own size. */ size: number; /** Off, a faint ring stays, so the face still reads as a place to look (your own card). */ hairline?: boolean; children: React.ReactNode }) {
+export function OpenRing({ open, size, hairline = false, halo = 'full', children }: { open: boolean; /** The face's own size. */ size: number; /** Off, a faint ring stays, so the face still reads as a place to look (your own card). */ hairline?: boolean; /** How far the halo breathes out: the map's, or `small` in a row of faces. */ halo?: 'full' | 'small'; children: React.ReactNode }) {
   useTheme();
   const reduce = useReducedMotion();
   const box = size + GAP * 2 + RING * 2 + 2;
@@ -65,17 +73,19 @@ export function OpenRing({ open, size, hairline = false, children }: { open: boo
       strokeOpacity: Math.min(1, on.value * 8),
     }), [reduce, lap]);
   const line = useAnimatedStyle(() => ({ opacity: 1 - on.value }));
-  const halo = useAnimatedStyle(() => {
-    if (reduce) return { opacity: 0.2 * on.value, transform: [{ scale: 1.3 }] };
+  const reach = REACH[halo];
+  const rest = REST[halo];
+  const breath = useAnimatedStyle(() => {
+    if (reduce) return { opacity: 0.2 * on.value, transform: [{ scale: rest }] };
     const t = beat.value;
-    return { opacity: on.value * 0.45 * Math.max(0, 1 - t / 0.7), transform: [{ scale: 1 + 0.85 * t }] };
-  });
+    return { opacity: on.value * 0.45 * Math.max(0, 1 - t / 0.7), transform: [{ scale: 1 + reach * t }] };
+  }, [reduce, reach, rest]);
   const face = useAnimatedStyle(() => ({ transform: [{ scale: pop.value }] }));
   const inner = size + GAP * 2;
 
   return (
     <View style={{ width: box, height: box, alignItems: 'center', justifyContent: 'center' }}>
-      <Animated.View pointerEvents="none" style={[{ position: 'absolute', width: inner, height: inner, borderRadius: inner / 2, backgroundColor: colors.open }, halo]} />
+      <Animated.View pointerEvents="none" style={[{ position: 'absolute', width: inner, height: inner, borderRadius: inner / 2, backgroundColor: colors.open }, breath]} />
       {hairline ? <Animated.View pointerEvents="none" style={[{ position: 'absolute', width: box - 2, height: box - 2, borderRadius: box / 2, borderWidth: 1.5, borderColor: colors.borderStrong }, line]} /> : null}
       <Svg pointerEvents="none" width={box} height={box} style={{ position: 'absolute', transform: [{ rotate: '-90deg' }] }}>
         <ACircle cx={box / 2} cy={box / 2} r={r} fill="none" stroke={colors.open} strokeWidth={RING} strokeLinecap="round" strokeDasharray={`${lap} ${lap}`} animatedProps={ring} />

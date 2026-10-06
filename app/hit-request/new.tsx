@@ -14,7 +14,7 @@ import { AudienceCards, GroupsCard, InviteRow } from '@/features/hits/WhoSeesFir
 import { isMapCourtId } from '@/features/places/courtName';
 import { fetchCourts, isClosedCourt, type Court } from '@/features/players/courts';
 import { milesBetween } from '@/features/players/geo';
-import { hitsWithinLine } from '@/features/players/openToHit';
+import { clockWords, hitsWithinLine } from '@/features/players/openToHit';
 import { homeFor } from '@/features/players/positions';
 import { useMyCity } from '@/features/players/useMyCity';
 import { show as showToast } from '@/lib/toast';
@@ -23,9 +23,11 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, lift, radius, spacing, typography } from '@/theme';
 
 const HOURS = [6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21];
-const hourLabel = (h: number) => `${h % 12 || 12} ${h < 12 ? 'AM' : 'PM'}`;
-/** "6:00 AM" or "6:30 AM": the hour with its minutes. */
-const timeLabel = (h: number, half: boolean) => `${h % 12 || 12}:${half ? '30' : '00'} ${h < 12 ? 'AM' : 'PM'}`;
+/**
+ * "6pm", "6:30pm", "noon": a time the way people say it, and the way its
+ * sibling sheet, Open to hit (opened from the same map), writes its times.
+ */
+const timeLabel = (h: number, half = false) => { const d = new Date(); d.setHours(h, half ? 30 : 0, 0, 0); return clockWords(d); };
 const FORMAT_LABEL: Record<HitRequest['format'], string> = { singles: 'Singles', doubles: 'Doubles', hit: 'Just hitting' };
 
 /**
@@ -136,11 +138,11 @@ export default function NewHit() {
   const opensAt = audience === 'invite_first' ? new Date(opensAtFor(start.toISOString())) : null;
   // Starting within 3 hours, that time has already passed: it is on Find Players straight away (as the server opens it).
   const opensNow = !!opensAt && opensAt.getTime() <= Date.now() + 60_000;
-  // "at 5:30 PM" today, "Sat at 5:30 PM" another day.
-  const opensText = opensAt ? `${opensAt.toDateString() === new Date().toDateString() ? '' : `${opensAt.toLocaleDateString([], { weekday: 'short' })} `}at ${opensAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : '';
+  // "at 5:30pm" today, "Sat at 5:30pm" another day: the same words as the times above.
+  const opensText = opensAt ? `${opensAt.toDateString() === new Date().toDateString() ? '' : `${opensAt.toLocaleDateString([], { weekday: 'short' })} `}at ${clockWords(opensAt)}` : '';
   // The invite as it will read, updated as you choose.
   const dayWord = day === 0 ? 'Today' : day === 1 ? 'Tomorrow' : days[day].toLocaleDateString([], { weekday: 'long' });
-  const summary = [FORMAT_LABEL[format], `${dayWord} at ${half ? timeLabel(hour, true) : hourLabel(hour)}`, where?.name].filter(Boolean).join(' · ');
+  const summary = [FORMAT_LABEL[format], `${dayWord} at ${timeLabel(hour, half)}`, where?.name].filter(Boolean).join(' · ');
 
   const post = async () => {
     if (!ready || !where) return;
@@ -193,7 +195,7 @@ export default function NewHit() {
 
   return (
     <DragSheet fitContent closeSignal={closeSignal} onDismissed={done} peekFraction={0.86}
-      header={<SheetTitle title={asked.length ? (params.rematch === '1' && asked.length === 1 ? `Rematch with ${askedNames}?` : `Ask ${askedNames} to hit`) : 'Looking for a hit'} line={summary} lineTone="brand" onClose={() => setCloseSignal((n) => n + 1)} />}>
+      header={<SheetTitle title={asked.length ? (params.rematch === '1' && asked.length === 1 ? `Rematch with ${askedNames}?` : `Ask ${askedNames} to hit`) : 'Looking for a hit'} line={summary} onClose={() => setCloseSignal((n) => n + 1)} />}>
       <ScrollView contentContainerStyle={formBody} keyboardShouldPersistTaps="handled">
         {/* Asked: said first, before anything is picked, so "Ask Sam" never reads as a private invite. */}
         {asked.length && !inviting ? (
@@ -204,10 +206,10 @@ export default function NewHit() {
         ) : null}
         <Section title="When">
           <Tiles scroll value={day} onChange={setDay} options={days.map((d, i) => ({ value: i, top: i === 0 ? 'Today' : d.toLocaleDateString([], { weekday: 'short' }), main: String(d.getDate()), label: d.toDateString() }))} />
-          <ChipStrip value={hour} onChange={setHour} options={hours.map((h) => ({ value: h, label: hourLabel(h) }))} />
+          <ChipStrip value={hour} onChange={setHour} options={hours.map((h) => ({ value: h, label: timeLabel(h) }))} />
           {/* The chosen hour, on the hour or at half past: chips the same size as the hours, sliding in under them. */}
           <Animated.View key={hour} entering={FadeInDown.duration(200)}>
-            <ChipStrip value={half ? 30 : 0} onChange={(m) => setHalf(m === 30)} options={[{ value: 0, label: timeLabel(hour, false) }, { value: 30, label: timeLabel(hour, true) }]} />
+            <ChipStrip value={half ? 30 : 0} onChange={(m) => setHalf(m === 30)} options={[{ value: 0, label: timeLabel(hour) }, { value: 30, label: timeLabel(hour, true) }]} />
           </Animated.View>
         </Section>
 

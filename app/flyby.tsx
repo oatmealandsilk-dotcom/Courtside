@@ -23,8 +23,10 @@ import { colors, font, spacing, typography } from '@/theme';
  * session's pill. Each with Follow, and what they did there, by the part of
  * the day only ("Posted this morning", "Checked in this evening"), never a
  * time. The people you played that day are not listed (they are on your
- * session already); the sheet says so by first name. Only people the server
- * lets you see (flyby, migration 130), said under the list.
+ * session already); the sheet says so by first name ("You played with
+ * Mira."). Only people the server lets you see (flyby, migration 130), said
+ * under the list: friends, and public players who posted there; a check-in
+ * only to friends.
  *
  * Opened with ?court= (the map's id), ?name= and ?day= ('YYYY-MM-DD').
  */
@@ -63,7 +65,7 @@ export default function FlybySheet() {
       : people.length ? `${people.length} other players were here`
         : undefined;
   // The people you played that day are on your session already: one quiet line says why they aren't here.
-  const playedNote = played.length ? `${andList(played.map((u) => firstName(u.name)))} ${played.length === 1 ? 'is' : 'are'} on your session already.` : null;
+  const playedNote = played.length ? `You played with ${andList(played.map((u) => firstName(u.name)))}.` : null;
 
   return (
     <DragSheet fitContent closeSignal={closeSignal} onDismissed={() => router.back()} peekFraction={0.7} contentHeight={contentH || undefined}
@@ -104,7 +106,7 @@ export default function FlybySheet() {
         ) : null}
         <View style={[styles.fine, playedNote ? styles.fineNext : null]}>
           <Ionicons name="lock-closed-outline" size={13} color={colors.textFaint} />
-          <Text style={styles.fineText}>Only friends and public players. Check-ins: friends only.</Text>
+          <Text style={styles.fineText}>You see friends, and public players who posted here. Check-ins show to friends only.</Text>
         </View>
       </ScrollView>
     </DragSheet>

@@ -157,8 +157,9 @@ function CourtPage() {
       subtitle={subtitle ?? (areaDone ? undefined : '\u00A0')}
       compactTitle
       // A long name ("Bellwood Recreation Center") ran to three lines beside the icons on a small
-      // phone: held to two, a step smaller. A short one keeps the usual size.
-      titleLines={name.length > 18 ? 2 : undefined}
+      // phone: held to two, and a step smaller only when it would wrap at the usual size, so
+      // "Alder Park" and a longer name that still fits on one line read the same size.
+      titleLines={2}
       onBack={() => goBack()}
       onRefresh={isDesktopBrowser() ? undefined : refresh}
       right={

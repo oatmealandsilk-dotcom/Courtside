@@ -27,6 +27,28 @@ const ITEM = 86;
 const ROW_PAD = spacing.lg - 6;
 /** Your own face's middle, from the page's left margin: the row's own padding, then half your item, less the margin the row runs out into. */
 const MINE_CENTER = ROW_PAD + ITEM / 2 - spacing.lg;
+/**
+ * Room above the faces for their green halo, which the sideways scroller
+ * would otherwise cut off flat. The scroller reaches up into the gap under
+ * the heading by as much, so nothing on the page moves.
+ */
+const HALO = 12;
+/**
+ * Room below the row, the same way, for the bottom of the "till midnight"
+ * under your face: a full 44pt to tap without the browser's help (it has no
+ * hitSlop). Less than the page's 16 between parts, so it never reaches the next one.
+ */
+const BELOW = 12;
+/** "till midnight": drawn as one small line, tapped as 44pt, all of it below your ring's switch (never over it). */
+const TILL_LINE = 14;
+const TILL_PAD_TOP = 2;
+const TILL_PAD_BOTTOM = 44 - TILL_LINE - TILL_PAD_TOP;
+/**
+ * The room it takes in the row: two of those lines, so your item is as tall
+ * as a player's beside it (a name, how far, until when) and the row is one
+ * height whether or not anyone is open. The rest of its 44pt hangs below.
+ */
+const TILL_ROOM = 2 * TILL_LINE + 6;
 
 /** Someone open to hit, near you: who, how far (if we know where you are), when they were last there, and until when they are open. */
 interface Up { user: User; miles?: number; rough: boolean; seenAt?: string; until?: string }
@@ -132,7 +154,7 @@ export function UpToday({ me, people, teen = false, locationOn, finding = false,
         <View style={styles.item}>
           <Pressable accessibilityRole="switch" accessibilityState={{ checked: up }} accessibilityLabel={up ? `You’re open to hit${till ? ` ${till}` : ''}. Turn off` : 'I’m free. Turn on open to hit'} accessibilityHint="Hold to edit your time and distance" accessibilityActions={[{ name: 'longpress', label: 'Edit your time and distance' }]} onAccessibilityAction={(e) => { if (e.nativeEvent.actionName === 'longpress') edit(); }} onPress={flip} onLongPress={held} delayLongPress={400} style={({ pressed }) => [styles.face, pressed && styles.pressed]}>
             <View>
-              <OpenRing open={up} size={FACE} hairline><Avatar name={me.name} seed={me.avatarSeed} uri={me.avatarUrl} size={FACE} /></OpenRing>
+              <OpenRing open={up} size={FACE} hairline halo="small"><Avatar name={me.name} seed={me.avatarSeed} uri={me.avatarUrl} size={FACE} /></OpenRing>
               {up ? null : <Animated.View entering={FadeIn.duration(160)} style={styles.plus}><Ionicons name="add" size={14} color={colors.bg} /></Animated.View>}
             </View>
             {/* On: ink words after a small green dot, as a player's card says it (green words were too faint to read on the court palettes). */}
@@ -141,12 +163,18 @@ export function UpToday({ me, people, teen = false, locationOn, finding = false,
               <Text style={[styles.name, styles.nameIn]} numberOfLines={1}>{up ? 'You’re open' : 'I’m free'}</Text>
             </View>
           </Pressable>
+          {/* 44pt tall in its own padding, all of it below the switch, so a near miss never turns your ring off.
+              Off, the same box held empty, so turning on never moves the row. */}
           {up && till ? (
-            <Pressable accessibilityRole="button" accessibilityLabel={`Open ${till}. Change your time and distance`} hitSlop={{ top: 6, bottom: 14, left: 8, right: 8 }} onPress={edit} style={({ pressed }) => [styles.tillLink, pressed && styles.pressed]}>
+            <Pressable accessibilityRole="button" accessibilityLabel={`Open ${till}. Change your time and distance`} hitSlop={{ left: 8, right: 8 }} onPress={edit} style={({ pressed }) => [styles.tillLink, pressed && styles.pressed]}>
               <Text style={styles.meta} numberOfLines={1}>{till}</Text>
               <Ionicons name="chevron-forward" size={10} color={colors.textMuted} />
             </Pressable>
-          ) : <Text style={[styles.meta, styles.metaBlank]}> </Text>}
+          ) : (
+            <View style={styles.tillLink} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+              <Text style={styles.meta}> </Text>
+            </View>
+          )}
         </View>
         {people.map((p) => {
           const theirs = tillLabel(p.until);
@@ -154,7 +182,7 @@ export function UpToday({ me, people, teen = false, locationOn, finding = false,
           return (
             <Animated.View key={p.user.id} entering={FadeIn.duration(220)} layout={LinearTransition.duration(220)}>
               <Pressable accessibilityRole="link" accessibilityLabel={`${p.user.name}, open to hit${theirs ? ` ${theirs}` : ''}${far ? `, ${far}` : ''}. Show on the map`} onPress={() => router.push({ pathname: '/map', params: { user: p.user.id } })} style={({ pressed }) => [styles.item, styles.face, pressed && styles.pressed]}>
-                <OpenRing open size={FACE}><Avatar name={p.user.name} seed={p.user.avatarSeed} uri={p.user.avatarUrl} size={FACE} ring={p.user.isCoach} /></OpenRing>
+                <OpenRing open size={FACE} halo="small"><Avatar name={p.user.name} seed={p.user.avatarSeed} uri={p.user.avatarUrl} size={FACE} ring={p.user.isCoach} /></OpenRing>
                 <Text style={styles.name} numberOfLines={1}>{p.user.name.split(' ')[0]}</Text>
                 {/* How far, then until when ("till 8pm"): two short lines, so neither is cut off. */}
                 {far ? <Text style={styles.meta} numberOfLines={1}>{far}</Text> : null}
@@ -187,9 +215,10 @@ const styleDefinitions = StyleSheet.create({
   head: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', paddingTop: spacing.xs },
   title: { ...typography.title, color: colors.text },
   count: { ...typography.small, color: colors.textMuted },
-  // Runs to the screen's edges, the way the stories rail does.
-  scroll: { marginHorizontal: -spacing.lg },
-  row: { paddingHorizontal: ROW_PAD, gap: 2, alignItems: 'flex-start' },
+  // Runs to the screen's edges, the way the stories rail does, and a little above and below the
+  // faces' line (into the gaps around it), so the halos and your "till" are never cut off.
+  scroll: { marginHorizontal: -spacing.lg, marginTop: -HALO, marginBottom: -BELOW },
+  row: { paddingHorizontal: ROW_PAD, paddingTop: HALO, paddingBottom: BELOW, gap: 2, alignItems: 'flex-start' },
   item: { width: ITEM, alignItems: 'center', paddingVertical: 2 },
   face: { alignItems: 'center', gap: 3 },
   pressed: { opacity: 0.7 },
@@ -199,9 +228,9 @@ const styleDefinitions = StyleSheet.create({
   name: { ...typography.smallStrong, color: colors.text, marginTop: 2, flexShrink: 1 },
   nameIn: { marginTop: 0 },
   meta: { ...typography.caption, letterSpacing: 0, color: colors.textMuted, ...font('500') },
-  // "till midnight", once you are open: a quiet way into the sheet, the same as holding.
-  tillLink: { flexDirection: 'row', alignItems: 'center', gap: 1, marginTop: 1, paddingVertical: 2 },
-  metaBlank: { marginTop: 3 },
+  // "till midnight", once you are open: a quiet way into the sheet, the same as holding. Drawn as
+  // one line; its 44pt runs on down past the item (the row's BELOW room), never up over the switch.
+  tillLink: { flexDirection: 'row', alignItems: 'center', gap: 1, marginTop: 1, paddingTop: TILL_PAD_TOP, paddingBottom: TILL_PAD_BOTTOM, marginBottom: TILL_ROOM - 1 - 44 },
   empty: { justifyContent: 'center', height: FACE + 18, paddingLeft: spacing.sm, maxWidth: 210 },
   emptyText: { ...typography.small, color: colors.textMuted },
   emptyLink: { ...typography.smallStrong, color: colors.brand, marginTop: 2 },

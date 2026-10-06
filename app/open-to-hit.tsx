@@ -139,6 +139,27 @@ export default function OpenToHitSheet() {
     close();
   };
 
+  // A time in the strip that is one of the quick picks (6pm, 9pm, midnight, or your own time): that
+  // chip lights for it, never "Pick a time", so one moment is never offered as two different choices.
+  const chipAt = (d: Date): Until | null => {
+    const t = d.getTime();
+    if (t === onTheMinute(endOfToday()).getTime()) return 'midnight';
+    if (t === six.getTime() && ahead(six)) return 'six';
+    if (t === nine.getTime() && ahead(nine)) return 'nine';
+    if (startedOnKeep && current && t === current.getTime()) return 'keep';
+    return null;
+  };
+  const lit: Until = until === 'time' ? (chipAt(slots[slot] ?? slots[0]) ?? 'time') : until;
+  const pick = (v: Until | undefined) => {
+    if (!v) return;
+    // "Pick a time" is for any other time: it opens on the first half hour that isn't a chip already.
+    if (v === 'time' && chipAt(slots[slot] ?? slots[0])) {
+      const free = slots.findIndex((d) => !chipAt(d));
+      if (free >= 0) setSlot(free);
+    }
+    setUntil(v);
+  };
+
   // Your own time, when it is none of the quick picks: kept as it is unless you pick another.
   const keepWords = current ? (tillLabel(current.toISOString()) ?? `till ${clockWords(current)}`) : null;
   const quick: { value: Until; label: string }[] = [
@@ -155,8 +176,9 @@ export default function OpenToHitSheet() {
       header={<SheetTitle title="Open to hit" line={summary} onClose={close} />}>
       <ScrollView contentContainerStyle={formBody} keyboardShouldPersistTaps="handled" onContentSizeChange={(_, h) => { const r = Math.ceil(h); if (r !== contentH) setContentH(r); }}>
         <Section title="Open until">
-          <Chips value={until} onChange={(v) => { if (v) setUntil(v); }} options={quick} />
-          {/* Any other time: one strip of half hours, from the next one on through the night. */}
+          <Chips value={lit} onChange={pick} options={quick} />
+          {/* Any other time: one strip of half hours, from the next one on through the night. It stays open
+              on a time that is a chip (9pm, midnight): that chip lights above it, the same moment. */}
           {until === 'time' ? (
             <Animated.View entering={FadeInDown.duration(200)} style={styles.picker}>
               <ChipStrip value={slot} onChange={setSlot} options={slots.map((d, i) => ({ value: i, label: clockWords(d) }))} />

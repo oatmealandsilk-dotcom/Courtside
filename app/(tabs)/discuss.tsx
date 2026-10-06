@@ -447,6 +447,8 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   }, [questions, topic, blockedIds, mutedIds, sort]);
   // A long list is drawn in slices: the first screenfuls at once, the rest on request.
   const slice = visible.slice(0, shownCount);
+  // The sort row goes with an empty topic: so does its menu, if it was open.
+  useEffect(() => { if (!anyInTopic) setSortOpen(false); }, [anyInTopic]);
 
   // Where to play: the courts you follow, with what is new at each, then the others in town, each a tap from its page.
   const yourCourts = <YourCourts from={youAt} />;
@@ -665,7 +667,10 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
             </View>
           ))}
         </ScrollView>
-        {/* One quiet line under the topics: how many threads, and a single Sort button, the way Reddit does it. */}
+        {/* One quiet line under the topics: how many threads, and a single Sort button, the way Reddit does it.
+            A topic with no threads at all has nothing to sort, so no row (the empty state says the rest);
+            one that Unanswered emptied keeps it, beside "All caught up". */}
+        {anyInTopic ? (
         <View style={styles.sortRow}>
           {/* Nothing here: the empty state below says so, not "0 threads" over it. */}
           <Text style={styles.sortCount}>{visible.length === 0 ? '' : visible.length === 1 ? '1 thread' : `${visible.length} threads`}</Text>
@@ -690,6 +695,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
             ) : null}
           </View>
         </View>
+        ) : null}
       </View>
 
       {visible.length === 0 && sort === 'unanswered' && anyInTopic ? (

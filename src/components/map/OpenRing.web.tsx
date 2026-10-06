@@ -23,6 +23,8 @@ const CSS = `
 .cs-or-halo{position:absolute;border-radius:999px;opacity:0;animation:cs-or-pulse 2.8s cubic-bezier(.22,.61,.36,1) infinite;animation-play-state:paused}
 .cs-or-on .cs-or-halo{animation-play-state:running}
 @keyframes cs-or-pulse{0%{transform:scale(1);opacity:.45}70%{opacity:0}100%{transform:scale(1.85);opacity:0}}
+.cs-or-sm .cs-or-halo{animation-name:cs-or-pulse-sm}
+@keyframes cs-or-pulse-sm{0%{transform:scale(1);opacity:.45}70%{opacity:0}100%{transform:scale(1.4);opacity:0}}
 .cs-or-line{position:absolute;box-sizing:border-box;border-radius:999px;pointer-events:none;transition:opacity .42s ease}
 .cs-or-on .cs-or-line{opacity:0}
 .cs-or-ring{position:absolute;left:0;top:0;transform:rotate(-90deg);overflow:visible;pointer-events:none}
@@ -33,6 +35,7 @@ const CSS = `
 @keyframes cs-or-pop{0%{transform:scale(1)}30%{transform:scale(1.08)}62%{transform:scale(.99)}100%{transform:scale(1)}}
 @media (prefers-reduced-motion:reduce){
 .cs-or-halo{animation:none;transform:scale(1.3);opacity:.2}
+.cs-or-sm .cs-or-halo{animation:none;transform:scale(1.2)}
 .cs-or-pop .cs-or-face{animation:none}
 .cs-or-ring circle,.cs-or-on .cs-or-ring circle{stroke-dashoffset:0;transition:opacity .26s ease}
 }
@@ -51,9 +54,10 @@ if (typeof document !== 'undefined' && !document.getElementById('cs-open-ring-cs
  * breathes out from it. Switched on, the ring draws itself round the face
  * and the face gives one small pop; off, the ring unwinds and a quiet
  * hairline takes its place (`hairline`). Reduce Motion: the ring fades in
- * and the halo holds still.
+ * and the halo holds still. `halo="small"`: a shorter breath (1.4x, not
+ * 1.85x) for a row of faces side by side, as on the phone.
  */
-export function OpenRing({ open, size, hairline = false, children }: { open: boolean; /** The face's own size. */ size: number; /** Off, a faint ring stays, so the face still reads as a place to look (your own card). */ hairline?: boolean; children: React.ReactNode }) {
+export function OpenRing({ open, size, hairline = false, halo = 'full', children }: { open: boolean; /** The face's own size. */ size: number; /** Off, a faint ring stays, so the face still reads as a place to look (your own card). */ hairline?: boolean; /** How far the halo breathes out: the map's, or `small` in a row of faces. */ halo?: 'full' | 'small'; children: React.ReactNode }) {
   useTheme();
   const box = size + GAP * 2 + RING * 2 + 2;
   const r = size / 2 + GAP + RING / 2;
@@ -75,7 +79,7 @@ export function OpenRing({ open, size, hairline = false, children }: { open: boo
   }, [pop]);
 
   return (
-    <div className={`cs-or${open ? ' cs-or-on' : ''}${pop ? ' cs-or-pop' : ''}`} style={{ width: box, height: box }}>
+    <div className={`cs-or${open ? ' cs-or-on' : ''}${pop ? ' cs-or-pop' : ''}${halo === 'small' ? ' cs-or-sm' : ''}`} style={{ width: box, height: box }}>
       <div className="cs-or-halo-wrap">
         <div className="cs-or-halo" style={{ left: (box - inner) / 2, top: (box - inner) / 2, width: inner, height: inner, background: colors.open }} />
       </div>

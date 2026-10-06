@@ -59,8 +59,10 @@ interface Props {
   onBack?: () => void;
   compactTitle?: boolean;
   /**
-   * A title that can run long (a court's name): at most this many lines, a
-   * step smaller, cut with "…" past them. Left out, a title takes the lines it needs.
+   * A title that can run long (a court's name): at most this many lines, cut
+   * with "…" past them, and a step smaller only when it would not fit on one
+   * line at the usual size, so a short name and a long one that still fits
+   * read the same size. Left out, a title takes the lines it needs.
    */
   titleLines?: number;
   /** Desktop-only right-hand column, Instagram style. Ignored below the desktop breakpoint. */
@@ -139,6 +141,12 @@ export function Screen({
   // The page's own height. A short page must still be able to scroll past the
   // pull strip, or it rests on the strip and its disc shows for good.
   const [viewH, setViewH] = useState(0);
+  // A long title (titleLines), as last measured at the usual size: which title, how wide its line, and whether it wrapped there.
+  const [titleFit, setTitleFit] = useState<{ title: string; w: number; wraps: boolean } | null>(null);
+  const titleSmall = !!titleLines && !!titleFit && titleFit.wraps && titleFit.title === title;
+  // What is drawn now, for the layout callback (a browser can hand it a callback from an earlier draw).
+  const titleNow = useRef({ title, small: titleSmall, fit: titleFit });
+  titleNow.current = { title, small: titleSmall, fit: titleFit };
   // Whether the keyboard is up. An iPhone says so as the keys start to move;
   // Android only once they have, since its "will" events never fire. Two
   // kinds of page listen. One with a pull strip on an iPhone: with the keys
@@ -482,7 +490,23 @@ export function Screen({
             </Pressable>
           ) : null}
           <View style={styles.headerText}>
-            <Text style={[compactTitle || !isPhone ? styles.titleCompact : styles.title, titleLines ? styles.titleCapped : null]} numberOfLines={titleLines}>{title}</Text>
+            {/* Measured at the usual size: more than one line there, and it steps down, staying down for this
+                title at this width (stepped down, it is not measured again unless the width changes). */}
+            <Text
+              style={[compactTitle || !isPhone ? styles.titleCompact : styles.title, titleSmall ? styles.titleCapped : null]}
+              numberOfLines={titleLines}
+              onLayout={titleLines ? (e) => {
+                const now = titleNow.current;
+                if (!now.title) return;
+                const w = Math.round(e.nativeEvent.layout.width);
+                // Stepped down: only a new width (a turned phone, a wider window) measures it again.
+                if (now.small) { if (now.fit && w !== now.fit.w) setTitleFit(null); return; }
+                const size = (compactTitle || !isPhone ? styles.titleCompact : styles.title).fontSize ?? 22;
+                const wraps = e.nativeEvent.layout.height > size * 1.8;
+                const t = now.title;
+                setTitleFit((prev) => (prev && prev.title === t && prev.w === w && prev.wraps === wraps ? prev : { title: t, w, wraps }));
+              } : undefined}
+            >{title}</Text>
             {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
           </View>
           {right}
@@ -619,7 +643,7 @@ const styleDefinitions = StyleSheet.create({
   headerText: { flex: 1, gap: 4 },
   title: { ...typography.display, color: colors.text },
   titleCompact: { ...typography.title, color: colors.text },
-  // A long name held to its lines: a step down from the compact title, the same tight tracking.
+  // A long name that would wrap at the usual size: a step down, the same tight tracking, held to its lines.
   titleCapped: { fontSize: 18, lineHeight: 23, letterSpacing: -0.4 },
   back: { paddingRight: spacing.xs, paddingVertical: spacing.xs },
   subtitle: { ...typography.small, color: colors.textMuted },
