@@ -305,7 +305,9 @@ export async function courtKings({ courtId, me, sessions, ranked = true }: { cou
     const board = [...wins.filter((w) => w.userId !== me), ...(ranked && mine.length ? [{ userId: me, n: mine.length, last: myLast }] : [])]
       .sort((a, b) => b.n - a.n || b.last.localeCompare(a.last));
     const rank = board.findIndex((w) => w.userId === me);
-    return { courtId, mode: board.length ? 'wins' : 'none', top: clone(board.slice(0, 3)), me: { wins: mine.length, ...(rank >= 0 ? { rank: rank + 1 } : {}), ranked: rank >= 0 } };
+    // More than ten placed above you: ranked, with no number ("10+"), as the server says it.
+    const over = rank > 10;
+    return { courtId, mode: board.length ? 'wins' : 'none', top: clone(board.slice(0, 3)), me: { wins: mine.length, ...(rank >= 0 && !over ? { rank: rank + 1 } : {}), ranked: rank >= 0, ...(over ? { over: true } : {}) } };
   }
   const regulars = DEMO_COURT_REGULARS[courtId] ?? [];
   if (regulars.length) return { courtId, mode: 'regulars', top: clone(regulars.slice(0, 3)), me: { wins: 0, ranked: false } };

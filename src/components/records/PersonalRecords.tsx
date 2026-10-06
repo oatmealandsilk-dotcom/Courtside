@@ -72,7 +72,7 @@ export function PersonalRecords({ records, sessions, sessionTags, users, current
       <View key={key} style={[styles.tile, gold && { borderColor: colors.sun, borderWidth: 1.5 }]} accessible accessibilityLabel={`${RECORD_LABEL[key]}: ${big}${small ? `, ${small}` : ''}${gold ? '. New this week' : ''}`}>
         <View style={styles.tileHead}>
           {gold ? <Ionicons name="trophy" size={13} color={colors.sun} /> : null}
-          <Text style={styles.tileLabel} numberOfLines={2}>{RECORD_LABEL[key]}</Text>
+          <Text style={styles.tileLabel} numberOfLines={1}>{RECORD_LABEL[key]}</Text>
         </View>
         <Text style={styles.tileValue} numberOfLines={1} adjustsFontSizeToFit>{big}</Text>
         {small ? <Text style={styles.tileSub} numberOfLines={1}>{small}</Text> : null}
@@ -111,10 +111,11 @@ export function PersonalRecords({ records, sessions, sessionTags, users, current
 /** The gold "Record" pill on a session that holds one, and "Best week" on a week's head. */
 export function RecordPill({ label = 'Record' }: { label?: string }) {
   const styles = useThemedStyles(styleDefinitions);
+  // The trophy gold, the word in ink: small gold letters on a gold tint are too faint to read.
   return (
     <View style={[styles.pill, { backgroundColor: `${colors.sun}22` }]} accessible accessibilityLabel={label === 'Record' ? 'Personal record' : label}>
       <Ionicons name="trophy" size={10} color={colors.sun} />
-      <Text style={[styles.pillText, { color: colors.sun }]}>{label}</Text>
+      <Text style={[styles.pillText, { color: colors.text }]}>{label}</Text>
     </View>
   );
 }
@@ -128,7 +129,8 @@ const styleDefinitions = StyleSheet.create({
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   tile: { ...lift, flexGrow: 1, flexBasis: '45%', minWidth: 140, borderRadius: 18, backgroundColor: colors.surface, paddingHorizontal: 14, paddingVertical: 12, gap: 4, borderWidth: 1.5, borderColor: 'transparent' },
   tileLike: { ...lift, borderRadius: 18, backgroundColor: colors.surface, borderWidth: 1.5, borderColor: 'transparent' },
-  tileHead: { flexDirection: 'row', alignItems: 'center', gap: 5, minHeight: 18 },
+  // One line, always the same height, so the numbers of two tiles side by side line up.
+  tileHead: { flexDirection: 'row', alignItems: 'center', gap: 5, height: 18 },
   tileLabel: { ...typography.small, ...font('500'), color: colors.textMuted, flexShrink: 1 },
   tileValue: { ...font('600'), fontSize: 24, lineHeight: 30, letterSpacing: -0.7, color: colors.text, fontVariant: ['tabular-nums'] },
   tileSub: { ...typography.small, color: colors.textMuted },

@@ -36,6 +36,7 @@ export function RecapCard({ recap, label = 'LAST WEEK' }: { recap: WeekRecap; la
   const styles = useThemedStyles(styleDefinitions);
   const [hours, minutes] = bigLength(recap.minutes);
   const compare = compareLine(recap);
+  const up = recap.minutes > recap.prevMinutes;
   const most = Math.max(...recap.days, 1);
   return (
     <View style={styles.card}>
@@ -52,9 +53,10 @@ export function RecapCard({ recap, label = 'LAST WEEK' }: { recap: WeekRecap; la
       </View>
       <Text style={styles.onCourt}>on court</Text>
       {compare ? (
-        <View style={styles.compare}>
-          <Ionicons name={recap.minutes >= recap.prevMinutes ? 'arrow-up' : 'arrow-down'} size={14} color={colors.brand} />
-          <Text style={styles.compareText}>{compare}</Text>
+        // Up wears the brand green; down (or the same) stays quiet: never a "win" colour for a lighter week.
+        <View style={[styles.compare, !up && styles.compareQuiet]}>
+          <Ionicons name={up ? 'arrow-up' : recap.minutes === recap.prevMinutes ? 'remove' : 'arrow-down'} size={14} color={up ? colors.brand : colors.textMuted} />
+          <Text style={[styles.compareText, !up && styles.compareTextQuiet]}>{compare}</Text>
         </View>
       ) : null}
       <View style={styles.bars} accessible accessibilityLabel={`Each day: ${recap.days.map((m, i) => `${DAY_LETTERS[i]} ${m} minutes`).join(', ')}`}>
@@ -76,10 +78,13 @@ export function RecapCard({ recap, label = 'LAST WEEK' }: { recap: WeekRecap; la
           <Text style={styles.statValue}>{`${recap.won}–${recap.lost}`}</Text>
           <Text style={styles.statLabel}>matches</Text>
         </View>
-        <View style={[styles.stat, styles.statLine]}>
-          <Text style={styles.statValue}>{recap.streak}</Text>
-          <Text style={styles.statLabel}>day streak</Text>
-        </View>
+        {/* A streak beside no sessions would read oddly (it counts posts and Instants too): only with a played week. */}
+        {recap.sessions ? (
+          <View style={[styles.stat, styles.statLine]}>
+            <Text style={styles.statValue}>{recap.streak}</Text>
+            <Text style={styles.statLabel}>day streak</Text>
+          </View>
+        ) : null}
       </View>
     </View>
   );
@@ -89,7 +94,8 @@ export function RecapCard({ recap, label = 'LAST WEEK' }: { recap: WeekRecap; la
 export function RecapHighlights({ recap, sessions }: { recap: WeekRecap; sessions: PracticeSession[] }) {
   const styles = useThemedStyles(styleDefinitions);
   const rows: { key: string; icon: 'flame' | 'trophy' | 'stats-chart'; tint: string; title: string; line: string }[] = [];
-  if (recap.bestWeek) rows.push({ key: 'week', icon: 'stats-chart', tint: colors.brand, title: 'Your biggest week yet', line: `${duration(recap.minutes)} on court, more than any week before` });
+  // The number is big on the card already: here, the best it beat.
+  if (recap.bestWeek) rows.push({ key: 'week', icon: 'stats-chart', tint: colors.brand, title: 'Your biggest week yet', line: `Beat your old best, ${duration(recap.bestBefore)}${recap.bestBeforeWeek ? ` (${weekRange(recap.bestBeforeWeek)})` : ''}` });
   if (recap.bestStreak && recap.streakFrom && recap.streakTo) {
     const inWeek = recap.streakFrom < recap.week ? recap.week : recap.streakFrom;
     rows.push({ key: 'streak', icon: 'flame', tint: colors.clay, title: 'Best streak yet', line: `${recap.streak} days in a row, ${weekdaySpan(inWeek, recap.streakTo)}` });
@@ -141,7 +147,7 @@ export function YourWeekBanner({ recap, onOpen, onClose }: { recap: WeekRecap; o
         <View style={{ flex: 1, gap: 2 }}>
           <Text style={styles.bannerLabel} numberOfLines={1}>{`YOUR WEEK · ${weekRange(recap.week).toUpperCase()}`}</Text>
           <Text style={styles.bannerTitle} numberOfLines={1}>{quiet ? 'A quiet week' : `${bigLength(recap.minutes).join(' ').trim()} on court · ${recap.sessions} ${recap.sessions === 1 ? 'session' : 'sessions'}`}</Text>
-          <Text style={styles.bannerLine} numberOfLines={1}>{quiet ? 'Up for a hit this week?' : compare ?? (recap.bestStreak ? 'Best streak yet' : 'Your first week here')}</Text>
+          <Text style={styles.bannerLine} numberOfLines={1}>{quiet ? 'Up for a hit this week?' : compare ?? (recap.bestStreak ? 'Best streak yet' : recap.firstWeek ? 'Your first week here' : recap.won ? `${recap.won} ${recap.won === 1 ? 'match' : 'matches'} won` : 'Back on court')}</Text>
         </View>
         <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
       </Pressable>
@@ -167,6 +173,8 @@ const styleDefinitions = StyleSheet.create({
   onCourt: { ...typography.body, color: colors.textMuted, marginTop: -2 },
   compare: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 6, marginTop: spacing.md, paddingHorizontal: 12, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: colors.brandDim },
   compareText: { ...font('600'), fontSize: 13.5, color: colors.brand },
+  compareQuiet: { backgroundColor: colors.surfaceAlt },
+  compareTextQuiet: { color: colors.textMuted },
   bars: { flexDirection: 'row', justifyContent: 'space-between', gap: 8, height: 130, marginTop: spacing.xl },
   barCol: { flex: 1, alignItems: 'center', gap: 6 },
   barSpace: { flex: 1, width: '100%', justifyContent: 'flex-end' },

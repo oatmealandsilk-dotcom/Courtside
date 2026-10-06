@@ -411,7 +411,8 @@ export default function Compose() {
     players: canTagKind(kind) ? players : [],
     // From a hit with nobody tagged and nothing typed, its people's names are kept as private words, as before.
     opponent: canTagKind(kind) ? (opponentText.trim() || (fromHit && !players.length ? fromHit.who : '')) : '',
-    note: fromHit ? `At ${fromHit.place}` : undefined,
+    // Where it was, as the note ("At Alder Park"): the hit's place, else the court tagged here, so Your sessions names it.
+    note: fromHit ? `At ${fromHit.place}` : loggedCourt() ? `At ${loggedCourt()!.name}` : undefined,
     ...(opened?.type === 'tracker' && logMinutes && logMinutes !== opened.activity.minutes ? { minutes: logMinutes } : {}),
     // Where it was played, kept in your log (migration 130): the court on the post, else the hit's.
     ...(loggedCourt() ? { courtId: loggedCourt()!.id } : {}),

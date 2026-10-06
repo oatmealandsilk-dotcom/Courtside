@@ -36,6 +36,8 @@ export default function FlybySheet() {
   const day = params.day && /^\d{4}-\d{2}-\d{2}$/.test(params.day) ? params.day : null;
   const name = params.name?.trim() || 'this court';
   const [closeSignal, setCloseSignal] = useState(0);
+  // The list's own height, so a short one opens a short sheet (open-to-hit's way), never one mostly empty.
+  const [contentH, setContentH] = useState(0);
   const [list, setList] = useState<FlybyPerson[] | null | undefined>(undefined);
   useEffect(() => {
     if (!courtId || !day) { setList(null); return undefined; }
@@ -60,9 +62,9 @@ export default function FlybySheet() {
       + (played.length ? ` ${andList(played.map((u) => firstName(u.name)))} ${played.length === 1 ? 'isn’t' : 'aren’t'} listed: you played ${played.length === 1 ? 'together' : 'them'}.` : '');
 
   return (
-    <DragSheet fitContent closeSignal={closeSignal} onDismissed={() => router.back()} peekFraction={0.7}
+    <DragSheet fitContent closeSignal={closeSignal} onDismissed={() => router.back()} peekFraction={0.7} contentHeight={contentH || undefined}
       header={<SheetTitle title={`At ${name} ${when}`} line={line} lines={3} onClose={close} />}>
-      <ScrollView contentContainerStyle={styles.body}>
+      <ScrollView contentContainerStyle={styles.body} onContentSizeChange={(_, h) => { const r = Math.ceil(h); if (r !== contentH) setContentH(r); }}>
         {list === undefined ? (
           <View style={styles.wait}><CourtSpinner size={24} /></View>
         ) : people.length ? (
@@ -77,7 +79,8 @@ export default function FlybySheet() {
                     <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={44} />
                     <View style={styles.words}>
                       <Text style={styles.name} numberOfLines={1}>{user.name}</Text>
-                      <Text style={styles.meta} numberOfLines={2}>{`@${user.handle} · ${what}`}</Text>
+                      {/* One line, like Strava's list: the name is above it already. */}
+                      <Text style={styles.meta} numberOfLines={1}>{what}</Text>
                     </View>
                   </Pressable>
                   <FollowPill small following={following} userId={user.id} name={user.name}

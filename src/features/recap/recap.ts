@@ -34,6 +34,11 @@ export interface WeekRecap {
   /** Tennis minutes on each day, Monday first. */
   days: number[];
   bestWeek: boolean;
+  /** The most time in any earlier week (0 when none), and that week's Monday: "Beat your old best, 3h 50m (Sep 21 – 27)". */
+  bestBefore: number;
+  bestBeforeWeek?: string;
+  /** No tennis in your log before this week: the first week you played here. */
+  firstWeek: boolean;
   bestStreak: boolean;
   /** The longest run of days in a row reaching into the week (its days before the week included), and its first and last day. */
   streak: number;
@@ -76,6 +81,9 @@ export function weekRecap(me: ID, sessions: PracticeSession[], posts: Post[], st
   const weeks = new Map<string, number>();
   for (const s of tennis) if (s.day < week && s.day >= addDays(week, -400)) weeks.set(weekStart(s.day), (weeks.get(weekStart(s.day)) ?? 0) + s.minutes);
   const bestBefore = Math.max(0, ...weeks.values());
+  // The first week to reach it holds it (the same rule as the records).
+  const bestBeforeWeek = bestBefore ? [...weeks].filter(([, m]) => m === bestBefore).map(([w]) => w).sort()[0] : undefined;
+  const firstWeek = !tennis.some((s) => s.day < week);
 
   // Streaks, counted only up to the week's end.
   const all = activeDays(me, sessions, posts, stories);
@@ -97,7 +105,7 @@ export function weekRecap(me: ID, sessions: PracticeSession[], posts: Post[], st
 
   return {
     week, end, minutes, sessions: inWeek.length, won, lost, prevMinutes, prevSessions: prev.length, days,
-    bestWeek, bestStreak, streak, streakFrom: reaching?.from, streakTo: reaching?.to,
+    bestWeek, bestBefore, ...(bestBeforeWeek ? { bestBeforeWeek } : {}), firstWeek, bestStreak, streak, streakFrom: reaching?.from, streakTo: reaching?.to,
     records: beaten(recordsBefore, recordsAfter),
     line: recapLine({ minutes, sessions: inWeek.length, won, prevMinutes, prevSessions: prev.length, bestWeek, bestStreak }),
   };

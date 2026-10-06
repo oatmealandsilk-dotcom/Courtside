@@ -1368,8 +1368,12 @@ export interface CourtKings {
   mode: 'wins' | 'regulars' | 'none';
   /** Up to three, best first. */
   top: { userId: ID; n: number; last?: string }[];
-  /** Your own line: your wins here (the same counting), and your place when you are ranked. */
-  me: { wins: number; rank?: number; ranked: boolean };
+  /**
+   * Your own line: your wins here (the same counting), and your place when
+   * you are ranked. `over`: ranked, but more than ten are placed above you,
+   * so no number ("10+").
+   */
+  me: { wins: number; rank?: number; ranked: boolean; over?: boolean };
 }
 
 /**

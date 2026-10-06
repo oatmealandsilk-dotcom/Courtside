@@ -16,7 +16,7 @@ const BASE = 360;
  * nothing in the top and bottom strips Instagram covers with its buttons.
  * Only your own numbers, and only once you choose to share them.
  */
-export function RecapStoryArt({ recap, width }: { recap: WeekRecap; width: number }) {
+export function RecapStoryArt({ recap, width, label }: { recap: WeekRecap; width: number; /** The card's own label, as on the screen ("LAST WEEK", "SEP 21 – 27"). */ label?: string }) {
   useTheme();
   const height = Math.round((width * 16) / 9);
   const k = width / BASE;
@@ -32,7 +32,7 @@ export function RecapStoryArt({ recap, width }: { recap: WeekRecap; width: numbe
         <View style={[styles.wash, { backgroundColor: colors.brand }]} />
         <View style={styles.inner}>
           <Text style={[styles.week, { color: colors.brandInk }]}>{`My week on court · ${weekRange(recap.week)}`}</Text>
-          <RecapCard recap={recap} />
+          <RecapCard recap={recap} label={label} />
         </View>
       </View>
     </View>

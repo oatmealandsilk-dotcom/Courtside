@@ -10,11 +10,11 @@ import { duration } from '@/lib/format';
  * (practice, matches and drills, never the gym), except the streak, which is
  * the streak the profile already shows (sessions, posts and Instants).
  *
- *   Most hours in a week     Monday to Sunday, at least an hour
- *   Longest streak           days in a row, at least 3
- *   Most sessions in a month at least 3
- *   Biggest win              a won match with a score: your games minus theirs
- *   Longest match            a match of at least 30 minutes
+ *   Best week        most time on court, Monday to Sunday, at least an hour
+ *   Longest streak   days in a row, at least 3
+ *   Busiest month    most sessions in a month, at least 3
+ *   Biggest win      a won match with a score: your games minus theirs
+ *   Longest match    a match of at least 30 minutes
  *
  * A record is only beaten by going strictly higher: a tie leaves it with the
  * first one to reach it. A first-ever number is a record but never a
@@ -27,10 +27,11 @@ export const RECORD_MIN: Record<RecordKey, number> = { week: 60, streak: 3, mont
 /** The order the records are shown in. */
 export const RECORD_KEYS: RecordKey[] = ['match', 'win', 'week', 'month', 'streak'];
 
+/** Short enough for one line on a record's tile and in the "New record!" note. */
 export const RECORD_LABEL: Record<RecordKey, string> = {
-  week: 'Most hours in a week',
+  week: 'Best week',
   streak: 'Longest streak',
-  month: 'Most sessions in a month',
+  month: 'Busiest month',
   win: 'Biggest win',
   match: 'Longest match',
 };
@@ -149,17 +150,19 @@ function namesOf(keys: RecordKey[]): string {
 }
 
 /**
- * The words of the "New record!" moment: "New record! Longest match" over
- * "2h 40m · beat 2h 5m"; two at once, "New records! Longest match and
- * biggest win", with the first one's numbers.
+ * The words of the "New record!" moment, short enough for the note's one
+ * title line: "New record! Longest match" over "2h 40m · beat 2h 5m", or
+ * "New record! Biggest win" over "6–0 6–1 · +11 games (was +5)". Two or
+ * more at once: "2 new records!" over "Longest match and biggest win".
  */
 export function recordToast(beats: RecordBeat[], sessions: PracticeSession[] = []): { title: string; body: string } | null {
   if (!beats.length) return null;
+  if (beats.length > 1) return { title: `${beats.length} new records!`, body: namesOf(beats.map((b) => b.key)) };
   const first = beats[0];
-  const title = `${beats.length > 1 ? 'New records!' : 'New record!'} ${namesOf(beats.map((b) => b.key))}`;
+  const title = `New record! ${RECORD_LABEL[first.key]}`;
   const score = first.key === 'win' ? scoreText(sessions.find((s) => s.id === first.now.sessionId)?.sets) : '';
   const body = first.key === 'win'
-    ? `${score ? `${score} · ` : ''}${recordValue(first.now)}, beat +${first.was.value}`
+    ? `${score ? `${score} · ` : ''}${recordValue(first.now)} (was +${first.was.value})`
     : `${recordValue(first.now)} · beat ${recordValue(first.was)}`;
   return { title, body };
 }

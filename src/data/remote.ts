@@ -3558,13 +3558,14 @@ export const remote = {
     if (!isMapCourtId(courtId)) return null;
     const { data, error } = await need().rpc('court_kings', { p_court: courtId });
     if (error) { if (!missingFunction(error)) fail('court kings')(error); return null; }
-    const r = (data ?? {}) as { mode?: string; top?: { id?: string; n?: number; last?: string | null }[]; me?: { n?: number; rank?: number | null; ranked?: boolean } };
+    const r = (data ?? {}) as { mode?: string; top?: { id?: string; n?: number; last?: string | null }[]; me?: { n?: number; rank?: number | null; ranked?: boolean; over?: boolean } };
+    const over = r.me?.over === true && !!r.me?.ranked;
     const mode = r.mode === 'wins' || r.mode === 'regulars' ? r.mode : 'none';
     return {
       courtId, mode,
       top: (Array.isArray(r.top) ? r.top : []).filter((t) => typeof t.id === 'string' && UUID_RE.test(t.id)).slice(0, 3)
         .map((t) => ({ userId: t.id!, n: num(t.n), ...(typeof t.last === 'string' ? { last: t.last.slice(0, 10) } : {}) })),
-      me: { wins: num(r.me?.n), ...(typeof r.me?.rank === 'number' ? { rank: r.me.rank } : {}), ranked: !!r.me?.ranked && typeof r.me?.rank === 'number' },
+      me: { wins: num(r.me?.n), ...(typeof r.me?.rank === 'number' ? { rank: r.me.rank } : {}), ranked: !!r.me?.ranked && (typeof r.me?.rank === 'number' || over), ...(over ? { over: true } : {}) },
     };
   },
   /**

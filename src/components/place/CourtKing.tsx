@@ -72,11 +72,14 @@ export function CourtKing({ courtId, name, refresh = 0 }: { courtId: string; nam
     body: 'The most match wins posted at this court in the last 90 days. Log a match, mark it won, and post it here; 2 a day count at most. Ties go to the latest win. Only public accounts are ranked.',
   });
 
+  // The crown is always won by match wins, so the line under the title says so (on the Regulars card too);
+  // with nothing posted here yet the card below says it all.
+  const empty = kings.mode === 'none' || !top.length;
   const head = (
     <View style={styles.head}>
       <View style={{ flex: 1, gap: 2 }}>
         <Text accessibilityRole="header" style={styles.title}>King of the Court</Text>
-        <Text style={styles.sub}>{kings.mode === 'regulars' ? 'Most days posted here · last 90 days' : 'Most match wins posted here · last 90 days'}</Text>
+        {empty ? null : <Text style={styles.sub}>Most match wins posted here · last 90 days</Text>}
       </View>
       <Pressable accessibilityRole="button" accessibilityLabel="How King of the Court works" hitSlop={10} onPress={explain} style={({ pressed }) => [styles.info, pressed && styles.pressed]}>
         <Ionicons name="information-circle-outline" size={22} color={colors.textMuted} />
@@ -85,7 +88,7 @@ export function CourtKing({ courtId, name, refresh = 0 }: { courtId: string; nam
   );
 
   // Nothing posted here yet: one small card that asks for the first win.
-  if (kings.mode === 'none' || !top.length) {
+  if (empty) {
     return (
       <>
         <View style={styles.wrap}>
@@ -106,6 +109,8 @@ export function CourtKing({ courtId, name, refresh = 0 }: { courtId: string; nam
   const open = (id: ID) => router.push(`/user/${id}`);
   const unit = kings.mode === 'wins' ? (n: number) => plural(n, 'win', 'wins') : (n: number) => plural(n, 'day', 'days');
   const myRank = kings.me.ranked ? kings.me.rank : undefined;
+  // Ranked, but more than ten placed above you: "10+", and what it takes to reach #3.
+  const myOver = kings.me.ranked && !!kings.me.over;
   // What it takes to climb: ties go to the latest win, so drawing level with a new win is enough.
   const climb = (rank: number): string | null => {
     if (kings.mode !== 'wins' || rank <= 1) return null;
@@ -129,7 +134,8 @@ export function CourtKing({ courtId, name, refresh = 0 }: { courtId: string; nam
             <Pressable accessibilityRole="link" accessibilityLabel={`King of ${place}: ${firstIsMe ? 'you' : first.user.name}, ${unit(first.n)}. Open profile`} onPress={() => open(first.userId)} style={({ pressed }) => [styles.king, firstIsMe && styles.mine, pressed && styles.pressed]}>
               <View style={styles.kingLabelRow}>
                 <CrownGlyph size={13} color={colors.sun} />
-                <Text style={[styles.kingLabel, { color: colors.sun }]} numberOfLines={1}>{`King of ${place}`.toUpperCase()}</Text>
+                {/* The crown gold, the words in ink: small gold letters are too faint to read on the cream card. */}
+                <Text style={[styles.kingLabel, { color: colors.text }]} numberOfLines={1}>{`King of ${place}`.toUpperCase()}</Text>
               </View>
               <View style={styles.kingRow}>
                 <View style={styles.kingFace}>
@@ -154,7 +160,6 @@ export function CourtKing({ courtId, name, refresh = 0 }: { courtId: string; nam
                 <Ionicons name="calendar-outline" size={14} color={colors.brand} />
                 <Text style={[styles.kingLabel, { color: colors.brand }]}>REGULARS HERE</Text>
               </View>
-              <Text style={styles.regularsSub}>Most days posted from this court · last 90 days</Text>
             </View>
           )}
           {(kings.mode === 'wins' ? rest : top).map((t, i) => {
@@ -174,13 +179,13 @@ export function CourtKing({ courtId, name, refresh = 0 }: { courtId: string; nam
             );
           })}
           {/* Your own line, under the top three: your place and what it takes, or why you aren't on it. */}
-          {kings.mode === 'wins' && myRank && myRank > 3 && me ? (
-            <View style={[styles.row, styles.line, styles.mine]} accessible accessibilityLabel={`You: number ${myRank}, ${unit(kings.me.wins)}. ${climb(myRank) ?? ''}`}>
-              <Text style={[styles.rank, styles.rankMine]}>{myRank}</Text>
+          {kings.mode === 'wins' && ((myRank && myRank > 3) || myOver) && me ? (
+            <View style={[styles.row, styles.line, styles.mine]} accessible accessibilityLabel={`You: ${myOver ? 'outside the top 10' : `number ${myRank}`}, ${unit(kings.me.wins)}. ${climb(myRank ?? 11) ?? ''}`}>
+              <Text style={[styles.rank, styles.rankMine, myOver && styles.rankOver]}>{myOver ? '10+' : myRank}</Text>
               <Avatar name={me.name} seed={me.avatarSeed} uri={me.avatarUrl} size={36} />
               <View style={styles.rowWords}>
                 <Text style={styles.rowName}>You</Text>
-                <Text style={[styles.rowHandle, styles.hint]} numberOfLines={1}>{climb(myRank)}</Text>
+                <Text style={[styles.rowHandle, styles.hint]} numberOfLines={1}>{climb(myRank ?? 11)}</Text>
               </View>
               <Text style={styles.count}><Text style={styles.countNumber}>{kings.me.wins}</Text>{` ${kings.me.wins === 1 ? 'win' : 'wins'}`}</Text>
             </View>
@@ -236,12 +241,13 @@ const styleDefinitions = StyleSheet.create({
   kingUnit: { ...typography.caption, color: colors.textMuted, letterSpacing: 0.8 },
   // Regulars.
   regularsHead: { paddingHorizontal: spacing.lg, paddingTop: 14, paddingBottom: 12, gap: 4 },
-  regularsSub: { ...typography.small, color: colors.textMuted },
   // 2, 3, and you.
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: 11 },
-  rank: { width: 18, ...font('600'), fontSize: 15, color: colors.textMuted, textAlign: 'center', fontVariant: ['tabular-nums'] },
+  rank: { width: 22, ...font('600'), fontSize: 15, color: colors.textMuted, textAlign: 'center', fontVariant: ['tabular-nums'] },
   rankMine: { color: colors.brand },
-  rankLock: { width: 18, alignItems: 'center' },
+  // "10+" in the same column as 2 and 3.
+  rankOver: { fontSize: 12, letterSpacing: -0.3 },
+  rankLock: { width: 22, alignItems: 'center' },
   rowWords: { flex: 1, minWidth: 0, gap: 1 },
   rowName: { ...font('500'), fontSize: 15, color: colors.text },
   rowHandle: { ...typography.small, color: colors.textMuted },

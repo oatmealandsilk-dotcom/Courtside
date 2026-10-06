@@ -68,7 +68,7 @@ export default function PrivacyCentre() {
           <Ionicons name="people-outline" size={19} color={colors.textMuted} />
           <View style={{ flex: 1, gap: 1 }}>
             <Text style={styles.rowLabel}>Check-ins are kept for 2 days</Text>
-            <Text style={styles.rowDetail}>So friends who were at the same court that day can see you in Flyby. Never a time, only morning, afternoon or evening. Location off, it’s gone.</Text>
+            <Text style={styles.rowDetail}>So friends who were at the same court that day can see you in Flyby. Never a time, only morning, afternoon or evening. Location off or “Only me”, it’s gone; activity status off, it isn’t shown.</Text>
           </View>
         </View>
       </View>
