@@ -33,7 +33,7 @@ import { trackerName } from '@/features/activity/lengths';
 import { TrackedLength } from '@/components/session/TrackedLength';
 import { LogComposerTop, LogDock, DOCK_ROOM } from '@/components/session/LogComposer';
 import { ScoreField } from '@/components/session/ScoreField';
-import { readScore, setsWinner } from '@/features/activity/score';
+import { canScore, readScore, setsWinner } from '@/features/activity/score';
 import { ZoneGlyph } from '@/components/session/ZoneGlyph';
 import { HealthShareRow } from '@/components/session/HealthShareRow';
 import { availableShare, chosenShare } from '@/features/activity/healthShare';
@@ -367,11 +367,11 @@ export default function Compose() {
   // Opened cold, the workout can arrive after the page: fitness from then on.
   useEffect(() => { if (workoutLog) setKind('fitness'); }, [workoutLog]);
   const [won, setWon] = useState<'won' | 'lost' | null>(null);
-  // A match's score (Oct 4, migration 91), your games first: when one side took more sets it decides the result.
+  // The score (Oct 4, migration 91), your games first, on any tennis session (Oct 6): on a match, when one side took more sets it decides the result.
   const [score, setScore] = useState('');
   const scored = readScore(score);
-  const scoreSets = kind === 'match' ? scored.sets : undefined;
-  const decided = setsWinner(scoreSets);
+  const scoreSets = canScore(kind) ? scored.sets : undefined;
+  const decided = kind === 'match' ? setsWinner(scoreSets) : undefined;
   const pickedWon = decided !== undefined ? decided : kind === 'match' && won ? won === 'won' : undefined;
   // How long, in your log (Oct 3): simply the tracker's time, shown as one
   // line; a small Edit opens hours and minutes steppers, for a break taken off.
@@ -386,7 +386,7 @@ export default function Compose() {
   const keysUp = useKeysUp();
   const shownKind = openedLog?.kind ?? kind;
   const shownWon = openedLog ? (openedLog.kind === 'match' ? openedLog.won : undefined) : pickedWon;
-  const shownSets = openedLog ? (openedLog.kind === 'match' ? openedLog.sets : undefined) : scoreSets;
+  const shownSets = openedLog ? (canScore(openedLog.kind) ? openedLog.sets : undefined) : scoreSets;
   // What the workout was, while it is logged (or about to be) as fitness: "Run".
   const shownWorkout = shownKind === 'fitness' ? openedLog?.workout ?? workoutSport : undefined;
   const sessionFor = (logId?: string): SessionDetail | null => (opened?.type === 'tracker' ? {
@@ -434,7 +434,7 @@ export default function Compose() {
   const afterLog = (logId: string | undefined, input: ReturnType<typeof logInput>, day: string, minutes: number) => {
     const me = currentUserId;
     if (!me) return { record: null as { title: string; body: string } | null, flyby: () => undefined };
-    const sets = input.kind === 'match' ? input.sets : undefined;
+    const sets = canScore(input.kind) ? input.sets : undefined;
     const added: PracticeSession = {
       id: logId ?? '__new', userId: me, day, minutes, kind: input.kind,
       won: input.kind === 'match' ? setsWinner(sets) ?? input.won : undefined, ...(sets ? { sets } : {}), createdAt: new Date().toISOString(),
@@ -578,7 +578,7 @@ export default function Compose() {
   const runJustLog = async () => {
     if (acting.current || ticked || opened?.type !== 'tracker') return;
     // A score that isn't one yet says why, and nothing is logged.
-    if (!openedLog && kind === 'match' && scored.problem) { setLogError(scored.problem); return; }
+    if (!openedLog && canScore(kind) && scored.problem) { setLogError(scored.problem); return; }
     acting.current = true;
     const activity = opened.activity;
     setBusy('log');
@@ -739,7 +739,7 @@ export default function Compose() {
   // kind and result for the first draw; the server writes them again from the log (migration 65).
   const shareFromLog = async () => {
     if (opened?.type !== 'tracker' || acting.current) { sent.current = false; return; }
-    if (!openedLog && !tracker.logged && kind === 'match' && scored.problem) { setLogError(scored.problem); sent.current = false; return; }
+    if (!openedLog && !tracker.logged && canScore(kind) && scored.problem) { setLogError(scored.problem); sent.current = false; return; }
     acting.current = true;
     const activity = opened.activity;
     setBusy('share');
@@ -1091,6 +1091,11 @@ export default function Compose() {
                       <Chips brand clearable value={won ?? undefined} onChange={(v) => setWon(v ?? null)} options={[{ value: 'won', label: 'Won' }, { value: 'lost', label: 'Lost' }]} />
                     ) : null}
                     <View style={styles.scoreBox}><ScoreField value={score} onChange={setScore} /></View>
+                  </Reanimated.View>
+                ) : canScore(kind) ? (
+                  // A practice or drills can carry its sets too (Oct 6, owner): optional, no result.
+                  <Reanimated.View entering={FadeInDown.duration(220).easing(Easing.bezier(0.32, 0.72, 0, 1))} exiting={FadeOut.duration(160)}>
+                    <View style={styles.scoreBox}><ScoreField kind={kind} label="Score (optional)" value={score} onChange={setScore} /></View>
                   </Reanimated.View>
                 ) : null}
               </Reanimated.View>

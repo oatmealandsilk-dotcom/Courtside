@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { Animated, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
+import { router, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -11,7 +11,7 @@ import { EmptyState, Screen } from '@/components/ui';
 import { postedIndex, sourceOn } from '@/features/activity/recent';
 import { useTennisFlags } from '@/features/activity/useTennisFlags';
 import { storyFromLog, storyFromPost, type SessionStory } from '@/features/share/sessionStory';
-import { scoreText } from '@/features/activity/score';
+import { canScore } from '@/features/activity/score';
 import { canCopyStory, canSaveStory, exportStory, stageSize, warmStory, type StoryAction, type StoryLook } from '@/features/share/storyImage';
 import { mixHex } from '@/features/activity/zones';
 import { goBack } from '@/lib/goBack';
@@ -98,16 +98,12 @@ export default function ShareSession() {
   const scrollX = useRef(new Animated.Value(0)).current;
 
   const [picked, setPicked] = useState<string | undefined>();
-  // A match with a score saved in your log (migration 91) starts with it here; typing over it changes only the picture.
-  const saved = story?.session.kind === 'match' ? scoreText(story.session.sets, true) : '';
-  const [score, setScore] = useState(saved);
-  const scoreTyped = useRef(false);
-  useEffect(() => { if (!scoreTyped.current && saved) setScore(saved); }, [saved]);
-  // A workout (a run, the gym: migration 107) has no score: no Score box, and nothing typed goes on its picture.
-  // Tennis, and anything logged by hand, keep the box as before.
-  const workout = !!story?.session.workout;
-  // "6-4 6-3" reads as a score with proper dashes and single spaces.
-  const shownScore = !workout && score.trim() ? score.trim().replace(/\s*[-–]\s*/g, '–').replace(/\s+/g, ' ') : undefined;
+  // The score is the session's own, saved in your log and drawn by the designs themselves (Oct 6, owner:
+  // "practices can have scores too"): no Score box here. A tennis session of yours with none yet offers
+  // a quiet "Add score", which opens its edit with the score ready to type, then comes back here.
+  const logId = sessionParam ?? story?.session.sessionId;
+  const log = logId ? sessions.find((s) => s.id === logId && s.userId === currentUserId) : undefined;
+  const addScore = log && canScore(log.kind) && !log.fromSessionId && !log.sets?.length && !story?.session.sets?.length ? log.id : undefined;
   const photo = picked ?? story?.photo;
   const [index, setIndex] = useState<number | null>(null);
   // What the last button said ("Saved to your downloads…"); a new design clears it.
@@ -191,7 +187,7 @@ export default function ShareSession() {
       {/* The copy that is photographed: full size, out of sight under the page. */}
       <View pointerEvents="none" aria-hidden accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={[styles.stage, size]}>
         <View ref={stage} collapsable={false} style={size}>
-          <SessionStoryArt design={design} story={story} width={size.width} photo={photo} hidden={blockedIds} score={shownScore} onPhotoLoad={(ok) => { if (photo) setLoaded((was) => (was?.uri === photo && was.ok === ok ? was : { uri: photo, ok })); }} />
+          <SessionStoryArt design={design} story={story} width={size.width} photo={photo} hidden={blockedIds} onPhotoLoad={(ok) => { if (photo) setLoaded((was) => (was?.uri === photo && was.ok === ok ? was : { uri: photo, ok })); }} />
         </View>
       </View>
       <View style={styles.page}>
@@ -223,7 +219,7 @@ export default function ShareSession() {
                     <View style={[styles.frame, { width: cardW, height: cardH }]} accessible accessibilityLabel={`${d.label} design`}>
                       {/* A see-through sticker is shown over a quiet backdrop, the way it will sit over a story. */}
                       {d.key === 'sticker' || d.key === 'overlay' ? <LinearGradient colors={[withAlpha(colors.text, 0.16), withAlpha(colors.text, 0.38)]} style={StyleSheet.absoluteFill} /> : null}
-                      <SessionStoryArt design={d.key} story={story} width={cardW} photo={photo} hidden={blockedIds} score={shownScore} />
+                      <SessionStoryArt design={d.key} story={story} width={cardW} photo={photo} hidden={blockedIds} />
                       {d.key === 'photo' ? (
                         <Pressable accessibilityRole="button" accessibilityLabel={photo ? 'Change photo' : 'Choose a photo'} onPress={() => { void choosePhoto(); }} style={({ pressed }) => [styles.photoButton, pressed && styles.pressed]}>
                           <Ionicons name="image-outline" size={14} color={colors.onMedia} />
@@ -251,21 +247,11 @@ export default function ShareSession() {
               })}
             </View>
 
-            {/* Any tennis session can carry a score (Oct 4): practice sets and tiebreaks are scored too. A workout has none. */}
-            {!workout ? (
-              <View style={styles.scoreRow}>
-                <Text style={styles.scoreLabel}>Score</Text>
-                <TextInput
-                  value={score}
-                  onChangeText={(t) => { scoreTyped.current = true; setScore(t.slice(0, 24)); }}
-                  placeholder="Optional, e.g. 6-4 6-3"
-                  placeholderTextColor={colors.textFaint}
-                  style={styles.scoreInput}
-                  returnKeyType="done"
-                  autoCorrect={false}
-                  accessibilityLabel="Match score, shown on the picture"
-                />
-              </View>
+            {addScore ? (
+              <Pressable accessibilityRole="link" accessibilityLabel="Add score to this session" hitSlop={8} onPress={() => router.push({ pathname: '/log-session', params: { edit: addScore, focus: 'score' } })} style={({ pressed }) => [styles.addScore, pressed && styles.pressed]}>
+                <Ionicons name="add" size={15} color={colors.textMuted} />
+                <Text style={styles.addScoreText}>Add score</Text>
+              </Pressable>
             ) : null}
 
             {/* Strava's row of round buttons, in CourtSide's colours (Oct 4): Stories leads, the rest follow. */}
@@ -307,10 +293,8 @@ const styleDefinitions = StyleSheet.create({
   designTextOn: { color: colors.text },
   designDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: 'transparent' },
   designDotOn: { backgroundColor: colors.brand },
-  scoreRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginHorizontal: spacing.xl, paddingHorizontal: 14, height: 44, borderRadius: radius.pill, backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
-  scoreLabel: { ...font('600'), fontSize: 14, color: colors.textMuted },
-  // The box fills the row's height and centres its own line: sized to the text alone, a phone clipped the bottom of the letters (Oct 5).
-  scoreInput: { flex: 1, alignSelf: 'stretch', ...font('600'), fontSize: 16, color: colors.text, paddingVertical: 0, paddingHorizontal: 0, textAlignVertical: 'center' },
+  addScore: { flexDirection: 'row', alignItems: 'center', alignSelf: 'center', gap: 3, paddingVertical: 2 },
+  addScoreText: { ...typography.smallStrong, color: colors.textMuted },
   actions: { flexDirection: 'row', justifyContent: 'center', gap: spacing.lg, paddingHorizontal: spacing.lg, marginTop: spacing.xs },
   action: { alignItems: 'center', gap: 6, width: 64 },
   actionCircle: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },

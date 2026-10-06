@@ -24,7 +24,7 @@ import { noteStep } from '@/lib/crashReporting';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
 import type { Answer, ChatEvent, ChatPhoto, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, DetectedActivity, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, HiddenWords, HiddenWordsKind, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, CourtNote, LastSeen, MapPlace, MapVisibility, TaggedCourt, Question, Removed, RemovedItem, Story, SurfacePreference, TakedownKind, TakedownReason, Tip, TournamentEntry, User, PublicStreak, CoachApplication, CourtAccess, CourtAccessSource, CourtDayPart, CourtFacts, CourtFollowCount, CourtNow, CourtKings, CourtRegulars, CourtReview, CourtRightNow, CourtRing, FlybyPerson, FollowedCourt, SessionTag, SessionTagRefusal, SessionTagRole, FeedGroup, FeedGroupCard, DiscoverGroup, GroupLook, Invitee, ContactMatch, HeadToHead, MatchSet, SessionWith } from './types';
-import { validSets } from '@/features/activity/score';
+import { canScore, validSets } from '@/features/activity/score';
 import { TERMS_VERSION } from '@/lib/legal';
 import { readinessOf, sessionTagNamesLive, sessionToSend, setSessionTagNamesLive, trustedSession } from './sessionTagGate';
 import { isMapCourtId } from '@/features/places/courtName';
@@ -493,8 +493,8 @@ export interface RemoteData {
 
 interface SessionRow { id: string; user_id: string; day: string; minutes: number; kind: PracticeSession['kind']; won: boolean | null; opponent: string | null; note: string | null; created_at: string; activity_id?: string | null; from_session_id?: string | null; sets?: unknown; workout?: string | null; court_id?: string | null }
 const toSession = (r: SessionRow): PracticeSession => {
-  // A match's score (migration 91; absent before it runs), kept only when it is a good one.
-  const sets = r.kind === 'match' ? validSets(r.sets) : undefined;
+  // A tennis session's score (migration 91 for a match, score_any_session for a practice or drills; absent before they run), kept only when it is a good one.
+  const sets = canScore(r.kind) ? validSets(r.sets) : undefined;
   return {
     id: r.id, userId: r.user_id, day: r.day, minutes: r.minutes, kind: r.kind, won: r.won ?? undefined, opponent: r.opponent ?? undefined, note: r.note ?? undefined,
     activityId: r.activity_id ?? undefined, fromSessionId: r.from_session_id ?? undefined, ...(sets ? { sets } : {}),
@@ -3173,12 +3173,14 @@ export const remote = {
     if (error) fail('session delete')(error);
   },
   /**
-   * A match's score, set, changed or cleared on a session already in your log
-   * (migration 91), with the result it gives. The server works the result out
-   * again from the sets, so the two never disagree. Throws a plain sentence.
+   * A session's score, set, changed or cleared on a session already in your
+   * log (migration 91), with the result it gives on a match. The server works
+   * the result out again from the sets, so the two never disagree. A practice
+   * or drills (Oct 6) has no result: `won` is left out and only the sets go.
+   * Throws a plain sentence.
    */
-  async updateSessionScore(id: ID, sets: MatchSet[] | null, won: boolean | null) {
-    const { error } = await need().from('practice_sessions').update({ sets, won }).eq('id', id);
+  async updateSessionScore(id: ID, sets: MatchSet[] | null, won?: boolean | null) {
+    const { error } = await need().from('practice_sessions').update(won === undefined ? { sets } : { sets, won }).eq('id', id);
     if (error) {
       fail('session score')(error);
       if (/\bsets\b/.test(error.message) && /column|schema/i.test(error.message)) throw new Error('Scores aren’t ready yet. Try again later.');

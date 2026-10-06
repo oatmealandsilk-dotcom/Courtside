@@ -120,7 +120,7 @@ import type {
   PlayerProfile,
   MediaCrop, Tip, TaggedCourt, TrackerId, Invitee, ContactMatch, HealthShareKey, HeadToHead, CourtKings, FlybyPerson, MatchSet, Removed, RemovedItem, TakedownKind, TakedownReason, TournamentEntry, HiddenWords, HiddenWordsKind } from '@/data/types';
 import { HIDDEN_WORDS_MAX, HIDDEN_WORD_LENGTH, cleanWords, defaultHiddenWords } from '@/features/hiddenWords/hiddenWords';
-import { setsWinner } from '@/features/activity/score';
+import { canScore, setsWinner } from '@/features/activity/score';
 
 interface NewStoryInput {
   imageUrl?: string;
@@ -682,7 +682,7 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
   loadLastSeen: (view?: { minLat: number; minLng: number; maxLat: number; maxLng: number } | null) => Promise<boolean>;
   /**
    * `activityId`: the tracker session it was logged from, which then counts as logged.
-   * `sets`: a match's score, your side first (migration 91); when one side took more sets, the result follows it.
+   * `sets`: the score, your side first (migration 91; any tennis session since Oct 6); on a match, when one side took more sets, the result follows it.
    */
   logSession: (input: { minutes: number; kind: PracticeSession['kind']; won?: boolean; sets?: MatchSet[]; opponent?: string; note?: string; day?: string; activityId?: ID; workout?: string; courtId?: string }) => Promise<ID>;
   /**
@@ -746,10 +746,11 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
   /** The private name typed for who you played, changed on a session already in your log. */
   setSessionOpponent: (sessionId: ID, opponent: string) => Promise<void>;
   /**
-   * A match's score on a session already in your log (migration 91): set,
-   * changed, or cleared with null. The result follows the sets when one side
-   * took more. Anyone who accepted a tag on it is asked again (the server does
-   * the same). Throws a plain sentence.
+   * A score on a session already in your log (migration 91; any tennis
+   * session since Oct 6): set, changed, or cleared with null. On a match the
+   * result follows the sets when one side took more, and anyone who accepted
+   * a tag on it is asked again (the server does the same); a practice's or
+   * drills' score is only the sets. Throws a plain sentence.
    */
   setSessionScore: (sessionId: ID, sets: MatchSet[] | null) => Promise<void>;
   /**
@@ -1838,8 +1839,8 @@ function postsFollowLog(posts: Post[], me: ID, activityId: ID | null, log: Pract
     if (log && s.activityId === activityId) {
       changed = true;
       const won = log.kind === 'match' && log.won !== undefined ? log.won : undefined;
-      // The log's score too (the server puts it on, migration 91).
-      const sets = log.kind === 'match' && log.sets?.length ? log.sets : undefined;
+      // The log's score too, on any tennis session (the server puts it on, migration 91; a practice's too since Oct 6).
+      const sets = canScore(log.kind) && log.sets?.length ? log.sets : undefined;
       // A fitness session logged from a workout says what it was ("Run"), as the server writes it (migration 107).
       const workout = log.kind === 'fitness' && log.workout ? log.workout : undefined;
       const { won: _w, sets: _s, workout: _wk, ...rest } = s;
@@ -3179,8 +3180,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const logSession = useCallback(async (input: { minutes: number; kind: PracticeSession['kind']; won?: boolean; sets?: MatchSet[]; opponent?: string; note?: string; day?: string; activityId?: ID; workout?: string; courtId?: string }) => {
     const me = requireUser();
-    // A match's score (migration 91): the result follows the sets when one side took more, as the server makes it.
-    const sets = input.kind === 'match' && input.sets?.length ? input.sets.slice(0, 5) : undefined;
+    // A score (migration 91), on any tennis session since Oct 6: on a match the result follows the sets when one side took more, as the server makes it.
+    const sets = canScore(input.kind) && input.sets?.length ? input.sets.slice(0, 5) : undefined;
     const session: PracticeSession = {
       id: nextId('ses'), userId: me, day: input.day ?? localDay(new Date()), minutes: input.minutes, kind: input.kind,
       won: input.kind === 'match' ? setsWinner(sets) ?? input.won : undefined, ...(sets ? { sets } : {}),
@@ -3586,7 +3587,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const now = new Date().toISOString();
     const fresh: SessionTag[] = add.map((p) => ({
       id: nextId('stag'), sessionId, taggerId: me, taggedId: p.id, role: p.role, status: 'pending', createdAt: now,
-      kind: session.kind, day: session.day, minutes: session.minutes, won: session.won, ...(session.sets ? { sets: session.sets } : {}),
+      // A tag carries a match's score only: a practice's stays the logger's own (my_session_tags, migration 91).
+      kind: session.kind, day: session.day, minutes: session.minutes, won: session.won, ...(session.kind === 'match' && session.sets ? { sets: session.sets } : {}),
     }));
     const dropped = new Set(drop.map((t) => t.id));
     const turned = new Map(turn.map((t) => [t.id, wanted.get(t.taggedId)!]));
@@ -3737,12 +3739,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const setSessionScore = useCallback(async (sessionId: ID, sets: MatchSet[] | null) => {
     const me = requireUser();
     const had = stateRef.current.sessions.find((x) => x.id === sessionId && x.userId === me);
-    if (!had || had.kind !== 'match') return;
+    // Any tennis session can carry a score (Oct 6); a workout never does.
+    if (!had || !canScore(had.kind)) return;
+    const match = had.kind === 'match';
     const next = sets?.length ? sets.slice(0, 5) : undefined;
     const same = JSON.stringify(had.sets ?? null) === JSON.stringify(next ?? null);
     if (same) return;
-    // An even count (a match stopped at one set all) keeps the result you chose.
-    const won = setsWinner(next) ?? had.won;
+    // An even count (a match stopped at one set all) keeps the result you chose. A practice has no result.
+    const won = match ? setsWinner(next) ?? had.won : had.won;
     const before = stateRef.current;
     const patch = (x: PracticeSession): PracticeSession => {
       const { sets: _old, ...rest } = x;
@@ -3758,13 +3762,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const { sets: _old, won: _won, ...rest } = p.session;
         return { ...p, session: { ...rest, ...(won !== undefined ? { won } : {}), ...(next ? { sets: next } : {}) } };
       }),
-      // Anyone who said yes is asked again, as on the server: what they accepted has changed.
-      sessionTags: prev.sessionTags.map((t) => (t.sessionId === sessionId && t.taggerId === me
+      // On a match, anyone who said yes is asked again, as on the server: what they accepted has changed.
+      // A practice's score is the logger's own: their tags never show it, so nobody is asked again (Oct 6).
+      sessionTags: match ? prev.sessionTags.map((t) => (t.sessionId === sessionId && t.taggerId === me
         ? { ...t, won, sets: next, ...(t.status === 'accepted' ? { status: 'pending' as const, respondedAt: undefined } : {}) }
-        : t)),
+        : t)) : prev.sessionTags,
     }));
     if (!live(me, sessionId)) return;
-    try { await remote.updateSessionScore(sessionId, next ?? null, won ?? null); } catch (e) {
+    try { await remote.updateSessionScore(sessionId, next ?? null, match ? won ?? null : undefined); } catch (e) {
       // Only this session, its posts and its tags go back: anything else changed meanwhile stays.
       setState((prev) => ({
         ...prev,
@@ -3775,7 +3780,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       throw e;
     }
     // The server's word on who is waiting now.
-    void refreshSessionTags();
+    if (match) void refreshSessionTags();
   }, [requireUser, refreshSessionTags]);
 
   const headToHead = useCallback(async (userId: ID): Promise<HeadToHead | null> => {

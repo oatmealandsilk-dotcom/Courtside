@@ -13,6 +13,7 @@ import * as haptics from '@/lib/haptics';
 import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
 import { loggedLabel } from './format';
+import { canScore } from './score';
 import { isTennisActivity } from './workouts';
 
 /** What logging a session takes: what it was, a match's result, who you played (tagged, or a name typed). */
@@ -101,7 +102,8 @@ export function useTrackerSession(activityId: ID | undefined) {
         minutes: input.minutes && input.minutes > 0 ? input.minutes : activity.minutes,
         kind: input.kind,
         won: input.kind === 'match' ? input.won : undefined,
-        ...(input.kind === 'match' && input.sets?.length ? { sets: input.sets } : {}),
+        // A score on any tennis session (Oct 6), never a workout.
+        ...(canScore(input.kind) && input.sets?.length ? { sets: input.sets } : {}),
         opponent: canTagKind(input.kind) ? input.opponent ?? '' : '',
         day: activityDay(activity),
         activityId: activity.id,

@@ -1,11 +1,21 @@
-import type { HeadToHead, MatchSet } from '@/data/types';
+import type { HeadToHead, MatchSet, PracticeSession } from '@/data/types';
 
 /*
- * A match's score (migration 91, Oct 4): typed as one line ("6-4 3-6 10-7"),
- * kept as sets from the logger's side, and said back the same way
- * everywhere (the log, the card, the share picture, "Rematch?"). Plain
- * functions, the same rules as the server's match_sets_ok and sets_winner.
+ * A session's score (migration 91, Oct 4, for a match; score_any_session,
+ * Oct 6, for any tennis session): typed as one line ("6-4 3-6 10-7"), kept as sets
+ * from the logger's side, and said back the same way everywhere (the log,
+ * the card, the share picture, "Rematch?"). Plain functions, the same rules
+ * as the server's match_sets_ok and sets_winner.
  */
+
+/**
+ * Whether a session of this kind can carry a score (Oct 6, owner: "well
+ * practices can have scores too"): any tennis session, a practice, a match
+ * or drills. Never a workout (a run, the gym: kind 'fitness'). Only a match
+ * has a result: on a practice or drills the sets are just the sets, never a
+ * win or a loss, and they never count toward the win rate or a head-to-head.
+ */
+export const canScore = (kind: PracticeSession['kind'] | undefined): boolean => kind === 'practice' || kind === 'match' || kind === 'drills';
 
 /** Most sets a score can have, and most games in one (a long match tiebreak). */
 export const MAX_SETS = 5;
