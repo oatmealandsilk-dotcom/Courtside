@@ -126,7 +126,7 @@ export default function HitThread() {
         </View>
       </Pressable>
       {/* Taken down by an admin (migration 108): only its author and admins can open it. */}
-      {story.removed ? <RemovedNote removed={story.removed} style={{ marginTop: spacing.md }} /> : null}
+      {story.removed ? <RemovedNote removed={story.removed} style={{ marginTop: spacing.md }} item={{ kind: 'hit', id: story.id, authorId: story.authorId }} /> : null}
 
       <View style={styles.authorRow}>
         <Pressable accessibilityRole="link" onPress={() => openPlayer(author.id, currentUserId)} style={styles.author}>

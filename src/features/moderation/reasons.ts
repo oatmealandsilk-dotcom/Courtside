@@ -1,4 +1,4 @@
-import type { Removed, TakedownKind, TakedownReason } from '@/data/types';
+import type { ID, Removed, ReviewRequest, TakedownKind, TakedownReason } from '@/data/types';
 
 /**
  * The eight reasons an admin can give for taking something down, in the
@@ -51,9 +51,14 @@ export const KIND_WORD: Record<TakedownKind, string> = {
   'coach-reply': 'reply',
 };
 
+/** What its author calls it in a sentence, as the server's notices do: "clip", "instant", "thread". */
+export function thingWord(kind: TakedownKind, clip = false): string {
+  return kind === 'post' && clip ? 'clip' : kind === 'hit' ? 'instant' : KIND_WORD[kind];
+}
+
 /** The notice the author gets, word for word as the server writes it (migration 108). */
 export function noticeFor(kind: TakedownKind, reason: TakedownReason, clip = false): string {
-  const thing = kind === 'post' && clip ? 'clip' : kind === 'hit' ? 'instant' : KIND_WORD[kind];
+  const thing = thingWord(kind, clip);
   return reason === 'other'
     ? `Your ${thing} was removed for breaking CourtSide’s rules.`
     : `Your ${thing} was removed for breaking CourtSide’s rules: ${reasonLabel(reason)}.`;
@@ -65,3 +70,34 @@ export const TAKEDOWN_KINDS: TakedownKind[] = ['post', 'hit', 'comment', 'hit-co
 export function asKind(raw: unknown): TakedownKind | null {
   return typeof raw === 'string' && (TAKEDOWN_KINDS as string[]).includes(raw) ? (raw as TakedownKind) : null;
 }
+
+/** A reason from the words a notice quotes ("Violence or weapons"), or 'other' for none or words this build does not know. */
+export function reasonFromLabel(label: string | undefined): TakedownReason {
+  const words = label?.trim().toLowerCase();
+  return TAKEDOWN_REASONS.find((r) => r.code !== 'other' && r.label.toLowerCase() === words)?.code ?? 'other';
+}
+
+/**
+ * The words the Community Guidelines page may name in "Why your post was
+ * removed" (a link's `what`); anything else in a link is ignored, so a
+ * shared link can never put other words on the page.
+ */
+export const RULE_THINGS = ['post', 'clip', 'instant', 'comment', 'thread', 'reply', 'question'] as const;
+export type RuleThing = (typeof RULE_THINGS)[number];
+export function asRuleThing(raw: unknown): RuleThing | null {
+  return typeof raw === 'string' && (RULE_THINGS as readonly string[]).includes(raw) ? (raw as RuleThing) : null;
+}
+
+/** An ISO time to the millisecond, however many places the server wrote. */
+const toMs = (iso: string) => Date.parse(iso.replace(/(\.\d{3})\d+/, '$1'));
+
+/**
+ * The author's ask for a review of this take-down: one still open, or one
+ * about this same take-down (its time matches). An ask about an earlier
+ * take-down that was put back does not count: it can be asked about again.
+ */
+export function reviewFor(list: ReviewRequest[] | null | undefined, kind: TakedownKind, id: ID, removedAt: string): ReviewRequest | undefined {
+  const about = (list ?? []).filter((r) => r.kind === kind && r.targetId === id);
+  return about.find((r) => r.status === 'open') ?? about.find((r) => r.removedAt === removedAt || toMs(r.removedAt) === toMs(removedAt));
+}
+

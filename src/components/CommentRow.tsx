@@ -10,7 +10,7 @@ import { RichText } from '@/components/RichText';
 import { StreakFlame } from '@/components/StreakFlame';
 import { shownStreak } from '@/features/practice/streakFlame';
 import type { Comment, TakedownKind } from '@/data/types';
-import { RemovedNote } from '@/features/moderation/RemovedNote';
+import { RemovedActions, RemovedNote } from '@/features/moderation/RemovedNote';
 import { confirm } from '@/lib/confirm';
 import { relativeTime } from '@/lib/format';
 import { confirmReport } from '@/lib/confirm';
@@ -29,7 +29,8 @@ export const replyIndent = (big: boolean) => (big ? 40 : 32) + spacing.md;
  * in, with a smaller picture. Used by the comments sheet and the post and hit pages.
  *
  * One an admin took down (migration 108) reaches only its author and the
- * admins, and says so under its words ("Removed: Hate"), with no Reply. For
+ * admins, and says so under its words ("Removed: Hate"), with no Reply; its
+ * author also gets "Why? See the rules · Ask for a review" there. For
  * an admin, holding the words offers Take down (or Restore); nobody else
  * gets anything on a hold.
  * Holding someone else's comment reports it (App Review 1.2, Oct 5).
@@ -53,9 +54,10 @@ export function CommentRow({ comment, big = false, reply = false, onPressBody, o
   const styles = useThemedStyles(styleDefinitions);
   const { users, posts, stories, currentUserId, currentUser, actions } = useApp();
   const who = users.find((u) => u.id === comment.authorId);
-  // Admins only: hold the words to take it down, or put it back. A comment on an Instant is its own kind to the server.
+  // A comment on an Instant is its own kind to the server.
+  const kind: TakedownKind = stories.some((st) => st.id === comment.postId) ? 'hit-comment' : 'comment';
+  // Admins only: hold the words to take it down, or put it back.
   const moderate = currentUser?.isAdmin ? () => {
-    const kind: TakedownKind = stories.some((st) => st.id === comment.postId) ? 'hit-comment' : 'comment';
     haptics.tap();
     if (comment.removed) {
       confirm({ title: 'Restore this comment?', message: 'Everyone who could see it before sees it again.', confirmLabel: 'Restore', onConfirm: () => { void actions.restoreContent(kind, comment.id); } });
@@ -111,8 +113,10 @@ export function CommentRow({ comment, big = false, reply = false, onPressBody, o
               <ExpoImage source={{ uri: comment.imageUrl }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" transition={150} />
             </Pressable>
           ) : null}
-          {comment.removed ? <RemovedNote removed={comment.removed} quiet /> : null}
+          {comment.removed ? <RemovedNote removed={comment.removed} quiet item={{ kind, id: comment.id, authorId: comment.authorId }} actions={false} /> : null}
         </Pressable>
+        {/* Its author's "Why? See the rules · Ask for a review": beside the words' own button, not inside it. */}
+        {comment.removed ? <RemovedActions removed={comment.removed} item={{ kind, id: comment.id, authorId: comment.authorId }} style={styles.removedActions} /> : null}
         {/* Beside the words' own button, not inside it: a button may not hold another on the web. */}
         {onReply && !comment.removed ? (
           <Pressable accessibilityRole="button" accessibilityLabel={`Reply to ${who?.name ?? 'this comment'}`} hitSlop={{ top: 6, bottom: 8, left: 8, right: 16 }} onPress={onReply} style={styles.replyButton}>
@@ -156,6 +160,7 @@ const styleDefinitions = StyleSheet.create({
   count: { ...typography.caption, color: colors.textFaint, letterSpacing: 0 },
   photo: { width: 168, height: 210, borderRadius: 12, overflow: 'hidden', backgroundColor: colors.surfaceAlt, marginTop: 4 },
   replyButton: { alignSelf: 'flex-start', paddingTop: 6 },
+  removedActions: { paddingTop: 2 },
   replyText: { ...typography.smallStrong, fontSize: 12, color: colors.textFaint },
   replyTextBig: { fontSize: 13 },
   // The viewer is a dark room whatever the theme: a photo reads best on black.

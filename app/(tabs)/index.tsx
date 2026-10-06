@@ -1488,7 +1488,7 @@ function Home({ scope, topRow, paused, onChrome }: {
                       onReady={(ok) => markReady(post.id, ok)}
                     />
                     {cover(post.id, 'mark')}
-                    {post.removed ? <View pointerEvents="none" style={[styles.removedWrap, { top: insets.top + 12 }]}><RemovedNote removed={post.removed} /></View> : null}
+                    {post.removed ? <View pointerEvents="box-none" style={[styles.removedWrap, { top: insets.top + 12 }]}><RemovedNote removed={post.removed} item={{ kind: 'post', id: post.id, authorId: post.authorId }} /></View> : null}
                   </View>
                 );
               }
@@ -1517,7 +1517,7 @@ function Home({ scope, topRow, paused, onChrome }: {
                         active={active === index && focused}
                       />
                     </View>
-                    {post.removed ? <View pointerEvents="none" style={[styles.removedWrap, { top: insets.top + 12 }]}><RemovedNote removed={post.removed} /></View> : null}
+                    {post.removed ? <View pointerEvents="box-none" style={[styles.removedWrap, { top: insets.top + 12 }]}><RemovedNote removed={post.removed} item={{ kind: 'post', id: post.id, authorId: post.authorId }} /></View> : null}
                   </View>
                 );
               }
@@ -1645,7 +1645,7 @@ function Home({ scope, topRow, paused, onChrome }: {
                   </ChromeLayer>
                  </Reanimated.View></PinchZone>
                   {post.videoUrl ? cover(post.id, 'word', post.thumbnailUrl, post.orientation === 'landscape') : null}
-                  {post.removed ? <View pointerEvents="none" style={[styles.removedWrap, { top: insets.top + 12 }]}><RemovedNote removed={post.removed} /></View> : null}
+                  {post.removed ? <View pointerEvents="box-none" style={[styles.removedWrap, { top: insets.top + 12 }]}><RemovedNote removed={post.removed} item={{ kind: 'post', id: post.id, authorId: post.authorId, clip: post.kind === 'clip' }} /></View> : null}
                 </View>
               );
             }).map((page, index) => {

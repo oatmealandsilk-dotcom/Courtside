@@ -28,6 +28,8 @@ import { notKnownAdult } from '@/features/players/age';
 import { useWelcomeNote } from '@/features/welcome/welcomeNote';
 import { useMapLead } from '@/features/tour/mapLead';
 import { FRIENDS_LINE } from '@/features/invite/friendsWords';
+import { reasonFromLabel } from '@/features/moderation/reasons';
+import { openRules } from '@/features/moderation/RemovedNote';
 
 /**
  * One row per thing that happened to you, the way Instagram does it.
@@ -57,6 +59,9 @@ const ICON: Record<NotificationKind, { name: keyof typeof Ionicons.glyphMap | 'h
   'coach-application': { name: 'ribbon', tint: 'brand' },
   report: { name: 'flag', tint: 'warning' },
   removed: { name: 'eye-off', tint: 'danger' },
+  // How an ask for a review went, and (admins) a new ask: "look again".
+  review: { name: 'refresh', tint: 'brand' },
+  'review-request': { name: 'refresh', tint: 'warning' },
   booking: { name: 'calendar', tint: 'brand' },
   'coach-answer': { name: 'shield-checkmark', tint: 'brand' },
   refund: { name: 'return-down-back', tint: 'success' },
@@ -101,6 +106,9 @@ const VERB: Record<NotificationKind, string> = {
   report: 'sent a report',
   // The words come from the row's preview (migration 108); see verbFor.
   removed: 'removed something of yours',
+  // The words come from the row's preview (migration 2026100600016); see verbFor.
+  review: 'looked again at something of yours',
+  'review-request': 'asked for a review',
   booking: 'booked you',
   'coach-answer': 'answered your booking',
   refund: 'refunded a booking',
@@ -150,6 +158,8 @@ function routeFor(group: Group): string {
   if (group.targetKind === 'coaching-request') return `/coach-request/${group.targetId}`;
   // A report opens the admin's Reports screen.
   if (group.kind === 'report') return '/admin-reports';
+  // An ask for a review opens the admins' Removed page, where it waits with Restore and Keep removed.
+  if (group.kind === 'review-request') return '/admin-removed';
   // Your own "it's up" note takes you to the feed, where the new thing sits first.
   if (group.kind === 'posted') return group.targetKind === 'question' ? `/question/${group.targetId}` : '/';
   // A follow of any kind opens the person, not a post.
@@ -170,6 +180,25 @@ function routeFor(group: Group): string {
 function removedNotice(preview: string | undefined): { thing: string; reason?: string } {
   const m = /^Your (.+?) was removed for breaking CourtSide.s rules(?:: (.+?))?\.?$/.exec((preview ?? '').trim());
   return m ? { thing: m[1], reason: m[2] } : { thing: 'post' };
+}
+
+/**
+ * The server's notice about an ask for a review (migration
+ * 2026100600016): "Your post was restored." or "We looked again and your
+ * clip stays removed: Spam or scams.", in its parts.
+ */
+function reviewNotice(preview: string | undefined): { restored: boolean; thing: string; reason?: string } {
+  const words = (preview ?? '').trim();
+  const back = /^Your (.+?) was restored\.?$/.exec(words);
+  if (back) return { restored: true, thing: back[1] };
+  const kept = /^We looked again and your (.+?) stays removed(?:: (.+?))?\.?$/.exec(words);
+  return kept ? { restored: false, thing: kept[1], reason: kept[2] } : { restored: false, thing: 'post' };
+}
+
+/** An admin's notice of a new ask: "@sam wants their post looked at again.", as who and what. */
+function reviewAsk(preview: string | undefined): { who: string; thing: string } {
+  const m = /^(.+?) wants their (.+?) looked at again\.?$/.exec((preview ?? '').trim());
+  return m ? { who: m[1], thing: m[2] } : { who: 'Someone', thing: 'post' };
 }
 
 /** Which heading a row sits under: new ones first, then by how long ago. */
@@ -280,6 +309,12 @@ export default function Notifications() {
     if (group.kind === 'milestone') return `just passed ${group.preview ?? 'a milestone'}`;
     // From CourtSide: "removed your clip for breaking its rules"; the reason goes on the line under it.
     if (group.kind === 'removed') return `removed your ${removedNotice(group.preview).thing} for breaking its rules`;
+    // From CourtSide: "restored your post", or "looked again: your clip stays removed".
+    if (group.kind === 'review') {
+      const r = reviewNotice(group.preview);
+      return r.restored ? `restored your ${r.thing}` : `looked again: your ${r.thing} stays removed`;
+    }
+    if (group.kind === 'review-request') return `asked for a review of their ${reviewAsk(group.preview).thing}`;
     if (group.kind === 'session-tag') return `tagged you in a ${group.preview === 'match' ? 'match' : 'practice'}`;
     // A workout you have since logged: no longer "Tap to log it" (the tap opens the post for it).
     if (group.kind === 'activity' && detectedActivities.find((a) => a.id === group.targetId)?.status === 'logged') return 'Logged. Tap to post it.';
@@ -395,6 +430,14 @@ export default function Notifications() {
   const photoOf = (id: string) => users.find((u) => u.id === id)?.avatarUrl;
   // The face's colours, the same as on their profile and in every sheet they open.
   const seedOf = (id: string) => users.find((u) => u.id === id)?.avatarSeed ?? id;
+  // A take-down's or a kept review's reason and thing, from the row's own words.
+  const reasonOf = (group: Group) => (group.kind === 'removed' ? removedNotice(group.preview).reason : reviewNotice(group.preview).reason);
+  const thingOf = (group: Group) => (group.kind === 'removed' ? removedNotice(group.preview).thing : reviewNotice(group.preview).thing);
+  // Who asked for a review, by the handle in its words (an admin's row is filed "from" the admin).
+  const askerOf = (group: Group) => {
+    const handle = reviewAsk(group.preview).who.replace(/^@/, '').toLowerCase();
+    return users.find((u) => u.handle.toLowerCase() === handle);
+  };
 
   return (
     <Screen title="Notifications" compactTitle onBack={() => goBack()} onRefresh={isDesktopBrowser() ? undefined : actions.refresh}>
@@ -432,7 +475,8 @@ export default function Notifications() {
                 ? (posts.find((p) => p.id === group.targetId)?.kind === 'clip' ? 'Your clip' : 'Your post')
                 : group.kind === 'posted'
                 ? (group.preview?.startsWith('Instant') || group.preview?.startsWith('Hit')) ? 'Your instant' : group.targetKind === 'question' ? 'Your question' : 'Your post'
-                : group.kind === 'coach-application' || group.kind === 'refund' || group.kind === 'removed' ? 'CourtSide'
+                : group.kind === 'coach-application' || group.kind === 'refund' || group.kind === 'removed' || group.kind === 'review' ? 'CourtSide'
+                : group.kind === 'review-request' ? reviewAsk(group.preview).who
                 : group.kind === 'weekly-recap' ? 'Your week on court'
                 : group.kind === 'activity' ? detectedWho(group.preview, detectedActivities.find((a) => a.id === group.targetId)?.sport)
                 : rest.length === 0
@@ -467,7 +511,10 @@ export default function Notifications() {
                   {group.kind === 'weekly-recap' ? (
                     // Your own week: its bars in a brand disc, no badge.
                     <View style={[styles.brandFace, styles.recapFace]}><Ionicons name="stats-chart" size={20} color={colors.brandInk} /></View>
-                  ) : group.kind === 'coach-application' || group.kind === 'refund' || group.kind === 'activity' || group.kind === 'removed' ? (
+                  ) : group.kind === 'review-request' && askerOf(group) ? (
+                    // The player who asked, when this phone knows them by their handle.
+                    <Avatar name={askerOf(group)!.name} seed={askerOf(group)!.avatarSeed} uri={askerOf(group)!.avatarUrl} size={44} />
+                  ) : group.kind === 'coach-application' || group.kind === 'refund' || group.kind === 'activity' || group.kind === 'removed' || group.kind === 'review' || group.kind === 'review-request' ? (
                     // From CourtSide itself: the mark, not a person's face.
                     <View style={styles.brandFace}><BrandMark size={24} /></View>
                   ) : rest.length ? (
@@ -497,12 +544,21 @@ export default function Notifications() {
                         {[tagState(tag), yourResult(tag), shortDay(tag.day), duration(tag.minutes)].filter(Boolean).join(' · ')}
                       </Text>
                     ) : null
-                  ) : group.kind === 'removed' ? (
-                    // The reason only: the whole sentence is already the row's words.
-                    removedNotice(group.preview).reason ? (
-                      <Text style={styles.preview} numberOfLines={2}>Reason: {removedNotice(group.preview).reason}</Text>
-                    ) : null
-                  ) : group.preview && group.kind !== 'milestone' && group.kind !== 'weekly-recap' && group.preview !== INVITE_LINE ? (
+                  ) : group.kind === 'removed' || (group.kind === 'review' && !reviewNotice(group.preview).restored) ? (
+                    // The reason (the whole sentence is already the row's words), then the way to the rule
+                    // it broke: "Something else" opens the rules at the top, where a plain removal is explained.
+                    <>
+                      {reasonOf(group) ? <Text style={styles.preview} numberOfLines={2}>Reason: {reasonOf(group)}</Text> : null}
+                      <View style={styles.whyRow}>
+                        <Text style={styles.preview}>Why? </Text>
+                        <Pressable accessibilityRole="link" accessibilityLabel="Why? See the rules" hitSlop={{ top: 8, bottom: 8, left: 4, right: 8 }} onPress={() => openRules(reasonFromLabel(reasonOf(group)), thingOf(group))} style={({ pressed }) => pressed && { opacity: 0.6 }}>
+                          <Text style={styles.whyLink}>See the rules</Text>
+                        </Pressable>
+                      </View>
+                    </>
+                  ) : group.kind === 'review' ? (
+                    <Text style={styles.preview} numberOfLines={2}>Thanks for asking. It’s back where it was.</Text>
+                  ) : group.kind === 'review-request' ? null : group.preview && group.kind !== 'milestone' && group.kind !== 'weekly-recap' && group.preview !== INVITE_LINE ? (
                     <Text style={styles.preview} numberOfLines={1}>
                       {group.preview}
                     </Text>
@@ -609,6 +665,8 @@ const styleDefinitions = StyleSheet.create({
   text: { ...typography.small, color: colors.text, lineHeight: 19 },
   who: { ...typography.smallStrong, color: colors.text },
   preview: { ...typography.small, color: colors.textMuted },
+  whyRow: { flexDirection: 'row', alignItems: 'center' },
+  whyLink: { ...typography.smallStrong, color: colors.text },
   time: { ...typography.caption, color: colors.textFaint },
   dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.brand },
   // Square like Instagram's, rounded like everything else here.

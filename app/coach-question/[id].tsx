@@ -147,7 +147,7 @@ export default function CoachQuestionDetail() {
       ) : undefined}
     >
       <View style={styles.head}>
-        {removed ? <RemovedNote removed={removed} style={{ alignSelf: 'flex-start' }} /> : null}
+        {removed ? <RemovedNote removed={removed} align="start" item={{ kind: 'coach-question', id: question.id, authorId: question.authorId }} /> : null}
         <View style={styles.authorRow}>
           <Avatar name={author?.name ?? '?'} seed={author?.avatarSeed ?? question.id} size={38} />
           <View style={{ flex: 1 }}>
@@ -221,7 +221,7 @@ export default function CoachQuestionDetail() {
                 <RichText style={styles.body}>{reply.body}</RichText>
               </Pressable>
             ) : <RichText style={styles.body}>{reply.body}</RichText>}
-            {reply.removed ? <RemovedNote removed={reply.removed} quiet /> : null}
+            {reply.removed ? <RemovedNote removed={reply.removed} quiet item={{ kind: 'coach-reply', id: reply.id, authorId: reply.coachUserId }} /> : null}
 
             <View style={styles.replyActions}>
               <Pressable

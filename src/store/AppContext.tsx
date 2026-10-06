@@ -21,7 +21,7 @@ import { TERMS_VERSION } from '@/lib/legal';
 
 import { fetchBootstrap, searchPosts as apiSearchPosts, signIn as apiSignIn, type Bootstrap } from '@/data/api';
 import * as demoApi from '@/data/api';
-import { BLOCKED_WORDS_NOTE, CHAT_PHOTO_UNREADABLE, auth as remoteAuth, fetchRemote, isLocalMedia, onWordsRefused, queueFeedSignal, remote, uploadChatPhoto, uploadMedia, emptyProfile, type GroupRefusal, type AdminReport, type ModerationResult, type ReportedChat, type ReportedItem, type ReportedItemKind, type ReportEvidence, type FeedSignal, type SiteFeedback, type WaitlistEntry, type BetaInviteStatus, type FirstDayStats, type FirstMove, type HandleStatus, type InviteCodeResult, type MyInviter, type RemoteData, type UserState } from '@/data/remote';
+import { BLOCKED_WORDS_NOTE, CHAT_PHOTO_UNREADABLE, REVIEW_NOTE_MAX, auth as remoteAuth, fetchRemote, isLocalMedia, onWordsRefused, queueFeedSignal, remote, uploadChatPhoto, uploadMedia, emptyProfile, type GroupRefusal, type AdminReport, type ModerationResult, type ReviewAskResult, type ReportedChat, type ReportedItem, type ReportedItemKind, type ReportEvidence, type FeedSignal, type SiteFeedback, type WaitlistEntry, type BetaInviteStatus, type FirstDayStats, type FirstMove, type HandleStatus, type InviteCodeResult, type MyInviter, type RemoteData, type UserState } from '@/data/remote';
 import { clearSnapshot, markSnapshotOpened, markSnapshotOpening, readSnapshot, saveSnapshot, snapshotFailedBefore } from '@/data/snapshot';
 import { forgetAccount, listSavedAccounts, rememberAccount, type SavedAccount } from '@/features/accounts/savedAccounts';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
@@ -118,7 +118,7 @@ import type {
   Story,
   User,
   PlayerProfile,
-  MediaCrop, Tip, TaggedCourt, TrackerId, Invitee, ContactMatch, HealthShareKey, HeadToHead, CourtKings, FlybyPerson, MatchSet, Removed, RemovedItem, TakedownKind, TakedownReason, TournamentEntry, HiddenWords, HiddenWordsKind } from '@/data/types';
+  MediaCrop, Tip, TaggedCourt, TrackerId, Invitee, ContactMatch, HealthShareKey, HeadToHead, CourtKings, FlybyPerson, MatchSet, Removed, RemovedItem, ReviewRequest, ReviewStatus, TakedownKind, TakedownReason, TournamentEntry, HiddenWords, HiddenWordsKind } from '@/data/types';
 import { HIDDEN_WORDS_MAX, HIDDEN_WORD_LENGTH, cleanWords, defaultHiddenWords } from '@/features/hiddenWords/hiddenWords';
 import { setsWinner } from '@/features/activity/score';
 
@@ -482,6 +482,12 @@ interface AppState extends Bootstrap, CourtLifeState, FeedGroupsState {
    * the page has asked for them. The demo keeps its own on this phone.
    */
   hiddenWords: HiddenWords | null;
+  /**
+   * Your own asks for a review of something taken down (migration
+   * 2026100600016): null until something removed of yours first shows and
+   * asks for them. The demo keeps its own on this phone.
+   */
+  reviewRequests: ReviewRequest[] | null;
   /** Whether the app may ask the device where you are, and the city it found. */
   locationEnabled: boolean;
   /**
@@ -555,7 +561,7 @@ function freshAccountSettings(): Partial<AppState> {
 function signedOut(prev: AppState): AppState {
   return {
     ...prev, currentUserId: null, onboardingComplete: false, healthIsReal: false, healthHistory: [], detectedActivities: [],
-    ...emptyCourtLife, ...emptyFeedGroups, lastSeenLoaded: false, sessionTags: [], newOnCourtside: null,
+    ...emptyCourtLife, ...emptyFeedGroups, lastSeenLoaded: false, sessionTags: [], newOnCourtside: null, reviewRequests: null,
     mapVisibility: isSupabaseConfigured ? undefined : prev.mapVisibility, teenMap: isSupabaseConfigured ? 'off' : prev.teenMap,
     ...freshAccountSettings(),
   };
@@ -1034,6 +1040,26 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
   restoreContent: (kind: TakedownKind, id: ID, options?: { quiet?: boolean; reportId?: ID }) => Promise<ModerationResult>;
   /** Admins only: Settings → Admin → Removed. 'not_ready' before migration 108; null when it could not load. */
   loadRemoved: () => Promise<RemovedItem[] | 'not_ready' | null>;
+  /**
+   * Your own asks for a review (migration 2026100600016), into
+   * `reviewRequests`. Asked once, the first time something removed of yours
+   * shows; a database without the migration counts as none asked.
+   */
+  loadReviewRequests: () => Promise<void>;
+  /**
+   * "Ask for a review" on something of yours taken down: once per take-down,
+   * with an optional note (up to 300 characters) only admins read. The
+   * admins are told; the answer comes back as a notification.
+   */
+  askForReview: (kind: TakedownKind, id: ID, note?: string) => Promise<ReviewAskResult>;
+  /** Admins only: every ask still waiting, for Settings → Admin → Removed. 'not_ready' before the migration; null when it could not load. */
+  loadOpenReviews: () => Promise<ReviewRequest[] | 'not_ready' | null>;
+  /**
+   * Admins only: looked again, and it stays down. Closes the ask and its
+   * author is told "We looked again and your post stays removed." (Restore
+   * closes an ask by itself, and tells its author it was restored.)
+   */
+  keepRemoved: (kind: TakedownKind, id: ID) => Promise<'done' | 'no_request' | ModerationResult>;
 
   /* Messaging */
   /**
@@ -1738,6 +1764,13 @@ function markRemoved(prev: AppState, kind: TakedownKind, id: ID, removed: Remove
   }
 }
 
+/** The ask about one item closed here as it was closed on the server (the demo, and an admin's own copy). */
+function closeReview(prev: AppState, kind: TakedownKind, id: ID, status: Exclude<ReviewStatus, 'open'>): AppState {
+  if (!prev.reviewRequests?.some((r) => r.kind === kind && r.targetId === id && r.status === 'open')) return prev;
+  const at = new Date().toISOString();
+  return { ...prev, reviewRequests: prev.reviewRequests.map((r) => (r.kind === kind && r.targetId === id && r.status === 'open' ? { ...r, status, closedAt: at } : r)) };
+}
+
 /** Why a take-down or restore did not go through, for its toast. */
 function moderationRefusal(result: ModerationResult, restoring: boolean): { title: string; body?: string } {
   if (result === 'refused') return { title: 'Only admins can do that' };
@@ -1974,6 +2007,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     prefs: DEFAULT_PREFS,
     contactsFindableLive: false,
     hiddenWords: null,
+    reviewRequests: null,
     tips: [],
     sessions: [],
     sessionTags: [],
@@ -5161,11 +5195,84 @@ export function AppProvider({ children }: { children: ReactNode }) {
       showToast({ ...moderationRefusal(result, true), icon: 'alert-circle-outline', long: true });
       return result;
     }
+    // An ask for a review about it is closed as restored (the server does the same, and tells its author).
+    setState((prev) => closeReview(prev, kind, id, 'restored'));
     if (!quiet) showToast({ title: 'Put back', body: 'Everyone who could see it before can see it again.', icon: 'eye-outline' });
     return result;
   }, []);
   restoreRef.current = restoreContent;
   const loadRemoved = useCallback(async () => (live(stateRef.current.currentUserId) ? remote.fetchRemoved() : []), []);
+  // Asking for a review (migration 2026100600016). Your own asks are read
+  // once, the first time something removed of yours shows; the demo keeps
+  // its asks on this phone.
+  const reviewsAsking = useRef<Promise<void> | null>(null);
+  const loadReviewRequests = useCallback(async (): Promise<void> => {
+    const me = stateRef.current.currentUserId;
+    if (!me) return;
+    if (!live(me)) {
+      setState((prev) => (prev.reviewRequests ? prev : { ...prev, reviewRequests: [] }));
+      return;
+    }
+    if (reviewsAsking.current) return reviewsAsking.current;
+    const ask = (async () => {
+      const got = await remote.fetchReviewRequests({ mine: me }).catch(() => null);
+      // A failure leaves it unknown (the button waits); a database without the migration has none.
+      if (got === null || stateRef.current.currentUserId !== me) return;
+      setState((prev) => ({ ...prev, reviewRequests: got === 'not_ready' ? [] : got }));
+    })().finally(() => { reviewsAsking.current = null; });
+    reviewsAsking.current = ask;
+    return ask;
+  }, []);
+  const askForReview = useCallback(async (kind: TakedownKind, id: ID, note?: string): Promise<ReviewAskResult> => {
+    const me = stateRef.current.currentUserId;
+    if (!me) return 'failed';
+    const held = heldItem(stateRef.current, kind, id);
+    const removedAt = held?.removed?.at;
+    const words = note?.replace(/\s+/g, ' ').trim().slice(0, REVIEW_NOTE_MAX) || undefined;
+    // Kept here at once (the demo's only copy; for a real account, until the server's own row is read back).
+    const keep = () => {
+      if (!removedAt) return;
+      const asked: ReviewRequest = { id: `review-${Date.now()}`, authorId: me, kind, targetId: id, note: words, status: 'open', removedAt, createdAt: new Date().toISOString() };
+      setState((prev) => (prev.currentUserId !== me ? prev : { ...prev, reviewRequests: [asked, ...(prev.reviewRequests ?? []).filter((r) => !(r.kind === kind && r.targetId === id && r.status === 'open'))] }));
+    };
+    if (!live(me, id)) {
+      if (!removedAt) return 'not_removed';
+      if ((stateRef.current.reviewRequests ?? []).some((r) => r.kind === kind && r.targetId === id && (r.status === 'open' || r.removedAt === removedAt))) return 'already';
+      keep();
+      haptics.commit();
+      return 'done';
+    }
+    const result = await remote.requestReview(kind, id, words);
+    if (result === 'done') { haptics.commit(); keep(); }
+    if (result === 'done' || result === 'already') {
+      // The server's own rows, so "Review asked" says what it holds.
+      const got = await remote.fetchReviewRequests({ mine: me }).catch(() => null);
+      if (Array.isArray(got) && stateRef.current.currentUserId === me) setState((prev) => ({ ...prev, reviewRequests: got }));
+    }
+    return result;
+  }, []);
+  const loadOpenReviews = useCallback(async (): Promise<ReviewRequest[] | 'not_ready' | null> => {
+    const me = stateRef.current.currentUserId;
+    if (!me || !amAdmin()) return [];
+    if (!live(me)) return (stateRef.current.reviewRequests ?? []).filter((r) => r.status === 'open');
+    return remote.fetchReviewRequests({ open: true }).catch(() => null);
+  }, []);
+  const keepRemoved = useCallback(async (kind: TakedownKind, id: ID): Promise<'done' | 'no_request' | ModerationResult> => {
+    const me = stateRef.current.currentUserId;
+    if (!me || !amAdmin()) return 'refused';
+    const result = live(me, id) ? await remote.keepRemoved(kind, id).catch(() => 'failed' as const) : 'done';
+    if (result === 'done' || result === 'no_request') {
+      haptics.commit();
+      setState((prev) => closeReview(prev, kind, id, 'kept'));
+      return result;
+    }
+    showToast({
+      title: result === 'refused' ? 'Only admins can do that' : result === 'not_ready' ? 'Reviews aren’t switched on yet' : result === 'gone' ? 'It’s already gone' : 'Couldn’t save that. Try again.',
+      body: result === 'not_ready' ? 'It needs the database update (migration 2026100600016) first.' : undefined,
+      icon: 'alert-circle-outline', long: true,
+    });
+    return result;
+  }, []);
   // Opening someone's followers or following: their follows come in then.
   const loadFollowsOf = useCallback(async (userId: ID) => {
     if (!live(stateRef.current.currentUserId, userId)) return;
@@ -8090,6 +8197,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       takeDown,
       restoreContent,
       loadRemoved,
+      loadReviewRequests,
+      askForReview,
+      loadOpenReviews,
+      keepRemoved,
       openConversationWith,
       resolveChatId,
       isDraftChat,
@@ -8304,6 +8415,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       takeDown,
       restoreContent,
       loadRemoved,
+      loadReviewRequests,
+      askForReview,
+      loadOpenReviews,
+      keepRemoved,
       openConversationWith,
       resolveChatId,
       isDraftChat,

@@ -23,7 +23,7 @@ import { blankVideoLocation } from '@/lib/videoLocation';
 import { noteStep } from '@/lib/crashReporting';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
-import type { Answer, ChatEvent, ChatPhoto, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, DetectedActivity, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, HiddenWords, HiddenWordsKind, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, CourtNote, LastSeen, MapPlace, MapVisibility, TaggedCourt, Question, Removed, RemovedItem, Story, SurfacePreference, TakedownKind, TakedownReason, Tip, TournamentEntry, User, PublicStreak, CoachApplication, CourtAccess, CourtAccessSource, CourtDayPart, CourtFacts, CourtFollowCount, CourtNow, CourtKings, CourtRegulars, CourtReview, CourtRightNow, CourtRing, FlybyPerson, FollowedCourt, SessionTag, SessionTagRefusal, SessionTagRole, FeedGroup, FeedGroupCard, DiscoverGroup, GroupLook, Invitee, ContactMatch, HeadToHead, MatchSet, SessionWith } from './types';
+import type { Answer, ChatEvent, ChatPhoto, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, DetectedActivity, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, HiddenWords, HiddenWordsKind, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, CourtNote, LastSeen, MapPlace, MapVisibility, TaggedCourt, Question, Removed, RemovedItem, ReviewRequest, ReviewStatus, Story, SurfacePreference, TakedownKind, TakedownReason, Tip, TournamentEntry, User, PublicStreak, CoachApplication, CourtAccess, CourtAccessSource, CourtDayPart, CourtFacts, CourtFollowCount, CourtNow, CourtKings, CourtRegulars, CourtReview, CourtRightNow, CourtRing, FlybyPerson, FollowedCourt, SessionTag, SessionTagRefusal, SessionTagRole, FeedGroup, FeedGroupCard, DiscoverGroup, GroupLook, Invitee, ContactMatch, HeadToHead, MatchSet, SessionWith } from './types';
 import { validSets } from '@/features/activity/score';
 import { TERMS_VERSION } from '@/lib/legal';
 import { readinessOf, sessionTagNamesLive, sessionToSend, setSessionTagNamesLive, trustedSession } from './sessionTagGate';
@@ -1455,6 +1455,26 @@ function moderationResult(error: { code?: string; message: string } | null, what
   fail(what)(error);
   return 'failed';
 }
+/** The longest note an author can send with "Ask for a review" (the database keeps 300 characters). */
+export const REVIEW_NOTE_MAX = 300;
+/**
+ * How "Ask for a review" went: 'done', 'already' (asked about this take-down
+ * before), 'not_removed' (put back meanwhile), 'not_yours', 'gone' (deleted),
+ * 'not_ready' (a database without migration 2026100600016) or 'failed'.
+ */
+export type ReviewAskResult = 'done' | 'already' | 'not_removed' | 'not_yours' | 'gone' | 'not_ready' | 'failed';
+/** Never closed_by: the app is not told which admin answered (the database does not hand it out either). */
+const REVIEW_COLUMNS = 'id, author_id, target_kind, target_id, note, removed_at, status, created_at, closed_at';
+interface ReviewRow { id: string; author_id: string; target_kind: string; target_id: string; note: string | null; removed_at: string; status: string; created_at: string; closed_at: string | null }
+const toReviewRequest = (r: ReviewRow): ReviewRequest[] => {
+  const kind = asKind(r.target_kind);
+  const status: ReviewStatus | null = r.status === 'open' || r.status === 'kept' || r.status === 'restored' ? r.status : null;
+  if (!kind || !status) return [];
+  return [{
+    id: r.id, authorId: r.author_id, kind, targetId: r.target_id, note: r.note ?? undefined, status,
+    removedAt: r.removed_at, createdAt: r.created_at, closedAt: r.closed_at ?? undefined,
+  }];
+};
 /** A reported post or Instant as the Reports screen shows it. */
 export interface ReportedItem { body: string; picture?: string; removed: boolean; reason?: TakedownReason }
 /**
@@ -2858,6 +2878,40 @@ export const remote = {
         parentId: text(r.parent_id), picture: text(r.picture), note: text(r.note), removedBy: text(r.removed_by),
       }];
     });
+  },
+  /**
+   * Your own asks for a review (review_requests, migration 2026100600016),
+   * newest first; or, for an admin with `open`, every ask still waiting.
+   * 'not_ready' on a database without that migration; null when it failed.
+   */
+  async fetchReviewRequests(who: { mine: ID } | { open: true }): Promise<ReviewRequest[] | 'not_ready' | null> {
+    let ask = need().from('review_requests').select(REVIEW_COLUMNS);
+    ask = 'mine' in who ? ask.eq('author_id', who.mine) : ask.eq('status', 'open');
+    const { data, error } = await ask.order('created_at', { ascending: false }).limit(300);
+    if (error) { if (missingTable(error)) return 'not_ready'; fail('review requests')(error); return null; }
+    return ((data ?? []) as ReviewRow[]).flatMap(toReviewRequest);
+  },
+  /**
+   * The author asks CourtSide to look again (request_review): once per
+   * take-down. See ReviewAskResult for the answers.
+   */
+  async requestReview(kind: TakedownKind, id: ID, note?: string): Promise<ReviewAskResult> {
+    const words = note?.replace(/\s+/g, ' ').trim().slice(0, REVIEW_NOTE_MAX);
+    const { error } = await need().rpc('request_review', { p_kind: kind, p_id: id, p_note: words || null });
+    if (!error) return 'done';
+    if (missingFunction(error)) return 'not_ready';
+    if (/already asked/.test(error.message)) return 'already';
+    if (/not removed/.test(error.message)) return 'not_removed';
+    if (/not yours/.test(error.message)) return 'not_yours';
+    if (/not found/.test(error.message)) return 'gone';
+    fail('request review')(error);
+    return 'failed';
+  },
+  /** An admin looked again and it stays down (keep_removed): its author is told. 'no_request' when nothing about it was waiting. */
+  async keepRemoved(kind: TakedownKind, id: ID): Promise<'done' | 'no_request' | ModerationResult> {
+    const { data, error } = await need().rpc('keep_removed', { p_kind: kind, p_id: id });
+    if (error) return moderationResult(error, 'keep removed');
+    return data === 'no_request' ? 'no_request' : 'done';
   },
 
   /* ------------------------------ more posts ------------------------------ */

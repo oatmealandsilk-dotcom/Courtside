@@ -114,6 +114,8 @@ export default function RootLayout() {
           <Stack.Screen name="open-to-hit" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
           {/* The Tennis profile's small sheets: an injury or limit, a goal, every achievement (DragSheet). */}
           <Stack.Screen name="tennis-sheet" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
+          {/* "Ask for a review" on something of yours taken down: a small sheet over it (DragSheet). */}
+          <Stack.Screen name="review-request" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
           <Stack.Screen name="hit-request/new" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
           <Stack.Screen name="edit-post" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
           <Stack.Screen

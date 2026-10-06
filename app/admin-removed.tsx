@@ -6,8 +6,8 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { TileCover } from '@/components/TileCover';
 import { Avatar, Button, EmptyState, Screen } from '@/components/ui';
-import type { RemovedItem, TakedownKind } from '@/data/types';
-import { reasonLabel } from '@/features/moderation/reasons';
+import type { RemovedItem, ReviewRequest, TakedownKind } from '@/data/types';
+import { reasonLabel, thingWord } from '@/features/moderation/reasons';
 import { confirm } from '@/lib/confirm';
 import { relativeTime } from '@/lib/format';
 import { goBack } from '@/lib/goBack';
@@ -46,17 +46,25 @@ function openRemoved(item: RemovedItem) {
  * it was, who posted it, why it came down (and the note, for "Something
  * else"), who took it down and when. "Restore" puts it back exactly as it
  * was: the card leaves at once, and comes back if the server says no.
+ *
+ * An author who asked for a review (migration 2026100600016) puts their card
+ * at the top, marked "Review asked" with their note. Restore answers it
+ * ("Your post was restored."); "Keep removed" answers it the other way ("We
+ * looked again and your post stays removed."). Either way its author is told.
  */
 export default function AdminRemoved() {
   const styles = useThemedStyles(styleDefinitions);
-  const { users, currentUser, actions } = useApp();
+  const { users, posts, currentUser, actions } = useApp();
   const [items, setItems] = useState<RemovedItem[] | 'not_ready' | 'failed' | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  // Asks for a review still waiting, by kind:id (none before the migration).
+  const [reviews, setReviews] = useState<Map<string, ReviewRequest>>(new Map());
   // Cards restored on this page, kept off a list that loads again before the server has caught up.
   const restored = useRef(new Set<string>());
 
   const load = useCallback(async () => {
-    const got = await actions.loadRemoved();
+    const [got, asks] = await Promise.all([actions.loadRemoved(), actions.loadOpenReviews()]);
+    if (Array.isArray(asks)) setReviews(new Map(asks.map((r) => [`${r.kind}:${r.targetId}`, r])));
     setItems(got === null ? 'failed' : got === 'not_ready' ? got : got.filter((x) => !restored.current.has(`${x.kind}:${x.id}`)));
   }, [actions]);
   // Again each time the page comes back into view (after a take-down elsewhere, say).
@@ -70,9 +78,14 @@ export default function AdminRemoved() {
     );
   }
 
+  const handleOf = (item: RemovedItem) => { const who = users.find((u) => u.id === item.authorId); return who ? `@${who.handle}` : 'Its author'; };
+  // What its author's notice calls it ("clip" for a clip this phone holds), as the server's words do.
+  const thingOf = (item: RemovedItem) => thingWord(item.kind, item.kind === 'post' && posts.find((p) => p.id === item.id)?.kind === 'clip');
   const restore = (item: RemovedItem) => confirm({
     title: `Restore this ${KIND_LABEL[item.kind].toLowerCase()}?`,
-    message: 'Everyone who could see it before sees it again. Its author isn’t told.',
+    message: reviews.has(`${item.kind}:${item.id}`)
+      ? `Everyone who could see it before sees it again. ${handleOf(item)} asked for this review and is told: “Your ${thingOf(item)} was restored.”`
+      : 'Everyone who could see it before sees it again. Its author isn’t told.',
     confirmLabel: 'Restore',
     onConfirm: async () => {
       const key = `${item.kind}:${item.id}`;
@@ -94,10 +107,36 @@ export default function AdminRemoved() {
       setBusy(null);
     },
   });
+  // Looked again, and it stays down: the ask is answered, the card stays (it is still removed).
+  const keep = (item: RemovedItem) => confirm({
+    title: `Keep this ${KIND_LABEL[item.kind].toLowerCase()} removed?`,
+    message: `${handleOf(item)} is told: “We looked again and your ${thingOf(item)} stays removed${item.reason === 'other' ? '' : `: ${reasonLabel(item.reason)}`}.”`,
+    confirmLabel: 'Keep removed',
+    onConfirm: async () => {
+      const key = `${item.kind}:${item.id}`;
+      const ask = reviews.get(key);
+      setBusy(`keep:${key}`);
+      setReviews((m) => { const next = new Map(m); next.delete(key); return next; });
+      const result = await actions.keepRemoved(item.kind, item.id);
+      // Not saved: the ask is back on its card.
+      if (result !== 'done' && result !== 'no_request' && ask) setReviews((m) => new Map(m).set(key, ask));
+      setBusy(null);
+    },
+  });
+  // Asked for a review first (oldest ask at the top: first come, first answered), then the rest as they came down.
+  const shown = Array.isArray(items)
+    ? [...items].sort((a, b) => {
+      const ra = reviews.get(`${a.kind}:${a.id}`);
+      const rb = reviews.get(`${b.kind}:${b.id}`);
+      if (ra && rb) return Date.parse(ra.createdAt) - Date.parse(rb.createdAt);
+      return ra ? -1 : rb ? 1 : 0;
+    })
+    : [];
+  const asked = shown.filter((x) => reviews.has(`${x.kind}:${x.id}`)).length;
 
   return (
     <Screen title="Removed" compactTitle onBack={() => goBack()} onRefresh={load}>
-      <Text style={styles.intro}>Everything taken down for breaking CourtSide’s rules. Only its author and admins can see these. Nothing here is deleted.</Text>
+      <Text style={styles.intro}>Everything taken down for breaking CourtSide’s rules. Only its author and admins can see these. Nothing here is deleted.{asked ? ` ${asked === 1 ? 'One author has' : `${asked} authors have`} asked for a review: ${asked === 1 ? 'that card is' : 'those cards are'} first.` : ''}</Text>
       {items === null ? (
         <Text style={styles.muted}>Loading…</Text>
       ) : items === 'not_ready' ? (
@@ -107,15 +146,22 @@ export default function AdminRemoved() {
       ) : items.length === 0 ? (
         <EmptyState icon="eye-off-outline" title="Nothing taken down" body="Use “Take down” in the … menu of a post, clip or Instant, or hold a comment or reply." />
       ) : (
-        items.map((item) => {
+        shown.map((item) => {
           const author = users.find((u) => u.id === item.authorId);
           const admin = item.removedBy ? users.find((u) => u.id === item.removedBy) : undefined;
           const key = `${item.kind}:${item.id}`;
+          const review = reviews.get(key);
           return (
-            <View key={key} style={styles.card}>
+            <View key={key} style={[styles.card, review && styles.cardAsked]}>
               <View style={styles.head}>
                 <View style={styles.kind}><Text style={styles.kindText}>{KIND_LABEL[item.kind]}</Text></View>
-                <Text style={styles.muted}>{relativeTime(item.removedAt)}</Text>
+                {review ? (
+                  <View style={styles.asked} accessibilityRole="text" accessibilityLabel="Review asked">
+                    <Ionicons name="refresh" size={11} color={colors.warning} />
+                    <Text style={styles.askedText}>Review asked</Text>
+                  </View>
+                ) : null}
+                <Text style={[styles.muted, styles.when]}>{relativeTime(item.removedAt)}</Text>
               </View>
 
               <Pressable accessibilityRole="link" accessibilityLabel={`Open the removed ${KIND_LABEL[item.kind].toLowerCase()}`} onPress={() => openRemoved(item)} style={styles.target}>
@@ -142,8 +188,17 @@ export default function AdminRemoved() {
                 </Text>
               </View>
 
+              {review ? (
+                // The author's own words, as they sent them.
+                <View style={styles.ask}>
+                  <Text style={styles.askHead}>{author ? `@${author.handle}` : 'The author'} asked {relativeTime(review.createdAt)}{review.note ? ':' : ', with no note.'}</Text>
+                  {review.note ? <Text style={styles.askNote}>“{review.note}”</Text> : null}
+                </View>
+              ) : null}
+
               <View style={styles.actions}>
                 <Button label="Restore" variant="secondary" loading={busy === key} onPress={() => restore(item)} />
+                {review ? <Button label="Keep removed" variant="ghost" loading={busy === `keep:${key}`} onPress={() => keep(item)} /> : null}
               </View>
             </View>
           );
@@ -156,7 +211,15 @@ export default function AdminRemoved() {
 const styleDefinitions = StyleSheet.create({
   intro: { ...typography.small, color: colors.textMuted, lineHeight: 20, paddingBottom: spacing.md },
   card: { gap: spacing.sm, padding: spacing.md, marginBottom: spacing.md, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
+  // Waiting on an answer: the card's edge in the "asked" colour, nothing louder.
+  cardAsked: { borderColor: colors.warning },
   head: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  when: { marginLeft: 'auto' },
+  asked: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.warning },
+  askedText: { ...typography.caption, color: colors.warning, letterSpacing: 0 },
+  ask: { gap: 4, padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.bgElevated },
+  askHead: { ...typography.smallStrong, color: colors.text },
+  askNote: { ...typography.body, color: colors.text, lineHeight: 21 },
   kind: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.pill, backgroundColor: colors.brandDim },
   kindText: { ...typography.caption, color: colors.brand },
   target: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.sm, borderRadius: radius.md, backgroundColor: colors.surfaceAlt },

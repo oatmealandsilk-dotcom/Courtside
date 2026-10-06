@@ -198,6 +198,8 @@ export default function Settings() {
         // Until the tour is switched on for everyone, only admins see this (to review it).
         ...(TOUR_ON || currentUser?.isAdmin ? [{ icon: 'compass-outline' as const, label: 'Show the tutorial', onPress: replayTour }] : []),
         { icon: 'help-circle-outline', label: 'Help', onPress: () => router.push('/help') },
+        // The rules in plain words, what happens when something is removed, and how to report (Oct 5).
+        { icon: 'book-outline', label: 'Community Guidelines', onPress: () => router.push('/guidelines') },
         { icon: 'information-circle-outline', label: 'About', onPress: () => router.push('/about') },
       ],
     },

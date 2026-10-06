@@ -88,7 +88,8 @@ export default function Agree() {
           Agreeing means you accept the full{' '}
           <Text accessibilityRole="link" onPress={() => openLegal('terms')} style={styles.link}>Terms of Use</Text>
           {' '}and have read the{' '}
-          <Text accessibilityRole="link" onPress={() => openLegal('privacy')} style={styles.link}>Privacy Policy</Text>.
+          <Text accessibilityRole="link" onPress={() => openLegal('privacy')} style={styles.link}>Privacy Policy</Text>. Each rule is explained in the{' '}
+          <Text accessibilityRole="link" onPress={() => router.push('/guidelines')} style={styles.link}>Community Guidelines</Text>.
         </Animated.Text>
       </ScrollView>
       {/* The guidelines scroll; they stop at the status bar instead of running under the clock. */}

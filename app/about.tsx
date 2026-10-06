@@ -39,7 +39,8 @@ export default function About() {
           // A way to reach a person, which Help promises is here.
           { icon: 'mail-outline', label: 'Contact us', open: () => { void Linking.openURL('mailto:support@courtsidebase.com?subject=CourtSide'); }, external: true },
           // The documents themselves, a tap away whenever someone wants them,
-          // not only at the moment of signing up.
+          // not only at the moment of signing up. The rules in plain words first (Oct 5).
+          { icon: 'book-outline', label: 'Community Guidelines', open: () => router.push('/guidelines') },
           { icon: 'document-text-outline', label: 'Terms of Use', open: () => openLegal('terms'), external: true },
           { icon: 'lock-closed-outline', label: 'Privacy Policy', open: () => openLegal('privacy'), external: true },
         ].map((row, index) => (
