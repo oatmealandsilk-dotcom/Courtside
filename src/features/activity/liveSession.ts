@@ -15,11 +15,10 @@ import { localDay } from '@/features/practice/stats';
  * AppContext (store/liveSession); these are the plain sums around it.
  */
 
-/** The kinds Start offers, the log sheet's tennis three in its own order. */
+/** The kinds Start offers, the log sheet's tennis two (Drills is folded into Practice, Oct 7, owner). */
 export const LIVE_KINDS: { value: LiveSession['kind']; label: string }[] = [
   { value: 'practice', label: 'Practice' },
   { value: 'match', label: 'Match' },
-  { value: 'drills', label: 'Drills' },
 ];
 
 /** The shortest and longest a session can be logged at (the database's 5 to 600 minutes, migration 39). */

@@ -58,7 +58,7 @@ const EVEN_WEB = Platform.OS === 'web' ? ({ textWrap: 'balance' } as unknown as 
  * on, the way "Played at …?" finds it), else the last court you tagged,
  * else a court you follow; tapping it (Change) opens Add location. At the
  * court's foot, who will see you there, by the court sheet's own check-in
- * rules. Then the kind (Practice, Match or Drills, practice already picked)
+ * rules. Then the kind (Practice or Match, practice already picked)
  * and a big round Start under the thumb.
  * Start runs the clock and opens the live page; at a court anyone may play
  * at it checks you in there too ("I'm playing here").

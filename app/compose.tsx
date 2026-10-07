@@ -69,13 +69,18 @@ import { useRevealOnFocus } from '@/lib/keyboardScroll';
 import { useAndroidBack } from '@/lib/androidBack';
 
 type Mode = 'clip' | 'post' | 'story' | 'hit';
-/** What a session was, the log sheet's four. */
+/** What a session was, the log sheet's three. */
 const KINDS: { value: PracticeSession['kind']; label: string }[] = [
   { value: 'practice', label: 'Practice' },
   { value: 'match', label: 'Match' },
-  { value: 'drills', label: 'Drills' },
   { value: 'fitness', label: 'Fitness' },
 ];
+/**
+ * Drills is folded into Practice (Oct 7, owner: "drills and practice are the
+ * same thing"). A session that is already Drills (started live before, or
+ * one being finished now) keeps its chip, so its choice is never blank.
+ */
+const WITH_DRILLS: typeof KINDS = [...KINDS.slice(0, 2), { value: 'drills', label: 'Drills' }, KINDS[2]];
 
 /**
  * Posting lands you on the feed, whichever tab (or challenge page) the Create
@@ -391,6 +396,7 @@ export default function Compose() {
   const workoutLog = opened?.type === 'tracker' && !isTennisActivity(opened.activity);
   const workoutSport = opened?.type === 'tracker' && !isTennisActivity(opened.activity) ? opened.activity.sport : undefined;
   const [kind, setKind] = useState<PracticeSession['kind']>(() => (workoutLog ? 'fitness' : fromHit?.kind ?? 'practice'));
+  const [kinds] = useState(() => (kind === 'drills' ? WITH_DRILLS : KINDS));
   // Opened cold, the workout can arrive after the page: fitness from then on.
   useEffect(() => { if (workoutLog) setKind('fitness'); }, [workoutLog]);
   const [won, setWon] = useState<'won' | 'lost' | null>(null);
@@ -1140,7 +1146,7 @@ export default function Compose() {
               addScoreTo ? <AddScore sessionId={addScoreTo} style={styles.addScore} /> : null
             ) : (
               <Reanimated.View layout={LinearTransition.duration(220)} style={styles.logChips}>
-                <Chips value={kind} onChange={(k) => { if (!k) return; setKind(k); if (k !== 'match') setWon(null); }} options={KINDS} />
+                <Chips value={kind} onChange={(k) => { if (!k) return; setKind(k); if (k !== 'match') setWon(null); }} options={kinds} />
                 {kind === 'match' ? (
                   <Reanimated.View entering={FadeInDown.duration(220).easing(Easing.bezier(0.32, 0.72, 0, 1))} exiting={FadeOut.duration(160)}>
                     {/* A score that says who won decides it; the chips are for a match with no score, or one level on sets. */}

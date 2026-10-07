@@ -39,9 +39,14 @@ import { colors, font, lift, radius, spacing, typography } from '@/theme';
 const KINDS: { value: PracticeSession['kind']; label: string }[] = [
   { value: 'practice', label: 'Practice' },
   { value: 'match', label: 'Match' },
-  { value: 'drills', label: 'Drills' },
   { value: 'fitness', label: 'Fitness' },
 ];
+/**
+ * Drills is folded into Practice (Oct 7, owner: "drills and practice are the
+ * same thing"). A session that is already Drills (started live before, or
+ * one being finished now) keeps its chip, so its choice is never blank.
+ */
+const WITH_DRILLS: typeof KINDS = [...KINDS.slice(0, 2), { value: 'drills', label: 'Drills' }, KINDS[2]];
 
 /**
  * What a fitness session logged by hand was, kept as the same slugs a
@@ -192,6 +197,7 @@ function LogSession() {
   const alreadyPosted = !!done && !!postOf({ type: 'tracker', activity: done }, postedIndex(posts, currentUserId));
 
   const [kind, setKind] = useState<PracticeSession['kind']>(fromHit?.kind ?? fromLive?.kind ?? 'practice');
+  const [kinds] = useState(() => (kind === 'drills' ? WITH_DRILLS : KINDS));
   // A fitness session's kind ("run", "gym"), when picked.
   const [workout, setWorkout] = useState<string | undefined>();
   const [minutes, setMinutes] = useState<number | null>(fresh ? fresh.minutes : fromHit ? fromHit.minutes : liveMins);
@@ -619,7 +625,7 @@ function LogSession() {
             </View>
           ) : null}
           <Section title="What was it">
-            <Chips value={kind} onChange={(k) => { if (k) setKind(k); }} options={KINDS} />
+            <Chips value={kind} onChange={(k) => { if (k) setKind(k); }} options={kinds} />
           </Section>
           {/* Fitness can say what it was, the way a workout from the Watch does: "Run", "Gym". */}
           {kind === 'fitness' && !fresh ? (
