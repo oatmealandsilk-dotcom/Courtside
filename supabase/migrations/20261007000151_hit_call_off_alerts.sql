@@ -1,4 +1,4 @@
--- CourtSide · migration 20261007000150: calling off a hit tells everyone in
+-- CourtSide · migration 20261007000151: calling off a hit tells everyone in
 -- it, and "Can't make it" (the find-a-hit audit, Oct 7, items 1 and 2).
 --
 --   1. Calling off a hit (the poster's Call off, which sets cancelled) now
@@ -212,7 +212,7 @@ begin
     return new;
   end if;
   if new.kind = 'posted' or new.user_id = new.actor_id then return new; end if;
-  -- A hit you were in, called off; someone in yours who can't make it (migration 150).
+  -- A hit you were in, called off; someone in yours who can't make it (migration 151).
   if new.kind in ('hit-called-off', 'hit-left') then
     select coalesce(nullif(name, ''), handle, 'Someone') into who from public.profiles where id = new.actor_id;
     link := '/hit-request/' || new.target_id;

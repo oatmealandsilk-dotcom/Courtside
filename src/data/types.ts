@@ -1084,7 +1084,7 @@ export interface ChatPhoto {
  * plain sentence too, for app builds older than this.
  */
 export interface ChatEvent {
-  /** 'called-off': the poster called the hit off (migration 150); the line is theirs, and `hitId` says which hit. */
+  /** 'called-off': the poster called the hit off (migration 151); the line is theirs, and `hitId` says which hit. */
   type: 'created' | 'added' | 'removed' | 'left' | 'renamed' | 'photo' | 'admin' | 'joined' | 'called-off';
   /** Who it was done to: the people added or removed, or made an admin. */
   targetIds?: ID[];
@@ -1274,14 +1274,14 @@ export type NotificationKind =
   /** The poster invited you to their invite-first or invite-only hit (migration 76). Actor is them; the target is the hit ('hit-request'). */
   | 'hit-invite'
   /**
-   * The poster called off a hit you were in (migration 150). Actor is them;
+   * The poster called off a hit you were in (migration 151). Actor is them;
    * the target is the hit ('hit-request'); the preview is when and where,
    * as the server words it: "today at 8:00 AM · Alder Park". A line in the
    * hit's chat says it too ("Sam called off this hit").
    */
   | 'hit-called-off'
   /**
-   * Someone in your hit tapped "Can't make it" (migration 150): their spot
+   * Someone in your hit tapped "Can't make it" (migration 151): their spot
    * is free again. Actor is them; the target is your hit ('hit-request');
    * the preview is when, and the room now: "today at 8:00 AM · 1 spot open again".
    */

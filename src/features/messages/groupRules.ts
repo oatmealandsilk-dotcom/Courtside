@@ -243,7 +243,7 @@ export function eventText(m: Message, users: User[], me: ID | null): string {
     case 'photo': return e.on === false ? `${actor} removed the group photo` : `${actor} changed the group photo`;
     case 'admin': return e.on === false ? `${actor} removed ${targets} as an admin` : `${actor} made ${targets} an admin`;
     case 'joined': return m.senderId === me ? 'You’re in for the hit' : `${actor} is in for the hit`;
-    // The poster called the hit off (migration 150): said in the chat everyone in it already has.
+    // The poster called the hit off (migration 151): said in the chat everyone in it already has.
     case 'called-off': return `${actor} called off this hit`;
     default: return m.body;
   }

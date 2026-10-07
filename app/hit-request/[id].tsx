@@ -25,7 +25,7 @@ import { publicRoute } from '@/features/share/publicRoute';
  * who's in by name (Oct 7, audit item 12): whoever posted it, then everyone
  * who joined, each opening their profile.
  *
- * A hit called off (migration 150) says so, by whom, and when and where it
+ * A hit called off (migration 151) says so, by whom, and when and where it
  * was, with the way into its chat, where the line about it is and a new time
  * can be found. Called off, the hit leaves the app's lists, so who called it
  * off and when come from your note about it.

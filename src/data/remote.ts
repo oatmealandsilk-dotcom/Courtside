@@ -3979,7 +3979,7 @@ export const remote = {
     return { conversationId: (data as string) || undefined };
   },
   /**
-   * "Can't make it": out of a hit you joined. Since migration 150 the server
+   * "Can't make it": out of a hit you joined. Since migration 151 the server
    * also takes you out of the hit's chat and tells the poster; before it,
    * leave_hit only gave the spot back, so the chat is left here too (a
    * second ask that does nothing once the server has done it). In that order

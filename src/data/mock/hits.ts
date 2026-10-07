@@ -59,7 +59,7 @@ const freedUp = demoHits.find((h) => h.id === 'hit-demo-8')!;
 
 /**
  * The notes those two hits left, worded as the server words them
- * (migration 150): Sam called off the hit you were in, and Priya can't make
+ * (migration 151): Sam called off the hit you were in, and Priya can't make
  * yours. Each opens its hit (Sam's, its chat).
  */
 export const demoHitNotifications: Notification[] = [

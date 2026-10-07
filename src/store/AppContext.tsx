@@ -769,11 +769,11 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions, LiveSessionAct
   /**
    * "Can't make it" on a hit you joined: your spot goes back, you leave the
    * hit's chat (as leaving it from the chat does), and the poster gets a
-   * note (the server's, migration 150). False when it didn't go through:
+   * note (the server's, migration 151). False when it didn't go through:
    * you are still in, and the card says so again.
    */
   leaveHit: (hitId: ID) => Promise<boolean>;
-  /** Calls off your hit. Everyone who joined gets a note, and the hit's chat a line saying so (the server's, migration 150). */
+  /** Calls off your hit. Everyone who joined gets a note, and the hit's chat a line saying so (the server's, migration 151). */
   cancelHit: (hitId: ID) => Promise<void>;
   /** Your hits, posted or joined, from the last two days, called-off ones included: for "How was the hit?". The demo's are already loaded. */
   recentHits: () => Promise<HitRequest[]>;

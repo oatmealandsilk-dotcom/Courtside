@@ -74,7 +74,7 @@ const ICON: Record<NotificationKind, { name: keyof typeof Ionicons.glyphMap | 'h
   'hit-join': { name: 'hit', tint: 'brand' },
   'hit-match': { name: 'hit', tint: 'brand' },
   'hit-invite': { name: 'hit', tint: 'brand' },
-  // A hit you were in, called off; someone in yours who can't make it (migration 150).
+  // A hit you were in, called off; someone in yours who can't make it (migration 151).
   'hit-called-off': { name: 'close', tint: 'danger' },
   'hit-left': { name: 'person-remove', tint: 'warning' },
   // The outline: filled, the dial closes up at badge size.

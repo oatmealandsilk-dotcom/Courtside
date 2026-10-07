@@ -58,7 +58,7 @@ import { colors, font, lift, radius, spacing, typography } from '@/theme';
  * has (Oct 7, audit item 2): it gives your spot back, takes you out of the
  * hit's chat and tells the poster, after a short "Free your spot?". Only
  * while the hit is still on the lists; one already played keeps its Chat. Calling
- * off your own hit tells everyone in it (the server's, migration 150).
+ * off your own hit tells everyone in it (the server's, migration 151).
  *
  * `tip` (the list's pick, one card at most): a just-in-time tip inside the
  * card, just above the thing it is about, once the card is in view. On
