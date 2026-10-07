@@ -71,6 +71,19 @@ export function agoShort(iso?: string): string {
  * never leaves a round dot behind. With Reduce Motion on (the system's
  * setting, or "cs-still" on the map, which the phone sets from its own),
  * only fades: the ring appears whole, the halo stays still.
+ *
+ * "cs-nn" on a player's pin: their name makes way for a face or a name
+ * beside it (pinEngine's names()), fading out, and back as you zoom in.
+ * "cs-spot": the small court mark in the middle of a ring of players at a
+ * court whose own pin is not on the map, never in the way of a tap.
+ * "cs-anchor" on a court: a ring of players fans round it, so its name and
+ * its "3 playing" make way (the ring says it).
+ *
+ * A face-stack (pinEngine, a group a step or two from splitting): faces
+ * peek out behind the leader's ("cs-pf"), fanned out by the marker's
+ * --cs-pv, so as you zoom in they spring a little further apart in place.
+ * A face leaving a gathered pin springs out ("cs-spring": a little past its
+ * spot and back, growing to full size). Reduce Motion: no spring, no glide.
  */
 export const MAP_PIN_CSS = `
 .cs-court-name{display:none}
@@ -115,6 +128,17 @@ export const MAP_PIN_CSS = `
 .cs-hitdot{display:none;position:absolute;left:-1px;top:-1px;width:11px;height:11px;border-radius:999px;border:2px solid;box-sizing:border-box;z-index:2;pointer-events:none}
 .cs-hit .cs-hitdot{display:block}
 .cs-quiet .maplibregl-marker{pointer-events:none}
+.cs-name{transition:opacity .2s ease}
+.cs-nn .cs-name{opacity:0;pointer-events:none}
+.cs-spot{pointer-events:none}
+.cs-anchor .cs-court-name,.cs-anchor .cs-court-tag{display:none}
+.cs-pf{position:absolute;translate:calc(var(--cs-pv,17px) * var(--cs-sx,1)) calc(var(--cs-pv,17px) * var(--cs-sy,0));transition:translate .42s cubic-bezier(.3,1.45,.5,1);animation:cs-pf-in .3s cubic-bezier(.3,1.45,.5,1) both}
+@keyframes cs-pf-in{0%{opacity:0;scale:.6}100%{opacity:1;scale:1}}
+.cs-move.cs-spring{transition:translate .5s cubic-bezier(.3,1.42,.5,1),transform .15s ease-out;animation:cs-grow .42s cubic-bezier(.3,1.42,.5,1) both}
+@keyframes cs-grow{0%{opacity:.4;scale:.74}100%{opacity:1;scale:1}}
+.cs-still .cs-pf{transition:none;animation-name:cs-fade-in}
+.cs-still .cs-spring{animation:none}
+@media (prefers-reduced-motion:reduce){.cs-pf{transition:none;animation-name:cs-fade-in}.cs-move.cs-spring{animation:none;transition:translate .4s cubic-bezier(.2,.8,.2,1),transform .15s ease-out}}
 `;
 
 /** The zoom at which court names show, and below which the court marks shrink. */
@@ -183,7 +207,7 @@ export function playerPinHtml(user: User, { size, label, seenAt, atCourt = false
   const ago = agoShort(seenAt);
   const when = ago ? `<span class="cs-ago" style="color:${colors.textMuted};font-weight:500"> · ${ago}</span>` : '';
   const court = atCourt ? `<span style="display:inline-block;vertical-align:-2px;margin-right:3px">${courtGlyph(colors.court, 11)}</span>` : '';
-  const name = label ? `<div style="margin-top:2px;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:3px 8px;border-radius:999px;background:${colors.bg};color:${colors.text};box-shadow:0 1px 4px rgba(0,0,0,.16);${FONT}"><i class="cs-dot" style="background:${colors.open}"></i>${court}${esc(user.name.split(' ')[0])}${when}</div>` : '';
+  const name = label ? `<div class="cs-name" style="margin-top:2px;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:3px 8px;border-radius:999px;background:${colors.bg};color:${colors.text};box-shadow:0 1px 4px rgba(0,0,0,.16);${FONT}"><i class="cs-dot" style="background:${colors.open}"></i>${court}${esc(user.name.split(' ')[0])}${when}</div>` : '';
   return `<div class="cs-pin" style="display:flex;flex-direction:column;align-items:center;cursor:pointer">${disc(user, size)}${name}</div>`;
 }
 
@@ -205,7 +229,7 @@ export function mePinHtml(me: User, size: number, hidden = false, playing?: stri
     : `<span style="color:${colors.textMuted};font-weight:500">&nbsp;·&nbsp;</span>Playing now${playing ? `<span style="display:inline-block;max-width:118px;overflow:hidden;text-overflow:ellipsis;vertical-align:top;color:${colors.textMuted};font-weight:500">&nbsp;·&nbsp;${esc(playing)}</span>` : ''}`;
   const dot = playing === undefined ? `<i class="cs-dot" style="background:${colors.open}"></i>`
     : `<i style="display:inline-block;flex:none;width:7px;height:7px;margin-right:4px;border-radius:4px;background:${colors.open}"></i>`;
-  const tag = `<div style="margin-top:2px;display:flex;align-items:center;white-space:nowrap;padding:3px 8px;border-radius:999px;background:${colors.bg};color:${colors.text};box-shadow:0 1px 4px rgba(0,0,0,.16);${FONT}">${dot}You${now}${open}${alone}</div>`;
+  const tag = `<div class="cs-name" style="margin-top:2px;display:flex;align-items:center;white-space:nowrap;padding:3px 8px;border-radius:999px;background:${colors.bg};color:${colors.text};box-shadow:0 1px 4px rgba(0,0,0,.16);${FONT}">${dot}You${now}${open}${alone}</div>`;
   return `<div class="cs-pin" style="display:flex;flex-direction:column;align-items:center;cursor:pointer">${disc(me, size)}${tag}</div>`;
 }
 
@@ -241,7 +265,7 @@ export function courtPinHtml(court: Court, on: boolean, ring = false, live?: str
   const pill = `position:absolute;left:calc(100% + ${live ? 10 : ring ? 9 : 5}px);top:50%;transform:translateY(-50%);max-width:${live ? 190 : 150}px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:2px 7px;border-radius:999px;background:${colors.bg};box-shadow:0 1px 3px rgba(0,0,0,.14);${FONT}`;
   const glowing = !!live || glowOnly;
   const name = live
-    ? `<span style="${pill};color:${colors.text}"><i style="display:inline-block;width:6px;height:6px;margin-right:4px;border-radius:3px;vertical-align:1px;background:${colors.open}"></i>${nameText ? `<span class="cs-court-nm" style="color:${colors.textMuted};font-weight:500">${nameText} · </span>` : ''}${esc(live)}</span>`
+    ? `<span class="cs-court-tag" style="${pill};color:${colors.text}"><i style="display:inline-block;width:6px;height:6px;margin-right:4px;border-radius:3px;vertical-align:1px;background:${colors.open}"></i>${nameText ? `<span class="cs-court-nm" style="color:${colors.textMuted};font-weight:500">${nameText} · </span>` : ''}${esc(live)}</span>`
     : nameText && !glowOnly ? `<span class="cs-court-name" style="${pill};color:${closed ? colors.textMuted : colors.text}">${nameText}</span>` : '';
   const glow = glowing ? `0 0 0 2px ${colors.bg},0 0 0 4px ${colors.open},0 0 12px 4px ${colors.open}66,` : ring ? storyRing(2, 2.5) : '';
   const tone = closed ? colors.borderStrong : colors.court;
@@ -297,6 +321,12 @@ export const courtLift = (mapHeight: number) => Math.round(Math.min(220, mapHeig
 /** The same for your own pin under your (shorter) card: in clear view, so switching Open to hit shows on it. */
 export const youLift = (mapHeight: number) => Math.round(Math.min(150, mapHeight * 0.14));
 
+/** A face in a face-stack: a little smaller than a pin's own, in a ring of the page colour (PILE_DISC across). */
+const PILE_FACE = 28;
+const PILE_DISC = PILE_FACE + 6;
+/** A player's face alone, for a face-stack (pinEngine's pile): put in the `pile` template's {face}. */
+export const pileFaceHtml = (user: User) => face(user, PILE_FACE);
+
 /**
  * What gathered pins look like (pinEngine), in the theme's colours. A
  * crowd of players is the leading player's own pin with a second disc
@@ -308,8 +338,15 @@ export const youLift = (mapHeight: number) => Math.round(Math.min(150, mapHeight
  * fewer"; players always show a face, so a number reads as courts). Never
  * mistaken for players. Players crowding your own pin (or
  * whoever is picked) gather into a small "+3" beside it instead (`chip`).
+ * Players checked in at one court, zoomed in, fan round the court's own
+ * pin in a ring (pinEngine), with no lines (Oct 7, owner: a ring round a
+ * court says they are at it); `spot`, a small court mark, stands in the
+ * middle only when that court's pin is not on the map. Just before a group
+ * splits it shows as a face-stack: the leader's pin with the next faces
+ * peeking out behind it, each in a ring of the page colour (`pile`, round
+ * a pileFaceHtml face), the way a likes row stacks faces.
  */
-export function clusterTemplates(): { badge: string; stack: string; court: string; chip: string } {
+export function clusterTemplates(): { badge: string; stack: string; court: string; chip: string; spot: string; pile: string } {
   const box = discSize(30);
   const inner = 30 + GAP * 2;
   const at = (box - inner) / 2;
@@ -319,5 +356,9 @@ export function clusterTemplates(): { badge: string; stack: string; court: strin
     court: `<div class="cs-pin" style="position:relative;display:flex;align-items:center;gap:3px;height:24px;padding:0 7px 0 5px;border-radius:6px;background:${colors.bg};border:1.5px solid ${colors.court};box-sizing:border-box;box-shadow:0 2px 6px rgba(0,0,0,.2);color:${colors.court};white-space:nowrap;${FONT};font-size:12px;cursor:pointer">${courtGlyph(colors.court, 11)}{n}${hitDot()}</div>`,
     // Beside you (or whoever is picked): the others crowding your spot, as a small ink "+3" with a disc peeking behind it.
     chip: `<div class="cs-pin" style="position:relative;width:40px;height:30px;cursor:pointer"><div style="position:absolute;left:12px;top:2px;width:26px;height:26px;border-radius:999px;background:${colors.surfaceAlt};border:1.5px solid ${colors.bg};box-sizing:border-box;box-shadow:0 2px 6px rgba(0,0,0,.18)"></div><div style="position:absolute;left:0;top:2px;min-width:28px;height:26px;padding:0 7px;box-sizing:border-box;border-radius:999px;background:${colors.text};color:${colors.bg};border:2px solid ${colors.bg};display:flex;align-items:center;justify-content:center;${FONT};box-shadow:0 2px 6px rgba(0,0,0,.22)">{n}</div></div>`,
+    // In the middle of a ring of players at a court whose own pin is not on the map: a court mark, the way a court pin looks.
+    spot: `<div style="width:22px;height:22px;border-radius:6px;background:${colors.bg};border:1.5px solid ${colors.court};box-sizing:border-box;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,.2);pointer-events:none">${courtGlyph(colors.court)}</div>`,
+    // A face peeking out of a face-stack, from the leader's disc's middle ({x},{y}) out {sx},{sy} times the pin's --cs-pv.
+    pile: `<div class="cs-pf" style="left:{x}px;top:{y}px;width:${PILE_DISC}px;height:${PILE_DISC}px;margin:-${PILE_DISC / 2}px 0 0 -${PILE_DISC / 2}px;--cs-sx:{sx};--cs-sy:{sy};border-radius:999px;background:${colors.bg};display:flex;align-items:center;justify-content:center;box-shadow:0 2px 7px rgba(0,0,0,.22)">{face}</div>`,
   };
 }

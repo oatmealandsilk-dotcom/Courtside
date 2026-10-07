@@ -1,6 +1,6 @@
 import type { User } from '@/data/types';
 import type { CanvasMarker } from '@/components/map/pinEngine';
-import { HIT_LIFT, PLAYING_CLASS, agoShort, courtPinHtml, discSize, hitPinHtml, mePinHtml, playerPinClass, playerPinHtml } from '@/components/map/markers';
+import { HIT_LIFT, PLAYING_CLASS, agoShort, courtPinHtml, discSize, hitPinHtml, mePinHtml, pileFaceHtml, playerPinClass, playerPinHtml } from '@/components/map/markers';
 import { milesBetween } from '@/features/players/geo';
 import { hitShort } from '@/features/hits/format';
 import { COURTS_MIN_ZOOM, type MapModel, type Placed } from '@/features/players/mapModel';
@@ -8,6 +8,8 @@ import { isOpenToHit } from '@/features/players/openToHit';
 
 /** Your face on your own pin, a touch bigger than everyone else's. */
 export const ME_SIZE = 38;
+/** Standing on a court: within about 20 m of its pin (pinList's courtUnder). */
+const ON_COURT_MILES = 0.0125;
 
 /**
  * About how wide a name pill under a pin is (11 px type, about 6.4 px a
@@ -68,6 +70,18 @@ export function mapMarkers({ model, expanded, me, shown, selectedId, selectedCou
     }
   }
   const drawn = new Set<string>();
+  // The court someone exactly placed is standing on (within about 20 m of its pin), if any: the nearest. Only exact spots (you,
+  // friends who follow each other with you): a rough spot is nudged about, so it never puts anyone at a court.
+  const courtUnder = (spot: { lat: number; lng: number }, prefer?: string): string | undefined => {
+    let best: string | undefined;
+    let bestMiles = ON_COURT_MILES;
+    for (const c of expanded ? model.courts : []) {
+      const miles = milesBetween(spot, c);
+      if (miles < ON_COURT_MILES && c.id === prefer) return `c:${c.id}`;
+      if (miles < bestMiles) { bestMiles = miles; best = `c:${c.id}`; }
+    }
+    return best;
+  };
   // Your own spot, on the full map only (see "Your pin" below): where your pin stands, for the court you play at.
   const meAt = expanded ? model.mePos : null;
   const list: CanvasMarker[] = (expanded ? model.courts : []).map((c, i) => {
@@ -109,6 +123,8 @@ export function mapMarkers({ model, expanded, me, shown, selectedId, selectedCou
       html: playerPinHtml(p.user, { size, on, label: expanded, seenAt: p.seenAt, atCourt: !!p.court }),
       cls: playerPinClass(p.user), anchor: expanded ? 'top' : 'center', offsetY: expanded ? -discSize(size) / 2 : 0,
       z: on ? 5 : isOpenToHit(p.user) ? 4 : 3, k: 'p', r: playerRank(p, now), sel: on, ds: discSize(size), g: 'p',
+      // Checked in at a court: only players at one court ring round it (pinEngine). Their face alone, for a face-stack.
+      at: !expanded ? undefined : p.court ? `c:${p.court.id}` : p.rough ? undefined : courtUnder(p.at), fh: expanded ? pileFaceHtml(p.user) : undefined,
       // On the still card the whole card is the one button; the pins only name who is there.
       role: expanded ? 'button' : undefined, label: p.user.name,
     });
@@ -122,6 +138,7 @@ export function mapMarkers({ model, expanded, me, shown, selectedId, selectedCou
   const nowWords = playing ? ` · Playing now · ${playing.courtName.slice(0, 18)}` : '';
   const meWidths = nameWidths(`You${nowWords}${isOpenToHit(me) ? ' · Open to hit' : ''}${hidden ? ' · Hidden' : ''}`, { open: isOpenToHit(me) || !!playing });
   const meClass = [playerPinClass(me), playing ? PLAYING_CLASS : ''].filter(Boolean).join(' ');
-  if (mine) list.push({ ...meWidths, id: 'me', lat: mine.lat, lng: mine.lng, html: mePinHtml(me, ME_SIZE, hidden, playing ? playing.courtName : undefined), cls: meClass, anchor: 'top', offsetY: -discSize(ME_SIZE) / 2, z: 6, k: 'p', fix: true, r: -1, ds: discSize(ME_SIZE), g: 'p', role: 'button', label: 'You' });
+  // Standing on a court (the one you are playing at first): players checked in at it ring round you.
+  if (mine) list.push({ ...meWidths, at: courtUnder(mine, playing?.courtId), id: 'me', lat: mine.lat, lng: mine.lng, html: mePinHtml(me, ME_SIZE, hidden, playing ? playing.courtName : undefined), cls: meClass, anchor: 'top', offsetY: -discSize(ME_SIZE) / 2, z: 6, k: 'p', fix: true, r: -1, ds: discSize(ME_SIZE), g: 'p', role: 'button', label: 'You' });
   return list;
 }
