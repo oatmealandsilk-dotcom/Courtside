@@ -1,4 +1,4 @@
-import type { HitRequest } from '../types';
+import type { Conversation, HitRequest, Message, Notification } from '../types';
 import { DEMO_PARK } from './courts';
 import { CURRENT_USER_ID } from './users';
 
@@ -31,4 +31,59 @@ export const demoHits: HitRequest[] = [
   // WHOOP session (act-demo-1, three hours ago): one that overlapped would
   // be logged as that session instead, so it shows the hit filled in by hand.
   { id: 'hit-demo-6', authorId: 'u-mira', startsAt: minutesAgo(390), place: at(1), format: 'hit', spots: 1, createdAt: hoursFromNow(-26), joinedIds: [CURRENT_USER_ID] },
+  // Sam's hit that you were in, which Sam has just called off (migration
+  // 150): no list shows it, and its alert and the line in its chat say so.
+  { id: 'hit-demo-7', authorId: 'u-sam', startsAt: laterToday(2), place: at(1), format: 'singles', spots: 1, createdAt: hoursFromNow(-6), joinedIds: [CURRENT_USER_ID], conversationId: 'cv-hit-demo-7', cancelled: true },
+  // Your own hit tomorrow evening, which Priya was in until she tapped
+  // "Can't make it": its spot is open again, and her note is in your alerts.
+  { id: 'hit-demo-8', authorId: CURRENT_USER_ID, startsAt: tomorrowAt(18), place: at(2), levelMin: 3.5, levelMax: 4.5, format: 'singles', spots: 1, note: 'Match play, best of three tiebreak sets.', createdAt: hoursFromNow(-8), joinedIds: [] },
 ];
+
+/** The demo hits only a player who has been here a while has: one they joined, and one of their own (see api's `?new=1`). */
+export const DEMO_HITS_OF_YOURS = ['hit-demo-7', 'hit-demo-8'];
+
+/**
+ * When a hit is, the way the server says it in a note (hit_when, migration
+ * 53): "today at 8:00 AM", "tomorrow at 6:00 PM", "Saturday at 9:00 AM".
+ */
+function serverWhen(iso: string): string {
+  const d = new Date(iso);
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const days = Math.round((new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime() - today.getTime()) / 86_400_000);
+  const day = days === 0 ? 'today' : days === 1 ? 'tomorrow' : d.toLocaleDateString('en-US', { weekday: 'long' });
+  return `${day} at ${d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`;
+}
+
+const calledOff = demoHits.find((h) => h.id === 'hit-demo-7')!;
+const freedUp = demoHits.find((h) => h.id === 'hit-demo-8')!;
+
+/**
+ * The notes those two hits left, worded as the server words them
+ * (migration 150): Sam called off the hit you were in, and Priya can't make
+ * yours. Each opens its hit (Sam's, its chat).
+ */
+export const demoHitNotifications: Notification[] = [
+  { id: 'n-hit-called-off', userId: CURRENT_USER_ID, actorId: 'u-sam', kind: 'hit-called-off', targetId: calledOff.id, targetKind: 'hit-request', createdAt: minutesAgo(12), read: false, preview: `${serverWhen(calledOff.startsAt)} · ${calledOff.place.name}` },
+  { id: 'n-hit-left', userId: CURRENT_USER_ID, actorId: 'u-priya', kind: 'hit-left', targetId: freedUp.id, targetKind: 'hit-request', createdAt: minutesAgo(48), read: false, preview: `${serverWhen(freedUp.startsAt)} · 1 spot open again` },
+];
+
+/**
+ * The chat Sam's hit made when you joined it ("Hit · <court>", migration
+ * 54): your join, a few words to sort it out, then Sam calling it off, and
+ * the line the server writes when a hit is called off.
+ */
+export const demoHitChat: { conversation: Conversation; messages: Message[] } = {
+  conversation: {
+    id: 'cv-hit-demo-7', participantIds: ['u-sam', CURRENT_USER_ID], isGroup: true, title: `Hit · ${calledOff.place.name}`,
+    createdBy: 'u-sam', adminIds: ['u-sam'],
+    messageIds: ['m-hit7-1', 'm-hit7-2', 'm-hit7-3', 'm-hit7-4', 'm-hit7-5'],
+    updatedAt: minutesAgo(12), unreadCount: 1,
+  },
+  messages: [
+    { id: 'm-hit7-1', conversationId: 'cv-hit-demo-7', senderId: CURRENT_USER_ID, body: 'You’re in for the hit', createdAt: minutesAgo(5 * 60), kind: 'system', event: { type: 'joined' } },
+    { id: 'm-hit7-2', conversationId: 'cv-hit-demo-7', senderId: 'u-sam', body: 'Nice, see you there. I’ll grab a court by the fence.', createdAt: minutesAgo(5 * 60 - 4), kind: 'text' },
+    { id: 'm-hit7-3', conversationId: 'cv-hit-demo-7', senderId: CURRENT_USER_ID, body: 'Perfect. I’ll bring a fresh can.', createdAt: minutesAgo(5 * 60 - 6), kind: 'text' },
+    { id: 'm-hit7-4', conversationId: 'cv-hit-demo-7', senderId: 'u-sam', body: 'Sorry, got pulled into work. Same time next week?', createdAt: minutesAgo(13), kind: 'text' },
+    { id: 'm-hit7-5', conversationId: 'cv-hit-demo-7', senderId: 'u-sam', body: 'Sam called off this hit', createdAt: minutesAgo(12), kind: 'system', event: { type: 'called-off', hitId: 'hit-demo-7' } },
+  ],
+};

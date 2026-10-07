@@ -9,6 +9,7 @@ import { Field } from '@/components/ui';
 import { ChipStrip, Chips, Fine, Section, SheetTitle, Submit, Tiles, formBody } from '@/components/sheet/SheetForm';
 import type { HitAudience, HitRequest, ID } from '@/data/types';
 import { opensAtFor } from '@/features/hits/audience';
+import { markJustPosted } from '@/features/hits/hitTips';
 import { AudienceCards, GroupsCard, InviteRow } from '@/features/hits/WhoSeesFirst';
 import { isMapCourtId } from '@/features/places/courtName';
 import { fetchCourts, isClosedCourt, type Court } from '@/features/players/courts';
@@ -179,6 +180,8 @@ export default function NewHit() {
     router.back();
     const id = posted.current;
     if (!id) return;
+    // Its card, back on the list, may say "We'll tell you when someone's in" (the first hit only: features/hits/hitTips).
+    markJustPosted(id);
     const to = sentTo.current;
     if (to.length || inviting) {
       const one = to.length === 1 ? to[0] : null;

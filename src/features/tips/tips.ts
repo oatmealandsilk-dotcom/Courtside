@@ -9,7 +9,7 @@ import { isDesktopBrowser } from '@/lib/browserDevice';
  * doing the thing first counts as knowing it, and that tip never shows. At
  * most one tip per visit to the app, never stacked.
  */
-export type TipKey = 'map-who-sees' | 'activities' | 'double-tap' | 'see-stats' | 'share-session' | 'hold-to-record' | 'who-liked' | 'chat-times' | 'hold-to-edit' | 'ask-coach' | 'messages';
+export type TipKey = 'map-who-sees' | 'activities' | 'double-tap' | 'see-stats' | 'share-session' | 'hold-to-record' | 'who-liked' | 'chat-times' | 'hold-to-edit' | 'ask-coach' | 'messages' | 'join-hit' | 'hit-posted';
 
 export const TIP_WORDS: Record<TipKey, string> = {
   'map-who-sees': 'Tap here to choose who sees you: players nearby, only friends, or just you.',
@@ -29,6 +29,11 @@ export const TIP_WORDS: Record<TipKey, string> = {
   'ask-coach': 'Ask a coach anything. Questions here are public.',
   // The paper plane is on every tab's header, so not "live here".
   messages: 'Tap the paper plane for your chats. The bell shows your alerts.',
+  // Hits (Oct 7, audit item 3): the first open hit card someone else posted
+  // that comes into view, pointing at its I'm in; and on your own hit, right
+  // after you post your first one, pointing at "No one in yet".
+  'join-hit': 'Tap I’m in to join. A chat opens to sort the details.',
+  'hit-posted': 'We’ll tell you when someone’s in.',
 };
 
 /** A tip's words on this device: in a computer's browser a clip is liked with a double-click, not a double-tap. */
@@ -131,12 +136,21 @@ export function resetTips() {
 
 function subscribe(l: () => void) { listeners.add(l); return () => { listeners.delete(l); }; }
 
+/** Whether this tip could still show (tips are on, and it is not done): a caller with work to do before asking (watching for its card to come into view) can skip it. */
+export function tipWaiting(key: TipKey): boolean {
+  return !off && !done.has(key);
+}
+
 /**
  * Whether this tip is on screen now. `ready` is the caller's own moment (the
  * thing is in view, after a short wait); the first tip to ask in a visit gets
  * it, and no other tip shows until the app is next opened.
+ *
+ * `answers`: the tip answers something the player has just done ("We'll tell
+ * you when someone's in", the moment their first hit is up), so it may show
+ * even after another tip this visit, though still never over one.
  */
-export function useTip(key: TipKey, ready: boolean): { shown: boolean; close: () => void } {
+export function useTip(key: TipKey, ready: boolean, answers = false): { shown: boolean; close: () => void } {
   const snapshot = useSyncExternalStore(subscribe, () => `${loaded}:${showing}:${done.has(key) || off}`);
   const [settled, setSettled] = useState(false);
   // A beat after the moment arrives, so the tip never jumps in mid-gesture.
@@ -146,11 +160,11 @@ export function useTip(key: TipKey, ready: boolean): { shown: boolean; close: ()
     return () => clearTimeout(t);
   }, [ready]);
   useEffect(() => {
-    if (!settled || !loaded || off || done.has(key) || showing || shownThisVisit) return;
+    if (!settled || !loaded || off || done.has(key) || showing || (shownThisVisit && !answers)) return;
     showing = key;
     shownThisVisit = true;
     emit();
-  }, [settled, key, snapshot]);
+  }, [settled, key, snapshot, answers]);
   useEffect(() => () => { if (showing === key) { showing = null; emit(); } }, [key]);
   return { shown: showing === key && !done.has(key) && !off, close: () => learned(key) };
 }

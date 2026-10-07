@@ -6,7 +6,7 @@ import { useTabUnderline } from '@/features/navigation/useTabUnderline';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Easing, Platform, ScrollView, TextInput, Pressable, StyleSheet, Text, View } from 'react-native';
-import { router } from 'expo-router';
+import { router, usePathname } from 'expo-router';
 
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { InboxButton, NotificationButton } from '@/components/InboxButton';
@@ -36,6 +36,8 @@ import { agoLabel } from '@/components/map/markers';
 import { confirmUnfollow } from '@/lib/confirm';
 import { NEAR_HIT_MILES, canSeeHitAt, hitSpot, openHits as openHitsOf } from '@/features/hits/visible';
 import { hitListOrder, isMyHit } from '@/features/hits/order';
+import { hitTipCard, useJustPosted } from '@/features/hits/hitTips';
+import { useIsFocused } from '@/lib/useIsFocused';
 import { labelOf, looksPublic } from '@/features/places/courtName';
 import { useCourtSearch } from '@/features/places/useCourtSearch';
 import { handPlace, type FoundPlace } from '@/features/places/geocode';
@@ -302,6 +304,14 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   const [furtherOpen, setFurtherOpen] = useState(false);
   const [moreHitsOpen, setMoreHitsOpen] = useState(false);
   const moreHits = Math.max(0, listedHits.length - HITS_SHOWN);
+  const shownHits = moreHitsOpen ? listedHits : listedHits.slice(0, HITS_SHOWN);
+  // The hit tips (Oct 7, audit item 3): one card in the list carries one, once it is in view, and
+  // only while this page is on show with no tutorial or search over it (see HitCard's tip).
+  const justPosted = useJustPosted();
+  const focused = useIsFocused();
+  const pathname = usePathname();
+  const hitTip = hitTipCard(shownHits.map((x) => x.hit), currentUserId, justPosted);
+  const hitTipReady = !previewSection && focused && pathname === '/discuss' && section === 'players' && !tourOpen && !search;
   // With nothing open, name a court only when the nearest one reads as public and is close: never just because it is nearest.
   const promptCourt = nearCourts.nearest && looksPublic(nearCourts.nearest.c.name) && nearCourts.nearest.miles <= 5 ? nearCourts.nearest.c : null;
   // "Near you" is one thing on this tab and on the map: people who shared a
@@ -532,7 +542,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
                 />
               );
             })()}
-            {(moreHitsOpen ? listedHits : listedHits.slice(0, HITS_SHOWN)).map(({ hit, miles }) => <HitCard key={hit.id} hit={hit} miles={miles} />)}
+            {shownHits.map(({ hit, miles }) => <HitCard key={hit.id} hit={hit} miles={miles} {...(hitTip?.hitId === hit.id ? { tip: hitTip.tip, tipReady: hitTipReady } : {})} />)}
             {moreHits ? (
               <Pressable accessibilityRole="button" accessibilityState={{ expanded: moreHitsOpen }} onPress={() => setMoreHitsOpen((o) => !o)} hitSlop={6} style={({ pressed }) => [styles.further, pressed && { opacity: 0.6 }]}>
                 <Text style={styles.furtherText}>{moreHitsOpen ? 'Fewer open hits' : `More open hits (${moreHits})`}</Text>

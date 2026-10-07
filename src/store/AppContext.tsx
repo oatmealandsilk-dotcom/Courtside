@@ -766,7 +766,14 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions, LiveSessionAct
   openHitNow: (hitId: ID) => Promise<void>;
   /** "I'm in": joins, and resolves the group chat to open (or a sentence saying why not). */
   joinHit: (hitId: ID) => Promise<{ conversationId?: ID; error?: string }>;
-  leaveHit: (hitId: ID) => void;
+  /**
+   * "Can't make it" on a hit you joined: your spot goes back, you leave the
+   * hit's chat (as leaving it from the chat does), and the poster gets a
+   * note (the server's, migration 150). False when it didn't go through:
+   * you are still in, and the card says so again.
+   */
+  leaveHit: (hitId: ID) => Promise<boolean>;
+  /** Calls off your hit. Everyone who joined gets a note, and the hit's chat a line saying so (the server's, migration 150). */
   cancelHit: (hitId: ID) => Promise<void>;
   /** Your hits, posted or joined, from the last two days, called-off ones included: for "How was the hit?". The demo's are already loaded. */
   recentHits: () => Promise<HitRequest[]>;
@@ -3726,10 +3733,33 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return result;
   }, [requireUser]);
 
-  const leaveHit = useCallback((hitId: ID) => {
+  const leaveHit = useCallback(async (hitId: ID): Promise<boolean> => {
     const me = requireUser();
-    setState((prev) => ({ ...prev, hitRequests: prev.hitRequests.map((h) => (h.id === hitId ? { ...h, joinedIds: h.joinedIds.filter((x) => x !== me) } : h)) }));
-    if (live(me, hitId)) void remote.leaveHit(hitId);
+    const s = stateRef.current;
+    const hit = s.hitRequests.find((h) => h.id === hitId);
+    if (!hit || !hit.joinedIds.includes(me)) return true;
+    // The hit's chat goes from this phone with the spot, as leaving the chat takes the spot (leaveGroup).
+    const chat = hit.conversationId ? s.conversations.find((c) => c.id === hit.conversationId) : undefined;
+    const kept = chat ? s.messages.filter((m) => m.conversationId === chat.id) : [];
+    haptics.commit();
+    setState((prev) => ({
+      ...prev,
+      hitRequests: prev.hitRequests.map((h) => (h.id === hitId ? { ...h, joinedIds: h.joinedIds.filter((x) => x !== me) } : h)),
+      ...(chat ? { conversations: prev.conversations.filter((c) => c.id !== chat.id), messages: prev.messages.filter((m) => m.conversationId !== chat.id) } : {}),
+    }));
+    if (!live(me, hitId)) return true;
+    const ok = await remote.leaveHit(hitId, hit.conversationId).catch(() => false);
+    if (ok || stateRef.current.currentUserId !== me) return ok;
+    // Still in on the server: the spot and the chat come back here too.
+    setState((prev) => ({
+      ...prev,
+      hitRequests: prev.hitRequests.map((h) => (h.id === hitId && !h.joinedIds.includes(me) ? { ...h, joinedIds: [...h.joinedIds, me] } : h)),
+      ...(chat && !prev.conversations.some((c) => c.id === chat.id) ? {
+        conversations: [chat, ...prev.conversations],
+        messages: [...prev.messages, ...kept.filter((m) => !prev.messages.some((p) => p.id === m.id))],
+      } : {}),
+    }));
+    return false;
   }, [requireUser]);
 
   const recentHits = useCallback(async (): Promise<HitRequest[]> => {
@@ -4117,7 +4147,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const me = requireUser();
     const had = stateRef.current.hitRequests.find((h) => h.id === hitId);
     setState((prev) => ({ ...prev, hitRequests: prev.hitRequests.filter((h) => h.id !== hitId) }));
-    if (!live(me, hitId)) return;
+    if (!live(me, hitId)) {
+      // The demo has no server to tell who's in (tell_hit_called_off, migration
+      // 150), so the line it writes in the hit's chat is written here.
+      const chatId = had?.conversationId;
+      if (!chatId || !stateRef.current.conversations.some((c) => c.id === chatId)) return;
+      const now = new Date().toISOString();
+      const line: Message = { id: nextId('m'), conversationId: chatId, senderId: me, body: '', createdAt: now, kind: 'system', event: { type: 'called-off', hitId } };
+      line.body = eventText(line, stateRef.current.users, null);
+      setState((prev) => ({
+        ...prev,
+        messages: [...prev.messages, line],
+        conversations: prev.conversations.map((c) => (c.id === chatId ? { ...c, messageIds: [...c.messageIds, line.id], updatedAt: now } : c)),
+      }));
+      return;
+    }
     try {
       await remote.cancelHit(hitId);
     } catch {

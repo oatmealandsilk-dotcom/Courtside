@@ -1081,9 +1081,12 @@ export interface ChatPhoto {
  * plain sentence too, for app builds older than this.
  */
 export interface ChatEvent {
-  type: 'created' | 'added' | 'removed' | 'left' | 'renamed' | 'photo' | 'admin' | 'joined';
+  /** 'called-off': the poster called the hit off (migration 150); the line is theirs, and `hitId` says which hit. */
+  type: 'created' | 'added' | 'removed' | 'left' | 'renamed' | 'photo' | 'admin' | 'joined' | 'called-off';
   /** Who it was done to: the people added or removed, or made an admin. */
   targetIds?: ID[];
+  /** 'called-off': the hit that was called off, so its alert can open this chat. */
+  hitId?: ID;
   /** The group's new name ('renamed', and 'created' when it was given one). No name on 'renamed' means the name was taken off. */
   title?: string;
   /** 'photo': a new photo (true) or the photo taken off (false). 'admin': made an admin (true) or no longer one (false). */
@@ -1267,6 +1270,19 @@ export type NotificationKind =
   | 'hit-join'
   /** The poster invited you to their invite-first or invite-only hit (migration 76). Actor is them; the target is the hit ('hit-request'). */
   | 'hit-invite'
+  /**
+   * The poster called off a hit you were in (migration 150). Actor is them;
+   * the target is the hit ('hit-request'); the preview is when and where,
+   * as the server words it: "today at 8:00 AM · Alder Park". A line in the
+   * hit's chat says it too ("Sam called off this hit").
+   */
+  | 'hit-called-off'
+  /**
+   * Someone in your hit tapped "Can't make it" (migration 150): their spot
+   * is free again. Actor is them; the target is your hit ('hit-request');
+   * the preview is when, and the room now: "today at 8:00 AM · 1 spot open again".
+   */
+  | 'hit-left'
   /** Someone nearby posted a hit much like yours (or like what your open-to-hit ring says). Actor is them; the target is their hit (migration 53). */
   | 'hit-match'
   /** A tracker picked up a tennis session. Actor is you; the target is the detected activity (migration 58). */

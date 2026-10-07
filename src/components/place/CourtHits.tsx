@@ -5,6 +5,9 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { HitCard } from '@/components/HitCard';
 import { PostHitField } from '@/components/PostHitField';
 import { hitListOrder } from '@/features/hits/order';
+import { hitTipCard, useJustPosted } from '@/features/hits/hitTips';
+import { useTourOpen } from '@/features/tour/tourStore';
+import { useIsFocused } from '@/lib/useIsFocused';
 import { useCourtHits } from '@/features/places/useCourtHits';
 import { playHere } from '@/features/players/courtLink';
 import { notKnownAdult } from '@/features/players/age';
@@ -34,6 +37,11 @@ export function CourtHits({ place, closed = false }: { place: { id?: string; nam
   const more = Math.max(0, all.length - HITS_SHOWN);
   const hits = moreOpen ? all : all.slice(0, HITS_SHOWN);
   const forFriends = !!currentUser && notKnownAdult(currentUser);
+  // The hit tips, as on Find Players: one card here carries one, once it is in view (see HitCard's tip).
+  const justPosted = useJustPosted();
+  const focused = useIsFocused();
+  const tourOpen = useTourOpen();
+  const hitTip = hitTipCard(hits, currentUserId, justPosted);
   if (closed && !hits.length) return null;
   return (
     <View style={styles.wrap}>
@@ -50,7 +58,7 @@ export function CourtHits({ place, closed = false }: { place: { id?: string; nam
           note={hits.length ? null : `Pick a time. ${forFriends ? 'Friends who follow you' : 'Players nearby'} can tap I’m in, and a chat opens to sort out the rest.`}
         />
       )}
-      {hits.map((h) => <HitCard key={h.id} hit={h} />)}
+      {hits.map((h) => <HitCard key={h.id} hit={h} {...(hitTip?.hitId === h.id ? { tip: hitTip.tip, tipReady: focused && !tourOpen } : {})} />)}
       {more ? (
         <Pressable accessibilityRole="button" accessibilityState={{ expanded: moreOpen }} onPress={() => setMoreOpen((o) => !o)} hitSlop={6} style={({ pressed }) => [styles.more, pressed && styles.pressed]}>
           <Text style={styles.moreText}>{moreOpen ? 'Fewer open hits' : `More open hits (${more})`}</Text>

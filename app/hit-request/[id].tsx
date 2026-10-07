@@ -10,6 +10,7 @@ import { LevelPill } from '@/components/LevelPill';
 import { Avatar, EmptyState, Screen } from '@/components/ui';
 import type { HitRequest } from '@/data/types';
 import { joinedCount } from '@/features/hits/audience';
+import { hitWhen } from '@/features/hits/format';
 import { goBack } from '@/lib/goBack';
 import { useStillLoading } from '@/lib/useStillLoading';
 import { useApp } from '@/store/AppContext';
@@ -23,15 +24,30 @@ import { publicRoute } from '@/features/share/publicRoute';
  * waits for the account's data before saying the hit is over. Under the card,
  * who's in by name (Oct 7, audit item 12): whoever posted it, then everyone
  * who joined, each opening their profile.
+ *
+ * A hit called off (migration 150) says so, by whom, and when and where it
+ * was, with the way into its chat, where the line about it is and a new time
+ * can be found. Called off, the hit leaves the app's lists, so who called it
+ * off and when come from your note about it.
  */
 function HitRequestPage() {
   const { id } = useLocalSearchParams<{ id?: string }>();
-  const { hitRequests } = useApp();
+  const { hitRequests, notifications, messages, conversations, users, currentUserId } = useApp();
   const loading = useStillLoading();
-  const hit = hitRequests.find((h) => h.id === id);
+  const found = hitRequests.find((h) => h.id === id);
+  const hit = found && !found.cancelled ? found : undefined;
+  const note = !found ? notifications.find((n) => n.kind === 'hit-called-off' && n.targetId === id && n.userId === currentUserId) : undefined;
+  const calledOff = found?.cancelled
+    ? { by: found.authorId, words: `${hitWhen(found.startsAt)} · ${found.place.name}` }
+    : note ? { by: note.actorId, words: note.preview ? note.preview.charAt(0).toUpperCase() + note.preview.slice(1) : undefined } : null;
+  const chatId = found?.conversationId ?? messages.find((m) => m.event?.type === 'called-off' && m.event.hitId === id)?.conversationId;
+  const chat = chatId && conversations.some((c) => c.id === chatId) ? chatId : undefined;
+  const byName = calledOff ? (calledOff.by === currentUserId ? 'You' : users.find((u) => u.id === calledOff.by)?.name.split(' ')[0] ?? 'The poster') : '';
   return (
     <Screen title="Hit" compactTitle onBack={() => goBack('/discuss')}>
-      {hit ? (
+      {calledOff ? (
+        <EmptyState glyph={<HitGlyph size={28} color={colors.textFaint} />} title={`${byName} called off this hit`} body={calledOff.words} action={chat ? { label: 'Open the chat', onPress: () => router.push(`/messages/${chat}`) } : undefined} />
+      ) : hit ? (
         <View style={{ paddingTop: 4, gap: spacing.xl }}>
           <HitCard hit={hit} linked={false} />
           <WhosIn hit={hit} />

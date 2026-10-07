@@ -1,13 +1,17 @@
-import React, { useState } from 'react';
+import React, { useRef, useState, type RefObject } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { Avatar } from '@/components/ui';
 import { CourtGlyph } from '@/components/map/CourtGlyph';
+import { TipBubble } from '@/components/TipBubble';
 import type { HitRequest } from '@/data/types';
 import { audienceLine, isHitOpen, joinedCount } from '@/features/hits/audience';
 import { FORMAT_LABEL, hitWhen, levelText } from '@/features/hits/format';
+import type { HitTip } from '@/features/hits/hitTips';
+import { learned, tipWaiting, useTip } from '@/features/tips/tips';
+import { useOnScreen } from '@/lib/useOnScreen';
 import { openCourt } from '@/features/players/courtLink';
 import { formatMiles } from '@/features/players/geo';
 import { confirm, confirmReport } from '@/lib/confirm';
@@ -49,12 +53,25 @@ import { colors, font, lift, radius, spacing, typography } from '@/theme';
  * green one on the cream and Melbourne courts), a long court name wraps
  * inside itself with its distance held to its last word, and your own hit
  * with people in it gives who's in a line of its own above Chat and Call off.
+ *
+ * A hit you are in has "Can't make it" beside Chat, the same pair the poster
+ * has (Oct 7, audit item 2): it gives your spot back, takes you out of the
+ * hit's chat and tells the poster, after a short "Free your spot?". Calling
+ * off your own hit tells everyone in it (the server's, migration 150).
+ *
+ * `tip` (the list's pick, one card at most): a just-in-time tip inside the
+ * card, just above the thing it is about, once the card is in view. On
+ * someone else's hit, "Tap I'm in to join" pointing at I'm in; on the hit
+ * you just posted, "We'll tell you when someone's in" pointing at who's in.
+ * `tipReady` is the list's own moment (its page on show, no tutorial up).
  */
-export function HitCard({ hit, miles, linked = true }: { hit: HitRequest; miles?: number; linked?: boolean }) {
+export function HitCard({ hit, miles, linked = true, tip, tipReady = false }: { hit: HitRequest; miles?: number; linked?: boolean; tip?: HitTip; tipReady?: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
   const { users, currentUserId, actions } = useApp();
   const [busy, setBusy] = useState(false);
+  const cardRef = useRef<View>(null);
   const author = users.find((u) => u.id === hit.authorId);
+  const posterFirst = author?.name.split(' ')[0] ?? 'The poster';
   const joined = hit.joinedIds.map((id) => users.find((u) => u.id === id)).filter((u): u is NonNullable<typeof u> => !!u);
   const mine = hit.authorId === currentUserId;
   const inIt = !!currentUserId && hit.joinedIds.includes(currentUserId);
@@ -64,8 +81,8 @@ export function HitCard({ hit, miles, linked = true }: { hit: HitRequest; miles?
   const full = left === 0;
   // Full, and neither yours nor one you are in: nothing to do here but look, so it reads that way.
   const quiet = full && !mine && !inIt;
-  // Yours, with people in it: Chat and Call off both, so the foot takes two lines (see the foot).
-  const twoLine = mine && !!hit.conversationId;
+  // Yours with people in it (Chat, Call off), or one you are in (Chat, Can't make it): two things to do, so the foot takes two lines (see the foot).
+  const twoLine = (mine && !!hit.conversationId) || (!mine && inIt);
   const open = isHitOpen(hit);
   const line = audienceLine(hit, currentUserId);
   const invited = mine ? (hit.invitedIds ?? []).map((id) => users.find((u) => u.id === id)).filter((u): u is NonNullable<typeof u> => !!u) : [];
@@ -83,6 +100,8 @@ export function HitCard({ hit, miles, linked = true }: { hit: HitRequest; miles?
   });
   const join = async () => {
     if (busy) return;
+    // Tapping it is knowing it: the tip about it never shows now.
+    learned('join-hit');
     setBusy(true);
     const result = await actions.joinHit(hit.id);
     setBusy(false);
@@ -90,8 +109,21 @@ export function HitCard({ hit, miles, linked = true }: { hit: HitRequest; miles?
     if (result.conversationId) router.push(`/messages/${result.conversationId}`);
     else showToast({ title: 'You’re in', body: `${author?.name.split(' ')[0] ?? 'They'} will see it.`, icon: 'checkmark-circle-outline' });
   };
+  // "Can't make it": your spot back, out of the chat, and a note to the poster (see leaveHit).
+  const cantMakeIt = () => confirm({
+    title: 'Free your spot?',
+    message: `${posterFirst} gets a note, and you leave the hit’s chat.`,
+    confirmLabel: 'Can’t make it',
+    destructive: true,
+    onConfirm: async () => {
+      const ok = await actions.leaveHit(hit.id);
+      showToast(ok
+        ? { title: 'Your spot is free', body: `${posterFirst} knows you can’t make it.`, icon: 'checkmark-circle-outline' }
+        : { title: 'That didn’t go through. You’re still in.', icon: 'alert-circle-outline' });
+    },
+  });
   return (
-    <Pressable accessible={linked} accessibilityRole={linked ? 'link' : undefined} disabled={!linked} onPress={linked ? () => router.push(`/hit-request/${hit.id}`) : undefined} style={({ pressed }) => [styles.card, pressed && { opacity: 0.92 }]}>
+    <Pressable ref={cardRef} accessible={linked} accessibilityRole={linked ? 'link' : undefined} disabled={!linked} onPress={linked ? () => router.push(`/hit-request/${hit.id}`) : undefined} style={({ pressed }) => [styles.card, pressed && { opacity: 0.92 }]}>
       {/* Who, with the paper plane and the flag beside the name; when, under it, across the
           card's full width, so "Tomorrow 9:00 AM" stays on one line on a small phone and the
           name is never cut to "Sam Ortiz is lookin…" (Oct 5). The section says it is a hit.
@@ -157,6 +189,9 @@ export function HitCard({ hit, miles, linked = true }: { hit: HitRequest; miles?
           ) : null}
         </View>
       ) : null}
+      {/* The list's tip, if this card carries it: in the card's flow just above the foot,
+          pointing down at I'm in (someone else's hit) or at who's in (the hit you just posted). */}
+      {tip && (tip === 'hit-posted' ? mine && total === 0 : !mine && !inIt && !full) ? <CardTip tip={tip} ready={tipReady} cardRef={cardRef} /> : null}
       {/* Who's in, as their faces overlapping and in words; then the one thing to do. Every
           button here is the same height, border and label weight, so none reads heavier by accident.
           Your own hit with people in it has two things to do (Chat, Call off): who's in takes the
@@ -179,15 +214,23 @@ export function HitCard({ hit, miles, linked = true }: { hit: HitRequest; miles?
                 <Text style={styles.secondaryText}>Chat</Text>
               </Pressable>
             ) : null}
-            <Pressable accessibilityRole="button" onPress={(e) => { e.stopPropagation?.(); confirm({ title: 'Call off this hit?', message: 'It comes off Find Players. Anyone who joined still has the chat.', confirmLabel: 'Call it off', destructive: true, onConfirm: () => actions.cancelHit(hit.id) }); }} style={({ pressed }) => [styles.button, styles.quietButton, twoLine && styles.buttonWide, pressed && styles.buttonPressed]}>
+            <Pressable accessibilityRole="button" onPress={(e) => { e.stopPropagation?.(); confirm({ title: 'Call off this hit?', message: total ? `It comes off Find Players, and ${total === 1 ? 'the player who’s in gets' : `the ${total} players who are in get`} a note.` : 'It comes off Find Players.', confirmLabel: 'Call it off', destructive: true, onConfirm: () => actions.cancelHit(hit.id) }); }} style={({ pressed }) => [styles.button, styles.quietButton, twoLine && styles.buttonWide, pressed && styles.buttonPressed]}>
               <Text style={styles.dangerText}>Call off</Text>
             </Pressable>
           </View>
         ) : inIt ? (
-          <Pressable accessibilityRole="button" accessibilityLabel="You’re in. Open the hit’s chat" onPress={(e) => { e.stopPropagation?.(); openChat(); }} style={({ pressed }) => [styles.button, styles.secondary, pressed && styles.buttonPressed]}>
-            <Ionicons name="chatbubble-ellipses-outline" size={16} color={colors.text} />
-            <Text style={styles.secondaryText}>Chat</Text>
-          </Pressable>
+          // In it: the chat, and the way out of it, sharing the line under who's in (the poster's own pair).
+          <View style={[styles.actions, styles.actionsTwoLine]}>
+            {hit.conversationId ? (
+              <Pressable accessibilityRole="button" accessibilityLabel="You’re in. Open the hit’s chat" onPress={(e) => { e.stopPropagation?.(); openChat(); }} style={({ pressed }) => [styles.button, styles.secondary, styles.buttonWide, pressed && styles.buttonPressed]}>
+                <Ionicons name="chatbubble-ellipses-outline" size={16} color={colors.text} />
+                <Text style={styles.secondaryText}>Chat</Text>
+              </Pressable>
+            ) : null}
+            <Pressable accessibilityRole="button" accessibilityLabel={`Can’t make it. Free your spot in ${posterFirst}’s hit`} onPress={(e) => { e.stopPropagation?.(); cantMakeIt(); }} style={({ pressed }) => [styles.button, styles.quietButton, styles.buttonWide, pressed && styles.buttonPressed]}>
+              <Text style={styles.dangerText}>Can’t make it</Text>
+            </Pressable>
+          </View>
         ) : full ? null : (
           <Pressable accessibilityRole="button" disabled={busy} onPress={(e) => { e.stopPropagation?.(); void join(); }} style={({ pressed }) => [styles.button, styles.primary, busy && { opacity: 0.6 }, pressed && styles.buttonPressed]}>
             <Text style={styles.primaryText}>{busy ? 'Joining…' : 'I’m in'}</Text>
@@ -197,6 +240,32 @@ export function HitCard({ hit, miles, linked = true }: { hit: HitRequest; miles?
     </Pressable>
   );
 }
+
+/**
+ * A hit tip inside its card (see HitCard's `tip`). It waits for the card to
+ * come into view, so a card far down the page never uses up the visit's one
+ * tip unseen. Drawn only on the card that carries it: a tip's hook lets go of
+ * the tip when it unmounts, so every card asking would let it go too.
+ */
+function CardTip({ tip, ready, cardRef }: { tip: HitTip; ready: boolean; cardRef: RefObject<View | null> }) {
+  const seen = useOnScreen(cardRef, ready && tipWaiting(tip));
+  // "We'll tell you when someone's in" answers the post just made, so it may follow another tip this visit.
+  const shown = useTip(tip, ready && seen, tip === 'hit-posted');
+  return (
+    <TipBubble
+      tip={tip}
+      shown={shown.shown}
+      onClose={shown.close}
+      pointer="down"
+      inline
+      on="page"
+      // Someone else's hit: at I'm in, on the right. Yours: at "No one in yet", on the left.
+      {...(tip === 'join-hit' ? { pointerRight: JOIN_POINTER, style: { alignItems: 'flex-end' as const } } : { pointerInset: 26, style: { alignItems: 'flex-start' as const } })}
+    />
+  );
+}
+/** From the card's right edge to the middle of I'm in, less half the pointer. */
+const JOIN_POINTER = 38;
 
 /**
  * Who's in, in words, you first: "You’re in", "Sam is in", "You and Sam are
