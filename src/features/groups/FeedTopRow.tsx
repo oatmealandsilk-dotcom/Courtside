@@ -20,7 +20,21 @@ import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
  * band of their own just under the clock (features/feed/topBand): a page's
  * words start below it, an empty feed centres under it, and a clip's sound
  * disc steps down out of it.
+ *
+ * The "+" is always on screen (Oct 7): it rides at the row's end until that
+ * end would run past the right edge (2 groups or more, or Activities in the
+ * middle), then it stays put at the edge, over the clip's sound disc, and the
+ * words pass behind it, cut off just before it the way they leave the left
+ * edge of the screen.
  */
+
+/** The "+": its box, and how far it keeps from the right edge once it stops there (over the sound disc's middle). */
+const PLUS = 28;
+const PLUS_RIGHT = 24;
+/** The words stop this far short of a "+" kept at the edge (the row's own gap before the "+" is 15). */
+const PLUS_ROOM = 12;
+/** Everything right of this many points from the right edge belongs to a "+" kept there. */
+const PLUS_ZONE = PLUS_RIGHT + PLUS + PLUS_ROOM;
 
 interface Props {
   groups: { id: string; name: string }[];
@@ -76,32 +90,44 @@ export function FeedTopRow({ groups, selected, onSelect, onPlus, onPicture, hidd
     shift.value = withTiming(target.current, { duration: 320, easing: Easing.bezier(0.22, 1, 0.36, 1) }, (done) => { if (done) runOnJS(then)(); });
   };
   const slide = useAnimatedStyle(() => ({ transform: [{ translateX: shift.value }] }));
+  // Where the "+" would sit at the row's end (-1 until laid out); it goes no further right than its stop at the edge.
+  const plusAt = useSharedValue(-1);
+  const plusStop = viewW - PLUS_RIGHT - PLUS;
+  const plusSlide = useAnimatedStyle(() => ({ transform: [{ translateX: Math.min(shift.value + plusAt.value, plusStop) }] }));
+  const ready = viewW && measured ? 1 : 0;
   return (
     <View pointerEvents={hidden ? 'none' : 'box-none'} style={[styles.layer, { top: insets.top + TOP_BAND_TOP, opacity: hidden ? 0 : 1 }]}>
       <View style={styles.clip} onLayout={(e) => setViewW(e.nativeEvent.layout.width)} pointerEvents="box-none">
-        <Animated.View style={[styles.row, slide, { opacity: viewW && measured ? 1 : 0 }]}>
-          {words.map((w, i) => {
-            const on = w.id === selected;
-            return (
-              <React.Fragment key={w.id ?? 'for-you'}>
-                {i > 0 ? <Text style={[styles.dot, { color: ink }, edge]}>·</Text> : null}
-                <Pressable
-                  accessibilityRole="tab"
-                  accessibilityState={{ selected: on }}
-                  accessibilityLabel={w.id === 'activities' ? 'Activities' : w.id ? `${w.name}, group feed` : 'For you'}
-                  hitSlop={{ top: 10, bottom: 10, left: 4, right: 4 }}
-                  onPress={() => { if (on) return; haptics.tap(); const id = w.id; glideTo(id ?? 'for-you', () => onSelect(id)); }}
-                  onLayout={(e) => {
-                    spots.current.set(w.id ?? 'for-you', { x: e.nativeEvent.layout.x, w: e.nativeEvent.layout.width });
-                    if (spots.current.size >= words.length) setMeasured((n) => n + 1);
-                  }}
-                >
-                  <Word name={w.name} spotKey={w.id ?? 'for-you'} spots={spots} shift={shift} viewW={viewW} style={[styles.word, { color: ink }, edge]} />
-                </Pressable>
-              </React.Fragment>
-            );
-          })}
-          <Pressable accessibilityRole="button" accessibilityLabel={waiting ? 'Find or start a group, someone is asking to join yours' : 'Find or start a group'} hitSlop={10} onPress={onPlus} style={styles.plus}>
+        {/* The words, cut off just short of the "+" at its stop. While the "+" rides at the row's end, no word reaches the cut. */}
+        <View style={styles.words} pointerEvents="box-none">
+          <Animated.View style={[styles.row, slide, { opacity: ready }]}>
+            {words.map((w, i) => {
+              const on = w.id === selected;
+              return (
+                <React.Fragment key={w.id ?? 'for-you'}>
+                  {i > 0 ? <Text style={[styles.dot, { color: ink }, edge]}>·</Text> : null}
+                  <Pressable
+                    accessibilityRole="tab"
+                    accessibilityState={{ selected: on }}
+                    accessibilityLabel={w.id === 'activities' ? 'Activities' : w.id ? `${w.name}, group feed` : 'For you'}
+                    hitSlop={{ top: 10, bottom: 10, left: 4, right: 4 }}
+                    onPress={() => { if (on) return; haptics.tap(); const id = w.id; glideTo(id ?? 'for-you', () => onSelect(id)); }}
+                    onLayout={(e) => {
+                      spots.current.set(w.id ?? 'for-you', { x: e.nativeEvent.layout.x, w: e.nativeEvent.layout.width });
+                      if (spots.current.size >= words.length) setMeasured((n) => n + 1);
+                    }}
+                  >
+                    <Word name={w.name} spotKey={w.id ?? 'for-you'} spots={spots} shift={shift} viewW={viewW} style={[styles.word, { color: ink }, edge]} />
+                  </Pressable>
+                </React.Fragment>
+              );
+            })}
+            {/* The "+"'s place at the row's end, kept so the row is laid out as before; the "+" itself is drawn below. */}
+            <View pointerEvents="none" style={styles.plus} onLayout={(e) => { plusAt.value = e.nativeEvent.layout.x; }} />
+          </Animated.View>
+        </View>
+        <Animated.View style={[styles.plusSpot, plusSlide, { opacity: ready }]}>
+          <Pressable accessibilityRole="button" accessibilityLabel={waiting ? 'Find or start a group, someone is asking to join yours' : 'Find or start a group'} hitSlop={10} onPress={onPlus} style={styles.plusHit}>
             <Ionicons name="add" size={22} color={ink} style={[{ opacity: 0.85 }, edge]} />
             {waiting ? <View style={styles.waiting} /> : null}
           </Pressable>
@@ -133,12 +159,15 @@ function Word({ name, spotKey, spots, shift, viewW, style }: { name: string; spo
 const styleDefinitions = StyleSheet.create({
   layer: { position: 'absolute', left: 0, right: 0, height: TOP_BAND_HEIGHT, zIndex: 8, alignItems: 'center', justifyContent: 'center' },
   clip: { alignSelf: 'stretch', overflow: 'hidden', height: TOP_BAND_HEIGHT },
+  words: { position: 'absolute', left: 0, top: 0, bottom: 0, right: PLUS_ZONE, overflow: 'hidden' },
   row: { position: 'absolute', left: 0, top: 0, flexDirection: 'row', alignItems: 'center', gap: 9, height: TOP_BAND_HEIGHT },
   word: { fontSize: 16, lineHeight: 22, ...font('600'), letterSpacing: -0.2, maxWidth: 150, paddingVertical: 2 },
   marker: { position: 'absolute', bottom: 3, width: 16, height: 2.5, borderRadius: 2 },
   markerEdge: { boxShadow: '0px 1px 3px rgba(0, 0, 0, 0.35)' },
   wordOn: { ...font('700') },
   dot: { fontSize: 14, lineHeight: 22, opacity: 0.3 },
-  plus: { marginLeft: 6, width: 28, height: 28, alignItems: 'center', justifyContent: 'center' },
+  plus: { marginLeft: 6, width: PLUS, height: PLUS },
+  plusSpot: { position: 'absolute', left: 0, top: (TOP_BAND_HEIGHT - PLUS) / 2, width: PLUS, height: PLUS },
+  plusHit: { width: PLUS, height: PLUS, alignItems: 'center', justifyContent: 'center' },
   waiting: { position: 'absolute', top: 2, right: 2, width: 8, height: 8, borderRadius: 4, backgroundColor: colors.brand, borderWidth: 1.5, borderColor: colors.bg },
 });
