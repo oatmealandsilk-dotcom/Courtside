@@ -72,7 +72,8 @@ function WhosIn({ hit }: { hit: HitRequest }) {
                   <Text style={styles.name} numberOfLines={1}>{you ? 'You' : user.name}</Text>
                   <LevelPill profile={user.profile} small />
                 </View>
-                {role === 'In' ? (you ? null : <Text style={styles.meta} numberOfLines={1}>@{user.handle}</Text>) : <Text style={styles.meta} numberOfLines={1}>{role}</Text>}
+                {/* Every row two lines, so they line up: the poster's role, a player's handle, or that you're in. */}
+                <Text style={styles.meta} numberOfLines={1}>{role !== 'In' ? role : you ? 'You’re in' : `@${user.handle}`}</Text>
               </View>
               {you ? null : <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />}
             </View>

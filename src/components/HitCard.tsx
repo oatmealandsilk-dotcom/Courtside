@@ -44,7 +44,11 @@ import { colors, font, lift, radius, spacing, typography } from '@/theme';
  * tag at its end (a grey "Full" when there is none, and then no faded I'm in
  * at all); the paper plane and the flag are bare icons, so the time leads;
  * who's in is their faces overlapping and their names ("You and Sam are
- * in"); and every button at the foot is the same height and weight.
+ * in"); and every button at the foot is the same height and weight. On
+ * review: "Full" is an empty, outlined tag (a grey fill read the same as the
+ * green one on the cream and Melbourne courts), a long court name wraps
+ * inside itself with its distance held to its last word, and your own hit
+ * with people in it gives who's in a line of its own above Chat and Call off.
  */
 export function HitCard({ hit, miles, linked = true }: { hit: HitRequest; miles?: number; linked?: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
@@ -60,6 +64,8 @@ export function HitCard({ hit, miles, linked = true }: { hit: HitRequest; miles?
   const full = left === 0;
   // Full, and neither yours nor one you are in: nothing to do here but look, so it reads that way.
   const quiet = full && !mine && !inIt;
+  // Yours, with people in it: Chat and Call off both, so the foot takes two lines (see the foot).
+  const twoLine = mine && !!hit.conversationId;
   const open = isHitOpen(hit);
   const line = audienceLine(hit, currentUserId);
   const invited = mine ? (hit.invitedIds ?? []).map((id) => users.find((u) => u.id === id)).filter((u): u is NonNullable<typeof u> => !!u) : [];
@@ -115,7 +121,10 @@ export function HitCard({ hit, miles, linked = true }: { hit: HitRequest; miles?
         {/* Where: a line of its own that wraps, so "Country Club at Wakefield Plantation" is never cut short. */}
         <Pressable accessibilityRole="link" accessibilityLabel={`${hit.place.name}${miles !== undefined ? `, ${formatMiles(miles)}` : ''}. See the court`} disabled={!canOpenCourt} onPress={(e) => { e.stopPropagation?.(); if (hit.place.lat !== undefined && hit.place.lng !== undefined) openCourt({ id: hit.place.id, name: hit.place.name, lat: hit.place.lat, lng: hit.place.lng }); }} style={({ pressed }) => [styles.place, pressed && canOpenCourt && { opacity: 0.6 }]}>
           <View style={styles.placeTile}><CourtGlyph size={12} color={colors.brand} /></View>
-          <Text style={styles.placeText} numberOfLines={2}>{hit.place.name}{miles !== undefined ? <Text style={styles.placeMiles}>{` · ${formatMiles(miles)}`}</Text> : null}</Text>
+          {/* The distance is held to the name's last word by no-break spaces, so a long name
+              wraps inside itself ("Country Club at Wakefield / Plantation · 2.6 mi") and never
+              leaves a dot dangling at a line's end or the distance alone on the second line. */}
+          <Text style={styles.placeText} numberOfLines={2}>{hit.place.name}{miles !== undefined ? <Text style={styles.placeMiles}>{` · ${formatMiles(miles).replace(/ /g, ' ')}`}</Text> : null}</Text>
         </Pressable>
         {/* What, then whether there is room, as a tag at the line's end: a grey "Full" once there is none. */}
         <View style={styles.metaRow}>
@@ -149,25 +158,28 @@ export function HitCard({ hit, miles, linked = true }: { hit: HitRequest; miles?
         </View>
       ) : null}
       {/* Who's in, as their faces overlapping and in words; then the one thing to do. Every
-          button here is the same height, border and label weight, so none reads heavier by accident. */}
-      <View style={styles.foot}>
+          button here is the same height, border and label weight, so none reads heavier by accident.
+          Your own hit with people in it has two things to do (Chat, Call off): who's in takes the
+          foot's first line in full, and the two buttons share the line under it, so neither the
+          names nor a button is ever squeezed (review, Oct 7: "Sam and …" on a 375pt phone). */}
+      <View style={[styles.foot, twoLine && styles.footTwoLine]}>
         <View style={styles.joined}>
           {joined.length ? (
             <View style={styles.faces}>
               {joined.slice(0, 3).map((u, i) => <Avatar key={u.id} name={u.name} seed={u.avatarSeed} uri={u.avatarUrl} size={26} style={[styles.face, { marginLeft: i ? -10 : 0, zIndex: 3 - i }]} />)}
             </View>
           ) : null}
-          <Text style={[styles.joinedText, inIt && styles.joinedTextMine]} numberOfLines={1}>{whoIsIn(joined, total, currentUserId)}</Text>
+          <Text style={[styles.joinedText, inIt && styles.joinedTextMine]} numberOfLines={2}>{whoIsIn(joined, total, currentUserId, twoLine)}</Text>
         </View>
         {mine ? (
-          <View style={styles.actions}>
+          <View style={[styles.actions, twoLine && styles.actionsTwoLine]}>
             {hit.conversationId ? (
-              <Pressable accessibilityRole="button" accessibilityLabel="Chat with who’s in" onPress={(e) => { e.stopPropagation?.(); openChat(); }} style={({ pressed }) => [styles.button, styles.secondary, pressed && styles.buttonPressed]}>
+              <Pressable accessibilityRole="button" accessibilityLabel="Chat with who’s in" onPress={(e) => { e.stopPropagation?.(); openChat(); }} style={({ pressed }) => [styles.button, styles.secondary, twoLine && styles.buttonWide, pressed && styles.buttonPressed]}>
                 <Ionicons name="chatbubble-ellipses-outline" size={16} color={colors.text} />
                 <Text style={styles.secondaryText}>Chat</Text>
               </Pressable>
             ) : null}
-            <Pressable accessibilityRole="button" onPress={(e) => { e.stopPropagation?.(); confirm({ title: 'Call off this hit?', message: 'It comes off Find Players. Anyone who joined still has the chat.', confirmLabel: 'Call it off', destructive: true, onConfirm: () => actions.cancelHit(hit.id) }); }} style={({ pressed }) => [styles.button, styles.quietButton, pressed && styles.buttonPressed]}>
+            <Pressable accessibilityRole="button" onPress={(e) => { e.stopPropagation?.(); confirm({ title: 'Call off this hit?', message: 'It comes off Find Players. Anyone who joined still has the chat.', confirmLabel: 'Call it off', destructive: true, onConfirm: () => actions.cancelHit(hit.id) }); }} style={({ pressed }) => [styles.button, styles.quietButton, twoLine && styles.buttonWide, pressed && styles.buttonPressed]}>
               <Text style={styles.dangerText}>Call off</Text>
             </Pressable>
           </View>
@@ -188,10 +200,11 @@ export function HitCard({ hit, miles, linked = true }: { hit: HitRequest; miles?
 
 /**
  * Who's in, in words, you first: "You’re in", "Sam is in", "You and Sam are
- * in", "Sam and 2 others are in". People this account is not shown
+ * in", "Sam and 2 others are in". With `roomy` (a line of its own) three are
+ * named: "Sam, Marcus and Priya are in". People this account is not shown
  * (hiddenJoins) are counted, never named: "2 players in" when none can be.
  */
-export function whoIsIn(people: { id: string; name: string }[], total: number, me: string | null): string {
+export function whoIsIn(people: { id: string; name: string }[], total: number, me: string | null, roomy = false): string {
   if (!total) return 'No one in yet';
   if (!people.length) return `${total} ${total === 1 ? 'player' : 'players'} in`;
   const ordered = [...people].sort((a, b) => (a.id === me ? -1 : b.id === me ? 1 : 0));
@@ -199,6 +212,7 @@ export function whoIsIn(people: { id: string; name: string }[], total: number, m
   const others = total - 1;
   if (!others) return ordered[0].id === me ? 'You’re in' : `${word(ordered[0])} is in`;
   if (others === 1 && ordered.length === 2) return `${word(ordered[0])} and ${word(ordered[1])} are in`;
+  if (roomy && others === 2 && ordered.length === 3) return `${word(ordered[0])}, ${word(ordered[1])} and ${word(ordered[2])} are in`;
   return `${word(ordered[0])} and ${others} ${others === 1 ? 'other' : 'others'} are in`;
 }
 
@@ -225,8 +239,10 @@ const styleDefinitions = StyleSheet.create({
   details: { ...typography.small, color: colors.textMuted, flexShrink: 1 },
   detailsFormat: { ...font('600'), color: colors.text },
   // Room left: a small tag, not a pill (only what can be pressed is fully round). Ink on Dim Green, so it reads on every court.
-  tag: { marginLeft: 'auto', paddingHorizontal: 8, height: 22, borderRadius: 6, justifyContent: 'center', backgroundColor: colors.brandDim },
-  tagFull: { backgroundColor: colors.surfaceAlt },
+  // "Full" is the same tag emptied out: no fill, a hairline and muted words. A grey fill was all but the
+  // same colour as Dim Green on the cream and Melbourne courts, so open and full looked alike (review, Oct 7).
+  tag: { marginLeft: 'auto', paddingHorizontal: 8, height: 22, borderRadius: 6, borderWidth: 1, borderColor: colors.brandDim, justifyContent: 'center', backgroundColor: colors.brandDim },
+  tagFull: { backgroundColor: 'transparent', borderColor: colors.borderStrong },
   tagText: { ...typography.caption, fontSize: 12, letterSpacing: 0, color: colors.text },
   tagTextFull: { color: colors.textMuted },
   note: { ...typography.body, color: colors.text, lineHeight: 21 },
@@ -245,6 +261,12 @@ const styleDefinitions = StyleSheet.create({
   joinedText: { ...typography.small, color: colors.textMuted, flexShrink: 1 },
   joinedTextMine: { ...font('600'), color: colors.text },
   actions: { flexDirection: 'row', gap: spacing.sm },
+  // Your hit with people in it: who's in on the first line, the two buttons sharing the second.
+  // On a phone they fill it; on a computer's wide card they stop at 180 and sit at the right, where
+  // every other card's button is, rather than stretching into a bar.
+  footTwoLine: { flexDirection: 'column', alignItems: 'stretch', gap: spacing.md },
+  actionsTwoLine: { alignSelf: 'stretch', justifyContent: 'flex-end' },
+  buttonWide: { flex: 1, maxWidth: 180 },
   // One button, three looks: the same height, border and label weight.
   button: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 38, paddingHorizontal: 16, borderRadius: 19, borderWidth: 1 },
   buttonPressed: { transform: [{ scale: 0.97 }] },

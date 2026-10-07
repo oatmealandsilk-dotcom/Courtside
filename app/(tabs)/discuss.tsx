@@ -14,7 +14,7 @@ import { InboxButton, NotificationButton } from '@/components/InboxButton';
 import { LevelPill } from '@/components/LevelPill';
 import { NearbyMap } from '@/components/NearbyMap';
 import { UpToday, useUpToday } from '@/components/UpToday';
-import { HitGlyph } from '@/components/HitGlyph';
+import { PostHitField } from '@/components/PostHitField';
 import { useLocationToggle, useOpenToHitToggle } from '@/features/players/useLocationToggle';
 import { QuestionCard, TOPIC_META } from '@/components/QuestionCard';
 import { HitCard } from '@/components/HitCard';
@@ -515,24 +515,23 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
               {/* Nothing open: the section says so in one muted line under its title, the way a section opens. */}
               {listedHits.length ? null : <Text style={styles.playersBody}>{hitsForFriends ? 'None from your friends yet.' : 'None near you yet.'}</Text>}
             </View>
-            {/* The way to post one (Oct 7): a field you could start filling in, at the top of the list,
-                not a small link beside the title. The same shape as Coaching's "Your question" box.
-                With nothing open and a public court close by, it starts the hit at that court.
-                "Post a hit", not just "Post", for a screen reader: a post elsewhere is a photo or clip. */}
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={!listedHits.length && promptCourt ? `Post a hit at ${labelOf(promptCourt)}` : 'Post a hit'}
-              onPress={() => (!listedHits.length && promptCourt ? playHere({ id: promptCourt.id, name: labelOf(promptCourt), lat: promptCourt.lat, lng: promptCourt.lng }) : router.push('/hit-request/new'))}
-              style={({ pressed }) => [styles.postField, pressed && styles.postFieldPressed]}
-            >
-              <HitGlyph size={22} color={colors.brand} />
-              <Text style={styles.postFieldText} numberOfLines={1}>{!listedHits.length && promptCourt ? `Play at ${labelOf(promptCourt)}?` : 'Looking for a hit?'}</Text>
-              <View style={styles.postFieldGo}><Ionicons name="arrow-forward" size={16} color={colors.brandInk} /></View>
-            </Pressable>
-            {/* Nothing open yet: what happens next, said once, under the field. */}
-            {listedHits.length ? null : (
-              <Text style={styles.postFieldNote}>{hitsForFriends ? 'Post a time and place. Friends who follow you can tap I’m in, and a chat opens to sort out the rest.' : 'Post a time and place. Players nearby can tap I’m in, and a chat opens to sort out the rest.'}</Text>
-            )}
+            {/* The way to post one (Oct 7): a field at the top of the list, not a small link beside
+                the title. With nothing open and a public court close by, it starts the hit at that
+                court; then the note under it says what happens next ("Pick a time" when the court
+                is already picked). "Post a hit", not just "Post", for a screen reader: a post
+                elsewhere is a photo or clip. */}
+            {(() => {
+              const court = !listedHits.length ? promptCourt : null;
+              const who = hitsForFriends ? 'Friends who follow you' : 'Players nearby';
+              return (
+                <PostHitField
+                  label={court ? `Play at ${labelOf(court)}?` : 'Looking for a hit?'}
+                  accessibilityLabel={court ? `Post a hit at ${labelOf(court)}` : 'Post a hit'}
+                  onPress={() => (court ? playHere({ id: court.id, name: labelOf(court), lat: court.lat, lng: court.lng }) : router.push('/hit-request/new'))}
+                  note={listedHits.length ? null : `${court ? 'Pick a time' : 'Post a time and place'}. ${who} can tap I’m in, and a chat opens to sort out the rest.`}
+                />
+              );
+            })()}
             {(moreHitsOpen ? listedHits : listedHits.slice(0, HITS_SHOWN)).map(({ hit, miles }) => <HitCard key={hit.id} hit={hit} miles={miles} />)}
             {moreHits ? (
               <Pressable accessibilityRole="button" accessibilityState={{ expanded: moreHitsOpen }} onPress={() => setMoreHitsOpen((o) => !o)} hitSlop={6} style={({ pressed }) => [styles.further, pressed && { opacity: 0.6 }]}>
@@ -798,17 +797,6 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
 const styleDefinitions = StyleSheet.create({
   hits: { gap: spacing.md },
   hitsHead: { gap: 3, paddingTop: spacing.sm },
-  // "Looking for a hit?": the shape of Coaching's question box (a pill on the lift, the round
-  // green button at its end with the small lift in its own colour), opening the hit form.
-  postField: {
-    flexDirection: 'row', alignItems: 'center', gap: spacing.md,
-    paddingLeft: spacing.lg, paddingRight: 6, paddingVertical: 6, minHeight: 52,
-    ...lift, borderRadius: radius.pill, backgroundColor: colors.surface,
-  },
-  postFieldPressed: { transform: [{ scale: 0.99 }] },
-  postFieldText: { ...typography.body, fontSize: 16, color: colors.textMuted, flex: 1 },
-  postFieldGo: { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center', shadowColor: colors.brand, shadowOpacity: 0.28, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 3 },
-  postFieldNote: { ...typography.small, color: colors.textMuted, lineHeight: 18, paddingHorizontal: 2, marginTop: -4 },
   // One quiet line that opens more hits: the rest of the near ones, or those beyond 25 km.
   further: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start', paddingVertical: 4 },
   furtherText: { ...typography.smallStrong, color: colors.textMuted },
