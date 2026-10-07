@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { BackHandler, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router } from 'expo-router';
 
 import { BrandMark } from '@/components/BrandMark';
 import { BirthDateField } from '@/components/BirthDateField';
@@ -32,12 +32,11 @@ export default function Birthday() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [blocked, setBlocked] = useState(false);
-  // Android's Back leaves the app, as on any first page (see agree.tsx), when
-  // this is the age check every account is sent to. Opened from the group
-  // form's "Add your birthday" (from=group) it sits on top of where the person
-  // was, so Back simply goes back there.
-  const { from } = useLocalSearchParams<{ from?: string }>();
-  useAndroidBack(() => { BackHandler.exitApp(); return true; }, from !== 'group');
+  // Android's Back leaves the app, as on any first page (see agree.tsx): this
+  // is the age check every account is sent to. (The group form's "Add your
+  // birthday" used to open it on top of the app; groups are for everyone
+  // now, migration 149, so nothing does.)
+  useAndroidBack(() => { BackHandler.exitApp(); return true; });
   useEffect(() => { void isDeviceBlocked().then((b) => { if (b) setBlocked(true); }); }, []);
   // An account that opened on a phone after its under-13 answer, with no age
   // on file (a new Apple or Google sign-in takes no birthday first): one made
