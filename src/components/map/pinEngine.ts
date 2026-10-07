@@ -36,8 +36,12 @@ import { JUST_OPEN_CLASS, OPEN_CLASS, POP_MS } from '@/components/map/markers';
  *    two faces peeking out behind it, each the way that player really is
  *    (above the name), and "+N" for any more; the half step after, they
  *    fan further apart in place; then they split, each face springing out
- *    from where it peeked (a little past its spot and back). So every
- *    pinch moves something: "+N", a face-stack, a wider one, apart.
+ *    from where it peeked (a little past its spot and back) while the
+ *    leader's face stays put in front, never blinking. So every pinch moves
+ *    something: "+N", a face-stack, a wider one, apart. Only where the
+ *    peeking faces have room (else one each side; else "+N" for now), so a
+ *    crowded part of the map never piles faces on faces. Where faces
+ *    overlap, the leading player's is in front.
  *  - Names make way, as on Apple's maps: a player's name shows only where it
  *    is clear of every other face and of the names already shown; the
  *    picked player, then the leading players place theirs first. A face
@@ -54,7 +58,7 @@ import { JUST_OPEN_CLASS, OPEN_CLASS, POP_MS } from '@/components/map/markers';
  *    whose faces would land on another pin or ring stays "+N" until you
  *    zoom in, and a crowd too big for a phone (over a dozen) stays "+N" (a
  *    tap lists them in rows). Only how they are drawn: every pin in a ring
- *    still stands at the court (within about 17 m of their own spot), a
+ *    still stands at the court (within about 20 m of their own spot), a
  *    ring's width out at most, and zooming out folds it back into "+N".
  *  - You, and whoever is picked, never gather into anyone: players whose
  *    faces crowd yours (or would sit on your name) gather into a small "+N"
@@ -194,7 +198,9 @@ var FACE_MERGE=0.6,FACE_IN=14;
 // behind the leader's, a little further apart each step (PILE_PV, px from the leader's middle), so every pinch shows something move.
 // Each peeks out the way it really stands, kept above level (PILE_UP: at least this far, in degrees, so never on the name under it),
 // and two at least PILE_GAP degrees apart.
-var PILE_STEPS=2,PILE_PV=[22,17],PILE_UP=10,PILE_GAP=70;
+// Only where its peeking faces have room (PILE_R: one's radius): none may sit on another player's face, a ring, or another stack's
+// peeking face by more than a sliver (PILE_SLIVER), so a crowded part of the map keeps its plain "+N"s.
+var PILE_STEPS=2,PILE_PV=[25,20],PILE_UP=10,PILE_GAP=70,PILE_R=17,PILE_SLIVER=8;
 // Rings: from zoom 15 in (RING_FROM), players on one spot (every one within a face of the leader at zoom 17, RING_SURE: about 17 m) fan round it, RING_R out (more for a big ring: each face and a gap, RING_GAP, round it), and only where the ring has room (no other pin under it) and fits a phone (RING_MAX out at most);
 // round you, clear of your disc by RING_FIX, and never on your name (at most RING_DROP below level each side, less for a long name).
 var RING_FROM=15,RING_SURE=17,RING_R=62,RING_GAP=8,RING_FIX=22,RING_DROP=40,RING_MAX=120;
@@ -283,11 +289,13 @@ return function(map,ml,o){
         if(faces&&z>=RING_FROM){
           next.forEach(function(c){c.ring=null;if(c.m.length<2)return;var at0=items[c.lead]&&items[c.lead].at;if(!at0)return;
             var one=c.m.every(function(id){var it=items[id];if(!it||it.at!==at0)return false;var lim=((c.d+(it.ds||48))/2-FACE_IN)/s17,ex=wx(it.lng)-c.x,ey=wy(it.lat)-c.y;return ex*ex+ey*ey<=lim*lim});
-            if(one)c.ring=ringGeom(items[c.lead],c.m.filter(function(id){return !(c.fx&&id===c.lead)}),c.fx,z)});
+            if(one)c.ring=ringGeom(items[c.lead],c.m.filter(function(id){return !(c.fx&&id===c.lead)}),c.fx,z);
+            // Where the ring goes round (ring()): the court's own pin (within about 20 m of every one of them), or you.
+            if(c.ring){var ct=!c.fx&&items[at0]&&items[at0].k==='c'?items[at0]:null;c.rx=ct?wx(ct.lng):c.x;c.ry=ct?wy(ct.lat):c.y}});
           var cut=[];
           next.forEach(function(c){if(!c.ring)return;var F=(c.ring.R+c.ring.d/2)/s;
             // Another pin's room: a ring's, or a face (yours, or the picked player's, with the name under it).
-            next.forEach(function(h){if(h===c)return;var Fh=(h.ring?h.ring.R+h.ring.d/2:h.d/2+(h.fx?21:0))/s,lim=F+Fh-FACE_IN/s,ex=h.x-c.x,ey=h.y-c.y;if(ex*ex+ey*ey<lim*lim){cut.push(c);if(h.ring)cut.push(h)}})});
+            next.forEach(function(h){if(h===c)return;var Fh=(h.ring?h.ring.R+h.ring.d/2:h.d/2+(h.fx?21:0))/s,lim=F+Fh-FACE_IN/s,ex=(h.ring?h.rx:h.x)-c.rx,ey=(h.ring?h.ry:h.y)-c.ry;if(ex*ex+ey*ey<lim*lim){cut.push(c);if(h.ring)cut.push(h)}})});
           cut.forEach(function(c){c.ring=null});
         }
         per[li]=next;groups=next;
@@ -305,7 +313,7 @@ return function(map,ml,o){
   function ringy(g){return !!(g&&g.ring)}
   // What shows at this level: every pin on its own, gathered, or in a ring round its spot; then room made for players.
   function desired(){
-    var out={},own={},inFan={},zl=zoomOf(lvl);rings=[];
+    var out={},own={},inFan={},zl=zoomOf(lvl),peeks=[];rings=[];
     // Too far out for it (its mz): left out at this level, so it fades away and nothing is made for it.
     function off(id){var it=items[id];return !!it&&it.mz!=null&&zl<it.mz}
     // Courts or hit flags on one spot, or a crowd of players too big to ring, tapped: in rows just under the spot, a name's width apart, the court's badge in sight on the spot.
@@ -328,7 +336,10 @@ return function(map,ml,o){
       }
       if(!lead||inFan[g.lead]||off(g.lead))lead=items[m[0]];
       // Just before it splits (a step or two of zoom): a face-stack, two or three faces fanned out behind the leader's; else "+N".
-      var pl=k==='p'&&FULL&&g.sp!=null&&g.sp-lvl<=PILE_STEPS?pile(lead,m,g.sp-lvl):null;
+      // Only with room for its peeking faces: each the way it really stands, or else one each side; with neither, "+N" for now.
+      var pl=null;
+      if(k==='p'&&FULL&&g.sp!=null&&g.sp-lvl<=PILE_STEPS){pl=pile(lead,m,g.sp-lvl,false);
+        if(pl&&!roomy(g,lead,pl,per[lvl],peeks)){pl=pile(lead,m,g.sp-lvl,true);if(pl&&!roomy(g,lead,pl,per[lvl],peeks))pl=null}}
       if(pl)html=pl.html;
       else if(k==='p'||k==='h')html=lead.html.replace(BADGE,tpl.badge.replace('{n}','+'+(m.length-1))).replace(STACK,k==='p'?tpl.stack:'');
       else{var total=m.reduce(function(t,id){return t+((items[id]&&items[id].n)||1)},0);html=tpl.court.replace('{n}',String(total))}
@@ -347,14 +358,15 @@ return function(map,ml,o){
   // A face-stack (a group a step or two from splitting): the leader's own pin with the next two faces fanned out behind it, each the
   // way it really stands from the leader (kept above level, clear of the name; two kept apart), so when they split each springs on
   // the way it was already peeking; "+N" for any more. steps: half steps until it splits (1 or 2); the faces fan further apart at 1.
-  // pv: how far out (the pin's --cs-pv, so the faces glide apart in place); po: where each peeks out.
-  function pile(lead,m,steps){
+  // pv: how far out (the pin's --cs-pv, so the faces glide apart in place); po: where each peeks out. side: one each side instead
+  // (when the way they stand has no room: roomy()).
+  function pile(lead,m,steps,side){
     var others=m.filter(function(id){return id!==lead.id&&!!items[id]&&!!items[id].fh});if(!others.length)return null;
     others.sort(function(a,b){return ((items[a].r||0)-(items[b].r||0))||(a<b?-1:1)});
     var D=Math.PI/180,lo=-180+PILE_UP,hi=-PILE_UP,two=others.slice(0,2);
     // Which way each stands (screen degrees, up is negative); below level goes to the nearer side. On the leader's very spot (within
     // about 2 m: a court), one each side, as the ring there opens (the leader to the top, the next round the right, then the left).
-    var ang=two.map(function(id,i){var it=items[id],ex=wx(it.lng)-wx(lead.lng),ey=wy(it.lat)-wy(lead.lat);if(Math.abs(ex)+Math.abs(ey)<3e-5)return i?lo:hi;
+    var ang=two.map(function(id,i){var it=items[id],ex=wx(it.lng)-wx(lead.lng),ey=wy(it.lat)-wy(lead.lat);if(side||Math.abs(ex)+Math.abs(ey)<3e-5)return i?lo:hi;
       var a=Math.atan2(ey,ex)/D;return a>=lo&&a<=hi?a:(a>90||a<lo)?lo:hi});
     if(ang.length===2){var i0=ang[0]<=ang[1]?0:1,i1=1-i0;if(ang[i1]-ang[i0]<PILE_GAP){var mid=(ang[0]+ang[1])/2;ang[i0]=mid-PILE_GAP/2;ang[i1]=mid+PILE_GAP/2;
       var sh=ang[i0]<lo?lo-ang[i0]:ang[i1]>hi?hi-ang[i1]:0;ang[i0]+=sh;ang[i1]+=sh}}
@@ -363,18 +375,31 @@ return function(map,ml,o){
       faces+=tpl.pile.split('{x}').join(String(c)).split('{y}').join(String(c)).split('{sx}').join(sx.toFixed(3)).split('{sy}').join(sy.toFixed(3)).split('{face}').join(items[id].fh||'')});
     return {html:lead.html.replace(BADGE,function(){return extra>0?tpl.badge.replace('{n}','+'+extra):''}).replace(STACK,function(){return faces}),pv:pv,po:po};
   }
+  // Room for a face-stack's peeking faces at this level (its closest-together point; further in, everything only spreads): none on
+  // another player's face (or a ring), nor on a face peeking out of a stack placed before it (the leading groups first: placed). With
+  // no room it stays "+N" for now, so a crowded part of the map never piles faces on faces.
+  function roomy(g,lead,pl,groups,placed){
+    var s=Math.pow(2,zoomOf(lvl)),lx=wx(lead.lng)*s,ly=wy(lead.lat)*s,mine=[],id,i;
+    for(id in pl.po){var px=lx+pl.po[id][0],py=ly+pl.po[id][1];
+      for(i=0;i<groups.length;i++){var h=groups[i];if(h===g)continue;
+        var hr=h.ring?h.ring.R+h.ring.d/2:h.d/2-4,hx=(h.ring?h.rx:h.x)*s-px,hy=(h.ring?h.ry:h.y)*s-py,lim=PILE_R+hr-PILE_SLIVER;
+        if(hx*hx+hy*hy<lim*lim)return false}
+      for(i=0;i<placed.length;i++){var qx=placed[i][0]-px,qy=placed[i][1]-py,l2=2*PILE_R-PILE_SLIVER;if(qx*qx+qy*qy<l2*l2)return false}
+      mine.push([px,py])}
+    mine.forEach(function(p){placed.push(p)});return true;
+  }
   // Players checked in at one court: fanned round it in a small ring, the leader at the top (two, or any even number, sit level), the
   // court's own pin in the middle (a small court mark there if its pin is not on the map). No lines: a ring round a court says they
   // are at it. You (playing there, on it), or whoever is picked, stay on your own spot with the others round you, never on your name.
-  // Only how they are drawn: each pin stands at the court (within about 17 m of their own spot), its face a ring's width out, and the
+  // Only how they are drawn: each pin stands at the court (within about 20 m of their own spot), its face a ring's width out, and the
   // ring keeps its size on screen as you zoom.
   function ring(g,m,out,own){
     var lead=items[g.lead]||items[m[0]],mid=!!g.fx&&m.indexOf(g.lead)>=0,on=m.filter(function(id){return !(mid&&id===g.lead)});
     on.sort(function(a,b){return (a===g.lead?-1:b===g.lead?1:0)||((items[a].r||0)-(items[b].r||0))||(a<b?-1:1)});
     var G=ringGeom(lead,on,mid,zoomOf(lvl))||g.ring,R=G.R,step=G.step,a0=G.a0;
-    // Round the court's own pin when it stands on their spot (within the same 17 m); round the leader's spot otherwise.
-    var court=lead.at&&items[lead.at],lim=34/Math.pow(2,RING_SURE),ctr=lead;
-    if(!mid&&court&&court.k==='c'){var ex=wx(court.lng)-wx(lead.lng),ey=wy(court.lat)-wy(lead.lat);if(ex*ex+ey*ey<=lim*lim)ctr=court}
+    // Round the court's own pin (every one of them is at it: checked in there, or within about 20 m of it), so its court mark is never
+    // a second one beside the real court; round the leader's spot only when that court is not in the list at all.
+    var court=lead.at&&items[lead.at],ctr=!mid&&court&&court.k==='c'?court:lead;
     if(mid){out[g.lead]=lead;own[g.lead]=g.lead}
     on.forEach(function(id,i){var a=a0+i*step,it=items[id];
       out[id]=ext(it,{lat:ctr.lat,lng:ctr.lng,fx:Math.round(R*Math.cos(a)),fy:Math.round(R*Math.sin(a))});own[id]=id});
@@ -454,11 +479,16 @@ return function(map,ml,o){
     el.addEventListener('click',function(e){e.stopPropagation();var k=ms[id];if(!k||k.leaving)return;
       if(k.it.cl){if(o.quiet)o.tap(k.it.cl.lead||k.it.cl.m[0]);else expand(id)}else o.tap(id)});
     var k={el:el,html:it.html,a:it.anchor||'center',cls:it.cls||'',it:it};
-    k.m=new ml.Marker({element:el,anchor:k.a,offset:off}).setLngLat([it.lng,it.lat]).addTo(map);return k}
+    k.m=new ml.Marker({element:el,anchor:k.a,offset:off}).setLngLat([it.lng,it.lat]).addTo(map);
+    // Players at the same height (z): the leading ones (lowest rank) in front where faces overlap, so a group that splits keeps its
+    // leader in front and the others come out from behind it, as they peeked. A new pin goes in under every one that leads it.
+    if(it.k==='p'&&it.r!=null){el.__r=it.r;el.__z=it.z||0;var par=el.parentNode;
+      if(par)for(var sib=par.firstChild;sib;sib=sib.nextSibling){if(sib!==el&&sib.__r!=null&&sib.__z===el.__z&&sib.__r<it.r){par.insertBefore(el,sib);break}}}
+    return k}
   function drop(id){var k=ms[id];if(!k)return;clearTimeout(k.leaving);clearTimeout(k.tidy);k.m.remove();delete ms[id]}
   function render(why){
     if(!ready||dead||held)return;
-    var d=desired(),was=owner,st=still(),spot={},glides=[],fresh=[];
+    var d=desired(),was=owner,st=still(),spot={},glides=[],fresh=[],back={};
     owner=d.own;
     // The view, and a margin of half of it all round: only pins in there are made.
     var ct=map.getContainer(),W=ct.clientWidth||400,H=ct.clientHeight||700,mid={x:W/2,y:H/2};
@@ -474,13 +504,17 @@ return function(map,ml,o){
       var p0=map.project([it.lng,it.lat]),pos={x:p0.x+off[0],y:p0.y+off[1]};
       if(!near(pos)){if(k)drop(id);continue}
       if(k&&k.a!==a){drop(id);k=null}
-      if(k&&k.leaving){clearTimeout(k.leaving);k.leaving=0;var c0=child(k);if(c0){c0.classList.remove('cs-out','cs-move');c0.style.translate=''}k.el.style.pointerEvents=''}
+      if(k&&k.leaving){clearTimeout(k.leaving);k.leaving=0;var c0=child(k);if(c0){c0.classList.remove('cs-out','cs-move');c0.style.translate=''}k.el.style.pointerEvents='';back[id]=1}
       var made=!k;
       if(!k){
         k=ms[id]=make(it,off);
         // Split off from a gathered pin (or fanned out of one): it glides out from where that pin was. A gathered pin goes by its lead.
         var ref=id.indexOf('k:')===0?id.split(':').slice(2).join(':'):id,src=why&&was[ref]&&was[ref]!==id?was[ref]:null,from=src&&spot[src]?plus(spot[src],peek[src]&&peek[src][ref]):null;
-        if(from&&!st&&onScreen(pos))glides.push({k:k,made:1,dx:from.x-pos.x,dy:from.y-pos.y,d:Math.abs(pos.x-mid.x)+Math.abs(pos.y-mid.y)});
+        // A player's own pin out of a gathered one on that very spot (its leader's), or a players' gathered pin taking over from its
+        // leader's own pin there: that face was showing all along, so the new one just stands on top (no fade, no spring) while the old
+        // one fades out under it; the others spring out from behind it, or glide in behind it.
+        if(from&&it.k==='p'&&Math.abs(from.x-pos.x)+Math.abs(from.y-pos.y)<=3){}
+        else if(from&&!st&&onScreen(pos))glides.push({k:k,made:1,p:it.k==='p',dx:from.x-pos.x,dy:from.y-pos.y,d:Math.abs(pos.x-mid.x)+Math.abs(pos.y-mid.y)});
         else fresh.push({k:k,pos:pos,gathered:id.indexOf('k:')===0});
       }else{
         var before=spot[id];
@@ -489,7 +523,7 @@ return function(map,ml,o){
         if(why&&before&&!st&&onScreen(pos)&&Math.abs(pos.x-before.x)+Math.abs(pos.y-before.y)>2)glides.push({k:k,dx:before.x-pos.x,dy:before.y-pos.y,d:Math.abs(pos.x-mid.x)+Math.abs(pos.y-mid.y)});
       }
       k.it=it;
-      k.el.style.zIndex=it.z!=null?String(it.z):'';
+      k.el.style.zIndex=it.z!=null?String(it.z):'';if(it.k==='p'){k.el.__z=it.z||0;k.el.__r=it.r}
       // A face-stack's faces fan out by --cs-pv: changed in place, they glide further apart (MAP_PIN_CSS .cs-pf).
       if(it.pv!=null)k.el.style.setProperty('--cs-pv',it.pv+'px');else k.el.style.removeProperty('--cs-pv');
       if(it.role)k.el.setAttribute('role',it.role);else k.el.removeAttribute('role');
@@ -501,6 +535,9 @@ return function(map,ml,o){
     for(id in ms){if(d.out[id]||ms[id].leaving)continue;var me0=spot[id]||at(ms[id]);
       var ref2=id.indexOf('k:')===0?id.split(':').slice(2).join(':'):id,tgt=d.own[ref2],into=why&&tgt&&tgt!==id&&d.out[tgt]&&ms[tgt]?plus(at(ms[tgt]),peekNow[tgt]&&peekNow[tgt][ref2]):null;
       if(!onScreen(me0)){drop(id);continue}
+      // A player's own pin whose gathered pin (theirs, on that very spot) has just come back (zoomed straight back out): that shows
+      // the same face whole, so this one goes at once rather than fading over it (no second name).
+      if(into&&back[tgt]&&tgt==='k:p:'+id&&Math.abs(into.x-me0.x)+Math.abs(into.y-me0.y)<=3){drop(id);continue}
       leaving.push({id:id,k:ms[id],from:me0,into:into,d:Math.abs(me0.x-mid.x)+Math.abs(me0.y-mid.y)})}
     // At most GLIDES move at once, nearest the middle; the rest just fade. One layout pass for all of them.
     glides.sort(function(a,b){return a.d-b.d});
@@ -508,12 +545,13 @@ return function(map,ml,o){
     leaving.sort(function(a,b){return a.d-b.d});
     leaving.forEach(function(l,i){if(i>=GLIDES||st)l.into=null});
     glides.forEach(function(g){var c=child(g.k);if(!c)return;clearTimeout(g.k.tidy);c.classList.remove('cs-move','cs-spring');c.style.translate=g.dx+'px '+g.dy+'px'});
-    leaving.forEach(function(l){var c=child(l.k);clearTimeout(l.k.tidy);l.k.el.style.pointerEvents='none';if(c&&l.into){c.classList.add('cs-move');c.style.translate=(l.into.x-l.from.x)+'px '+(l.into.y-l.from.y)+'px'}if(c)c.classList.add('cs-out');
+    // One still springing out (zoomed straight back out) loses its spring first: the spring's grow would hold it solid until it went.
+    leaving.forEach(function(l){var c=child(l.k);clearTimeout(l.k.tidy);l.k.el.style.pointerEvents='none';if(c)c.classList.remove('cs-spring');if(c&&l.into){c.classList.add('cs-move');c.style.translate=(l.into.x-l.from.x)+'px '+(l.into.y-l.from.y)+'px'}if(c)c.classList.add('cs-out');
       var k=l.k,id=l.id;k.leaving=setTimeout(function(){k.m.remove();if(ms[id]===k)delete ms[id]},c?260:0)});
     if(glides.length)void ct.offsetWidth;
-    // One split off a gathered pin springs out (a little past its spot and back, growing to full size); anything else just glides.
-    glides.forEach(function(g){var c=child(g.k);if(!c)return;c.classList.add('cs-move',g.made?'cs-spring':'cs-in');c.style.translate='0px 0px';
-      g.k.tidy=setTimeout(function(){c.classList.remove('cs-move','cs-in','cs-spring');c.style.translate=''},g.made?620:460)});
+    // A player split off a gathered pin springs out (a little past its spot and back, growing to full size); anything else just glides.
+    glides.forEach(function(g){var c=child(g.k);if(!c)return;var sp=g.made&&g.p;c.classList.add('cs-move',sp?'cs-spring':'cs-in');c.style.translate='0px 0px';
+      g.k.tidy=setTimeout(function(){c.classList.remove('cs-move','cs-in','cs-spring');c.style.translate=''},sp?620:460)});
     // New pins: the first ones after the full map opens come in as one wave, nearest the middle first; later ones fade in.
     var t=now();
     if(!waveDone&&!wave0&&fresh.length){

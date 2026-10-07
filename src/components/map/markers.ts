@@ -138,7 +138,7 @@ export const MAP_PIN_CSS = `
 @keyframes cs-grow{0%{opacity:.4;scale:.74}100%{opacity:1;scale:1}}
 .cs-still .cs-pf{transition:none;animation-name:cs-fade-in}
 .cs-still .cs-spring{animation:none}
-@media (prefers-reduced-motion:reduce){.cs-pf{transition:none;animation-name:cs-fade-in}.cs-spring{animation:none}}
+@media (prefers-reduced-motion:reduce){.cs-pf{transition:none;animation-name:cs-fade-in}.cs-move.cs-spring{animation:none;transition:translate .4s cubic-bezier(.2,.8,.2,1),transform .15s ease-out}}
 `;
 
 /** The zoom at which court names show, and below which the court marks shrink. */
