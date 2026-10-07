@@ -1,14 +1,21 @@
-# CourtSide: App Store listing, version 1.0 (build 15)
+# CourtSide: App Store listing, version 1.0 (build 16)
 
-Everything you type into Apple's forms to send CourtSide to the App Store, in the order you meet it, ready to copy. Rewritten Oct 5, 2026 from the app as it is on `main`, the live website and the live sign-in settings. The owner's copy of this file is `~/Desktop/CourtSide-AppStore-Pack.md`; keep the two the same.
+Everything you type into Apple's forms to send CourtSide to the App Store, in the order you meet it, ready to copy. Rewritten Oct 7, 2026 for **build 16**, from the app as it is on `main`, the live database, the live website and the live sign-in settings.
 
-**What changed from the previous version of this file:** Sign in with Apple is in the app (but still switched off on the server), the Reddit and Talk Tennis threads and the sample people are gone, location is now shared (rough area for strangers, exact spot only for friends who follow each other), Apple Health, contacts matching, phone linking, voice notes and the `app_opens` record are in the app and on the privacy label, paid booking and the AI coach are switched off for review, the age rating follows Apple's 2025 questionnaire, and the screenshots are the 8 in `~/Desktop/CourtSide-Store-Screenshots-B` (the 4 in `store/screenshots/` are out of date). Where `~/Desktop/CourtSide-AppStore-Checklist.md` (Oct 5, morning) disagrees, this file is newer.
+**This is the only pack now.** It replaces `~/Desktop/CourtSide-AppStore-Pack.md` (Oct 6) and `~/Desktop/CourtSide-AppStore-Checklist.md` (Oct 5). Both now say so at the top. To open this one: Desktop → `Courtside` folder → `store` → `app-store-listing.md`.
 
-**Updated Oct 5, evening:** Hidden words is live (database update 117 was applied at about 8pm), so it's marked done and named in the description and the review notes. The demo-account steps no longer let the made-up accounts reach real players (no city, Location off, follows only your own accounts). The Instagram switch was an open decision; it's now decided (see the next note). Smaller fixes: when the app asks for notifications, the sign-up box's name ("Username"), the location wording in the description, and the Device ID row (the privacy policy gains one matching line with Claude's next website update).
+**What changed for build 16 (Oct 7)**
 
-**Updated Oct 5, late:** you decided the Instagram switch (section 8, item J): it stays **on for everyone** and is now written into the Terms and the privacy policy. On the post screen it now reads "Let CourtSide feature this on its Instagram" (it used to say "Feature on CourtSide's Instagram"). The two marketing boxes in section 4 are ticked for good, and the item is gone from section 0. Later still: the same switch is now on the **Edit post** screen too, so people can switch it off any time after posting, and the Terms, the privacy policy and the short "I agree" page say so.
+- **Build 16 everywhere.** Build 15 is too old to send: its camera pop-up doesn't mention videos. Build 16 has its own update channel (`store`), so instant updates can't reach the copy Apple reviews.
+- **Pre-order** for **Tue Oct 13**, set up before you submit (section 2 and item 8K).
+- **Screenshots:** folder `CourtSide-Store-Screenshots-C` (was B).
+- **Review notes:** how to try Start a session and hits, the new + menu, reporting a group, Ask for a review, Hidden words as it now starts. Recounted: 3,903 of 4,000.
+- **Description:** one new line for Start a session. **What's New** added (from the Oct 6 Desktop pack, plus today's features).
+- **Privacy label:** checked against build 16. No boxes change; a few "what it is" notes added.
+- **Demo-account steps** follow today's app (+ → Session, Not now and Continue after setup).
+- **New must before Submit:** the privacy policy's camera line (item 8L).
 
-**Updated Oct 6 (App Store audit):** the review notes now say plainly that heart rate and calories show on a workout someone posts while "Share health data" is on (on to start for adults, off for teens, who can still switch it on), name the Health row as it appears in the app ("Apple Watch"), describe the camera, microphone and Photos the way the app now uses them (picking a photo for a chat or a comment no longer asks for Photos access), say the streak and weekly recap reminders each have an off switch, and list paid in-person lessons and King of the Court as built but switched off. The description's Apple Health line says the same about posts. A TODO above the notes reminds you that "Sign in with Apple … also work" is only true once you switch it on (section 8, item A).
+Earlier changes (Oct 5 and 6) are in this file's history.
 
 **How to use it**
 
@@ -22,14 +29,16 @@ Everything you type into Apple's forms to send CourtSide to the App Store, in th
 |---|---|
 | App Store Connect | Apple's website for publishing apps: appstoreconnect.apple.com. You sign in with your Apple Developer account (Robert Chen, Individual). |
 | App Review, reviewer | Apple's team that tests every app before it goes on the store, and the person who tests yours. |
-| Build | One packaged copy of the iPhone app uploaded to Apple. Build 15 is the one to send. |
+| Build | One packaged copy of the iPhone app uploaded to Apple. **Build 16** is the one to send. |
 | TestFlight | Apple's app for installing a build on your phone before it's public. |
+| Pre-order | The App Store page goes up before the app can be downloaded. People tap "Pre-Order" (free), and the app downloads by itself on release day. |
 | Supabase | The online service that holds CourtSide's database (accounts, posts, messages) and runs sign-in. |
 | Server switch | A setting in the database that turns a feature on or off for everyone without a new build. |
 | Database update (migration) | A numbered file of changes to the database. Claude writes them; they go live only with your yes. |
 | Secret | A private key stored in Supabase. It works like a password, so only you type it in. |
 | Demo account | A login you give Apple so the reviewer can get into the app. |
 | Instant update | New app code Expo sends to phones that already have the app, with no new build. |
+| Channel | The "mailbox" a build checks for instant updates. Builds 11 to 15 use `production`; build 16 uses `store`, which stays empty during review. |
 
 ---
 
@@ -37,12 +46,14 @@ Everything you type into Apple's forms to send CourtSide to the App Store, in th
 
 Each of these would likely get the app rejected. Details are in the sections named.
 
-1. **Sign in with Apple works.** Checked tonight (Oct 5): Supabase still has Apple sign-in **off**. The Apple button shows on every iPhone, and tapping it gives an error. Reviewers almost always tap it. Steps in section 8, item A.
+1. **Sign in with Apple works.** Checked Oct 7, evening: Supabase still has Apple sign-in **off**. The Apple button shows on every iPhone, and tapping it gives an error. Reviewers almost always tap it. Steps in section 8, item A.
 2. **The Sign in with Apple key is in Supabase.** Apple requires that deleting an account made with Apple also removes CourtSide from that person's Apple ID (Apple calls it "revoking the token"). The code is ready; it needs your key. Steps in section 8, item B.
-3. **Hidden words is live. Done** (Oct 5, about 8pm). Apple's rule 1.2 says apps where people post **must** have "a method for filtering objectionable material". Hidden words is that filter (section 8, item C). Since Oct 7 it starts off for adults (owner's call) and is always on for under-18s; slurs and threats are refused for everyone.
-4. **Build 15 is in TestFlight and you have tried it** (section 8, item D).
-5. **The two demo accounts exist, with something in them** (section 6).
-6. **Every row a reviewer can tap works**, or is hidden for the review: Phone number, WHOOP, Google sign-in (section 8, items E to G).
+3. **Hidden words is live. Done.** Apple's rule 1.2 says apps where people post **must** have "a method for filtering objectionable material". Hidden words is that filter (section 8, item C). Checked Oct 7: database update 148 is live, so adults start with it off and can switch it on, under-18s always have it on, and slurs and threats are refused for everyone.
+4. **Build 16 is in TestFlight and you have tried it** (section 8, item D). Not build 15.
+5. **The pre-order is set up**, release date **Tue Oct 13** (section 2, item 8K).
+6. **The two demo accounts exist, with something in them** (section 6).
+7. **Every row a reviewer can tap works**, or is hidden for the review: Phone number, WHOOP, Google sign-in (section 8, items E to G).
+8. **The privacy policy's camera line is fixed on the website** (section 8, item L).
 
 ---
 
@@ -95,12 +106,27 @@ Leave **Apple's standard license agreement**. The extra rule Apple wants (no tol
 
 ---
 
-## 2. Pricing and Availability
+## 2. Pricing and Availability (with the pre-order)
 
-**Where:** left sidebar → **Pricing and Availability**.
+**Where:** left sidebar → **Pricing and Availability**. Do this on **Thu Oct 8**, before you submit.
 
-- **Price:** Free (USD 0.00).
-- **Countries or Regions:** click **Edit** → **Deselect All** → tick **United States** → **Done** → **Save**.
+**Why a pre-order:** Apple can approve the app any day this week, but launch is **Tue Oct 13**. A pre-order puts the App Store page up as soon as you release it after approval, so people can tap "Pre-Order" and share the link, and the app downloads by itself on their phones on Oct 13.
+
+### Price
+
+**Free** (USD 0.00). If a price is already set, leave it. If not: **Price Schedule** → **Add Pricing** → choose **USD 0.00 (Free)** → **Next** → **Confirm**.
+
+### Where, and when (the pre-order)
+
+1. Under **App Availability**, click **Set Up Availability**.
+2. Choose the countries: **Deselect All**, then tick **United States** only.
+3. Tick **Publish as Pre-Order**.
+4. **Release date:** **Tue Oct 13, 2026**.
+5. Click **Confirm** (then **Save** if the page shows it).
+
+Apple's buttons on this page may be worded slightly differently; the order is the same.
+
+**The date rule:** Apple only accepts a release date at least **2 days** after the day you set it (and at most 180 days). Set on Thu Oct 8, Oct 13 is fine. The last day you can set Oct 13 is **Sun Oct 11**.
 
 Why US only at first:
 
@@ -166,6 +192,8 @@ Apple changed its age ratings in July 2025. The old **12+ is now 13+**, and the 
 
 **If the reviewer disagrees:** the most likely change is Apple deciding that Safari links count as web access, which would make it 16+. That only changes who can download it on a teen's iPhone; nothing else needs doing.
 
+Groups being open to teens (since Oct 7) doesn't change any answer here.
+
 ---
 
 ## 4. App Privacy ("nutrition label")
@@ -182,7 +210,7 @@ https://app.courtsidebase.com/privacy.html
 
 2. **User Privacy Choices URL:** leave blank.
 
-(Both addresses in this pack were checked tonight and open.)
+(The CourtSide addresses in this pack were checked on Oct 7 and open.)
 
 ### Apple's three questions, in plain words
 
@@ -225,21 +253,23 @@ Never tick **Third-Party Advertising** or **Other Purposes**.
 | **Email Address** | Yes | No | App Functionality | Sign-in and password resets; coach applications. Never shown to others. |
 | **Phone Number** | Yes | No | App Functionality | A number linked in Settings → Phone number (checked with a texted code), and a coach applicant's number. Never shown. |
 | **Health** | Yes | No | App Functionality | From Apple Health: sleep, heart rate variability, resting heart rate, food totals, and the average and maximum heart rate of a workout. From WHOOP, if connected: recovery, sleep, HRV. Also private injury notes for the coach. |
-| **Fitness** | Yes | No | App Functionality | Steps, active energy, workouts (tennis, runs, rides, the gym), logged sessions and matches, streaks, the tennis profile |
-| **Precise Location** | Yes | No | App Functionality | An adult's spot on the map, to about 10 m, while they share it with "Players nearby" or "Only people you follow back". Deleted the moment Location is turned off. Also the point sent to place search when adding a place to a post. |
+| **Fitness** | Yes | No | App Functionality | Steps, active energy, workouts (tennis, runs, rides, the gym), logged sessions and matches, streaks, the tennis profile. A live session's running timer stays on the phone; only the session you log or post reaches CourtSide. |
+| **Precise Location** | Yes | No | App Functionality | An adult's spot on the map, to about 10 m, while they share it with "Players nearby" or "Only people you follow back". Deleted the moment Location is turned off. The court an adult checks in at ("I'm playing here", or **Start a session** at a court), shown to the same people for up to two hours. Also the point sent to place search when adding a place to a post. |
 | **Coarse Location** | Yes | No | App Functionality, Product Personalization | The town on a profile; the rough (about 1 km) area kept for teens and "Only me"; the rounded point sent for the weather; players and open hits near you |
-| **Contacts** | Yes | No | App Functionality, Product Personalization | Who follows whom (Apple counts a follow list as a "social graph"). Find friends from contacts sends phone numbers and emails from the phone's contacts, checks them, then throws them away. |
-| **Emails or Text Messages** | Yes | No | App Functionality | Direct messages and group chats |
-| **Photos or Videos** | Yes | No | App Functionality, **Developer's Advertising or Marketing** | Posts, clips, instants, chat photos, profile photos. Marketing: a post left on "Let CourtSide feature this on its Instagram" (on by default) may be reposted on CourtSide's Instagram and in its own marketing. |
+| **Contacts** | Yes | No | App Functionality, Product Personalization | Who follows whom (Apple counts a follow list as a "social graph"), including a follow from the map's player card. Find friends from contacts sends phone numbers and emails from the phone's contacts, checks them, then throws them away. |
+| **Emails or Text Messages** | Yes | No | App Functionality | Direct messages and group chats, including a hit's chat and its "called off" and "left" lines |
+| **Photos or Videos** | Yes | No | App Functionality, **Developer's Advertising or Marketing** | Posts, clips, instants, a session's photo or clip, chat photos, profile photos. Marketing: a post left on "Let CourtSide feature this on its Instagram" (on by default) may be reposted on CourtSide's Instagram and in its own marketing. |
 | **Audio Data** | Yes | No | App Functionality | Voice notes, and the sound on clips |
-| **Other User Content** | Yes | No | App Functionality | Captions, comments, threads, replies, polls, questions to coaches, tips, bios, court reports, reports people send, Hidden words lists, coach applications and résumés, and conversations with the AI coach once it's on |
+| **Other User Content** | Yes | No | App Functionality | Captions, comments, threads, replies, polls, questions to coaches, tips, bios, court notes, reports people send, requests to review a take-down, Hidden words lists, coach applications and résumés, and conversations with the AI coach once it's on |
 | **Search History** | Yes | No | App Functionality | Post searches go to CourtSide's server and place searches to Photon (komoot's map search). CourtSide doesn't save them, but the services' request logs keep them for a few days, and the server's log knows which account searched. Declaring it is the safe side. |
 | **User ID** | Yes | No | App Functionality, **Developer's Advertising or Marketing** | The account ID and @handle. Marketing: the @handle credits a reposted post. |
-| **Device ID** | Yes | No | App Functionality | The phone's push address, so alerts reach it. A scrambled copy of each phone's push address is also kept (`device_sightings`) until the account is deleted, to catch invite fraud: someone counting a second account on the same phone as a player they invited. Apple counts fraud prevention as App Functionality. **Not** the advertising ID. |
-| **Product Interaction** | Yes | No | App Functionality, Product Personalization, **Analytics** | Likes, saves, votes, follows, views; how long each post stayed on screen (orders the feed, kept about two months); when a chat was last read; which days someone opens the app (only ever counted as daily totals) |
+| **Device ID** | Yes | No | App Functionality | The phone's push address, so alerts reach it (hit call-offs and "Can't make it" included). A scrambled copy of each phone's push address is also kept (`device_sightings`) until the account is deleted, to catch invite fraud: someone counting a second account on the same phone as a player they invited. Apple counts fraud prevention as App Functionality. **Not** the advertising ID. |
+| **Product Interaction** | Yes | No | App Functionality, Product Personalization, **Analytics** | Likes, saves, votes, follows, views; how long each post stayed on screen and when you last saw it (orders the feed, so posts you've already seen come after new ones; kept about two months); when a chat was last read; which days someone opens the app (only ever counted as daily totals) |
 | **Crash Data** | Yes | No | App Functionality | Error reports saved to CourtSide's own database (`app_errors`) with the account ID |
 | **Other Diagnostic Data** | Yes | No | App Functionality | The same reports: the screen, app version, phone type and system version |
 | **Other Data Types** | Yes | No | App Functionality | Date of birth, for the age check. Never shown to anyone. |
+
+**Checked Oct 7 against build 16: no box changes.** Start a session's check-in is the same court check-in as "I'm playing here" (Precise Location, already ticked). The feed's "seen" record is Product Interaction (already ticked). Hit alerts use the push address (Device ID). Follow on the map card is the follow list (Contacts). "Push to bottom" is a tool for admins and collects nothing from members. The words in the last column are for you; Apple only sees the boxes.
 
 **Leave everything else unticked (No):**
 
@@ -273,7 +303,7 @@ Never tick **Third-Party Advertising** or **Other Purposes**.
 
 1. Under **Previews and Screenshots**, choose the **iPhone 6.9" Display** tab.
 2. Delete any screenshots already there (hover → the ✕).
-3. Drag in these 8 files, **in this order**, from Finder: Desktop → `CourtSide-Store-Screenshots-B` → `App Store 6.9 inch`:
+3. Drag in these 8 files, **in this order**, from Finder: Desktop → `CourtSide-Store-Screenshots-C` → `App Store 6.9 inch`. Use folder **C**, not B or the older ones: the file names are the same, so check the folder name.
    1. `01-find-someone-to-hit-with.png`
    2. `02-post-your-best-points.png`
    3. `03-up-3-2-on-mira-rematch.png`
@@ -284,7 +314,7 @@ Never tick **Third-Party Advertising** or **Other Purposes**.
    8. `08-pick-your-court.png`
 4. Check the order matches, then **Save** (top right).
 
-They're 1320 × 2868 pixels with no transparency (checked), which is exactly what Apple wants for this slot. Apple shrinks them for smaller iPhones, so no other sizes are needed. CourtSide is iPhone only, so no iPad screenshots. The **App Preview** (a video) is optional; skip it.
+Set C's files are 1320 × 2868 pixels with no transparency, which is exactly what Apple wants for this slot. Apple shrinks them for smaller iPhones, so no other sizes are needed. CourtSide is iPhone only, so no iPad screenshots. The **App Preview** (a video) is optional; skip it. (The 4 pictures in the project's `store/screenshots/` are out of date; don't use them.)
 
 ### Promotional Text (limit 170)
 
@@ -293,6 +323,27 @@ Growing the game. Find someone to hit with near you, post your best points with 
 ```
 
 127 characters. This is the only text you can change any time without a new review, so use it later for news ("New: …").
+
+### What's New in This Version (limit 4,000)
+
+Apple shows this box only for updates, so on version 1.0 you will probably **not** see it. If it is there, paste this. If not, skip it; nothing is lost.
+
+```text
+• Start a session when you get to the court: a live timer from Start to Finish, then log it with a photo or clip.
+• Take a photo or record a video right from the post screen.
+• Add a match score, like 6-4 3-6 10-8, to any session. It shows on your post and your share card.
+• An Activities tab in the Feed: sessions from you and the people you follow.
+• Your tennis profile in three tabs (Activity, Health and Game), with a weekly recap of your time on court.
+• Streaks: a flame by your name from three days in a row, and "Friends on a streak" to see who's keeping theirs going.
+• Hits: calling one off tells everyone who's in, and "Can't make it" frees your spot.
+• Share your clips and photos straight to your Instagram story.
+• Find friends from your contacts while you set up.
+• Chats: hold a message to react, and turn read receipts on or off for each chat.
+• Hidden words can hide offensive comments and messages from people you don't follow. If a post of yours is taken down, you'll see why and can ask for a review.
+• A new app icon, long clips that shrink to fit instead of failing to upload, and lots of smaller fixes.
+```
+
+1,128 characters. Optional: paste the same text in **TestFlight** → build **16** → **Test Details** → **What to Test**, so your testers see what changed (only testers see it there).
 
 ### Description (limit 4,000)
 
@@ -308,6 +359,7 @@ FIND SOMEONE TO HIT WITH
 
 POST YOUR GAME
 • Clips and photos in a full-screen feed. Double-tap to like, then comment, save or send it to a friend.
+• Start a session when you get to the court: a live timer, and friends can see you're playing there if you choose.
 • Add your score and session stats to a clip, or log a session just for you.
 • Every session you log counts toward your streak.
 • Instants: one photo right after you play. A five-second countdown, then the camera takes it. Instants stay up for 24 hours.
@@ -334,7 +386,7 @@ Seven looks: the warm CourtSide original, Night, Clean, and four city courts: Me
 SAFETY FIRST
 • CourtSide is for ages 13 and up. Teen accounts start private, only people a teen follows can message them, and teens are never shown to strangers on the map.
 • Report posts, profiles, threads, comments and messages. Block or mute anyone.
-• Hidden words hides offensive comments and messages from people you don't follow (always on for under-18s). Slurs and threats can't be posted.
+• Hidden words can hide offensive comments and messages from people you don't follow (always on for under-18s). Slurs and threats can't be posted.
 • No ads. We don't sell your data or track you across other apps.
 
 Training, injury and fitness content on CourtSide is general information, not medical advice.
@@ -343,16 +395,16 @@ Terms of Service: https://app.courtsidebase.com/terms.html
 Privacy Policy: https://app.courtsidebase.com/privacy.html
 ```
 
-3,139 characters.
+3,321 characters.
 
 **Why it says what it says**
 
 - **Apple Health is named** because Apple rejects apps that use Health without saying so in the description (rule 2.5.1).
-- **Location is described exactly:** other players see your rough area from any distance, or the court you've checked in at (for up to two hours); only friends who follow each other see your exact spot; or nobody. The old listing's "Nobody's exact position is ever shown" is no longer true.
-- **Hidden words is named** in SAFETY FIRST because it's live and it's the filter Apple's rule 1.2 asks for.
-- **Left out on purpose:** the AI coach and paid lessons (both switched off in this version), WHOOP, Fitbit, Oura and Polar (not open to everyone), tournament names (trademarks: the themes use city names), and the Instagram repost switch (the Terms and privacy policy explain it, and the description links to both).
+- **Location is described exactly:** other players see your rough area from any distance, or the court you've checked in at (for up to two hours); only friends who follow each other see your exact spot; or nobody. "If you choose" on the Start a session line is there because the check-in follows the same choice (and never happens with Location off or for teens).
+- **Hidden words "can hide"** because, since Oct 7, adults start with it off and switch it on themselves; it's always on for under-18s.
+- **Left out on purpose:** the AI coach and paid lessons (both switched off in this version), WHOOP, Fitbit, Oura and Polar (not open to everyone), tournament names (trademarks: the themes use city names), the admins' "Push to bottom" tool, and the Instagram repost switch (the Terms and privacy policy explain it, and the description links to both).
 
-**Optional coaching paragraph.** Add it only if at least one real coach is listed on the Coaching tab. Paste it between the TALK TENNIS and APPLE HEALTH sections, with an empty line above and below. It adds 152 characters (150, plus the empty line), making the description 3,291.
+**Optional coaching paragraph.** Add it only if at least one real coach is listed on the Coaching tab. Paste it between the TALK TENNIS and APPLE HEALTH sections, with an empty line above and below. It adds 152 characters (150, plus the empty line), making the description 3,473.
 
 ```text
 COACHING
@@ -378,7 +430,7 @@ partner,hitting,match,doubles,coach,club,serve,racquet,score,streak,clips,social
 https://app.courtsidebase.com/support.html
 ```
 
-It opens (checked tonight) and has the support email, how to report and block, and how to delete an account.
+It opens (checked Oct 7) and has the support email, how to report and block, and how to delete an account.
 
 ### Marketing URL (optional)
 
@@ -386,7 +438,7 @@ It opens (checked tonight) and has the support email, how to report and block, a
 https://courtsidebase.com
 ```
 
-It opens CourtSide's home page ("The social media app for tennis"). After launch, Claude switches its "Get the iPhone app" button from TestFlight to the App Store link.
+It opens CourtSide's home page ("The social media app for tennis"). After the pre-order page is up, Claude switches its "Get the iPhone app" button from TestFlight to the App Store link (a public website change, so Claude asks you first).
 
 ### Version
 
@@ -402,11 +454,11 @@ Use your name **exactly** as it appears on your Apple Developer account (it's an
 
 ### Build
 
-Under **Build**, click **Add Build** (or the **+**), choose **15**, click **Done**. If 15 isn't listed, it hasn't finished processing in TestFlight yet (it can take up to an hour after upload).
+Under **Build**, click **Add Build** (or the **+**), choose **16**, click **Done**. **Not 15**: build 15 is older and its camera pop-up doesn't mention videos. If 16 isn't listed, it hasn't finished processing yet (it can take up to an hour after upload).
 
 ### App Store Version Release
 
-Choose **Manually release this version.** After Apple approves, nothing goes public until you press **Release**. Pressing Release is the public step.
+Choose **Manually release this version.** After Apple approves, nothing goes public until you press **Release This Version**. With the pre-order set up, pressing it puts the **pre-order page** up straight away (it can take up to 24 hours to show everywhere), and the app becomes downloadable by itself on **Tue Oct 13**. Pressing Release is the public step.
 
 ---
 
@@ -414,12 +466,12 @@ Choose **Manually release this version.** After Apple approves, nothing goes pub
 
 **Why:** everything in CourtSide is behind sign-in. Apple requires a working login it can use (rule 2.1), and an empty app looks broken, so the accounts need a little in them. Two accounts let the reviewer try messages, reporting and blocking on each other.
 
-**Do this on your iPhone with build 15, on Tue Oct 6 or Wed Oct 7.** Email confirmation is off in Supabase today (checked tonight), so a new account works at once. Turning it on later doesn't break accounts already made.
+**Do this on your iPhone with build 16, on Thu Oct 8, before you submit.** (If you already made them on build 15, they still work: accounts live on the server, not in the build. Just check step 4.) Email confirmation is off in Supabase (checked Oct 7), so a new account works at once. Turning it on later doesn't break accounts already made.
 
 **Keep the made-up accounts away from real players.** Three things in CourtSide reach strangers on their own, so the steps below avoid all three:
 
 - **A city.** A new account that sets a city sends a "joined near you" alert to up to 50 real players in that city. So both demo accounts **leave the city empty**.
-- **A follow.** Every follow alerts the person followed. So the demo accounts follow only each other and your own two accounts, **@oatmealandsilk** and **@mrdinosaur62**.
+- **A follow.** Every follow alerts the person followed. So the demo accounts follow only each other and your own two accounts, **@oatmealandsilk** and **@mrdinosaur62**. That includes the "People you may know" screen right after setup: follow nobody there.
 - **Location.** CourtSide's Location switch belongs to the **phone**, not the account. If it's on when you make a new account, that account goes on the map straight away, wherever you are (at home, say), and players within about 30 miles get an alert that a new player shared their spot near them. So Location stays **off** until each account has its map setting.
 
 ### Before you start: switch Location off
@@ -436,14 +488,18 @@ While still signed in as yourself: **Profile** → gear (top right) → **Locati
    - **Password:** a new one, 12+ characters, that you use nowhere else. Write it down; you'll paste it into App Store Connect.
    - **Birthday:** an adult date, for example **January 1, 1990**.
    - Tick the Terms box, then tap **Create account**.
-3. Go through setup. On **About you**, **leave the Location box empty**. On Your game, pick a rating and a style. Skip the optional steps, and on the screen right after setup tap **Later** (answering the question shown there would reach a real player). Agree to the Community guidelines.
-4. **Leave "Invited by?" empty.** Don't give it anyone's handle.
-5. In **Edit profile**: add a profile photo of a court or a ball (not a stranger's face). **Leave the city empty.**
-6. Set the map: **Profile** → gear → **Privacy center** → **Who can see you on the map** → **Only me**. Do this now, before Location is ever on for A. A still sees its friends on the map. The review notes tell Apple the demo account uses Only me, and the reviewer can change it. On the reviewer's phone, Location starts off, so they still get Apple's own permission pop-up.
+3. Go through setup:
+   - On **About you**, **leave the Location box empty**, and **leave "Invited by?" empty**.
+   - On **Your game**, pick a rating and a style. Skip the optional steps.
+   - On **Log your tennis automatically**, tap **Not now**.
+   - On **People you may know**, don't follow anyone and don't tap **Find friends from your contacts**. Tap **Continue**.
+   - Agree to the **Community guidelines** when they show.
+4. In **Edit profile**: add a profile photo of a court or a ball (not a stranger's face). **Leave the city empty.**
+5. Set the map: **Profile** → gear → **Privacy center** → **Who can see you on the map** → **Only me**. Do this now, before Location is ever on for A. A still sees its friends on the map. The review notes tell Apple the demo account uses Only me, and the reviewer can change it. On the reviewer's phone, Location starts off, so they still get Apple's own permission pop-up. (With Only me, the reviewer's Start a session says "Only you will see this session" and checks in nowhere, which is what you want.)
 
 ### Step 2: make account B the same way
 
-Same steps with name `Review Partner`, username `reviewdemo2`, and `+review2` in the email. Leave B's city empty too. In step 6, choose **Only people you follow back** instead of Only me.
+Same steps with name `Review Partner`, username `reviewdemo2`, and `+review2` in the email. Leave B's city empty too. In step 5, choose **Only people you follow back** instead of Only me.
 
 ### Step 3: put things in them
 
@@ -452,24 +508,26 @@ Do these while signed in as the account named. To switch: **Profile** → gear �
 | As | Do this | So the reviewer sees |
 |---|---|---|
 | A | Follow B, **@oatmealandsilk** and **@mrdinosaur62**, and nobody else (every follow alerts the person followed). | A Feed with posts in it |
-| A | **+** → **post** → pick a **photo** of a court or your racquet, add a caption. Don't add a place or a court. Switch off "Let CourtSide feature this on its Instagram" (older builds call it "Feature on CourtSide's Instagram"). | A post to like, comment on and report |
-| A | **+** → **post** → pick a **video** from your camera roll (your own tennis, no one in it who hasn't said yes). Same as the photo: no place or court, and the Instagram switch off if it's there. | The clip player |
-| A | **+** → **Log a session** (Practice, 60 minutes) and keep it private | Your sessions and a streak |
-| A | **+** → **thread or question** → for example "What string tension do you use with poly?" | A thread to reply to and report |
+| A | **+** → **Post** → pick a **photo** of a court or your racquet, add a caption. Don't add a place or a court. Switch off "Let CourtSide feature this on its Instagram". | A post to like, comment on and report |
+| A | **+** → **Clip** → pick a **video** from your camera roll (your own tennis, no one in it who hasn't said yes). Same as the photo: no place or court, and the Instagram switch off if it's there. | The clip player |
+| A | **+** → **Session** → **Log a past one** → **Practice**, **How long** 1 hour → **Save**. It stays private. | Your sessions and a streak |
+| A | **+** → **Thread or question** → for example "What string tension do you use with poly?" | A thread to reply to and report |
 | A | **Coaching** → **Ask a coach** → ask one real question | Ask a coach working |
 | B | Follow A back (now you're "mutuals", which Apple will see on the map) | A friend on the map |
 | B | Like and comment on A's photo, and reply to A's thread | Comments and replies to report |
 | B | Send A a direct message ("Hit Saturday?"), then switch to A and reply | A real chat |
 | B | Start a group chat with A, called "Saturday doubles", and send one message | Group chats |
-| Optional | As B, before the court step: post a **hit** (Community → Find Players → **Post a hit**) for a day after Oct 15 at a court where you could really play | An open hit. Real players nearby can see it and tap "I'm in", so only post one you'd turn up to, and delete it after approval. |
+| Optional | As B, before the court step: **Community** → **Find Players** → **Looking for a hit?** → a court where you could really play, a day after Oct 15 | An open hit the reviewer can join, chat in and leave with **Can't make it**. Real players nearby can see it and tap "I'm in", so only post one you'd turn up to. Don't call it off during review (that alerts whoever joined); delete it after approval. |
 | B | **Last, at a public tennis court**, never at home. First check B's map setting says **Only people you follow back** (Profile → gear → Privacy center). Then **Profile** → gear → **Location** → switch it **on**, open the map and wait until it has found you. Then switch back to your own account. Don't turn Location off while signed in as B: that deletes B's spot. | B on A's map, at the court. Only A can see it, so real players nearby never see a made-up "Review Partner". |
+
+Don't start a live session as B: it would check B in at the court for B's friends, and that's an extra thing to undo.
 
 ### Step 4: check and leave them alone
 
 - Sign in as A once more and look at the Feed, Community and Messages. All of the above should be there. (Location is on again by now; that's fine for A, because Only me hides it from everyone.)
 - **Don't sign in as B again** after the court step while Location is on. B's pin would move to wherever you are, and A (the reviewer) sees B's exact spot.
 - Back on your own account, Location is on again, so your own pin is back on the map as usual.
-- **Never make either account an admin.** An admin account would show the reviewer the Reports, Removed, Waitlist, Invites and payment tools.
+- **Never make either account an admin.** An admin account would show the reviewer the Reports, Removed, Pushed-down posts, Waitlist, Invites and payment tools.
 - **Don't change the passwords or delete anything** until Apple approves.
 - Don't post an instant for the reviewer: it leaves the rail after 24 hours anyway.
 
@@ -495,55 +553,62 @@ Do these while signed in as the account named. To switch: **Profile** → gear �
 
 First replace the four `[…]` blanks with the two logins from section 6. The notes assume section 0 is done.
 
-> **TODO (William), before you paste:** the notes say "Sign in with Apple and Google also work." That is only true once you have switched Apple sign-in on in Supabase (section 8, item A) and published Google sign-in (item G), and tried both on build 15. Until then the Apple button shows an error, and Apple rejects for that: don't submit. The new "Players joining near you" switch shows once database update 146 is applied (Claude does that); the notes don't depend on it.
+> **TODO (William), before you paste:** the notes say "Sign in with Apple and Google also work." That is only true once you have switched Apple sign-in on in Supabase (section 8, item A) and published Google sign-in (item G), and tried both on build 16. Checked Oct 7, evening: Apple sign-in is still off. Until it's on, the Apple button shows an error, and Apple rejects for that: don't submit.
 
 ```text
-CourtSide is a social app for tennis players: a map of courts and players nearby, a feed of clips and photos, discussions, messages, and free Ask a coach questions.
+CourtSide is a social app for tennis players: a map of courts and players nearby, a feed of clips and photos, discussions and messages.
 
 DEMO ACCOUNTS
-Email and password: [DEMO A EMAIL] / [DEMO A PASSWORD]. A second adult account, [DEMO B EMAIL] / [DEMO B PASSWORD], follows the first back and shares a chat and a group chat with it, to test messages, reporting and blocking. Sign in with Apple and Google also work.
+Email and password: [DEMO A EMAIL] / [DEMO A PASSWORD]. Second adult account: [DEMO B EMAIL] / [DEMO B PASSWORD]. The two follow each other and share a chat and a group chat, to test messages, reporting and blocking. Sign in with Apple and Google also work.
 
 WHERE THINGS ARE
-The app opens on Community > Find Players (map). Tabs: Community (map, Discussions; "Post a hit" for open games), Feed, + (post or clip, instant, thread, log a session), Coaching, Profile. Messages: the paper-plane button at the top. Settings: the gear on Profile.
+The app opens on Community > Find Players (map, then Open hits). Tabs: Community, Feed, + (Session, Clip, Post, Thread, Instant), Coaching, Profile. Messages: paper-plane button, top. Settings: gear on Profile.
+
+TO TRY
+- Session: + > Session > Start now runs a timer; Finish opens Log it (photo or clip, then Post session or Save privately).
+- Hits: Find Players > "Looking for a hit?" posts one; others tap I'm in and a chat opens. Call off and Can't make it alert the others.
 
 AGE AND TEENS
-Everyone gives a birthday once; under 13 cannot join. Ages 13-17: accounts start private, only people they follow can start a chat with them, they are never shown to strangers on the map or suggested to adult strangers, and they can share only a rough area with friends who follow each other, off until they turn it on. Please use the adult demo accounts.
+A birthday is asked once; under 13 cannot join. Ages 13-17: accounts start private, only people they follow can start a chat with them, they are never shown to strangers on the map or suggested to adult strangers, and they can share only a rough area with friends who follow each other, off until they turn it on.
 
-PERMISSIONS (each asked only when its feature is first used, except notifications)
-- Location, while using the app only: courts and players near you. Optional. Each person chooses who sees them (Settings > Privacy center > Who can see you on the map): Players nearby (rough area), Only people you follow back, or Only me, which the demo account uses. Turning Location off deletes your spot from our servers.
+PERMISSIONS (each asked when its feature is first used; notifications once after setup)
+- Location, while using the app only: courts and players near you. Optional. Each person chooses who sees them (Settings > Privacy center > Who can see you on the map): Players nearby (rough area), Only people you follow back, or Only me, which the demo account uses. Turning Location off deletes your spot from our servers. Start a session checks you in at its court for the same people.
 - Camera and microphone: posts (photo, or video with sound), instants, chat photos, voice notes while recording. Photos: chat and comment photos ask nothing; picking for a post asks once (Limited or Don't Allow work too); saving asks add-only access.
-- Contacts: only from Settings > Find friends from contacts. Numbers and emails are matched against CourtSide accounts, then deleted.
-- Notifications: asked once after setup. Reminders (streak, weekly recap) each have an off switch in Settings.
-- Apple Health, read only: Settings > Health and nutrition (row "Apple Watch"). Reads sleep, HRV, resting heart rate, steps, active energy, nutrition, and Workouts with heart rate to log a session in one tap. Background delivery only shows a local alert. Never writes to Health. Private, except heart rate and calories on a post with "Share health data" on (default on for adults only). Never used for ads or marketing, never sold, not in iCloud. With no workouts on the device, the sessions list is empty.
+- Contacts: only if the person taps Find friends from your contacts (after setup or in Settings). Numbers and emails are matched against CourtSide accounts, then deleted.
+- Notifications: reminders (streak, weekly recap) each have an off switch in Settings.
+- Apple Health, read only: Settings > Health and nutrition (row "Apple Watch"). Reads workouts with heart rate (to log sessions), sleep, HRV, resting heart rate, steps, active energy, nutrition. Background delivery only shows a local alert. Never writes. Private, except heart rate and calories on a post with "Share health data" on (default on for adults only). Never used for ads or marketing, never sold, not in iCloud.
 
 SAFETY (1.2)
-Everyone agrees to the Terms and Community guidelines (no tolerance for objectionable content or abusive users). Report: ••• on a post, instant or profile; the flag on a thread; press and hold a comment, reply or message; ••• on a coach question; a chat's details. Block or mute: ••• on a profile. Reported items are hidden from the reporter at once. Our team is alerted to every report, reviews it within 24 hours in an in-app queue, takes down content (the author is told why) and suspends accounts. Settings > Hidden words hides offensive comments and messages from people you don't follow (one switch for adults; always on for under-18s); slurs and threats can't be posted anywhere.
+Everyone agrees to the Terms and Community guidelines (no tolerance for objectionable content or abusive users). Report: ••• on a post, instant, profile or group; the flag on a thread; press and hold a comment, reply or message; ••• on a coach question; a chat's details. Block or mute: ••• on a profile. Reported items are hidden from the reporter at once. Our team is alerted to every report, reviews it within 24 hours, takes down content (the author is told why and can ask for a review) and suspends accounts. Settings > Hidden words hides offensive comments and messages from people you don't follow (adults switch it on; always on for under-18s); slurs and threats can't be posted anywhere.
 
 DELETE ACCOUNT
-Profile > gear > Account center > Delete account, then type DELETE. Also on the web at app.courtsidebase.com.
+Profile > gear > Account center > Delete account, then type DELETE.
 
-COACHING AND PURCHASES
-Coaching is free: Ask a coach (public questions) and coach profiles with messaging. Nothing can be bought: no in-app purchases, subscriptions, payments or ads.
+PURCHASES
+None. Coaching (Ask a coach, coach profiles) is free. No in-app purchases, subscriptions, payments or ads.
 
 NOT IN THIS VERSION
-The AI coach is built but switched off on our server; it will come in a later update sent for review. Paid lessons and King of the Court are switched off. Fitbit, Oura, Polar and WHOOP tennis sessions are off too. Connecting WHOOP for recovery and sleep is optional and needs a WHOOP membership.
+The AI coach, paid lessons and King of the Court are built but switched off on our server; the AI coach will come in a later update sent for review. Fitbit, Oura, Polar and WHOOP tennis sessions are off too. Connecting WHOOP for recovery and sleep is optional and needs a WHOOP membership.
 
 CONTACT
 support@courtsidebase.com
 ```
 
-3,817 characters with the blanks in. Your real emails and passwords add about 25, and the AI coach swap below about 130, so it stays just under 4,000 (about 3,975 with both). Anything added on top needs something else cut.
+3,903 characters with the blanks in. Your real emails and passwords add about 30, so about 3,935 of 4,000. Anything added on top needs something else cut: ask Claude to recount.
+
+**Why these words (for you, not for Apple)**
+
+- **TO TRY** is new: it walks the reviewer to today's two biggest features, Start a session and hits, in one line each. Reporting and blocking are in SAFETY.
+- **Start a session** reuses the court check-in ("I'm playing here"): adults only, never with Only me or Location off, no tracking in the background. The demo account uses Only me, so the reviewer's session checks in nowhere and says why on screen.
+- **Hidden words** says "adults switch it on" because database update 148 (live, checked Oct 7) starts it off for adults. Slurs and threats are still refused for everyone, which is the filter rule 1.2 asks for.
+- **"Push to bottom"** (the admins' tool that sinks a post in every feed) is left out: it's for you and the other admin account only, and the notes are at their limit. Mention it in a reply if Apple asks how you moderate.
+- **Shortened to fit:** the web delete link, "Please use the adult demo accounts", and the long notifications line went; nothing a reviewer needs.
 
 ### Swaps, depending on your answers in section 8
 
-- **You chose to switch the AI coach on for the review** (section 8, item I): replace the first sentence of NOT IN THIS VERSION with:
-
-```text
-The AI coach (Coaching tab) is powered by Claude from Anthropic. Before anything is sent, a one-time screen lists what is shared (questions, tennis profile, and sleep and HRV from Apple Health if connected) and asks Agree or Not now.
-```
-
-- **The WHOOP row was hidden for the review:** delete the last sentence of NOT IN THIS VERSION.
-- **Phone number works** (section 8, item E): you may add this line at the end of PERMISSIONS: `- Phone number (optional): Settings > Phone number texts a 6-digit code to link a number, so friends who have it can find you. It is never shown.`
+- **The WHOOP row was hidden for the review** (item F): delete the last sentence of NOT IN THIS VERSION.
+- **You chose to switch the AI coach on for the review** (item I, not recommended): the old swap no longer fits under 4,000. Tell Claude and it rewrites NOT IN THIS VERSION to fit.
+- **Phone number works** (item E): the line about it no longer fits. The recommended choice is to hide the row anyway.
 
 ### Attachment
 
@@ -557,14 +622,14 @@ Tick these in order. **(you)** means only you can do it. **(Claude)** means say 
 
 ### A. Switch on Sign in with Apple (you, 3 minutes) — must
 
-**Why:** the Apple button is in the app, but the server refuses it. Checked tonight: still off.
+**Why:** the Apple button is in the app, but the server refuses it. Checked Oct 7, evening: still off.
 
 1. Go to **supabase.com** and sign in. Open the **CourtSide** project (`cgitvbnvchmofqkhtlml`).
 2. Left menu: **Authentication** → **Sign In / Providers** → **Apple**.
 3. Switch on **Enable Sign in with Apple**.
 4. In **Client IDs**, type `co.courtside.app`. If something is already there, add a comma, then `co.courtside.app`.
 5. Leave the secret key box empty (it's only for Apple sign-in on the website). Click **Save**.
-6. Test on build 15: sign out, tap **Sign in with Apple**, use an Apple ID that has never used CourtSide, choose **Hide My Email**. You should land in setup with your real first name filled in. Then delete that test account (Account center → Delete account).
+6. Test on build 16: sign out, tap **Sign in with Apple**, use an Apple ID that has never used CourtSide, choose **Hide My Email**. You should land in setup with your real first name filled in. Then delete that test account (Account center → Delete account).
 
 Or say: **"Yes, turn on Sign in with Apple in Supabase"** and Claude does steps 1 to 5 in its browser tab.
 
@@ -584,24 +649,31 @@ Or say: **"Yes, turn on Sign in with Apple in Supabase"** and Claude does steps 
 
 ### C. Hidden words is live — done
 
-**Why it matters:** it's the "filter" Apple's rule 1.2 asks for. **Settings → Hidden words** hides offensive comments and messages from people you don't follow, the way Instagram does, and slurs and threats can't be posted at all. (Exactly: slurs, sexual words about children, telling someone to kill themselves and the most serious threats are refused everywhere.) Tennis talk like "kill shot" is never touched, and nothing from someone you follow is ever hidden.
+**Why it matters:** it's the "filter" Apple's rule 1.2 asks for. **Settings → Hidden words** can hide offensive comments and messages from people you don't follow, the way Instagram does, and slurs and threats can't be posted at all. (Exactly: slurs, sexual words about children, telling someone to kill themselves and the most serious threats are refused everywhere.) Tennis talk like "kill shot" is never touched, and nothing from someone you follow is ever hidden.
 
-**Nothing to do.** Database update 117 was applied on Oct 5 at about 8pm, the app change is already on main (so build 15 carries it), and the live privacy policy already describes it.
+**Nothing to do.** It went live Oct 5. Your Oct 6 change (database update 148: adults start with it off, under-18s always on) is live too, checked Oct 7. The review notes and the description say it that way.
 
-### D. Build 15 (you start it, then test it) — must
+### D. Build 16 (you start it, then test it) — must
 
-1. Build 15 must include everything above, the new Instagram switch words and the same switch on Edit post (item J), and today's fixes. When Claude says main is ready, start it yourself (Claude can't start builds): in the Terminal tab, paste the line Claude gives you. It's normally `cd ~/Desktop/Courtside && npx eas-cli@latest build --platform ios --profile production --auto-submit`. It may ask for your Apple ID password when it uploads to TestFlight.
-   - **Cost:** free within Expo's monthly build allowance; past it, Expo bills you.
-2. When it reaches TestFlight, install it and try, in this order: Sign in with Apple, Continue with Google, email sign-in with demo A, post a photo, take an instant, report a comment, block account B then unblock, the map with Location on, Apple Health → Connect, a message with a voice note, and delete a throwaway account (never a demo one).
+**Why build 16, not 15:** build 15 was made late on Monday night (12:37am, Tue Oct 6). Its camera pop-up still says the camera is for instants and chat photos, while the app now records videos for posts (Apple's rule 5.1.1 wants the pop-up to match). Build 16 also has its own update channel, `store`, so instant updates meant for testers can't reach the copy Apple reviews.
+
+1. **When Claude says "ready for build 16"**, open the Terminal tab, paste this and press Return:
+
+   ```
+   cd ~/Desktop/Courtside && npx eas-cli@latest build --platform ios --profile store --auto-submit-with-profile production
+   ```
+
+   It takes about 10 minutes, then Apple needs up to an hour to process it. If it asks you to log in to Apple, use robertzchen@icloud.com and type the password and code yourself.
+   - **Cost:** free within Expo's monthly build allowance (about 6 iPhone builds so far this month). If Expo shows a page asking you to pay, stop and tell Claude.
+2. When it reaches TestFlight, install **build 16** and try, in this order: Sign in with Apple (an Apple ID that has never used CourtSide, choose Hide My Email), Continue with Google, email sign-in with demo A, **+ → Post → Take photo** (read the camera pop-up: it should mention posts), **Record video**, **+ → Session → Start now**, then **Finish** and **Save privately**, the map with Location on, a hit (if one is open near you: join it, then **Can't make it**), report a comment, block account B then unblock, Apple Health → Connect, a message with a voice note, and delete a throwaway account (never a demo one).
 3. If you can borrow an iPad, try sign-in and a photo there too. Apple often tests iPhone-only apps on an iPad.
 
-### E. Phone number row (you test; Claude hides it if it fails)
+### E. Phone number row (your call; recommended: hide it)
 
-Tonight's check shows Supabase's phone texting switched off, so linking a number probably says "Phone numbers can't be linked just yet". A reviewer who taps it would see a broken feature.
+Checked Oct 7: Supabase's phone texting is still switched **off**, so linking a number says "Phone numbers can't be linked just yet". A reviewer who taps it sees a feature that looks unfinished.
 
-- On build 15: **Profile** → gear → **Phone number** → enter your number → **Text me a code**.
-- **A code arrives:** fine, keep it.
-- **It fails:** say **"Hide the Phone number row for the review."** Don't fix it by switching on Supabase's phone sign-in by itself: that lets strangers trigger texts Twilio bills you for.
+- **Recommended:** say **"Hide the Phone number row for the review."** Claude hides it before build 16 (it can come back with an instant update after approval).
+- Don't fix it by switching on Supabase's phone sign-in by itself: that lets strangers trigger texts Twilio bills you for.
 
 ### F. WHOOP row (you test; Claude hides it if it fails)
 
@@ -611,7 +683,7 @@ The WHOOP row on **Settings → Health and nutrition** is shown to everyone, but
 
 1. Go to **console.cloud.google.com** → project **courtside-508622** → **Google Auth Platform** → **Audience**.
 2. If **Publishing status** says "Testing", click **Publish app** → **Confirm**.
-3. On build 15, sign in with a Google account that's never used CourtSide.
+3. On build 16, sign in with a Google account that's never used CourtSide.
 
 Or say: **"Check Google sign-in is published"** and Claude looks in its browser tab.
 
@@ -619,67 +691,77 @@ Or say: **"Check Google sign-in is published"** and Claude looks in its browser 
 
 Send any email to **support@courtsidebase.com** from your phone. If it doesn't reach your inbox within a few minutes, say **"Add the support@ email route in Cloudflare."**
 
-### I. Your two calls
+### I. Your calls
 
-| Decision | Recommendation | Why |
+| Decision | Status | Why |
 |---|---|---|
-| **AI coach during review** | **Keep it off** (don't add the Anthropic key until after approval, then switch it on with the next reviewed update). | Fewer things for the reviewer to question, no cost. If you want it at launch instead, add the key **and** a monthly spend limit in the Anthropic console **before** you submit, and use the swap in section 7. Never add the key between Submit and approval. |
-| **Every workout from Apple Health, for everyone** | **Yes, before you submit**, if your brother's runs came through. Say "Turn on workouts from Apple Health for everyone." | Build 15's Health permission text says "tennis, runs, rides, the gym and more". Today that's only on for admins and the people you named, so a reviewer would get tennis only. |
+| **AI coach during review** | **Keep it off** (recommended). Don't add the Anthropic key until after approval, then switch it on with the next reviewed update. | Fewer things for the reviewer to question, no cost. If you want it at launch instead, add the key **and** a monthly spend limit in the Anthropic console **before** you submit, and tell Claude so it rewrites the notes. Never add the key between Submit and approval. |
+| **Every workout from Apple Health, for everyone** | **Done** (Oct 6; checked on Oct 7). | Build 16's Health pop-up says "tennis, runs, rides, the gym and more", and that's now true for everyone, the reviewer included. |
 
 ### J. Decided: the Instagram switch is on for everyone — done
 
 **What you said (Oct 5):** "Let's just make it on for everyone and then we have it listed inside of the terms and agreement."
 
-**What that means:** most new posts have a "Let CourtSide feature this on its Instagram" switch (it used to say "Feature on CourtSide's Instagram"). It starts **on** for everyone, teens included, and people can switch it off before they post, or any time after on the post itself (••• → Edit, the same switch). Posts shared only to a group, posts with a logged or tracked session's stats attached (including "Log it" posts), and instants have no switch and are never featured.
+**What that means:** most new posts have a "Let CourtSide feature this on its Instagram" switch. It starts **on** for everyone, teens included, and people can switch it off before they post, or any time after on the post itself (••• → Edit, the same switch). Posts shared only to a group, posts with a logged or tracked session's stats attached (including "Log it" posts), and instants have no switch and are never featured.
 
-**What Claude did:**
+**Already done:** the Terms ("When CourtSide features your post"), the privacy policy, the short "I agree" page and the Edit post screen all say so, and section 4 keeps **Developer's Advertising or Marketing** ticked on Photos or Videos and User ID. People who agreed to the Terms before Oct 5 aren't asked again unless you say **"Ask everyone to agree to the new Terms"**.
 
-- **Terms:** a new section, "When CourtSide features your post". While the switch is on, the person gives CourtSide a free, non-exclusive licence to show that post (photo or clip, caption, @handle) on CourtSide's own social media and marketing, credited to their @handle. Switching it off (before posting, or any time after on Edit post), deleting the post, or emailing support@ to have it switched off stops any new use; anything already up can be taken down on request. Nothing is sold to anyone.
-- **Privacy policy:** the same thing in one line of "What we collect" (next to what you post), a line in "Your choices" on how to switch it off, a sentence each in "Private accounts" and the teen rules saying a featured post is public even from a private or teen account, a line under "Some things stay" for posts already featured when an account is deleted, and Instagram (Meta) in "Services we rely on".
-- **The switch's words** on the post screen are plainer now, and the same switch is on **Edit post** (••• → Edit on your own post), so it can be switched off after posting. It isn't there on group posts or posts with a session's stats, which are never featured.
-- **The short terms** (the "I agree" page) gained one line: "Featured posts: CourtSide may feature your posts on its Instagram, credited to you. Switch it off on any post when you share it, or later in Edit post."
-- **Section 4:** **Developer's Advertising or Marketing** stays ticked on Photos or Videos and User ID.
+### K. The pre-order (you, 3 minutes) — must, before you submit
 
-**Still for you:** the Terms and privacy policy go live with the next website update (public, on app.courtsidebase.com). People who agreed to the Terms before today aren't asked again unless Claude bumps the Terms version, which shows everyone the "I agree" page once more on their next open. Say **"Ask everyone to agree to the new Terms"** if you want that.
+The steps are in section 2. In short:
 
-### K. The forms (you, about 45 minutes)
+- **Thu Oct 8**, before **Submit for Review**: Pricing and Availability → App Availability → **Set Up Availability** → United States only → **Publish as Pre-Order** → release date **Tue Oct 13** → **Confirm**.
+- The date must be at least 2 days after the day you set it, so **Sun Oct 11 is the last day** to set Oct 13.
+- Nothing is public yet. The pre-order page only goes up when you press **Release This Version** after approval.
+- **If approval is slow** and Oct 13 gets close, tell Claude: the date can be moved before it passes (same page).
+
+### L. The privacy policy's camera line (Claude, after your OK) — must, before you submit
+
+The website's privacy policy still says the camera is only for "an instant or a photo for a chat" and the microphone only for voice notes. Build 16 records photos and videos with sound for posts, so the policy must say so too. The current and the proposed sentence are in **`~/Desktop/CourtSide-Privacy-Camera-Line.md`**. Read it, then say **"Yes, put the new camera line on the website."** It's a public change to app.courtsidebase.com/privacy.html; Claude does it and checks the live page.
+
+### M. The forms (you, about 45 minutes)
 
 - [ ] **App Information:** Name, Subtitle, Category, Content Rights (section 1). **Save.**
 - [ ] **Age Rating:** questionnaire done, shows **13+** (section 3).
 - [ ] **App Privacy:** URL saved, 19 types set up, the two marketing boxes ticked (item J), **Publish** pressed (section 4).
-- [ ] **Pricing and Availability:** Free, United States only (section 2).
-- [ ] **Version page:** 8 screenshots in order, Promotional Text, Description, Keywords, Support URL, Marketing URL, Copyright (section 5).
-- [ ] **Build:** **15** selected.
-- [ ] **Export compliance:** nothing to answer. Build 15 already tells Apple it uses no special encryption (only the iPhone's own secure connections). If App Store Connect still asks "What type of encryption algorithms does your app implement?", choose **None of the algorithms mentioned above**.
-- [ ] **Sign in with Apple** is on the sign-in screen of build 15 **and works** (item A).
+- [ ] **Pricing and Availability:** Free, United States only, **Publish as Pre-Order** with release date **Tue Oct 13** (section 2, item K).
+- [ ] **Version page:** the 8 screenshots from folder **C**, in order; Promotional Text; What's New only if the box shows; Description, Keywords, Support URL, Marketing URL, Copyright (section 5).
+- [ ] **Build:** **16** selected (not 15).
+- [ ] **Export compliance:** nothing to answer. Build 16 already tells Apple it uses no special encryption (only the iPhone's own secure connections). If App Store Connect still asks "What type of encryption algorithms does your app implement?", choose **None of the algorithms mentioned above**.
+- [ ] **Sign in with Apple** is on the sign-in screen of build 16 **and works** (item A).
+- [ ] **The privacy policy's camera line** is live on the website (item L).
 - [ ] **App Review Information:** Sign-in required ticked, demo A login, your contact details, Notes pasted with the blanks filled.
 - [ ] **App Store Version Release:** Manually release this version.
 - [ ] **Accessibility** (a newer, optional section): skip it for now.
 - [ ] **Business → Agreements:** "Free Apps" shows Active. (No bank or tax details are needed for a free app.)
-- [ ] Tell Claude **"Submitted"**, so it holds every instant update until Apple answers. The reviewer must see exactly the build you sent.
 - [ ] Top right of 1.0 Prepare for Submission: **Add for Review** → **Submit for Review**. Submitting isn't public.
+- [ ] Tell Claude **"Submitted"**. Nothing is sent to build 16's `store` channel until Apple answers, so the reviewer sees exactly the build you sent. Testers on builds 11 to 15 keep getting updates as normal.
 
 ### After Apple answers
 
-- **Approved:** press **Release** when you're ready (this is the public moment). Then tell Claude "Released": it unfreezes updates and switches the website's TestFlight button to the App Store.
-- **Rejected:** forward the message from Apple's Resolution Center to Claude. Most rejections are fixed by a reply or a small change, and the next review is usually faster.
+- **Approved:** tell Claude **"Approved"**. Then:
+  1. Claude, with your OK, points build 16's channel at the normal updates, so people who download on launch day get the newest fixes from their second open: `npx eas-cli@latest channel:edit store --branch production --non-interactive`. Do it before Tue Oct 13.
+  2. **You** press **Release This Version** (top right of the version page). **This is the public moment:** the pre-order page goes up straight away (up to 24 hours to show everywhere), and downloads open by themselves on **Tue Oct 13**.
+  3. Claude, with your OK, switches the website's "Get the iPhone app" button from TestFlight to the App Store link.
+- **Rejected:** forward the message from Apple's Resolution Center to Claude. Most rejections are fixed by a reply or a small change, and the next review is usually faster. If the fix needs a new build, it's build 17, and the pre-order date may need moving (item K).
 - **From launch day on:** check **Profile → gear → Admin → Reports** at least once a day. The notes promise Apple a person reviews every report within 24 hours.
 
 ---
 
 ## 9. Your to-do
 
-1. **Tonight or tomorrow morning:** switch on Sign in with Apple (8A), or tell Claude to.
-2. **Tomorrow (Tue Oct 6):** send your two calls (8I). Make the Sign in with Apple key (8B). Publish Google sign-in (8G). Email support@ (8H). Hidden words (8C) is already done.
-3. **When Claude says main is ready:** start build 15 (8D).
-4. **Wed Oct 7:** install build 15, test it, test Phone number and WHOOP (8E, 8F), and make the two demo accounts (section 6, starting with Location off).
-5. **Wed or Thu:** fill in the forms (8K), paste the notes with the demo logins, and press **Submit for Review** by **Thu Oct 8**.
+1. **Tonight (Wed Oct 7):** switch on Sign in with Apple (8A, or tell Claude to) and add the Apple key (8B). Say **"Hide the Phone number row for the review."** (8E). Read the camera sentence on your Desktop and OK it (8L).
+2. **When Claude says "ready for build 16":** paste the build command (8D).
+3. **Thu Oct 8:** install build 16 from TestFlight and test it (8D), WHOOP (8F), Google (8G), email support@ (8H). Make the two demo accounts on build 16 (section 6, starting with Location off).
+4. **Thu Oct 8:** set up the pre-order (section 2), fill in the forms (8M), paste the notes with the demo logins, press **Submit for Review**, and tell Claude **"Submitted"**.
+5. **After approval:** tell Claude **"Approved"**, then press **Release This Version**. Launch is **Tue Oct 13**.
 
 ---
 
 ## Sources
 
+- Apple, [Publish for pre-order](https://developer.apple.com/help/app-store-connect/manage-your-apps-availability/publish-for-pre-order/) and [Offering your apps for pre-order](https://developer.apple.com/app-store/pre-orders/)
 - Apple, [Age ratings values and definitions](https://developer.apple.com/help/app-store-connect/reference/app-information/age-ratings-values-and-definitions) (the 4+, 9+, 13+, 16+, 18+ scale and every question's meaning)
 - Apple, [App privacy details on the App Store](https://developer.apple.com/app-store/app-privacy-details/)
-- Apple, [App Review Guidelines](https://developer.apple.com/app-store/review/guidelines/) (1.2 user content, 2.1 completeness, 2.3.7 keywords, 2.5.1 HealthKit, 4.8 sign-in, 5.1.1(v) account deletion)
+- Apple, [App Review Guidelines](https://developer.apple.com/app-store/review/guidelines/) (1.2 user content, 2.1 completeness, 2.3.7 keywords, 2.5.1 HealthKit, 4.8 sign-in, 5.1.1 permissions and account deletion)
 - Apple, [Revoke tokens (Sign in with Apple REST API)](https://developer.apple.com/documentation/sign_in_with_apple/revoke_tokens)
