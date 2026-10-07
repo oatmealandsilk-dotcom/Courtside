@@ -99,6 +99,8 @@ export function Field({
 }: Props) {
   const styles = useThemedStyles(styleDefinitions);
   const submits = Boolean(onSubmitEditing) && (submitOnEnter || !multiline);
+  // Where the grey example is drawn here rather than by the phone (see the TextInput).
+  const drawnExample = Platform.OS === 'ios' && soft && !multiline && !compact && !bare && !!placeholder;
   // Where the caret is, so the @ being typed is the one at the caret rather
   // than any @ in the text. Read from the box's own selection events.
   const [caret, setCaret] = useState(0);
@@ -143,6 +145,7 @@ export function Field({
           {labelRight}
         </View>
       ) : null}
+      <View>
       <TextInput
         ref={inputRef ?? own}
         accessibilityLabel={accessibilityLabel ?? label ?? placeholder}
@@ -154,7 +157,9 @@ export function Field({
           if (mentions) setCaret((c) => c + (text.length - value.length));
         }}
         onSelectionChange={mentions ? (e) => setCaret(e.nativeEvent.selection.end) : undefined}
-        placeholder={placeholder}
+        // A one-line soft box on an iPhone draws its own grey example (below): the phone's sat a
+        // few points low however the box was padded (Oct 7, owner: "it's still not centered").
+        placeholder={drawnExample ? undefined : placeholder}
         placeholderTextColor={colors.textFaint}
         multiline={multiline}
         autoCapitalize={autoCapitalize}
@@ -184,6 +189,12 @@ export function Field({
           bare && styles.bare,
         ]}
       />
+      {drawnExample && !value ? (
+        <View pointerEvents="none" style={styles.example} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+          <Text numberOfLines={1} style={styles.exampleText}>{placeholder}</Text>
+        </View>
+      ) : null}
+      </View>
       {mention && candidates.length ? <MentionSuggestions candidates={candidates} onPick={pick} maxHeight={listHeight} /> : null}
       {hint ? <Text style={styles.hint}>{hint}</Text> : null}
     </View>
@@ -213,6 +224,10 @@ const styleDefinitions = StyleSheet.create({
   // text itself. With padding, the example sat a line low, half under the box (Oct 6, owner).
   softLine: { ...lift, borderWidth: 0, borderRadius: radius.pill, height: 52, paddingVertical: 0, fontSize: 16 },
   softArea: { ...lift, borderWidth: 0, borderRadius: 20, paddingVertical: 14, fontSize: 16, lineHeight: 22 },
+  // The soft box's own grey example on an iPhone: the box's full height, its words centred in it,
+  // in from the left as far as the typed words.
+  example: { position: 'absolute', top: 0, bottom: 0, left: spacing.lg, right: spacing.lg, justifyContent: 'center' },
+  exampleText: { fontSize: 16, color: colors.textFaint },
   well: { backgroundColor: colors.surfaceAlt, borderColor: 'transparent', borderRadius: 14 },
   compact: { minHeight: 44, maxHeight: 120, borderRadius: 22, paddingTop: 11, paddingBottom: 11, paddingHorizontal: 16, fontSize: 16, lineHeight: 22 },
 });
