@@ -5592,7 +5592,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // Never your own: what you read leaves your own posts out, so you could not even see it was down.
     if (stateRef.current.posts.find((p) => p.id === postId)?.authorId === me) return 'refused';
     // With a database, only one of its own posts (never a stand-in still on screen from before it loaded).
-    if (isSupabaseConfigured && !live(me, postId)) return 'gone';
+    if (isSupabaseConfigured && !live(me, postId)) {
+      showToast({ ...demoteRefusal('gone', on), icon: 'alert-circle-outline', long: true });
+      return 'gone';
+    }
     const was = demotedPosts().has(postId);
     haptics.commit();
     markDemoted(postId, on);
@@ -5603,6 +5606,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       showToast({ ...demoteRefusal(result, on), icon: 'alert-circle-outline', long: true });
       return result;
     }
+    // Marked again now the server has it: a list asked for while it was on its way (a pull, a deal) was
+    // read before the change and must not take the "Pushed down" tag back off on this phone.
+    markDemoted(postId, on);
     if (options.quiet) return result;
     if (on) {
       offerUndo('Pushed to the bottom', () => demotedPosts().has(postId), () => { void demoteRef.current(postId, false, { quiet: true }); },

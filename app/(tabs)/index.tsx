@@ -861,7 +861,8 @@ function Home({ scope, topRow, paused, onChrome }: {
       // Placed from the page on screen's key: `active` counts `feed`, which has the tip and challenge pages in it and hidden players out.
       const on = prev.indexOf(activeKeyRef.current ?? '');
       const at = Math.min(prev.length, (on >= 0 ? on : activeRef.current) + (NEWEST_FIRST ? 1 : 2));
-      return [...prev.slice(0, at), ...dealt.filter((k) => !prev.includes(k)), ...prev.slice(at)];
+      // Anything an admin pushed to the bottom stays the very last.
+      return sinkDemoted([...prev.slice(0, at), ...dealt.filter((k) => !prev.includes(k)), ...prev.slice(at)], demotedPosts(), at);
     });
   };
 
@@ -1114,6 +1115,30 @@ function Home({ scope, topRow, paused, onChrome }: {
   useEffect(() => {
     if (!sinks) return undefined;
     return onDemotedChange(() => {
+      // For you's tip and challenge pages stay where they are on screen. Each sits just after a page; if that
+      // page is a post now going to the end (below the page on screen), it follows the nearest page above it
+      // that stays instead. Otherwise the tip, the challenge and its top clips would all go to the end with it.
+      const s = slots.current;
+      if (!scope && s && s.deal === dealCount.current) {
+        const list = feedRef.current;
+        const down = demotedPosts();
+        const at = Math.min(activeRef.current, list.length - 1);
+        const lifted = new Set(featured.current ?? []);
+        const sinking = (i: number) => { const x = list[i]; return i > at && x?.type === 'post' && down.has(x.post.id); };
+        const isLead = (x: FeedItem) => x.type === 'post' && lifted.has(x.post.id);
+        const anchor = (key: string | null, skip: (x: FeedItem) => boolean) => {
+          if (!key) return key;
+          let i = list.findIndex((x) => keyOf(x) === key);
+          if (i < 0 || !sinking(i)) return key;
+          while (i >= 0 && (sinking(i) || skip(list[i]))) i -= 1;
+          return i >= 0 ? keyOf(list[i]) : key;
+        };
+        slots.current = {
+          ...s,
+          tip: anchor(s.tip, (x) => x.type === 'tip' || x.type === 'challenge' || isLead(x)),
+          challenge: anchor(s.challenge, (x) => x.type === 'challenge' || isLead(x)),
+        };
+      }
       setOrder((prev) => {
         // The page on screen in `order`: the nearest page at or above it that is there (the tip and challenge pages are not).
         let here = -1;
