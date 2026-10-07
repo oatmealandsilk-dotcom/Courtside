@@ -1704,6 +1704,29 @@ export interface Invitee {
   missing?: InviteeMissing[];
 }
 
+/**
+ * An affiliate's own numbers (migration 147, my_affiliate_stats): the paid
+ * invite partners named in the server's 'affiliates' list. The same counts
+ * Admin → Invites shows for them. Only ever the signed-in person's own.
+ */
+export interface AffiliateStats {
+  /** Joined through their link or code (not deleted, not suspended). */
+  invited: number;
+  /** Counted: real players, $1 each (migration 80's rule). */
+  qualified: number;
+  /** Players paid for so far, and what that came to. */
+  paid: number;
+  paidCents: number;
+  /** Counted but not paid yet. */
+  owed: number;
+  owedCents: number;
+  /** Paid plus owed: everything they have made. */
+  earnedCents: number;
+  /** What one player is worth, in cents ($1). */
+  rateCents: number;
+  lastPaidAt?: string;
+}
+
 /** A CourtSide player found in your phone's contacts (migration 88). `phone`/`email` is the contact detail that matched, as you sent it. */
 export interface ContactMatch {
   id: ID;

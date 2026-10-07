@@ -24,7 +24,7 @@ import { blankVideoLocation } from '@/lib/videoLocation';
 import { noteStep } from '@/lib/crashReporting';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
-import type { Answer, FriendStreak, ChatEvent, ChatPhoto, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, DetectedActivity, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, HiddenWords, HiddenWordsKind, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, CourtNote, LastSeen, MapPlace, MapVisibility, TaggedCourt, Question, Removed, RemovedItem, ReviewRequest, ReviewStatus, Story, SurfacePreference, TakedownKind, TakedownReason, Tip, TournamentEntry, User, PublicStreak, CoachApplication, CourtAccess, CourtAccessSource, CourtDayPart, CourtFacts, CourtFollowCount, CourtNow, CourtKings, CourtRegulars, CourtReview, CourtRightNow, CourtRing, FlybyPerson, FollowedCourt, SessionTag, SessionTagRefusal, SessionTagRole, FeedGroup, FeedGroupCard, DiscoverGroup, GroupLook, Invitee, ContactMatch, HeadToHead, MatchSet, SessionWith } from './types';
+import type { Answer, FriendStreak, ChatEvent, ChatPhoto, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, DetectedActivity, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, HiddenWords, HiddenWordsKind, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, CourtNote, LastSeen, MapPlace, MapVisibility, TaggedCourt, Question, Removed, RemovedItem, ReviewRequest, ReviewStatus, Story, SurfacePreference, TakedownKind, TakedownReason, Tip, TournamentEntry, User, PublicStreak, CoachApplication, CourtAccess, CourtAccessSource, CourtDayPart, CourtFacts, CourtFollowCount, CourtNow, CourtKings, CourtRegulars, CourtReview, CourtRightNow, CourtRing, FlybyPerson, FollowedCourt, SessionTag, SessionTagRefusal, SessionTagRole, FeedGroup, FeedGroupCard, DiscoverGroup, GroupLook, Invitee, AffiliateStats, ContactMatch, HeadToHead, MatchSet, SessionWith } from './types';
 import { canScore, validSets } from '@/features/activity/score';
 import { TERMS_VERSION } from '@/lib/legal';
 import { readinessOf, sessionTagNamesLive, sessionToSend, setSessionTagNamesLive, trustedSession } from './sessionTagGate';
@@ -2679,6 +2679,25 @@ export const remote = {
     const { data, error } = await need().rpc('my_invitees');
     if (error || !Array.isArray(data)) return null;
     return data as Invitee[];
+  },
+  /**
+   * My own numbers as an affiliate (migration 147): earned, paid, owed, counted.
+   * Null for everyone who is not on the server's affiliates list, and while the
+   * function is missing or could not be asked: the Invites page is then the plain one.
+   */
+  async fetchMyAffiliate(): Promise<AffiliateStats | null> {
+    const { data, error } = await need().rpc('my_affiliate_stats');
+    if (error || !data || typeof data !== 'object') return null;
+    const row = data as Partial<AffiliateStats> & { affiliate?: boolean };
+    if (row.affiliate !== true) return null;
+    const n = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
+    const paidCents = n(row.paidCents);
+    const owedCents = n(row.owedCents);
+    return {
+      invited: n(row.invited), qualified: n(row.qualified), paid: n(row.paid), paidCents, owed: n(row.owed), owedCents,
+      earnedCents: n(row.earnedCents) || paidCents + owedCents, rateCents: n(row.rateCents) || 100,
+      lastPaidAt: typeof row.lastPaidAt === 'string' ? row.lastPaidAt : undefined,
+    };
   },
 
   /**
