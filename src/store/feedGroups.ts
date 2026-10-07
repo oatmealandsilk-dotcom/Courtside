@@ -3,9 +3,8 @@ import { useCallback, useMemo } from 'react';
 
 import { isLocalMedia, remote, uploadMedia } from '@/data/remote';
 import { demoDiscoverGroups, demoGroups } from '@/data/mock/groups';
-import type { Comment, DiscoverGroup, FeedGroup, FeedGroupCard, GroupLook, ID, Post, User } from '@/data/types';
+import type { Comment, DiscoverGroup, FeedGroup, FeedGroupCard, GroupLook, ID, Post } from '@/data/types';
 import { plainLook, sameLook } from '@/features/groups/look';
-import { notKnownAdult } from '@/features/players/age';
 import * as haptics from '@/lib/haptics';
 import { show as showToast } from '@/lib/toast';
 
@@ -16,23 +15,14 @@ import { show as showToast } from '@/lib/toast';
  * asks the server, which enforces every rule (3 groups each, admins only,
  * who can read a group post). The demo answers the same way from its own two
  * groups (data/mock/groups).
+ *
+ * Groups are for everyone, teens included (the owner, Oct 6: "Groups can be
+ * for anyone"; migration 149). Being in a group together opens nothing else:
+ * chats, the map and hits keep their own teen rules, on the server.
  */
 
 /** The most groups one person can be in. The server keeps the same number (feed_group_cap). */
 export const MAX_GROUPS = 3;
-
-/**
- * Groups are for adults in this version (the owner's rule: teens get 1:1
- * only). Someone not known to be an adult, a teen or an account with no
- * birthday yet, cannot start, join or ask to join one; the server says the
- * same (migration 67, 'adults_only'). Teens keep the For you feed as it is.
- */
-export const groupsOpenTo = (u: Pick<User, 'ageGroup'> | null | undefined) => !!u && !notKnownAdult(u);
-
-/** What someone who cannot use groups yet sees instead of Start or Join. */
-export const GROUPS_AGE_LINE = 'Groups open when you’re 18.';
-/** The same for an account with no birthday on file yet (not known to be a teen). */
-export const GROUPS_BIRTHDAY_LINE = 'Add your birthday to start a group';
 
 /** A new group's name: at least this many characters, at most NAME_MAX (the server keeps 40 for older ones). */
 export const NAME_MIN = 2;
@@ -60,7 +50,7 @@ export interface FeedGroupsState {
 
 export const emptyFeedGroups: FeedGroupsState = { feedGroups: [], feedGroupsAsked: [], feedGroupsOn: null, feedGroupsLooks: false };
 
-interface Reads { currentUserId: ID | null; posts: Post[]; comments: Comment[]; users: Pick<User, 'id' | 'name' | 'ageGroup'>[]; agesOnProfiles: boolean | null }
+interface Reads { currentUserId: ID | null; posts: Post[]; comments: Comment[] }
 
 export interface FeedGroupsActions {
   /** Your groups, their members and (for an admin) their requests. */
@@ -79,13 +69,6 @@ export interface FeedGroupsActions {
   discoverFeedGroups: (q: string) => Promise<DiscoverGroup[] | null>;
   /** What an invite link shows. Null when there is no such group; throws when it could not be asked. */
   feedGroupCard: (id: ID) => Promise<FeedGroupCard | null>;
-  /**
-   * Of these people, which can join a group (known to be an adult, migration
-   * 73's can_join_groups; never their age): true or false for each. Someone
-   * the server would not answer about counts as false. Empty when the
-   * database cannot say (before 73), and then the server decides when they try.
-   */
-  groupJoinable: (ids: ID[]) => Promise<Record<ID, boolean>>;
   /** Joins an open group or asks to join one. Throws a plain sentence when it cannot. */
   joinFeedGroup: (id: ID) => Promise<'joined' | 'requested' | 'already'>;
   /** Leaves a group, or takes back a request. */
@@ -108,8 +91,9 @@ export interface FeedGroupsActions {
 /** The server's word, as a sentence for the person who tapped. */
 export function groupSentence(word: string): string {
   switch (word) {
-    case 'adults_only': return GROUPS_AGE_LINE;
-    case 'their_age': return 'They can’t join groups yet.';
+    // A database from before migration 149, when groups were for adults only.
+    case 'adults_only':
+    case 'their_age': return 'Groups aren’t open to everyone yet. Try again soon.';
     case 'group_limit': return `You're in ${MAX_GROUPS} groups already. Leave one to join another.`;
     case 'their_limit': return `They're in ${MAX_GROUPS} groups already, the most anyone can be in.`;
     case 'not_admin': return 'Only the group’s admin can do that.';
@@ -183,8 +167,7 @@ export function useFeedGroups<S extends FeedGroupsState & Reads>(
     const you = me();
     if (!you) throw new Error('Sign in to start a group.');
     if (!live(you)) {
-      // The demo says what the server says (migration 67, 'adults_only').
-      if (!groupsOpenTo(stateRef.current.users.find((u) => u.id === you))) throw new Error(GROUPS_AGE_LINE);
+      // The demo says what the server says.
       if (stateRef.current.feedGroups.length >= MAX_GROUPS) throw new Error(groupSentence('group_limit'));
       const id = demoId();
       haptics.commit();
@@ -238,27 +221,11 @@ export function useFeedGroups<S extends FeedGroupsState & Reads>(
     return remote.feedGroupCard(id);
   }, [stateRef, live]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const groupJoinable = useCallback(async (ids: ID[]): Promise<Record<ID, boolean>> => {
-    const s = stateRef.current;
-    const you = s.currentUserId;
-    if (!you || !ids.length) return {};
-    // The demo's own people, and a database from before migration 64 (every profile carries its age): by their age.
-    const byAge = (id: ID) => {
-      const u = s.users.find((x) => x.id === id);
-      return live(you, id) ? u?.ageGroup === 'adult' : u?.ageGroup !== 'teen';
-    };
-    if (!live(you) || s.agesOnProfiles !== false) return Object.fromEntries(ids.map((id) => [id, byAge(id)]));
-    const told = await remote.canJoinGroups(ids).catch(() => null);
-    if (!told) return {};
-    return Object.fromEntries(ids.map((id) => [id, told[id] === true]));
-  }, [stateRef, live]);
-
   const joinFeedGroup = useCallback(async (id: ID) => {
     const you = me();
     if (!you) throw new Error('Sign in to join a group.');
     if (!live(you)) {
-      // The demo says what the server says (migration 67, 'adults_only').
-      if (!groupsOpenTo(stateRef.current.users.find((u) => u.id === you))) throw new Error(GROUPS_AGE_LINE);
+      // The demo says what the server says.
       const g = demoGroup(id);
       if (!g) throw new Error(groupSentence('not_found'));
       if (stateRef.current.feedGroups.some((x) => x.id === id)) return 'already';
@@ -276,8 +243,6 @@ export function useFeedGroups<S extends FeedGroupsState & Reads>(
     const you = me();
     if (!you) return null;
     if (!live(you)) {
-      // The demo says what the server says: nothing for someone not known to be an adult.
-      if (!groupsOpenTo(stateRef.current.users.find((u) => u.id === you))) return [];
       const term = q.trim().toLowerCase();
       const { feedGroups, feedGroupsAsked } = stateRef.current;
       return demoDiscoverGroups
@@ -368,7 +333,7 @@ export function useFeedGroups<S extends FeedGroupsState & Reads>(
   }, [stateRef, setState, live]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return useMemo(
-    () => ({ loadFeedGroups: reload, createFeedGroup, discoverFeedGroups, feedGroupCard, groupJoinable, joinFeedGroup, leaveFeedGroup, answerFeedGroupRequest, removeFeedGroupMember, updateFeedGroup, loadFeedGroupPosts }),
-    [reload, createFeedGroup, discoverFeedGroups, feedGroupCard, groupJoinable, joinFeedGroup, leaveFeedGroup, answerFeedGroupRequest, removeFeedGroupMember, updateFeedGroup, loadFeedGroupPosts],
+    () => ({ loadFeedGroups: reload, createFeedGroup, discoverFeedGroups, feedGroupCard, joinFeedGroup, leaveFeedGroup, answerFeedGroupRequest, removeFeedGroupMember, updateFeedGroup, loadFeedGroupPosts }),
+    [reload, createFeedGroup, discoverFeedGroups, feedGroupCard, joinFeedGroup, leaveFeedGroup, answerFeedGroupRequest, removeFeedGroupMember, updateFeedGroup, loadFeedGroupPosts],
   );
 }

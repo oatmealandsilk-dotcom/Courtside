@@ -27,11 +27,9 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
  * blocked with; someone the chat rules lock (a teen who doesn't follow you,
  * say) shows a lock and "Can't message yet", is asked about again on tap,
  * and says why in a note if still locked; anyone already in the group says
- * so. Who can join a group at all (known to be an adult) is the server's
- * answer (can_join_groups, migration 73), asked as the step opens, since
- * nobody's age but your own reaches the app: someone it says no about (a
- * teen, or an account with no birthday yet) shows "Can't join groups yet"
- * and can't be picked, so nobody gets an invite they can't use.
+ * so. Anyone can join a group (migration 149), so nobody is left out for
+ * their age: the chat rules above are what keep a teen from getting an
+ * invite from someone they don't follow.
  */
 
 export const INVITE_MAX = 20;
@@ -56,17 +54,10 @@ export function InvitePeople({ groupId, groupName, picked, onPicked }: {
       .filter((u): u is User => !!u && u.id !== currentUserId && !blockedIds.includes(u.id))
       .sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
   }, [users, followingIds, blockedIds, conversations, currentUserId]);
-  // Who can join a group, asked once as the step opens (a tap before the answer waits for it).
-  const [joinable, setJoinable] = useState<Record<ID, boolean> | null>(null);
-  const asking = useRef<Promise<Record<ID, boolean>> | null>(null);
   // The chat locks the app already knows about are asked about again as the step opens.
   useEffect(() => {
     const locked = actions.lockedNow(people.map((u) => u.id));
     if (locked.length) void actions.recheckFollows(locked);
-    let live = true;
-    asking.current = actions.groupJoinable(people.map((u) => u.id)).catch(() => ({}));
-    void asking.current.then((got) => { if (live) setJoinable(got); });
-    return () => { live = false; };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   // The latest picks, for a tap that finishes after waiting on the server.
   const pickedNow = useRef(picked);
@@ -76,18 +67,12 @@ export function InvitePeople({ groupId, groupName, picked, onPicked }: {
   const shown = term ? people.filter((u) => `${u.name} ${u.handle}`.toLowerCase().includes(term)) : people;
   const pickedUsers = picked.map((pid) => users.find((u) => u.id === pid)).filter((u): u is User => !!u);
 
-  // A missing answer (the database can't say yet) locks nobody: the server decides if they try.
-  const cantJoin = (u: User, told = joinable) => !!told && told[u.id] === false;
-  const why = (u: User): 'member' | 'cant' | 'locked' | null => (inGroup.has(u.id) ? 'member' : cantJoin(u) ? 'cant' : !actions.canMessage(u.id) ? 'locked' : null);
-  const cantNote = (u: User) => `${u.name.split(' ')[0]} can’t join groups yet, so an invite wouldn’t work for them.`;
+  const why = (u: User): 'member' | 'locked' | null => (inGroup.has(u.id) ? 'member' : !actions.canMessage(u.id) ? 'locked' : null);
 
   const toggle = async (u: User) => {
     if (pickedNow.current.includes(u.id)) { haptics.untap(); onPicked((now) => now.filter((x) => x !== u.id)); setNote(null); return; }
     const w = why(u);
     if (w === 'member') return;
-    if (w === 'cant') { setNote(cantNote(u)); return; }
-    // Not answered yet: wait for who can join before picking.
-    if (!joinable && asking.current && cantJoin(u, await asking.current)) { setNote(cantNote(u)); return; }
     // Locked, unless they have followed you since the app opened: ask before saying no.
     if (w === 'locked' && !(await actions.reachNow(u.id))) { setNote(chatLockNote(named(u, users))); return; }
     // The picks as they are now, not as they were before the wait: two quick taps both count.
@@ -169,25 +154,25 @@ export function InvitePeople({ groupId, groupName, picked, onPicked }: {
           {shown.map((u, i) => {
             const on = picked.includes(u.id);
             const w = on ? null : why(u);
-            const status = w === 'member' ? 'In the group' : w === 'cant' ? 'Can’t join groups yet' : w === 'locked' ? 'Can’t message yet' : `@${u.handle}`;
+            const status = w === 'member' ? 'In the group' : w === 'locked' ? 'Can’t message yet' : `@${u.handle}`;
             return (
               <Pressable
                 key={u.id}
                 accessibilityRole="checkbox"
                 accessibilityState={{ checked: on, disabled: w === 'member' }}
-                accessibilityLabel={`${u.name}, ${w === 'member' ? 'already in the group' : w === 'cant' ? 'can’t join groups yet' : w === 'locked' ? 'can’t be messaged yet' : `@${u.handle}`}`}
+                accessibilityLabel={`${u.name}, ${w === 'member' ? 'already in the group' : w === 'locked' ? 'can’t be messaged yet' : `@${u.handle}`}`}
                 disabled={w === 'member'}
                 onPress={() => { void toggle(u); }}
                 style={({ pressed }) => [styles.row, i > 0 && styles.line, pressed && styles.rowPressed]}
               >
-                <View style={(w === 'member' || w === 'cant') && styles.dim}>
+                <View style={w === 'member' && styles.dim}>
                   <Avatar name={u.name} seed={u.avatarSeed} uri={u.avatarUrl} size={42} />
                 </View>
-                <View style={[styles.words, (w === 'member' || w === 'cant') && styles.dim]}>
+                <View style={[styles.words, w === 'member' && styles.dim]}>
                   <Text style={styles.name} numberOfLines={1}>{u.name}</Text>
                   <Text style={styles.handle} numberOfLines={1}>{status}</Text>
                 </View>
-                {w === 'locked' || w === 'cant' ? <Ionicons name="lock-closed" size={14} color={colors.textFaint} /> : null}
+                {w === 'locked' ? <Ionicons name="lock-closed" size={14} color={colors.textFaint} /> : null}
                 {w === 'member' ? <Ionicons name="checkmark-circle" size={24} color={colors.textFaint} /> : (
                   <View style={[styles.tick, on && styles.tickOn]}>{on ? <Ionicons name="checkmark" size={15} color={colors.brandInk} /> : null}</View>
                 )}

@@ -15,7 +15,7 @@ import { confirm } from '@/lib/confirm';
 import { goBack } from '@/lib/goBack';
 import { publicRoute } from '@/features/share/publicRoute';
 import { useApp } from '@/store/AppContext';
-import { GROUPS_AGE_LINE, MAX_GROUPS, groupsOpenTo } from '@/store/feedGroups';
+import { MAX_GROUPS } from '@/store/feedGroups';
 import { colors, font, lift, radius, spacing, typography } from '@/theme';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 
@@ -32,10 +32,7 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 function GroupPage() {
   const styles = useThemedStyles(styleDefinitions);
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { feedGroups, feedGroupsAsked, users, currentUserId, currentUser, actions } = useApp();
-  // Groups are adults-only for now: someone not known to be an adult sees
-  // one calm line where Join would be (the server says no to them anyway).
-  const open = groupsOpenTo(currentUser);
+  const { feedGroups, feedGroupsAsked, users, currentUserId, actions } = useApp();
   const group = feedGroups.find((g) => g.id === id);
   const [card, setCard] = useState<FeedGroupCard | null | undefined>(undefined);
   const [busy, setBusy] = useState(false);
@@ -134,12 +131,10 @@ function GroupPage() {
         </View>
       ) : (
         <View style={styles.joinBox}>
-          {!open
-            ? <Text style={styles.ageLine}>{GROUPS_AGE_LINE}</Text>
-            : asked
+          {asked
             ? <Button label="Asked to join · Cancel" variant="secondary" onPress={() => act(async () => { await actions.leaveFeedGroup(id); await readCard(); })} disabled={busy} full />
             : <Button label={ask ? 'Ask to join' : 'Join group'} onPress={join} loading={busy} disabled={busy} full />}
-          {open ? <Text style={styles.joinNote}>A group’s feed shows everything its members post. You can be in up to {MAX_GROUPS} groups.</Text> : null}
+          <Text style={styles.joinNote}>A group’s feed shows everything its members post. You can be in up to {MAX_GROUPS} groups.</Text>
         </View>
       )}
       {note ? <Text style={styles.note} accessibilityLiveRegion="polite">{note}</Text> : null}
@@ -240,7 +235,6 @@ const styleDefinitions = StyleSheet.create({
   actionText: { ...typography.smallStrong, color: colors.text },
   joinBox: { gap: spacing.sm },
   joinNote: { ...typography.small, color: colors.textMuted, textAlign: 'center', lineHeight: 19, paddingHorizontal: spacing.lg },
-  ageLine: { ...typography.body, color: colors.text, textAlign: 'center' },
   note: { ...typography.small, color: colors.textMuted, textAlign: 'center', marginTop: spacing.md },
   section: { ...typography.smallStrong, color: colors.textMuted, paddingHorizontal: spacing.xs, paddingTop: spacing.xl, paddingBottom: spacing.sm },
   // The grouped list of Settings: a shade off the page, rows on hairlines.
