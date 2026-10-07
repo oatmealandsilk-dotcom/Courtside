@@ -68,14 +68,34 @@ export function pageIsDark(): boolean {
  * which then always does. Read the fill from the live theme as you draw.
  */
 export function inkOn(fill: string): string {
-  const hex = fill.replace('#', '');
-  if (!/^[0-9a-f]{6}$/i.test(hex)) return '#FFFFFF';
+  const luminance = luminanceOf(fill);
+  if (luminance === null) return '#FFFFFF';
+  return 1.05 / (luminance + 0.05) >= 4.5 ? '#FFFFFF' : '#000000';
+}
+
+/**
+ * Whether words in `ink` read on `fill` (4.5:1 or better, the bar for small
+ * words). Lets a label take a palette's colour where it reads and fall back
+ * to the palette's own ink where it does not (Melbourne's sky blue is too
+ * light for small words on its near-white card). Colours that are not
+ * `#RRGGBB` count as reading, so the caller's choice stands.
+ */
+export function readsOn(ink: string, fill: string): boolean {
+  const a = luminanceOf(ink);
+  const b = luminanceOf(fill);
+  if (a === null || b === null) return true;
+  return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05) >= 4.5;
+}
+
+/** How bright a `#RRGGBB` colour is to the eye (WCAG's relative luminance, 0 to 1); null for anything else. */
+function luminanceOf(color: string): number | null {
+  const hex = color.replace('#', '');
+  if (!/^[0-9a-f]{6}$/i.test(hex)) return null;
   const [r, g, b] = [0, 2, 4].map((i) => {
     const unit = parseInt(hex.slice(i, i + 2), 16) / 255;
     return unit <= 0.03928 ? unit / 12.92 : Math.pow((unit + 0.055) / 1.055, 2.4);
   });
-  const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-  return 1.05 / (luminance + 0.05) >= 4.5 ? '#FFFFFF' : '#000000';
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
 
 /**
