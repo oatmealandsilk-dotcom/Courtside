@@ -640,7 +640,7 @@ export function PlayerSheet({ placed, following, onClose, onProfile, onMessage, 
   const menu: MenuSheetItem[] = [
     ...(onAskToHit ? [{ icon: 'person-circle-outline' as const, label: 'View profile', onPress: () => afterMenu(onProfile) }] : []),
     ...(onAddToGroup ? [{ icon: 'people-outline' as const, label: 'Add to a group', onPress: () => afterMenu(onAddToGroup) }] : []),
-    { icon: following ? 'person-remove-outline' : 'person-add-outline', label: following ? 'Unfollow' : requested ? 'Cancel request' : 'Follow', onPress: () => afterMenu(onFollow) },
+    { icon: following || requested ? 'person-remove-outline' : 'person-add-outline', label: following ? 'Unfollow' : requested ? 'Cancel request' : 'Follow', onPress: () => afterMenu(onFollow) },
   ];
   return (
     <GestureDetector gesture={pull.gesture}>
@@ -1202,9 +1202,9 @@ const styleDefinitions = StyleSheet.create({
   zoomRule: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
   // The bottom panel: the rail of players, or the one that was picked.
   // Flush on the bottom edge, a grabber line on top: a tray, not a card floating on the map.
-  // Its shadow lifts it off the map upward only (a blur no wider than its offset), so none falls
-  // below it onto the strip under the tab bar: on the phone that drew a grey band there (Oct 7).
-  sheet: { backgroundColor: colors.surface, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, paddingTop: spacing.sm, paddingBottom: spacing.md, gap: spacing.sm, shadowColor: '#000', shadowOpacity: 0.13, shadowRadius: 14, shadowOffset: { width: 0, height: -12 } },
+  // Its shadow spills below it too, but the strip under the tab bar now sits over it (CardStage keeps
+  // its layers' stacking to itself), so that spill no longer draws a grey band there (Oct 7).
+  sheet: { backgroundColor: colors.surface, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, paddingTop: spacing.sm, paddingBottom: spacing.md, gap: spacing.sm, shadowColor: '#000', shadowOpacity: 0.14, shadowRadius: 22, shadowOffset: { width: 0, height: -8 } },
   grabber: { alignSelf: 'center', width: 36, height: 4, borderRadius: 2, backgroundColor: colors.border, marginBottom: spacing.xs },
   sheetHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.lg, paddingBottom: 2 },
   sheetHeadRight: { flexDirection: 'row', alignItems: 'center', gap: 4 },
@@ -1251,7 +1251,9 @@ const styleDefinitions = StyleSheet.create({
   closeTop: { alignSelf: 'flex-start', marginTop: -5 },
   closePressed: { opacity: 0.6 },
   // The player card's one row of actions: two pills sharing the width, then two round buttons.
-  cardActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg, marginTop: spacing.sm, paddingBottom: spacing.xs },
+  // Capped, so on a computer (where the card spans the whole map) the pills stay pill-sized
+  // rather than stretching into bars; a phone never reaches the cap.
+  cardActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg, marginTop: spacing.sm, paddingBottom: spacing.xs, width: '100%', maxWidth: 456 },
   cardSlot: { flex: 1, minWidth: 0 },
   cardPill: { height: 44, borderRadius: radius.pill, borderWidth: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, paddingHorizontal: spacing.md },
   cardPrimary: { backgroundColor: colors.brand, borderColor: colors.brand },

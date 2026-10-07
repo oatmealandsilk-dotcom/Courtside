@@ -53,7 +53,10 @@ export function CardStage({ cardKey, kind, crown, children }: {
 }) {
   const { layers, remove } = useStageLayers(cardKey, kind, children);
   return (
-    <View pointerEvents="box-none">
+    // A view of its own that keeps its layers' stacking to itself. Without it the phone drops this
+    // wrapper as layout-only, each card's zIndex then lifted it above the strip that runs under the
+    // tab bar, and the card's shadow fell on that strip as a grey band (Oct 7).
+    <View pointerEvents="box-none" collapsable={false} style={{ zIndex: 0 }}>
       {layers.map((layer) => (
         <Layer key={layer.id} layer={layer} out={layer.out} crown={crown} onGone={remove} />
       ))}

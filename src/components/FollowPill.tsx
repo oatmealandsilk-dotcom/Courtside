@@ -7,7 +7,7 @@ import * as haptics from '@/lib/haptics';
 import { useTheme } from '@/theme/ThemeProvider';
 import { BrandWash } from '@/components/ui/BrandWash';
 import { useApp } from '@/store/AppContext';
-import { colors, typography, withAlpha } from '@/theme';
+import { colors, typography } from '@/theme';
 import { reduceMotionEnabled } from '@/lib/useReducedMotion';
 
 const EASE = Easing.bezier(0.22, 1, 0.36, 1);
@@ -64,11 +64,13 @@ export function FollowPill({ following, onPress, small = false, name, userId, wi
 
 /**
  * Follow as a round button, for a row with no room for a third word (the
- * map's player card, Oct 7): a person with a plus in the brand's colour
- * until you follow, then a quiet person with a tick, the same sand as the
- * buttons beside it (a private account's ask waiting shows dots instead).
- * The same dip, haptic and spoken label as FollowPill, and one size
- * whatever it says, so nothing beside it moves when you tap.
+ * map's player card, Oct 7): the same sand disc as the buttons beside it,
+ * with a person and a plus in the brand's colour until you follow, then the
+ * person in ink with a tick (a private account's ask waiting shows dots
+ * instead). Only the glyph changes, never the disc, so it stays one of the
+ * row's family in every theme: a brand tint behind it went olive on New
+ * York's navy. The same dip, haptic and spoken label as FollowPill, and one
+ * size whatever it says, so nothing beside it moves when you tap.
  */
 export function FollowDisc({ following, onPress, name, userId, size = 44 }: { following: boolean; onPress: () => void; name?: string; userId?: string; size?: number }) {
   useTheme();
@@ -77,21 +79,16 @@ export function FollowDisc({ following, onPress, name, userId, size = 44 }: { fo
   const filled = following || requested;
   const on = useSharedValue(filled ? 1 : 0);
   const bump = useSharedValue(1);
+  // 1 while the faces may grow as they cross over; 0 under Reduce Motion, where they only fade.
+  const motion = useSharedValue(1);
   const reduced = useRef(false);
-  useEffect(() => { reduceMotionEnabled().then((r) => { reduced.current = r; }).catch(() => {}); }, []);
+  useEffect(() => { reduceMotionEnabled().then((r) => { reduced.current = r; if (r) motion.value = 0; }).catch(() => {}); }, [motion]);
   useEffect(() => { on.value = withTiming(filled ? 1 : 0, { duration: 280, easing: EASE }); }, [filled, on]);
 
-  // Read on each draw and handed over as plain values (see FollowPill: read inside, they stuck to the first theme).
-  const { brandDim, surfaceAlt, borderStrong, brand } = colors;
-  const edgeOff = withAlpha(brand, 0.32);
-  const disc = useAnimatedStyle(() => ({
-    backgroundColor: interpolateColor(on.value, [0, 1], [brandDim, surfaceAlt]),
-    borderColor: interpolateColor(on.value, [0, 1], [edgeOff, borderStrong]),
-    transform: [{ scale: bump.value }],
-  }), [brandDim, surfaceAlt, borderStrong, edgeOff]);
+  const disc = useAnimatedStyle(() => ({ transform: [{ scale: bump.value }] }));
   // The two faces cross over, the new one settling in from a touch smaller.
-  const addFace = useAnimatedStyle(() => ({ opacity: 1 - on.value, transform: [{ scale: 1 - on.value * 0.2 }] }));
-  const doneFace = useAnimatedStyle(() => ({ opacity: on.value, transform: [{ scale: 0.8 + on.value * 0.2 }] }));
+  const addFace = useAnimatedStyle(() => ({ opacity: 1 - on.value, transform: [{ scale: 1 - on.value * 0.2 * motion.value }] }));
+  const doneFace = useAnimatedStyle(() => ({ opacity: on.value, transform: [{ scale: 1 - (1 - on.value) * 0.2 * motion.value }] }));
 
   const press = () => {
     if (!reduced.current) bump.value = withSequence(withTiming(0.94, { duration: 60, easing: EASE }), withSpring(1, { damping: 20, stiffness: 320 }));
@@ -101,7 +98,7 @@ export function FollowDisc({ following, onPress, name, userId, size = 44 }: { fo
 
   return (
     <Pressable accessibilityRole="button" accessibilityState={{ selected: filled }} accessibilityLabel={`${following ? 'Following' : requested ? 'Requested' : 'Follow'}${name ? ` ${name}` : ''}`} onPress={press} hitSlop={4}>
-      <Animated.View style={[styles.disc, { width: size, height: size, borderRadius: size / 2 }, disc]}>
+      <Animated.View style={[styles.disc, { width: size, height: size, borderRadius: size / 2, backgroundColor: colors.surfaceAlt, borderColor: colors.borderStrong }, disc]}>
         <Animated.View pointerEvents="none" style={[styles.face, addFace]}>
           <Ionicons name="person-add-outline" size={19} color={colors.brand} />
         </Animated.View>

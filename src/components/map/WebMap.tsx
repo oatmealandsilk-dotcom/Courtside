@@ -434,8 +434,9 @@ export function NearbyMap(props: NearbyMapProps) {
             <PlaceSheet place={model.place} rows={model.placeRows} loading={model.placeLoading} failed={model.placeFailed} onPickCourt={model.pickCourt} onRetry={model.retryPlace} onClose={model.clearPlace} played={model.ringFor} />
           ) : null}
         </CardStage>
-        {/* The tray's own colour runs on beneath the floating tab bar, so no map shows between them. */}
-        {barInset ? <View style={{ height: barInset, backgroundColor: colors.surface, marginTop: -spacing.md - 1 }} /> : null}
+        {/* The tray's own colour runs on beneath the floating tab bar, so no map shows between them.
+            It lies over the card above it, so the card's shadow never darkens it into a band (Oct 7). */}
+        {barInset ? <View style={{ height: barInset, backgroundColor: colors.surface, marginTop: -spacing.md - 1, zIndex: 1 }} /> : null}
       </View>
     </View>
   );
