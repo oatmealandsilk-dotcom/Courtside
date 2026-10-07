@@ -3413,6 +3413,16 @@ export const remote = {
     const { error } = await need().from('practice_sessions').update({ opponent }).eq('id', id);
     if (error) { fail('session opponent')(error); throw new Error('That didn’t save. Try again.'); }
   },
+  /**
+   * A session's day and length, changed on a session already in your log
+   * (Oct 6). The database already takes it (your own rows, migration 39);
+   * its triggers ask anyone who accepted a tag again (migration 62) and
+   * rework your posts carrying it (migration 65).
+   */
+  async updateSessionTime(id: ID, day: string, minutes: number) {
+    const { error } = await need().from('practice_sessions').update({ day, minutes }).eq('id', id);
+    if (error) { fail('session time')(error); throw new Error('That didn’t save. Try again.'); }
+  },
 
   /* ---------------------------------------------- session tags (migration 62) */
 
