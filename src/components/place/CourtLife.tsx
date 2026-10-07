@@ -123,8 +123,10 @@ export function CourtFactsLine({ courtId, name, note = true, lines }: { courtId:
   const said = summarizeFacts(facts && reportedIds.length ? { ...facts, notes: facts.notes.filter((n) => !reportedIds.includes(courtNoteKey(courtId, n.text))) } : facts);
   const mine = !!myCourtReviews[courtId];
   // Your own note (the newest may be yours) has no flag: Update yours is there for it.
+  // Compared space for space as the database keeps it (a line break saved becomes one space).
   const quoted = note ? said.note : undefined;
-  const canReport = !!quoted && !!currentUserId && myCourtReviews[courtId]?.notes?.trim() !== quoted.text.trim();
+  const asKept = (text?: string) => text?.replace(/\s+/g, ' ').trim();
+  const canReport = !!quoted && !!currentUserId && asKept(myCourtReviews[courtId]?.notes) !== asKept(quoted.text);
   const reportNote = () => {
     if (!quoted) return;
     confirmReport('note', () => afterReport(actions.reportUser(null, `court-note:${courtNoteKey(courtId, quoted.text)}`, quoted.text)));
