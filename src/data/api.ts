@@ -53,6 +53,9 @@ import type {
   Message,
   Notification,
   Post,
+  PostKind,
+  DemotedPost,
+  DemoteResult,
   PracticeSession,
   HeadToHead,
   Invitee,
@@ -161,7 +164,8 @@ export async function fetchBootstrap(): Promise<Bootstrap> {
     : integrations;
   return delay(
     clone({
-      users,
+      // ?admin=1: the demo's own player is an admin (demoAdmin), to try the admin pages without a database.
+      users: demoAdmin() ? users.map((u) => (u.id === CURRENT_USER_ID ? { ...u, isAdmin: true } : u)) : users,
       // The demo reels are gone: real clips and hits come from people now.
       // The demo written posts and threads stay, so the app is never empty,
       // and so does the one clip tagged at a demo court, for its page and reel.
@@ -459,6 +463,119 @@ export async function fetchFeedScores(): Promise<Record<ID, FeedScore> | null> {
     out[r.post_id] = { viewers: r.viewers ?? 0, looks: r.looks ?? 0, watchSeconds: r.watch_seconds ?? 0, skips: r.skips ?? 0, profileTaps: r.profile_taps ?? 0, seenByMe: !!r.seen_by_me || Number.isFinite(seenAt), ...(Number.isFinite(seenAt) ? { mySeenAt: seenAt } : {}) };
   }
   return out;
+}
+
+/* ------------------------- Pushed to the bottom (152) ------------------------- */
+
+/** PostgREST's "Could not find the function" (PGRST202), or Postgres's "function … does not exist": a database a migration behind. */
+const noSuchFunction = (error: { code?: string; message?: string }) =>
+  error.code === 'PGRST202' || error.code === '42883' || /could not find the function|function .* does not exist/i.test(error.message ?? '');
+
+/**
+ * The demo's pushed-down posts, by id, with when, by whom and the note: on
+ * this phone only, for this visit (the demo has no server). Empty at first,
+ * so the demo's feed is as it always was until an admin pushes something.
+ */
+const demoDemoted = new Map<ID, { at: string; by: ID; note?: string }>();
+
+/**
+ * Whether the demo's own player is an admin: only with ?admin=1 (kept for
+ * the visit), so the admin pages and the … menu's admin rows can be tried
+ * without a database. Never with one: there, the server says who is.
+ */
+export function demoAdmin(): boolean {
+  if (supabase) return false;
+  try {
+    if (typeof window === 'undefined' || !window.location || !window.sessionStorage) return false;
+    if (new URLSearchParams(window.location.search).get('admin') === '1') window.sessionStorage.setItem('courtside-demo-admin', '1');
+    return window.sessionStorage.getItem('courtside-demo-admin') === '1';
+  } catch {
+    return false;
+  }
+}
+// Read as the app opens, while the address still says ?admin=1 (signing in moves to another page).
+demoAdmin();
+
+const demoPost = (id: ID) => posts.find((p) => p.id === id) ?? demoGroupPosts.find((p) => p.id === id);
+
+/**
+ * Every post an admin pushed to the bottom of feeds (feed_demoted_posts,
+ * migration 152), except your own: an author never sees theirs marked.
+ * Asked with the feed's numbers (features/feed/feedScores). [] on a database
+ * without the migration (nothing is pushed down there); null when it could
+ * not be asked (offline): the last answer is kept.
+ */
+export async function fetchDemotedPosts(): Promise<ID[] | null> {
+  if (!supabase) return [...demoDemoted.keys()].filter((id) => demoPost(id)?.authorId !== CURRENT_USER_ID);
+  const { data, error } = await supabase.rpc('feed_demoted_posts');
+  if (error) return noSuchFunction(error) ? [] : null;
+  if (!Array.isArray(data)) return null;
+  return (data as unknown[]).flatMap((r) => {
+    const id = typeof r === 'string' ? r : (r as { post_id?: unknown } | null)?.post_id;
+    return typeof id === 'string' && id ? [id] : [];
+  });
+}
+
+/**
+ * An admin pushes a post to the bottom of feeds (`on`), or undoes it
+ * (set_post_demoted, migration 152). Its author is never told. See
+ * DemoteResult for the answers.
+ */
+export async function setPostDemoted(postId: ID, on: boolean, note?: string): Promise<DemoteResult> {
+  const words = note?.replace(/\s+/g, ' ').trim().slice(0, 200) || undefined;
+  if (!supabase) {
+    if (!demoAdmin()) return 'refused';
+    if (!on) { demoDemoted.delete(postId); return delay('done' as const, 120); }
+    const had = demoDemoted.get(postId);
+    demoDemoted.set(postId, { at: had?.at ?? new Date().toISOString(), by: had?.by ?? CURRENT_USER_ID, note: words ?? had?.note });
+    return delay('done' as const, 120);
+  }
+  const { error } = await supabase.rpc('set_post_demoted', { p_post: postId, p_on: on, p_note: words ?? null });
+  if (!error) return 'done';
+  if (noSuchFunction(error)) return 'not_ready';
+  if (/not allowed/.test(error.message)) return 'refused';
+  if (/not found/.test(error.message)) return 'gone';
+  console.warn('[api] push to bottom failed', error);
+  return 'failed';
+}
+
+/**
+ * Settings → Admin → Pushed-down posts: every one, newest first
+ * (admin_demoted_posts, migration 152). Admins only. 'not_ready' on a
+ * database without the migration; null when it could not load.
+ */
+export async function fetchDemotedList(): Promise<DemotedPost[] | 'not_ready' | null> {
+  if (!supabase) {
+    if (!demoAdmin()) return null;
+    const list = [...demoDemoted.entries()].flatMap(([postId, d]): DemotedPost[] => {
+      const p = demoPost(postId);
+      const author = p ? users.find((u) => u.id === p.authorId) : undefined;
+      return [{
+        postId, authorId: p?.authorId, authorHandle: author?.handle, kind: p?.kind, preview: (p?.body ?? '').slice(0, 160),
+        picture: p?.thumbnailUrl ?? p?.imageUrl, demotedAt: d.at, demotedBy: d.by, note: d.note,
+      }];
+    }).sort((a, b) => Date.parse(b.demotedAt) - Date.parse(a.demotedAt));
+    return delay(clone(list));
+  }
+  const { data, error } = await supabase.rpc('admin_demoted_posts');
+  if (error) {
+    if (noSuchFunction(error)) return 'not_ready';
+    console.warn('[api] pushed-down list failed', error);
+    return null;
+  }
+  type Raw = { post_id?: unknown; author_id?: unknown; author_handle?: unknown; kind?: unknown; preview?: unknown; picture?: unknown; demoted_at?: unknown; demoted_by?: unknown; note?: unknown };
+  const text = (v: unknown) => (typeof v === 'string' && v ? v : undefined);
+  const kinds: PostKind[] = ['clip', 'match', 'session', 'note', 'gear', 'milestone'];
+  return (Array.isArray(data) ? (data as Raw[]) : []).flatMap((r): DemotedPost[] => {
+    const postId = text(r.post_id);
+    const demotedAt = text(r.demoted_at);
+    if (!postId || !demotedAt) return [];
+    const kind = kinds.find((k) => k === r.kind);
+    return [{
+      postId, authorId: text(r.author_id), authorHandle: text(r.author_handle), kind, preview: text(r.preview) ?? '',
+      picture: text(r.picture), demotedAt, demotedBy: text(r.demoted_by), note: text(r.note),
+    }];
+  });
 }
 
 /* ------------------------------ Shared links ------------------------------ */

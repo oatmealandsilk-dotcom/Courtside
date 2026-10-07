@@ -27,6 +27,7 @@ import { NewHereTag } from '@/components/NewHereTag';
 import { StreakFlame } from '@/components/StreakFlame';
 import { shownStreak, streakWords } from '@/features/practice/streakFlame';
 import { isNewHere } from '@/features/feed/newHere';
+import { PushedDownTag } from '@/components/PushedDownTag';
 import { useOptimisticToggle } from '@/lib/useOptimisticToggle';
 import { Avatar, Chip } from '@/components/ui';
 import { LevelPill } from '@/components/LevelPill';
@@ -298,6 +299,8 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
             <View style={styles.subRow}>
               <Text style={styles.sub} numberOfLines={1}>@{author.handle} · {relativeTime(post.createdAt)}{post.editedAt ? ' · Edited' : ''}</Text>
               {isNewHere(post) ? <NewHereTag short /> : null}
+              {/* Admins only: pushed to the bottom of feeds (migration 152). Nothing at all for anyone else. */}
+              <PushedDownTag post={post} />
             </View>
             {/* Where, on its own line under the name, as Instagram sets it: the whole place, a tap opens the court. */}
             <PlaceLine court={post.court} location={post.location} />

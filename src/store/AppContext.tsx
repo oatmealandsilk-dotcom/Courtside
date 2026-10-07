@@ -58,6 +58,7 @@ import * as toast from '@/lib/toast';
 import { anyUploading, cancelUpload, finishUpload, holdQuietUpload, setUploadProgress, simulateUpload, startUpload } from '@/lib/uploads';
 import { requestFeedRefresh } from '@/features/feed/feedBus';
 import { loadFeedScores } from '@/features/feed/feedScores';
+import { demotedPosts, markDemoted } from '@/features/feed/demoted';
 import { blockDevice, groupFor, isDeviceBlocked, rememberAnswered, yearsOld, type AgeGroup } from '@/features/age/ageCheck';
 import { knownOpen, notKnownAdult, type AgeSource, type Openness, type OpennessMap } from '@/features/players/age';
 import type { TeenMap } from '@/features/players/mapPrivacy';
@@ -123,7 +124,7 @@ import type {
   Story,
   User,
   PlayerProfile,
-  MediaCrop, Tip, TaggedCourt, TrackerId, Invitee, AffiliateStats, ContactMatch, HealthShareKey, HeadToHead, CourtKings, FlybyPerson, FriendStreak, MatchSet, Removed, RemovedItem, ReviewRequest, ReviewStatus, TakedownKind, TakedownReason, TournamentEntry, HiddenWords, HiddenWordsKind } from '@/data/types';
+  MediaCrop, Tip, TaggedCourt, TrackerId, Invitee, AffiliateStats, ContactMatch, HealthShareKey, HeadToHead, CourtKings, FlybyPerson, FriendStreak, MatchSet, Removed, RemovedItem, DemotedPost, DemoteResult, ReviewRequest, ReviewStatus, TakedownKind, TakedownReason, TournamentEntry, HiddenWords, HiddenWordsKind } from '@/data/types';
 import { HIDDEN_WORDS_MAX, HIDDEN_WORD_LENGTH, cleanWords, defaultHiddenWords } from '@/features/hiddenWords/hiddenWords';
 import { canScore, scoreNotKept, setsWinner } from '@/features/activity/score';
 
@@ -1134,6 +1135,17 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions, LiveSessionAct
   /** Admins only: Settings → Admin → Removed. 'not_ready' before migration 108; null when it could not load. */
   loadRemoved: () => Promise<RemovedItem[] | 'not_ready' | null>;
   /**
+   * Admins only: pushes a post to the very bottom of everyone's feeds (`on`),
+   * or undoes it (migration 152; the owner's "shadow ban", Oct 7). Shown on
+   * this phone at once (the admins' "Pushed down" tag, the … menu); if the
+   * server says no, that goes back and a toast says why. Never your own post.
+   * Its author is never told, and nobody is notified. `quiet`: no toast on
+   * success (an Undo passes it).
+   */
+  setPostDemoted: (postId: ID, on: boolean, options?: { quiet?: boolean }) => Promise<DemoteResult>;
+  /** Admins only: Settings → Admin → Pushed-down posts. 'not_ready' before migration 152; null when it could not load. */
+  loadDemotedPosts: () => Promise<DemotedPost[] | 'not_ready' | null>;
+  /**
    * Your own asks for a review (migration 20261006000139), into
    * `reviewRequests`. Asked once, the first time something removed of yours
    * shows; a database without the migration counts as none asked.
@@ -1881,6 +1893,14 @@ function closeReview(prev: AppState, kind: TakedownKind, id: ID, status: Exclude
   if (!prev.reviewRequests?.some((r) => r.kind === kind && r.targetId === id && r.status === 'open')) return prev;
   const at = new Date().toISOString();
   return { ...prev, reviewRequests: prev.reviewRequests.map((r) => (r.kind === kind && r.targetId === id && r.status === 'open' ? { ...r, status, closedAt: at } : r)) };
+}
+
+/** What a toast says when pushing a post to the bottom (or undoing it) did not go through. */
+function demoteRefusal(result: DemoteResult, pushing: boolean): { title: string; body?: string } {
+  if (result === 'refused') return { title: 'Only admins can do that' };
+  if (result === 'not_ready') return { title: 'Push to bottom isn’t switched on yet', body: 'The server needs a quick update first. Nothing was changed.' };
+  if (result === 'gone') return { title: 'This post isn’t here any more' };
+  return { title: pushing ? 'Couldn’t push it to the bottom' : 'Couldn’t undo it', body: 'Check your connection and try again.' };
 }
 
 /** Why a take-down or restore did not go through, for its toast. */
@@ -5562,6 +5582,42 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
   restoreRef.current = restoreContent;
   const loadRemoved = useCallback(async () => (live(stateRef.current.currentUserId) ? remote.fetchRemoved() : []), []);
+  // Pushing a post to the bottom of feeds (migration 152). Shown here first
+  // (features/feed/demoted), then the server; if it says no, it goes back.
+  // Nothing about it reaches anyone but admins, and nobody is notified.
+  const demoteRef = useRef<(postId: ID, on: boolean, options?: { quiet?: boolean }) => Promise<DemoteResult>>(async () => 'failed');
+  const setPostDemoted = useCallback(async (postId: ID, on: boolean, options: { quiet?: boolean } = {}): Promise<DemoteResult> => {
+    const me = stateRef.current.currentUserId;
+    if (!me || !amAdmin()) return 'refused';
+    // Never your own: what you read leaves your own posts out, so you could not even see it was down.
+    if (stateRef.current.posts.find((p) => p.id === postId)?.authorId === me) return 'refused';
+    // With a database, only one of its own posts (never a stand-in still on screen from before it loaded).
+    if (isSupabaseConfigured && !live(me, postId)) return 'gone';
+    const was = demotedPosts().has(postId);
+    haptics.commit();
+    markDemoted(postId, on);
+    const result = await demoApi.setPostDemoted(postId, on);
+    if (result !== 'done') {
+      // Back as it was, unless something else has changed it meanwhile.
+      if (demotedPosts().has(postId) === on) markDemoted(postId, was);
+      showToast({ ...demoteRefusal(result, on), icon: 'alert-circle-outline', long: true });
+      return result;
+    }
+    if (options.quiet) return result;
+    if (on) {
+      offerUndo('Pushed to the bottom', () => demotedPosts().has(postId), () => { void demoteRef.current(postId, false, { quiet: true }); },
+        { body: 'Its author isn’t told.', icon: 'arrow-down-circle-outline' });
+    } else {
+      showToast({ title: 'Back in its usual place', body: 'It ranks in feeds as it did before.', icon: 'arrow-up-circle-outline' });
+    }
+    return result;
+  }, []);
+  demoteRef.current = setPostDemoted;
+  const loadDemotedPosts = useCallback(async () => {
+    const me = stateRef.current.currentUserId;
+    if (!me || !amAdmin()) return null;
+    return demoApi.fetchDemotedList();
+  }, []);
   // Asking for a review (migration 20261006000139). Your own asks are read
   // once, the first time something removed of yours shows; the demo keeps
   // its asks on this phone. A read that fails is tried again a few times,
@@ -8726,6 +8782,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       takeDown,
       restoreContent,
       loadRemoved,
+      setPostDemoted,
+      loadDemotedPosts,
       loadReviewRequests,
       askForReview,
       loadOpenReviews,
@@ -8954,6 +9012,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       takeDown,
       restoreContent,
       loadRemoved,
+      setPostDemoted,
+      loadDemotedPosts,
       loadReviewRequests,
       askForReview,
       loadOpenReviews,

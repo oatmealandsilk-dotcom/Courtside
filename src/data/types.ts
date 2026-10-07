@@ -627,6 +627,33 @@ export interface RemovedItem {
 }
 
 /**
+ * A post an admin pushed to the bottom of feeds (migration 152): Settings →
+ * Admin → Pushed-down posts. Admins only; its author is never told.
+ */
+export interface DemotedPost {
+  postId: ID;
+  authorId?: ID;
+  /** Its author's @handle, as the server knows it (the app may not have loaded them). */
+  authorHandle?: string;
+  kind?: PostKind;
+  /** A few of its words. */
+  preview: string;
+  picture?: string;
+  demotedAt: string;
+  /** The admin who pushed it down. */
+  demotedBy?: ID;
+  /** The admin's own note. Never shown to the author. */
+  note?: string;
+}
+
+/**
+ * How pushing a post down (or undoing it) went: 'done' (or it already was),
+ * 'refused' (not an admin), 'gone' (deleted meanwhile), 'not_ready' (a
+ * database without migration 152 yet) or 'failed' (anything else).
+ */
+export type DemoteResult = 'done' | 'refused' | 'gone' | 'not_ready' | 'failed';
+
+/**
  * Where an author's "Ask for a review" stands (migration 20261006000139):
  * waiting for an admin, looked at again and kept down, or put back.
  */

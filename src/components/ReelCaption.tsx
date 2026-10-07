@@ -13,6 +13,7 @@ import { NewHereTag } from '@/components/NewHereTag';
 import { StreakFlame } from '@/components/StreakFlame';
 import { shownStreak, streakWords } from '@/features/practice/streakFlame';
 import { isNewHere } from '@/features/feed/newHere';
+import { PushedDownTag } from '@/components/PushedDownTag';
 import { RichText } from '@/components/RichText';
 import type { Post, User } from '@/data/types';
 import { openCourt } from '@/features/players/courtLink';
@@ -117,6 +118,8 @@ export function ReelCaption({ post, author, onAuthor, onOpenStats, active = fals
       {/* An opened caption gets a deeper shade behind it, reaching up past its top line, so long words read on any frame. */}
       {open ? <LinearGradient pointerEvents="none" colors={['rgba(0, 0, 0, 0)', 'rgba(0, 0, 0, 0.42)', 'rgba(0, 0, 0, 0.42)']} locations={[0, 0.2, 1]} style={styles.openShade} /> : null}
       <Who author={author} onAuthor={onAuthor} newHere={isNewHere(post)} place={place} court={post.court} />
+      {/* Admins only: pushed to the bottom of feeds (migration 152), on a line of its own under the name. Nothing at all for anyone else. */}
+      <PushedDownTag post={post} onMedia />
       {text ? (
         open ? (
           <ScrollView style={{ maxHeight: Math.round(screenH * 0.4) }} nestedScrollEnabled showsVerticalScrollIndicator={false} bounces={false}>

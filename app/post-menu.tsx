@@ -25,6 +25,7 @@ import { StoryOverlayCanvas } from '@/components/share/StoryOverlay';
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { useOpenOutside } from '@/features/share/openOutside';
 import { useAndroidBack } from '@/lib/androidBack';
+import { useDemotedPosts } from '@/features/feed/demoted';
 import type { Post, Story } from '@/data/types';
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
@@ -79,7 +80,8 @@ const DRAG_CLOSE_SPEED = 0.9;
  * Download); under them a short list, what can't be undone last, after a
  * hairline. Your own post can be edited, pinned, archived or deleted; anyone
  * else's can be reported, and its author muted or blocked. Admins also get
- * "Take down" (or "Restore" once it is down); nobody else ever sees either.
+ * "Take down" (or "Restore" once it is down) and, on a post, "Push to bottom"
+ * (or "Undo push to bottom"; migration 152); nobody else ever sees any of them.
  * Save is not here: the bookmark sits right beside the ••• everywhere it opens.
  *
  * A post shared to a group only never leaves the group: no picture of it, no
@@ -197,6 +199,9 @@ export default function PostMenu() {
   // archiving still work.
   const removed = item?.removed;
   const admin = !!currentUser?.isAdmin;
+  // Pushed to the bottom of feeds by an admin (migration 152): only admins ever learn it, and never about their own.
+  const demoted = useDemotedPosts();
+  const pushedDown = admin && !!post && !mine && demoted.has(post.id);
   // Your own clip or photo, straight into Instagram's story editor with a CourtSide sticker (Oct 5;
   // builds with react-native-share only, never in a browser: see mediaStory.ts). A session post with
   // a photo already goes there as the session's picture (its Photo design), so there it is the clip only.
@@ -302,7 +307,8 @@ export default function PostMenu() {
     } else if (openOutside !== false) tiles.push({ key: 'image', icon: 'image-outline', label: 'Image', spoken: 'Share this post as a picture', waiting: openOutside === null, onPress: () => router.replace({ pathname: '/share-card', params: { id: post.id } }) });
     // The original file, for the owner and for CourtSide's own channels (an admin): one tap to the camera roll, then Instagram.
     // Android's share sheet has no "Save to gallery" (a real save needs a new build: docs/android-setup.md), so there it says what it does.
-    if ((post.videoUrl || post.imageUrl) && (mine || (admin && post.featureOk !== false))) {
+    // Not one pushed to the bottom: it is no candidate for featuring.
+    if ((post.videoUrl || post.imageUrl) && (mine || (admin && post.featureOk !== false && !pushedDown))) {
       tiles.push({ key: 'download', icon: 'download-outline', label: Platform.OS === 'android' ? 'Original' : 'Download', spoken: Platform.OS === 'android' ? 'Share the original file' : 'Download the original', busy: downloading, onPress: download });
     }
   }
@@ -363,6 +369,19 @@ export default function PostMenu() {
       if (blocked) { actions.toggleBlock(author.id); close(); return; }
       ask(blockQuestion(author, () => { if (!actions.isBlocked(author.id)) actions.toggleBlock(author.id); close(); }));
     } });
+  }
+  // Admins only (the database refuses anyone else): push a post to the very bottom of everyone's feeds,
+  // or undo that. A shadow, not a take-down: it stays on its author's profile and opens from a link,
+  // and its author is never told. Asked first; undoing is one tap.
+  if (admin && post && !mine && !removed) {
+    dangerRows.push(pushedDown
+      ? { key: 'demote', icon: 'arrow-up-circle-outline', label: 'Undo push to bottom', note: 'Back to its usual place in feeds', onPress: () => { void actions.setPostDemoted(post.id, false); close(); } }
+      : { key: 'demote', icon: 'arrow-down-circle-outline', label: 'Push to bottom', note: 'Last in everyone’s feeds. Its author isn’t told.', onPress: () => ask({
+        title: 'Push to the bottom?',
+        message: 'It moves to the very bottom of every feed. Only you and the other admin can see this. The author isn’t told.',
+        confirmLabel: 'Push to bottom',
+        onConfirm: () => { void actions.setPostDemoted(post.id, true); close(); },
+      }) });
   }
   // Admins only (the database refuses anyone else): take it down, with a
   // reason, on its own page; or, once down, put it back. Never on your own:

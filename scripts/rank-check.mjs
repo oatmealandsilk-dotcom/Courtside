@@ -21,7 +21,12 @@
  *   7. two visits: the second opens on posts the first did not show;
  *   8. an Instant you opened anywhere (its views list) counts as seen;
  *   9. six thousand posts: all of the above holds, and the deal takes
- *      milliseconds (nothing in it grows with posts × posts).
+ *      milliseconds (nothing in it grows with posts × posts);
+ *  10. a post an admin pushed to the bottom (migration 152), however popular
+ *      and new, and not seen yet, comes after every post you have seen, at
+ *      the very end; its author's own feed deals it exactly as before; and
+ *      a group's feed or Activities moves it to the end without moving the
+ *      page on screen or anything above it.
  * Nothing random: the same run gives the same answer every time. Exit code 0
  * is a pass, 1 a failure.
  */
@@ -110,7 +115,7 @@ function authorTooClose(items) {
   return null;
 }
 
-const { rankFeed, CAUGHT_UP } = await loadRanking();
+const { rankFeed, sinkDemoted, CAUGHT_UP } = await loadRanking();
 const deal = (data, ctx = {}) => rankFeed(data.posts, data.questions ?? [], [], ME, data.hits ?? [], { users: data.users, now: NOW, ...ctx });
 const keys = (items) => items.map(keyOf);
 
@@ -253,6 +258,52 @@ console.log('9. Thousands of posts');
   ok(!order.slice(0, line).some((k) => seenOnPhone.has(k)) && !order.slice(line + 1).some((k) => k.startsWith('p:') && !seenOnPhone.has(k)), 'seen and not seen on the right sides of the line');
   { const close = authorTooClose(items); ok(!close, `no author twice within five pages${close ? ` (${close}; line at ${line} of ${order.length})` : ''}`); }
   ok(ms < 2000, `dealt in ${Math.round(ms)} ms (under 2 s)`);
+}
+
+// 10. Pushed to the bottom by an admin: last for everyone else, as ever for its author.
+console.log('10. Pushed to the bottom');
+{
+  const data = {
+    posts: [
+      video('down', 'star', HOUR, { likedBy: likes(90), commentIds: likes(25), savedBy: likes(20), shares: 12 }),
+      post('seen1', 'a', 5 * DAY), post('seen2', 'b', 6 * DAY), post('seen3', 'c', 7 * DAY),
+      post('fresh1', 'd', 3 * DAY), post('fresh2', 'e', 4 * DAY),
+    ],
+    questions: [question('q1', 'f', DAY), question('q2', 'g', 2 * DAY)],
+    hits: [hit('h1', 's', HOUR)],
+    users: ['star', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 's'].map((u) => user(u)).concat(user(ME)),
+  };
+  const seenOnPhone = new Map([['p:seen1', NOW - DAY], ['p:seen2', NOW - 2 * DAY], ['p:seen3', NOW - 3 * DAY]]);
+  const ctx = { seenOnPhone, followingIds: ['star'] };
+  const before = keys(deal(data, ctx));
+  ok(before[0] === 'p:down', `not pushed down: the popular new video leads (${before.join(' → ')})`);
+  const demoted = new Set(['down']);
+  const order = keys(deal(data, { ...ctx, demoted }));
+  const at = order.indexOf('p:down');
+  const lastSeen = Math.max(...['p:seen1', 'p:seen2', 'p:seen3'].map((k) => order.indexOf(k)));
+  ok(at > lastSeen && at > order.indexOf(CAUGHT_UP), `pushed down, not seen yet: after "caught up" and every post you have seen (${order.join(' → ')})`);
+  ok(at === order.length - 1, 'pushed down: the very last page, after every thread and Instant too');
+  ok(order.length === before.length && new Set(order).size === order.length, 'every page still dealt exactly once');
+  const asAuthor = (d, c = {}) => rankFeed(d.posts, d.questions, [], 'star', d.hits, { users: d.users, now: NOW, ...c });
+  const authorBefore = keys(asAuthor(data, { seenOnPhone }));
+  const authorAfter = keys(asAuthor(data, { seenOnPhone, demoted }));
+  ok(authorAfter.join() === authorBefore.join(), `its author's own feed deals it exactly as before (${authorAfter.join(' → ')})`);
+  const seenToo = keys(deal(data, { ...ctx, demoted, seenOnPhone: new Map([...seenOnPhone, ['p:down', NOW - 9 * DAY]]) }));
+  ok(seenToo[seenToo.length - 1] === 'p:down', 'pushed down and seen long ago: still the very last page (it never comes round again above the rest)');
+  // A bigger feed: several pushed down, the rest of the rules still hold.
+  const big = bigFeed(60, 18, 21);
+  const many = new Set(big.posts.filter((_, i) => i % 7 === 0).map((p) => p.id));
+  const items = deal(big, { demoted: many });
+  const bigOrder = keys(items);
+  const firstDown = bigOrder.findIndex((k) => k.startsWith('p:') && many.has(k.slice(2)));
+  ok(bigOrder.slice(firstDown).every((k) => k.startsWith('p:') && many.has(k.slice(2))) && bigOrder.length - firstDown === many.size,
+    `${many.size} pushed down in a feed of ${big.posts.length}: all ${many.size} last, nothing else among them`);
+  { const close = authorTooClose(items); ok(!close, `no author twice within five pages${close ? ` (${close})` : ''}`); }
+  // A group's feed and Activities (newest first): the page on screen and everything above it stay put.
+  const groupOrder = ['p:g1', 'p:g2', 'p:down', 'p:g3', 'p:g4'];
+  ok(sinkDemoted(groupOrder, demoted).join() === 'p:g1,p:g2,p:g3,p:g4,p:down', 'a group\'s feed: pushed down goes to the end');
+  ok(sinkDemoted(groupOrder, demoted, 3) === groupOrder, 'on the page after it: nothing moves (it is above you already)');
+  ok(sinkDemoted(groupOrder, new Set()) === groupOrder, 'nothing pushed down: nothing moves');
 }
 
 console.log(failures ? `\nRANK CHECK FAILED: ${failures} of ${checks} checks` : `\nRank check passed: ${checks} checks`);

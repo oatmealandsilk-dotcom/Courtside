@@ -31,6 +31,12 @@ export type RankContext = {
   scores?: Record<ID, FeedScore>;
   /** The clock to rank against; fixed in the check (scripts/rank-check.mjs). */
   now?: number;
+  /**
+   * Posts an admin pushed to the bottom (migration 152; features/feed/demoted), by id: dealt after
+   * everything else, below what you have already seen. Never your own: the server leaves them out, and
+   * so does the ranking, so an author's own feed is exactly as it always was.
+   */
+  demoted?: ReadonlySet<ID>;
 };
 
 const DAY = 86_400_000;
@@ -68,6 +74,8 @@ const recency = (createdAt: string, now: number) => 10 * Math.pow(0.5, Math.max(
  *   3. Everything you have seen, on any phone, this visit or before: what you
  *      saw longest ago first (and the best of it), what you saw this visit
  *      last of all. Never a dead end.
+ *   4. Posts an admin pushed to the bottom (ctx.demoted), seen or not: the
+ *      very end, for everyone but their author.
  *
  * A post you have seen never comes above one you have not, however good it
  * is; your own posts too, once you have seen them. Threads and Instants follow
@@ -82,9 +90,13 @@ const recency = (createdAt: string, now: number) => 10 * Math.pow(0.5, Math.max(
  * always deals the same order: nothing here is random.
  */
 export function rankFeed(posts: Post[], questions: Question[], comments: Comment[], userId: string | null, hits: Story[] = [], ctx: RankContext = {}): FeedItem[] {
+  // Pushed to the bottom by an admin (not yours): out of both parts, dealt last of all.
+  const isDown = (p: Post) => !!ctx.demoted?.has(p.id) && p.authorId !== userId;
+  const down = ctx.demoted?.size ? posts.filter(isDown) : [];
+  const up = down.length ? posts.filter((p) => !isDown(p)) : posts;
   if (NEWEST_FIRST) {
-    // Posts in the order they were made; a thread and a hit after every two.
-    const all = newest(posts);
+    // Posts in the order they were made; a thread and a hit after every two; anything pushed down after all of it.
+    const all = newest(up);
     const forum = newest(questions);
     const moments = orderHits(hits, userId);
     const result: FeedItem[] = [];
@@ -93,6 +105,7 @@ export function rankFeed(posts: Post[], questions: Question[], comments: Comment
       const question = forum.shift(); if (question) result.push({ type: 'question', question });
       const hit = moments.shift(); if (hit) result.push({ type: 'hit', story: hit });
     }
+    for (const post of newest(down)) result.push({ type: 'post', post });
     return result;
   }
   if (!posts.length && !questions.length && !hits.length) return [];
@@ -178,8 +191,8 @@ export function rankFeed(posts: Post[], questions: Question[], comments: Comment
   // An Instant you have opened anywhere (the full-screen viewer, another phone) is on its views list: seen too.
   const hitSeen = (st: Story) => isSeen(`h:${st.id}`, st.createdAt) || (!!userId && st.authorId !== userId && !!st.viewedBy?.includes(userId));
 
-  const freshPosts = byScore(posts.filter((p) => !postSeen(p)), scorePost);
-  const seenPosts = byScore(posts.filter(postSeen), (p) => again(`p:${p.id}`, p.createdAt, scorePost(p)));
+  const freshPosts = byScore(up.filter((p) => !postSeen(p)), scorePost);
+  const seenPosts = byScore(up.filter(postSeen), (p) => again(`p:${p.id}`, p.createdAt, scorePost(p)));
   const freshForum = byScore(questions.filter((q) => !questionSeen(q)), scoreQuestion);
   const seenForum = byScore(questions.filter(questionSeen), (q) => again(`q:${q.id}`, q.createdAt, scoreQuestion(q)));
   const freshMoments = orderHits(hits.filter((st) => !hitSeen(st)), userId);
@@ -240,5 +253,30 @@ export function rankFeed(posts: Post[], questions: Question[], comments: Comment
   push({ type: 'caught-up' }, '');
   // Threads and Instants not seen yet that did not fit above still come before the ones you have.
   dealPart(seenPosts, [...freshForum, ...seenForum], [...freshMoments, ...seenMoments], 'all');
+  // 4. Pushed to the bottom by an admin: under everything, seen or not, however good or new, a clip or
+  //    a first post (its score only orders it among the others pushed down). Not seen yet first.
+  if (down.length) {
+    const downRanked = [...byScore(down.filter((p) => !postSeen(p)), scorePost), ...byScore(down.filter(postSeen), (p) => again(`p:${p.id}`, p.createdAt, scorePost(p)))];
+    dealPart(downRanked, [], [], 'none');
+  }
   return result;
+}
+
+/**
+ * A feed's order (keys "p:<id>", "q:<id>", …) with every post in `demoted`
+ * (pushed to the bottom by an admin) from `from` on moved to the very end,
+ * everything else keeping its order: for a group's feed and Activities, and
+ * for pages put into a feed already dealt. Nothing before `from` moves: that
+ * is the page on screen and what is above it. Returns `order` itself when
+ * nothing moves.
+ */
+export function sinkDemoted(order: string[], demoted: ReadonlySet<ID>, from = 0): string[] {
+  if (!demoted.size) return order;
+  const start = Math.max(0, from);
+  const isDown = (k: string) => k.startsWith('p:') && demoted.has(k.slice(2));
+  const tail = order.slice(start);
+  const keep = tail.filter((k) => !isDown(k));
+  if (keep.length === tail.length) return order;
+  const next = [...order.slice(0, start), ...keep, ...tail.filter(isDown)];
+  return next.every((k, i) => k === order[i]) ? order : next;
 }

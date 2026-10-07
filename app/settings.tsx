@@ -204,6 +204,8 @@ export default function Settings() {
         { icon: 'flag-outline' as const, label: 'Reports', value: openReports ? `${openReports} open` : undefined, onPress: () => router.push('/admin-reports') },
         // Everything taken down, with Restore (migration 108). Its own icon: Hidden words has the eye.
         { icon: 'shield-outline' as const, label: 'Removed', onPress: () => router.push('/admin-removed') },
+        // Posts pushed to the bottom of feeds, with Undo (migration 152).
+        { icon: 'arrow-down-circle-outline' as const, label: 'Pushed-down posts', onPress: () => router.push('/admin-pushed-down') },
         { icon: 'mail-outline' as const, label: 'Waitlist', onPress: () => router.push('/admin-waitlist') },
         { icon: 'people-outline' as const, label: 'Invites', onPress: () => router.push('/admin-invites') },
         { icon: 'school-outline' as const, label: 'Coaches and payments', onPress: () => router.push('/admin-coaches') },

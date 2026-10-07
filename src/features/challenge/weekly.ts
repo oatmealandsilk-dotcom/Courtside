@@ -49,12 +49,17 @@ export function timeLeft(challenge: Challenge, now = Date.now()): string {
   return days <= 1 ? 'Ends today' : `${days} days left`;
 }
 
-/** Clips posted that week with the tag, most-liked first; a tie goes to whoever posted first. */
-export function entriesFor(challenge: Challenge, posts: Post[]): Post[] {
+/**
+ * Clips posted that week with the tag, most-liked first; a tie goes to whoever
+ * posted first. One an admin pushed to the bottom (`demoted`, migration 152;
+ * never your own) comes after all the others, however many likes it has.
+ */
+export function entriesFor(challenge: Challenge, posts: Post[], demoted?: ReadonlySet<string>): Post[] {
+  const down = (p: Post) => (demoted?.has(p.id) ? 1 : 0);
   return posts
     .filter((p) => {
       const at = Date.parse(p.createdAt);
       return !p.archived && !p.removed && (p.kind === 'clip' || !!p.videoUrl) && p.tags.includes(challenge.tag) && at >= challenge.startsAt && at < challenge.endsAt;
     })
-    .sort((a, b) => b.likedBy.length - a.likedBy.length || Date.parse(a.createdAt) - Date.parse(b.createdAt));
+    .sort((a, b) => down(a) - down(b) || b.likedBy.length - a.likedBy.length || Date.parse(a.createdAt) - Date.parse(b.createdAt));
 }

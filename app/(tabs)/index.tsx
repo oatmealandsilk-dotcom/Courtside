@@ -57,7 +57,8 @@ import { isLive } from '@/features/stories/stories';
 import { RemovedActions, RemovedNote } from '@/features/moderation/RemovedNote';
 import { show as showToast } from '@/lib/toast';
 import { ClipPlayback } from '@/components/ClipPlayback';
-import { CAUGHT_UP, NEWEST_FIRST, rankFeed, type FeedItem, type RankContext } from '@/features/feed/rankFeed';
+import { CAUGHT_UP, NEWEST_FIRST, rankFeed, sinkDemoted, type FeedItem, type RankContext } from '@/features/feed/rankFeed';
+import { demotedPosts, onDemotedChange } from '@/features/feed/demoted';
 import { feedScores, loadFeedScores } from '@/features/feed/feedScores';
 import { loadSeen, markSeen, seenOnPhone } from '@/features/feed/seenPosts';
 import { challengeFor, entriesFor } from '@/features/challenge/weekly';
@@ -100,12 +101,13 @@ const isActivity = (p: Post, me: string | null | undefined, follows: Set<string>
 /**
  * What the ranking may know: who you follow, who follows you, profiles, what
  * you have seen (this visit, on this phone before, and on any phone as the
- * server says), and how posts have been watched.
+ * server says), how posts have been watched, and which an admin pushed to the
+ * bottom (never your own).
  */
 function rankContext(data: Pick<RankContext, 'users'> & { currentUserId: string | null; followingIds: string[]; followEdges: { followerId: string; followingId: string }[] }, seen: Set<string>): RankContext {
   // How posts have been watched, as last loaded; asked again (once a minute old) for the next deal.
   void loadFeedScores({ userId: data.currentUserId });
-  return { followingIds: data.followingIds, followEdges: data.followEdges, users: data.users, seen, seenOnPhone: seenOnPhone(data.currentUserId), scores: feedScores() };
+  return { followingIds: data.followingIds, followEdges: data.followEdges, users: data.users, seen, seenOnPhone: seenOnPhone(data.currentUserId), scores: feedScores(), demoted: demotedPosts() };
 }
 
 /** For you comes back dealt afresh, from the top, after the app has been away this long (Instagram does the same). */
@@ -526,7 +528,8 @@ function Home({ scope, topRow, paused, onChrome }: {
             .filter((p) => isActivity(p, data.currentUserId, follows, nearRef.current))
             .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
           actsDealt.current = acts.map((p) => p.id).sort().join(',');
-          setOrder(acts.map((p) => `p:${p.id}`));
+          // Newest first; anything an admin pushed to the bottom after all of it.
+          setOrder(sinkDemoted(acts.map((p) => `p:${p.id}`), demotedPosts()));
           setActive(0);
           setVisit((v) => v + 1);
           return;
@@ -546,8 +549,12 @@ function Home({ scope, topRow, paused, onChrome }: {
             // In the grid's own order: pinned first, then newest (the archive's set is newest first only),
             // so a pinned post opens where its tile sits and a swipe goes on in the grid's order.
             .sort((a, b) => (set === 'archived' ? 0 : Number(!!b.pinned) - Number(!!a.pinned)) || Date.parse(b.createdAt) - Date.parse(a.createdAt));
-        setOrder(mine.map((p) => `p:${p.id}`));
-        setActive(Math.max(0, mine.findIndex((p) => p.id === scope.start)));
+        // A group's feed: anything an admin pushed to the bottom goes after all of it. One person's posts
+        // (a profile's grid, a court's) stay exactly in the grid's order: that is what makes it a push, not a take-down.
+        const keys = mine.map((p) => `p:${p.id}`);
+        const dealt = groupId ? sinkDemoted(keys, demotedPosts()) : keys;
+        setOrder(dealt);
+        setActive(Math.max(0, scope.start ? dealt.indexOf(`p:${scope.start}`) : 0));
         setVisit((v) => v + 1);
         return;
       }
@@ -670,13 +677,16 @@ function Home({ scope, topRow, paused, onChrome }: {
       const have = new Set(prev);
       const add = groupKeys.split(',').map((id) => `p:${id}`).filter((k) => !have.has(k)).sort((a, b) => made(b) - made(a));
       if (!add.length) return prev;
-      const last = made(prev[prev.length - 1]);
+      // The last page by time (one pushed to the bottom is last whatever its time).
+      const down = demotedPosts();
+      const timed = prev.filter((k) => !down.has(k.slice(2)));
+      const last = made(timed[timed.length - 1] ?? prev[prev.length - 1]);
       const older = add.filter((k) => made(k) <= last);
       const newer = add.filter((k) => made(k) > last);
       // Just after the page on screen, found by its key: `active` counts `feed`, which leaves out hidden players.
       const on = prev.indexOf(activeKeyRef.current ?? '');
       const at = on >= 0 ? on + 1 : Math.min(prev.length, activeRef.current + 1);
-      return [...prev.slice(0, at), ...newer, ...prev.slice(at), ...older];
+      return sinkDemoted([...prev.slice(0, at), ...newer, ...prev.slice(at), ...older], down, at);
     });
   }, [groupKeys]); // eslint-disable-line react-hooks/exhaustive-deps
   // Activities take a session post as it arrives (yours just shared, or one
@@ -703,7 +713,7 @@ function Home({ scope, topRow, paused, onChrome }: {
       if (!add.length) return prev;
       const on = prev.indexOf(activeKeyRef.current ?? '');
       const at = on >= 0 ? on + 1 : Math.min(prev.length, activeRef.current + 1);
-      return [...prev.slice(0, at), ...add, ...prev.slice(at)];
+      return sinkDemoted([...prev.slice(0, at), ...add, ...prev.slice(at)], demotedPosts(), at);
     });
   }, [actKeys]); // eslint-disable-line react-hooks/exhaustive-deps
   // Opening a group's feed asks the server for its newest page; nearing the
@@ -766,7 +776,8 @@ function Home({ scope, topRow, paused, onChrome }: {
         if (Number.isFinite(made) && made > (unseenBelow.current ?? -Infinity)) unseenBelow.current = made;
       }
     }
-    return [...prev.slice(0, at), ...add, ...prev.slice(at), ...tail];
+    // Anything an admin pushed to the bottom stays the very last, below what you have seen that came in now.
+    return sinkDemoted([...prev.slice(0, at), ...add, ...prev.slice(at), ...tail], demotedPosts(), here + 1);
   };
   /**
    * Nearing "You're all caught up", or the end of what is loaded: the next
@@ -1045,7 +1056,9 @@ function Home({ scope, topRow, paused, onChrome }: {
   const challenge = useMemo(() => challengeFor(), []);
   const featured = useRef<string[] | null>(null);
   if (featured.current === null && feedItems.length) {
-    featured.current = entriesFor(challenge, feedItems.flatMap((i) => (i.type === 'post' ? [i.post] : []))).slice(0, 3).map((p) => p.id);
+    // Never one an admin pushed to the bottom: it is not lifted to the challenge.
+    const down = demotedPosts();
+    featured.current = entriesFor(challenge, feedItems.flatMap((i) => (i.type === 'post' && !down.has(i.post.id) ? [i.post] : [])), down).slice(0, 3).map((p) => p.id);
   }
   // Where For you's tip and challenge pages sit, for the deal they were placed in (dealCount): just after
   // the page each first followed. Pages that come in later (an older page, the fresh load) go in around
@@ -1094,6 +1107,21 @@ function Home({ scope, topRow, paused, onChrome }: {
   const activeKey = feed[active] ? keyOf(feed[active]) : undefined;
   const activeKeyRef = useRef(activeKey);
   activeKeyRef.current = activeKey;
+  // The posts an admin pushed to the bottom, arriving (or changing) after this feed was dealt: any of them
+  // below the page on screen go to the very end. Nothing at or above the page on screen moves. For you, a
+  // group's feed and Activities only; one person's posts keep the grid's order.
+  const sinks = !scope || !!scope.groupId || !!scope.activities;
+  useEffect(() => {
+    if (!sinks) return undefined;
+    return onDemotedChange(() => {
+      setOrder((prev) => {
+        // The page on screen in `order`: the nearest page at or above it that is there (the tip and challenge pages are not).
+        let here = -1;
+        for (let i = Math.min(activeRef.current, feedRef.current.length - 1); i >= 0 && here < 0; i -= 1) here = prev.indexOf(keyOf(feedRef.current[i]));
+        return sinkDemoted(prev, demotedPosts(), here + 1);
+      });
+    });
+  }, [sinks]);
   // The post, Instant or question on screen; the tip and challenge pages are none of them.
   const realKey = activeKey && signalKind(activeKey) ? activeKey : undefined;
   useEffect(() => { setQuick(connectionIsQuick()); }, [active, realKey]);

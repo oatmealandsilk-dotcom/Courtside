@@ -12,6 +12,7 @@ import { FollowPill } from '@/components/FollowPill';
 import { RichText } from '@/components/RichText';
 import type { User } from '@/data/types';
 import { isNewHere } from '@/features/feed/newHere';
+import { PushedDownTag } from '@/components/PushedDownTag';
 import { tagsNotInCaption } from '@/features/feed/tags';
 import { openCourt } from '@/features/players/courtLink';
 import { confirmUnfollow } from '@/lib/confirm';
@@ -96,6 +97,8 @@ export function CommentsCaption({ kind, id }: { kind: 'post' | 'hit'; id: string
               <StreakFlame days={streak} style={styles.flame} />
               <LevelPill profile={author.profile} small />
               {post && isNewHere(post) ? <NewHereTag short /> : null}
+              {/* Admins only: pushed to the bottom of feeds (migration 152). Nothing at all for anyone else. */}
+              {post ? <PushedDownTag post={post} /> : null}
             </View>
             {offerFollow.current ? (
               <FollowPill

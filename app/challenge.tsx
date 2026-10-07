@@ -6,6 +6,7 @@ import { ChallengeEntries } from '@/components/ChallengeEntries';
 import { enterChallenge } from '@/components/ChallengePage';
 import { EmptyState, Screen } from '@/components/ui';
 import { challengeFor, entriesFor, timeLeft } from '@/features/challenge/weekly';
+import { useDemotedPosts } from '@/features/feed/demoted';
 import { goBack } from '@/lib/goBack';
 import { useTagPosting } from '@/lib/uploads';
 import { useApp } from '@/store/AppContext';
@@ -17,7 +18,9 @@ export default function ChallengeScreen() {
   const styles = useThemedStyles(styleDefinitions);
   const { posts } = useApp();
   const challenge = useMemo(() => challengeFor(), []);
-  const entries = useMemo(() => entriesFor(challenge, posts), [challenge, posts]);
+  // One an admin pushed to the bottom stands after all the others (never your own: the list leaves those out).
+  const demoted = useDemotedPosts();
+  const entries = useMemo(() => entriesFor(challenge, posts, demoted), [challenge, posts, demoted]);
   // Your clip for it is still going up: it joins the list once it lands, and
   // until then the button says so (and waits), so it is not entered twice.
   const posting = useTagPosting(challenge.tag);

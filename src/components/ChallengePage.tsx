@@ -6,6 +6,7 @@ import { router } from 'expo-router';
 import { ChallengeEntries } from '@/components/ChallengeEntries';
 import { Wash } from '@/components/Wash';
 import { challengeFor, entriesFor, timeLeft, type Challenge } from '@/features/challenge/weekly';
+import { useDemotedPosts } from '@/features/feed/demoted';
 import { useTagPosting } from '@/lib/uploads';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
@@ -24,16 +25,21 @@ export const enterChallenge = (challenge: Challenge) => router.push({ pathname: 
 export function ChallengePage({ challenge }: { challenge: Challenge }) {
   const styles = useThemedStyles(styleDefinitions);
   const { posts, users } = useApp();
-  const entries = useMemo(() => entriesFor(challenge, posts), [challenge, posts]);
+  // One an admin pushed to the bottom stands after all the others (never your own: the list leaves those out).
+  const demoted = useDemotedPosts();
+  const entries = useMemo(() => entriesFor(challenge, posts, demoted), [challenge, posts, demoted]);
+  // Its top three: never one pushed to the bottom (unless there is nothing else to show).
+  const featured = useMemo(() => entries.filter((p) => !demoted.has(p.id)), [entries, demoted]);
   // Your clip for it is still going up: the button says so (and waits) until
   // it lands and joins the entries, so it is not entered twice.
   const posting = useTagPosting(challenge.tag);
   const last = useMemo(() => {
     const previous = challengeFor(challenge.startsAt, -1);
-    const winner = entriesFor(previous, posts)[0];
+    // Never one an admin pushed to the bottom: it is not featured, so it never "wins" either.
+    const winner = entriesFor(previous, posts, demoted).find((p) => !demoted.has(p.id));
     const who = winner ? users.find((u) => u.id === winner.authorId) : undefined;
     return who ? { title: previous.title, handle: who.handle } : null;
-  }, [challenge, posts, users]);
+  }, [challenge, posts, users, demoted]);
   return (
     <View style={styles.page}>
       <Wash height={460} />
@@ -48,7 +54,7 @@ export function ChallengePage({ challenge }: { challenge: Challenge }) {
             <Text style={styles.lead}>{challenge.ask} Post a clip with <Text style={styles.tag}>#{challenge.tag}</Text> in the caption. The most-liked are featured here.</Text>
           </View>
           {entries.length ? (
-            <ChallengeEntries entries={entries.slice(0, 3)} />
+            <ChallengeEntries entries={(featured.length ? featured : entries).slice(0, 3)} />
           ) : (
             <View style={styles.empty}>
               <Ionicons name="videocam-outline" size={20} color={colors.textFaint} />
