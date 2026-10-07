@@ -8,7 +8,7 @@ import { useReducedMotion } from '@/lib/useReducedMotion';
 /**
  * A tick that draws itself in, left to right, the way a pen would: the short
  * stroke first, then the long one. Used where something has just been done
- * ("Just log it", the "Logged" note). With Reduce Motion it is simply there.
+ * ("Save privately", the "Logged" note). With Reduce Motion it is simply there.
  * The same on a phone and in a browser: a reveal of the tick, not an SVG
  * stroke animation, which a browser's build does not run the same way.
  */

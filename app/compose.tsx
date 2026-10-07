@@ -41,7 +41,7 @@ import { HealthShareRow } from '@/components/session/HealthShareRow';
 import { availableShare, chosenShare } from '@/features/activity/healthShare';
 import { useHealthChoice } from '@/features/activity/useHealthChoice';
 import type { CardPerson } from '@/components/session/SessionCard';
-import { KIND_LABEL, activityDay, loggedLabel } from '@/features/activity/format';
+import { KIND_LABEL, activityDay, fromWho, loggedLabel } from '@/features/activity/format';
 import { inSentence, isTennisActivity, workoutName } from '@/features/activity/workouts';
 import { canTagKind } from '@/features/activity/sessionTags';
 import { shareAction, showLogged, useTrackerSession } from '@/features/activity/useTrackerSession';
@@ -64,7 +64,10 @@ import type { TaggedCourt } from '@/data/types';
 import { colors, radius, spacing, typography, font } from '@/theme';
 import { challengeFor } from '@/features/challenge/weekly';
 import { goHome } from '@/lib/goBack';
-import { livePlace, liveState, startClock } from '@/features/activity/liveSession';
+import { liveDay, liveMinutes, livePlace, liveState, liveTracker, startClock } from '@/features/activity/liveSession';
+import { finishLive, openLiveLog } from '@/features/activity/finishLive';
+import { useTennisFlags } from '@/features/activity/useTennisFlags';
+import { knownTennisFlags, tennisFlags } from '@/features/activity/flags';
 import { useRevealOnFocus } from '@/lib/keyboardScroll';
 import { useAndroidBack } from '@/lib/androidBack';
 
@@ -98,6 +101,13 @@ const goBackNow = () => { if (router.canGoBack()) router.back(); else landOnFeed
 const arrive = (index: number) => FadeInDown.delay(90 + index * 55).duration(260).easing(Easing.out(Easing.cubic));
 /** choose → library → form, with back always stepping one page left. */
 type Stage = 'choose' | 'library' | 'edit' | 'form';
+/**
+ * How long a session's "Log it" page stays once saved, so the moment is
+ * seen (Oct 7, owner: logging "has to feel more rewarding"): the tick on the
+ * button, the streak rolling up. Posting goes on to the feed a little sooner.
+ */
+const CELEBRATE_MS = 1150;
+const CELEBRATE_SHARE_MS = 900;
 
 /**
  * Instagram-shaped composer: pick media, write a caption, post.
@@ -111,16 +121,74 @@ type Stage = 'choose' | 'library' | 'edit' | 'form';
  * can carry a session too, picked from "Add session stats" (`statsPick`):
  * the post stays a Post or a Clip, with the stats on it. A challenge entry
  * is untouched by either.
+ *
+ * Opened from Finish on a live session (?live=1, Oct 7), it is the same
+ * "Log it" page, filled in from the clock: see `fromLive` below.
  */
-export default function Compose() {
+export default function ComposeRoute() {
+  const { live } = useLocalSearchParams<{ live?: string }>();
+  const { liveSessionRead, liveSession, currentUserId } = useApp();
+  // Which trackers' sessions count are known first (kept from the app's start, as a rule), so your
+  // tracker's copy of the same game is found and logged as it, never logged twice (liveTracker).
+  const [flagsIn, setFlagsIn] = useState(() => live !== '1' || !!knownTennisFlags(currentUserId));
+  useEffect(() => {
+    if (flagsIn) return undefined;
+    let on = true;
+    void tennisFlags(currentUserId).finally(() => { if (on) setFlagsIn(true); });
+    return () => { on = false; };
+  }, [flagsIn]); // eslint-disable-line react-hooks/exhaustive-deps
+  // From Finish: decided once, as the page opens (saving ends the live session, and the page must stay put meanwhile).
+  const decided = useRef<null | 'log' | 'gone'>(null);
+  if (live === '1' && !decided.current) {
+    // Opened cold (a reload on the page): the live session is read from the phone first.
+    if (!liveSessionRead || !flagsIn) return null;
+    decided.current = liveSession && liveSession.userId === currentUserId && liveState(liveSession) === 'finished' ? 'log' : 'gone';
+  }
+  // Logged or thrown away since (a reload after Save): the plain log sheet instead.
+  if (decided.current === 'gone') return <ToLogSheet />;
+  return <Compose />;
+}
+
+function ToLogSheet() {
+  useEffect(() => { router.replace('/log-session'); }, []);
+  return null;
+}
+
+function Compose() {
   const styles = useThemedStyles(styleDefinitions);
   const { actions, posts, stories, currentUserId, currentUser, detectedCoords, lastSeen, locationEnabled, detectedActivities, sessions, sessionTags, users, hitRequests, blockedIds, feedGroups, feedGroupsOn, liveSession } = useApp();
 
   // The story rail opens this straight at the library with ?mode=story.
-  const params = useLocalSearchParams<{ mode?: string; shot?: string; challenge?: string; courtId?: string; courtName?: string; lat?: string; lng?: string; activity?: string; session?: string; hit?: string; group?: string; trim?: string }>();
-  // A tracker's session (?activity=, from "Log it"): found among yours, or
-  // waited for when the app was opened cold from an alert (useTrackerSession).
-  const tracker = useTrackerSession(params.activity);
+  const params = useLocalSearchParams<{ mode?: string; shot?: string; challenge?: string; courtId?: string; courtName?: string; lat?: string; lng?: string; activity?: string; session?: string; hit?: string; group?: string; trim?: string; live?: string }>();
+  /*
+   * From Finish on a live session (?live=1, Oct 7, owner: "This should
+   * function exactly like how our current sessions are logged once you click
+   * finish"): this same "Log it" page, filled in from the session, held from
+   * the moment the page opened: what it was, the clock's time (pauses left
+   * out), the day it started and, for someone known to be an adult, its
+   * court as the post's place (the court goes in your private log for
+   * anyone, as from a hit). A photo or a clip goes on as for a tracker's
+   * session; Post session posts it, Save privately puts it in your log and
+   * your streak only. Saved either way, the live session is done with (its
+   * bar goes); closed without saving, it waits ("Finished · Log it").
+   *
+   * One game, logged once (Oct 6, owner): when your tracker timed the same
+   * game and nobody has logged it yet (liveTracker), the page is that
+   * session's own "Log it", with the clock's time, the kind and the court
+   * filled in, so the workout counts as logged and is never offered again.
+   * One already in your log is said, since saving again would count it twice.
+   */
+  const [fromLive] = useState(() => (params.live === '1' && !params.activity && liveSession && liveSession.userId === currentUserId && liveState(liveSession) === 'finished' ? liveSession : null));
+  const flagsOn = useTennisFlags();
+  const [liveTwins] = useState(() => (fromLive && currentUserId ? liveTracker(fromLive, detectedActivities, { me: currentUserId, flags: flagsOn }) : {}));
+  // The live session with no tracker copy waiting: logged from here by hand, with the clock's time.
+  const liveOnly = !!fromLive && !liveTwins.waiting;
+  const liveMins = fromLive ? liveMinutes(fromLive) : 0;
+  // A tracker's session (?activity=, from "Log it", or the tracker's copy of a
+  // live session): found among yours, or waited for when the app was opened
+  // cold from an alert (useTrackerSession).
+  const trackerId = params.activity ?? liveTwins.waiting?.id;
+  const tracker = useTrackerSession(trackerId);
   // Share to: everyone (the default, which also shows in each of your groups'
   // feeds, migration 74) or one group only (migration 67). Opened with
   // ?group=<id>, that group only is picked to start with.
@@ -177,7 +245,7 @@ export default function Compose() {
   // One session, one post: whether this one is on a post of yours already.
   // The app may hold only the newest few of your posts, so they are asked
   // for fresh first; Share waits for that answer (or for it to fail).
-  const [postsChecked, setPostsChecked] = useState(!opened && !params.activity);
+  const [postsChecked, setPostsChecked] = useState(!opened && !trackerId);
   useEffect(() => {
     if (!opened) return undefined;
     let on = true;
@@ -217,7 +285,7 @@ export default function Compose() {
   const shotUri = params.shot === 'pending' ? takePendingShot() : params.shot;
   const isHit = params.mode === 'hit' && !!shotUri;
   // A session being posted goes straight to the form too: the photo is optional.
-  const [stage, setStage] = useState<Stage>(isHit ? 'form' : opened || params.activity || params.session ? 'form' : 'choose');
+  const [stage, setStage] = useState<Stage>(isHit ? 'form' : opened || trackerId || params.session || fromLive ? 'form' : 'choose');
   // The courts around you start loading while you pick and edit, so Add
   // location opens on a full list (it asks for the same spot, from the same cache).
   useEffect(() => {
@@ -244,7 +312,7 @@ export default function Compose() {
     ],
   }));
   const dimStyle = useAnimatedStyle(() => ({ opacity: 1 - leave.value }));
-  // The form leaves the same way (Just log it): fading, sinking a little, a touch smaller.
+  // The form leaves the same way (Save privately): fading, sinking a little, a touch smaller.
   const formLeave = useAnimatedStyle(() => ({ opacity: 1 - leave.value, transform: [{ translateY: leave.value * 16 }, { scale: 1 - 0.05 * leave.value }] }));
   // The Create box never runs off a short screen: it is held to the screen's
   // height (inside the notch and home bar), its title and × stay put, and
@@ -289,7 +357,7 @@ export default function Compose() {
   const [media, setMedia] = useState<PickedMedia | null>(isHit ? { uri: shotUri as string, label: 'Instant', kind: 'photo', thumbnailUrl: shotUri as string, orientation: 'portrait' } : null);
   // A session's post goes where its picture goes (owner, Oct 2): with a video
   // it is a Clip (under Clips, in the reel), otherwise a Post.
-  const openedClip = !!opened && media?.kind === 'video';
+  const openedClip = (!!opened || liveOnly) && media?.kind === 'video';
   // A post is 4:5 upright, the way the feed shows it; a clip and a story fill a phone screen (9:16).
   const portraitRatio = mode === 'post' && !openedClip ? 4 / 5 : 9 / 16;
   // The pick as it came off the device. The editor always opens on this, so
@@ -309,13 +377,16 @@ export default function Compose() {
   // People tagged in the post: chips under the caption, added from a short search.
   const [tagged, setTagged] = useState<string[]>([]);
   // Opened from a court's page ("Post from here"): that court is already the place.
-  const [location, setLocation] = useState(params.courtName?.trim() ?? '');
+  // From Finish, where the session was started, for someone known to be an
+  // adult only (a place on a post says where a minor plays: owner decision 7).
+  const [location, setLocation] = useState(params.courtName?.trim() || (fromLive && adult ? livePlace(fromLive) : ''));
   // The court it was played on, when the location was picked from the courts list.
   // Only ever put on the post for someone known to be an adult (owner decision
   // 7, below): for anyone else the place goes on as words, without the court.
   const [court, setCourt] = useState<TaggedCourt | null>(() => {
     const lat = Number(params.lat); const lng = Number(params.lng); const name = params.courtName?.trim();
-    return params.courtId && name && params.lat && params.lng && Number.isFinite(lat) && Number.isFinite(lng) ? { id: params.courtId, name, lat, lng } : null;
+    if (params.courtId && name && params.lat && params.lng && Number.isFinite(lat) && Number.isFinite(lng)) return { id: params.courtId, name, lat, lng };
+    return fromLive?.court && adult ? fromLive.court : null;
   });
   const [featureOk, setFeatureOk] = useState(true);
   // "Played at …?": the named court you are standing at right now (within
@@ -355,7 +426,7 @@ export default function Compose() {
   }, [canSuggest, hereLat, hereLng]);
 
   // A session's post needs its stats or a picture; anything else needs a picture.
-  const canSubmit = opened ? (withStats && postsChecked) || !!media?.uri : !!media?.uri && (mode !== 'clip' || media.kind === 'video');
+  const canSubmit = liveOnly || (opened ? (withStats && postsChecked) || !!media?.uri : !!media?.uri && (mode !== 'clip' || media.kind === 'video'));
   // "Add session stats" is for a Post or a Clip, never a challenge entry (the
   // weekly clip stays exactly as it was) and never a story or an instant.
   const statsRow = !opened && !entering && !inChallenge && (mode === 'post' || mode === 'clip');
@@ -365,9 +436,11 @@ export default function Compose() {
    * "Log it" (Oct 2): a tracker's session opens here, the normal composer,
    * with the session's card at the top. What is added decides what it is: a
    * photo makes it a Post, a clip a Clip, nothing at all a Post that is the
-   * session's card. "Just log it" puts it in your log and your streak and
-   * posts nothing. A session logged already ("Post it", "Try again") has
-   * nothing left to choose: Share alone.
+   * session's card. "Save privately" (Oct 7; was "Just log it") puts it in
+   * your log and your streak and posts nothing; "Post session" (was Share)
+   * logs it and posts it. A session logged already ("Post it", "Try again")
+   * has nothing left to choose: Post session alone. A live session's Finish
+   * opens this same page (`fromLive`, above).
    */
   const fromHit = useState(() => {
     if (!params.hit) return null;
@@ -376,7 +449,7 @@ export default function Compose() {
     const h = hitRequests.find((x) => x.id === params.hit);
     return h && currentUserId ? prefillFor(h, currentUserId, users) : null;
   })[0];
-  const logNow = !!params.activity && !openedPosted && (opened?.type === 'tracker' || (!opened && tracker.waiting));
+  const logNow = liveOnly || (!!trackerId && !openedPosted && (opened?.type === 'tracker' || (!opened && tracker.waiting)));
   // Once the session has opened here, this stays the "Log it" page: Share
   // posts it, which would otherwise turn it into the plain composer (stats
   // taken off) for the moment it takes to close.
@@ -390,7 +463,7 @@ export default function Compose() {
   // result and nobody to tag. Tennis is exactly as it was.
   const workoutLog = opened?.type === 'tracker' && !isTennisActivity(opened.activity);
   const workoutSport = opened?.type === 'tracker' && !isTennisActivity(opened.activity) ? opened.activity.sport : undefined;
-  const [kind, setKind] = useState<PracticeSession['kind']>(() => (workoutLog ? 'fitness' : fromHit?.kind ?? 'practice'));
+  const [kind, setKind] = useState<PracticeSession['kind']>(() => (workoutLog ? 'fitness' : fromHit?.kind ?? fromLive?.kind ?? 'practice'));
   // Opened cold, the workout can arrive after the page: fitness from then on.
   useEffect(() => { if (workoutLog) setKind('fitness'); }, [workoutLog]);
   const [won, setWon] = useState<'won' | 'lost' | null>(null);
@@ -403,12 +476,15 @@ export default function Compose() {
   // How long, in your log (Oct 3): simply the tracker's time, shown as one
   // line; a small Edit opens hours and minutes steppers, for a break taken off.
   // The post keeps the tracker's own time (the server writes it, migration 65).
-  const [logMinutes, setLogMinutes] = useState<number | null>(null);
+  // From Finish: the clock's time (as the log sheet had it, Oct 6), on the
+  // tracker's copy too; with no copy, the time the log and the post both take.
+  const [logMinutes, setLogMinutes] = useState<number | null>(() => (liveTwins.waiting && liveMins !== liveTwins.waiting.minutes ? liveMins : null));
   const [editLength, setEditLength] = useState(false);
   const [players, setPlayers] = useState<SessionPlayer[]>([]);
   const [opponentText, setOpponentText] = useState('');
   const [busy, setBusy] = useState<null | 'log' | 'share'>(null);
-  const [ticked, setTicked] = useState(false);
+  // Saved, and by which button: the moment plays on that button (a tick, the streak rolling up) before the page goes.
+  const [ticked, setTicked] = useState<false | 'log' | 'share'>(false);
   const [logError, setLogError] = useState('');
   const keysUp = useKeysUp();
   const shownKind = openedLog?.kind ?? kind;
@@ -424,15 +500,29 @@ export default function Compose() {
     ...(shownWon !== undefined ? { won: shownWon } : {}),
     ...(shownSets?.length ? { sets: shownSets } : {}),
     ...(logId ? { sessionId: logId } : {}),
+  } : liveOnly && fromLive ? {
+    // A live session with no tracker: what a session logged by hand carries (sessionFromLogged), its time the log's.
+    focus: loggedLabel({ kind: shownKind, won: shownWon }),
+    minutes: logMinutes ?? liveMins,
+    drills: [],
+    kind: shownKind,
+    day: liveDay(fromLive),
+    ...(shownWon !== undefined ? { won: shownWon } : {}),
+    ...(shownSets?.length ? { sets: shownSets } : {}),
+    ...(logId ? { sessionId: logId } : {}),
   } : null);
+  // The day the session counts for (streak, hours, the week): the tracker's, or the live session's start.
+  const logDay = opened?.type === 'tracker' ? activityDay(opened.activity) : liveOnly && fromLive ? liveDay(fromLive) : null;
+  // The time it goes in your log when it isn't edited: the tracker's, or the clock's.
+  const baseMinutes = opened?.type === 'tracker' ? opened.activity.minutes : liveMins;
   const cardSession = logMode ? sessionFor() : null;
   // "Practice — how did it go?": the hint follows what it was, never a time
   // of day. Left empty, the post says the day instead ("Saturday match").
   // A workout: "Run — how did it go?", and "Saturday run".
   const shownWhat = shownWorkout ? workoutName(shownWorkout) : KIND_LABEL[shownKind];
-  const logHint = opened?.type === 'tracker' ? shownWhat : '';
-  const logCaption = opened?.type === 'tracker'
-    ? `${new Date(`${activityDay(opened.activity)}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long' })} ${inSentence(shownWhat)}`
+  const logHint = logDay ? shownWhat : '';
+  const logCaption = logDay
+    ? `${new Date(`${logDay}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long' })} ${inSentence(shownWhat)}`
     : '';
   const logInput = () => ({
     kind,
@@ -442,15 +532,20 @@ export default function Compose() {
     // From a hit with nobody tagged and nothing typed, its people's names are kept as private words, as before.
     opponent: canTagKind(kind) ? (opponentText.trim() || (fromHit && !players.length ? fromHit.who : '')) : '',
     // Where it was, as the note ("At Alder Park"): the hit's place, else the court tagged here, so Your sessions names it.
-    note: fromHit ? `At ${fromHit.place}` : loggedCourt() ? `At ${loggedCourt()!.name}` : undefined,
+    // From Finish, the place typed at Start when there was no court.
+    note: fromHit ? `At ${fromHit.place}` : loggedCourt() ? `At ${loggedCourt()!.name}` : fromLive?.place ? `At ${fromLive.place}` : undefined,
     ...(opened?.type === 'tracker' && logMinutes && logMinutes !== opened.activity.minutes ? { minutes: logMinutes } : {}),
+    // A live session with no tracker: the clock's time, or the one picked under Edit.
+    ...(liveOnly ? { minutes: logMinutes ?? liveMins } : {}),
     // Where it was played, kept in your log (migration 130): the court on the post, else the hit's.
     ...(loggedCourt() ? { courtId: loggedCourt()!.id } : {}),
   });
-  /** The court a session logged here was played at: the one tagged on the post, or the hit it came from. */
+  /** The court a session logged here was played at: the one tagged on the post, or the hit (or live session) it came from. */
   const loggedCourt = (): { id: string; name: string } | null => {
     if (location.trim() && court && isMapCourtId(court.id)) return { id: court.id, name: court.name };
     if (fromHit?.placeId && isMapCourtId(fromHit.placeId)) return { id: fromHit.placeId, name: fromHit.place };
+    // Kept in your private log for anyone, as from a hit, even with no place on the post.
+    if (fromLive?.court && isMapCourtId(fromLive.court.id)) return { id: fromLive.court.id, name: fromLive.court.name };
     return null;
   };
   /**
@@ -497,7 +592,7 @@ export default function Compose() {
   const peopleLog = logMode ? openedLog : logOf(peoplePick);
   const peopleKind = logMode ? shownKind : peopleLog?.kind;
   const copyLog = peopleLog?.fromSessionId ? peopleLog : undefined;
-  const groupMode = !!peoplePick && !copyLog && canTagKind(peopleKind) && (logMode || !!peopleLog);
+  const groupMode = (!!peoplePick || liveOnly) && !copyLog && canTagKind(peopleKind) && (logMode || !!peopleLog);
   const peopleTags = groupMode && peopleLog && currentUserId ? tagsOnSession(sessionTags, peopleLog.id, currentUserId) : [];
   const standing = peopleTags.filter(isActive);
   const tagStatus: Record<ID, SessionTagStatus> = Object.fromEntries(peopleTags.map((t) => [t.taggedId, t.status]));
@@ -598,37 +693,80 @@ export default function Compose() {
     }).catch(() => undefined);
   };
   const added = !!body.trim() || !!media;
-  // One of Just log it and Share at a time, held from the first tap (the
-  // `busy` state is a frame behind a quick second tap).
+  // One of Save privately and Post session at a time, held from the first tap
+  // (the `busy` state is a frame behind a quick second tap).
   const acting = useRef(false);
-  // Just log it: into your log and your streak, nothing posted. A tick, a buzz, and the page sinks away.
+  /*
+   * The streak this session makes, over the two buttons ("Day 6 streak", with
+   * the flame): your log's own count (computeStats) with this session's day
+   * in it. Held at the moment it saves, so the number can roll up from what
+   * it was (the log, refreshed, would otherwise already have it).
+   */
+  const streakPreview = useMemo(() => (logMode && logDay ? tracker.streakWith(logDay) : null), [logMode, logDay, sessions, posts, stories]); // eslint-disable-line react-hooks/exhaustive-deps
+  const [savedStreak, setSavedStreak] = useState<{ now: number; before: number } | null>(null);
+  /** Saved: the tick on the button that did it, a reward tap, the streak rolling up. The page leaves a moment later. */
+  const celebrate = (by: 'log' | 'share') => {
+    setSavedStreak(streakPreview);
+    setTicked(by);
+    haptics.reward();
+  };
+  // A live session with no tracker, once logged here: a second try (Post session after a post that
+  // didn't go up) uses that log, never a second one.
+  const liveLogId = useRef<ID | null>(null);
+  /** Logs the session this page is for: the tracker's (tracker.save), or a live session's by hand. Returns the log's id; throws if it did not save. */
+  const saveLog = async (input: ReturnType<typeof logInput>): Promise<ID> => {
+    if (!liveOnly || !fromLive) return tracker.save(input);
+    if (liveLogId.current) return liveLogId.current;
+    const id = await actions.logSession({
+      minutes: input.minutes ?? liveMins,
+      kind: input.kind,
+      won: input.kind === 'match' ? input.won : undefined,
+      ...(canScore(input.kind) && input.sets?.length ? { sets: input.sets } : {}),
+      opponent: canTagKind(input.kind) ? input.opponent : '',
+      day: liveDay(fromLive),
+      ...(input.note ? { note: input.note } : {}),
+      ...(input.courtId ? { courtId: input.courtId } : {}),
+    });
+    liveLogId.current = id;
+    // Each person tagged is asked to accept; anyone the server turns away is said after.
+    const tagging = canTagKind(input.kind) ? input.players : [];
+    if (tagging.length) {
+      const refused = await actions.setSessionPlayers(id, tagging).catch(() => []);
+      for (const r of refused) showToast({ title: `${firstName(users.find((u) => u.id === r.id)?.name ?? '') || 'They'} wasn’t tagged`, body: r.why, icon: 'pricetag-outline' });
+    }
+    return id;
+  };
+  /** Logged (here or elsewhere): a live session it came from is done with, and its bar goes. */
+  const liveLogged = () => { if (fromLive) actions.endLiveSession(); };
+  // Save privately: into your log and your streak, nothing posted. A tick, a reward tap, the streak rolling up, and the page sinks away.
   const runJustLog = async () => {
-    if (acting.current || ticked || opened?.type !== 'tracker') return;
+    if (acting.current || ticked || !logDay) return;
     // A score that isn't one yet says why, and nothing is logged.
     if (!openedLog && canScore(kind) && scored.problem) { setLogError(scored.problem); return; }
     acting.current = true;
-    const activity = opened.activity;
+    const day = logDay;
     setBusy('log');
     setLogError('');
     const input = logInput();
     let logId: string | undefined;
     try {
-      try { logId = await tracker.save(input); } catch (e) {
+      try { logId = await saveLog(input); } catch (e) {
         // Logged already (on another phone, say): that is what was asked for.
         if (!(e instanceof Error && e.message === 'Already logged.')) throw e;
       }
+      liveLogged();
       setBusy(null);
-      setTicked(true);
-      const streak = tracker.streakWith(activityDay(activity));
-      const next = afterLog(logId, input, activityDay(activity), input.minutes ?? activity.minutes);
+      celebrate('log');
+      const streak = streakPreview ?? tracker.streakWith(day);
+      const minutes = input.minutes ?? baseMinutes;
+      const next = afterLog(logId, input, day, minutes);
       setTimeout(() => {
-        haptics.reward();
         closeMenu();
         // With an Instagram button on it: the session as a story picture. A beaten record is the moment instead.
-        showLogged(input.minutes ?? activity.minutes, { kind: input.kind, won: input.won, sets: input.sets, workout: input.kind === 'fitness' ? workoutSport : undefined }, streak, logId, next.record);
+        showLogged(minutes, { kind: input.kind, won: input.won, sets: input.sets, workout: input.kind === 'fitness' ? workoutSport : undefined }, streak, logId, next.record);
         // Then who else was at that court today, once the first note has been read.
         next.flyby(next.record ? 5500 : undefined);
-      }, 300);
+      }, CELEBRATE_MS);
     } catch {
       acting.current = false;
       setBusy(null);
@@ -638,18 +776,23 @@ export default function Compose() {
   const justLog = () => {
     if (!added) { void runJustLog(); return; }
     confirm({
-      title: 'Just log it?',
+      title: 'Save privately?',
       message: media?.kind === 'video' ? 'Your caption and clip won’t be posted.' : media ? 'Your caption and photo won’t be posted.' : 'Your caption won’t be posted.',
-      confirmLabel: 'Log it',
+      confirmLabel: 'Save',
       onConfirm: () => { void runJustLog(); },
     });
   };
-  // × logs nothing: the session stays "Not logged yet". Anything written or added is asked about first.
+  // × logs nothing: the session stays "Not logged yet" (a live one, "Finished · Log it" on its bar). Anything written or added is asked about first.
   const leaveLog = () => {
     if (!added || ticked) { goBackNow(); return; }
     confirm({ title: 'Discard post?', confirmLabel: 'Discard', destructive: true, onConfirm: goBackNow });
   };
   const hideIt = () => {
+    // From Finish: the live session thrown away, asked first (a tracker's copy of it stays waiting, as it was).
+    if (fromLive) {
+      confirm({ title: 'Discard this session?', message: 'The time won’t be logged.', confirmLabel: 'Discard', destructive: true, onConfirm: () => { actions.discardLiveSession(); goBackNow(); } });
+      return;
+    }
     if (opened?.type !== 'tracker') return;
     const id = opened.activity.id;
     confirm({ title: workoutLog ? 'Hide this workout?' : 'Hide this session?', message: 'It won’t count toward your streak.', confirmLabel: 'Hide', destructive: true, onConfirm: () => { actions.dismissActivity(id); goBackNow(); } });
@@ -682,7 +825,7 @@ export default function Compose() {
       return;
     }
 
-    if (opened && logMode) { void shareFromLog(); return; }
+    if ((opened || liveOnly) && logMode) { void shareFromLog(); return; }
 
     if (opened) {
       // The stats go on only while attached (and never twice: once your posts
@@ -765,24 +908,25 @@ export default function Compose() {
   // Share from "Log it": log it first (unless it already is), then post it with the log's
   // kind and result for the first draw; the server writes them again from the log (migration 65).
   const shareFromLog = async () => {
-    if (opened?.type !== 'tracker' || acting.current) { sent.current = false; return; }
+    if ((opened?.type !== 'tracker' && !liveOnly) || !logDay || acting.current) { sent.current = false; return; }
     if (!openedLog && !tracker.logged && canScore(kind) && scored.problem) { setLogError(scored.problem); sent.current = false; return; }
     acting.current = true;
-    const activity = opened.activity;
+    const day = logDay;
+    const trackerActivity = opened?.type === 'tracker' ? opened.activity : null;
     setBusy('share');
     setLogError('');
-    let logId = openedLog?.id ?? tracker.logged?.id;
+    let logId = openedLog?.id ?? tracker.logged?.id ?? liveLogId.current ?? undefined;
     // Logged here and now (not before this page opened): it can beat a record.
     const freshLog = !logId;
     const shareInput = logInput();
     if (openedLog) applyWho();
-    // Logged already from here (a Just log it that came back, say): the people picked go on it now.
+    // Logged already from here (a Save privately that came back, say): the people picked go on it now.
     else if (logId && canTagKind(kind) && players.length) {
       const id = logId;
       void actions.setSessionPlayers(id, players).catch(() => undefined);
     }
     if (!logId) {
-      try { logId = await tracker.save(shareInput); } catch (e) {
+      try { logId = await saveLog(shareInput); } catch (e) {
         // Logged already on another phone: post it all the same; the server
         // finds that log and puts what it says on the post (migration 65).
         if (!(e instanceof Error && e.message === 'Already logged.')) {
@@ -794,6 +938,7 @@ export default function Compose() {
         }
       }
     }
+    liveLogged();
     const firstPost = !posts.some((p) => p.authorId === currentUserId);
     // Logged, but the server didn't keep the score (a practice's, before migration 136): the post goes
     // up without it, as the server will show it, and the note after says so.
@@ -821,12 +966,14 @@ export default function Compose() {
     } catch {
       // Logged, but the post did not go: the session waits in Your sessions, ready to post.
       landOnFeed();
-      showToast({ title: 'Logged. The post didn’t go up.', icon: 'alert-circle-outline', action: { label: 'Try again', onPress: () => router.push({ pathname: '/compose', params: { activity: activity.id } }) } });
+      const again = trackerActivity ? { activity: trackerActivity.id } : logId ? { session: logId } : null;
+      showToast({ title: 'Logged. The post didn’t go up.', icon: 'alert-circle-outline', ...(again ? { action: { label: 'Try again', onPress: () => router.push({ pathname: '/compose', params: again }) } } : {}) });
       return;
     }
-    landOnFeed();
-    const day = activityDay(activity);
-    const next = afterLog(freshLog ? logId : undefined, shareInput, day, shareInput.minutes ?? activity.minutes);
+    // Posted: the tick on Post session and the streak rolling up, then on to the feed, where it goes up.
+    celebrate('share');
+    setTimeout(landOnFeed, CELEBRATE_SHARE_MS);
+    const next = afterLog(freshLog ? logId : undefined, shareInput, day, shareInput.minutes ?? baseMinutes);
     const record = freshLog ? next.record : null;
     // Said once the post has actually landed, never while it is still going up (or if it fails).
     if (firstPost) whenLanded(postId, () => setTimeout(() => showToast({ title: 'Your first post is up', body: 'Tap to invite the people you hit with.', icon: 'people-outline', href: '/invite?first=1' }), 1800));
@@ -962,7 +1109,7 @@ export default function Compose() {
       {entering ? null : <Reanimated.View entering={arrive(0)}><Pressable
         accessibilityRole="button"
         accessibilityLabel={!liveSession ? 'Session. Start one now, or log one you’ve played' : liveState(liveSession) === 'finished' ? 'Log your finished session' : 'Session in progress. Open it'}
-        onPress={() => (!liveSession ? setSessionChoice(true) : liveState(liveSession) === 'finished' ? router.replace({ pathname: '/log-session', params: { live: '1' } }) : router.replace('/live-session'))}
+        onPress={() => (!liveSession ? setSessionChoice(true) : liveState(liveSession) === 'finished' ? finishLive(liveSession, actions, { open: () => openLiveLog('replace') }) : router.replace('/live-session'))}
         style={[styles.choiceOption, tight && styles.choiceOptionTight, tighter && styles.choiceOptionTighter]}
       >
         <Ionicons name={liveSession ? 'radio-button-on' : 'stopwatch-outline'} size={choiceIcon} color={liveSession ? colors.open : colors.textMuted}/>
@@ -1010,7 +1157,7 @@ export default function Compose() {
     // not out to the menu. Stories go back to their own library.
     const editBack = () => {
       // A session's photo is optional: back drops it and returns to the post.
-      if (opened) { setMedia(null); setPicked(null); setStage('form'); return; }
+      if (opened || liveOnly) { setMedia(null); setPicked(null); setStage('form'); return; }
       if (params.mode === 'story') { setStage('library'); return; }
       setStage('choose');
       void openDevice(mode === 'clip' ? 'video' : 'all');
@@ -1108,16 +1255,17 @@ export default function Compose() {
             compactTitle
             bar={false}
             onBack={leaveLog}
-            // The dock has Share; while the keyboard hides the dock, Share is up here.
-            right={keysUp ? <Button label="Share" variant="secondary" onPress={submit} disabled={!opened || !postsChecked || !!busy || ticked} /> : undefined}
+            // The dock has Post session; while the keyboard hides the dock, Post is up here.
+            right={keysUp ? <Button label="Post" variant="secondary" onPress={submit} disabled={!(opened || liveOnly) || !postsChecked || !!busy || !!ticked} /> : undefined}
           >
             <View style={styles.logTop}>
               <LogComposerTop
                 session={cardSession}
                 people={cardPeople}
                 hidden={blockedIds}
-                waiting={!opened}
+                waiting={!opened && !liveOnly}
                 media={media}
+                replay={ticked ? 1 : 0}
                 preparing={preparing}
                 prepDone={prepDone}
                 onPhoto={() => { void openDevice('all'); }}
@@ -1169,7 +1317,22 @@ export default function Compose() {
                   hint={`Change it if you took a break. Your post keeps ${trackerName(opened.activity)}’s time.`}
                 />
               </Reanimated.View>
+            ) : liveOnly && liveMins ? (
+              // From Finish with no tracker: the clock's time, one line, with Edit (pauses are already left out).
+              <Reanimated.View layout={LinearTransition.duration(220)} style={styles.lengthBox}>
+                <TrackedLength
+                  minutes={logMinutes ?? liveMins}
+                  trackerMinutes={liveMins}
+                  tracker="your timer"
+                  open={editLength}
+                  onOpen={setEditLength}
+                  onChange={(m) => setLogMinutes(m === liveMins ? null : m)}
+                  hint="Paused time isn’t counted. Change it if you need to."
+                />
+              </Reanimated.View>
             ) : null}
+            {/* Your tracker's copy of this live session is in your log already: saving this too would count the game twice. */}
+            {liveOnly && liveTwins.logged ? <Text style={styles.twiceNote}>{`This session is already in your log, from ${fromWho(liveTwins.logged)}. Saving it again counts it twice.`}</Text> : null}
             <Reanimated.View layout={LinearTransition.duration(220)} style={styles.logRows}>
               {whoRow}
               {opened?.type === 'tracker' ? (
@@ -1179,7 +1342,12 @@ export default function Compose() {
               {/* One people row: "Who was there" on a match or a practice; on drills or fitness, Tag people once there is a photo or a clip to tag them in. */}
               {!whoRow && (media || tagged.length) ? <TagPlayers variant="row" line label="Tag people" tagged={tagged} onChange={setTagged} /> : null}
             </Reanimated.View>
-            {opened?.type === 'tracker' && !openedLog && opened.activity.status === 'new' ? (
+            {fromLive ? (
+              // From Finish: thrown away, asked first (the log sheet's own "Discard session").
+              <Pressable accessibilityRole="button" accessibilityLabel="Discard session" hitSlop={8} onPress={hideIt} style={({ pressed }) => [styles.hideIt, pressed && { opacity: 0.6 }]}>
+                <Text style={styles.hideItText}>Discard session</Text>
+              </Pressable>
+            ) : opened?.type === 'tracker' && !openedLog && opened.activity.status === 'new' ? (
               <Pressable accessibilityRole="button" accessibilityLabel={workoutLog ? 'Hide this workout' : 'Not tennis? Hide this session'} hitSlop={8} onPress={hideIt} style={({ pressed }) => [styles.hideIt, pressed && { opacity: 0.6 }]}>
                 <Text style={styles.hideItText}>{workoutLog ? 'Hide this workout' : 'Not tennis? Hide it'}</Text>
               </Pressable>
@@ -1187,7 +1355,18 @@ export default function Compose() {
             <View style={{ height: DOCK_ROOM + insets.bottom }} />
           </Screen>
           {keysUp ? null : (
-            <LogDock canJustLog={!openedLog} busy={busy} ticked={ticked} error={logError} onJustLog={justLog} onShare={submit} shareDisabled={!opened || !postsChecked} />
+            <LogDock
+              canJustLog={!openedLog}
+              busy={busy}
+              ticked={ticked}
+              error={logError}
+              onJustLog={justLog}
+              onShare={submit}
+              shareDisabled={!(opened || liveOnly) || !postsChecked}
+              label="Post session"
+              quietLabel="Save privately"
+              streak={savedStreak ?? streakPreview}
+            />
           )}
         </Reanimated.View>
       </View>
@@ -1471,6 +1650,7 @@ const styleDefinitions = StyleSheet.create({
   // How long: the tracker's time on one line, with a small Edit (TrackedLength, as Log your tennis has it).
   lengthBox: { marginTop: spacing.lg },
   hideIt: { alignSelf: 'center', paddingVertical: spacing.lg },
+  twiceNote: { ...typography.smallStrong, color: colors.text, marginTop: spacing.md },
   hideItText: { ...font('600'), fontSize: 13, color: colors.textMuted },
   hitFrame: { width: '100%', aspectRatio: 4 / 3, maxHeight: 520, borderRadius: radius.lg, overflow: 'hidden', backgroundColor: '#000', alignSelf: 'center' },
   hitMeta: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },

@@ -10,6 +10,7 @@ import { Wash } from '@/components/Wash';
 import type { User } from '@/data/types';
 import { useConnectRow } from '@/features/activity/autoLog';
 import { hasSessionStats } from '@/features/activity/format';
+import { finishLive } from '@/features/activity/finishLive';
 import { liveState } from '@/features/activity/liveSession';
 import { START_UNDER, useInviterToFollow } from '@/features/activity/nearYou';
 import { canReadContacts } from '@/features/contacts/phoneContacts';
@@ -113,7 +114,7 @@ export function ActivitiesStart({ topInset, bottomInset, nearCount, sessions = 0
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={!liveNow ? 'Start a session' : liveNow === 'finished' ? 'Log your finished session' : 'Session in progress. Open it'}
-          onPress={() => (!liveNow ? router.push('/start-session') : liveNow === 'finished' ? router.push({ pathname: '/log-session', params: { live: '1' } }) : router.push('/live-session'))}
+          onPress={() => (!liveNow ? router.push('/start-session') : liveNow === 'finished' && liveSession ? finishLive(liveSession, actions) : router.push('/live-session'))}
           style={({ pressed }) => [styles.row, offer && styles.rowLine, pressed && styles.pressed]}
         >
           <View style={styles.tile}><Ionicons name={liveNow ? 'radio-button-on' : 'play'} size={16} color={liveNow ? colors.open : colors.brand} /></View>

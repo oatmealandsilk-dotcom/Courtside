@@ -13,6 +13,14 @@ export interface ConfirmOptions {
   /** Runs only on yes. Cancel, a tap outside, Escape or Android's back does nothing. */
   onConfirm: () => void | Promise<void>;
   /**
+   * The safe answer's own word, where "Cancel" would not say it ("Keep
+   * going" under "Discard"). It stays the safe answer: a tap outside, Escape
+   * or Android's back still means it.
+   */
+  cancelLabel?: string;
+  /** Runs when that safe answer's own row is tapped (only then: a tap outside or Escape changes nothing). */
+  onCancel?: () => void;
+  /**
    * A second way to say yes, on its own row under the first ("Remove tag and
    * my session" under "Remove tag"). Rare: most questions have one answer.
    * A list makes a card of choices, each on its own row in order under the

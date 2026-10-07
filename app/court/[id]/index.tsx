@@ -20,6 +20,7 @@ import { isMapCourtId } from '@/features/places/courtName';
 import { openCourtReel, postFromCourt, sendCourtToChat, showCourtOnMap, startSessionHere, useCourtOpen } from '@/features/players/courtLink';
 import { formatMiles, milesBetween } from '@/features/players/geo';
 import { directionsTo } from '@/features/players/openInMaps';
+import { finishLive } from '@/features/activity/finishLive';
 import { liveState } from '@/features/activity/liveSession';
 import { isDesktopBrowser } from '@/lib/browserDevice';
 import { relativeTime } from '@/lib/format';
@@ -220,7 +221,7 @@ function CourtPage() {
           full
           variant="secondary"
           label={!liveNow ? 'Start a session here' : liveNow === 'finished' ? 'Log your session' : 'Session in progress'}
-          onPress={() => (!liveNow ? startSessionHere(here, access) : liveNow === 'finished' ? router.push({ pathname: '/log-session', params: { live: '1' } }) : router.push('/live-session'))}
+          onPress={() => (!liveNow ? startSessionHere(here, access) : liveNow === 'finished' && liveSession ? finishLive(liveSession, actions) : router.push('/live-session'))}
         />
       </View>
       <DottedRule />

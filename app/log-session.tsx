@@ -25,7 +25,6 @@ import { hitPrefill, prefillFor } from '@/features/hits/followUp';
 import { beatenBy, recordToast } from '@/features/records/records';
 import { flybyAfter } from '@/features/flyby/flyby';
 import { localDay } from '@/features/practice/stats';
-import { liveDay, liveMinutes, livePlace, liveTracker, startClock } from '@/features/activity/liveSession';
 import type { DetectedActivity, ID, PracticeSession, SessionPlayer, SessionTagStatus } from '@/data/types';
 import { confirm } from '@/lib/confirm';
 import { duration } from '@/lib/format';
@@ -90,25 +89,25 @@ const WORKOUT_KINDS: { value: string; label: string }[] = ['run', 'ride', 'swim'
  * change its length and day there (Oct 6). A copy of someone else's session
  * (from their tag) is theirs to tag, so it says so instead.
  *
- * Opened from Finish on a live session (?live=1, Oct 6), it comes filled in
- * from it: what it was, the day it started, how long the clock ran (one line,
- * "1h 12m from your timer", with Edit), and the court, kept in your log as
- * from a hit. "Save and post" saves it, then opens a new post with the
- * session's stats on it, where a photo goes on. Saved, the live session is
- * done with; closed without saving, it waits ("Log it" on its bar); "Discard
- * session" throws it away, asked first.
+ * A live session's Finish (Oct 7) opens the "Log it" composer instead
+ * (compose?live=1, see features/activity/finishLive); an address still
+ * saying log-session?live=1 is handed on there.
  */
 export default function LogSessionRoute() {
   const { activity, hit, edit, live } = useLocalSearchParams<{ activity?: string; hit?: string; edit?: string; live?: string }>();
-  const { liveSessionRead } = useApp();
   // A tracker's session is logged from the composer now (Oct 2): "Log it"
-  // opens a new post with the session on it, with "Just log it" beside Share.
+  // opens a new post with the session on it, with "Save privately" beside Post session.
   // This page still opens from the lock screen's alert and older alert rows
   // (the server's link says /log-session?activity=), so it hands those on.
   if (activity && !edit) return <ToComposer activity={activity} hit={hit} />;
-  // From Finish, opened cold (a reload on the sheet): the live session is read from the phone first.
-  if (live === '1' && !liveSessionRead) return null;
+  // A live session's Finish: the same composer, filled in from the clock (Oct 7).
+  if (live === '1' && !edit) return <ToLiveLog />;
   return <LogSession />;
+}
+
+function ToLiveLog() {
+  useEffect(() => { router.replace({ pathname: '/compose', params: { live: '1' } }); }, []);
+  return null;
 }
 
 /** What a tracker's session was, with a workout's distance: "Tennis", "Run · 3.1 mi". */
@@ -132,8 +131,8 @@ function ToComposer({ activity, hit }: { activity: string; hit?: string }) {
  */
 function LogSession() {
   const styles = useThemedStyles(styleDefinitions);
-  const { activity, hit, edit, focus, live } = useLocalSearchParams<{ activity?: string; hit?: string; edit?: string; focus?: string; live?: string }>();
-  const { actions, detectedActivities, remoteLoaded, ready, hitRequests, currentUserId, users, posts, stories, sessions, sessionTags, sessionTagsReady, liveSession } = useApp();
+  const { activity, hit, edit, focus } = useLocalSearchParams<{ activity?: string; hit?: string; edit?: string; focus?: string }>();
+  const { actions, detectedActivities, remoteLoaded, ready, hitRequests, currentUserId, users, posts, stories, sessions, sessionTags, sessionTagsReady } = useApp();
   // The box you type in stays above a phone's keyboard, and so do the names listed under it.
   const { scroller, onScroll, reveal } = useKeyboardReveal();
   // The hit it was opened for: the prompt's words, or the hit itself if the app was reloaded on the way.
@@ -144,16 +143,10 @@ function LogSession() {
     const h = hitRequests.find((x) => x.id === hit);
     return h && currentUserId ? prefillFor(h, currentUserId, users) : null;
   });
-  // The live session it was opened for (Finish), held from the moment the sheet opened.
-  const [fromLive] = useState(() => (live === '1' && !activity && !hit && !edit && liveSession?.userId === currentUserId ? liveSession : null));
-  const liveMins = fromLive ? liveMinutes(fromLive) : null;
-  const livePlaceName = fromLive ? livePlace(fromLive) : '';
   const [closeSignal, setCloseSignal] = useState(0);
   const close = () => setCloseSignal((n) => n + 1);
   // The session to post once the sheet has slid away, when the player chose to post it.
   const next = useRef<string | null>(null);
-  // A session logged by hand (here, from a live session) to post once the sheet has slid away.
-  const postLogged = useRef<string | null>(null);
   // Posting is offered only while the server has tennis sessions switched on for its source.
   const flags = useTennisFlags();
   const postable = (x: DetectedActivity) => sourceOn(x, flags);
@@ -191,10 +184,10 @@ function LogSession() {
   useEffect(() => { if (activity) void actions.loadMySessionPosts(); }, [activity]); // eslint-disable-line react-hooks/exhaustive-deps
   const alreadyPosted = !!done && !!postOf({ type: 'tracker', activity: done }, postedIndex(posts, currentUserId));
 
-  const [kind, setKind] = useState<PracticeSession['kind']>(fromHit?.kind ?? fromLive?.kind ?? 'practice');
+  const [kind, setKind] = useState<PracticeSession['kind']>(fromHit?.kind ?? 'practice');
   // A fitness session's kind ("run", "gym"), when picked.
   const [workout, setWorkout] = useState<string | undefined>();
-  const [minutes, setMinutes] = useState<number | null>(fresh ? fresh.minutes : fromHit ? fromHit.minutes : liveMins);
+  const [minutes, setMinutes] = useState<number | null>(fresh ? fresh.minutes : fromHit ? fromHit.minutes : null);
   const [editLength, setEditLength] = useState(false);
   // A session that arrives after the sheet opened starts on its own length too.
   const [preset, setPreset] = useState(fresh?.id);
@@ -219,18 +212,6 @@ function LogSession() {
   const [andPost, setAndPost] = useState(false);
   const [error, setError] = useState('');
 
-  // From a live session (Oct 6, owner: no double logging): your tracker's copy of the same game
-  // (liveTracker). One waiting is what Save logs, the live session's time with its heart rate and
-  // calories, so it is never offered again; held from Save on, so the sheet doesn't change as it goes.
-  // One already in your log is said, since saving again would count the game twice.
-  const liveTwins = useMemo(
-    () => (fromLive && currentUserId ? liveTracker(fromLive, detectedActivities, { me: currentUserId, flags }) : {}),
-    [fromLive, detectedActivities, currentUserId, flags],
-  );
-  const [heldTwin, setHeldTwin] = useState<DetectedActivity | null>(null);
-  const liveWith = heldTwin ?? liveTwins.waiting;
-  const liveDone = liveWith || saving ? undefined : liveTwins.logged;
-
   const firstOf = (id: ID) => users.find((u) => u.id === id)?.name.trim().split(/\s+/)[0] ?? 'They';
 
   /*
@@ -244,7 +225,7 @@ function LogSession() {
    * a refresh in a browser), the sheet waits a moment rather than offering
    * the by-hand log over a session already waiting (the same game, twice).
    */
-  const plain = !activity && !hit && !edit && !fromLive;
+  const plain = !activity && !hit && !edit;
   const unlogged = useMemo(
     () => (plain ? detectedActivities.filter((x) => x.userId === currentUserId && x.status === 'new' && sourceOn(x, flags)).sort((x, y) => y.startedAt.localeCompare(x.startedAt)) : []),
     [plain, detectedActivities, currentUserId, flags],
@@ -367,10 +348,9 @@ function LogSession() {
     setSaving(true);
     setAndPost(post);
     setError('');
-    // The day it counts for (streak, hours, the week): the tracker's own, a live session's, or the day picked under When.
-    const day = fresh ? activityDay(fresh) : fromLive ? liveDay(fromLive) : playedOn;
+    // The day it counts for (streak, hours, the week): the tracker's own, or the day picked under When.
+    const day = fresh ? activityDay(fresh) : playedOn;
     if (fresh) setFrozen(fresh);
-    if (liveWith) setHeldTwin(liveWith);
     // Who you played goes with a match or a practice only.
     const tagging = canTagKind(kind) ? players : [];
     // From a hit with nobody tagged and nothing typed, its people's names are kept as private words, as before.
@@ -381,17 +361,12 @@ function LogSession() {
       const id = await actions.logSession({
         minutes, kind, won: shownWon === 'won' ? true : shownWon === 'lost' ? false : undefined, ...(sets ? { sets } : {}), opponent: typed, day,
         ...(kind === 'fitness' && workout ? { workout } : {}),
-        // A tracker's session, or the tracker's copy of a live one: logged as that session, which then counts as logged (migration 58).
-        ...(fresh ? { activityId: fresh.id } : liveWith ? { activityId: liveWith.id } : {}),
+        // A tracker's session: logged as that session, which then counts as logged (migration 58).
+        ...(fresh ? { activityId: fresh.id } : {}),
         // From a hit: where it was, as the note, and the court itself in your log (migration 130).
         ...(fromHit ? { note: `At ${fromHit.place}` } : {}),
         ...(fromHit?.placeId ? { courtId: fromHit.placeId } : {}),
-        // From a live session: the same, from where it was started.
-        ...(livePlaceName ? { note: `At ${livePlaceName}` } : {}),
-        ...(fromLive?.court ? { courtId: fromLive.court.id } : {}),
       });
-      // Logged: the live session it came from is done with (its bar goes).
-      if (fromLive) actions.endLiveSession();
       // Each person tagged is asked to accept; anyone the server turns away is said after.
       if (tagging.length) {
         void actions.setSessionPlayers(id, tagging).then((refused) => {
@@ -402,10 +377,7 @@ function LogSession() {
       // Posting goes straight on to the new post, which only opens once the
       // save went through, and says "Posted" when shared. A toast there would
       // sit over its Share button for a few seconds.
-      // From a live session your tracker also timed, the same: the post opens on the tracker's session, with its numbers to share.
-      if (post && (fresh || liveWith)) next.current = (fresh ?? liveWith)!.id;
-      // From a live session, "Save and post": the new post opens with its stats, where a photo goes on.
-      else if (post && fromLive) postLogged.current = id;
+      if (post && fresh) next.current = fresh.id;
       // The server didn't keep the score (a practice's, before migration 136): said here too, never shown as saved.
       else if (asked) showToast(tookScoreNotKept(id)
         ? { title: 'Logged without the score', body: `Scores aren’t ready yet. ${asked} will be asked to accept.`, icon: 'alert-circle-outline', long: true }
@@ -428,16 +400,10 @@ function LogSession() {
           const people = users;
           flybyAfter({ courtId: fromHit.placeId, courtName: fromHit.place, day, ask: actions.flyby, users: () => people, skip: fromHit.playerIds, delayMs: record ? 5500 : undefined });
         }
-        // The same for a live session at a court.
-        if (fromLive?.court) {
-          const people = users;
-          flybyAfter({ courtId: fromLive.court.id, courtName: fromLive.court.name, day, ask: actions.flyby, users: () => people, skip: tagging.map((p) => p.id), delayMs: record ? 5500 : undefined });
-        }
       }
       close();
     } catch (e) {
       setFrozen(null);
-      setHeldTwin(null);
       const said = e instanceof Error ? e.message : 'That session didn’t save. Try again.';
       // Logged already (on another phone, say): the sheet catches up and says so.
       if (said === 'Already logged.') void actions.refreshActivities();
@@ -446,7 +412,7 @@ function LogSession() {
     }
   };
 
-  const heroDay = fromLive ? liveDay(fromLive) : playedOn;
+  const heroDay = playedOn;
   const hide = (x: DetectedActivity) => confirm({
     title: 'Hide this session?',
     message: 'It won’t count toward your streak.',
@@ -471,25 +437,13 @@ function LogSession() {
     <SheetTitle title="Log a session" line="Your tracker picked these up. Pick one, or log one yourself." lines={2} onClose={close} />
   ) : fromHit ? (
     <SheetTitle title="How was the hit?" line={`${fromHit.place}${fromHit.who ? ` · with ${fromHit.who}` : ''}. Only you see this.`} lines={2} onClose={close} />
-  ) : fromLive ? (
-    <SheetTitle title="Log your session" line={`${livePlaceName ? `${livePlaceName} · started` : 'Started'} ${startClock(fromLive)}${liveWith ? ` · with ${fromWho(liveWith)}` : ''}. Only you see this.`} lines={2} onClose={close} />
   ) : (
     <SheetTitle title="Log a session" line="Counts toward your streak. Only you see it." onClose={close} />
   );
-  // A tracker's numbers, yours alone: its own session's, or those of its copy of a live one, which go into your log with it.
-  const numbers = fresh ? privateLine(fresh) : liveWith ? privateLine(liveWith) : '';
+  // A tracker's numbers, yours alone.
+  const numbers = fresh ? privateLine(fresh) : '';
   // Once the sheet is gone: the new post with this session's stats, in this page's place, or back where it was opened from.
-  const dismissed = () => (next.current ? router.replace({ pathname: '/compose', params: { activity: next.current } })
-    : postLogged.current ? router.replace({ pathname: '/compose', params: { session: postLogged.current } })
-      : router.back());
-  // From a live session: thrown away, asked first; nothing is logged.
-  const discardLive = () => confirm({
-    title: 'Discard this session?',
-    message: 'The time won’t be logged.',
-    confirmLabel: 'Discard',
-    destructive: true,
-    onConfirm: () => { actions.discardLiveSession(); close(); },
-  });
+  const dismissed = () => (next.current ? router.replace({ pathname: '/compose', params: { activity: next.current } }) : router.back());
 
   return (
     <DragSheet fitContent closeSignal={closeSignal} onDismissed={dismissed} peekFraction={edit && !timeEditable ? 0.46 : 0.7} header={header}>
@@ -601,8 +555,6 @@ function LogSession() {
       ) : (
         <ScrollView ref={scroller} onScroll={onScroll} scrollEventThrottle={32} contentContainerStyle={formBody} keyboardShouldPersistTaps="handled">
           {gone ? <Text style={styles.notice}>That session is no longer here.</Text> : null}
-          {/* Your tracker's copy of this live session is in your log already: saving this too would count the game twice. */}
-          {liveDone ? <Text style={styles.notice}>{`This session is already in your log, from ${fromWho(liveDone)}. Saving it again counts it twice.`}</Text> : null}
           {numbers ? <Text style={styles.numbers}>{numbers}</Text> : null}
           {/* The session as it will go in your log, in the sessions' own look: what and when, then the time, big. */}
           {minutes && !fresh ? (
@@ -638,17 +590,6 @@ function LogSession() {
                 onOpen={setEditLength}
                 onChange={(m) => setMinutes(m)}
               />
-            ) : fromLive && liveMins ? (
-              // From a live session: the clock's time, one line, with Edit (pauses are already left out).
-              <TrackedLength
-                minutes={minutes ?? liveMins}
-                trackerMinutes={liveMins}
-                tracker="your timer"
-                open={editLength}
-                onOpen={setEditLength}
-                onChange={(m) => setMinutes(m)}
-                hint="Paused time isn’t counted. Change it if you need to."
-              />
             ) : (
               // The usual lengths a tap each, and Custom for any other (Oct 6).
               <LengthPicker minutes={minutes} onChange={setMinutes} />
@@ -681,15 +622,15 @@ function LogSession() {
               />
             </Section>
           ) : null}
-          {/* A tracker's session already knows its day, and so does a live one. */}
-          {fresh || fromLive ? null : (
+          {/* A tracker's session already knows its day. */}
+          {fresh ? null : (
             <Section title="When">
               <DayPicker value={playedOn} onChange={setPlayedOn} />
             </Section>
           )}
           {error ? <Text style={styles.error}>{error}</Text> : null}
           <Submit label="Save" onPress={() => { void save(); }} disabled={!minutes} busy={saving && !andPost} waiting="Pick how long" />
-          {(fresh && postable(fresh)) || fromLive ? (
+          {fresh && postable(fresh) ? (
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Save and post"
@@ -705,10 +646,6 @@ function LogSession() {
           {fresh ? (
             <Pressable accessibilityRole="button" accessibilityLabel={isTennisActivity(fresh) ? 'Not tennis? Hide this session' : 'Hide this workout'} hitSlop={8} onPress={() => hide(fresh)} style={({ pressed }) => [styles.hide, pressed && { opacity: 0.6 }]}>
               <Text style={styles.hideText}>{isTennisActivity(fresh) ? 'Not tennis? Hide it' : 'Hide this workout'}</Text>
-            </Pressable>
-          ) : fromLive ? (
-            <Pressable accessibilityRole="button" accessibilityLabel="Discard session" hitSlop={8} onPress={discardLive} style={({ pressed }) => [styles.hide, pressed && { opacity: 0.6 }]}>
-              <Text style={styles.hideText}>Discard session</Text>
             </Pressable>
           ) : null}
         </ScrollView>

@@ -16,8 +16,9 @@ import type { CourtLifeActions } from '@/store/courtLife';
  * Start runs a clock and, at a court on the map, checks you in there with
  * the court sheet's own "I'm playing here" (checkInAtCourt, migration 63),
  * so its rules are the ones that decide who sees you: nothing new is shared.
- * Finish stops the clock and checks you out; the log sheet then fills itself
- * in from it (app/log-session?live=1). The session is kept on this phone, for
+ * Finish stops the clock and checks you out; the "Log it" composer then fills
+ * itself in from it (app/compose?live=1, Oct 7; under five minutes Finish asks
+ * instead: features/activity/finishLive). The session is kept on this phone, for
  * each account, so it survives the app closing; the server never has it.
  */
 

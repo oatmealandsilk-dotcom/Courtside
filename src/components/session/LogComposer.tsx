@@ -3,14 +3,16 @@ import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
-import Reanimated, { FadeOut } from 'react-native-reanimated';
+import Reanimated, { FadeOut, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { PreparingRing } from '@/components/PreparingRing';
 import type { ID, SessionDetail } from '@/data/types';
+import { useReducedMotion } from '@/lib/useReducedMotion';
 import { colors, font, lift, spacing, withAlpha } from '@/theme';
 import { SessionCard, type CardPerson } from './SessionCard';
+import { CountUp } from './CountUp';
 import { DrawnTick } from './DrawnTick';
 import { PostPreview, type PreviewMedia } from './PostPreview';
 
@@ -41,7 +43,7 @@ export function useLogSizes() {
  * you write. While the session is still on its way (opened cold from an
  * alert), a waiting card stands in, and the tiles wait.
  */
-export function LogComposerTop({ session, people, hidden, waiting, media, preparing, prepDone, onPhoto, onClip, onEdit, onRemove, error, preview }: {
+export function LogComposerTop({ session, people, hidden, waiting, media, preparing, prepDone, onPhoto, onClip, onEdit, onRemove, error, preview, replay = 0 }: {
   session: SessionDetail | null;
   people?: CardPerson[];
   hidden: ID[];
@@ -56,6 +58,8 @@ export function LogComposerTop({ session, people, hidden, waiting, media, prepar
   error?: string;
   /** What the preview needs besides the picture and the stats. */
   preview: Omit<React.ComponentProps<typeof PostPreview>, 'media' | 'session' | 'hidden' | 'onEdit' | 'onRemove'>;
+  /** Changed once saved: the card's numbers count up again, the moment it is logged (Oct 7). */
+  replay?: number;
 }) {
   const styles = useThemedStyles(styleDefinitions);
   const size = useLogSizes();
@@ -75,7 +79,7 @@ export function LogComposerTop({ session, people, hidden, waiting, media, prepar
     <View>
       <View style={styles.top}>
         {session ? (
-          <SessionCard session={session} width={size.cardW} play={play} people={people} hidden={hidden} />
+          <SessionCard key={replay} session={session} width={size.cardW} play={play} people={people} hidden={hidden} />
         ) : (
           <View style={[styles.waitCard, { width: size.cardW, height: size.cardH, borderRadius: 20 * (size.cardW / 358), backgroundColor: colors.surfaceAlt }]} accessible accessibilityLabel={waiting ? 'Getting your session' : 'No session'}>
             {waiting ? <CourtSpinner size={34} /> : null}
@@ -111,46 +115,88 @@ function Tile({ icon, label, height, busy, done, disabled, onPress }: { icon: Re
 }
 
 /**
- * The two buttons pinned to the bottom of the composer: "Just log it"
- * (private: it goes in your log and your streak, nothing is posted) and
- * Share. Already logged, Share alone. A tick replaces the words once logged.
- * Every posting screen has this green Share (a New post or New clip too,
- * with Share alone; an Instant's says "Post Instant").
+ * The two buttons pinned to the bottom of the composer: the quiet one
+ * ("Save privately" on a session's "Log it": it goes in your log and your
+ * streak, nothing is posted) and the green one ("Post session"). Already
+ * logged, the green one alone. Every posting screen has this green button
+ * (a New post or New clip too, with Share alone; an Instant's says "Post
+ * Instant").
+ *
+ * On a session (Oct 7, owner: logging "has to feel more rewarding through
+ * the buttons"), the streak it makes sits over the two, with the app's
+ * flame: "Day 6 streak". Once saved, the button that did it draws a tick in
+ * place of its words, and the streak line gives a small bump in a soft
+ * green pill, its number rolling up when this session made it grow. With
+ * Reduce Motion it simply changes.
  */
-export function LogDock({ canJustLog, busy, ticked, error, onJustLog, onShare, shareDisabled, label = 'Share' }: {
+export function LogDock({ canJustLog, busy, ticked, error, onJustLog, onShare, shareDisabled, label = 'Share', quietLabel = 'Save privately', streak }: {
   canJustLog: boolean;
   busy: null | 'log' | 'share';
-  ticked: boolean;
+  /** Saved, and by which button (false: not yet). */
+  ticked: false | 'log' | 'share';
   error: string;
   onJustLog: () => void;
   onShare: () => void;
   shareDisabled?: boolean;
-  /** The green button's word: Share, or "Post Instant". */
+  /** The green button's word: Share, "Post session", or "Post Instant". */
   label?: string;
+  /** The quiet button's word. */
+  quietLabel?: string;
+  /** The streak with this session in it (`now`), and before it: the line over the buttons. */
+  streak?: { now: number; before: number } | null;
 }) {
   const styles = useThemedStyles(styleDefinitions);
   const insets = useSafeAreaInsets();
-  const off = !!busy || ticked;
+  const reduced = useReducedMotion();
+  const off = !!busy || !!ticked;
+  // The streak line's bump, the moment it is saved.
+  const bump = useSharedValue(1);
+  useEffect(() => {
+    if (!ticked || reduced) return;
+    bump.value = withSequence(withTiming(1.12, { duration: 170 }), withSpring(1, { damping: 11, stiffness: 210 }));
+  }, [ticked, reduced, bump]);
+  const bumpStyle = useAnimatedStyle(() => ({ transform: [{ scale: bump.value }] }));
+  const grew = !!streak && streak.now > streak.before;
+  const streakWords = !streak ? '' : streak.now >= 2 ? `Day ${streak.now} streak` : ticked ? 'Day 1 streak' : 'Starts your streak';
   return (
     <View pointerEvents="box-none" style={[styles.dock, { paddingBottom: insets.bottom + 8 }]}>
       <LinearGradient pointerEvents="none" colors={[withAlpha(colors.bg, 0), colors.bg, colors.bg]} locations={[0, 0.26, 1]} style={StyleSheet.absoluteFill} />
       {error ? <Text style={styles.dockError} accessibilityLiveRegion="polite">{error}</Text> : null}
+      {streak ? (
+        <Reanimated.View
+          style={[styles.streak, ticked ? styles.streakSaved : null, bumpStyle]}
+          accessible
+          accessibilityLabel={ticked ? `Saved. ${streakWords}` : grew ? `${streakWords} with this session` : streakWords}
+          accessibilityLiveRegion="polite"
+        >
+          <Ionicons name="flame" size={16} color={colors.clay} />
+          {streak.now >= 2 ? (
+            <View style={styles.streakWords}>
+              <Text style={styles.streakText}>Day </Text>
+              {/* Rolls up from the streak before this session, once saved. */}
+              <CountUp value={streak.now} from={grew ? streak.before : streak.now} play={!!ticked && grew} duration={650} style={styles.streakText} maxFontSizeMultiplier={1.3} />
+              <Text style={styles.streakText}> streak</Text>
+              {grew && !ticked ? <Text style={styles.streakMore}> with this session</Text> : null}
+            </View>
+          ) : <Text style={styles.streakText}>{streakWords}</Text>}
+        </Reanimated.View>
+      ) : null}
       <View style={styles.dockRow}>
         {canJustLog ? (
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Just log it. Private, counts toward your streak"
+            accessibilityLabel={`${quietLabel}. Only you see it, and it counts toward your streak`}
             accessibilityState={{ disabled: off, busy: busy === 'log' }}
             disabled={off}
             onPress={onJustLog}
-            style={({ pressed }) => [styles.pill, styles.quiet, pressed && styles.pressed, off && busy !== 'log' && !ticked && styles.off]}
+            style={({ pressed }) => [styles.pill, styles.quiet, pressed && styles.pressed, off && busy !== 'log' && ticked !== 'log' && styles.off]}
           >
-            {ticked ? (
+            {ticked === 'log' ? (
               <DrawnTick size={22} color={colors.brand} />
             ) : busy === 'log' ? <ActivityIndicator size="small" color={colors.text} /> : (
               <>
-                <Ionicons name="eye-off-outline" size={16} color={colors.textMuted} />
-                <Text style={styles.quietText}>Just log it</Text>
+                <Ionicons name="lock-closed-outline" size={15} color={colors.textMuted} />
+                <Text style={styles.quietText} numberOfLines={1}>{quietLabel}</Text>
               </>
             )}
           </Pressable>
@@ -161,17 +207,18 @@ export function LogDock({ canJustLog, busy, ticked, error, onJustLog, onShare, s
           accessibilityState={{ disabled: off || shareDisabled, busy: busy === 'share' }}
           disabled={off || shareDisabled}
           onPress={onShare}
-          style={({ pressed }) => [styles.pill, styles.share, { flex: canJustLog ? 1.25 : 1 }, pressed && styles.pressed, (off || shareDisabled) && busy !== 'share' && styles.off]}
+          style={({ pressed }) => [styles.pill, styles.share, { flex: canJustLog ? 1.25 : 1 }, pressed && styles.pressed, (off || shareDisabled) && busy !== 'share' && ticked !== 'share' && styles.off]}
         >
-          {busy === 'share' ? <ActivityIndicator size="small" color={colors.brandInk} /> : <Text style={styles.shareText}>{label}</Text>}
+          {ticked === 'share' ? <DrawnTick size={22} color={colors.brandInk} />
+            : busy === 'share' ? <ActivityIndicator size="small" color={colors.brandInk} /> : <Text style={styles.shareText} numberOfLines={1}>{label}</Text>}
         </Pressable>
       </View>
     </View>
   );
 }
 
-/** How much room the dock takes, so the rows above can scroll clear of it. */
-export const DOCK_ROOM = 54 + 8 + 40;
+/** How much room the dock takes, so the rows above can scroll clear of it (the streak line over the buttons included). */
+export const DOCK_ROOM = 54 + 8 + 40 + 34;
 
 const styleDefinitions = StyleSheet.create({
   top: { flexDirection: 'row', gap: 10, alignItems: 'flex-start' },
@@ -190,5 +237,11 @@ const styleDefinitions = StyleSheet.create({
   quietText: { ...font('600'), fontSize: 16, color: colors.text },
   share: { backgroundColor: colors.brand },
   shareText: { ...font('600'), fontSize: 16, color: colors.brandInk },
+  streak: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', alignSelf: 'center', gap: 5, marginBottom: 6, minHeight: 28, paddingHorizontal: 12, borderRadius: 14 },
+  // Saved: the line sits in a soft green pill for the moment before the page goes.
+  streakSaved: { backgroundColor: colors.brandDim },
+  streakWords: { flexDirection: 'row', alignItems: 'baseline' },
+  streakText: { ...font('600'), fontSize: 14, lineHeight: 19, color: colors.text, padding: 0, margin: 0 },
+  streakMore: { ...font('500'), fontSize: 14, lineHeight: 19, color: colors.textMuted },
 });
 
