@@ -30,30 +30,37 @@ import { JUST_OPEN_CLASS, OPEN_CLASS, POP_MS } from '@/components/map/markers';
  *    group of three about 50 m apart splits a zoom step and a half sooner
  *    than before. Their names make way instead (names()).
  *  - Names make way, as on Apple's maps: a player's name shows only where it
- *    is clear of every other face and of the names already shown; you,
- *    whoever is picked, then the leading players place theirs first. A face
+ *    is clear of every other face and of the names already shown; the
+ *    picked player, then the leading players place theirs first. A face
  *    never moves for a name, and a hidden name comes back as you zoom in.
- *  - Rings: players on one spot (a court), or so close that zooming in will
- *    not part them before street level (zoom 17), fan out in a small ring
- *    round it from zoom 15 in (Snap Map style), the leader at the top, each
+ *    Yours always shows.
+ *  - Rings: players on one spot (a court), or within a face of each other
+ *    at street level (zoom 17, about 17 m), fan out in a small ring round
+ *    it from zoom 15 in (Snap Map style), the leader at the top, each
  *    joined to the spot by a dotted line, the spot marked by a dot (or the
  *    court itself, which stays put under them and lets its words go: the
- *    ring says who is there). Only how they are drawn: every pin in a ring
- *    still stands at the spot they share, a ring's width out at most, and
- *    zooming out folds it back into "+N".
- *  - You, and whoever is picked, never gather into anyone: players crowding
- *    you (or them) gather into a small "+N" beside your pin instead, clear
- *    of your name; ones on your very spot ring round you from zoom 15 in,
- *    never in the strip below you where your name is.
+ *    ring says who is there). Only where the ring has room: one whose faces
+ *    would land on another pin or ring stays "+N" until you zoom in, and
+ *    a crowd too big for a phone (over a dozen) stays "+N" (a tap lists
+ *    them in rows). Only how they are drawn: every pin in a ring still
+ *    stands at the spot they share (within about 17 m of their own), a
+ *    ring's width out at most, and zooming out folds it back into "+N".
+ *  - You, and whoever is picked, never gather into anyone: players whose
+ *    faces crowd yours (or would sit on your name) gather into a small "+N"
+ *    beside your pin instead (and anyone that "+N" would cover); ones on
+ *    your very spot ring round you from zoom 15 in, over the top, clear of
+ *    your name however long it is. The picked player's pin is the same but
+ *    for the name (their card says who they are), so picking a player never
+ *    pulls the faces round them into a "+N" unless they crowd their face.
  *  - Room for players: a court someone is standing on lifts above their
  *    disc, and its hit flag above that; a court a player's name would cover
  *    moves aside (or folds away until you zoom in). Zoomed out (below 12),
  *    a flag on top of a court or a player folds into it as a small dot.
  *  - Tapping a gathered pin zooms in just far enough that it is one pin no
  *    longer (it splits, or fans out in its ring), and half a step more if
- *    they all still fit on screen there. Courts or hit flags on the very
- *    same spot never split by zooming, so a tap fans them out in rows just
- *    under the spot instead (room for each).
+ *    they all still fit on screen there. Ones that never part by zooming
+ *    (courts or hit flags on the very same spot, a crowd too big to ring)
+ *    fan out in rows just under the spot instead (room for each).
  *  - Only pins in or near the view are made; the rest wait until the map
  *    comes to rest near them. At most 40 glide at once, nearest the middle.
  *  - The full map, just opened: its first pins (players, courts and hits
@@ -150,7 +157,7 @@ export interface PinEngineOptions {
 /** Makes a PinEngine: `factory(map, maplibregl, options)`. */
 export type PinEngineFactory = (map: unknown, maplibre: unknown, options: PinEngineOptions) => PinEngine;
 
-/** The room each kind needs on the full map. Players' (a name is about 100 wide, a disc and its name about 70 tall) is kept for you and whoever is picked, so your names always stay clear; everyone else needs room for their face only (pinEngine's FACE_IN). */
+/** The room each kind needs on the full map. Players on the full map gather by their faces (and your name), not by this box (pinEngine's FACE_IN); it still sizes the engine's search grid, and the still card keeps its own (CARD_BOX). */
 /** Courts gather from about twice a crowd's width apart, so a whole city shows a handful of numbers, not a dozen (Oct 6, owner: "Numbers + fewer"); closer in they split. */
 export const FULL_MAP_BOX: NonNullable<PinEngineOptions['box']> = { p: [100, 70], pFar: [74, 70], c: [120, 64], h: [92, 28] };
 /** On the still card: faces only. */
@@ -163,8 +170,9 @@ var BADGE='<'+'!--cs-badge-->',STACK='<'+'!--cs-stack-->';
 var GLIDES=40,FOLD_BELOW=12,CHIP_W=44,FAN_W=104,FAN_H=80,FAN_COLS=3,WAVE_MS=595,POP_IN_MS=340;
 // Faces on the full map: two players gather once their discs (48 across, the white part about 40) are nearer than their width less this, so at the start of a half step the white discs may overlap by a sliver (6 px), and by its middle not at all.
 var FACE_IN=14;
-// Rings: from zoom 15 in (RING_FROM), players zooming in would not part before zoom 17 (RING_SURE, as a level: half steps) fan round their spot, RING_R out (more for a big ring: each face and a gap, RING_GAP, round it); round you, clear of your disc by RING_FIX, and never in the strip below you where your name is (RING_ARC: the rest of the circle).
-var RING_FROM=15,RING_SURE=34,RING_R=62,RING_GAP=8,RING_FIX=22,RING_ARC=Math.PI*13/9;
+// Rings: from zoom 15 in (RING_FROM), players on one spot (every one within a face of the leader at zoom 17, RING_SURE: about 17 m) fan round it, RING_R out (more for a big ring: each face and a gap, RING_GAP, round it), and only where the ring has room (no other pin under it) and fits a phone (RING_MAX out at most);
+// round you, clear of your disc by RING_FIX, and never on your name (at most RING_DROP below level each side, less for a long name).
+var RING_FROM=15,RING_SURE=17,RING_R=62,RING_GAP=8,RING_FIX=22,RING_DROP=40,RING_MAX=120;
 function wx(lng){return (lng+180)/360*512}
 function wy(lat){var s=Math.sin(lat*Math.PI/180);s=Math.min(Math.max(s,-0.9999),0.9999);return (0.5-Math.log((1+s)/(1-s))/(4*Math.PI))*512}
 function has(c,n){return (' '+(c||'')+' ').indexOf(' '+n+' ')>=0}
@@ -184,17 +192,37 @@ return function(map,ml,o){
   function levelNow(){return Math.max(ZMIN*2,Math.min(ZMAX*2,Math.floor(map.getZoom()*2+1e-6)))}
   function zoomOf(l){return l/2}
   function fixed(it){return !!(it&&(it.fix||it.sel))}
+  // Half the width of a player's name at a zoom (it drops the "· 2h" below FOLD_BELOW).
+  function nameW(it,z){return ((z<FOLD_BELOW?(it.fws||it.fw):it.fw)||0)/2}
+  // A ring of these players (on) round the leader's spot, in screen pixels: how far out (R), where the first face sits (a0) and how far
+  // round the next (step). Null when it would not fit a phone. mid: the leader (you, or whoever is picked) stays on the spot and the
+  // others go round, over the top, never on the leader's name: each side, at most RING_DROP below level, less for a long name.
+  function ringGeom(lead,on,mid,z){
+    var n=on.length,d=0;if(!n||!lead)return null;on.forEach(function(id){d=Math.max(d,(items[id]&&items[id].ds)||48)});
+    var R,span;
+    if(!mid){span=2*Math.PI;R=Math.max(RING_R,n*(d+RING_GAP)/span)}
+    else{
+      var ld=lead.ds||48,w=nameW(lead,z),t=ld/2-4+5,b=t+21,fr=d/2+2;
+      // How far below level a face this far out may sit and stay clear of the name (a pill hung just under the disc).
+      var drop=function(Rr){for(var deg=RING_DROP;deg>0;deg-=2){var a=deg*Math.PI/180,x=Rr*Math.cos(a),y=Rr*Math.sin(a),qx=Math.min(x,w),qy=Math.max(t,Math.min(y,b));if((x-qx)*(x-qx)+(y-qy)*(y-qy)>=fr*fr)return a}return 0};
+      R=ld/2+d/2+RING_FIX;span=Math.PI+2*drop(R);R=Math.max(R,n*(d+RING_GAP)/span);span=Math.PI+2*drop(R);
+    }
+    if(R>RING_MAX)return null;
+    var step=span/n;
+    // Round the full circle from the top (two, or any even number, sit level); round you, from the left over the top to the right.
+    return {R:R,d:d,step:step,mid:mid,a0:mid?Math.PI-(span-Math.PI)/2+step/2:-Math.PI/2-(n%2?0:step/2)};
+  }
   // Each kind's pins gathered at every zoom level: level z gathers the groups of level z+1 whose room overlaps a group's lead.
   // You and whoever is picked lead their own group and are never gathered into another; a picked court or hit stays out altogether.
-  // Each group also counts how many groups of street level (RING_SURE) it is made of (p): one, and zooming in will not part them before then, so they ring.
+  // Players' groups from zoom 15 in also say whether they ring (ring: see ringGeom).
   function build(){
     tree={};
     ['p','c','h'].forEach(function(k){
       var list=[];for(var id in items){var it=items[id];if(it.k===k&&!it.solo&&!(it.sel&&k!=='p'))list.push(it)}
       if(list.length<2){tree[k]=null;return}
       list.sort(function(a,b){return ((fixed(b)?1:0)-(fixed(a)?1:0))||((a.r||0)-(b.r||0))||(a.id<b.id?-1:1)});
-      var groups=list.map(function(it){return {lead:it.id,fx:fixed(it),m:[it.id],x:wx(it.lng),y:wy(it.lat),d:it.ds||48,p:1}});
-      var per={},faces=FULL&&k==='p';
+      var groups=list.map(function(it){return {lead:it.id,fx:fixed(it),m:[it.id],x:wx(it.lng),y:wy(it.lat),d:it.ds||48}});
+      var per={},faces=FULL&&k==='p',s17=Math.pow(2,RING_SURE);
       // How wide a group's pin is at a zoom: its leader's (a player's own width with or without the "· 2h"; anything else, the kind's box).
       function wide(g,z,dflt){var it=items[g.lead];if(k!=='p'||!it)return dflt;var w=z<FOLD_BELOW?(it.fws||it.fw):it.fw;return w?Math.max(w,it.ds||0):dflt}
       for(var li=ZMAX*2;li>=ZMIN*2;li--){
@@ -204,17 +232,36 @@ return function(map,ml,o){
         for(i=0;i<groups.length;i++){var key=Math.floor(groups[i].x/r)+':'+Math.floor(groups[i].y/r);(cell[key]=cell[key]||[]).push(i)}
         for(i=0;i<groups.length;i++){
           if(used[i])continue;used[i]=1;
-          var g=groups[i],c={lead:g.lead,fx:g.fx,m:g.m.slice(),x:g.x,y:g.y,d:g.d,p:g.p},cx=Math.floor(g.x/r),cy=Math.floor(g.y/r);
+          var g=groups[i],c={lead:g.lead,fx:g.fx,m:g.m.slice(),x:g.x,y:g.y,d:g.d},cx=Math.floor(g.x/r),cy=Math.floor(g.y/r);
+          // You, on the full map: your name, a pill just under your disc (nw: half its width; nt to nb: its top and bottom).
+          var gl=items[g.lead],mine=faces&&g.fx&&!!gl&&!!gl.fix,nw=0,nt=0,nb=0;if(mine){nw=nameW(gl,z)/s;nt=(g.d/2-4+5)/s;nb=nt+21/s}
+          // pass 0: who crowds; pass 1, only once someone has (you, or whoever is picked): anyone the "+N" beside you would cover.
+          for(var pass=0;pass<(faces&&g.fx?2:1);pass++){if(pass&&c.m.length<2)break;
           for(var dx=-1;dx<=1;dx++)for(var dy=-1;dy<=1;dy++){var b=cell[(cx+dx)+':'+(cy+dy)];if(!b)continue;
-            for(var j=0;j<b.length;j++){var q=b[j];if(used[q]||groups[q].fx)continue;var h=groups[q],ddx=h.x-g.x,ddy=h.y-g.y,near;
+            for(var j=0;j<b.length;j++){var q=b[j];if(used[q]||groups[q].fx)continue;var h=groups[q],ddx=h.x-g.x,ddy=h.y-g.y,near,hr=(h.d/2-4)/s;
+              if(faces&&pass){var ox=ddx-(g.d/2+20)/s,lim=hr+20/s;near=ox*ox+ddy*ddy<lim*lim}
               // Players on the full map crowd when their faces would cover more than a sliver of each other (their names make way: names()).
-              if(faces&&!g.fx){var rr=((g.d+h.d)/2-FACE_IN)/s;near=ddx*ddx+ddy*ddy<rr*rr}
+              // The picked player's the same, so picking someone never pulls the faces round them into a "+N" (their card names them).
+              else if(faces){var rr=((g.d+h.d)/2-FACE_IN)/s;near=ddx*ddx+ddy*ddy<rr*rr;
+                // Yours never makes way: a face that would sit on your name gathers beside you instead.
+                if(!near&&mine){var qx=Math.max(-nw,Math.min(ddx,nw)),qy=Math.max(nt,Math.min(ddy,nb));near=(ddx-qx)*(ddx-qx)+(ddy-qy)*(ddy-qy)<hr*hr}}
               // Anything else crowds when its room overlaps: side by side, half of each one's width; one above the other, a disc and its name.
-              // You (or whoever is picked) keep that room for your name, and reach further to the right, where the "+N" beside you goes.
+              // You (or whoever is picked) reach further to the right, where the "+N" beside you goes.
               else{var reach=(g.w+h.w)/2+(g.fx&&ddx>0?CHIP_W:0);near=Math.abs(ddx)<reach/s&&Math.abs(ddy)<Hh}
-              if(near){used[q]=1;c.m=c.m.concat(h.m);c.p+=h.p}}}
-          if(li>=RING_SURE)c.p=1;
+              if(near){used[q]=1;c.m=c.m.concat(h.m)}}}}
           next.push(c);
+        }
+        // Rings, from zoom 15 in: a group whose players all stand within a face of its leader at zoom 17 (so the ring is never far from
+        // anyone's own spot) and that fits a phone; then only where it has room: one whose faces would land on another pin (or ring) stays "+N".
+        if(faces&&z>=RING_FROM){
+          next.forEach(function(c){c.ring=null;if(c.m.length<2)return;
+            var one=c.m.every(function(id){var it=items[id],lim=((c.d+(it.ds||48))/2-FACE_IN)/s17,ex=wx(it.lng)-c.x,ey=wy(it.lat)-c.y;return ex*ex+ey*ey<=lim*lim});
+            if(one)c.ring=ringGeom(items[c.lead],c.m.filter(function(id){return !(c.fx&&id===c.lead)}),c.fx,z)});
+          var cut=[];
+          next.forEach(function(c){if(!c.ring)return;var F=(c.ring.R+c.ring.d/2)/s;
+            // Another pin's room: a ring's, or a face (yours, or the picked player's, with the name under it).
+            next.forEach(function(h){if(h===c)return;var Fh=(h.ring?h.ring.R+h.ring.d/2:h.d/2+(h.fx?21:0))/s,lim=F+Fh-FACE_IN/s,ex=h.x-c.x,ey=h.y-c.y;if(ex*ex+ey*ey<lim*lim){cut.push(c);if(h.ring)cut.push(h)}})});
+          cut.forEach(function(c){c.ring=null});
         }
         per[li]=next;groups=next;
       }
@@ -223,14 +270,14 @@ return function(map,ml,o){
   }
   // Where something sits at this level, in the level's own pixels (its widest-apart point, so room worked out here holds all through the level).
   function lp(lat,lng){var s=Math.pow(2,zoomOf(lvl));return {x:wx(lng)*s,y:wy(lat)*s}}
-  // Whether a group of players fans out in a ring at level li (see ring()).
-  function ringy(k,g,li){return FULL&&k==='p'&&zoomOf(li)>=RING_FROM&&g.p===1&&g.m.length>1}
+  // Whether a group fans out in a ring at its level (build() decides: players on one spot, with room round them; see ring()).
+  function ringy(g){return !!(g&&g.ring)}
   // What shows at this level: every pin on its own, gathered, or in a ring round its spot; then room made for players.
   function desired(){
     var out={},own={},inFan={},zl=zoomOf(lvl);rings=[];
     // Too far out for it (its mz): left out at this level, so it fades away and nothing is made for it.
     function off(id){var it=items[id];return !!it&&it.mz!=null&&zl<it.mz}
-    // Courts or hit flags on one spot, tapped (players ring instead): in rows just under the spot, a name's width apart, the court's badge in sight on the spot.
+    // Courts or hit flags on one spot, or a crowd of players too big to ring, tapped: in rows just under the spot, a name's width apart, the court's badge in sight on the spot.
     if(fan){var live=fan.m.filter(function(id){return !!items[id]&&!off(id)});
       var n=live.length,cols=Math.min(FAN_COLS,n),flead=fan.lead&&items[fan.lead],top=flead?((flead.ds||48)/2+24+10+24):46;
       live.forEach(function(id,i){var row=Math.floor(i/cols),inRow=Math.min(cols,n-row*cols),col=i-row*cols;inFan[id]=1;
@@ -239,7 +286,7 @@ return function(map,ml,o){
     ['p','c','h'].forEach(function(k){var per=tree[k];if(!per)return;per[lvl].forEach(function(g){
       var m=g.m.filter(function(id){return !inFan[id]&&!off(id)});if(!m.length)return;
       if(m.length===1){out[m[0]]=items[m[0]];own[m[0]]=m[0];return}
-      if(ringy(k,g,lvl)){ring(g,m,out,own);return}
+      if(ringy(g)){ring(g,m,out,own);return}
       var lead=items[g.lead],cid='k:'+k+':'+g.lead,rest,html;
       if(g.fx){
         // You (or whoever is picked) stay as you are; the others gather into a small "+N" beside you.
@@ -259,17 +306,15 @@ return function(map,ml,o){
     room(out);
     return {out:out,own:own};
   }
-  // Players on one spot, or so near it that zooming in will not part them before street level: fanned round it in a small ring, the
-  // leader at the top (two, or any even number, sit level), each joined to the spot by a dotted line from a dot on it. You, or whoever
-  // is picked, stay on the spot itself with the others round you, never in the strip below you where your name is. Only how they are
-  // drawn: each pin stands at the spot (the leader's), its face a ring's width out, and the ring keeps its size on screen as you zoom.
+  // Players on one spot (a court; or a few metres apart, where zooming in would not part them before street level): fanned round it
+  // in a small ring, the leader at the top (two, or any even number, sit level), each joined to the spot by a dotted line from a dot
+  // on it. You, or whoever is picked, stay on the spot itself with the others round you, never on your name. Only how they are
+  // drawn: each pin stands at the spot (the leader's, within about 17 m of their own), its face a ring's width out, and the ring keeps
+  // its size on screen as you zoom.
   function ring(g,m,out,own){
     var lead=items[g.lead]||items[m[0]],mid=!!g.fx&&m.indexOf(g.lead)>=0,on=m.filter(function(id){return !(mid&&id===g.lead)});
     on.sort(function(a,b){return (a===g.lead?-1:b===g.lead?1:0)||((items[a].r||0)-(items[b].r||0))||(a<b?-1:1)});
-    var n=on.length,d=0;on.forEach(function(id){d=Math.max(d,items[id].ds||48)});
-    var span=mid?RING_ARC:2*Math.PI,step=span/n,R=Math.max(mid?(lead.ds||48)/2+d/2+RING_FIX:RING_R,n*(d+RING_GAP)/span);
-    // Round the full circle from the top; round you, from the left over the top to the right.
-    var a0=mid?Math.PI/2+(2*Math.PI-RING_ARC)/2+step/2:-Math.PI/2-(n%2?0:step/2),S=Math.ceil(R+4),from=mid?(lead.ds||48)/2+2:8,legs='';
+    var G=ringGeom(lead,on,mid,zoomOf(lvl))||g.ring,R=G.R,step=G.step,a0=G.a0,S=Math.ceil(R+4),from=mid?(lead.ds||48)/2+2:8,legs='';
     if(mid){out[g.lead]=lead;own[g.lead]=g.lead}
     on.forEach(function(id,i){var a=a0+i*step,x=Math.cos(a),y=Math.sin(a),it=items[id],to=R-(it.ds||48)/2+4;
       out[id]=ext(it,{lat:lead.lat,lng:lead.lng,fx:Math.round(R*x),fy:Math.round(R*y)});own[id]=id;
@@ -279,7 +324,8 @@ return function(map,ml,o){
     rings.push(lp(lead.lat,lead.lng));
   }
   // Names make way, as on Apple's maps: a player's name shows only where it is clear of every other face and of the names already
-  // shown; you, whoever is picked, then the leading players (pinList's rank) place theirs first. A face never moves for a name.
+  // shown; the picked player, then the leading players (pinList's rank) place theirs first. A face never moves for a name. Yours
+  // always shows, first (a face that would sit on it gathers beside you, and rings keep off it).
   function names(out){
     if(!FULL)return;
     var ps=[],shown=[],id,it,short=zoomOf(lvl)<FOLD_BELOW;
@@ -290,6 +336,7 @@ return function(map,ml,o){
     ps.forEach(function(p){if(!p.pl)return;var w=((short?(p.it.fws||p.it.fw):p.it.fw)||0)/2;if(!w)return;
       // The name hangs just under the disc, about 21 tall.
       var t=p.y+p.r+5,b=t+21,ok=true,i;
+      if(!p.o){shown.push({x:p.x,w:w,t:t,b:b});return}
       for(i=0;i<ps.length&&ok;i++){var q=ps[i];if(q===p)continue;var cx=Math.max(p.x-w,Math.min(q.x,p.x+w)),cy=Math.max(t,Math.min(q.y,b));if((q.x-cx)*(q.x-cx)+(q.y-cy)*(q.y-cy)<q.r*q.r)ok=false}
       for(i=0;i<shown.length&&ok;i++){var e=shown[i];if(Math.abs(e.x-p.x)<e.w+w+3&&e.t<b+2&&e.b>t-2)ok=false}
       if(ok)shown.push({x:p.x,w:w,t:t,b:b});else out[p.id]=ext(p.it,{cls:((p.it.cls||'')+' cs-nn').trim(),nn:1})});
@@ -425,9 +472,9 @@ return function(map,ml,o){
     if(o.gathered)o.gathered();
     var key=cl.lead||cl.m[0],at=null;
     if(per)for(var li=lvl+1;li<=ZMAX*2&&at==null;li++){var g=null;per[li].forEach(function(x){if(x.m.indexOf(key)>=0)g=x});
-      if(!g||ringy(cl.k,g,li)||cl.m.some(function(id){return g.m.indexOf(id)<0}))at=zoomOf(li)}
+      if(!g||ringy(g)||cl.m.some(function(id){return g.m.indexOf(id)<0}))at=zoomOf(li)}
     if(at==null){
-      // Never one pin no longer by zooming in (courts or hit flags on the very same spot): fanned in rows once the map is there.
+      // Never one pin no longer by zooming in (courts or hit flags on the very same spot, a crowd too big to ring): fanned in rows once the map is there.
       // The level is taken then, so a zoom frame still to come does not fold the fan straight back.
       var it0=items[key];if(!it0)return;
       var go=function(){flying=false;if(dead)return;if(raf){cancelAnimationFrame(raf);raf=0}lvl=levelNow();fan={k:cl.k,m:cl.m.slice(),lead:cl.lead,lat:it0.lat,lng:it0.lng,lvl:lvl};render('fan')};
