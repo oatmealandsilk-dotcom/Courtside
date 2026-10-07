@@ -10,6 +10,7 @@ import { colors, radius } from '@/theme';
 import { Wash } from '@/components/Wash';
 import { CLOSE_MS, OPEN_SPRING, STAGE_EASING, getStage, setFull, stageDip, stageTop, subscribe as onStageChange, type StageGeo } from '@/features/feed/commentStage';
 import { useAndroidBack } from '@/lib/androidBack';
+import { HAND_IN_MS, HAND_OUT_MS, arrivingHeight, handOverSheet, takeHandOver } from '@/components/sheetHandOver';
 
 const EASE = Easing.bezier(0.22, 0.61, 0.36, 1);
 /** Out of the way fast: a quick ease-in, the way a card is tossed down. */
@@ -86,6 +87,14 @@ export function DragSheet(props: {
    * drag down does: it slides away, and beforeClose is asked first.
    */
   ownBack?: boolean;
+  /**
+   * Bump this number to hand the sheet over to the next page's sheet instead
+   * of sliding it away (Start, to the live page): its contents fade where
+   * they are, onDismissed goes to the next page, and that page's sheet opens
+   * already up at this height (components/sheetHandOver). Ignored once a
+   * close has begun. The comments stage ignores it.
+   */
+  handOverSignal?: number;
 }) {
   return props.stage ? <StageSheet {...props} geo={props.stage} /> : <PlainSheet {...props} />;
 }
@@ -100,6 +109,7 @@ function PlainSheet({
   contentHeight,
   beforeClose,
   ownBack = false,
+  handOverSignal = 0,
 }: {
   header: React.ReactNode;
   children: React.ReactNode;
@@ -110,6 +120,7 @@ function PlainSheet({
   contentHeight?: number;
   beforeClose?: () => boolean;
   ownBack?: boolean;
+  handOverSignal?: number;
 }) {
   const styles = useThemedStyles(styleDefinitions);
   const { height: windowHeight } = useWindowDimensions();
@@ -130,8 +141,13 @@ function PlainSheet({
   // The sheet is drawn as a card of height (fullHeight − translateY) pinned to
   // the bottom edge, rather than a full-height card slid down — so the bottom
   // of its body (a comment box, a send button) is always on screen.
-  const translateY = useSharedValue(fullHeight);
-  const backdropOpacity = useSharedValue(0);
+  // Handed over by the page before (Start, to the live page): it opens
+  // already up where that sheet stood, the dim already there, and only its
+  // contents come in (sheetHandOver).
+  const [arriving] = useState(arrivingHeight);
+  const translateY = useSharedValue(arriving ? Math.max(0, fullHeight - arriving) : fullHeight);
+  const backdropOpacity = useSharedValue(arriving ? 1 : 0);
+  const contentOpacity = useSharedValue(arriving ? 0 : 1);
   const dismissedRef = useRef(false);
   // On its way out (×, a tap outside, a drag down, Back): from then on nothing
   // may move it back up. A fitted sheet re-measures its contents as it slides
@@ -148,12 +164,28 @@ function PlainSheet({
   // Where the sheet was last sent to rest (its top edge), so a change in its
   // contents moves it only when that place really changes.
   const restAt = useRef(openOffset);
+  const latestOpen = useRef(openOffset);
+  latestOpen.current = openOffset;
+  // Whether it has been sent to rest yet (a sheet handed over waits for its contents' height first).
+  const sent = useRef(false);
   useEffect(() => {
     // Settled however the opening ends: at rest, or cut short by the keyboard
     // taking it up ("Add a comment") or a finger on the handle.
     restAt.current = openOffset;
-    translateY.value = withSpring(openOffset, SPRING, () => { runOnJS(settled)(); });
+    takeHandOver();
     backdropOpacity.value = withTiming(1, { duration: 260, easing: EASE });
+    const rise = () => {
+      if (sent.current || touched.current || closing.value) return;
+      sent.current = true;
+      restAt.current = latestOpen.current;
+      translateY.value = withSpring(latestOpen.current, SPRING, () => { runOnJS(settled)(); });
+    };
+    if (!arriving) { rise(); return undefined; }
+    // Handed over: it waits where it is for its contents' height (the effect
+    // below), so it settles once, never up to the opening height and back down.
+    contentOpacity.value = withTiming(1, { duration: HAND_IN_MS, easing: EASE });
+    const late = setTimeout(rise, 250);
+    return () => clearTimeout(late);
     // Only the opening height depends on these; re-running on resize would
     // fight a drag in progress.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -166,6 +198,7 @@ function PlainSheet({
   // twin measures again on every change for the same reason.
   useEffect(() => {
     if (touched.current || dismissedRef.current || closing.value || openOffset === restAt.current) return;
+    sent.current = true;
     restAt.current = openOffset;
     translateY.value = withSpring(openOffset, SPRING);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -234,6 +267,26 @@ function PlainSheet({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [closeSignal]);
 
+  // Handed over to the next page's sheet: nothing moves it from here, its
+  // contents fade where they are, and the next sheet opens at this height.
+  const handCount = useRef(handOverSignal);
+  useEffect(() => {
+    if (handOverSignal === handCount.current) return;
+    handCount.current = handOverSignal;
+    if (closing.value || dismissedRef.current) return;
+    closing.value = true;
+    const leave = () => {
+      if (dismissedRef.current) return;
+      handOverSheet(fullHeight - translateY.value);
+      finish();
+    };
+    fallback.current = setTimeout(leave, HAND_OUT_MS + 200);
+    contentOpacity.value = withTiming(0, { duration: HAND_OUT_MS, easing: EASE }, (done) => {
+      if (done) runOnJS(leave)();
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [handOverSignal]);
+
   const startY = useSharedValue(0);
   const markTouched = () => { touched.current = true; };
   const pan = Gesture.Pan()
@@ -268,6 +321,7 @@ function PlainSheet({
   // Clear of the home bar when the keyboard is down; on top of the keyboard when it is up.
   const bodyStyle = useAnimatedStyle(() => ({ paddingBottom: Math.max(keyboard.height.value, insets.bottom) }));
   const backdropStyle = useAnimatedStyle(() => ({ opacity: backdropOpacity.value }));
+  const contentStyle = useAnimatedStyle(() => ({ opacity: contentOpacity.value }));
 
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
@@ -279,10 +333,10 @@ function PlainSheet({
         <GestureDetector gesture={pan}>
           <View style={styles.handle} onLayout={(e) => { const h = Math.ceil(e.nativeEvent.layout.height); if (h !== headH) setHeadH(h); }}>
             <View style={styles.grabber} />
-            {header}
+            <Animated.View style={contentStyle}>{header}</Animated.View>
           </View>
         </GestureDetector>
-        <Animated.View style={[styles.body, bodyStyle]}>{children}</Animated.View>
+        <Animated.View style={[styles.body, bodyStyle, contentStyle]}>{children}</Animated.View>
       </Animated.View>
     </View>
   );

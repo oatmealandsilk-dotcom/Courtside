@@ -62,21 +62,24 @@ function keep(key: string, picture: Blob) {
 
 let drawing = false;
 /** Draws the first spot in line, if nothing is being drawn already. */
-function drawNext(key: string, lat: number, lng: number, width: number, height: number, look: ReturnType<typeof lookFor>) {
+function drawNext(key: string, lat: number, lng: number, zoom: number, width: number, height: number, look: ReturnType<typeof lookFor>) {
   if (drawing) return;
   drawing = true;
   // Through the big map's file, the one door to the map engine (see WebMap).
   import('@/components/map/WebMap')
-    .then((m) => m.snapshotMap({ lat, lng, zoom: THUMB_ZOOM, width, height, look }))
+    .then((m) => m.snapshotMap({ lat, lng, zoom, width, height, look }))
     .then((picture) => keep(key, picture))
     .catch(() => { failed.add(key); queue.leave(key); })
     .finally(() => { drawing = false; queue.emit(); });
 }
 
-/** A still map of a spot, `width` × `height`, in the theme's own map colours. Takes no taps: the card it sits in does. */
-export function CourtMapThumb({ lat, lng, width, height }: { lat: number; lng: number; width: number; height: number }) {
+/**
+ * A still map of a spot, `width` × `height`, in the theme's own map colours. Takes no taps: the card it sits in does.
+ * `zoom`: how close in (a chat's card shows the streets around, Start a session the court's own block).
+ */
+export function CourtMapThumb({ lat, lng, width, height, zoom = THUMB_ZOOM }: { lat: number; lng: number; width: number; height: number; zoom?: number }) {
   const { theme } = useTheme();
-  const key = thumbKey(theme, lat, lng, width, height);
+  const key = thumbKey(theme, lat, lng, width, height, zoom);
   const look = useMemo(() => thumbLook(lookFor(themes[theme])), [theme]);
   const shot = useSyncExternalStore(queue.subscribe, () => shots.get(key) ?? null, () => null);
   const turn = useSyncExternalStore(queue.subscribe, () => queue.first() === key && !drawing, () => false);
@@ -91,7 +94,7 @@ export function CourtMapThumb({ lat, lng, width, height }: { lat: number; lng: n
     });
     return () => { gone = true; if (!shots.has(key)) queue.leave(key); };
   }, [key]);
-  useEffect(() => { if (turn && !shot) drawNext(key, lat, lng, width, height, look); }, [turn, shot, key]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (turn && !shot) drawNext(key, lat, lng, zoom, width, height, look); }, [turn, shot, key]); // eslint-disable-line react-hooks/exhaustive-deps
   const [shown, setShown] = useState(false);
   useEffect(() => { setShown(false); }, [shot]);
   return (
