@@ -66,7 +66,7 @@ maplibregl.setWorkerUrl(`${BASE}/maplibre/maplibre-gl-worker.mjs`);
  * marks. The controls laid over it are shared with the phone.
  */
 export function NearbyMap(props: NearbyMapProps) {
-  const { me, players, onOpen, onExpand, expanded = false, onBack, at, locationOn, locating = false, onToggleLocation, focusCourt, focusHit, focusUser, focusSpot, focusPlace, holdPins = false, hitCount, inviting = false } = props;
+  const { me, players, onOpen, onExpand, expanded = false, onBack, at, locationOn, locating = false, onToggleLocation, focusCourt, focusHit, focusUser, focusSpot, focusPlace, holdPins = false, hitCount, inviting = false, cardHeight } = props;
   const styles = useThemedStyles(styleDefinitions);
   const { theme, night } = useTheme();
   const insets = useSafeAreaInsets();
@@ -112,8 +112,8 @@ export function NearbyMap(props: NearbyMapProps) {
   const cardCenter = model.city ?? start.center;
   const cardPlayers = model.inCity;
   const onCardCount = useMemo(
-    () => (expanded ? 0 : cardPlayers.filter((p) => onCard(cardCenter, p.at, cardW || windowW - 2 * spacing.lg)).length),
-    [expanded, cardPlayers, cardCenter.lat, cardCenter.lng, cardW, windowW], // eslint-disable-line react-hooks/exhaustive-deps
+    () => (expanded ? 0 : cardPlayers.filter((p) => onCard(cardCenter, p.at, cardW || windowW - 2 * spacing.lg, cardHeight ?? HEIGHT)).length),
+    [expanded, cardPlayers, cardCenter.lat, cardCenter.lng, cardW, windowW, cardHeight], // eslint-disable-line react-hooks/exhaustive-deps
   );
   // Zoomed out past about a city: the court pins step aside (pinList), and a note says so.
   // Told the moment the zoom crosses it (as on the phone), kept in a ref so a pinch only sets it on the crossing.
@@ -355,12 +355,12 @@ export function NearbyMap(props: NearbyMapProps) {
 
   if (!expanded && !model.city) {
     // A city still being looked up holds the card's place, looking as the map will while it loads; no city at all asks for one.
-    return model.cityPending ? <View style={styles.card}><MapCardLoading /></View> : <CitylessCard onOpenMap={onExpand} />;
+    return model.cityPending ? <View style={[styles.card, cardHeight ? { height: cardHeight } : null]}><MapCardLoading /></View> : <CitylessCard onOpenMap={onExpand} />;
   }
   if (!expanded) {
     const failed = load.status === 'failed' && !cardShown;
     return (
-      <View style={styles.card} onLayout={(e) => { const w = Math.round(e.nativeEvent.layout.width); if (w > 0 && w !== cardW) setCardW(w); }}>
+      <View style={[styles.card, cardHeight ? { height: cardHeight } : null]} onLayout={(e) => { const w = Math.round(e.nativeEvent.layout.width); if (w > 0 && w !== cardW) setCardW(w); }}>
         {/* Under the map, until it has drawn and faded in over it. Given up on, a tap tries again; still loading, it opens the full map. */}
         {!loaderGone ? (failed ? <MapCardFailed /> : <MapCardLoading />) : null}
         {!cardShown ? (

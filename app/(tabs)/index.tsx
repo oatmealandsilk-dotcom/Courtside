@@ -28,6 +28,7 @@ import * as haptics from '@/lib/haptics';
 import { Avatar, Button, EmptyState } from '@/components/ui';
 import { LevelPill } from '@/components/LevelPill';
 import { ActivitiesStart, NearYouTag } from '@/components/ActivitiesStart';
+import { FIND_PLAYERS_ROOM, FeedFindPlayers, useFindPlayersShown } from '@/components/FeedFindPlayers';
 import { FollowPill } from '@/components/FollowPill';
 import { START_UNDER, useNearYouAuthors } from '@/features/activity/nearYou';
 import { useConnectRow } from '@/features/activity/autoLog';
@@ -1253,6 +1254,34 @@ function Home({ scope, topRow, paused, onChrome }: {
     const t = setTimeout(() => setPlayable(true), curtainDown ? 120 : 1500);
     return () => clearTimeout(t);
   }, [warmed, curtainDown, scope]);
+  // Short posts in For you (owner, Oct 6: "for short post we put the find
+  // players near you thing there"): Community's map card fills the room the
+  // first one of a visit leaves, if it fits there and has players near you to
+  // show; every other short post just has its comment line pulled up (PostCard).
+  // Each written post's page says how much room it leaves; the card goes on the
+  // first one, from the page on screen on, with room enough. Once there it stays
+  // for the visit, and never moves on to another page. Not until Home has been
+  // on screen and the curtain is gone: a map drawing out of sight would hold the
+  // opening curtain (warmup).
+  const findShown = useFindPlayersShown();
+  const findCard = useCallback((room: number) => <FeedFindPlayers room={room} />, []);
+  const [roomy, setRoomy] = useState<ReadonlySet<string>>(() => new Set());
+  const noteRoom = useCallback((postId: string, room: number) => {
+    const fits = room >= FIND_PLAYERS_ROOM;
+    setRoomy((prev) => {
+      if (prev.has(postId) === fits) return prev;
+      const next = new Set(prev);
+      if (fits) next.add(postId); else next.delete(postId);
+      return next;
+    });
+  }, []);
+  const findHost = useRef<{ visit: number; id: string }>({ visit: -1, id: '' });
+  if (!scope && findShown && playable && shownOnce.current && findHost.current.visit !== visit) {
+    const at = feed.findIndex((item, index) => index >= active && item.type === 'post' && roomy.has(item.post.id));
+    const host = at >= 0 ? feed[at] : undefined;
+    if (host?.type === 'post') findHost.current = { visit, id: host.post.id };
+  }
+  const findHostId = !scope && findShown && findHost.current.visit === visit && roomy.has(findHost.current.id) ? findHost.current.id : null;
   // Photos and clip covers are fetched outright; a page reports itself ready when its picture lands.
   useEffect(() => {
     for (const item of feed.slice(0, AHEAD)) {
@@ -1332,6 +1361,10 @@ function Home({ scope, topRow, paused, onChrome }: {
         <View style={styles.endTile}><MarkDraw size={30} /></View>
         <Text style={styles.endTitle}>You're all caught up.</Text>
         <Text style={styles.endBody}>That's every session from you and the people you follow. Log your next one after you play.</Text>
+        {/* And the way to do it, right here (Oct 6, owner: "it should say log an activity … or it could say both"). */}
+        <View style={styles.endActions}>
+          <Button label="Log an activity" onPress={() => router.push('/log-session')} full />
+        </View>
       </View>
     </View>
   );
@@ -1442,7 +1475,7 @@ function Home({ scope, topRow, paused, onChrome }: {
                 ? Math.max(top, insets.top + 12 + (removedTall[post.id] ?? REMOVED_GUESS) + 16) : top);
 
               if (item.type === 'tip') return <TipPage key="tip" onSubmit={actions.submitTip} />;
-              if (item.type === 'act-start') return <ActivitiesStart key="act-start" topInset={insets.top + 64} bottomInset={barInset > 0 ? barInset + 8 : POST_BOTTOM} nearCount={feedItems.filter((i) => i.type === 'post' && nearAuthors.has(i.post.authorId)).length} />;
+              if (item.type === 'act-start') return <ActivitiesStart key="act-start" topInset={insets.top + 64} bottomInset={barInset > 0 ? barInset + 8 : POST_BOTTOM} nearCount={feedItems.filter((i) => i.type === 'post' && nearAuthors.has(i.post.authorId)).length} sessions={feedItems.length} />;
               if (item.type === 'challenge') return <ChallengePage key="challenge" challenge={challenge} />;
 
               if (item.type === 'hit') {
@@ -1601,6 +1634,8 @@ function Home({ scope, topRow, paused, onChrome }: {
                         onMore={() => router.push({ pathname: '/post-menu', params: { id: post.id } })}
                         clamp={8}
                         active={active === index && focused}
+                        under={post.id === findHostId ? findCard : undefined}
+                        onRoom={scope ? undefined : (room) => noteRoom(post.id, room)}
                       />
                     </View>
                     {removedOver(post)}
