@@ -12,8 +12,8 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import { AUDIENCES, EVERYONE_FRIENDS_LINE } from './audience';
 
 /*
- * "Who sees it first" on the hit form (migration 76): three cards you tap,
- * the way Start a group asks who can join. Everyone is today's hit; Invite
+ * "Who sees it first" on the hit form (migration 76): three answers you tap,
+ * rows of one grouped list. Everyone is today's hit; Invite
  * first and Only people I invite open a row of the people you follow to
  * tick (the players from "Ask to hit" already ticked, first), and "My
  * groups" when you are in one. Only people you can message are offered: the
@@ -26,9 +26,11 @@ export const HIT_INVITE_MAX = 20;
 /** `forFriends`: the poster is not known to be an adult, so "Everyone" reaches only their followers and says so. */
 export function AudienceCards({ value, onChange, forFriends = false }: { value: HitAudience; onChange: (v: HitAudience) => void; forFriends?: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
+  // One grouped list, a row per answer on a hairline (Oct 7: three lifted cards with a ringed one read heavy):
+  // the chosen row's icon and radio take the brand, the rest stay quiet.
   return (
-    <View style={styles.list} accessibilityRole="radiogroup" accessibilityLabel="Who sees it first">
-      {AUDIENCES.map((option) => {
+    <View style={styles.group} accessibilityRole="radiogroup" accessibilityLabel="Who sees it first">
+      {AUDIENCES.map((option, i) => {
         const o = forFriends && option.value === 'everyone' ? { ...option, line: EVERYONE_FRIENDS_LINE } : option;
         const on = o.value === value;
         return (
@@ -38,17 +40,20 @@ export function AudienceCards({ value, onChange, forFriends = false }: { value: 
             accessibilityState={{ checked: on }}
             accessibilityLabel={`${o.title}. ${o.line}`}
             onPress={() => { if (!on) { haptics.tap(); onChange(o.value); } }}
-            style={({ pressed }) => [styles.card, on && styles.cardOn, pressed && !on && styles.pressed]}
+            style={({ pressed }) => [styles.option, pressed && !on && styles.pressedRow]}
           >
-            <View style={[styles.icon, on && styles.iconOn]}>
-              <Ionicons name={o.icon} size={18} color={on ? colors.brandInk : colors.textMuted} />
+            <View style={[styles.optionIcon, on && styles.optionIconOn]}>
+              <Ionicons name={o.icon} size={17} color={on ? colors.brand : colors.textMuted} />
             </View>
-            <View style={styles.words}>
-              <Text style={styles.title}>{o.title}</Text>
-              <Text style={styles.line}>{o.line}</Text>
-            </View>
-            <View style={[styles.radio, on && styles.radioOn]}>
-              {on ? <Ionicons name="checkmark" size={13} color={colors.brandInk} /> : null}
+            {/* The words own the hairline, so it starts at them, not at the icon. */}
+            <View style={[styles.optionBody, i > 0 && styles.rule]}>
+              <View style={styles.words}>
+                <Text style={styles.title}>{o.title}</Text>
+                <Text style={styles.line}>{o.line}</Text>
+              </View>
+              <View style={[styles.radio, on && styles.radioOn]}>
+                {on ? <Ionicons name="checkmark" size={13} color={colors.brandInk} /> : null}
+              </View>
             </View>
           </Pressable>
         );
@@ -116,32 +121,33 @@ export function GroupsCard({ on, onChange, count }: { on: boolean; onChange: (on
   const line = on ? `Everyone in your ${count === 1 ? 'group' : `${count} groups`} can see it and join.` : 'Only the people you tick.';
   return (
     <Pressable accessibilityRole="switch" accessibilityState={{ checked: on }} accessibilityLabel="My groups" accessibilityHint={line}
-      onPress={() => { (on ? haptics.untap : haptics.tap)(); onChange(!on); }} style={({ pressed }) => [styles.card, styles.cardSmall, pressed && styles.pressed]}>
-      <View style={styles.icon}><Ionicons name="people-circle-outline" size={20} color={colors.textMuted} /></View>
-      <View style={styles.words}>
-        <Text style={styles.title}>My groups</Text>
-        <Text style={styles.line}>{line}</Text>
-      </View>
-      <View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-        <Toggle value={on} onChange={onChange} />
+      onPress={() => { (on ? haptics.untap : haptics.tap)(); onChange(!on); }} style={({ pressed }) => [styles.group, styles.option, pressed && styles.pressed]}>
+      <View style={[styles.optionIcon, on && styles.optionIconOn]}><Ionicons name="people-circle-outline" size={19} color={on ? colors.brand : colors.textMuted} /></View>
+      <View style={styles.optionBody}>
+        <View style={styles.words}>
+          <Text style={styles.title}>My groups</Text>
+          <Text style={styles.line}>{line}</Text>
+        </View>
+        <View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+          <Toggle value={on} onChange={onChange} />
+        </View>
       </View>
     </Pressable>
   );
 }
 
 const styleDefinitions = StyleSheet.create({
-  list: { gap: spacing.sm },
-  card: {
-    ...lift, flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: 64,
-    paddingVertical: spacing.sm + 2, paddingHorizontal: spacing.md + 2, borderRadius: 18,
-    backgroundColor: colors.surface, borderWidth: 1.5, borderColor: colors.surface,
-  },
-  cardSmall: { minHeight: 60 },
-  cardOn: { borderColor: colors.brand },
+  // The grouped list: one white box on the page's soft shadow, the answers as rows inside it.
+  group: { ...lift, borderRadius: radius.lg, backgroundColor: colors.surface, overflow: 'hidden' },
+  option: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingLeft: spacing.md + 2 },
+  optionBody: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md, paddingRight: spacing.md + 2, minHeight: 60 },
+  rule: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  // A small tile, quiet until its row is chosen, then the brand's pale tint.
+  optionIcon: { width: 32, height: 32, borderRadius: 10, backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
+  optionIconOn: { backgroundColor: colors.brandDim },
   pressed: { opacity: 0.8 },
-  icon: { width: 36, height: 36, borderRadius: 12, backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
-  iconOn: { backgroundColor: colors.brand },
-  words: { flex: 1, minWidth: 0, gap: 1 },
+  pressedRow: { backgroundColor: colors.bgElevated },
+  words: { flex: 1, minWidth: 0, gap: 2 },
   title: { ...typography.body, ...font('600'), color: colors.text },
   line: { ...typography.small, color: colors.textMuted, lineHeight: 18 },
   radio: { width: 22, height: 22, borderRadius: radius.pill, borderWidth: 1.5, borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center' },
