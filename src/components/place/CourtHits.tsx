@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { HitCard } from '@/components/HitCard';
 import { HitGlyph } from '@/components/HitGlyph';
+import { hitListOrder } from '@/features/hits/order';
 import { useCourtHits } from '@/features/places/useCourtHits';
 import { playHere } from '@/features/players/courtLink';
 import { notKnownAdult } from '@/features/players/age';
@@ -18,14 +19,17 @@ import { colors, lift, spacing, typography } from '@/theme';
  * never suggested for a hit: no Play here, and nothing at all with none open.
  * The soonest three show; any more are a tap away ("More open hits (2)"),
  * the way Find Players does it, so one you were invited to is never cut off.
+ * In Find Players' order too (Oct 7): yours and the ones you are in first,
+ * full ones last.
  */
 export function CourtHits({ place, closed = false }: { place: { id?: string; name: string; lat: number; lng: number }; closed?: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
-  const all = useCourtHits(place);
+  const { currentUser, currentUserId } = useApp();
+  const found = useCourtHits(place);
+  const all = useMemo(() => hitListOrder(found, (h) => h, currentUserId), [found, currentUserId]);
   const [moreOpen, setMoreOpen] = useState(false);
   const more = Math.max(0, all.length - HITS_SHOWN);
   const hits = moreOpen ? all : all.slice(0, HITS_SHOWN);
-  const { currentUser } = useApp();
   const forFriends = !!currentUser && notKnownAdult(currentUser);
   if (closed && !hits.length) return null;
   return (
@@ -72,7 +76,7 @@ const styleDefinitions = StyleSheet.create({
   // The same "More open hits" row as Find Players.
   more: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start', paddingVertical: 4 },
   moreText: { ...typography.smallStrong, color: colors.textMuted },
-  // The same prompt as Find Players' empty Open hits.
+  // A court with no open hits: one card that posts the first.
   prompt: { ...lift, flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.lg, borderRadius: 20, backgroundColor: colors.surface },
   promptTile: { width: 44, height: 44, borderRadius: 12, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
   promptTitle: { ...typography.bodyStrong, color: colors.text },

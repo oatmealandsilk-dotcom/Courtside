@@ -368,6 +368,16 @@ one and never a band of surface colour.
   the waitlist's: a 56px brand-dim tile with the mark, title at 22/500, one Small body at 19px
   line height, a field if it asks for something, one primary pill, one ghost link.
 - **Rows:** no container; a hairline above each row after the first.
+- **Hit card** (`HitCard`, Oct 7): `surface`, 20px corners, the soft lift, 16px padding. Head: the
+  poster's 40px face, the name (Club Green "Your hit" on your own), the time at 20/500, and the
+  paper plane and flag as bare Faint Ink icons that only show a disc when pressed. Then the court
+  as a line of its own (a 26px brand-dim tile with the court glyph, the name at 15/500 wrapping to
+  two lines, the distance muted), and the game and level on one Small line with the room left as
+  a small 6px-cornered tag at its end: ink on Dim Green ("1 spot left"), or Muted Ink on Warm Sand
+  alt ("Full"). A tag is not a pill, because it cannot be pressed. Under a hairline, who's in as
+  overlapping 26px faces and words ("You and Sam are in"), then one 38px button: primary "I'm in",
+  secondary "Chat", or "Call off" as an outline in Hairline Tan with the word in Danger red. A full
+  hit you are not in has no button and a muted time. Lists show yours first, then open, then full.
 
 ### Inputs / Fields
 - **Field:** `surface` fill, 1px Hairline Tan, 12px corners, 16px/12px padding, 15px text.
@@ -375,6 +385,10 @@ one and never a band of surface colour.
 - **Pill field:** the same, fully round, 16px text, 52px min height, with a round green arrow or a
   search glyph inside. Press darkens the border to Strong Tan.
 - **Thread composer:** pill field with a 38px round send button that only lifts when there is text.
+- **Post field** (Community's "Looking for a hit?"): Coaching's question box again, the hit glyph
+  at its start in brand and the round green arrow at its end; it opens the hit form. It heads the
+  Open hits list; with none open, the section's muted line says so and one Small line under the
+  field says what happens next.
 
 ### Navigation
 - **Phone:** four tabs on Ball Can Cream under a hairline, labels at 10.5px Small Strong in Faint

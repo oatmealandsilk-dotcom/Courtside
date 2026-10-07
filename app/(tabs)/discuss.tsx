@@ -35,6 +35,7 @@ import { IN_TOWN_MILES, measureFrom } from '@/features/players/mapModel';
 import { agoLabel } from '@/components/map/markers';
 import { confirmUnfollow } from '@/lib/confirm';
 import { NEAR_HIT_MILES, canSeeHitAt, hitSpot, openHits as openHitsOf } from '@/features/hits/visible';
+import { hitListOrder, isMyHit } from '@/features/hits/order';
 import { labelOf, looksPublic } from '@/features/places/courtName';
 import { useCourtSearch } from '@/features/places/useCourtSearch';
 import { handPlace, type FoundPlace } from '@/features/places/geocode';
@@ -287,9 +288,20 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
     }
     return { openHits: [...near, ...typed], furtherHits: [...far, ...farTyped] };
   }, [seenHits, youAt?.lat, youAt?.lng, lastSeen, users, currentUserId, myCity, followingIds]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The order the list shows them in (Oct 7, audit items 18 and 19): the hits you posted or are in
+  // first, wherever they are (one far off no longer waits folded under "Further away"), then the
+  // ones with a spot, then the full ones. Only the order: which hits show, and the map's count of
+  // them, are worked out above as before.
+  const { listedHits, listedFurther } = useMemo(() => {
+    const hitOf = (item: (typeof openHits)[number]) => item.hit;
+    return {
+      listedHits: hitListOrder([...openHits, ...furtherHits.filter((x) => isMyHit(x.hit, currentUserId))], hitOf, currentUserId),
+      listedFurther: hitListOrder(furtherHits.filter((x) => !isMyHit(x.hit, currentUserId)), hitOf, currentUserId),
+    };
+  }, [openHits, furtherHits, currentUserId]);
   const [furtherOpen, setFurtherOpen] = useState(false);
   const [moreHitsOpen, setMoreHitsOpen] = useState(false);
-  const moreHits = Math.max(0, openHits.length - HITS_SHOWN);
+  const moreHits = Math.max(0, listedHits.length - HITS_SHOWN);
   // With nothing open, name a court only when the nearest one reads as public and is close: never just because it is nearest.
   const promptCourt = nearCourts.nearest && looksPublic(nearCourts.nearest.c.name) && nearCourts.nearest.miles <= 5 ? nearCourts.nearest.c : null;
   // "Near you" is one thing on this tab and on the map: people who shared a
@@ -495,48 +507,46 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
             follows them, since its "Hit today" badges repeat those cards. */}
         {!search && !openHits.length ? yourCourts : null}
         {!search && !openHits.length ? courtsBlock : null}
-        {/* Hits: someone wants a game, near you first. Posting one is right here. */}
+        {/* Hits: someone wants a game, yours first, then near you. Posting one is right here. */}
         {!search ? (
           <View style={styles.hits}>
             <View style={styles.hitsHead}>
-              <Text style={styles.playersTitle}>Open hits</Text>
-              <View style={styles.hitsLinks}>
-                {/* "Post a hit", not just "Post": a post elsewhere is a photo or clip. */}
-                <Pressable accessibilityRole="button" onPress={() => router.push('/hit-request/new')} hitSlop={8}><Text style={styles.postHit}>Post a hit</Text></Pressable>
-              </View>
+              <Text accessibilityRole="header" style={styles.playersTitle}>Open hits</Text>
+              {/* Nothing open: the section says so in one muted line under its title, the way a section opens. */}
+              {listedHits.length ? null : <Text style={styles.playersBody}>{hitsForFriends ? 'None from your friends yet.' : 'None near you yet.'}</Text>}
             </View>
-            {openHits.length ? (moreHitsOpen ? openHits : openHits.slice(0, HITS_SHOWN)).map(({ hit, miles }) => <HitCard key={hit.id} hit={hit} miles={miles} />) : promptCourt ? (
-              <Pressable accessibilityRole="button" onPress={() => playHere({ id: promptCourt.id, name: labelOf(promptCourt), lat: promptCourt.lat, lng: promptCourt.lng })} style={styles.hitPrompt}>
-                <View style={styles.hitPromptTile}><HitGlyph size={24} color={colors.brand} /></View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.hitPromptTitle}>Post the first hit at {labelOf(promptCourt)}</Text>
-                  <Text style={styles.hitPromptBody}>{hitsForFriends ? 'Say when. Friends who follow you can join.' : 'Say when. Players nearby can join.'}</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
-              </Pressable>
-            ) : (
-              <Pressable accessibilityRole="button" onPress={() => router.push('/hit-request/new')} style={styles.hitPrompt}>
-                <View style={styles.hitPromptTile}><HitGlyph size={24} color={colors.brand} /></View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.hitPromptTitle}>Looking for someone to play?</Text>
-                  <Text style={styles.hitPromptBody}>{hitsForFriends ? 'Say when and where. Friends who follow you can join.' : 'Say when and where. Players nearby can join.'}</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
-              </Pressable>
+            {/* The way to post one (Oct 7): a field you could start filling in, at the top of the list,
+                not a small link beside the title. The same shape as Coaching's "Your question" box.
+                With nothing open and a public court close by, it starts the hit at that court.
+                "Post a hit", not just "Post", for a screen reader: a post elsewhere is a photo or clip. */}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={!listedHits.length && promptCourt ? `Post a hit at ${labelOf(promptCourt)}` : 'Post a hit'}
+              onPress={() => (!listedHits.length && promptCourt ? playHere({ id: promptCourt.id, name: labelOf(promptCourt), lat: promptCourt.lat, lng: promptCourt.lng }) : router.push('/hit-request/new'))}
+              style={({ pressed }) => [styles.postField, pressed && styles.postFieldPressed]}
+            >
+              <HitGlyph size={22} color={colors.brand} />
+              <Text style={styles.postFieldText} numberOfLines={1}>{!listedHits.length && promptCourt ? `Play at ${labelOf(promptCourt)}?` : 'Looking for a hit?'}</Text>
+              <View style={styles.postFieldGo}><Ionicons name="arrow-forward" size={16} color={colors.brandInk} /></View>
+            </Pressable>
+            {/* Nothing open yet: what happens next, said once, under the field. */}
+            {listedHits.length ? null : (
+              <Text style={styles.postFieldNote}>{hitsForFriends ? 'Post a time and place. Friends who follow you can tap I’m in, and a chat opens to sort out the rest.' : 'Post a time and place. Players nearby can tap I’m in, and a chat opens to sort out the rest.'}</Text>
             )}
+            {(moreHitsOpen ? listedHits : listedHits.slice(0, HITS_SHOWN)).map(({ hit, miles }) => <HitCard key={hit.id} hit={hit} miles={miles} />)}
             {moreHits ? (
               <Pressable accessibilityRole="button" accessibilityState={{ expanded: moreHitsOpen }} onPress={() => setMoreHitsOpen((o) => !o)} hitSlop={6} style={({ pressed }) => [styles.further, pressed && { opacity: 0.6 }]}>
                 <Text style={styles.furtherText}>{moreHitsOpen ? 'Fewer open hits' : `More open hits (${moreHits})`}</Text>
                 <Ionicons name={moreHitsOpen ? 'chevron-up' : 'chevron-down'} size={14} color={colors.textMuted} />
               </Pressable>
             ) : null}
-            {furtherHits.length ? (
+            {listedFurther.length ? (
               <>
                 <Pressable accessibilityRole="button" accessibilityState={{ expanded: furtherOpen }} onPress={() => setFurtherOpen((o) => !o)} hitSlop={6} style={({ pressed }) => [styles.further, pressed && { opacity: 0.6 }]}>
-                  <Text style={styles.furtherText}>Further away ({furtherHits.length})</Text>
+                  <Text style={styles.furtherText}>Further away ({listedFurther.length})</Text>
                   <Ionicons name={furtherOpen ? 'chevron-up' : 'chevron-down'} size={14} color={colors.textMuted} />
                 </Pressable>
-                {furtherOpen ? furtherHits.map(({ hit, miles }) => <HitCard key={hit.id} hit={hit} miles={miles} />) : null}
+                {furtherOpen ? listedFurther.map(({ hit, miles }) => <HitCard key={hit.id} hit={hit} miles={miles} />) : null}
               </>
             ) : null}
           </View>
@@ -787,8 +797,18 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
 
 const styleDefinitions = StyleSheet.create({
   hits: { gap: spacing.md },
-  hitsHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: spacing.sm },
-  hitsLinks: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg },
+  hitsHead: { gap: 3, paddingTop: spacing.sm },
+  // "Looking for a hit?": the shape of Coaching's question box (a pill on the lift, the round
+  // green button at its end with the small lift in its own colour), opening the hit form.
+  postField: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.md,
+    paddingLeft: spacing.lg, paddingRight: 6, paddingVertical: 6, minHeight: 52,
+    ...lift, borderRadius: radius.pill, backgroundColor: colors.surface,
+  },
+  postFieldPressed: { transform: [{ scale: 0.99 }] },
+  postFieldText: { ...typography.body, fontSize: 16, color: colors.textMuted, flex: 1 },
+  postFieldGo: { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center', shadowColor: colors.brand, shadowOpacity: 0.28, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 3 },
+  postFieldNote: { ...typography.small, color: colors.textMuted, lineHeight: 18, paddingHorizontal: 2, marginTop: -4 },
   // One quiet line that opens more hits: the rest of the near ones, or those beyond 25 km.
   further: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start', paddingVertical: 4 },
   furtherText: { ...typography.smallStrong, color: colors.textMuted },
@@ -797,12 +817,6 @@ const styleDefinitions = StyleSheet.create({
   // A place found by the search: the court tile's frame, in the quiet surface colour, so places and courts read apart.
   placeTile: { width: 52, height: 52, borderRadius: 14, backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
   courtNameMatch: { ...font('700'), color: colors.text },
-  postHit: { ...typography.smallStrong, color: colors.brand },
-  hitPrompt: { ...lift, flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.lg, borderRadius: 20, backgroundColor: colors.surface },
-  // The empty state's tile: the icon on Dim Green, the way the app's feature cards hold the mark.
-  hitPromptTile: { width: 44, height: 44, borderRadius: 12, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
-  hitPromptTitle: { ...typography.bodyStrong, color: colors.text },
-  hitPromptBody: { ...typography.small, color: colors.textMuted },
   sortRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', zIndex: 5 },
   sortCount: { ...typography.small, color: colors.textFaint },
   sortButton: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.pill },

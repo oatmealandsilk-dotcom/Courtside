@@ -37,6 +37,14 @@ import { colors, font, lift, radius, spacing, typography } from '@/theme';
  * and their picture and name open their profile, where Block is. `linked`
  * (the default) opens the hit's own page on a tap; that page passes false,
  * so a tap there no longer opens the same page again on top.
+ *
+ * Oct 7 refinement (the same card; owner: "I really like these cards"): the
+ * court is a line of its own that wraps to two lines instead of a pill cut
+ * short; the game and level share one line with whether there is room as a
+ * tag at its end (a grey "Full" when there is none, and then no faded I'm in
+ * at all); the paper plane and the flag are bare icons, so the time leads;
+ * who's in is their faces overlapping and their names ("You and Sam are
+ * in"); and every button at the foot is the same height and weight.
  */
 export function HitCard({ hit, miles, linked = true }: { hit: HitRequest; miles?: number; linked?: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
@@ -49,6 +57,9 @@ export function HitCard({ hit, miles, linked = true }: { hit: HitRequest; miles?
   // Everyone in takes a spot, those this account is not shown included (joinedCount).
   const total = joinedCount(hit);
   const left = Math.max(0, hit.spots - total);
+  const full = left === 0;
+  // Full, and neither yours nor one you are in: nothing to do here but look, so it reads that way.
+  const quiet = full && !mine && !inIt;
   const open = isHitOpen(hit);
   const line = audienceLine(hit, currentUserId);
   const invited = mine ? (hit.invitedIds ?? []).map((id) => users.find((u) => u.id === id)).filter((u): u is NonNullable<typeof u> => !!u) : [];
@@ -58,6 +69,7 @@ export function HitCard({ hit, miles, linked = true }: { hit: HitRequest; miles?
   // Someone else's: their profile from their picture and name, and a flag to report the hit.
   const theirs = !mine && !!currentUserId;
   const openPoster = theirs && author ? () => router.push(`/user/${author.id}`) : undefined;
+  const canOpenCourt = hit.place.lat !== undefined && hit.place.lng !== undefined;
   // Reported, it leaves your screens at once (the hit's own page goes back, as a reported thread's does).
   const report = () => confirmReport('hit', () => {
     afterReport(actions.reportUser(hit.authorId, `hit-request:${hit.id}`), author, actions);
@@ -76,7 +88,9 @@ export function HitCard({ hit, miles, linked = true }: { hit: HitRequest; miles?
     <Pressable accessible={linked} accessibilityRole={linked ? 'link' : undefined} disabled={!linked} onPress={linked ? () => router.push(`/hit-request/${hit.id}`) : undefined} style={({ pressed }) => [styles.card, pressed && { opacity: 0.92 }]}>
       {/* Who, with the paper plane and the flag beside the name; when, under it, across the
           card's full width, so "Tomorrow 9:00 AM" stays on one line on a small phone and the
-          name is never cut to "Sam Ortiz is lookin…" (Oct 5). The section says it is a hit. */}
+          name is never cut to "Sam Ortiz is lookin…" (Oct 5). The section says it is a hit.
+          The two icons are bare (Oct 7), in faint ink with no disc behind them, so the time is
+          what the eye lands on; a press still shows the disc. */}
       <View style={styles.head}>
         <Pressable accessibilityRole={openPoster ? 'link' : undefined} accessibilityLabel={openPoster ? `Open ${author!.name}'s profile` : undefined} disabled={!openPoster} onPress={(e) => { e.stopPropagation?.(); openPoster?.(); }}>
           <Avatar name={author?.name ?? '?'} seed={author?.avatarSeed ?? hit.id} uri={author?.avatarUrl} size={40} />
@@ -84,27 +98,35 @@ export function HitCard({ hit, miles, linked = true }: { hit: HitRequest; miles?
         <View style={styles.headWords}>
           <View style={styles.whoRow}>
             <Pressable accessibilityRole={openPoster ? 'link' : undefined} accessibilityLabel={openPoster ? `${author!.name} is looking for a hit. Open profile` : undefined} disabled={!openPoster} onPress={(e) => { e.stopPropagation?.(); openPoster?.(); }} style={styles.whoPress}>
-              <Text style={styles.who} numberOfLines={1}>{mine ? 'Your hit' : author?.name ?? 'A player'}</Text>
+              <Text style={[styles.who, mine && styles.whoMine]} numberOfLines={1}>{mine ? 'Your hit' : author?.name ?? 'A player'}</Text>
             </Pressable>
             <View style={styles.spacer} />
-            {open ? <Pressable accessibilityRole="button" accessibilityLabel="Send this hit to a chat" hitSlop={6} onPress={(e) => { e.stopPropagation?.(); router.push({ pathname: '/share', params: { kind: 'hit-request', id: hit.id } }); }} style={({ pressed }) => [styles.send, pressed && { opacity: 0.6 }]}>
-              <Ionicons name="paper-plane-outline" size={17} color={colors.textMuted} />
+            {open ? <Pressable accessibilityRole="button" accessibilityLabel="Send this hit to a chat" hitSlop={6} onPress={(e) => { e.stopPropagation?.(); router.push({ pathname: '/share', params: { kind: 'hit-request', id: hit.id } }); }} style={({ pressed }) => [styles.icon, pressed && styles.iconPressed]}>
+              <Ionicons name="paper-plane-outline" size={18} color={colors.textFaint} />
             </Pressable> : null}
-            {theirs ? <Pressable accessibilityRole="button" accessibilityLabel="Report this hit" hitSlop={6} onPress={(e) => { e.stopPropagation?.(); report(); }} style={({ pressed }) => [styles.send, pressed && { opacity: 0.6 }]}>
-              <Ionicons name="flag-outline" size={16} color={colors.textMuted} />
+            {theirs ? <Pressable accessibilityRole="button" accessibilityLabel="Report this hit" hitSlop={6} onPress={(e) => { e.stopPropagation?.(); report(); }} style={({ pressed }) => [styles.icon, pressed && styles.iconPressed]}>
+              <Ionicons name="flag-outline" size={17} color={colors.textFaint} />
             </Pressable> : null}
           </View>
-          <Text style={styles.when} numberOfLines={1}>{hitWhen(hit.startsAt)}</Text>
+          <Text style={[styles.when, quiet && styles.whenQuiet]} numberOfLines={1}>{hitWhen(hit.startsAt)}</Text>
         </View>
       </View>
-      <Pressable accessibilityRole="link" accessibilityLabel={`${hit.place.name}${miles !== undefined ? `, ${formatMiles(miles)}` : ''}. See the court`} disabled={hit.place.lat === undefined} onPress={(e) => { e.stopPropagation?.(); if (hit.place.lat !== undefined && hit.place.lng !== undefined) openCourt({ id: hit.place.id, name: hit.place.name, lat: hit.place.lat, lng: hit.place.lng }); }} style={styles.place}>
-        <CourtGlyph size={13} color={colors.brand} />
-        <Text style={styles.placeText} numberOfLines={1}>{hit.place.name}{miles !== undefined ? <Text style={styles.placeMiles}>{` · ${formatMiles(miles)}`}</Text> : null}</Text>
-      </Pressable>
-      {/* One quiet line, not three chips: the format, the level, and how many can still join. */}
-      <Text style={styles.details} numberOfLines={1}>
-        {FORMAT_LABEL[hit.format]} · {levelText(hit, author?.profile.skillSystem)} · <Text style={left ? styles.detailsLeft : undefined}>{left ? `${left} ${left === 1 ? 'spot' : 'spots'} left` : 'Full'}</Text>
-      </Text>
+      <View style={styles.facts}>
+        {/* Where: a line of its own that wraps, so "Country Club at Wakefield Plantation" is never cut short. */}
+        <Pressable accessibilityRole="link" accessibilityLabel={`${hit.place.name}${miles !== undefined ? `, ${formatMiles(miles)}` : ''}. See the court`} disabled={!canOpenCourt} onPress={(e) => { e.stopPropagation?.(); if (hit.place.lat !== undefined && hit.place.lng !== undefined) openCourt({ id: hit.place.id, name: hit.place.name, lat: hit.place.lat, lng: hit.place.lng }); }} style={({ pressed }) => [styles.place, pressed && canOpenCourt && { opacity: 0.6 }]}>
+          <View style={styles.placeTile}><CourtGlyph size={12} color={colors.brand} /></View>
+          <Text style={styles.placeText} numberOfLines={2}>{hit.place.name}{miles !== undefined ? <Text style={styles.placeMiles}>{` · ${formatMiles(miles)}`}</Text> : null}</Text>
+        </Pressable>
+        {/* What, then whether there is room, as a tag at the line's end: a grey "Full" once there is none. */}
+        <View style={styles.metaRow}>
+          <Text style={styles.details} numberOfLines={1}>
+            <Text style={styles.detailsFormat}>{FORMAT_LABEL[hit.format]}</Text>{` · ${levelText(hit, author?.profile.skillSystem)}`}
+          </Text>
+          <View style={[styles.tag, full && styles.tagFull]}>
+            <Text style={[styles.tagText, full && styles.tagTextFull]}>{full ? 'Full' : `${left} ${left === 1 ? 'spot' : 'spots'} left`}</Text>
+          </View>
+        </View>
+      </View>
       {hit.note ? <Text style={styles.note} numberOfLines={3}>{hit.note}</Text> : null}
       {line ? (
         <View style={styles.audience}>
@@ -121,47 +143,92 @@ export function HitCard({ hit, miles, linked = true }: { hit: HitRequest; miles?
           {mine && hit.audience === 'invite_first' && left > 0 ? (
             <Pressable accessibilityRole="button" accessibilityLabel="Open to everyone now" onPress={(e) => { e.stopPropagation?.(); confirm({ title: 'Open to everyone now?', message: 'It goes on Find Players and the map for players nearby, not just the people you invited.', confirmLabel: 'Open it', onConfirm: () => { void actions.openHitNow(hit.id); } }); }} style={({ pressed }) => [styles.openNow, pressed && { opacity: 0.7 }]}>
               <Ionicons name="earth-outline" size={15} color={colors.text} />
-              <Text style={styles.secondaryText}>Open to everyone now</Text>
+              <Text style={styles.openNowText}>Open to everyone now</Text>
             </Pressable>
           ) : null}
         </View>
       ) : null}
+      {/* Who's in, as their faces overlapping and in words; then the one thing to do. Every
+          button here is the same height, border and label weight, so none reads heavier by accident. */}
       <View style={styles.foot}>
         <View style={styles.joined}>
-          {joined.slice(0, 4).map((u, i) => <Avatar key={u.id} name={u.name} seed={u.avatarSeed} uri={u.avatarUrl} size={24} style={[styles.face, { marginLeft: i ? -8 : 0 }]} />)}
-          <Text style={styles.joinedText}>{total ? `${total} in` : 'No one in yet'}</Text>
+          {joined.length ? (
+            <View style={styles.faces}>
+              {joined.slice(0, 3).map((u, i) => <Avatar key={u.id} name={u.name} seed={u.avatarSeed} uri={u.avatarUrl} size={26} style={[styles.face, { marginLeft: i ? -10 : 0, zIndex: 3 - i }]} />)}
+            </View>
+          ) : null}
+          <Text style={[styles.joinedText, inIt && styles.joinedTextMine]} numberOfLines={1}>{whoIsIn(joined, total, currentUserId)}</Text>
         </View>
         {mine ? (
           <View style={styles.actions}>
-            {hit.conversationId ? <Pressable accessibilityRole="button" onPress={(e) => { e.stopPropagation?.(); openChat(); }} style={styles.secondary}><Text style={styles.secondaryText}>Chat</Text></Pressable> : null}
-            <Pressable accessibilityRole="button" onPress={(e) => { e.stopPropagation?.(); confirm({ title: 'Call off this hit?', message: 'It comes off Find Players. Anyone who joined still has the chat.', confirmLabel: 'Call it off', destructive: true, onConfirm: () => actions.cancelHit(hit.id) }); }} style={styles.secondary}><Text style={[styles.secondaryText, { color: colors.danger }]}>Call off</Text></Pressable>
+            {hit.conversationId ? (
+              <Pressable accessibilityRole="button" accessibilityLabel="Chat with who’s in" onPress={(e) => { e.stopPropagation?.(); openChat(); }} style={({ pressed }) => [styles.button, styles.secondary, pressed && styles.buttonPressed]}>
+                <Ionicons name="chatbubble-ellipses-outline" size={16} color={colors.text} />
+                <Text style={styles.secondaryText}>Chat</Text>
+              </Pressable>
+            ) : null}
+            <Pressable accessibilityRole="button" onPress={(e) => { e.stopPropagation?.(); confirm({ title: 'Call off this hit?', message: 'It comes off Find Players. Anyone who joined still has the chat.', confirmLabel: 'Call it off', destructive: true, onConfirm: () => actions.cancelHit(hit.id) }); }} style={({ pressed }) => [styles.button, styles.quietButton, pressed && styles.buttonPressed]}>
+              <Text style={styles.dangerText}>Call off</Text>
+            </Pressable>
           </View>
         ) : inIt ? (
-          <Pressable accessibilityRole="button" onPress={(e) => { e.stopPropagation?.(); openChat(); }} style={styles.secondary}><Ionicons name="chatbubble-ellipses-outline" size={15} color={colors.text} /><Text style={styles.secondaryText}>You’re in · Chat</Text></Pressable>
-        ) : (
-          <Pressable accessibilityRole="button" disabled={!left || busy} onPress={(e) => { e.stopPropagation?.(); void join(); }} style={[styles.primary, (!left || busy) && { opacity: 0.45 }]}><Text style={styles.primaryText}>{busy ? 'Joining…' : 'I’m in'}</Text></Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel="You’re in. Open the hit’s chat" onPress={(e) => { e.stopPropagation?.(); openChat(); }} style={({ pressed }) => [styles.button, styles.secondary, pressed && styles.buttonPressed]}>
+            <Ionicons name="chatbubble-ellipses-outline" size={16} color={colors.text} />
+            <Text style={styles.secondaryText}>Chat</Text>
+          </Pressable>
+        ) : full ? null : (
+          <Pressable accessibilityRole="button" disabled={busy} onPress={(e) => { e.stopPropagation?.(); void join(); }} style={({ pressed }) => [styles.button, styles.primary, busy && { opacity: 0.6 }, pressed && styles.buttonPressed]}>
+            <Text style={styles.primaryText}>{busy ? 'Joining…' : 'I’m in'}</Text>
+          </Pressable>
         )}
       </View>
     </Pressable>
   );
 }
 
+/**
+ * Who's in, in words, you first: "You’re in", "Sam is in", "You and Sam are
+ * in", "Sam and 2 others are in". People this account is not shown
+ * (hiddenJoins) are counted, never named: "2 players in" when none can be.
+ */
+export function whoIsIn(people: { id: string; name: string }[], total: number, me: string | null): string {
+  if (!total) return 'No one in yet';
+  if (!people.length) return `${total} ${total === 1 ? 'player' : 'players'} in`;
+  const ordered = [...people].sort((a, b) => (a.id === me ? -1 : b.id === me ? 1 : 0));
+  const word = (u: { id: string; name: string }) => (u.id === me ? 'You' : u.name.split(' ')[0]);
+  const others = total - 1;
+  if (!others) return ordered[0].id === me ? 'You’re in' : `${word(ordered[0])} is in`;
+  if (others === 1 && ordered.length === 2) return `${word(ordered[0])} and ${word(ordered[1])} are in`;
+  return `${word(ordered[0])} and ${others} ${others === 1 ? 'other' : 'others'} are in`;
+}
+
 const styleDefinitions = StyleSheet.create({
   card: { ...lift, gap: spacing.md, padding: spacing.lg, borderRadius: 20, backgroundColor: colors.surface },
   head: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   headWords: { flex: 1, minWidth: 0 },
-  whoRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  // 32 drawn, 44 to the finger.
-  send: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bgElevated },
+  whoRow: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  // 32 drawn, 44 to the finger; bare until pressed.
+  icon: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  iconPressed: { backgroundColor: colors.bgElevated },
   whoPress: { flexShrink: 1, minWidth: 0 },
   spacer: { flex: 1 },
   who: { ...typography.bodyStrong, color: colors.text },
+  whoMine: { color: colors.brand },
   when: { ...typography.title, fontSize: 20, color: colors.text, marginTop: -2 },
-  place: { flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'flex-start', paddingHorizontal: 12, paddingVertical: 7, borderRadius: radius.pill, backgroundColor: colors.brandDim, maxWidth: '100%' },
-  placeText: { ...typography.smallStrong, color: colors.brand, flexShrink: 1 },
-  placeMiles: { ...typography.small, color: colors.brand },
-  details: { ...typography.small, ...font('600'), color: colors.textMuted },
-  detailsLeft: { color: colors.brand },
+  whenQuiet: { color: colors.textMuted },
+  facts: { gap: spacing.sm },
+  place: { flexDirection: 'row', alignItems: 'center', gap: 10, alignSelf: 'flex-start', maxWidth: '100%' },
+  placeTile: { width: 26, height: 26, borderRadius: 8, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
+  placeText: { ...typography.body, ...font('500'), color: colors.text, lineHeight: 20, letterSpacing: -0.15, flexShrink: 1 },
+  placeMiles: { ...typography.body, color: colors.textMuted, letterSpacing: 0 },
+  metaRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  details: { ...typography.small, color: colors.textMuted, flexShrink: 1 },
+  detailsFormat: { ...font('600'), color: colors.text },
+  // Room left: a small tag, not a pill (only what can be pressed is fully round). Ink on Dim Green, so it reads on every court.
+  tag: { marginLeft: 'auto', paddingHorizontal: 8, height: 22, borderRadius: 6, justifyContent: 'center', backgroundColor: colors.brandDim },
+  tagFull: { backgroundColor: colors.surfaceAlt },
+  tagText: { ...typography.caption, fontSize: 12, letterSpacing: 0, color: colors.text },
+  tagTextFull: { color: colors.textMuted },
   note: { ...typography.body, color: colors.text, lineHeight: 21 },
   audience: { gap: spacing.sm, padding: spacing.md, borderRadius: radius.lg, backgroundColor: colors.bgElevated },
   audienceRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
@@ -169,13 +236,23 @@ const styleDefinitions = StyleSheet.create({
   invitedText: { ...typography.small, color: colors.textMuted, flex: 1 },
   faceSmall: { borderWidth: 1.5, borderColor: colors.bgElevated, borderRadius: 11 },
   openNow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 36, borderRadius: 18, backgroundColor: colors.surface, ...lift },
-  foot: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
-  joined: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 },
-  face: { borderWidth: 2, borderColor: colors.surface, borderRadius: 14 },
-  joinedText: { ...typography.small, color: colors.textMuted },
+  openNowText: { ...typography.smallStrong, color: colors.text },
+  // The foot: who's in and the one thing to do, under a hairline.
+  foot: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm, paddingTop: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  joined: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1, minWidth: 0 },
+  faces: { flexDirection: 'row', alignItems: 'center' },
+  face: { borderWidth: 2, borderColor: colors.surface, borderRadius: 15 },
+  joinedText: { ...typography.small, color: colors.textMuted, flexShrink: 1 },
+  joinedTextMine: { ...font('600'), color: colors.text },
   actions: { flexDirection: 'row', gap: spacing.sm },
-  primary: { height: 38, paddingHorizontal: 20, borderRadius: 19, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
-  primaryText: { ...typography.bodyStrong, fontSize: 15, color: colors.brandInk },
-  secondary: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 38, paddingHorizontal: 14, borderRadius: 19, backgroundColor: colors.bgElevated, justifyContent: 'center' },
-  secondaryText: { ...typography.smallStrong, color: colors.text },
+  // One button, three looks: the same height, border and label weight.
+  button: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 38, paddingHorizontal: 16, borderRadius: 19, borderWidth: 1 },
+  buttonPressed: { transform: [{ scale: 0.97 }] },
+  primary: { paddingHorizontal: 22, backgroundColor: colors.brand, borderColor: colors.brand },
+  primaryText: { ...typography.bodyStrong, color: colors.brandInk },
+  secondary: { backgroundColor: colors.surfaceAlt, borderColor: colors.border },
+  secondaryText: { ...typography.bodyStrong, color: colors.text },
+  // Destructive, so quiet: an outline in the hairline and the word in red, never a filled or tinted pill.
+  quietButton: { backgroundColor: 'transparent', borderColor: colors.border },
+  dangerText: { ...typography.bodyStrong, color: colors.danger },
 });
