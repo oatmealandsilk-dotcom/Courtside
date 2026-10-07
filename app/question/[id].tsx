@@ -177,7 +177,7 @@ function QuestionDetail() {
           <View style={{ gap: 8 }}>
           <MentionSuggestions candidates={tag.rows} onPick={tag.pick} maxHeight={176} />
           <View style={styles.composer}>
-            <TextInput ref={replyInput} autoFocus onFocus={() => reveal(replyInput.current)} accessibilityLabel="Reply to this thread" placeholder="Add your reply… (@ to tag)" placeholderTextColor={colors.textFaint} multiline maxLength={10000} value={draft} onChangeText={setDraft} onSelectionChange={tag.onSelectionChange} style={styles.replyInput}
+            <TextInput ref={replyInput} autoFocus keyboardType={Platform.OS === 'ios' ? 'twitter' : undefined} onFocus={() => reveal(replyInput.current)} accessibilityLabel="Reply to this thread" placeholder="Add your reply… (@ to tag)" placeholderTextColor={colors.textFaint} multiline maxLength={10000} value={draft} onChangeText={setDraft} onSelectionChange={tag.onSelectionChange} style={styles.replyInput}
               blurOnSubmit={Platform.OS === 'web' ? true : undefined}
               onSubmitEditing={Platform.OS === 'web' ? submit : undefined} />
             {media ? <AttachedPreview media={media} onRemove={() => setMedia(null)} /> : null}

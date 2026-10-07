@@ -134,7 +134,7 @@ export function ThreadReply({ answer, thread, acceptedId, askerId, depth = 0, pr
         {replying && !closed && !answer.removed && <View style={styles.inlineComposer}>
           <MentionSuggestions candidates={tag.rows} onPick={tag.pick} maxHeight={176} />
           <View style={styles.composer}>
-            <TextInput ref={lineRef} autoFocus onFocus={() => reveal(lineRef.current)} accessibilityLabel={`Reply to ${responder?.name ?? 'player'}`} placeholder={`Reply to ${responder?.name?.split(' ')[0] ?? 'this'}… (@ to tag)`} placeholderTextColor={colors.textFaint} multiline maxLength={10000} value={draft} onChangeText={setDraft} onSelectionChange={tag.onSelectionChange} style={styles.replyInput}
+            <TextInput ref={lineRef} autoFocus keyboardType={Platform.OS === 'ios' ? 'twitter' : undefined} onFocus={() => reveal(lineRef.current)} accessibilityLabel={`Reply to ${responder?.name ?? 'player'}`} placeholder={`Reply to ${responder?.name?.split(' ')[0] ?? 'this'}… (@ to tag)`} placeholderTextColor={colors.textFaint} multiline maxLength={10000} value={draft} onChangeText={setDraft} onSelectionChange={tag.onSelectionChange} style={styles.replyInput}
               // Enter sends on a computer; the web toolkit needs blurOnSubmit to do that in a multiline box.
               blurOnSubmit={Platform.OS === 'web' ? true : undefined}
               onSubmitEditing={Platform.OS === 'web' ? post : undefined}/>

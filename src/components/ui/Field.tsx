@@ -158,7 +158,8 @@ export function Field({
         placeholderTextColor={colors.textFaint}
         multiline={multiline}
         autoCapitalize={autoCapitalize}
-        keyboardType={keyboardType}
+        // Where @mentions work, iPhone's keyboard with @ and # beside the space bar, as Instagram's comment box has.
+        keyboardType={keyboardType ?? (mentions && Platform.OS === 'ios' ? 'twitter' : undefined)}
         secureTextEntry={secureTextEntry}
         autoComplete={autoComplete}
         maxLength={maxLength}
