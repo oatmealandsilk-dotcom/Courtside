@@ -23,6 +23,8 @@ import { BRAND, LINE as LINE_SHAPE, PICTURE } from '@/components/launchPicture';
  * a fraction of a pixel (scripts/trace-launch-picture.py writes launchPicture.ts),
  * so the cream hands over to exactly the same letters in your theme's colours.
  * A new launch picture needs that script run again, in the same build.
+ * The line is drawn in the theme's launchLine: on the cream court that is the
+ * picture's own grey, so there the hand-off changes nothing at all.
  *
  * Only a different line (while a newer version downloads) is set as text, in
  * Inter Bold, on the picture's line: caps 2461.0–2487.0, 35.6 px, tracking

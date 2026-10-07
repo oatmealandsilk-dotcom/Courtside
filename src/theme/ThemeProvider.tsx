@@ -28,6 +28,7 @@ export const darkColors: Palette = {
   // left, green lettering; the quiet words in the page's muted grey.
   cardFill: '#15251D', cardGlowTop: '#22412D', cardGlowBottom: '#413425',
   cardFigure: '#6FB483', cardInk: '#6FB483', cardMuted: '#A6B1AB',
+  launchLine: '#8A948F',
 };
 
 /**
@@ -51,6 +52,7 @@ const cleanColors: Palette = {
   // These only fill the slots, with that box's colours.
   cardFill: '#2C7446', cardGlowTop: '#2C7446', cardGlowBottom: '#2C7446',
   cardFigure: '#FFFFFF', cardInk: '#FFFFFF', cardMuted: '#FFFFFF',
+  launchLine: '#5F6871',
 };
 
 /**
@@ -74,6 +76,7 @@ const aoColors: Palette = {
   // words 4.7:1 or more on the fill and both corners, the big numbers 5.7:1.
   cardFill: '#6EA8D5', cardGlowTop: '#9CCBEC', cardGlowBottom: '#8FE3DD',
   cardFigure: '#0B2A47', cardInk: '#0E2F4F', cardMuted: '#143858',
+  launchLine: '#496273',
 };
 
 /**
@@ -96,6 +99,7 @@ const rolandGarrosColors: Palette = {
   // shirt's gold glow bottom left.
   cardFill: '#A44627', cardGlowTop: '#B24D25', cardGlowBottom: '#A4570A',
   cardFigure: '#FAF8F0', cardInk: '#FAF8F0', cardMuted: '#F6EFE6',
+  launchLine: '#6D5745',
 };
 
 /**
@@ -117,6 +121,7 @@ const wimbledonColors: Palette = {
   // the club's purple bottom left. (Oct 6: lilac was tried; owner: "for the London one green looks better".)
   cardFill: '#326F37', cardGlowTop: '#377A34', cardGlowBottom: '#615782',
   cardFigure: '#FAF8F0', cardInk: '#FAF8F0', cardMuted: '#F0F1E7',
+  launchLine: '#586552',
 };
 
 /**
@@ -140,6 +145,7 @@ const usOpenColors: Palette = {
   // (held low, so the yellow lettering holds on it); the quiet words a shade lighter than the page's.
   cardFill: '#22497B', cardGlowTop: '#325D91', cardGlowBottom: '#675A38',
   cardFigure: '#F5D460', cardInk: '#F5D460', cardMuted: '#CBD8E6',
+  launchLine: '#A9B9CA',
 };
 
 export type ThemeName = 'default' | 'clean' | 'night' | 'ao' | 'roland-garros' | 'wimbledon' | 'us-open';
