@@ -977,11 +977,12 @@ export default function Compose() {
         {preparing === 'all' ? <PreparingRing size={choiceIcon} done={prepDone} /> : <Ionicons name="images-outline" size={choiceIcon} color={colors.textMuted}/>}<Text style={styles.choiceLabel}>Post</Text><Text style={styles.note}>{preparing === 'all' ? 'Getting it ready…' : 'Choose from your photos and videos.'}</Text>
       </Pressable></Reanimated.View>}
       {pickError ? <Text style={styles.pickError}>{pickError}</Text> : null}
-      {entering ? null : <Reanimated.View entering={arrive(3)}><Pressable accessibilityRole="button" accessibilityLabel="Take an Instant" onPress={() => router.replace('/hit')} style={[styles.choiceOption, tight && styles.choiceOptionTight, tighter && styles.choiceOptionTighter]}>
-        <Ionicons name="camera-outline" size={choiceIcon} color={colors.textMuted}/><Text style={styles.choiceLabel}>Instant</Text><Text style={styles.note}>A photo after you play. Up on the feed for a day.</Text>
-      </Pressable></Reanimated.View>}
-      {entering ? null : <Reanimated.View entering={arrive(4)}><Pressable accessibilityRole="button" accessibilityLabel="Create a thread or question" onPress={() => router.replace('/ask')} style={[styles.choiceOption, tight && styles.choiceOptionTight, tighter && styles.choiceOptionTighter]}>
+      {/* Order (Oct 7, owner): what we most want people to post first — a session, then a clip; then a post, a thread, an Instant. */}
+      {entering ? null : <Reanimated.View entering={arrive(3)}><Pressable accessibilityRole="button" accessibilityLabel="Create a thread or question" onPress={() => router.replace('/ask')} style={[styles.choiceOption, tight && styles.choiceOptionTight, tighter && styles.choiceOptionTighter]}>
         <Ionicons name="chatbubbles-outline" size={choiceIcon} color={colors.textMuted}/><Text style={styles.choiceLabel}>Thread or question</Text><Text style={styles.note}>Ask the community or start a conversation.</Text>
+      </Pressable></Reanimated.View>}
+      {entering ? null : <Reanimated.View entering={arrive(4)}><Pressable accessibilityRole="button" accessibilityLabel="Take an Instant" onPress={() => router.replace('/hit')} style={[styles.choiceOption, tight && styles.choiceOptionTight, tighter && styles.choiceOptionTighter]}>
+        <Ionicons name="camera-outline" size={choiceIcon} color={colors.textMuted}/><Text style={styles.choiceLabel}>Instant</Text><Text style={styles.note}>A photo after you play. Up on the feed for a day.</Text>
       </Pressable></Reanimated.View>}
       </ScrollView>
     </Reanimated.View>
