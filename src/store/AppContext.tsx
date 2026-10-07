@@ -79,6 +79,7 @@ import { forgetLinkPreviews } from '@/features/messages/linkPreview';
 import { groupInviteText } from '@/features/groups/inviteMessage';
 import { KIND_WORD } from '@/features/moderation/reasons';
 import { emptyFeedGroups, useFeedGroups, type FeedGroupsActions, type FeedGroupsState } from '@/store/feedGroups';
+import { emptyLiveSession, useLiveSession, type LiveSessionActions, type LiveSessionState } from '@/store/liveSession';
 import type {
   DailyHealth,
   DetectedActivity,
@@ -365,7 +366,7 @@ export interface Prefs {
 export type PrefKey = keyof Prefs;
 const DEFAULT_PREFS: Prefs = { showActivity: true, pushLikes: true, pushCoach: true, pushMessages: true, pushActivity: true, pushMapFriends: true, pushMapHits: true, pushMapPlayers: true, pushCourts: true, contactsFindable: true, pushRecap: true, pushJoined: true, pushStreak: true };
 
-interface AppState extends Bootstrap, CourtLifeState, FeedGroupsState {
+interface AppState extends Bootstrap, CourtLifeState, FeedGroupsState, LiveSessionState {
   ready: boolean;
   /** Health came from this account's own connections, not the demo; a reload must keep it. */
   healthIsReal?: boolean;
@@ -587,13 +588,13 @@ function freshAccountSettings(): Partial<AppState> {
 function signedOut(prev: AppState): AppState {
   return {
     ...prev, currentUserId: null, onboardingComplete: false, healthIsReal: false, healthHistory: [], detectedActivities: [],
-    ...emptyCourtLife, ...emptyFeedGroups, lastSeenLoaded: false, sessionTags: [], newOnCourtside: null, reviewRequests: null, reviewsOff: false, reviewsFailed: false,
+    ...emptyCourtLife, ...emptyFeedGroups, ...emptyLiveSession, lastSeenLoaded: false, sessionTags: [], newOnCourtside: null, reviewRequests: null, reviewsOff: false, reviewsFailed: false,
     mapVisibility: isSupabaseConfigured ? undefined : prev.mapVisibility, teenMap: isSupabaseConfigured ? 'off' : prev.teenMap,
     ...freshAccountSettings(),
   };
 }
 
-interface AppActions extends CourtLifeActions, FeedGroupsActions {
+interface AppActions extends CourtLifeActions, FeedGroupsActions, LiveSessionActions {
   /* Location */
   setLocationEnabled: (enabled: boolean) => Promise<string | null>;
   /** "Who can see you on the map?": takes effect at once. Resolves false when it could not be saved. */
@@ -2134,6 +2135,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     newOnCourtside: null,
     ...emptyCourtLife,
     ...emptyFeedGroups,
+    ...emptyLiveSession,
     hitRequests: [],
     locationEnabled: readFlag('courtside-location'),
     locationAsked: readAsked('courtside-location'),
@@ -8426,11 +8428,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const courtLife = useCourtLife(stateRef, setState, live);
   // Groups with a feed of their own (migration 67): its actions are written in store/feedGroups.
   const feedGroups = useFeedGroups(stateRef, setState, live);
+  // A session played live, Start to Finish (Oct 6): its actions are written in store/liveSession.
+  const liveSessionActions = useLiveSession(stateRef, setState, live, courtLife, state.currentUserId, state.liveSession);
 
   const actions = useMemo<AppActions>(
     () => ({
       ...courtLife,
       ...feedGroups,
+      ...liveSessionActions,
       addCoachResult,
       addCoachReview,
       bookCoach,
@@ -8662,6 +8667,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [
       courtLife,
       feedGroups,
+      liveSessionActions,
       addCoachResult,
       addCoachReview,
       bookCoach,

@@ -3,6 +3,7 @@ import { router, useFocusEffect, type Href } from 'expo-router';
 
 import type { ID, OpenCourtReview } from '@/data/types';
 import { sameCourt } from '@/features/places/court';
+import { isMapCourtId } from '@/features/places/courtName';
 
 /** A court to open: the map's id when there is one, its name and its spot. */
 type Spot = { id?: string; name: string; lat: number; lng: number };
@@ -119,6 +120,19 @@ export function openCourtNow(court: { id: string; name: string; access?: string 
 /** "Post from here": a new post or clip with this court already tagged. Only a court with the map's id can be tagged. */
 export function postFromCourt(court: Spot & { id: string }) {
   router.push({ pathname: '/compose', params: { courtId: court.id, courtName: court.name, lat: court.lat.toFixed(5), lng: court.lng.toFixed(5) } });
+}
+
+/**
+ * "Start a session here" (Oct 6, owner chose "A"): Start a session with this
+ * court already chosen, and who may play there, so the check-in follows the
+ * court sheet's own rules (a teen, or a club's or someone's home court, gets
+ * the timer alone). A place with no court on the map goes by its name.
+ */
+export function startSessionHere(court: Spot, access?: string) {
+  const at = isMapCourtId(court.id)
+    ? { courtId: court.id, courtName: court.name, lat: court.lat.toFixed(5), lng: court.lng.toFixed(5), ...(access && access !== 'unknown' ? { access } : {}) }
+    : { place: court.name };
+  router.push({ pathname: '/start-session', params: at });
 }
 
 /** A court into any of your chats ("meet here"), with its id, so the chat's card opens this same court's page. */

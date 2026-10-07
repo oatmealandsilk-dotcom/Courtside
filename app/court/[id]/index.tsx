@@ -17,9 +17,10 @@ import { areaOf } from '@/features/places/search';
 import { useCourtPosts } from '@/features/places/useCourtPosts';
 import { fetchCourts, isClosedCourt, type Court } from '@/features/players/courts';
 import { isMapCourtId } from '@/features/places/courtName';
-import { openCourtReel, postFromCourt, sendCourtToChat, showCourtOnMap, useCourtOpen } from '@/features/players/courtLink';
+import { openCourtReel, postFromCourt, sendCourtToChat, showCourtOnMap, startSessionHere, useCourtOpen } from '@/features/players/courtLink';
 import { formatMiles, milesBetween } from '@/features/players/geo';
 import { directionsTo } from '@/features/players/openInMaps';
+import { liveState } from '@/features/activity/liveSession';
 import { isDesktopBrowser } from '@/lib/browserDevice';
 import { relativeTime } from '@/lib/format';
 import { goBack } from '@/lib/goBack';
@@ -39,12 +40,13 @@ type Params = { id: string; name?: string; lat?: string; lng?: string };
  * (lights, busy times, the surface), with Add what you know; the open hits
  * here, with Play here; then everything posted there as a grid, newest
  * first. A tile opens the court's reel on that post. The heart up top
- * follows it.
+ * follows it. Under Watch all and Directions, Start a session here: the
+ * clock, with this court already chosen (or the session already going).
  */
 function CourtPage() {
   const styles = useThemedStyles(styleDefinitions);
   const params = useLocalSearchParams<Params>();
-  const { posts, users, currentUser, currentUserId, detectedCoords, courtFacts, courtFollows, courtExtras, actions } = useApp();
+  const { posts, users, currentUser, currentUserId, detectedCoords, courtFacts, courtFollows, courtExtras, actions, liveSession } = useApp();
   const stillLoading = useStillLoading();
   const parsed = parseCourtParams(params, posts);
   // One place object per court, however often the posts change (a like, a new page).
@@ -137,6 +139,7 @@ function CourtPage() {
   // The court as the rest of the app should know it: the map's id even for a
   // page opened by spot (from a hit or a chat), so hits and sends land on it.
   const here = { id: noteId, name, lat: place.lat, lng: place.lng };
+  const liveNow = liveSession ? liveState(liveSession) : null;
   // Who has played here: the people behind the posts, newest first, you aside.
   const players: User[] = [];
   for (const p of list) {
@@ -209,6 +212,17 @@ function CourtPage() {
         {/* Directions alone (still loading, or nowhere to post) stays pill-sized, not a bar across the page. */}
         {!lead && (!postHere || counting) ? <View style={styles.pill} /> : null}
       </View>
+      {/* Start a session here (Oct 6, owner chose "A"): starting is "I'm at this court", so the start step opens
+          with this court chosen; it checks you in by the court sheet's rules, and a teen, or anyone at a club's or
+          someone's home court, gets the timer alone. A session already going: that one, never a second. */}
+      <View style={styles.startRow}>
+        <Button
+          full
+          variant="secondary"
+          label={!liveNow ? 'Start a session here' : liveNow === 'finished' ? 'Log your session' : 'Session in progress'}
+          onPress={() => (!liveNow ? startSessionHere(here, access) : liveNow === 'finished' ? router.push({ pathname: '/log-session', params: { live: '1' } }) : router.push('/live-session'))}
+        />
+      </View>
       <DottedRule />
       {/* King of the Court (migration 130): signed in, at a court on the map, never at someone's home court, and only while its switch is on for you (migration 140; admins for now). Brings its own rule below. */}
       {factsId && currentUserId && access !== 'private' ? <CourtKing courtId={factsId} name={name} refresh={kingTick} /> : null}
@@ -257,6 +271,7 @@ const styleDefinitions = StyleSheet.create({
   // Two pills, never wider together than a phone's row: on a computer they stay pill-sized.
   pills: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.lg, maxWidth: 440 },
   pill: { flex: 1 },
+  startRow: { marginTop: spacing.sm, maxWidth: 440 },
 });
 
 // A link shared outside the app opens here for anyone; signed out, it shows the public look (see SharedPage).

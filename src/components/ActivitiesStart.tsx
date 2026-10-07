@@ -10,6 +10,7 @@ import { Wash } from '@/components/Wash';
 import type { User } from '@/data/types';
 import { useConnectRow } from '@/features/activity/autoLog';
 import { hasSessionStats } from '@/features/activity/format';
+import { liveState } from '@/features/activity/liveSession';
 import { START_UNDER, useInviterToFollow } from '@/features/activity/nearYou';
 import { canReadContacts } from '@/features/contacts/phoneContacts';
 import { CONTACTS_LABEL } from '@/features/invite/friendsWords';
@@ -32,6 +33,8 @@ const PICKS = 3;
  *    while nothing brings sessions in, however many you follow, until its ×
  *    closes it: the setup card's quiet second home after "Not now"
  *    (features/activity/autoLog).
+ *  - "Start a session" (Oct 6): a timer from Start to Finish, and a check-in
+ *    at the court; while one is going, the row opens it.
  *  - "Log a session", for anything played without a watch.
  *  - While you follow fewer than ten: a few people to follow, whoever
  *    invited you first (by migration 84's rule, see useInviterToFollow),
@@ -49,11 +52,12 @@ const PICKS = 3;
  */
 export function ActivitiesStart({ topInset, bottomInset, nearCount, sessions = 0 }: { topInset: number; bottomInset: number; nearCount: number; sessions?: number }) {
   const styles = useThemedStyles(styleDefinitions);
-  const { followingIds, actions, sessions: log, posts, currentUserId } = useApp();
+  const { followingIds, actions, sessions: log, posts, currentUserId, liveSession } = useApp();
   // Anything in your own log, or a session of yours posted with its numbers.
   const logs = log.some((s) => s.userId === currentUserId)
     || posts.some((p) => p.authorId === currentUserId && !p.archived && !p.removed && !!p.session && hasSessionStats(p.session));
   const { auto, source, offer, close } = useConnectRow();
+  const liveNow = liveSession ? liveState(liveSession) : null;
   const [busy, setBusy] = useState(false);
   const inviter = useInviterToFollow();
   // Someone followed from here stays, saying Following (as the feed's strip does).
@@ -106,7 +110,17 @@ export function ActivitiesStart({ topInset, bottomInset, nearCount, sessions = 0
             </Pressable>
           </View>
         ) : null}
-        <Pressable accessibilityRole="button" accessibilityLabel="Log a session" onPress={() => router.push('/log-session')} style={({ pressed }) => [styles.row, offer && styles.rowLine, pressed && styles.pressed]}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={!liveNow ? 'Start a session' : liveNow === 'finished' ? 'Log your finished session' : 'Session in progress. Open it'}
+          onPress={() => (!liveNow ? router.push('/start-session') : liveNow === 'finished' ? router.push({ pathname: '/log-session', params: { live: '1' } }) : router.push('/live-session'))}
+          style={({ pressed }) => [styles.row, offer && styles.rowLine, pressed && styles.pressed]}
+        >
+          <View style={styles.tile}><Ionicons name={liveNow ? 'radio-button-on' : 'play'} size={16} color={liveNow ? colors.open : colors.brand} /></View>
+          <Text style={styles.rowText}>{!liveNow ? 'Start a session' : liveNow === 'finished' ? 'Log your session' : 'Session in progress'}</Text>
+          <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
+        </Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel="Log a session" onPress={() => router.push('/log-session')} style={({ pressed }) => [styles.row, styles.rowLine, pressed && styles.pressed]}>
           <View style={styles.tile}><Ionicons name="add" size={20} color={colors.brand} /></View>
           <Text style={styles.rowText}>Log a session</Text>
           <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />

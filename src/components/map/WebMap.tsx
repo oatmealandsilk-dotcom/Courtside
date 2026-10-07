@@ -29,6 +29,7 @@ import { STYLE, applyLook, cardLook, lookFor } from '@/components/map/look';
 import { CLOSE_ZOOM_NAMES, FAR_ZOOM, MAP_PIN_CSS, SHORT_ZOOM, clusterTemplates, courtLift, youLift } from '@/components/map/markers';
 import { CARD_BOX, FULL_MAP_BOX, PIN_ENGINE_JS, type PinEngine, type PinEngineFactory } from '@/components/map/pinEngine';
 import { mapMarkers } from '@/components/map/pinList';
+import { livePin } from '@/features/activity/liveSession';
 import { PAINT_WATCH_JS } from '@/components/map/engineLoader';
 import { MapCardFailed, MapCardLoading, MapLoadPill } from '@/components/map/MapLoadState';
 import { useMapLoad } from '@/components/map/useMapLoad';
@@ -71,12 +72,14 @@ export function NearbyMap(props: NearbyMapProps) {
   const { theme, night } = useTheme();
   const insets = useSafeAreaInsets();
   const barInset = useBarInset();
-  const { followingIds, actions, mapLive, mapVisibility, teenMap, lastSeen } = useApp();
+  const { followingIds, actions, mapLive, mapVisibility, teenMap, lastSeen, liveSession, courtNow, locationEnabled } = useApp();
   // Who can see you on the map (migration 63): from your card and the location button, once there is a choice to make.
   const choosing = canChooseVisibility(mapLive, me, teenMap);
   // A teen (migration 78) is shared only with friends who follow them back, and with nobody until they say so.
   const teen = onTeenMap(me, teenMap);
   const hiddenMe = choosing && (mapVisibility === 'none' || (teen && mapVisibility == null));
+  // Playing a live session, checked in at its court (Oct 6): your pin says "Playing now", the court glows.
+  const playing = livePin(liveSession, courtNow, locationEnabled);
   // Since migration 98 you share to see: what keeps "Players nearby" from you
   // (Location off, or Only me), said by the tray and the still card, with the tap that changes it.
   const lock = nearbyLock({ mapLive, me, mapVisibility, locationOn: !!locationOn, hasSpot: !!lastSeen[me.id] });
@@ -318,8 +321,8 @@ export function NearbyMap(props: NearbyMapProps) {
   const selectedCourtId = model.selectedCourt?.id ?? null;
   const selectedHitId = model.selectedHit?.hit.id ?? null;
   const markers = useMemo(
-    () => mapMarkers({ model, expanded, me, shown, selectedId, selectedCourtId, selectedHitId, hidden: hiddenMe }),
-    [model.courts, model.ringed, model.cardCourts, model.cardRinged, model.hits, shown, selectedId, selectedCourtId, selectedHitId, expanded, me, night, theme, openToHit, model.mePos, hiddenMe], // eslint-disable-line react-hooks/exhaustive-deps
+    () => mapMarkers({ model, expanded, me, shown, selectedId, selectedCourtId, selectedHitId, hidden: hiddenMe, playing }),
+    [model.courts, model.ringed, model.cardCourts, model.cardRinged, model.hits, shown, selectedId, selectedCourtId, selectedHitId, expanded, me, night, theme, openToHit, model.mePos, hiddenMe, playing?.courtId, playing?.courtName], // eslint-disable-line react-hooks/exhaustive-deps
   );
   // What "+N" pins look like, in this theme's colours.
   const tpl = useMemo(() => clusterTemplates(), [theme, night]); // eslint-disable-line react-hooks/exhaustive-deps

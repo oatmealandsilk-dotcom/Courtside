@@ -1,6 +1,7 @@
 import type { User } from '@/data/types';
 import type { CanvasMarker } from '@/components/map/pinEngine';
-import { HIT_LIFT, agoShort, courtPinHtml, discSize, hitPinHtml, mePinHtml, playerPinClass, playerPinHtml } from '@/components/map/markers';
+import { HIT_LIFT, PLAYING_CLASS, agoShort, courtPinHtml, discSize, hitPinHtml, mePinHtml, playerPinClass, playerPinHtml } from '@/components/map/markers';
+import { milesBetween } from '@/features/players/geo';
 import { hitShort } from '@/features/hits/format';
 import { COURTS_MIN_ZOOM, type MapModel, type Placed } from '@/features/players/mapModel';
 import { isOpenToHit } from '@/features/players/openToHit';
@@ -38,10 +39,16 @@ const playerRank = (p: Placed, now: number) =>
  * never gather into anyone (whoever crowds you shows as "+N" beside you);
  * a picked court or hit never gathers at all.
  */
-export function mapMarkers({ model, expanded, me, shown, selectedId, selectedCourtId, selectedHitId, hidden = false }: {
+export function mapMarkers({ model, expanded, me, shown, selectedId, selectedCourtId, selectedHitId, hidden = false, playing = null }: {
   model: MapModel; expanded: boolean; me: User; shown: Placed[]; selectedId: string | null; selectedCourtId: string | null; selectedHitId: string | null;
   /** You chose "Only me": your own pin says so. */
   hidden?: boolean;
+  /**
+   * You are playing a live session, checked in at this court (Oct 6; see
+   * livePin): your pin wears the green ring and "Playing now · <court>", and
+   * the court glows the way a court with players on it does, counting you.
+   */
+  playing?: { courtId: string; courtName: string } | null;
 }): CanvasMarker[] {
   const now = Date.now();
   // Full court pins only on the full map (the model draws none on the card either).
@@ -51,26 +58,32 @@ export function mapMarkers({ model, expanded, me, shown, selectedId, selectedCou
   // none of them is drawn there. The picked court stays with its card.
   // What is on at each court right now, its glow and its label (Oct 6, owner): players standing
   // on it ("3 playing"), else its soonest open hit ("Hit 6pm"), whose flag then folds into it.
-  const playing = new Map<string, number>();
+  const playingAt = new Map<string, number>();
   const hitAt = new Map<string, string>();
   if (expanded) {
-    for (const p of shown) if (p.court) playing.set(p.court.id, (playing.get(p.court.id) ?? 0) + 1);
+    for (const p of shown) if (p.court) playingAt.set(p.court.id, (playingAt.get(p.court.id) ?? 0) + 1);
     for (const h of model.hits) {
       const id = h.hit.place.id;
       if (id && (!hitAt.has(id) || h.hit.startsAt < hitAt.get(id)!)) hitAt.set(id, h.hit.startsAt);
     }
   }
   const drawn = new Set<string>();
+  // Your own spot, on the full map only (see "Your pin" below): where your pin stands, for the court you play at.
+  const meAt = expanded ? model.mePos : null;
   const list: CanvasMarker[] = (expanded ? model.courts : []).map((c, i) => {
     const on = c.id === selectedCourtId;
     const ringed = model.ringed.has(c.id);
     drawn.add(c.id);
-    const n = playing.get(c.id) ?? 0;
+    const n = playingAt.get(c.id) ?? 0;
     const hit = hitAt.get(c.id);
-    const tag = n ? `${n} playing` : hit ? `Hit ${hitShort(hit).replace(/^Today /, '')}` : undefined;
+    // Your live session's court counts you: "You're playing", "You + 2 playing".
+    const yours = playing?.courtId === c.id;
+    const tag = yours ? (n ? `You + ${n} playing` : 'You’re playing') : n ? `${n} playing` : hit ? `Hit ${hitShort(hit).replace(/^Today /, '')}` : undefined;
+    // Your pin standing on it already says so: the court only glows under it, no words beside.
+    const underYou = yours && !on && !!meAt && milesBetween(meAt, c) < 0.05;
     // Something on: never gathered into a court crowd, above the others, and shown at every zoom (as its hit's flag was).
     // `n`: how many courts it is, for the count on a crowd.
-    return { id: `c:${c.id}`, lat: c.lat, lng: c.lng, html: courtPinHtml(c, on, ringed, tag), z: on ? 4 : tag ? 2 : 1, k: 'c' as const, r: (ringed ? 0 : 1e6) - c.count * 1000 + i, sel: on, solo: !!tag, n: c.count, g: 'c' as const, role: 'button', label: tag ? `${c.name}, ${tag}` : c.name, mz: on || tag ? undefined : COURTS_MIN_ZOOM };
+    return { id: `c:${c.id}`, lat: c.lat, lng: c.lng, html: courtPinHtml(c, on, ringed, underYou ? undefined : tag, underYou), z: on ? 4 : tag ? 2 : 1, k: 'c' as const, r: (ringed ? 0 : 1e6) - c.count * 1000 + i, sel: on, solo: !!tag, n: c.count, g: 'c' as const, role: 'button', label: tag ? `${c.name}, ${tag}` : c.name, mz: on || tag ? undefined : COURTS_MIN_ZOOM };
   });
   // The still card: your city's courts as quiet dots, under everything.
   // The still card shows people and hits only; courts live on the full map (Oct 3, owner).
@@ -102,11 +115,13 @@ export function mapMarkers({ model, expanded, me, shown, selectedId, selectedCou
   }
   // Your pin only where you last shared your location; location off, no pin.
   // Not on the still card: it shows your city, never your spot in it.
-  const mine = expanded ? model.mePos : null;
+  const mine = meAt;
   // Hung by its top, the face on your spot; Open to hit switches its class, so the green ring draws in behind your card.
   // Never gathered: players crowding your spot gather into a "+N" beside you (fix).
-  // Your tag: "You", with "· Open to hit" or "· Hidden" when they show.
-  const meWidths = nameWidths(`You${isOpenToHit(me) ? ' · Open to hit' : ''}${hidden ? ' · Hidden' : ''}`, { open: isOpenToHit(me) });
-  if (mine) list.push({ ...meWidths, id: 'me', lat: mine.lat, lng: mine.lng, html: mePinHtml(me, ME_SIZE, hidden), cls: playerPinClass(me), anchor: 'top', offsetY: -discSize(ME_SIZE) / 2, z: 6, k: 'p', fix: true, r: -1, ds: discSize(ME_SIZE), g: 'p', role: 'button', label: 'You' });
+  // Your tag: "You", with "· Playing now · <court>", "· Open to hit" or "· Hidden" when they show.
+  const nowWords = playing ? ` · Playing now · ${playing.courtName.slice(0, 18)}` : '';
+  const meWidths = nameWidths(`You${nowWords}${isOpenToHit(me) ? ' · Open to hit' : ''}${hidden ? ' · Hidden' : ''}`, { open: isOpenToHit(me) || !!playing });
+  const meClass = [playerPinClass(me), playing ? PLAYING_CLASS : ''].filter(Boolean).join(' ');
+  if (mine) list.push({ ...meWidths, id: 'me', lat: mine.lat, lng: mine.lng, html: mePinHtml(me, ME_SIZE, hidden, playing ? playing.courtName : undefined), cls: meClass, anchor: 'top', offsetY: -discSize(ME_SIZE) / 2, z: 6, k: 'p', fix: true, r: -1, ds: discSize(ME_SIZE), g: 'p', role: 'button', label: 'You' });
   return list;
 }

@@ -96,6 +96,9 @@ export const MAP_PIN_CSS = `
 .cs-open .cs-dot{width:7px;margin-right:4px}
 .cs-tag-open{display:inline-block;overflow:hidden;white-space:nowrap;vertical-align:top;max-width:0;opacity:0;transition:max-width .45s cubic-bezier(.2,.8,.2,1),opacity .12s ease}
 .cs-open .cs-tag-open{max-width:90px;opacity:1;transition:max-width .45s cubic-bezier(.2,.8,.2,1),opacity .25s ease .14s}
+.cs-playing .cs-halo-wrap{opacity:1}
+.cs-playing .cs-halo{animation-play-state:running}
+.cs-playing .cs-ring circle{stroke-dashoffset:0;opacity:1;stroke-linecap:round}
 .cs-still .cs-halo{animation:none;transform:scale(1.35);opacity:.2}
 .cs-still .cs-just-open .cs-disc{animation:none}
 .cs-still .cs-ring circle,.cs-still .cs-open .cs-ring circle{stroke-dashoffset:0;transition:opacity .3s ease}
@@ -128,6 +131,12 @@ export const JUST_OPEN_CLASS = 'cs-just-open';
 export const POP_MS = 650;
 /** The classes a player's pin wears: "cs-open" while they are open to hit today. */
 export const playerPinClass = (user: User) => (isOpenToHit(user) ? OPEN_CLASS : '');
+/**
+ * Worn by your own pin while you are playing a live session checked in at a
+ * court (Oct 6): the same green ring and breathing halo as the courts with
+ * something on, without Open to hit's "· Open to hit" (see MAP_PIN_CSS).
+ */
+export const PLAYING_CLASS = 'cs-playing';
 
 /** The green ring's width, and the page-coloured ring between it and the face. */
 const RING = 2.5;
@@ -187,11 +196,16 @@ export function playerPinHtml(user: User, { size, label, seenAt, atCourt = false
  * on the same page-coloured pill (never a solid green one, which is a
  * posted hit's flag). Hung by its top like the players' pins.
  */
-export function mePinHtml(me: User, size: number, hidden = false): string {
+export function mePinHtml(me: User, size: number, hidden = false, playing?: string): string {
   const open = `<span class="cs-tag-open"><span style="color:${colors.textMuted};font-weight:500">&nbsp;· </span>Open to hit</span>`;
   // "Only me" (migration 63): nobody else sees this pin, and the tag says so.
   const alone = hidden ? `<span style="color:${colors.textMuted};font-weight:500">&nbsp;· Hidden</span>` : '';
-  const tag = `<div style="margin-top:2px;display:flex;align-items:center;white-space:nowrap;padding:3px 8px;border-radius:999px;background:${colors.bg};color:${colors.text};box-shadow:0 1px 4px rgba(0,0,0,.16);${FONT}"><i class="cs-dot" style="background:${colors.open}"></i>You${open}${alone}</div>`;
+  // Playing a live session, checked in at a court (Oct 6): a steady green dot, "Playing now" and the court.
+  const now = playing === undefined ? ''
+    : `<span style="color:${colors.textMuted};font-weight:500">&nbsp;·&nbsp;</span>Playing now${playing ? `<span style="display:inline-block;max-width:118px;overflow:hidden;text-overflow:ellipsis;vertical-align:top;color:${colors.textMuted};font-weight:500">&nbsp;·&nbsp;${esc(playing)}</span>` : ''}`;
+  const dot = playing === undefined ? `<i class="cs-dot" style="background:${colors.open}"></i>`
+    : `<i style="display:inline-block;flex:none;width:7px;height:7px;margin-right:4px;border-radius:4px;background:${colors.open}"></i>`;
+  const tag = `<div style="margin-top:2px;display:flex;align-items:center;white-space:nowrap;padding:3px 8px;border-radius:999px;background:${colors.bg};color:${colors.text};box-shadow:0 1px 4px rgba(0,0,0,.16);${FONT}">${dot}You${now}${open}${alone}</div>`;
   return `<div class="cs-pin" style="display:flex;flex-direction:column;align-items:center;cursor:pointer">${disc(me, size)}${tag}</div>`;
 }
 
@@ -214,24 +228,27 @@ const storyRing = (gap: number, width: number) => `0 0 0 ${gap}px ${colors.bg},0
  * place to suggest. `live`: something on there now, in a few words ("3
  * playing", "Hit 6pm"; Oct 6, owner): the court glows, a green ring and a
  * soft halo, and the words sit beside it at every zoom (with its name
- * before them, close in); it never shrinks when zoomed out.
+ * before them, close in); it never shrinks when zoomed out. `glowOnly`: the
+ * same glow with no words, under your own pin when you are playing there
+ * (your pin's tag says it, Oct 6).
  */
-export function courtPinHtml(court: Court, on: boolean, ring = false, live?: string): string {
+export function courtPinHtml(court: Court, on: boolean, ring = false, live?: string, glowOnly = false): string {
   // A light rounded square with the court drawn in its colour: a place, not a person (Oct 5, owner: courts and
   // players looked too alike). Picked, it fills in. People stay round, bigger, with their faces.
   const size = on ? 28 : 22;
   const closed = isClosedCourt(court);
   const nameText = court.name && court.name !== 'Tennis courts' ? `${esc(court.name)}${closed ? ` · ${court.access === 'private' ? 'private' : 'members'}` : ''}` : '';
   const pill = `position:absolute;left:calc(100% + ${live ? 10 : ring ? 9 : 5}px);top:50%;transform:translateY(-50%);max-width:${live ? 190 : 150}px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:2px 7px;border-radius:999px;background:${colors.bg};box-shadow:0 1px 3px rgba(0,0,0,.14);${FONT}`;
+  const glowing = !!live || glowOnly;
   const name = live
     ? `<span style="${pill};color:${colors.text}"><i style="display:inline-block;width:6px;height:6px;margin-right:4px;border-radius:3px;vertical-align:1px;background:${colors.open}"></i>${nameText ? `<span class="cs-court-nm" style="color:${colors.textMuted};font-weight:500">${nameText} · </span>` : ''}${esc(live)}</span>`
-    : nameText ? `<span class="cs-court-name" style="${pill};color:${closed ? colors.textMuted : colors.text}">${nameText}</span>` : '';
-  const glow = live ? `0 0 0 2px ${colors.bg},0 0 0 4px ${colors.open},0 0 12px 4px ${colors.open}66,` : ring ? storyRing(2, 2.5) : '';
+    : nameText && !glowOnly ? `<span class="cs-court-name" style="${pill};color:${closed ? colors.textMuted : colors.text}">${nameText}</span>` : '';
+  const glow = glowing ? `0 0 0 2px ${colors.bg},0 0 0 4px ${colors.open},0 0 12px 4px ${colors.open}66,` : ring ? storyRing(2, 2.5) : '';
   const tone = closed ? colors.borderStrong : colors.court;
   const fill = on ? tone : colors.bg;
   const glyph = on ? (closed ? colors.bg : colors.brandInk) : closed ? colors.textMuted : colors.court;
   const edge = on ? `2px solid ${colors.bg}` : `1.5px solid ${tone}`;
-  return `<div class="cs-court cs-pin${on ? ' cs-on' : ''}${live ? ' cs-live' : ''}" style="position:relative;width:${size}px;height:${size}px;border-radius:${on ? 8 : 6}px;background:${fill};border:${edge};box-sizing:border-box;display:flex;align-items:center;justify-content:center;box-shadow:${glow}0 2px 6px rgba(0,0,0,${on ? '.3' : '.2'});cursor:pointer${closed && !on ? ';opacity:.75' : ''}">${courtGlyph(glyph)}${name}${hitDot()}</div>`;
+  return `<div class="cs-court cs-pin${on ? ' cs-on' : ''}${glowing ? ' cs-live' : ''}" style="position:relative;width:${size}px;height:${size}px;border-radius:${on ? 8 : 6}px;background:${fill};border:${edge};box-sizing:border-box;display:flex;align-items:center;justify-content:center;box-shadow:${glow}0 2px 6px rgba(0,0,0,${on ? '.3' : '.2'});cursor:pointer${closed && !on ? ';opacity:.75' : ''}">${courtGlyph(glyph)}${name}${hitDot()}</div>`;
 }
 
 /** The dot an open hit folds into on a pin when zoomed out (pinEngine puts "cs-hit" on the pin). */
