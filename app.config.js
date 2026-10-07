@@ -70,7 +70,7 @@ module.exports = {
         NSPhotoLibraryUsageDescription: 'CourtSide uses your photo library to choose clips and photos to post or send in chats.',
         NSLocationWhenInUseUsageDescription: 'CourtSide uses your location while the app is open to show courts and players near you. You choose who can see you.',
         // Saving a chat photo to your camera roll from the share sheet (from build 11).
-        NSPhotoLibraryAddUsageDescription: 'CourtSide saves the photos you choose to your library.',
+        NSPhotoLibraryAddUsageDescription: 'CourtSide saves the photos and videos you choose to your library.',
       },
     },
     android: {
@@ -166,7 +166,7 @@ module.exports = {
       // for: workouts (tennis and, since Oct 5, every other kind: runs, rides,
       // the gym) and heart rate, plus the daily numbers and food totals.
       // Takes effect from the next App Store build.
-      ['react-native-health', { healthSharePermission: 'CourtSide reads your workouts (tennis, runs, rides, the gym and more) and your heart rate during them, so you can log your sessions, plus sleep, heart rate variability, resting heart rate, steps, active energy and nutrition, for your Health page and your AI coach’s training plan.', healthUpdatePermission: 'CourtSide does not write to Health.' }],
+      ['react-native-health', { healthSharePermission: 'CourtSide reads your workouts (tennis, runs, rides, the gym and more) and your heart rate during them, so you can log your sessions, plus sleep, heart rate variability, resting heart rate, steps, active energy and nutrition, for your Health page.', healthUpdatePermission: 'CourtSide does not write to Health.' }],
     ],
     experiments: { baseUrl },
     // Instant updates: a build asks Expo for newer app code when it opens and

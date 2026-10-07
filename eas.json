@@ -32,6 +32,10 @@
       "android": {
         "buildType": "app-bundle"
       }
+    },
+    "store": {
+      "extends": "production",
+      "channel": "store"
     }
   },
   "submit": {
