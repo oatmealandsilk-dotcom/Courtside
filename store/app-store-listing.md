@@ -39,7 +39,7 @@ Each of these would likely get the app rejected. Details are in the sections nam
 
 1. **Sign in with Apple works.** Checked tonight (Oct 5): Supabase still has Apple sign-in **off**. The Apple button shows on every iPhone, and tapping it gives an error. Reviewers almost always tap it. Steps in section 8, item A.
 2. **The Sign in with Apple key is in Supabase.** Apple requires that deleting an account made with Apple also removes CourtSide from that person's Apple ID (Apple calls it "revoking the token"). The code is ready; it needs your key. Steps in section 8, item B.
-3. **Hidden words is live. Done** (Oct 5, about 8pm). Apple's rule 1.2 says apps where people post **must** have "a method for filtering objectionable material". Hidden words is that filter, and it's on (section 8, item C).
+3. **Hidden words is live. Done** (Oct 5, about 8pm). Apple's rule 1.2 says apps where people post **must** have "a method for filtering objectionable material". Hidden words is that filter (section 8, item C). Since Oct 7 it starts off for adults (owner's call) and is always on for under-18s; slurs and threats are refused for everyone.
 4. **Build 15 is in TestFlight and you have tried it** (section 8, item D).
 5. **The two demo accounts exist, with something in them** (section 6).
 6. **Every row a reviewer can tap works**, or is hidden for the review: Phone number, WHOOP, Google sign-in (section 8, items E to G).
@@ -334,7 +334,7 @@ Seven looks: the warm CourtSide original, Night, Clean, and four city courts: Me
 SAFETY FIRST
 • CourtSide is for ages 13 and up. Teen accounts start private, only people a teen follows can message them, and teens are never shown to strangers on the map.
 • Report posts, profiles, threads, comments and messages. Block or mute anyone.
-• Hidden words hides offensive comments and messages from people you don't follow. Slurs and threats can't be posted.
+• Hidden words hides offensive comments and messages from people you don't follow (always on for under-18s). Slurs and threats can't be posted.
 • No ads. We don't sell your data or track you across other apps.
 
 Training, injury and fitness content on CourtSide is general information, not medical advice.
@@ -517,7 +517,7 @@ PERMISSIONS (each asked only when its feature is first used, except notification
 - Apple Health, read only: Settings > Health and nutrition (row "Apple Watch"). Reads sleep, HRV, resting heart rate, steps, active energy, nutrition, and Workouts with heart rate to log a session in one tap. Background delivery only shows a local alert. Never writes to Health. Private, except heart rate and calories on a post with "Share health data" on (default on for adults only). Never used for ads or marketing, never sold, not in iCloud. With no workouts on the device, the sessions list is empty.
 
 SAFETY (1.2)
-Everyone agrees to the Terms and Community guidelines (no tolerance for objectionable content or abusive users). Report: ••• on a post, instant or profile; the flag on a thread; press and hold a comment, reply or message; ••• on a coach question; a chat's details. Block or mute: ••• on a profile. Reported items are hidden from the reporter at once. Our team is alerted to every report, reviews it within 24 hours in an in-app queue, takes down content (the author is told why) and suspends accounts. Settings > Hidden words hides offensive comments and messages from people you don't follow; slurs and threats can't be posted.
+Everyone agrees to the Terms and Community guidelines (no tolerance for objectionable content or abusive users). Report: ••• on a post, instant or profile; the flag on a thread; press and hold a comment, reply or message; ••• on a coach question; a chat's details. Block or mute: ••• on a profile. Reported items are hidden from the reporter at once. Our team is alerted to every report, reviews it within 24 hours in an in-app queue, takes down content (the author is told why) and suspends accounts. Settings > Hidden words hides offensive comments and messages from people you don't follow (one switch for adults; always on for under-18s); slurs and threats can't be posted anywhere.
 
 DELETE ACCOUNT
 Profile > gear > Account center > Delete account, then type DELETE. Also on the web at app.courtsidebase.com.
