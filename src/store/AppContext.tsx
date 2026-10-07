@@ -817,6 +817,14 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
    */
   setSessionScore: (sessionId: ID, sets: MatchSet[] | null) => Promise<void>;
   /**
+   * The day and length of a session already in your log, changed (Oct 6,
+   * Log a session's edit): your streak, hours and week follow at once. Anyone
+   * who accepted a tag on it is asked again, as the server does whenever a
+   * session's day or length changes (migration 62), and your posts carrying
+   * it say the new day and length (migration 65). Throws a plain sentence.
+   */
+  setSessionTime: (sessionId: ID, time: { day: string; minutes: number }) => Promise<void>;
+  /**
    * Your record against one player (migration 91): only scored matches across
    * the net from each other that you are both confirmed on. Null when it could
    * not be asked, for yourself, or with someone blocked either way.
@@ -4000,6 +4008,46 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
     // The server's word on who is waiting now.
     if (match) void refreshSessionTags();
+  }, [requireUser, refreshSessionTags]);
+
+  const setSessionTime = useCallback(async (sessionId: ID, time: { day: string; minutes: number }) => {
+    const me = requireUser();
+    const had = stateRef.current.sessions.find((x) => x.id === sessionId && x.userId === me);
+    // Within what the database keeps (5 to 600 minutes, migration 39), on a real day.
+    const minutes = Math.max(5, Math.min(600, Math.round(time.minutes)));
+    if (!had || !/^\d{4}-\d{2}-\d{2}$/.test(time.day)) return;
+    if (had.day === time.day && had.minutes === minutes) return;
+    const before = stateRef.current;
+    // Who said yes is asked again (migration 62): what they accepted has changed. Their names come off your posts meanwhile.
+    const reasked = new Set(before.sessionTags.filter((t) => t.sessionId === sessionId && t.taggerId === me && t.status === 'accepted').map((t) => t.taggedId));
+    haptics.commit();
+    setState((prev) => ({
+      ...prev,
+      sessions: prev.sessions.map((x) => (x.id === sessionId ? { ...x, day: time.day, minutes } : x)),
+      // Your posts carrying it say the new day and length straight away (the server does the same, migration 65).
+      posts: prev.posts.map((p) => {
+        if (p.authorId !== me || !p.session || p.session.sessionId !== sessionId) return p;
+        const kept = p.session.with?.filter((w) => !reasked.has(w.id));
+        const { with: _with, ...rest } = p.session;
+        return { ...p, session: { ...rest, day: time.day, minutes, ...(kept?.length ? { with: kept } : {}) } };
+      }),
+      sessionTags: prev.sessionTags.map((t) => (t.sessionId === sessionId && t.taggerId === me
+        ? { ...t, day: time.day, minutes, ...(t.status === 'accepted' ? { status: 'pending' as const, respondedAt: undefined } : {}) }
+        : t)),
+    }));
+    if (!live(me, sessionId)) return;
+    try { await remote.updateSessionTime(sessionId, time.day, minutes); } catch (e) {
+      // Only this session, its posts and its tags go back: anything else changed meanwhile stays.
+      setState((prev) => ({
+        ...prev,
+        sessions: prev.sessions.map((x) => (x.id === sessionId ? had : x)),
+        posts: prev.posts.map((p) => before.posts.find((b) => b.id === p.id && p.session?.sessionId === sessionId) ?? p),
+        sessionTags: prev.sessionTags.map((t) => (t.sessionId === sessionId ? before.sessionTags.find((b) => b.id === t.id) ?? t : t)),
+      }));
+      throw e;
+    }
+    // The server's word on who is waiting now.
+    if (reasked.size) void refreshSessionTags();
   }, [requireUser, refreshSessionTags]);
 
   const headToHead = useCallback(async (userId: ID): Promise<HeadToHead | null> => {
@@ -8516,6 +8564,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       sessionTagRefusal,
       setSessionOpponent,
       setSessionScore,
+      setSessionTime,
       headToHead,
       courtKings,
       flyby,
@@ -8741,6 +8790,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       sessionTagRefusal,
       setSessionOpponent,
       setSessionScore,
+      setSessionTime,
       headToHead,
       courtKings,
       flyby,

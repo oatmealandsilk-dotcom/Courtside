@@ -92,9 +92,10 @@ export function TrackedLength({ minutes, trackerMinutes, tracker, open, onOpen, 
 }
 
 /** One of the two: − and + either side of the number, which a screen reader can also swipe up and down. */
-function Stepper({ label, value, unit, onMinus, onPlus, minusOff, plusOff }: {
+export function Stepper({ label, value, unit, onMinus, onPlus, minusOff, plusOff }: {
   label: string; value: string; unit: string; onMinus: () => void; onPlus: () => void; minusOff: boolean; plusOff: boolean;
 }) {
+  // Also Log a session's own length (LengthPicker): the same pair, the same look.
   const styles = useThemedStyles(styleDefinitions);
   return (
     <View
@@ -106,14 +107,14 @@ function Stepper({ label, value, unit, onMinus, onPlus, minusOff, plusOff }: {
       accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
       onAccessibilityAction={(e) => { if (e.nativeEvent.actionName === 'increment' && !plusOff) onPlus(); if (e.nativeEvent.actionName === 'decrement' && !minusOff) onMinus(); }}
     >
-      <Pressable hitSlop={6} disabled={minusOff} onPress={onMinus} style={({ pressed }) => [styles.step, minusOff && styles.off, pressed && styles.pressed]}>
+      <Pressable accessibilityLabel={`Fewer ${label.toLowerCase()}`} hitSlop={6} disabled={minusOff} onPress={onMinus} style={({ pressed }) => [styles.step, minusOff && styles.off, pressed && styles.pressed]}>
         <Ionicons name="remove" size={18} color={colors.text} />
       </Pressable>
       <View style={styles.figure}>
         <Text style={styles.value}>{value}</Text>
         <Text style={styles.unit}>{unit}</Text>
       </View>
-      <Pressable hitSlop={6} disabled={plusOff} onPress={onPlus} style={({ pressed }) => [styles.step, plusOff && styles.off, pressed && styles.pressed]}>
+      <Pressable accessibilityLabel={`More ${label.toLowerCase()}`} hitSlop={6} disabled={plusOff} onPress={onPlus} style={({ pressed }) => [styles.step, plusOff && styles.off, pressed && styles.pressed]}>
         <Ionicons name="add" size={18} color={colors.text} />
       </Pressable>
     </View>

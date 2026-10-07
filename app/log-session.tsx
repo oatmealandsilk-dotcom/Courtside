@@ -5,13 +5,15 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { DragSheet } from '@/components/DragSheet';
-import { Chips, Section, SheetTitle, Submit, Tiles, formBody } from '@/components/sheet/SheetForm';
+import { Chips, Section, SheetTitle, Submit, formBody } from '@/components/sheet/SheetForm';
 import { WhoYouPlayed } from '@/components/WhoYouPlayed';
 import { KIND_LABEL, activityDay, activityTitle, activityWhen, dayWords, fromWho, loggedLabel, privateLine, sessionEyebrow } from '@/features/activity/format';
 import { showLogged } from '@/features/activity/useTrackerSession';
 import { Duration } from '@/components/session/Duration';
-import { LENGTHS, lengthTile, trackerName } from '@/features/activity/lengths';
+import { trackerName } from '@/features/activity/lengths';
 import { TrackedLength } from '@/components/session/TrackedLength';
+import { LengthPicker } from '@/components/session/LengthPicker';
+import { DayPicker } from '@/components/session/DayPicker';
 import { ScoreField } from '@/components/session/ScoreField';
 import { canScore, readScore, scoreText, setsWinner, tookScoreNotKept } from '@/features/activity/score';
 import { computeStats } from '@/features/practice/stats';
@@ -52,8 +54,10 @@ const WORKOUT_KINDS: { value: string; label: string }[] = ['run', 'ride', 'swim'
 
 /**
  * Log a session in two taps: what it was (practice is picked already) and
- * how long, then Save. A match can say whether you won. Yesterday is one
- * more tap, for the session you forgot to log.
+ * how long, then Save. A match can say whether you won. How long offers the
+ * usual lengths and Custom for any other (hours and minutes); When is Today,
+ * Yesterday or any day of the last four weeks, for the session you forgot to
+ * log (Oct 6, owner). A session counts for the day picked.
  *
  * Opened from a "Tennis detected" alert (?activity=), it comes filled in
  * from the tracker's session: its day, its exact length, and a private line
@@ -80,8 +84,9 @@ const WORKOUT_KINDS: { value: string; label: string }[] = ['run', 'ride', 'swim'
  * 3 on a match or 8 on a practice, each asked to accept before their name shows on a post; a name
  * typed that isn't on CourtSide stays private, as before (migration 62).
  * From a hit, its people are offered first. Opened on a session already
- * logged (?edit=, a row in Your sessions), the sheet is that part alone, so
- * people can be tagged after the fact. A copy of someone else's session
+ * logged (?edit=, a row in Your sessions), the sheet is its score and that
+ * part, so people can be tagged after the fact; one logged by hand can also
+ * change its length and day there (Oct 6). A copy of someone else's session
  * (from their tag) is theirs to tag, so it says so instead.
  */
 export default function LogSessionRoute() {
@@ -186,7 +191,11 @@ function LogSession() {
   // From a hit, its people are offered to tag; with no tagging yet, their names start in the box.
   const [players, setPlayers] = useState<SessionPlayer[]>([]);
   const [opponent, setOpponent] = useState(fromHit && !sessionTagsReady ? fromHit.who : '');
-  const [when, setWhen] = useState<'today' | 'yesterday'>(fromHit && fromHit.day !== localDay(new Date()) ? 'yesterday' : 'today');
+  // The day it was played (Oct 6: any of the last four weeks, not just today or yesterday). From a hit, the hit's day; never one still to come.
+  const [playedOn, setPlayedOn] = useState(() => {
+    const today = localDay(new Date());
+    return fromHit?.day && fromHit.day < today ? fromHit.day : today;
+  });
   const [saving, setSaving] = useState(false);
   // Which button the save came from, so only that one spins.
   const [andPost, setAndPost] = useState(false);
@@ -229,7 +238,7 @@ function LogSession() {
   const choosing = !!offered && !byHand && unlogged.length > 0;
   const logThis = (x: DetectedActivity) => { next.current = x.id; close(); };
 
-  // Opened on a session already logged (?edit=): its score and who you played, and nothing else.
+  // Opened on a session already logged (?edit=): its score and who you played (and, logged by hand, its length and day).
   const editing = edit ? sessions.find((x) => x.id === edit && x.userId === currentUserId) : undefined;
   // Your log (and its tags) may still be on its way when the sheet opens from a link.
   const loaded = listLoaded;
@@ -264,6 +273,16 @@ function LogSession() {
   const fromTag = editing?.fromSessionId ? sessionTags.find((t) => t.taggedId === currentUserId && (t.mirroredSessionId === editing.id || t.sessionId === editing.fromSessionId)) : undefined;
   const fromName = fromTag ? firstOfName(users.find((u) => u.id === fromTag.taggerId)?.name ?? '') : '';
   const editScoring = !!editing && canScore(editing.kind) && !editing.fromSessionId;
+  // A session logged by hand can change its day and length here too (Oct 6), shown as saved until
+  // something is picked. A tracker's keeps the tracker's day and time; a copy of someone else's is theirs.
+  const timeEditable = editScoring && !editing?.activityId;
+  const [pickedMinutes, setPickedMinutes] = useState<number | null>(null);
+  const [pickedDay, setPickedDay] = useState<string | null>(null);
+  const editMinutes = pickedMinutes ?? editing?.minutes ?? null;
+  const editDay = pickedDay ?? editing?.day ?? localDay(new Date());
+  const timeChanged = !!editing && timeEditable && (editDay !== editing.day || editMinutes !== editing.minutes);
+  // Anyone who accepted is asked again once the day or length changes (the server does it, migration 62): said before Save.
+  const reasked = timeChanged ? editTags.filter((t) => t.status === 'accepted').map((t) => firstOf(t.taggedId)) : [];
   const saveEdit = async () => {
     if (!editing || saving) return;
     // A score that isn't one yet says why, and nothing is saved.
@@ -271,6 +290,8 @@ function LogSession() {
     setSaving(true);
     setError('');
     try {
+      // The day and length, only when changed: streak, hours and the week follow.
+      if (timeChanged && editMinutes) await actions.setSessionTime(editing.id, { day: editDay, minutes: editMinutes });
       if (canTagKind(editing.kind)) await actions.setSessionOpponent(editing.id, editText);
       // The score, only when it changed: on a match, anyone who accepted is asked again (migration 91).
       if (editScoring && scoreText(editScored.sets) !== scoreText(editing.sets)) {
@@ -316,7 +337,8 @@ function LogSession() {
     setSaving(true);
     setAndPost(post);
     setError('');
-    const day = fresh ? activityDay(fresh) : when === 'today' ? localDay(new Date()) : localDay(Date.now() - 86_400_000);
+    // The day it counts for (streak, hours, the week): the tracker's own, or the day picked under When.
+    const day = fresh ? activityDay(fresh) : playedOn;
     if (fresh) setFrozen(fresh);
     // Who you played goes with a match or a practice only.
     const tagging = canTagKind(kind) ? players : [];
@@ -378,7 +400,7 @@ function LogSession() {
     }
   };
 
-  const heroDay = when === 'today' ? localDay(new Date()) : localDay(Date.now() - 86_400_000);
+  const heroDay = playedOn;
   const hide = (x: DetectedActivity) => confirm({
     title: 'Hide this session?',
     message: 'It won’t count toward your streak.',
@@ -411,7 +433,7 @@ function LogSession() {
   const dismissed = () => (next.current ? router.replace({ pathname: '/compose', params: { activity: next.current } }) : router.back());
 
   return (
-    <DragSheet fitContent closeSignal={closeSignal} onDismissed={dismissed} peekFraction={edit ? 0.46 : 0.7} header={header}>
+    <DragSheet fitContent closeSignal={closeSignal} onDismissed={dismissed} peekFraction={edit && !timeEditable ? 0.46 : 0.7} header={header}>
       <KeyboardScrollContext.Provider value={reveal}>
       {edit ? (
         <ScrollView ref={scroller} onScroll={onScroll} scrollEventThrottle={32} contentContainerStyle={formBody} keyboardShouldPersistTaps="handled">
@@ -434,6 +456,12 @@ function LogSession() {
             </>
           ) : (
             <>
+              {/* How long, as the log has it: the usual lengths and Custom (Oct 6). */}
+              {timeEditable ? (
+                <Section title="How long">
+                  <LengthPicker minutes={editMinutes} onChange={setPickedMinutes} />
+                </Section>
+              ) : null}
               {/* Any tennis session's score (Oct 6): a match's as before; a practice's or drills' is optional and only the sets. */}
               <Section title={editing.kind === 'match' ? 'Score' : 'Score (optional)'} hint={editing.kind === 'match' && editTags.some((t) => t.status === 'accepted') ? 'Changing it asks the players who accepted to confirm again.' : undefined}>
                 <ScoreField kind={editing.kind} focus={focus === 'score'} value={editScore} onChange={(next) => { scoreTouched.current = true; setEditScore(next); }} />
@@ -455,6 +483,12 @@ function LogSession() {
                   />
                 </Section>
               ) : null}
+              {timeEditable ? (
+                <Section title="When">
+                  <DayPicker value={editDay} onChange={setPickedDay} />
+                </Section>
+              ) : null}
+              {reasked.length ? <Text style={styles.hint}>Changing the day or length asks {andList(reasked)} to confirm again.</Text> : null}
               {error ? <Text style={styles.error}>{error}</Text> : null}
               <Submit label="Save" onPress={() => { void saveEdit(); }} busy={saving} />
             </>
@@ -544,7 +578,8 @@ function LogSession() {
                 onChange={(m) => setMinutes(m)}
               />
             ) : (
-              <Tiles value={minutes ?? 0} onChange={(m) => setMinutes(m)} options={LENGTHS.map(lengthTile)} />
+              // The usual lengths a tap each, and Custom for any other (Oct 6).
+              <LengthPicker minutes={minutes} onChange={setMinutes} />
             )}
           </Section>
           {kind === 'match' ? (
@@ -577,7 +612,7 @@ function LogSession() {
           {/* A tracker's session already knows its day. */}
           {fresh ? null : (
             <Section title="When">
-              <Chips value={when} onChange={(v) => { if (v) setWhen(v); }} options={[{ value: 'today', label: 'Today' }, { value: 'yesterday', label: 'Yesterday' }]} />
+              <DayPicker value={playedOn} onChange={setPlayedOn} />
             </Section>
           )}
           {error ? <Text style={styles.error}>{error}</Text> : null}

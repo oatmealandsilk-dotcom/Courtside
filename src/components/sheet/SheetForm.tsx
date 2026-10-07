@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -60,13 +60,27 @@ export function Chips<T extends string>({ options, value, onChange, clearable = 
   );
 }
 
-/** Choices as small white tiles on a shadow, a top line and a big one: days of the week, lengths of a session. */
-export function Tiles<T extends string | number>({ options, value, onChange, scroll = false, inCard = false }: { options: { value: T; top: string; main: string; label?: string; /** Drawn in place of the two lines (a length as "1h 30m", big figures and small units). */ draw?: (on: boolean) => React.ReactNode }[]; value: T; onChange: (v: T) => void; scroll?: boolean; inCard?: boolean }) {
+/**
+ * Choices as small white tiles on a shadow, a top line and a big one: days of the week, lengths of a session.
+ * `reveal` (a sideways row only): opened on a choice further along than the screen shows (a session from two
+ * weeks ago, being edited), the row starts scrolled to it.
+ */
+export function Tiles<T extends string | number>({ options, value, onChange, scroll = false, inCard = false, reveal = false }: { options: { value: T; top: string; main: string; label?: string; /** Drawn in place of the two lines (a length as "1h 30m", big figures and small units). */ draw?: (on: boolean) => React.ReactNode }[]; value: T; onChange: (v: T) => void; scroll?: boolean; inCard?: boolean; reveal?: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
+  const scroller = useRef<ScrollView>(null);
+  // Where the chosen tile lies and how wide the row is, once each is laid out; brought into view once, never again under your thumb.
+  const seen = useRef({ row: 0, x: -1, w: 0, done: !reveal });
+  const bringIn = () => {
+    const s = seen.current;
+    if (s.done || !s.row || s.x < 0) return;
+    s.done = true;
+    if (s.x + s.w <= s.row - 32) return;
+    scroller.current?.scrollTo({ x: Math.max(0, s.x - (s.row - s.w) / 2), animated: false });
+  };
   const tiles = options.map((o) => {
     const on = o.value === value;
     return (
-      <Pressable key={String(o.value)} accessibilityRole="radio" accessibilityState={{ selected: on }} accessibilityLabel={o.label ?? `${o.top} ${o.main}`} onPress={() => onChange(o.value)} style={({ pressed }) => [styles.tile, inCard && styles.tileInCard, scroll ? styles.tileFixed : styles.tileFlex, on && styles.tileOn, pressed && !on && { opacity: 0.8 }]}>
+      <Pressable key={String(o.value)} onLayout={scroll && on && !seen.current.done ? (e) => { seen.current.x = e.nativeEvent.layout.x; seen.current.w = e.nativeEvent.layout.width; bringIn(); } : undefined} accessibilityRole="radio" accessibilityState={{ selected: on }} accessibilityLabel={o.label ?? `${o.top} ${o.main}`} onPress={() => onChange(o.value)} style={({ pressed }) => [styles.tile, inCard && styles.tileInCard, scroll ? styles.tileFixed : styles.tileFlex, on && styles.tileOn, pressed && !on && { opacity: 0.8 }]}>
         {o.draw ? o.draw(on) : (
           <>
             <Text style={[styles.tileTop, on && styles.tileInk]}>{o.top}</Text>
@@ -79,7 +93,7 @@ export function Tiles<T extends string | number>({ options, value, onChange, scr
   if (!scroll) return <View style={styles.tileRow}>{tiles}</View>;
   return (
     <View style={{ marginHorizontal: -spacing.lg }}>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.tileRow, { paddingHorizontal: spacing.lg, paddingVertical: 6 }]}>{tiles}</ScrollView>
+      <ScrollView ref={scroller} onLayout={reveal ? (e) => { seen.current.row = e.nativeEvent.layout.width; bringIn(); } : undefined} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.tileRow, { paddingHorizontal: spacing.lg, paddingVertical: 6 }]}>{tiles}</ScrollView>
       <LinearGradient pointerEvents="none" colors={inCard ? [`${colors.surface}00`, colors.surface] : [`${colors.bg}00`, colors.bg]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.fadeRight} />
     </View>
   );
@@ -146,7 +160,8 @@ const styleDefinitions = StyleSheet.create({
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   tileRow: { flexDirection: 'row', gap: spacing.sm },
   tile: { ...lift, height: 64, borderRadius: 18, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', gap: 1 },
-  tileFixed: { width: 58 },
+  // A day's tile: 58 wide, a little wider only for a longer word on top ("Yesterday").
+  tileFixed: { minWidth: 58, paddingHorizontal: 8 },
   tileFlex: { flex: 1 },
   tileOn: { backgroundColor: colors.text },
   tileTop: { fontSize: 12, ...font('500'), color: colors.textMuted },

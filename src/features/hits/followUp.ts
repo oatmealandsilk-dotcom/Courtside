@@ -17,7 +17,7 @@ import { isMapCourtId } from '@/features/places/courtName';
 
 /** A hit has no end of its own: it is taken to be over this long after it starts. */
 export const HIT_MINUTES = 90;
-/** Past this, a hit is old news and is not asked about (the log sheet only offers today and yesterday). */
+/** Past this, a hit is old news and is not asked about (an older one can still be logged by hand, on its day). */
 const STALE_MS = 36 * 3_600_000;
 
 export const hitEnd = (h: HitRequest) => Date.parse(h.startsAt) + HIT_MINUTES * 60_000;
