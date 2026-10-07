@@ -199,7 +199,7 @@ export function workoutLine(a: Pick<DetectedActivity, 'sport' | 'minutes' | 'dis
  */
 export const WORKOUTS_ASK = {
   title: 'Workouts from Apple Health',
-  message: 'CourtSide reads your workouts (tennis, runs, rides, the gym and more) and your heart rate during them, so you can log and post them, plus sleep, HRV, resting heart rate and steps. Nothing is posted unless you choose to.',
+  message: 'CourtSide reads your workouts (tennis, runs, rides, the gym and more) and your heart rate during them, so you can log and post them, plus sleep, HRV, resting heart rate, steps, active energy and food (calories, protein, carbs, fat) for your Health page. Nothing is posted unless you choose to.',
 } as const;
 
 /** The same for WHOOP (migration 135), to someone whose WHOOP so far brings in tennis only. WHOOP already shares workouts, so no sign-in follows. */

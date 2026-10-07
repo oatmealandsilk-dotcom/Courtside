@@ -24,7 +24,7 @@ interface Props {
   placeholder?: string;
   multiline?: boolean;
   minHeight?: number;
-  autoCapitalize?: 'none' | 'sentences' | 'words';
+  autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
   keyboardType?: KeyboardTypeOptions;
   secureTextEntry?: boolean;
   hint?: string;

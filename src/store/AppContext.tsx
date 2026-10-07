@@ -357,9 +357,13 @@ export interface Prefs {
   contactsFindable: boolean;
   /** The weekly recap's phone alert, Mondays at 8am (migration 130). Off, the row still lands in Notifications. */
   pushRecap: boolean;
+  /** "Sam just joined CourtSide near you" as a phone alert (migration 146). Off, the row still lands in Notifications. */
+  pushJoined: boolean;
+  /** The 7pm "Keep your streak" reminder, set on the phone itself (kept with the account by migration 146). */
+  pushStreak: boolean;
 }
 export type PrefKey = keyof Prefs;
-const DEFAULT_PREFS: Prefs = { showActivity: true, pushLikes: true, pushCoach: true, pushMessages: true, pushActivity: true, pushMapFriends: true, pushMapHits: true, pushMapPlayers: true, pushCourts: true, contactsFindable: true, pushRecap: true };
+const DEFAULT_PREFS: Prefs = { showActivity: true, pushLikes: true, pushCoach: true, pushMessages: true, pushActivity: true, pushMapFriends: true, pushMapHits: true, pushMapPlayers: true, pushCourts: true, contactsFindable: true, pushRecap: true, pushJoined: true, pushStreak: true };
 
 interface AppState extends Bootstrap, CourtLifeState, FeedGroupsState {
   ready: boolean;
@@ -483,6 +487,8 @@ interface AppState extends Bootstrap, CourtLifeState, FeedGroupsState {
    * switch is not shown: it would do nothing, and come back on at the next start.
    */
   contactsFindableLive: boolean;
+  /** The database has the "Players joining near you" switch (migration 146); before that it would do nothing, so it is not shown. */
+  joinAlertsLive: boolean;
   /**
    * Your Hidden words (Settings → Hidden words, migration 117): null until
    * the page has asked for them. The demo keeps its own on this phone.
@@ -541,6 +547,8 @@ function withServerSettings(s: AppState, base: string, got: UserState | null): P
     pushMapFriends: got.pushMapFriends ?? true, pushMapHits: got.pushMapHits ?? true, pushMapPlayers: got.pushMapPlayers ?? true, pushCourts: got.pushCourts ?? true,
     contactsFindable: got.contactsFindable ?? true,
     pushRecap: got.pushRecap ?? true,
+    // Migration 146: a database without them keeps what this phone has.
+    pushJoined: got.pushJoined ?? s.prefs.pushJoined, pushStreak: got.pushStreak ?? s.prefs.pushStreak,
   };
   for (const k of Object.keys(prefs) as PrefKey[]) if (s.prefs[k] !== was.f[k]) prefs[k] = s.prefs[k];
   const cardsChanged = JSON.stringify(s.paymentMethods) !== JSON.stringify(was.p);
@@ -1654,6 +1662,8 @@ function snapshotOf(s: AppState, me: ID): RemoteData {
       pushMapFriends: s.prefs.pushMapFriends, pushMapHits: s.prefs.pushMapHits, pushMapPlayers: s.prefs.pushMapPlayers, pushCourts: s.prefs.pushCourts,
       contactsFindable: s.contactsFindableLive ? s.prefs.contactsFindable : undefined,
       pushRecap: s.prefs.pushRecap,
+      pushJoined: s.joinAlertsLive ? s.prefs.pushJoined : undefined,
+      pushStreak: s.prefs.pushStreak,
       constraints: self?.profile.constraints,
     },
     tips: s.tips, coachApplications: s.coachApplications, coaches: s.coaches, coachReviews: s.coachReviews, coachResults: s.coachResults,
@@ -1774,10 +1784,14 @@ function mergeRemote(prev: AppState, data: RemoteData, me: ID, email: string | n
           pushMapFriends: data.userState.pushMapFriends ?? true, pushMapHits: data.userState.pushMapHits ?? true, pushMapPlayers: data.userState.pushMapPlayers ?? true, pushCourts: data.userState.pushCourts ?? true,
           contactsFindable: data.userState.contactsFindable ?? true,
           pushRecap: data.userState.pushRecap ?? true,
+          // Migration 146: a database without them keeps what this phone has.
+          pushJoined: data.userState.pushJoined ?? prev.prefs.pushJoined,
+          pushStreak: data.userState.pushStreak ?? prev.prefs.pushStreak,
         }
         : prev.prefs,
       // The settings row carries contacts_findable only once migration 89 has run (with no row yet, the load asks on its own).
       contactsFindableLive: data.userState?.contactsFindable !== undefined || data.contactsFindableReady ? true : prev.contactsFindableLive,
+      joinAlertsLive: data.userState?.pushJoined !== undefined || data.alertSwitchesReady ? true : prev.joinAlertsLive,
       // The saved copy shows the app; only the server's answer counts as loaded (live updates, settings sync and retries wait for it).
       remoteLoaded: fromSnapshot ? prev.remoteLoaded : true,
       snapshotShown: fromSnapshot ? true : prev.snapshotShown,
@@ -2088,6 +2102,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     defaultPaymentId: readDefaultPayment(),
     prefs: DEFAULT_PREFS,
     contactsFindableLive: false,
+    // The demo has no server to ask: its switches all show.
+    joinAlertsLive: !isSupabaseConfigured,
     hiddenWords: null,
     reviewRequests: null,
     reviewsOff: false,
@@ -2513,6 +2529,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         contactsFindable: s.contactsFindableLive ? s.prefs.contactsFindable : undefined,
         // The weekly recap's alert (migration 130): a database without it leaves it out by itself.
         pushRecap: s.prefs.pushRecap,
+        // Migration 146's two switches; the same.
+        pushJoined: s.joinAlertsLive ? s.prefs.pushJoined : undefined,
+        pushStreak: s.prefs.pushStreak,
       }).finally(settled);
     }, 400);
     // Never sent (a newer change took its place, or the account changed): nothing of it is on its way up.
@@ -2970,9 +2989,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setState((prev) => ({ ...prev, users: prev.users.map((u) => (u.id === me ? { ...u, stats } : u)) }));
     }
     if (!state.remoteLoaded) return;
-    const t = setTimeout(() => { void planStreakReminder(streakAtRisk(me, state.sessions, state.posts, state.stories)); }, 1500);
+    // Streak reminders off (Settings → Notifications): 0 takes away one already set.
+    const t = setTimeout(() => { void planStreakReminder(state.prefs.pushStreak ? streakAtRisk(me, state.sessions, state.posts, state.stories) : 0); }, 1500);
     return () => clearTimeout(t);
-  }, [state.currentUserId, state.sessions, state.posts, state.stories, state.users, state.remoteLoaded, state.snapshotShown]);
+  }, [state.currentUserId, state.sessions, state.posts, state.stories, state.users, state.remoteLoaded, state.snapshotShown, state.prefs.pushStreak]);
 
   // Your streak's number (never what is behind it) goes up for the flame
   // others see beside your name (migration 134): once the full load is in,

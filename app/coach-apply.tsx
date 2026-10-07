@@ -358,7 +358,7 @@ export default function CoachApply() {
                 </View>
               ))}
               <Text style={styles.agree}>
-                By applying you agree to identity verification. Coaching on CourtSide is free for now; paid lessons come later, under the Terms of Use.
+                By applying you agree to identity verification and the Terms of Use. Coaching on CourtSide is free.
               </Text>
               {sendError ? <Text style={styles.fieldError}>{sendError}</Text> : null}
             </>
