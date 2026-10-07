@@ -1295,6 +1295,42 @@ export type NotificationTarget = 'post' | 'hit' | 'question' | 'coach-question' 
 /** A court a post is tagged with: the map's id for it, its name, and where it is. */
 export interface TaggedCourt { id: string; name: string; lat: number; lng: number }
 
+/**
+ * A session being played right now, Strava-style (Oct 6, owner: "click
+ * start when they start a session, and finish when they finish"): Start at
+ * a court, a clock that runs until Finish, then the usual log, filled in.
+ * Starting at a court on the map also checks you in there ("I'm playing
+ * here", migration 63), by that sheet's own rules, so friends can see you
+ * playing. Kept on this phone only (never on the server) until it is logged
+ * or thrown away, so it survives the app closing; the log it becomes is a
+ * normal PracticeSession.
+ */
+export interface LiveSession {
+  id: ID;
+  /** Whose it is: a phone signed into another account never shows it. */
+  userId: ID;
+  /** When Start was tapped. */
+  startedAt: string;
+  /** What it is: the log's tennis kinds (fitness is logged from a tracker or by hand). */
+  kind: Exclude<PracticeSession['kind'], 'fitness'>;
+  /** The court on the map it was started at, if any. */
+  court?: TaggedCourt;
+  /** Where it is in words, when it is not a court on the map ("Dad's driveway"). */
+  place?: string;
+  /** Paused since, while paused: the clock stands still. */
+  pausedAt?: string;
+  /** Time spent paused before now, in milliseconds (not counted). */
+  pausedMs: number;
+  /** When Finish was tapped: the clock has stopped and the log is waiting. */
+  endedAt?: string;
+  /** Whether Start checked you in at the court, so a reopened app can put the check-in back. */
+  checkedIn: boolean;
+  /** When it last checked you in: a check-in lasts two hours, so a longer session renews it. */
+  checkedInAt?: string;
+  /** Why the check-in did not go through, when it was tried and refused, in the court sheet's own words. */
+  checkInProblem?: string;
+}
+
 /** What one player says about a public court on the map. Unsaid is left out. */
 export interface CourtNote {
   /** The court's OpenStreetMap id, as the map knows it: "way123456". */

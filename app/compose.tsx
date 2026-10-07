@@ -63,6 +63,7 @@ import type { TaggedCourt } from '@/data/types';
 import { colors, radius, spacing, typography, font } from '@/theme';
 import { challengeFor } from '@/features/challenge/weekly';
 import { goHome } from '@/lib/goBack';
+import { livePlace, liveState, startClock } from '@/features/activity/liveSession';
 import { useRevealOnFocus } from '@/lib/keyboardScroll';
 import { useAndroidBack } from '@/lib/androidBack';
 
@@ -112,7 +113,7 @@ type Stage = 'choose' | 'library' | 'edit' | 'form';
  */
 export default function Compose() {
   const styles = useThemedStyles(styleDefinitions);
-  const { actions, posts, stories, currentUserId, currentUser, detectedCoords, lastSeen, locationEnabled, detectedActivities, sessions, sessionTags, users, hitRequests, blockedIds, feedGroups, feedGroupsOn } = useApp();
+  const { actions, posts, stories, currentUserId, currentUser, detectedCoords, lastSeen, locationEnabled, detectedActivities, sessions, sessionTags, users, hitRequests, blockedIds, feedGroups, feedGroupsOn, liveSession } = useApp();
 
   // The story rail opens this straight at the library with ?mode=story.
   const params = useLocalSearchParams<{ mode?: string; shot?: string; challenge?: string; courtId?: string; courtName?: string; lat?: string; lng?: string; activity?: string; session?: string; hit?: string; group?: string; trim?: string }>();
@@ -960,8 +961,23 @@ export default function Compose() {
       {entering ? null : <Reanimated.View entering={arrive(3)}><Pressable accessibilityRole="button" accessibilityLabel="Create a thread or question" onPress={() => router.replace('/ask')} style={[styles.choiceOption, tight && styles.choiceOptionTight, tighter && styles.choiceOptionTighter]}>
         <Ionicons name="chatbubbles-outline" size={choiceIcon} color={colors.textMuted}/><Text style={styles.choiceLabel}>Thread or question</Text><Text style={styles.note}>Ask the community or start a conversation.</Text>
       </Pressable></Reanimated.View>}
+      {/* Start a session (Oct 6, owner: Strava's Start and Finish): a quiet line like Log a session, just above it.
+          While one is going it opens that one instead; finished and not logged yet, its log. */}
+      {entering ? null : <Reanimated.View entering={arrive(4)}><Pressable
+        accessibilityRole="button"
+        accessibilityLabel={!liveSession ? 'Start a session. A timer, and a check-in at your court' : liveState(liveSession) === 'finished' ? 'Log your finished session' : 'Session in progress. Open it'}
+        onPress={() => (!liveSession ? router.replace('/start-session') : liveState(liveSession) === 'finished' ? router.replace({ pathname: '/log-session', params: { live: '1' } }) : router.replace('/live-session'))}
+        style={({ pressed }) => [styles.choiceQuiet, pressed && { opacity: 0.6 }]}
+      >
+        <Ionicons name={liveSession ? 'radio-button-on' : 'play-circle-outline'} size={20} color={liveSession ? colors.open : colors.textMuted}/>
+        <View style={styles.choiceQuietWords}>
+          <Text style={styles.choiceQuietLabel}>{!liveSession ? 'Start a session' : liveState(liveSession) === 'finished' ? 'Log your session' : 'Session in progress'}</Text>
+          <Text style={styles.note} numberOfLines={1}>{!liveSession ? 'Timer and court check-in' : [liveState(liveSession) === 'finished' ? 'Finished' : `Started ${startClock(liveSession)}`, livePlace(liveSession)].filter(Boolean).join(' · ')}</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={16} color={colors.textFaint}/>
+      </Pressable></Reanimated.View>}
       {/* Logging is not posting: a quiet line under the four ways to post, private, for the streak. */}
-      {entering ? null : <Reanimated.View entering={arrive(4)}><Pressable accessibilityRole="button" accessibilityLabel="Log a session. Private, counts toward your streak" onPress={() => router.replace('/log-session')} style={({ pressed }) => [styles.choiceQuiet, pressed && { opacity: 0.6 }]}>
+      {entering ? null : <Reanimated.View entering={arrive(5)}><Pressable accessibilityRole="button" accessibilityLabel="Log a session. Private, counts toward your streak" onPress={() => router.replace('/log-session')} style={({ pressed }) => [styles.choiceQuiet, styles.choiceQuietNext, pressed && { opacity: 0.6 }]}>
         <Ionicons name="add-circle-outline" size={20} color={colors.textMuted}/>
         <View style={styles.choiceQuietWords}><Text style={styles.choiceQuietLabel}>Log a session</Text><Text style={styles.note}>Private · counts toward your streak</Text></View>
         <Ionicons name="chevron-forward" size={16} color={colors.textFaint}/>
@@ -1351,6 +1367,8 @@ const styleDefinitions = StyleSheet.create({
   choiceLabel: { fontSize: 16, ...font('600'), color: colors.text },
   // "Log a session": a plain line under the cards, no card of its own, so it reads as the quieter choice.
   choiceQuiet: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 2, paddingTop: 14, paddingBottom: 2, paddingHorizontal: 4, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  // The second quiet line (Log a session, under Start a session): no line of its own between the two.
+  choiceQuietNext: { borderTopWidth: 0, marginTop: 0, paddingTop: 6 },
   choiceQuietWords: { flex: 1, gap: 2 },
   choiceQuietLabel: { fontSize: 15, ...font('600'), color: colors.text },
   backdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'transparent' },

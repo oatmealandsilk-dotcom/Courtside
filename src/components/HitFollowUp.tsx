@@ -14,7 +14,7 @@ import { useAnyUploading } from '@/lib/uploads';
 import { useApp } from '@/store/AppContext';
 
 /** Pages where someone is writing or posting: the question waits until they are done. */
-const BUSY = new Set(['/compose', '/edit-post', '/ask', '/ask-coach', '/log-session', '/pick-session', '/session-tag', '/pick-location', '/court-report', '/court-now', '/map-visibility', '/open-to-hit', '/hit-request/new', '/hit', '/comments', '/session-stats', '/who-played', '/health-share', '/tennis-sheet']);
+const BUSY = new Set(['/compose', '/edit-post', '/ask', '/ask-coach', '/log-session', '/start-session', '/live-session', '/pick-session', '/session-tag', '/pick-location', '/court-report', '/court-now', '/map-visibility', '/open-to-hit', '/hit-request/new', '/hit', '/comments', '/session-stats', '/who-played', '/health-share', '/tennis-sheet']);
 /** The inbox and every chat: the note would sit over a chat's header and the inbox's title, mid-conversation. */
 const isBusy = (path: string) => BUSY.has(path) || path === '/messages' || path.startsWith('/messages/');
 /** A moment after the way is clear, so it never lands on the app's own opening notes. */

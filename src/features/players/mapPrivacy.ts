@@ -4,7 +4,7 @@ import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 
-import type { MapVisibility, User } from '@/data/types';
+import type { CourtAccess, MapVisibility, User } from '@/data/types';
 import { isDemo } from '@/features/activity/flags';
 import { notKnownAdult } from '@/features/players/age';
 
@@ -73,6 +73,24 @@ export type TeenMap = 'off' | 'on';
  */
 export const canChooseVisibility = (mapLive: boolean | null, me: User | null | undefined, teenMap: TeenMap) =>
   mapLive === true && !!me && (!notKnownAdult(me) || teenMap === 'on');
+
+/**
+ * Who sees you checked in at a court, once you have said (migration 63): your
+ * answer to "Who can see you on the map?", or null when there is no choice
+ * to make yet (the server's default then: names to people who follow each
+ * other with you, a count to anyone else).
+ */
+export const seenByOnMap = (mapLive: boolean | null, me: User | null | undefined, teenMap: TeenMap, mapVisibility: MapVisibility | null | undefined) =>
+  (canChooseVisibility(mapLive, me, teenMap) ? mapVisibility ?? null : null);
+
+/**
+ * Whether "I'm playing here" is on offer at a court (the court sheet's rule,
+ * app/court-now): never for someone not known to be an adult, whose spot is
+ * never put on the map for anyone, nor at a club's or someone's home court.
+ * The server holds the same rules ('adults_only', 'closed_court').
+ */
+export const canCheckIn = (me: User | null | undefined, access?: CourtAccess) =>
+  !!me && !notKnownAdult(me) && access !== 'members' && access !== 'private';
 
 /** Whether the map's teen rule (friends who follow each other only) applies to you. */
 export const onTeenMap = (me: User | null | undefined, teenMap: TeenMap) => !!me && notKnownAdult(me) && teenMap === 'on';

@@ -336,8 +336,8 @@ export function SessionCard({ session, width, play = false, people, hidden = [],
   );
 }
 
-/** A court seen from behind the baseline, faint, across the bottom of the card. */
-function CourtLines({ color }: { color: string }) {
+/** A court seen from behind the baseline, faint, across the bottom of the card (and the live session's box). */
+export function CourtLines({ color }: { color: string }) {
   return (
     <View pointerEvents="none" style={styles.lines}>
       <Svg width="100%" height="100%" viewBox="0 0 100 24" preserveAspectRatio="none">

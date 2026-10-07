@@ -6,6 +6,7 @@ import { router, useGlobalSearchParams, useNavigationContainerRef, usePathname, 
 import { NavBar } from './NavBar';
 import { setInstantExit } from '@/features/navigation/instantExit';
 import { UploadBar } from '@/components/UploadBar';
+import { LiveBar } from '@/components/session/LiveBar';
 import { WarmCurtain } from '@/components/WarmCurtain';
 import { TourOverlay } from '@/components/TourOverlay';
 import { isTourOpen, useTourOpen } from '@/features/tour/tourStore';
@@ -49,7 +50,7 @@ const routes = Object.keys(paths).map(name => ({ key: name, name }));
  * The comments close themselves on Escape, with their own animation (see
  * DragSheet.web), so they are not here: a second step back closed the page under them too.
  */
-const SHEETS = new Set(['/compose', '/share', '/pick-group', '/find-groups', '/group-form', '/group-invite', '/pick-court', '/ask', '/post-menu', '/edit-post', '/messages/new', '/log-session', '/pick-session', '/session-tag', '/hit-request/new', '/court-report', '/court-now', '/map-visibility', '/open-to-hit', '/tennis-sheet', '/review-request']);
+const SHEETS = new Set(['/compose', '/share', '/pick-group', '/find-groups', '/group-form', '/group-invite', '/pick-court', '/ask', '/post-menu', '/edit-post', '/messages/new', '/log-session', '/pick-session', '/session-tag', '/hit-request/new', '/court-report', '/court-now', '/map-visibility', '/open-to-hit', '/tennis-sheet', '/review-request', '/start-session', '/live-session']);
 const TAB_ORDER: string[] = Object.values(paths);
 /** How often an open app looks for new workouts and new Notifications rows: just over the two minutes the Apple Health look waits between looks. */
 const LIVE_LOOK_MS = 125_000;
@@ -97,7 +98,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // The going-home helpers look at which page is on show (see tabsOnShow in goBack).
   const rootNavigation = useNavigationContainerRef();
   useEffect(() => { setRootNavigation(rootNavigation); return () => setRootNavigation(null); }, [rootNavigation]);
-  const { currentUserId, currentUser, ready, authResolved, remoteLoaded, onboardingComplete, termsVersion, healthIsReal, actions } = useApp();
+  const { currentUserId, currentUser, ready, authResolved, remoteLoaded, onboardingComplete, termsVersion, healthIsReal, actions, liveSession } = useApp();
   // Crash reports say which screen they happened on.
   useEffect(() => { setCrashScreen(pathname); }, [pathname]);
   // Alerts: a tap on one opens what it is about. Once someone is signed in
@@ -226,7 +227,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // menu sits at the side, out of their way, so it stays, the way
   // Instagram's does behind its Create box. Sign-in, setup and the camera
   // hide it everywhere.
-  const phoneOnlyHide = ['/compose', '/edit-post', '/ask', '/ask-coach', '/coach-apply', '/pick-location', '/pick-court', '/invite', '/comments', '/session-stats', '/who-played', '/share', '/pick-group', '/find-groups', '/group-form', '/group-invite', '/likes', '/post-menu', '/log-session', '/pick-session', '/session-tag', '/hit-request/new', '/court-report', '/court-now', '/map-visibility', '/open-to-hit', '/wrapped', '/health-share', '/share-session', '/share-card', '/tennis-sheet', '/flyby', '/weekly-recap', '/review-request'].includes(pathname) || pathname === '/messages' || pathname.startsWith('/messages/');
+  const phoneOnlyHide = ['/compose', '/edit-post', '/ask', '/ask-coach', '/coach-apply', '/pick-location', '/pick-court', '/invite', '/comments', '/session-stats', '/who-played', '/share', '/pick-group', '/find-groups', '/group-form', '/group-invite', '/likes', '/post-menu', '/log-session', '/pick-session', '/session-tag', '/hit-request/new', '/court-report', '/court-now', '/map-visibility', '/open-to-hit', '/wrapped', '/health-share', '/share-session', '/share-card', '/tennis-sheet', '/flyby', '/weekly-recap', '/review-request', '/start-session', '/live-session'].includes(pathname) || pathname === '/messages' || pathname.startsWith('/messages/');
   // Arriving from the password-reset email is its own calm page, with no app around it yet.
   // (The comments' own address says which clip they are about, for the stage below.)
   const { reset, kind: routeKind, id: routeId, stage: routeStage } = useGlobalSearchParams<{ reset?: string; kind?: string; id?: string; stage?: string }>();
@@ -258,6 +259,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => { if (Platform.OS === 'web' && navLayer.current) navLayer.current.inert = barOnStage; }, [barOnStage]);
   const showNav = !!currentUserId && !hideEverywhere && !onSplash && (!(isPhone && phoneOnlyHide) || barOnStage);
   const curtainDown = useCurtainDown();
+  // A session you started and haven't logged (Oct 6): its bar rides above the tab bar wherever the bar
+  // is, never over a sheet, a composer or the live page itself, nor on a clip's comments stage or under the tutorial.
+  const liveBarOn = !!liveSession && liveSession.userId === currentUserId && showNav && !barOnStage && !phoneOnlyHide && !SHEETS.has(pathname) && !tourOpen && curtainDown;
   // As the opening curtain lifts, the page under it settles from a touch large
   // and low into place, on the curtain's own curve (see WarmCurtain), so the
   // logo leaving and the app arriving are one motion. On the phone only: in a
@@ -331,12 +335,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return <View style={{ flex: 1, minHeight: 0, backgroundColor: colors.bg, flexDirection: isPhone ? 'column' : 'row' }}>
     {showNav && !isPhone && nav}
     {/* While the tour is up, TalkBack reads only the tour, not the page under the dim. */}
-    <Reanimated.View importantForAccessibility={tourOpen ? 'no-hide-descendants' : 'auto'} style={[{ flex: 1, minWidth: 0, minHeight: 0 }, settle]}><RouteTransition>{children}</RouteTransition><Toast /><UploadBar /></Reanimated.View>
+    <Reanimated.View importantForAccessibility={tourOpen ? 'no-hide-descendants' : 'auto'} style={[{ flex: 1, minWidth: 0, minHeight: 0 }, settle]}><RouteTransition>{children}</RouteTransition>{liveBarOn && !isPhone ? <LiveBar phone={false} /> : null}<Toast /><UploadBar /></Reanimated.View>
     {showNav && isPhone ? (
       <Reanimated.View ref={((node: unknown) => { navLayer.current = node as HTMLElement | null; navFade.ref?.(node); }) as never} pointerEvents={barOnStage ? 'none' : 'box-none'} style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }, barOnStage && { overflow: 'hidden' }, navFade.style]}>
         <Reanimated.View ref={navHold.ref as never} pointerEvents="box-none" style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }, navHold.style]}>{nav}</Reanimated.View>
       </Reanimated.View>
     ) : null}
+    {liveBarOn && isPhone ? <LiveBar phone /> : null}
     {/* A new message drops in at the top, over the bar too; never on the pages the app keeps to themselves. */}
     <MessageBanner enabled={!!currentUserId && !hideEverywhere && !onSplash && !detour} />
     {/* "How was the hit?", once, after a hit you played; only for a set-up account, never on the pages the app keeps to themselves. */}
