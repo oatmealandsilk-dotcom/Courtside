@@ -310,7 +310,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   const justPosted = useJustPosted();
   const focused = useIsFocused();
   const pathname = usePathname();
-  const hitTip = hitTipCard(shownHits.map((x) => x.hit), currentUserId, justPosted);
+  const hitTip = hitTipCard(shownHits.map((x) => x.hit), currentUserId, justPosted, { teen: !!currentUser && notKnownAdult(currentUser), followingIds });
   const hitTipReady = !previewSection && focused && pathname === '/discuss' && section === 'players' && !tourOpen && !search;
   // With nothing open, name a court only when the nearest one reads as public and is close: never just because it is nearest.
   const promptCourt = nearCourts.nearest && looksPublic(nearCourts.nearest.c.name) && nearCourts.nearest.miles <= 5 ? nearCourts.nearest.c : null;

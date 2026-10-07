@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react';
 
 import type { HitRequest, ID } from '@/data/types';
+import { tipWaiting } from '@/features/tips/tips';
 import { joinedCount } from './audience';
 import { isHitFull } from './order';
 
@@ -31,12 +32,21 @@ export function useJustPosted(): ID | null {
  * The card that carries a tip, and which: the hit you have just posted while
  * nobody is in it yet ("We'll tell you when someone's in"), else the first
  * hit in the list someone else posted that you could still join ("Tap I'm in
- * to join"). Null: none here. `hits` in the order shown.
+ * to join"). A tip already learned is passed over, so the other can still
+ * have its card. Null: none here. `hits` in the order shown.
+ *
+ * `teen`: you are not known to be an adult, so a hit is yours to join only
+ * with someone you follow (join_hit's teen rule says "teen_closed" to anyone
+ * else): the tip never points at an I'm in that would only say no.
  */
-export function hitTipCard(hits: HitRequest[], me: ID | null | undefined, posted: ID | null): { hitId: ID; tip: HitTip } | null {
+export function hitTipCard(
+  hits: HitRequest[], me: ID | null | undefined, posted: ID | null,
+  { teen = false, followingIds = [] }: { teen?: boolean; followingIds?: ID[] } = {},
+): { hitId: ID; tip: HitTip } | null {
   if (!me) return null;
-  const mine = posted ? hits.find((h) => h.id === posted && h.authorId === me && joinedCount(h) === 0) : undefined;
+  const mine = posted && tipWaiting('hit-posted') ? hits.find((h) => h.id === posted && h.authorId === me && joinedCount(h) === 0) : undefined;
   if (mine) return { hitId: mine.id, tip: 'hit-posted' };
-  const theirs = hits.find((h) => h.authorId !== me && !h.joinedIds.includes(me) && !isHitFull(h));
+  if (!tipWaiting('join-hit')) return null;
+  const theirs = hits.find((h) => h.authorId !== me && !h.joinedIds.includes(me) && !isHitFull(h) && (!teen || followingIds.includes(h.authorId)));
   return theirs ? { hitId: theirs.id, tip: 'join-hit' } : null;
 }

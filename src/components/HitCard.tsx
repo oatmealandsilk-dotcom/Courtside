@@ -56,7 +56,8 @@ import { colors, font, lift, radius, spacing, typography } from '@/theme';
  *
  * A hit you are in has "Can't make it" beside Chat, the same pair the poster
  * has (Oct 7, audit item 2): it gives your spot back, takes you out of the
- * hit's chat and tells the poster, after a short "Free your spot?". Calling
+ * hit's chat and tells the poster, after a short "Free your spot?". Only
+ * while the hit is still on the lists; one already played keeps its Chat. Calling
  * off your own hit tells everyone in it (the server's, migration 150).
  *
  * `tip` (the list's pick, one card at most): a just-in-time tip inside the
@@ -75,6 +76,10 @@ export function HitCard({ hit, miles, linked = true, tip, tipReady = false }: { 
   const joined = hit.joinedIds.map((id) => users.find((u) => u.id === id)).filter((u): u is NonNullable<typeof u> => !!u);
   const mine = hit.authorId === currentUserId;
   const inIt = !!currentUserId && hit.joinedIds.includes(currentUserId);
+  // "Can't make it" while the hit is still on the lists (until an hour after its start, openHits),
+  // the same window in which the server tells the poster. A hit already played, opened on its
+  // own page, keeps just its chat.
+  const canLeave = inIt && !mine && Date.parse(hit.startsAt) > Date.now() - 3_600_000;
   // Everyone in takes a spot, those this account is not shown included (joinedCount).
   const total = joinedCount(hit);
   const left = Math.max(0, hit.spots - total);
@@ -82,7 +87,7 @@ export function HitCard({ hit, miles, linked = true, tip, tipReady = false }: { 
   // Full, and neither yours nor one you are in: nothing to do here but look, so it reads that way.
   const quiet = full && !mine && !inIt;
   // Yours with people in it (Chat, Call off), or one you are in (Chat, Can't make it): two things to do, so the foot takes two lines (see the foot).
-  const twoLine = (mine && !!hit.conversationId) || (!mine && inIt);
+  const twoLine = (mine && !!hit.conversationId) || canLeave;
   const open = isHitOpen(hit);
   const line = audienceLine(hit, currentUserId);
   const invited = mine ? (hit.invitedIds ?? []).map((id) => users.find((u) => u.id === id)).filter((u): u is NonNullable<typeof u> => !!u) : [];
@@ -218,7 +223,7 @@ export function HitCard({ hit, miles, linked = true, tip, tipReady = false }: { 
               <Text style={styles.dangerText}>Call off</Text>
             </Pressable>
           </View>
-        ) : inIt ? (
+        ) : canLeave ? (
           // In it: the chat, and the way out of it, sharing the line under who's in (the poster's own pair).
           <View style={[styles.actions, styles.actionsTwoLine]}>
             {hit.conversationId ? (
@@ -231,6 +236,12 @@ export function HitCard({ hit, miles, linked = true, tip, tipReady = false }: { 
               <Text style={styles.dangerText}>Can’t make it</Text>
             </Pressable>
           </View>
+        ) : inIt ? (
+          // In a hit already played: just its chat.
+          <Pressable accessibilityRole="button" accessibilityLabel="You’re in. Open the hit’s chat" onPress={(e) => { e.stopPropagation?.(); openChat(); }} style={({ pressed }) => [styles.button, styles.secondary, pressed && styles.buttonPressed]}>
+            <Ionicons name="chatbubble-ellipses-outline" size={16} color={colors.text} />
+            <Text style={styles.secondaryText}>Chat</Text>
+          </Pressable>
         ) : full ? null : (
           <Pressable accessibilityRole="button" disabled={busy} onPress={(e) => { e.stopPropagation?.(); void join(); }} style={({ pressed }) => [styles.button, styles.primary, busy && { opacity: 0.6 }, pressed && styles.buttonPressed]}>
             <Text style={styles.primaryText}>{busy ? 'Joining…' : 'I’m in'}</Text>

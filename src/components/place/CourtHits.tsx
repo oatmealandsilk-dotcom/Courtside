@@ -30,7 +30,7 @@ import { colors, spacing, typography } from '@/theme';
  */
 export function CourtHits({ place, closed = false }: { place: { id?: string; name: string; lat: number; lng: number }; closed?: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
-  const { currentUser, currentUserId } = useApp();
+  const { currentUser, currentUserId, followingIds } = useApp();
   const found = useCourtHits(place);
   const all = useMemo(() => hitListOrder(found, (h) => h, currentUserId), [found, currentUserId]);
   const [moreOpen, setMoreOpen] = useState(false);
@@ -41,7 +41,7 @@ export function CourtHits({ place, closed = false }: { place: { id?: string; nam
   const justPosted = useJustPosted();
   const focused = useIsFocused();
   const tourOpen = useTourOpen();
-  const hitTip = hitTipCard(hits, currentUserId, justPosted);
+  const hitTip = hitTipCard(hits, currentUserId, justPosted, { teen: forFriends, followingIds });
   if (closed && !hits.length) return null;
   return (
     <View style={styles.wrap}>
