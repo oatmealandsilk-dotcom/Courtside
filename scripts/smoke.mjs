@@ -730,7 +730,8 @@ const STEPS = [
     async run(page) {
       await page.tap({ label: 'Feed' });
     },
-    expect: [{ label: 'Clip comments' }, { label: 'For you' }],
+    // The demo is in 2 groups: the top row's "+" (Find groups) must still be on screen (Oct 7).
+    expect: [{ label: 'Clip comments' }, { label: 'For you' }, { label: /^Find or start a group/ }],
   },
   {
     name: 'clip-comments',
