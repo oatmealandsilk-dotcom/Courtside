@@ -17,7 +17,9 @@ const atPark = (n: number, name: string) => {
  * here" at Alder Park and Lena at Cypress Hollow, so they show on the court
  * itself (a stranger sees anyone on a court only while they are checked in
  * there); Omar follows you back, so he shows exactly where he was; everyone
- * else is about a kilometre out. Priya hides her activity, so her spot has no time. Up for a
+ * else is about a kilometre out. Marcus's and Jonah's rough spots happen to
+ * land a few doors from Omar, the three about 50 m apart (Oct 7), so the demo
+ * has a small group of three that the map splits as you zoom in. Priya hides her activity, so her spot has no time. Up for a
  * hit today: Sam, Noor, Lena and Bea (`openUntil`, as their profiles say), and Diego,
  * over in Pasadena, who would rather hit within 5 miles (`openMiles`, migration 120).
  * Never a row for Ella, the teen: the database shows a teen's spot only
@@ -31,8 +33,9 @@ export const demoLastSeen: Record<ID, LastSeen> = Object.fromEntries(([
   { userId: 'u-lena', ...atPark(3, 'Cypress Hollow Park'), city: 'Los Angeles', seenAt: minutesAgo(64), openUntil: LENA_TILL },
   { userId: 'u-omar', lat: 34.0662, lng: -118.2431, place: 'exact', city: 'Los Angeles', seenAt: minutesAgo(190) },
   { userId: 'u-bea', lat: 34.05515, lng: -118.24677, place: 'approx', city: 'Los Angeles', seenAt: minutesAgo(130), openUntil: endOfToday() },
-  { userId: 'u-marcus', lat: 34.07, lng: -118.23, place: 'approx', city: 'Los Angeles', seenAt: minutesAgo(120) },
-  { userId: 'u-jonah', lat: 34.04812, lng: -118.26021, place: 'approx', city: 'Los Angeles', seenAt: minutesAgo(300) },
+  // Marcus and Jonah: rough spots that land (after positionFor's nudge) about 50 m from Omar and from each other.
+  { userId: 'u-marcus', lat: 34.06518, lng: -118.240602, place: 'approx', city: 'Los Angeles', seenAt: minutesAgo(120) },
+  { userId: 'u-jonah', lat: 34.066145, lng: -118.244171, place: 'approx', city: 'Los Angeles', seenAt: minutesAgo(300) },
   { userId: 'u-ivy', lat: 34.04255, lng: -118.23488, place: 'approx', city: 'Los Angeles', seenAt: minutesAgo(1500) },
   { userId: 'u-diego', lat: 34.14781, lng: -118.14452, place: 'approx', city: 'Pasadena', seenAt: minutesAgo(33), openUntil: DIEGO_TILL, openMiles: 5 },
   { userId: 'u-priya', lat: 34.04, lng: -118.22, place: 'approx', city: 'Los Angeles' },
