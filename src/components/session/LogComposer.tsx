@@ -157,12 +157,15 @@ export function LogDock({ canJustLog, busy, ticked, error, onJustLog, onShare, s
   }, [ticked, reduced, bump]);
   const bumpStyle = useAnimatedStyle(() => ({ transform: [{ scale: bump.value }] }));
   const grew = !!streak && streak.now > streak.before;
-  const streakWords = !streak ? '' : streak.now >= 2 ? `Day ${streak.now} streak` : ticked ? 'Day 1 streak' : 'Starts your streak';
+  // No line when the session's day isn't part of a streak running to today (one from days ago, logged
+  // late): it neither starts nor adds to one, so nothing is claimed. "Starts" only when it does start one.
+  const hasStreak = !!streak && streak.now >= 1;
+  const streakWords = !streak ? '' : streak.now >= 2 ? `Day ${streak.now} streak` : grew && !ticked ? 'Starts your streak' : 'Day 1 streak';
   return (
     <View pointerEvents="box-none" style={[styles.dock, { paddingBottom: insets.bottom + 8 }]}>
       <LinearGradient pointerEvents="none" colors={[withAlpha(colors.bg, 0), colors.bg, colors.bg]} locations={[0, 0.26, 1]} style={StyleSheet.absoluteFill} />
       {error ? <Text style={styles.dockError} accessibilityLiveRegion="polite">{error}</Text> : null}
-      {streak ? (
+      {streak && hasStreak ? (
         <Reanimated.View
           style={[styles.streak, ticked ? styles.streakSaved : null, bumpStyle]}
           accessible

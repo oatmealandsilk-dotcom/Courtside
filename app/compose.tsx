@@ -710,6 +710,20 @@ function Compose() {
     setTicked(by);
     haptics.reward();
   };
+  // The way out once saved, held while that moment plays. × (or Android's back) meanwhile takes it
+  // straight away, and it runs once only: never the page's own way out and then a second back after it.
+  const exitHeld = useRef<{ timer: ReturnType<typeof setTimeout>; run: () => void } | null>(null);
+  const leaveAfter = (run: () => void, ms: number) => {
+    const timer = setTimeout(() => { exitHeld.current = null; run(); }, ms);
+    exitHeld.current = { timer, run };
+  };
+  const leaveNow = () => {
+    const held = exitHeld.current;
+    if (!held) return;
+    exitHeld.current = null;
+    clearTimeout(held.timer);
+    held.run();
+  };
   // A live session with no tracker, once logged here: a second try (Post session after a post that
   // didn't go up) uses that log, never a second one.
   const liveLogId = useRef<ID | null>(null);
@@ -760,7 +774,7 @@ function Compose() {
       const streak = streakPreview ?? tracker.streakWith(day);
       const minutes = input.minutes ?? baseMinutes;
       const next = afterLog(logId, input, day, minutes);
-      setTimeout(() => {
+      leaveAfter(() => {
         closeMenu();
         // With an Instagram button on it: the session as a story picture. A beaten record is the moment instead.
         showLogged(minutes, { kind: input.kind, won: input.won, sets: input.sets, workout: input.kind === 'fitness' ? workoutSport : undefined }, streak, logId, next.record);
@@ -784,7 +798,9 @@ function Compose() {
   };
   // × logs nothing: the session stays "Not logged yet" (a live one, "Finished · Log it" on its bar). Anything written or added is asked about first.
   const leaveLog = () => {
-    if (!added || ticked) { goBackNow(); return; }
+    // Saved, and on its way out: now rather than in a moment (and only once).
+    if (ticked) { leaveNow(); return; }
+    if (!added) { goBackNow(); return; }
     confirm({ title: 'Discard post?', confirmLabel: 'Discard', destructive: true, onConfirm: goBackNow });
   };
   const hideIt = () => {
@@ -972,7 +988,7 @@ function Compose() {
     }
     // Posted: the tick on Post session and the streak rolling up, then on to the feed, where it goes up.
     celebrate('share');
-    setTimeout(landOnFeed, CELEBRATE_SHARE_MS);
+    leaveAfter(landOnFeed, CELEBRATE_SHARE_MS);
     const next = afterLog(freshLog ? logId : undefined, shareInput, day, shareInput.minutes ?? baseMinutes);
     const record = freshLog ? next.record : null;
     // Said once the post has actually landed, never while it is still going up (or if it fails).
@@ -1309,8 +1325,9 @@ function Compose() {
               <Reanimated.View layout={LinearTransition.duration(220)} style={styles.lengthBox}>
                 <TrackedLength
                   minutes={logMinutes ?? opened.activity.minutes}
-                  trackerMinutes={opened.activity.minutes}
-                  tracker={trackerName(opened.activity)}
+                  // From Finish (your tracker's copy of the live session): the clock's time is what goes in, "from your timer", not "edited".
+                  trackerMinutes={fromLive && liveMins ? liveMins : opened.activity.minutes}
+                  tracker={fromLive && liveMins ? 'your timer' : trackerName(opened.activity)}
                   open={editLength}
                   onOpen={setEditLength}
                   onChange={(m) => setLogMinutes(m === opened.activity.minutes ? null : m)}
