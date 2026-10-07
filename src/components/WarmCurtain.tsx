@@ -85,7 +85,7 @@ export function WarmCurtain() {
         // On a phone: the launch picture's logo and line in the theme's colours, drawn exactly where the
         // launch picture draws them, the same as the screen before it: it lifts into the app (Oct 4).
         <Animated.View style={[StyleSheet.absoluteFill, brandStyle]}>
-          <LaunchMark ink={colors.brand} faint={colors.textFaint} />
+          <LaunchMark ink={colors.brand} faint={colors.launchLine} />
         </Animated.View>
       ) : (
         <>

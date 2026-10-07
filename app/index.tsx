@@ -200,7 +200,7 @@ export default function Index() {
         // On a phone the themed screen is the launch picture's own logo and line, cut from it
         // and drawn the same way (cover), in the theme's colours: the cream fades into it with
         // nothing moving, on any size of phone (Oct 4, owner: theme fade back, no blip).
-        <LaunchMark ink={colors.brand} faint={colors.textFaint} line={launchUpdate.downloading ? 'Getting the newest version' : 'Growing the game'} />
+        <LaunchMark ink={colors.brand} faint={colors.launchLine} line={launchUpdate.downloading ? 'Getting the newest version' : 'Growing the game'} />
       ) : (
         <>
           <Animated.View style={[styles.brand, { opacity: rise, transform: [{ scale: rise.interpolate({ inputRange: [0, 1], outputRange: [0.97, 1] }) }] }]}>
@@ -214,7 +214,7 @@ export default function Index() {
         // Coming here later (a sign-in, a switch of account): the cream drawn copy, faded once laid out.
         <Animated.View pointerEvents="none" onLayout={startCoverFade} style={[StyleSheet.absoluteFill, styles.splash, launchStyles.launch, { opacity: cover }]}>
           <StatusBar style="dark" />
-          <LaunchMark ink={lightColors.brand} faint={lightColors.textFaint} />
+          <LaunchMark ink={lightColors.brand} faint={lightColors.launchLine} />
         </Animated.View>
       ) : null}
     </Animated.View>

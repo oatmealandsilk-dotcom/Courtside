@@ -1,54 +1,46 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Easing, Platform, StyleSheet, Text, View, useWindowDimensions, type TextLayoutEvent } from 'react-native';
-import Svg, { G, Rect } from 'react-native-svg';
+import { Animated, Easing, PixelRatio, Platform, StyleSheet, Text, View, useWindowDimensions, type TextLayoutEvent } from 'react-native';
+import Svg, { G, Path, Rect } from 'react-native-svg';
 
 import { font } from '@/theme';
 import { LAUNCH_FADE_MS, launchHiddenAt, launchShowing, whenLaunchHidden } from '@/lib/launchSplash';
+import { BRAND, LINE as LINE_SHAPE, PICTURE } from '@/components/launchPicture';
 
 /*
  * The launch picture's logo, name and line, drawn (not a picture) at exactly
  * the place and size the phone's launch picture shows them on this screen, in
  * whatever colours are given (Oct 4, owner: the theme fade with nothing moving
  * and nothing missing, on any phone). The launch picture is 1284 × 2778 and the
- * phone draws it to cover the screen; every number below is a measurement of
- * it (assets/splash.png) carried through that same cover fit. Drawn shapes and
- * text appear on the first frame, where a picture loads a moment later.
+ * phone draws it to cover the screen; every shape here is in that picture's
+ * pixels (assets/splash.png) and is carried through that same cover fit.
+ * Drawn shapes appear on the first frame, where a picture loads a moment later.
  *
- * Measured again with Python + PIL (Oct 4, owner: "should not be misalignment
- * even if it's a tiny bit"), in picture pixels:
- * - Mark: rows 1229–1411, leaning 14°. Halfway down (row 1320) the frame spans
- *   556.0–683.0, sides 18.9 wide, bars 19 tall, the bar across on rows 1312–1327;
- *   the sideline spans 710.0–729.0. BrandMark's proportions are a touch off this
- *   (the old fit was 2 px short, the bar 1 px thin), so it is drawn from these.
- * - Name: ink 414–870, flat bottoms on 1575.0. The picture sets it in an
- *   Arial-like bold, not Inter, so no Inter size matches every letter; the
- *   closest overlay (least squares, whole word) is Inter Bold 99 px, tracking
- *   −0.0285 em, baseline 1575.1, 1.2 px right of the middle.
- * - Line: Inter Bold, not SemiBold (ink within 1% of Bold, 9% over SemiBold),
- *   caps 2461.0–2487.0: 35.6 px, tracking 0.09 em, on the middle (the old fit
- *   sat 1 px high).
- * iOS adds the letter spacing after the last letter too, which put a centred
- * line half a spacing off (the line 1.7 px left); typeAt puts that half back.
+ * The shapes are the picture's own (Oct 7, owner: "the courtsides don't match
+ * up exactly"). Until then the name was set in Inter Bold, but the picture sets
+ * it in an Arial-like bold the app does not carry, so the letters changed shape
+ * at the hand-off however well the size and place were measured. Now the logo,
+ * the name and the line are cut from the picture itself, following its edges to
+ * a fraction of a pixel (scripts/trace-launch-picture.py writes launchPicture.ts),
+ * so the cream hands over to exactly the same letters in your theme's colours.
+ * A new launch picture needs that script run again, in the same build.
+ * The line is drawn in the theme's launchLine: on the cream court that is the
+ * picture's own grey, so there the hand-off changes nothing at all.
+ *
+ * Only a different line (while a newer version downloads) is set as text, in
+ * Inter Bold, on the picture's line: caps 2461.0–2487.0, 35.6 px, tracking
+ * 0.09 em, on the middle. iOS adds the letter spacing after the last letter
+ * too, which put a centred line half a spacing off; typeAt puts that half back.
  * Apple's text engine can also round a line's depth below the baseline to a
- * whole point at these sizes (it does on a Mac: up to half a point, which is
- * 1.5 px on an iPhone 16 Pro), so each line reports where its baseline really
- * landed and is set by that, not by the font's sums (useDrawnBaseline).
+ * whole point at these sizes (up to half a point, 1.5 px on an iPhone 16 Pro),
+ * so the line reports where its baseline really landed and is set by that, not
+ * by the font's sums (useDrawnBaseline).
  */
-const PIC_W = 1284;
-const PIC_H = 2778;
-// The mark, in picture pixels, as it stands halfway down (the lean pivots there).
-const MARK_TOP = 1229;
-const MARK_H = 182;
-const FRAME_LEFT = 556.04;
-const FRAME_W = 126.92;
-const FRAME_SIDE = 18.95; // sides 18.93, bars 19: one width for both
-const BAR_TOP = 1312;
-const BAR_H = 15;
-const SLASH_LEFT = 710.04;
-const SLASH_W = 18.92;
-// The two lines of type: size and baseline in picture pixels, tracking in ems,
-// and where the middle of the line sits (the picture's own middle is 642).
-const NAME = { size: 99, tracking: -0.0285, baseline: 1575.1, centre: 643.2 };
+const PIC_W = PICTURE.width;
+const PIC_H = PICTURE.height;
+/** The picture's own line; any other line is set as text. */
+const PICTURE_LINE = 'Growing the game';
+// The text line: size and baseline in picture pixels, tracking in ems, and where
+// the middle of the line sits (the picture's own middle is 642).
 const LINE = { size: 35.6, tracking: 0.09, baseline: 2486.95, centre: 642.1 };
 // Inter's ascent and descent (2048 units to the em) and the line height used. iOS
 // centres the letters in a line taller than the font's own, half the extra above.
@@ -100,22 +92,50 @@ function typeAt(spec: { size: number; tracking: number; baseline: number; centre
   };
 }
 
-function PictureLaunchMark({ ink, faint, line = 'Growing the game' }: { ink: string; faint: string; line?: string }) {
+/**
+ * One box of the launch picture (x, y, width, height in its pixels), drawn over exactly the place the
+ * phone's picture shows it: the picture is scaled by `s` and its top left sits at (ox, oy).
+ *
+ * The phone lays every view out on whole screen pixels, rounding a box that falls between them, where
+ * the launch picture itself sits wherever the scaling puts it, between pixels too. A box on its own
+ * place would be moved by up to half a pixel, and the shapes in it with it. So the box is widened out
+ * to the nearest whole pixels, and its window onto the picture (the viewBox) widened by the same, which
+ * leaves every shape exactly where the picture has it.
+ */
+function PictureBox({ view, s, ox, oy, label, children }: { view: readonly number[]; s: number; ox: number; oy: number; label: string; children: React.ReactNode }) {
+  const [x, y, w, h] = view;
+  const px = PixelRatio.get();
+  const left = Math.floor((ox + x * s) * px) / px;
+  const top = Math.floor((oy + y * s) * px) / px;
+  const width = Math.ceil((ox + (x + w) * s) * px) / px - left;
+  const height = Math.ceil((oy + (y + h) * s) * px) / px - top;
+  const seen = [(left - ox) / s, (top - oy) / s, width / s, height / s].join(' ');
+  return (
+    <View accessible accessibilityRole="image" accessibilityLabel={label} style={{ position: 'absolute', left, top, width, height }}>
+      <Svg width={width} height={height} viewBox={seen} preserveAspectRatio="none">{children}</Svg>
+    </View>
+  );
+}
+
+function PictureLaunchMark({ ink, faint, line = PICTURE_LINE }: { ink: string; faint: string; line?: string }) {
   const { width: W, height: H } = useWindowDimensions();
   const s = Math.max(W / PIC_W, H / PIC_H);
   const ox = (W - PIC_W * s) / 2;
   const oy = (H - PIC_H * s) / 2;
-  const top = oy + MARK_TOP * s;
-  const name = useDrawnBaseline(NAME.size * s);
   const tagline = useDrawnBaseline(LINE.size * s);
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-      <View style={[styles.lean, { top, height: MARK_H * s, left: ox + FRAME_LEFT * s, width: FRAME_W * s, borderWidth: FRAME_SIDE * s, borderColor: ink }]}>
-        <View style={{ position: 'absolute', left: 0, right: 0, top: (BAR_TOP - MARK_TOP - FRAME_SIDE) * s, height: BAR_H * s, backgroundColor: ink }} />
-      </View>
-      <View style={[styles.lean, { top, height: MARK_H * s, left: ox + SLASH_LEFT * s, width: SLASH_W * s, backgroundColor: ink }]} />
-      <Text allowFontScaling={false} onTextLayout={name.onTextLayout} style={[styles.name, typeAt(NAME, s, oy, name.at), { color: ink }]}>CourtSide</Text>
-      <Text allowFontScaling={false} onTextLayout={tagline.onTextLayout} style={[styles.line, typeAt(LINE, s, oy, tagline.at), { color: faint }]}>{line}</Text>
+      <PictureBox view={BRAND.view} s={s} ox={ox} oy={oy} label="CourtSide">
+        <Path d={BRAND.mark} fill={ink} fillRule="evenodd" />
+        <Path d={BRAND.name} fill={ink} fillRule="evenodd" />
+      </PictureBox>
+      {line === PICTURE_LINE ? (
+        <PictureBox view={LINE_SHAPE.view} s={s} ox={ox} oy={oy} label={line}>
+          <Path d={LINE_SHAPE.d} fill={faint} fillRule="evenodd" />
+        </PictureBox>
+      ) : (
+        <Text allowFontScaling={false} onTextLayout={tagline.onTextLayout} style={[styles.line, typeAt(LINE, s, oy, tagline.at), { color: faint }]}>{line}</Text>
+      )}
     </View>
   );
 }
@@ -188,7 +208,5 @@ const styles = StyleSheet.create({
   // Just under the mark: laid out from the middle of the screen, so the mark itself never moves.
   androidName: { position: 'absolute', top: '50%', left: 0, right: 0, textAlign: 'center', fontSize: 30, lineHeight: 36, letterSpacing: -0.9, ...font('700') },
   androidLine: { position: 'absolute', bottom: '10.5%', left: 0, right: 0, textAlign: 'center', fontSize: 11.5, letterSpacing: 1, textTransform: 'uppercase', ...font('700') },
-  lean: { position: 'absolute', transform: [{ skewX: '-14deg' }] },
-  name: { position: 'absolute', textAlign: 'center', ...font('700') },
   line: { position: 'absolute', textAlign: 'center', ...font('700'), textTransform: 'uppercase' },
 });
