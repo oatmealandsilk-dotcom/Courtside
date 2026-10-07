@@ -17,6 +17,7 @@ import { conversations, messages } from './mock/messages';
 import { healthHistory, integrations } from './mock/health';
 import { activityNotifications, demoFoundWorkouts, detectedActivities, foundWeek, whoopWeek } from './mock/activities';
 import { CURRENT_USER_ID, users } from './mock/users';
+import { DEMO_AFFILIATES, demoAffiliateStats, demoInvitees } from './mock/invites';
 import { demoHits } from './mock/hits';
 import { isMapCourtId } from '@/features/places/courtName';
 import { demoLastSeen } from './mock/presence';
@@ -31,6 +32,7 @@ import { supabase } from '@/lib/supabase';
 import { canTagKind, isActive, isClosed, maxTagsFor, mirrorCopy } from '@/features/activity/sessionTags';
 import type {
   Achievement,
+  AffiliateStats,
   Answer,
   Coach,
   CoachApplication,
@@ -53,6 +55,7 @@ import type {
   Post,
   PracticeSession,
   HeadToHead,
+  Invitee,
   MatchSet,
   SessionTag,
   SessionTagRefusal,
@@ -206,6 +209,43 @@ export async function fetchWhoopWeek(all: boolean): Promise<DetectedActivity[]> 
 export async function fetchAppleWeek(all: boolean): Promise<DetectedActivity[]> {
   return delay(clone(foundWeek().activities.filter((a) => all || a.sport === 'tennis')));
 }
+
+/* ---------------------------------------------------------------- Invites */
+
+/** Who joined through `me`'s link or code (my_invitees, migration 85): the demo player's people (an affiliate), nobody for anyone else. */
+export async function fetchMyInvitees(me: ID): Promise<Invitee[]> {
+  return delay(DEMO_AFFILIATES.has(me) ? demoInvitees() : []);
+}
+
+/** How many joined through `me`'s link, for Settings → Invites. */
+export async function countReferrals(me: ID): Promise<number> {
+  return delay(DEMO_AFFILIATES.has(me) ? demoInvitees().length : 0);
+}
+
+/** `me`'s own numbers as an affiliate (my_affiliate_stats, migration 147), or null for anyone who is not one. */
+export async function fetchMyAffiliate(me: ID): Promise<AffiliateStats | null> {
+  return delay(DEMO_AFFILIATES.has(me) && !demoNotAffiliate() ? demoAffiliateStats() : null);
+}
+
+/**
+ * Demo build in a browser: `?affiliate=0` (kept for the tab) plays the demo
+ * player as someone who is not an affiliate, with the same people, so the
+ * plain Invite friends page everyone else gets can be seen beside the
+ * dashboard. `?affiliate=1` turns it back.
+ */
+function demoNotAffiliate(): boolean {
+  try {
+    if (typeof window === 'undefined' || !window.location || !window.sessionStorage) return false;
+    const asked = new URLSearchParams(window.location.search).get('affiliate');
+    if (asked === '0') window.sessionStorage.setItem('courtside-demo-not-affiliate', '1');
+    if (asked === '1') window.sessionStorage.removeItem('courtside-demo-not-affiliate');
+    return window.sessionStorage.getItem('courtside-demo-not-affiliate') === '1';
+  } catch {
+    return false;
+  }
+}
+// Noted as the app loads, while the address still has it.
+if (!supabase) demoNotAffiliate();
 
 /* ------------------------------------------- New on CourtSide (migration 63) */
 

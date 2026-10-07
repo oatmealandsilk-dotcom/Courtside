@@ -122,7 +122,7 @@ import type {
   Story,
   User,
   PlayerProfile,
-  MediaCrop, Tip, TaggedCourt, TrackerId, Invitee, ContactMatch, HealthShareKey, HeadToHead, CourtKings, FlybyPerson, FriendStreak, MatchSet, Removed, RemovedItem, ReviewRequest, ReviewStatus, TakedownKind, TakedownReason, TournamentEntry, HiddenWords, HiddenWordsKind } from '@/data/types';
+  MediaCrop, Tip, TaggedCourt, TrackerId, Invitee, AffiliateStats, ContactMatch, HealthShareKey, HeadToHead, CourtKings, FlybyPerson, FriendStreak, MatchSet, Removed, RemovedItem, ReviewRequest, ReviewStatus, TakedownKind, TakedownReason, TournamentEntry, HiddenWords, HiddenWordsKind } from '@/data/types';
 import { HIDDEN_WORDS_MAX, HIDDEN_WORD_LENGTH, cleanWords, defaultHiddenWords } from '@/features/hiddenWords/hiddenWords';
 import { canScore, scoreNotKept, setsWinner } from '@/features/activity/score';
 
@@ -950,6 +950,8 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
   claimPendingReferral: () => Promise<void>;
   countReferrals: () => Promise<number>;
   fetchMyInvitees: () => Promise<Invitee[] | null>;
+  /** My own earnings as an affiliate (migration 147), or null for anyone who is not one (or before the migration): the Invites page is then the plain one. */
+  fetchMyAffiliate: () => Promise<AffiliateStats | null>;
   /** Find friends from contacts (migration 88): which of these numbers and emails are players. */
   matchContacts: (phones: string[], emails: string[]) => Promise<ContactMatch[] | 'limit' | null>;
   /** Your linked phone number, confirmed by text, or null. */
@@ -8040,13 +8042,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     showInviterFollow(who, mine?.id === who ? mine.handle : undefined);
   };
   useEffect(() => { if (live(state.currentUserId)) void claimPendingReferral(); }, [state.currentUserId, claimPendingReferral]);
-  const countReferrals = useCallback(async () => { const me = stateRef.current.currentUserId; return live(me) ? remote.countReferrals(me!) : 0; }, []);
+  // The demo player is an affiliate with people of their own (src/data/mock/invites.ts); anyone else in the demo has none.
+  const countReferrals = useCallback(async () => { const me = stateRef.current.currentUserId; return live(me) ? remote.countReferrals(me!) : me ? demoApi.countReferrals(me) : 0; }, []);
   const matchContacts = useCallback(async (phones: string[], emails: string[]) => { const me = stateRef.current.currentUserId; return live(me) ? remote.matchContacts(phones, emails) : []; }, []);
   const myPhone = useCallback(async () => { const me = stateRef.current.currentUserId; return live(me) ? remote.myPhone() : null; }, []);
   const startPhoneLink = useCallback(async (phone: string) => { await remote.startPhoneLink(phone); }, []);
   const confirmPhoneLink = useCallback(async (phone: string, code: string) => { await remote.confirmPhoneLink(phone, code); }, []);
   const unlinkPhone = useCallback(async () => { await remote.unlinkPhone(); }, []);
-  const fetchMyInvitees = useCallback(async () => { const me = stateRef.current.currentUserId; return live(me) ? remote.fetchMyInvitees() : []; }, []);
+  const fetchMyInvitees = useCallback(async () => { const me = stateRef.current.currentUserId; return live(me) ? remote.fetchMyInvitees() : me ? demoApi.fetchMyInvitees(me) : []; }, []);
+  const fetchMyAffiliate = useCallback(async () => { const me = stateRef.current.currentUserId; return live(me) ? remote.fetchMyAffiliate() : me ? demoApi.fetchMyAffiliate(me) : null; }, []);
 
   const pullFrom = useCallback(async (me: ID, provider: Integration['provider']): Promise<boolean> => {
     if (provider === 'apple-health') {
@@ -8560,6 +8564,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       claimPendingReferral,
       countReferrals,
       fetchMyInvitees,
+      fetchMyAffiliate,
       matchContacts,
       myPhone,
       startPhoneLink,
@@ -8785,6 +8790,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       claimPendingReferral,
       countReferrals,
       fetchMyInvitees,
+      fetchMyAffiliate,
       matchContacts,
       myPhone,
       startPhoneLink,
