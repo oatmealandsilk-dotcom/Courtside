@@ -1287,11 +1287,10 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
   // A new Apple or Google account has no settings row until its age check,
   // so whether the database has "Let people find me from their contacts"
   // (migration 89) is asked on its own: the switch shows from the first visit.
-  const contactsFindableReady = ustate.data || ustate.error ? false
-    : await db.from('user_state').select('contacts_findable').limit(0).then(({ error }) => !error, () => false);
-  // The same for the "Players joining near you" switch (migration 146).
-  const alertSwitchesReady = ustate.data || ustate.error ? false
-    : await db.from('user_state').select('push_joined').limit(0).then(({ error }) => !error, () => false);
+  // The same for the "Players joining near you" switch (migration 146), asked alongside.
+  const hasColumn = (column: string) => db.from('user_state').select(column).limit(0).then(({ error }) => !error, () => false);
+  const [contactsFindableReady, alertSwitchesReady] = ustate.data || ustate.error ? [false, false]
+    : await Promise.all([hasColumn('contacts_findable'), hasColumn('push_joined')]);
   const hitList = await withMyHits(((hitRows.data ?? []) as HitRow[]).map(toHit), me);
   // Tournament plans (where and when someone will play) are only for
   // themselves and friends who follow each other, whoever they are. Since
