@@ -50,7 +50,7 @@ interface Row {
  */
 export default function Settings() {
   const styles = useThemedStyles(styleDefinitions);
-  const { currentUser, currentUserId, locationEnabled, detectedLocation, actions, prefs, courtExtras, mapLive, mapVisibility, teenMap, contactsFindableLive, integrations } = useApp();
+  const { currentUser, currentUserId, locationEnabled, detectedLocation, actions, prefs, courtExtras, mapLive, mapVisibility, teenMap, contactsFindableLive, joinAlertsLive, integrations } = useApp();
   const [locationNote, setLocationNote] = useState('');
   const toggleLocation = async (next: boolean) => {
     // Never said who can see you on the map (migration 63): that comes first, the same as on the map.
@@ -134,7 +134,7 @@ export default function Settings() {
     {
       title: 'Account',
       rows: [
-        { icon: 'person-circle-outline', label: 'Account center', detail: 'Password, sign-in and payments', onPress: () => router.push('/account') },
+        { icon: 'person-circle-outline', label: 'Account center', detail: 'Password and sign-in', onPress: () => router.push('/account') },
         { icon: 'shield-checkmark-outline', label: 'Privacy center', onPress: () => router.push('/privacy') },
         // Oct 5 (owner: "Do word feature like how Instagram does"): Instagram's Hidden words (migration 117).
         { icon: 'eye-off-outline', label: 'Hidden words', detail: 'Offensive comments and messages', onPress: () => router.push('/hidden-words') },
@@ -164,6 +164,11 @@ export default function Settings() {
         }] : []),
         // Mondays at 8am your time (migration 130): last week on court. Off, it still lands in Notifications.
         { icon: 'stats-chart-outline' as const, label: 'Weekly recap', detail: 'Mondays at 8am: your week on court', toggle: { value: prefs.pushRecap, onChange: (v: boolean) => actions.setPref('pushRecap', v) } },
+        // "Sam just joined CourtSide near you" (migration 146): only adults hear it (the server's rule), and
+        // the switch shows once the database has it. Off, it still lands in Notifications.
+        ...(mapAdult && joinAlertsLive ? [{ icon: 'person-add-outline' as const, label: 'Players joining near you', detail: 'Someone new in your town', toggle: { value: prefs.pushJoined, onChange: (v: boolean) => actions.setPref('pushJoined', v) } }] : []),
+        // The 7pm reminder, set on this phone (features/practice/reminder).
+        { icon: 'flame-outline' as const, label: 'Streak reminders', detail: 'At 7pm, when today has nothing yet', toggle: { value: prefs.pushStreak, onChange: (v: boolean) => actions.setPref('pushStreak', v) } },
       ],
     }]),
     // The map's own alerts, each with its own switch. On a computer too: they also land in your Notifications.

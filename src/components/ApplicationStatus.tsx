@@ -7,25 +7,32 @@ import Reanimated, { Easing, FadeInDown } from 'react-native-reanimated';
 import { LiveDot } from '@/components/LiveDot';
 import { Avatar, Button, Screen } from '@/components/ui';
 import type { CoachApplication, User } from '@/data/types';
+import { usePaidBooking } from '@/features/coaching/bookings';
 import { goBack } from '@/lib/goBack';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, lift, radius, spacing, typography } from '@/theme';
 
 type Status = CoachApplication['status'];
 
-/** What the page says, in the voice of someone at the club who is on it. */
-const WORDS: Record<Status, { title: string; lead: (first: string) => string; pill: string }> = {
+/**
+ * What the page says, in the voice of someone at the club who is on it.
+ * `paid`: paid booking is open to this person (usePaidBooking). Until then
+ * coaching is free, so nothing here speaks of payouts or booking (App Review, Oct 6).
+ */
+const WORDS: Record<Status, { title: string; lead: (first: string, paid: boolean) => string; pill: string }> = {
   submitted: { title: 'It’s in.', lead: (f) => `Thanks, ${f}. Every coach on CourtSide is checked by a person, so this takes a couple of days. We’ll tell you here the moment anything moves.`, pill: 'Received' },
   'in-review': { title: 'We’re on it.', lead: (f) => `${f}, someone is going through your application right now. If we need anything, we’ll call or email.`, pill: 'In review' },
-  approved: { title: 'You’re in.', lead: (f) => `Welcome to CourtSide coaching, ${f}. Your studio is open: set your page, your services and your payouts, and players can book you.`, pill: 'Approved' },
+  approved: { title: 'You’re in.', lead: (f, paid) => (paid
+    ? `Welcome to CourtSide coaching, ${f}. Your studio is open: set your page, your services and your payouts, and players can book you.`
+    : `Welcome to CourtSide coaching, ${f}. Your studio is open: set your page and your services, and players can find you.`), pill: 'Approved' },
   rejected: { title: 'Not this time.', lead: (f) => `Thanks for applying, ${f}. The notification we sent says why. Most people who reapply do it with a rating link or one more reference.`, pill: 'Not approved' },
 };
 
-const STEPS = [
+const stepsFor = (paid: boolean) => [
   { title: 'Application filed', note: 'Your details, ratings and references' },
   { title: 'Credentials and rating checked', note: 'We open your UTR or USTA page ourselves' },
   { title: 'A quick reference call', note: 'Ten minutes with someone you coach' },
-  { title: 'Listed on CourtSide', note: 'Your studio opens and players can book you' },
+  { title: 'Listed on CourtSide', note: paid ? 'Your studio opens and players can book you' : 'Your studio opens and players can find you' },
 ];
 
 const enter = (i: number) => FadeInDown.delay(60 + i * 70).duration(420).easing(Easing.out(Easing.cubic));
@@ -40,6 +47,8 @@ export function ApplicationStatus({ application, me, onApplyAgain }: { applicati
   const styles = useThemedStyles(styleDefinitions);
   const status: Status = application?.status ?? 'submitted';
   const words = WORDS[status];
+  const paid = usePaidBooking();
+  const STEPS = stepsFor(paid);
   const first = (me?.name ?? application?.fullName ?? 'there').split(' ')[0];
   // Steps ticked off, and the one happening now (none once it is decided).
   const doneUpTo = ({ submitted: 1, 'in-review': 2, approved: 4, rejected: 1 } as const)[status];
@@ -52,7 +61,7 @@ export function ApplicationStatus({ application, me, onApplyAgain }: { applicati
       <View style={styles.page}>
         <Reanimated.View entering={enter(0)} style={styles.head}>
           <Text style={styles.title}>{words.title}</Text>
-          <Text style={styles.lead}>{words.lead(first)}</Text>
+          <Text style={styles.lead}>{words.lead(first, paid)}</Text>
         </Reanimated.View>
 
         <Reanimated.View entering={enter(1)} style={styles.card}>

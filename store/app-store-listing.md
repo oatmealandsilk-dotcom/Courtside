@@ -8,6 +8,8 @@ Everything you type into Apple's forms to send CourtSide to the App Store, in th
 
 **Updated Oct 5, late:** you decided the Instagram switch (section 8, item J): it stays **on for everyone** and is now written into the Terms and the privacy policy. On the post screen it now reads "Let CourtSide feature this on its Instagram" (it used to say "Feature on CourtSide's Instagram"). The two marketing boxes in section 4 are ticked for good, and the item is gone from section 0. Later still: the same switch is now on the **Edit post** screen too, so people can switch it off any time after posting, and the Terms, the privacy policy and the short "I agree" page say so.
 
+**Updated Oct 6 (App Store audit):** the review notes now say plainly that heart rate and calories show on a workout someone posts while "Share health data" is on (on to start for adults, off for teens, who can still switch it on), name the Health row as it appears in the app ("Apple Watch"), describe the camera, microphone and Photos the way the app now uses them (picking a photo for a chat or a comment no longer asks for Photos access), say the streak and weekly recap reminders each have an off switch, and list paid in-person lessons and King of the Court as built but switched off. The description's Apple Health line says the same about posts. A TODO above the notes reminds you that "Sign in with Apple … also work" is only true once you switch it on (section 8, item A).
+
 **How to use it**
 
 - **Copy only what is inside the grey boxes.** Anything in `[square brackets]` is a blank for you to fill in first.
@@ -320,7 +322,7 @@ TALK TENNIS
 APPLE HEALTH (OPTIONAL)
 • Connect Apple Health in Settings, under Health and nutrition. Your tennis workouts come in with their average and maximum heart rate, so you can log a session in one tap.
 • See your sleep, heart rate variability, resting heart rate, steps, active energy and food totals in one place.
-• CourtSide only reads from Health and never writes to it. Your health data stays private unless you choose to show numbers on a post, and it is never used for ads or sold.
+• CourtSide only reads from Health and never writes to it. Your health data stays private: only a workout you post shows its heart rate and calories, and one switch hides them. It is never used for ads or sold.
 
 YOUR PROFILE
 • Your posts, your clips and the posts you're tagged in, with a tennis profile: your rating, play style, favorite surface and what you're working toward.
@@ -493,6 +495,8 @@ Do these while signed in as the account named. To switch: **Profile** → gear �
 
 First replace the four `[…]` blanks with the two logins from section 6. The notes assume section 0 is done.
 
+> **TODO (William), before you paste:** the notes say "Sign in with Apple and Google also work." That is only true once you have switched Apple sign-in on in Supabase (section 8, item A) and published Google sign-in (item G), and tried both on build 15. Until then the Apple button shows an error, and Apple rejects for that: don't submit. The new "Players joining near you" switch shows once database update 146 is applied (Claude does that); the notes don't depend on it.
+
 ```text
 CourtSide is a social app for tennis players: a map of courts and players nearby, a feed of clips and photos, discussions, messages, and free Ask a coach questions.
 
@@ -507,10 +511,10 @@ Everyone gives a birthday once; under 13 cannot join. Ages 13-17: accounts start
 
 PERMISSIONS (each asked only when its feature is first used, except notifications)
 - Location, while using the app only: courts and players near you. Optional. Each person chooses who sees them (Settings > Privacy center > Who can see you on the map): Players nearby (rough area), Only people you follow back, or Only me, which the demo account uses. Turning Location off deletes your spot from our servers.
-- Camera: an instant, or a photo for a chat. Photos: to pick clips and photos to post or send. Microphone: voice notes, only while recording.
+- Camera and microphone: posts (photo, or video with sound), instants, chat photos, voice notes while recording. Photos: chat and comment photos ask nothing; picking for a post asks once (Limited or Don't Allow work too); saving asks add-only access.
 - Contacts: only from Settings > Find friends from contacts. Numbers and emails are matched against CourtSide accounts, then deleted.
-- Notifications: asked once after setup: messages, likes, comments, follows.
-- Apple Health, read only: Settings > Health and nutrition. Reads sleep, HRV, resting heart rate, steps, active energy, nutrition totals, and Workouts with heart rate so a session can be logged in one tap. Background delivery only shows a local "Activity detected" alert (or "Tennis detected"). Never writes to Health. Health data is private to the account, never used for ads or marketing, never sold, not stored in iCloud. With no workouts on the device, the sessions list is empty.
+- Notifications: asked once after setup. Reminders (streak, weekly recap) each have an off switch in Settings.
+- Apple Health, read only: Settings > Health and nutrition (row "Apple Watch"). Reads sleep, HRV, resting heart rate, steps, active energy, nutrition, and Workouts with heart rate to log a session in one tap. Background delivery only shows a local alert. Never writes to Health. Private, except heart rate and calories on a post with "Share health data" on (default on for adults only). Never used for ads or marketing, never sold, not in iCloud. With no workouts on the device, the sessions list is empty.
 
 SAFETY (1.2)
 Everyone agrees to the Terms and Community guidelines (no tolerance for objectionable content or abusive users). Report: ••• on a post, instant or profile; the flag on a thread; press and hold a comment, reply or message; ••• on a coach question; a chat's details. Block or mute: ••• on a profile. Reported items are hidden from the reporter at once. Our team is alerted to every report, reviews it within 24 hours in an in-app queue, takes down content (the author is told why) and suspends accounts. Settings > Hidden words hides offensive comments and messages from people you don't follow; slurs and threats can't be posted.
@@ -522,13 +526,13 @@ COACHING AND PURCHASES
 Coaching is free: Ask a coach (public questions) and coach profiles with messaging. Nothing can be bought: no in-app purchases, subscriptions, payments or ads.
 
 NOT IN THIS VERSION
-The AI coach is built but switched off on our server; it will come in a later update sent for review. Fitbit, Oura, Polar and WHOOP tennis sessions are off too. Connecting WHOOP for recovery and sleep is optional and needs a WHOOP membership.
+The AI coach is built but switched off on our server; it will come in a later update sent for review. Paid lessons and King of the Court are switched off. Fitbit, Oura, Polar and WHOOP tennis sessions are off too. Connecting WHOOP for recovery and sleep is optional and needs a WHOOP membership.
 
 CONTACT
 support@courtsidebase.com
 ```
 
-3,574 characters with the blanks in. Your real emails and passwords add about 25, and the AI coach swap below about 135, so it stays well under 4,000.
+3,817 characters with the blanks in. Your real emails and passwords add about 25, and the AI coach swap below about 130, so it stays just under 4,000 (about 3,975 with both). Anything added on top needs something else cut.
 
 ### Swaps, depending on your answers in section 8
 

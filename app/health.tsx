@@ -28,7 +28,7 @@ import { colors, radius, spacing, typography } from '@/theme';
 
 /** What each source is, in a line, and how it connects. */
 const ABOUT: Partial<Record<Integration['provider'], { icon: keyof typeof Ionicons.glyphMap; line: string; how: string }>> = {
-  'apple-health': { icon: 'heart-outline', line: 'Sleep, HRV, resting heart rate, steps, active energy.', how: 'Reads the Health app on this phone.' },
+  'apple-health': { icon: 'heart-outline', line: 'Sleep, HRV, resting heart rate, steps, active energy, food.', how: 'Reads the Health app on this phone.' },
   whoop: { icon: 'pulse-outline', line: 'Recovery, strain, HRV, resting heart rate, sleep.', how: 'Signs in to WHOOP once; then it syncs on its own.' },
   // Tennis sessions only, through the server's trackers function (migration 69).
   fitbit: { icon: 'watch-outline', line: 'Tennis sessions and your heart rate during them.', how: 'Sign in to Fitbit once. Tennis you record shows up here.' },
@@ -59,7 +59,7 @@ const TRACKER_ROWS: Integration['provider'][] = ['whoop', 'apple-health', 'fitbi
 /** Apple Health and WHOOP once every workout is switched on for them on the server (migrations 107 and 135; owner, Oct 5). */
 const ABOUT_WORKOUTS: Partial<Record<Integration['provider'], { line: string; how: string }>> = {
   'apple-health': {
-    line: 'Through Apple Health: your workouts (tennis, runs, rides, the gym and more) and their heart rate, plus sleep, HRV, resting heart rate, steps.',
+    line: 'Through Apple Health: your workouts (tennis, runs, rides, the gym and more) and their heart rate, plus sleep, HRV, resting heart rate, steps, food.',
     how: 'Reads the Health app on this phone. Record a workout on your Apple Watch or iPhone; CourtSide picks it up when you open the app.',
   },
   whoop: {
@@ -70,7 +70,7 @@ const ABOUT_WORKOUTS: Partial<Record<Integration['provider'], { line: string; ho
 
 /** The same two, once tennis sessions are switched on for them on the server (migration 58). */
 const ABOUT_TENNIS: Partial<Record<Integration['provider'], { line: string; how: string }>> = {
-  'apple-health': { line: 'Through Apple Health: tennis workouts and their heart rate, plus sleep, HRV, resting heart rate, steps.', how: 'Reads the Health app on this phone. Start a Tennis workout on your Apple Watch; CourtSide picks it up when you open the app.' },
+  'apple-health': { line: 'Through Apple Health: tennis workouts and their heart rate, plus sleep, HRV, resting heart rate, steps, food.', how: 'Reads the Health app on this phone. Start a Tennis workout on your Apple Watch; CourtSide picks it up when you open the app.' },
   whoop: { line: 'Tennis sessions, recovery, strain, HRV, sleep.', how: 'Sign in to WHOOP once. A tennis session it records arrives as an alert, usually within an hour.' },
 };
 
@@ -176,7 +176,7 @@ export default function Health() {
     onConfirm: () => run('apple-health', next),
   } : {
     title: 'Tennis sessions from Apple Health',
-    message: 'CourtSide reads your Tennis workouts and your heart rate during them, so you can log and post them, plus sleep, HRV, resting heart rate and steps. Nothing is posted unless you choose to.',
+    message: 'CourtSide reads your Tennis workouts and your heart rate during them, so you can log and post them, plus sleep, HRV, resting heart rate, steps, active energy and food (calories, protein, carbs, fat) for your Health page. Nothing is posted unless you choose to.',
     confirmLabel: 'Continue',
     onConfirm: () => run('apple-health', next),
   });

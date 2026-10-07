@@ -85,7 +85,9 @@ const ANDROID_PICKER = Platform.OS === 'android';
 export async function pickFromDevice(selection: 'video' | 'photo' | 'all', options?: { trimTo?: number }): Promise<PickedMedia | null> {
   const kinds: ImagePicker.MediaType[] = selection === 'video' ? ['videos'] : selection === 'photo' ? ['images'] : ['images', 'videos'];
   const trimTo = Platform.OS === 'ios' && selection === 'video' ? options?.trimTo : undefined;
-  const perm = ANDROID_PICKER ? null : await ImagePicker.requestMediaLibraryPermissionsAsync().catch(() => null);
+  // A photo-only pick never asks (App Review 5.1.1(iii), Oct 6): it always opens Apple's
+  // current picker, which needs no access, so the question would only be noise.
+  const perm = ANDROID_PICKER || selection === 'photo' ? null : await ImagePicker.requestMediaLibraryPermissionsAsync().catch(() => null);
   // Photo access refused ("Don't Allow") or limited: Apple's current picker needs none and
   // hands over only what was chosen, so it opens instead of refusing (App Review 2.1 and
   // 5.1.1(iv), Oct 5). Full access only picks the older picker, the reliable one for video.
@@ -319,7 +321,8 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
   const open = async (): Promise<ImagePicker.ImagePickerResult> => {
     const kinds: ImagePicker.MediaType[] = selection === 'video' ? ['videos'] : selection === 'photo' ? ['images'] : ['images', 'videos'];
     // Android asks nothing first: its Photo Picker needs no permission (see pickFromDevice).
-    const perm = ANDROID_PICKER ? null : await ImagePicker.requestMediaLibraryPermissionsAsync().catch(() => null);
+    // Nor does a photo-only pick: it always gets Apple's current picker (see pickFromDevice).
+    const perm = ANDROID_PICKER || selection === 'photo' ? null : await ImagePicker.requestMediaLibraryPermissionsAsync().catch(() => null);
     // Refused or limited access opens Apple's current picker, which needs none (see pickFromDevice).
     const full = !!perm?.granted && perm.accessPrivileges !== 'limited';
     // Apple's older picker copies the file itself and has proved the reliable

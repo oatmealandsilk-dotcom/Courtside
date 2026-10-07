@@ -480,6 +480,8 @@ export interface RemoteData {
    * so itself.
    */
   contactsFindableReady?: boolean;
+  /** The same, for the "Players joining near you" switch (migration 146). */
+  alertSwitchesReady?: boolean;
   /** Messages you deleted for yourself, so a chat fetched again later leaves them out too. Missing in saved copies. */
   hiddenMessageIds?: ID[];
   /**
@@ -597,6 +599,8 @@ export interface UserState {
   contactsFindable?: boolean;
   /** The weekly recap's phone alert (migration 130). Undefined on a database without it, which means on. */
   pushRecap?: boolean;
+  /** "Players joining near you" and "Streak reminders" (migration 146). Undefined on a database without them: the phone's own choice stands. */
+  pushJoined?: boolean; pushStreak?: boolean;
   /** What the coach works around (injuries, schedule, gear): kept in this private row, never on the public profile. Undefined on a database without migration 19. */
   constraints?: PlayerProfile['constraints'];
   /**
@@ -688,7 +692,7 @@ const toCoach = (r: CoachRow, services: CoachServiceRow[], me: ID): Coach => ({
 /** One pin from map_players (migration 63; `mutual` since 98). */
 interface MapPlayerRow { user_id: ID; lat: number; lng: number; place: MapPlace | string; court_id: string | null; court_name: string | null; city: string | null; seen_at: string | null; open_until: string | null; mutual?: boolean | null }
 interface NotificationRow { id: string; user_id: string; actor_id: string; kind: string; target_id: string; target_kind: string; preview: string | null; read: boolean; created_at: string }
-interface UserStateRow { muted_ids: string[]; blocked_ids: string[]; saved_question_ids: string[]; payment_methods: PaymentMethod[]; default_payment_id: string | null; show_activity: boolean; push_likes: boolean; push_coach: boolean; push_messages?: boolean | null; push_activity?: boolean | null; push_map_friends?: boolean | null; push_map_hits?: boolean | null; push_map_players?: boolean | null; push_courts?: boolean | null; contacts_findable?: boolean | null; push_recap?: boolean | null; private_profile?: { constraints?: PlayerProfile['constraints']; tournaments?: unknown } | null; map_visibility?: string | null;
+interface UserStateRow { muted_ids: string[]; blocked_ids: string[]; saved_question_ids: string[]; payment_methods: PaymentMethod[]; default_payment_id: string | null; show_activity: boolean; push_likes: boolean; push_coach: boolean; push_messages?: boolean | null; push_activity?: boolean | null; push_map_friends?: boolean | null; push_map_hits?: boolean | null; push_map_players?: boolean | null; push_courts?: boolean | null; contacts_findable?: boolean | null; push_recap?: boolean | null; push_joined?: boolean | null; push_streak?: boolean | null; private_profile?: { constraints?: PlayerProfile['constraints']; tournaments?: unknown } | null; map_visibility?: string | null;
   /** Your own age group, readable only by you (migration 64). Absent before it. */
   age_group?: string | null;
   /** Your birthday, readable only by you (migration 13). */
@@ -749,6 +753,8 @@ const toUserState = (r: UserStateRow): UserState => ({
   pushCourts: typeof r.push_courts === 'boolean' ? r.push_courts : undefined,
   contactsFindable: typeof r.contacts_findable === 'boolean' ? r.contacts_findable : undefined,
   pushRecap: typeof r.push_recap === 'boolean' ? r.push_recap : undefined,
+  pushJoined: typeof r.push_joined === 'boolean' ? r.push_joined : undefined,
+  pushStreak: typeof r.push_streak === 'boolean' ? r.push_streak : undefined,
   constraints: Array.isArray(r.private_profile?.constraints) ? r.private_profile!.constraints : undefined,
   // The key is there only once migration 63 has run; null means never chosen.
   mapVisibility: 'map_visibility' in r ? asVisibility(r.map_visibility) : undefined,
@@ -1290,8 +1296,10 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
   // A new Apple or Google account has no settings row until its age check,
   // so whether the database has "Let people find me from their contacts"
   // (migration 89) is asked on its own: the switch shows from the first visit.
-  const contactsFindableReady = ustate.data || ustate.error ? false
-    : await db.from('user_state').select('contacts_findable').limit(0).then(({ error }) => !error, () => false);
+  // The same for the "Players joining near you" switch (migration 146), asked alongside.
+  const hasColumn = (column: string) => db.from('user_state').select(column).limit(0).then(({ error }) => !error, () => false);
+  const [contactsFindableReady, alertSwitchesReady] = ustate.data || ustate.error ? [false, false]
+    : await Promise.all([hasColumn('contacts_findable'), hasColumn('push_joined')]);
   const hitList = await withMyHits(((hitRows.data ?? []) as HitRow[]).map(toHit), me);
   // Tournament plans (where and when someone will play) are only for
   // themselves and friends who follow each other, whoever they are. Since
@@ -1315,6 +1323,7 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
   return {
     agesOnProfiles,
     ...(contactsFindableReady ? { contactsFindableReady: true } : {}),
+    ...(alertSwitchesReady ? { alertSwitchesReady: true } : {}),
     // Your own "up for a hit" when it is kept privately (migration 78: not a known adult) comes from your settings row.
     // And how far you'd like to go for a hit (migration 120), kept only in that row too.
     // Nobody else's town position is read (PROFILE_COLUMNS); yours comes on its own (cityLoad).
@@ -1529,6 +1538,8 @@ let lacksOpenToHitMiles = false;
 let sessionsLackCourt = false;
 /** Set once a settings save finds no push_recap column (a database before migration 130). */
 let userStateLacksPushRecap = false;
+/** Set once a settings save finds no push_joined / push_streak columns (a database before migration 146). */
+let userStateLacksAlertSwitches = false;
 
 /** A note for whoever reads the logs: this needs the group chat update in Supabase first. */
 const needs75 = (what: string) => console.warn(`[remote] ${what} needs the messaging update. Open Supabase → SQL Editor → New query, paste the file supabase/migrations/20261003000075_messaging.sql and press Run. It is safe to run more than once.`);
@@ -1826,10 +1837,16 @@ export const remote = {
       ...(s.contactsFindable !== undefined && !userStateLacksContactsFindable ? { contacts_findable: s.contactsFindable } : {}),
       // The weekly recap's alert (migration 130).
       ...(s.pushRecap !== undefined && !userStateLacksPushRecap ? { push_recap: s.pushRecap } : {}),
+      // "Players joining near you" and "Streak reminders" (migration 146).
+      ...(!userStateLacksAlertSwitches ? {
+        ...(s.pushJoined !== undefined ? { push_joined: s.pushJoined } : {}),
+        ...(s.pushStreak !== undefined ? { push_streak: s.pushStreak } : {}),
+      } : {}),
     });
     let { error } = await send();
-    for (let tries = 0; error && tries < 4; tries += 1) {
-      if (/push_recap/.test(error.message) && !userStateLacksPushRecap) userStateLacksPushRecap = true;
+    for (let tries = 0; error && tries < 5; tries += 1) {
+      if (/push_joined|push_streak/.test(error.message) && !userStateLacksAlertSwitches) userStateLacksAlertSwitches = true;
+      else if (/push_recap/.test(error.message) && !userStateLacksPushRecap) userStateLacksPushRecap = true;
       else if (/contacts_findable/.test(error.message) && !userStateLacksContactsFindable) userStateLacksContactsFindable = true;
       else if (/push_map_|push_courts/.test(error.message) && !userStateLacksMapAlerts) userStateLacksMapAlerts = true;
       else if (/push_activity/.test(error.message) && !userStateLacksPushActivity) userStateLacksPushActivity = true;
