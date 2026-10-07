@@ -173,12 +173,20 @@ export function CardWash({ look, radius, edge = true }: { look: CardLook; radius
  * session at the top of the composer. 4:5, the brand's colour (see cardLook),
  * with what it was and when, the time on court as the headline, heart rate
  * and its zones when shared, who it was against, and where the numbers came
- * from. `width` sets the scale: 358 is the feed's size, the composer's is
- * about two thirds of it.
+ * from. `width` sets the scale: 358 is the full size, the composer's is
+ * about two thirds of it. The feed's post draws it sideways (`height`).
  */
-export function SessionCard({ session, width, play = false, people, hidden = [], onPress, showSource = true, accessibilityHint, aspect = 4 / 5, radius, eyebrow, place, brand = false, scale = 1, inset, picture = false }: {
+export function SessionCard({ session, width, height, play = false, people, hidden = [], onPress, showSource = true, accessibilityHint, aspect = 4 / 5, radius, eyebrow, place, brand = false, scale = 1, inset, picture = false }: {
   session: SessionDetail;
   width: number;
+  /**
+   * Drawn sideways at this height, as wide as `width` (the feed's post,
+   * Oct 6, owner: "It will be sideways"): the time on top, the other numbers
+   * in one even row under it, each the same size with its name under it.
+   * Everything scales to fit the box. The picture-only props below are not
+   * used then.
+   */
+  height?: number;
   /**
    * The rest are for the pictures made to share (Share → Instagram): the
    * card's shape (9:16 for a whole story), its rounding (0 edge to edge),
@@ -250,7 +258,33 @@ export function SessionCard({ session, width, play = false, people, hidden = [],
     tracker && showSource ? sourceLabel(session.source ?? 'apple-health') : null,
   ].filter(Boolean).join('. ');
 
-  const body = (
+  // The numbers under the time on the sideways card, in the order the tall card has them.
+  const stats: SidewaysStat[] = [
+    far ? { key: 'far', value: far.value, part: far.value < 10 ? 'dec1' : 'int', label: far.unit } : null,
+    hr ? { key: 'max', value: session.maxHr!, label: 'max bpm' } : null,
+    hr && session.avgHr ? { key: 'avg', value: session.avgHr, label: 'avg bpm' } : null,
+    strain != null ? { key: 'strain', value: strain, part: 'dec1', label: 'Strain' } : null,
+    kcal ? { key: 'kcal', value: kcal, label: 'cal' } : null,
+  ].filter((s): s is SidewaysStat => !!s);
+
+  const body = height != null ? (
+    <Sideways
+      session={session}
+      look={look}
+      width={width}
+      height={height}
+      play={play}
+      top={shownTop}
+      result={result}
+      score={score}
+      stats={stats}
+      zones={zones}
+      lead={lead}
+      more={list.length - 1}
+      vs={vs}
+      source={tracker && showSource ? sourceLabel(session.source ?? 'apple-health') : null}
+    />
+  ) : (
     <View collapsable={false} style={[styles.card, { width, aspectRatio: aspect, borderRadius: round, padding: pad, paddingTop: inset ? inset.top : pad, paddingBottom: inset ? inset.bottom : pad, backgroundColor: look.fill, borderColor: look.border, borderWidth: look.dark && round > 0 ? 1 : 0 }]}>
       <CardWash look={look} radius={round} edge={round > 0} />
       {/* The faint court is tennis's: a run or the gym has none. */}
@@ -336,6 +370,108 @@ export function SessionCard({ session, width, play = false, people, hidden = [],
   );
 }
 
+/** One number under the time on the sideways card, and its name. */
+type SidewaysStat = { key: string; value: number; part?: 'int' | 'dec1'; label: string };
+
+/**
+ * The session card sideways (the feed's post, Oct 6): the same box, wash,
+ * colours and type as the tall card, laid out for a wide box. What it was
+ * and when along the top, the time big under it, then the other numbers in
+ * one row of equal columns, every figure the same size with its name under
+ * it (the tall card's mix of sizes read as jumbled here, owner Oct 6), the
+ * zones under them, and who and where the numbers came from along the
+ * bottom. `height` is whatever the page has room for: everything is drawn
+ * to the scale that fits both ways (358 wide by about 250 tall is 1).
+ */
+function Sideways({ session, look, width, height, play, top, result, score, stats, zones, lead, more, vs, source }: {
+  session: SessionDetail;
+  look: CardLook;
+  width: number;
+  height: number;
+  play: boolean;
+  top: string;
+  result: string | null;
+  score: string | null;
+  stats: SidewaysStat[];
+  zones: number[] | null;
+  lead: CardPerson | undefined;
+  more: number;
+  vs: string;
+  source: string | null;
+}) {
+  const round = Math.round(20 * (width / 358));
+  // The small words keep a size you can read when the card is drawn small; the figures scale freely.
+  const smallAt = (k: number, size: number, floor: number) => Math.max(floor, size * k);
+  const line = (size: number) => Math.round(size * 1.3);
+  const foot = !!lead || !!source;
+  // How tall everything is at scale k, so the scale can be the one that fits.
+  const needAt = (k: number) =>
+    2 * 18 * k
+    + (result ? smallAt(k, 26, 20) : line(smallAt(k, 11.5, 9)))
+    + 12 * k
+    + Math.round(64 * k * 1.08)
+    + line(smallAt(k, 14, 10)) + 2 * k
+    + (score ? 6 * k + Math.round(22 * k * 1.25) : 0)
+    + (stats.length ? 14 * k + 1 + 10 * k + Math.round(26 * k * 1.1) + 2 * k + line(smallAt(k, 12, 10)) : 0)
+    + (zones ? 12 * k + 8 * k : 0)
+    + (foot ? 14 * k + (lead ? Math.max(Math.round(26 * k), line(smallAt(k, 14, 10))) : line(smallAt(k, 11, 9))) : 0);
+  let k = width / 358;
+  for (let i = 0; i < 3; i++) k = Math.min(width / 358, (k * height) / needAt(k));
+  // Room left over goes mostly to the time, up to about the tall card's size, so a
+  // card with few numbers (drills, a practice with none shared) is not mostly empty.
+  const hero = Math.max(64 * k, Math.min(64 * k + (Math.max(0, height - needAt(k)) * 0.6) / 1.08, 92 * (width / 358)));
+  const small = (size: number, floor: number) => smallAt(k, size, floor);
+  const pad = Math.round(18 * k);
+  return (
+    <View collapsable={false} style={[styles.card, { width, height, borderRadius: round, paddingHorizontal: Math.round(20 * k), paddingVertical: pad, backgroundColor: look.fill, borderColor: look.border, borderWidth: look.dark ? 1 : 0 }]}>
+      <CardWash look={look} radius={round} />
+      {/* The faint court is tennis's: a run or the gym has none. */}
+      {session.kind === 'fitness' || session.workout ? null : <CourtLines color={look.lines} />}
+      <View style={styles.top}>
+        <Text style={{ ...font('600'), fontSize: small(11.5, 9), lineHeight: line(small(11.5, 9)), letterSpacing: Math.max(0.8, 1.1 * k), color: look.eyebrow, flex: 1 }} numberOfLines={1} maxFontSizeMultiplier={1.2}>
+          {top}
+        </Text>
+        {result ? (
+          <Pop token={result} style={[styles.pill, { height: small(26, 20), borderRadius: small(13, 10), paddingHorizontal: small(11, 8), backgroundColor: look.pillFill }]}>
+            <Text style={{ ...font('700'), fontSize: small(13, 10), color: look.pillInk }} maxFontSizeMultiplier={1.2}>{result}</Text>
+          </Pop>
+        ) : null}
+      </View>
+      <View style={[styles.middle, styles.sidewaysMiddle, { paddingTop: 12 * k, paddingBottom: foot ? 14 * k : 0 }]}>
+        <Duration minutes={session.minutes} size={hero} color={look.figure} unitColor={look.muted} play={play} delay={120} duration={700} />
+        <Text style={{ ...font('500'), fontSize: small(14, 10), lineHeight: line(small(14, 10)), color: look.muted, marginTop: 2 * k }} maxFontSizeMultiplier={1.2}>{onCourtWord(session)}</Text>
+        {score ? (
+          <Text style={{ ...font('700'), fontSize: 22 * k, lineHeight: Math.round(22 * k * 1.25), letterSpacing: -0.4 * k, color: look.figure, fontVariant: ['tabular-nums'], marginTop: 6 * k }} numberOfLines={1} maxFontSizeMultiplier={1.2}>{score}</Text>
+        ) : null}
+        {stats.length ? (
+          <View style={[styles.statRow, { gap: 10 * k, marginTop: 14 * k, paddingTop: 10 * k, borderTopColor: look.lines }]}>
+            {stats.map((s) => (
+              <View key={s.key} style={styles.stat}>
+                <Figure value={s.value} part={s.part} size={26 * k} color={look.figure} unitColor={look.muted} play={play} delay={200} />
+                <Text style={{ ...font('500'), fontSize: small(12, 10), lineHeight: line(small(12, 10)), color: look.muted, marginTop: 2 * k }} numberOfLines={1} maxFontSizeMultiplier={1.2}>{s.label}</Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
+        {zones ? <ZoneBar zones={zones} colors={look.zones} height={8 * k} play={play} delay={200} duration={600} style={{ marginTop: 12 * k }} /> : null}
+      </View>
+      {foot ? (
+        <View style={styles.foot}>
+          {lead ? (
+            <View style={[styles.who, lead.pending && styles.pending]}>
+              <Avatar name={lead.name} seed={lead.id} size={Math.round(26 * k)} />
+              <Text style={{ ...font('600'), fontSize: small(14, 10), color: look.ink, flexShrink: 1 }} numberOfLines={1} maxFontSizeMultiplier={1.2}>
+                {vs} @{lead.handle}{more > 0 ? ` +${more}` : ''}
+              </Text>
+            </View>
+          ) : <View style={{ flex: 1 }} />}
+          {source ? <Text style={{ ...font('600'), fontSize: small(11, 9), lineHeight: line(small(11, 9)), color: look.faint }} maxFontSizeMultiplier={1.2}>{source}</Text> : null}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
 /** A court seen from behind the baseline, faint, across the bottom of the card. */
 function CourtLines({ color }: { color: string }) {
   return (
@@ -354,6 +490,9 @@ const styles = StyleSheet.create({
   top: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   pill: { alignItems: 'center', justifyContent: 'center' },
   middle: { flex: 1 },
+  sidewaysMiddle: { justifyContent: 'center', minHeight: 0 },
+  statRow: { flexDirection: 'row', alignSelf: 'stretch', borderTopWidth: 1 },
+  stat: { flex: 1, minWidth: 0 },
   hrRow: { flexDirection: 'row', alignItems: 'flex-end' },
   foot: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   who: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, minWidth: 0 },
