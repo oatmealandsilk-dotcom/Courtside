@@ -16,6 +16,19 @@ interface Props<T extends string> {
   scrollable?: boolean;
   /** Two pills per row, for four longer labels that would otherwise be cut short. */
   wrap?: boolean;
+  /**
+   * The chosen one's fill and words, when not the brand's (a sheet's form
+   * fills its choice with ink, as its Chips do, keeping green for the one
+   * thing to press). Read from the live `colors` as you draw.
+   */
+  tint?: string;
+  ink?: string;
+  /** Taller, with body-size words: the one choice on a short sheet (Start a session's kind). */
+  large?: boolean;
+  /** Picks one of a few (a kind, not a page): read out as radio buttons rather than tabs. */
+  radio?: boolean;
+  /** What the choice is, for a screen reader ("Type of session"). */
+  accessibilityLabel?: string;
 }
 
 export function SegmentedControl<T extends string>({
@@ -24,6 +37,11 @@ export function SegmentedControl<T extends string>({
   onChange,
   scrollable = false,
   wrap = false,
+  tint,
+  ink,
+  large = false,
+  radio = false,
+  accessibilityLabel,
 }: Props<T>) {
   const styles = useThemedStyles(styleDefinitions);
   const items = segments.map((segment) => {
@@ -32,11 +50,11 @@ export function SegmentedControl<T extends string>({
       <Pressable
         key={segment.value}
         onPress={() => onChange(segment.value)}
-        accessibilityRole="tab"
-        accessibilityState={{ selected: active }}
-        style={[styles.segment, wrap && styles.segmentWrapped, scrollable && styles.segmentLoose, active && styles.segmentActive]}
+        accessibilityRole={radio ? 'radio' : 'tab'}
+        accessibilityState={radio ? { checked: active } : { selected: active }}
+        style={({ pressed }) => [styles.segment, large && styles.segmentLarge, wrap && styles.segmentWrapped, scrollable && styles.segmentLoose, active && styles.segmentActive, active && tint ? { backgroundColor: tint, borderColor: tint } : null, pressed && !active && styles.segmentPressed]}
       >
-        <Text style={[styles.label, scrollable && { flexShrink: 0 }, active && styles.labelActive]} numberOfLines={1}>
+        <Text style={[styles.label, large && styles.labelLarge, scrollable && { flexShrink: 0 }, active && styles.labelActive, active && ink ? { color: ink } : null]} numberOfLines={1}>
           {segment.label}
         </Text>
       </Pressable>
@@ -55,7 +73,7 @@ export function SegmentedControl<T extends string>({
     );
   }
 
-  return <View style={[styles.track, wrap && styles.trackWrapped]}>{items}</View>;
+  return <View accessibilityRole={radio ? 'radiogroup' : undefined} accessibilityLabel={accessibilityLabel} style={[styles.track, wrap && styles.trackWrapped]}>{items}</View>;
 }
 
 const styleDefinitions = StyleSheet.create({
@@ -77,6 +95,8 @@ const styleDefinitions = StyleSheet.create({
     borderRadius: radius.pill,
     alignItems: 'center',
   },
+  segmentLarge: { paddingVertical: 12 },
+  segmentPressed: { opacity: 0.7 },
   // Half the row each, so two fit per line and none of the words get clipped.
   segmentWrapped: { flexBasis: '48%', flexGrow: 1 },
   // Loose in a scrolling row, each chip carries its own edge so it never looks like bare words.
@@ -85,4 +105,5 @@ const styleDefinitions = StyleSheet.create({
   segmentActive: { backgroundColor: colors.brand, borderColor: colors.brand },
   label: { ...typography.smallStrong, color: colors.textMuted },
   labelActive: { color: colors.brandInk },
+  labelLarge: { ...typography.bodyStrong },
 });
