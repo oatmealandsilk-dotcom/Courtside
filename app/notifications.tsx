@@ -74,6 +74,9 @@ const ICON: Record<NotificationKind, { name: keyof typeof Ionicons.glyphMap | 'h
   'hit-join': { name: 'hit', tint: 'brand' },
   'hit-match': { name: 'hit', tint: 'brand' },
   'hit-invite': { name: 'hit', tint: 'brand' },
+  // A hit you were in, called off; someone in yours who can't make it (migration 150).
+  'hit-called-off': { name: 'close', tint: 'danger' },
+  'hit-left': { name: 'person-remove', tint: 'warning' },
   // The outline: filled, the dial closes up at badge size.
   activity: { name: 'stopwatch-outline', tint: 'court' },
   'map-friend-hit': { name: 'hit', tint: 'brand' },
@@ -121,6 +124,9 @@ const VERB: Record<NotificationKind, string> = {
   'hit-join': 'is in for your hit',
   'hit-match': 'is also looking for a hit',
   'hit-invite': 'invited you to hit',
+  // When and where (or when, and the room now) come from the row's preview, on the line under it.
+  'hit-called-off': 'called off the hit',
+  'hit-left': 'can’t make it',
   activity: 'Tap to log it.',
   'map-friend-hit': 'is up for a hit today',
   'map-new-hit': 'posted an open hit near you',
@@ -211,6 +217,16 @@ function reviewAsk(preview: string | undefined): { who: string; thing: string } 
   return m ? { who: m[1], thing: m[2] } : { who: 'Someone', thing: 'post' };
 }
 
+/**
+ * The server says when a hit is the way a sentence does ("today at 8:00 AM ·
+ * Alder Park", hit_when), for the phone alert, where it follows the verb. On
+ * its own line under the verb here, it starts with a capital.
+ */
+function hitWords(kind: NotificationKind, preview: string | undefined): string | undefined {
+  if (!preview || (kind !== 'hit-called-off' && kind !== 'hit-left')) return preview;
+  return preview.charAt(0).toUpperCase() + preview.slice(1);
+}
+
 /** Which heading a row sits under: new ones first, then by how long ago. */
 function sectionFor(unread: boolean, at: string): string {
   if (unread) return 'New';
@@ -272,7 +288,7 @@ function activityNow(a: DetectedActivity | undefined): { who: string; verb: stri
 
 export default function Notifications() {
   const styles = useThemedStyles(styleDefinitions);
-  const { notifications, users, posts, stories, comments, hitRequests, conversations, questions, currentUserId, currentUser, followRequests, followingIds, followedCourts, sessionTags, detectedActivities, actions, blockedIds } = useApp();
+  const { notifications, users, posts, stories, comments, hitRequests, conversations, messages, questions, currentUserId, currentUser, followRequests, followingIds, followedCourts, sessionTags, detectedActivities, actions, blockedIds } = useApp();
   // CourtSide's own welcome, for a new player (welcomeNote): seen once this page opens, though its tint stays until you leave.
   const welcome = useWelcomeNote(currentUser);
   const [welcomeTint] = useState(welcome.unread);
@@ -330,6 +346,15 @@ export default function Notifications() {
   const hitChatFor = (group: Group): string | undefined => {
     if (group.kind !== 'hit-join') return undefined;
     const chat = hitRequests.find((h) => h.id === group.targetId)?.conversationId;
+    return chat && conversations.some((c) => c.id === chat) ? chat : undefined;
+  };
+  // A hit you were in, called off: its chat, where the line about it is and a new time can be
+  // found (the phone alert opens it too). The hit itself has left the lists, so the chat is
+  // found by that line. Not here (you left it since): the hit's page, which says it was called off.
+  const calledOffChatFor = (group: Group): string | undefined => {
+    if (group.kind !== 'hit-called-off') return undefined;
+    const chat = hitRequests.find((h) => h.id === group.targetId)?.conversationId
+      ?? messages.find((m) => m.event?.type === 'called-off' && m.event.hitId === group.targetId)?.conversationId;
     return chat && conversations.some((c) => c.id === chat) ? chat : undefined;
   };
   // "liked your clip", "liked your photo": the verb names what was liked, not just "post".
@@ -444,7 +469,7 @@ export default function Notifications() {
         actorIds: [n.actorId],
         createdAt: n.createdAt,
         // The server's stand-in for an Instant with no caption; the row already says what it was.
-        preview: n.preview === 'your hit' ? undefined : n.kind === 'activity' && n.preview ? shortLength(n.preview) : n.preview,
+        preview: n.preview === 'your hit' ? undefined : n.kind === 'activity' && n.preview ? shortLength(n.preview) : hitWords(n.kind, n.preview),
         unread: fresh(n),
       });
     }
@@ -571,6 +596,8 @@ export default function Notifications() {
                   const reply = replyAt(group);
                   if (reply) { router.push({ pathname: '/comments', params: reply }); return; }
                   if (group.kind === 'court-activity') { openFollowedCourt(group.targetId); return; }
+                  const calledOff = calledOffChatFor(group);
+                  if (calledOff) { router.push(`/messages/${calledOff}`); return; }
                   const to = routeFor(group);
                   // "Clip posted" and the like open Home: goHome closes this page down to the
                   // tabs. Never '/', the splash screen's address too, which opened a second app on top.

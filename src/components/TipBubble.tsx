@@ -9,7 +9,8 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 /**
  * A just-in-time tip: a small dark bubble with one line, a little pointer,
  * and a tap anywhere on it to close it for good. The caller places it
- * (absolute) next to the thing it is about.
+ * (absolute) next to the thing it is about. The tap goes no further, so a
+ * tip inside something tappable (a hit card) never opens it as well.
  *
  * `inline` (Oct 5): in the page's own flow instead, so it covers nothing.
  * It opens by easing the page below it down, and closes by easing it back.
@@ -48,7 +49,7 @@ export function TipBubble({ tip, shown, onClose, style, pointer = 'down', pointe
   const body = (
     <>
       {pointer === 'up' ? <Animated.View style={[pointerStyle, styles.pointerUp, lifted && styles.pointerUpLifted]} /> : null}
-      <Pressable accessibilityRole="button" accessibilityLabel={`Tip: ${tipWords(tip)} Tap to close.`} onPress={onClose} style={[styles.bubble, lifted && styles.bubbleLifted]}>
+      <Pressable accessibilityRole="button" accessibilityLabel={`Tip: ${tipWords(tip)} Tap to close.`} onPress={(e) => { e.stopPropagation?.(); onClose(); }} style={[styles.bubble, lifted && styles.bubbleLifted]}>
         <Text style={[styles.text, lifted && styles.textLifted]}>{tipWords(tip)}</Text>
         <Text style={[styles.ok, lifted && styles.okLifted]}>Got it</Text>
       </Pressable>

@@ -18,7 +18,7 @@ import { healthHistory, integrations } from './mock/health';
 import { activityNotifications, demoFoundWorkouts, detectedActivities, foundWeek, whoopWeek } from './mock/activities';
 import { CURRENT_USER_ID, users } from './mock/users';
 import { DEMO_AFFILIATES, demoAffiliateStats, demoInvitees } from './mock/invites';
-import { demoHits } from './mock/hits';
+import { DEMO_HITS_OF_YOURS, demoHitChat, demoHitNotifications, demoHits } from './mock/hits';
 import { isMapCourtId } from '@/features/places/courtName';
 import { demoLastSeen } from './mock/presence';
 import { DEMO_FOLLOWERS, DEMO_FOLLOWING, DEMO_MAP_ALERTS } from './mock/courtLife';
@@ -178,12 +178,13 @@ export async function fetchBootstrap(): Promise<Bootstrap> {
       coachApplications: [],
       coachResults,
       coachReviews,
-      conversations,
-      messages,
+      // The demo's hit chat (Sam's hit, called off) only without a database, and not for a player who has just joined.
+      conversations: supabase || fresh ? conversations : [demoHitChat.conversation, ...conversations],
+      messages: supabase || fresh ? messages : [...messages, ...demoHitChat.messages],
       // The demo's tracker session and its "Tennis detected" row, two of the
       // map's alerts and a tag of you. Only without a database: a real
       // account's come from the server.
-      notifications: supabase ? [] : [...demoRecapNotification(), ...(fresh ? [] : activityNotifications), ...(found?.notifications ?? []), ...DEMO_MAP_ALERTS, ...demoSessionTagNotifications],
+      notifications: supabase ? [] : [...demoRecapNotification(), ...(fresh ? [] : activityNotifications), ...(found?.notifications ?? []), ...DEMO_MAP_ALERTS, ...demoSessionTagNotifications, ...(fresh ? [] : demoHitNotifications)],
       detectedActivities: supabase ? [] : [...(fresh ? [] : detectedActivities), ...(found?.activities ?? [])],
       coachingRequests,
       integrations: sources,
@@ -191,7 +192,7 @@ export async function fetchBootstrap(): Promise<Bootstrap> {
       achievements,
       // Only without a database: with one, these come from the server, and an
       // account's real hits must never be covered by the demo's.
-      ...(supabase ? {} : { hitRequests: demoHits, lastSeen: demoLastSeen, followingIds: fresh ? [] : DEMO_FOLLOWING, followEdges: fresh ? [] : DEMO_FOLLOWERS.map((id) => ({ followerId: id, followingId: CURRENT_USER_ID })), sessions: demoSessions, sessionTags: demoSessionTags }),
+      ...(supabase ? {} : { hitRequests: fresh ? demoHits.filter((h) => !DEMO_HITS_OF_YOURS.includes(h.id)) : demoHits, lastSeen: demoLastSeen, followingIds: fresh ? [] : DEMO_FOLLOWING, followEdges: fresh ? [] : DEMO_FOLLOWERS.map((id) => ({ followerId: id, followingId: CURRENT_USER_ID })), sessions: demoSessions, sessionTags: demoSessionTags }),
     }),
   );
 }

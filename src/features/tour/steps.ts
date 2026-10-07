@@ -89,8 +89,10 @@ export const TOUR_STEPS: TourStep[] = [
     phone: { title: 'Your map', body: 'Courts near you, and the players who shared their spot.' },
     wide: { title: 'Your map', body: 'Courts near you, and the players who shared their spot.' },
     byLead: {
-      // One line: the lit card says "Send them your link", and a shorter tip keeps clear of the map's own lines above it.
-      invite: { title: 'Send your link', body: 'Anyone who joins follows you.' },
+      // Short: the lit card says "Send them your link", and a short tip keeps clear of the map's own lines above it.
+      // The clause about hits (Oct 7, audit item 3) is the only word of them a new city's player gets here; it
+      // makes the tip two lines, which still clears "15 places to play nearby" on a phone. Never longer than this.
+      invite: { title: 'Send your link', body: 'Anyone who joins follows you, and can join your hits.' },
       friends: { title: 'Start here', body: 'Share your link, or find a friend by @handle.' },
       // Never "Tap I'm free" now: a tap during the tutorial only moves it on, so the ring stayed
       // off while a new player thought they had turned it on (Oct 5). The words say what the ring

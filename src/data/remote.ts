@@ -782,7 +782,7 @@ const toCoachApplication = (r: CoachApplicationRow): CoachApplication => ({
 /** A chat member's row. `role` came with migration 54 (admin or member); a database without it leaves it out. */
 interface MemberRow { user_id: string; last_read_at: string | null; role?: string | null; read_receipts?: boolean | null }
 interface ConversationRow { id: string; updated_at: string; title?: string | null; is_group?: boolean | null; created_by?: string | null; photo_url?: string | null; conversation_members?: MemberRow[]; messages?: MessageRow[] }
-interface MessageRow { id: string; conversation_id: string; sender_id: string; body: string; kind: string; shared_id: string | null; reactions: Record<string, string> | null; created_at: string; edited_at?: string | null; place?: { id?: string; name: string; lat: number; lng: number; count?: unknown } | null; audio_url?: string | null; audio_ms?: number | null; event?: { type?: string; targets?: unknown; title?: string | null; on?: boolean | null } | null; photos?: unknown; reply_to_id?: string | null }
+interface MessageRow { id: string; conversation_id: string; sender_id: string; body: string; kind: string; shared_id: string | null; reactions: Record<string, string> | null; created_at: string; edited_at?: string | null; place?: { id?: string; name: string; lat: number; lng: number; count?: unknown } | null; audio_url?: string | null; audio_ms?: number | null; event?: { type?: string; targets?: unknown; title?: string | null; on?: boolean | null; hit?: unknown } | null; photos?: unknown; reply_to_id?: string | null }
 
 /**
  * A photo message's photos as the server keeps them ([{path, w, h}], migration
@@ -800,8 +800,8 @@ function toChatPhotos(raw: unknown): ChatPhoto[] | undefined {
   return out.length ? out.slice(0, 10) : undefined;
 }
 
-const EVENT_TYPES: ChatEvent['type'][] = ['created', 'added', 'removed', 'left', 'renamed', 'photo', 'admin', 'joined'];
-/** An event line's `event` as the server wrote it ({type, targets, title, on}), in the app's shape. Anything unexpected is left out, and the line shows its plain sentence. */
+const EVENT_TYPES: ChatEvent['type'][] = ['created', 'added', 'removed', 'left', 'renamed', 'photo', 'admin', 'joined', 'called-off'];
+/** An event line's `event` as the server wrote it ({type, targets, title, on}, and `hit` on a called-off hit's line), in the app's shape. Anything unexpected is left out, and the line shows its plain sentence. */
 function toChatEvent(raw: MessageRow['event']): ChatEvent | undefined {
   if (!raw || typeof raw !== 'object' || !EVENT_TYPES.includes(raw.type as ChatEvent['type'])) return undefined;
   const targets = Array.isArray(raw.targets) ? raw.targets.filter((t): t is string => typeof t === 'string') : [];
@@ -810,6 +810,7 @@ function toChatEvent(raw: MessageRow['event']): ChatEvent | undefined {
     targetIds: targets.length ? targets : undefined,
     title: typeof raw.title === 'string' && raw.title ? raw.title : undefined,
     on: typeof raw.on === 'boolean' ? raw.on : undefined,
+    hitId: typeof raw.hit === 'string' && raw.hit ? raw.hit : undefined,
   };
 }
 
@@ -3977,7 +3978,24 @@ export const remote = {
     }
     return { conversationId: (data as string) || undefined };
   },
-  async leaveHit(hitId: ID) { const { error } = await need().rpc('leave_hit', { hit: hitId }); if (error) fail('leave hit')(error); },
+  /**
+   * "Can't make it": out of a hit you joined. Since migration 150 the server
+   * also takes you out of the hit's chat and tells the poster; before it,
+   * leave_hit only gave the spot back, so the chat is left here too (a
+   * second ask that does nothing once the server has done it). In that order
+   * on purpose: leaving the chat first would give the spot back without the
+   * poster's note. False when the spot could not be given back.
+   */
+  async leaveHit(hitId: ID, conversationId?: ID): Promise<boolean> {
+    const db = need();
+    const { error } = await db.rpc('leave_hit', { hit: hitId });
+    if (error) { fail('leave hit')(error); return false; }
+    if (conversationId) {
+      const left = await db.rpc('leave_group', { conv: conversationId });
+      if (left.error) fail('leave hit chat')(left.error);
+    }
+    return true;
+  },
   /** Throws when it does not go through, so the hit can come back on screen. */
   async cancelHit(hitId: ID) { const { error } = await need().from('hit_requests').update({ cancelled: true }).eq('id', hitId); if (error) { fail('cancel hit')(error); throw error; } },
   /** 'blocked' when refused for its words (the box says so itself, not a toast), 'failed' for anything else. */

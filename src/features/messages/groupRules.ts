@@ -113,7 +113,7 @@ export const hasGroupControls = (c: Conversation) => !isGroupChat(c) || c.adminI
 
 /** Whether you hold a spot in a hit whose chat this is: leaving the chat gives it up (the server does the same). */
 export const holdsHitSpot = (hits: HitRequest[], conversationId: ID, me: ID | null | undefined) =>
-  !!me && hits.some((h) => h.conversationId === conversationId && h.joinedIds.includes(me));
+  !!me && hits.some((h) => h.conversationId === conversationId && !h.cancelled && h.joinedIds.includes(me));
 
 /**
  * You are a group's only admin and others are still in it. Leaving then
@@ -243,6 +243,8 @@ export function eventText(m: Message, users: User[], me: ID | null): string {
     case 'photo': return e.on === false ? `${actor} removed the group photo` : `${actor} changed the group photo`;
     case 'admin': return e.on === false ? `${actor} removed ${targets} as an admin` : `${actor} made ${targets} an admin`;
     case 'joined': return m.senderId === me ? 'You’re in for the hit' : `${actor} is in for the hit`;
+    // The poster called the hit off (migration 150): said in the chat everyone in it already has.
+    case 'called-off': return `${actor} called off this hit`;
     default: return m.body;
   }
 }

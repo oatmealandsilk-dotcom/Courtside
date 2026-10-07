@@ -6,7 +6,7 @@ import { useTabUnderline } from '@/features/navigation/useTabUnderline';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Easing, Platform, ScrollView, TextInput, Pressable, StyleSheet, Text, View } from 'react-native';
-import { router } from 'expo-router';
+import { router, usePathname } from 'expo-router';
 
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { InboxButton, NotificationButton } from '@/components/InboxButton';
@@ -14,7 +14,7 @@ import { InboxButton, NotificationButton } from '@/components/InboxButton';
 import { LevelPill } from '@/components/LevelPill';
 import { NearbyMap } from '@/components/NearbyMap';
 import { UpToday, useUpToday } from '@/components/UpToday';
-import { HitGlyph } from '@/components/HitGlyph';
+import { PostHitField } from '@/components/PostHitField';
 import { useLocationToggle, useOpenToHitToggle } from '@/features/players/useLocationToggle';
 import { QuestionCard, TOPIC_META } from '@/components/QuestionCard';
 import { HitCard } from '@/components/HitCard';
@@ -35,6 +35,9 @@ import { IN_TOWN_MILES, measureFrom } from '@/features/players/mapModel';
 import { agoLabel } from '@/components/map/markers';
 import { confirmUnfollow } from '@/lib/confirm';
 import { NEAR_HIT_MILES, canSeeHitAt, hitSpot, openHits as openHitsOf } from '@/features/hits/visible';
+import { hitListOrder, isMyHit } from '@/features/hits/order';
+import { hitTipCard, useJustPosted } from '@/features/hits/hitTips';
+import { useIsFocused } from '@/lib/useIsFocused';
 import { labelOf, looksPublic } from '@/features/places/courtName';
 import { useCourtSearch } from '@/features/places/useCourtSearch';
 import { handPlace, type FoundPlace } from '@/features/places/geocode';
@@ -287,9 +290,28 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
     }
     return { openHits: [...near, ...typed], furtherHits: [...far, ...farTyped] };
   }, [seenHits, youAt?.lat, youAt?.lng, lastSeen, users, currentUserId, myCity, followingIds]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The order the list shows them in (Oct 7, audit items 18 and 19): the hits you posted or are in
+  // first, wherever they are (one far off no longer waits folded under "Further away"), then the
+  // ones with a spot, then the full ones. Only the order: which hits show, and the map's count of
+  // them, are worked out above as before.
+  const { listedHits, listedFurther } = useMemo(() => {
+    const hitOf = (item: (typeof openHits)[number]) => item.hit;
+    return {
+      listedHits: hitListOrder([...openHits, ...furtherHits.filter((x) => isMyHit(x.hit, currentUserId))], hitOf, currentUserId),
+      listedFurther: hitListOrder(furtherHits.filter((x) => !isMyHit(x.hit, currentUserId)), hitOf, currentUserId),
+    };
+  }, [openHits, furtherHits, currentUserId]);
   const [furtherOpen, setFurtherOpen] = useState(false);
   const [moreHitsOpen, setMoreHitsOpen] = useState(false);
-  const moreHits = Math.max(0, openHits.length - HITS_SHOWN);
+  const moreHits = Math.max(0, listedHits.length - HITS_SHOWN);
+  const shownHits = moreHitsOpen ? listedHits : listedHits.slice(0, HITS_SHOWN);
+  // The hit tips (Oct 7, audit item 3): one card in the list carries one, once it is in view, and
+  // only while this page is on show with no tutorial or search over it (see HitCard's tip).
+  const justPosted = useJustPosted();
+  const focused = useIsFocused();
+  const pathname = usePathname();
+  const hitTip = hitTipCard(shownHits.map((x) => x.hit), currentUserId, justPosted, { teen: !!currentUser && notKnownAdult(currentUser), followingIds });
+  const hitTipReady = !previewSection && focused && pathname === '/discuss' && section === 'players' && !tourOpen && !search;
   // With nothing open, name a court only when the nearest one reads as public and is close: never just because it is nearest.
   const promptCourt = nearCourts.nearest && looksPublic(nearCourts.nearest.c.name) && nearCourts.nearest.miles <= 5 ? nearCourts.nearest.c : null;
   // "Near you" is one thing on this tab and on the map: people who shared a
@@ -495,48 +517,45 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
             follows them, since its "Hit today" badges repeat those cards. */}
         {!search && !openHits.length ? yourCourts : null}
         {!search && !openHits.length ? courtsBlock : null}
-        {/* Hits: someone wants a game, near you first. Posting one is right here. */}
+        {/* Hits: someone wants a game, yours first, then near you. Posting one is right here. */}
         {!search ? (
           <View style={styles.hits}>
             <View style={styles.hitsHead}>
-              <Text style={styles.playersTitle}>Open hits</Text>
-              <View style={styles.hitsLinks}>
-                {/* "Post a hit", not just "Post": a post elsewhere is a photo or clip. */}
-                <Pressable accessibilityRole="button" onPress={() => router.push('/hit-request/new')} hitSlop={8}><Text style={styles.postHit}>Post a hit</Text></Pressable>
-              </View>
+              <Text accessibilityRole="header" style={styles.playersTitle}>Open hits</Text>
+              {/* Nothing open: the section says so in one muted line under its title, the way a section opens. */}
+              {listedHits.length ? null : <Text style={styles.playersBody}>{hitsForFriends ? 'None from your friends yet.' : 'None near you yet.'}</Text>}
             </View>
-            {openHits.length ? (moreHitsOpen ? openHits : openHits.slice(0, HITS_SHOWN)).map(({ hit, miles }) => <HitCard key={hit.id} hit={hit} miles={miles} />) : promptCourt ? (
-              <Pressable accessibilityRole="button" onPress={() => playHere({ id: promptCourt.id, name: labelOf(promptCourt), lat: promptCourt.lat, lng: promptCourt.lng })} style={styles.hitPrompt}>
-                <View style={styles.hitPromptTile}><HitGlyph size={24} color={colors.brand} /></View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.hitPromptTitle}>Post the first hit at {labelOf(promptCourt)}</Text>
-                  <Text style={styles.hitPromptBody}>{hitsForFriends ? 'Say when. Friends who follow you can join.' : 'Say when. Players nearby can join.'}</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
-              </Pressable>
-            ) : (
-              <Pressable accessibilityRole="button" onPress={() => router.push('/hit-request/new')} style={styles.hitPrompt}>
-                <View style={styles.hitPromptTile}><HitGlyph size={24} color={colors.brand} /></View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.hitPromptTitle}>Looking for someone to play?</Text>
-                  <Text style={styles.hitPromptBody}>{hitsForFriends ? 'Say when and where. Friends who follow you can join.' : 'Say when and where. Players nearby can join.'}</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
-              </Pressable>
-            )}
+            {/* The way to post one (Oct 7): a field at the top of the list, not a small link beside
+                the title. With nothing open and a public court close by, it starts the hit at that
+                court; then the note under it says what happens next ("Pick a time" when the court
+                is already picked). "Post a hit", not just "Post", for a screen reader: a post
+                elsewhere is a photo or clip. */}
+            {(() => {
+              const court = !listedHits.length ? promptCourt : null;
+              const who = hitsForFriends ? 'Friends who follow you' : 'Players nearby';
+              return (
+                <PostHitField
+                  label={court ? `Play at ${labelOf(court)}?` : 'Looking for a hit?'}
+                  accessibilityLabel={court ? `Post a hit at ${labelOf(court)}` : 'Post a hit'}
+                  onPress={() => (court ? playHere({ id: court.id, name: labelOf(court), lat: court.lat, lng: court.lng }) : router.push('/hit-request/new'))}
+                  note={listedHits.length ? null : `${court ? 'Pick a time' : 'Post a time and place'}. ${who} can tap I’m in, and a chat opens to sort out the rest.`}
+                />
+              );
+            })()}
+            {shownHits.map(({ hit, miles }) => <HitCard key={hit.id} hit={hit} miles={miles} {...(hitTip?.hitId === hit.id ? { tip: hitTip.tip, tipReady: hitTipReady } : {})} />)}
             {moreHits ? (
               <Pressable accessibilityRole="button" accessibilityState={{ expanded: moreHitsOpen }} onPress={() => setMoreHitsOpen((o) => !o)} hitSlop={6} style={({ pressed }) => [styles.further, pressed && { opacity: 0.6 }]}>
                 <Text style={styles.furtherText}>{moreHitsOpen ? 'Fewer open hits' : `More open hits (${moreHits})`}</Text>
                 <Ionicons name={moreHitsOpen ? 'chevron-up' : 'chevron-down'} size={14} color={colors.textMuted} />
               </Pressable>
             ) : null}
-            {furtherHits.length ? (
+            {listedFurther.length ? (
               <>
                 <Pressable accessibilityRole="button" accessibilityState={{ expanded: furtherOpen }} onPress={() => setFurtherOpen((o) => !o)} hitSlop={6} style={({ pressed }) => [styles.further, pressed && { opacity: 0.6 }]}>
-                  <Text style={styles.furtherText}>Further away ({furtherHits.length})</Text>
+                  <Text style={styles.furtherText}>Further away ({listedFurther.length})</Text>
                   <Ionicons name={furtherOpen ? 'chevron-up' : 'chevron-down'} size={14} color={colors.textMuted} />
                 </Pressable>
-                {furtherOpen ? furtherHits.map(({ hit, miles }) => <HitCard key={hit.id} hit={hit} miles={miles} />) : null}
+                {furtherOpen ? listedFurther.map(({ hit, miles }) => <HitCard key={hit.id} hit={hit} miles={miles} />) : null}
               </>
             ) : null}
           </View>
@@ -787,8 +806,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
 
 const styleDefinitions = StyleSheet.create({
   hits: { gap: spacing.md },
-  hitsHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: spacing.sm },
-  hitsLinks: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg },
+  hitsHead: { gap: 3, paddingTop: spacing.sm },
   // One quiet line that opens more hits: the rest of the near ones, or those beyond 25 km.
   further: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start', paddingVertical: 4 },
   furtherText: { ...typography.smallStrong, color: colors.textMuted },
@@ -797,12 +815,6 @@ const styleDefinitions = StyleSheet.create({
   // A place found by the search: the court tile's frame, in the quiet surface colour, so places and courts read apart.
   placeTile: { width: 52, height: 52, borderRadius: 14, backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
   courtNameMatch: { ...font('700'), color: colors.text },
-  postHit: { ...typography.smallStrong, color: colors.brand },
-  hitPrompt: { ...lift, flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.lg, borderRadius: 20, backgroundColor: colors.surface },
-  // The empty state's tile: the icon on Dim Green, the way the app's feature cards hold the mark.
-  hitPromptTile: { width: 44, height: 44, borderRadius: 12, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
-  hitPromptTitle: { ...typography.bodyStrong, color: colors.text },
-  hitPromptBody: { ...typography.small, color: colors.textMuted },
   sortRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', zIndex: 5 },
   sortCount: { ...typography.small, color: colors.textFaint },
   sortButton: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.pill },
