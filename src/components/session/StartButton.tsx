@@ -63,7 +63,8 @@ export function StartButton({ onStart, onStarted, onPhase, label = 'Start' }: {
   const sweep = useSharedValue(0);
   const swap = useSharedValue(0);
   const pulse = useSharedValue(0);
-  const run = useRef({ swept: false, result: undefined as boolean | undefined, done: false, timers: [] as ReturnType<typeof setTimeout>[] });
+  // `pressed`: Start has been taken, from the tap until it starts or unwinds (a second tap before the page draws again is ignored).
+  const run = useRef({ pressed: false, swept: false, result: undefined as boolean | undefined, done: false, timers: [] as ReturnType<typeof setTimeout>[] });
   useEffect(() => () => { run.current.timers.forEach(clearTimeout); }, []);
   const later = (fn: () => void, ms: number) => { run.current.timers.push(setTimeout(fn, ms)); };
   const moveTo = (next: StartPhase) => { setPhase(next); onPhase?.(next); };
@@ -89,6 +90,7 @@ export function StartButton({ onStart, onStarted, onPhase, label = 'Start' }: {
   const unwind = () => {
     const r = run.current;
     r.done = true;
+    r.pressed = false;
     cancelAnimation(pulse);
     pulse.value = 0;
     sweep.value = withTiming(0, { duration: reduced ? 120 : 320, easing: EASE_OUT });
@@ -113,8 +115,9 @@ export function StartButton({ onStart, onStarted, onPhase, label = 'Start' }: {
   const swept = () => { run.current.swept = true; settle(); };
 
   const begin = () => {
-    if (phase !== 'idle') return;
     const r = run.current;
+    if (phase !== 'idle' || r.pressed) return;
+    r.pressed = true;
     r.swept = false;
     r.result = undefined;
     r.done = false;

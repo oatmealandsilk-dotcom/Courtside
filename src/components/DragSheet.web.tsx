@@ -1,10 +1,11 @@
 import { useTheme } from '@/theme/ThemeProvider';
-import React, { createContext, useContext, useEffect, useRef } from 'react';
+import React, { createContext, useContext, useEffect, useLayoutEffect, useRef } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '@/theme';
 import { Wash } from '@/components/Wash';
 import { isDesktopBrowser } from '@/lib/browserDevice';
 import { setSidePanel } from '@/features/feed/sidePanel';
+import { HAND_IN_MS, HAND_OUT_MS, arrivingHeight, handOverSheet, takeHandOver } from '@/components/sheetHandOver';
 import { CLOSE_MS, OPEN_MS_WEB, SIDE_MIN_WINDOW, SNAP_MS_WEB, currentY, getStage, glideSamples, onFrame, place as stagePlace, setFull, subscribe as onStageChange, type StageGeo } from '@/features/feed/commentStage';
 
 const EASE = 'cubic-bezier(.22,.61,.36,1)';
@@ -69,6 +70,7 @@ export function DragSheet({
   stageOverlay,
   active = true,
   beforeClose,
+  handOverSignal = 0,
 }: {
   header: React.ReactNode;
   children: React.ReactNode;
@@ -92,14 +94,16 @@ export function DragSheet({
   stageOverlay?: React.ReactNode;
   /** Asked before a drag down, a click outside or Escape closes it: false keeps it open (see the native twin). Never for closeSignal. */
   beforeClose?: () => boolean;
+  /** Bump to hand over to the next page's sheet instead of sliding away (see the native twin and sheetHandOver). */
+  handOverSignal?: number;
 }) {
   // On a computer a bottom sheet stretched across a wide window looks lost;
   // there it is a centred box instead, the way Instagram's dialogs are.
   const dialog = typeof window !== 'undefined' && isDesktopBrowser() && window.innerWidth >= 700;
   if (dialog && side && window.innerWidth >= SIDE_MIN_WINDOW) return <SidePanel header={header} onDismissed={onDismissed} closeSignal={closeSignal} onSettled={onSettled} active={active} beforeClose={beforeClose}>{children}</SidePanel>;
-  if (dialog) return <DialogBox header={header} onDismissed={onDismissed} closeSignal={closeSignal} fitContent={fitContent} onSettled={onSettled} active={active} beforeClose={beforeClose}>{children}</DialogBox>;
+  if (dialog) return <DialogBox header={header} onDismissed={onDismissed} closeSignal={closeSignal} fitContent={fitContent} onSettled={onSettled} active={active} beforeClose={beforeClose} handOverSignal={handOverSignal}>{children}</DialogBox>;
   if (stage) return <StageSheet header={header} onDismissed={onDismissed} closeSignal={closeSignal} onSettled={onSettled} geo={stage} stageOverlay={stageOverlay} active={active}>{children}</StageSheet>;
-  return <Sheet header={header} onDismissed={onDismissed} peekFraction={peekFraction} closeSignal={closeSignal} onSettled={onSettled} active={active} contentHeight={contentHeight} beforeClose={beforeClose}>{children}</Sheet>;
+  return <Sheet header={header} onDismissed={onDismissed} peekFraction={peekFraction} closeSignal={closeSignal} onSettled={onSettled} active={active} contentHeight={contentHeight} beforeClose={beforeClose} handOverSignal={handOverSignal}>{children}</Sheet>;
 }
 
 /** The latest beforeClose, and whether a close the person started may go ahead now. */
@@ -195,19 +199,40 @@ function SidePanel({ header, children, onDismissed, closeSignal, onSettled, acti
 }
 
 /** The centred box a sheet becomes on a computer: fades and settles in, dims and blurs what is behind. */
-function DialogBox({ header, children, onDismissed, closeSignal, fitContent, onSettled, active, beforeClose }: { header: React.ReactNode; children: React.ReactNode; onDismissed: () => void; closeSignal: number; fitContent: boolean; onSettled?: () => void; active: boolean; beforeClose?: () => boolean }) {
+function DialogBox({ header, children, onDismissed, closeSignal, fitContent, onSettled, active, beforeClose, handOverSignal = 0 }: { header: React.ReactNode; children: React.ReactNode; onDismissed: () => void; closeSignal: number; fitContent: boolean; onSettled?: () => void; active: boolean; beforeClose?: () => boolean; handOverSignal?: number }) {
   useTheme();
   const mayClose = useMayClose(beforeClose);
   const box = useRef<HTMLDivElement>(null);
   const backdrop = useRef<HTMLDivElement>(null);
   const done = useRef(false);
-  useEffect(() => {
-    backdrop.current?.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 180, easing: 'ease-out' });
-    box.current?.animate([{ opacity: 0, transform: 'translate(-50%, calc(-50% + 10px)) scale(0.97)' }, { opacity: 1, transform: 'translate(-50%, -50%)' }], { duration: 240, easing: EASE });
+  // Handed over by the box before (Start, to the live page): the dim is already there, only the box comes in.
+  const arriving = useRef<number | null | undefined>(undefined);
+  if (arriving.current === undefined) arriving.current = arrivingHeight();
+  useLayoutEffect(() => {
+    takeHandOver();
+    if (arriving.current) {
+      box.current?.animate([{ opacity: 0 }, { opacity: 1 }], { duration: HAND_IN_MS, easing: EASE });
+    } else {
+      backdrop.current?.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 180, easing: 'ease-out' });
+      box.current?.animate([{ opacity: 0, transform: 'translate(-50%, calc(-50% + 10px)) scale(0.97)' }, { opacity: 1, transform: 'translate(-50%, -50%)' }], { duration: 240, easing: EASE });
+    }
     const settled = setTimeout(() => onSettled?.(), 240);
     return () => clearTimeout(settled);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  // Handed over to the next page's box: this one fades where it is, and the dim stays for the next.
+  const handCount = useRef(handOverSignal);
+  useEffect(() => {
+    if (handOverSignal === handCount.current) return;
+    handCount.current = handOverSignal;
+    if (done.current) return;
+    done.current = true;
+    const height = box.current?.offsetHeight ?? 1;
+    const leave = () => { handOverSheet(height); onDismissed(); };
+    const out = box.current?.animate([{ opacity: 1 }, { opacity: 0 }], { duration: HAND_OUT_MS, easing: 'ease-in', fill: 'forwards' });
+    if (out) out.onfinish = leave; else leave();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [handOverSignal]);
   useEscape(() => { if (mayClose()) close(); }, { enabled: active });
   const close = () => {
     if (done.current) return;
@@ -262,6 +287,7 @@ function Sheet({
   active,
   contentHeight,
   beforeClose,
+  handOverSignal = 0,
 }: {
   header: React.ReactNode;
   children: React.ReactNode;
@@ -272,6 +298,7 @@ function Sheet({
   active: boolean;
   contentHeight?: number;
   beforeClose?: () => boolean;
+  handOverSignal?: number;
 }) {
   // Hears a theme change, so its own colours never lag the page's.
   useTheme();
@@ -285,7 +312,15 @@ function Sheet({
   const touched = useRef(false);
   const sheet = useRef<HTMLDivElement>(null);
   const backdrop = useRef<HTMLDivElement>(null);
+  // Its contents (the header under the grabber, and the body): what fades as it hands over, or comes in handed over.
+  const headWords = useRef<HTMLDivElement>(null);
+  const body = useRef<HTMLDivElement>(null);
   const dismissed = useRef(false);
+  // On its way out, sliding away or handed over: from then on neither may start.
+  const leaving = useRef(false);
+  // Handed over by the sheet before (Start, to the live page): it opens already up where that one stood (sheetHandOver).
+  const arriving = useRef<number | null | undefined>(undefined);
+  if (arriving.current === undefined) arriving.current = arrivingHeight();
   const geometry = useRef({ fullHeight: 1, openOffset: 0 });
   /** The sheet's current translateY, kept here so a drag can start from wherever it sits. */
   const current = useRef(0);
@@ -310,7 +345,7 @@ function Sheet({
     }
   };
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const measure = () => {
       // The area the sheet lives in: the page above the tab bar, not the whole window.
       const vh = area.current?.clientHeight || window.innerHeight;
@@ -324,16 +359,25 @@ function Sheet({
     };
     measureRef.current = measure;
     measure();
-    place(geometry.current.fullHeight, 0);
+    takeHandOver();
+    const from = arriving.current;
+    place(from ? Math.max(0, geometry.current.fullHeight - from) : geometry.current.fullHeight, 0);
+    if (from) {
+      // The browser settles that height (and the dim) now, so the glide below starts from it rather than from nothing.
+      void sheet.current?.getBoundingClientRect();
+      for (const el of [headWords.current, body.current]) el?.animate([{ opacity: 0 }, { opacity: 1 }], { duration: HAND_IN_MS, easing: EASE, fill: 'backwards' });
+    }
     // One frame so the opening slide is seen rather than starting already open.
-    const frame = requestAnimationFrame(() => place(geometry.current.openOffset, OPEN_MS));
+    // Handed over, it waits for its contents' height instead (the effect below), so it settles once, never up and back down.
+    const frame = requestAnimationFrame(() => { if (!from || fit.current) place(geometry.current.openOffset, OPEN_MS); });
+    const late = from ? window.setTimeout(() => { if (!fit.current && !touched.current && !leaving.current) place(geometry.current.openOffset, OPEN_MS); }, 250) : 0;
     const settled = setTimeout(() => onSettled?.(), OPEN_MS + 20);
     window.addEventListener('resize', measure);
     // A phone's keyboard shrinks the visible area without a window resize; the sheet re-measures and keeps its box above it.
     const vv = window.visualViewport;
     const onViewport = () => { measure(); touched.current = true; place(0, 160); };
     vv?.addEventListener('resize', onViewport);
-    return () => { cancelAnimationFrame(frame); clearTimeout(settled); window.removeEventListener('resize', measure); vv?.removeEventListener('resize', onViewport); };
+    return () => { cancelAnimationFrame(frame); clearTimeout(late); clearTimeout(settled); window.removeEventListener('resize', measure); vv?.removeEventListener('resize', onViewport); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -352,6 +396,8 @@ function Sheet({
     onDismissed();
   };
   const close = () => {
+    if (leaving.current) return;
+    leaving.current = true;
     touched.current = true;
     place(geometry.current.fullHeight, SETTLE_MS, 'cubic-bezier(.4,0,1,1)');
     window.setTimeout(finish, SETTLE_MS + 20);
@@ -367,8 +413,23 @@ function Sheet({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [closeSignal]);
   useEscape(() => { if (!dismissed.current && mayClose()) close(); }, { notWhileTyping: true, enabled: active });
+  // Handed over to the next page's sheet: it stays where it is, its contents fade, and the next opens at this height.
+  const handCount = useRef(handOverSignal);
+  useEffect(() => {
+    if (handOverSignal === handCount.current) return;
+    handCount.current = handOverSignal;
+    if (leaving.current || dismissed.current) return;
+    leaving.current = true;
+    touched.current = true;
+    drag.current = null;
+    const height = geometry.current.fullHeight - current.current;
+    for (const el of [headWords.current, body.current]) el?.animate([{ opacity: 1 }, { opacity: 0 }], { duration: HAND_OUT_MS, easing: EASE, fill: 'forwards' });
+    window.setTimeout(() => { if (dismissed.current) return; handOverSheet(height); finish(); }, HAND_OUT_MS);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [handOverSignal]);
 
   const onPointerDown = (event: React.PointerEvent) => {
+    if (leaving.current) return;
     if (!event.isPrimary || event.button !== 0) return;
     drag.current = { startY: event.clientY, originY: current.current, lastY: event.clientY, lastT: performance.now(), velocity: 0, moved: false };
     touched.current = true;
@@ -432,10 +493,10 @@ function Sheet({
           style={{ position: 'relative', paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 10, touchAction: 'none', cursor: 'grab', userSelect: 'none' }}
         >
           <div style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: colors.borderStrong, alignSelf: 'center' }} />
-          {header}
+          <div ref={headWords} style={{ display: 'flex', flexDirection: 'column' }}>{header}</div>
         </div>
         {/* Clear of a phone's home bar, the same as the app's own sheet. */}
-        <div style={{ position: 'relative', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', paddingBottom: insets.bottom }}>{children}</div>
+        <div ref={body} style={{ position: 'relative', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', paddingBottom: insets.bottom }}>{children}</div>
       </div>
     </div>
   );

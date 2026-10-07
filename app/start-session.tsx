@@ -44,6 +44,13 @@ const ACCESS: readonly string[] = ['public', 'members', 'pay', 'private'];
 const mapHeight = (windowH: number) => (windowH < 700 ? 100 : Math.round(Math.min(136, windowH * 0.16)));
 /** How close in the court's map is: its own block and paths, not the district (a chat's court card stays at 15). */
 const MAP_ZOOM = 16;
+/**
+ * How far down the map the court's spot sits: a little below the middle,
+ * so the pin's head has air under the card's top edge on a short band (an
+ * SE's) and its point sits just above the fade. The picture is drawn that
+ * much taller, centred on the court, and the band shows its top.
+ */
+const SPOT_AT = 0.58;
 /** The court's pin, a drop: a round head (radius 16, centred 19 across and 19 down) narrowing to its point at PIN_TIP. */
 const PIN_W = 38;
 const PIN_H = 50;
@@ -83,6 +90,8 @@ export default function StartSession() {
   const { actions, currentUser, currentUserId, locationEnabled, followedCourts, courtFacts, mapLive, mapVisibility, teenMap, liveSession } = useApp();
   const [closeSignal, setCloseSignal] = useState(0);
   const close = () => setCloseSignal((n) => n + 1);
+  // Start's ring has closed: the sheet hands over to the live page in its place, rather than sliding down for it to rise again.
+  const [handOver, setHandOver] = useState(0);
   // Once the sheet is gone: the live page, when Start was tapped; else back where it opened.
   const next = useRef<'live' | null>(null);
   // A court's page sends its court (and who may play there); a place with no court on the map, just its name.
@@ -173,13 +182,21 @@ export default function StartSession() {
   // From here on, however the sheet goes away, it goes to the live page: the session is already running.
   const start = async () => {
     next.current = 'live';
-    const s = await actions.startLiveSession({ kind, court, place: court ? undefined : shown?.place, access });
-    if (s) return true;
+    try {
+      const s = await actions.startLiveSession({ kind, court, place: court ? undefined : shown?.place, access });
+      if (s) return true;
+    } catch {
+      // The clock goes in before the check-in: a check-in that threw has still started the session (its page offers the check-in again).
+      if (going.current && liveState(going.current) !== 'finished') return true;
+    }
     next.current = null;
     showToast({ title: 'Couldn’t start the session', body: 'Try Start again in a moment.', icon: 'alert-circle-outline' });
     return false;
   };
   const dismissed = () => (next.current === 'live' ? router.replace('/live-session') : router.back());
+  // The session as the store last has it, for a start whose check-in threw.
+  const going = useRef(liveSession);
+  going.current = liveSession;
 
   /* ------------------------------ The look ------------------------------ */
   // How tall the contents are, so the sheet opens just that tall: no empty half under Start.
@@ -196,7 +213,7 @@ export default function StartSession() {
 
   if (goingAtOpen) return <Redirect href="/live-session" />;
   return (
-    <DragSheet fitContent closeSignal={closeSignal} onDismissed={dismissed} peekFraction={0.9} contentHeight={contentH || undefined}
+    <DragSheet fitContent closeSignal={closeSignal} handOverSignal={handOver} onDismissed={dismissed} peekFraction={0.9} contentHeight={contentH || undefined}
       header={<Header onClose={close} />}>
       <ScrollView
         contentContainerStyle={[formBody, styles.body]}
@@ -218,7 +235,7 @@ export default function StartSession() {
                 <View style={[styles.map, { height: mapH }]} onLayout={(e) => { const w = Math.round(e.nativeEvent.layout.width); if (w && w !== mapW) setMapW(w); }}>
                   {/* First, so the map covers it: where a phone draws the map's picture (a browser needs nothing here). */}
                   <CourtMapSnapshots />
-                  {mapW ? <CourtMapThumb lat={court.lat} lng={court.lng} width={mapW} height={mapH} zoom={MAP_ZOOM} /> : null}
+                  {mapW ? <CourtMapThumb lat={court.lat} lng={court.lng} width={mapW} height={Math.round(mapH * SPOT_AT * 2)} zoom={MAP_ZOOM} /> : null}
                   {/* The map fades into the card at its foot, so the court's name reads as the map's own caption. */}
                   <LinearGradient pointerEvents="none" colors={[withAlpha(colors.surface, 0), colors.surface]} style={styles.mapFade} />
                   <CourtPin mapH={mapH} here={isHere} />
@@ -242,7 +259,7 @@ export default function StartSession() {
                   ) : !placeWords ? <Text style={styles.quiet}>Where are you playing?</Text> : null}
                 </View>
                 {/* With no court yet the whole row is the button ("Pick a court"), so no second "Pick" beside it. */}
-                {placeWords ? <Text style={styles.change}>Change</Text> : null}
+                {placeWords ? <Text style={[styles.change, (court || quiet) && styles.changeTop]}>Change</Text> : null}
               </View>
             </Pressable>
             {/* Who will see you, in the check-in's own words, as the court sheet says them. */}
@@ -262,7 +279,7 @@ export default function StartSession() {
 
         {/* Start: round and big, under the thumb, in a ring that closes as it starts (a record button's). */}
         <View style={styles.startWrap}>
-          <StartButton onStart={start} onStarted={close} onPhase={setPhase} />
+          <StartButton onStart={start} onStarted={() => setHandOver((n) => n + 1)} onPhase={setPhase} />
         </View>
       </ScrollView>
     </DragSheet>
@@ -305,7 +322,7 @@ function CourtPin({ mapH, here }: { mapH: number; here: boolean }) {
   const ring = useAnimatedStyle(() => ({ opacity: here ? 0.7 * (1 - breath.value) : 0, transform: [{ scale: 1 + breath.value * 1.8 }] }), [here]);
   const ground = here ? colors.open : colors.court;
   return (
-    <View pointerEvents="none" style={[styles.pin, { top: Math.round(mapH / 2 - PIN_TIP) }]}>
+    <View pointerEvents="none" style={[styles.pin, { top: Math.round(mapH * SPOT_AT - PIN_TIP) }]}>
       <Animated.View style={[styles.pinGround, { borderColor: ground }, ring]} />
       <View style={[styles.pinGround, { backgroundColor: withAlpha(ground, 0.38) }]} />
       <Svg width={PIN_W} height={PIN_H} viewBox={`0 0 ${PIN_W} ${PIN_H}`}>
@@ -392,6 +409,8 @@ const styleDefinitions = StyleSheet.create({
   quietHere: { ...font('600'), color: colors.open },
   // Change: a light word, not a box; the whole court above it takes the tap.
   change: { ...typography.bodyStrong, color: colors.brand },
+  // Beside the court's name, not between its two lines (as the sheet had it before Oct 7).
+  changeTop: { alignSelf: 'flex-start', paddingTop: 4 },
   seen: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingLeft: spacing.lg, paddingRight: spacing.md, paddingVertical: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   seenTile: { width: 30, height: 30, borderRadius: 15, backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
   seenTileOn: { backgroundColor: colors.brandDim },
