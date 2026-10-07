@@ -38,7 +38,7 @@ export default function AdminWelcome() {
   return (
     <Screen title="Welcome new players" compactTitle onBack={() => goBack()} onRefresh={load}>
       <Text style={styles.lead}>
-        {posts === null ? ' ' : waiting ? `${waiting} first ${waiting === 1 ? 'post is' : 'posts are'} waiting for a hello.` : 'Everyone has been welcomed.'} A comment from you on someone's first day does more for them coming back than anything else.
+        {posts === null ? ' ' : waiting ? `${waiting} new ${waiting === 1 ? 'player has' : 'players have'} posted for the first time and nobody has replied yet.` : 'Everyone has been welcomed.'} Saying hi on someone's first day is the best way to get them to come back.
       </Text>
       {stats ? <Numbers stats={stats} /> : null}
       {posts === null ? (
@@ -79,7 +79,7 @@ export default function AdminWelcome() {
 const pct = (part: number, whole: number) => (whole ? `${Math.round((part / whole) * 100)}%` : '—');
 
 /** Each first move, as the Picked line names it. */
-const PICK_LABEL: Record<FirstMove, string> = { invite: 'Shared link', follow: 'Followed', find: 'Find a friend', post: 'Post', instant: 'Instant', answer: 'Answer', ask: 'Ask', later: 'Later' };
+const PICK_LABEL: Record<FirstMove, string> = { invite: 'Shared their link', follow: 'Followed someone', find: 'Found a friend', post: 'Posted', instant: 'Posted an Instant', answer: 'Answered', ask: 'Asked', later: 'Skipped' };
 
 /**
  * Whether the first-move step works. Day one: what share of new players
@@ -96,10 +96,10 @@ function Numbers({ stats }: { stats: FirstDayStats }) {
   return (
     <View style={styles.numbers}>
       <View style={styles.numRow}>
-        <View style={styles.num}><Text style={styles.numValue}>{pct(stats.moved30, stats.new30)}</Text><Text style={styles.numLabel}>of new players moved on day one</Text><Text style={styles.numFoot}>{stats.moved30} of {stats.new30}, last 30 days</Text></View>
-        <View style={styles.num}><Text style={styles.numValue}>{pct(stats.moversBack, stats.movers)} <Text style={styles.numVs}>vs {pct(stats.othersBack, others)}</Text></Text><Text style={styles.numLabel}>back in week two: movers vs the rest</Text><Text style={styles.numFoot}>{stats.cohort ? `${stats.cohort} players old enough to tell` : 'Needs players 2 weeks old'}</Text></View>
+        <View style={styles.num}><Text style={styles.numValue}>{pct(stats.moved30, stats.new30)}</Text><Text style={styles.numLabel}>did something on their first day</Text><Text style={styles.numFoot}>{stats.moved30} of {stats.new30} new players, last 30 days</Text></View>
+        <View style={styles.num}><Text style={styles.numValue}>{pct(stats.moversBack, stats.movers)} <Text style={styles.numVs}>vs {pct(stats.othersBack, others)}</Text></Text><Text style={styles.numLabel}>came back a week later if they did something on day one (vs if they didn't)</Text><Text style={styles.numFoot}>{stats.cohort ? `Out of ${stats.cohort} players who joined 2+ weeks ago` : 'Needs players who joined 2+ weeks ago'}</Text></View>
       </View>
-      {picks.length ? <Text style={styles.picks}>Picked: {picks.map((k) => `${PICK_LABEL[k]} ${stats.picked[k] ?? 0}`).join(' · ')}</Text> : null}
+      {picks.length ? <Text style={styles.picks}>Their first step: {picks.map((k) => `${PICK_LABEL[k]} ${stats.picked[k] ?? 0}`).join(' · ')}</Text> : null}
     </View>
   );
 }
