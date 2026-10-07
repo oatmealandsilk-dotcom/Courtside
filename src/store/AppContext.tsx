@@ -8043,14 +8043,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
   useEffect(() => { if (live(state.currentUserId)) void claimPendingReferral(); }, [state.currentUserId, claimPendingReferral]);
   // The demo player is an affiliate with people of their own (src/data/mock/invites.ts); anyone else in the demo has none.
-  const countReferrals = useCallback(async () => { const me = stateRef.current.currentUserId; return live(me) ? remote.countReferrals(me!) : me ? demoApi.countReferrals(me) : 0; }, []);
+  // Only a build with no database plays the demo's part: a real build never shows made-up money.
+  const countReferrals = useCallback(async () => { const me = stateRef.current.currentUserId; return live(me) ? remote.countReferrals(me!) : !isSupabaseConfigured && me ? demoApi.countReferrals(me) : 0; }, []);
   const matchContacts = useCallback(async (phones: string[], emails: string[]) => { const me = stateRef.current.currentUserId; return live(me) ? remote.matchContacts(phones, emails) : []; }, []);
   const myPhone = useCallback(async () => { const me = stateRef.current.currentUserId; return live(me) ? remote.myPhone() : null; }, []);
   const startPhoneLink = useCallback(async (phone: string) => { await remote.startPhoneLink(phone); }, []);
   const confirmPhoneLink = useCallback(async (phone: string, code: string) => { await remote.confirmPhoneLink(phone, code); }, []);
   const unlinkPhone = useCallback(async () => { await remote.unlinkPhone(); }, []);
-  const fetchMyInvitees = useCallback(async () => { const me = stateRef.current.currentUserId; return live(me) ? remote.fetchMyInvitees() : me ? demoApi.fetchMyInvitees(me) : []; }, []);
-  const fetchMyAffiliate = useCallback(async () => { const me = stateRef.current.currentUserId; return live(me) ? remote.fetchMyAffiliate() : me ? demoApi.fetchMyAffiliate(me) : null; }, []);
+  const fetchMyInvitees = useCallback(async () => { const me = stateRef.current.currentUserId; return live(me) ? remote.fetchMyInvitees() : !isSupabaseConfigured && me ? demoApi.fetchMyInvitees(me) : []; }, []);
+  const fetchMyAffiliate = useCallback(async () => { const me = stateRef.current.currentUserId; return live(me) ? remote.fetchMyAffiliate() : !isSupabaseConfigured && me ? demoApi.fetchMyAffiliate(me) : null; }, []);
 
   const pullFrom = useCallback(async (me: ID, provider: Integration['provider']): Promise<boolean> => {
     if (provider === 'apple-health') {

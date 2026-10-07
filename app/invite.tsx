@@ -160,6 +160,7 @@ export default function Invite() {
           <AffiliateDashboard
             stats={affiliate}
             people={people ? list : null}
+            peopleAsked={loaded}
             userId={currentUser.id}
             handle={currentUser.handle}
             link={link}

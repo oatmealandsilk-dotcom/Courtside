@@ -40,10 +40,12 @@ const played = new Set<string>();
  * The page's ScrollView, the sheet and the actions belong to the page
  * (app/invite.tsx); this draws what is inside.
  */
-export function AffiliateDashboard({ stats, people, userId, handle, link, friendsOnly, copied, copiedCode, onShare, onCopy, onCopyCode, onOpen, tools }: {
+export function AffiliateDashboard({ stats, people, peopleAsked, userId, handle, link, friendsOnly, copied, copiedCode, onShare, onCopy, onCopyCode, onOpen, tools }: {
   stats: AffiliateStats;
   /** Counted first, newest first; null while unknown. */
   people: Invitee[] | null;
+  /** The list has been asked for and answered (or failed): null after this means it could not be fetched. */
+  peopleAsked: boolean;
   userId: string;
   handle: string;
   link: string;
@@ -91,7 +93,7 @@ export function AffiliateDashboard({ stats, people, userId, handle, link, friend
         {tools ? <View style={styles.tools}>{tools}</View> : null}
       </View>
 
-      <People people={people} counted={people ? people.filter((p) => p.countedAt).length : counted} onOpen={onOpen} />
+      <People people={people} asked={peopleAsked} invited={stats.invited} counted={people ? people.filter((p) => p.countedAt).length : counted} onOpen={onOpen} />
 
       <View style={styles.foot}>
         <Text style={styles.footTitle}>What counts</Text>
@@ -228,16 +230,23 @@ function Rewards({ counted }: { counted: number }) {
 }
 
 /** Their players, counted first: a row each, the status at the end of the name's line. */
-function People({ people, counted, onOpen }: { people: Invitee[] | null; counted: number; onOpen: (id: string) => void }) {
+function People({ people, asked, invited, counted, onOpen }: { people: Invitee[] | null; asked: boolean; invited: number; counted: number; onOpen: (id: string) => void }) {
   const styles = useThemedStyles(styleDefinitions);
   const list = people ?? [];
+  // Still on its way (the earnings can come first): no "No one yet" for a moment before the list.
+  // Could not be fetched: how many joined, from the earnings' own count, never "No one yet".
+  const unknown = people === null;
   return (
     <View style={styles.section}>
       <View style={styles.sectionHead}>
         <Text style={styles.cardTitle}>Your players</Text>
         {list.length ? <Text style={styles.cardCount}>{`${counted} of ${list.length} counted`}</Text> : null}
       </View>
-      {list.length ? (
+      {unknown ? (
+        asked && invited > 0 ? (
+          <Text style={styles.unknown}>{`${invited} ${invited === 1 ? 'player has' : 'players have'} joined through you.`}</Text>
+        ) : asked ? null : <View style={styles.waiting} />
+      ) : list.length ? (
         <View style={styles.list}>
           {list.map((p, i) => {
             const name = p.name || `@${p.handle}`;
@@ -371,6 +380,9 @@ const styleDefinitions = StyleSheet.create({
   pillOn: { backgroundColor: colors.brandDim, borderColor: colors.brandDim, paddingLeft: 7 },
   pillOnText: { ...typography.smallStrong, color: colors.text },
 
+  // The list's place while it is on its way: about one row, so the page does not jump far when it lands.
+  waiting: { height: 64 },
+  unknown: { ...typography.small, color: colors.textMuted, lineHeight: 19, paddingHorizontal: spacing.xs },
   empty: { alignItems: 'center', gap: spacing.xs, paddingVertical: spacing.xl },
   emptyIcon: { width: 48, height: 48, borderRadius: radius.lg, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.xs },
   emptyTitle: { ...typography.heading, color: colors.text },

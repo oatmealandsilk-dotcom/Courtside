@@ -77,10 +77,13 @@ returns boolean language sql stable security definer set search_path = public as
     select lower(p.handle) = any (l.names) or p.id::text = any (l.names)
     from public.profiles p
     cross join lateral (
+      -- Each entry without spaces, line breaks or @ at either end ("@TP", " tp" and "@ tp" are all tp).
       select array(
-        select lower(ltrim(btrim(x), '@'))
-        from unnest(string_to_array(coalesce((select value from public.server_settings where key = 'affiliates'), ''), ',')) x
-        where btrim(x) <> ''
+        select n from (
+          select lower(btrim(x, E' \t\r\n@')) as n
+          from unnest(string_to_array(coalesce((select value from public.server_settings where key = 'affiliates'), ''), ',')) x
+        ) e
+        where n <> ''
       ) as names
     ) l
     where p.id = u
