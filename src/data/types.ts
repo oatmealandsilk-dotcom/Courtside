@@ -1329,6 +1329,8 @@ export interface LiveSession {
   checkedInAt?: string;
   /** Why the check-in did not go through, when it was tried and refused, in the court sheet's own words. */
   checkInProblem?: string;
+  /** When "Still playing?" was last asked (three hours on the clock); asked again two hours after. */
+  stillAskedAt?: string;
 }
 
 /** What one player says about a public court on the map. Unsaid is left out. */

@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react';
 
-import type { CourtAccess, CourtRightNow, LiveSession, MapVisibility, TaggedCourt, User } from '@/data/types';
+import type { CourtAccess, CourtRightNow, DetectedActivity, ID, LiveSession, MapVisibility, TaggedCourt, User } from '@/data/types';
+import type { TennisFlags } from '@/features/activity/flags';
+import { sourceOn } from '@/features/activity/recent';
+import { isTennisActivity } from '@/features/activity/workouts';
 import { isMapCourtId } from '@/features/places/courtName';
 import { canCheckIn } from '@/features/players/mapPrivacy';
 import { localDay } from '@/features/practice/stats';
@@ -148,4 +151,80 @@ export function seenLine({ here, seenBy, why, problem, starting = false }: {
 export function livePin(s: LiveSession | null, courtNow: Record<string, CourtRightNow>, locationOn: boolean): { courtId: string; courtName: string } | null {
   if (!s?.court || !locationOn || liveState(s) === 'finished') return null;
   return courtNow[s.court.id]?.youHere ? { courtId: s.court.id, courtName: s.court.name } : null;
+}
+
+/* ------------------------------------------------ one game, logged once */
+
+/** When the live session ran, on the clock on the wall: Start to Finish, or to now (a pause still standing counts as now). */
+export function liveSpan(s: Pick<LiveSession, 'startedAt' | 'endedAt'>, now = Date.now()): { from: number; to: number } {
+  const from = Date.parse(s.startedAt);
+  const to = s.endedAt ? Date.parse(s.endedAt) : now;
+  return { from, to: Math.max(from, to) };
+}
+
+/**
+ * Whether a tracker's workout and a live session are the same game, by the
+ * server's own rule for one session seen twice (WHOOP and the Watch, say;
+ * note_detected_activity, migration 138): they started within ten minutes
+ * of each other, or they overlap for at least half the shorter of the two.
+ */
+function sameGame(span: { from: number; to: number }, a: Pick<DetectedActivity, 'startedAt' | 'endedAt'>): boolean {
+  const from = Date.parse(a.startedAt);
+  const to = Date.parse(a.endedAt);
+  if (!Number.isFinite(from) || !Number.isFinite(to) || !Number.isFinite(span.from)) return false;
+  if (Math.abs(from - span.from) <= 10 * 60_000) return true;
+  const overlap = Math.min(to, span.to) - Math.max(from, span.from);
+  return overlap > 0 && overlap >= 0.5 * Math.min(to - from, span.to - span.from);
+}
+
+/** How much of the live session a workout covers, to pick the fullest copy. */
+const cover = (span: { from: number; to: number }, a: DetectedActivity) => Math.min(Date.parse(a.endedAt), span.to) - Math.max(Date.parse(a.startedAt), span.from);
+
+/**
+ * Your tracker's copy of the game the live session timed (Oct 6, owner: no
+ * double logging): a tennis session from your Apple Watch, WHOOP, Fitbit…
+ * over the same time, from a source the server has switched on, found the
+ * way "How was the hit?" finds one (features/hits/followUp, trackerFor).
+ *
+ * `waiting` is one nobody has logged yet: the live session is logged as it
+ * (logSession's activityId, the link "Log it" makes, migration 58), so your
+ * log gets its heart rate and calories and the workout counts as logged,
+ * never offered again. A copy arriving after the log is folded in by the
+ * server (logged by hand, migration 138). `logged` is one already in your
+ * log: the sheet says so, as saving again would count the same game twice.
+ * Tennis only, as for a hit: a run that morning is not the session.
+ */
+export function liveTracker(s: LiveSession, activities: DetectedActivity[], { me, flags, now = Date.now() }: { me: ID; flags: TennisFlags; now?: number }): { waiting?: DetectedActivity; logged?: DetectedActivity } {
+  const span = liveSpan(s, now);
+  const same = activities.filter((a) => a.userId === me && isTennisActivity(a) && sourceOn(a, flags) && sameGame(span, a));
+  const fullest = (list: DetectedActivity[]) => [...list].sort((x, y) => cover(span, y) - cover(span, x))[0];
+  return { waiting: fullest(same.filter((a) => a.status === 'new')), logged: fullest(same.filter((a) => a.status === 'logged')) };
+}
+
+/* ------------------------------------------------ "Still playing?" */
+
+/** A session whose clock has run this long is asked about (Oct 6, owner): Finish, or Keep going. */
+export const STILL_PLAYING_MS = 3 * 3_600_000;
+/** "Keep going" (or the question put away) asks again this much later. */
+export const STILL_PLAYING_AGAIN_MS = 2 * 3_600_000;
+/** The phone's own alert for it, by name: a new one replaces the old, and Finish or a pause takes it away. */
+export const STILL_PLAYING_ALERT = 'courtside-still-playing';
+
+/**
+ * When to ask "Still playing?", on the clock on the wall: once the session's
+ * clock reaches three hours (pauses left out), and, once asked, two hours
+ * after that. Null while paused or finished: there is nothing to ask then.
+ */
+export function stillPlayingAt(s: LiveSession | null): number | null {
+  if (!s || liveState(s) !== 'running') return null;
+  const atThree = Date.parse(s.startedAt) + (s.pausedMs || 0) + STILL_PLAYING_MS;
+  const again = s.stillAskedAt ? Date.parse(s.stillAskedAt) + STILL_PLAYING_AGAIN_MS : 0;
+  return Math.max(atThree, Number.isFinite(again) ? again : 0);
+}
+
+/** "3 hours", "4 hours 20 minutes": how long the clock has run, in words, for the question. */
+export function hoursWords(ms: number): string {
+  const h = Math.floor(ms / 3_600_000);
+  const m = Math.floor((ms % 3_600_000) / 60_000);
+  return [h ? `${h} hour${h === 1 ? '' : 's'}` : '', m >= 5 || !h ? `${m} minutes` : ''].filter(Boolean).join(' ');
 }

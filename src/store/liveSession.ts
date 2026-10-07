@@ -56,6 +56,8 @@ export interface LiveSessionActions {
   endLiveSession: () => void;
   /** "Let friends see you're here", after a check-in that did not happen. Resolves the refusal, or null. */
   checkInLiveSession: () => Promise<string | null>;
+  /** "Still playing?" was asked (Keep going, or put away): the clock runs on, and it is asked again two hours later. */
+  keepGoingLiveSession: () => void;
 }
 
 /** This phone's copy, one session per account. */
@@ -201,6 +203,12 @@ export function useLiveSession<S extends LiveSessionState & Reads>(
     return checkIn(s);
   }, [stateRef, checkIn]);
 
+  const keepGoingLiveSession = useCallback(() => {
+    const s = latest.current;
+    if (!s || liveState(s) === 'finished') return;
+    put(s.userId, { ...s, stillAskedAt: new Date().toISOString() });
+  }, [put]);
+
   // Signed in: this account's session from the phone, if one was going. A
   // check-in it made is put back: the server's still stands for its two
   // hours (asked again here), the demo's lived only in the closed page.
@@ -235,6 +243,6 @@ export function useLiveSession<S extends LiveSessionState & Reads>(
   }, [renewing, stateRef, checkIn]);
 
   return useMemo(() => ({
-    startLiveSession, pauseLiveSession, resumeLiveSession, finishLiveSession, discardLiveSession, endLiveSession, checkInLiveSession,
-  }), [startLiveSession, pauseLiveSession, resumeLiveSession, finishLiveSession, discardLiveSession, endLiveSession, checkInLiveSession]);
+    startLiveSession, pauseLiveSession, resumeLiveSession, finishLiveSession, discardLiveSession, endLiveSession, checkInLiveSession, keepGoingLiveSession,
+  }), [startLiveSession, pauseLiveSession, resumeLiveSession, finishLiveSession, discardLiveSession, endLiveSession, checkInLiveSession, keepGoingLiveSession]);
 }

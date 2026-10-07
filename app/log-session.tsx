@@ -23,7 +23,7 @@ import { hitPrefill, prefillFor } from '@/features/hits/followUp';
 import { beatenBy, recordToast } from '@/features/records/records';
 import { flybyAfter } from '@/features/flyby/flyby';
 import { localDay } from '@/features/practice/stats';
-import { liveDay, liveMinutes, livePlace, startClock } from '@/features/activity/liveSession';
+import { liveDay, liveMinutes, livePlace, liveTracker, startClock } from '@/features/activity/liveSession';
 import type { DetectedActivity, ID, PracticeSession, SessionPlayer, SessionTagStatus } from '@/data/types';
 import { confirm } from '@/lib/confirm';
 import { duration } from '@/lib/format';
@@ -210,6 +210,18 @@ function LogSession() {
   const [andPost, setAndPost] = useState(false);
   const [error, setError] = useState('');
 
+  // From a live session (Oct 6, owner: no double logging): your tracker's copy of the same game
+  // (liveTracker). One waiting is what Save logs, the live session's time with its heart rate and
+  // calories, so it is never offered again; held from Save on, so the sheet doesn't change as it goes.
+  // One already in your log is said, since saving again would count the game twice.
+  const liveTwins = useMemo(
+    () => (fromLive && currentUserId ? liveTracker(fromLive, detectedActivities, { me: currentUserId, flags }) : {}),
+    [fromLive, detectedActivities, currentUserId, flags],
+  );
+  const [heldTwin, setHeldTwin] = useState<DetectedActivity | null>(null);
+  const liveWith = heldTwin ?? liveTwins.waiting;
+  const liveDone = liveWith || saving ? undefined : liveTwins.logged;
+
   const firstOf = (id: ID) => users.find((u) => u.id === id)?.name.trim().split(/\s+/)[0] ?? 'They';
 
   /*
@@ -336,6 +348,7 @@ function LogSession() {
     setError('');
     const day = fresh ? activityDay(fresh) : fromLive ? liveDay(fromLive) : when === 'today' ? localDay(new Date()) : localDay(Date.now() - 86_400_000);
     if (fresh) setFrozen(fresh);
+    if (liveWith) setHeldTwin(liveWith);
     // Who you played goes with a match or a practice only.
     const tagging = canTagKind(kind) ? players : [];
     // From a hit with nobody tagged and nothing typed, its people's names are kept as private words, as before.
@@ -346,7 +359,8 @@ function LogSession() {
       const id = await actions.logSession({
         minutes, kind, won: shownWon === 'won' ? true : shownWon === 'lost' ? false : undefined, ...(sets ? { sets } : {}), opponent: typed, day,
         ...(kind === 'fitness' && workout ? { workout } : {}),
-        ...(fresh ? { activityId: fresh.id } : {}),
+        // A tracker's session, or the tracker's copy of a live one: logged as that session, which then counts as logged (migration 58).
+        ...(fresh ? { activityId: fresh.id } : liveWith ? { activityId: liveWith.id } : {}),
         // From a hit: where it was, as the note, and the court itself in your log (migration 130).
         ...(fromHit ? { note: `At ${fromHit.place}` } : {}),
         ...(fromHit?.placeId ? { courtId: fromHit.placeId } : {}),
@@ -366,7 +380,8 @@ function LogSession() {
       // Posting goes straight on to the new post, which only opens once the
       // save went through, and says "Posted" when shared. A toast there would
       // sit over its Share button for a few seconds.
-      if (post && fresh) next.current = fresh.id;
+      // From a live session your tracker also timed, the same: the post opens on the tracker's session, with its numbers to share.
+      if (post && (fresh || liveWith)) next.current = (fresh ?? liveWith)!.id;
       // From a live session, "Save and post": the new post opens with its stats, where a photo goes on.
       else if (post && fromLive) postLogged.current = id;
       // The server didn't keep the score (a practice's, before migration 136): said here too, never shown as saved.
@@ -400,6 +415,7 @@ function LogSession() {
       close();
     } catch (e) {
       setFrozen(null);
+      setHeldTwin(null);
       const said = e instanceof Error ? e.message : 'That session didn’t save. Try again.';
       // Logged already (on another phone, say): the sheet catches up and says so.
       if (said === 'Already logged.') void actions.refreshActivities();
@@ -434,11 +450,12 @@ function LogSession() {
   ) : fromHit ? (
     <SheetTitle title="How was the hit?" line={`${fromHit.place}${fromHit.who ? ` · with ${fromHit.who}` : ''}. Only you see this.`} lines={2} onClose={close} />
   ) : fromLive ? (
-    <SheetTitle title="Log your session" line={`${livePlaceName ? `${livePlaceName} · ` : ''}started ${startClock(fromLive)}. Only you see this.`} lines={2} onClose={close} />
+    <SheetTitle title="Log your session" line={`${livePlaceName ? `${livePlaceName} · ` : ''}started ${startClock(fromLive)}${liveWith ? ` · with ${fromWho(liveWith)}` : ''}. Only you see this.`} lines={2} onClose={close} />
   ) : (
     <SheetTitle title="Log a session" line="Counts toward your streak. Only you see it." onClose={close} />
   );
-  const numbers = fresh ? privateLine(fresh) : '';
+  // A tracker's numbers, yours alone: its own session's, or those of its copy of a live one, which go into your log with it.
+  const numbers = fresh ? privateLine(fresh) : liveWith ? privateLine(liveWith) : '';
   // Once the sheet is gone: the new post with this session's stats, in this page's place, or back where it was opened from.
   const dismissed = () => (next.current ? router.replace({ pathname: '/compose', params: { activity: next.current } })
     : postLogged.current ? router.replace({ pathname: '/compose', params: { session: postLogged.current } })
@@ -550,6 +567,8 @@ function LogSession() {
       ) : (
         <ScrollView ref={scroller} onScroll={onScroll} scrollEventThrottle={32} contentContainerStyle={formBody} keyboardShouldPersistTaps="handled">
           {gone ? <Text style={styles.notice}>That session is no longer here.</Text> : null}
+          {/* Your tracker's copy of this live session is in your log already: saving this too would count the game twice. */}
+          {liveDone ? <Text style={styles.notice}>{`This session is already in your log, from ${fromWho(liveDone)}. Saving it again counts it twice.`}</Text> : null}
           {numbers ? <Text style={styles.numbers}>{numbers}</Text> : null}
           {/* The session as it will go in your log, in the sessions' own look: what and when, then the time, big. */}
           {minutes && !fresh ? (

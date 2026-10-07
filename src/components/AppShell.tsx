@@ -7,6 +7,7 @@ import { NavBar } from './NavBar';
 import { setInstantExit } from '@/features/navigation/instantExit';
 import { UploadBar } from '@/components/UploadBar';
 import { LiveBar } from '@/components/session/LiveBar';
+import { StillPlaying } from '@/components/session/StillPlaying';
 import { WarmCurtain } from '@/components/WarmCurtain';
 import { TourOverlay } from '@/components/TourOverlay';
 import { isTourOpen, useTourOpen } from '@/features/tour/tourStore';
@@ -346,6 +347,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <MessageBanner enabled={!!currentUserId && !hideEverywhere && !onSplash && !detour} />
     {/* "How was the hit?", once, after a hit you played; only for a set-up account, never on the pages the app keeps to themselves. */}
     <HitFollowUp enabled={!!currentUserId && onboardingComplete && (remoteLoaded || !isSupabaseConfigured) && !hideEverywhere && !onSplash && !detour} />
+    {/* "Still playing?", when a live session's clock reaches three hours: the same note, on the same terms. */}
+    <StillPlaying enabled={!!currentUserId && onboardingComplete && !hideEverywhere && !onSplash && !detour} />
     {/* The splash curtain, from the splash's hand-over until the page the app opens on has drawn (see warmup). */}
     {!curtainDown && !!currentUserId && !hideEverywhere && (onSplash || isStartTab(pathname)) ? <WarmCurtain /> : null}
     {/* The first-run tour: over the bar, so it can light the bar's own buttons. */}

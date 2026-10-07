@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import type { DetectedActivity, HitRequest, ID, PracticeSession, User } from '@/data/types';
+import type { DetectedActivity, HitRequest, ID, LiveSession, PracticeSession, User } from '@/data/types';
+import { liveSpan } from '@/features/activity/liveSession';
 import { sourceOn } from '@/features/activity/recent';
 import { isTennisActivity } from '@/features/activity/workouts';
 import type { TennisFlags } from '@/features/activity/flags';
@@ -42,11 +43,26 @@ export function trackerFor(h: HitRequest, { me, activities, flags }: { me: ID; a
 }
 
 /**
+ * A session you started live (Start to Finish, Oct 6) that ran during the
+ * hit, in the same window as a tracker's copy (trackerFor): the hit was
+ * timed there, so it is that session's to log, and "How was the hit?" never
+ * asks about it as well (owner: no double logging). Once that session is
+ * logged, the log itself stands for the hit, as any log since it started does.
+ */
+export function liveCovers(h: HitRequest, live: LiveSession | null | undefined, me: ID, now = Date.now()): boolean {
+  if (!live || live.userId !== me) return false;
+  const { from, to } = liveSpan(live, now);
+  const start = Date.parse(h.startsAt);
+  return from < start + 3 * 3_600_000 && to > start - 30 * 60_000;
+}
+
+/**
  * The hits to ask about now, newest first: over, played, from today or
  * yesterday, not called off, not asked about on this device, with nothing
- * logged since they started, and not already logged from your tracker.
+ * logged since they started, not already logged from your tracker, and not
+ * timed by a live session of yours that is still waiting to be logged.
  */
-export function dueHits(hits: HitRequest[], { me, sessions, activities, flags, asked, now = Date.now() }: { me: ID; sessions: PracticeSession[]; activities: DetectedActivity[]; flags: TennisFlags; asked: Set<ID>; now?: number }): HitRequest[] {
+export function dueHits(hits: HitRequest[], { me, sessions, activities, flags, asked, live, now = Date.now() }: { me: ID; sessions: PracticeSession[]; activities: DetectedActivity[]; flags: TennisFlags; asked: Set<ID>; live?: LiveSession | null; now?: number }): HitRequest[] {
   const days = [localDay(now), localDay(now - 86_400_000)];
   return hits
     .filter((h) => {
@@ -56,6 +72,7 @@ export function dueHits(hits: HitRequest[], { me, sessions, activities, flags, a
       const day = localDay(h.startsAt);
       if (!days.includes(day)) return false;
       if (trackerFor(h, { me, activities, flags })?.status === 'logged') return false;
+      if (liveCovers(h, live, me, now)) return false;
       return !sessions.some((s) => s.userId === me && s.day === day && Date.parse(s.createdAt) >= Date.parse(h.startsAt));
     })
     .sort((a, b) => b.startsAt.localeCompare(a.startsAt));
