@@ -1358,6 +1358,10 @@ function Home({ scope, topRow, paused, onChrome }: {
         <View style={styles.endTile}><MarkDraw size={30} /></View>
         <Text style={styles.endTitle}>You're all caught up.</Text>
         <Text style={styles.endBody}>That's every session from you and the people you follow. Log your next one after you play.</Text>
+        {/* And the way to do it, right here (Oct 6, owner: "it should say log an activity … or it could say both"). */}
+        <View style={styles.endActions}>
+          <Button label="Log an activity" onPress={() => router.push('/log-session')} full />
+        </View>
       </View>
     </View>
   );
