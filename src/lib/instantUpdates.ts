@@ -24,7 +24,7 @@ const QUIET_AFTER_POST_MS = 2 * 60_000;
  * the Google sheet was open threw away a new player's sign-in, and they had
  * to start again from the welcome page (Oct 1).
  */
-const BUSY_PAGES = ['/sign-in', '/birthday', '/agree', '/onboarding', '/auto-log', '/first-move', '/compose', '/ask', '/hit', '/edit-post', '/edit-profile', '/log-session', '/pick-session', '/court-report', '/court-now', '/hit-request/new', '/comments', '/session-stats', '/who-played', '/health-share', '/ask-coach', '/coach-apply', '/pick-location', '/tennis-sheet', '/edit-gear'];
+const BUSY_PAGES = ['/sign-in', '/birthday', '/agree', '/onboarding', '/auto-log', '/first-move', '/compose', '/ask', '/hit', '/edit-post', '/edit-profile', '/log-session', '/start-session', '/pick-session', '/court-report', '/court-now', '/hit-request/new', '/comments', '/session-stats', '/who-played', '/health-share', '/ask-coach', '/coach-apply', '/pick-location', '/tennis-sheet', '/edit-gear'];
 
 /**
  * Whether a restart now would throw something away: a post or Instant still

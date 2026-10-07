@@ -8,8 +8,7 @@ import { Toggle } from '@/components/ui';
 import { Section, SheetTitle, formBody } from '@/components/sheet/SheetForm';
 import type { CourtAccess, CourtNow } from '@/data/types';
 import { isMapCourtId } from '@/features/places/courtName';
-import { notKnownAdult } from '@/features/players/age';
-import { canChooseVisibility } from '@/features/players/mapPrivacy';
+import { canCheckIn, seenByOnMap } from '@/features/players/mapPrivacy';
 import { NOW_ICON, NOW_LABEL, nowStatus, playingLine } from '@/features/players/courtSummary';
 import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
@@ -55,9 +54,9 @@ export default function CourtNowSheet() {
   const access: CourtAccess = said && said !== 'unknown' ? said : ACCESS.includes(params.access ?? '') ? (params.access as CourtAccess) : 'unknown';
   // A teen never checks in: their spot is never put on the map for anyone.
   // Nor does anyone at a club's or someone's home court.
-  const canCheckIn = !!currentUser && !notKnownAdult(currentUser) && access !== 'members' && access !== 'private';
+  const checkInHere = canCheckIn(currentUser, access);
   // Who sees you here follows who can see you on the map, once you have said (migration 63).
-  const seenBy = canChooseVisibility(mapLive, currentUser, teenMap) ? mapVisibility ?? null : null;
+  const seenBy = seenByOnMap(mapLive, currentUser, teenMap, mapVisibility);
   const hereNote = !locationEnabled ? 'Turn on Location to check in.'
     : seenBy === 'none' ? 'You chose Only me on the map, so no one sees you here.'
       : seenBy === 'nearby' ? 'For 2 hours. Players nearby see you on this court.'
@@ -71,7 +70,7 @@ export default function CourtNowSheet() {
     const problem = await actions.reportCourtNow(courtId, status);
     setBusy(false);
     if (problem) { setError(problem); return; }
-    if (canCheckIn) { setThanks(status); return; }
+    if (checkInHere) { setThanks(status); return; }
     showToast({ title: 'Thanks', body: `${NOW_LABEL[status]}, for the next 90 minutes.`, icon: 'checkmark-circle-outline' });
     setCloseSignal((n) => n + 1);
   };
@@ -108,7 +107,7 @@ export default function CourtNowSheet() {
             <Text style={styles.playing}>{playing}</Text>
           </View>
         ) : null}
-        {canCheckIn ? (
+        {checkInHere ? (
           <Section title="Playing here?">
             <View style={styles.hereRow}>
               <View style={{ flex: 1, gap: 2 }}>

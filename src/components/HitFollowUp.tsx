@@ -14,9 +14,9 @@ import { useAnyUploading } from '@/lib/uploads';
 import { useApp } from '@/store/AppContext';
 
 /** Pages where someone is writing or posting: the question waits until they are done. */
-const BUSY = new Set(['/compose', '/edit-post', '/ask', '/ask-coach', '/log-session', '/pick-session', '/session-tag', '/pick-location', '/court-report', '/court-now', '/map-visibility', '/open-to-hit', '/hit-request/new', '/hit', '/comments', '/session-stats', '/who-played', '/health-share', '/tennis-sheet']);
-/** The inbox and every chat: the note would sit over a chat's header and the inbox's title, mid-conversation. */
-const isBusy = (path: string) => BUSY.has(path) || path === '/messages' || path.startsWith('/messages/');
+const BUSY = new Set(['/compose', '/edit-post', '/ask', '/ask-coach', '/log-session', '/start-session', '/live-session', '/pick-session', '/session-tag', '/pick-location', '/court-report', '/court-now', '/map-visibility', '/open-to-hit', '/hit-request/new', '/hit', '/comments', '/session-stats', '/who-played', '/health-share', '/tennis-sheet']);
+/** The inbox and every chat: the note would sit over a chat's header and the inbox's title, mid-conversation. (Still playing? waits the same way.) */
+export const isBusy = (path: string) => BUSY.has(path) || path === '/messages' || path.startsWith('/messages/');
 /** A moment after the way is clear, so it never lands on the app's own opening notes. */
 const SETTLE_MS = 2500;
 /** It stays up this long (a flick or a tap puts it away sooner): long enough to be noticed on a page you are looking at. */
@@ -42,7 +42,7 @@ const SEEN_MS = 5000;
  * .web twin.
  */
 export function HitFollowUp({ enabled }: { enabled: boolean }) {
-  const { currentUserId, hitRequests, sessions, detectedActivities, users, actions } = useApp();
+  const { currentUserId, hitRequests, sessions, detectedActivities, users, actions, liveSession } = useApp();
   const pathname = usePathname();
   const touring = useTourBusy();
   const uploading = useAnyUploading();
@@ -95,7 +95,8 @@ export function HitFollowUp({ enabled }: { enabled: boolean }) {
     return () => clearTimeout(t);
   }, [known, enabled, currentUserId, now]);
 
-  const due = enabled && currentUserId && asked && flags ? dueHits(recent, { me: currentUserId, sessions, activities: detectedActivities, flags, asked, now }) : [];
+  // A hit timed by a live session of yours (Start to Finish) is that session's to log: never asked about as well.
+  const due = enabled && currentUserId && asked && flags ? dueHits(recent, { me: currentUserId, sessions, activities: detectedActivities, flags, asked, live: liveSession, now }) : [];
   const clear = enabled && curtainDown && !touring && !uploading && !isBusy(pathname);
   const first = due[0];
 

@@ -157,14 +157,26 @@ export function Toast() {
               </Pressable>
               {toast.stat ? <Stat value={toast.stat.value} from={toast.stat.from} label={toast.stat.label} token={toast.id} /> : null}
               {/* Its own button beside the words, not part of them, so a tap on
-                  the words still only opens what the toast is about. */}
+                  the words still only opens what the toast is about. A question
+                  with two answers has a quieter one first ("Keep going · Finish"). */}
+              {action && toast.secondary ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`${toast.secondary.label}: ${toast.title}`}
+                  hitSlop={{ top: 6, bottom: 6 }}
+                  onPress={() => { hide('action'); toast.secondary?.onPress(); }}
+                  style={({ pressed }) => [styles.secondary, pressed && styles.actionPressed]}
+                >
+                  <Text style={styles.secondaryLabel}>{toast.secondary.label}</Text>
+                </Pressable>
+              ) : null}
               {action ? (
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={`${action.label}: ${toast.title}`}
                   hitSlop={{ top: 6, bottom: 6, right: 6 }}
                   onPress={() => { hide('action'); action.onPress(); }}
-                  style={({ pressed }) => [styles.action, pressed && styles.actionPressed]}
+                  style={({ pressed }) => [styles.action, toast.secondary && styles.actionAfterSecondary, pressed && styles.actionPressed]}
                 >
                   <Text style={styles.actionLabel}>{action.label}</Text>
                 </Pressable>
@@ -244,6 +256,10 @@ const styleDefinitions = StyleSheet.create({
   action: { alignSelf: 'stretch', justifyContent: 'center', paddingLeft: spacing.md, paddingRight: 16 },
   actionPressed: { opacity: 0.55 },
   actionLabel: { ...typography.smallStrong, color: colors.brand, letterSpacing: -0.1 },
+  // The quieter of two answers, in the words' own grey, a little apart from the brand one after it.
+  secondary: { alignSelf: 'stretch', justifyContent: 'center', paddingLeft: spacing.md, paddingRight: spacing.xs },
+  secondaryLabel: { ...typography.smallStrong, color: colors.textMuted, letterSpacing: -0.1 },
+  actionAfterSecondary: { paddingLeft: spacing.sm },
   words: { flexShrink: 1, alignItems: 'flex-start' },
   title: { ...typography.smallStrong, color: colors.text, letterSpacing: -0.1 },
   body: { ...typography.caption, fontSize: 12, letterSpacing: 0, color: colors.textMuted, marginTop: 1 },

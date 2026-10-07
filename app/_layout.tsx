@@ -107,6 +107,9 @@ export default function RootLayout() {
           <Stack.Screen name="session-tag" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
           <Stack.Screen name="court-report" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
           <Stack.Screen name="court-now" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
+          {/* Start a session (where and what, then Start) and the live session's own page, its clock big: sheets over the page they came from (DragSheet). */}
+          <Stack.Screen name="start-session" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
+          <Stack.Screen name="live-session" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
           {/* Flyby's list, "At Alder Park today" (migration 130): a sheet over the page it came from (DragSheet). */}
           <Stack.Screen name="flyby" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
           <Stack.Screen name="map-visibility" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />

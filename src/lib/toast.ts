@@ -28,6 +28,12 @@ export interface ToastMessage {
    */
   action?: { label: string; onPress: () => void };
   /**
+   * A quieter second button just before `action`, for a question with two
+   * answers ("Still playing? · Keep going · Finish"). Tapping it runs
+   * `onPress` and closes the toast, as `action` does.
+   */
+  secondary?: { label: string; onPress: () => void };
+  /**
    * A note that has to be read, not glanced at: why something was refused.
    * It stays up much longer, its words wrap onto more lines instead of being
    * cut off with "…", and a tap puts it away once read.

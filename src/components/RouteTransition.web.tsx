@@ -17,6 +17,9 @@ if (isDesktopBrowser()) SHEETS.add('/messages/new');
 // A court's own two sheets ("Add what you know", "How is it right now?") sit over its page or card the same way.
 SHEETS.add('/court-report');
 SHEETS.add('/court-now');
+// Start a session, and the live session's page, sit over the page they came from the same way.
+SHEETS.add('/start-session');
+SHEETS.add('/live-session');
 // "Who can see you on the map?" sits over the map or Find Players the same way.
 SHEETS.add('/map-visibility');
 // So does Open to hit's hold-to-edit sheet, over Find Players.

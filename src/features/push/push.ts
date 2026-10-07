@@ -10,6 +10,7 @@ import { goHome } from '@/lib/goBack';
 import { heardAlert } from '@/features/messages/incoming';
 import { isChatInFront } from '@/features/messages/chatInFront';
 import { setUpNotificationChannels } from '@/features/push/channels';
+import { STILL_PLAYING_ALERT } from '@/features/activity/liveSession';
 
 /**
  * Push notifications: alerts on the phone's lock screen for likes, replies,
@@ -36,6 +37,10 @@ if (Platform.OS !== 'web') {
       const href = typeof data?.href === 'string' ? data.href : '';
       const chat = href.startsWith('/messages/') ? href.slice('/messages/'.length).split(/[/?#]/)[0] : '';
       if (chat && heardAlert(chat, title ?? '', body ?? '')) {
+        return { shouldShowBanner: false, shouldShowList: false, shouldPlaySound: false, shouldSetBadge: false };
+      }
+      // "Still playing?" with the app open: the app's own note asks it (components/session/StillPlaying), never the phone's as well.
+      if (notification.request.identifier === STILL_PLAYING_ALERT) {
         return { shouldShowBanner: false, shouldShowList: false, shouldPlaySound: false, shouldSetBadge: false };
       }
       return { shouldShowBanner: true, shouldShowList: true, shouldPlaySound: false, shouldSetBadge: false };

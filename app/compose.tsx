@@ -63,6 +63,7 @@ import type { TaggedCourt } from '@/data/types';
 import { colors, radius, spacing, typography, font } from '@/theme';
 import { challengeFor } from '@/features/challenge/weekly';
 import { goHome } from '@/lib/goBack';
+import { livePlace, liveState, startClock } from '@/features/activity/liveSession';
 import { useRevealOnFocus } from '@/lib/keyboardScroll';
 import { useAndroidBack } from '@/lib/androidBack';
 
@@ -112,7 +113,7 @@ type Stage = 'choose' | 'library' | 'edit' | 'form';
  */
 export default function Compose() {
   const styles = useThemedStyles(styleDefinitions);
-  const { actions, posts, stories, currentUserId, currentUser, detectedCoords, lastSeen, locationEnabled, detectedActivities, sessions, sessionTags, users, hitRequests, blockedIds, feedGroups, feedGroupsOn } = useApp();
+  const { actions, posts, stories, currentUserId, currentUser, detectedCoords, lastSeen, locationEnabled, detectedActivities, sessions, sessionTags, users, hitRequests, blockedIds, feedGroups, feedGroupsOn, liveSession } = useApp();
 
   // The story rail opens this straight at the library with ?mode=story.
   const params = useLocalSearchParams<{ mode?: string; shot?: string; challenge?: string; courtId?: string; courtName?: string; lat?: string; lng?: string; activity?: string; session?: string; hit?: string; group?: string; trim?: string }>();
@@ -249,12 +250,15 @@ export default function Compose() {
   // the choices under them scroll if they still don't fit. On a short
   // screen (an iPhone SE) the cards are a little tighter, and on a shorter
   // one (a small Android) tighter again, with smaller icons, so they all fit.
+  // Since Start a session joined them as a fifth card (Oct 6), "short" means
+  // anything shorter than a big iPhone's screen, so Log a session still shows
+  // under them without scrolling on an everyday phone.
   // A challenge entry's one card is left exactly as it was.
   const { height: windowH } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const menuMaxH = Math.max(320, windowH - insets.top - insets.bottom - 40);
-  const tight = windowH < 760 && !entering;
-  const tighter = windowH < 700 && !entering;
+  const tight = windowH < 950 && !entering;
+  const tighter = windowH < 760 && !entering;
   const choiceIcon = tighter ? 24 : 28;
   const navigation = useNavigation();
   const closing = useRef(false);
@@ -946,22 +950,35 @@ export default function Compose() {
     <Reanimated.View style={[styles.choiceSheet, tight && styles.choiceSheetTight, { maxHeight: menuMaxH }, popStyle]}>
       <View style={styles.choiceHeader}><Text style={styles.choiceTitle}>{entering ? challenge.title : 'Create'}</Text><Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={closeMenu} hitSlop={10}><Ionicons name="close" size={24} color={colors.text}/></Pressable></View>
       <ScrollView style={styles.choiceScroll} contentContainerStyle={[styles.choiceList, tight && styles.choiceListTight]} bounces={false} showsVerticalScrollIndicator={false}>
-      <Reanimated.View entering={arrive(0)}><Pressable accessibilityRole="button" accessibilityLabel={entering ? `Choose your clip for the ${challenge.title} challenge` : 'Create a clip'} onPress={() => { setMode('clip'); void openDevice('video'); }} style={[styles.choiceOption, tight && styles.choiceOptionTight, tighter && styles.choiceOptionTighter, entering && styles.choiceChallenge]}>
+      {/* Start a session (Oct 6, owner: Strava's Start and Finish; the one players use most): first, a card like the
+          others. While one is going it opens that one instead; finished and not logged yet, its log.
+          Someone not known to be an adult never checks in (mapPrivacy.canCheckIn), so theirs promises only the timer. */}
+      {entering ? null : <Reanimated.View entering={arrive(0)}><Pressable
+        accessibilityRole="button"
+        accessibilityLabel={!liveSession ? (adult ? 'Start a session. A timer, and a check-in at your court' : 'Start a session. A timer, Start to Finish') : liveState(liveSession) === 'finished' ? 'Log your finished session' : 'Session in progress. Open it'}
+        onPress={() => (!liveSession ? router.replace('/start-session') : liveState(liveSession) === 'finished' ? router.replace({ pathname: '/log-session', params: { live: '1' } }) : router.replace('/live-session'))}
+        style={[styles.choiceOption, tight && styles.choiceOptionTight, tighter && styles.choiceOptionTighter]}
+      >
+        <Ionicons name={liveSession ? 'radio-button-on' : 'stopwatch-outline'} size={choiceIcon} color={liveSession ? colors.open : colors.textMuted}/>
+        <Text style={styles.choiceLabel}>{!liveSession ? 'Start a session' : liveState(liveSession) === 'finished' ? 'Log your session' : 'Session in progress'}</Text>
+        <Text style={styles.note}>{!liveSession ? (adult ? 'Time your hit and check in at the court.' : 'Time your hit, from Start to Finish.') : [liveState(liveSession) === 'finished' ? 'Finished' : `Started ${startClock(liveSession)}`, livePlace(liveSession)].filter(Boolean).join(' · ')}</Text>
+      </Pressable></Reanimated.View>}
+      <Reanimated.View entering={arrive(entering ? 0 : 1)}><Pressable accessibilityRole="button" accessibilityLabel={entering ? `Choose your clip for the ${challenge.title} challenge` : 'Create a clip'} onPress={() => { setMode('clip'); void openDevice('video'); }} style={[styles.choiceOption, tight && styles.choiceOptionTight, tighter && styles.choiceOptionTighter, entering && styles.choiceChallenge]}>
         {preparing === 'video' ? <PreparingRing size={choiceIcon} done={prepDone} /> : <Ionicons name={entering ? 'trophy-outline' : 'videocam-outline'} size={choiceIcon} color={entering ? colors.brand : colors.textMuted}/>}<Text style={styles.choiceLabel}>{entering ? 'Choose your clip' : 'Clip'}</Text><Text style={styles.note}>{preparing === 'video' ? 'Getting your video ready — shrinking it so it posts fast.' : entering ? `A video from your phone. #${challenge.tag} is already in the caption.` : 'Share a video from your device.'}</Text>
       </Pressable></Reanimated.View>
       {/* Entering the challenge: the clip is the only way in, so nothing else is offered. */}
-      {entering ? null : <Reanimated.View entering={arrive(1)}><Pressable accessibilityRole="button" accessibilityLabel="Create a post" onPress={() => { setMode('post'); void openDevice('all'); }} style={[styles.choiceOption, tight && styles.choiceOptionTight, tighter && styles.choiceOptionTighter]}>
+      {entering ? null : <Reanimated.View entering={arrive(2)}><Pressable accessibilityRole="button" accessibilityLabel="Create a post" onPress={() => { setMode('post'); void openDevice('all'); }} style={[styles.choiceOption, tight && styles.choiceOptionTight, tighter && styles.choiceOptionTighter]}>
         {preparing === 'all' ? <PreparingRing size={choiceIcon} done={prepDone} /> : <Ionicons name="images-outline" size={choiceIcon} color={colors.textMuted}/>}<Text style={styles.choiceLabel}>Post</Text><Text style={styles.note}>{preparing === 'all' ? 'Getting it ready…' : 'Choose from your photos and videos.'}</Text>
       </Pressable></Reanimated.View>}
       {pickError ? <Text style={styles.pickError}>{pickError}</Text> : null}
-      {entering ? null : <Reanimated.View entering={arrive(2)}><Pressable accessibilityRole="button" accessibilityLabel="Take an Instant" onPress={() => router.replace('/hit')} style={[styles.choiceOption, tight && styles.choiceOptionTight, tighter && styles.choiceOptionTighter]}>
+      {entering ? null : <Reanimated.View entering={arrive(3)}><Pressable accessibilityRole="button" accessibilityLabel="Take an Instant" onPress={() => router.replace('/hit')} style={[styles.choiceOption, tight && styles.choiceOptionTight, tighter && styles.choiceOptionTighter]}>
         <Ionicons name="camera-outline" size={choiceIcon} color={colors.textMuted}/><Text style={styles.choiceLabel}>Instant</Text><Text style={styles.note}>A photo after you play. Up on the feed for a day.</Text>
       </Pressable></Reanimated.View>}
-      {entering ? null : <Reanimated.View entering={arrive(3)}><Pressable accessibilityRole="button" accessibilityLabel="Create a thread or question" onPress={() => router.replace('/ask')} style={[styles.choiceOption, tight && styles.choiceOptionTight, tighter && styles.choiceOptionTighter]}>
+      {entering ? null : <Reanimated.View entering={arrive(4)}><Pressable accessibilityRole="button" accessibilityLabel="Create a thread or question" onPress={() => router.replace('/ask')} style={[styles.choiceOption, tight && styles.choiceOptionTight, tighter && styles.choiceOptionTighter]}>
         <Ionicons name="chatbubbles-outline" size={choiceIcon} color={colors.textMuted}/><Text style={styles.choiceLabel}>Thread or question</Text><Text style={styles.note}>Ask the community or start a conversation.</Text>
       </Pressable></Reanimated.View>}
-      {/* Logging is not posting: a quiet line under the four ways to post, private, for the streak. */}
-      {entering ? null : <Reanimated.View entering={arrive(4)}><Pressable accessibilityRole="button" accessibilityLabel="Log a session. Private, counts toward your streak" onPress={() => router.replace('/log-session')} style={({ pressed }) => [styles.choiceQuiet, pressed && { opacity: 0.6 }]}>
+      {/* Logging is not posting: a quiet line under the ways to post, private, for the streak. */}
+      {entering ? null : <Reanimated.View entering={arrive(5)}><Pressable accessibilityRole="button" accessibilityLabel="Log a session. Private, counts toward your streak" onPress={() => router.replace('/log-session')} style={({ pressed }) => [styles.choiceQuiet, pressed && { opacity: 0.6 }]}>
         <Ionicons name="add-circle-outline" size={20} color={colors.textMuted}/>
         <View style={styles.choiceQuietWords}><Text style={styles.choiceQuietLabel}>Log a session</Text><Text style={styles.note}>Private · counts toward your streak</Text></View>
         <Ionicons name="chevron-forward" size={16} color={colors.textFaint}/>
