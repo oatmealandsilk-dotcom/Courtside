@@ -102,6 +102,9 @@ const ICON = 26;
  */
 const SHORT_ROOM = 120;
 
+/** A session card's height as a share of its width at most: 4:3, sideways. */
+const SIDEWAYS = 3 / 4;
+
 function PostCardInner({
   onComment,
   post,
@@ -199,18 +202,20 @@ function PostCardInner({
       ) : post.kind === 'clip' ? <MediaPlaceholder label={post.mediaLabel ?? 'Clip'} seed={post.id} portrait /> : null}
       {sessionCard ? (
         <View
-          // Asks for the card's full 4:5 height and gives way first when the
-          // page is short (the feed's page is a fixed height), so the caption
-          // and the buttons under it always stay on screen; the card is then
-          // drawn smaller, still 4:5, centred.
-          style={slot.w ? [styles.cardSlot, { height: Math.round(Math.min(slot.w, 420) * 1.25) }] : [styles.cardSlot, styles.cardWait]}
+          // Sideways, as wide as the post's words (Oct 6, owner: a tall card
+          // squeezed onto a short page "looks a bit funky ... It will be
+          // sideways"). Asks for a 4:3 box and gives way first when the page
+          // is short (the feed's page is a fixed height), so the caption and
+          // the buttons under it always stay on screen; the card then gets
+          // wider than 4:3 and draws its numbers to fit, still full width.
+          style={slot.w ? [styles.cardSlot, { height: Math.round(slot.w * SIDEWAYS) }] : [styles.cardSlot, styles.cardWait]}
           onLayout={(e) => {
             const w = Math.floor(e.nativeEvent.layout.width);
             const h = Math.floor(e.nativeEvent.layout.height);
             if (w > 0 && (w !== slot.w || h !== slot.h)) setSlot({ w, h });
           }}
         >
-          {slot.w && slot.h ? <SessionCard session={post.session!} width={Math.max(1, Math.min(slot.w, 420, Math.floor(slot.h * 0.8)))} play={play} hidden={blockedIds} onPress={openStats} /> : null}
+          {slot.w && slot.h ? <SessionCard session={post.session!} width={slot.w} height={Math.min(slot.h, Math.round(slot.w * SIDEWAYS))} play={play} hidden={blockedIds} onPress={openStats} /> : null}
         </View>
       ) : null}
       <Pressable onPress={onPress} style={styles.body}>
@@ -381,7 +386,7 @@ const styleDefinitions = StyleSheet.create({
   photo: { width: '100%', aspectRatio: 1, borderRadius: radius.lg },
   video: { width: '100%', borderRadius: radius.lg, overflow: 'hidden', backgroundColor: '#000' },
   cardSlot: { width: '100%', alignItems: 'center', justifyContent: 'center', flexShrink: 6, minHeight: 0, overflow: 'hidden' },
-  cardWait: { aspectRatio: 4 / 5 },
+  cardWait: { aspectRatio: 1 / SIDEWAYS },
   kindRow: {
     flexDirection: 'row',
     alignItems: 'center',
