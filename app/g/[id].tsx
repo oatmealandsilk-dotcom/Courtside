@@ -5,9 +5,12 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { Avatar, Button, EmptyState, Screen } from '@/components/ui';
 import { CourtSpinner } from '@/components/CourtSpinner';
+import { MenuSheet } from '@/components/MenuSheet';
+import { Tappable } from '@/components/Tappable';
 import type { FeedGroupCard } from '@/data/types';
 import { GroupTile } from '@/features/groups/GroupTile';
 import { openGroupFeed } from '@/features/groups/openGroupFeed';
+import { reportGroup } from '@/features/groups/reportGroup';
 import { confirm } from '@/lib/confirm';
 import { goBack } from '@/lib/goBack';
 import { publicRoute } from '@/features/share/publicRoute';
@@ -23,6 +26,7 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
  * leave. Invite opens a sheet (group-invite): the link, and people you follow
  * to send it to in a chat. Its admin also answers requests, removes people and
  * edits it (in a sheet, group-form, opened from Edit in the header).
+ * Anyone else can report it from the "…" in the header (App Review 1.2).
  */
 
 function GroupPage() {
@@ -36,6 +40,7 @@ function GroupPage() {
   const [card, setCard] = useState<FeedGroupCard | null | undefined>(undefined);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   // Asked once signed in (a link opened cold signs in first), after your own groups are read.
   // A request that didn't go through (no connection) is not "no such group": it says so, with Try again.
@@ -92,14 +97,21 @@ function GroupPage() {
   const ask = group ? group.ask : !!card?.ask;
 
   const members = `${count} ${count === 1 ? 'member' : 'members'}`;
-  const edit = admin ? (
+  // Its admin edits it; anyone else can report it (the same "…" sheet a profile has).
+  // From inside, the report names the group's admin; from outside the server works out who runs it.
+  const right = admin ? (
     <Pressable accessibilityRole="button" accessibilityLabel="Edit group" hitSlop={10} onPress={() => router.push({ pathname: '/group-form', params: { id } })} style={({ pressed }) => [styles.edit, pressed && styles.pillPressed]}>
       <Text style={styles.editText}>Edit</Text>
     </Pressable>
+  ) : currentUserId ? (
+    <Tappable accessibilityLabel="More options" onPress={() => setMenuOpen(true)} hitSlop={10} style={styles.more}>
+      <Ionicons name="ellipsis-horizontal" size={24} color={colors.text} />
+    </Tappable>
   ) : undefined;
+  const report = () => reportGroup(actions.reportUser, { id, name: title, description, ownerId: group?.members.find((m) => m.admin)?.id }, true);
 
   return (
-    <Screen title="Group" compactTitle onBack={() => goBack('/groups')} right={edit}>
+    <Screen title="Group" compactTitle onBack={() => goBack('/groups')} right={right}>
       <View style={styles.head}>
         <GroupTile name={title} look={group?.look ?? card?.look} size={88} />
         <Text style={styles.title} numberOfLines={2}>{title}</Text>
@@ -206,6 +218,7 @@ function GroupPage() {
           </Pressable>
         </>
       ) : null}
+      <MenuSheet visible={menuOpen} onClose={() => setMenuOpen(false)} title={title} items={[{ icon: 'flag-outline', label: 'Report group', danger: true, onPress: report }]} />
     </Screen>
   );
 }
@@ -248,6 +261,7 @@ const styleDefinitions = StyleSheet.create({
   pillText: { ...typography.smallStrong, color: colors.text },
   pillYes: { backgroundColor: colors.brand },
   pillYesText: { color: colors.brandInk },
+  more: { padding: 4 },
   // Edit, in the header: plain words in the brand colour.
   edit: { paddingHorizontal: 12, height: 32, borderRadius: radius.pill, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
   editText: { ...typography.smallStrong, color: colors.brand },

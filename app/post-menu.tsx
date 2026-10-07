@@ -18,6 +18,7 @@ import { notKnownAdult } from '@/features/players/age';
 import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { removedLine, thingWord } from '@/features/moderation/reasons';
 import { useReviewOf } from '@/features/moderation/RemovedNote';
+import { REPORT_NOT_SENT } from '@/features/moderation/reportThanks';
 import { canShareMediaStory, shareMediaToStory, type StoryMediaKind } from '@/features/share/mediaStory';
 import { stageSize } from '@/features/share/storyImage';
 import { StoryOverlayCanvas } from '@/components/share/StoryOverlay';
@@ -348,12 +349,15 @@ export default function PostMenu() {
     const blocked = blockedIds.includes(author.id);
     rows.push({ key: 'mute', icon: muted ? 'volume-high-outline' : 'volume-mute-outline', label: muted ? `Unmute @${author.handle}` : `Mute @${author.handle}`, note: muted ? undefined : 'You won’t see their posts. They aren’t told.', onPress: () => { actions.toggleMute(author.id); close(); } });
     // Asked first, as a comment's report is; the menu stays up behind the question and says thanks after.
-    dangerRows.push({ key: 'report', icon: 'flag-outline', label: 'Report', danger: true, onPress: () => ask(reportQuestion(isHit ? 'Instant' : post?.kind === 'clip' ? 'clip' : 'post', () => {
+    // The thanks only once it is in; if it didn't send, the note says so, with Try again.
+    const sendReport = () => {
       reported.current = { post, story };
-      actions.reportUser(author.id, `${isHit ? 'hit' : 'post'}:${item.id}`);
-      setReportedNow(true);
-      say(REPORT_THANKS, true);
-    })) });
+      void actions.reportUser(author.id, `${isHit ? 'hit' : 'post'}:${item.id}`).then((filed) => {
+        if (filed) { setReportedNow(true); say(REPORT_THANKS, true); return; }
+        say(`${REPORT_NOT_SENT.title}. ${REPORT_NOT_SENT.body}`, false, sendReport);
+      });
+    };
+    dangerRows.push({ key: 'report', icon: 'flag-outline', label: 'Report', danger: true, onPress: () => ask(reportQuestion(isHit ? 'Instant' : post?.kind === 'clip' ? 'clip' : 'post', sendReport)) });
     // Unblocking is one tap; blocking asks first and says what it does.
     dangerRows.push({ key: 'block', icon: 'ban-outline', label: blocked ? `Unblock @${author.handle}` : `Block @${author.handle}`, danger: !blocked, onPress: () => {
       if (blocked) { actions.toggleBlock(author.id); close(); return; }

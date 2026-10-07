@@ -918,14 +918,23 @@ export interface BetaInviteStatus { live: boolean; total: number; invited: numbe
 export type ReportedItemKind = 'post' | 'hit' | 'hit-request' | 'question' | 'answer' | 'comment' | 'coach-question' | 'coach-reply' | 'tip';
 const ITEM_KINDS: ReportedItemKind[] = ['post', 'hit', 'hit-request', 'question', 'answer', 'comment', 'coach-question', 'coach-reply', 'tip'];
 
+/**
+ * Reports about something the admin's card can't load by itself (Oct 6): a
+ * group, a coach's page, a review of a coach, and a court note, which is
+ * never named. Each card shows whose it is (when known) and the words the
+ * report carried (a group's name, a review's or note's words).
+ */
+export type ReportedOtherKind = 'group' | 'coach' | 'coach-review' | 'court-note';
+const OTHER_KINDS: ReportedOtherKind[] = ['group', 'coach', 'coach-review', 'court-note'];
+
 export interface AdminReport {
   id: ID;
   /** Who sent it; gone when they have since deleted their account (the report stays, migration 115). */
   reporterId?: ID;
   /** The account the report is about. */
   userId?: ID;
-  /** What was reported: a post, a hit, a thread, a reply, a comment, a coach question or reply, an account, or a chat. */
-  kind: ReportedItemKind | 'profile' | 'conversation' | 'ai-coach';
+  /** What was reported: a post, a hit, a thread, a reply, a comment, a coach question or reply, an account, a chat, a group, a coach's page or review, or a court note. */
+  kind: ReportedItemKind | ReportedOtherKind | 'profile' | 'conversation' | 'ai-coach';
   targetId?: ID;
   /** One message in a reported chat ("Report" on a message). */
   messageId?: ID;
@@ -2799,7 +2808,7 @@ export const remote = {
       const aiWords = kind === 'ai-reply' || kind === 'ai-plan' ? (r.target ?? '').slice(kind.length + 1) : undefined;
       return {
         id: r.id, reporterId: r.reporter_id ?? undefined, userId: r.target_user_id ?? undefined,
-        kind: aiWords !== undefined ? 'ai-coach' : (ITEM_KINDS as string[]).includes(kind) || kind === 'conversation' ? kind as AdminReport['kind'] : 'profile', targetId: aiWords === undefined ? id || undefined : undefined,
+        kind: aiWords !== undefined ? 'ai-coach' : (ITEM_KINDS as string[]).includes(kind) || (OTHER_KINDS as string[]).includes(kind) || kind === 'conversation' ? kind as AdminReport['kind'] : 'profile', targetId: aiWords === undefined ? id || undefined : undefined,
         // A message report's reason is only its id: the card marks the message itself.
         messageId, reason: messageId ? undefined : aiWords !== undefined ? `AI coach ${kind === 'ai-plan' ? 'week' : 'answer'}: “${aiWords}”` : r.reason || undefined,
         createdAt: r.created_at, status: (r.status ?? 'open') as AdminReport['status'], reviewedAt: r.reviewed_at ?? undefined,
@@ -3212,8 +3221,9 @@ export const remote = {
   async fetchMyReported(): Promise<ID[]> {
     const { data, error } = await need().rpc('my_reported_targets');
     if (error || !Array.isArray(data)) return [];
-    // An open hit ('hit-request') since migration 126, a tip since 128; before them the server never hands one back, and nothing changes.
-    return (data as unknown[]).map((t) => /^(?:post|hit|hit-request|question|answer|comment|coach-question|coach-reply|tip):(.+)$/.exec(String(t))?.[1]).filter((id): id is string => !!id);
+    // An open hit ('hit-request') since migration 126, a tip since 128, a coach review, a court note and a group since 145;
+    // before them the server never hands one back, and nothing changes.
+    return (data as unknown[]).map((t) => /^(?:post|hit|hit-request|question|answer|comment|coach-question|coach-reply|tip|coach-review|court-note|group):(.+)$/.exec(String(t))?.[1]).filter((id): id is string => !!id);
   },
   async fetchHits(me?: ID | null): Promise<HitRequest[] | null> {
     const { data, error } = await need().from('hit_requests').select('*, hit_joins(user_id)').eq('cancelled', false)

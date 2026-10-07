@@ -7,7 +7,9 @@ import { Avatar } from '@/components/ui';
 import { HitGlyph } from '@/components/HitGlyph';
 import type { CourtAccess, User } from '@/data/types';
 import { askToHit, openCourtNow, openCourtReview } from '@/features/players/courtLink';
-import { ACCESS_LABEL, NOW_ICON, nowStatus, playingLine, regularsLine, summarizeFacts } from '@/features/players/courtSummary';
+import { ACCESS_LABEL, NOW_ICON, courtNoteKey, nowStatus, playingLine, regularsLine, summarizeFacts } from '@/features/players/courtSummary';
+import { afterReport } from '@/features/moderation/reportThanks';
+import { confirmReport } from '@/lib/confirm';
 import type { CourtToFollow } from '@/store/courtLife';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
@@ -108,12 +110,25 @@ export function FollowHeart({ court, style, size = 18 }: { court: CourtToFollow;
  * weekday evenings · Some cracks (3 players)", the newest note (only ever
  * an adult's, never named), and Add what you know. Before anyone has said
  * anything, a single line asking.
+ *
+ * The note has a small flag to report it (App Review 1.2), asked first as
+ * every report is. Once reported it leaves your screen and the next newest
+ * shows. The database leaves out notes by anyone suspended or blocked
+ * either way (migration 145): the app is never told whose a note is.
  */
 export function CourtFactsLine({ courtId, name, note = true, lines }: { courtId: string; name: string; /** The newest note under the line. */ note?: boolean; lines?: number }) {
   const styles = useThemedStyles(styleDefinitions);
-  const { courtFacts, myCourtReviews } = useApp();
-  const said = summarizeFacts(courtFacts[courtId]);
+  const { courtFacts, myCourtReviews, reportedIds, currentUserId, actions } = useApp();
+  const facts = courtFacts[courtId];
+  const said = summarizeFacts(facts && reportedIds.length ? { ...facts, notes: facts.notes.filter((n) => !reportedIds.includes(courtNoteKey(courtId, n.text))) } : facts);
   const mine = !!myCourtReviews[courtId];
+  // Your own note (the newest may be yours) has no flag: Update yours is there for it.
+  const quoted = note ? said.note : undefined;
+  const canReport = !!quoted && !!currentUserId && myCourtReviews[courtId]?.notes?.trim() !== quoted.text.trim();
+  const reportNote = () => {
+    if (!quoted) return;
+    confirmReport('note', () => afterReport(actions.reportUser(null, `court-note:${courtNoteKey(courtId, quoted.text)}`, quoted.text)));
+  };
   const add = (
     <Text accessibilityRole="link" accessibilityLabel={mine ? `Update what you said about ${name}` : `Add what you know about ${name}`} onPress={() => openCourtReview(courtId, { name })} style={styles.link}>
       {mine ? 'Update yours' : 'Add what you know'}
@@ -125,7 +140,16 @@ export function CourtFactsLine({ courtId, name, note = true, lines }: { courtId:
   return (
     <View style={styles.facts}>
       <Text style={styles.factsLine} numberOfLines={lines}>{said.line}</Text>
-      {note && said.note ? <Text style={styles.quote} numberOfLines={2}>“{said.note.text}”</Text> : null}
+      {quoted ? (
+        <View style={styles.noteRow}>
+          <Text style={[styles.quote, styles.noteText]} numberOfLines={2}>“{quoted.text}”</Text>
+          {canReport ? (
+            <Pressable accessibilityRole="button" accessibilityLabel="Report this note" hitSlop={10} onPress={reportNote} style={({ pressed }) => [styles.noteFlag, pressed && styles.noteFlagPressed]}>
+              <Ionicons name="flag-outline" size={13} color={colors.textFaint} />
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
       <Text style={styles.factsQuiet}>{add}</Text>
     </View>
   );
@@ -184,6 +208,11 @@ const styleDefinitions = StyleSheet.create({
   factsLine: { ...typography.smallStrong, color: colors.text, lineHeight: 19 },
   factsQuiet: { ...typography.small, color: colors.textMuted, lineHeight: 19 },
   quote: { ...typography.small, color: colors.textMuted, lineHeight: 19 },
+  // The newest note, its report flag at the end of its first line.
+  noteRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
+  noteText: { flex: 1, minWidth: 0 },
+  noteFlag: { paddingTop: 3 },
+  noteFlagPressed: { opacity: 0.5 },
   link: { ...typography.smallStrong, color: colors.brand },
   regulars: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   faces: { flexDirection: 'row', alignItems: 'center' },

@@ -14,7 +14,7 @@ import { ChatPhotoImage, PhotoViewer } from '@/features/messages/ChatPhotoViews'
 import { confirm } from '@/lib/confirm';
 import { relativeTime } from '@/lib/format';
 import { reasonLabel } from '@/features/moderation/reasons';
-import type { ChatPhoto, TakedownKind, User } from '@/data/types';
+import type { ChatPhoto, ID, TakedownKind, User } from '@/data/types';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing, typography } from '@/theme';
 
@@ -28,9 +28,12 @@ const CHAT_PREVIEW = 8;
 const KIND_NAME: Record<AdminReport['kind'], string> = {
   post: 'Post', hit: 'Instant', 'hit-request': 'Open hit', question: 'Thread', answer: 'Reply', comment: 'Comment',
   'coach-question': 'Coach question', 'coach-reply': 'Coach reply', tip: 'Tip', profile: 'Profile', conversation: 'Chat', 'ai-coach': 'AI coach',
+  group: 'Group', coach: 'Coach page', 'coach-review': 'Coach review', 'court-note': 'Court note',
 };
-/** Things a report can point at, besides an account, a chat or something the AI coach wrote. */
-const isItem = (kind: AdminReport['kind']): kind is ReportedItemKind => kind !== 'profile' && kind !== 'conversation' && kind !== 'ai-coach';
+/** Reports whose card shows the account and the words the report carried, with nothing more to load (remote.ReportedOtherKind). */
+const NOT_LOADED = new Set<AdminReport['kind']>(['profile', 'conversation', 'ai-coach', 'group', 'coach', 'coach-review', 'court-note']);
+/** Things a report can point at, besides an account, a chat, something the AI coach wrote, a group, a coach's page or review, or a court note. */
+const isItem = (kind: AdminReport['kind']): kind is ReportedItemKind => !NOT_LOADED.has(kind);
 
 /** The kind to take down for a reported thing, or null for one that can't be taken down (an open hit, a tip, an account). */
 function takedownKindOf(report: AdminReport, item: ReportedItem | null | undefined): TakedownKind | null {
@@ -48,7 +51,7 @@ function takedownKindOf(report: AdminReport, item: ReportedItem | null | undefin
  * board for a tip, or the account for a profile, or for something since
  * deleted (the card then shows the person). Null when there is nowhere to go.
  */
-function whereTo(report: AdminReport, item: ReportedItem | null | undefined): Href | null {
+function whereTo(report: AdminReport, item: ReportedItem | null | undefined, coachOfReview?: ID): Href | null {
   const id = report.targetId;
   if (isItem(report.kind) && item === null) return report.userId ? `/user/${report.userId}` : null;
   switch (report.kind) {
@@ -62,6 +65,12 @@ function whereTo(report: AdminReport, item: ReportedItem | null | undefined): Hr
     case 'coach-reply': return id && item?.parentId ? { pathname: '/coach-question/[id]', params: { id: item.parentId, at: id } } : null;
     case 'tip': return id ? { pathname: '/tips', params: { at: id } } : '/tips';
     case 'profile': return report.userId ? `/user/${report.userId}` : null;
+    // A group's page (an admin who isn't in it sees its name, photo and about line), a coach's page, a court's page (for a note on it).
+    case 'group': return id ? `/g/${id}` : null;
+    case 'coach': return id ? `/coach/${id}` : null;
+    case 'court-note': return id ? `/court/${id}` : null;
+    // A review sits on its coach's page, when this phone has it; otherwise its writer's profile.
+    case 'coach-review': return coachOfReview ? `/coach/${coachOfReview}` : report.userId ? `/user/${report.userId}` : null;
     default: return null;
   }
 }
@@ -93,7 +102,7 @@ const SUSPEND_NOTE = 'They can’t post, comment, reply or message until you uns
  */
 export default function AdminReports() {
   const styles = useThemedStyles(styleDefinitions);
-  const { users, currentUser, actions } = useApp();
+  const { users, currentUser, coachReviews, actions } = useApp();
   const [tab, setTab] = useState<Tab>('open');
   // Null while the first load is on its way; 'failed' when it could not load (never shown as "nothing to review").
   const [reports, setReports] = useState<AdminReport[] | null | 'failed'>(null);
@@ -262,7 +271,7 @@ export default function AdminReports() {
               </View>
             );
           }
-          const target = whereTo(report, item);
+          const target = whereTo(report, item, report.kind === 'coach-review' ? coachReviews.find((r) => r.id === report.targetId)?.coachId : undefined);
           const kind = takedownKindOf(report, item);
           const takeDownButton = kind && item && report.targetId ? (
             item.removed

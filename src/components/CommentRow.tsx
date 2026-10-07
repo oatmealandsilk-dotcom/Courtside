@@ -14,7 +14,7 @@ import { RemovedActions, RemovedNote } from '@/features/moderation/RemovedNote';
 import { confirm, reportQuestion, useScopedConfirm } from '@/lib/confirm';
 import { relativeTime } from '@/lib/format';
 import * as haptics from '@/lib/haptics';
-import { thankForReport } from '@/features/moderation/reportThanks';
+import { afterReport } from '@/features/moderation/reportThanks';
 import { useApp } from '@/store/AppContext';
 import { colors, spacing, typography } from '@/theme';
 import { openPlayer } from '@/features/navigation/openPlayer';
@@ -99,8 +99,7 @@ export function CommentRow({ comment, big = false, reply = false, onPressBody, o
   // Someone else's comment: hold it to report it. It leaves your screens at once.
   const canReport = !!currentUserId && comment.authorId !== currentUserId;
   const sendReport = () => {
-    actions.reportUser(comment.authorId, `comment:${comment.id}`);
-    thankForReport(who, actions);
+    afterReport(actions.reportUser(comment.authorId, `comment:${comment.id}`), who, actions);
   };
   const askReport = () => ask(reportQuestion('comment', sendReport));
   const report = canReport ? () => {

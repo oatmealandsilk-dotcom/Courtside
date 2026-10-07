@@ -653,12 +653,20 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions {
   isBlocked: (userId: ID) => boolean;
   toggleAlerts: (userId: ID, quiet?: boolean) => void;
   /**
-   * Reports someone to CourtSide, about one thing of theirs when `reason`
+   * Reports someone to CourtSide, about one thing of theirs when `target`
    * names it ("post:<id>", "hit:<id>", "question:<id>", "answer:<id>",
-   * "comment:<id>", "coach-question:<id>", "coach-reply:<id>"). That thing
-   * leaves your screens at once; the server works out whose it is.
+   * "comment:<id>", "coach-question:<id>", "coach-reply:<id>", "tip:<id>",
+   * "coach-review:<id>", "court-note:<court>:<key>"), or an account
+   * ("profile:<id>"), a group ("group:<id>") or a coach's page
+   * ("coach:<id>"). That thing leaves your screens at once; the server works
+   * out whose it is. `userId` is whose it is, when the app knows (a group
+   * seen from outside, or a court note, names nobody). `note` is what the
+   * admin's card says about it (a group's name, a note's words).
+   *
+   * Resolves whether the report reached CourtSide, so the thanks shows only
+   * then. When it didn't (no connection), what was hidden comes back.
    */
-  reportUser: (userId: ID, reason: string) => void;
+  reportUser: (userId: ID | null | undefined, target: string, note?: string) => Promise<boolean>;
   /** A suggestion from an early user, on the board for everyone to vote on. */
   submitTip: (body: string) => Promise<void>;
   voteTip: (tipId: ID, direction: 1 | -1) => void;
@@ -1528,8 +1536,11 @@ const nextId = (prefix: string): string => {
 };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-/** A report about one thing: what it is and its id. The same list the server reads (stamp_report, migration 115; an open hit, 'hit-request', since 126; a tip since 128). */
-const REPORTED_TARGET = /^(?:post|hit|hit-request|question|answer|comment|coach-question|coach-reply|tip):(.+)$/;
+/**
+ * A report about one thing: what it is and its id. The same list the server reads (stamp_report, migration 115; an open hit, 'hit-request', since 126; a tip since 128),
+ * plus a coach review, a court note (its court and a key for its words) and a group (migration 145), each kept out of your sight on the screens that show them.
+ */
+const REPORTED_TARGET = /^(?:post|hit|hit-request|question|answer|comment|coach-question|coach-reply|tip|coach-review|court-note|group):(.+)$/;
 
 /**
  * The made-up players, posts and threads the app ships with so a demo is
@@ -7700,15 +7711,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
     });
   }, [requireUser]);
 
-  const reportUser = useCallback((userId: ID, reason: string) => {
-    // Nobody reports themselves (toggleBlock has the same check).
-    if (userId === stateRef.current.currentUserId) return;
-    haptics.commit();
-    // What was reported leaves your screens at once: a post, hit, thread, reply, comment or coach question or reply.
-    const target = REPORTED_TARGET.exec(reason)?.[1];
-    if (target) setState((prev) => (prev.reportedIds.includes(target) ? prev : { ...prev, reportedIds: [...prev.reportedIds, target] }));
+  const reportUser = useCallback((userId: ID | null | undefined, target: string, note = ''): Promise<boolean> => {
     const me = stateRef.current.currentUserId;
-    if (me && live(me)) void remote.insertReport(me, UUID.test(userId) ? userId : null, reason, '');
+    // Nobody reports themselves (toggleBlock has the same check).
+    if (userId && userId === me) return Promise.resolve(false);
+    haptics.commit();
+    // What was reported leaves your screens at once: a post, hit, thread, reply, comment, coach question or reply, tip, review, court note or group.
+    const hide = REPORTED_TARGET.exec(target)?.[1];
+    const fresh = !!hide && !stateRef.current.reportedIds.includes(hide);
+    if (fresh) setState((prev) => (prev.reportedIds.includes(hide!) ? prev : { ...prev, reportedIds: [...prev.reportedIds, hide!] }));
+    // The demo has nobody to send it to: it simply says thanks (as reportChat does).
+    if (!me || !live(me)) return Promise.resolve(true);
+    const about = userId && UUID.test(userId) ? userId : null;
+    return remote.fileReport(me, about, target, note).catch(() => false).then((filed) => {
+      // Not sent: it comes back, so it can be reported again (the caller says it didn't send).
+      if (!filed && fresh) setState((prev) => ({ ...prev, reportedIds: prev.reportedIds.filter((x) => x !== hide) }));
+      return filed;
+    });
   }, []);
   const resolveCoachQuestion = useCallback((questionId: ID) => {
     const me = requireUser();

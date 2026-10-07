@@ -16,6 +16,7 @@ import { useAiCoachConsent } from '@/features/aiCoach/consent';
 import { usePaidBooking } from '@/features/coaching/bookings';
 import { openLegal } from '@/lib/legal';
 import { confirmReport } from '@/lib/confirm';
+import { afterReport } from '@/features/moderation/reportThanks';
 import { planRemindersSupported, readPlanReminders, schedulePlanReminders, setPlanReminders } from '@/features/aiCoach/planReminder';
 import { show as showToast } from '@/lib/toast';
 import { duration, formatDate, experienceLabel, hoursAndMinutes } from '@/lib/format';
@@ -338,8 +339,7 @@ function Train() {
                   hitSlop={8}
                   style={styles.report}
                   onPress={() => confirmReport('answer', () => {
-                    actions.reportUser('ai-coach', `ai-reply:${m.body.slice(0, 180)}`);
-                    showToast({ title: 'Thanks — a person will review this', icon: 'flag-outline' });
+                    afterReport(actions.reportUser('ai-coach', `ai-reply:${m.body.slice(0, 180)}`));
                   })}
                 >
                   <Text style={styles.reportText}>Report</Text>
@@ -387,8 +387,7 @@ function Train() {
                 hitSlop={8}
                 style={styles.report}
                 onPress={() => confirmReport('week', () => {
-                  actions.reportUser('ai-coach', `ai-plan:${plan.headline.slice(0, 180)}`);
-                  showToast({ title: 'Thanks — a person will review this', icon: 'flag-outline' });
+                  afterReport(actions.reportUser('ai-coach', `ai-plan:${plan.headline.slice(0, 180)}`));
                 })}
               >
                 <Text style={styles.reportText}>Report</Text>

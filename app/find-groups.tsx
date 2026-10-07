@@ -8,6 +8,7 @@ import { SearchField } from '@/components/SearchField';
 import { SheetTitle } from '@/components/sheet/SheetForm';
 import type { DiscoverGroup, ID } from '@/data/types';
 import { GroupTile } from '@/features/groups/GroupTile';
+import { reportGroup } from '@/features/groups/reportGroup';
 import { confirm } from '@/lib/confirm';
 import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
@@ -26,6 +27,8 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
  * the buttons fade and say why when tapped. Someone not known to be an adult
  * sees one calm line instead (groups are adults-only, as on the server).
  * The Groups page (from Profile, or "Manage" here) stays as it was.
+ * Holding a group's row reports it (App Review 1.2), as holding a comment
+ * does; a group you reported leaves the list.
  */
 
 const FULL_LINE = `You’re in ${MAX_GROUPS} groups, the most anyone can be in. Leave one to join another.`;
@@ -33,7 +36,7 @@ const FULL_START_LINE = `You’re in ${MAX_GROUPS} groups, the most anyone can b
 
 export default function FindGroups() {
   const styles = useThemedStyles(styleDefinitions);
-  const { feedGroups, feedGroupsAsked, feedGroupsOn, currentUserId, currentUser, actions } = useApp();
+  const { feedGroups, feedGroupsAsked, feedGroupsOn, currentUserId, currentUser, reportedIds, actions } = useApp();
   const [closeSignal, setCloseSignal] = useState(0);
   const dismiss = () => setCloseSignal((n) => n + 1);
   // Where to go once the sheet has gone (a group's page, or the Groups page).
@@ -71,7 +74,7 @@ export default function FindGroups() {
 
   // Where you stand with each group: the app's own copy of your groups and requests wins over the list's.
   const listed = useMemo(() => (rows ?? [])
-    .filter((r) => !minedAtOpen.current.has(r.id))
+    .filter((r) => !minedAtOpen.current.has(r.id) && !reportedIds.includes(r.id))
     .map((r) => {
       const mine = feedGroups.find((g) => g.id === r.id);
       return {
@@ -80,7 +83,7 @@ export default function FindGroups() {
         requested: feedGroupsOn ? feedGroupsAsked.some((a) => a.id === r.id) : r.requested,
         memberCount: mine ? Math.max(mine.members.length, r.memberCount) : r.memberCount,
       };
-    }), [rows, feedGroups, feedGroupsAsked, feedGroupsOn]);
+    }), [rows, feedGroups, feedGroupsAsked, feedGroupsOn, reportedIds]);
   const searching = !!search.trim();
   // While you search it may grow (more found) but never shrinks under you letter by letter:
   // it keeps the height it had before the first letter (on a phone the keyboard has opened it all the way anyway).
@@ -124,14 +127,25 @@ export default function FindGroups() {
       : state === 'requested' ? `You asked to join ${g.name}. Cancel the request`
       : faded ? `${label}. ${FULL_LINE}`
       : state === 'request' ? `Ask to join ${g.name}` : `Join ${g.name}`;
+    // Hold the group (not its button) to report it; a screen reader offers Report on it instead.
+    const report = () => reportGroup(actions.reportUser, { id: g.id, name: g.name, description: g.description });
     return (
       <View key={g.id} style={[styles.row, i > 0 && styles.line]}>
-        <GroupTile name={g.name} look={g.look} size={44} />
-        <View style={styles.words}>
-          <Text style={styles.name} numberOfLines={1}>{g.name}</Text>
-          <Text style={styles.meta} numberOfLines={1}>{members}{g.ask ? ' · Ask to join' : ' · Open'}</Text>
-          {g.description ? <Text style={styles.about} numberOfLines={2}>{g.description}</Text> : null}
-        </View>
+        <Pressable
+          accessibilityHint="Hold to report"
+          accessibilityActions={[{ name: 'longpress', label: 'Report group' }]}
+          onAccessibilityAction={(e) => { if (e.nativeEvent.actionName === 'longpress') report(); }}
+          onLongPress={report}
+          delayLongPress={400}
+          style={({ pressed }) => [styles.group, pressed && styles.pressed]}
+        >
+          <GroupTile name={g.name} look={g.look} size={44} />
+          <View style={styles.words}>
+            <Text style={styles.name} numberOfLines={1}>{g.name}</Text>
+            <Text style={styles.meta} numberOfLines={1}>{members}{g.ask ? ' · Ask to join' : ' · Open'}</Text>
+            {g.description ? <Text style={styles.about} numberOfLines={2}>{g.description}</Text> : null}
+          </View>
+        </Pressable>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={a11y}
@@ -291,6 +305,8 @@ const styleDefinitions = StyleSheet.create({
   dot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.brand },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md, paddingHorizontal: spacing.lg, minHeight: 72 },
   line: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  // The group itself (its tile and words), which a hold reports.
+  group: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   words: { flex: 1, minWidth: 0, gap: 2 },
   name: { ...typography.body, ...font('600'), color: colors.text },
   meta: { ...typography.small, color: colors.textMuted },

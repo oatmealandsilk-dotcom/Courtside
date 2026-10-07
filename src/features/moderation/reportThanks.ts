@@ -5,6 +5,23 @@ import { show as showToast } from '@/lib/toast';
 /** The one thanks line, wherever something is reported. */
 export const REPORT_THANKS = 'Thanks — a person will review this';
 
+/** What a report says when it didn't reach CourtSide: the same words a chat's report uses. */
+export const REPORT_NOT_SENT = { title: 'Your report didn’t send', body: 'Check your connection and try again.' } as const;
+
+/** Said when a report didn't reach CourtSide (no connection, say), instead of the thanks. */
+export function reportNotSent() {
+  showToast({ ...REPORT_NOT_SENT, icon: 'alert-circle-outline' });
+}
+
+/**
+ * After a report is sent (actions.reportUser): the thanks, with Block
+ * offered, once it is in; otherwise that it didn't send, so nobody is
+ * thanked for a report nobody will see.
+ */
+export function afterReport(filed: Promise<boolean>, author?: { id: ID; handle: string } | null, actions?: BlockActions) {
+  void filed.then((ok) => (ok ? thankForReport(author, actions) : reportNotSent()));
+}
+
 /** What the thanks needs to offer Block: the app's own actions do. */
 interface BlockActions {
   toggleBlock: (userId: ID) => void;

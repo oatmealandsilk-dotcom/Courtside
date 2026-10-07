@@ -19,7 +19,7 @@ import { HiddenComments, HiddenReplyRow } from '@/components/HiddenComments';
 import { hiddenCoachRepliesOn, shownInList } from '@/features/hiddenWords/hiddenWords';
 import * as haptics from '@/lib/haptics';
 import { show as showToast } from '@/lib/toast';
-import { thankForReport } from '@/features/moderation/reportThanks';
+import { afterReport } from '@/features/moderation/reportThanks';
 import { useStillLoading } from '@/lib/useStillLoading';
 import { RichText } from '@/components/RichText';
 import { useApp } from '@/store/AppContext';
@@ -134,15 +134,14 @@ export default function CoachQuestionDetail() {
   const signedIn = !!currentUserId;
   const reportQuestion = () => confirmReport('question', () => {
     leaving.current = true;
-    actions.reportUser(question.authorId, `coach-question:${question.id}`);
+    const filed = actions.reportUser(question.authorId, `coach-question:${question.id}`);
     goBack('/coaches');
     const asker = users.find((u) => u.id === question.authorId);
-    thankForReport(asker, actions);
+    afterReport(filed, asker, actions);
   }, true);
   const reportReply = (reply: CoachReply) => confirmReport('reply', () => {
-    actions.reportUser(reply.coachUserId, `coach-reply:${reply.id}`);
     const coach = users.find((u) => u.id === reply.coachUserId);
-    thankForReport(coach, actions);
+    afterReport(actions.reportUser(reply.coachUserId, `coach-reply:${reply.id}`), coach, actions);
   });
 
   return (

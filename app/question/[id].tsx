@@ -13,7 +13,7 @@ import { Linking, Platform, Pressable, StyleSheet, Text, TextInput, View } from 
 import { router, useLocalSearchParams } from 'expo-router';
 import { goBack } from '@/lib/goBack';
 import { confirmReport } from '@/lib/confirm';
-import { thankForReport } from '@/features/moderation/reportThanks';
+import { afterReport } from '@/features/moderation/reportThanks';
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { ThreadSkeleton } from '@/components/Skeleton';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -104,9 +104,8 @@ function QuestionDetail() {
   // It leaves your screens at once, so the page goes back.
   const theirs = !!currentUserId && question.authorId !== currentUserId;
   const report = () => confirmReport('thread', () => {
-    actions.reportUser(question.authorId, `question:${question.id}`);
     const asker = users.find((u) => u.id === question.authorId);
-    thankForReport(asker, actions);
+    afterReport(actions.reportUser(question.authorId, `question:${question.id}`), asker, actions);
     goBack('/discuss');
   });
 

@@ -47,6 +47,18 @@ export function summarizeFacts(f: CourtFacts | undefined): { facts: Fact[]; line
 }
 
 /**
+ * A court note's key, for reporting it ("court-note:<court>:<key>"): its
+ * court and a short fingerprint of its words. Notes are never named, so the
+ * words are what pick one out (the database finds its author by them,
+ * migration 145), and a note you reported stays out of your sight by it.
+ */
+export function courtNoteKey(courtId: string, text: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 0x01000193) >>> 0;
+  return `${courtId}:${h.toString(16).padStart(8, '0')}`;
+}
+
+/**
  * When a court is busy, from the players who answered: the parts of the
  * week at least half of them called busy ("Usually busy weekday evenings",
  * two at most); else "Usually free" only when most of them said they have

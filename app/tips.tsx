@@ -13,7 +13,7 @@ import { voteCounts } from '@/components/VoteControls';
 import { RichText } from '@/components/RichText';
 import { relativeTime } from '@/lib/format';
 import { confirmDelete, confirmReport } from '@/lib/confirm';
-import { thankForReport } from '@/features/moderation/reportThanks';
+import { afterReport } from '@/features/moderation/reportThanks';
 import { useApp } from '@/store/AppContext';
 import type { Tip } from '@/data/types';
 import { colors, font, spacing, typography, lift } from '@/theme';
@@ -86,8 +86,7 @@ export default function Tips() {
                         </Pressable>
                       ) : currentUserId ? (
                         <Pressable accessibilityRole="button" accessibilityLabel="Report this tip" onPress={() => confirmReport('tip', () => {
-                          actions.reportUser(tip.authorId, `tip:${tip.id}`);
-                          thankForReport(author, actions);
+                          afterReport(actions.reportUser(tip.authorId, `tip:${tip.id}`), author, actions);
                         })} hitSlop={ACTION_SLOP} style={styles.action}>
                           <Ionicons name="flag-outline" size={14} color={colors.textFaint} />
                           <Text style={styles.time}>Report</Text>

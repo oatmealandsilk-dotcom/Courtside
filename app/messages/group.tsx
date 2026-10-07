@@ -15,6 +15,7 @@ import { hitWhen } from '@/features/hits/format';
 import { confirm, confirmAfterMenu, confirmBlock } from '@/lib/confirm';
 import { goBack } from '@/lib/goBack';
 import { show as showToast } from '@/lib/toast';
+import { afterReport } from '@/features/moderation/reportThanks';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, lift, radius, spacing, typography } from '@/theme';
@@ -224,7 +225,7 @@ export default function ChatDetails() {
                   // The thanks only once it is filed; otherwise a note to try again.
                   // A chat with nothing in it yet isn't on the server: their profile is reported, as from their page.
                   onConfirm: () => {
-                    if (draft) { actions.reportUser(other.id, 'profile'); showToast({ title: 'Thanks — a person will review this', icon: 'flag-outline' }); return; }
+                    if (draft) { afterReport(actions.reportUser(other.id, `profile:${other.id}`)); return; }
                     void actions.reportChat(conversation.id, 'one-to-one chat', other.id).then((filed) => showToast(filed ? { title: 'Thanks — a person will review this', icon: 'flag-outline' } : { title: 'Your report didn’t send', body: 'Check your connection and try again.', icon: 'alert-circle-outline' })); },
                 })}
                 style={({ pressed }) => [styles.row, pressed && styles.pressed]}

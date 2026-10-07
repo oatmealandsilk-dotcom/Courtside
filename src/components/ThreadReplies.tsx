@@ -5,7 +5,7 @@ import { shownStreak, streakWords } from '@/features/practice/streakFlame';
 import React, { useRef, useState } from 'react';
 import { confirm, confirmDelete, confirmReport } from '@/lib/confirm';
 import { RemovedNote } from '@/features/moderation/RemovedNote';
-import { thankForReport } from '@/features/moderation/reportThanks';
+import { afterReport } from '@/features/moderation/reportThanks';
 import * as haptics from '@/lib/haptics';
 import { MentionSuggestions } from '@/components/MentionSuggestions';
 import { useMentionDraft } from '@/features/mentions/useMentionDraft';
@@ -81,8 +81,7 @@ export function ThreadReply({ answer, thread, acceptedId, askerId, depth = 0, pr
     : theirs ? () => {
       haptics.tap();
       confirmReport('reply', () => {
-        actions.reportUser(answer.authorId, `answer:${answer.id}`);
-        thankForReport(responder, actions);
+        afterReport(actions.reportUser(answer.authorId, `answer:${answer.id}`), responder, actions);
       });
     } : undefined;
   // An admin's hold takes it down (or puts it back), with Delete still there on their own reply (migration 108).

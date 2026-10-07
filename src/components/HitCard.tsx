@@ -13,7 +13,7 @@ import { formatMiles } from '@/features/players/geo';
 import { confirm, confirmReport } from '@/lib/confirm';
 import { goBack } from '@/lib/goBack';
 import { show as showToast } from '@/lib/toast';
-import { thankForReport } from '@/features/moderation/reportThanks';
+import { afterReport } from '@/features/moderation/reportThanks';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, lift, radius, spacing, typography } from '@/theme';
@@ -60,8 +60,7 @@ export function HitCard({ hit, miles, linked = true }: { hit: HitRequest; miles?
   const openPoster = theirs && author ? () => router.push(`/user/${author.id}`) : undefined;
   // Reported, it leaves your screens at once (the hit's own page goes back, as a reported thread's does).
   const report = () => confirmReport('hit', () => {
-    actions.reportUser(hit.authorId, `hit-request:${hit.id}`);
-    thankForReport(author, actions);
+    afterReport(actions.reportUser(hit.authorId, `hit-request:${hit.id}`), author, actions);
     if (!linked) goBack('/discuss');
   });
   const join = async () => {

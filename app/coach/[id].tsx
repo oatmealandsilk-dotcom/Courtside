@@ -7,13 +7,18 @@ import { goBack } from '@/lib/goBack';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { Avatar, Button, EmptyState, Field, Screen } from '@/components/ui';
+import { MenuSheet, type MenuSheetItem } from '@/components/MenuSheet';
+import { Tappable } from '@/components/Tappable';
 import { pickFromDevice, type PickedMedia } from '@/components/MediaPicker';
+import type { CoachReview, User } from '@/data/types';
 import { KIND_LABEL, SPECIALTY_LABEL, statusLabel, turnaround, usePaidBooking } from '@/features/coaching/bookings';
 import { money, relativeTime } from '@/lib/format';
 import { openLegal } from '@/lib/legal';
 import { useApp } from '@/store/AppContext';
 import { show as showToast } from '@/lib/toast';
 import { BLOCKED_WORDS_NOTE } from '@/features/hiddenWords/hiddenWords';
+import { afterReport } from '@/features/moderation/reportThanks';
+import { confirmBlock, confirmReport } from '@/lib/confirm';
 import { colors, font, radius, spacing, typography, lift } from '@/theme';
 
 /**
@@ -21,11 +26,16 @@ import { colors, font, radius, spacing, typography, lift } from '@/theme';
  * services. Booking is a question (and a video, for a video review), then
  * Stripe's pay page; the coach answers inside CourtSide. Calm sections, no
  * boxed cards: the services are one grouped list you pick from.
+ *
+ * Anyone else can report the page or block the coach from the "…" in the
+ * header, the same sheet a profile has, and hold someone's review to report
+ * it, as with a comment (App Review 1.2). A review you reported, or by
+ * someone you blocked, leaves the list.
  */
 export default function CoachDetail() {
   const styles = useThemedStyles(styleDefinitions);
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { coaches, users, coachingRequests, coachResults, coachReviews, currentUserId, actions } = useApp();
+  const { coaches, users, coachingRequests, coachResults, coachReviews, currentUserId, reportedIds, blockedIds, actions } = useApp();
   // Paid booking is not part of this release (owner's call, Oct 3): until it is, only admins see
   // prices and booking (to test them); everyone else gets the free ways in, a message or a question.
   const paidBooking = usePaidBooking();
@@ -45,6 +55,7 @@ export default function CoachDetail() {
   const [result, setResult] = useState({ client: '', focus: '', before: '', after: '', weeks: '', note: '' });
   const [reviewStars, setReviewStars] = useState(0);
   const [reviewBody, setReviewBody] = useState('');
+  const [menuOpen, setMenuOpen] = useState(false);
 
   if (!coach || !user) {
     return (
@@ -62,7 +73,9 @@ export default function CoachDetail() {
     .filter((r) => r.coachId === coach.id && r.userId === currentUserId && r.status !== 'awaiting-payment')
     .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
   const results = coachResults.filter((r) => r.coachId === coach.id);
-  const reviews = coachReviews.filter((r) => r.coachId === coach.id).sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+  const reviews = coachReviews
+    .filter((r) => r.coachId === coach.id && !reportedIds.includes(r.id) && !blockedIds.includes(r.authorId))
+    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
   const myReview = reviews.find((r) => r.authorId === currentUserId);
   const canReview = !isOwner && !!currentUserId && !myReview && mine.some((r) => r.status === 'answered');
   const bookable = !isOwner && coach.listed !== false && paidBooking && coach.payoutsReady !== false;
@@ -124,8 +137,32 @@ export default function CoachDetail() {
     });
   };
 
+  // The "…" menu: report the page (it names the coach), or block them; Unblock once blocked.
+  const blocked = blockedIds.includes(user.id);
+  const menu: MenuSheetItem[] = blocked
+    ? [{ icon: 'checkmark-circle-outline', label: 'Unblock', onPress: () => actions.toggleBlock(user.id) }]
+    : [
+        { icon: 'flag-outline', label: 'Report', danger: true, onPress: () => confirmReport('coach', () => afterReport(actions.reportUser(user.id, `coach:${coach.id}`, coach.headline ? `Coach page “${coach.headline}”` : 'Coach page'), user, actions), true) },
+        { icon: 'ban-outline', label: `Block @${user.handle}`, danger: true, onPress: () => confirmBlock(user, () => {
+          if (!actions.isBlocked(user.id)) actions.toggleBlock(user.id);
+          showToast({ title: `Blocked ${user.name}`, icon: 'ban-outline' });
+        }, true) },
+      ];
+  const reportReview = (review: CoachReview, author: User | undefined) => confirmReport('review', () => {
+    afterReport(actions.reportUser(review.authorId, `coach-review:${review.id}`, review.body.slice(0, 300)), author, actions);
+  });
+
   return (
-    <Screen title="Coach" compactTitle onBack={() => goBack()}>
+    <Screen
+      title="Coach"
+      compactTitle
+      onBack={() => goBack()}
+      right={!isOwner && currentUserId ? (
+        <Tappable accessibilityLabel="More options" onPress={() => setMenuOpen(true)} hitSlop={10} style={styles.more}>
+          <Ionicons name="ellipsis-horizontal" size={24} color={colors.text} />
+        </Tappable>
+      ) : undefined}
+    >
       {/* ------------------------------------------------------------ who */}
       <View style={styles.hero}>
         <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={72} />
@@ -325,6 +362,8 @@ export default function CoachDetail() {
         <View style={styles.group}>
           {reviews.map((r, index) => {
             const author = users.find((u) => u.id === r.authorId);
+            // Someone else's review: hold its words to report it, as with a comment.
+            const report = currentUserId && r.authorId !== currentUserId ? () => reportReview(r, author) : undefined;
             return (
               <View key={r.id} style={[styles.review, index > 0 && styles.line]}>
                 <View style={styles.reviewHead}>
@@ -335,13 +374,27 @@ export default function CoachDetail() {
                   </View>
                   <Text style={styles.stars} accessibilityLabel={`${r.rating} stars`}>{'★'.repeat(r.rating)}<Text style={styles.starsOff}>{'★'.repeat(5 - r.rating)}</Text></Text>
                 </View>
-                {r.body ? <Text style={styles.reviewBody}>{r.body}</Text> : null}
+                {r.body ? (
+                  report ? (
+                    <Pressable
+                      accessibilityHint="Hold to report"
+                      accessibilityActions={[{ name: 'longpress', label: 'Report review' }]}
+                      onAccessibilityAction={(e) => { if (e.nativeEvent.actionName === 'longpress') report(); }}
+                      onLongPress={report}
+                      delayLongPress={400}
+                      style={({ pressed }) => pressed && styles.reviewHeld}
+                    >
+                      <Text style={styles.reviewBody}>{r.body}</Text>
+                    </Pressable>
+                  ) : <Text style={styles.reviewBody}>{r.body}</Text>
+                ) : null}
               </View>
             );
           })}
         </View>
       )}
       {busy ? <ActivityIndicator style={{ marginTop: spacing.lg }} color={colors.textFaint} /> : null}
+      <MenuSheet visible={menuOpen} onClose={() => setMenuOpen(false)} title={user.name} items={menu} />
     </Screen>
   );
 }
@@ -398,4 +451,6 @@ const styleDefinitions = StyleSheet.create({
   stars: { fontSize: 13, color: colors.warning, letterSpacing: 1 },
   starsOff: { color: colors.border },
   reviewBody: { ...typography.small, color: colors.text, lineHeight: 20 },
+  reviewHeld: { opacity: 0.6 },
+  more: { padding: 4 },
 });
