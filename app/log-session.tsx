@@ -59,8 +59,8 @@ const WORKOUT_KINDS: { value: string; label: string }[] = ['run', 'ride', 'swim'
 
 /**
  * Log a session in two taps: what it was (practice is picked already) and
- * how long, then Save. A match can say whether you won. How long offers the
- * usual lengths and Custom for any other (hours and minutes); When is Today,
+ * how long, then Save. A match can say whether you won. How long is hours
+ * and minutes, an hour to start (Oct 7, owner: "just custom"); When is Today,
  * Yesterday or any day of the last four weeks, for the session you forgot to
  * log (Oct 6, owner). A session counts for the day picked.
  *
@@ -475,7 +475,7 @@ function LogSession() {
             </>
           ) : (
             <>
-              {/* How long, as the log has it: the usual lengths and Custom (Oct 6). */}
+              {/* How long, as the log has it: hours and minutes (Oct 7). */}
               {timeEditable ? (
                 <Section title="How long">
                   <LengthPicker minutes={editMinutes} onChange={setPickedMinutes} />
@@ -597,7 +597,7 @@ function LogSession() {
                 onChange={(m) => setMinutes(m)}
               />
             ) : (
-              // The usual lengths a tap each, and Custom for any other (Oct 6).
+              // Hours and minutes, an hour or five minutes a tap (Oct 7, owner: "just custom").
               <LengthPicker minutes={minutes} onChange={setMinutes} />
             )}
           </Section>
