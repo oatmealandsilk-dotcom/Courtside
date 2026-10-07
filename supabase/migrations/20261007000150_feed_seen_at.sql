@@ -9,7 +9,9 @@
 -- screen, from feed_signals, migration 20).
 --
 -- Privacy is unchanged: the only time that leaves the server is the caller's
--- own; for everyone else, still totals only, never who looked at what.
+-- own; for everyone else, still totals only, never who looked at what. Posts
+-- that never reach For you (archived, or shared to a group only) are left
+-- out now, so their totals no longer reach people who cannot open them.
 --
 -- Old app versions keep working: they read the columns they know and ignore
 -- the new one. Apps from before this runs keep working too: without the
@@ -37,7 +39,12 @@ language sql stable security definer set search_path = public as $$
   from public.feed_signals f
   join public.posts p on p.id::text = f.target_id
   where f.target_kind = 'post' and auth.uid() is not null and p.removed_at is null
+    and not p.archived and p.group_id is null
   group by f.target_id
+  -- Newest posts first: the API hands back at most 1000 rows, so once more
+  -- posts than that have been looked at, the ones it leaves out are the
+  -- oldest, never a random handful of new ones you have already seen.
+  order by max(p.created_at) desc, f.target_id
 $$;
 
 revoke all on function public.feed_post_scores() from public, anon;

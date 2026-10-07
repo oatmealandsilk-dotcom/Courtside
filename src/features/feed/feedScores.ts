@@ -34,7 +34,9 @@ export function loadFeedScores({ force = false, userId }: { force?: boolean; use
   if (!force && Date.now() - loadedAt < 60_000) return Promise.resolve();
   const asker = owner;
   const run = fetchFeedScores()
-    .then((next) => { if (owner !== asker) return; scores = next; loadedAt = Date.now(); })
+    // No answer (offline, a failed call): the last one stays. Swapping it for nothing would put what you
+    // saw on another phone back above "You're all caught up" on the next pull.
+    .then((next) => { if (owner !== asker || !next) return; scores = next; loadedAt = Date.now(); })
     .catch(() => {})
     .finally(() => { if (loading === run) loading = null; });
   loading = run;

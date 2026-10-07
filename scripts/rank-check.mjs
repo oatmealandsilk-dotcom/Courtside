@@ -18,7 +18,10 @@
  *   5. among the ones you have seen: what you saw longest ago first, what you
  *      saw this visit last; threads you have not seen before ones you have;
  *   6. nothing seen: "You're all caught up" is last; everything seen: it is first;
- *   7. two visits: the second opens on posts the first did not show.
+ *   7. two visits: the second opens on posts the first did not show;
+ *   8. an Instant you opened anywhere (its views list) counts as seen;
+ *   9. six thousand posts: all of the above holds, and the deal takes
+ *      milliseconds (nothing in it grows with posts × posts).
  * Nothing random: the same run gives the same answer every time. Exit code 0
  * is a pass, 1 a failure.
  */
@@ -219,6 +222,37 @@ console.log('7. Two visits');
   const repeatsAbove = second.slice(0, line).filter((k) => looked.includes(k));
   ok(repeatsAbove.length === 0, `none of the ${looked.length} pages looked at comes before "caught up" on the next visit`);
   ok(!looked.includes(second[0]), `the next visit opens on something new (${second[0]})`);
+}
+
+// 8. An Instant you opened anywhere (its views list has you) is seen, as a post is.
+console.log('8. Instants opened elsewhere');
+{
+  const data = {
+    posts: [post('n1', 'a', HOUR), post('n2', 'b', 2 * HOUR), post('n3', 'c', 3 * HOUR), post('n4', 'd', 4 * HOUR)],
+    hits: [{ ...hit('watched', 's', HOUR), viewedBy: [ME] }, hit('fresh', 't', 2 * HOUR)],
+    users: ['a', 'b', 'c', 'd', 's', 't'].map((u) => user(u)).concat(user(ME)),
+  };
+  const order = keys(deal(data));
+  const line = order.indexOf(CAUGHT_UP);
+  ok(order.indexOf('h:fresh') < line && order.indexOf('h:watched') > line, `the Instant you opened is below "caught up", the other above (${order.join(' → ')})`);
+}
+
+// 9. A big feed: thousands of posts, half seen, dealt in well under a second (nothing that grows with posts × posts).
+console.log('9. Thousands of posts');
+{
+  const data = bigFeed(6000, 400, 13);
+  const r = numbers(17);
+  const seenOnPhone = new Map();
+  for (const p of data.posts) if (r() < 0.5) seenOnPhone.set(`p:${p.id}`, NOW - Math.floor(r() * 9 * DAY));
+  const started = performance.now();
+  const items = deal(data, { seenOnPhone });
+  const ms = performance.now() - started;
+  const order = keys(items);
+  const line = order.indexOf(CAUGHT_UP);
+  ok(order.length === data.posts.length + data.questions.length + data.hits.length + 1, `every one of ${data.posts.length} posts dealt once`);
+  ok(!order.slice(0, line).some((k) => seenOnPhone.has(k)) && !order.slice(line + 1).some((k) => k.startsWith('p:') && !seenOnPhone.has(k)), 'seen and not seen on the right sides of the line');
+  { const close = authorTooClose(items); ok(!close, `no author twice within five pages${close ? ` (${close}; line at ${line} of ${order.length})` : ''}`); }
+  ok(ms < 2000, `dealt in ${Math.round(ms)} ms (under 2 s)`);
 }
 
 console.log(failures ? `\nRANK CHECK FAILED: ${failures} of ${checks} checks` : `\nRank check passed: ${checks} checks`);

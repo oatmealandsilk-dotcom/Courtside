@@ -175,7 +175,8 @@ export function rankFeed(posts: Post[], questions: Question[], comments: Comment
   const isSeen = (key: string, createdAt: string) => lastSeen(key, createdAt) !== null;
   const postSeen = (p: Post) => isSeen(`p:${p.id}`, p.createdAt);
   const questionSeen = (q: Question) => isSeen(`q:${q.id}`, q.createdAt);
-  const hitSeen = (st: Story) => isSeen(`h:${st.id}`, st.createdAt);
+  // An Instant you have opened anywhere (the full-screen viewer, another phone) is on its views list: seen too.
+  const hitSeen = (st: Story) => isSeen(`h:${st.id}`, st.createdAt) || (!!userId && st.authorId !== userId && !!st.viewedBy?.includes(userId));
 
   const freshPosts = byScore(posts.filter((p) => !postSeen(p)), scorePost);
   const seenPosts = byScore(posts.filter(postSeen), (p) => again(`p:${p.id}`, p.createdAt, scorePost(p)));
@@ -187,18 +188,20 @@ export function rankFeed(posts: Post[], questions: Question[], comments: Comment
   const result: FeedItem[] = [];
   const authors: string[] = [];
   const push = (item: FeedItem, authorId: string) => { result.push(item); authors.push(authorId); };
-  // The best page whose author has not been on any of the last four.
-  const take = <T extends { authorId: string }>(list: T[]): T | undefined => {
+  // The best page whose author has not been on any of the last four; with `strict`, none if there is no such
+  // page, otherwise the best page anyway (only that author left).
+  const take = <T extends { authorId: string }>(list: T[], strict = false): T | undefined => {
     if (!list.length) return undefined;
     const busy = new Set(authors.slice(-(AUTHOR_GAP - 1)));
     const at = list.findIndex((x) => !busy.has(x.authorId));
+    if (at < 0 && strict) return undefined;
     return list.splice(at < 0 ? 0 : at, 1)[0];
   };
   let threadNext = true;
-  const takeMix = (forum: Question[], moments: Story[]): boolean => {
+  const takeMix = (forum: Question[], moments: Story[], strict = false): boolean => {
     const order = threadNext ? [forum, moments] as const : [moments, forum] as const;
     for (const list of order) {
-      const x = take(list as (Question | Story)[]);
+      const x = take(list as (Question | Story)[], strict);
       if (!x) continue;
       threadNext = list !== forum;
       if (list === forum) push({ type: 'question', question: x as Question }, x.authorId);
@@ -209,19 +212,25 @@ export function rankFeed(posts: Post[], questions: Question[], comments: Comment
   };
   /**
    * One part of the feed: its posts best first, a thread or a hit in every
-   * fourth slot (counted from the part's own start). When its posts run out,
-   * `rest` says what else it takes: every thread and hit left ("all"), only
-   * the hits ("hits": today's moments you have not seen go above the line,
-   * threads stay mixed in below), or nothing more.
+   * fourth slot (counted from the part's own start; when every one left is by
+   * someone on the last four pages, a post goes there and the thread comes
+   * at the first slot after where its author is clear). When its posts run
+   * out, `rest` says what else it takes: every thread and hit left ("all"),
+   * only the hits ("hits": today's moments you have not seen go above the
+   * line, threads stay mixed in below), or nothing more.
    */
   const dealPart = (ranked: Post[], forum: Question[], moments: Story[], rest: 'all' | 'hits' | 'none') => {
     const start = result.length;
+    let owed = false;
     for (;;) {
       const slot = result.length - start + 1;
-      if (ranked.length && slot % MIX_EVERY === 0 && takeMix(forum, moments)) continue;
+      if (ranked.length && (owed || slot % MIX_EVERY === 0)) {
+        if (takeMix(forum, moments, true)) { owed = false; continue; }
+        owed = forum.length + moments.length > 0;
+      }
       const post = take(ranked);
       if (post) { push({ type: 'post', post }, post.authorId); continue; }
-      if (rest === 'all' && takeMix(forum, moments)) continue;
+      if (rest === 'all' && (takeMix(forum, moments, true) || takeMix(forum, moments))) continue;
       if (rest === 'hits') { const hit = take(moments); if (hit) { push({ type: 'hit', story: hit }, hit.authorId); continue; } }
       break;
     }
