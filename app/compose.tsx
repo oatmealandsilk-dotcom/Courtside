@@ -15,6 +15,7 @@ import { MediaEditor, type EditedMedia } from '@/components/MediaEditor';
 import { takePendingShot } from '@/features/compose/pendingShot';
 import { registerCreateClose } from '@/features/compose/createMenu';
 import { SheetBackdrop } from '@/components/SheetBackdrop';
+import { MenuSheet } from '@/components/MenuSheet';
 import { Button, Chip, Field, Screen, Toggle } from '@/components/ui';
 import { alsoShowsIn } from '@/features/groups/groupFeed';
 import { openGroupFeed } from '@/features/groups/openGroupFeed';
@@ -250,15 +251,18 @@ export default function Compose() {
   // the choices under them scroll if they still don't fit. On a short
   // screen (an iPhone SE) the cards are a little tighter, and on a shorter
   // one (a small Android) tighter again, with smaller icons, so they all fit.
-  // Since Start a session joined them as a fifth card (Oct 6), "short" means
-  // anything shorter than a big iPhone's screen, so Log a session still shows
-  // under them without scrolling on an everyday phone.
+  // Since Session joined them as a fifth card (Oct 6), "short" means anything
+  // shorter than a big iPhone's screen (an everyday iPhone, 844 to 874 tall,
+  // is a little short of room for five full-size cards), so all five show
+  // without scrolling there; a big iPhone gets them full size.
   // A challenge entry's one card is left exactly as it was.
   const { height: windowH } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const menuMaxH = Math.max(320, windowH - insets.top - insets.bottom - 40);
-  const tight = windowH < 950 && !entering;
+  const tight = windowH < 900 && !entering;
   const tighter = windowH < 760 && !entering;
+  // The Session card's small menu: Start now, or Log a past one.
+  const [sessionChoice, setSessionChoice] = useState(false);
   const choiceIcon = tighter ? 24 : 28;
   const navigation = useNavigation();
   const closing = useRef(false);
@@ -950,18 +954,20 @@ export default function Compose() {
     <Reanimated.View style={[styles.choiceSheet, tight && styles.choiceSheetTight, { maxHeight: menuMaxH }, popStyle]}>
       <View style={styles.choiceHeader}><Text style={styles.choiceTitle}>{entering ? challenge.title : 'Create'}</Text><Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={closeMenu} hitSlop={10}><Ionicons name="close" size={24} color={colors.text}/></Pressable></View>
       <ScrollView style={styles.choiceScroll} contentContainerStyle={[styles.choiceList, tight && styles.choiceListTight]} bounces={false} showsVerticalScrollIndicator={false}>
-      {/* Start a session (Oct 6, owner: Strava's Start and Finish; the one players use most): first, a card like the
-          others. While one is going it opens that one instead; finished and not logged yet, its log.
-          Someone not known to be an adult never checks in (mapPrivacy.canCheckIn), so theirs promises only the timer. */}
+      {/* Session (Oct 6, owner chose "A": one card for both, so the menu stays five cards): a card like the
+          others. Tapped, a small menu asks Start now (the clock, and a check-in at your court) or Log a past
+          one (the log sheet: private, for the streak). While one is going it opens that one instead; finished
+          and not logged yet, its log. Someone not known to be an adult never checks in (mapPrivacy.canCheckIn),
+          so theirs promises only the timer. */}
       {entering ? null : <Reanimated.View entering={arrive(0)}><Pressable
         accessibilityRole="button"
-        accessibilityLabel={!liveSession ? (adult ? 'Start a session. A timer, and a check-in at your court' : 'Start a session. A timer, Start to Finish') : liveState(liveSession) === 'finished' ? 'Log your finished session' : 'Session in progress. Open it'}
-        onPress={() => (!liveSession ? router.replace('/start-session') : liveState(liveSession) === 'finished' ? router.replace({ pathname: '/log-session', params: { live: '1' } }) : router.replace('/live-session'))}
+        accessibilityLabel={!liveSession ? 'Session. Start one now, or log one you’ve played' : liveState(liveSession) === 'finished' ? 'Log your finished session' : 'Session in progress. Open it'}
+        onPress={() => (!liveSession ? setSessionChoice(true) : liveState(liveSession) === 'finished' ? router.replace({ pathname: '/log-session', params: { live: '1' } }) : router.replace('/live-session'))}
         style={[styles.choiceOption, tight && styles.choiceOptionTight, tighter && styles.choiceOptionTighter]}
       >
         <Ionicons name={liveSession ? 'radio-button-on' : 'stopwatch-outline'} size={choiceIcon} color={liveSession ? colors.open : colors.textMuted}/>
-        <Text style={styles.choiceLabel}>{!liveSession ? 'Start a session' : liveState(liveSession) === 'finished' ? 'Log your session' : 'Session in progress'}</Text>
-        <Text style={styles.note}>{!liveSession ? (adult ? 'Time your hit and check in at the court.' : 'Time your hit, from Start to Finish.') : [liveState(liveSession) === 'finished' ? 'Finished' : `Started ${startClock(liveSession)}`, livePlace(liveSession)].filter(Boolean).join(' · ')}</Text>
+        <Text style={styles.choiceLabel}>{!liveSession ? 'Session' : liveState(liveSession) === 'finished' ? 'Log your session' : 'Session in progress'}</Text>
+        <Text style={styles.note}>{!liveSession ? 'Start one now, or log one you’ve played.' : [liveState(liveSession) === 'finished' ? 'Finished' : `Started ${startClock(liveSession)}`, livePlace(liveSession)].filter(Boolean).join(' · ')}</Text>
       </Pressable></Reanimated.View>}
       <Reanimated.View entering={arrive(entering ? 0 : 1)}><Pressable accessibilityRole="button" accessibilityLabel={entering ? `Choose your clip for the ${challenge.title} challenge` : 'Create a clip'} onPress={() => { setMode('clip'); void openDevice('video'); }} style={[styles.choiceOption, tight && styles.choiceOptionTight, tighter && styles.choiceOptionTighter, entering && styles.choiceChallenge]}>
         {preparing === 'video' ? <PreparingRing size={choiceIcon} done={prepDone} /> : <Ionicons name={entering ? 'trophy-outline' : 'videocam-outline'} size={choiceIcon} color={entering ? colors.brand : colors.textMuted}/>}<Text style={styles.choiceLabel}>{entering ? 'Choose your clip' : 'Clip'}</Text><Text style={styles.note}>{preparing === 'video' ? 'Getting your video ready — shrinking it so it posts fast.' : entering ? `A video from your phone. #${challenge.tag} is already in the caption.` : 'Share a video from your device.'}</Text>
@@ -977,14 +983,17 @@ export default function Compose() {
       {entering ? null : <Reanimated.View entering={arrive(4)}><Pressable accessibilityRole="button" accessibilityLabel="Create a thread or question" onPress={() => router.replace('/ask')} style={[styles.choiceOption, tight && styles.choiceOptionTight, tighter && styles.choiceOptionTighter]}>
         <Ionicons name="chatbubbles-outline" size={choiceIcon} color={colors.textMuted}/><Text style={styles.choiceLabel}>Thread or question</Text><Text style={styles.note}>Ask the community or start a conversation.</Text>
       </Pressable></Reanimated.View>}
-      {/* Logging is not posting: a quiet line under the ways to post, private, for the streak. */}
-      {entering ? null : <Reanimated.View entering={arrive(5)}><Pressable accessibilityRole="button" accessibilityLabel="Log a session. Private, counts toward your streak" onPress={() => router.replace('/log-session')} style={({ pressed }) => [styles.choiceQuiet, pressed && { opacity: 0.6 }]}>
-        <Ionicons name="add-circle-outline" size={20} color={colors.textMuted}/>
-        <View style={styles.choiceQuietWords}><Text style={styles.choiceQuietLabel}>Log a session</Text><Text style={styles.note}>Private · counts toward your streak</Text></View>
-        <Ionicons name="chevron-forward" size={16} color={colors.textFaint}/>
-      </Pressable></Reanimated.View>}
       </ScrollView>
     </Reanimated.View>
+    <MenuSheet
+      visible={sessionChoice}
+      onClose={() => setSessionChoice(false)}
+      title="Session"
+      items={[
+        { icon: 'stopwatch-outline', label: 'Start now', note: adult ? 'A timer, and a check-in at your court.' : 'A timer, from Start to Finish.', onPress: () => router.replace('/start-session') },
+        { icon: 'add-circle-outline', label: 'Log a past one', note: 'Private · counts toward your streak', onPress: () => router.replace('/log-session') },
+      ]}
+    />
   </View>;
 
   if (stage === 'edit' && media) {
@@ -1402,10 +1411,6 @@ const styleDefinitions = StyleSheet.create({
   choiceOptionTighter: { paddingVertical: 12, gap: 4 },
   choiceChallenge: { borderWidth: 1, borderColor: colors.brand },
   choiceLabel: { fontSize: 16, ...font('600'), color: colors.text },
-  // "Log a session": a plain line under the cards, no card of its own, so it reads as the quieter choice.
-  choiceQuiet: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 2, paddingTop: 14, paddingBottom: 2, paddingHorizontal: 4, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
-  choiceQuietWords: { flex: 1, gap: 2 },
-  choiceQuietLabel: { fontSize: 15, ...font('600'), color: colors.text },
   backdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'transparent' },
   sheet: {
     height: '100%',

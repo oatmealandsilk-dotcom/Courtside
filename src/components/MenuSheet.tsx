@@ -9,6 +9,8 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 export interface MenuSheetItem {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
+  /** A few words under the label, only where the label alone would not say what happens. */
+  note?: string;
   /** Red, for what reports, blocks or can't be taken back. */
   danger?: boolean;
   onPress: () => void;
@@ -20,6 +22,8 @@ export interface MenuSheetItem {
  * title, one row per choice on hairlines, red for Report and Block). It
  * closes before a row's action runs, so a question asked next should use
  * confirmAfterMenu (or confirmReport / confirmBlock with fromMenu).
+ * A row may carry a short note under its label (the Create box's Session
+ * card: Start now, or Log a past one).
  */
 export function MenuSheet({ visible, onClose, title, items }: { visible: boolean; onClose: () => void; title?: string; items: MenuSheetItem[] }) {
   const styles = useThemedStyles(styleDefinitions);
@@ -37,11 +41,17 @@ export function MenuSheet({ visible, onClose, title, items }: { visible: boolean
             <Pressable
               key={item.label}
               accessibilityRole="button"
+              accessibilityLabel={item.note ? `${item.label}. ${item.note}` : undefined}
               onPress={() => { onClose(); item.onPress(); }}
               style={({ pressed }) => [styles.row, index > 0 && styles.border, pressed && styles.pressed]}
             >
               <Ionicons name={item.icon} size={21} color={item.danger ? colors.danger : colors.text} />
-              <Text style={[styles.label, item.danger && styles.danger]}>{item.label}</Text>
+              {item.note ? (
+                <View style={styles.words}>
+                  <Text style={[styles.label, item.danger && styles.danger]}>{item.label}</Text>
+                  <Text style={styles.note}>{item.note}</Text>
+                </View>
+              ) : <Text style={[styles.label, item.danger && styles.danger]}>{item.label}</Text>}
             </Pressable>
           ))}
         </View>
@@ -68,5 +78,7 @@ const styleDefinitions = StyleSheet.create({
   border: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   pressed: { backgroundColor: colors.surfaceAlt },
   label: { ...typography.body, color: colors.text },
+  words: { flex: 1, gap: 2 },
+  note: { ...typography.small, color: colors.textMuted },
   danger: { color: colors.danger },
 });

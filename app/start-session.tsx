@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { Redirect, router } from 'expo-router';
+import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { DragSheet } from '@/components/DragSheet';
@@ -8,7 +8,7 @@ import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { Chips, Section, SheetTitle, Submit, formBody } from '@/components/sheet/SheetForm';
 import type { CourtAccess, LiveSession, TaggedCourt } from '@/data/types';
 import { LIVE_KINDS, checkInPlan, liveState, seenLine } from '@/features/activity/liveSession';
-import { labelOf } from '@/features/places/courtName';
+import { isMapCourtId, labelOf } from '@/features/places/courtName';
 import { openPlacePicker } from '@/features/places/picker';
 import { recentPlaces, warmRecentPlaces } from '@/features/places/recents';
 import { notKnownAdult } from '@/features/players/age';
@@ -23,6 +23,8 @@ import { colors, font, lift, radius, spacing, typography } from '@/theme';
 /** Why this court was put in for you: where you are, where you played last, or a court you follow. */
 type Why = 'here' | 'recent' | 'yours' | 'picked';
 const WHY_WORDS: Record<Why, string> = { here: 'You’re here', recent: 'Last time', yours: 'Your court', picked: '' };
+/** Who may play at a court, as a court's page sends it. */
+const ACCESS: readonly string[] = ['public', 'members', 'pay', 'private'];
 
 /**
  * Start a session (Oct 6, owner: "click start when they start a session …
@@ -34,6 +36,8 @@ const WHY_WORDS: Record<Why, string> = { here: 'You’re here', recent: 'Last ti
  * will see you, by the court sheet's own check-in rules, and one big Start.
  * Start runs the clock and opens the live page; at a court anyone may play
  * at it checks you in there too ("I'm playing here").
+ * From a court's own page ("Start a session here", features/players/courtLink
+ * startSessionHere) that court comes already chosen, with who may play there.
  */
 export default function StartSession() {
   const styles = useThemedStyles(styleDefinitions);
@@ -42,6 +46,17 @@ export default function StartSession() {
   const close = () => setCloseSignal((n) => n + 1);
   // Once the sheet is gone: the live page, when Start was tapped; else back where it opened.
   const next = useRef<'live' | null>(null);
+  // A court's page sends its court (and who may play there); a place with no court on the map, just its name.
+  const params = useLocalSearchParams<{ courtId?: string; courtName?: string; lat?: string; lng?: string; access?: string; place?: string }>();
+  const [fromPage] = useState<{ court: TaggedCourt | null; place: string; access?: CourtAccess } | null>(() => {
+    const lat = Number(params.lat);
+    const lng = Number(params.lng);
+    const name = params.courtName?.trim();
+    const access = ACCESS.includes(params.access ?? '') ? (params.access as CourtAccess) : undefined;
+    if (isMapCourtId(params.courtId) && name && Number.isFinite(lat) && Number.isFinite(lng)) return { court: { id: params.courtId, name, lat, lng }, place: '', access };
+    const place = params.place?.trim();
+    return place ? { court: null, place } : null;
+  });
   const [kind, setKind] = useState<LiveSession['kind']>('practice');
   const [busy, setBusy] = useState(false);
   // A session already going (a second tap, an old link): its own page instead of a second one.
@@ -51,7 +66,7 @@ export default function StartSession() {
   // Each way of knowing where you play, as it arrives; the best one shows until you pick.
   const [here, setHere] = useState<Court | null>(null);
   const [recent, setRecent] = useState<TaggedCourt | null>(null);
-  const [picked, setPicked] = useState<{ court: TaggedCourt | null; place: string } | null>(null);
+  const [picked, setPicked] = useState<{ court: TaggedCourt | null; place: string } | null>(() => (fromPage ? { court: fromPage.court, place: fromPage.place } : null));
   // "Played at …?"'s own rule (compose): only a court you are standing at, only with Location on, never for a teen.
   const canSuggest = !!currentUser && !notKnownAdult(currentUser) && locationEnabled;
   useEffect(() => {
@@ -88,7 +103,8 @@ export default function StartSession() {
   const hereCourt: TaggedCourt | null = here ? { id: here.id, name: labelOf(here), lat: here.lat, lng: here.lng } : null;
   const yoursCourt: TaggedCourt | null = yours ? { id: yours.courtId, name: yours.name ?? 'Tennis courts', lat: yours.lat, lng: yours.lng } : null;
   const shown: { court: TaggedCourt | null; place: string; why: Why } | null = picked
-    ? { ...picked, why: 'picked' }
+    // A court picked (or sent by its page) that you are standing at still says so.
+    ? { ...picked, why: picked.court && hereCourt && picked.court.id === hereCourt.id ? 'here' : 'picked' }
     : hereCourt ? { court: hereCourt, place: '', why: 'here' }
       : recent ? { court: recent, place: '', why: 'recent' }
         : yoursCourt ? { court: yoursCourt, place: '', why: 'yours' } : null;
@@ -97,6 +113,7 @@ export default function StartSession() {
   // Who may play there, for the check-in's rule: what the map's list said, or the court's facts.
   useEffect(() => { if (court) void actions.loadCourtInfo([court.id]); }, [court?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const access: CourtAccess | undefined = (here && court?.id === here.id ? here.access : undefined)
+    ?? (fromPage?.court && court?.id === fromPage.court.id ? fromPage.access : undefined)
     ?? (yours && court?.id === yours.courtId && yours.access !== 'unknown' ? yours.access : undefined)
     ?? (court ? courtFacts[court.id]?.access : undefined);
   const change = () => openPlacePicker((value, chosen) => {
