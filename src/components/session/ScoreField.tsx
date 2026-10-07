@@ -69,6 +69,8 @@ export function ScoreField({ value, onChange, kind = 'match', label, focus = fal
         autoCapitalize="none"
         autoCorrect={false}
         keyboardType="numbers-and-punctuation"
+        // No "AutoFill" bubble over the hint below: a score is never a saved password or address.
+        autoComplete="off"
       />
       <Text accessibilityLiveRegion="polite" style={[styles.line, problem ? styles.problem : null]}>{line}</Text>
     </View>

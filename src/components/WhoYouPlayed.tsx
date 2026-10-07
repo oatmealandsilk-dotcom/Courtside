@@ -221,6 +221,7 @@ export function WhoYouPlayed({ kind, players, onPlayers, text, onText, search, s
         accessibilityLabel={search ? 'Who was there: search CourtSide players or type a name' : placeholder}
         autoCapitalize="words"
         autoCorrect={false}
+        autoComplete="off"
         // The names typed here are kept as the session's opponent, which holds 60 characters (a longer one never saved).
         maxLength={OPPONENT_MAX}
         onFocus={() => { if (closing.current) clearTimeout(closing.current); setFocused(true); reveal(block.current); }}

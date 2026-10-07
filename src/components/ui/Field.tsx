@@ -209,7 +209,9 @@ const styleDefinitions = StyleSheet.create({
   inputFocused: { borderColor: colors.borderStrong },
   bare: { backgroundColor: 'transparent', borderWidth: 0, paddingHorizontal: 0, paddingVertical: 6, fontSize: 16, lineHeight: 22 },
   hint: { ...typography.small, color: colors.textFaint },
-  softLine: { ...lift, borderWidth: 0, borderRadius: radius.pill, minHeight: 52, paddingVertical: 14, fontSize: 16 },
+  // A fixed height and no top/bottom padding: iPhone then centres the words and the grey example
+  // text itself. With padding, the example sat a line low, half under the box (Oct 6, owner).
+  softLine: { ...lift, borderWidth: 0, borderRadius: radius.pill, height: 52, paddingVertical: 0, fontSize: 16 },
   softArea: { ...lift, borderWidth: 0, borderRadius: 20, paddingVertical: 14, fontSize: 16, lineHeight: 22 },
   well: { backgroundColor: colors.surfaceAlt, borderColor: 'transparent', borderRadius: 14 },
   compact: { minHeight: 44, maxHeight: 120, borderRadius: 22, paddingTop: 11, paddingBottom: 11, paddingHorizontal: 16, fontSize: 16, lineHeight: 22 },
