@@ -17,6 +17,8 @@ const EASE_OUT_OF_VIEW = Easing.bezier(0.4, 0, 1, 1);
 /** Apple's sheets rise on a spring: quick, with the faintest settle at the top. */
 const SPRING = { damping: 24, stiffness: 240, mass: 0.9, overshootClamping: false } as const;
 const FLICK_PX_PER_S = 700;
+/** How long the plain sheet takes to slide away. */
+const PLAIN_CLOSE_MS = 230;
 
 /**
  * The comments stage's own drag, for a list inside it that hands a pull down
@@ -131,6 +133,14 @@ function PlainSheet({
   const translateY = useSharedValue(fullHeight);
   const backdropOpacity = useSharedValue(0);
   const dismissedRef = useRef(false);
+  // On its way out (×, a tap outside, a drag down, Back): from then on nothing
+  // may move it back up. A fitted sheet re-measures its contents as it slides
+  // (a fraction of a point either way as it crosses the screen's pixels), and
+  // that used to spring it straight back open, the dim gone and the page never
+  // left, so neither × nor a tap above could close it (Oct 6, owner).
+  const closing = useSharedValue(false);
+  const fallback = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (fallback.current) clearTimeout(fallback.current); }, []);
   const latestSettled = useRef(onSettled);
   latestSettled.current = onSettled;
   const settled = () => latestSettled.current?.();
@@ -155,7 +165,7 @@ function PlainSheet({
   // that first fitted a short page is never left stuck short. The browser's
   // twin measures again on every change for the same reason.
   useEffect(() => {
-    if (touched.current || dismissedRef.current || openOffset === restAt.current) return;
+    if (touched.current || dismissedRef.current || closing.value || openOffset === restAt.current) return;
     restAt.current = openOffset;
     translateY.value = withSpring(openOffset, SPRING);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -167,20 +177,26 @@ function PlainSheet({
     onDismissed();
   };
   const dismiss = () => {
+    if (closing.value) return;
+    closing.value = true;
     // The keyboard (a search or comment box in the sheet) goes down with the
     // sheet, not after it: the page it uncovers is then already at rest.
     Keyboard.dismiss();
-    translateY.value = withTiming(fullHeight, { duration: 230, easing: EASE_OUT_OF_VIEW }, (done) => {
+    // Whatever happens to the animation, the page is not left open behind it (as the stage's close).
+    fallback.current = setTimeout(finish, PLAIN_CLOSE_MS + 200);
+    translateY.value = withTiming(fullHeight, { duration: PLAIN_CLOSE_MS, easing: EASE_OUT_OF_VIEW }, (done) => {
       if (done) runOnJS(finish)();
     });
     backdropOpacity.value = withTiming(0, { duration: 210, easing: EASE });
   };
   const openFull = () => {
+    if (closing.value) return;
     touched.current = true;
     translateY.value = withSpring(0, SPRING);
     backdropOpacity.value = withTiming(1, { duration: 240, easing: EASE });
   };
   const returnTo = (origin: number) => {
+    if (closing.value) return;
     touched.current = true;
     translateY.value = withSpring(origin, SPRING);
     backdropOpacity.value = withTiming(1 - origin / fullHeight, { duration: 220, easing: EASE });
@@ -223,17 +239,20 @@ function PlainSheet({
   const pan = Gesture.Pan()
     .onStart(() => {
       'worklet';
+      if (closing.value) return;
       startY.value = translateY.value;
       runOnJS(markTouched)();
     })
     .onUpdate((e) => {
       'worklet';
+      if (closing.value) return;
       const next = Math.max(0, Math.min(fullHeight, startY.value + e.translationY));
       translateY.value = next;
       backdropOpacity.value = 1 - next / fullHeight;
     })
     .onEnd((e) => {
       'worklet';
+      if (closing.value) return;
       const origin = startY.value;
       const travelled = translateY.value - origin;
       if (e.velocityY > FLICK_PX_PER_S || (travelled > 0 && travelled > (fullHeight - origin) * 0.32)) {
