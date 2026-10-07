@@ -8,7 +8,7 @@ import { useReducedMotion } from '@/lib/useReducedMotion';
 
 import { Avatar, BrandWash } from '@/components/ui';
 import { Glass } from '@/components/ui/Glass';
-import { FollowDisc } from '@/components/FollowPill';
+import { FollowShrink } from '@/components/FollowPill';
 import { MenuSheet, type MenuSheetItem } from '@/components/MenuSheet';
 import { afterMenu } from '@/lib/confirm';
 import { TileCover } from '@/components/TileCover';
@@ -635,12 +635,15 @@ export function PlayerSheet({ placed, following, onClose, onProfile, onMessage, 
   // ⋯ holds what used to hang under the buttons (Add to a group), the profile, and Follow in words,
   // the same choices a profile's own ⋯ offers. Each runs once the menu has gone.
   const [menuOpen, setMenuOpen] = useState(false);
-  const { followRequests, currentUserId } = useApp();
+  const { followRequests, currentUserId, followEdges } = useApp();
   const requested = !following && !!currentUserId && followRequests.some((r) => r.fromId === currentUserId && r.toId === user.id);
+  // They follow you: said on the card ("Follows you"), and Follow reads "Follow back" in the menu
+  // and to a screen reader. Following back is what puts you both on each other's map.
+  const followsYou = !!currentUserId && followEdges.some((e) => e.followerId === user.id && e.followingId === currentUserId);
   const menu: MenuSheetItem[] = [
     ...(onAskToHit ? [{ icon: 'person-circle-outline' as const, label: 'View profile', onPress: () => afterMenu(onProfile) }] : []),
     ...(onAddToGroup ? [{ icon: 'people-outline' as const, label: 'Add to a group', onPress: () => afterMenu(onAddToGroup) }] : []),
-    { icon: following || requested ? 'person-remove-outline' : 'person-add-outline', label: following ? 'Unfollow' : requested ? 'Cancel request' : 'Follow', onPress: () => afterMenu(onFollow) },
+    { icon: following || requested ? 'person-remove-outline' : 'person-add-outline', label: following ? 'Unfollow' : requested ? 'Cancel request' : followsYou ? 'Follow back' : 'Follow', onPress: () => afterMenu(onFollow) },
   ];
   return (
     <GestureDetector gesture={pull.gesture}>
@@ -658,9 +661,11 @@ export function PlayerSheet({ placed, following, onClose, onProfile, onMessage, 
             <LevelPill profile={user.profile} small />
           </View>
           {/* At a court right now (migration 63): which one, first; otherwise the town, and how far (never finer than the pin is). */}
-          <Text style={styles.personMeta} numberOfLines={1}>{[`@${user.handle}`, court ? null : seenCity || user.location || null, formatSpotMiles(miles, rough)].filter(Boolean).join(' · ')}</Text>
+          {/* "Follows you" joins whichever line is short: this one at a court (no town on it, and the
+              court's name below needs its room), the "Active" line otherwise. */}
+          <Text style={styles.personMeta} numberOfLines={1}>{[`@${user.handle}`, court ? null : seenCity || user.location || null, formatSpotMiles(miles, rough), court && followsYou ? 'Follows you' : null].filter(Boolean).join(' · ')}</Text>
           {court ? <View style={styles.openRow}><CourtGlyph size={13} color={colors.court} /><Text style={styles.atCourt} numberOfLines={1}>At {court.name}{seenAt ? ` · ${agoLabel(seenAt)}` : ''}</Text></View>
-            : seenAt ? <Text style={styles.personMeta} numberOfLines={1}>{activeLabel(seenAt)}</Text> : null}
+            : seenAt || followsYou ? <Text style={styles.personMeta} numberOfLines={1}>{[seenAt ? activeLabel(seenAt) : null, followsYou ? 'Follows you' : null].filter(Boolean).join(' · ')}</Text> : null}
           {isOpenToHit(user) ? <View style={styles.openRow}><View style={styles.openDot} /><Text style={styles.openText}>{till ? `Open to hit ${till}` : 'Open to hit today'}</Text></View> : null}
         </Pressable>
         {/* Up by the name, where a card's close sits on a phone, rather than floating halfway down the words. */}
@@ -669,15 +674,16 @@ export function PlayerSheet({ placed, following, onClose, onProfile, onMessage, 
         </Pressable>
       </View>
       {farLine ? <Text style={styles.farLine}>{farLine}</Text> : null}
-      {/* One row, one family (Oct 7): a single filled pill (Ask to hit, tennis first, or Message where
-          Ask to hit is not offered), a sand pill of the same size beside it, then Follow as a round
-          button and ⋯ for the rest. Nothing in the row changes size when you follow. */}
+      {/* One row (Oct 7): a single filled pill (Ask to hit, tennis first, or Message where Ask to hit
+          is not offered), a sand pill beside it, Follow in words until you follow (then a small round
+          button), and ⋯ for the rest. All four fit a 375pt phone: the two pills size to their words and
+          share what is left, and the sand pill carries no icon to make the room for "Follow". */}
       <View style={styles.cardActions}>
         <View style={styles.cardSlot}>
           {onAskToHit ? (
             <Tappable accessibilityLabel={`Ask ${user.name} to hit`} onPress={onAskToHit} scaleTo={0.97} hoverTo={1.02} style={[styles.cardPill, styles.cardPrimary, pageIsDark() ? styles.cardLiftDark : styles.cardLift]}>
               <BrandWash />
-              <HitGlyph size={17} color={colors.brandInk} />
+              <HitGlyph size={16} color={colors.brandInk} />
               <Text style={styles.cardPrimaryText} numberOfLines={1}>Ask to hit</Text>
             </Tappable>
           ) : (
@@ -691,17 +697,15 @@ export function PlayerSheet({ placed, following, onClose, onProfile, onMessage, 
         <View style={styles.cardSlot}>
           {onAskToHit ? (
             <Tappable accessibilityLabel={`Message ${user.name}`} onPress={onMessage} scaleTo={0.97} hoverTo={1.02} style={[styles.cardPill, styles.cardSecondary]}>
-              <Ionicons name="paper-plane-outline" size={16} color={colors.text} />
               <Text style={styles.cardSecondaryText} numberOfLines={1}>Message</Text>
             </Tappable>
           ) : (
             <Tappable accessibilityRole="link" accessibilityLabel="Open profile" onPress={onProfile} scaleTo={0.97} hoverTo={1.02} style={[styles.cardPill, styles.cardSecondary]}>
-              <Ionicons name="person-circle-outline" size={17} color={colors.text} />
               <Text style={styles.cardSecondaryText} numberOfLines={1}>Profile</Text>
             </Tappable>
           )}
         </View>
-        <FollowDisc following={following} userId={user.id} onPress={onFollow} name={first} />
+        <FollowShrink following={following} userId={user.id} onPress={onFollow} name={first} followsYou={followsYou} />
         <Tappable accessibilityLabel={`More for ${user.name}`} onPress={() => setMenuOpen(true)} scaleTo={0.94} style={styles.cardRound}>
           <Ionicons name="ellipsis-horizontal" size={19} color={colors.text} />
         </Tappable>
@@ -1250,12 +1254,14 @@ const styleDefinitions = StyleSheet.create({
   // The player card's close: level with the name (half its height above the name's middle).
   closeTop: { alignSelf: 'flex-start', marginTop: -5 },
   closePressed: { opacity: 0.6 },
-  // The player card's one row of actions: two pills sharing the width, then two round buttons.
+  // The player card's one row of actions: two pills, Follow, then ⋯.
   // Capped, so on a computer (where the card spans the whole map) the pills stay pill-sized
   // rather than stretching into bars; a phone never reaches the cap.
   cardActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg, marginTop: spacing.sm, paddingBottom: spacing.xs, width: '100%', maxWidth: 456 },
-  cardSlot: { flex: 1, minWidth: 0 },
-  cardPill: { height: 44, borderRadius: radius.pill, borderWidth: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, paddingHorizontal: spacing.md },
+  // Each pill starts at its own words' width and the two share what is left equally, so Ask to hit
+  // never squeezes to "Ask to h…" beside a shorter Message. Follow drawing in hands its room to them.
+  cardSlot: { flexGrow: 1, flexShrink: 1, flexBasis: 'auto', minWidth: 0 },
+  cardPill: { height: 44, borderRadius: radius.pill, borderWidth: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingHorizontal: spacing.md },
   cardPrimary: { backgroundColor: colors.brand, borderColor: colors.brand },
   // The page's one shadow (DESIGN.md, Lift): the primary in its own colour; plain dark on a dark page.
   cardLift: { shadowColor: colors.brand, shadowOpacity: 0.28, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 3 },

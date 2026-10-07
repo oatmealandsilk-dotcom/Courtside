@@ -1,5 +1,5 @@
-import React, { useEffect, useRef } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { Easing, interpolateColor, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
@@ -7,7 +7,7 @@ import * as haptics from '@/lib/haptics';
 import { useTheme } from '@/theme/ThemeProvider';
 import { BrandWash } from '@/components/ui/BrandWash';
 import { useApp } from '@/store/AppContext';
-import { colors, typography } from '@/theme';
+import { colors, readsOn, typography } from '@/theme';
 import { reduceMotionEnabled } from '@/lib/useReducedMotion';
 
 const EASE = Easing.bezier(0.22, 1, 0.36, 1);
@@ -63,60 +63,102 @@ export function FollowPill({ following, onPress, small = false, name, userId, wi
 }
 
 /**
- * Follow as a round button, for a row with no room for a third word (the
- * map's player card, Oct 7): the same sand disc as the buttons beside it,
- * with a person and a plus in the brand's colour until you follow, then the
- * person in ink with a tick (a private account's ask waiting shows dots
- * instead). Only the glyph changes, never the disc, so it stays one of the
- * row's family in every theme: a brand tint behind it went olive on New
- * York's navy. The same dip, haptic and spoken label as FollowPill, and one
- * size whatever it says, so nothing beside it moves when you tap.
+ * Follow on the map's player card, in a row with Ask to hit, Message and ⋯
+ * (Oct 7): the word until you follow, then a small round button.
+ *
+ * Not following, it is a pill that says "Follow", ringed in the brand's
+ * colour on the card's own colour: easy to find (following is how friends
+ * see each other on the map) without a second filled green pill beside Ask
+ * to hit. The word takes the brand's colour where that reads at 4.5:1 on the
+ * card, and the palette's ink where it does not (Melbourne's sky blue).
+ *
+ * Tap it and the pill draws in to the quiet disc of the buttons beside it:
+ * a person in ink with a tick, or with dots while a private account's ask
+ * waits ("Requested"). Unfollow (from the disc or the ⋯ menu) and it opens
+ * back out into the word. The pills beside it take up the room it gives
+ * back as it goes, and hand it back as it opens.
+ * Reduce Motion: no change of size is animated; the faces only fade.
+ *
+ * `followsYou` changes only what it says to a screen reader ("Follow back"):
+ * the words "Follow back" do not fit in the row on a small phone.
  */
-export function FollowDisc({ following, onPress, name, userId, size = 44 }: { following: boolean; onPress: () => void; name?: string; userId?: string; size?: number }) {
+export function FollowShrink({ following, onPress, name, userId, followsYou = false, size = 44 }: { following: boolean; onPress: () => void; name?: string; userId?: string; followsYou?: boolean; size?: number }) {
   useTheme();
   const { followRequests, currentUserId } = useApp();
   const requested = !following && !!userId && !!currentUserId && followRequests.some((r) => r.fromId === currentUserId && r.toId === userId);
   const filled = following || requested;
+  // `on` crosses the faces and colours over; `shut` draws the width in (0 = the word's width, 1 = the disc).
   const on = useSharedValue(filled ? 1 : 0);
+  const shut = useSharedValue(filled ? 1 : 0);
   const bump = useSharedValue(1);
-  // 1 while the faces may grow as they cross over; 0 under Reduce Motion, where they only fade.
   const motion = useSharedValue(1);
   const reduced = useRef(false);
+  // How wide the word is, measured from a hidden copy of it, so the pill knows the width to open
+  // back out to and the word is never squeezed into "Fo…" while the pill draws in. 0 until
+  // measured: the pill then sizes itself around the word.
+  const [wordText, setWordText] = useState(0);
+  const wordWidth = wordText ? wordText + 2 * SHRINK_PAD + 2 : 0;
   useEffect(() => { reduceMotionEnabled().then((r) => { reduced.current = r; if (r) motion.value = 0; }).catch(() => {}); }, [motion]);
-  useEffect(() => { on.value = withTiming(filled ? 1 : 0, { duration: 280, easing: EASE }); }, [filled, on]);
+  useEffect(() => {
+    on.value = withTiming(filled ? 1 : 0, { duration: 260, easing: EASE });
+    shut.value = reduced.current ? (filled ? 1 : 0) : withTiming(filled ? 1 : 0, { duration: 320, easing: EASE });
+  }, [filled, on, shut]);
 
-  const disc = useAnimatedStyle(() => ({ transform: [{ scale: bump.value }] }));
-  // The two faces cross over, the new one settling in from a touch smaller.
-  const addFace = useAnimatedStyle(() => ({ opacity: 1 - on.value, transform: [{ scale: 1 - on.value * 0.2 * motion.value }] }));
-  const doneFace = useAnimatedStyle(() => ({ opacity: on.value, transform: [{ scale: 1 - (1 - on.value) * 0.2 * motion.value }] }));
+  // Read on each draw and handed in as plain values (see FollowPill: read inside, they stick to the first theme).
+  const { surface, surfaceAlt, brand, borderStrong, text } = colors;
+  const wordInk = readsOn(brand, surface) ? brand : text;
+  const box = useAnimatedStyle(() => {
+    const look = {
+      backgroundColor: interpolateColor(on.value, [0, 1], [surface, surfaceAlt]),
+      borderColor: interpolateColor(on.value, [0, 1], [brand, borderStrong]),
+      transform: [{ scale: bump.value }],
+    };
+    if (wordWidth > 0) return { ...look, width: wordWidth + (size - wordWidth) * shut.value };
+    return shut.value > 0.5 ? { ...look, width: size } : look;
+  }, [wordWidth, size, surface, surfaceAlt, brand, borderStrong]);
+  // The word goes before the pill is too narrow for it, and comes back once there is room.
+  const word = useAnimatedStyle(() => ({ opacity: Math.max(0, 1 - on.value * 1.8) }));
+  const done = useAnimatedStyle(() => ({ opacity: on.value, transform: [{ scale: 1 - (1 - on.value) * 0.2 * motion.value }] }));
 
   const press = () => {
-    if (!reduced.current) bump.value = withSequence(withTiming(0.94, { duration: 60, easing: EASE }), withSpring(1, { damping: 20, stiffness: 320 }));
+    if (!reduced.current) bump.value = withSequence(withTiming(0.95, { duration: 60, easing: EASE }), withSpring(1, { damping: 20, stiffness: 320 }));
     haptics.tap();
     onPress();
   };
 
+  const said = following ? 'Following' : requested ? 'Requested' : followsYou ? 'Follow back' : 'Follow';
   return (
-    <Pressable accessibilityRole="button" accessibilityState={{ selected: filled }} accessibilityLabel={`${following ? 'Following' : requested ? 'Requested' : 'Follow'}${name ? ` ${name}` : ''}`} onPress={press} hitSlop={4}>
-      <Animated.View style={[styles.disc, { width: size, height: size, borderRadius: size / 2, backgroundColor: colors.surfaceAlt, borderColor: colors.borderStrong }, disc]}>
-        <Animated.View pointerEvents="none" style={[styles.face, addFace]}>
-          <Ionicons name="person-add-outline" size={19} color={colors.brand} />
-        </Animated.View>
-        <Animated.View pointerEvents="none" style={[styles.face, doneFace]}>
+    <Pressable accessibilityRole="button" accessibilityState={{ selected: filled }} accessibilityLabel={`${said}${name ? ` ${name}` : ''}`} onPress={press} hitSlop={4}>
+      <Animated.View style={[styles.shrink, { height: size, borderRadius: size / 2 }, box]}>
+        <Animated.Text style={[styles.shrinkWord, { color: wordInk }, wordText ? { width: wordText } : null, word]} numberOfLines={1}>Follow</Animated.Text>
+        <Animated.View pointerEvents="none" style={[styles.face, done]}>
           <View style={styles.person}>
-            <Ionicons name="person-outline" size={18} color={colors.text} />
-            <View style={[styles.badge, { backgroundColor: colors.text, borderColor: colors.surfaceAlt }]}>
-              <Ionicons name={requested ? 'ellipsis-horizontal' : 'checkmark'} size={8} color={colors.surfaceAlt} />
+            <Ionicons name="person-outline" size={18} color={text} />
+            <View style={[styles.badge, { backgroundColor: text, borderColor: surfaceAlt }]}>
+              <Ionicons name={requested ? 'ellipsis-horizontal' : 'checkmark'} size={8} color={surfaceAlt} />
             </View>
           </View>
         </Animated.View>
       </Animated.View>
+      {/* The measure: the same word, unsqueezed, never seen or read out. */}
+      <View pointerEvents="none" style={styles.measure} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" aria-hidden>
+        <Text style={styles.shrinkWord} numberOfLines={1} onLayout={(e) => {
+          const w = Math.ceil(e.nativeEvent.layout.width);
+          if (w > 0 && w !== wordText) setWordText(w);
+        }}>Follow</Text>
+      </View>
     </Pressable>
   );
 }
 
+/** The word pill's padding either side of "Follow". */
+const SHRINK_PAD = 12;
+
 const styles = StyleSheet.create({
-  disc: { alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
+  // FollowShrink: the word pill, which draws in to a disc. Clipped, so the word never shows past it.
+  shrink: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: SHRINK_PAD, borderWidth: 1, overflow: 'hidden' },
+  shrinkWord: { ...typography.smallStrong, fontSize: 14, flexShrink: 0 },
+  measure: { position: 'absolute', left: 0, top: 0, opacity: 0 },
   face: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, alignItems: 'center', justifyContent: 'center' },
   // The tick sits on the person's shoulder, cut out of it by a ring of the button's own colour.
   person: { width: 18, height: 18, marginRight: 3 },
