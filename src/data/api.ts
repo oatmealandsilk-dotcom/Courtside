@@ -442,16 +442,20 @@ export async function searchPosts(_term: string): Promise<{ posts: Post[]; comme
 
 /**
  * How every post has done in feeds, by post id, for the ranking (migration
- * 143). Empty when it could not be asked (offline, or the server is a
- * version behind): the feed then ranks as before. The demo has no looks.
+ * 143), and when you last saw each (migration 150). Null when it could not
+ * be asked (offline, or the server is a version behind): the last answer is
+ * kept (features/feed/feedScores), and without one the feed ranks from what
+ * this phone has seen (features/feed/seenPosts). The demo has no looks.
  */
-export async function fetchFeedScores(): Promise<Record<ID, FeedScore>> {
+export async function fetchFeedScores(): Promise<Record<ID, FeedScore> | null> {
   if (!supabase) return {};
   const { data, error } = await supabase.rpc('feed_post_scores');
-  if (error || !Array.isArray(data)) return {};
+  if (error || !Array.isArray(data)) return null;
   const out: Record<ID, FeedScore> = {};
-  for (const r of data as { post_id: string; viewers: number; looks: number; watch_seconds: number; skips: number; profile_taps: number; seen_by_me: boolean }[]) {
-    out[r.post_id] = { viewers: r.viewers ?? 0, looks: r.looks ?? 0, watchSeconds: r.watch_seconds ?? 0, skips: r.skips ?? 0, profileTaps: r.profile_taps ?? 0, seenByMe: !!r.seen_by_me };
+  // my_last_seen (migration 150) is read only when the server sends it: before that runs, "seen" has no time.
+  for (const r of data as { post_id: string; viewers: number; looks: number; watch_seconds: number; skips: number; profile_taps: number; seen_by_me: boolean; my_last_seen?: string | null }[]) {
+    const seenAt = r.my_last_seen ? Date.parse(r.my_last_seen) : NaN;
+    out[r.post_id] = { viewers: r.viewers ?? 0, looks: r.looks ?? 0, watchSeconds: r.watch_seconds ?? 0, skips: r.skips ?? 0, profileTaps: r.profile_taps ?? 0, seenByMe: !!r.seen_by_me || Number.isFinite(seenAt), ...(Number.isFinite(seenAt) ? { mySeenAt: seenAt } : {}) };
   }
   return out;
 }

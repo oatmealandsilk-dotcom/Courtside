@@ -850,8 +850,11 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions, LiveSessionAct
   /** Change your own thread's question and details. */
   editQuestion: (questionId: ID, patch: { title: string; body: string }) => void;
   /** Pull-to-refresh: fetches everything again from the server. */
-  /** Fetches what is new. False when it could not (no connection, a failed load), so a page does not say "Updated". */
-  refresh: () => Promise<boolean>;
+  /**
+   * Fetches what is new. False when it could not (no connection, a failed load), so a page does not say "Updated".
+   * `quiet`: asked by the app itself (For you coming back after a while), so a failure says nothing.
+   */
+  refresh: (opts?: { quiet?: boolean }) => Promise<boolean>;
   deletePost: (postId: ID) => void;
   /** Deletes a comment (on a post or an Instant) and its replies: your own, or anyone's under something of yours (migration 125). */
   deleteComment: (commentId: ID) => void;
@@ -2634,8 +2637,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // The network can miss on a cold open; the load is tried a few times
       // before giving up, and giving up never means "start the quiz again".
       let data: Awaited<ReturnType<typeof fetchRemote>> | null = null;
-      // How posts have been watched, for the feed's first deal: asked alongside the load, not after it.
-      void loadFeedScores();
+      // How posts have been watched (and which you have seen, on any phone), for the feed's deal:
+      // asked afresh alongside the load, not after it. The feed waits for it before dealing from the top.
+      void loadFeedScores({ force: true, userId: me });
       for (let attempt = 0; ; attempt += 1) {
         try { data = await fetchRemote(me); break; } catch (e) {
           if (attempt >= 3) throw e;
@@ -4505,7 +4509,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     drawWaiters.current.push(waiter);
   }), []);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (opts?: { quiet?: boolean }) => {
+    // Handed straight to a pull's handler, it may be given something else: only a real { quiet: true } is quiet.
+    const quiet = !!opts && typeof opts === 'object' && opts.quiet === true;
     const me = stateRef.current.currentUserId;
     // Any signed-in account fetches, one whose last load failed included: a
     // pull is exactly how someone asks it to try again.
@@ -4514,7 +4520,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     void refreshSessionTags();
     if (await loadRemote(me, undefined, true)) { await drawn(() => stateRef.current.feed !== before); return true; }
     // An open on the saved copy that could not refresh has already said so.
-    if (stateRef.current.remoteLoaded || !stateRef.current.snapshotShown) showToast({ title: 'Can’t refresh right now', body: 'Check your connection, then pull down to try again.', icon: 'cloud-offline-outline' });
+    if (!quiet && (stateRef.current.remoteLoaded || !stateRef.current.snapshotShown)) showToast({ title: 'Can’t refresh right now', body: 'Check your connection, then pull down to try again.', icon: 'cloud-offline-outline' });
     return false;
   }, [loadRemote, drawn, refreshSessionTags]);
 

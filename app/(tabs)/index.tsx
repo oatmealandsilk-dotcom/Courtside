@@ -57,8 +57,9 @@ import { isLive } from '@/features/stories/stories';
 import { RemovedActions, RemovedNote } from '@/features/moderation/RemovedNote';
 import { show as showToast } from '@/lib/toast';
 import { ClipPlayback } from '@/components/ClipPlayback';
-import { NEWEST_FIRST, rankFeed, type FeedItem, type RankContext } from '@/features/feed/rankFeed';
+import { CAUGHT_UP, NEWEST_FIRST, rankFeed, type FeedItem, type RankContext } from '@/features/feed/rankFeed';
 import { feedScores, loadFeedScores } from '@/features/feed/feedScores';
+import { loadSeen, markSeen, seenOnPhone } from '@/features/feed/seenPosts';
 import { challengeFor, entriesFor } from '@/features/challenge/weekly';
 import { ChallengePage } from '@/components/ChallengePage';
 import { lockPageSwipe } from '@/features/navigation/swipeLock';
@@ -96,11 +97,32 @@ const isActivity = (p: Post, me: string | null | undefined, follows: Set<string>
   !p.archived && !p.removed && !p.groupId && reachable(p) && !!p.session && hasSessionStats(p.session) && (p.authorId === me || follows.has(p.authorId) || near.has(p.authorId));
 
 /** When each page's post, thread or Instant was made, for putting new ones newest first. */
-/** What the ranking may know: who you follow, who follows you, profiles, what you have seen this visit, and how posts have been watched. */
-function rankContext(data: Pick<RankContext, 'users'> & { followingIds: string[]; followEdges: { followerId: string; followingId: string }[] }, seen: Set<string>): RankContext {
+/**
+ * What the ranking may know: who you follow, who follows you, profiles, what
+ * you have seen (this visit, on this phone before, and on any phone as the
+ * server says), and how posts have been watched.
+ */
+function rankContext(data: Pick<RankContext, 'users'> & { currentUserId: string | null; followingIds: string[]; followEdges: { followerId: string; followingId: string }[] }, seen: Set<string>): RankContext {
   // How posts have been watched, as last loaded; asked again (once a minute old) for the next deal.
-  void loadFeedScores();
-  return { followingIds: data.followingIds, followEdges: data.followEdges, users: data.users, seen, scores: feedScores() };
+  void loadFeedScores({ userId: data.currentUserId });
+  return { followingIds: data.followingIds, followEdges: data.followEdges, users: data.users, seen, seenOnPhone: seenOnPhone(data.currentUserId), scores: feedScores() };
+}
+
+/** For you comes back dealt afresh, from the top, after the app has been away this long (Instagram does the same). */
+const AWAY_REDEAL_MS = 10 * 60_000;
+/** How long the first deal waits for the server to say what you have seen on other phones, at most. */
+const SEEN_WAIT_MS = 1500;
+/** A page on screen at least this long has been seen; less is a page flown past in the middle of a fling. */
+const GLANCE_MS = 300;
+/** How many older pages "You're all caught up" asks for by itself each time For you is dealt (40 posts a page). */
+const LINE_PAGES = 3;
+
+/** "the past 3 days": how far back the posts "You're all caught up" speaks for go. */
+function pastDays(days: number) {
+  if (days <= 1) return 'the past day';
+  if (days < 14) return `the past ${days} days`;
+  if (days < 60) return `the past ${Math.round(days / 7)} weeks`;
+  return 'the past few months';
 }
 
 function madeAt(data: { posts: { id: string; createdAt: string }[]; questions: { id: string; createdAt: string }[]; stories: { id: string; createdAt: string }[] }) {
@@ -451,7 +473,7 @@ function Home({ scope, topRow, paused, onChrome }: {
   latest.current = app;
   const [order, setOrder] = useState<string[]>([]);
   orderRef.current = order;
-  // Every page you have rested on this session; a refresh sends these to the back.
+  // Every page you have seen this session (on screen a moment, see GLANCE_MS); the next deal puts these at the very end.
   const seenNow = useRef(new Set<string>());
   // Feed signals, for a smarter feed later: how long each page is on your
   // screen while the feed is in front and the app is open, and whether you
@@ -468,6 +490,8 @@ function Home({ scope, topRow, paused, onChrome }: {
     const kind = signalKind(view.key);
     if (!kind) return;
     const seconds = (Date.now() - view.since) / 1000;
+    // A page flown past in the middle of a fling was never really looked at: not a look, nor a skip.
+    if (seconds * 1000 < GLANCE_MS) return;
     actions.noteFeedSignal({ kind, id: view.key.slice(2), seen: true, watched: seconds, skipped: seconds < 1.5 });
   };
   const tappedAuthor = (key: string) => {
@@ -484,6 +508,10 @@ function Home({ scope, topRow, paused, onChrome }: {
   const actsDealt = useRef<string | null>(null);
   // When the main feed was last dealt, so a pull knows what is new since.
   const dealtAt = useRef<number | null>(null);
+  // Counts For you's deals, so the tip and the challenge are placed afresh with each one and stay put in between (see `feed`).
+  const dealCount = useRef(0);
+  // The newest post you have not seen put in under "You're all caught up" since the last deal (placeArrivals), in ms.
+  const unseenBelow = useRef<number | null>(null);
   // Builds the page order from whatever is loaded; a pull-to-refresh asks for it again.
   const seen = seenNow;
   const rerank = useCallback((remount = true, fresh = false) => {
@@ -526,36 +554,39 @@ function Home({ scope, topRow, paused, onChrome }: {
       // A post whose picture or video is a link only its author's phone could
       // open (an upload that never finished) is left out of the deal.
       const ranked = rankFeed(data.posts.filter(forYou), data.questions.filter((q) => !q.source && !q.removed), data.comments, data.currentUserId, data.stories.filter((st) => isLive(st)), rankContext(data, seen.current)).flatMap((i) =>
-        i.type === 'post' ? [`p:${i.post.id}`] : i.type === 'question' ? [`q:${i.question.id}`] : i.type === 'hit' ? [`h:${i.story.id}`] : [],
+        i.type === 'post' ? [`p:${i.post.id}`] : i.type === 'question' ? [`q:${i.question.id}`] : i.type === 'hit' ? [`h:${i.story.id}`] : i.type === 'caught-up' ? [CAUGHT_UP] : [],
       );
-      // Something of yours from the last few minutes goes first, so a fresh post
-      // is right there. Newest first there is no such hold: what you post goes
-      // to the top the moment it has landed (liftToTop, below), and from then
-      // on it sits by its time like everyone else's. Holding your own day's posts
-      // above everything put other people's newer posts pages down after a pull.
+      // Two parts (rankFeed): what you have not seen yet, "You're all caught
+      // up", then what you have. Everything below only ever moves pages within
+      // the first part: nothing you have seen is lifted above something new.
+      const line = ranked.indexOf(CAUGHT_UP);
+      const fresh1 = line < 0 ? ranked : ranked.slice(0, line);
+      const earlier = line < 0 ? [] : ranked.slice(line);
+      const notSeen = new Set(fresh1);
+      // Something of yours from the last few minutes, not seen yet, goes first,
+      // so a fresh post is right there. Newest first there is no such hold: what
+      // you post goes to the top the moment it has landed (liftToTop, below),
+      // and from then on it sits by its time like everyone else's. Holding your
+      // own day's posts above everything put other people's newer posts pages
+      // down after a pull. Once you have seen it, it is one of the posts you have seen.
       const justMine: string[] = NEWEST_FIRST ? [] : data.posts
-        .filter((p) => p.authorId === data.currentUserId && !p.archived && !p.removed && !p.groupId && Date.now() - Date.parse(p.createdAt) < 5 * 60_000)
+        .filter((p) => p.authorId === data.currentUserId && !p.archived && !p.removed && !p.groupId && Date.now() - Date.parse(p.createdAt) < 5 * 60_000 && notSeen.has(`p:${p.id}`))
         .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
         .map((p) => `p:${p.id}`);
-      // The ranking already puts what you have watched this visit lower down
-      // and new players' first posts higher up, and it deals the same order
-      // from the same data, so a pull never reshuffles at random.
-      const final = [...justMine, ...ranked.filter((k) => !justMine.includes(k))];
+      const top = [...justMine, ...fresh1.filter((k) => !justMine.includes(k))];
       // The feed always opens on a clip (unless something of yours just
-      // landed): the first clip in the order is brought to the front.
+      // landed): the first clip you have not seen is brought to the front.
+      // With none left to see, it opens on "You're all caught up".
       // Newest first, the newest post leads whatever it is.
       if (!justMine.length && !NEWEST_FIRST) {
         const postKind = new Map(data.posts.map((p) => [`p:${p.id}`, p.kind]));
         const storyVideo = new Set(data.stories.filter((st) => st.videoUrl).map((st) => `h:${st.id}`));
         const isClip = (k: string) => postKind.get(k) === 'clip' || storyVideo.has(k);
-        // A refresh opens on a different clip from the one just watched: one
-        // not yet watched when there is one, otherwise any other clip; only
-        // with a single clip in the whole feed does the same one lead again.
+        // A refresh opens on a different clip from the one just watched (that
+        // one has been seen, so it is below the line already).
         const previous = fresh ? orderRef.current[0] : undefined;
-        let first = final.findIndex((k) => isClip(k) && k !== previous && !seen.current.has(k));
-        if (first < 0) first = final.findIndex((k) => isClip(k) && k !== previous);
-        if (first < 0) first = final.findIndex(isClip);
-        if (first > 0) final.unshift(...final.splice(first, 1));
+        const first = top.findIndex((k) => isClip(k) && k !== previous && !seen.current.has(k));
+        if (first > 0) top.unshift(...top.splice(first, 1));
       }
       // After a pull, everything made since the feed was last dealt leads,
       // newest first — a new thread or Instant too, not left in its usual slot
@@ -565,10 +596,13 @@ function Home({ scope, topRow, paused, onChrome }: {
         const had = new Set(orderRef.current);
         const made = madeAt(data);
         const since = dealtAt.current - 30 * 60_000;
-        const lead = final.filter((k) => !had.has(k) && made(k) > since).sort((a, b) => made(b) - made(a));
-        if (lead.length) { const rest = final.filter((k) => !lead.includes(k)); final.splice(0, final.length, ...lead, ...rest); }
+        const lead = top.filter((k) => !had.has(k) && made(k) > since).sort((a, b) => made(b) - made(a));
+        if (lead.length) { const rest = top.filter((k) => !lead.includes(k)); top.splice(0, top.length, ...lead, ...rest); }
       }
+      const final = [...top, ...earlier];
       dealtAt.current = Date.now();
+      dealCount.current += 1;
+      unseenBelow.current = null;
       setOrder(final);
       setActive(0);
       if (remount) setVisit((v) => v + 1);
@@ -593,10 +627,28 @@ function Home({ scope, topRow, paused, onChrome }: {
     const key = data.posts.some((p) => p.id === id) ? `p:${id}` : data.stories.some((st) => st.id === id) ? `h:${id}` : null;
     offStage(() => { if (key) liftToTop(key); else rerank(); });
   }), [scope, rerank, liftToTop]); // eslint-disable-line react-hooks/exhaustive-deps
+  // For you's first deal waits (briefly) to know what you have already seen: the "Loading" page meanwhile, not "quiet".
+  const [awaitingSeen, setAwaitingSeen] = useState(false);
   const dealOnce = useCallback(() => {
     const stamp = `${ready}:${currentUserId}:${scope?.userId ?? ''}:${scope?.set ?? ''}:${scope?.ids?.join(',') ?? ''}:${scope?.groupId ?? ''}:${scope?.activities ? 'a' : ''}`;
     if (rankedFor.current === stamp) return;
     rankedFor.current = stamp;
+    // For you is dealt from what you have seen: this phone's own list (read
+    // from the phone in a moment) and the server's, for other phones and
+    // earlier visits (asked alongside the opening load). Both are waited for,
+    // the server at most a second and a half; without it, this phone's list.
+    if (!scope && ready && currentUserId) {
+      const me = currentUserId;
+      setAwaitingSeen(true);
+      void Promise.all([loadSeen(me), Promise.race([loadFeedScores({ userId: me }), new Promise((resolve) => setTimeout(resolve, SEEN_WAIT_MS))])]).then(() => {
+        // Overtaken by a later deal (another account, the load finishing): that one says when it is done.
+        if (rankedFor.current !== stamp) return;
+        setAwaitingSeen(false);
+        rerank();
+      });
+      return;
+    }
+    setAwaitingSeen(false);
     rerank();
   }, [ready, currentUserId, scope?.userId, scope?.set, scope?.ids?.join(','), scope?.groupId, scope?.activities, rerank]);
   // A group's feed takes its posts as they arrive: the first page from the
@@ -682,13 +734,69 @@ function Home({ scope, topRow, paused, onChrome }: {
   const dataIn = !isSupabaseConfigured || app.remoteLoaded || app.snapshotShown;
   useEffect(() => { if (Platform.OS === 'web' && !scope && !routeFocused && dataIn) dealOnce(); }, [dealOnce, routeFocused, scope, dataIn]);
   /**
-   * Nearing the end of what is loaded: the next page of older posts is asked
-   * for and dealt onto the end. The pages already in front of you are left
+   * Pages that reach this phone after For you was dealt (an older page as you
+   * near the end, the fresh load after an open on the saved copy), put in
+   * without moving anything above the page on screen. `dealt` is rankFeed's
+   * order, "You're all caught up" in it. The ones you have not seen go above
+   * "You're all caught up" while that is still below you (`soon`: within the
+   * next two pages; otherwise just above it), or, once you are on it or past
+   * it, just after the page on screen; the ones you have seen go on the end.
+   */
+  const placeArrivals = (prev: string[], dealt: string[], soon: boolean) => {
+    const have = new Set(prev);
+    const cut = dealt.indexOf(CAUGHT_UP);
+    const add = (cut < 0 ? dealt : dealt.slice(0, cut)).filter((k) => !have.has(k));
+    const tail = (cut < 0 ? [] : dealt.slice(cut + 1)).filter((k) => !have.has(k));
+    if (!add.length && !tail.length) return prev;
+    // Where you are, by the page on screen's key (`active` counts `feed`, which has the tip and challenge pages in it):
+    // the nearest page at or above it that is in the order.
+    let here = -1;
+    for (let i = Math.min(activeRef.current, feedRef.current.length - 1); i >= 0 && here < 0; i -= 1) here = prev.indexOf(keyOf(feedRef.current[i]));
+    const line = prev.indexOf(CAUGHT_UP);
+    const at = line < 0 ? (soon ? Math.min(prev.length, here + 2) : prev.length)
+      : line > here ? (soon ? Math.min(line, here + 2) : line)
+      : here + 1;
+    // Ones you have not seen going in under "You're all caught up" (you were on it or past it): the
+    // newest of them is where "You've seen all new posts from …" has to stop (caughtUpDays).
+    if (line >= 0 && line <= here && add.length) {
+      const ids = new Set(add.filter((k) => k.startsWith('p:')).map((k) => k.slice(2)));
+      for (const p of latest.current.posts) {
+        if (!ids.has(p.id)) continue;
+        const made = Date.parse(p.createdAt);
+        if (Number.isFinite(made) && made > (unseenBelow.current ?? -Infinity)) unseenBelow.current = made;
+      }
+    }
+    return [...prev.slice(0, at), ...add, ...prev.slice(at), ...tail];
+  };
+  /**
+   * Nearing "You're all caught up", or the end of what is loaded: the next
+   * page of older posts is asked for, so anything in it you have not seen
+   * comes before the line (or, once you are on the line, straight after it).
+   * From the line, a few pages at most each time the feed is dealt
+   * (LINE_PAGES): someone who has seen everything sits on it every time they
+   * open the app, and asking again with every page that lands would fetch
+   * the whole history. Past the line, only near the end, never on every
+   * swipe through Earlier posts. The pages already in front of you are left
    * exactly as they are — re-ranking here would throw you back to the top.
    */
+  const lineAt = order.indexOf(CAUGHT_UP);
+  const lineAsks = useRef<{ deal: number; cursors: Set<string> }>({ deal: -1, cursors: new Set() });
   useEffect(() => {
-    if (scope || !ready) return;
-    if (!order.length || active < order.length - 5) return;
+    if (scope || !ready || !order.length) return;
+    // Where the line is in `feed` (what `active` counts: the tip and the challenge are in it, too).
+    const card = lineAt < 0 ? -1 : feedRef.current.findIndex((i) => i.type === 'caught-up');
+    const nearEnd = active >= feedRef.current.length - 5;
+    const nearLine = card >= 0 && active >= card - 5 && active <= card + 1;
+    if (!nearEnd && !nearLine) return;
+    if (!nearEnd) {
+      // One count per page asked for: swipes while a page is on its way ask for that same page.
+      if (lineAsks.current.deal !== dealCount.current) lineAsks.current = { deal: dealCount.current, cursors: new Set() };
+      const cursor = latest.current.feed.cursor ?? '';
+      if (!lineAsks.current.cursors.has(cursor)) {
+        if (lineAsks.current.cursors.size >= LINE_PAGES) return;
+        lineAsks.current.cursors.add(cursor);
+      }
+    }
     // Kept even when you swipe on (or back up) meanwhile: the store has moved
     // past this page, so dropping it would skip it. Asks while it loads get
     // the same page, and what is already in the feed is not added twice.
@@ -697,20 +805,16 @@ function Home({ scope, topRow, paused, onChrome }: {
     void latest.current.actions.loadMorePosts().then((fresh) => {
       if (latest.current.currentUserId !== asker || !fresh.length) return;
       const hidden = new Set([...latest.current.blockedIds, ...latest.current.mutedIds]);
-      // The new page is ranked on its own and added to the end; nothing
-      // already in the feed moves.
+      // The new page is ranked on its own and put in (placeArrivals);
+      // nothing already in the feed moves.
       const data = latest.current;
       const dealt = rankFeed(fresh.filter((p) => !p.archived && !hidden.has(p.authorId) && forYou(p)), [], data.comments, data.currentUserId, [], rankContext(data, seenNow.current))
-        .flatMap((i) => (i.type === 'post' ? [`p:${i.post.id}`] : []));
-      setOrder((prev) => {
-        const have = new Set(prev);
-        const keys = dealt.filter((k) => !have.has(k));
-        return keys.length ? [...prev, ...keys] : prev;
-      });
+        .flatMap((i) => (i.type === 'post' ? [`p:${i.post.id}`] : i.type === 'caught-up' ? [CAUGHT_UP] : []));
+      setOrder((prev) => placeArrivals(prev, dealt, false));
     });
     // The feed's own actions never change; asking for them by name here would
     // re-run this on every render for nothing.
-  }, [active, order.length, scope, ready]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [active, order.length, lineAt, scope, ready]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Opened on the saved copy from last time: when the fresh load lands, what
   // is new is dealt in just ahead of where you are. The page in front of you
@@ -726,18 +830,22 @@ function Home({ scope, topRow, paused, onChrome }: {
     const data = latest.current;
     const hidden = new Set([...data.blockedIds, ...data.mutedIds]);
     const have = new Set(orderRef.current);
-    const fresh = rankFeed(data.posts.filter((p) => forYou(p) && !p.archived && !hidden.has(p.authorId)), data.questions.filter((q) => !q.removed), data.comments, data.currentUserId, data.stories.filter((st) => isLive(st)), rankContext(data, seenNow.current))
-      .flatMap((i) => (i.type === 'post' ? [`p:${i.post.id}`] : i.type === 'question' ? [`q:${i.question.id}`] : i.type === 'hit' ? [`h:${i.story.id}`] : []))
-      .filter((k) => !have.has(k));
+    // The same threads as a full deal (rerank): never one pulled in from another community.
+    const ranked = rankFeed(data.posts.filter((p) => forYou(p) && !p.archived && !hidden.has(p.authorId)), data.questions.filter((q) => !q.source && !q.removed), data.comments, data.currentUserId, data.stories.filter((st) => isLive(st)), rankContext(data, seenNow.current))
+      .flatMap((i) => (i.type === 'post' ? [`p:${i.post.id}`] : i.type === 'question' ? [`q:${i.question.id}`] : i.type === 'hit' ? [`h:${i.story.id}`] : i.type === 'caught-up' ? [CAUGHT_UP] : []));
+    const fresh = ranked.filter((k) => !have.has(k));
     if (!fresh.length) return;
-    // Newest first, with nothing shown yet (Home has not been on screen, or
-    // its first clip has not started): the feed is simply dealt again, so the
-    // newest is the first thing you see. The app opens on Community, so the
-    // feed can be loaded and ready long before anyone has looked at it.
-    // Otherwise the new pages go in right after the one on screen, newest first.
-    if (NEWEST_FIRST && activeRef.current === 0 && (!playable || !shownOnce.current)) { rerank(); return; }
+    // With nothing shown yet (Home has not been on screen, or, newest first,
+    // its first clip has not started): the feed is simply dealt again, so
+    // the best of what is new (newest first: the newest) is the first thing
+    // you see. The app opens on Community, so the feed can be loaded and
+    // ready long before anyone has looked at it. Otherwise the new pages go
+    // in just after the one on screen (placeArrivals), and nothing you have
+    // seen is put above anything you have not.
+    if (activeRef.current === 0 && (!shownOnce.current || (NEWEST_FIRST && !playable))) { rerank(); return; }
+    if (!NEWEST_FIRST) { setOrder((prev) => placeArrivals(prev, ranked, true)); return; }
     const made = madeAt(data);
-    const dealt = NEWEST_FIRST ? [...fresh].sort((a, b) => made(b) - made(a)) : fresh;
+    const dealt = [...fresh].sort((a, b) => made(b) - made(a));
     setOrder((prev) => {
       // Placed from the page on screen's key: `active` counts `feed`, which has the tip and challenge pages in it and hidden players out.
       const on = prev.indexOf(activeKeyRef.current ?? '');
@@ -827,7 +935,8 @@ function Home({ scope, topRow, paused, onChrome }: {
     // for that itself), so the ranking below reads the new posts. Waiting here
     // for "any change at all" used to give up early — a message or a like
     // arriving mid-fetch counted — and ranked the old list.
-    await actions.refresh();
+    // What you have seen on other phones (and on this one) is asked afresh too, so the new deal puts it below the line.
+    await Promise.all([actions.refresh(), loadFeedScores({ force: true, userId: latest.current.currentUserId })]);
     // How to wait is chosen once, here, from how quickly clips have been
     // loading: on a quick connection the feed holds until the new first clip
     // is ready (about a second at most) and lands on it playing; on a slow one
@@ -849,6 +958,34 @@ function Home({ scope, topRow, paused, onChrome }: {
     });
     await new Promise<void>((resolve) => setTimeout(resolve, 120));
   }, [actions, rerank]);
+
+  // Coming back to the app after a while (AWAY_REDEAL_MS) is a new visit: For
+  // you is fetched and dealt again from the top, the server asked afresh what
+  // you have seen (on any phone), so what you watched before you left, or
+  // since on another phone, is below the line. A shorter trip away leaves
+  // every page exactly where it was.
+  const awaySince = useRef<number | null>(null);
+  useEffect(() => {
+    if (scope) return undefined;
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next !== 'active') { if (awaySince.current === null) awaySince.current = Date.now(); return; }
+      const since = awaySince.current;
+      awaySince.current = null;
+      const data = latest.current;
+      if (since === null || Date.now() - since < AWAY_REDEAL_MS || !data.ready || !orderRef.current.length) return;
+      const me = data.currentUserId;
+      void (async () => {
+        // An open on the saved copy is already fetching again as the app comes back: not asked twice.
+        await Promise.all([
+          data.remoteLoaded || !isSupabaseConfigured ? data.actions.refresh({ quiet: true }) : undefined,
+          loadFeedScores({ force: true, userId: me }),
+        ]);
+        if (latest.current.currentUserId !== me) return;
+        offStage(() => rerank(true, true));
+      })();
+    });
+    return () => sub.remove();
+  }, [scope, rerank]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /**
    * People worth following, best first: anyone who has interacted with you
@@ -880,6 +1017,7 @@ function Home({ scope, topRow, paused, onChrome }: {
     const storyById = new Map(stories.map((st) => [st.id, st]));
     const questionById = new Map(questions.map((q) => [q.id, q]));
     return order.flatMap<FeedItem>((key) => {
+      if (key === CAUGHT_UP) return [{ type: 'caught-up' as const }];
       const id = key.slice(2);
       if (key.startsWith('p:')) {
         const post = postById.get(id);
@@ -909,18 +1047,41 @@ function Home({ scope, topRow, paused, onChrome }: {
   if (featured.current === null && feedItems.length) {
     featured.current = entriesFor(challenge, feedItems.flatMap((i) => (i.type === 'post' ? [i.post] : []))).slice(0, 3).map((p) => p.id);
   }
+  // Where For you's tip and challenge pages sit, for the deal they were placed in (dealCount): just after
+  // the page each first followed. Pages that come in later (an older page, the fresh load) go in around
+  // them, so neither moves, and nothing at or above the page on screen changes under a thumb.
+  const slots = useRef<{ deal: number; tip: string | null; challenge: string | null } | null>(null);
   // While the app is young, a page a few swipes in asks early users for a
   // tip; a few more in, the challenge, with its top clips straight after it.
   const feed = useMemo<FeedItem[]>(() => {
     // Activities for a new player opens on its first page (ActivitiesStart), sessions under it.
     if (scope?.activities && actsStart) return [{ type: 'act-start' as const }, ...feedItems];
     if (scope || !feedItems.length) return feedItems;
-    const top = featured.current ?? [];
+    // Only the ones above "You're all caught up" are lifted to it: one you have seen stays below the line.
+    const line = feedItems.findIndex((i) => i.type === 'caught-up');
+    const above = line < 0 ? feedItems : feedItems.slice(0, line);
+    const top = (featured.current ?? []).filter((id) => above.some((i) => i.type === 'post' && i.post.id === id));
     const lead = top.flatMap((id) => feedItems.filter((i) => i.type === 'post' && i.post.id === id));
     const rest = feedItems.filter((i) => !(i.type === 'post' && top.includes(i.post.id)));
-    const tipAt = Math.min(3, rest.length);
+    const real = (i: FeedItem) => i.type === 'post' || i.type === 'question' || i.type === 'hit';
+    // With nothing you have seen under "You're all caught up", it is the very last page: a short feed puts
+    // the tip and the challenge above it, not after it.
+    const notPastLastLine = (list: FeedItem[], at: number) => {
+      const c = list.findIndex((i) => i.type === 'caught-up');
+      return c >= 0 && at > c && !list.slice(c + 1).some(real) ? c : at;
+    };
+    const fixed = slots.current && slots.current.deal === dealCount.current ? slots.current : null;
+    const place = (list: FeedItem[], after: string | null | undefined, rule: number) => {
+      if (after === null) return 0;
+      if (after !== undefined) { const i = list.findIndex((x) => keyOf(x) === after); if (i >= 0) return i + 1; }
+      return rule;
+    };
+    const tipAt = place(rest, fixed?.tip, notPastLastLine(rest, Math.min(3, rest.length)));
     const withTip: FeedItem[] = [...rest.slice(0, tipAt), { type: 'tip' as const }, ...rest.slice(tipAt)];
-    const at = Math.min(7, withTip.length);
+    // The challenge with clips you have not seen after it stays above the line, however short the part above it is.
+    const lineInTip = withTip.findIndex((i) => i.type === 'caught-up');
+    const at = place(withTip, fixed?.challenge, lead.length && lineInTip >= 0 ? Math.min(7, lineInTip) : notPastLastLine(withTip, Math.min(7, withTip.length)));
+    slots.current = { deal: dealCount.current, tip: tipAt ? keyOf(rest[tipAt - 1]) : null, challenge: at ? keyOf(withTip[at - 1]) : null };
     return [...withTip.slice(0, at), { type: 'challenge' as const }, ...lead, ...withTip.slice(at)];
   }, [feedItems, scope, actsStart]);
 
@@ -928,13 +1089,14 @@ function Home({ scope, topRow, paused, onChrome }: {
   // (the stage is this Home's, it is the page on screen, and nothing has been
   // opened over the comments). Read by the page's key in `feed`, which is
   // what `active` counts: `order` has no tip or challenge page.
+  const feedRef = useRef(feed);
+  feedRef.current = feed;
   const activeKey = feed[active] ? keyOf(feed[active]) : undefined;
   const activeKeyRef = useRef(activeKey);
   activeKeyRef.current = activeKey;
   // The post, Instant or question on screen; the tip and challenge pages are none of them.
   const realKey = activeKey && signalKind(activeKey) ? activeKey : undefined;
-  // Every page you rest on goes into this visit's seen set (a refresh sends them to the back).
-  useEffect(() => { if (realKey) seenNow.current.add(realKey); setQuick(connectionIsQuick()); }, [active, realKey]);
+  useEffect(() => { setQuick(connectionIsQuick()); }, [active, realKey]);
   const held = !!myStage && myStage.key === activeKey && !myStage.covered && !(PAUSE_AT_FULL && myStage.full);
   const playing = (focused || held) && !touring && !paused;
   // A new page on screen (or the feed coming back to the front): the last one
@@ -943,7 +1105,16 @@ function Home({ scope, topRow, paused, onChrome }: {
   const viewedKey = playing && appActive ? realKey : undefined;
   useEffect(() => {
     endViewing.current();
-    if (viewedKey) viewing.current = { key: viewedKey, since: Date.now() };
+    if (!viewedKey) return undefined;
+    viewing.current = { key: viewedKey, since: Date.now() };
+    // Seen, once it has been on screen a moment (Oct 7, owner: "don't keep seeing the same videos"):
+    // in this visit's set, and in this phone's own list (features/feed/seenPosts), so the next deal,
+    // an open after a reload, or one with no connection, puts it below everything you have not seen.
+    // Only a page really in front of you counts: not one built out of sight, under the tutorial, with
+    // the app away, or flown past mid-fling (GLANCE_MS) — the server is told the same (endViewing).
+    const key = viewedKey;
+    const glance = setTimeout(() => { seenNow.current.add(key); markSeen(latest.current.currentUserId, key); }, GLANCE_MS);
+    return () => clearTimeout(glance);
   }, [viewedKey]);
 
   /*
@@ -1342,7 +1513,7 @@ function Home({ scope, topRow, paused, onChrome }: {
     // An Instant seen here counts on its views, as in the full-screen viewer
     // (once per person; your own is left out of its count anyway).
     if (showing.type === 'hit') { if (showing.story.authorId !== currentUserId) actions.markStoryViewed(showing.story.id); return; }
-    if (showing.type === 'tip' || showing.type === 'challenge' || showing.type === 'act-start') return;
+    if (showing.type === 'tip' || showing.type === 'challenge' || showing.type === 'act-start' || showing.type === 'caught-up') return;
     actions.recordView(
       showing.type === 'post' ? 'post' : 'question',
       showing.type === 'post' ? showing.post.id : showing.question.id,
@@ -1368,6 +1539,58 @@ function Home({ scope, topRow, paused, onChrome }: {
       </View>
     </View>
   );
+  /*
+   * For you's "You're all caught up" (Oct 7, owner: "don't keep seeing the
+   * same videos"): between the posts you have not seen and the ones you have,
+   * Instagram's way. How far back it speaks for is how far back the feed has
+   * loaded (every page of it, once there are no more). With posts you have
+   * seen under it, it says so ("Earlier posts"; only threads you have not
+   * read yet under it, "More from the community"); as the very last page, it
+   * is the way to post and back to the top instead.
+   */
+  const feedCursor = app.feed.more ? app.feed.cursor : null;
+  const caughtUpDays = useMemo(() => {
+    let oldest = feedCursor ? Date.parse(feedCursor) : Infinity;
+    if (!feedCursor) for (const p of posts) if (forYou(p) && !p.archived) oldest = Math.min(oldest, Date.parse(p.createdAt));
+    let days = Number.isFinite(oldest) ? Math.ceil((Date.now() - oldest) / 86_400_000) : 1;
+    // An older post you have not seen came in under the line (you were already on it): only what is newer than it has all been seen.
+    if (unseenBelow.current !== null) days = Math.min(days, Math.floor((Date.now() - unseenBelow.current) / 86_400_000));
+    return Math.max(1, days);
+  }, [posts, feedCursor, order]); // eslint-disable-line react-hooks/exhaustive-deps
+  const caughtUpPage = (index: number) => {
+    const below = feed.slice(index + 1);
+    const last = !below.some((i) => i.type === 'post' || i.type === 'question' || i.type === 'hit');
+    const label = below.some((i) => i.type === 'post') ? 'Earlier posts' : 'More from the community';
+    return (
+      <View key={CAUGHT_UP} style={styles.endPage}>
+        <View style={styles.endCard}>
+          <Wash height={300} strength={0.65} fade={colors.surface} />
+          <View style={styles.endTile}><Ionicons name="checkmark" size={30} color={colors.brand} /></View>
+          <View style={styles.caughtWords}>
+            <Text accessibilityRole="header" style={styles.endTitle}>You're all caught up</Text>
+            <Text style={styles.endBody}>{`You've seen all new posts from ${pastDays(caughtUpDays)}.`}</Text>
+          </View>
+          {last ? (
+            <View style={styles.endActions}>
+              <Button label="Share something" onPress={() => router.push('/compose')} full />
+              <Pressable accessibilityRole="button" onPress={() => pager.current?.scrollToTop()} hitSlop={8} style={styles.endBackWrap}>
+                <Text style={styles.endBack}>↑ Back to the top</Text>
+              </Pressable>
+            </View>
+          ) : (
+            <View accessible accessibilityLabel={`${label}: swipe up to see them`} style={styles.earlierRow}>
+              <View style={styles.earlierRule} />
+              <Text style={styles.earlierLabel}>{label}</Text>
+              <Ionicons name="chevron-down" size={16} color={colors.textMuted} />
+              <View style={styles.earlierRule} />
+            </View>
+          )}
+        </View>
+      </View>
+    );
+  };
+  // With nothing you have seen under "You're all caught up", it is the last page itself (no second card after it).
+  const lineLast = !scope && feed.length > 0 && feed[feed.length - 1].type === 'caught-up';
   const endPage = (
     <View key="the-end" style={styles.endPage}>
       <View style={styles.endCard}>
@@ -1407,10 +1630,10 @@ function Home({ scope, topRow, paused, onChrome }: {
             </View>
           ) : (
             <EmptyState
-              title={scope?.groupId ? 'Loading the group' : scope?.activities ? (ready ? 'No activities yet' : 'Loading activities') : scope ? 'Nothing here yet' : ready ? 'Your court is quiet' : 'Loading your clips'}
-              body={scope?.activities ? 'Log a session after you play, or follow players, and their sessions show up here.' : scope ? undefined : 'Be the first on it: a clip, a photo, or an Instant after you play.'}
+              title={scope?.groupId ? 'Loading the group' : scope?.activities ? (ready ? 'No activities yet' : 'Loading activities') : scope ? 'Nothing here yet' : ready && !awaitingSeen ? 'Your court is quiet' : 'Loading your clips'}
+              body={scope?.activities ? 'Log a session after you play, or follow players, and their sessions show up here.' : scope || awaitingSeen ? undefined : 'Be the first on it: a clip, a photo, or an Instant after you play.'}
               // "Log a session" opens the log sheet itself (Oct 5: it opened the + menu).
-              action={(!scope || scope.activities) && ready ? { label: scope?.activities ? 'Log a session' : 'Share something', onPress: () => router.push(scope?.activities ? '/log-session' : '/compose') } : undefined}
+              action={(!scope || scope.activities) && ready && !awaitingSeen ? { label: scope?.activities ? 'Log a session' : 'Share something', onPress: () => router.push(scope?.activities ? '/log-session' : '/compose') } : undefined}
             />
           )}
         </View>
@@ -1477,6 +1700,7 @@ function Home({ scope, topRow, paused, onChrome }: {
               if (item.type === 'tip') return <TipPage key="tip" onSubmit={actions.submitTip} />;
               if (item.type === 'act-start') return <ActivitiesStart key="act-start" topInset={insets.top + 64} bottomInset={barInset > 0 ? barInset + 8 : POST_BOTTOM} nearCount={feedItems.filter((i) => i.type === 'post' && nearAuthors.has(i.post.authorId)).length} sessions={feedItems.length} />;
               if (item.type === 'challenge') return <ChallengePage key="challenge" challenge={challenge} />;
+              if (item.type === 'caught-up') return caughtUpPage(index);
 
               if (item.type === 'hit') {
                 const story = item.story;
@@ -1820,7 +2044,7 @@ function Home({ scope, topRow, paused, onChrome }: {
                   )}
                 </React.Fragment>
               );
-            }), ...(scope?.activities ? [caughtUp] : scope ? [] : [endPage])]}
+            }), ...(scope?.activities ? [caughtUp] : scope || lineLast ? [] : [endPage])]}
           </VerticalPager>
 
           {showingNear ? (
@@ -2003,6 +2227,11 @@ const styleDefinitions = StyleSheet.create({
   endActions: { gap: spacing.md, paddingTop: spacing.xs },
   endBackWrap: { alignSelf: 'center' },
   endBack: { ...typography.smallStrong, color: colors.textMuted },
+  caughtWords: { gap: spacing.xs },
+  // "Earlier posts", a hairline either side: the posts you have seen start on the next page.
+  earlierRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingTop: spacing.xs },
+  earlierRule: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
+  earlierLabel: { ...typography.smallStrong, color: colors.textMuted },
 });
 
 /**
