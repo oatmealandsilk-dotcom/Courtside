@@ -8,7 +8,9 @@ import { useReducedMotion } from '@/lib/useReducedMotion';
 
 import { Avatar, BrandWash } from '@/components/ui';
 import { Glass } from '@/components/ui/Glass';
-import { FollowPill } from '@/components/FollowPill';
+import { FollowDisc } from '@/components/FollowPill';
+import { MenuSheet, type MenuSheetItem } from '@/components/MenuSheet';
+import { afterMenu } from '@/lib/confirm';
 import { TileCover } from '@/components/TileCover';
 import { LevelPill } from '@/components/LevelPill';
 import { Tappable } from '@/components/Tappable';
@@ -38,7 +40,7 @@ import { openCourt, openCourtReel, playHere, postFromCourt, sendCourtToChat } fr
 import { Toggle } from '@/components/ui';
 import type { MapFilter, Placed } from '@/features/players/mapModel';
 import type { Weather } from '@/lib/weather';
-import { colors, radius, spacing, typography, withAlpha } from '@/theme';
+import { colors, pageIsDark, radius, spacing, typography, withAlpha } from '@/theme';
 import { agoLabel, agoShort } from '@/components/map/markers';
 import { MAP_CREDITS } from '@/components/map/credits';
 import { AccessTag, CourtFactsLine, FollowHeart, NowTags, RegularsRow } from '@/components/place/CourtLife';
@@ -629,6 +631,17 @@ export function PlayerSheet({ placed, following, onClose, onProfile, onMessage, 
   // Farther than they'd like to go for a hit (migration 120): one friendly line, never a warning, and Ask to hit stays as it is.
   const farLine = hitsWithinLine(user, miles, seenCity || user.location);
   const till = isOpenToHit(user) ? tillLabel(user.openToHitUntil) : null;
+  const first = user.name.split(' ')[0];
+  // ⋯ holds what used to hang under the buttons (Add to a group), the profile, and Follow in words,
+  // the same choices a profile's own ⋯ offers. Each runs once the menu has gone.
+  const [menuOpen, setMenuOpen] = useState(false);
+  const { followRequests, currentUserId } = useApp();
+  const requested = !following && !!currentUserId && followRequests.some((r) => r.fromId === currentUserId && r.toId === user.id);
+  const menu: MenuSheetItem[] = [
+    ...(onAskToHit ? [{ icon: 'person-circle-outline' as const, label: 'View profile', onPress: () => afterMenu(onProfile) }] : []),
+    ...(onAddToGroup ? [{ icon: 'people-outline' as const, label: 'Add to a group', onPress: () => afterMenu(onAddToGroup) }] : []),
+    { icon: following ? 'person-remove-outline' : 'person-add-outline', label: following ? 'Unfollow' : requested ? 'Cancel request' : 'Follow', onPress: () => afterMenu(onFollow) },
+  ];
   return (
     <GestureDetector gesture={pull.gesture}>
     <Animated.View style={[styles.sheet, pull.style]}>
@@ -650,44 +663,50 @@ export function PlayerSheet({ placed, following, onClose, onProfile, onMessage, 
             : seenAt ? <Text style={styles.personMeta} numberOfLines={1}>{activeLabel(seenAt)}</Text> : null}
           {isOpenToHit(user) ? <View style={styles.openRow}><View style={styles.openDot} /><Text style={styles.openText}>{till ? `Open to hit ${till}` : 'Open to hit today'}</Text></View> : null}
         </Pressable>
-        <Pressable accessibilityRole="button" accessibilityLabel="Close" hitSlop={10} onPress={onClose} style={styles.close}>
-          <Ionicons name="close" size={18} color={colors.textMuted} />
+        {/* Up by the name, where a card's close sits on a phone, rather than floating halfway down the words. */}
+        <Pressable accessibilityRole="button" accessibilityLabel="Close" hitSlop={10} onPress={onClose} style={({ pressed }) => [styles.close, styles.closeTop, pressed && styles.closePressed]}>
+          <Ionicons name="close" size={17} color={colors.textMuted} />
         </Pressable>
       </View>
       {farLine ? <Text style={styles.farLine}>{farLine}</Text> : null}
-      {onAskToHit ? (
-        // Tennis first: Ask to hit leads (a normal open hit, also sent to your chat with them), then Message and Follow.
-        <View style={styles.personActions}>
-          <Pressable accessibilityRole="button" accessibilityLabel={`Ask ${user.name} to hit`} onPress={onAskToHit} style={[styles.primary, styles.pillTight]}>
-            <BrandWash />
-            <HitGlyph size={16} color={colors.brandInk} />
-            <Text style={styles.primaryText}>Ask to hit</Text>
-          </Pressable>
-          <Pressable accessibilityRole="button" accessibilityLabel={`Message ${user.name}`} onPress={onMessage} style={[styles.secondary, styles.pillTight]}>
-            <Text style={styles.secondaryText}>Message</Text>
-          </Pressable>
-          <FollowPill following={following} userId={user.id} onPress={onFollow} name={user.name.split(' ')[0]} />
+      {/* One row, one family (Oct 7): a single filled pill (Ask to hit, tennis first, or Message where
+          Ask to hit is not offered), a sand pill of the same size beside it, then Follow as a round
+          button and ⋯ for the rest. Nothing in the row changes size when you follow. */}
+      <View style={styles.cardActions}>
+        <View style={styles.cardSlot}>
+          {onAskToHit ? (
+            <Tappable accessibilityLabel={`Ask ${user.name} to hit`} onPress={onAskToHit} scaleTo={0.97} hoverTo={1.02} style={[styles.cardPill, styles.cardPrimary, pageIsDark() ? styles.cardLiftDark : styles.cardLift]}>
+              <BrandWash />
+              <HitGlyph size={17} color={colors.brandInk} />
+              <Text style={styles.cardPrimaryText} numberOfLines={1}>Ask to hit</Text>
+            </Tappable>
+          ) : (
+            <Tappable accessibilityLabel={`Message ${user.name}`} onPress={onMessage} scaleTo={0.97} hoverTo={1.02} style={[styles.cardPill, styles.cardPrimary, pageIsDark() ? styles.cardLiftDark : styles.cardLift]}>
+              <BrandWash />
+              <Ionicons name="paper-plane-outline" size={16} color={colors.brandInk} />
+              <Text style={styles.cardPrimaryText} numberOfLines={1}>Message</Text>
+            </Tappable>
+          )}
         </View>
-      ) : (
-        <View style={styles.personActions}>
-          <Pressable accessibilityRole="button" accessibilityLabel={`Message ${user.name}`} onPress={onMessage} style={styles.primary}>
-            <BrandWash />
-            <Ionicons name="paper-plane-outline" size={16} color={colors.brandInk} />
-            <Text style={styles.primaryText}>Message</Text>
-          </Pressable>
-          <Pressable accessibilityRole="link" accessibilityLabel="Open profile" onPress={onProfile} style={styles.secondary}>
-            <Text style={styles.secondaryText}>Profile</Text>
-          </Pressable>
-          <FollowPill following={following} userId={user.id} onPress={onFollow} name={user.name.split(' ')[0]} />
+        <View style={styles.cardSlot}>
+          {onAskToHit ? (
+            <Tappable accessibilityLabel={`Message ${user.name}`} onPress={onMessage} scaleTo={0.97} hoverTo={1.02} style={[styles.cardPill, styles.cardSecondary]}>
+              <Ionicons name="paper-plane-outline" size={16} color={colors.text} />
+              <Text style={styles.cardSecondaryText} numberOfLines={1}>Message</Text>
+            </Tappable>
+          ) : (
+            <Tappable accessibilityRole="link" accessibilityLabel="Open profile" onPress={onProfile} scaleTo={0.97} hoverTo={1.02} style={[styles.cardPill, styles.cardSecondary]}>
+              <Ionicons name="person-circle-outline" size={17} color={colors.text} />
+              <Text style={styles.cardSecondaryText} numberOfLines={1}>Profile</Text>
+            </Tappable>
+          )}
         </View>
-      )}
-      {/* A quiet link of its own: a fourth pill does not fit beside the three on a phone. */}
-      {onAddToGroup ? (
-        <Pressable accessibilityRole="button" accessibilityLabel={`Add ${user.name} to a group`} onPress={onAddToGroup} hitSlop={6} style={({ pressed }) => [styles.groupLink, pressed && { opacity: 0.6 }]}>
-          <Ionicons name="people-outline" size={16} color={colors.textMuted} />
-          <Text style={styles.groupLinkText}>Add to a group</Text>
-        </Pressable>
-      ) : null}
+        <FollowDisc following={following} userId={user.id} onPress={onFollow} name={first} />
+        <Tappable accessibilityLabel={`More for ${user.name}`} onPress={() => setMenuOpen(true)} scaleTo={0.94} style={styles.cardRound}>
+          <Ionicons name="ellipsis-horizontal" size={19} color={colors.text} />
+        </Tappable>
+      </View>
+      <MenuSheet visible={menuOpen} onClose={() => setMenuOpen(false)} title={`@${user.handle}`} items={menu} />
     </Animated.View>
     </GestureDetector>
   );
@@ -1183,7 +1202,9 @@ const styleDefinitions = StyleSheet.create({
   zoomRule: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
   // The bottom panel: the rail of players, or the one that was picked.
   // Flush on the bottom edge, a grabber line on top: a tray, not a card floating on the map.
-  sheet: { backgroundColor: colors.surface, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, paddingTop: spacing.sm, paddingBottom: spacing.md, gap: spacing.sm, shadowColor: '#000', shadowOpacity: 0.14, shadowRadius: 22, shadowOffset: { width: 0, height: -8 } },
+  // Its shadow lifts it off the map upward only (a blur no wider than its offset), so none falls
+  // below it onto the strip under the tab bar: on the phone that drew a grey band there (Oct 7).
+  sheet: { backgroundColor: colors.surface, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, paddingTop: spacing.sm, paddingBottom: spacing.md, gap: spacing.sm, shadowColor: '#000', shadowOpacity: 0.13, shadowRadius: 14, shadowOffset: { width: 0, height: -12 } },
   grabber: { alignSelf: 'center', width: 36, height: 4, borderRadius: 2, backgroundColor: colors.border, marginBottom: spacing.xs },
   sheetHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.lg, paddingBottom: 2 },
   sheetHeadRight: { flexDirection: 'row', alignItems: 'center', gap: 4 },
@@ -1226,6 +1247,21 @@ const styleDefinitions = StyleSheet.create({
   personName: { ...typography.heading, color: colors.text, flexShrink: 1 },
   personMeta: { ...typography.small, color: colors.textMuted },
   close: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
+  // The player card's close: level with the name (half its height above the name's middle).
+  closeTop: { alignSelf: 'flex-start', marginTop: -5 },
+  closePressed: { opacity: 0.6 },
+  // The player card's one row of actions: two pills sharing the width, then two round buttons.
+  cardActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg, marginTop: spacing.sm, paddingBottom: spacing.xs },
+  cardSlot: { flex: 1, minWidth: 0 },
+  cardPill: { height: 44, borderRadius: radius.pill, borderWidth: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, paddingHorizontal: spacing.md },
+  cardPrimary: { backgroundColor: colors.brand, borderColor: colors.brand },
+  // The page's one shadow (DESIGN.md, Lift): the primary in its own colour; plain dark on a dark page.
+  cardLift: { shadowColor: colors.brand, shadowOpacity: 0.28, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 3 },
+  cardLiftDark: { shadowColor: '#000000', shadowOpacity: 0.35, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 3 },
+  cardSecondary: { backgroundColor: colors.surfaceAlt, borderColor: colors.borderStrong },
+  cardPrimaryText: { ...typography.smallStrong, fontSize: 14, color: colors.brandInk, flexShrink: 1 },
+  cardSecondaryText: { ...typography.smallStrong, fontSize: 14, color: colors.text, flexShrink: 1 },
+  cardRound: { width: 44, height: 44, borderRadius: 22, borderWidth: 1, backgroundColor: colors.surfaceAlt, borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center' },
   personActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
   primary: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 40, paddingHorizontal: 16, borderRadius: radius.pill, backgroundColor: colors.brand },
   primaryText: { ...typography.smallStrong, color: colors.brandInk },
@@ -1233,8 +1269,6 @@ const styleDefinitions = StyleSheet.create({
   secondaryText: { ...typography.smallStrong, color: colors.text },
   pillTight: { paddingHorizontal: 12 },
   pillIcon: { flexDirection: 'row', gap: 5 },
-  groupLink: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', marginHorizontal: spacing.lg, marginTop: -spacing.xs, paddingBottom: spacing.sm },
-  groupLinkText: { ...typography.smallStrong, color: colors.textMuted },
   openRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 },
   // Open to hit, on a player's card: the map's green, never the brand (New York's is yellow).
   openDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.open },

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { Pressable, StyleSheet } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import Animated, { Easing, interpolateColor, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
@@ -7,7 +7,7 @@ import * as haptics from '@/lib/haptics';
 import { useTheme } from '@/theme/ThemeProvider';
 import { BrandWash } from '@/components/ui/BrandWash';
 import { useApp } from '@/store/AppContext';
-import { colors, typography } from '@/theme';
+import { colors, typography, withAlpha } from '@/theme';
 import { reduceMotionEnabled } from '@/lib/useReducedMotion';
 
 const EASE = Easing.bezier(0.22, 1, 0.36, 1);
@@ -62,7 +62,68 @@ export function FollowPill({ following, onPress, small = false, name, userId, wi
   );
 }
 
+/**
+ * Follow as a round button, for a row with no room for a third word (the
+ * map's player card, Oct 7): a person with a plus in the brand's colour
+ * until you follow, then a quiet person with a tick, the same sand as the
+ * buttons beside it (a private account's ask waiting shows dots instead).
+ * The same dip, haptic and spoken label as FollowPill, and one size
+ * whatever it says, so nothing beside it moves when you tap.
+ */
+export function FollowDisc({ following, onPress, name, userId, size = 44 }: { following: boolean; onPress: () => void; name?: string; userId?: string; size?: number }) {
+  useTheme();
+  const { followRequests, currentUserId } = useApp();
+  const requested = !following && !!userId && !!currentUserId && followRequests.some((r) => r.fromId === currentUserId && r.toId === userId);
+  const filled = following || requested;
+  const on = useSharedValue(filled ? 1 : 0);
+  const bump = useSharedValue(1);
+  const reduced = useRef(false);
+  useEffect(() => { reduceMotionEnabled().then((r) => { reduced.current = r; }).catch(() => {}); }, []);
+  useEffect(() => { on.value = withTiming(filled ? 1 : 0, { duration: 280, easing: EASE }); }, [filled, on]);
+
+  // Read on each draw and handed over as plain values (see FollowPill: read inside, they stuck to the first theme).
+  const { brandDim, surfaceAlt, borderStrong, brand } = colors;
+  const edgeOff = withAlpha(brand, 0.32);
+  const disc = useAnimatedStyle(() => ({
+    backgroundColor: interpolateColor(on.value, [0, 1], [brandDim, surfaceAlt]),
+    borderColor: interpolateColor(on.value, [0, 1], [edgeOff, borderStrong]),
+    transform: [{ scale: bump.value }],
+  }), [brandDim, surfaceAlt, borderStrong, edgeOff]);
+  // The two faces cross over, the new one settling in from a touch smaller.
+  const addFace = useAnimatedStyle(() => ({ opacity: 1 - on.value, transform: [{ scale: 1 - on.value * 0.2 }] }));
+  const doneFace = useAnimatedStyle(() => ({ opacity: on.value, transform: [{ scale: 0.8 + on.value * 0.2 }] }));
+
+  const press = () => {
+    if (!reduced.current) bump.value = withSequence(withTiming(0.94, { duration: 60, easing: EASE }), withSpring(1, { damping: 20, stiffness: 320 }));
+    haptics.tap();
+    onPress();
+  };
+
+  return (
+    <Pressable accessibilityRole="button" accessibilityState={{ selected: filled }} accessibilityLabel={`${following ? 'Following' : requested ? 'Requested' : 'Follow'}${name ? ` ${name}` : ''}`} onPress={press} hitSlop={4}>
+      <Animated.View style={[styles.disc, { width: size, height: size, borderRadius: size / 2 }, disc]}>
+        <Animated.View pointerEvents="none" style={[styles.face, addFace]}>
+          <Ionicons name="person-add-outline" size={19} color={colors.brand} />
+        </Animated.View>
+        <Animated.View pointerEvents="none" style={[styles.face, doneFace]}>
+          <View style={styles.person}>
+            <Ionicons name="person-outline" size={18} color={colors.text} />
+            <View style={[styles.badge, { backgroundColor: colors.text, borderColor: colors.surfaceAlt }]}>
+              <Ionicons name={requested ? 'ellipsis-horizontal' : 'checkmark'} size={8} color={colors.surfaceAlt} />
+            </View>
+          </View>
+        </Animated.View>
+      </Animated.View>
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
+  disc: { alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
+  face: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, alignItems: 'center', justifyContent: 'center' },
+  // The tick sits on the person's shoulder, cut out of it by a ring of the button's own colour.
+  person: { width: 18, height: 18, marginRight: 3 },
+  badge: { position: 'absolute', right: -6, bottom: -3, width: 13, height: 13, borderRadius: 6.5, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
   // One width whatever it says, like Instagram: Follow, Following and Requested never change
   // the pill's size, so nothing beside it shifts when you tap (Oct 2). Sized for "✓ Following".
   pill: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, width: 116, paddingVertical: 9, paddingHorizontal: 10, borderRadius: 999, borderWidth: 1 },
