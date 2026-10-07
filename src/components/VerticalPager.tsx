@@ -62,7 +62,8 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
     if (node?.scrollTo) { node.scrollTo({ x: 0, y: target, animated }); return; }
     runOnUI(() => { 'worklet'; scrollTo(list, 0, target, animated); })();
   }, [list, top]);
-  useImperativeHandle(ref, () => ({ scrollToTop: () => jump(0, true) }), [jump]);
+  useImperativeHandle(ref, () => ({ scrollToTop: () => { setAroundRef.current(0); jump(0, true); } }), [jump]);
+  const setAroundRef = useRef<(index: number) => void>(() => undefined);
 
   // How far the strip is pulled into view (the first page's corners round
   // while it is), and how open the gap under the clock is, which is what the
@@ -155,10 +156,16 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
   const changed = useCallback((index: number) => {
     if (index !== last.current) { last.current = index; onIndex(index); }
   }, [onIndex]);
+  // The page a swipe starts from: on an iPhone the scroller may only stop on
+  // it or a neighbour (snapOffsets below), so a hard flick moves one page.
+  const [around, setAround] = useState(initialIndex);
+  setAroundRef.current = setAround;
   const settled = useCallback((y: number) => {
     changed(pageOf(y));
+    setAround(pageOf(y));
     onSettled?.(last.current);
   }, [changed, pageOf, onSettled]);
+  const dragFrom = useCallback((y: number) => setAround(pageOf(y)), [pageOf]);
   settledRef.current = settled;
   const dragEnded = useCallback((y: number) => {
     if (settleTimer.current) clearTimeout(settleTimer.current);
@@ -202,7 +209,8 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
       const index = Math.max(0, Math.min(count - 1, Math.round((y - top) / h)));
       if (index !== lastIndex.value) { lastIndex.value = index; runOnJS(changed)(index); }
     },
-    onBeginDrag: () => {
+    onBeginDrag: (e) => {
+      if (IOS) runOnJS(dragFrom)(e.contentOffset.y);
       barDir.value = 0;
       dragging.value = true;
       // The tutorial waits for this finger to lift before it starts.
@@ -252,7 +260,20 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
   // finger's direction, so a quick tug down that never reached the line
   // used to land there with nothing loading. Where a pull ends is decided
   // above instead.
-  const snapOffsets = useMemo(() => children.map((_, i) => top + i * height), [children, top, height]);
+  //
+  // One page per swipe, however hard (Oct 7, owner: "they can only go one at
+  // a time"). Android stops on the next page by itself (disableIntervalMomentum);
+  // an iPhone ignores that when the stops are listed and aims for wherever
+  // the flick would coast, pages away. So there, only the page the swipe
+  // started on and its two neighbours are stops, with snapToEnd off: a flick
+  // past the last of them lands on it rather than coasting on.
+  const snapOffsets = useMemo(() => {
+    if (!IOS) return children.map((_, i) => top + i * height);
+    const from = Math.max(0, Math.min(children.length - 1, around));
+    const stops: number[] = [];
+    for (let i = Math.max(0, from - 1); i <= Math.min(children.length - 1, from + 1); i += 1) stops.push(top + i * height);
+    return stops;
+  }, [children, top, height, around]);
   // The strip follows the room under the clock; if that ever changes, the page in view stays put.
   const placedTop = useRef(top);
   useEffect(() => {
@@ -286,6 +307,7 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
           style={{ height }}
           snapToOffsets={snapOffsets}
           snapToStart={false}
+          snapToEnd={!IOS}
           snapToAlignment="start"
           disableIntervalMomentum
           contentOffset={{ x: 0, y: top + startIndex.current * height }}
