@@ -450,7 +450,7 @@ function LogSession() {
   ) : fromHit ? (
     <SheetTitle title="How was the hit?" line={`${fromHit.place}${fromHit.who ? ` · with ${fromHit.who}` : ''}. Only you see this.`} lines={2} onClose={close} />
   ) : fromLive ? (
-    <SheetTitle title="Log your session" line={`${livePlaceName ? `${livePlaceName} · ` : ''}started ${startClock(fromLive)}${liveWith ? ` · with ${fromWho(liveWith)}` : ''}. Only you see this.`} lines={2} onClose={close} />
+    <SheetTitle title="Log your session" line={`${livePlaceName ? `${livePlaceName} · started` : 'Started'} ${startClock(fromLive)}${liveWith ? ` · with ${fromWho(liveWith)}` : ''}. Only you see this.`} lines={2} onClose={close} />
   ) : (
     <SheetTitle title="Log a session" line="Counts toward your streak. Only you see it." onClose={close} />
   );

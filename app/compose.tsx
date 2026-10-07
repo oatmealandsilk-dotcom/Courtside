@@ -951,16 +951,17 @@ export default function Compose() {
       <View style={styles.choiceHeader}><Text style={styles.choiceTitle}>{entering ? challenge.title : 'Create'}</Text><Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={closeMenu} hitSlop={10}><Ionicons name="close" size={24} color={colors.text}/></Pressable></View>
       <ScrollView style={styles.choiceScroll} contentContainerStyle={[styles.choiceList, tight && styles.choiceListTight]} bounces={false} showsVerticalScrollIndicator={false}>
       {/* Start a session (Oct 6, owner: Strava's Start and Finish; the one players use most): first, a card like the
-          others. While one is going it opens that one instead; finished and not logged yet, its log. */}
+          others. While one is going it opens that one instead; finished and not logged yet, its log.
+          Someone not known to be an adult never checks in (mapPrivacy.canCheckIn), so theirs promises only the timer. */}
       {entering ? null : <Reanimated.View entering={arrive(0)}><Pressable
         accessibilityRole="button"
-        accessibilityLabel={!liveSession ? 'Start a session. A timer, and a check-in at your court' : liveState(liveSession) === 'finished' ? 'Log your finished session' : 'Session in progress. Open it'}
+        accessibilityLabel={!liveSession ? (adult ? 'Start a session. A timer, and a check-in at your court' : 'Start a session. A timer, Start to Finish') : liveState(liveSession) === 'finished' ? 'Log your finished session' : 'Session in progress. Open it'}
         onPress={() => (!liveSession ? router.replace('/start-session') : liveState(liveSession) === 'finished' ? router.replace({ pathname: '/log-session', params: { live: '1' } }) : router.replace('/live-session'))}
         style={[styles.choiceOption, tight && styles.choiceOptionTight, tighter && styles.choiceOptionTighter]}
       >
         <Ionicons name={liveSession ? 'radio-button-on' : 'stopwatch-outline'} size={choiceIcon} color={liveSession ? colors.open : colors.textMuted}/>
         <Text style={styles.choiceLabel}>{!liveSession ? 'Start a session' : liveState(liveSession) === 'finished' ? 'Log your session' : 'Session in progress'}</Text>
-        <Text style={styles.note}>{!liveSession ? 'Time your hit and check in at the court.' : [liveState(liveSession) === 'finished' ? 'Finished' : `Started ${startClock(liveSession)}`, livePlace(liveSession)].filter(Boolean).join(' · ')}</Text>
+        <Text style={styles.note}>{!liveSession ? (adult ? 'Time your hit and check in at the court.' : 'Time your hit, from Start to Finish.') : [liveState(liveSession) === 'finished' ? 'Finished' : `Started ${startClock(liveSession)}`, livePlace(liveSession)].filter(Boolean).join(' · ')}</Text>
       </Pressable></Reanimated.View>}
       <Reanimated.View entering={arrive(entering ? 0 : 1)}><Pressable accessibilityRole="button" accessibilityLabel={entering ? `Choose your clip for the ${challenge.title} challenge` : 'Create a clip'} onPress={() => { setMode('clip'); void openDevice('video'); }} style={[styles.choiceOption, tight && styles.choiceOptionTight, tighter && styles.choiceOptionTighter, entering && styles.choiceChallenge]}>
         {preparing === 'video' ? <PreparingRing size={choiceIcon} done={prepDone} /> : <Ionicons name={entering ? 'trophy-outline' : 'videocam-outline'} size={choiceIcon} color={entering ? colors.brand : colors.textMuted}/>}<Text style={styles.choiceLabel}>{entering ? 'Choose your clip' : 'Clip'}</Text><Text style={styles.note}>{preparing === 'video' ? 'Getting your video ready — shrinking it so it posts fast.' : entering ? `A video from your phone. #${challenge.tag} is already in the caption.` : 'Share a video from your device.'}</Text>
