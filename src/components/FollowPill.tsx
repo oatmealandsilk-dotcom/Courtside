@@ -79,30 +79,43 @@ export function FollowPill({ following, onPress, small = false, name, userId, wi
  * back as it goes, and hand it back as it opens.
  * Reduce Motion: no change of size is animated; the faces only fade.
  *
+ * `room` is how much wider than the disc the row lets it grow. Where the
+ * word does not fit (a narrow phone, or iPhone's larger text sizes) it is
+ * the same ringed disc with a person and a plus, rather than cutting the
+ * words beside it short ("Ask to h…"). Left out, the word always shows.
+ *
  * `followsYou` changes only what it says to a screen reader ("Follow back"):
  * the words "Follow back" do not fit in the row on a small phone.
  */
-export function FollowShrink({ following, onPress, name, userId, followsYou = false, size = 44 }: { following: boolean; onPress: () => void; name?: string; userId?: string; followsYou?: boolean; size?: number }) {
+export function FollowShrink({ following, onPress, name, userId, followsYou = false, size = 44, room }: { following: boolean; onPress: () => void; name?: string; userId?: string; followsYou?: boolean; size?: number; room?: number }) {
   useTheme();
   const { followRequests, currentUserId } = useApp();
   const requested = !following && !!userId && !!currentUserId && followRequests.some((r) => r.fromId === currentUserId && r.toId === userId);
   const filled = following || requested;
-  // `on` crosses the faces and colours over; `shut` draws the width in (0 = the word's width, 1 = the disc).
-  const on = useSharedValue(filled ? 1 : 0);
-  const shut = useSharedValue(filled ? 1 : 0);
-  const bump = useSharedValue(1);
-  const motion = useSharedValue(1);
-  const reduced = useRef(false);
   // How wide the word is, measured from a hidden copy of it, so the pill knows the width to open
   // back out to and the word is never squeezed into "Fo…" while the pill draws in. 0 until
   // measured: the pill then sizes itself around the word.
   const [wordText, setWordText] = useState(0);
   const wordWidth = wordText ? wordText + 2 * SHRINK_PAD + 2 : 0;
+  // Until both are known, the word: most phones have the room, and a first frame of disc would flash.
+  const roomy = room === undefined || wordWidth === 0 || wordWidth - size <= room;
+  const closed = filled || !roomy;
+  // `on` crosses the faces and colours over; `shut` draws the width in (0 = the word's width, 1 = the disc).
+  const on = useSharedValue(filled ? 1 : 0);
+  const shut = useSharedValue(closed ? 1 : 0);
+  const bump = useSharedValue(1);
+  const motion = useSharedValue(1);
+  const reduced = useRef(false);
+  const wasFilled = useRef(filled);
   useEffect(() => { reduceMotionEnabled().then((r) => { reduced.current = r; if (r) motion.value = 0; }).catch(() => {}); }, [motion]);
   useEffect(() => {
-    on.value = withTiming(filled ? 1 : 0, { duration: 260, easing: EASE });
-    shut.value = reduced.current ? (filled ? 1 : 0) : withTiming(filled ? 1 : 0, { duration: 320, easing: EASE });
-  }, [filled, on, shut]);
+    // A follow (or the database turning one down) animates; the row's room changing (the phone
+    // turned, the text size changed) just puts it right.
+    const tapped = wasFilled.current !== filled;
+    wasFilled.current = filled;
+    on.value = tapped ? withTiming(filled ? 1 : 0, { duration: 260, easing: EASE }) : filled ? 1 : 0;
+    shut.value = tapped && !reduced.current ? withTiming(closed ? 1 : 0, { duration: 320, easing: EASE }) : closed ? 1 : 0;
+  }, [filled, closed, on, shut]);
 
   // Read on each draw and handed in as plain values (see FollowPill: read inside, they stick to the first theme).
   const { surface, surfaceAlt, brand, borderStrong, text } = colors;
@@ -117,10 +130,18 @@ export function FollowShrink({ following, onPress, name, userId, followsYou = fa
     return shut.value > 0.5 ? { ...look, width: size } : look;
   }, [wordWidth, size, surface, surfaceAlt, brand, borderStrong]);
   // The word goes before the pill is too narrow for it, and comes back once there is room.
-  const word = useAnimatedStyle(() => ({ opacity: Math.max(0, 1 - on.value * 1.8) }));
+  const word = useAnimatedStyle(() => ({ opacity: roomy ? Math.max(0, 1 - on.value * 1.8) : 0 }), [roomy]);
+  // No room for the word: a person and a plus in its place, crossing over to the tick the same way.
+  const add = useAnimatedStyle(() => ({ opacity: roomy ? 0 : 1 - on.value, transform: [{ scale: 1 - on.value * 0.2 * motion.value }] }), [roomy]);
   const done = useAnimatedStyle(() => ({ opacity: on.value, transform: [{ scale: 1 - (1 - on.value) * 0.2 * motion.value }] }));
 
+  // A second tap while it is still drawing in is a double tap, not a change of mind: without this,
+  // it followed and unfollowed at once, and said "Unfollowed" for a follow you meant.
+  const lastPress = useRef(0);
   const press = () => {
+    const now = Date.now();
+    if (now - lastPress.current < 450) return;
+    lastPress.current = now;
     if (!reduced.current) bump.value = withSequence(withTiming(0.95, { duration: 60, easing: EASE }), withSpring(1, { damping: 20, stiffness: 320 }));
     haptics.tap();
     onPress();
@@ -131,6 +152,9 @@ export function FollowShrink({ following, onPress, name, userId, followsYou = fa
     <Pressable accessibilityRole="button" accessibilityState={{ selected: filled }} accessibilityLabel={`${said}${name ? ` ${name}` : ''}`} onPress={press} hitSlop={4}>
       <Animated.View style={[styles.shrink, { height: size, borderRadius: size / 2 }, box]}>
         <Animated.Text style={[styles.shrinkWord, { color: wordInk }, wordText ? { width: wordText } : null, word]} numberOfLines={1}>Follow</Animated.Text>
+        <Animated.View pointerEvents="none" style={[styles.face, add]}>
+          <Ionicons name="person-add-outline" size={19} color={wordInk} />
+        </Animated.View>
         <Animated.View pointerEvents="none" style={[styles.face, done]}>
           <View style={styles.person}>
             <Ionicons name="person-outline" size={18} color={text} />
@@ -158,7 +182,10 @@ const styles = StyleSheet.create({
   // FollowShrink: the word pill, which draws in to a disc. Clipped, so the word never shows past it.
   shrink: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: SHRINK_PAD, borderWidth: 1, overflow: 'hidden' },
   shrinkWord: { ...typography.smallStrong, fontSize: 14, flexShrink: 0 },
-  measure: { position: 'absolute', left: 0, top: 0, opacity: 0 },
+  // A width of its own, reaching back over the row (unseen, untouchable): left to fit inside the
+  // button, an iPhone measures the word no wider than the 44pt disc when the card opens on someone
+  // you already follow, and unfollowing then opens out to a clipped "Follo…".
+  measure: { position: 'absolute', right: 0, top: 0, width: 240, alignItems: 'flex-end', opacity: 0 },
   face: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, alignItems: 'center', justifyContent: 'center' },
   // The tick sits on the person's shoulder, cut out of it by a ring of the button's own colour.
   person: { width: 18, height: 18, marginRight: 3 },

@@ -645,6 +645,22 @@ export function PlayerSheet({ placed, following, onClose, onProfile, onMessage, 
     ...(onAddToGroup ? [{ icon: 'people-outline' as const, label: 'Add to a group', onPress: () => afterMenu(onAddToGroup) }] : []),
     { icon: following || requested ? 'person-remove-outline' : 'person-add-outline', label: following ? 'Unfollow' : requested ? 'Cancel request' : followsYou ? 'Follow back' : 'Follow', onPress: () => afterMenu(onFollow) },
   ];
+  // Whether Follow has the room to say its word: the row's width against what the two pills, the
+  // Follow disc and ⋯ take at their natural size, the pills' words measured hidden at whatever text
+  // size the phone is set to. On a 375pt iPhone one step up in Text Size, the word would cut
+  // "Ask to hit" short; there Follow is the disc until you follow, as it is after.
+  const primaryLabel = onAskToHit ? 'Ask to hit' : 'Message';
+  const secondaryLabel = onAskToHit ? 'Message' : 'Profile';
+  const [rowWidth, setRowWidth] = useState(0);
+  const [labelWidths, setLabelWidths] = useState({ primary: 0, secondary: 0 });
+  const measured = (key: 'primary' | 'secondary') => (e: { nativeEvent: { layout: { width: number } } }) => {
+    const width = Math.ceil(e.nativeEvent.layout.width);
+    setLabelWidths((was) => (was[key] === width ? was : { ...was, [key]: width }));
+  };
+  const followRoom = rowWidth && labelWidths.primary && labelWidths.secondary
+    ? rowWidth - 2 * spacing.lg - 3 * spacing.sm - 2 * CARD_ROUND
+      - (CARD_PILL_CHROME + CARD_PILL_ICON + CARD_PILL_GAP + labelWidths.primary) - (CARD_PILL_CHROME + labelWidths.secondary)
+    : undefined;
   return (
     <GestureDetector gesture={pull.gesture}>
     <Animated.View style={[styles.sheet, pull.style]}>
@@ -678,37 +694,42 @@ export function PlayerSheet({ placed, following, onClose, onProfile, onMessage, 
           is not offered), a sand pill beside it, Follow in words until you follow (then a small round
           button), and ⋯ for the rest. All four fit a 375pt phone: the two pills size to their words and
           share what is left, and the sand pill carries no icon to make the room for "Follow". */}
-      <View style={styles.cardActions}>
+      <View style={styles.cardActions} onLayout={(e) => { const width = Math.floor(e.nativeEvent.layout.width); if (width !== rowWidth) setRowWidth(width); }}>
         <View style={styles.cardSlot}>
           {onAskToHit ? (
             <Tappable accessibilityLabel={`Ask ${user.name} to hit`} onPress={onAskToHit} scaleTo={0.97} hoverTo={1.02} style={[styles.cardPill, styles.cardPrimary, pageIsDark() ? styles.cardLiftDark : styles.cardLift]}>
               <BrandWash />
-              <HitGlyph size={16} color={colors.brandInk} />
-              <Text style={styles.cardPrimaryText} numberOfLines={1}>Ask to hit</Text>
+              <HitGlyph size={CARD_PILL_ICON} color={colors.brandInk} />
+              <Text style={styles.cardPrimaryText} numberOfLines={1}>{primaryLabel}</Text>
             </Tappable>
           ) : (
             <Tappable accessibilityLabel={`Message ${user.name}`} onPress={onMessage} scaleTo={0.97} hoverTo={1.02} style={[styles.cardPill, styles.cardPrimary, pageIsDark() ? styles.cardLiftDark : styles.cardLift]}>
               <BrandWash />
-              <Ionicons name="paper-plane-outline" size={16} color={colors.brandInk} />
-              <Text style={styles.cardPrimaryText} numberOfLines={1}>Message</Text>
+              <Ionicons name="paper-plane-outline" size={CARD_PILL_ICON} color={colors.brandInk} />
+              <Text style={styles.cardPrimaryText} numberOfLines={1}>{primaryLabel}</Text>
             </Tappable>
           )}
         </View>
         <View style={styles.cardSlot}>
           {onAskToHit ? (
             <Tappable accessibilityLabel={`Message ${user.name}`} onPress={onMessage} scaleTo={0.97} hoverTo={1.02} style={[styles.cardPill, styles.cardSecondary]}>
-              <Text style={styles.cardSecondaryText} numberOfLines={1}>Message</Text>
+              <Text style={styles.cardSecondaryText} numberOfLines={1}>{secondaryLabel}</Text>
             </Tappable>
           ) : (
             <Tappable accessibilityRole="link" accessibilityLabel="Open profile" onPress={onProfile} scaleTo={0.97} hoverTo={1.02} style={[styles.cardPill, styles.cardSecondary]}>
-              <Text style={styles.cardSecondaryText} numberOfLines={1}>Profile</Text>
+              <Text style={styles.cardSecondaryText} numberOfLines={1}>{secondaryLabel}</Text>
             </Tappable>
           )}
         </View>
-        <FollowShrink following={following} userId={user.id} onPress={onFollow} name={first} followsYou={followsYou} />
+        <FollowShrink following={following} userId={user.id} onPress={onFollow} name={first} followsYou={followsYou} size={CARD_ROUND} room={followRoom} />
         <Tappable accessibilityLabel={`More for ${user.name}`} onPress={() => setMenuOpen(true)} scaleTo={0.94} style={styles.cardRound}>
           <Ionicons name="ellipsis-horizontal" size={19} color={colors.text} />
         </Tappable>
+        {/* The pills' words at their natural width, never seen or read out (see followRoom). */}
+        <View pointerEvents="none" style={styles.cardMeasure} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" aria-hidden>
+          <Text style={styles.cardPrimaryText} numberOfLines={1} onLayout={measured('primary')}>{primaryLabel}</Text>
+          <Text style={styles.cardSecondaryText} numberOfLines={1} onLayout={measured('secondary')}>{secondaryLabel}</Text>
+        </View>
       </View>
       <MenuSheet visible={menuOpen} onClose={() => setMenuOpen(false)} title={`@${user.handle}`} items={menu} />
     </Animated.View>
@@ -1159,6 +1180,17 @@ function TipPulse({ where, size }: { where: TipSpot; size: number }) {
   return <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: 0, top: 0, width: size, height: size, borderRadius: size / 2, borderWidth: 2, borderColor: colors.text }, ring]} />;
 }
 
+/**
+ * The player card's row, in numbers the row's fit is worked out from (PlayerSheet's followRoom):
+ * how tall its buttons are (and how wide the round ones), a pill's padding either side and its
+ * hairline border, and the icon and gap before a filled pill's word.
+ */
+const CARD_ROUND = 44;
+const CARD_PILL_PAD = spacing.md;
+const CARD_PILL_CHROME = 2 * CARD_PILL_PAD + 2;
+const CARD_PILL_ICON = 16;
+const CARD_PILL_GAP = 6;
+
 const styleDefinitions = StyleSheet.create({
   // The tip: an ink bubble, its arrow pointing up at the button.
   tip: { position: 'absolute', zIndex: 30, elevation: 30, width: 210 },
@@ -1261,7 +1293,7 @@ const styleDefinitions = StyleSheet.create({
   // Each pill starts at its own words' width and the two share what is left equally, so Ask to hit
   // never squeezes to "Ask to h…" beside a shorter Message. Follow drawing in hands its room to them.
   cardSlot: { flexGrow: 1, flexShrink: 1, flexBasis: 'auto', minWidth: 0 },
-  cardPill: { height: 44, borderRadius: radius.pill, borderWidth: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingHorizontal: spacing.md },
+  cardPill: { height: CARD_ROUND, borderRadius: radius.pill, borderWidth: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: CARD_PILL_GAP, paddingHorizontal: CARD_PILL_PAD },
   cardPrimary: { backgroundColor: colors.brand, borderColor: colors.brand },
   // The page's one shadow (DESIGN.md, Lift): the primary in its own colour; plain dark on a dark page.
   cardLift: { shadowColor: colors.brand, shadowOpacity: 0.28, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 3 },
@@ -1269,7 +1301,9 @@ const styleDefinitions = StyleSheet.create({
   cardSecondary: { backgroundColor: colors.surfaceAlt, borderColor: colors.borderStrong },
   cardPrimaryText: { ...typography.smallStrong, fontSize: 14, color: colors.brandInk, flexShrink: 1 },
   cardSecondaryText: { ...typography.smallStrong, fontSize: 14, color: colors.text, flexShrink: 1 },
-  cardRound: { width: 44, height: 44, borderRadius: 22, borderWidth: 1, backgroundColor: colors.surfaceAlt, borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center' },
+  cardRound: { width: CARD_ROUND, height: CARD_ROUND, borderRadius: CARD_ROUND / 2, borderWidth: 1, backgroundColor: colors.surfaceAlt, borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center' },
+  // Hidden, for measuring the pills' words: a width of its own, so nothing squeezes them.
+  cardMeasure: { position: 'absolute', right: 0, top: 0, width: 240, alignItems: 'flex-end', opacity: 0 },
   personActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
   primary: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 40, paddingHorizontal: 16, borderRadius: radius.pill, backgroundColor: colors.brand },
   primaryText: { ...typography.smallStrong, color: colors.brandInk },
