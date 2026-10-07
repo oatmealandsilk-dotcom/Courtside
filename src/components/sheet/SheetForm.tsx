@@ -1,5 +1,5 @@
-import React, { useRef } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -54,6 +54,8 @@ export function Section({ title, hint, right, strong = false, children }: { titl
 
 /** A small pill's reach: well past it above and below, barely sideways, so the two halves of a switch never take each other's taps. */
 const SMALL_REACH = { top: 8, bottom: 8, left: 1, right: 1 } as const;
+/** How wide the fade is at the end of a sideways row. */
+const FADE = 32;
 
 /**
  * One choice drawn light (`soft` on Chips and ChipStrip): a white pill on the
@@ -61,10 +63,10 @@ const SMALL_REACH = { top: 8, bottom: 8, left: 1, right: 1 } as const;
  * in the brand, its words in ink. Quieter than an ink-filled chip, so a sheet
  * of several choices keeps the one filled thing for its button.
  */
-function SoftPill({ label, a11y, on, onPress, fill = false, small = false }: { label: string; a11y?: string; on: boolean; onPress: () => void; fill?: boolean; small?: boolean }) {
+function SoftPill({ label, a11y, on, onPress, fill = false, small = false, onLayout }: { label: string; a11y?: string; on: boolean; onPress: () => void; fill?: boolean; small?: boolean; onLayout?: (e: LayoutChangeEvent) => void }) {
   const styles = useThemedStyles(styleDefinitions);
   return (
-    <Pressable accessibilityRole="radio" accessibilityState={{ checked: on, selected: on }} accessibilityLabel={a11y ?? label} hitSlop={small ? SMALL_REACH : 4} onPress={onPress}
+    <Pressable onLayout={onLayout} accessibilityRole="radio" accessibilityState={{ checked: on, selected: on }} accessibilityLabel={a11y ?? label} hitSlop={small ? SMALL_REACH : 4} onPress={onPress}
       style={({ pressed }) => [styles.pill, small && styles.pillSmall, fill && styles.pillFill, on && styles.pillOn, pressed && !on && styles.pressed]}>
       <Text style={[styles.pillText, small && styles.pillTextSmall, on && styles.pillTextOn]} numberOfLines={1}>{label}</Text>
     </Pressable>
@@ -125,24 +127,79 @@ export function Tiles<T extends string | number>({ options, value, onChange, scr
   });
   if (!scroll) return <View style={styles.tileRow}>{tiles}</View>;
   return (
-    <View style={{ marginHorizontal: -spacing.lg }}>
+    <View style={[{ marginHorizontal: -spacing.lg }, soft && styles.shadowRoom]}>
       <ScrollView ref={scroller} onLayout={reveal ? (e) => { seen.current.row = e.nativeEvent.layout.width; bringIn(); } : undefined} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.tileRow, { paddingHorizontal: spacing.lg, paddingVertical: 6 }]}>{tiles}</ScrollView>
       <LinearGradient pointerEvents="none" colors={inCard ? [`${colors.surface}00`, colors.surface] : [`${colors.bg}00`, colors.bg]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.fadeRight} />
     </View>
   );
 }
 
-/** A row of chips that scrolls sideways, fading at the edge so it reads as "more this way". */
-export function ChipStrip<T extends string | number>({ options, value, onChange, inCard = false, soft = false, label }: { options: { value: T; label: string; a11y?: string }[]; value: T; onChange: (v: T) => void; inCard?: boolean; /** Drawn light, as soft Chips. */ soft?: boolean; /** What a screen reader calls the row. */ label?: string }) {
+/**
+ * A row of chips that scrolls sideways, fading at the edge so it reads as "more this way".
+ * `reveal`: the chosen chip is kept in view: brought in when it is chosen half under the fade, or when the
+ * row changes around it (another day's hours, every time relabelled), and never moved under your thumb otherwise.
+ */
+export function ChipStrip<T extends string | number>({ options, value, onChange, inCard = false, soft = false, label, reveal = false }: { options: { value: T; label: string; a11y?: string }[]; value: T; onChange: (v: T) => void; inCard?: boolean; /** Drawn light, as soft Chips. */ soft?: boolean; /** What a screen reader calls the row. */ label?: string; reveal?: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
+  const scroller = useRef<ScrollView>(null);
+  // How wide the row is, how far it has been scrolled, and how wide each chip is (by its value and words, so a
+  // chip relabelled ":30" waits for its new width). Where a chip lies is added up from the widths: a browser
+  // reports a size that changed, never a chip that only moved along.
+  const geo = useRef({ row: 0, at: 0, content: 0, widths: new Map<string, number>(), pending: false, animate: false });
+  // Scrolled to the end, the fade has nothing more to hint at and would only dim the last chip.
+  const [atEnd, setAtEnd] = useState(false);
+  const checkEnd = () => { const g = geo.current; const end = g.row > 0 && g.content > 0 && g.at + g.row >= g.content - 2; if (end !== atEnd) setAtEnd(end); };
+  const keyOf = (o: { value: T; label: string }) => `${String(o.value)}|${o.label}`;
+  /** Scrolls the chosen chip clear of the edge and the fade; false until every chip before it is measured. */
+  const keepInView = () => {
+    const g = geo.current;
+    if (!g.row) return false;
+    let x = spacing.lg;
+    for (const o of options) {
+      const w = g.widths.get(keyOf(o));
+      if (w === undefined) return false;
+      if (o.value === value) {
+        const left = x - spacing.lg;
+        const right = x + w + FADE - g.row;
+        const to = left < g.at ? left : right > g.at ? right : null;
+        if (to !== null) scroller.current?.scrollTo({ x: Math.max(0, to), animated: g.animate });
+        return true;
+      }
+      x += w + spacing.sm;
+    }
+    return true;
+  };
+  // A new choice, or new choices around it (another day's hours, every time relabelled): bring it in once measured.
+  const choices = options.map(keyOf).join(',');
+  useEffect(() => {
+    if (!reveal) return;
+    const g = geo.current;
+    g.pending = true;
+    g.animate = g.row > 0;
+    if (keepInView()) g.pending = false;
+  }, [value, choices]); // eslint-disable-line react-hooks/exhaustive-deps
+  const settle = () => { const g = geo.current; if (g.pending && keepInView()) g.pending = false; };
+  const measured = (o: { value: T; label: string }) => (reveal ? (e: LayoutChangeEvent) => {
+    geo.current.widths.set(keyOf(o), e.nativeEvent.layout.width);
+    settle();
+  } : undefined);
   return (
-    <View style={{ marginHorizontal: -spacing.lg }}>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} accessibilityRole={soft ? 'radiogroup' : undefined} accessibilityLabel={label} contentContainerStyle={[styles.chips, { flexWrap: 'nowrap', paddingHorizontal: spacing.lg }, soft && styles.stripSoft]}>
+    <View style={[{ marginHorizontal: -spacing.lg }, soft && styles.shadowRoom]}>
+      <ScrollView ref={scroller} horizontal showsHorizontalScrollIndicator={false} accessibilityRole={soft ? 'radiogroup' : undefined} accessibilityLabel={label}
+        scrollEventThrottle={reveal ? 32 : undefined}
+        onScroll={reveal ? (e) => { geo.current.at = e.nativeEvent.contentOffset.x; checkEnd(); } : undefined}
+        onContentSizeChange={reveal ? (w) => { geo.current.content = w; checkEnd(); } : undefined}
+        onLayout={reveal ? (e) => { geo.current.row = e.nativeEvent.layout.width; settle(); checkEnd(); } : undefined}
+        contentContainerStyle={[styles.chips, { flexWrap: 'nowrap', paddingHorizontal: spacing.lg }, soft && styles.stripSoft]}>
         {options.map((o) => (soft
-          ? <SoftPill key={String(o.value)} label={o.label} a11y={o.a11y} on={value === o.value} onPress={() => onChange(o.value)} />
-          : <Chip key={String(o.value)} label={o.label} selected={value === o.value} tint={colors.text} ink={colors.bg} onPress={() => onChange(o.value)} />))}
+          ? <SoftPill key={String(o.value)} onLayout={measured(o)} label={o.label} a11y={o.a11y} on={value === o.value} onPress={() => onChange(o.value)} />
+          : reveal ? (
+            <View key={String(o.value)} onLayout={measured(o)}>
+              <Chip label={o.label} selected={value === o.value} tint={colors.text} ink={colors.bg} onPress={() => onChange(o.value)} />
+            </View>
+          ) : <Chip key={String(o.value)} label={o.label} selected={value === o.value} tint={colors.text} ink={colors.bg} onPress={() => onChange(o.value)} />))}
       </ScrollView>
-      <LinearGradient pointerEvents="none" colors={inCard ? [`${colors.surface}00`, colors.surface] : [`${colors.bg}00`, colors.bg]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.fadeRight} />
+      <LinearGradient pointerEvents="none" colors={inCard ? [`${colors.surface}00`, colors.surface] : [`${colors.bg}00`, colors.bg]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={[styles.fadeRight, reveal && atEnd && styles.fadeGone]} />
     </View>
   );
 }
@@ -212,6 +269,9 @@ const styleDefinitions = StyleSheet.create({
   pressed: { opacity: 0.7 },
   // Room above and below a soft strip for the pills' shadow, which a sideways scroller would otherwise clip.
   stripSoft: { paddingVertical: 6 },
+  // A soft sideways row hands that room back to the form, so its pills and tiles sit the same distance
+  // from their heading, and from the next part, as every other choice on the sheet.
+  shadowRoom: { marginVertical: -6 },
   tileRow: { flexDirection: 'row', gap: spacing.sm },
   tile: { ...lift, height: 64, borderRadius: 18, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', gap: 1 },
   // A day's tile: 58 wide, a little wider only for a longer word on top ("Yesterday").
@@ -224,7 +284,8 @@ const styleDefinitions = StyleSheet.create({
   tileSoft: { borderWidth: 1.5, borderColor: 'transparent' },
   tileSoftOn: { backgroundColor: colors.brandDim, borderColor: colors.brand, boxShadow: 'none' },
   tileSoftTopOn: { color: colors.text, ...font('600') },
-  fadeRight: { position: 'absolute', right: 0, top: 0, bottom: 0, width: 32 },
+  fadeRight: { position: 'absolute', right: 0, top: 0, bottom: 0, width: FADE },
+  fadeGone: { opacity: 0 },
   submit: { height: 54, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
   submitOn: { backgroundColor: colors.brand, boxShadow: '0px 8px 20px rgba(0, 0, 0, 0.16)' },
   submitOff: { backgroundColor: colors.surfaceAlt },

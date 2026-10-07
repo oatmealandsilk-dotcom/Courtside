@@ -233,7 +233,7 @@ export default function NewHit() {
             <Chips soft small label="Minutes past the hour" value={half ? 'half' : 'hour'} onChange={pickHalf}
               options={[{ value: 'hour', label: ':00', a11y: 'On the hour' }, { value: 'half', label: ':30', a11y: 'Half past' }]} />
           )}>
-            <ChipStrip soft label="Start time" value={hour} onChange={pickHour} options={hours.map((h) => ({ value: h, label: timeLabel(h, half) }))} />
+            <ChipStrip soft reveal label="Start time" value={hour} onChange={pickHour} options={hours.map((h) => ({ value: h, label: timeLabel(h, half) }))} />
           </Section>
 
           <Section strong title="Where" hint={farLine ?? undefined}>
@@ -245,7 +245,7 @@ export default function NewHit() {
           </Section>
 
           {/* Level and how many: a row each, the question on the left and its answer on the right, on a hairline. */}
-          <View>
+          <View style={styles.rows}>
             <View style={styles.row}>
               <Text style={styles.rowTitle} accessibilityRole="header">Level</Text>
               <Chips soft label="Level" value={level} onChange={pickLevel} options={[{ value: 'mine', label: rating ? `Around ${rating.toFixed(1)}` : 'My level' }, { value: 'any', label: 'Any' }]} />
@@ -274,12 +274,7 @@ export default function NewHit() {
             <Section strong title="Invite" hint={pickedUsers.length ? `${pickedUsers.length} picked · each gets it in your chat` : 'Tick who gets it in your chat'}>
               <InviteRow picked={picked} onPicked={setPicked} first={askedIds} />
               {groupCount ? <GroupsCard on={withGroups} onChange={setWithGroups} count={groupCount} /> : null}
-              {audience === 'invite_first' ? (
-                <View style={styles.openNote}>
-                  <Ionicons name="time-outline" size={16} color={colors.brand} />
-                  <Text style={styles.openNoteText}>{opensNow ? 'It starts within 3 hours, so it goes on Find Players straight away.' : `Opens to everyone ${opensText}, unless it’s full by then.`}</Text>
-                </View>
-              ) : null}
+              {/* When it opens to everyone is said once, under Post, where it stays in sight (it was also said here, word for word). */}
             </Section>
           ) : null}
 
@@ -322,8 +317,10 @@ const styleDefinitions = StyleSheet.create({
   // "It's an open hit": one plain line on the sheet's quiet tint, above When.
   openNote: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, padding: spacing.md, borderRadius: radius.lg, backgroundColor: colors.bgElevated },
   openNoteText: { ...typography.small, color: colors.text, flex: 1, lineHeight: 19 },
-  // Level and Players needed: the question left, the answer right, a hairline between the two.
-  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, minHeight: 56, paddingVertical: spacing.sm },
+  // Level and Players needed: the question left, the answer right, a hairline between the two. The pair
+  // gives back its outer padding, so its first pills sit 24 under Game's, as every part sits under the last.
+  rows: { marginVertical: -spacing.md },
+  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, minHeight: 48, paddingVertical: spacing.md },
   rule: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   rowWords: { flexShrink: 1, gap: 2 },
   rowTitle: { ...typography.bodyStrong, color: colors.text },
