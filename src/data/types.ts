@@ -368,7 +368,8 @@ export interface Achievement {
  * How a post has done in feeds (feed_post_scores, migration 143), for the
  * ranking: how many people saw it, how many looks, seconds on screen, quick
  * swipe-aways (under 1.5 s), taps through to its author, and whether you saw
- * it on an earlier visit. Totals only, the author's own looks left out.
+ * it on an earlier visit, on any phone. Totals only, the author's own looks
+ * left out.
  */
 export interface FeedScore {
   viewers: number;
@@ -377,6 +378,8 @@ export interface FeedScore {
   skips: number;
   profileTaps: number;
   seenByMe: boolean;
+  /** When you last saw it, in ms (migration 150); missing before that has run. Only ever your own. */
+  mySeenAt?: number;
 }
 
 export type PostKind = 'clip' | 'match' | 'session' | 'note' | 'gear' | 'milestone';

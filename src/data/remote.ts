@@ -4434,7 +4434,9 @@ async function flushSignals() {
 }
 export function queueFeedSignal(signal: FeedSignal) {
   pendingSignals.push(signal);
-  if (pendingSignals.length >= 40) { void flushSignals(); return; }
+  // The look that was on screen as the app went away (the feed closes it a moment after the flush below):
+  // sent now, not in eight seconds a phone in the background may never give it.
+  if (pendingSignals.length >= 40 || AppState.currentState !== 'active') { void flushSignals(); return; }
   if (!signalTimer) signalTimer = setTimeout(() => { void flushSignals(); }, 8000);
 }
 AppState.addEventListener('change', (next) => { if (next !== 'active') void flushSignals(); });

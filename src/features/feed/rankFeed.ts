@@ -2,7 +2,12 @@ import type { Post, Question, Comment, Story, User, ID, FeedScore } from '@/data
 import { isNewHere } from '@/features/feed/newHere';
 export type FeedItem = { type: 'post'; post: Post } | { type: 'question'; question: Question } | { type: 'hit'; story: Story } | { type: 'tip' } | { type: 'challenge' }
   // Activities' first page for a new player (components/ActivitiesStart).
-  | { type: 'act-start' };
+  | { type: 'act-start' }
+  // "You're all caught up": For you's line between what you have not seen yet and what you have.
+  | { type: 'caught-up' };
+
+/** The "You're all caught up" page's key in the feed's order (every other key is "p:", "q:" or "h:" and an id). */
+export const CAUGHT_UP = 'caught-up';
 
 /**
  * Off: the feed is ranked (see scorePost below). On: simply newest first,
@@ -20,9 +25,11 @@ export type RankContext = {
   users?: User[];
   /** Pages already shown this visit, as feed keys ("p:<id>", "q:<id>", "h:<id>"). */
   seen?: Set<string>;
-  /** How each post has done in feeds, by id (feedScores, migration 143). */
+  /** When you last saw each page on this phone, any earlier visit included, by feed key (ms; features/feed/seenPosts). */
+  seenOnPhone?: ReadonlyMap<string, number>;
+  /** How each post has done in feeds, by id, and whether and when you saw it (feedScores, migrations 143 and 150). */
   scores?: Record<ID, FeedScore>;
-  /** The clock to rank against; fixed in the sanity check. */
+  /** The clock to rank against; fixed in the check (scripts/rank-check.mjs). */
   now?: number;
 };
 
@@ -35,6 +42,13 @@ const MIX_EVERY = 4;
 const VIDEO_BOOST = 6;
 /** Looks from this many people before how it was watched counts; fewer is chance. */
 const WATCH_MIN_VIEWERS = 3;
+/**
+ * Among what you have already seen, each day since you last saw something is
+ * worth this many points (up to two weeks' worth), so what you saw longest ago
+ * comes round first and the best of a day leads that day.
+ */
+const STALE_PER_DAY = 5;
+const STALE_MAX_DAYS = 14;
 
 const newest = <T extends { createdAt: string }>(list: T[]) => [...list].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
 const cityOf = (location?: string) => (location ?? '').split(',')[0].trim().toLowerCase();
@@ -46,15 +60,26 @@ const orderHits = (hits: Story[], userId: string | null) =>
 const recency = (createdAt: string, now: number) => 10 * Math.pow(0.5, Math.max(0, now - Date.parse(createdAt)) / DAY);
 
 /**
- * The feed, ranked. Each post gets a score — how new it is, how much people
- * liked, commented on, saved and shared it, how close you are to its author,
- * whether its author is new here, whether it matches what you engage with,
- * whether it is a clip (clips lead), how people watched it (held on it or
- * swiped away, from the server's totals), and whether you have seen it,
- * this visit or before —
- * then it is dealt so no author appears twice within five pages, with a
- * thread or a hit in every fourth slot. The same data always deals the same
- * order: nothing here is random.
+ * The feed, ranked, in two parts (Oct 7, owner: "don't keep seeing the same
+ * videos"):
+ *
+ *   1. Everything you have not seen yet, best first.
+ *   2. "You're all caught up" (the CAUGHT_UP page).
+ *   3. Everything you have seen, on any phone, this visit or before: what you
+ *      saw longest ago first (and the best of it), what you saw this visit
+ *      last of all. Never a dead end.
+ *
+ * A post you have seen never comes above one you have not, however good it
+ * is; your own posts too, once you have seen them. Threads and Instants follow
+ * the same rule among themselves.
+ *
+ * "Best" is a score: how new it is, how much people liked, commented on,
+ * saved and shared it, how close you are to its author, whether its author is
+ * new here, whether it matches what you engage with, whether it is a clip
+ * (clips lead), and how people watched it (held on it or swiped away, from
+ * the server's totals). Each part is dealt so no author appears twice within
+ * five pages, with a thread or a hit in every fourth slot. The same data
+ * always deals the same order: nothing here is random.
  */
 export function rankFeed(posts: Post[], questions: Question[], comments: Comment[], userId: string | null, hits: Story[] = [], ctx: RankContext = {}): FeedItem[] {
   if (NEWEST_FIRST) {
@@ -70,6 +95,7 @@ export function rankFeed(posts: Post[], questions: Question[], comments: Comment
     }
     return result;
   }
+  if (!posts.length && !questions.length && !hits.length) return [];
   const now = ctx.now ?? Date.now();
   const seen = ctx.seen ?? new Set<string>();
 
@@ -116,52 +142,94 @@ export function rankFeed(posts: Post[], questions: Question[], comments: Comment
     const held = 1 - Math.min(1, sc.skips / sc.looks);
     return 10 * (held - 0.5) + 3 * Math.log2(1 + Math.min(60, sc.watchSeconds / sc.looks)) + 2 * Math.log2(1 + sc.profileTaps);
   };
-  // Seen this visit, or on an earlier one: either way it gives way to something new.
-  const seenBefore = (p: Post) => seen.has(`p:${p.id}`) || !!scores[p.id]?.seenByMe;
   const scorePost = (p: Post) =>
     recency(p.createdAt, now) + engagement(p) + closeness(p) + newCreator(p) + taste([p.kind, ...p.tags])
-    + (isVideo(p) ? VIDEO_BOOST : 0) + watched(p) - (seenBefore(p) ? 8 : 0);
-  const scoreQuestion = (q: Question) =>
-    recency(q.createdAt, now) + taste([q.topic, ...q.tags]) - (seen.has(`q:${q.id}`) ? 8 : 0);
+    + (isVideo(p) ? VIDEO_BOOST : 0) + watched(p);
+  const scoreQuestion = (q: Question) => recency(q.createdAt, now) + taste([q.topic, ...q.tags]);
+
+  /**
+   * When you last saw a page, or null if you never have: on this phone (this
+   * visit or before) or, for a post, on any phone (the server). The server
+   * saying "seen" without saying when (migration 150 not run yet) counts as
+   * seen when it was made: you cannot have seen it before that.
+   */
+  const lastSeen = (key: string, createdAt: string): number | null => {
+    const server = key.startsWith('p:') ? scores[key.slice(2)] : undefined;
+    let at = -Infinity;
+    for (const t of [ctx.seenOnPhone?.get(key), server?.mySeenAt]) if (typeof t === 'number' && Number.isFinite(t) && t > at) at = t;
+    if (seen.has(key)) at = Math.max(at, now);
+    if (at === -Infinity && server?.seenByMe) at = Date.parse(createdAt) || 0;
+    return at === -Infinity ? null : at;
+  };
+  // Seen: further back in "Earlier posts" the more recently you saw it; this visit's at the very end.
+  const again = (key: string, createdAt: string, score: number) => {
+    const at = lastSeen(key, createdAt) ?? now;
+    return score + STALE_PER_DAY * Math.min(STALE_MAX_DAYS, Math.max(0, (now - at) / DAY)) - (seen.has(key) ? 1000 : 0);
+  };
 
   // Highest first; ties by newest, then by id, so equal scores never trade places between deals.
   const byScore = <T extends { id: string; createdAt: string }>(list: T[], score: (x: T) => number) =>
     list.map((x) => ({ x, s: score(x) }))
       .sort((a, b) => b.s - a.s || Date.parse(b.x.createdAt) - Date.parse(a.x.createdAt) || a.x.id.localeCompare(b.x.id))
       .map((e) => e.x);
-  const ranked = byScore(posts, scorePost);
-  const forum = byScore(questions, scoreQuestion);
-  const moments = orderHits(hits, userId);
+  const isSeen = (key: string, createdAt: string) => lastSeen(key, createdAt) !== null;
+  const postSeen = (p: Post) => isSeen(`p:${p.id}`, p.createdAt);
+  const questionSeen = (q: Question) => isSeen(`q:${q.id}`, q.createdAt);
+  const hitSeen = (st: Story) => isSeen(`h:${st.id}`, st.createdAt);
+
+  const freshPosts = byScore(posts.filter((p) => !postSeen(p)), scorePost);
+  const seenPosts = byScore(posts.filter(postSeen), (p) => again(`p:${p.id}`, p.createdAt, scorePost(p)));
+  const freshForum = byScore(questions.filter((q) => !questionSeen(q)), scoreQuestion);
+  const seenForum = byScore(questions.filter(questionSeen), (q) => again(`q:${q.id}`, q.createdAt, scoreQuestion(q)));
+  const freshMoments = orderHits(hits.filter((st) => !hitSeen(st)), userId);
+  const seenMoments = orderHits(hits.filter(hitSeen), userId);
 
   const result: FeedItem[] = [];
   const authors: string[] = [];
-  const recent = () => new Set(authors.slice(-(AUTHOR_GAP - 1)));
+  const push = (item: FeedItem, authorId: string) => { result.push(item); authors.push(authorId); };
   // The best page whose author has not been on any of the last four.
   const take = <T extends { authorId: string }>(list: T[]): T | undefined => {
     if (!list.length) return undefined;
-    const busy = recent();
+    const busy = new Set(authors.slice(-(AUTHOR_GAP - 1)));
     const at = list.findIndex((x) => !busy.has(x.authorId));
     return list.splice(at < 0 ? 0 : at, 1)[0];
   };
   let threadNext = true;
-  const takeMix = (): FeedItem | undefined => {
+  const takeMix = (forum: Question[], moments: Story[]): boolean => {
     const order = threadNext ? [forum, moments] as const : [moments, forum] as const;
     for (const list of order) {
       const x = take(list as (Question | Story)[]);
       if (!x) continue;
       threadNext = list !== forum;
-      return list === forum ? { type: 'question', question: x as Question } : { type: 'hit', story: x as Story };
+      if (list === forum) push({ type: 'question', question: x as Question }, x.authorId);
+      else push({ type: 'hit', story: x as Story }, x.authorId);
+      return true;
     }
-    return undefined;
+    return false;
   };
-  while (ranked.length || forum.length || moments.length) {
-    const slot = result.length + 1;
-    let item: FeedItem | undefined;
-    if (slot % MIX_EVERY === 0 || !ranked.length) item = takeMix();
-    if (!item) { const post = take(ranked); if (post) item = { type: 'post', post }; }
-    if (!item) break;
-    result.push(item);
-    authors.push(item.type === 'post' ? item.post.authorId : item.type === 'question' ? item.question.authorId : item.type === 'hit' ? item.story.authorId : '');
-  }
+  /**
+   * One part of the feed: its posts best first, a thread or a hit in every
+   * fourth slot (counted from the part's own start). When its posts run out,
+   * `rest` says what else it takes: every thread and hit left ("all"), only
+   * the hits ("hits": today's moments you have not seen go above the line,
+   * threads stay mixed in below), or nothing more.
+   */
+  const dealPart = (ranked: Post[], forum: Question[], moments: Story[], rest: 'all' | 'hits' | 'none') => {
+    const start = result.length;
+    for (;;) {
+      const slot = result.length - start + 1;
+      if (ranked.length && slot % MIX_EVERY === 0 && takeMix(forum, moments)) continue;
+      const post = take(ranked);
+      if (post) { push({ type: 'post', post }, post.authorId); continue; }
+      if (rest === 'all' && takeMix(forum, moments)) continue;
+      if (rest === 'hits') { const hit = take(moments); if (hit) { push({ type: 'hit', story: hit }, hit.authorId); continue; } }
+      break;
+    }
+  };
+
+  dealPart(freshPosts, freshForum, freshMoments, 'hits');
+  push({ type: 'caught-up' }, '');
+  // Threads and Instants not seen yet that did not fit above still come before the ones you have.
+  dealPart(seenPosts, [...freshForum, ...seenForum], [...freshMoments, ...seenMoments], 'all');
   return result;
 }

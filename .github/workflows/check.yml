@@ -38,6 +38,12 @@ jobs:
       - name: Type-check
         run: npm run typecheck
 
+      # For you's order (scripts/rank-check.mjs): nothing you have seen above
+      # anything you have not, no author twice within five pages, the same
+      # order every time. Made-up posts, no browser, a second or two.
+      - name: Feed order check
+        run: npm run rank-check
+
   # The auto-tester (scripts/smoke.mjs): builds the web app in demo mode (no
   # database), opens it in Chrome at a phone's width and clicks through the
   # main screens: sign-in, each tab, a post and its comments, a chat,
