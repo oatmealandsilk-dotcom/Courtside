@@ -21,9 +21,16 @@ export const LIVE_KINDS: { value: LiveSession['kind']; label: string }[] = [
   { value: 'match', label: 'Match' },
 ];
 
-/** The shortest and longest a session can be logged at (the database's 5 to 600 minutes, migration 39). */
-const MIN_MINUTES = 5;
+/** The shortest and longest a session can be logged at (the database's 5 to 600 minutes, migrations 39 and 58). */
+export const MIN_MINUTES = 5;
 const MAX_MINUTES = 600;
+
+/**
+ * Under five minutes on the clock (pauses left out): too short to log, so
+ * almost always a Start tapped by accident (Oct 7, owner: "If a session is
+ * under 5 min what do u do"). Finish asks instead of opening the log.
+ */
+export const tooShort = (s: Pick<LiveSession, 'startedAt' | 'pausedAt' | 'pausedMs' | 'endedAt'>, now = Date.now()) => elapsedMs(s, now) < MIN_MINUTES * 60_000;
 
 /** How long it has been going, pauses left out, in milliseconds: stopped at Finish, standing still while paused. */
 export function elapsedMs(s: Pick<LiveSession, 'startedAt' | 'pausedAt' | 'pausedMs' | 'endedAt'>, now = Date.now()): number {
@@ -139,6 +146,28 @@ export function seenLine({ here, seenBy, why, problem, starting = false }: {
   if (why === 'only-me') return { line: only, shared: false, note: 'You chose Only me on the map.' };
   if (problem) return { line: only, shared: false, note: problem };
   return { line: only, shared: false };
+}
+
+/**
+ * The live page's one row under the clock (Oct 7, owner: the two lines and
+ * the wrapping button were cramped): who can see you, in a few words, by
+ * the same rules as seenLine. Seen: who. Only you: why, when it is
+ * something you chose or can change (Location, Only me). A check-in's own
+ * refusal is said when "Show friends" is tapped, not kept on the row.
+ */
+export function seenShort({ here, seenBy, why }: {
+  here: boolean;
+  seenBy: MapVisibility | null;
+  why?: ReturnType<typeof checkInPlan>['why'];
+}): { line: string; shared: boolean } {
+  if (here) {
+    if (seenBy === 'nearby') return { line: 'Friends and players nearby see you here', shared: true };
+    if (seenBy === 'mutuals') return { line: 'Friends who follow you back see you here', shared: true };
+    return { line: 'Friends can see you’re playing here', shared: true };
+  }
+  if (why === 'location-off') return { line: 'Only you · Location is off', shared: false };
+  if (why === 'only-me') return { line: 'Only you · you chose Only me', shared: false };
+  return { line: 'Only you can see this', shared: false };
 }
 
 /**

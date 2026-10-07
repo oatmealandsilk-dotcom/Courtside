@@ -10,9 +10,11 @@ import { CardWash, CourtLines, cardLook } from '@/components/session/SessionCard
 import { Submit, formBody } from '@/components/sheet/SheetForm';
 import { BrandWash } from '@/components/ui';
 import { KIND_LABEL } from '@/features/activity/format';
-import { checkInPlan, clockText, elapsedMs, livePlace, liveState, seenLine, spokenClock, startClock, useLiveNow } from '@/features/activity/liveSession';
+import { finishLive, openLiveLog } from '@/features/activity/finishLive';
+import { checkInPlan, clockText, elapsedMs, livePlace, liveState, seenShort, spokenClock, startClock, useLiveNow } from '@/features/activity/liveSession';
 import { seenByOnMap } from '@/features/players/mapPrivacy';
 import { confirm } from '@/lib/confirm';
+import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, lift, pageIsDark, radius, spacing, typography } from '@/theme';
@@ -21,11 +23,12 @@ import { colors, font, lift, pageIsDark, radius, spacing, typography } from '@/t
  * The live session's own page (Oct 6), opened from the bar over the tabs or
  * straight after Start: the clock big, in the session box's own colours (the
  * court's shirt, as a logged session's card is), what and where, who can
- * see you playing, then Pause or Resume, and Finish. Finish stops the clock,
- * checks you out and opens the log sheet filled in from it
- * (log-session?live=1), where the score, who you played and a photo go on.
- * Discard throws it away, asked first. The chevron (or a pull down) only
- * tucks the page away: the clock keeps running in the bar.
+ * see you playing (one row, Oct 7), then Pause or Resume, and Finish.
+ * Finish stops the clock, checks you out and opens the "Log it" composer
+ * filled in from it (compose?live=1, Oct 7), where a photo or a clip, the
+ * score and who you played go on; under five minutes it asks instead
+ * (finishLive). Discard throws it away, asked first. The chevron (or a pull
+ * down) only tucks the page away: the clock keeps running in the bar.
  */
 export default function LiveSessionPage() {
   const styles = useThemedStyles(styleDefinitions);
@@ -37,7 +40,6 @@ export default function LiveSessionPage() {
   const next = useRef<'log' | 'start' | null>(null);
   const [contentH, setContentH] = useState(0);
   const [asking, setAsking] = useState(false);
-  const [problem, setProblem] = useState('');
   const state = s ? liveState(s) : 'finished';
   const now = useLiveNow(!!s && state === 'running');
   // Whether you are checked in at its court right now, as the court's own card knows it.
@@ -45,7 +47,7 @@ export default function LiveSessionPage() {
   const look = cardLook(theme);
 
   const dismissed = () => {
-    if (next.current === 'log') router.replace({ pathname: '/log-session', params: { live: '1' } });
+    if (next.current === 'log') openLiveLog('replace');
     else if (next.current === 'start') router.replace('/start-session');
     else router.back();
   };
@@ -73,26 +75,25 @@ export default function LiveSessionPage() {
   const here = !!s.court && !!courtNow[s.court.id]?.youHere && locationEnabled && state !== 'finished';
   const seenBy = seenByOnMap(mapLive, currentUser, teenMap, mapVisibility);
   const plan = checkInPlan({ me: currentUser, court: s.court, access: s.court ? courtFacts[s.court.id]?.access : undefined, locationOn: locationEnabled, seenBy });
-  const seen = state === 'finished'
-    ? { line: 'Finished. You’re checked out of the court.', shared: false, note: undefined as string | undefined }
-    : seenLine({ here, seenBy, why: plan.why, problem: problem || s.checkInProblem });
+  const seen = state === 'finished' ? { line: 'Finished · checked out', shared: false } : seenShort({ here, seenBy, why: plan.why });
   // Not seen, but could be by the court sheet's rules (a check-in that did not go through, Location just turned on): one tap to try.
   const canTry = state !== 'finished' && !here && (plan.checkIn || plan.why === 'location-off');
+  // Why it didn't go through is said when it is tried, in the app's own note, so the row stays one line.
+  const refusedNote = (why: string) => showToast({ title: 'Only you can see this session', body: why, icon: 'lock-closed-outline', long: true });
   const tryCheckIn = async () => {
     if (asking) return;
     setAsking(true);
-    setProblem('');
     if (!locationEnabled) {
       const off = await actions.setLocationEnabled(true);
-      if (off) { setProblem(off); setAsking(false); return; }
+      if (off) { refusedNote(off); setAsking(false); return; }
     }
     const refused = await actions.checkInLiveSession();
-    if (refused) setProblem(refused);
+    if (refused) refusedNote(refused);
     setAsking(false);
   };
 
-  const finish = () => { actions.finishLiveSession(); next.current = 'log'; close(); };
-  const logIt = () => { next.current = 'log'; close(); };
+  // Finish (Log it, once finished): the "Log it" composer once this page has slid away; under five minutes, a question instead.
+  const finish = () => finishLive(s, actions, { open: () => { next.current = 'log'; close(); }, onDiscard: close });
   const discard = () => confirm({
     title: 'Discard this session?',
     message: 'The time won’t be logged, and friends stop seeing you here.',
@@ -125,18 +126,15 @@ export default function LiveSessionPage() {
           </View>
         </View>
 
-        {/* Who can see you playing, the check-in's own words. */}
+        {/* Who can see you playing, in one row: a few words, and one button only when a tap can change it. */}
         <View style={styles.seen}>
           <View style={[styles.seenIcon, seen.shared && styles.seenIconOn]}>
-            {seen.shared ? <LiveDot size={8} color={colors.open} /> : <Ionicons name={state === 'finished' ? 'checkmark' : 'lock-closed'} size={14} color={colors.textMuted} />}
+            {seen.shared ? <LiveDot size={8} color={colors.open} /> : <Ionicons name={state === 'finished' ? 'checkmark' : 'lock-closed'} size={13} color={colors.textMuted} />}
           </View>
-          <View style={{ flex: 1, gap: 2 }}>
-            <Text style={[styles.seenLine, seen.shared && styles.seenShared]}>{seen.line}</Text>
-            {seen.note ? <Text style={styles.seenNote}>{seen.note}</Text> : null}
-          </View>
+          <Text style={[styles.seenLine, seen.shared && styles.seenShared]} numberOfLines={2}>{seen.line}</Text>
           {canTry ? (
-            <Pressable accessibilityRole="button" accessibilityLabel={plan.why === 'location-off' ? 'Turn on Location and let friends see you’re here' : 'Let friends see you’re here'} disabled={asking} onPress={() => { void tryCheckIn(); }} style={({ pressed }) => [styles.tryPill, pressed && styles.pressed]}>
-              {asking ? <ActivityIndicator size="small" color={colors.text} /> : <Text style={styles.tryText}>{plan.why === 'location-off' ? 'Turn on' : 'Show friends'}</Text>}
+            <Pressable accessibilityRole="button" accessibilityLabel={plan.why === 'location-off' ? 'Turn on Location and let friends see you’re here' : 'Let friends see you’re here'} disabled={asking} hitSlop={6} onPress={() => { void tryCheckIn(); }} style={({ pressed }) => [styles.tryPill, pressed && styles.pressed]}>
+              {asking ? <ActivityIndicator size="small" color={colors.text} /> : <Text style={styles.tryText} numberOfLines={1}>{plan.why === 'location-off' ? 'Turn on' : 'Show friends'}</Text>}
             </Pressable>
           ) : null}
         </View>
@@ -155,7 +153,7 @@ export default function LiveSessionPage() {
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={state === 'finished' ? 'Log this session' : 'Finish session'}
-            onPress={state === 'finished' ? logIt : finish}
+            onPress={finish}
             style={({ pressed }) => [styles.primary, pageIsDark() ? styles.primaryDark : null, pressed && styles.pressedScale]}
           >
             <BrandWash />
@@ -213,13 +211,12 @@ const styleDefinitions = StyleSheet.create({
   boxUnder: { ...font('500'), fontSize: 14, marginTop: -2, marginBottom: 34 },
   boxPill: { paddingHorizontal: 9, paddingVertical: 3, borderRadius: radius.pill },
   boxPillText: { ...font('700'), fontSize: 11, letterSpacing: 0.3 },
-  seen: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  seenIcon: { width: 30, height: 30, borderRadius: 15, backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
+  seen: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm + 2, minHeight: 36 },
+  seenIcon: { width: 28, height: 28, borderRadius: 14, backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
   seenIconOn: { backgroundColor: colors.brandDim },
-  seenLine: { ...typography.bodyStrong, color: colors.textMuted },
+  seenLine: { ...typography.smallStrong, fontSize: 14, lineHeight: 19, color: colors.textMuted, flex: 1, minWidth: 0 },
   seenShared: { color: colors.text },
-  seenNote: { ...typography.small, color: colors.textFaint },
-  tryPill: { minWidth: 64, height: 32, paddingHorizontal: 12, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
+  tryPill: { flexShrink: 0, minWidth: 64, height: 32, paddingHorizontal: 14, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
   tryText: { ...typography.smallStrong, color: colors.text },
   controls: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.xs },
   second: { ...lift, flex: 1, height: 58, borderRadius: radius.pill, backgroundColor: colors.surface, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },

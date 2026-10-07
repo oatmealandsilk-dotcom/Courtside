@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
-import { router, usePathname } from 'expo-router';
+import { usePathname } from 'expo-router';
 
 import { isBusy } from '@/components/HitFollowUp';
 import type { LiveSession } from '@/data/types';
+import { finishLive } from '@/features/activity/finishLive';
 import { elapsedMs, hoursWords, livePlace, stillPlayingAt } from '@/features/activity/liveSession';
 import { planStillPlaying } from '@/features/activity/stillPlaying';
 import { useCurtainDown } from '@/features/feed/warmup';
@@ -26,8 +27,8 @@ const SEEN_MS = 5000;
  * clock has run three hours (pauses left out) is asked about once, gently, in
  * the app's own note at the top, the way "How was the hit?" asks (never over
  * a page where someone is writing, the tutorial or the opening curtain).
- * Finish stops the clock and opens the log sheet filled in, where the time
- * can be put right; Keep going (or the note put away) asks again two hours
+ * Finish stops the clock and opens the "Log it" composer filled in, where the
+ * time can be put right; Keep going (or the note put away) asks again two hours
  * on. The phone also sets its own alert for that moment, so a session left
  * running with the app closed is asked about on the lock screen
  * (features/activity/stillPlaying; none in a browser). Draws nothing itself.
@@ -99,7 +100,7 @@ export function StillPlaying({ enabled }: { enabled: boolean }) {
         secondary: { label: 'Keep going', onPress: () => actions.keepGoingLiveSession() },
         action: {
           label: 'Finish',
-          onPress: () => { actions.finishLiveSession(); router.push({ pathname: '/log-session', params: { live: '1' } }); },
+          onPress: () => { const now = latest.current; if (now) finishLive(now, actions); },
         },
         holdMs: HOLD_MS,
         onClosed: (how, upMs) => {

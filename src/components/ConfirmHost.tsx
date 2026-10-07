@@ -116,7 +116,8 @@ export function ConfirmHost() {
     else setRequest(null);
   };
 
-  const answer = (choice: Answer) => {
+  /** `own`: the safe answer's own row was tapped (its onCancel runs then, never on a tap outside or Escape). */
+  const answer = (choice: Answer, own = false) => {
     const asked = live.current;
     if (!asked) return; // already answered: a second tap, or Escape heard twice
     live.current = null;
@@ -124,16 +125,17 @@ export function ConfirmHost() {
     // The action runs as the card leaves, the way Instagram's delete does.
     if (choice === 'yes') void asked.onConfirm();
     else if (typeof choice === 'number') void alsoChoices(asked)[choice]?.onPress();
+    else if (own) asked.onCancel?.();
   };
 
   // A tap on a button or the dimmed screen counts only if it began once the card had settled (SETTLE_MS).
   const touchBegan = () => { touchAt.current = Date.now(); };
-  const tapped = (choice: Answer) => {
+  const tapped = (choice: Answer, own = false) => {
     // No touch began (TalkBack's double tap goes straight to the press): judged by now instead.
     const began = touchAt.current || Date.now();
     touchAt.current = 0;
     if (began - openedAt.current < SETTLE_MS) return;
-    answer(choice);
+    answer(choice, own);
   };
 
   // Each new question: in it comes, felt as well as seen, with the focus put where it belongs.
@@ -210,12 +212,12 @@ export function ConfirmHost() {
             <Pressable
               ref={cancelRef}
               accessibilityRole="button"
-              accessibilityLabel="Cancel"
+              accessibilityLabel={request.cancelLabel ?? 'Cancel'}
               onPressIn={touchBegan}
-              onPress={() => tapped('cancel')}
+              onPress={() => tapped('cancel', true)}
               style={({ pressed }) => [styles.row, pressed && styles.pressed]}
             >
-              <Text style={styles.cancel}>Cancel</Text>
+              <Text style={styles.cancel}>{request.cancelLabel ?? 'Cancel'}</Text>
             </Pressable>
             {/* The other answers, between the two; laid in backwards, as the column is turned over. */}
             {alsoChoices(request).map((choice, at) => (

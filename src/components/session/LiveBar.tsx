@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LiveDot } from '@/components/LiveDot';
 import { BrandWash } from '@/components/ui';
 import { KIND_LABEL } from '@/features/activity/format';
+import { finishLive } from '@/features/activity/finishLive';
 import { clockText, elapsedMs, livePlace, liveState, spokenClock, useLiveNow } from '@/features/activity/liveSession';
 import { TAB_BAR_H, setLiveBarSpace } from '@/features/navigation/barInset';
 import { BAR_TUCK, barCompact } from '@/features/navigation/barShrink';
@@ -47,8 +48,8 @@ export function LiveBar({ phone }: { phone: boolean }) {
   const where = livePlace(s);
   const what = state === 'finished' ? 'Finished' : state === 'paused' ? 'Paused' : KIND_LABEL[s.kind];
   const line = where ? `${what} · ${where}` : what;
-  const finish = () => { actions.finishLiveSession(); router.push({ pathname: '/log-session', params: { live: '1' } }); };
-  const log = () => router.push({ pathname: '/log-session', params: { live: '1' } });
+  // Finish (Log it, once finished) opens the "Log it" composer; under five minutes it asks first (finishLive).
+  const finish = () => finishLive(s, actions);
 
   return (
     <Reanimated.View
@@ -88,7 +89,7 @@ export function LiveBar({ phone }: { phone: boolean }) {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={state === 'finished' ? 'Log this session' : 'Finish session'}
-          onPress={state === 'finished' ? log : finish}
+          onPress={finish}
           style={({ pressed }) => [styles.finish, pressed && styles.pressed]}
         >
           <Text style={styles.finishText}>{state === 'finished' ? 'Log it' : 'Finish'}</Text>
