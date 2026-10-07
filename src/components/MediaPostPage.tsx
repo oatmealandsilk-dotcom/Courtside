@@ -107,8 +107,18 @@ const LANE_MIN = 400;
  * its shape. Any more and the whole photo shows (see frameSize).
  */
 const TRIM_SLACK = 0.03;
-/** How soft the bands beside a photo standing whole in a wider frame are drawn. */
+/** How soft the bands beside a photo standing whole in a wider frame are drawn, in points on screen. */
 const BAND_BLUR = 24;
+/**
+ * The number expo-image is given for that softness. A browser blurs by
+ * points, and Android shrinks the photo to a quarter before blurring, so 24
+ * reads about the same on both. An iPhone halves the number and blurs the
+ * photo's own pixels instead, and a post's photo is 1440 pixels on its long
+ * side (about two and a half to each point of the band), so 24 there was a
+ * faint smudge with the photo still plain in it: about five times as much
+ * gives the same soft bands.
+ */
+const bandBlur = Platform.OS === 'ios' ? BAND_BLUR * 5 : BAND_BLUR;
 /** The buttons' one size: like, comment, send, save and more all read as a set. */
 const ICON = 26;
 
@@ -235,7 +245,8 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
     // whole photo, at the shape its author cut in the editor (Oct 7, owner: "I posted this as vertical but it
     // shows as horizontal" — a 4:5 photo over a session card had been trimmed to a wide strip). When the page
     // is too short for its whole height, it stands whole in the middle of the frame, the sides filled with a
-    // soft, blurred copy of itself, the way a wide clip is letterboxed. Only a sliver short is simply filled.
+    // soft, blurred copy of itself (letterboxed, as a wide clip is, but in its own colours rather than black).
+    // Only a sliver short is simply filled.
     // Videos and computers as before: the frame shrinks to the picture's own shape.
     if (!desktopWeb && !post.videoUrl) return { width: Math.round(full), height: Math.round(h), boxed: h < (full / ratio) * (1 - TRIM_SLACK) };
     return { width: Math.round(h * ratio), height: Math.round(h), boxed: false };
@@ -308,7 +319,7 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
             {/* A photo standing whole in a wider frame: the bands either side are the photo itself, blurred and a little darker. */}
             {frameSize?.boxed ? (
               <View style={StyleSheet.absoluteFill} pointerEvents="none" aria-hidden accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-                <ExpoImage source={{ uri: post.imageUrl ?? post.thumbnailUrl }} style={[StyleSheet.absoluteFill, styles.bands]} contentFit="cover" blurRadius={BAND_BLUR} cachePolicy="memory-disk" />
+                <ExpoImage source={{ uri: post.imageUrl ?? post.thumbnailUrl }} style={[StyleSheet.absoluteFill, styles.bands]} contentFit="cover" blurRadius={bandBlur} cachePolicy="memory-disk" />
                 <View style={[StyleSheet.absoluteFill, styles.bandsShade]} />
               </View>
             ) : null}
