@@ -1169,6 +1169,31 @@ export default function Compose() {
 
   const formBack = () => (mode === 'hit' ? router.navigate('/hit') : opened && !media ? goBackNow() : setStage('edit'));
   stageBack.current = () => { formBack(); return true; };
+  // Share is the big green button along the foot, as on a session's post ("Log it"): one look on every
+  // posting screen (owner, Oct 6). While the phone's keyboard covers the foot, it is up in the corner, still green.
+  const shareLabel = mode === 'story' || mode === 'hit' ? 'Post Instant' : 'Share';
+  const shareOff = !canSubmit || groupWaiting || groupGone;
+  // The picture, small, beside the caption (Instagram's), so Share to, the people, the place and the
+  // stats show without scrolling: about 68 wide at the post's own shape, a landscape one a touch wider.
+  const thumb = orientation === 'landscape'
+    ? { width: 72, height: Math.round(72 * 9 / 16) }
+    : { width: 68, height: Math.round(68 / portraitRatio) };
+  const withThumb = mode !== 'hit' && mode !== 'story' && !!media?.uri;
+  // The minutes box: "90 min" at rest, just the number while typing. Under Add session stats, or a challenge entry's own row.
+  const minutesBox = (
+    <TextInput
+      ref={minutesInput}
+      value={minutesFocused || !minutes ? minutes : `${minutes} min`}
+      onChangeText={(text) => setMinutes(text.replace(/\D/g, '').slice(0, 3))}
+      placeholder="Add"
+      placeholderTextColor={colors.textFaint}
+      keyboardType="number-pad"
+      accessibilityLabel="Minutes on court"
+      onFocus={() => { setMinutesFocused(true); reveal(minutesRow.current); }}
+      onBlur={() => setMinutesFocused(false)}
+      style={styles.minutesInput}
+    />
+  );
   return (
     <View style={[styles.backdrop, mode === 'hit' && { backgroundColor: colors.bg }]}>
       {mode === 'hit' ? null : <SheetBackdrop />}
@@ -1177,7 +1202,7 @@ export default function Compose() {
           title={mode === 'clip' || openedClip ? 'New clip' : mode === 'post' ? 'New post' : mode === 'story' ? 'New story' : 'New Instant'}
           compactTitle
           onBack={formBack}
-          right={<Button label={mode === 'story' || mode === 'hit' ? 'Post Instant' : 'Share'} variant="secondary" onPress={submit} disabled={!canSubmit || groupWaiting || groupGone} />}
+          right={keysUp ? <Button label={shareLabel} size="sm" onPress={submit} disabled={shareOff} /> : undefined}
         >
           <View style={mode === 'story' || mode === 'hit' ? styles.form : null}>
             {/* Opened for a tracker's session that never came (hidden, gone after 30 days): a plain new post. */}
@@ -1194,7 +1219,7 @@ export default function Compose() {
               />
             ) : null}
             {opened && withStats && addScoreTo ? <AddScore sessionId={addScoreTo} style={styles.addScoreStats} /> : null}
-            <View style={styles.stage}>
+            {withThumb ? null : <View style={styles.stage}>
               {opened && !media ? (
                 // No picture yet: an invitation to add one, not an empty frame to fill.
                 // It is optional only while the stats are on: without them, the picture is the post.
@@ -1218,7 +1243,7 @@ export default function Compose() {
               ) : (
                 <MediaPicker bare orientation={orientation} portraitRatio={portraitRatio} selection={mode === 'clip' ? 'video' : 'all'} value={media} onChange={setMedia} trim={edit} onCoverAt={(at) => setEdit((was) => ({ ...was, coverAt: at }))} />
               )}
-            </View>
+            </View>}
             {mode === 'hit' ? (
               <View style={styles.hitMeta}>
                 <View style={styles.hitPill}><Ionicons name="time-outline" size={13} color={colors.brand} /><Text style={styles.hitPillText}>24 hours</Text></View>
@@ -1237,10 +1262,21 @@ export default function Compose() {
               />
             ) : (
               <>
-                {/* The caption, with no label over it: the box says what it is. */}
-                <View style={styles.caption}>
-                  <Field accessibilityLabel="Caption" value={body} onChangeText={setBody} placeholder={opened && !openedPosted ? `${pickCaption(opened)} — how did it go?` : 'Write a caption…'} multiline minHeight={88} mentions maxLength={POST_MAX} />
-                </View>
+                {/* The caption, with no label over it: the box says what it is. With a photo or clip, the
+                    picture sits small at its left, the words beside it, the way Instagram's share screen has them.
+                    Tapping the picture opens the larger preview, and Edit cover the Cover page, as before. */}
+                {withThumb ? (
+                  <View style={styles.captionRow}>
+                    <MediaPicker bare thumb={thumb} orientation={orientation} portraitRatio={portraitRatio} selection={mode === 'clip' ? 'video' : 'all'} value={media} onChange={setMedia} trim={edit} onCoverAt={(at) => setEdit((was) => ({ ...was, coverAt: at }))} />
+                    <View style={styles.flex}>
+                      <Field bare accessibilityLabel="Caption" value={body} onChangeText={setBody} placeholder={opened && !openedPosted ? `${pickCaption(opened)} — how did it go?` : 'Write a caption…'} multiline minHeight={Math.max(64, thumb.height)} mentions maxLength={POST_MAX} />
+                    </View>
+                  </View>
+                ) : (
+                  <View style={styles.caption}>
+                    <Field accessibilityLabel="Caption" value={body} onChangeText={setBody} placeholder={opened && !openedPosted ? `${pickCaption(opened)} — how did it go?` : 'Write a caption…'} multiline minHeight={88} mentions maxLength={POST_MAX} />
+                  </View>
+                )}
                 {inChallenge ? (
                   <View style={styles.challengeChip} accessible accessibilityLabel={`Entering this week's challenge: ${challenge.title}`}>
                     <Ionicons name="trophy-outline" size={14} color={colors.brand} />
@@ -1266,9 +1302,18 @@ export default function Compose() {
                   {/* One people row: "Who was there" with a session (its people asked to accept), Tag people without. */}
                   {whoRow ?? copyRow ?? <TagPlayers variant="row" label="Tag people" tagged={tagged} onChange={setTagged} />}
                   {placeRows}
-                  {/* A Post or a Clip can carry one of your sessions: a row to pick it, then its stats in the row's place. */}
+                  {/* A Post or a Clip can carry one of your sessions: a row to pick it, then its stats in the row's place.
+                      How long you played is asked once, here in session stats (owner, Oct 6): a session picked from your
+                      log brings its own time; with none to pick, just the minutes, which go on the post as they always did. */}
                   {statsRow && !statsPick ? (
-                    <FormRow line icon="stopwatch-outline" label="Add session stats" chevron onPress={pickStats} />
+                    <View ref={minutesRow}>
+                      <FormRow line icon="stopwatch-outline" label="Add session stats" chevron onPress={pickStats} />
+                      {/* The words are the box's label (a tap on them goes to the box); the box is what a screen reader lands on. */}
+                      <View style={styles.minutesLine}>
+                        <Text style={styles.minutesWords} numberOfLines={1} onPress={() => minutesInput.current?.focus()} aria-hidden accessibilityElementsHidden importantForAccessibility="no-hide-descendants">Or just your minutes on court</Text>
+                        {minutesBox}
+                      </View>
+                    </View>
                   ) : null}
                   {statsRow && statsPick ? (
                     <View style={styles.statsCard}>
@@ -1286,8 +1331,8 @@ export default function Compose() {
                       />
                     </View>
                   ) : null}
-                  {/* A session already knows its time on court. */}
-                  {opened || (statsRow && statsPick) ? null : <FormRow
+                  {/* A session already knows its time on court. A challenge entry (no session stats) keeps its own row. */}
+                  {opened || statsRow ? null : <FormRow
                     ref={minutesRow}
                     line
                     icon="time-outline"
@@ -1296,20 +1341,7 @@ export default function Compose() {
                     accessible={false}
                     accessibilityRole="none"
                     onPress={() => minutesInput.current?.focus()}
-                    control={
-                      <TextInput
-                        ref={minutesInput}
-                        value={minutesFocused || !minutes ? minutes : `${minutes} min`}
-                        onChangeText={(text) => setMinutes(text.replace(/\D/g, '').slice(0, 3))}
-                        placeholder="Add"
-                        placeholderTextColor={colors.textFaint}
-                        keyboardType="number-pad"
-                        accessibilityLabel="Minutes on court"
-                        onFocus={() => { setMinutesFocused(true); reveal(minutesRow.current); }}
-                        onBlur={() => setMinutesFocused(false)}
-                        style={styles.minutesInput}
-                      />
-                    }
+                    control={minutesBox}
                   />}
                   {/* A post with session stats is never offered for CourtSide's Instagram. On for everyone by default (owner, Oct 5);
                       the Terms' "When CourtSide features your post" and the privacy policy quote this label, so change them together. */}
@@ -1328,7 +1360,11 @@ export default function Compose() {
               </>
             )}
           </View>
+          <View style={{ height: DOCK_ROOM + insets.bottom }} />
         </Screen>
+        {keysUp ? null : (
+          <LogDock canJustLog={false} busy={null} ticked={false} error="" onJustLog={() => undefined} onShare={submit} shareDisabled={shareOff} label={shareLabel} />
+        )}
       </View>
     </View>
   );
@@ -1372,6 +1408,8 @@ const styleDefinitions = StyleSheet.create({
   // A clip or post: the caption 24 under the preview, the challenge chip 8
   // under that, and the rows 16 under whichever is last.
   caption: { marginTop: spacing.xl },
+  // The picture small at the left, the caption beside it, tops level, a thin line under both.
+  captionRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md, marginTop: spacing.sm, paddingBottom: spacing.md, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
   shareTo: { gap: spacing.sm, marginTop: spacing.md },
   shareToLabel: { ...typography.smallStrong, color: colors.textMuted },
   shareToChips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
@@ -1379,6 +1417,9 @@ const styleDefinitions = StyleSheet.create({
   challengeChip: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 6, marginTop: spacing.sm, paddingVertical: 5, paddingHorizontal: 10, borderRadius: radius.pill, backgroundColor: colors.brandDim },
   challengeChipText: { ...typography.smallStrong, color: colors.brand },
   rows: { marginTop: spacing.lg },
+  // "Or just your minutes on court": under Add session stats, starting where its words start (FormRow's 26 icon plus its gap).
+  minutesLine: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginLeft: 26 + spacing.md, marginTop: -6, paddingBottom: 10, minHeight: 32 },
+  minutesWords: { ...typography.small, color: colors.textMuted, flex: 1 },
   minutesInput: { ...typography.body, color: colors.text, textAlign: 'right', width: 88, alignSelf: 'stretch', paddingVertical: 0, paddingHorizontal: 0, ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : {}) },
   note: { ...typography.small, color: colors.textFaint, lineHeight: 18 },
   pickError: { ...typography.small, color: colors.danger, lineHeight: 18 },

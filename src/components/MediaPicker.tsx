@@ -9,6 +9,7 @@ import type { MediaCrop } from '@/data/types';
 import { ClipVideo } from '@/components/ClipVideo';
 import { framesAt } from '@/features/compose/frames';
 import { CoverPage } from '@/components/CoverPage';
+import { MediaThumb } from '@/components/MediaThumb';
 import { colors, font } from '@/theme';
 import { canShrinkVideo } from '@/lib/shrinkVideo';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -37,6 +38,12 @@ export interface MediaPickerProps {
   bare?: boolean;
   /** Shape of the bare stage. Defaults to portrait. */
   orientation?: 'portrait' | 'landscape';
+  /**
+   * With `bare`: the media as a small thumbnail of this size (beside a
+   * caption, Instagram's) instead of the full-width stage. The same taps:
+   * the larger preview, and Edit cover on a clip (MediaThumb).
+   */
+  thumb?: { width: number; height: number };
   /** Width over height of the portrait stage: 4:5 for a post, 9:16 (the default) for a clip. */
   portraitRatio?: number;
   /** What the edit step decided: the previews play only the part kept, and honour the sound choice. */
@@ -236,7 +243,7 @@ function explainPickError(err: unknown): string {
   return `Could not open your library: ${reason}`;
 }
 
-export function MediaPicker({ value, onChange, compact, selection = 'all', label, bare = false, orientation = 'portrait', portraitRatio = 9 / 16, trim, noCover = false, onCoverAt }: MediaPickerProps) {
+export function MediaPicker({ value, onChange, compact, selection = 'all', label, bare = false, orientation = 'portrait', thumb, portraitRatio = 9 / 16, trim, noCover = false, onCoverAt }: MediaPickerProps) {
   useTheme();
   const { height: screenHeight } = useWindowDimensions();
   const [error, setError] = useState('');
@@ -368,9 +375,13 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
     // 480 tall at most, and never more than about half the screen.
     const clipHeight = Math.min(480, Math.round(screenHeight * 0.55));
     return <View style={{ gap: 12 }}>
-      {/* The box takes the media's own shape — tall for portrait, wide for
+      {thumb ? (
+        // Small, beside the caption: the same larger preview and Cover page.
+        <MediaThumb kind={value.kind} poster={poster} width={thumb.width} height={thumb.height} crop={trim?.crop} onOpen={() => setExpanded(true)} onEditCover={withCover ? openCover : undefined} />
+      ) : (
+      /* The box takes the media's own shape — tall for portrait, wide for
           landscape — with rounded corners on the theme's ground, so there is
-          nothing black around it. The media fills it edge to edge. */}
+          nothing black around it. The media fills it edge to edge. */
       <Pressable accessibilityRole="button" accessibilityLabel="Open a larger preview" onPress={() => setExpanded(true)}
         style={orientation === 'landscape'
           ? { width: '100%', aspectRatio: 16 / 9, borderRadius: 16, overflow: 'hidden', backgroundColor: colors.surfaceAlt }
@@ -402,6 +413,7 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
           <Ionicons name="expand-outline" size={15} color="white" />
         </View>
       </Pressable>
+      )}
       {withCover ? (
         <CoverPage
           visible={coverOpen}
