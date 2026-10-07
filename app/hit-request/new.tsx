@@ -81,7 +81,11 @@ export default function NewHit() {
   useEffect(() => { if (!seeded.current && askedIds.length) { seeded.current = true; setPicked(askedIds); } }, [askedIds]);
   const pickedUsers = picked.flatMap((id) => { const u = users.find((x) => x.id === id); return u ? [u] : []; });
   const [withGroups, setWithGroups] = useState(false);
-  const groupCount = feedGroups.length;
+  // "My groups" is for someone known to be an adult. Groups are for everyone
+  // now (migration 149), but a teen's hit still reaches only the people the
+  // teen rules let see it (hits/visible), never a whole group of strangers,
+  // so a teen isn't offered a switch that says it would.
+  const groupCount = currentUser && !notKnownAdult(currentUser) ? feedGroups.length : 0;
   const groupsOn = inviting && withGroups && groupCount > 0;
   // Who gets the hit's card in your chat: the ticked when inviting, the asked otherwise.
   const recipients = inviting ? pickedUsers : asked;

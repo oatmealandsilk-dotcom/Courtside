@@ -22,7 +22,7 @@ import { KeyboardScrollContext, afterKeyboard, visibleAboveKeyboard, type Measur
 import { show as showToast } from '@/lib/toast';
 import { useReducedMotion } from '@/lib/useReducedMotion';
 import { useApp } from '@/store/AppContext';
-import { ABOUT_MAX, GROUPS_AGE_LINE, GROUPS_BIRTHDAY_LINE, MAX_GROUPS, NAME_MAX, NAME_MIN, groupsOpenTo, tidyGroupName } from '@/store/feedGroups';
+import { ABOUT_MAX, MAX_GROUPS, NAME_MAX, NAME_MIN, tidyGroupName } from '@/store/feedGroups';
 import { colors, font, lift, spacing, typography } from '@/theme';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 
@@ -60,14 +60,14 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
  * read out to a screen reader ("Step 2 of 3, About & who can join"), and so
  * is a problem with the name.
  *
- * Who can't start one is told before filling anything in: under 18 (the
- * server's rule too), no birthday on file yet, already in 3 groups, or
- * groups not loading (with Try again). With ?id=, the same parts on one page
- * edit a group you run.
+ * Anyone can start one, teens included (migration 149). Who can't right now
+ * is told before filling anything in: already in 3 groups, or groups not
+ * loading (with Try again). With ?id=, the same parts on one page edit a
+ * group you run.
  */
 
 type Step = 0 | 1 | 2 | 3;
-type Gate = 'young' | 'birthday' | 'loading' | 'off' | 'full' | 'gone';
+type Gate = 'loading' | 'off' | 'full' | 'gone';
 
 /** A group's fields as one string, for "has anything changed since it was saved". */
 const snap = (v: { name: string; about: string; ask: boolean; listed: boolean; look: GroupLook }) =>
@@ -97,7 +97,7 @@ const READY_MS = 3500;
 export default function GroupForm() {
   const styles = useThemedStyles(styleDefinitions);
   const { id } = useLocalSearchParams<{ id?: string }>();
-  const { feedGroups, feedGroupsOn, feedGroupsLooks, currentUser, currentUserId, actions } = useApp();
+  const { feedGroups, feedGroupsOn, feedGroupsLooks, currentUserId, actions } = useApp();
   const isEdit = !!id;
   const editing = id ? feedGroups.find((g) => g.id === id) : undefined;
   const reduced = useReducedMotion();
@@ -130,15 +130,12 @@ export default function GroupForm() {
   // ---------------------------------------------------------------- can you?
   // Read once signed in (a link opened cold signs in first).
   useEffect(() => { if (currentUserId && feedGroupsOn !== true) void actions.loadFeedGroups(); }, [currentUserId]); // eslint-disable-line react-hooks/exhaustive-deps
-  const tooYoung = !isEdit && !groupsOpenTo(currentUser);
-  // Not known to be an adult because there is no birthday on file, rather than a known teen.
-  const noBirthday = tooYoung && !!currentUser && !currentUser.ageGroup;
   const loading = !isEdit && feedGroupsOn === null;
   const off = !isEdit && feedGroupsOn === false;
   // Once this sheet has made the group, being in 3 is the point, not a stop.
   const full = !isEdit && !createdId && feedGroups.length >= MAX_GROUPS;
   const gate: Gate | null = id && !editing ? (feedGroupsOn === null ? 'loading' : feedGroupsOn === false ? 'off' : 'gone')
-    : noBirthday ? 'birthday' : tooYoung ? 'young' : loading ? 'loading' : off ? 'off' : full ? 'full' : null;
+    : loading ? 'loading' : off ? 'off' : full ? 'full' : null;
   const retry = async () => { setRetrying(true); await actions.loadFeedGroups().catch(() => undefined); setRetrying(false); };
 
   // ---------------------------------------------------------------- the name
@@ -319,8 +316,7 @@ export default function GroupForm() {
 
   // ---------------------------------------------------------------- the button
   let primary: { label: string; busyLabel?: string; waiting?: string; disabled: boolean; onPress: () => void } | null = null;
-  if (gate === 'young' || gate === 'gone') primary = { label: 'OK', disabled: false, onPress: dismiss };
-  else if (gate === 'birthday') primary = { label: 'Add your birthday', disabled: false, onPress: () => { landing.current = { href: '/birthday?from=group' }; dismiss(); } };
+  if (gate === 'gone') primary = { label: 'OK', disabled: false, onPress: dismiss };
   else if (gate === 'off') primary = { label: retrying ? 'Trying again…' : 'Try again', disabled: retrying, onPress: () => { void retry(); } };
   else if (gate === 'full') primary = { label: 'See your groups', disabled: false, onPress: () => { landing.current = { href: '/groups' }; dismiss(); } };
   else if (gate === 'loading') primary = null;
@@ -409,8 +405,6 @@ export default function GroupForm() {
   } else if (gate) {
     const g = {
       gone: { icon: 'help-circle-outline', title: 'This group isn’t here any more', line: 'It may have been changed by another admin, or you’re no longer its admin.' },
-      young: { icon: 'lock-closed-outline', title: GROUPS_AGE_LINE, line: 'Until then the For you feed is all yours, and you can still message the people you follow.' },
-      birthday: { icon: 'calendar-outline', title: GROUPS_BIRTHDAY_LINE, line: 'Groups are for adults. Add your birthday, and if you’re 18 or over you can start one straight away.' },
       off: { icon: 'cloud-offline-outline', title: 'Groups didn’t load', line: 'Check your connection and try again. If it keeps happening, groups may not be switched on yet.' },
       full: { icon: 'people-outline', title: `You’re in ${MAX_GROUPS} groups`, line: `That’s the most anyone can be in. Leave one to start another.` },
     }[gate];

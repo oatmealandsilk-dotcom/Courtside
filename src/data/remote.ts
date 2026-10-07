@@ -3436,22 +3436,6 @@ export const remote = {
     if (error) throw new Error(groupWord(error));
     return data as string;
   },
-  /**
-   * Of these people, which can join a group (migration 73, can_join_groups:
-   * known to be an adult), never their age. Someone left out of the answer
-   * (blocked, gone, past the day's limit) is not in the map. Null when the
-   * database cannot say (before 73, or the question didn't go through).
-   */
-  async canJoinGroups(userIds: ID[]): Promise<Record<ID, boolean> | null> {
-    const ids = Array.from(new Set(userIds.filter((id) => UUID_RE.test(id))));
-    const out: Record<ID, boolean> = {};
-    for (let at = 0; at < ids.length; at += 100) {
-      const { data, error } = await need().rpc('can_join_groups', { ids: ids.slice(at, at + 100) });
-      if (error) { if (!missingFunction(error)) fail('can join groups')(error); return null; }
-      for (const r of (data ?? []) as { user_id: string; ok: boolean | null }[]) out[r.user_id] = r.ok === true;
-    }
-    return out;
-  },
   /** Starts a group; its id. Throws with the server's word ('group_limit', 'name_needed', 'slow_down'). */
   async createFeedGroup(name: string, description: string, ask: boolean): Promise<ID> {
     const { data, error } = await need().rpc('create_feed_group', { p_name: name, p_description: description || null, p_ask: ask });

@@ -12,7 +12,7 @@ import { reportGroup } from '@/features/groups/reportGroup';
 import { confirm } from '@/lib/confirm';
 import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
-import { GROUPS_AGE_LINE, MAX_GROUPS, groupsOpenTo } from '@/store/feedGroups';
+import { MAX_GROUPS } from '@/store/feedGroups';
 import { colors, font, lift, radius, spacing, typography } from '@/theme';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 
@@ -24,9 +24,8 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
  * Each says how many are in it and what it is about, never who; an open one
  * has Join, an ask-first one has Request, and the button turns into Joined
  * or Requested once tapped. Nobody is in more than 3 groups: once you are,
- * the buttons fade and say why when tapped. Someone not known to be an adult
- * sees one calm line instead (groups are adults-only, as on the server).
- * The Groups page (from Profile, or "Manage" here) stays as it was.
+ * the buttons fade and say why when tapped. Groups are for everyone, teens
+ * included (migration 149). The Groups page (from Profile, or "Manage" here) stays as it was.
  * Holding a group's row reports it (App Review 1.2), as holding a comment
  * does; a group you reported leaves the list.
  */
@@ -36,7 +35,7 @@ const FULL_START_LINE = `You’re in ${MAX_GROUPS} groups, the most anyone can b
 
 export default function FindGroups() {
   const styles = useThemedStyles(styleDefinitions);
-  const { feedGroups, feedGroupsAsked, feedGroupsOn, currentUserId, currentUser, reportedIds, actions } = useApp();
+  const { feedGroups, feedGroupsAsked, feedGroupsOn, currentUserId, reportedIds, actions } = useApp();
   const [closeSignal, setCloseSignal] = useState(0);
   const dismiss = () => setCloseSignal((n) => n + 1);
   // Where to go once the sheet has gone (a group's page, or the Groups page).
@@ -48,7 +47,6 @@ export default function FindGroups() {
     if (href) router.push(href as never);
   };
 
-  const open = groupsOpenTo(currentUser);
   const off = feedGroupsOn === false;
   const full = feedGroups.length >= MAX_GROUPS;
   useEffect(() => { if (currentUserId) void actions.loadFeedGroups(); }, [currentUserId]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -64,13 +62,13 @@ export default function FindGroups() {
   const [rows, setRows] = useState<DiscoverGroup[] | null | undefined>(undefined);
   const asked = useRef(0);
   useEffect(() => {
-    if (!open || off) return;
+    if (off) return;
     const ask = ++asked.current;
     const t = setTimeout(() => {
       void actions.discoverFeedGroups(search).then((got) => { if (ask === asked.current) setRows(got); });
     }, search ? 250 : 0);
     return () => clearTimeout(t);
-  }, [search, open, off]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [search, off]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Where you stand with each group: the app's own copy of your groups and requests wins over the list's.
   const listed = useMemo(() => (rows ?? [])
@@ -180,7 +178,7 @@ export default function FindGroups() {
       closeSignal={closeSignal}
       onDismissed={done}
       peekFraction={0.86}
-      contentHeight={(rows !== undefined || !open || off) && fitH ? fitH : undefined}
+      contentHeight={(rows !== undefined || off) && fitH ? fitH : undefined}
       header={<SheetTitle title="Groups" line="A feed only the group sees" onClose={dismiss} />}
     >
       <ScrollView
@@ -189,12 +187,7 @@ export default function FindGroups() {
         keyboardDismissMode="on-drag"
         onContentSizeChange={(_, h) => { const r = Math.ceil(h); if (r !== contentH) setContentH(r); }}
       >
-        {!open ? (
-          <View style={[styles.card, styles.ageCard]}>
-            <View style={styles.ageIcon}><Ionicons name="lock-closed-outline" size={18} color={colors.textMuted} /></View>
-            <Text style={styles.ageLine}>{GROUPS_AGE_LINE}</Text>
-          </View>
-        ) : off ? (
+        {off ? (
           <Text style={styles.note}>Groups aren’t switched on yet. Check back soon.</Text>
         ) : (
           <>
@@ -326,7 +319,4 @@ const styleDefinitions = StyleSheet.create({
   emptyDisc: { width: 56, height: 56, borderRadius: 28, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.sm },
   emptyTitle: { ...typography.bodyStrong, color: colors.text, textAlign: 'center' },
   emptyLine: { ...typography.small, color: colors.textMuted, lineHeight: 19, textAlign: 'center', maxWidth: 280 },
-  ageCard: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.lg },
-  ageIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
-  ageLine: { ...typography.body, color: colors.text, flex: 1 },
 });
