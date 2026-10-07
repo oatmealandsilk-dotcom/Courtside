@@ -120,7 +120,7 @@ export default function LiveSessionPage() {
             {state === 'running' ? null : <View style={[styles.boxPill, { backgroundColor: look.pillFill }]}><Text style={[styles.boxPillText, { color: look.pillInk }]}>{state === 'paused' ? 'Paused' : 'Finished'}</Text></View>}
           </View>
           <View>
-            <Text style={[styles.clock, { color: look.figure }, state === 'paused' && styles.clockPaused]} numberOfLines={1} adjustsFontSizeToFit maxFontSizeMultiplier={1.1}>{clockText(ms)}</Text>
+            <Text style={[styles.clock, { color: look.figure }, state === 'paused' && styles.clockPaused]} numberOfLines={1} maxFontSizeMultiplier={1.1}>{clockText(ms)}</Text>
             <Text style={[styles.boxUnder, { color: look.muted }]}>{state === 'finished' ? 'on court' : state === 'paused' ? 'on court so far' : 'on court, and counting'}</Text>
           </View>
         </View>
@@ -206,7 +206,8 @@ const styleDefinitions = StyleSheet.create({
   box: { borderRadius: 28, overflow: 'hidden', paddingHorizontal: 22, paddingTop: 20, paddingBottom: 22, gap: 6, minHeight: 210, justifyContent: 'space-between' },
   boxTop: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 22 },
   boxEyebrow: { ...font('600'), fontSize: 11.5, letterSpacing: 1.1, flex: 1 },
-  clock: { ...font('600'), fontSize: 68, lineHeight: 76, letterSpacing: -3, fontVariant: ['tabular-nums'], marginTop: spacing.sm },
+  // A fixed size that fits the box up to '10:00:00' (sessions stop at 10 hours). Shrink-to-fit drew it as a dot on iPhone (Oct 7, owner).
+  clock: { ...font('600'), fontSize: 60, lineHeight: 68, letterSpacing: -2.5, fontVariant: ['tabular-nums'], marginTop: spacing.sm, alignSelf: 'stretch' },
   clockPaused: { opacity: 0.55 },
   // Clear of the faint court along the foot of the box.
   boxUnder: { ...font('500'), fontSize: 14, marginTop: -2, marginBottom: 34 },
