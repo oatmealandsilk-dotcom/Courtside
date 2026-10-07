@@ -146,7 +146,7 @@ export function useLiveSession<S extends LiveSessionState & Reads>(
       ...(!input.court && input.place?.trim() ? { place: input.place.trim() } : {}),
       pausedMs: 0, checkedIn: false,
     };
-    haptics.reward();
+    // No beat here: Start's own button gives it, as its ring closes (components/session/StartButton).
     put(me, s);
     await checkIn(s, input.access);
     return latest.current ?? s;

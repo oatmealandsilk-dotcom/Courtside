@@ -20,9 +20,9 @@ export const THUMB_ZOOM = 15;
 /** Bump when the map's look changes, so pictures taken in the old look are taken again. */
 const LOOK_VERSION = 2;
 
-/** One picture per spot, size and theme: a new theme (or a dark one) is a new picture. */
-export const thumbKey = (theme: string, lat: number, lng: number, width: number, height: number) =>
-  `v${LOOK_VERSION}|${theme}|${lat.toFixed(5)},${lng.toFixed(5)}|${THUMB_ZOOM}|${Math.round(width)}x${Math.round(height)}`;
+/** One picture per spot, size, zoom and theme: a new theme (or a dark one) is a new picture. */
+export const thumbKey = (theme: string, lat: number, lng: number, width: number, height: number, zoom = THUMB_ZOOM) =>
+  `v${LOOK_VERSION}|${theme}|${lat.toFixed(5)},${lng.toFixed(5)}|${zoom}|${Math.round(width)}x${Math.round(height)}`;
 
 /** A short file-safe name for a key (a plain string hash: it only has to tell keys apart). */
 export function keyName(key: string): string {

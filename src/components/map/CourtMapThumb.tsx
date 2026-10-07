@@ -57,24 +57,26 @@ function keep(key: string, dataUrl: string) {
 }
 
 /** What the drawing needs for each spot waiting in line. */
-interface Job { lat: number; lng: number; width: number; height: number; lookJson: string; ground?: string }
+interface Job { lat: number; lng: number; zoom: number; width: number; height: number; lookJson: string; ground?: string }
 const jobs = new Map<string, Job>();
 
 /**
  * A still map of a spot, `width` × `height` points, in the theme's own map
  * colours. Nothing on it moves or takes a tap: the card it sits in does.
  * It is drawn by CourtMapSnapshots, which the screen showing it mounts once.
+ * `zoom`: how close in (a chat's card shows the streets around, Start a
+ * session the court's own block).
  */
-export function CourtMapThumb({ lat, lng, width, height }: { lat: number; lng: number; width: number; height: number }) {
+export function CourtMapThumb({ lat, lng, width, height, zoom = THUMB_ZOOM }: { lat: number; lng: number; width: number; height: number; zoom?: number }) {
   const { theme } = useTheme();
-  const key = thumbKey(theme, lat, lng, width, height);
+  const key = thumbKey(theme, lat, lng, width, height, zoom);
   const look = useMemo(() => thumbLook(lookFor(themes[theme])), [theme]);
   const shot = useSyncExternalStore(queue.subscribe, () => shots.get(key) ?? null, () => null);
   // Checked once per spot: kept from before, or into the line to be drawn.
   useEffect(() => {
     if (shots.has(key) || failed.has(key)) return undefined;
     if (fromDisk(key)) { queue.emit(); return undefined; }
-    jobs.set(key, { lat, lng, width, height, lookJson: JSON.stringify(look), ground: look.background?.fill });
+    jobs.set(key, { lat, lng, zoom, width, height, lookJson: JSON.stringify(look), ground: look.background?.fill });
     queue.join(key);
     return () => { if (!shots.has(key)) { queue.leave(key); jobs.delete(key); } };
   }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -121,8 +123,8 @@ export function CourtMapSnapshots() {
  * as it answers, or after 30 seconds (time for the map's code to come from
  * a second or third host when the first stalls: engineLoader).
  */
-function SnapshotView({ lat, lng, width, height, lookJson, ground, onShot, onFail }: {
-  lat: number; lng: number; width: number; height: number; lookJson: string; ground?: string;
+function SnapshotView({ lat, lng, zoom, width, height, lookJson, ground, onShot, onFail }: {
+  lat: number; lng: number; zoom: number; width: number; height: number; lookJson: string; ground?: string;
   onShot: (dataUrl: string) => void; onFail: () => void;
 }) {
   useEffect(() => {
@@ -136,7 +138,7 @@ var post=function(o){window.ReactNativeWebView&&window.ReactNativeWebView.postMe
 var LOOK=${lookJson};
 function look(map,l){for(var id in l){if(!map.getLayer(id))continue;var r=l[id];try{if(r.hide){map.setLayoutProperty(id,'visibility','none');continue}if(r.minZoom!=null)map.setLayerZoomRange(id,r.minZoom,24);if(r.fill)map.setPaintProperty(id,id==='background'?'background-color':'fill-color',r.fill);if(r.fill&&id!=='background')map.setPaintProperty(id,'fill-outline-color',r.fill);if(r.line)map.setPaintProperty(id,'line-color',r.line);if(r.opacity!=null)map.setPaintProperty(id,'line-opacity',r.opacity);if(r.text)map.setPaintProperty(id,'text-color',r.text);if(r.halo)map.setPaintProperty(id,'text-halo-color',r.halo)}catch(e){}}}
 function start(){
-var map=new maplibregl.Map({container:'m',style:'${STYLE}',center:[${lng},${lat}],zoom:${THUMB_ZOOM},interactive:false,attributionControl:false,preserveDrawingBuffer:true,fadeDuration:0,pixelRatio:2});
+var map=new maplibregl.Map({container:'m',style:'${STYLE}',center:[${lng},${lat}],zoom:${zoom},interactive:false,attributionControl:false,preserveDrawingBuffer:true,fadeDuration:0,pixelRatio:2});
 map.on('load',function(){try{map.style.stylesheet.transition={duration:0,delay:0}}catch(e){}look(map,LOOK);map.once('idle',function(){try{post({type:'shot',data:map.getCanvas().toDataURL('image/jpeg',0.86)})}catch(e){post({type:'fail'})}})});
 }
 ${ENGINE_JS}
