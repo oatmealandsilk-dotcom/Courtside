@@ -203,7 +203,8 @@ function asHiddenWords(data: unknown): HiddenWords | null {
   if (!d || typeof d !== 'object' || typeof d.hideOffensiveComments !== 'boolean') return null;
   return {
     hideOffensiveComments: d.hideOffensiveComments,
-    hideOffensiveRequests: d.hideOffensiveRequests !== false,
+    // Left out: off for an adult, on (and locked) otherwise, as the server starts them (migration 148).
+    hideOffensiveRequests: d.locked === true || d.hideOffensiveRequests === true,
     customWords: Array.isArray(d.customWords) ? d.customWords.filter((w): w is string => typeof w === 'string') : [],
     customInComments: d.customInComments !== false,
     customInRequests: d.customInRequests !== false,

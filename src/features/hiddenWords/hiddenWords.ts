@@ -31,9 +31,14 @@ export const BLOCKED_WORDS_NOTE = 'This includes words that break CourtSide’s 
 export const HIDDEN_WORDS_MAX = 100;
 export const HIDDEN_WORD_LENGTH = 30;
 
-/** A new account's settings, and the demo's: both offensive filters on, no words of your own. */
+/**
+ * A new account's settings, and the demo's, no words of your own. The two
+ * offensive filters start off for an adult (owner, Oct 6: "Turn off filter
+ * for words on default"; migration 148 does the same on the server) and are
+ * always on for anyone not known to be an adult (`locked`).
+ */
 export function defaultHiddenWords(locked: boolean): HiddenWords {
-  return { hideOffensiveComments: true, hideOffensiveRequests: true, customWords: [], customInComments: true, customInRequests: true, locked };
+  return { hideOffensiveComments: locked, hideOffensiveRequests: locked, customWords: [], customInComments: true, customInRequests: true, locked };
 }
 
 /** Words as the server keeps them: trimmed, spaces run together, no empty ones, no repeats whatever the capitals. */
