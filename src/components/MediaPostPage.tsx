@@ -100,6 +100,25 @@ export const feedFrameRatio = (landscape: boolean, video: boolean, shape: number
 export const feedShape = (landscape: boolean, w: number, h: number) => (landscape ? Math.max(1.2, Math.min(2.6, w / h)) : Math.max(0.5, Math.min(1.3, w / h)));
 /** The narrowest the words and buttons under a post get, so a tall picture never squeezes them. */
 const LANE_MIN = 400;
+/**
+ * How much of a photo's height may be left off when the page is a little
+ * short of room for all of it, rather than standing it in a frame with
+ * bands down its sides: a sliver (3%) nobody notices, never enough to change
+ * its shape. Any more and the whole photo shows (see frameSize).
+ */
+const TRIM_SLACK = 0.03;
+/** How soft the bands beside a photo standing whole in a wider frame are drawn, in points on screen. */
+const BAND_BLUR = 24;
+/**
+ * The number expo-image is given for that softness. A browser blurs by
+ * points, and Android shrinks the photo to a quarter before blurring, so 24
+ * reads about the same on both. An iPhone halves the number and blurs the
+ * photo's own pixels instead, and a post's photo is 1440 pixels on its long
+ * side (about two and a half to each point of the band), so 24 there was a
+ * faint smudge with the photo still plain in it: about five times as much
+ * gives the same soft bands.
+ */
+const bandBlur = Platform.OS === 'ios' ? BAND_BLUR * 5 : BAND_BLUR;
 /** The buttons' one size: like, comment, send, save and more all read as a set. */
 const ICON = 26;
 
@@ -191,8 +210,8 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
     setSized(true);
     setShape(Math.max(1.2, Math.min(2.6, Math.max(w, h) / Math.min(w, h))));
   };
-  // The frame is sized in points from the room it has, so it is always the
-  // picture's own shape: never stretched across a wide window and cropped
+  // The frame is sized in points from the room it has, so the picture always
+  // shows at its own shape: never stretched across a wide window and cropped
   // down to fit its height. A tall picture may take 62% of the page's height.
   const [room, setRoom] = useState<{ w: number; h: number } | null>(null);
   // What the page needs besides the picture: the name above it, and the
@@ -221,11 +240,16 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
     const tall = rest ? Math.max(room.h * 0.4, room.h - rest) : room.h * 0.62;
     const full = room.w - inset * 2;
     const h = Math.min(tall, full / ratio);
-    // On a phone a photo always fills the page's width, the way Instagram's feed does (Oct 5, owner: a tall photo
-    // with a session card under it was shrunk to a narrow column). When the page is too short for its whole
-    // height it is trimmed instead, keeping more of the top, where faces usually are. Videos and computers as before.
-    if (!desktopWeb && !post.videoUrl) return { width: Math.round(full), height: Math.round(h), cropped: h < full / ratio - 1 };
-    return { width: Math.round(h * ratio), height: Math.round(h), cropped: false };
+    // On a phone a photo's frame always takes the page's width, the way Instagram's feed does (Oct 5, owner: a
+    // tall photo with a session card under it was shrunk to a narrow column). The photo in it is always the
+    // whole photo, at the shape its author cut in the editor (Oct 7, owner: "I posted this as vertical but it
+    // shows as horizontal" — a 4:5 photo over a session card had been trimmed to a wide strip). When the page
+    // is too short for its whole height, it stands whole in the middle of the frame, the sides filled with a
+    // soft, blurred copy of itself (letterboxed, as a wide clip is, but in its own colours rather than black).
+    // Only a sliver short is simply filled.
+    // Videos and computers as before: the frame shrinks to the picture's own shape.
+    if (!desktopWeb && !post.videoUrl) return { width: Math.round(full), height: Math.round(h), boxed: h < (full / ratio) * (1 - TRIM_SLACK) };
+    return { width: Math.round(h * ratio), height: Math.round(h), boxed: false };
   })();
   // On a computer the post is one centred column, the way it is on a phone:
   // the picture in the middle at its own size, and the name above it and the
@@ -292,7 +316,14 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
           <PostVideo uri={post.videoUrl} poster={post.thumbnailUrl} active={active} preload={preload} onDoubleTap={onDoubleTap} trimStart={post.trimStart} trimEnd={post.trimEnd} speed={post.speed} volume={post.volume} crop={post.crop} silent={post.muted} discInk={discInk} onReady={onReady} onSize={landscape ? onSize : undefined} />
         ) : (
           <Pressable accessibilityRole="image" accessibilityLabel={post.mediaLabel ?? 'Post photo'} onPress={tapPicture} style={StyleSheet.absoluteFill}>
-            <ExpoImage accessibilityIgnoresInvertColors source={{ uri: post.imageUrl ?? post.thumbnailUrl }} style={StyleSheet.absoluteFill} contentFit="cover" contentPosition={frameSize?.cropped ? { top: '25%', left: '50%' } : 'center'} cachePolicy="memory-disk" onLoad={() => onReady?.(true)} />
+            {/* A photo standing whole in a wider frame: the bands either side are the photo itself, blurred and a little darker. */}
+            {frameSize?.boxed ? (
+              <View style={StyleSheet.absoluteFill} pointerEvents="none" aria-hidden accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+                <ExpoImage source={{ uri: post.imageUrl ?? post.thumbnailUrl }} style={[StyleSheet.absoluteFill, styles.bands]} contentFit="cover" blurRadius={bandBlur} cachePolicy="memory-disk" />
+                <View style={[StyleSheet.absoluteFill, styles.bandsShade]} />
+              </View>
+            ) : null}
+            <ExpoImage accessibilityIgnoresInvertColors source={{ uri: post.imageUrl ?? post.thumbnailUrl }} style={StyleSheet.absoluteFill} contentFit={frameSize?.boxed ? 'contain' : 'cover'} cachePolicy="memory-disk" onLoad={() => onReady?.(true)} />
           </Pressable>
         )}
         {/* Heart-rate zones, when shared: a thin foot along the picture's bottom edge, nothing over the picture itself. */}
@@ -408,6 +439,9 @@ const styleDefinitions = StyleSheet.create({
   frameTall: { alignSelf: 'center' },
   // A wide video: the same rounding as every picture in the feed, the video's own shape.
   frameWide: { alignSelf: 'center' },
+  // Drawn a little larger than the frame, so the blur's soft rim falls outside it.
+  bands: { transform: [{ scale: 1.15 }] },
+  bandsShade: { backgroundColor: 'rgba(0, 0, 0, 0.22)' },
   // Takes all the room under the picture, so "Add a comment…" can sit on the page's bottom edge.
   details: { gap: spacing.sm, flexGrow: 1, flexShrink: 1, minHeight: 0 },
   // The stats, caption and buttons: close together, as one block under the picture.
