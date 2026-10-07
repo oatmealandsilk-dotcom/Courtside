@@ -1,5 +1,5 @@
-import React, { useRef } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -31,15 +31,19 @@ export function SheetTitle({ title, line, lineTone = 'muted', lines = 1, onClose
   );
 }
 
-/** A part of the form under a heading, the way the Coaching page heads its parts. */
-export function Section({ title, hint, right, children }: { title: string; hint?: string; right?: React.ReactNode; children: React.ReactNode }) {
+/**
+ * A part of the form under a heading, the way the Coaching page heads its parts.
+ * `strong`: the heading in the page's ink at reading size, for a sheet whose
+ * choices are drawn light (`soft`) and so no longer carry the page on their own.
+ */
+export function Section({ title, hint, right, strong = false, children }: { title: string; hint?: string; right?: React.ReactNode; strong?: boolean; children: React.ReactNode }) {
   const styles = useThemedStyles(styleDefinitions);
   return (
-    <View style={styles.section}>
-      <View style={styles.sectionHead}>
+    <View style={[styles.section, strong && styles.sectionStrong]}>
+      <View style={[styles.sectionHead, strong && styles.sectionHeadStrong]}>
         <View style={{ flex: 1, gap: 2 }}>
-          <Text style={styles.sectionTitle}>{title}</Text>
-          {hint ? <Text style={styles.sectionHint}>{hint}</Text> : null}
+          <Text style={[styles.sectionTitle, strong && styles.sectionTitleStrong]} accessibilityRole={strong ? 'header' : undefined}>{title}</Text>
+          {hint ? <Text style={[styles.sectionHint, strong && styles.sectionHintStrong]}>{hint}</Text> : null}
         </View>
         {right}
       </View>
@@ -48,14 +52,45 @@ export function Section({ title, hint, right, children }: { title: string; hint?
   );
 }
 
-/** One choice among a few, as the Community tab's chips: the chosen one filled with ink. Tap it again to clear, if clearing is allowed. */
-export function Chips<T extends string>({ options, value, onChange, clearable = false, brand = false }: { options: { value: T; label: string }[]; value: T | undefined; onChange: (v: T | undefined) => void; clearable?: boolean; /** The chosen one in the brand colour with a tick (a match's result). */ brand?: boolean }) {
+/** A small pill's reach: well past it above and below, barely sideways, so the two halves of a switch never take each other's taps. */
+const SMALL_REACH = { top: 8, bottom: 8, left: 1, right: 1 } as const;
+/** How wide the fade is at the end of a sideways row. */
+const FADE = 32;
+
+/**
+ * One choice drawn light (`soft` on Chips and ChipStrip): a white pill on the
+ * page's soft shadow that, once chosen, takes the brand's pale tint and a ring
+ * in the brand, its words in ink. Quieter than an ink-filled chip, so a sheet
+ * of several choices keeps the one filled thing for its button.
+ */
+function SoftPill({ label, a11y, on, onPress, fill = false, small = false, onLayout }: { label: string; a11y?: string; on: boolean; onPress: () => void; fill?: boolean; small?: boolean; onLayout?: (e: LayoutChangeEvent) => void }) {
   const styles = useThemedStyles(styleDefinitions);
   return (
-    <View style={styles.chips} accessibilityRole="radiogroup">
-      {options.map((o) => (
+    <Pressable onLayout={onLayout} accessibilityRole="radio" accessibilityState={{ checked: on, selected: on }} accessibilityLabel={a11y ?? label} hitSlop={small ? SMALL_REACH : 4} onPress={onPress}
+      style={({ pressed }) => [styles.pill, small && styles.pillSmall, fill && styles.pillFill, on && styles.pillOn, pressed && !on && styles.pressed]}>
+      <Text style={[styles.pillText, small && styles.pillTextSmall, on && styles.pillTextOn]} numberOfLines={1}>{label}</Text>
+    </Pressable>
+  );
+}
+
+/** One choice among a few, as the Community tab's chips: the chosen one filled with ink. Tap it again to clear, if clearing is allowed. */
+export function Chips<T extends string>({ options, value, onChange, clearable = false, brand = false, soft = false, fill = false, small = false, label }: {
+  /** `a11y`: what a screen reader says for a chip whose words are shorthand (":30" is "Half past"). */
+  options: { value: T; label: string; a11y?: string }[]; value: T | undefined; onChange: (v: T | undefined) => void; clearable?: boolean;
+  /** The chosen one in the brand colour with a tick (a match's result). */ brand?: boolean;
+  /** Drawn light: white pills, the chosen one tinted and ringed in the brand (see SoftPill). */ soft?: boolean;
+  /** Soft only: the pills share the row's width equally (three game types across). */ fill?: boolean;
+  /** Soft only: small pills held in one white capsule, a two-way switch beside a heading (":00 / :30"). */ small?: boolean;
+  /** What a screen reader calls the group. */ label?: string;
+}) {
+  const styles = useThemedStyles(styleDefinitions);
+  return (
+    <View style={[styles.chips, fill && styles.chipsFill, soft && small && styles.chipsTrack]} accessibilityRole="radiogroup" accessibilityLabel={label}>
+      {options.map((o) => (soft ? (
+        <SoftPill key={o.value} label={o.label} a11y={o.a11y} on={value === o.value} fill={fill} small={small} onPress={() => onChange(clearable && value === o.value ? undefined : o.value)} />
+      ) : (
         <Chip key={o.value} label={o.label} selected={value === o.value} tint={brand ? undefined : colors.text} ink={brand ? colors.brandInk : colors.bg} icon={brand ? 'checkmark' : undefined} onPress={() => onChange(clearable && value === o.value ? undefined : o.value)} />
-      ))}
+      )))}
     </View>
   );
 }
@@ -65,7 +100,7 @@ export function Chips<T extends string>({ options, value, onChange, clearable = 
  * `reveal` (a sideways row only): opened on a choice further along than the screen shows (a session from two
  * weeks ago, being edited), the row starts scrolled to it.
  */
-export function Tiles<T extends string | number>({ options, value, onChange, scroll = false, inCard = false, reveal = false }: { options: { value: T; top: string; main: string; label?: string; /** Drawn in place of the two lines (a length as "1h 30m", big figures and small units). */ draw?: (on: boolean) => React.ReactNode }[]; value: T; onChange: (v: T) => void; scroll?: boolean; inCard?: boolean; reveal?: boolean }) {
+export function Tiles<T extends string | number>({ options, value, onChange, scroll = false, inCard = false, reveal = false, soft = false }: { options: { value: T; top: string; main: string; label?: string; /** Drawn in place of the two lines (a length as "1h 30m", big figures and small units). */ draw?: (on: boolean) => React.ReactNode }[]; value: T; onChange: (v: T) => void; scroll?: boolean; inCard?: boolean; reveal?: boolean; /** The chosen tile tinted and ringed in the brand rather than filled with ink, to match soft chips. */ soft?: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
   const scroller = useRef<ScrollView>(null);
   // Where the chosen tile lies and how wide the row is, once each is laid out; brought into view once, never again under your thumb.
@@ -80,11 +115,11 @@ export function Tiles<T extends string | number>({ options, value, onChange, scr
   const tiles = options.map((o) => {
     const on = o.value === value;
     return (
-      <Pressable key={String(o.value)} onLayout={scroll && on && !seen.current.done ? (e) => { seen.current.x = e.nativeEvent.layout.x; seen.current.w = e.nativeEvent.layout.width; bringIn(); } : undefined} accessibilityRole="radio" accessibilityState={{ selected: on }} accessibilityLabel={o.label ?? `${o.top} ${o.main}`} onPress={() => onChange(o.value)} style={({ pressed }) => [styles.tile, inCard && styles.tileInCard, scroll ? styles.tileFixed : styles.tileFlex, on && styles.tileOn, pressed && !on && { opacity: 0.8 }]}>
+      <Pressable key={String(o.value)} onLayout={scroll && on && !seen.current.done ? (e) => { seen.current.x = e.nativeEvent.layout.x; seen.current.w = e.nativeEvent.layout.width; bringIn(); } : undefined} accessibilityRole="radio" accessibilityState={{ selected: on }} accessibilityLabel={o.label ?? `${o.top} ${o.main}`} onPress={() => onChange(o.value)} style={({ pressed }) => [styles.tile, inCard && styles.tileInCard, scroll ? styles.tileFixed : styles.tileFlex, soft && styles.tileSoft, on && (soft ? styles.tileSoftOn : styles.tileOn), pressed && !on && { opacity: 0.8 }]}>
         {o.draw ? o.draw(on) : (
           <>
-            <Text style={[styles.tileTop, on && styles.tileInk]}>{o.top}</Text>
-            <Text style={[styles.tileMain, on && styles.tileInk]}>{o.main}</Text>
+            <Text style={[styles.tileTop, on && (soft ? styles.tileSoftTopOn : styles.tileInk)]}>{o.top}</Text>
+            <Text style={[styles.tileMain, on && !soft && styles.tileInk]}>{o.main}</Text>
           </>
         )}
       </Pressable>
@@ -92,22 +127,79 @@ export function Tiles<T extends string | number>({ options, value, onChange, scr
   });
   if (!scroll) return <View style={styles.tileRow}>{tiles}</View>;
   return (
-    <View style={{ marginHorizontal: -spacing.lg }}>
+    <View style={[{ marginHorizontal: -spacing.lg }, soft && styles.shadowRoom]}>
       <ScrollView ref={scroller} onLayout={reveal ? (e) => { seen.current.row = e.nativeEvent.layout.width; bringIn(); } : undefined} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.tileRow, { paddingHorizontal: spacing.lg, paddingVertical: 6 }]}>{tiles}</ScrollView>
       <LinearGradient pointerEvents="none" colors={inCard ? [`${colors.surface}00`, colors.surface] : [`${colors.bg}00`, colors.bg]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.fadeRight} />
     </View>
   );
 }
 
-/** A row of chips that scrolls sideways, fading at the edge so it reads as "more this way". */
-export function ChipStrip<T extends string | number>({ options, value, onChange, inCard = false }: { options: { value: T; label: string }[]; value: T; onChange: (v: T) => void; inCard?: boolean }) {
+/**
+ * A row of chips that scrolls sideways, fading at the edge so it reads as "more this way".
+ * `reveal`: the chosen chip is kept in view: brought in when it is chosen half under the fade, or when the
+ * row changes around it (another day's hours, every time relabelled), and never moved under your thumb otherwise.
+ */
+export function ChipStrip<T extends string | number>({ options, value, onChange, inCard = false, soft = false, label, reveal = false }: { options: { value: T; label: string; a11y?: string }[]; value: T; onChange: (v: T) => void; inCard?: boolean; /** Drawn light, as soft Chips. */ soft?: boolean; /** What a screen reader calls the row. */ label?: string; reveal?: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
+  const scroller = useRef<ScrollView>(null);
+  // How wide the row is, how far it has been scrolled, and how wide each chip is (by its value and words, so a
+  // chip relabelled ":30" waits for its new width). Where a chip lies is added up from the widths: a browser
+  // reports a size that changed, never a chip that only moved along.
+  const geo = useRef({ row: 0, at: 0, content: 0, widths: new Map<string, number>(), pending: false, animate: false });
+  // Scrolled to the end, the fade has nothing more to hint at and would only dim the last chip.
+  const [atEnd, setAtEnd] = useState(false);
+  const checkEnd = () => { const g = geo.current; const end = g.row > 0 && g.content > 0 && g.at + g.row >= g.content - 2; if (end !== atEnd) setAtEnd(end); };
+  const keyOf = (o: { value: T; label: string }) => `${String(o.value)}|${o.label}`;
+  /** Scrolls the chosen chip clear of the edge and the fade; false until every chip before it is measured. */
+  const keepInView = () => {
+    const g = geo.current;
+    if (!g.row) return false;
+    let x = spacing.lg;
+    for (const o of options) {
+      const w = g.widths.get(keyOf(o));
+      if (w === undefined) return false;
+      if (o.value === value) {
+        const left = x - spacing.lg;
+        const right = x + w + FADE - g.row;
+        const to = left < g.at ? left : right > g.at ? right : null;
+        if (to !== null) scroller.current?.scrollTo({ x: Math.max(0, to), animated: g.animate });
+        return true;
+      }
+      x += w + spacing.sm;
+    }
+    return true;
+  };
+  // A new choice, or new choices around it (another day's hours, every time relabelled): bring it in once measured.
+  const choices = options.map(keyOf).join(',');
+  useEffect(() => {
+    if (!reveal) return;
+    const g = geo.current;
+    g.pending = true;
+    g.animate = g.row > 0;
+    if (keepInView()) g.pending = false;
+  }, [value, choices]); // eslint-disable-line react-hooks/exhaustive-deps
+  const settle = () => { const g = geo.current; if (g.pending && keepInView()) g.pending = false; };
+  const measured = (o: { value: T; label: string }) => (reveal ? (e: LayoutChangeEvent) => {
+    geo.current.widths.set(keyOf(o), e.nativeEvent.layout.width);
+    settle();
+  } : undefined);
   return (
-    <View style={{ marginHorizontal: -spacing.lg }}>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.chips, { flexWrap: 'nowrap', paddingHorizontal: spacing.lg }]}>
-        {options.map((o) => <Chip key={String(o.value)} label={o.label} selected={value === o.value} tint={colors.text} ink={colors.bg} onPress={() => onChange(o.value)} />)}
+    <View style={[{ marginHorizontal: -spacing.lg }, soft && styles.shadowRoom]}>
+      <ScrollView ref={scroller} horizontal showsHorizontalScrollIndicator={false} accessibilityRole={soft ? 'radiogroup' : undefined} accessibilityLabel={label}
+        scrollEventThrottle={reveal ? 32 : undefined}
+        onScroll={reveal ? (e) => { geo.current.at = e.nativeEvent.contentOffset.x; checkEnd(); } : undefined}
+        onContentSizeChange={reveal ? (w) => { geo.current.content = w; checkEnd(); } : undefined}
+        onLayout={reveal ? (e) => { geo.current.row = e.nativeEvent.layout.width; settle(); checkEnd(); } : undefined}
+        contentContainerStyle={[styles.chips, { flexWrap: 'nowrap', paddingHorizontal: spacing.lg }, soft && styles.stripSoft]}>
+        {options.map((o) => (soft
+          ? <SoftPill key={String(o.value)} onLayout={measured(o)} label={o.label} a11y={o.a11y} on={value === o.value} onPress={() => onChange(o.value)} />
+          : reveal ? (
+            <View key={String(o.value)} onLayout={measured(o)}>
+              <Chip label={o.label} selected={value === o.value} tint={colors.text} ink={colors.bg} onPress={() => onChange(o.value)} />
+            </View>
+          ) : <Chip key={String(o.value)} label={o.label} selected={value === o.value} tint={colors.text} ink={colors.bg} onPress={() => onChange(o.value)} />))}
       </ScrollView>
-      <LinearGradient pointerEvents="none" colors={inCard ? [`${colors.surface}00`, colors.surface] : [`${colors.bg}00`, colors.bg]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.fadeRight} />
+      <LinearGradient pointerEvents="none" colors={inCard ? [`${colors.surface}00`, colors.surface] : [`${colors.bg}00`, colors.bg]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={[styles.fadeRight, reveal && atEnd && styles.fadeGone]} />
     </View>
   );
 }
@@ -157,7 +249,29 @@ const styleDefinitions = StyleSheet.create({
   // Quiet labels: the choices under them carry the page, not the headings.
   sectionTitle: { ...typography.smallStrong, color: colors.textMuted },
   sectionHint: { ...typography.small, color: colors.textFaint },
+  // Strong: the heading reads first, then the light choices under it.
+  sectionStrong: { gap: 10 },
+  sectionHeadStrong: { alignItems: 'center' },
+  sectionTitleStrong: { ...typography.bodyStrong, color: colors.text },
+  sectionHintStrong: { color: colors.textMuted, lineHeight: 18 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  chipsFill: { flexWrap: 'nowrap' },
+  // The small switch's capsule: white on the soft shadow, like a stepper; only the chosen side is drawn inside it.
+  chipsTrack: { ...lift, flexWrap: 'nowrap', gap: 2, padding: 3, borderRadius: radius.pill, backgroundColor: colors.surface },
+  // The soft pill: white on the page's shadow, with a ring on every pill (clear until chosen) so choosing never shifts the row.
+  pill: { ...lift, minHeight: 38, paddingHorizontal: 15, borderRadius: radius.pill, borderWidth: 1.5, borderColor: 'transparent', backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' },
+  pillSmall: { minHeight: 30, minWidth: 46, paddingHorizontal: 10, backgroundColor: 'transparent', boxShadow: 'none' },
+  pillFill: { flex: 1, paddingHorizontal: spacing.sm },
+  pillOn: { backgroundColor: colors.brandDim, borderColor: colors.brand, boxShadow: 'none' },
+  pillText: { ...typography.smallStrong, fontSize: 14, color: colors.textMuted, fontVariant: ['tabular-nums'] },
+  pillTextSmall: { fontSize: 13 },
+  pillTextOn: { color: colors.text },
+  pressed: { opacity: 0.7 },
+  // Room above and below a soft strip for the pills' shadow, which a sideways scroller would otherwise clip.
+  stripSoft: { paddingVertical: 6 },
+  // A soft sideways row hands that room back to the form, so its pills and tiles sit the same distance
+  // from their heading, and from the next part, as every other choice on the sheet.
+  shadowRoom: { marginVertical: -6 },
   tileRow: { flexDirection: 'row', gap: spacing.sm },
   tile: { ...lift, height: 64, borderRadius: 18, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', gap: 1 },
   // A day's tile: 58 wide, a little wider only for a longer word on top ("Yesterday").
@@ -167,7 +281,11 @@ const styleDefinitions = StyleSheet.create({
   tileTop: { fontSize: 12, ...font('500'), color: colors.textMuted },
   tileMain: { fontSize: 20, ...font('600'), letterSpacing: -0.4, color: colors.text, fontVariant: ['tabular-nums'] },
   tileInk: { color: colors.bg },
-  fadeRight: { position: 'absolute', right: 0, top: 0, bottom: 0, width: 32 },
+  tileSoft: { borderWidth: 1.5, borderColor: 'transparent' },
+  tileSoftOn: { backgroundColor: colors.brandDim, borderColor: colors.brand, boxShadow: 'none' },
+  tileSoftTopOn: { color: colors.text, ...font('600') },
+  fadeRight: { position: 'absolute', right: 0, top: 0, bottom: 0, width: FADE },
+  fadeGone: { opacity: 0 },
   submit: { height: 54, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
   submitOn: { backgroundColor: colors.brand, boxShadow: '0px 8px 20px rgba(0, 0, 0, 0.16)' },
   submitOff: { backgroundColor: colors.surfaceAlt },

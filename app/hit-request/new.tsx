@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import Animated, { FadeInDown } from 'react-native-reanimated';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { DragSheet } from '@/components/DragSheet';
@@ -18,6 +17,7 @@ import { milesBetween } from '@/features/players/geo';
 import { clockWords, hitsWithinLine } from '@/features/players/openToHit';
 import { homeFor } from '@/features/players/positions';
 import { useMyCity } from '@/features/players/useMyCity';
+import * as haptics from '@/lib/haptics';
 import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
@@ -57,10 +57,10 @@ export default function NewHit() {
   // Late in the evening there is no hour left today: start on tomorrow.
   const [day, setDay] = useState(new Date().getHours() >= 21 ? 1 : 0);
   const nextHour = Math.min(21, Math.max(6, new Date().getHours() + 1));
-  const [hour, setHourOnly] = useState(nextHour);
-  // Courts book on the half hour too: picking an hour offers its :30 underneath, on the hour until chosen.
+  const [hour, setHour] = useState(nextHour);
+  // Courts book on the half hour too: ":00 / :30" beside Time moves every hour in the row to its half past
+  // (Oct 7: one row of times, not a second row repeating the chosen hour). It stays as picked across days and hours.
   const [half, setHalf] = useState(false);
-  const setHour = (h: number) => { setHourOnly(h); setHalf(false); };
   // "Play here" on a court's page or card: that court is chosen, its map id kept
   // (when it has one) so the hit shows on the court's page.
   const params = useLocalSearchParams<{ courtId?: string; courtName?: string; lat?: string; lng?: string; ask?: string; audience?: string; format?: string; note?: string; rematch?: string }>();
@@ -201,75 +201,93 @@ export default function NewHit() {
     });
   };
 
+  // A choice changed is felt (the selection tick), a choice tapped again is not.
+  const pickDay = (d: number) => { if (d !== day) { haptics.untap(); setDay(d); } };
+  const pickHour = (h: number) => { if (h !== hour) { haptics.untap(); setHour(h); } };
+  const pickHalf = (m: 'hour' | 'half' | undefined) => { if (m && (m === 'half') !== half) { haptics.untap(); setHalf(m === 'half'); } };
+  const pickFormat = (f: HitRequest['format'] | undefined) => { if (!f || f === format) return; haptics.untap(); setFormat(f); setSpots(f === 'doubles' ? 3 : 1); };
+  const pickLevel = (v: 'any' | 'mine' | undefined) => { if (v && v !== level) { haptics.untap(); setLevel(v); } };
+  const nudge = (by: 1 | -1) => { haptics.untap(); setSpots((n) => Math.min(3, Math.max(1, n + by))); };
+  // A hairline under the title once the form has scrolled beneath it, so the two never run together.
+  const [scrolled, setScrolled] = useState(false);
+
   return (
-    <DragSheet fitContent closeSignal={closeSignal} onDismissed={done} peekFraction={0.86}
-      header={<SheetTitle title={asked.length ? (params.rematch === '1' && asked.length === 1 ? `Rematch with ${askedNames}?` : `Ask ${askedNames} to hit`) : 'Looking for a hit'} line={summary} onClose={() => setCloseSignal((n) => n + 1)} />}>
-      <ScrollView contentContainerStyle={formBody} keyboardShouldPersistTaps="handled">
-        {/* Asked: said first, before anything is picked, so "Ask Sam" never reads as a private invite. */}
-        {asked.length && !inviting ? (
-          <View style={styles.openNote}>
-            <Ionicons name="people-outline" size={16} color={colors.textMuted} />
-            <Text style={styles.openNoteText}>It’s an open hit: {askedNames} {asked.length === 1 ? 'gets' : 'get'} it in your chat, and anyone nearby can take the spot.</Text>
-          </View>
-        ) : null}
-        <Section title="When">
-          <Tiles scroll value={day} onChange={setDay} options={days.map((d, i) => ({ value: i, top: i === 0 ? 'Today' : d.toLocaleDateString([], { weekday: 'short' }), main: String(d.getDate()), label: d.toDateString() }))} />
-          <ChipStrip value={hour} onChange={setHour} options={hours.map((h) => ({ value: h, label: timeLabel(h) }))} />
-          {/* The chosen hour, on the hour or at half past: chips the same size as the hours, sliding in under them. */}
-          <Animated.View key={hour} entering={FadeInDown.duration(200)}>
-            <ChipStrip value={half ? 30 : 0} onChange={(m) => setHalf(m === 30)} options={[{ value: 0, label: timeLabel(hour) }, { value: 30, label: timeLabel(hour, true) }]} />
-          </Animated.View>
-        </Section>
-
-        <Section title="Where" hint={farLine ?? undefined}>
-          <CourtSearch home={home} nearby={courts} chosen={place} onChoose={setPlace} typed={typed} onType={(t) => { setTyped(t); setPlace(null); }} />
-        </Section>
-
-        <Section title="Game">
-          <Chips value={format} onChange={(f) => { if (!f) return; setFormat(f); setSpots(f === 'doubles' ? 3 : 1); }} options={[{ value: 'singles', label: 'Singles' }, { value: 'doubles', label: 'Doubles' }, { value: 'hit', label: 'Just hitting' }]} />
-        </Section>
-
-        {/* Level and how many, side by side: two small choices, one line. */}
-        <View style={styles.pair}>
-          <View style={{ flex: 1 }}>
-            <Section title="Level">
-              <Chips value={level} onChange={(v) => { if (v) setLevel(v); }} options={[{ value: 'mine', label: rating ? `Around ${rating.toFixed(1)}` : 'My level' }, { value: 'any', label: 'Any' }]} />
-            </Section>
-          </View>
-          <Section title="Players needed" hint="Not counting you">
-            <View style={styles.stepper}>
-              <Pressable accessibilityRole="button" accessibilityLabel="One fewer" disabled={spots <= 1} onPress={() => setSpots((n) => Math.max(1, n - 1))} style={[styles.step, spots <= 1 && { opacity: 0.35 }]}>
-                <Ionicons name="remove" size={16} color={colors.text} />
-              </Pressable>
-              <Text style={styles.stepValue} accessibilityLiveRegion="polite">{spots}</Text>
-              <Pressable accessibilityRole="button" accessibilityLabel="One more" disabled={spots >= 3} onPress={() => setSpots((n) => Math.min(3, n + 1))} style={[styles.step, spots >= 3 && { opacity: 0.35 }]}>
-                <Ionicons name="add" size={16} color={colors.text} />
-              </Pressable>
+    <DragSheet closeSignal={closeSignal} onDismissed={done} peekFraction={0.86}
+      header={<SheetTitle title={asked.length ? (params.rematch === '1' && asked.length === 1 ? `Rematch with ${askedNames}?` : `Ask ${askedNames} to hit`) : 'Looking for a hit'} line={summary} lines={2} onClose={() => setCloseSignal((n) => n + 1)} />}>
+      <View style={styles.body}>
+        <ScrollView style={styles.scroll} contentContainerStyle={styles.form} keyboardShouldPersistTaps="handled" scrollEventThrottle={32}
+          onScroll={(e) => { const s = e.nativeEvent.contentOffset.y > 2; if (s !== scrolled) setScrolled(s); }}>
+          {/* Asked: said first, before anything is picked, so "Ask Sam" never reads as a private invite. */}
+          {asked.length && !inviting ? (
+            <View style={styles.openNote}>
+              <Ionicons name="people-outline" size={16} color={colors.textMuted} />
+              <Text style={styles.openNoteText}>It’s an open hit: {askedNames} {asked.length === 1 ? 'gets' : 'get'} it in your chat, and anyone nearby can take the spot.</Text>
             </View>
+          ) : null}
+          <Section strong title="When">
+            <Tiles soft scroll value={day} onChange={pickDay} options={days.map((d, i) => ({ value: i, top: i === 0 ? 'Today' : d.toLocaleDateString([], { weekday: 'short' }), main: String(d.getDate()), label: d.toDateString() }))} />
           </Section>
-        </View>
 
-        <Section title="Who sees it first">
-          <AudienceCards value={audience} onChange={setAudience} forFriends={forFriends} />
-        </Section>
-        {inviting ? (
-          <Section title="Invite" hint={pickedUsers.length ? `${pickedUsers.length} picked · each gets it in your chat` : 'Tick who gets it in your chat'}>
-            <InviteRow picked={picked} onPicked={setPicked} first={askedIds} />
-            {groupCount ? <GroupsCard on={withGroups} onChange={setWithGroups} count={groupCount} /> : null}
-            {audience === 'invite_first' ? (
-              <View style={styles.openNote}>
-                <Ionicons name="time-outline" size={16} color={colors.brand} />
-                <Text style={styles.openNoteText}>{opensNow ? 'It starts within 3 hours, so it goes on Find Players straight away.' : `Opens to everyone ${opensText}, unless it’s full by then.`}</Text>
+          {/* One row of times. On the hour or at half past is one switch beside the heading, and every time in the row follows it. */}
+          <Section strong title="Time" right={(
+            <Chips soft small label="Minutes past the hour" value={half ? 'half' : 'hour'} onChange={pickHalf}
+              options={[{ value: 'hour', label: ':00', a11y: 'On the hour' }, { value: 'half', label: ':30', a11y: 'Half past' }]} />
+          )}>
+            <ChipStrip soft reveal label="Start time" value={hour} onChange={pickHour} options={hours.map((h) => ({ value: h, label: timeLabel(h, half) }))} />
+          </Section>
+
+          <Section strong title="Where" hint={farLine ?? undefined}>
+            <CourtSearch home={home} nearby={courts} chosen={place} onChoose={setPlace} typed={typed} onType={(t) => { setTyped(t); setPlace(null); }} />
+          </Section>
+
+          <Section strong title="Game">
+            <Chips soft fill label="Game" value={format} onChange={pickFormat} options={[{ value: 'singles', label: 'Singles' }, { value: 'doubles', label: 'Doubles' }, { value: 'hit', label: 'Just hitting' }]} />
+          </Section>
+
+          {/* Level and how many: a row each, the question on the left and its answer on the right, on a hairline. */}
+          <View style={styles.rows}>
+            <View style={styles.row}>
+              <Text style={styles.rowTitle} accessibilityRole="header">Level</Text>
+              <Chips soft label="Level" value={level} onChange={pickLevel} options={[{ value: 'mine', label: rating ? `Around ${rating.toFixed(1)}` : 'My level' }, { value: 'any', label: 'Any' }]} />
+            </View>
+            <View style={[styles.row, styles.rule]}>
+              <View style={styles.rowWords}>
+                <Text style={styles.rowTitle} accessibilityRole="header">Players needed</Text>
+                <Text style={styles.rowHint}>Not counting you</Text>
               </View>
-            ) : null}
-          </Section>
-        ) : null}
+              <View style={styles.stepper}>
+                <Pressable accessibilityRole="button" accessibilityLabel="One fewer" disabled={spots <= 1} hitSlop={4} onPress={() => nudge(-1)} style={({ pressed }) => [styles.step, spots <= 1 && styles.stepOff, pressed && styles.stepPressed]}>
+                  <Ionicons name="remove" size={18} color={colors.text} />
+                </Pressable>
+                <Text style={styles.stepValue} accessibilityLiveRegion="polite">{spots}</Text>
+                <Pressable accessibilityRole="button" accessibilityLabel="One more" disabled={spots >= 3} hitSlop={4} onPress={() => nudge(1)} style={({ pressed }) => [styles.step, spots >= 3 && styles.stepOff, pressed && styles.stepPressed]}>
+                  <Ionicons name="add" size={18} color={colors.text} />
+                </Pressable>
+              </View>
+            </View>
+          </View>
 
-        <Field soft value={note} onChangeText={(v) => setNote(v.slice(0, 280))} placeholder="Anything else? (optional)" multiline minHeight={56} />
-        {past ? <Text style={styles.error}>That time has passed. Pick a later one.</Text> : null}
-        {error ? <Text style={styles.error}>{error}</Text> : null}
-        <Submit label="Post" onPress={post} disabled={!ready} busy={saving} waiting={past ? 'Pick a later time' : !where ? 'Choose where to play' : 'Pick who to invite'} />
-        <Fine>{audience === 'invite_only'
+          <Section strong title="Who sees it first">
+            <AudienceCards value={audience} onChange={setAudience} forFriends={forFriends} />
+          </Section>
+          {inviting ? (
+            <Section strong title="Invite" hint={pickedUsers.length ? `${pickedUsers.length} picked · each gets it in your chat` : 'Tick who gets it in your chat'}>
+              <InviteRow picked={picked} onPicked={setPicked} first={askedIds} />
+              {groupCount ? <GroupsCard on={withGroups} onChange={setWithGroups} count={groupCount} /> : null}
+              {/* When it opens to everyone is said once, under Post, where it stays in sight (it was also said here, word for word). */}
+            </Section>
+          ) : null}
+
+          <Field soft value={note} onChangeText={(v) => setNote(v.slice(0, 280))} placeholder="Anything else? (optional)" multiline minHeight={56} />
+        </ScrollView>
+        <View pointerEvents="none" style={[styles.topRule, scrolled && styles.topRuleOn]} />
+
+        {/* Post stays in reach at the foot of the sheet, with what it will do said under it. */}
+        <View style={styles.footer}>
+          {past ? <Text style={styles.error}>That time has passed. Pick a later one.</Text> : null}
+          {error ? <Text style={styles.error}>{error}</Text> : null}
+          <Submit label="Post" onPress={post} disabled={!ready} busy={saving} waiting={past ? 'Pick a later time' : !where ? 'Choose where to play' : 'Pick who to invite'} />
+          <Fine>{audience === 'invite_only'
           ? `Only ${recipients.length ? recipientNames : 'the people you invite'}${groupsOn ? ' and your groups' : ''} can see it. It never shows on Find Players.`
           : audience === 'invite_first' && opensNow
             ? `It starts within 3 hours, so it goes on Find Players straight away.${recipients.length ? ` ${recipientNames} still ${recipients.length === 1 ? 'gets' : 'get'} it in your chat.` : ''}`
@@ -280,18 +298,37 @@ export default function NewHit() {
               : forFriends
                 ? 'Friends who follow you see it. Whoever joins gets a chat with you.'
                 : 'Players nearby see it on Find Players. Whoever joins gets a chat with you.'}</Fine>
-      </ScrollView>
+        </View>
+      </View>
     </DragSheet>
   );
 }
 
 const styleDefinitions = StyleSheet.create({
-  error: { ...typography.small, color: colors.danger },
+  // The form scrolls; Post stays put beneath it.
+  body: { flex: 1, minHeight: 0 },
+  scroll: { flex: 1, minHeight: 0 },
+  // The sheet's rhythm: 24 between parts, the parts' own headings 10 above their choices.
+  form: { ...formBody, gap: spacing.xl, paddingBottom: spacing.xl },
+  topRule: { position: 'absolute', top: 0, left: 0, right: 0, height: StyleSheet.hairlineWidth, backgroundColor: colors.border, opacity: 0 },
+  topRuleOn: { opacity: 1 },
+  footer: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.sm, gap: 20, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, backgroundColor: colors.bg },
+  error: { ...typography.small, color: colors.danger, textAlign: 'center', marginBottom: -spacing.sm },
   // "It's an open hit": one plain line on the sheet's quiet tint, above When.
   openNote: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, padding: spacing.md, borderRadius: radius.lg, backgroundColor: colors.bgElevated },
   openNoteText: { ...typography.small, color: colors.text, flex: 1, lineHeight: 19 },
-  pair: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.lg },
-  stepper: { flexDirection: 'row', alignItems: 'center', gap: 10, height: 34 },
-  step: { ...lift, width: 32, height: 32, borderRadius: 16, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' },
-  stepValue: { minWidth: 14, textAlign: 'center', fontSize: 16, ...font('600'), color: colors.text, fontVariant: ['tabular-nums'] },
+  // Level and Players needed: the question left, the answer right, a hairline between the two. The pair
+  // gives back its outer padding, so its first pills sit 24 under Game's, as every part sits under the last.
+  rows: { marginVertical: -spacing.md },
+  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, minHeight: 48, paddingVertical: spacing.md },
+  rule: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  rowWords: { flexShrink: 1, gap: 2 },
+  rowTitle: { ...typography.bodyStrong, color: colors.text },
+  rowHint: { ...typography.small, color: colors.textMuted },
+  // One white capsule, minus and plus at its ends: the phone's own stepper, in the sheet's soft white.
+  stepper: { ...lift, flexDirection: 'row', alignItems: 'center', borderRadius: radius.pill, backgroundColor: colors.surface, padding: 3 },
+  step: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  stepOff: { opacity: 0.3 },
+  stepPressed: { backgroundColor: colors.surfaceAlt },
+  stepValue: { minWidth: 28, textAlign: 'center', fontSize: 17, ...font('600'), color: colors.text, fontVariant: ['tabular-nums'] },
 });
