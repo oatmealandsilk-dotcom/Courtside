@@ -12,8 +12,8 @@ import * as Location from 'expo-location';
 export type DevicePermission = 'camera' | 'photos' | 'microphone' | 'location';
 export type PermissionState = 'granted' | 'denied' | 'undetermined' | 'unavailable';
 
-export const PERMISSION_META: Record<DevicePermission, { label: string; why: string; icon: string }> = {
-  camera: { label: 'Camera', why: 'To take an Instant after a session, or a photo to send in a chat.', icon: 'camera-outline' },
+export const PERMISSION_META: Record<DevicePermission, { label: string; why: string; /** The reason while Instants are hidden (features/stories/instantsSwitch), where `why` names them. */ whyNoInstants?: string; icon: string }> = {
+  camera: { label: 'Camera', why: 'To take an Instant after a session, or a photo to send in a chat.', whyNoInstants: 'To take a photo or video to post, or a photo to send in a chat.', icon: 'camera-outline' },
   // "Limited" access looks granted to iOS but breaks handing a video over
   // (error 3164), so the wording says "All Photos" specifically, not just "on".
   // Each reason is one short line: the answer (On, Off, Not asked) is shown

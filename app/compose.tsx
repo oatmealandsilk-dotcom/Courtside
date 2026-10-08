@@ -288,7 +288,9 @@ function Compose() {
   // A hit arrives here with its photo already taken: straight to the form.
   // The camera's photo travels in memory; the address only says one is waiting.
   const shotUri = params.shot === 'pending' ? takePendingShot() : params.shot;
-  const isHit = params.mode === 'hit' && !!shotUri;
+  // Only while Instants are on (features/stories/instantsSwitch): otherwise an old or made-up
+  // /compose?mode=hit link opens the Create menu rather than an Instant's form.
+  const isHit = params.mode === 'hit' && !!shotUri && knownTennisFlags(currentUserId)?.instants === true;
   // A session being posted goes straight to the form too: the photo is optional.
   const [stage, setStage] = useState<Stage>(isHit ? 'form' : opened || trackerId || params.session || fromLive ? 'form' : 'choose');
   // The courts around you start loading while you pick and edit, so Add
