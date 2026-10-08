@@ -21,9 +21,13 @@ import { useBarInset } from '@/features/navigation/barInset';
 import { colors, spacing, typography } from '@/theme';
 
 /**
- * How far down each route was left, kept outside React so it survives the
+ * How far down each tab was left, kept outside React so it survives the
  * screen being unmounted and rebuilt — which is exactly what happens when you
- * swipe to another tab and back.
+ * swipe to another tab and back. Only a page that names itself (memoryKey:
+ * the tabs) keeps its place here. Any other page (Settings, a thread, a
+ * player) opens at its top each time it is opened (Oct 8, owner: Settings
+ * opened at the bottom, wherever it was last left); back on it from a page
+ * opened over it, it is still where you left it, as it stays drawn underneath.
  */
 const scrollMemory = new Map<string, number>();
 
@@ -69,9 +73,10 @@ interface Props {
   rail?: ReactNode;
   headerWrapper?: (header: ReactNode) => ReactNode;
   /**
-   * Which screen this is, for remembering scroll position. Needed because a
-   * screen drawn as a swipe preview sees the route you are leaving, not its
-   * own — without this, Coaching's position would be applied to Profile.
+   * Which tab this is, for remembering scroll position: a page given one
+   * opens where it was last left; a page without one opens at its top. Needed
+   * because a screen drawn as a swipe preview sees the route you are leaving,
+   * not its own — without this, Coaching's position would be applied to Profile.
    */
   memoryKey?: string;
   /** Hands the caller the scroller, for jumping to a particular child. */
@@ -130,10 +135,15 @@ export function Screen({
   // While a sideways page swipe is under way, this scroller stands down.
   const swiping = useSyncExternalStore(subscribePageDragging, isPageDragging, () => false);
   const key = memoryKey ?? pathname;
+  // Only a page that names itself picks up where it was left (see scrollMemory).
+  const remembers = memoryKey !== undefined;
   const scroller = useRef<ScrollView | null>(null);
   // Captured once so the starting offset is set before the first paint rather
   // than scrolled to afterwards, which is what made it jump into place.
-  const initial = useRef(scrollMemory.get(key) ?? 0);
+  const initial = useRef(remembers ? scrollMemory.get(key) ?? 0 : 0);
+  // How far down this page is now, as of the last finger lift or coast: for a
+  // text box working out how far to scroll (reveal, below).
+  const here = useRef(initial.current);
   // The strip only exists on the phone, and only on pages that can refresh.
   const strip = Platform.OS !== 'web' && onRefresh ? PULL_GAP : 0;
   const restored = useRef(initial.current === 0);
@@ -307,7 +317,11 @@ export function Screen({
   const glide = useSharedValue(0);
   const gliding = useSharedValue(false);
   useAnimatedReaction(() => glide.value, (v, prev) => { if (gliding.value && v !== prev) scrollTo(list, 0, v, false); }, []);
-  const remember = useCallback((y: number) => { scrollMemory.set(key, Math.max(0, y - strip)); }, [key, strip]);
+  const remember = useCallback((y: number) => {
+    const at = Math.max(0, y - strip);
+    here.current = at;
+    if (remembers) scrollMemory.set(key, at);
+  }, [key, strip, remembers]);
   // The disc rides in the middle of the open gap, fading in as it opens and out as it closes.
   const rowStyle = useAnimatedStyle(() => ({ opacity: pullRowOpacity(gap.value), transform: [{ translateY: pullRowLift(gap.value) }] }));
   // In a browser the page itself does not move: the disc comes down over the
@@ -441,19 +455,20 @@ export function Screen({
         const visibleBottom = visibleAboveKeyboard() - 24;
         const overflow = y + h - visibleBottom;
         if (overflow <= 0) return;
-        const current = scrollMemory.get(key) ?? 0;
-        scroller.current?.scrollTo({ y: current + overflow, animated: true });
+        scroller.current?.scrollTo({ y: here.current + overflow, animated: true });
       });
     });
-  }, [key]);
+  }, []);
 
   // "Top" is just under the pull-to-refresh strip: landing on the strip by a
   // tap rather than a pull would show the spinner with nothing to dismiss it.
   useEffect(() => subscribeScrollToTop((tab, instant, below = 0) => {
     if (TAB_FOR_KEY[key] !== tab && key !== tab) return;
     scroller.current?.scrollTo({ y: strip + below, animated: !instant });
-    if (instant) scrollMemory.set(key, below);
-  }), [key, strip]);
+    if (!instant) return;
+    here.current = below;
+    if (remembers) scrollMemory.set(key, below);
+  }), [key, strip, remembers]);
 
   // Under the header, over the top of the page: a small note once a pull has fetched.
   const updatedNote = onRefresh ? (

@@ -175,7 +175,7 @@ export default function Guidelines() {
   );
 
   return (
-    <Screen title="" onBack={() => goBack()} scrollRef={scrollRef} memoryKey={`guidelines:${rule ?? 'top'}`}>
+    <Screen title="" onBack={() => goBack()} scrollRef={scrollRef}>
       <View style={styles.page}>
         <View style={styles.head}>
           <Text style={styles.title} accessibilityRole="header">Community Guidelines</Text>
