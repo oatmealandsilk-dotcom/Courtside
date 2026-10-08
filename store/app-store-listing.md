@@ -519,7 +519,6 @@ Do these while signed in as the account named. To switch: **Profile** → **☰*
 | B | Follow A back (now you're "mutuals", which Apple will see on the map) | A friend on the map |
 | B | Like and comment on A's photo, and reply to A's thread | Comments and replies to report |
 | B | Send A a direct message ("Hit Saturday?"), then switch to A and reply | A real chat |
-| B | Start a group chat with A, called "Saturday doubles", and send one message | Group chats |
 | Optional | As B, before the court step: **Community** → **Find Players** → scroll to **Open hits** → the box at the top (**Looking for a hit?**, or **Play at [court]?**) → a court where you could really play, on the **last day it offers** (it only goes 6 days ahead: Wed Oct 14 if you post on Thu Oct 8), in the evening | An open hit the reviewer can join, chat in and leave with **Can't make it**. Real players nearby can see it and tap "I'm in", so only post one you'd turn up to. Don't call it off during review (that alerts whoever joined); delete it after approval. |
 | B | **Last, at a public tennis court**, never at home. First check B's map setting says **Only people you follow back** (Profile → ☰ → Settings → Privacy center). Then **Profile** → **☰** → **Settings** → **Location** → switch it **on**, open the map and wait until it has found you. Then switch back to your own account. Don't turn Location off while signed in as B: that deletes B's spot. | B on A's map, at the court. Only A can see it, so real players nearby never see a made-up "Review Partner". |
 
@@ -562,7 +561,7 @@ First replace the four `[…]` blanks with the two logins from section 6. The no
 CourtSide: a social app for tennis players (map, feed, discussions, messages).
 
 DEMO ACCOUNTS
-Email and password: [DEMO A EMAIL] / [DEMO A PASSWORD]. Second adult account: [DEMO B EMAIL] / [DEMO B PASSWORD]. The two follow each other and share a chat and a group chat, to test messages, reporting and blocking. Sign in with Apple and Google also work.
+Email and password: [DEMO A EMAIL] / [DEMO A PASSWORD]. Second adult account: [DEMO B EMAIL] / [DEMO B PASSWORD]. The two follow each other and share a chat, to test messages, reporting and blocking. Sign in with Apple and Google also work.
 
 WHERE THINGS ARE
 The app opens on Community > Find Players (map, then Open hits). Tabs: Community, Feed, + (Session, Clip, Post, Thread, Instant), Coaching, Profile. Messages: paper-plane button, top. Settings: Profile > ☰ > Settings.
