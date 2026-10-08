@@ -12,18 +12,20 @@ import { TOUR_ON } from '@/features/tour/tourSeen';
 import { useApp } from '@/store/AppContext';
 import { useAiCoachOn } from '@/features/aiCoach/switch';
 import { usePaidBooking } from '@/features/coaching/bookings';
+import { useInstantsOn } from '@/features/stories/instantsSwitch';
 import { colors, radius, spacing, typography } from '@/theme';
 
 /**
  * The answers, as things stand for this person: the payment answer only once
- * paid booking is open to them, and the AI coach's only once it is switched
- * on, so Help never describes something they cannot find (App Review 2.1).
+ * paid booking is open to them, the AI coach's only once it is switched on,
+ * and Instants only while they are (features/stories/instantsSwitch), so Help
+ * never describes something they cannot find (App Review 2.1).
  */
-function topicsFor({ aiCoachOn, paidBooking }: { aiCoachOn: boolean; paidBooking: boolean }): { title: string; body: string }[] {
+function topicsFor({ aiCoachOn, paidBooking, instantsOn }: { aiCoachOn: boolean; paidBooking: boolean; instantsOn: boolean }): { title: string; body: string }[] {
   return [
   {
     title: 'How does the feed decide what I see?',
-    body: 'Home mixes clips, Instants and Community threads, leaning toward newer ones, and deals them in a fresh order each time you open it. Things you have not seen come before things you have, and new players’ first posts appear near the top so they get a welcome. Muting someone removes their posts without unfollowing.',
+    body: (instantsOn ? 'Home mixes clips, Instants and Community threads' : 'Home mixes clips, photos and Community threads') + ', leaning toward newer ones, and deals them in a fresh order each time you open it. Things you have not seen come before things you have, and new players’ first posts appear near the top so they get a welcome. Muting someone removes their posts without unfollowing.',
   },
   {
     title: 'What is my NTRP or UTR badge?',
@@ -66,7 +68,8 @@ export default function Help() {
   const [open, setOpen] = useState<number | null>(null);
   const aiCoachOn = useAiCoachOn() === true;
   const paidBooking = usePaidBooking();
-  const TOPICS = topicsFor({ aiCoachOn, paidBooking });
+  const instantsOn = useInstantsOn() === true;
+  const TOPICS = topicsFor({ aiCoachOn, paidBooking, instantsOn });
 
   return (
     <Screen title="Help" compactTitle onBack={() => goBack()}>

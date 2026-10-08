@@ -290,7 +290,9 @@ function Compose() {
   // A hit arrives here with its photo already taken: straight to the form.
   // The camera's photo travels in memory; the address only says one is waiting.
   const shotUri = params.shot === 'pending' ? takePendingShot() : params.shot;
-  const isHit = params.mode === 'hit' && !!shotUri;
+  // Only while Instants are on (features/stories/instantsSwitch): otherwise an old or made-up
+  // /compose?mode=hit link opens the Create menu rather than an Instant's form.
+  const isHit = params.mode === 'hit' && !!shotUri && knownTennisFlags(currentUserId)?.instants === true;
   // A session being posted goes straight to the form too: the photo is optional.
   const [stage, setStage] = useState<Stage>(isHit ? 'form' : opened || trackerId || params.session || fromLive ? 'form' : 'choose');
   // The courts around you start loading while you pick and edit, so Add
@@ -1188,7 +1190,8 @@ function Compose() {
       {entering ? null : <Reanimated.View entering={arrive(3)}><Pressable accessibilityRole="button" accessibilityLabel="Create a thread or question" onPress={() => router.replace('/ask')} style={[styles.choiceOption, tight && styles.choiceOptionTight, tighter && styles.choiceOptionTighter]}>
         <Ionicons name="chatbubbles-outline" size={choiceIcon} color={colors.textMuted}/><Text style={styles.choiceLabel}>Thread or question</Text><Text style={styles.note}>Ask the community or start a conversation.</Text>
       </Pressable></Reanimated.View>}
-      {entering ? null : <Reanimated.View entering={arrive(4)}><Pressable accessibilityRole="button" accessibilityLabel="Take an Instant" onPress={() => router.replace('/hit')} style={[styles.choiceOption, tight && styles.choiceOptionTight, tighter && styles.choiceOptionTighter]}>
+      {/* Instants are held back until the server's flag:instants says so (features/stories/instantsSwitch, owner Oct 8): no card, and no gap where it was. */}
+      {entering || !flagsOn.instants ? null : <Reanimated.View entering={arrive(4)}><Pressable accessibilityRole="button" accessibilityLabel="Take an Instant" onPress={() => router.replace('/hit')} style={[styles.choiceOption, tight && styles.choiceOptionTight, tighter && styles.choiceOptionTighter]}>
         <Ionicons name="camera-outline" size={choiceIcon} color={colors.textMuted}/><Text style={styles.choiceLabel}>Instant</Text><Text style={styles.note}>A photo after you play. Up on the feed for a day.</Text>
       </Pressable></Reanimated.View>}
       </ScrollView>

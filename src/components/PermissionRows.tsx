@@ -14,6 +14,7 @@ import {
   type PermissionState,
 } from '@/features/permissions/devicePermissions';
 import { Toggle } from '@/components/ui';
+import { useInstantsOn } from '@/features/stories/instantsSwitch';
 import * as toast from '@/lib/toast';
 import { colors, radius, spacing, typography } from '@/theme';
 
@@ -56,12 +57,15 @@ const STATUS: Record<PermissionState, string> = {
 export function PermissionRows({ only, footnote }: { only?: DevicePermission[]; footnote?: string }) {
   const styles = useThemedStyles(styleDefinitions);
   const { states, ask } = usePermissions();
+  // The camera's reason names Instants only while they are on (features/stories/instantsSwitch).
+  const instantsOn = useInstantsOn() === true;
   const kinds = only ?? ALL_PERMISSIONS;
   return (
     <View>
       <View style={styles.list}>
         {kinds.map((kind, i) => {
           const meta = PERMISSION_META[kind];
+          const why = !instantsOn && meta.whyNoInstants ? meta.whyNoInstants : meta.why;
           const state = states?.[kind] ?? 'undetermined';
           const on = state === 'granted';
           const unavailable = state === 'unavailable';
@@ -77,7 +81,7 @@ export function PermissionRows({ only, footnote }: { only?: DevicePermission[]; 
               key={kind}
               accessibilityRole="switch"
               accessibilityLabel={`${meta.label}, ${STATUS[state]}`}
-              accessibilityHint={meta.why}
+              accessibilityHint={why}
               accessibilityState={{ checked: on, disabled: unavailable }}
               // The switch drawn in the row only shows it, so the row itself says whether it is on (in a browser too).
               aria-checked={on}
@@ -95,7 +99,7 @@ export function PermissionRows({ only, footnote }: { only?: DevicePermission[]; 
                   <Text style={styles.label} numberOfLines={1}>
                     {meta.label}<Text style={styles.status}> · {STATUS[state]}</Text>
                   </Text>
-                  <Text style={styles.why}>{meta.why}</Text>
+                  <Text style={styles.why}>{why}</Text>
                 </View>
                 {/* The whole row is the switch, so this one only shows it: a tap is never counted twice (no second permission prompt or note). */}
                 <View pointerEvents="none" aria-hidden accessibilityElementsHidden importantForAccessibility="no-hide-descendants">

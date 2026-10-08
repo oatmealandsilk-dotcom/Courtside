@@ -32,6 +32,7 @@ import { useMapLead } from '@/features/tour/mapLead';
 import { FRIENDS_LINE } from '@/features/invite/friendsWords';
 import { reasonFromLabel } from '@/features/moderation/reasons';
 import { openRules } from '@/features/moderation/RemovedNote';
+import { useInstantsOn, withoutInstantRows } from '@/features/stories/instantsSwitch';
 
 /**
  * One row per thing that happened to you, the way Instagram does it.
@@ -403,9 +404,11 @@ export default function Notifications() {
   };
 
   // Nothing from someone you blocked: their likes, follows and comments go with them.
+  // Nothing about an Instant while Instants are hidden (features/stories/instantsSwitch): the row would open nothing.
+  const instantsOn = useInstantsOn();
   const mine = useMemo(
-    () => notifications.filter((n) => n.userId === currentUserId && !blockedIds.includes(n.actorId)),
-    [notifications, currentUserId, blockedIds],
+    () => withoutInstantRows(notifications.filter((n) => n.userId === currentUserId && !blockedIds.includes(n.actorId)), instantsOn),
+    [notifications, currentUserId, blockedIds, instantsOn],
   );
 
   // Every row that was new while this page has been open keeps its tint until you leave, however

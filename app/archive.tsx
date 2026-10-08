@@ -15,6 +15,7 @@ import { useBarInset } from '@/features/navigation/barInset';
 import { isPageDragging, subscribePageDragging } from '@/features/navigation/swipeLock';
 import { useTabUnderline } from '@/features/navigation/useTabUnderline';
 import { archivedStories } from '@/features/stories/stories';
+import { useInstantsOn } from '@/features/stories/instantsSwitch';
 import { useApp } from '@/store/AppContext';
 import { colors, font, radius, spacing, typography, lift } from '@/theme';
 
@@ -45,6 +46,8 @@ const verticalOnlyTouch = WEB ? ({ touchAction: 'pan-y' } as unknown as ViewStyl
 export default function Archive() {
   const styles = useThemedStyles(styleDefinitions);
   const { posts, stories, currentUserId, actions } = useApp();
+  // Instants hidden (features/stories/instantsSwitch): Archive is your archived posts alone, with no tabs over them.
+  const instantsOn = useInstantsOn() === true;
   // Your own posts, put-away ones included; the feed never carries those.
   useEffect(() => { if (currentUserId) void actions.loadPostsOf(currentUserId); }, [currentUserId]); // eslint-disable-line react-hooks/exhaustive-deps
   const [tab, setTab] = useState<Tab>('stories');
@@ -103,7 +106,7 @@ export default function Archive() {
   );
 
   const archivedPosts = (
-    <Section key="posts" id="posts" places={places} active={tab === 'posts'}>
+    <Section key="posts" id="posts" places={places} active={!instantsOn || tab === 'posts'}>
       <Text style={styles.note}>Archived posts leave your profile and the feed, and keep their likes and comments. Only you can see this.</Text>
       {myPosts.length ? (
         <View style={styles.list}>
@@ -145,6 +148,14 @@ export default function Archive() {
       )}
     </Section>
   );
+
+  if (!instantsOn) {
+    return (
+      <Screen title="Archive" compactTitle onBack={() => goBack()} scroll={false} padded={false} scrollsInside>
+        {archivedPosts}
+      </Screen>
+    );
+  }
 
   return (
     <Screen title="Archive" compactTitle onBack={() => goBack()} scroll={false} padded={false} scrollsInside>

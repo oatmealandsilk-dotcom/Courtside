@@ -54,6 +54,7 @@ import { hasSessionStats } from '@/features/activity/format';
 import { MediaPlaceholder } from '@/components/MediaPlaceholder';
 import { TipPage } from '@/components/TipPage';
 import { isLive } from '@/features/stories/stories';
+import { useInstantsOn } from '@/features/stories/instantsSwitch';
 import { RemovedActions, RemovedNote } from '@/features/moderation/RemovedNote';
 import { show as showToast } from '@/lib/toast';
 import { ClipPlayback } from '@/components/ClipPlayback';
@@ -368,6 +369,11 @@ function Home({ scope, topRow, paused, onChrome }: {
   const { theme } = useTheme();
   const app = useApp();
   const { posts, questions, comments, stories, users, currentUserId, saved, actions, ready, followingIds, mutedIds, blockedIds, conversations } = app;
+  // Instants are held back (features/stories/instantsSwitch, owner Oct 8): none dealt in and none
+  // shown until the server's switch says so. Read by the deals through a ref, as `latest` is.
+  const instantsOn = useInstantsOn() === true;
+  const instantsRef = useRef(instantsOn);
+  instantsRef.current = instantsOn;
   // Activities for a new player: sessions posted by players near them too (features/activity/nearYou),
   // and a first page with the ways in (ActivitiesStart). Read by rerank through a ref, as `latest` is.
   const nearAuthors = useNearYouAuthors(!!scope?.activities);
@@ -560,7 +566,7 @@ function Home({ scope, topRow, paused, onChrome }: {
       }
       // A post whose picture or video is a link only its author's phone could
       // open (an upload that never finished) is left out of the deal.
-      const ranked = rankFeed(data.posts.filter(forYou), data.questions.filter((q) => !q.source && !q.removed), data.comments, data.currentUserId, data.stories.filter((st) => isLive(st)), rankContext(data, seen.current)).flatMap((i) =>
+      const ranked = rankFeed(data.posts.filter(forYou), data.questions.filter((q) => !q.source && !q.removed), data.comments, data.currentUserId, instantsRef.current ? data.stories.filter((st) => isLive(st)) : [], rankContext(data, seen.current)).flatMap((i) =>
         i.type === 'post' ? [`p:${i.post.id}`] : i.type === 'question' ? [`q:${i.question.id}`] : i.type === 'hit' ? [`h:${i.story.id}`] : i.type === 'caught-up' ? [CAUGHT_UP] : [],
       );
       // Two parts (rankFeed): what you have not seen yet, "You're all caught
@@ -842,7 +848,7 @@ function Home({ scope, topRow, paused, onChrome }: {
     const hidden = new Set([...data.blockedIds, ...data.mutedIds]);
     const have = new Set(orderRef.current);
     // The same threads as a full deal (rerank): never one pulled in from another community.
-    const ranked = rankFeed(data.posts.filter((p) => forYou(p) && !p.archived && !hidden.has(p.authorId)), data.questions.filter((q) => !q.source && !q.removed), data.comments, data.currentUserId, data.stories.filter((st) => isLive(st)), rankContext(data, seenNow.current))
+    const ranked = rankFeed(data.posts.filter((p) => forYou(p) && !p.archived && !hidden.has(p.authorId)), data.questions.filter((q) => !q.source && !q.removed), data.comments, data.currentUserId, instantsRef.current ? data.stories.filter((st) => isLive(st)) : [], rankContext(data, seenNow.current))
       .flatMap((i) => (i.type === 'post' ? [`p:${i.post.id}`] : i.type === 'question' ? [`q:${i.question.id}`] : i.type === 'hit' ? [`h:${i.story.id}`] : i.type === 'caught-up' ? [CAUGHT_UP] : []));
     const fresh = ranked.filter((k) => !have.has(k));
     if (!fresh.length) return;
@@ -1064,14 +1070,15 @@ function Home({ scope, topRow, paused, onChrome }: {
         return post && !away(post.authorId, post) && (!post.archived || scope?.set === 'archived') ? [{ type: 'post' as const, post }] : [];
       }
       if (key.startsWith('h:')) {
-        // A hit leaves the feed the moment it expires or is put away.
+        // A hit leaves the feed the moment it expires or is put away, and every one while Instants are hidden.
+        if (!instantsOn) return [];
         const story = storyById.get(id);
         return story && !away(story.authorId) && isLive(story) ? [{ type: 'hit' as const, story }] : [];
       }
       const question = questionById.get(id);
       return question && !away(question.authorId) && !question.removed ? [{ type: 'question' as const, question }] : [];
     });
-  }, [order, posts, questions, stories, blockedIds, mutedIds, users, currentUserId, followingIds, scope?.set, scope?.groupId, scope?.start, keepMuted]);
+  }, [order, posts, questions, stories, blockedIds, mutedIds, users, currentUserId, followingIds, scope?.set, scope?.groupId, scope?.start, keepMuted, instantsOn]);
   // This week's challenge, and its top clips so far. They are settled once
   // per visit: a like arriving mid-scroll must not reshuffle the pages.
   const challenge = useMemo(() => challengeFor(), []);
@@ -1704,7 +1711,7 @@ function Home({ scope, topRow, paused, onChrome }: {
           ) : (
             <EmptyState
               title={scope?.groupId ? 'Loading the group' : scope?.activities ? (ready ? 'No activities yet' : 'Loading activities') : scope ? 'Nothing here yet' : ready && !awaitingSeen ? 'Your court is quiet' : 'Loading your clips'}
-              body={scope?.activities ? 'Log a session after you play, or follow players, and their sessions show up here.' : scope || awaitingSeen ? undefined : 'Be the first on it: a clip, a photo, or an Instant after you play.'}
+              body={scope?.activities ? 'Log a session after you play, or follow players, and their sessions show up here.' : scope || awaitingSeen ? undefined : instantsOn ? 'Be the first on it: a clip, a photo, or an Instant after you play.' : 'Be the first on it: a clip or a photo after you play.'}
               // "Log a session" opens the log sheet itself (Oct 5: it opened the + menu).
               action={(!scope || scope.activities) && ready && !awaitingSeen ? { label: scope?.activities ? 'Log a session' : 'Share something', onPress: () => router.push(scope?.activities ? '/log-session' : '/compose') } : undefined}
             />

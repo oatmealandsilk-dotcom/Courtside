@@ -26,6 +26,7 @@ import { formatSpotMiles, milesBetween } from '@/features/players/geo';
 import { IN_TOWN_MILES } from '@/features/players/mapModel';
 import { isRoughSpot } from '@/features/players/positions';
 import { useMyCity } from '@/features/players/useMyCity';
+import { useInstantsOn } from '@/features/stories/instantsSwitch';
 import { confirmUnfollow } from '@/lib/confirm';
 import * as haptics from '@/lib/haptics';
 import { shareOutside } from '@/lib/shareOutside';
@@ -79,6 +80,7 @@ export default function FirstMove() {
   const cityName = (currentUser?.location ?? '').split(',')[0].trim() || null;
   const firstName = currentUser?.name?.split(' ')[0];
   const contacts = canReadContacts();
+  const instantsOn = useInstantsOn() === true;
 
   // Who plays round your city: that part of the map, asked for once, the
   // same ask the full map makes when it looks there (an adult only).
@@ -273,10 +275,13 @@ export default function FirstMove() {
               </View>
               <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
             </Pressable>
-            <Pressable accessibilityRole="button" accessibilityLabel="Take an Instant" onPress={() => done('instant', () => router.push('/hit'))} style={({ pressed }) => [styles.instant, pressed && styles.pressed]}>
-              <Ionicons name="camera-outline" size={16} color={colors.textMuted} />
-              <Text style={styles.instantText}>Nothing saved? <Text style={styles.instantLink}>Take an Instant</Text></Text>
-            </Pressable>
+            {/* Only while Instants are on (features/stories/instantsSwitch): otherwise the card is the one row. */}
+            {instantsOn ? (
+              <Pressable accessibilityRole="button" accessibilityLabel="Take an Instant" onPress={() => done('instant', () => router.push('/hit'))} style={({ pressed }) => [styles.instant, pressed && styles.pressed]}>
+                <Ionicons name="camera-outline" size={16} color={colors.textMuted} />
+                <Text style={styles.instantText}>Nothing saved? <Text style={styles.instantLink}>Take an Instant</Text></Text>
+              </Pressable>
+            ) : null}
           </View>
         </Animated.View>
       </ScrollView>

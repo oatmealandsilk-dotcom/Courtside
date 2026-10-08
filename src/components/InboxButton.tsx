@@ -8,6 +8,7 @@ import { useApp } from '@/store/AppContext';
 import { useWelcomeNote } from '@/features/welcome/welcomeNote';
 import { blockedDirect, isGroupChat, isMuted, unreadChatCount } from '@/features/messages/groupRules';
 import { unseenCount } from '@/features/activity/found';
+import { useInstantsOn, withoutInstantRows } from '@/features/stories/instantsSwitch';
 import { colors, typography } from '@/theme';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 
@@ -99,7 +100,9 @@ export function NotificationButton({ size = 24 }: { size?: number }) {
   const welcome = useWelcomeNote(currentUser);
   // Never anything from someone you blocked (the Notifications page leaves those out too).
   // Several workouts found at once are one row there, so they count once (features/activity/found).
-  const unseen = unseenCount(notifications.filter((n) => n.userId === currentUserId && !blockedIds.includes(n.actorId)), detectedActivities) + (welcome.unread ? 1 : 0);
+  // Nothing about an Instant while they are hidden, as on the page (features/stories/instantsSwitch).
+  const instantsOn = useInstantsOn();
+  const unseen = unseenCount(withoutInstantRows(notifications.filter((n) => n.userId === currentUserId && !blockedIds.includes(n.actorId)), instantsOn), detectedActivities) + (welcome.unread ? 1 : 0);
   const slop = Math.max(8, Math.ceil((44 - (size + 8)) / 2));
   return (
     <Tappable accessibilityRole="link" accessibilityLabel={unseen ? `Notifications, ${unseen} new` : 'Notifications'} onPress={() => router.push('/notifications')} hitSlop={slop} style={styles.plain}>

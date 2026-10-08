@@ -8,6 +8,7 @@ import type { TakedownReason } from '@/data/types';
 import { TAKEDOWN_REASONS, asRuleThing, reasonLabel } from '@/features/moderation/reasons';
 import { goBack } from '@/lib/goBack';
 import { openLegal } from '@/lib/legal';
+import { useInstantsOn } from '@/features/stories/instantsSwitch';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, radius, spacing, typography } from '@/theme';
@@ -20,7 +21,7 @@ const UPDATED = 'October 5, 2026';
  * in the same order and under the same name the author's notice uses, so
  * "Removed: Spam or scams" leads straight to "Spam or scams" here.
  */
-const RULES: Record<TakedownReason, { lead: string; list?: string[]; after?: string }> = {
+const RULES: Record<TakedownReason, { lead: string; /** The lead while Instants are hidden (features/stories/instantsSwitch), where it names them. */ leadNoInstants?: string; list?: string[]; after?: string }> = {
   harassment: {
     lead: 'Treat people the way you would on court. Don’t insult, threaten, shame or gang up on anyone.',
     list: [
@@ -40,6 +41,7 @@ const RULES: Record<TakedownReason, { lead: string; list?: string[]; after?: str
   },
   sexual: {
     lead: 'Keep CourtSide something anyone could look at. No nudity or sexual content in posts, clips, Instants, comments or messages.',
+    leadNoInstants: 'Keep CourtSide something anyone could look at. No nudity or sexual content in posts, clips, comments or messages.',
     after: 'Anything that sexualizes someone under 18 is never allowed, and we report it to the authorities.',
   },
   violence: {
@@ -96,8 +98,9 @@ const AFTER: { icon: keyof typeof Ionicons.glyphMap; text: string; review?: true
 ];
 
 /** Where each kind of thing is reported from (the same places Help and the Terms name). */
-const REPORT: string[] = [
-  'A post, clip or Instant: tap ••• and Report',
+const reportPlaces = (instantsOn: boolean): string[] => [
+  // Instants only while they are on (features/stories/instantsSwitch).
+  instantsOn ? 'A post, clip or Instant: tap ••• and Report' : 'A post or clip: tap ••• and Report',
   'A profile: open it and tap ••• at the top',
   'A thread: tap the flag at the top',
   'A comment, reply or chat message: press and hold it',
@@ -128,6 +131,7 @@ export default function Guidelines() {
   const styles = useThemedStyles(styleDefinitions);
   // Asking for a review isn't on this database yet (known once your asks were read): the page doesn't promise it.
   const { reviewsOff } = useApp();
+  const instantsOn = useInstantsOn() === true;
   const params = useLocalSearchParams<{ rule?: string; what?: string }>();
   const hash = Platform.OS === 'web' && typeof window !== 'undefined' ? window.location.hash.replace(/^#/, '') : '';
   const rule = asAnchor(params.rule) ?? asAnchor(hash);
@@ -225,7 +229,7 @@ export default function Guidelines() {
                 </View>
               ) : null}
               <Text style={styles.h2} accessibilityRole="header">{reasonLabel(r.code)}</Text>
-              <Text style={styles.body}>{part.lead}</Text>
+              <Text style={styles.body}>{!instantsOn && part.leadNoInstants ? part.leadNoInstants : part.lead}</Text>
               {part.list ? bullets(part.list) : null}
               {part.after ? <Text style={styles.body}>{part.after}</Text> : null}
             </View>
@@ -247,7 +251,7 @@ export default function Guidelines() {
         <View nativeID="report" onLayout={place('report')} style={styles.section}>
           <Text style={styles.h2} accessibilityRole="header">How to report</Text>
           <Text style={styles.body}>See something that breaks these rules? Report it. A person reviews every report within 24 hours, and the person you report is never told who reported them.</Text>
-          {bullets(REPORT)}
+          {bullets(reportPlaces(instantsOn))}
           <Text style={styles.body}>You can also block or mute anyone. If someone might be in danger right now, call your local emergency number first.</Text>
         </View>
 

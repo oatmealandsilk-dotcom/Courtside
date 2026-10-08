@@ -21,6 +21,7 @@ import { Tappable } from '@/components/Tappable';
 import { Avatar, Button, EmptyState, Field, Screen } from '@/components/ui';
 import { relativeTime } from '@/lib/format';
 import { hitClock } from '@/features/stories/stories';
+import { InstantsGate } from '@/features/stories/InstantsGate';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing, typography, font } from '@/theme';
 import { useStillLoading } from '@/lib/useStillLoading';
@@ -30,8 +31,13 @@ import { confirm } from '@/lib/confirm';
 import { openPlayer } from '@/features/navigation/openPlayer';
 import { COMMENT_MAX } from '@/features/feed/limits';
 
+/** Only while Instants are on (features/stories/instantsSwitch), or for an admin; otherwise to the Feed. */
+export default function HitThreadRoute() {
+  return <InstantsGate admins><HitThread /></InstantsGate>;
+}
+
 /** One hit with its likes and comments — the same page a post gets. */
-export default function HitThread() {
+function HitThread() {
   const focused = useIsFocused();
   const styles = useThemedStyles(styleDefinitions);
   const { id } = useLocalSearchParams<{ id: string }>();
