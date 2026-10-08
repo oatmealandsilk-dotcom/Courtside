@@ -26,6 +26,7 @@ import { useTennisFlags } from '@/features/activity/useTennisFlags';
 import { workoutWatchAvailable } from '@/features/health/workoutWatch';
 import { notKnownAdult } from '@/features/players/age';
 import { HitGlyph } from '@/components/HitGlyph';
+import { PHONE_LINKING } from '@/lib/phoneLinking';
 
 interface Row {
   icon: keyof typeof Ionicons.glyphMap;
@@ -140,7 +141,8 @@ export default function Settings() {
         { icon: 'eye-off-outline', label: 'Hidden words', detail: 'Offensive comments and messages', onPress: () => router.push('/hidden-words') },
         // Oct 4 (owner): link a number so friends can find you, and find friends from your contacts.
         { icon: 'link-outline', label: 'Invites', detail: 'Your link', value: joined ? `${joined} joined` : undefined, onPress: () => router.push('/invite') },
-        { icon: 'call-outline', label: 'Phone number', detail: 'So friends can find you', onPress: () => router.push('/link-phone') },
+        // Hidden until texting codes is switched on (lib/phoneLinking).
+        ...(PHONE_LINKING ? [{ icon: 'call-outline' as const, label: 'Phone number', detail: 'So friends can find you', onPress: () => router.push('/link-phone') }] : []),
         ...(Platform.OS === 'web' ? [] : [{ icon: 'people-outline' as const, label: 'Find friends from contacts', onPress: () => router.push('/find-contacts') }]),
         // Oct 4: the way out of being found that way (migration 89). In a browser too: it is about other people's phones.
         // Shown only once the database has it; before that it would do nothing.

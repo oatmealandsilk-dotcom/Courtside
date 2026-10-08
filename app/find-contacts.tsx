@@ -13,6 +13,7 @@ import * as haptics from '@/lib/haptics';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, radius, spacing, typography } from '@/theme';
+import { PHONE_LINKING } from '@/lib/phoneLinking';
 
 type Found = { match: ContactMatch; contactName?: string };
 type Phase = 'start' | 'reading' | 'done' | 'denied' | 'ask-again' | 'unavailable' | 'limit' | 'failed';
@@ -114,7 +115,7 @@ export default function FindContacts() {
       ) : (
         <View style={styles.results}>
           {/* Not when "Let people find me from their contacts" is off (migration 89): a number would find no one to you. */}
-          {!hasPhone && prefs.contactsFindable ? (
+          {PHONE_LINKING && !hasPhone && prefs.contactsFindable ? (
             <Pressable accessibilityRole="link" onPress={() => router.push('/link-phone')} style={({ pressed }) => [styles.nudge, pressed && { opacity: 0.8 }]}>
               <Ionicons name="call-outline" size={18} color={colors.brand} />
               <Text style={styles.nudgeText}>Link your phone number so friends can find you too</Text>
