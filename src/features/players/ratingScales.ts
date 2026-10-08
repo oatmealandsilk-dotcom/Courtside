@@ -34,11 +34,13 @@ export const SCALES: Record<'NTRP' | 'UTR', Scale> = {
       { upTo: 2.0, label: 'Starting out' },
       { upTo: 4.0, label: 'Developing' },
       { upTo: 6.0, label: 'Club level' },
-      { upTo: 8.0, label: 'Strong club / varsity' },
-      { upTo: 10.0, label: 'Advanced junior / D3' },
-      { upTo: 12.0, label: 'Division I' },
-      { upTo: 14.0, label: 'Professional pathway' },
-      { upTo: 16.5, label: 'Tour level' },
+      // Skill words only, never a school or college division (Oct 7, owner: "take out
+      // d1/d3 competitive juniors etc because it's not entirely true").
+      { upTo: 8.0, label: 'Strong club player' },
+      { upTo: 10.0, label: 'Advanced' },
+      { upTo: 12.0, label: 'High-level competitor' },
+      { upTo: 14.0, label: 'Elite' },
+      { upTo: 16.5, label: 'Pro level' },
     ],
   },
 };
