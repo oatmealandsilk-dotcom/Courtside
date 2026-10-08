@@ -32,7 +32,8 @@ export default function HealthShareSheet() {
     setTicked(next);
     request.onChange(next);
   };
-  const source = request ? sourceLabel(statsSourceOf(request.activity)) : '';
+  // A tracker's numbers say whose they are ("Data by WHOOP"); ones you typed in have no one to name.
+  const source = request?.activity.source ? sourceLabel(statsSourceOf({ source: request.activity.source, device: request.activity.device })) : '';
   return (
     <DragSheet fitContent closeSignal={closeSignal} onDismissed={() => router.back()} peekFraction={0.5} header={<SheetTitle title="Share health data" line="Ticked numbers show on your post" onClose={close} />}>
       <ScrollView contentContainerStyle={formBody}>
@@ -58,7 +59,7 @@ export default function HealthShareSheet() {
                 );
               })}
             </View>
-            <Fine>Anyone who can see your post sees the ticked numbers. The rest stay private to you. {source}.</Fine>
+            <Fine>{`Anyone who can see your post sees the ticked numbers. The rest stay private to you.${source ? ` ${source}.` : ''}`}</Fine>
             <Submit label="Done" onPress={close} />
           </>
         ) : (

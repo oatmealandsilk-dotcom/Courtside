@@ -89,9 +89,12 @@ export function recentSessions({ me, sessions, activities, flags, days = ATTACH_
   return picks.sort((x, y) => startOf(y) - startOf(x));
 }
 
-/** What the post will carry. Health numbers only from a tracker, only those chosen ("Share health data"). */
+/**
+ * What the post will carry. Health numbers only those chosen ("Share health
+ * data"): a tracker's, or (Oct 8) the ones typed into a session logged by hand.
+ */
 export function statsOf(pick: SessionPick, share: HealthShareKey[]): SessionDetail {
-  return pick.type === 'tracker' ? sessionFromActivity(pick.activity, share) : sessionFromLogged(pick.session);
+  return pick.type === 'tracker' ? sessionFromActivity(pick.activity, share) : sessionFromLogged(pick.session, share);
 }
 
 /** "Tennis" or "Run" (what the tracker called it), "Match · Won", "Run" (a fitness session logged from a run). */

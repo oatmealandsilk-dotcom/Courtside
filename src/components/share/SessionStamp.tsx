@@ -40,7 +40,8 @@ export function SessionStamp({ session, width, eyebrow, place, hidden = [] }: {
   const far = session.workout ? distanceFigure(session.distanceM) : null;
   const stats = [
     session.kcal ? { label: 'Calories', value: session.kcal, unit: 'cal' } : null,
-    session.maxHr != null && session.avgHr ? { label: 'Avg HR', value: session.avgHr, unit: 'bpm' } : null,
+    // An average on its own (typed in by hand, Oct 8) shows as a tracker's does.
+    session.avgHr ? { label: 'Avg HR', value: session.avgHr, unit: 'bpm' } : null,
     session.maxHr != null ? { label: 'Max HR', value: session.maxHr, unit: 'bpm' } : null,
   ].filter((x): x is { label: string; value: number; unit: string } => !!x);
   const { opponents, partners } = sessionPeople(session, hidden);

@@ -199,6 +199,17 @@ export interface PracticeSession {
    * knows you were there. Absent when you didn't say.
    */
   courtId?: string;
+  /**
+   * Calories and average heart rate typed in by hand (Oct 8, owner: "yes add
+   * it"; migration 154, columns kcal and avg_hr), only on a session logged
+   * without a tracker: a tracker's own numbers always win, so a session
+   * from one never carries these. Optional, within 1–3000 kcal and 40–220
+   * bpm (the database holds the same limits). Private, like the rest of
+   * your log; a post shows them only as "Share health data" says, the same
+   * as a tracker's. Never counted in streaks, records or anything ranked.
+   */
+  kcal?: number;
+  avgHr?: number;
   createdAt: string;
 }
 

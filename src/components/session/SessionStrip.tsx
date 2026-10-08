@@ -48,12 +48,14 @@ export function SessionStrip({ session, hidden = [], play = false, scale = 1, on
   const { theme } = useTheme();
   const k = scale;
   const hr = session.maxHr != null;
+  // An average on its own (typed into a session logged by hand, Oct 8) shows as a tracker's does.
+  const avg = session.avgHr ? session.avgHr : null;
   const strain = session.strain != null ? session.strain : null;
   const kcal = session.kcal ? session.kcal : null;
   // A workout's distance (migration 107), in its title line ("Run · 3.1 mi") rather than a fifth
   // column the panel has no room for. Tennis never has one.
   const far = session.workout ? distanceFigure(session.distanceM) : null;
-  const shared = [hr, strain != null, kcal != null].filter(Boolean).length;
+  const shared = [hr || avg != null, strain != null, kcal != null].filter(Boolean).length;
   // "Match · Won 6–4 3–6 10–7" when the log has a score (migration 91).
   const result = resultWithScore(session);
   const what = [whatWord(session), result].filter(Boolean).join(' · ');
@@ -64,14 +66,14 @@ export function SessionStrip({ session, hidden = [], play = false, scale = 1, on
   const vs = lead ? (opponents.length ? 'vs' : 'with') : '';
   const tracker = !!session.activityId;
   const source = tracker ? sourceLabel(session.source ?? 'apple-health') : null;
-  const spoken = [`${spokenDuration(session.minutes)}, ${(titleAs ?? what).toLowerCase()}`, far ? `${far.value} miles` : null, hr && session.avgHr ? `average heart rate ${session.avgHr}` : null, hr ? `max ${session.maxHr}` : null, kcal ? `${kcal} calories` : null, sub ?? (lead ? `${vs} @${lead.handle}` : null), sub ? null : source].filter(Boolean).join(', ');
+  const spoken = [`${spokenDuration(session.minutes)}, ${(titleAs ?? what).toLowerCase()}`, far ? `${far.value} miles` : null, avg ? `average heart rate ${avg}` : null, hr ? `max ${session.maxHr}` : null, kcal ? `${kcal} calories` : null, sub ?? (lead ? `${vs} @${lead.handle}` : null), sub ? null : source].filter(Boolean).join(', ');
   const small = { fontSize: 13 * k, lineHeight: Math.round(17 * k) };
   // The session card's own look (Oct 4, owner: "looks a bit flat"): the court's shirt, its fade and its lettering (Oct 6),
   // the cream with green numbers on the CourtSide court (Oct 5).
   const look = cardLook(theme);
   const stats = [
     kcal != null ? { key: 'kcal', label: 'Calories', node: <Figure value={kcal} baseline size={19 * k} color={look.figure} unitColor={look.muted} play={play} delay={200} duration={600} /> } : null,
-    hr && session.avgHr ? { key: 'avg', label: 'Avg HR', node: <Figure value={session.avgHr} unit="bpm" baseline unitScale={0.62} size={19 * k} color={look.figure} unitColor={look.muted} play={play} delay={200} duration={600} /> } : null,
+    avg ? { key: 'avg', label: 'Avg HR', node: <Figure value={avg} unit="bpm" baseline unitScale={0.62} size={19 * k} color={look.figure} unitColor={look.muted} play={play} delay={200} duration={600} /> } : null,
     hr ? { key: 'max', label: 'Max HR', node: <Figure value={session.maxHr!} unit="bpm" baseline unitScale={0.62} size={19 * k} color={look.figure} unitColor={look.muted} play={play} delay={200} duration={600} /> } : null,
   ].filter((x): x is { key: string; label: string; node: React.ReactElement } => !!x);
   const time = <Duration minutes={session.minutes} size={19 * k} unitScale={0.62} color={look.figure} unitColor={look.muted} play={play} delay={120} duration={600} />;

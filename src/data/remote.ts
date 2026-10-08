@@ -26,6 +26,7 @@ import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
 import type { Answer, FriendStreak, ChatEvent, ChatPhoto, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, DetectedActivity, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, HiddenWords, HiddenWordsKind, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, CourtNote, LastSeen, MapPlace, MapVisibility, TaggedCourt, Question, Removed, RemovedItem, ReviewRequest, ReviewStatus, Story, SurfacePreference, TakedownKind, TakedownReason, Tip, TournamentEntry, User, PublicStreak, CoachApplication, CourtAccess, CourtAccessSource, CourtDayPart, CourtFacts, CourtFollowCount, CourtNow, CourtKings, CourtRegulars, CourtReview, CourtRightNow, CourtRing, FlybyPerson, FollowedCourt, SessionTag, SessionTagRefusal, SessionTagRole, FeedGroup, FeedGroupCard, DiscoverGroup, GroupLook, Invitee, AffiliateStats, ContactMatch, HeadToHead, MatchSet, SessionWith } from './types';
 import { canScore, validSets } from '@/features/activity/score';
+import { keptAvgHr, keptKcal } from '@/features/activity/manualStats';
 import { TERMS_VERSION } from '@/lib/legal';
 import { readinessOf, sessionTagNamesLive, sessionToSend, setSessionTagNamesLive, trustedSession } from './sessionTagGate';
 import { isMapCourtId } from '@/features/places/courtName';
@@ -495,7 +496,7 @@ export interface RemoteData {
   userStateFailed?: boolean;
 }
 
-interface SessionRow { id: string; user_id: string; day: string; minutes: number; kind: PracticeSession['kind']; won: boolean | null; opponent: string | null; note: string | null; created_at: string; activity_id?: string | null; from_session_id?: string | null; sets?: unknown; workout?: string | null; court_id?: string | null }
+interface SessionRow { id: string; user_id: string; day: string; minutes: number; kind: PracticeSession['kind']; won: boolean | null; opponent: string | null; note: string | null; created_at: string; activity_id?: string | null; from_session_id?: string | null; sets?: unknown; workout?: string | null; court_id?: string | null; kcal?: number | null; avg_hr?: number | null }
 const toSession = (r: SessionRow): PracticeSession => {
   // A tennis session's score (migration 91 for a match, 136 for a practice or drills; absent before they run), kept only when it is a good one.
   const sets = canScore(r.kind) ? validSets(r.sets) : undefined;
@@ -506,6 +507,9 @@ const toSession = (r: SessionRow): PracticeSession => {
     ...(r.kind === 'fitness' && r.workout ? { workout: r.workout } : {}),
     // Where it was played (migration 130; absent before it runs).
     ...(isMapCourtId(r.court_id ?? undefined) ? { courtId: r.court_id! } : {}),
+    // Calories and average heart rate typed in by hand (migration 154; absent before it runs), never on a tracker's.
+    ...(!r.activity_id && keptKcal(r.kcal) ? { kcal: keptKcal(r.kcal) } : {}),
+    ...(!r.activity_id && keptAvgHr(r.avg_hr) ? { avgHr: keptAvgHr(r.avg_hr) } : {}),
     createdAt: r.created_at,
   };
 };
@@ -3334,6 +3338,9 @@ export const remote = {
     if (s.workout) row.workout = s.workout;
     // Where it was played (migration 130), only when there is one and the database has it.
     if (s.courtId && !sessionsLackCourt) row.court_id = s.courtId;
+    // Calories and average heart rate typed in (migration 154), only on one logged by hand, only when given.
+    if (!s.activityId && s.kcal) row.kcal = s.kcal;
+    if (!s.activityId && s.avgHr) row.avg_hr = s.avgHr;
     // With a score, the row comes back as the server kept it.
     let keptSets: unknown = null;
     const send = async (body: Record<string, unknown>) => {
@@ -3347,6 +3354,12 @@ export const remote = {
     if (error && row.court_id && /court_id/.test(error.message)) {
       sessionsLackCourt = true;
       delete row.court_id;
+      ({ error } = await send(s.activityId ? { ...row, activity_id: s.activityId } : row));
+    }
+    // A database before migration 154 has neither: the session still counts, without them (the app hides the boxes until it has them).
+    if (error && (row.kcal !== undefined || row.avg_hr !== undefined) && /\b(kcal|avg_hr)\b/.test(error.message)) {
+      delete row.kcal;
+      delete row.avg_hr;
       ({ error } = await send(s.activityId ? { ...row, activity_id: s.activityId } : row));
     }
     // A database before migration 107 has no workout: the session still counts, as Fitness.
@@ -3423,6 +3436,20 @@ export const remote = {
   async updateSessionTime(id: ID, day: string, minutes: number) {
     const { error } = await need().from('practice_sessions').update({ day, minutes }).eq('id', id);
     if (error) { fail('session time')(error); throw new Error('That didn’t save. Try again.'); }
+  },
+
+  /**
+   * Whether the database keeps calories and average heart rate typed into a
+   * session (migration 154): asked by looking at the two columns, which reads
+   * no rows. False when they are not there; null when there was no answer
+   * (no signal), which says nothing either way. Until it is true, "+ Add
+   * calories & heart rate" is not offered, so nothing typed is lost.
+   */
+  async manualStatsReady(): Promise<boolean | null> {
+    const { error } = await need().from('practice_sessions').select('kcal,avg_hr').limit(0);
+    if (!error) return true;
+    if (error.code === '42703' || error.code === 'PGRST204' || /\b(kcal|avg_hr)\b/.test(error.message)) return false;
+    return null;
   },
 
   /* ---------------------------------------------- session tags (migration 62) */

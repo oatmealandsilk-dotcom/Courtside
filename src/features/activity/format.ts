@@ -291,10 +291,15 @@ export function shortDay(day: string, now = new Date()): string {
 
 /**
  * The stats a post carries from a session you logged by hand: how long and
- * what it was (a match with its result), and nothing else. Never a heart
- * rate: your own log has none, and the server would strip one (migration 58).
+ * what it was (a match with its result). Since Oct 8 a session logged by
+ * hand can hold calories and an average heart rate typed into it: those go
+ * on only as `share` ("Share health data") says, with the list, exactly as
+ * a tracker's do; the server writes them again from your log, never from
+ * this copy (migration 154). With no list (a story picture from your log),
+ * none go.
  */
-export function sessionFromLogged(s: PracticeSession): SessionDetail {
+export function sessionFromLogged(s: PracticeSession, share: HealthShareKey[] = []): SessionDetail {
+  const typed = !s.activityId && (!!s.kcal || !!s.avgHr);
   return {
     focus: loggedLabel({ kind: s.kind, won: s.won, workout: s.workout }),
     minutes: s.minutes,
@@ -307,6 +312,10 @@ export function sessionFromLogged(s: PracticeSession): SessionDetail {
     ...(s.kind === 'match' && s.won !== undefined ? { won: s.won } : {}),
     // The score goes too, on any tennis session (Oct 6); the server puts the log's own on the post either way (migration 91).
     ...(canScore(s.kind) && s.sets?.length ? { sets: s.sets } : {}),
+    // Typed-in numbers (Oct 8), only those chosen; the list goes whenever the log has any, so the server knows the choice.
+    ...(typed ? { share: share.filter((k) => (k === 'hr' && !!s.avgHr) || (k === 'kcal' && !!s.kcal)) } : {}),
+    ...(typed && share.includes('hr') && s.avgHr ? { avgHr: s.avgHr } : {}),
+    ...(typed && share.includes('kcal') && s.kcal ? { kcal: s.kcal } : {}),
   };
 }
 

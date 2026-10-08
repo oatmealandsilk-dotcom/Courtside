@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import type { DetectedActivity, HealthShareKey, SessionDetail } from '@/data/types';
+import type { DetectedActivity, HealthShareKey, PracticeSession, SessionDetail } from '@/data/types';
 import { cleanZones, hardMinutes } from './zones';
 
 /*
@@ -12,6 +12,20 @@ import { cleanZones, hardMinutes } from './zones';
  * (migration 72).
  */
 
+/**
+ * The health numbers a session has: a tracker's (a DetectedActivity is one),
+ * or since Oct 8 the calories and average heart rate typed into a session
+ * logged by hand (loggedNumbers), which carry no tracker name. Everything
+ * below reads only these, so both follow the same sharing rules.
+ */
+export type HealthNumbers = Partial<Pick<DetectedActivity, 'avgHr' | 'maxHr' | 'kcal' | 'zones' | 'strain' | 'source' | 'device'>>;
+
+/** A session logged by hand, as the numbers typed into it; nothing when none were. A tracker's session never has any (its tracker's win). */
+export function loggedNumbers(s: Pick<PracticeSession, 'kcal' | 'avgHr' | 'activityId'> | undefined): HealthNumbers | undefined {
+  if (!s || s.activityId || (!s.kcal && !s.avgHr)) return undefined;
+  return { ...(s.kcal ? { kcal: s.kcal } : {}), ...(s.avgHr ? { avgHr: s.avgHr } : {}) };
+}
+
 /** Every number in the order the sheet and the server list them. */
 export const HEALTH_KEYS: HealthShareKey[] = ['hr', 'zones', 'strain', 'kcal'];
 
@@ -22,8 +36,8 @@ export const HEALTH_LABEL: Record<HealthShareKey, string> = {
   kcal: 'Calories',
 };
 
-/** The numbers this tracker session actually has, in order. Strain is WHOOP's alone. */
-export function availableShare(a: DetectedActivity | undefined): HealthShareKey[] {
+/** The numbers this session actually has, in order. Strain is WHOOP's alone. */
+export function availableShare(a: HealthNumbers | undefined): HealthShareKey[] {
   if (!a) return [];
   return HEALTH_KEYS.filter((k) => {
     switch (k) {
@@ -36,7 +50,7 @@ export function availableShare(a: DetectedActivity | undefined): HealthShareKey[
 }
 
 /** What one number reads as on the sheet: "141 avg · 171 max bpm", "30 min in zones 4–5", "14.2", "612 cal". */
-export function healthValue(a: DetectedActivity, k: HealthShareKey): string {
+export function healthValue(a: HealthNumbers, k: HealthShareKey): string {
   switch (k) {
     case 'hr': return [a.avgHr ? `${a.avgHr} avg` : null, a.maxHr ? `${a.maxHr} max` : null].filter(Boolean).join(' · ') + ' bpm';
     case 'zones': { const z = cleanZones(a.zones); return z ? `${hardMinutes(z)} min in zones 4–5` : ''; }
@@ -83,7 +97,7 @@ export function shareHint(chosen: HealthShareKey[]): string {
  * tracker has, and the list itself. The server writes the same from its own
  * copy of the tracker (migration 72); this is the copy shown straight away.
  */
-export function withShare(base: SessionDetail, a: DetectedActivity, share: HealthShareKey[]): SessionDetail {
+export function withShare(base: SessionDetail, a: HealthNumbers, share: HealthShareKey[]): SessionDetail {
   const has = (k: HealthShareKey) => share.includes(k);
   const zones = cleanZones(a.zones);
   return {
@@ -112,7 +126,8 @@ export function withShare(base: SessionDetail, a: DetectedActivity, share: Healt
  * adult who asked), the numbers it carries.
  */
 export function postShare(s: SessionDetail | undefined): HealthShareKey[] {
-  if (!s?.activityId) return [];
+  // A tracker's post, or since Oct 8 one from your log that shares numbers typed into it (always with its list).
+  if (!s?.activityId && !(s?.sessionId && Array.isArray(s.share))) return [];
   if (Array.isArray(s.share)) return HEALTH_KEYS.filter((k) => s.share?.includes(k));
   return HEALTH_KEYS.filter((k) => {
     switch (k) {
@@ -133,7 +148,7 @@ export const sameShare = (a: HealthShareKey[], b: HealthShareKey[]) => a.length 
  * holds it. Without it (older than the two weeks the app keeps), numbers can
  * only come off here; the server's answer brings the rest.
  */
-export function reshare(s: SessionDetail, share: HealthShareKey[], a: DetectedActivity | undefined): SessionDetail {
+export function reshare(s: SessionDetail, share: HealthShareKey[], a: HealthNumbers | undefined): SessionDetail {
   const { maxHr, avgHr, zones, strain, kcal, share: _was, ...base } = s;
   if (a) return withShare(base, a, share);
   const has = (k: HealthShareKey) => share.includes(k);

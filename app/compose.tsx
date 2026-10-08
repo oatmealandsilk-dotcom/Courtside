@@ -38,7 +38,9 @@ import { AddScore, ScoreField } from '@/components/session/ScoreField';
 import { canScore, readScore, scoreText, setsWinner, tookScoreNotKept } from '@/features/activity/score';
 import { ZoneGlyph } from '@/components/session/ZoneGlyph';
 import { HealthShareRow } from '@/components/session/HealthShareRow';
-import { availableShare, chosenShare } from '@/features/activity/healthShare';
+import { availableShare, chosenShare, loggedNumbers, type HealthNumbers } from '@/features/activity/healthShare';
+import { keptAvgHr, keptKcal, readManualStats, type ManualRead } from '@/features/activity/manualStats';
+import { ManualStats } from '@/components/session/ManualStats';
 import { useHealthChoice } from '@/features/activity/useHealthChoice';
 import type { CardPerson } from '@/components/session/SessionCard';
 import { KIND_LABEL, activityDay, fromWho, loggedLabel } from '@/features/activity/format';
@@ -161,7 +163,7 @@ function ToLogSheet() {
 
 function Compose() {
   const styles = useThemedStyles(styleDefinitions);
-  const { actions, posts, stories, currentUserId, currentUser, detectedCoords, lastSeen, locationEnabled, detectedActivities, sessions, sessionTags, users, hitRequests, blockedIds, feedGroups, feedGroupsOn, liveSession } = useApp();
+  const { actions, posts, stories, currentUserId, currentUser, detectedCoords, lastSeen, locationEnabled, detectedActivities, sessions, sessionTags, users, hitRequests, blockedIds, feedGroups, feedGroupsOn, liveSession, manualStatsReady } = useApp();
 
   // The story rail opens this straight at the library with ?mode=story.
   const params = useLocalSearchParams<{ mode?: string; shot?: string; challenge?: string; courtId?: string; courtName?: string; lat?: string; lng?: string; activity?: string; session?: string; hit?: string; group?: string; trim?: string; live?: string }>();
@@ -275,8 +277,8 @@ function Compose() {
   const [justLogged, setJustLogged] = useState(false);
   // "Share health data": remembered on this phone for the next post, one choice per account.
   const [health, setHealth] = useHealthChoice(currentUserId, adult);
-  // The numbers a session's post shares: only a tracker's, only those chosen that it has.
-  const shareFor = (pick: SessionPick) => (pick.type === 'tracker' ? chosenShare(health, availableShare(pick.activity)) : []);
+  // The numbers a session's post shares: only those chosen that it has, a tracker's or (Oct 8) the ones typed into your log.
+  const shareFor = (pick: SessionPick) => chosenShare(health, availableShare(pick.type === 'tracker' ? pick.activity : loggedNumbers(pick.session)));
   // Opened from the weekly challenge: its tag starts the caption, which is what makes the clip an entry.
   // A challenge takes a clip and nothing else: no Post, Instant or Thread here,
   // the phone's videos open straight away, and a photo is never taken.
@@ -492,6 +494,27 @@ function Compose() {
   // Saved, and by which button: the moment plays on that button (a tick, the streak rolling up) before the page goes.
   const [ticked, setTicked] = useState<false | 'log' | 'share'>(false);
   const [logError, setLogError] = useState('');
+  /*
+   * "+ Add calories & heart rate" (Oct 8, owner: "yes add it"): on a timed
+   * session with no tracker only (a tracker's own numbers win), folded away
+   * until asked for, and only once the server keeps them (migration 154).
+   * They go in your private log; the post shows them as "Share health data"
+   * says, the same switch and rules as a tracker's.
+   */
+  const canType = manualStatsReady && liveOnly;
+  const [statsOpen, setStatsOpen] = useState(false);
+  const [kcalText, setKcalText] = useState('');
+  const [hrText, setHrText] = useState('');
+  const [statsAsked, setStatsAsked] = useState(false);
+  const typedRead: ManualRead = canType && statsOpen ? readManualStats(kcalText, hrText) : {};
+  // Each number on the card as soon as it is a good one (a heart rate half typed never takes the calories off with it).
+  const typedNumbers: HealthNumbers | undefined = (() => {
+    if (!canType || !statsOpen) return undefined;
+    const k = keptKcal(Number(kcalText || NaN));
+    const h = keptAvgHr(Number(hrText || NaN));
+    return k || h ? { ...(k ? { kcal: k } : {}), ...(h ? { avgHr: h } : {}) } : undefined;
+  })();
+  const typedShare = chosenShare(health, availableShare(typedNumbers));
   const keysUp = useKeysUp();
   const shownKind = openedLog?.kind ?? kind;
   const shownWon = openedLog ? (openedLog.kind === 'match' ? openedLog.won : undefined) : pickedWon;
@@ -516,6 +539,10 @@ function Compose() {
     ...(shownWon !== undefined ? { won: shownWon } : {}),
     ...(shownSets?.length ? { sets: shownSets } : {}),
     ...(logId ? { sessionId: logId } : {}),
+    // Typed in (Oct 8): only the chosen ones, with the list, as sessionFromLogged puts them; the server reads them from the log.
+    ...(typedNumbers ? { share: typedShare } : {}),
+    ...(typedShare.includes('hr') && typedNumbers?.avgHr ? { avgHr: typedNumbers.avgHr } : {}),
+    ...(typedShare.includes('kcal') && typedNumbers?.kcal ? { kcal: typedNumbers.kcal } : {}),
   } : null);
   // The day the session counts for (streak, hours, the week): the tracker's, or the live session's start.
   const logDay = opened?.type === 'tracker' ? activityDay(opened.activity) : liveOnly && fromLive ? liveDay(fromLive) : null;
@@ -545,6 +572,9 @@ function Compose() {
     ...(liveOnly ? { minutes: logMinutes ?? liveMins } : {}),
     // Where it was played, kept in your log (migration 130): the court on the post, else the hit's.
     ...(loggedCourt() ? { courtId: loggedCourt()!.id } : {}),
+    // Typed in by hand (Oct 8), a timed session with no tracker only.
+    ...(typedRead.kcal ? { kcal: typedRead.kcal } : {}),
+    ...(typedRead.avgHr ? { avgHr: typedRead.avgHr } : {}),
   });
   /** The court a session logged here was played at: the one tagged on the post, or the hit (or live session) it came from. */
   const loggedCourt = (): { id: string; name: string } | null => {
@@ -746,6 +776,8 @@ function Compose() {
       day: liveDay(fromLive),
       ...(input.note ? { note: input.note } : {}),
       ...(input.courtId ? { courtId: input.courtId } : {}),
+      ...(input.kcal ? { kcal: input.kcal } : {}),
+      ...(input.avgHr ? { avgHr: input.avgHr } : {}),
     });
     liveLogId.current = id;
     // Each person tagged is asked to accept; anyone the server turns away is said after.
@@ -763,6 +795,8 @@ function Compose() {
     if (acting.current || ticked || !logDay) return;
     // A score that isn't one yet says why, and nothing is logged.
     if (!openedLog && canScore(kind) && scored.problem) { setLogError(scored.problem); return; }
+    // A typed number out of range says why, by its box, and nothing is logged.
+    if (typedRead.problem && !liveLogId.current) { setStatsAsked(true); return; }
     acting.current = true;
     const day = logDay;
     setBusy('log');
@@ -932,6 +966,7 @@ function Compose() {
   const shareFromLog = async () => {
     if ((opened?.type !== 'tracker' && !liveOnly) || !logDay || acting.current) { sent.current = false; return; }
     if (!openedLog && !tracker.logged && canScore(kind) && scored.problem) { setLogError(scored.problem); sent.current = false; return; }
+    if (typedRead.problem && !liveLogId.current) { setStatsAsked(true); sent.current = false; return; }
     acting.current = true;
     const day = logDay;
     const trackerActivity = opened?.type === 'tracker' ? opened.activity : null;
@@ -1355,12 +1390,29 @@ function Compose() {
                 />
               </Reanimated.View>
             ) : null}
+            {/* Optional, folded away (Oct 8, owner): calories and average heart rate, a timed session with no tracker only. */}
+            {canType ? (
+              <Reanimated.View layout={LinearTransition.duration(220)} style={styles.manualStats}>
+                <ManualStats
+                  open={statsOpen}
+                  onOpen={(next) => { setStatsOpen(next); setStatsAsked(false); }}
+                  kcal={kcalText}
+                  avgHr={hrText}
+                  onKcal={(t) => { setKcalText(t); setStatsAsked(false); }}
+                  onAvgHr={(t) => { setHrText(t); setStatsAsked(false); }}
+                  showProblem={statsAsked}
+                />
+              </Reanimated.View>
+            ) : null}
             {/* Your tracker's copy of this live session is in your log already: saving this too would count the game twice. */}
             {liveOnly && liveTwins.logged ? <Text style={styles.twiceNote}>{`This session is already in your log, from ${fromWho(liveTwins.logged)}. Saving it again counts it twice.`}</Text> : null}
             <Reanimated.View layout={LinearTransition.duration(220)} style={styles.logRows}>
               {whoRow}
               {opened?.type === 'tracker' ? (
                 <HealthShareRow line={!!whoRow} activity={opened.activity} choice={health} onChoice={setHealth} />
+              ) : typedNumbers ? (
+                // The numbers typed in above, by the same switch and rules as a tracker's (Oct 8).
+                <HealthShareRow line={!!whoRow} activity={typedNumbers} choice={health} onChoice={setHealth} />
               ) : null}
               {placeRows}
               {/* One people row: "Who was there" on a match or a practice; on drills or fitness, Tag people once there is a photo or a clip to tag them in. */}
@@ -1673,6 +1725,7 @@ const styleDefinitions = StyleSheet.create({
   logRows: { marginTop: spacing.md },
   // How long: the tracker's time on one line, with a small Edit (TrackedLength, as Log your tennis has it).
   lengthBox: { marginTop: spacing.lg },
+  manualStats: { marginTop: spacing.lg },
   hideIt: { alignSelf: 'center', paddingVertical: spacing.lg },
   twiceNote: { ...typography.smallStrong, color: colors.text, marginTop: spacing.md },
   hideItText: { ...font('600'), fontSize: 13, color: colors.textMuted },
