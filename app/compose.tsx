@@ -1150,7 +1150,8 @@ function Compose() {
       {entering ? null : <Reanimated.View entering={arrive(3)}><Pressable accessibilityRole="button" accessibilityLabel="Create a thread or question" onPress={() => router.replace('/ask')} style={[styles.choiceOption, tight && styles.choiceOptionTight, tighter && styles.choiceOptionTighter]}>
         <Ionicons name="chatbubbles-outline" size={choiceIcon} color={colors.textMuted}/><Text style={styles.choiceLabel}>Thread or question</Text><Text style={styles.note}>Ask the community or start a conversation.</Text>
       </Pressable></Reanimated.View>}
-      {entering ? null : <Reanimated.View entering={arrive(4)}><Pressable accessibilityRole="button" accessibilityLabel="Take an Instant" onPress={() => router.replace('/hit')} style={[styles.choiceOption, tight && styles.choiceOptionTight, tighter && styles.choiceOptionTighter]}>
+      {/* Instants are held back until the server's flag:instants says so (features/stories/instantsSwitch, owner Oct 8): no card, and no gap where it was. */}
+      {entering || !flagsOn.instants ? null : <Reanimated.View entering={arrive(4)}><Pressable accessibilityRole="button" accessibilityLabel="Take an Instant" onPress={() => router.replace('/hit')} style={[styles.choiceOption, tight && styles.choiceOptionTight, tighter && styles.choiceOptionTighter]}>
         <Ionicons name="camera-outline" size={choiceIcon} color={colors.textMuted}/><Text style={styles.choiceLabel}>Instant</Text><Text style={styles.note}>A photo after you play. Up on the feed for a day.</Text>
       </Pressable></Reanimated.View>}
       </ScrollView>

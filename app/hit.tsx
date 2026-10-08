@@ -10,6 +10,7 @@ import * as haptics from '@/lib/haptics';
 import { show as showToast } from '@/lib/toast';
 import { BLOCKED_WORDS_NOTE } from '@/features/hiddenWords/hiddenWords';
 import { useLightStatusWhileFocused } from '@/lib/statusBarStyle';
+import { InstantsGate } from '@/features/stories/InstantsGate';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing, typography, font } from '@/theme';
 
@@ -41,7 +42,12 @@ function mirrorPhoto(uri: string): Promise<string> {
   });
 }
 
-export default function Hit() {
+/** Only while Instants are on (features/stories/instantsSwitch); otherwise to the Feed. */
+export default function HitRoute() {
+  return <InstantsGate><Hit /></InstantsGate>;
+}
+
+function Hit() {
   const styles = useThemedStyles(styleDefinitions);
   const insets = useSafeAreaInsets();
   const { actions } = useApp();

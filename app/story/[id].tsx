@@ -16,6 +16,7 @@ import { Avatar, EmptyState } from '@/components/ui';
 import { hitClock, isLive } from '@/features/stories/stories';
 import { RemovedNote } from '@/features/moderation/RemovedNote';
 import { relativeTime } from '@/lib/format';
+import { InstantsGate } from '@/features/stories/InstantsGate';
 import { useApp } from '@/store/AppContext';
 import type { Story } from '@/data/types';
 import { colors, radius, spacing, typography } from '@/theme';
@@ -36,7 +37,12 @@ const VIDEO_MS = 12000;
  * anyone else's. The viewer is paused while the menu (and any question it
  * asks) is up, and on the way back moves on from an Instant that went.
  */
-export default function StoryViewer() {
+export default function StoryViewerRoute() {
+  // Only while Instants are on (features/stories/instantsSwitch), or for an admin; otherwise to the Feed.
+  return <InstantsGate admins><StoryViewer /></InstantsGate>;
+}
+
+function StoryViewer() {
   const focused = useIsFocused();
   // Stories are shown on black: the clock and battery go light over them.
   useLightStatusWhileFocused();

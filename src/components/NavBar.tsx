@@ -22,6 +22,7 @@ import { useApp } from '@/store/AppContext';
 import { useWelcomeNote } from '@/features/welcome/welcomeNote';
 import { unreadChatCount } from '@/features/messages/groupRules';
 import { unseenCount } from '@/features/activity/found';
+import { useInstantsOn, withoutInstantRows } from '@/features/stories/instantsSwitch';
 import { colors, pageIsDark, radius, spacing, typography, font, withAlpha } from '@/theme';
 import { useTourOpen, useTourTarget } from '@/features/tour/tourStore';
 
@@ -80,7 +81,9 @@ export function NavBar({ state, navigation }: NavBarProps) {
   const unread = unreadChatCount(conversations, currentUserId, blockedIds);
   // Never anything from someone you blocked (the Notifications page leaves those out too).
   // Several workouts found at once are one row there, so they count once (features/activity/found).
-  const alerts = unseenCount(notifications.filter((n) => n.userId === currentUserId && !blockedIds.includes(n.actorId)), detectedActivities);
+  // Nothing about an Instant while they are hidden, as on the page (features/stories/instantsSwitch).
+  const instantsOn = useInstantsOn();
+  const alerts = unseenCount(withoutInstantRows(notifications.filter((n) => n.userId === currentUserId && !blockedIds.includes(n.actorId)), instantsOn), detectedActivities);
   // The sidebar's bell counts CourtSide's own welcome too, until Notifications is first opened
   // (welcomeNote). Only the bell: it never adds to Profile's number in the bar, so a new
   // player is not met with a red badge for something nobody did.

@@ -41,6 +41,7 @@ import { useResponsive } from '@/lib/useResponsive';
 import { isTaggedIn } from '@/features/activity/sessionTags';
 import { studioLine } from '@/features/coaching/studioSummary';
 import { useModalOpenWhile } from '@/lib/modalOpen';
+import { useInstantsOn, withoutInstantRows } from '@/features/stories/instantsSwitch';
 
 /** The messages tip's pointer from the right edge of the page's content (the header's own right edge): the menu button (38), the gap (14), then half the paper plane (35), less half the pointer (12). */
 const INBOX_POINTER = 38 + 14 + 17 - 6;
@@ -108,7 +109,9 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
  const welcome = useWelcomeNote(user);
  // Never anything from someone you blocked (the Notifications page leaves those out too).
  // Several workouts found at once are one row there, so they count once, as on the tab bar's bell (features/activity/found).
- const unseen = unseenCount(notifications.filter(n => n.userId === currentUserId && !blockedIds.includes(n.actorId)), detectedActivities) + (welcome.unread ? 1 : 0);
+ // Nothing about an Instant while they are hidden, as on the page (features/stories/instantsSwitch).
+ const instantsOn = useInstantsOn();
+ const unseen = unseenCount(withoutInstantRows(notifications.filter(n => n.userId === currentUserId && !blockedIds.includes(n.actorId)), instantsOn), detectedActivities) + (welcome.unread ? 1 : 0);
  const savedCount = saved.postIds.length + saved.questionIds.length;
  const swipe = (direction: 1 | -1) => {
    const next = swipeDestination('/profile', tab, direction);
