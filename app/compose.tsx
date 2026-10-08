@@ -1178,8 +1178,9 @@ function Compose() {
     // Back means "wrong one": straight back into your photos to pick again,
     // not out to the menu. Stories go back to their own library.
     const editBack = () => {
-      // A session's photo is optional: back drops it and returns to the post.
-      if (opened || liveOnly) { setMedia(null); setPicked(null); setStage('form'); return; }
+      // A session's photo is optional: back drops a fresh pick and returns to the post. Back from
+      // "Trim or edit" on one already chosen (returning) keeps it as it was.
+      if (opened || liveOnly) { if (!returning) { setMedia(null); setPicked(null); } setStage('form'); return; }
       if (params.mode === 'story') { setStage('library'); return; }
       setStage('choose');
       void openDevice(mode === 'clip' ? 'video' : 'all');

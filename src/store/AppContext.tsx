@@ -21,7 +21,7 @@ import { TERMS_VERSION } from '@/lib/legal';
 
 import { fetchBootstrap, searchPosts as apiSearchPosts, signIn as apiSignIn, type Bootstrap } from '@/data/api';
 import * as demoApi from '@/data/api';
-import { BLOCKED_WORDS_NOTE, CHAT_PHOTO_UNREADABLE, REVIEW_NOTE_MAX, auth as remoteAuth, fetchRemote, isLocalMedia, onWordsRefused, queueFeedSignal, remote, uploadChatPhoto, uploadMedia, emptyProfile, type GroupRefusal, type AdminReport, type ModerationResult, type ReviewAskResult, type ReportedChat, type ReportedItem, type ReportedItemKind, type ReportEvidence, type FeedSignal, type SiteFeedback, type WaitlistEntry, type BetaInviteStatus, type FirstDayStats, type FirstMove, type HandleStatus, type InviteCodeResult, type MyInviter, type RemoteData, type UserState } from '@/data/remote';
+import { BLOCKED_WORDS_NOTE, CHAT_PHOTO_UNREADABLE, REVIEW_NOTE_MAX, auth as remoteAuth, fetchRemote, isLocalMedia, onWordsRefused, queueFeedSignal, remote, uploadChatPhoto, uploadMedia, emptyProfile, type GroupRefusal, type AdminReport, type ModerationResult, type ReviewAskResult, type ReportedChat, type ReportedItem, type ReportedItemKind, type ReportEvidence, type FeedSignal, type SiteFeedback, type WaitlistEntry, type BetaInviteStatus, type FirstDayStats, type FirstMove, type HandleStatus, type InviteCodeResult, type MyInviter, type RemoteData, type UserState, standInName } from '@/data/remote';
 import { clearSnapshot, markSnapshotOpened, markSnapshotOpening, readSnapshot, saveSnapshot, snapshotFailedBefore } from '@/data/snapshot';
 import { forgetAccount, listSavedAccounts, rememberAccount, type SavedAccount } from '@/features/accounts/savedAccounts';
 import { isAuthRetryableFetchError } from '@supabase/supabase-js';
@@ -3186,9 +3186,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [loadRemote]);
 
   const signInWithApple = useCallback(async () => {
-    const session = await remoteAuth.signInWithApple();
-    if (!session) return false;
+    const signedIn = await remoteAuth.signInWithApple();
+    if (!signedIn) return false;
+    const { session, name } = signedIn;
+    // The sign-in listener began loading the account (SIGNED_IN) while Apple's sign-in was still
+    // finishing, so before Apple's name went on the profile: that load read the stand-in made from
+    // the email ("X7k2m9qbzt"), and the setup's Name box showed it (App Review 4.0). Every load
+    // that read it is waited for, then the name goes on screen, so none of them can land after it.
+    const earlier = loading.current?.run;
     await loadRemote(session.user.id, session.user.email);
+    if (earlier) await earlier.catch(() => false);
+    if (name) {
+      const me = session.user.id;
+      setState((prev) => ({
+        ...prev,
+        users: prev.users.map((u) => (u.id === me && (u.name === standInName(u.handle) || u.name === u.handle) ? { ...u, name } : u)),
+      }));
+    }
     return true;
   }, [loadRemote]);
 
@@ -3604,14 +3618,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const was = stateRef.current.mapVisibility;
     haptics.tap();
     setState((prev) => ({ ...prev, mapVisibility: v }));
+    // Only me checks you out of any court too (the server drops the check-in): your pin, the
+    // court's card and a live session stop saying friends see you playing, as Location off does.
+    const leaveCourts = () => {
+      if (v !== 'none') return;
+      setState((prev) => (prev.currentUserId !== me ? prev : {
+        ...prev,
+        courtNow: Object.fromEntries(Object.entries(prev.courtNow).map(([id, row]) => [id, { ...row, youHere: false }])),
+        followedCourts: prev.followedCourts?.map((c) => ({ ...c, youHere: false })) ?? null,
+        liveSession: prev.liveSession?.checkedIn ? { ...prev.liveSession, checkedIn: false } : prev.liveSession,
+      }));
+    };
     if (!live(me)) {
       // The demo keeps it in the browser, the way the server keeps it with the account.
       try { if (Platform.OS === 'web') localStorage.setItem(DEMO_VISIBILITY_KEY, v); } catch {}
+      leaveCourts();
       return true;
     }
     const ok = await remote.setMapVisibility(v);
     if (!ok && stateRef.current.currentUserId === me) setState((prev) => ({ ...prev, mapVisibility: was }));
     if (ok) {
+      leaveCourts();
       // Your spot again at once, so the choice takes effect now: the server
       // keeps your exact spot only for Players nearby or follow-back only.
       const s = stateRef.current;
@@ -9090,8 +9117,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       patch.posts = state.posts.filter((p) => !out.has(p.id) && !shut(p));
       patch.stories = state.stories.filter((s) => !out.has(s.id) && !shut(s));
       patch.hitRequests = out.size ? state.hitRequests.filter((h) => !out.has(h.id)) : state.hitRequests;
-      patch.comments = state.comments.filter((c) => !out.has(c.id));
     }
+    // Comments leave out anyone you blocked too, at once: theirs no longer stayed in a post's
+    // comments (and its count) until the next full load. A reply under a comment left out here is
+    // not shown (see threadsOf), so it is not counted either.
+    const dropped = new Set(state.comments.filter((c) => out.has(c.id) || blocked.has(c.authorId)).map((c) => c.id));
+    patch.comments = dropped.size ? state.comments.filter((c) => !dropped.has(c.id) && !(c.parentId && dropped.has(c.parentId))) : state.comments;
     // Threads and replies leave out anyone you blocked as well, at once (Oct 5): their
     // replies no longer stay on a thread you had open, nor their threads in Search's
     // recents, until it was loaded again (the database already does the same, 108).

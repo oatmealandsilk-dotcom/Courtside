@@ -78,8 +78,8 @@ export function NearbyMap(props: NearbyMapProps) {
   // A teen (migration 78) is shared only with friends who follow them back, and with nobody until they say so.
   const teen = onTeenMap(me, teenMap);
   const hiddenMe = choosing && (mapVisibility === 'none' || (teen && mapVisibility == null));
-  // Playing a live session, checked in at its court (Oct 6): your pin says "Playing now", the court glows.
-  const playing = livePin(liveSession, courtNow, locationEnabled);
+  // Playing a live session, checked in at its court (Oct 6): your pin says "Playing now", the court glows. Not on Only me, which nobody sees.
+  const playing = livePin(liveSession, courtNow, locationEnabled && !hiddenMe);
   // Since migration 98 you share to see: what keeps "Players nearby" from you
   // (Location off, or Only me), said by the tray and the still card, with the tap that changes it.
   const lock = nearbyLock({ mapLive, me, mapVisibility, locationOn: !!locationOn, hasSpot: !!lastSeen[me.id] });

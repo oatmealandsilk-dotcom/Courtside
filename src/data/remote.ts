@@ -4941,16 +4941,20 @@ export const auth = {
     // it, so the reviewer and everyone else start with their real name (App Review 4.0, Oct 5).
     const metaName = typeof data.user?.user_metadata?.name === 'string' ? data.user.user_metadata.name.trim() : '';
     const appleName = (name || metaName).slice(0, 60);
+    // The name put on the profile just now, if any: the app's sign-in listener began loading the
+    // account before it got there, so the app puts it on screen itself (see AppContext).
+    let applied: string | null = null;
     if (data.user && appleName) {
       try {
         const { data: row } = await client.from('profiles').select('name, handle').eq('id', data.user.id).maybeSingle();
         const p = row as { name?: string; handle?: string } | null;
         if (p?.handle && p.name && (p.name === standInName(p.handle) || p.name === p.handle) && p.name !== appleName) {
-          await client.from('profiles').update({ name: appleName }).eq('id', data.user.id).eq('name', p.name);
+          const { error: nameError } = await client.from('profiles').update({ name: appleName }).eq('id', data.user.id).eq('name', p.name);
+          if (!nameError) applied = appleName;
         }
       } catch { /* the setup's Name box is still there to fix it */ }
     }
-    return data.session;
+    return data.session ? { session: data.session, name: applied } : null;
   },
   /**
    * For deleting an account made with Apple: Apple's own sheet asks the

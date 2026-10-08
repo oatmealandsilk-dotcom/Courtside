@@ -184,7 +184,7 @@ function PostCardInner({
               beside the name, with the streak and the level, it cut the name down to "June …" (Oct 6 audit, item 9). */}
           <View style={styles.subRow}>
             <Text style={styles.sub} numberOfLines={1}>
-              @{author.handle} · {relativeTime(post.createdAt)}
+              @{author.handle} · {relativeTime(post.createdAt)}{post.editedAt ? ' · Edited' : ''}
             </Text>
             {isNewHere(post) ? <NewHereTag /> : null}
             {/* Admins only: pushed to the bottom of feeds (migration 152). Nothing at all for anyone else. */}

@@ -55,8 +55,12 @@ export default function NewHit() {
   const { currentUser, detectedCoords, users, openness, feedGroups, lastSeen, actions } = useApp();
   const [closeSignal, setCloseSignal] = useState(0);
   const days = useMemo(() => Array.from({ length: 7 }, (_, i) => { const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() + i); return d; }), []);
-  // Late in the evening there is no hour left today: start on tomorrow.
-  const [day, setDay] = useState(new Date().getHours() >= 21 ? 1 : 0);
+  // Late in the evening there is no hour left today: start on tomorrow, and Today is not offered
+  // (picked, it showed no times and kept a 9pm already under way).
+  const todayOpen = HOURS.some((h) => h >= new Date().getHours() + 1);
+  const [day, setDay] = useState(todayOpen ? 0 : 1);
+  // Left open past 9pm on Today: on to tomorrow.
+  useEffect(() => { if (!todayOpen && day === 0) setDay(1); }, [todayOpen, day]);
   const nextHour = Math.min(21, Math.max(6, new Date().getHours() + 1));
   const [hour, setHour] = useState(nextHour);
   // Courts book on the half hour too: ":00 / :30" beside Time moves every hour in the row to its half past
@@ -228,7 +232,7 @@ export default function NewHit() {
             </View>
           ) : null}
           <Section strong title="When">
-            <Tiles soft scroll value={day} onChange={pickDay} options={days.map((d, i) => ({ value: i, top: i === 0 ? 'Today' : d.toLocaleDateString([], { weekday: 'short' }), main: String(d.getDate()), label: d.toDateString() }))} />
+            <Tiles soft scroll value={day} onChange={pickDay} options={days.flatMap((d, i) => (i === 0 && !todayOpen ? [] : [{ value: i, top: i === 0 ? 'Today' : d.toLocaleDateString([], { weekday: 'short' }), main: String(d.getDate()), label: d.toDateString() }]))} />
           </Section>
 
           {/* One row of times. On the hour or at half past is one switch beside the heading, and every time in the row follows it. */}

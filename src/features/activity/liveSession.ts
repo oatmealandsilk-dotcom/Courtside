@@ -136,7 +136,8 @@ export function seenLine({ here, seenBy, why, problem, starting = false }: {
   starting?: boolean;
 }): { line: string; shared: boolean; note?: string } {
   const can = starting ? 'will see' : 'can see';
-  if (here) {
+  // Only me shares nothing, even with a check-in not yet cleared on this phone (the server drops it).
+  if (here && seenBy !== 'none') {
     if (seenBy === 'nearby') return { line: `Friends and players nearby ${can} you’re playing here`, shared: true };
     if (seenBy === 'mutuals') return { line: `Friends who follow you back ${can} you’re playing here`, shared: true };
     return { line: `Friends ${can} you’re playing here`, shared: true };
@@ -160,7 +161,7 @@ export function seenShort({ here, seenBy, why }: {
   seenBy: MapVisibility | null;
   why?: ReturnType<typeof checkInPlan>['why'];
 }): { line: string; shared: boolean } {
-  if (here) {
+  if (here && seenBy !== 'none') {
     if (seenBy === 'nearby') return { line: 'Friends and players nearby see you here', shared: true };
     if (seenBy === 'mutuals') return { line: 'Friends who follow you back see you here', shared: true };
     return { line: 'Friends can see you’re playing here', shared: true };

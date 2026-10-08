@@ -868,11 +868,31 @@ function Home({ scope, topRow, paused, onChrome }: {
 
   // Something of yours just landed: straight to the top (see liftToTop). With
   // no page named, the feed is dealt again.
+  // The lift waits for the page to be here. Under Create the feed reads the app a moment late
+  // (AppStateLater), so a lift could come before the post itself: the feed went to its top while
+  // the old first page was still there, and the new post then landed above it, out of view (the
+  // website's scroller keeps the page on screen where it is).
+  const pendingLift = useRef<string | null>(null);
+  const isHere = (key: string) => {
+    const data = latest.current;
+    const id = key.slice(2);
+    return key.startsWith('p:') ? data.posts.some((p) => p.id === id) : key.startsWith('h:') ? data.stories.some((st) => st.id === id) : true;
+  };
   useEffect(() => subscribeFeedRefresh((key) => {
     if (scope) return;
+    pendingLift.current = null;
     if (key?.startsWith('p:') && latest.current.posts.some((p) => p.id === key.slice(2) && p.groupId)) return;
+    if (key && !isHere(key)) { pendingLift.current = key; return; }
     offStage(() => { if (key) liftToTop(key); else rerank(); });
   }), [scope, rerank, liftToTop]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const key = pendingLift.current;
+    if (!key || scope || !isHere(key)) return;
+    pendingLift.current = null;
+    // A post shared to a group never goes into For you (as above).
+    if (key.startsWith('p:') && posts.some((p) => p.id === key.slice(2) && p.groupId)) return;
+    offStage(() => liftToTop(key));
+  }, [posts, stories]); // eslint-disable-line react-hooks/exhaustive-deps
   // Pulling down on the first page fetches what is new and starts the feed over from the top.
   // Pull-to-refresh: fetch what is new, rank the pages again in place (the
   // pager is holding the feed down and brings it back itself), and give the

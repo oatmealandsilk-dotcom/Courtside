@@ -57,6 +57,17 @@ const TAB_ORDER: string[] = Object.values(paths);
 const LIVE_LOOK_MS = 125_000;
 /** The pages that can take a clip's stage (see commentStage): its comments, and its session stats. */
 const STAGE_ROUTES = new Set(['/comments', '/session-stats']);
+// An emailed link that has expired or was used already (or a Google sign-in that failed) comes
+// back with error_description on the address. Kept for the sign-in page to say, whatever page the
+// link lands on: a new password's link lands on /account, and the sign-in detour below replaced
+// that address (and the error with it) before the start page, which used to keep it, ever drew.
+if (Platform.OS === 'web' && typeof window !== 'undefined') {
+  try {
+    const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+    const message = hash.get('error_description') || new URLSearchParams(window.location.search).get('error_description');
+    if (message) sessionStorage.setItem('courtside-auth-error', message);
+  } catch { /* Nothing to carry forward. */ }
+}
 export function AppShell({ children }: { children: React.ReactNode }) {
   useTheme();
   const pathname = usePathname();

@@ -69,9 +69,9 @@ function describe(media: PickedMedia): string {
  * hands over only what was chosen and needs no permission (Google Play's copy
  * of it reaches older phones too). So nothing is asked for first there: the
  * question did nothing on Android 13 and later, and on older phones a "no"
- * blocked picking altogether. The older picker ("legacy") is an iPhone
- * matter: there it is the one that hands a video over reliably; on Android
- * it was the bare Files browser.
+ * blocked picking altogether. (The older picker, "legacy", is Android's
+ * option only, the bare Files browser; an iPhone's library always opens
+ * Apple's current picker, which needs no permission either.)
  */
 const ANDROID_PICKER = Platform.OS === 'android';
 
@@ -85,20 +85,17 @@ const ANDROID_PICKER = Platform.OS === 'android';
 export async function pickFromDevice(selection: 'video' | 'photo' | 'all', options?: { trimTo?: number }): Promise<PickedMedia | null> {
   const kinds: ImagePicker.MediaType[] = selection === 'video' ? ['videos'] : selection === 'photo' ? ['images'] : ['images', 'videos'];
   const trimTo = Platform.OS === 'ios' && selection === 'video' ? options?.trimTo : undefined;
-  // A photo-only pick never asks (App Review 5.1.1(iii), Oct 6): it always opens Apple's
-  // current picker, which needs no access, so the question would only be noise.
-  const perm = ANDROID_PICKER || selection === 'photo' ? null : await ImagePicker.requestMediaLibraryPermissionsAsync().catch(() => null);
-  // Photo access refused ("Don't Allow") or limited: Apple's current picker needs none and
-  // hands over only what was chosen, so it opens instead of refusing (App Review 2.1 and
-  // 5.1.1(iv), Oct 5). Full access only picks the older picker, the reliable one for video.
-  const full = !!perm?.granted && perm.accessPrivileges !== 'limited';
+  // Nothing is asked for first, on any pick (App Review 5.1.1(iii); photos since Oct 6, videos
+  // since Oct 8): the iPhone's library always opens Apple's current picker, which needs no
+  // access and hands over only what was chosen (expo-image-picker's `legacy` is Android's
+  // option only), so asking for full Photos access changed nothing and was only noise.
   // One picker, once. A failed pick used to open the library a second time
   // with the other picker, which read as the app losing your choice.
   try {
     const result = await ImagePicker.launchImageLibraryAsync(trimTo
       // Apple's trimmer belongs to the older picker, which converts with the same 1080p H.264 setting.
       ? { mediaTypes: kinds, quality: 0.85, allowsEditing: true, videoMaxDuration: trimTo, videoQuality: ImagePicker.UIImagePickerControllerQualityType.High, ...AS_IS }
-      : { mediaTypes: kinds, quality: 0.85, legacy: Platform.OS === 'ios' && selection !== 'photo' && full, ...AS_IS });
+      : { mediaTypes: kinds, quality: 0.85, ...AS_IS });
     if (result.canceled) return null;
     const asset = result.assets[0];
     const isVideo = asset.type === 'video';
@@ -314,20 +311,13 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
     setTimeout(finish, 1500);
   };
   /**
-   * Opens the library. Apple's current picker needs no permission prompt and
-   * is tried first; if it throws (it does on some phones and inside sheets),
-   * the older picker is tried before giving up.
+   * Opens the library: Apple's current picker on an iPhone, the Photo Picker
+   * on Android. Neither needs a permission, so nothing is asked first (see
+   * pickFromDevice).
    */
   const open = async (): Promise<ImagePicker.ImagePickerResult> => {
     const kinds: ImagePicker.MediaType[] = selection === 'video' ? ['videos'] : selection === 'photo' ? ['images'] : ['images', 'videos'];
-    // Android asks nothing first: its Photo Picker needs no permission (see pickFromDevice).
-    // Nor does a photo-only pick: it always gets Apple's current picker (see pickFromDevice).
-    const perm = ANDROID_PICKER || selection === 'photo' ? null : await ImagePicker.requestMediaLibraryPermissionsAsync().catch(() => null);
-    // Refused or limited access opens Apple's current picker, which needs none (see pickFromDevice).
-    const full = !!perm?.granted && perm.accessPrivileges !== 'limited';
-    // Apple's older picker copies the file itself and has proved the reliable
-    // one for video; it needs full photo access, which is why that is checked.
-    return ImagePicker.launchImageLibraryAsync({ mediaTypes: kinds, quality: 0.85, legacy: Platform.OS === 'ios' && selection !== 'photo' && full, ...AS_IS });
+    return ImagePicker.launchImageLibraryAsync({ mediaTypes: kinds, quality: 0.85, ...AS_IS });
   };
   const choose = async () => {
     try {

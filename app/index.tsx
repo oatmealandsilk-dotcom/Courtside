@@ -125,13 +125,7 @@ export default function Index() {
   useEffect(() => { if (backToApp) goToStart(); }, [backToApp]);
 
   useEffect(() => {
-    if (Platform.OS === 'web') {
-      try {
-        const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''));
-        const message = hash.get('error_description') || new URLSearchParams(window.location.search).get('error_description');
-        if (message) sessionStorage.setItem('courtside-auth-error', message);
-      } catch { /* Nothing to carry forward. */ }
-    }
+    // A link's error on the address (error_description) is kept for the sign-in page by AppShell, on any page it lands on.
     Animated.spring(rise, { toValue: 1, useNativeDriver: true, speed: 6, bounciness: 4 }).start();
     const timer = setTimeout(() => setHeld(true), HOLD_MS);
     return () => clearTimeout(timer);

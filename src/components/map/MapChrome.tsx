@@ -764,6 +764,11 @@ export function YouSheet({ me, open, teen = false, onToggle, onProfile, onClose,
   // Until the time you picked (holding your ring in the Open to hit row), or midnight.
   const till = (open ? tillLabel(me.openToHitUntil) : null) ?? 'until midnight';
   const noteOn = useAnimatedStyle(() => ({ opacity: Math.max(0, lit.value * 2 - 1) }));
+  // Who sees the ring follows Who can see you, the row under it: on Only me nobody else does, and
+  // on Only people you follow back (always, for a teen) only those friends (map_players).
+  const ringNote = seenBy === 'none' || (teen && seenBy == null)
+    ? 'Only you see your ring on the map.'
+    : teen || seenBy === 'mutuals' ? `Friends who follow you back see your green ring ${till}.` : `Players nearby see your green ring ${till}.`;
   return (
     <GestureDetector gesture={pull.gesture}>
     <Animated.View style={[styles.sheet, pull.style]}>
@@ -788,7 +793,7 @@ export function YouSheet({ me, open, teen = false, onToggle, onProfile, onClose,
           <Text style={styles.openTitle}>Open to hit today</Text>
           {/* Both sentences hold the same place (the longer one keeps the room), so the card never changes height as they hand over. */}
           <View>
-            <Animated.Text style={[styles.openNote, noteOn]} aria-hidden={!open} accessibilityElementsHidden={!open} importantForAccessibility={open ? 'auto' : 'no-hide-descendants'}>{teen ? `Friends who follow you back see your green ring ${till}.` : `Players nearby see your green ring ${till}.`}</Animated.Text>
+            <Animated.Text style={[styles.openNote, noteOn]} aria-hidden={!open} accessibilityElementsHidden={!open} importantForAccessibility={open ? 'auto' : 'no-hide-descendants'}>{ringNote}</Animated.Text>
             <Animated.Text style={[styles.openNote, styles.noteOver, noteOff]} aria-hidden={open} accessibilityElementsHidden={open} importantForAccessibility={open ? 'no-hide-descendants' : 'auto'}>Wear a green ring on the map until midnight.</Animated.Text>
           </View>
         </View>

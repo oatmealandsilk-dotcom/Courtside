@@ -3,11 +3,12 @@ import React, { useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
 import { useReducedMotion } from '@/lib/useReducedMotion';
 import { STAGE_EASING } from '@/features/feed/commentStage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { FullWindowOverlay } from 'react-native-screens';
 
 import { Glass } from '@/components/ui/Glass';
 import { HitGlyph } from '@/components/HitGlyph';
@@ -123,7 +124,7 @@ export function Toast() {
   if (!toast) return null;
   const icon = toast.icon ?? 'checkmark';
   const action = toast.action;
-  return (
+  const card = (
     <GestureDetector gesture={flick}>
       <Animated.View pointerEvents="box-none" style={[styles.wrap, { top: insets.top + spacing.xs }, style]}>
         <View style={styles.shadow}>
@@ -187,6 +188,20 @@ export function Toast() {
       </Animated.View>
     </GestureDetector>
   );
+  if (Platform.OS === 'ios') {
+    // iOS draws the pages that slide up over the app (Create, comments, Send to, a post's menu)
+    // in a layer of its own, above the app's, so a toast drawn in the app's layer sat under them:
+    // why a post was refused, hidden behind Create; Block after a report, under the comments'
+    // dim. It goes on the window's own overlay instead, as the message banner does, there only
+    // while it is up and letting every touch around it through. Gestures need a root of their own
+    // there. Not a dialog: VoiceOver can still reach the page under it.
+    return (
+      <FullWindowOverlay unstable_accessibilityContainerViewIsModal={false}>
+        <GestureHandlerRootView pointerEvents="box-none" style={StyleSheet.absoluteFill}>{card}</GestureHandlerRootView>
+      </FullWindowOverlay>
+    );
+  }
+  return card;
 }
 
 /**

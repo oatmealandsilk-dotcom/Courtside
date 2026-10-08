@@ -19,6 +19,9 @@ import { useApp } from '@/store/AppContext';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, lift, pageIsDark, radius, spacing, typography } from '@/theme';
 
+// Why it didn't go through is said when it is tried, in the app's own note, so the row stays one line.
+const refusedNote = (why: string) => showToast({ title: 'Only you can see this session', body: why, icon: 'lock-closed-outline', long: true });
+
 /**
  * The live session's own page (Oct 6), opened from the bar over the tabs or
  * straight after Start: the clock big, in the session box's own colours (the
@@ -44,6 +47,18 @@ export default function LiveSessionPage() {
   const now = useLiveNow(!!s && state === 'running');
   // Whether you are checked in at its court right now, as the court's own card knows it.
   useEffect(() => { if (s?.court) void actions.loadCourtInfo([s.court.id]); }, [s?.court?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  // "Turn on" with Location off: the check-in waits until Location is on here. Tried straight
+  // after switching it on, it still read Location as off (the switch reaches the app's state on
+  // the next draw) and quietly did nothing, so it took a second tap.
+  const checkInWhenOn = useRef(false);
+  useEffect(() => {
+    if (!checkInWhenOn.current || !locationEnabled) return;
+    checkInWhenOn.current = false;
+    void actions.checkInLiveSession()
+      .then((refused) => { if (refused) refusedNote(refused); })
+      .catch(() => undefined)
+      .finally(() => setAsking(false));
+  }, [locationEnabled]); // eslint-disable-line react-hooks/exhaustive-deps
   const look = cardLook(theme);
 
   const dismissed = () => {
@@ -78,14 +93,15 @@ export default function LiveSessionPage() {
   const seen = state === 'finished' ? { line: 'Finished · checked out', shared: false } : seenShort({ here, seenBy, why: plan.why });
   // Not seen, but could be by the court sheet's rules (a check-in that did not go through, Location just turned on): one tap to try.
   const canTry = state !== 'finished' && !here && (plan.checkIn || plan.why === 'location-off');
-  // Why it didn't go through is said when it is tried, in the app's own note, so the row stays one line.
-  const refusedNote = (why: string) => showToast({ title: 'Only you can see this session', body: why, icon: 'lock-closed-outline', long: true });
   const tryCheckIn = async () => {
     if (asking) return;
     setAsking(true);
     if (!locationEnabled) {
+      // The check-in follows once Location is on (see checkInWhenOn above).
+      checkInWhenOn.current = true;
       const off = await actions.setLocationEnabled(true);
-      if (off) { refusedNote(off); setAsking(false); return; }
+      if (off) { checkInWhenOn.current = false; refusedNote(off); setAsking(false); }
+      return;
     }
     const refused = await actions.checkInLiveSession();
     if (refused) refusedNote(refused);

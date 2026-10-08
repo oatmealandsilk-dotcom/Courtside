@@ -9,7 +9,7 @@ Everything you type into Apple's forms to send CourtSide to the App Store, in th
 - **Build 16 everywhere.** Build 15 is too old to send: its camera pop-up doesn't mention videos. Build 16 has its own update channel (`store`), so instant updates can't reach the copy Apple reviews.
 - **Pre-order** for **Tue Oct 13**, set up before you submit (section 2 and item 8K).
 - **Screenshots:** folder `CourtSide-Store-Screenshots-C` (was B).
-- **Review notes:** how to try Start a session and hits, the new + menu, reporting a group, Ask for a review, Hidden words as it now starts. Recounted: 3,898 of 4,000.
+- **Review notes:** how to try Start a session and hits, the new + menu, reporting a group, Ask for a review, Hidden words as it now starts. Recounted: 3,868 of 4,000.
 - **Description:** one new line for Start a session. **What's New** added (from the Oct 6 Desktop pack, plus today's features).
 - **Privacy label:** checked against build 16. No boxes change; a few "what it is" notes added.
 - **Demo-account steps** follow today's app (+ → Session, Not now and Continue after setup).
@@ -492,8 +492,8 @@ While still signed in as yourself: **Profile** → **☰** (top right) → **Set
    - **Birthday:** an adult date, for example **January 1, 1990**.
    - Tick the Terms box, then tap **Create account**.
 3. Go through setup:
-   - On **About you**, **leave the Location box empty**, and **leave "Invited by?" empty**.
-   - On **Your game**, pick a rating and a style. Skip the optional steps.
+   - On **About you**, **leave the Location box empty**, **leave "Invited by?" empty**, and pick a rating (Continue stays dimmed until you do).
+   - On **Your game**, pick a style. Skip the optional steps.
    - On **Log your tennis automatically**, tap **Not now**.
    - On **People you may know**, don't follow anyone and don't tap **Find friends from your contacts**. Tap **Continue**.
    - Agree to the **Community guidelines** when they show.
@@ -576,13 +576,13 @@ A birthday is asked once; under 13 cannot join. Ages 13-17: accounts start priva
 
 PERMISSIONS (each asked when its feature is first used; notifications once after setup)
 - Location, while using the app only: courts and players near you. Optional. Each person chooses who sees them (Settings > Privacy center > Who can see you on the map): Players nearby (rough area), Only people you follow back, or Only me, which the demo account uses. Turning Location off deletes your spot from our servers. Start a session checks you in at its court for the same people.
-- Camera and microphone: posts (photo, or video with sound), instants, chat photos, voice notes while recording. Photos: chat and comment photos ask nothing; picking for a post asks once (Limited or Don't Allow work too); saving asks add-only access.
+- Camera and microphone: posts (photo, or video with sound), instants, chat photos, voice notes while recording. Photos: picking photos and videos asks nothing; saving asks add-only access.
 - Contacts: only if the person taps Find friends from your contacts (after setup or in Settings). Numbers and emails are matched against CourtSide accounts, then deleted.
 - Notifications: reminders (streak, weekly recap) each have an off switch in Settings.
 - Apple Health, read only: Settings > Health and nutrition (row "Apple Watch"). Reads workouts with heart rate (to log sessions), sleep, HRV, resting heart rate, steps, active energy, nutrition. Background delivery only shows a local alert. Never writes. Private, except heart rate and calories on a post with "Share health data" on (default on for adults only). Never used for ads or marketing, never sold, not in iCloud.
 
 SAFETY (1.2)
-Everyone agrees to the Terms and Community guidelines (no tolerance for objectionable content or abusive users). Report: ••• on a post, instant, profile or group; the flag on a thread; press and hold a comment, reply or message; ••• on a coach question; a chat's details. Block or mute: ••• on a profile. Reported items are hidden from the reporter at once. Our team is alerted to every report, reviews it within 24 hours, takes down content (the author is told why and can ask for a review) and suspends accounts. Settings > Hidden words hides offensive comments and messages from people you don't follow (adults switch it on; always on for under-18s); slurs and threats can't be posted anywhere.
+Everyone agrees to the Terms and Community guidelines (no tolerance for objectionable content or abusive users). Report: ••• on a post, instant, profile or group; the flag on a thread; press and hold a comment, reply or message; ••• on a coach question; a chat's details. Block or mute: ••• on a profile. Reported posts, comments, replies and threads are hidden from the reporter at once. Our team is alerted to every report, reviews it within 24 hours, takes down content (the author is told why and can ask for a review) and suspends accounts. Settings > Hidden words hides offensive comments and messages from people you don't follow (adults switch it on; always on for under-18s); slurs and threats can't be posted anywhere.
 
 DELETE ACCOUNT
 Profile > ☰ > Settings > Account center > Delete account, then type DELETE.
@@ -597,7 +597,7 @@ CONTACT
 support@courtsidebase.com
 ```
 
-3,898 characters with the blanks in. Your real emails and passwords add about 30, so about 3,930 of 4,000. Anything added on top needs something else cut: ask Claude to recount.
+3,868 characters with the blanks in. Your real emails and passwords add about 30, so about 3,900 of 4,000. Anything added on top needs something else cut: ask Claude to recount.
 
 **Why these words (for you, not for Apple)**
 
