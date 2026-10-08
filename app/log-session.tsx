@@ -15,6 +15,8 @@ import { TrackedLength } from '@/components/session/TrackedLength';
 import { LengthPicker } from '@/components/session/LengthPicker';
 import { DayPicker } from '@/components/session/DayPicker';
 import { ScoreField } from '@/components/session/ScoreField';
+import { ManualStats } from '@/components/session/ManualStats';
+import { readManualStats, type ManualRead } from '@/features/activity/manualStats';
 import { canScore, readScore, scoreText, setsWinner, tookScoreNotKept } from '@/features/activity/score';
 import { computeStats } from '@/features/practice/stats';
 import { andList, canTagKind, firstName as firstOfName, isActive, tagsOnSession } from '@/features/activity/sessionTags';
@@ -94,6 +96,13 @@ const WORKOUT_KINDS: { value: string; label: string }[] = ['run', 'ride', 'swim'
  * change its length and day there (Oct 6). A copy of someone else's session
  * (from their tag) is theirs to tag, so it says so instead.
  *
+ * Logged by hand, "+ Add calories & heart rate" (Oct 8, owner) opens two
+ * optional number boxes at the foot, closed to start with so logging stays
+ * two taps. They go in your private log only; a post of the session shows
+ * them as "Share health data" says, like a tracker's (migration 154). Not
+ * offered until the server keeps them, and never for a tracker's session,
+ * whose own numbers win.
+ *
  * A live session's Finish (Oct 7) opens the "Log it" composer instead
  * (compose?live=1, see features/activity/finishLive); an address still
  * saying log-session?live=1 is handed on there.
@@ -137,7 +146,7 @@ function ToComposer({ activity, hit }: { activity: string; hit?: string }) {
 function LogSession() {
   const styles = useThemedStyles(styleDefinitions);
   const { activity, hit, edit, focus } = useLocalSearchParams<{ activity?: string; hit?: string; edit?: string; focus?: string }>();
-  const { actions, detectedActivities, remoteLoaded, ready, hitRequests, currentUserId, users, posts, stories, sessions, sessionTags, sessionTagsReady } = useApp();
+  const { actions, detectedActivities, remoteLoaded, ready, hitRequests, currentUserId, users, posts, stories, sessions, sessionTags, sessionTagsReady, manualStatsReady } = useApp();
   // The box you type in stays above a phone's keyboard, and so do the names listed under it.
   const { scroller, onScroll, reveal } = useKeyboardReveal();
   // The hit it was opened for: the prompt's words, or the hit itself if the app was reloaded on the way.
@@ -213,6 +222,14 @@ function LogSession() {
     const today = localDay(new Date());
     return fromHit?.day && fromHit.day < today ? fromHit.day : today;
   });
+  // Calories and average heart rate typed in (Oct 8): folded away until asked for, never on a tracker's session.
+  const [statsOpen, setStatsOpen] = useState(false);
+  const [kcalText, setKcalText] = useState('');
+  const [hrText, setHrText] = useState('');
+  // How many times Save met a number out of range since the boxes last changed: says why, and puts the caret there.
+  const [statsAsked, setStatsAsked] = useState(0);
+  const canType = manualStatsReady && !fresh;
+  const typedStats: ManualRead = canType && statsOpen ? readManualStats(kcalText, hrText) : {};
   const [saving, setSaving] = useState(false);
   // Which button the save came from, so only that one spins.
   const [andPost, setAndPost] = useState(false);
@@ -351,6 +368,8 @@ function LogSession() {
   const save = async (post = false) => {
     if (!minutes || saving) return;
     if (canScore(kind) && scored.problem) { setError(scored.problem); return; }
+    // A number out of range says why, by its box, and nothing is saved.
+    if (typedStats.problem) { setStatsAsked((n) => n + 1); return; }
     setSaving(true);
     setAndPost(post);
     setError('');
@@ -372,6 +391,9 @@ function LogSession() {
         // From a hit: where it was, as the note, and the court itself in your log (migration 130).
         ...(fromHit ? { note: `At ${fromHit.place}` } : {}),
         ...(fromHit?.placeId ? { courtId: fromHit.placeId } : {}),
+        // Typed in by hand (Oct 8): private to your log.
+        ...(typedStats.kcal ? { kcal: typedStats.kcal } : {}),
+        ...(typedStats.avgHr ? { avgHr: typedStats.avgHr } : {}),
       });
       // Each person tagged is asked to accept; anyone the server turns away is said after.
       if (tagging.length) {
@@ -634,6 +656,19 @@ function LogSession() {
               <DayPicker value={playedOn} onChange={setPlayedOn} />
             </Section>
           )}
+          {/* Optional, at the foot, folded away (Oct 8, owner): the two taps to log stay two taps. */}
+          {canType ? (
+            <ManualStats
+              open={statsOpen}
+              onOpen={(next) => { setStatsOpen(next); setStatsAsked(0); }}
+              kcal={kcalText}
+              avgHr={hrText}
+              onKcal={(t) => { setKcalText(t); setStatsAsked(0); }}
+              onAvgHr={(t) => { setHrText(t); setStatsAsked(0); }}
+              asked={statsAsked}
+              note="A post shows them only if you share health data."
+            />
+          ) : null}
           {error ? <Text style={styles.error}>{error}</Text> : null}
           <Submit label="Save" onPress={() => { void save(); }} disabled={!minutes} busy={saving && !andPost} waiting="Pick how long" />
           {fresh && postable(fresh) ? (

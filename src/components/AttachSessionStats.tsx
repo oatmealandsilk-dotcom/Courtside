@@ -6,7 +6,7 @@ import { FormRow } from '@/components/FormRow';
 import { HealthShareRow } from '@/components/session/HealthShareRow';
 import { SessionStrip } from '@/components/session/SessionStrip';
 import { fromWho } from '@/features/activity/format';
-import { availableShare, chosenShare, type HealthChoice } from '@/features/activity/healthShare';
+import { availableShare, chosenShare, loggedNumbers, type HealthChoice } from '@/features/activity/healthShare';
 import { statsOf, type SessionPick } from '@/features/activity/recent';
 import { pendingNote, tagsOnSession, withOnNewPost } from '@/features/activity/sessionTags';
 import { useApp } from '@/store/AppContext';
@@ -22,7 +22,8 @@ import { isTennisActivity } from '@/features/activity/workouts';
  * without them, and, when the tracker read any health
  * numbers, "Share health data" with its Choose sheet (HealthShareRow), the
  * same for every age (migration 72). A session you logged by hand shows how
- * long and what it was, and never a heart rate.
+ * long and what it was, and (Oct 8) the calories and average heart rate typed
+ * into it, under the same "Share health data" row and rules.
  *
  * Opened from a session ("Save and post", "Post it") it sits at the top of
  * the post, and × leaves a row to put the stats back (none once it is
@@ -55,7 +56,9 @@ export function AttachSessionStats({ pick, attached, onAttach, health, onHealth,
   const activity = pick.type === 'tracker' ? pick.activity : undefined;
   // The session from your log this is (a tracker's, once logged), and who on it is still to answer.
   const logged = pick.session;
-  const share = chosenShare(health, availableShare(activity));
+  // The numbers it can share: its tracker's, or those typed into your log (Oct 8).
+  const numbers = activity ?? loggedNumbers(logged);
+  const share = chosenShare(health, availableShare(numbers));
   const stats = currentUserId ? withOnNewPost(statsOf(pick, share), currentUserId, sessions, sessionTags, users) ?? statsOf(pick, share) : statsOf(pick, share);
   const waitingOn = logged ? tagsOnSession(sessionTags, logged.id, currentUserId)
     .filter((t) => t.status === 'pending')
@@ -85,7 +88,7 @@ export function AttachSessionStats({ pick, attached, onAttach, health, onHealth,
           </View>
           <SessionStrip session={stats} hidden={blockedIds} />
           <Text style={styles.note}>{hint}</Text>
-          {activity ? <HealthShareRow activity={activity} choice={health} onChoice={onHealth} /> : null}
+          {numbers ? <HealthShareRow activity={numbers} choice={health} onChoice={onHealth} /> : null}
           {waitingNote ? (
             <View style={styles.waiting}>
               <Ionicons name="time-outline" size={13} color={colors.textFaint} />

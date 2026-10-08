@@ -9,6 +9,7 @@ import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { Avatar } from '@/components/ui';
 import type { DetectedActivity, ID, MatchSet, Post, PracticeSession, SessionTag, User } from '@/data/types';
 import { resultWord, scoreLine, sessionEyebrow, sourceLabel } from '@/features/activity/format';
+import { loggedNumbers } from '@/features/activity/healthShare';
 import { flipSets, spokenScore } from '@/features/activity/score';
 import { isActive, sessionPeople, tagsOnSession } from '@/features/activity/sessionTags';
 import { overUsual } from '@/features/activity/usual';
@@ -92,6 +93,8 @@ export function SessionSheet({ post, me, users, sessions, sessionTags, activitie
   const log = mine && logId ? sessions.find((x) => x.id === logId && x.userId === me) : undefined;
   const result = resultWord(s);
   const hr = s.maxHr != null;
+  // An average on its own (typed into a session logged by hand, Oct 8) shows as a tracker's does.
+  const avg = s.avgHr ? s.avgHr : null;
   const zones = postZones(s);
   // Shared on the post (migration 72); Strain is WHOOP's alone.
   const strain = s.strain != null ? s.strain : null;
@@ -125,15 +128,23 @@ export function SessionSheet({ post, me, users, sessions, sessionTags, activitie
   const rivalName = rival ? users.find((u) => u.id === rival.id)?.name.trim().split(/\s+/)[0] : undefined;
   const court = post.court;
   const tracker = !!s.activityId;
-  const sparse = !hr && !zones && strain == null && !kcal && !far;
+  const sparse = !hr && !avg && !zones && strain == null && !kcal && !far;
 
   // The author's own numbers that are not on the post.
   const privateHr = activity && !hr && activity.maxHr ? activity : undefined;
   const ownZones = activity && !zones ? cleanZones(activity.zones) : null;
-  const owner = activity ? [
-    strain == null && activity.source === 'whoop' && activity.strain != null ? { key: 'strain', value: activity.strain, unit: '', label: 'STRAIN', dec: true } : null,
-    !kcal && activity.kcal ? { key: 'kcal', value: activity.kcal, unit: '', label: 'CALORIES', dec: false } : null,
-  ].filter((x): x is { key: string; value: number; unit: string; label: string; dec: boolean } => !!x) : [];
+  // Typed into your log by hand (Oct 8) and not shared on the post: yours alone too, as a tracker's are.
+  const typed = mine && !s.activityId && log ? loggedNumbers(log) : undefined;
+  const owner = [
+    ...(activity ? [
+      strain == null && activity.source === 'whoop' && activity.strain != null ? { key: 'strain', value: activity.strain, unit: '', label: 'STRAIN', dec: true } : null,
+      !kcal && activity.kcal ? { key: 'kcal', value: activity.kcal, unit: '', label: 'CALORIES', dec: false } : null,
+    ] : []),
+    ...(typed ? [
+      !avg && typed.avgHr ? { key: 'avg', value: typed.avgHr, unit: 'bpm', label: 'AVG HEART RATE', dec: false } : null,
+      !kcal && typed.kcal ? { key: 'kcal', value: typed.kcal, unit: '', label: 'CALORIES', dec: false } : null,
+    ] : []),
+  ].filter((x): x is { key: string; value: number; unit: string; label: string; dec: boolean } => !!x);
   const started = activity ? clockParts(activity.startedAt) : null;
 
   const peopleRow = shown.length || (court && !sparse) ? (
@@ -196,9 +207,9 @@ export function SessionSheet({ post, me, users, sessions, sessionTags, activitie
               <Column label="DISTANCE"><Figure value={far.value} part={far.value < 10 ? 'dec1' : 'int'} unit={far.unit} size={34} color={colors.text} unitColor={colors.textMuted} play={play} delay={160} /></Column>
             </View>
           ) : null}
-          {hr || zones ? (
+          {hr || avg || zones ? (
             <View style={styles.columns}>
-              {hr && s.avgHr ? <Column label="AVG HEART RATE"><Figure value={s.avgHr} unit="bpm" size={34} color={colors.text} unitColor={colors.textMuted} play={play} delay={200} /></Column> : null}
+              {avg ? <Column label="AVG HEART RATE"><Figure value={avg} unit="bpm" size={34} color={colors.text} unitColor={colors.textMuted} play={play} delay={200} /></Column> : null}
               {hr ? <Column label="MAX"><Figure value={s.maxHr!} unit="bpm" size={34} color={colors.text} unitColor={colors.textMuted} play={play} delay={200} /></Column> : null}
               {zones ? <Column label="ZONES 4–5"><Figure value={hardMinutes(zones)} unit="min" size={34} color={colors.text} unitColor={colors.textMuted} play={play} delay={200} /></Column> : null}
             </View>
@@ -218,7 +229,7 @@ export function SessionSheet({ post, me, users, sessions, sessionTags, activitie
         </View>
       ) : null}
 
-      {activity && (owner.length || started || privateHr) ? (
+      {(activity || typed) && (owner.length || started || privateHr) ? (
         <Pop delay={play ? 400 : 0} duration={260} from={1} rise={8} style={styles.only}>
           <View style={styles.onlyHead}>
             <Ionicons name="eye-off-outline" size={12} color={colors.textMuted} />
@@ -226,7 +237,7 @@ export function SessionSheet({ post, me, users, sessions, sessionTags, activitie
           </View>
           <View style={styles.onlyRow}>
             {owner.map((o) => (
-              <Column key={o.key} label={o.label}><Figure value={o.value} part={o.dec ? 'dec1' : 'int'} size={26} color={colors.text} unitColor={colors.textMuted} play={play} delay={400} /></Column>
+              <Column key={o.key} label={o.label}><Figure value={o.value} unit={o.unit || undefined} part={o.dec ? 'dec1' : 'int'} size={26} color={colors.text} unitColor={colors.textMuted} play={play} delay={400} /></Column>
             ))}
             {started ? (
               <Column label="STARTED">

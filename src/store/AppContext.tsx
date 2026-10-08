@@ -40,7 +40,8 @@ import { isTennisActivity, workoutLine, workoutName } from '@/features/activity/
 import { detectedNote } from '@/features/activity/format';
 import { FOLD_OVER, allTennis as allTennisFound, foundBursts, foundHref, foundLine, foundTitle } from '@/features/activity/found';
 import { mergePast, readOneWithHeartRate, readPastHealth, type PastWorkout } from '@/features/activity/pastWorkouts';
-import { postShare, reshare, sameShare } from '@/features/activity/healthShare';
+import { loggedNumbers, postShare, reshare, sameShare } from '@/features/activity/healthShare';
+import { keptAvgHr, keptKcal } from '@/features/activity/manualStats';
 import { OPPONENT_MAX, REFUSALS, maxTagsFor, canTagKind, firstName, isActive, localRefusal, mirrorCopy, nameFor, patchWith, reconcileWith, refusalWords, roleOn, tagsOnSession, withEntry, withOnNewPost } from '@/features/activity/sessionTags';
 import { duration } from '@/lib/format';
 import { forgetReferrer, isWaitlistCode, peekReferrer } from '@/features/invite/referral';
@@ -437,6 +438,13 @@ interface AppState extends Bootstrap, CourtLifeState, FeedGroupsState, LiveSessi
    */
   sessionTagsReady: boolean;
   /**
+   * Whether the server keeps calories and average heart rate typed into a
+   * session logged by hand (migration 154 has run). Until it says so, "+ Add
+   * calories & heart rate" is not offered, so nothing typed is ever lost.
+   * Always on in the demo.
+   */
+  manualStatsReady: boolean;
+  /**
    * What the server has said about people (migration 64, open_to_you):
    * whether you may start a chat with them. Nobody's age but your own
    * reaches the app, so this is how it knows. Asked only about the people it
@@ -732,7 +740,7 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions, LiveSessionAct
    * `activityId`: the tracker session it was logged from, which then counts as logged.
    * `sets`: the score, your side first (migration 91; any tennis session since Oct 6); on a match, when one side took more sets, the result follows it.
    */
-  logSession: (input: { minutes: number; kind: PracticeSession['kind']; won?: boolean; sets?: MatchSet[]; opponent?: string; note?: string; day?: string; activityId?: ID; workout?: string; courtId?: string }) => Promise<ID>;
+  logSession: (input: { minutes: number; kind: PracticeSession['kind']; won?: boolean; sets?: MatchSet[]; opponent?: string; note?: string; day?: string; activityId?: ID; workout?: string; courtId?: string; kcal?: number; avgHr?: number }) => Promise<ID>;
   /**
    * King of the Court at one court (migration 130): the server's board for
    * you, or the demo's. Null when it could not be asked (or the database has
@@ -2164,6 +2172,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     sessions: [],
     sessionTags: [],
     sessionTagsReady: !isSupabaseConfigured,
+    manualStatsReady: !isSupabaseConfigured,
     openness: {},
     courtShown: {},
     agesOnProfiles: null,
@@ -2488,6 +2497,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
     try { off = remote.onHits(refetch); } catch { /* live updates are a nicety */ }
     return () => { on = false; if (timer) clearTimeout(timer); off?.(); };
   }, [remoteLoaded, currentUserForLive, liveEpoch]);
+
+  // Calories and heart rate typed into a session (migration 154): asked once
+  // whether the server keeps them, after the first load. A database without
+  // them (or no answer) leaves the boxes hidden; the server never loses them.
+  const statsReady = state.manualStatsReady;
+  useEffect(() => {
+    if (!isSupabaseConfigured || !remoteLoaded || !currentUserForLive || !UUID.test(currentUserForLive) || statsReady) return;
+    let on = true;
+    void remote.manualStatsReady().then((ready) => { if (on && ready) setState((prev) => (prev.manualStatsReady ? prev : { ...prev, manualStatsReady: true })); }).catch(() => undefined);
+    return () => { on = false; };
+  }, [remoteLoaded, currentUserForLive, statsReady, liveEpoch]);
 
   // Session tags (migration 62): asked once per account whether the server
   // has them; until it does, "Who you played" stays free text. Once it does,
@@ -3437,7 +3457,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [patchCurrentUser],
   );
 
-  const logSession = useCallback(async (input: { minutes: number; kind: PracticeSession['kind']; won?: boolean; sets?: MatchSet[]; opponent?: string; note?: string; day?: string; activityId?: ID; workout?: string; courtId?: string }) => {
+  const logSession = useCallback(async (input: { minutes: number; kind: PracticeSession['kind']; won?: boolean; sets?: MatchSet[]; opponent?: string; note?: string; day?: string; activityId?: ID; workout?: string; courtId?: string; kcal?: number; avgHr?: number }) => {
     const me = requireUser();
     // A score (migration 91), on any tennis session since Oct 6: on a match the result follows the sets when one side took more, as the server makes it.
     const sets = canScore(input.kind) && input.sets?.length ? input.sets.slice(0, 5) : undefined;
@@ -3451,6 +3471,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ...(input.kind === 'fitness' && input.workout ? { workout: input.workout } : {}),
       // Where it was played (migration 130): the map's id for the court, private like the rest of your log.
       ...(isMapCourtId(input.courtId) ? { courtId: input.courtId } : {}),
+      // Calories and average heart rate typed in (Oct 8, migration 154): only by hand (a tracker's own numbers win), only within the limits.
+      ...(!input.activityId && keptKcal(input.kcal) ? { kcal: keptKcal(input.kcal) } : {}),
+      ...(!input.activityId && keptAvgHr(input.avgHr) ? { avgHr: keptAvgHr(input.avgHr) } : {}),
       createdAt: new Date().toISOString(),
     };
     // A tracker session logged here counts as logged straight away (the database marks it too, migration 58).
@@ -4499,9 +4522,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // post, only when the list really changed. Shown at once from your own
     // tracker while it is held here; the server then writes the numbers from
     // its private copy (migration 72) and its answer replaces these.
+    // Since Oct 8 also on a post from your log with calories or heart rate typed into it, read from your log (the server does the same, migration 154).
     const healthWas = post.session;
     const tracker = healthWas?.activityId ? stateRef.current.detectedActivities.find((a) => a.id === healthWas.activityId && a.userId === me) : undefined;
-    const healthNow = healthWas?.activityId && patch.share && !sameShare(postShare(healthWas), patch.share) ? reshare(healthWas, patch.share, tracker) : undefined;
+    const typed = !healthWas?.activityId && healthWas?.sessionId ? loggedNumbers(stateRef.current.sessions.find((x) => x.id === healthWas.sessionId && x.userId === me)) : undefined;
+    const healthNow = healthWas && (healthWas.activityId || typed) && patch.share && !sameShare(postShare(healthWas), patch.share) ? reshare(healthWas, patch.share, tracker ?? typed) : undefined;
     // "Let CourtSide feature this on its Instagram" switched after posting
     // (Oct 5, owner): only on a post that can be featured, only when it
     // really changed. Shown at once; the server's answer then counts (it

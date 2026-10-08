@@ -3,8 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { Toggle } from '@/components/ui';
-import type { DetectedActivity } from '@/data/types';
-import { availableShare, chosenShare, choiceFromTicks, shareHint, shareSummary, type HealthChoice } from '@/features/activity/healthShare';
+import { availableShare, chosenShare, choiceFromTicks, shareHint, shareSummary, type HealthChoice, type HealthNumbers } from '@/features/activity/healthShare';
 import { openHealthShare } from '@/features/activity/healthSharePicker';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, spacing, typography } from '@/theme';
@@ -13,14 +12,16 @@ import { colors, font, spacing, typography } from '@/theme';
  * "Share health data" (owner, Oct 3), one row in the composer of a tracker
  * session's post, the same for every age: a switch, and "Choose" for a sheet
  * with a tick per number the tracker has (heart rate, zones, Strain,
- * calories). Switched on, every number is shared; ticking some off keeps it
+ * calories). Since Oct 8 the same row, by the same rules, for the calories
+ * and average heart rate typed into a session logged by hand. Switched on, every number is shared; ticking some off keeps it
  * on and says "2 of 4". A line under it says what goes on the post. Nothing
  * is drawn for a session whose tracker read none of them. Laid out as a
  * FormRow, with the link and the switch beside the row's own tap area (a
  * button inside a button is not allowed in a browser).
  */
 export function HealthShareRow({ activity, choice, onChoice, line = false }: {
-  activity: DetectedActivity;
+  /** The session's numbers: its tracker's, or those typed into your log. */
+  activity: HealthNumbers;
   choice: HealthChoice;
   onChoice: (next: HealthChoice) => void;
   /** The thin line above it, as on every row but the first. */

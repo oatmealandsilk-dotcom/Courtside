@@ -10,7 +10,7 @@ import { FormRow } from '@/components/FormRow';
 import { LocationLink } from '@/components/LocationChip';
 import { HealthShareRow } from '@/components/session/HealthShareRow';
 import type { DetectedActivity, TaggedCourt } from '@/data/types';
-import { availableShare, chosenShare, choiceFromTicks, postShare, sameShare, type HealthChoice } from '@/features/activity/healthShare';
+import { availableShare, chosenShare, choiceFromTicks, loggedNumbers, postShare, sameShare, type HealthChoice } from '@/features/activity/healthShare';
 import { POST_MAX } from '@/features/feed/limits';
 import { notKnownAdult } from '@/features/players/age';
 import { openPlacePicker } from '@/features/places/picker';
@@ -34,7 +34,7 @@ import { colors, spacing, typography } from '@/theme';
 export default function EditPost() {
   const styles = useThemedStyles(styleDefinitions);
   const { id = '', kind: rawKind, pickPlace: pickParam } = useLocalSearchParams<{ id?: string; kind?: string; pickPlace?: string }>();
-  const { posts, questions, currentUserId, currentUser, detectedActivities, ready, actions } = useApp();
+  const { posts, questions, currentUserId, currentUser, detectedActivities, sessions, ready, actions } = useApp();
   const isQuestion = rawKind === 'question';
   const post = isQuestion ? undefined : posts.find((p) => p.id === id);
   const question = isQuestion ? questions.find((q) => q.id === id) : undefined;
@@ -106,7 +106,10 @@ export default function EditPost() {
     void actions.fetchActivity(activityId).then((a) => { if (on && a) setTracker(a); });
     return () => { on = false; };
   }, [activityId, !!held]); // eslint-disable-line react-hooks/exhaustive-deps
-  const available = tracker ? availableShare(tracker) : [];
+  // Since Oct 8 also on a post from your log with calories or heart rate typed into it: the same row, read from your log.
+  const typedLog = mine && !activityId && post?.session?.sessionId ? sessions.find((x) => x.id === post.session?.sessionId && x.userId === currentUserId) : undefined;
+  const numbers = tracker ?? loggedNumbers(typedLog);
+  const available = numbers ? availableShare(numbers) : [];
   // Null until it is changed here: until then it reads what the post shares.
   const [health, setHealth] = useState<HealthChoice | null>(null);
   const healthShown = health ?? choiceFromTicks(postShare(post?.session), available);
@@ -177,7 +180,7 @@ export default function EditPost() {
           <>
             <Field label="Caption" labelRight={<LocationLink value={location} court={!!court && courtOk} onPress={() => pickPlace(location)} onClear={() => { setLocation(''); setCourt(null); }} />} value={body} onChangeText={setBody} multiline minHeight={80} mentions maxLength={POST_MAX} />
             <TagPlayers tagged={tagged} onChange={setTagged} />
-            {tracker && available.length ? <HealthShareRow activity={tracker} choice={healthShown} onChoice={setHealth} /> : null}
+            {numbers && available.length ? <HealthShareRow activity={numbers} choice={healthShown} onChoice={setHealth} /> : null}
             {/* The composer's switch, word for word: the Terms ("When CourtSide features your post") and the privacy policy quote it. */}
             {featurable ? (
               <FormRow

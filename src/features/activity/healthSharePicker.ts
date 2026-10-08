@@ -1,6 +1,7 @@
 import { router } from 'expo-router';
 
-import type { DetectedActivity, HealthShareKey } from '@/data/types';
+import type { HealthShareKey } from '@/data/types';
+import type { HealthNumbers } from './healthShare';
 
 /*
  * "Choose" beside "Share health data" opens its own small sheet
@@ -9,7 +10,8 @@ import type { DetectedActivity, HealthShareKey } from '@/data/types';
  * preview changes as you tick, the way "Who you played" hands back players.
  */
 export interface HealthShareRequest {
-  activity: DetectedActivity;
+  /** The session's numbers: its tracker's, or those typed into your log (no tracker named then). */
+  activity: HealthNumbers;
   /** The numbers this session has, in order. */
   available: HealthShareKey[];
   /** Those ticked now. */

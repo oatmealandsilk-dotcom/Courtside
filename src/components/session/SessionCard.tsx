@@ -230,12 +230,14 @@ export function SessionCard({ session, width, height, play = false, people, hidd
   // (the composer's is about two thirds); the big figures scale freely.
   const small = (size: number, floor: number) => (picture ? size * k : Math.max(floor, size * k));
   const hr = session.maxHr != null;
+  // An average on its own (typed into a session logged by hand, Oct 8) shows as a tracker's does.
+  const avg = session.avgHr ? session.avgHr : null;
   const zones = postZones(session);
   // Strain and calories, when the author shared them (migration 72).
   // Strain is WHOOP's own number: posts show only what every tracker gives (Oct 3, owner).
   const strain = null as number | null;
   const kcal = session.kcal ? session.kcal : null;
-  const health = hr || !!zones || strain != null || !!kcal;
+  const health = hr || !!avg || !!zones || strain != null || !!kcal;
   const result = resultWord(session);
   // The score from the author's log (migration 91; a practice's too since Oct 6), under the time, the share picture included.
   const score = scoreLine(session);
@@ -251,7 +253,7 @@ export function SessionCard({ session, width, height, play = false, people, hidd
     result,
     score ? spokenScore(session.sets) : null,
     far ? `${far.value} miles` : null,
-    hr ? `max heart rate ${session.maxHr}${session.avgHr ? `, average ${session.avgHr}` : ''}` : null,
+    hr ? `max heart rate ${session.maxHr}${avg ? `, average ${avg}` : ''}` : avg ? `average heart rate ${avg}` : null,
     strain != null ? `Strain ${strain.toFixed(1)}` : null,
     kcal ? `${kcal} calories` : null,
     lead ? `${vs} @${lead.handle}${lead.pending ? ', waiting to accept' : ''}${list.length > 1 ? ` and ${list.length - 1} more` : ''}` : null,
@@ -262,7 +264,7 @@ export function SessionCard({ session, width, height, play = false, people, hidd
   const stats: SidewaysStat[] = [
     far ? { key: 'far', value: far.value, part: far.value < 10 ? 'dec1' : 'int', label: far.unit } : null,
     hr ? { key: 'max', value: session.maxHr!, label: 'max bpm' } : null,
-    hr && session.avgHr ? { key: 'avg', value: session.avgHr, label: 'avg bpm' } : null,
+    avg ? { key: 'avg', value: avg, label: 'avg bpm' } : null,
     strain != null ? { key: 'strain', value: strain, part: 'dec1', label: 'Strain' } : null,
     kcal ? { key: 'kcal', value: kcal, label: 'cal' } : null,
   ].filter((s): s is SidewaysStat => !!s);
@@ -318,15 +320,15 @@ export function SessionCard({ session, width, height, play = false, people, hidd
         ) : null}
         {health ? (
           <Reanimated.View entering={picture ? undefined : FadeIn.duration(220)} exiting={picture ? undefined : FadeOut.duration(160)} style={{ marginTop: 20 * k }}>
-            {hr ? (
+            {hr || avg ? (
               <View style={[styles.hrRow, { gap: 26 * k }]}>
-                <Figure value={session.maxHr!} unit="max bpm" size={38 * k} color={look.figure} unitColor={look.muted} unitScale={0.33} play={play} delay={200} />
-                {session.avgHr ? <Figure value={session.avgHr} unit="avg" size={38 * k} color={look.figure} unitColor={look.muted} unitScale={0.33} play={play} delay={200} /> : null}
+                {hr ? <Figure value={session.maxHr!} unit="max bpm" size={38 * k} color={look.figure} unitColor={look.muted} unitScale={0.33} play={play} delay={200} /> : null}
+                {avg ? <Figure value={avg} unit={hr ? 'avg' : 'avg bpm'} size={38 * k} color={look.figure} unitColor={look.muted} unitScale={0.33} play={play} delay={200} /> : null}
               </View>
             ) : null}
-            {zones ? <ZoneBar zones={zones} colors={look.zones} height={10 * k} play={play} delay={200} duration={600} style={{ marginTop: hr ? 14 * k : 0 }} /> : null}
+            {zones ? <ZoneBar zones={zones} colors={look.zones} height={10 * k} play={play} delay={200} duration={600} style={{ marginTop: hr || avg ? 14 * k : 0 }} /> : null}
             {strain != null || kcal ? (
-              <View style={[styles.hrRow, { gap: 22 * k, marginTop: hr || zones ? 12 * k : 0 }]}>
+              <View style={[styles.hrRow, { gap: 22 * k, marginTop: hr || avg || zones ? 12 * k : 0 }]}>
                 {strain != null ? <Figure value={strain} part="dec1" baseline unit="Strain" size={24 * k} color={look.figure} unitColor={look.muted} unitScale={0.46} play={play} delay={260} /> : null}
                 {kcal ? <Figure value={kcal} baseline unit="cal" size={24 * k} color={look.figure} unitColor={look.muted} unitScale={0.46} play={play} delay={260} /> : null}
               </View>
