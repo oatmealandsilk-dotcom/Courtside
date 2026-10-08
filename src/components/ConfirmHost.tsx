@@ -72,6 +72,11 @@ export function ConfirmHost() {
   useModalOpenWhile(request !== null);
   // The question still waiting for an answer: null once answered, even mid-fade.
   const live = useRef<ConfirmOptions | null>(null);
+  // The question whose card is on screen (coming in, up, or fading out): null once it has gone. A
+  // question is only asked, not yet on screen, until its card starts to come in (the effect below).
+  const onScreen = useRef<ConfirmOptions | null>(null);
+  // How many cards have come in, so a fade that ends just as a newer card comes in leaves that one be.
+  const drawn = useRef(0);
   // Anything asked while a card was up waits its turn.
   const line = useRef<ConfirmOptions[]>([]);
   const shown = useSharedValue(0);
@@ -108,9 +113,11 @@ export function ConfirmHost() {
     return () => setConfirmHost(null);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // The card is gone from view: the next question in line, or nothing.
-  const gone = () => {
-    if (live.current) return; // a new question came in while this one faded; it is on screen now
+  // The card is gone from view (`turn`: which card it was): the next question in line, or nothing.
+  const gone = (turn = drawn.current) => {
+    if (turn !== drawn.current) return; // a newer card came in as this one finished; it is on screen now
+    onScreen.current = null;
+    if (live.current) return; // a new question came in while this one faded; its card comes in now
     const next = line.current.shift();
     if (next) present(next);
     else setRequest(null);
@@ -121,7 +128,16 @@ export function ConfirmHost() {
     const asked = live.current;
     if (!asked) return; // already answered: a second tap, or Escape heard twice
     live.current = null;
-    shown.value = withTiming(0, OUT, (done) => { if (done) runOnJS(gone)(); });
+    if (onScreen.current === asked) {
+      const turn = drawn.current;
+      shown.value = withTiming(0, OUT, (done) => { if (done) runOnJS(gone)(turn); });
+    } else if (onScreen.current) {
+      // Taken back before its card came in (withdrawConfirm in the same moment it was asked), so it
+      // never shows: the card still fading out from before keeps its own words and finishes going.
+      setRequest(onScreen.current);
+    } else {
+      gone(); // ...and with nothing on screen, the next question in line comes straight away, or nothing
+    }
     // The action runs as the card leaves, the way Instagram's delete does.
     if (choice === 'yes') void asked.onConfirm();
     else if (typeof choice === 'number') void alsoChoices(asked)[choice]?.onPress();
@@ -141,6 +157,10 @@ export function ConfirmHost() {
   // Each new question: in it comes, felt as well as seen, with the focus put where it belongs.
   useEffect(() => {
     if (!request) return undefined;
+    // Taken back before its card could come in (see answer): it never comes in, so nothing is left up that cannot answer.
+    if (live.current !== request) return undefined;
+    onScreen.current = request;
+    drawn.current += 1;
     // The phone's keyboard sits above the app and would cover the card's buttons.
     if (Platform.OS !== 'web') Keyboard.dismiss();
     haptics.asking(!!request.destructive);

@@ -58,7 +58,9 @@ export function setConfirmHost(next: ConfirmHostApi | null) {
  * Takes a question back unanswered, as Cancel would: the screen that asked
  * it has gone (a menu closed by the browser's Back, a viewer that closed
  * itself), and "Delete post?" must not stay up over the page beneath and
- * still delete. Nothing happens if it was already answered.
+ * still delete. Nothing happens if it was already answered. One taken back
+ * before its card has come in (asked and withdrawn in the same moment)
+ * never shows at all.
  */
 export function withdrawConfirm(options: ConfirmOptions) {
   const at = waiting.indexOf(options);
