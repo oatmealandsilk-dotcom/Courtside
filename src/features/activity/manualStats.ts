@@ -14,8 +14,28 @@ export const KCAL_MAX = 3000;
 export const AVG_HR_MIN = 40;
 export const AVG_HR_MAX = 220;
 
-/** Only the digits of what was typed, at most `max` of them (a pasted "450 kcal" keeps 450). */
-export const digitsOnly = (text: string, max: number) => text.replace(/\D/g, '').slice(0, max);
+/**
+ * What a box keeps of what was typed or pasted: the digits, and a decimal
+ * point or a comma between them ("1,200", "145.5"), so a number is never
+ * changed by a character quietly dropped from its middle. Anything else goes
+ * (a pasted "450 kcal" keeps 450). At most 8 characters.
+ */
+export const numberText = (text: string) => text.replace(/[^\d.,]/g, '').slice(0, 8);
+
+/**
+ * The whole number a box says, or NaN when it says none. Thousands may be
+ * set apart ("1,200" or "1.200" is 1200), and a decimal is rounded the way a
+ * tracker's numbers are whole ("145.5" or "145,5" is 146).
+ */
+export function wholeNumber(text: string): number {
+  let t = text.trim();
+  if (!/\d/.test(t)) return NaN;
+  if (/^\d{1,3}(,\d{3})+(\.\d*)?$/.test(t)) t = t.replace(/,/g, '');
+  else if (/^\d{1,3}(\.\d{3})+(,\d*)?$/.test(t)) t = t.replace(/\./g, '').replace(',', '.');
+  else if (/^\d*[.,]?\d*$/.test(t)) t = t.replace(',', '.');
+  else return NaN;
+  return Math.round(Number(t));
+}
 
 export interface ManualRead {
   kcal?: number;
@@ -31,8 +51,8 @@ export interface ManualRead {
  * either can be given without the other.
  */
 export function readManualStats(kcalText: string, hrText: string): ManualRead {
-  const kcal = kcalText.trim() ? Number(kcalText.trim()) : undefined;
-  const avgHr = hrText.trim() ? Number(hrText.trim()) : undefined;
+  const kcal = kcalText.trim() ? wholeNumber(kcalText) : undefined;
+  const avgHr = hrText.trim() ? wholeNumber(hrText) : undefined;
   if (kcal !== undefined && !(Number.isInteger(kcal) && kcal >= KCAL_MIN && kcal <= KCAL_MAX)) {
     return { problem: `Calories go from ${KCAL_MIN} to ${KCAL_MAX.toLocaleString('en-US')}.`, problemIn: 'kcal' };
   }

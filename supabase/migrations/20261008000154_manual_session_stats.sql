@@ -28,10 +28,12 @@
 -- What changes, by name:
 --   practice_sessions: new columns kcal smallint and avg_hr smallint, each
 --     with a check on its range.
---   put_session_with (migration 107's, word for word, one block changed): a
+--   put_session_with (migration 107's, word for word apart from its health
+--     numbers: the line reading the "share" list and the block under it): a
 --     post from a session logged by hand keeps its "share" list and gets
 --     avgHr and kcal from the log, only those ticked. Before, it stripped all
---     health numbers from such a post.
+--     health numbers from such a post. A tracker's post comes out exactly as
+--     before.
 --   post_session_stats (migration 107's, word for word, two lines changed):
 --     no longer takes the "share" list off a post from your log before
 --     put_session_with reads it.

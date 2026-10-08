@@ -226,7 +226,8 @@ function LogSession() {
   const [statsOpen, setStatsOpen] = useState(false);
   const [kcalText, setKcalText] = useState('');
   const [hrText, setHrText] = useState('');
-  const [statsAsked, setStatsAsked] = useState(false);
+  // How many times Save met a number out of range since the boxes last changed: says why, and puts the caret there.
+  const [statsAsked, setStatsAsked] = useState(0);
   const canType = manualStatsReady && !fresh;
   const typedStats: ManualRead = canType && statsOpen ? readManualStats(kcalText, hrText) : {};
   const [saving, setSaving] = useState(false);
@@ -368,7 +369,7 @@ function LogSession() {
     if (!minutes || saving) return;
     if (canScore(kind) && scored.problem) { setError(scored.problem); return; }
     // A number out of range says why, by its box, and nothing is saved.
-    if (typedStats.problem) { setStatsAsked(true); return; }
+    if (typedStats.problem) { setStatsAsked((n) => n + 1); return; }
     setSaving(true);
     setAndPost(post);
     setError('');
@@ -659,12 +660,12 @@ function LogSession() {
           {canType ? (
             <ManualStats
               open={statsOpen}
-              onOpen={(next) => { setStatsOpen(next); setStatsAsked(false); }}
+              onOpen={(next) => { setStatsOpen(next); setStatsAsked(0); }}
               kcal={kcalText}
               avgHr={hrText}
-              onKcal={(t) => { setKcalText(t); setStatsAsked(false); }}
-              onAvgHr={(t) => { setHrText(t); setStatsAsked(false); }}
-              showProblem={statsAsked}
+              onKcal={(t) => { setKcalText(t); setStatsAsked(0); }}
+              onAvgHr={(t) => { setHrText(t); setStatsAsked(0); }}
+              asked={statsAsked}
               note="A post shows them only if you share health data."
             />
           ) : null}

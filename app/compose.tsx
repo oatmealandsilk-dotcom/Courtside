@@ -39,7 +39,7 @@ import { canScore, readScore, scoreText, setsWinner, tookScoreNotKept } from '@/
 import { ZoneGlyph } from '@/components/session/ZoneGlyph';
 import { HealthShareRow } from '@/components/session/HealthShareRow';
 import { availableShare, chosenShare, loggedNumbers, type HealthNumbers } from '@/features/activity/healthShare';
-import { keptAvgHr, keptKcal, readManualStats, type ManualRead } from '@/features/activity/manualStats';
+import { keptAvgHr, keptKcal, readManualStats, wholeNumber, type ManualRead } from '@/features/activity/manualStats';
 import { ManualStats } from '@/components/session/ManualStats';
 import { useHealthChoice } from '@/features/activity/useHealthChoice';
 import type { CardPerson } from '@/components/session/SessionCard';
@@ -499,19 +499,22 @@ function Compose() {
    * session with no tracker only (a tracker's own numbers win), folded away
    * until asked for, and only once the server keeps them (migration 154).
    * They go in your private log; the post shows them as "Share health data"
-   * says, the same switch and rules as a tracker's.
+   * says, the same switch and rules as a tracker's. Not when your tracker's
+   * copy of this same game is in your log already (liveTwins.logged): its
+   * numbers are the ones that count.
    */
-  const canType = manualStatsReady && liveOnly;
+  const canType = manualStatsReady && liveOnly && !liveTwins.logged;
   const [statsOpen, setStatsOpen] = useState(false);
   const [kcalText, setKcalText] = useState('');
   const [hrText, setHrText] = useState('');
-  const [statsAsked, setStatsAsked] = useState(false);
+  // How many times Save met a number out of range since the boxes last changed: says why, and puts the caret there.
+  const [statsAsked, setStatsAsked] = useState(0);
   const typedRead: ManualRead = canType && statsOpen ? readManualStats(kcalText, hrText) : {};
   // Each number on the card as soon as it is a good one (a heart rate half typed never takes the calories off with it).
   const typedNumbers: HealthNumbers | undefined = (() => {
     if (!canType || !statsOpen) return undefined;
-    const k = keptKcal(Number(kcalText || NaN));
-    const h = keptAvgHr(Number(hrText || NaN));
+    const k = keptKcal(wholeNumber(kcalText));
+    const h = keptAvgHr(wholeNumber(hrText));
     return k || h ? { ...(k ? { kcal: k } : {}), ...(h ? { avgHr: h } : {}) } : undefined;
   })();
   const typedShare = chosenShare(health, availableShare(typedNumbers));
@@ -796,7 +799,7 @@ function Compose() {
     // A score that isn't one yet says why, and nothing is logged.
     if (!openedLog && canScore(kind) && scored.problem) { setLogError(scored.problem); return; }
     // A typed number out of range says why, by its box, and nothing is logged.
-    if (typedRead.problem && !liveLogId.current) { setStatsAsked(true); return; }
+    if (typedRead.problem && !liveLogId.current) { setStatsAsked((n) => n + 1); return; }
     acting.current = true;
     const day = logDay;
     setBusy('log');
@@ -966,7 +969,7 @@ function Compose() {
   const shareFromLog = async () => {
     if ((opened?.type !== 'tracker' && !liveOnly) || !logDay || acting.current) { sent.current = false; return; }
     if (!openedLog && !tracker.logged && canScore(kind) && scored.problem) { setLogError(scored.problem); sent.current = false; return; }
-    if (typedRead.problem && !liveLogId.current) { setStatsAsked(true); sent.current = false; return; }
+    if (typedRead.problem && !liveLogId.current) { setStatsAsked((n) => n + 1); sent.current = false; return; }
     acting.current = true;
     const day = logDay;
     const trackerActivity = opened?.type === 'tracker' ? opened.activity : null;
@@ -1395,12 +1398,12 @@ function Compose() {
               <Reanimated.View layout={LinearTransition.duration(220)} style={styles.manualStats}>
                 <ManualStats
                   open={statsOpen}
-                  onOpen={(next) => { setStatsOpen(next); setStatsAsked(false); }}
+                  onOpen={(next) => { setStatsOpen(next); setStatsAsked(0); }}
                   kcal={kcalText}
                   avgHr={hrText}
-                  onKcal={(t) => { setKcalText(t); setStatsAsked(false); }}
-                  onAvgHr={(t) => { setHrText(t); setStatsAsked(false); }}
-                  showProblem={statsAsked}
+                  onKcal={(t) => { setKcalText(t); setStatsAsked(0); }}
+                  onAvgHr={(t) => { setHrText(t); setStatsAsked(0); }}
+                  asked={statsAsked}
                 />
               </Reanimated.View>
             ) : null}
