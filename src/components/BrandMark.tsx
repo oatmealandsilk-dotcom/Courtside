@@ -5,7 +5,8 @@ import { useTheme } from '@/theme/ThemeProvider';
 import { colors } from '@/theme';
 
 /** A forward-leaning court and a separate sideline, designed for small icons. */
-export function BrandMark({ size = 36, color }: { size?: number; color?: string }) {
+/** `weight` thickens the lines (1 = the icon's own; the share overlays use a heavier mark, Oct 9). */
+export function BrandMark({ size = 36, color, weight = 1 }: { size?: number; color?: string; weight?: number }) {
   useTheme();
   const ink = color ?? colors.brand;
   // Android cannot lean a plain box (it drops a skew), so there the mark was
@@ -16,20 +17,20 @@ export function BrandMark({ size = 36, color }: { size?: number; color?: string 
       <View accessible accessibilityRole="image" accessibilityLabel="CourtSide logo" style={{ width: size, height: size }}>
         <Svg width={size} height={size} viewBox="0 0 100 100">
           <G transform="translate(41 50) skewX(-14) translate(-41 -50)">
-            <Rect x={19.75} y={17.75} width={42.5} height={64.5} fill="none" stroke={ink} strokeWidth={7.5} />
-            <Rect x={23.5} y={47.72} width={35} height={5.5} fill={ink} />
+            <Rect x={19.75} y={17.75} width={42.5} height={64.5} fill="none" stroke={ink} strokeWidth={7.5 * weight} />
+            <Rect x={23.5} y={50.47 - 2.75 * weight} width={35} height={5.5 * weight} fill={ink} />
           </G>
           <G transform="translate(80.75 50) skewX(-14) translate(-80.75 -50)">
-            <Rect x={77} y={14} width={7.5} height={72} fill={ink} />
+            <Rect x={80.75 - 3.75 * weight} y={14} width={7.5 * weight} height={72} fill={ink} />
           </G>
         </Svg>
       </View>
     );
   }
   return <View accessible accessibilityRole="image" accessibilityLabel="CourtSide logo" style={{ width: size, height: size }}>
-    <View style={{position:'absolute',left:size*.16,top:size*.14,width:size*.5,height:size*.72,borderWidth:size*.075,borderColor:ink,transform:[{skewX:'-14deg'}]}}>
-      <View style={{position:'absolute',left:0,right:0,top:'46%',height:size*.055,backgroundColor:ink}}/>
+    <View style={{position:'absolute',left:size*.16,top:size*.14,width:size*.5,height:size*.72,borderWidth:size*.075*weight,borderColor:ink,transform:[{skewX:'-14deg'}]}}>
+      <View style={{position:'absolute',left:0,right:0,top:'46%',height:size*.055*weight,backgroundColor:ink}}/>
     </View>
-    <View style={{position:'absolute',left:size*.77,top:size*.14,width:size*.075,height:size*.72,backgroundColor:ink,transform:[{skewX:'-14deg'}]}}/>
+    <View style={{position:'absolute',left:size*(.8125-.0375*weight),top:size*.14,width:size*.075*weight,height:size*.72,backgroundColor:ink,transform:[{skewX:'-14deg'}]}}/>
   </View>;
 }

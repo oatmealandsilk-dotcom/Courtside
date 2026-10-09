@@ -5,6 +5,8 @@ export const lightColors = {
   border: '#DCD6C8', borderStrong: '#B8AF9D',
   text: '#24251F', textMuted: '#5D584C', textFaint: '#6C665A',
   brand: '#3F7049', brandInk: '#FAF8F0', brandDim: '#E3E7D9',
+  // The logo laid over a photo on a share (Oct 9, owner): a brighter brand colour that reads on any court.
+  brandBright: '#7ED492',
   court: '#527C56', clay: '#A06F53', hard: '#3E6982', grass: '#748360',
   info: '#3E6982', success: '#527C56', warning: '#957328', danger: '#A34D40',
   // Two colours only for decoration (a group's face), never for a warning or
@@ -138,11 +140,13 @@ export const fontFamily = {
   medium: 'Inter_500Medium',
   semibold: 'Inter_600SemiBold',
   bold: 'Inter_700Bold',
+  // The share overlays' wordmark only (Oct 9, owner: the logo was "too thin").
+  black: 'Inter_900Black',
 } as const;
 
 /** A weight as a style: `{...font('500')}` where a literal fontWeight used to be. */
-export const font = (weight: '400' | '500' | '600' | '700') => {
-  const family = { '400': fontFamily.regular, '500': fontFamily.medium, '600': fontFamily.semibold, '700': fontFamily.bold }[weight];
+export const font = (weight: '400' | '500' | '600' | '700' | '900') => {
+  const family = { '400': fontFamily.regular, '500': fontFamily.medium, '600': fontFamily.semibold, '700': fontFamily.bold, '900': fontFamily.black }[weight];
   // A browser takes a list and falls back to the system's own sans should Inter
   // ever be slow; a phone takes exactly one name and has Inter in the bundle.
   return { fontFamily: Platform.OS === 'web' ? `${family}, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif` : family, fontWeight: weight };

@@ -16,7 +16,7 @@ type Palette = Record<keyof typeof lightColors, string>;
 export const darkColors: Palette = {
   bg: '#0F1412', bgElevated: '#161D19', surface: '#1A221E', surfaceAlt: '#232C27',
   border: '#2C3832', borderStrong: '#46554D', text: '#EDF1EE', textMuted: '#A6B1AB', textFaint: '#8A948F',
-  brand: '#6FB483', brandInk: '#0C1710', brandDim: '#1F2E25', court: '#6FB483', clay: '#C98A6A',
+  brand: '#6FB483', brandInk: '#0C1710', brandDim: '#1F2E25', brandBright: '#7ED492', court: '#6FB483', clay: '#C98A6A',
   hard: '#7FA9C4', grass: '#86B393', info: '#7FA9C4', success: '#6FB483', warning: '#D2B36A', danger: '#D97F73',
   sun: '#E0BE66', rose: '#E592B4',
   open: '#4FD487',
@@ -40,7 +40,7 @@ export const darkColors: Palette = {
 const cleanColors: Palette = {
   bg: '#FFFFFF', bgElevated: '#F7F8F8', surface: '#FAFAFA', surfaceAlt: '#F0F1F1',
   border: '#E6E7E8', borderStrong: '#C7CACC', text: '#0F1419', textMuted: '#536471', textFaint: '#5F6871',
-  brand: '#2C7446', brandInk: '#FFFFFF', brandDim: '#E8F3EC', court: '#2C7446', clay: '#B4653A',
+  brand: '#2C7446', brandInk: '#FFFFFF', brandDim: '#E8F3EC', brandBright: '#7ED492', court: '#2C7446', clay: '#B4653A',
   hard: '#2C6885', grass: '#477F50', info: '#2C6885', success: '#2C7446', warning: '#806311', danger: '#B93129',
   sun: '#9A7110', rose: '#B04A7C',
   open: '#17803F',
@@ -62,7 +62,7 @@ const cleanColors: Palette = {
 const aoColors: Palette = {
   bg: '#EBF5FC', bgElevated: '#D7E9F4', surface: '#F8FCFF', surfaceAlt: '#C8DEEE',
   border: '#AECFE5', borderStrong: '#6394BC', text: '#0D2B43', textMuted: '#34566E', textFaint: '#496273',
-  brand: '#2E85BF', brandInk: '#FFFFFF', brandDim: '#CFE4F2', court: '#4179A8', clay: '#B97753',
+  brand: '#2E85BF', brandInk: '#FFFFFF', brandDim: '#CFE4F2', brandBright: '#6EC1F0', court: '#4179A8', clay: '#B97753',
   hard: '#2E85BF', grass: '#4E8A57', info: '#3979AF', success: '#2A7F60', warning: '#9C7016', danger: '#B8463F',
   sun: '#A8781A', rose: '#AE4F80',
   open: '#1A8147',
@@ -87,7 +87,7 @@ const aoColors: Palette = {
 const rolandGarrosColors: Palette = {
   bg: '#F8F0E9', bgElevated: '#EFDFD1', surface: '#FFFAF5', surfaceAlt: '#E6D2C0',
   border: '#D6BCA2', borderStrong: '#B08A66', text: '#33201A', textMuted: '#664836', textFaint: '#6D5745',
-  brand: '#AD4E2E', brandInk: '#FFF6F0', brandDim: '#ECD9CB', court: '#9E432E', clay: '#C67443',
+  brand: '#AD4E2E', brandInk: '#FFF6F0', brandDim: '#ECD9CB', brandBright: '#F2946A', court: '#9E432E', clay: '#C67443',
   hard: '#3E6982', grass: '#1F5F3F', info: '#3E6982', success: '#1F5F3F', warning: '#9A6718', danger: '#9E432E',
   sun: '#9E7416', rose: '#A2456E',
   open: '#1A8147',
@@ -109,7 +109,7 @@ const rolandGarrosColors: Palette = {
 const wimbledonColors: Palette = {
   bg: '#F2F6EC', bgElevated: '#E4EDD8', surface: '#FBFDF7', surfaceAlt: '#D7E3C9',
   border: '#C4D5B3', borderStrong: '#8CA37B', text: '#18291A', textMuted: '#485943', textFaint: '#586552',
-  brand: '#256B3A', brandInk: '#FFFFFF', brandDim: '#D9E6D4', court: '#4E8A4A', clay: '#A9694A',
+  brand: '#256B3A', brandInk: '#FFFFFF', brandDim: '#D9E6D4', brandBright: '#7ED492', court: '#4E8A4A', clay: '#A9694A',
   hard: '#4F2683', grass: '#4E8A4A', info: '#4F2683', success: '#256B3A', warning: '#8A6A19', danger: '#943634',
   sun: '#94701A', rose: '#A4497A',
   open: '#1A8147',
@@ -132,7 +132,7 @@ const wimbledonColors: Palette = {
 const usOpenColors: Palette = {
   bg: '#14283D', bgElevated: '#1B3350', surface: '#1F3A5A', surfaceAlt: '#2A4A6E',
   border: '#32557A', borderStrong: '#5C82AC', text: '#E9F0F8', textMuted: '#BDCDDE', textFaint: '#A9B9CA',
-  brand: '#F5D460', brandInk: '#1B1A0A', brandDim: '#4A4A2C', court: '#4E87C4', clay: '#D08A5E',
+  brand: '#F5D460', brandInk: '#1B1A0A', brandDim: '#4A4A2C', brandBright: '#F5D460', court: '#4E87C4', clay: '#D08A5E',
   hard: '#4E87C4', grass: '#5C9BD8', info: '#5C9BD8', success: '#FFDF79', warning: '#E3B85A', danger: '#E07E72',
   sun: '#F0B04A', rose: '#EE97BA',
   // The one green on this court, kept for Open to hit: the ring a player wears reads as green, as promised.

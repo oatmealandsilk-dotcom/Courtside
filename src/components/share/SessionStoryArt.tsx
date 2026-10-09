@@ -11,7 +11,7 @@ import { formatDistance } from '@/features/activity/workouts';
 import type { ID } from '@/data/types';
 import type { SessionStory } from '@/features/share/sessionStory';
 import { useTheme } from '@/theme/ThemeProvider';
-import { colors, font, inkOn } from '@/theme';
+import { colors, font } from '@/theme';
 
 /** The three pictures a session can be shared as, in the order they are offered. */
 export type StoryDesign = 'photo' | 'card' | 'sticker' | 'overlay';
@@ -77,8 +77,8 @@ export function SessionStoryArt({ design, story, width, photo, hidden = [], onPh
       s.maxHr != null ? { label: 'Max HR', value: `${s.maxHr} bpm` } : null,
     ].filter((x): x is { label: string; value: string } => !!x);
     const u = width / 360;
-    // The halo the logo's own colour reads against: light round the deep greens, dark under a light colour.
-    const halo: Halo = inkOn(colors.brand.slice(0, 7)) === '#FFFFFF' ? 'light' : 'dark';
+    // A soft dark shadow under the logo, as the white numbers have (Oct 9, owner: "the white shadow is off putting").
+    const halo: Halo = 'dark';
     return (
       // Centred on what Instagram leaves clear (its buttons cover about 13% at the top and 17% at the
       // foot), so the bigger logo under the numbers stays clear of the reply bar.
@@ -95,8 +95,8 @@ export function SessionStoryArt({ design, story, width, photo, hidden = [], onPh
             stands off a green, blue or night court; a lighter brand colour (Night's, Melbourne's, New
             York's) gets a soft dark shadow instead, as the white numbers have. */}
         <View style={[styles.overBrand, { gap: 8 * u, marginTop: 12 * u }]}>
-          <ShadedMark size={33 * u} u={u} color={colors.brand} halo={halo} />
-          <Text style={[styles.overWord, { fontSize: 30 * u, lineHeight: 36 * u, letterSpacing: -0.9 * u, color: colors.brand }, wordHalo(halo, u)]}>CourtSide</Text>
+          <ShadedMark size={33 * u} u={u} color={colors.brandBright} halo={halo} weight={1.6} />
+          <Text style={[styles.overWord, { fontSize: 30 * u, lineHeight: 36 * u, letterSpacing: -0.9 * u, color: colors.brandBright }, wordHalo(halo, u)]}>CourtSide</Text>
         </View>
       </View>
     );
@@ -144,7 +144,8 @@ const styles = StyleSheet.create({
   overLabel: { color: '#FFFFFF', ...font('600'), textShadowColor: 'rgba(0,0,0,0.35)', textShadowRadius: 6 },
   overValue: { color: '#FFFFFF', ...font('700'), letterSpacing: -0.5, textShadowColor: 'rgba(0,0,0,0.35)', textShadowRadius: 8 },
   overBrand: { flexDirection: 'row', alignItems: 'center' },
-  overWord: { ...font('700') },
+  // Inter Black: the logo was "too thin" over a photo (Oct 9, owner).
+  overWord: { ...font('900') },
   shade: { position: 'absolute', left: 0, right: 0, bottom: 0 },
   sticker: { position: 'absolute', boxShadow: '0px 6px 22px rgba(0, 0, 0, 0.32)' },
 });
