@@ -35,14 +35,14 @@ const LOOK: Record<Halo, { rgb: string; opacity: number; radius: number; drop: n
 /** How far the drawn halo reaches past the mark's own lines, in `u`. */
 const SPREAD = 7;
 
-export function ShadedMark({ size, u, color, halo, weight = 1 }: { size: number; u: number; color: string; halo: Halo; weight?: number }) {
+export function ShadedMark({ size, u, color, halo, weight = 1, sideWeight = weight }: { size: number; u: number; color: string; halo: Halo; weight?: number; sideWeight?: number }) {
   const look = LOOK[halo];
   // One gradient per mark: a page can show this mark twice (the preview and the copy photographed).
   const id = `halo${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
   if (Platform.OS === 'ios') {
     return (
       <View style={{ shadowColor: `rgb(${look.rgb})`, shadowOpacity: look.opacity, shadowRadius: look.radius * u, shadowOffset: { width: 0, height: look.drop * u } }}>
-        <BrandMark size={size} color={color} weight={weight} />
+        <BrandMark size={size} color={color} weight={weight} sideWeight={sideWeight} />
       </View>
     );
   }
@@ -68,7 +68,7 @@ export function ShadedMark({ size, u, color, halo, weight = 1 }: { size: number;
           <Ellipse cx={w / 2} cy={w / 2} rx={rx} ry={ry} fill={`url(#${id})`} />
         </Svg>
       </View>
-      <BrandMark size={size} color={color} weight={weight} />
+      <BrandMark size={size} color={color} weight={weight} sideWeight={sideWeight} />
     </View>
   );
 }

@@ -95,7 +95,7 @@ export function SessionStoryArt({ design, story, width, photo, hidden = [], onPh
             stands off a green, blue or night court; a lighter brand colour (Night's, Melbourne's, New
             York's) gets a soft dark shadow instead, as the white numbers have. */}
         <View style={[styles.overBrand, { gap: 8 * u, marginTop: 12 * u }]}>
-          <ShadedMark size={33 * u} u={u} color={colors.brandBright} halo={halo} weight={1.35} />
+          <ShadedMark size={33 * u} u={u} color={colors.brandBright} halo={halo} weight={1.5} sideWeight={1.05} />
           <Text style={[styles.overWord, { fontSize: 30 * u, lineHeight: 36 * u, letterSpacing: -0.9 * u, color: colors.brandBright }, wordHalo(halo, u)]}>CourtSide</Text>
         </View>
       </View>

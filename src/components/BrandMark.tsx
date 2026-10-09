@@ -5,8 +5,8 @@ import { useTheme } from '@/theme/ThemeProvider';
 import { colors } from '@/theme';
 
 /** A forward-leaning court and a separate sideline, designed for small icons. */
-/** `weight` thickens the lines (1 = the icon's own; the share overlays use a heavier mark, Oct 9). */
-export function BrandMark({ size = 36, color, weight = 1 }: { size?: number; color?: string; weight?: number }) {
+/** `weight` thickens the court's lines and `sideWeight` the sideline (1 = the icon's own; the share overlays use a heavier court, Oct 9). */
+export function BrandMark({ size = 36, color, weight = 1, sideWeight = weight }: { size?: number; color?: string; weight?: number; sideWeight?: number }) {
   useTheme();
   const ink = color ?? colors.brand;
   // Android cannot lean a plain box (it drops a skew), so there the mark was
@@ -21,7 +21,7 @@ export function BrandMark({ size = 36, color, weight = 1 }: { size?: number; col
             <Rect x={23.5} y={50.47 - 2.75 * weight} width={35} height={5.5 * weight} fill={ink} />
           </G>
           <G transform="translate(80.75 50) skewX(-14) translate(-80.75 -50)">
-            <Rect x={80.75 - 3.75 * weight} y={14} width={7.5 * weight} height={72} fill={ink} />
+            <Rect x={80.75 - 3.75 * sideWeight} y={14} width={7.5 * sideWeight} height={72} fill={ink} />
           </G>
         </Svg>
       </View>
@@ -31,6 +31,6 @@ export function BrandMark({ size = 36, color, weight = 1 }: { size?: number; col
     <View style={{position:'absolute',left:size*.16,top:size*.14,width:size*.5,height:size*.72,borderWidth:size*.075*weight,borderColor:ink,transform:[{skewX:'-14deg'}]}}>
       <View style={{position:'absolute',left:0,right:0,top:'46%',height:size*.055*weight,backgroundColor:ink}}/>
     </View>
-    <View style={{position:'absolute',left:size*(.8125-.0375*weight),top:size*.14,width:size*.075*weight,height:size*.72,backgroundColor:ink,transform:[{skewX:'-14deg'}]}}/>
+    <View style={{position:'absolute',left:size*(.8125-.0375*sideWeight),top:size*.14,width:size*.075*sideWeight,height:size*.72,backgroundColor:ink,transform:[{skewX:'-14deg'}]}}/>
   </View>;
 }

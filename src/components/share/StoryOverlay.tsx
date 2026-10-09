@@ -71,7 +71,7 @@ export function StoryOverlay({ handle, u }: {
     <View style={{ maxWidth: MAX_W * u }}>
       <View style={[styles.row, { gap: 10 * u }]}>
         {/* Pulled left by the mark's own margin, so the mark itself, not the space round it, starts at the corner. */}
-        <View style={{ marginLeft: -(MARK * 0.125) * u }}><ShadedMark size={MARK * u} u={u} color={WHITE} halo="dark" weight={1.3} /></View>
+        <View style={{ marginLeft: -(MARK * 0.125) * u }}><ShadedMark size={MARK * u} u={u} color={WHITE} halo="dark" weight={1.45} sideWeight={1.05} /></View>
         <View style={{ flexShrink: 1 }}>
           <Text allowFontScaling={false} numberOfLines={1} style={[{ ...font('700'), fontSize: HANDLE.size * u, lineHeight: HANDLE.line * u, color: WHITE }, shade]}>@{handle}</Text>
           <Text allowFontScaling={false} numberOfLines={1} style={[{ ...font('700'), fontSize: SUB.size * u, lineHeight: SUB.line * u, color: SOFT }, shade]}>on CourtSide</Text>
