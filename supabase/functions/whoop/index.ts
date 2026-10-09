@@ -34,7 +34,8 @@
 //           Run migration 58 first (/finish needs its whoop_pending table).
 //           Tennis sessions carry WHOOP's heart-rate zone times (workout.ts);
 //           migration 65 stores them. Either can go first: before 65 the
-//           database ignores them.
+//           database ignores them. Migration 155 (Oct 8) before this
+//           version's heart-rate refill can run: until then it is skipped.
 // Secrets:  supabase secrets set WHOOP_CLIENT_ID=... WHOOP_CLIENT_SECRET=...
 //           optional ALLOW_DEV_RETURN=1 while testing in Expo Go (remove before going live):
 //           without it, a sign-in only ever returns to the app or app.courtsidebase.com.
@@ -286,6 +287,47 @@ async function workoutsFor(uid: string, hours = 36): Promise<{ fresh: string[]; 
 }
 
 /**
+ * Oct 8: until migration 155 and this version, every WHOOP workout came in
+ * without its heart rate and zones (WHOOP sends percent_recorded as 0–1,
+ * which read as under 1%: see percentRecorded). Once per connection, the
+ * workouts already here that have no heart rate are read from WHOOP again
+ * (back to the oldest, 30 days at most, as far as record_activity takes) and
+ * record_activity fills them in. Only those: nothing new is filed and nothing
+ * is taken back here. whoop_tokens.hr_refilled_at (migration 155) says it is
+ * done: empty for connections made before it, set for any made since. A
+ * database without it, or a WHOOP that did not answer, leaves it for the
+ * next look.
+ */
+async function refillHeartRate(uid: string): Promise<void> {
+  const { data: t, error } = await admin.from('whoop_tokens').select('hr_refilled_at, whoop_user_id').eq('user_id', uid).maybeSingle();
+  // No migration 155 yet (no such column), no WHOOP, or already done.
+  if (error || !t || t.hr_refilled_at) return;
+  const done = async () => { await admin.from('whoop_tokens').update({ hr_refilled_at: new Date().toISOString() }).eq('user_id', uid); };
+  // As workoutsFor: a key no phone of this player's collected never reads workouts.
+  if (t.whoop_user_id == null) return done();
+  const { data: rows, error: bad } = await admin.from('detected_activities').select('external_id, started_at').eq('user_id', uid).eq('source', 'whoop')
+    .is('avg_hr', null).neq('status', 'withdrawn').gte('started_at', new Date(Date.now() - 30 * 86_400_000).toISOString());
+  if (bad) { console.error('[whoop] refill', bad.message); return; }
+  const want = new Set(((rows ?? []) as { external_id: string }[]).map((r) => r.external_id));
+  if (!want.size) return done();
+  const oldest = Math.min(...((rows ?? []) as { started_at: string }[]).map((r) => Date.parse(r.started_at)));
+  const r = await page(uid, '/activity/workout', new Date(oldest - 3_600_000).toISOString(), new Date().toISOString(), 12);
+  // WHOOP answered, but this key may not read workouts: nothing to fill in, ever.
+  if (r.status === 403) return done();
+  // No key, or WHOOP did not answer: the next look tries again.
+  if (r.status !== 200) return;
+  let filled = 0;
+  for (const w of r.records as WhoopWorkout[]) {
+    if (!want.has(String(w.id))) continue;
+    const { error: no } = await admin.rpc('record_activity', { u: uid, src: 'whoop', ext: w.id, p: toPayload(w), quiet: true });
+    if (no) { console.error('[whoop] refill record', no.message); return; }
+    filled += 1;
+  }
+  console.log('[whoop] refilled', filled, 'of', want.size);
+  return done();
+}
+
+/**
  * The last week from WHOOP, folded into a row per day, plus any new
  * workouts. With only = 'workouts', just the workouts. `workoutDays` (1 to 7)
  * looks that far back for them instead of the last 36 hours; the answer's
@@ -300,6 +342,8 @@ async function sync(uid: string, only?: 'workouts', workoutDays?: number): Promi
   let fresh: string[] = [];
   let allWorkouts = false;
   try { ({ fresh, all: allWorkouts } = await workoutsFor(uid, Math.round(looked * 24))); } catch (e) { console.error('[whoop] workouts', e); }
+  // Once per connection: heart rate and zones back on the workouts already here (Oct 8, migration 155).
+  try { await refillHeartRate(uid); } catch (e) { console.error('[whoop] refill', e); }
   await sweep();
   if (only === 'workouts') return { days: 0, fresh, workoutDays: looked, allWorkouts };
   // As before: a key WHOOP will no longer refresh means connecting again.

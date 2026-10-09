@@ -87,17 +87,31 @@ export function zoneMinutes(z?: WhoopZones | null): number[] | null {
   const out = [z0 + z1, z2, z3, z4, z5].map((v) => Math.round(v / 60_000));
   return out.some((v) => v > 0) ? out : null;
 }
+/**
+ * How much of the workout WHOOP's strap heard the heart, as a whole percent
+ * (0–100), or null. WHOOP's docs say 0–100, but it sends a fraction, 0–1:
+ * every WHOOP workout until Oct 8 lost its heart rate and zones because a
+ * whole session (1.0) read as 1%. So 1 or less is a fraction. The database
+ * reads it the same way (migration 155), so under 2% goes as 0: a 1 sent from
+ * here must never be read as a whole session there. Both mean the strap was
+ * barely on. Over 100 is passed on for the database to refuse, as before.
+ */
+export function percentRecorded(v: unknown): number | null {
+  if (typeof v !== 'number' || !Number.isFinite(v) || v < 0) return null;
+  const pct = Math.round(v <= 1 ? v * 100 : v);
+  return pct < 2 ? 0 : pct;
+}
 /** A distance worth keeping, in whole metres; tennis never has one (as on the phone). */
 const metres = (w: WhoopWorkout) => {
   const m = w.score?.distance_meter;
   return !isTennis(w) && typeof m === 'number' && Number.isFinite(m) && m > 0 ? Math.round(m) : null;
 };
-/** The payload record_activity (migrations 58, 65 and 107) checks and stores. */
+/** The payload record_activity (migrations 58, 65, 107 and 155) checks and stores. */
 export const toPayload = (w: WhoopWorkout) => ({
   sport: sportOf(w) ?? 'workout', started_at: w.start, ended_at: w.end, tz_offset_min: tzMinutes(w.timezone_offset),
   avg_hr: w.score?.average_heart_rate ?? null, max_hr: w.score?.max_heart_rate ?? null,
   kcal: w.score?.kilojoule != null ? Math.round(w.score.kilojoule / 4.184) : null,
-  strain: w.score?.strain ?? null, percent_recorded: w.score?.percent_recorded ?? null,
+  strain: w.score?.strain ?? null, percent_recorded: percentRecorded(w.score?.percent_recorded),
   hr_zones: zoneMinutes(w.score?.zone_durations ?? w.score?.zone_duration),
   score_state: w.score_state ?? null, device: 'WHOOP',
   ...(metres(w) ? { distance_m: metres(w) } : {}),
