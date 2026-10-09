@@ -168,7 +168,7 @@ export interface PinEngineOptions {
   quiet?: boolean;
   /** Room each kind needs on screen before two gather, [wide, tall] in pixels. `pFar`: players below zoom 12, where names drop the "· 2h". */
   box?: { p?: [number, number]; pFar?: [number, number]; c?: [number, number]; h?: [number, number] };
-  /** Room kept clear round the edge when zooming to fit a gathered pin (the bars and the tray). */
+  /** Room kept clear round the edge when zooming to fit a gathered pin (the bars, the buttons and the cards). */
   pad?: { top: number; bottom: number; left: number; right: number };
   /** A gathered pin was tapped (a little haptic on the phone). */
   gathered?: () => void;

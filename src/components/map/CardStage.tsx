@@ -7,15 +7,16 @@ import { sheetFling } from '@/components/map/sheetFling';
 import { layerZ, useStageLayers, type StageKind, type StageLayer } from '@/components/map/stageLayers';
 
 /*
- * The bottom of the full map: the tray of players, or the card for whatever
- * was tapped, with the map's buttons (Back to me, the credits) riding on top
- * of whichever is up. Changing what is up glides rather than cuts, the way
- * Snap Map's friend cards move:
+ * The bottom of the full map: the card for whatever was tapped (or the list
+ * of players), or nothing but the map itself, with the map's buttons (Back to
+ * me, the players pill, the credits) riding on top of whichever is up.
+ * Changing what is up glides rather than cuts, the way Snap Map's friend
+ * cards move:
  *
  * - A card rises from the bottom edge on a soft spring (about a third of a
- *   second) while the tray fades down out of the way.
+ *   second) while the bare map's buttons fade down out of the way.
  * - Closing (×, a tap on the map, a swipe down) slides the card down and
- *   fades it, then it is gone; the tray settles back in under it. After a
+ *   fades it, then it is gone; the buttons settle back in under it. After a
  *   swipe the card carries on at the finger's speed rather than starting over.
  * - Tapping another pin while a card is up: the old card sinks as the new
  *   one rises over it.
@@ -43,9 +44,9 @@ const SINK = Easing.bezier(0.4, 0, 0.2, 1);
 const OFFSTAGE = 4000;
 
 export function CardStage({ cardKey, kind, crown, children }: {
-  /** What is up ('tray', 'me', 'p:<id>', 'c:<id>'…); a new key is a new card. */
+  /** What is up ('bare', 'list', 'me', 'p:<id>', 'c:<id>'…); a new key is a new card. */
   cardKey: string;
-  /** The tray settles in place; a card rises. */
+  /** 'tray' settles in place (the bare map, or the card asking where you are); a card rises. */
   kind: StageKind;
   /** Rides on top of whatever is up: the map's buttons. */
   crown?: React.ReactNode;
@@ -90,7 +91,7 @@ function Layer({ layer, out, crown, onGone }: { layer: StageLayer; out: boolean;
     inner.current?.measure((_x, _y, _w, h) => { if (h > 0) rise(h); });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Arriving: the tray (or anything under Reduce Motion) fades in; a card rises once measured, above.
+  // Arriving: a 'tray' layer (or anything under Reduce Motion) fades in; a card rises once measured, above.
   useEffect(() => {
     if (layer.first || rises) return;
     if (reduce) {

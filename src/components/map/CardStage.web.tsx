@@ -106,7 +106,7 @@ export function CardStage({ cardKey, kind, crown, children }: { cardKey: string;
         <View
           key={layer.id}
           ref={(el) => { if (el) els.current.set(layer.id, el as unknown as HTMLElement); }}
-          // The tray always under the cards; the newest card above the one leaving, which no longer takes taps.
+          // The bare map's layer always under the cards; the newest card above the one leaving, which no longer takes taps.
           style={[{ zIndex: layerZ(layer) }, layer.out ? styles.out : styles.through]}
         >
           {crown ? (

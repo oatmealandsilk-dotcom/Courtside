@@ -8,12 +8,13 @@ import { useReducer, useRef } from 'react';
  * each only animates them its own way.
  */
 
+/** 'tray' settles in place (the bare map with only its buttons, or the card asking where you are); 'card' rises from the bottom edge. */
 export type StageKind = 'tray' | 'card';
 
 export interface StageLayer {
   /** Unique per appearance: a card closed and opened again is a new layer. */
   id: string;
-  /** What it shows ('tray', 'me', 'p:<id>'…). */
+  /** What it shows ('bare', 'list', 'me', 'p:<id>'…). */
   key: string;
   kind: StageKind;
   node: React.ReactNode;
@@ -52,5 +53,5 @@ export function useStageLayers(cardKey: string, kind: StageKind, node: React.Rea
   return { layers: layers.current, remove };
 }
 
-/** The newest card stacks over the one leaving; the tray always sits under the cards. */
+/** The newest card stacks over the one leaving; a 'tray' layer always sits under the cards. */
 export const layerZ = (layer: StageLayer) => (layer.kind === 'tray' ? 1 : 2 + layer.n);

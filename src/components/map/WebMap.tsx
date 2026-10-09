@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as maplibregl from 'maplibre-gl';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
-import { CitylessCard, CourtSheet, CourtsZoomNote, FilterChips, HitSheet, MapCredit, YouSheet, MapButtons, MapTopBar, NearbyRail, PlaceSheet, PlayerSheet, PreviewOverlay, WhereCard } from '@/components/map/MapChrome';
+import { CitylessCard, CityWeatherChip, CourtSheet, CourtsZoomNote, FilterChips, HitSheet, MapCredit, YouSheet, MapButtons, MapTopBar, PlaceSheet, PlayerSheet, PlayersPill, PlayersSheet, PreviewOverlay, WhereCard } from '@/components/map/MapChrome';
 import { CardStage } from '@/components/map/CardStage';
 import { CARD_HEIGHT, CARD_ZOOM, onCard } from '@/components/map/cardFit';
 import type { NearbyMapProps } from '@/components/NearbyMap.types';
@@ -64,7 +64,9 @@ maplibregl.setWorkerUrl(`${BASE}/maplibre/maplibre-gl-worker.mjs`);
  * by MapLibre — the same vector-map engine behind modern map apps. Players
  * appear only where they last shared their location (no shared spot, no pin,
  * never placed by their profile's city); courts and open hits have their own
- * marks. The controls laid over it are shared with the phone.
+ * marks. The controls laid over it are shared with the phone. Nothing lies
+ * along the bottom of the full map (Oct 8, owner): the pins carry the faces,
+ * and an "All N players" pill beside Back to me opens the list of everyone.
  */
 export function NearbyMap(props: NearbyMapProps) {
   const { me, players, onOpen, onExpand, expanded = false, onBack, at, locationOn, locating = false, onToggleLocation, focusCourt, focusHit, focusUser, focusSpot, focusPlace, holdPins = false, hitCount, inviting = false, cardHeight } = props;
@@ -81,13 +83,15 @@ export function NearbyMap(props: NearbyMapProps) {
   // Playing a live session, checked in at its court (Oct 6): your pin says "Playing now", the court glows. Not on Only me, which nobody sees.
   const playing = livePin(liveSession, courtNow, locationEnabled && !hiddenMe);
   // Since migration 98 you share to see: what keeps "Players nearby" from you
-  // (Location off, or Only me), said by the tray and the still card, with the tap that changes it.
+  // (Location off, or Only me), said by the players pill, their list and the still card, with the tap that changes it.
   const lock = nearbyLock({ mapLive, me, mapVisibility, locationOn: !!locationOn, hasSpot: !!lastSeen[me.id] });
   const unlock = lock === 'hidden' ? () => { void askWhoSeesYou('manage'); } : onToggleLocation;
   // The "Open to hit today" switch on your card: a teen who never said who sees them is asked first.
   const toggleOpen = useOpenToHitToggle();
   // Your own pin, tapped: the card with your open-to-hit switch.
   const [meOpen, setMeOpen] = useState(false);
+  // The list of everyone around, opened from the "All N players" pill. A player's card opened from it comes back to it on closing.
+  const [listOpen, setListOpen] = useState(false);
   // Your ring (and your card's switch) go out by themselves at the time you picked.
   useOpenClock([me.openToHitUntil]);
   const openToHit = isOpenToHit(me);
@@ -206,7 +210,8 @@ export function NearbyMap(props: NearbyMapProps) {
     el.classList.toggle('cs-quiet', !expanded);
     zoomClass();
     instance.on('zoom', zoomClass);
-    instance.on('click', () => { latest.current.select(null); latest.current.selectCourt(null); latest.current.selectHit(null); setMeOpen(false); });
+    // A tap on the map puts away whatever is up (the list of players too), back to the bare map.
+    instance.on('click', () => { latest.current.select(null); latest.current.selectCourt(null); latest.current.selectHit(null); setMeOpen(false); setListOpen(false); });
     // Courts and their rings for where the map came to rest: asked once it
     // has been still a moment, not on every frame of a scroll, and only zoomed
     // in on a town (both check the zoom). Rings come with the courts layer off
@@ -386,13 +391,21 @@ export function NearbyMap(props: NearbyMapProps) {
     );
   }
 
-  // Which card is up: yours, a player's, a court's, a hit's, or none (the tray; or, not knowing where you are, the card asking).
+  // Which card is up: yours, a player's, a court's, a hit's, a place's, the list of players, or none
+  // (the bare map, only its buttons; or, not knowing where you are, the card asking).
   const stageKey = meOpen ? 'me'
     : model.selected ? `p:${model.selected.user.id}`
       : model.selectedCourt ? `c:${model.selectedCourt.id}`
         : model.selectedHit ? `h:${model.selectedHit.hit.id}`
           : model.place ? `place:${model.place.id}`
-            : !model.homeKnown ? 'where' : 'tray';
+            : !model.homeKnown ? 'where'
+              : listOpen ? 'list' : 'bare';
+  const bare = stageKey === 'bare';
+  // Under a card, its own colour runs on beneath the floating tab bar, so no map shows between them; it
+  // lies over the card's foot, so the card's shadow never darkens it into a band (Oct 7), and it rises and
+  // sinks with its card. With nothing up the map runs to the bottom edge, and only the buttons keep clear
+  // of the bar (or, with no bar, of the home indicator).
+  const foot = (card: React.ReactNode) => (barInset ? <View pointerEvents="box-none">{card}<View pointerEvents="none" style={[styles.foot, { height: barInset }]} /></View> : card);
   // Locked (checked with the server first), it says why in a note that stays to be read.
   const message = async (id: string) => {
     const lock = await actions.messageLock(id);
@@ -407,21 +420,26 @@ export function NearbyMap(props: NearbyMapProps) {
       <View pointerEvents="box-none" style={[styles.top, { paddingTop: insets.top + spacing.sm }]}>
         <MapTopBar onBack={onBack} query={model.query} onQuery={model.setQuery} locationOn={locationOn} locating={locating} onToggleLocation={onToggleLocation} results={model.courtResults} onPickCourt={model.pickCourt} places={model.placeSearch} onPickPlace={model.pickPlace} players={model.query.trim() ? model.tray.length : 0} locationMenu={choosing} />
         <FilterChips filter={model.filter} onFilter={model.setFilter} courtsOn={model.courtsOn} onCourts={model.toggleCourts} courtsLoading={model.courtsLoading} />
+        {/* The city and its weather, a small chip under the filters. */}
+        {model.homeKnown ? <CityWeatherChip cityName={cityName} weather={weather} /> : null}
         {model.courtsOn && far && !model.selectedCourt && !model.query.trim() ? <CourtsZoomNote /> : null}
         {/* Slow to come, or didn't: a small pill under the chips, clear of the pins around you (as on the phone). */}
         <MapLoadPill status={load.status} onRetry={load.restart} />
       </View>
       <View pointerEvents="box-none" style={styles.bottom}>
-        {/* What is up along the bottom (the tray or a card) glides in and out, the map's buttons riding on top of it: CardStage. */}
+        {/* What is up along the bottom (a card, or nothing) glides in and out, the map's buttons riding on top of it: CardStage. */}
         <CardStage
           cardKey={stageKey}
-          kind={stageKey === 'tray' || stageKey === 'where' ? 'tray' : 'card'}
-          crown={<View pointerEvents="box-none" style={styles.crown}><MapButtons onRecentre={() => { model.select(null); model.selectCourt(null); model.selectHit(null); model.clearPlace(); map.current?.flyTo({ center: [model.homeView.center.lng, model.homeView.center.lat], zoom: model.homeView.zoom ?? START_ZOOM, duration: 600 }); }} onZoomIn={() => map.current?.zoomIn()} onZoomOut={() => map.current?.zoomOut()} /></View>}
+          kind={bare || stageKey === 'where' ? 'tray' : 'card'}
+          crown={<View pointerEvents="box-none" style={styles.crown}><MapButtons lead={bare ? <PlayersPill items={model.tray} query={model.query} filter={model.filter} courts={model.nearestCourts} lock={lock} onOpen={() => setListOpen(true)} /> : undefined} onRecentre={() => { model.select(null); model.selectCourt(null); model.selectHit(null); model.clearPlace(); map.current?.flyTo({ center: [model.homeView.center.lng, model.homeView.center.lat], zoom: model.homeView.zoom ?? START_ZOOM, duration: 600 }); }} onZoomIn={() => map.current?.zoomIn()} onZoomOut={() => map.current?.zoomOut()} /></View>}
         >
-          {stageKey === 'where' ? (
+          {bare ? (
+            // Nothing up: only the room the buttons above keep clear of the tab bar (or, with no bar, of the home indicator).
+            <View pointerEvents="none" style={{ height: barInset || insets.bottom }} />
+          ) : foot(stageKey === 'where' ? (
             <WhereCard locating={locating} onLocation={onToggleLocation} />
-          ) : stageKey === 'tray' ? (
-            <NearbyRail items={model.tray} cityName={cityName} selectedId={null} onSelect={model.select} weather={weather} query={model.query} filter={model.filter} courts={model.nearestCourts} onPickCourt={model.selectCourt} lock={lock} onUnlock={unlock} />
+          ) : stageKey === 'list' ? (
+            <PlayersSheet items={model.tray} cityName={cityName} onSelect={model.select} weather={weather} query={model.query} filter={model.filter} courts={model.nearestCourts} onPickCourt={model.selectCourt} lock={lock} onUnlock={unlock} onClose={() => setListOpen(false)} />
           ) : meOpen ? (
             <YouSheet me={me} open={openToHit} teen={teen} onToggle={(on) => { void toggleOpen(on); }} onProfile={() => { setMeOpen(false); router.push('/(tabs)/profile'); }} onClose={() => setMeOpen(false)} seenBy={mapVisibility} onSeenBy={choosing ? () => { void askWhoSeesYou('manage'); } : undefined} />
           ) : model.selected ? (
@@ -432,11 +450,8 @@ export function NearbyMap(props: NearbyMapProps) {
             <HitSheet hit={model.selectedHit.hit} miles={milesBetween(home, model.selectedHit.at)} onClose={() => model.selectHit(null)} />
           ) : model.place ? (
             <PlaceSheet place={model.place} rows={model.placeRows} loading={model.placeLoading} failed={model.placeFailed} onPickCourt={model.pickCourt} onRetry={model.retryPlace} onClose={model.clearPlace} played={model.ringFor} />
-          ) : null}
+          ) : null)}
         </CardStage>
-        {/* The tray's own colour runs on beneath the floating tab bar, so no map shows between them.
-            It lies over the card above it, so the card's shadow never darkens it into a band (Oct 7). */}
-        {barInset ? <View style={{ height: barInset, backgroundColor: colors.surface, marginTop: -spacing.md - 1, zIndex: 1 }} /> : null}
       </View>
     </View>
   );
@@ -450,5 +465,7 @@ const styleDefinitions = StyleSheet.create({
   top: { position: 'absolute', left: 0, right: 0, top: 0, gap: 2, zIndex: 10 },
   // The map's buttons, riding on whatever is up along the bottom.
   crown: { marginBottom: spacing.md },
-  bottom: { position: 'absolute', left: 0, right: 0, bottom: 0, justifyContent: 'flex-end', gap: spacing.md, zIndex: 10 },
+  bottom: { position: 'absolute', left: 0, right: 0, bottom: 0, justifyContent: 'flex-end', zIndex: 10 },
+  // Under a card: the card's colour beneath the tab bar, a point up over the card's foot so no seam shows.
+  foot: { backgroundColor: colors.surface, marginTop: -1 },
 });

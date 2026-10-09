@@ -72,7 +72,7 @@ export function liveCentre(fix: LatLng): LatLng {
 export function measureFrom(you: LatLng | null | undefined, profileCity: LatLng | null): LatLng | null {
   return you ?? profileCity ?? null;
 }
-/** The tray lists people only this close (about 50 miles), unless you searched for someone or somewhere, or picked Following. */
+/** The players list (the full map's "All N players") holds people only this close (about 50 miles), unless you searched for someone or somewhere, or picked Following. */
 const TRAY_MILES = 50;
 
 /** The box court rings are asked for around a spot: about 10 miles each way, a town and its edges. */
@@ -362,9 +362,9 @@ export function useMapModel(me: User, players: User[], fix?: LatLng | null, focu
     setSelectedHitId(null);
     setQuery('');
   }, []);
-  /** The place's list closed: the map stays where it is, the players tray comes back. */
+  /** The place's list closed: the map stays where it is (bare again, or the players list if that was open). */
   const clearPlace = useCallback(() => setPlace(null), []);
-  // The tray under the map: the people around you. In a town where nobody
+  // The full map's players list (its "All N players" pill): the people around you. In a town where nobody
   // shares yet it never lists players 2,000 miles away as "around" it; it
   // names the nearest courts instead. A search or Following lists everyone it finds.
   const tray = useMemo(() => (query.trim() || filter === 'following' ? shown : shown.filter((p) => p.miles <= TRAY_MILES)), [shown, query, filter]);
@@ -416,7 +416,7 @@ export function useMapModel(me: User, players: User[], fix?: LatLng | null, focu
   }, [card, cityLat, cityLng, loadCourtRings]);
   const cardRinged = useMemo(() => new Set(cardCourts.filter((c) => ringFor(c)).map((c) => c.id)), [cardCourts, ringFor]);
   /**
-   * With nobody sharing nearby, the tray names the nearest few places anyone
+   * With nobody sharing nearby, the players list names the nearest few places anyone
    * may play in town: named ones only (three unnamed "Tennis courts" rows
    * tell nobody anything), those whose names read as public (a park, a rec
    * centre, a school) first, then the rest, nearest first within each. Only
