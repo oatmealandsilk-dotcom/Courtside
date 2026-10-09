@@ -295,8 +295,8 @@ async function workoutsFor(uid: string, hours = 36): Promise<{ fresh: string[]; 
  * record_activity fills them in. Only those: nothing new is filed and nothing
  * is taken back here. whoop_tokens.hr_refilled_at (migration 155) says it is
  * done: empty for connections made before it, set for any made since. A
- * database without it, or a WHOOP that did not answer, leaves it for the
- * next look.
+ * database without it, a WHOOP that did not answer, nothing switched on, or
+ * a workout that did not go through leaves it for the next look.
  */
 async function refillHeartRate(uid: string): Promise<void> {
   const { data: t, error } = await admin.from('whoop_tokens').select('hr_refilled_at, whoop_user_id').eq('user_id', uid).maybeSingle();
@@ -310,6 +310,10 @@ async function refillHeartRate(uid: string): Promise<void> {
   if (bad) { console.error('[whoop] refill', bad.message); return; }
   const want = new Set(((rows ?? []) as { external_id: string }[]).map((r) => r.external_id));
   if (!want.size) return done();
+  // As workoutsFor: only what this person still brings in from WHOOP. With
+  // nothing switched on, no WHOOP call, and it waits for the switch.
+  const on = await wants(uid);
+  if (!on.tennis && !on.all) return;
   const oldest = Math.min(...((rows ?? []) as { started_at: string }[]).map((r) => Date.parse(r.started_at)));
   const r = await page(uid, '/activity/workout', new Date(oldest - 3_600_000).toISOString(), new Date().toISOString(), 12);
   // WHOOP answered, but this key may not read workouts: nothing to fill in, ever.
@@ -317,14 +321,19 @@ async function refillHeartRate(uid: string): Promise<void> {
   // No key, or WHOOP did not answer: the next look tries again.
   if (r.status !== 200) return;
   let filled = 0;
+  let failed = 0;
   for (const w of r.records as WhoopWorkout[]) {
-    if (!want.has(String(w.id))) continue;
+    // One already here, filed as the usual look files it: never one WHOOP now
+    // calls something not kept (a session renamed a sauna does not come back
+    // as a 'workout'); the usual look takes those back itself.
+    if (!want.has(String(w.id)) || !keeps(w, on)) continue;
     const { error: no } = await admin.rpc('record_activity', { u: uid, src: 'whoop', ext: w.id, p: toPayload(w), quiet: true });
-    if (no) { console.error('[whoop] refill record', no.message); return; }
+    // One that did not go through never holds up the rest; the next look tries again.
+    if (no) { console.error('[whoop] refill record', no.message); failed += 1; continue; }
     filled += 1;
   }
-  console.log('[whoop] refilled', filled, 'of', want.size);
-  return done();
+  console.log('[whoop] refilled', filled, 'of', want.size, ...(failed ? [`(${failed} failed: the next look tries again)`] : []));
+  if (!failed) await done();
 }
 
 /**

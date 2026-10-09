@@ -95,10 +95,13 @@ export function zoneMinutes(z?: WhoopZones | null): number[] | null {
  * reads it the same way (migration 155), so under 2% goes as 0: a 1 sent from
  * here must never be read as a whole session there. Both mean the strap was
  * barely on. Over 100 is passed on for the database to refuse, as before.
+ * A number written as text ("30") counts as that number, as the database
+ * has always read it: before, a "30" still took the heart rate off.
  */
 export function percentRecorded(v: unknown): number | null {
-  if (typeof v !== 'number' || !Number.isFinite(v) || v < 0) return null;
-  const pct = Math.round(v <= 1 ? v * 100 : v);
+  const n = typeof v === 'string' && /^[0-9]+([.][0-9]+)?$/.test(v) ? Number(v) : v;
+  if (typeof n !== 'number' || !Number.isFinite(n) || n < 0) return null;
+  const pct = Math.round(n <= 1 ? n * 100 : n);
   return pct < 2 ? 0 : pct;
 }
 /** A distance worth keeping, in whole metres; tennis never has one (as on the phone). */
