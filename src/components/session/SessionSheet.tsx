@@ -21,6 +21,7 @@ import { learned, useTip } from '@/features/tips/tips';
 import { colors, font, withAlpha } from '@/theme';
 import { Duration, Figure } from './Duration';
 import { Pop } from './Pop';
+import { StatsGrid, type StatNumber } from './StatsGrid';
 import { ZoneRows } from './ZoneRows';
 
 
@@ -29,6 +30,13 @@ function clockParts(iso: string): { time: string; mark: string } {
   const s = new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
   const m = /^(.*?)[\s ]*([AaPp][.]?[Mm][.]?)$/.exec(s);
   return m ? { time: m[1], mark: m[2].replace(/[.]/g, '').toLowerCase() } : { time: s, mark: '' };
+}
+
+/** "2–1": the sets each side took, on a match's score of two sets or more. */
+function setsTaken(s: Pick<NonNullable<Post['session']>, 'kind' | 'sets'>): string | null {
+  if (s.kind !== 'match' || !s.sets || s.sets.length < 2) return null;
+  const won = s.sets.filter(([a, b]) => a > b).length;
+  return `${won}–${s.sets.length - won}`;
 }
 
 /** A person on the session, as the sheet lists them. */
@@ -199,34 +207,24 @@ export function SessionSheet({ post, me, users, sessions, sessionTags, activitie
         <FormRow lead={<CourtGlyph size={16} color={colors.brand} />} label={court.name} chevron onPress={() => openCourt(court)} accessibilityLabel={`${court.name}, see posts from here`} />
       ) : null}
 
+      {/* Every shared number in one labelled grid, the zones' rows under it (Oct 8, owner: "Ok pop up one then. Ship 1"). */}
       {!sparse ? (
         <>
           <View style={styles.rule} />
-          {far ? (
-            <View style={styles.columns}>
-              <Column label="DISTANCE"><Figure value={far.value} part={far.value < 10 ? 'dec1' : 'int'} unit={far.unit} size={34} color={colors.text} unitColor={colors.textMuted} play={play} delay={160} /></Column>
-            </View>
-          ) : null}
-          {hr || avg || zones ? (
-            <View style={styles.columns}>
-              {avg ? <Column label="AVG HEART RATE"><Figure value={avg} unit="bpm" size={34} color={colors.text} unitColor={colors.textMuted} play={play} delay={200} /></Column> : null}
-              {hr ? <Column label="MAX"><Figure value={s.maxHr!} unit="bpm" size={34} color={colors.text} unitColor={colors.textMuted} play={play} delay={200} /></Column> : null}
-              {zones ? <Column label="ZONES 4–5"><Figure value={hardMinutes(zones)} unit="min" size={34} color={colors.text} unitColor={colors.textMuted} play={play} delay={200} /></Column> : null}
-            </View>
-          ) : null}
-          {strain != null || kcal ? (
-            <View style={styles.columns}>
-              {strain != null ? <Column label="STRAIN"><Figure value={strain} part="dec1" size={34} color={colors.text} unitColor={colors.textMuted} play={play} delay={260} /></Column> : null}
-              {kcal ? <Column label="CALORIES"><Figure value={kcal} size={34} color={colors.text} unitColor={colors.textMuted} play={play} delay={260} /></Column> : null}
-            </View>
-          ) : null}
+          <StatsGrid
+            numbers={[
+              far ? { key: 'far', label: 'DISTANCE', value: far.value, unit: far.unit, dec: far.value < 10 } : null,
+              avg ? { key: 'avg', label: 'AVG HR', value: avg, unit: 'bpm' } : null,
+              hr ? { key: 'max', label: 'MAX HR', value: s.maxHr!, unit: 'bpm' } : null,
+              kcal ? { key: 'kcal', label: 'CALORIES', value: kcal } : null,
+              strain != null ? { key: 'strain', label: 'STRAIN', value: strain, dec: true } : null,
+              zones ? { key: 'hard', label: 'ZONES 4–5', value: hardMinutes(zones), unit: 'min' } : null,
+            ].filter((n): n is StatNumber => !!n)}
+            sets={setsTaken(s)}
+            zones={zones}
+            play={play}
+          />
         </>
-      ) : null}
-      {zones ? (
-        <View style={styles.zones}>
-          <Text style={styles.label} maxFontSizeMultiplier={1.2}>HEART RATE ZONES</Text>
-          <ZoneRows zones={zones} play={play} />
-        </View>
       ) : null}
 
       {(activity || typed) && (owner.length || started || privateHr) ? (
@@ -311,10 +309,8 @@ const styleDefinitions = StyleSheet.create({
   court: { flexDirection: 'row', alignItems: 'center', gap: 4, maxWidth: 130 },
   courtText: { ...font('500'), fontSize: 13, color: colors.textMuted, flexShrink: 1 },
   rule: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border, marginTop: 4, marginBottom: 2 },
-  columns: { flexDirection: 'row', gap: 22 },
   column: { gap: 3 },
   label: { ...font('600'), fontSize: 11, letterSpacing: 0.66, color: colors.textMuted },
-  zones: { gap: 6, marginTop: 4 },
   // A calm filled tile, no outline: the dashed edge read as unfinished (Oct 6, owner). 17 = the old 16 plus its 1pt border, so nothing moves.
   only: { borderRadius: 18, backgroundColor: colors.bgElevated, padding: 17, gap: 12, marginTop: 4 },
   onlyHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
