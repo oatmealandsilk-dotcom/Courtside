@@ -18,7 +18,6 @@ import { useOpenToHitToggle } from '@/features/players/useLocationToggle';
 import { askToHit } from '@/features/players/courtLink';
 import { isOpenToHit } from '@/features/players/openToHit';
 import { useOpenClock } from '@/features/players/useOpenClock';
-import { useBarInset } from '@/features/navigation/barInset';
 import { show as showToast } from '@/lib/toast';
 import { confirmUnfollow } from '@/lib/confirm';
 import { useApp } from '@/store/AppContext';
@@ -73,7 +72,9 @@ export function NearbyMap(props: NearbyMapProps) {
   const styles = useThemedStyles(styleDefinitions);
   const { theme, night } = useTheme();
   const insets = useSafeAreaInsets();
-  const barInset = useBarInset();
+  // The full map runs without the floating tab bar on phones (AppShell's phoneOnlyHide, owner Oct 8), so
+  // under a card only the home indicator is kept, in the card's own colour.
+  const barInset = insets.bottom;
   const { followingIds, actions, mapLive, mapVisibility, teenMap, lastSeen, liveSession, courtNow, locationEnabled } = useApp();
   // Who can see you on the map (migration 63): from your card and the location button, once there is a choice to make.
   const choosing = canChooseVisibility(mapLive, me, teenMap);
@@ -401,7 +402,7 @@ export function NearbyMap(props: NearbyMapProps) {
             : !model.homeKnown ? 'where'
               : listOpen ? 'list' : 'bare';
   const bare = stageKey === 'bare';
-  // Under a card, its own colour runs on beneath the floating tab bar, so no map shows between them; it
+  // Under a card, its own colour runs on beneath the home indicator, so no map shows below it; it
   // lies over the card's foot, so the card's shadow never darkens it into a band (Oct 7), and it rises and
   // sinks with its card. With nothing up the map runs to the bottom edge, and only the buttons keep clear
   // of the bar (or, with no bar, of the home indicator).
@@ -434,8 +435,8 @@ export function NearbyMap(props: NearbyMapProps) {
           crown={<View pointerEvents="box-none" style={styles.crown}><MapButtons lead={bare ? <PlayersPill items={model.tray} query={model.query} filter={model.filter} courts={model.nearestCourts} lock={lock} onOpen={() => setListOpen(true)} /> : undefined} onRecentre={() => { model.select(null); model.selectCourt(null); model.selectHit(null); model.clearPlace(); map.current?.flyTo({ center: [model.homeView.center.lng, model.homeView.center.lat], zoom: model.homeView.zoom ?? START_ZOOM, duration: 600 }); }} onZoomIn={() => map.current?.zoomIn()} onZoomOut={() => map.current?.zoomOut()} /></View>}
         >
           {bare ? (
-            // Nothing up: only the room the buttons above keep clear of the tab bar (or, with no bar, of the home indicator).
-            <View pointerEvents="none" style={{ height: barInset || insets.bottom }} />
+            // Nothing up: only the room the buttons above keep clear of the home indicator (no tab bar on the full map).
+            <View pointerEvents="none" style={{ height: Math.max(insets.bottom, spacing.md) }} />
           ) : foot(stageKey === 'where' ? (
             <WhereCard locating={locating} onLocation={onToggleLocation} />
           ) : stageKey === 'list' ? (

@@ -239,7 +239,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // menu sits at the side, out of their way, so it stays, the way
   // Instagram's does behind its Create box. Sign-in, setup and the camera
   // hide it everywhere.
-  const phoneOnlyHide = ['/compose', '/edit-post', '/ask', '/ask-coach', '/coach-apply', '/pick-location', '/pick-court', '/invite', '/comments', '/session-stats', '/who-played', '/share', '/pick-group', '/find-groups', '/group-form', '/group-invite', '/likes', '/post-menu', '/log-session', '/pick-session', '/session-tag', '/hit-request/new', '/court-report', '/court-now', '/map-visibility', '/open-to-hit', '/wrapped', '/health-share', '/share-session', '/share-card', '/tennis-sheet', '/flyby', '/weekly-recap', '/review-request', '/start-session', '/live-session'].includes(pathname) || pathname === '/messages' || pathname.startsWith('/messages/');
+  // The full map (owner, Oct 8: "without the feed community profile etc.") runs without it too:
+  // the map fills the screen and its own Back (or the edge swipe) leaves it.
+  const phoneOnlyHide = ['/map', '/compose', '/edit-post', '/ask', '/ask-coach', '/coach-apply', '/pick-location', '/pick-court', '/invite', '/comments', '/session-stats', '/who-played', '/share', '/pick-group', '/find-groups', '/group-form', '/group-invite', '/likes', '/post-menu', '/log-session', '/pick-session', '/session-tag', '/hit-request/new', '/court-report', '/court-now', '/map-visibility', '/open-to-hit', '/wrapped', '/health-share', '/share-session', '/share-card', '/tennis-sheet', '/flyby', '/weekly-recap', '/review-request', '/start-session', '/live-session'].includes(pathname) || pathname === '/messages' || pathname.startsWith('/messages/');
   // Arriving from the password-reset email is its own calm page, with no app around it yet.
   // (The comments' own address says which clip they are about, for the stage below.)
   const { reset, kind: routeKind, id: routeId, stage: routeStage } = useGlobalSearchParams<{ reset?: string; kind?: string; id?: string; stage?: string }>();
