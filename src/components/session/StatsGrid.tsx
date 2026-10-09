@@ -18,10 +18,14 @@ import { ZoneRows } from './ZoneRows';
  * nothing is made up. The heart-rate zones' rows go under it, as before.
  */
 
-/** A number on the pop-up, as the post shares it. */
-export type StatNumber = { key: string; label: string; value: number; unit?: string; dec?: boolean };
+/** A number on the pop-up, as the post shares it; `spoken` is its name in full, for a screen reader ("Average heart rate"). */
+export type StatNumber = { key: string; label: string; spoken: string; value: number; unit?: string; dec?: boolean };
 
-type Cell = { key: string; label: string; n?: StatNumber; text?: string };
+type Cell = { key: string; label: string; n?: StatNumber; text?: string; said: string };
+
+/** What a screen reader says for a cell: the counting figure is hidden from it, so the cell says its name and number in one go. */
+const UNIT_WORDS: Record<string, string> = { bpm: 'beats per minute', min: 'minutes', km: 'kilometers', mi: 'miles' };
+const spokenNumber = (n: StatNumber) => `${n.spoken}, ${n.dec ? n.value.toFixed(1) : Math.round(n.value)}${n.unit ? ` ${UNIT_WORDS[n.unit] ?? n.unit}` : ''}`;
 
 export function StatsGrid({ numbers, sets, zones, play }: {
   /** What the post shares, most telling first. */
@@ -32,7 +36,10 @@ export function StatsGrid({ numbers, sets, zones, play }: {
   play: boolean;
 }) {
   const styles = useThemedStyles(styleDefinitions);
-  const cells: Cell[] = [...numbers.map((n) => ({ key: n.key, label: n.label, n })), ...(sets ? [{ key: 'sets', label: 'SETS', text: sets }] : [])];
+  const cells: Cell[] = [
+    ...numbers.map((n) => ({ key: n.key, label: n.label, n, said: spokenNumber(n) })),
+    ...(sets ? [{ key: 'sets', label: 'SETS', text: sets, said: `Sets, ${sets.replace('–', ' to ')}` }] : []),
+  ];
   // Three across; four go two and two rather than three and one.
   const across = cells.length === 4 ? 2 : Math.min(3, Math.max(1, cells.length));
   const rows: Cell[][] = [];
@@ -45,7 +52,7 @@ export function StatsGrid({ numbers, sets, zones, play }: {
             <View key={r} style={[styles.row, r > 0 && styles.rowRule]}>
               {/* A short last row keeps its empty places, so every number sits in its column. */}
               {Array.from({ length: across }, (_, i) => row[i]).map((c, i) => (
-                <View key={c?.key ?? `empty-${i}`} style={styles.cell}>
+                <View key={c?.key ?? `empty-${i}`} style={styles.cell} accessible={!!c} accessibilityRole={c ? 'text' : undefined} accessibilityLabel={c?.said}>
                   {c ? (
                     <>
                       <Text style={styles.label} numberOfLines={1} maxFontSizeMultiplier={1.2}>{c.label}</Text>

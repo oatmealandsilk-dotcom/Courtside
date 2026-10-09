@@ -213,12 +213,12 @@ export function SessionSheet({ post, me, users, sessions, sessionTags, activitie
           <View style={styles.rule} />
           <StatsGrid
             numbers={[
-              far ? { key: 'far', label: 'DISTANCE', value: far.value, unit: far.unit, dec: far.value < 10 } : null,
-              avg ? { key: 'avg', label: 'AVG HR', value: avg, unit: 'bpm' } : null,
-              hr ? { key: 'max', label: 'MAX HR', value: s.maxHr!, unit: 'bpm' } : null,
-              kcal ? { key: 'kcal', label: 'CALORIES', value: kcal } : null,
-              strain != null ? { key: 'strain', label: 'STRAIN', value: strain, dec: true } : null,
-              zones ? { key: 'hard', label: 'ZONES 4–5', value: hardMinutes(zones), unit: 'min' } : null,
+              far ? { key: 'far', label: 'DISTANCE', spoken: 'Distance', value: far.value, unit: far.unit, dec: far.value < 10 } : null,
+              avg ? { key: 'avg', label: 'AVG HR', spoken: 'Average heart rate', value: avg, unit: 'bpm' } : null,
+              hr ? { key: 'max', label: 'MAX HR', spoken: 'Max heart rate', value: s.maxHr!, unit: 'bpm' } : null,
+              kcal ? { key: 'kcal', label: 'CALORIES', spoken: 'Calories', value: kcal } : null,
+              strain != null ? { key: 'strain', label: 'STRAIN', spoken: 'Strain', value: strain, dec: true } : null,
+              zones ? { key: 'hard', label: 'ZONES 4–5', spoken: 'Time in zones 4 to 5', value: hardMinutes(zones), unit: 'min' } : null,
             ].filter((n): n is StatNumber => !!n)}
             sets={setsTaken(s)}
             zones={zones}
