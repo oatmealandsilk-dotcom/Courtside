@@ -2,7 +2,7 @@ import React, { useLayoutEffect, useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { sheetFling } from '@/components/map/sheetFling';
-import { layerZ, useStageLayers, type StageKind, type StageLayer } from '@/components/map/stageLayers';
+import { layerZ, useStageLayers, type Crown, type StageKind, type StageLayer } from '@/components/map/stageLayers';
 
 /*
  * The browser's twin of CardStage (see there for the choreography): the
@@ -72,7 +72,7 @@ function leave(el: HTMLElement, crown: HTMLElement | null, kind: StageKind, done
   last.oncancel = done;
 }
 
-export function CardStage({ cardKey, kind, crown, children }: { cardKey: string; kind: StageKind; /** Rides on top of whatever is up: the map's buttons. */ crown?: React.ReactNode; children: React.ReactNode }) {
+export function CardStage({ cardKey, kind, crown, children }: { cardKey: string; kind: StageKind; /** Rides on top of whatever is up: the map's buttons. Given as a function, it is told which card it rides on (its key). */ crown?: Crown; children: React.ReactNode }) {
   const { layers, remove } = useStageLayers(cardKey, kind, children);
   // Each layer's element, and the map's buttons riding on it.
   const els = useRef(new Map<string, HTMLElement>());
@@ -111,7 +111,8 @@ export function CardStage({ cardKey, kind, crown, children }: { cardKey: string;
         >
           {crown ? (
             <View ref={(el) => { if (el) crowns.current.set(layer.id, el as unknown as HTMLElement); }} style={styles.through}>
-              {crown}
+              {/* Its own buttons: one on its way out keeps the ones it had (the players list's, faded while it was tall). */}
+              {typeof crown === 'function' ? crown(layer.key) : crown}
             </View>
           ) : null}
           {layer.node}

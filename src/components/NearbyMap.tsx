@@ -5,7 +5,7 @@ import Reanimated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTimi
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { CitylessCard, CityWeatherChip, CourtSheet, CourtsZoomNote, FilterChips, HitSheet, MapCredit, YouSheet, MapButtons, MapTopBar, PlaceSheet, PlayerSheet, PlayersPill, PlayersSheet, PreviewOverlay, WhereCard } from '@/components/map/MapChrome';
+import { CitylessCard, CityWeatherChip, CourtSheet, CourtsZoomNote, FilterChips, HitSheet, ListCrown, MapCredit, YouSheet, MapButtons, MapTopBar, PlaceSheet, PlayerSheet, PlayersPill, PlayersSheet, PreviewOverlay, WhereCard } from '@/components/map/MapChrome';
 import { CardStage } from '@/components/map/CardStage';
 import { MapCanvas, type CanvasMarker, type MapCanvasHandle, type MapLoadStatus } from '@/components/map/MapCanvas';
 import { MapCardFailed, MapCardLoading, MapLoadPill } from '@/components/map/MapLoadState';
@@ -92,6 +92,11 @@ export function NearbyMap(props: NearbyMapProps) {
   const [meOpen, setMeOpen] = useState(false);
   // The list of everyone around, opened from the "All N players" pill. A player's card opened from it comes back to it on closing.
   const [listOpen, setListOpen] = useState(false);
+  // The list at its tall height (listStops): a player's card opened from it comes back to it tall; the pill opens it low again.
+  const [listTall, setListTall] = useState(false);
+  // Where the list may reach: the full map's height, and the foot of the filters (it stops under them, so they still work).
+  const [mapH, setMapH] = useState(0);
+  const [chipsEnd, setChipsEnd] = useState(0);
   // Your ring (and your card's switch) go out by themselves at the time you picked.
   useOpenClock([me.openToHitUntil]);
   const openToHit = isOpenToHit(me);
@@ -272,12 +277,16 @@ export function NearbyMap(props: NearbyMapProps) {
   };
   // Into one of your groups (the sheet says if they can't be).
   const addToGroup = (id: string) => router.push({ pathname: '/pick-group', params: { user: id } });
+  // The map's buttons, riding on whatever is up along the bottom; on the players list, they fade as it rises (ListCrown).
+  const buttons = <View pointerEvents="box-none" style={styles.crown}><MapButtons lead={bare ? <PlayersPill items={model.tray} query={model.query} filter={model.filter} courts={model.nearestCourts} lock={lock} onOpen={() => { setListTall(false); setListOpen(true); }} /> : undefined} onRecentre={() => { model.select(null); model.selectCourt(null); model.selectHit(null); model.clearPlace(); canvas.current?.flyTo(model.homeView.center, model.homeView.zoom ?? CITY_ZOOM, 600); }} /></View>;
   return (
-    <View style={styles.fill}>
+    <View style={styles.fill} onLayout={(e) => setMapH(Math.round(e.nativeEvent.layout.height))}>
       {mapView}
       <View pointerEvents="box-none" style={[styles.top, { paddingTop: insets.top + spacing.sm }]}>
         <MapTopBar onBack={onBack} query={model.query} onQuery={model.setQuery} locationOn={locationOn} locating={locating} onToggleLocation={onToggleLocation} results={model.courtResults} onPickCourt={model.pickCourt} places={model.placeSearch} onPickPlace={model.pickPlace} players={model.query.trim() ? model.tray.length : 0} locationMenu={choosing} />
-        <FilterChips filter={model.filter} onFilter={model.setFilter} courtsOn={model.courtsOn} onCourts={model.toggleCourts} courtsLoading={model.courtsLoading} />
+        <View onLayout={(e) => { const { y, height } = e.nativeEvent.layout; setChipsEnd(Math.round(y + height)); }}>
+          <FilterChips filter={model.filter} onFilter={model.setFilter} courtsOn={model.courtsOn} onCourts={model.toggleCourts} courtsLoading={model.courtsLoading} />
+        </View>
         {/* The city and its weather, a small chip under the filters. */}
         {model.homeKnown ? <CityWeatherChip cityName={cityName} weather={weather} /> : null}
         {model.courtsOn && far && !model.selectedCourt && !model.query.trim() ? <CourtsZoomNote /> : null}
@@ -289,7 +298,7 @@ export function NearbyMap(props: NearbyMapProps) {
         <CardStage
           cardKey={stageKey}
           kind={bare || stageKey === 'where' ? 'tray' : 'card'}
-          crown={<View pointerEvents="box-none" style={styles.crown}><MapButtons lead={bare ? <PlayersPill items={model.tray} query={model.query} filter={model.filter} courts={model.nearestCourts} lock={lock} onOpen={() => setListOpen(true)} /> : undefined} onRecentre={() => { model.select(null); model.selectCourt(null); model.selectHit(null); model.clearPlace(); canvas.current?.flyTo(model.homeView.center, model.homeView.zoom ?? CITY_ZOOM, 600); }} /></View>}
+          crown={(key) => (key === 'list' ? <ListCrown>{buttons}</ListCrown> : buttons)}
         >
           {bare ? (
             // Nothing up: only the room the buttons above keep clear of the home indicator (no tab bar on the full map).
@@ -297,7 +306,7 @@ export function NearbyMap(props: NearbyMapProps) {
           ) : foot(stageKey === 'where' ? (
             <WhereCard locating={locating} onLocation={onToggleLocation} />
           ) : stageKey === 'list' ? (
-            <PlayersSheet items={model.tray} cityName={cityName} onSelect={model.select} weather={weather} query={model.query} filter={model.filter} courts={model.nearestCourts} onPickCourt={model.selectCourt} lock={lock} onUnlock={unlock} onClose={() => setListOpen(false)} />
+            <PlayersSheet items={model.tray} cityName={cityName} onSelect={model.select} query={model.query} filter={model.filter} courts={model.nearestCourts} onPickCourt={model.selectCourt} lock={lock} onUnlock={unlock} onClose={() => setListOpen(false)} openTall={listTall} onTall={setListTall} room={{ height: mapH, top: chipsEnd, foot: barInset }} />
           ) : meOpen ? (
             <YouSheet me={me} open={openToHit} teen={teen} onToggle={(on) => { void toggleOpen(on); }} onProfile={() => { setMeOpen(false); router.push('/(tabs)/profile'); }} onClose={() => setMeOpen(false)} seenBy={mapVisibility} onSeenBy={choosing ? () => { void askWhoSeesYou('manage'); } : undefined} />
           ) : model.selected ? (
