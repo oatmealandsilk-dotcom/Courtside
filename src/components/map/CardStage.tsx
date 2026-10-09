@@ -4,7 +4,7 @@ import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withDelay,
 import { useReducedMotion } from '@/lib/useReducedMotion';
 
 import { sheetFling } from '@/components/map/sheetFling';
-import { layerZ, useStageLayers, type StageKind, type StageLayer } from '@/components/map/stageLayers';
+import { layerZ, useStageLayers, type Crown, type StageKind, type StageLayer } from '@/components/map/stageLayers';
 
 /*
  * The bottom of the full map: the card for whatever was tapped (or the list
@@ -48,8 +48,8 @@ export function CardStage({ cardKey, kind, crown, children }: {
   cardKey: string;
   /** 'tray' settles in place (the bare map, or the card asking where you are); a card rises. */
   kind: StageKind;
-  /** Rides on top of whatever is up: the map's buttons. */
-  crown?: React.ReactNode;
+  /** Rides on top of whatever is up: the map's buttons. Given as a function, it is told which card it rides on (its key). */
+  crown?: Crown;
   children: React.ReactNode;
 }) {
   const { layers, remove } = useStageLayers(cardKey, kind, children);
@@ -65,7 +65,9 @@ export function CardStage({ cardKey, kind, crown, children }: {
   );
 }
 
-function Layer({ layer, out, crown, onGone }: { layer: StageLayer; out: boolean; crown?: React.ReactNode; onGone: (layer: StageLayer) => void }) {
+function Layer({ layer, out, crown: crownFor, onGone }: { layer: StageLayer; out: boolean; crown?: Crown; onGone: (layer: StageLayer) => void }) {
+  // Its own buttons: one on its way out keeps the ones it had (the players list's, faded while it was tall).
+  const crown = typeof crownFor === 'function' ? crownFor(layer.key) : crownFor;
   const reduce = useReducedMotion();
   const rises = layer.kind === 'card' && !reduce && !layer.first;
   // Down from its resting place; how solid it is; and the buttons riding on it.

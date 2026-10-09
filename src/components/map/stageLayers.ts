@@ -11,6 +11,9 @@ import { useReducer, useRef } from 'react';
 /** 'tray' settles in place (the bare map with only its buttons, or the card asking where you are); 'card' rises from the bottom edge. */
 export type StageKind = 'tray' | 'card';
 
+/** The map's buttons riding on each layer: the same on every one, or made for each from its key (the players list fades its own). */
+export type Crown = React.ReactNode | ((key: string) => React.ReactNode);
+
 export interface StageLayer {
   /** Unique per appearance: a card closed and opened again is a new layer. */
   id: string;

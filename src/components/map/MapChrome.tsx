@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Gesture, GestureDetector, ScrollView as GestureScrollView } from 'react-native-gesture-handler';
-import Animated, { Easing, FadeIn, FadeOut, interpolateColor, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSpring, withTiming } from 'react-native-reanimated';
+import Animated, { Easing, FadeIn, FadeOut, interpolateColor, runOnJS, useAnimatedReaction, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSpring, withTiming } from 'react-native-reanimated';
 import { useReducedMotion } from '@/lib/useReducedMotion';
 
 import { Avatar, BrandWash } from '@/components/ui';
@@ -46,6 +46,7 @@ import { MAP_CREDITS } from '@/components/map/credits';
 import { AccessTag, CourtFactsLine, FollowHeart, NowTags, RegularsRow } from '@/components/place/CourtLife';
 import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { sheetFling } from '@/components/map/sheetFling';
+import { listHeadroom, useListStops, type ListRoom } from '@/components/map/listStops';
 import { OpenRing } from '@/components/map/OpenRing';
 import { mix } from '@/components/map/look';
 import { notKnownAdult } from '@/features/players/age';
@@ -351,10 +352,23 @@ const GHScrollView = Platform.OS === 'web' ? ScrollView : GestureScrollView;
 /** What keeps players from you (nearbyLock), as the list says it: not with a name typed, or on Following, neither of which depends on it. */
 const lockOf = (lock: NearbyLock | undefined, query: string, filter: MapFilter) => (lock && !query.trim() && filter !== 'following' ? lock : null);
 
-/** How many the list holds: players, or with nobody sharing nearby, the nearest courts it names instead (never "0 players"). */
-function listCount(items: Placed[], query: string, filter: MapFilter, courts: CourtRow[]): string {
-  if (!items.length && !query.trim() && filter === 'all' && courts.length) return `${courts.length} ${courts.length === 1 ? 'court' : 'courts'}`;
-  return items.length === 1 ? '1 player' : `${items.length} players`;
+/**
+ * The list's one line: how many, and where ("10 players near Raleigh"). A
+ * search or Following, which list everyone they find, say whose instead.
+ * With nobody sharing nearby it counts the nearest courts it names (never
+ * "0 players"); with nobody to list at all it says only where, the list
+ * itself saying why (its words unchanged).
+ */
+function listTitle(items: Placed[], query: string, filter: MapFilter, courts: CourtRow[], cityName: string): string {
+  const q = query.trim();
+  const n = items.length;
+  // "you" is the map's own stand-in for a town not named yet: "near you".
+  const place = cityName || 'you';
+  if (!n) return !q && filter === 'all' && courts.length ? `${courts.length} ${courts.length === 1 ? 'court' : 'courts'} near ${place}` : `Players near ${place}`;
+  const who = n === 1 ? '1 player' : `${n} players`;
+  if (q) return `${who} matching “${q}”`;
+  if (filter === 'following') return `${who} you follow`;
+  return `${who} near ${place}`;
 }
 
 /** With nobody to list, the pill's few words for why: the list's own reason, shortened. */
@@ -415,98 +429,139 @@ export function CityWeatherChip({ cityName, weather }: { cityName: string; weath
 
 /**
  * Everyone around, nearest first: the list the pill opens, rising like a
- * card. The search and the chips filter it as they do the pins; a row opens
- * that player's card (and closing the card comes back to the list). With
- * nobody to list it says why, with the tap that changes it, or names the
- * nearest courts. × (or a pull down on its title, or past the list's top)
- * closes it, back to the bare map.
+ * card. Since Oct 8 (owner: "This show players pop up covers too much of the
+ * screen") it is a compact list at two heights (listStops): it opens low,
+ * three and a half rows with the map and its pins in view above, and a pull
+ * up on its handle (or on a phone, on the list) raises it to tall, under the
+ * search and the filters. One line on top says how many and where ("10
+ * players near Raleigh"; the city chip under the filters already gives the
+ * weather), and each row is a contacts list's: a face, the name and level,
+ * how far and how long ago under it. The search and the chips filter it as
+ * they do the pins; a row opens that player's card (and closing the card
+ * comes back to the list, at the height it was). With nobody to list it says
+ * why, with the tap that changes it, or names the nearest courts. × (or a
+ * pull down past its peek) closes it, back to the bare map.
  */
-export function PlayersSheet({ items, cityName, onSelect, weather, query = '', filter = 'all', courts = [], onPickCourt, lock = null, onUnlock, onClose }: { items: Placed[]; cityName: string; onSelect: (id: string) => void; /** Beside the city's name: what it's like to play there today. */ weather?: Weather | null; /** What is typed in the search, which the players are filtered by. */ query?: string; /** Which chip is on, so an empty list says why. */ filter?: MapFilter; /** With nobody sharing nearby, the nearest few places anyone may play, to tap. */ courts?: CourtRow[]; onPickCourt?: (id: string) => void; /** What keeps "Players nearby" from you (nearbyLock): an empty list says so, not that nobody is there. */ lock?: NearbyLock; /** The one tap that lifts it: Location on, or who can see you. */ onUnlock?: () => void; onClose: () => void }) {
+export function PlayersSheet({ items, cityName, onSelect, query = '', filter = 'all', courts = [], onPickCourt, lock = null, onUnlock, onClose, openTall = false, onTall, room }: { items: Placed[]; cityName: string; onSelect: (id: string) => void; /** What is typed in the search, which the players are filtered by. */ query?: string; /** Which chip is on, so an empty list says why. */ filter?: MapFilter; /** With nobody sharing nearby, the nearest few places anyone may play, to tap. */ courts?: CourtRow[]; onPickCourt?: (id: string) => void; /** What keeps "Players nearby" from you (nearbyLock): an empty list says so, not that nobody is there. */ lock?: NearbyLock; /** The one tap that lifts it: Location on, or who can see you. */ onUnlock?: () => void; onClose: () => void; /** Opens at its tall height (it was tall when a row opened a player's card). */ openTall?: boolean; /** Which height it is going to (tall, or the peek), each time that changes. */ onTall?: (tall: boolean) => void; /** Where the list may reach (the map's height, the foot of the filters, the strip under the home indicator). */ room?: ListRoom }) {
   const styles = useThemedStyles(styleDefinitions);
-  const pull = useDragToClose(onClose);
   const { height: windowH } = useWindowDimensions();
-  // Tall enough to be a list, never so tall it buries the map or the buttons over it.
-  const listMax = Math.max(160, Math.min(Math.round(windowH * 0.45), windowH - 420));
+  const stops = useListStops({ rows: items.length, room, windowH, openTall, onTall, onClose });
   // Since migration 98 you share to see: with Location off or on Only me the
   // server sends only your friends, so an empty list says how to see the
   // players near you instead of "No one sharing nearby yet".
   const locked = lockOf(lock, query, filter);
+  const grabber = <View style={[styles.grabber, styles.listGrabber]} />;
+  const list = items.length ? (
+    <Animated.ScrollView
+      ref={stops.listRef}
+      style={[styles.listScroll, stops.listStyle]}
+      contentContainerStyle={styles.list}
+      showsVerticalScrollIndicator={false}
+      scrollEventThrottle={16}
+      bounces={false}
+      scrollEnabled={stops.scrollEnabled}
+      onScroll={stops.onScroll}
+      onContentSizeChange={stops.onContentSizeChange}
+    >
+      {items.map((p, i) => (
+        <Pressable key={p.user.id} accessibilityRole="button" accessibilityLabel={`${p.user.name}, ${formatSpotMiles(p.miles, p.rough)}`} onPress={() => onSelect(p.user.id)} style={({ pressed }) => [styles.listRow, pressed && styles.listPressed]}>
+          {/* A hairline between rows, from the names across, the way a contacts list draws it. */}
+          {i > 0 ? <View pointerEvents="none" style={styles.listRowRule} /> : null}
+          <View style={[styles.listRing, isOpenToHit(p.user) && styles.listRingOn]}><Avatar name={p.user.name} seed={p.user.avatarSeed} size={40} ring={p.user.isCoach} /></View>
+          <View style={styles.listWords}>
+            <View style={styles.personTop}>
+              <Text style={styles.listName} numberOfLines={1}>{p.user.name}</Text>
+              <LevelPill profile={p.user.profile} small />
+            </View>
+            <Text style={styles.personMeta} numberOfLines={1}>{[formatSpotMiles(p.miles, p.rough), p.seenAt ? agoLabel(p.seenAt) : null, isOpenToHit(p.user) ? 'open to hit' : null].filter(Boolean).join(' · ')}</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
+        </Pressable>
+      ))}
+    </Animated.ScrollView>
+  ) : null;
   return (
-    <Animated.View style={[styles.sheet, pull.style]}>
-      {/* The title drags the list down to close it; the list itself scrolls. */}
-      <GestureDetector gesture={pull.gesture}>
+    <Animated.View style={[styles.listSheet, stops.sheetStyle]}>
+      {/* The handle and the title: a drag up raises the list, a drag down lowers it and then closes it. */}
+      <GestureDetector gesture={stops.headGesture}>
         <View style={styles.listHead}>
-          <View style={styles.grabber} />
-          <View style={styles.sheetHead}>
-            <View style={styles.sheetTitleRow}>
-              <Text accessibilityRole="header" style={styles.sheetTitle} numberOfLines={1}>Around {cityName}</Text>
-              {weather ? (
-                <View style={styles.sheetWeather} accessibilityLabel={`${weather.tempF} degrees, ${weather.label}`}>
-                  <Ionicons name={weather.icon as keyof typeof Ionicons.glyphMap} size={15} color={colors.textMuted} />
-                  <Text style={styles.sheetWeatherText}>{weather.tempF}°</Text>
-                </View>
-              ) : null}
-            </View>
-            <View style={styles.sheetHeadRight}>
-              <Text style={styles.sheetCount}>{listCount(items, query, filter, courts)}</Text>
-              <Pressable accessibilityRole="button" accessibilityLabel="Close" hitSlop={10} onPress={onClose} style={({ pressed }) => [styles.close, pressed && styles.closePressed]}>
-                <Ionicons name="close" size={17} color={colors.textMuted} />
-              </Pressable>
-            </View>
+          {stops.canTall ? (
+            <Pressable accessibilityRole="button" accessibilityLabel={stops.up ? 'Make the list shorter' : 'Make the list taller'} hitSlop={8} onPress={() => { haptics.tap(); stops.toggle(); }} style={styles.listGrabberHit}>{grabber}</Pressable>
+          ) : (
+            <View style={styles.listGrabberHit}>{grabber}</View>
+          )}
+          <View style={styles.listTitleRow}>
+            <Text accessibilityRole="header" style={styles.listTitle} numberOfLines={1}>{listTitle(items, query, filter, courts, cityName)}</Text>
+            <Pressable accessibilityRole="button" accessibilityLabel="Close" hitSlop={10} onPress={onClose} style={({ pressed }) => [styles.close, pressed && styles.closePressed]}>
+              <Ionicons name="close" size={17} color={colors.textMuted} />
+            </Pressable>
           </View>
         </View>
       </GestureDetector>
-      {items.length ? (
-        <GHScrollView
-          style={{ maxHeight: listMax, flexGrow: 0 }}
-          contentContainerStyle={styles.list}
-          showsVerticalScrollIndicator={false}
-          scrollEventThrottle={16}
-          // Pulled down past its top (a phone's bounce): closed, as a pull on the title does.
-          onScrollEndDrag={(e) => { if (e.nativeEvent.contentOffset.y < -48) onClose(); }}
-        >
-          {items.map((p, i) => (
-            <Pressable key={p.user.id} accessibilityRole="button" accessibilityLabel={`${p.user.name}, ${formatSpotMiles(p.miles, p.rough)}`} onPress={() => onSelect(p.user.id)} style={({ pressed }) => [styles.listRow, i > 0 && styles.listRule, pressed && styles.listPressed]}>
-              <View style={[styles.listRing, isOpenToHit(p.user) && styles.listRingOn]}><Avatar name={p.user.name} seed={p.user.avatarSeed} size={40} ring={p.user.isCoach} /></View>
-              <View style={styles.listWords}>
-                <View style={styles.personTop}>
-                  <Text style={styles.listName} numberOfLines={1}>{p.user.name}</Text>
-                  <LevelPill profile={p.user.profile} small />
-                </View>
-                <Text style={styles.personMeta} numberOfLines={1}>{[formatSpotMiles(p.miles, p.rough), p.seenAt ? agoLabel(p.seenAt) : null, isOpenToHit(p.user) ? 'open to hit' : null].filter(Boolean).join(' · ')}</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
-            </Pressable>
-          ))}
-        </GHScrollView>
-      ) : locked && (filter !== 'all' || !courts.length) ? (
-        <View style={styles.lockBox}>
-          <LockNote lock={locked} onUnlock={onUnlock} />
-        </View>
-      ) : query.trim() || filter !== 'all' || !courts.length ? (
-        // With a name typed, say only that no player has it: a court's name finds the court, and the players are still there.
-        <Text style={styles.sheetEmpty}>
-          {query.trim() ? `No players named “${query.trim()}”`
-            : filter === 'following' ? 'Nobody you follow is sharing their spot nearby.'
-              : filter !== 'all' ? 'Nobody nearby matches that.'
-                : 'No one sharing nearby yet. Tap a court to see what’s played there.'}
-        </Text>
+      {list ? (
+        stops.listGesture ? <GestureDetector gesture={stops.listGesture}>{list}</GestureDetector> : list
       ) : (
-        // Nobody sharing yet: the nearest places to play instead of an empty list, each a tap from its card.
-        <View style={styles.emptyCourts}>
-          {locked ? <LockNote lock={locked} onUnlock={onUnlock} /> : null}
-          <Text style={styles.emptyCourtsTitle}>{locked ? 'The nearest courts:' : 'No one sharing nearby yet. The nearest courts:'}</Text>
-          {courts.map(({ c, miles }, i) => (
-            <Pressable key={c.id} accessibilityRole="button" accessibilityLabel={`${c.name}, ${formatMiles(miles)}. Show on the map`} onPress={() => { haptics.tap(); onPickCourt?.(c.id); }} style={({ pressed }) => [styles.resultRow, i > 0 && styles.listRule, pressed && styles.listPressed]}>
-              <View style={styles.resultTile}><CourtGlyph size={13} color={colors.brand} /></View>
-              <View style={styles.listWords}>
-                {/* The court's own name; an unnamed one (only listed when a town has no named court) says just "Tennis courts", never "public". */}
-                <Text style={styles.listName} numberOfLines={1}>{c.name}</Text>
-                <Text style={styles.personMeta} numberOfLines={1}>{[formatMiles(miles), c.count > 1 ? `${c.count} courts` : null, c.lit ? 'lights' : null].filter(Boolean).join(' · ')}</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={14} color={colors.textFaint} />
-            </Pressable>
-          ))}
+        <View style={styles.listEmpty}>
+          {locked && (filter !== 'all' || !courts.length) ? (
+            <View style={styles.lockBox}>
+              <LockNote lock={locked} onUnlock={onUnlock} />
+            </View>
+          ) : query.trim() || filter !== 'all' || !courts.length ? (
+            // With a name typed, say only that no player has it: a court's name finds the court, and the players are still there.
+            <Text style={styles.sheetEmpty}>
+              {query.trim() ? `No players named “${query.trim()}”`
+                : filter === 'following' ? 'Nobody you follow is sharing their spot nearby.'
+                  : filter !== 'all' ? 'Nobody nearby matches that.'
+                    : 'No one sharing nearby yet. Tap a court to see what’s played there.'}
+            </Text>
+          ) : (
+            // Nobody sharing yet: the nearest places to play instead of an empty list, each a tap from its card.
+            <View style={styles.emptyCourts}>
+              {locked ? <LockNote lock={locked} onUnlock={onUnlock} /> : null}
+              <Text style={styles.emptyCourtsTitle}>{locked ? 'The nearest courts:' : 'No one sharing nearby yet. The nearest courts:'}</Text>
+              {courts.map(({ c, miles }, i) => (
+                <Pressable key={c.id} accessibilityRole="button" accessibilityLabel={`${c.name}, ${formatMiles(miles)}. Show on the map`} onPress={() => { haptics.tap(); onPickCourt?.(c.id); }} style={({ pressed }) => [styles.resultRow, i > 0 && styles.listRule, pressed && styles.listPressed]}>
+                  <View style={styles.resultTile}><CourtGlyph size={13} color={colors.brand} /></View>
+                  <View style={styles.listWords}>
+                    {/* The court's own name; an unnamed one (only listed when a town has no named court) says just "Tennis courts", never "public". */}
+                    <Text style={styles.listName} numberOfLines={1}>{c.name}</Text>
+                    <Text style={styles.personMeta} numberOfLines={1}>{[formatMiles(miles), c.count > 1 ? `${c.count} courts` : null, c.lit ? 'lights' : null].filter(Boolean).join(' · ')}</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={14} color={colors.textFaint} />
+                </Pressable>
+              ))}
+            </View>
+          )}
+        </View>
+      )}
+    </Animated.View>
+  );
+}
+
+/**
+ * The map's buttons (Back to me, the zoom, the credits) riding on the
+ * players list. As the list is pulled up and the map left above it runs
+ * short (listHeadroom) they fade out, and once they would no longer fit
+ * under the filters they are gone, taking no taps, so nothing ever lies over
+ * the list or the filters; pulled back down, they fade back in. A short list
+ * that rises only a little keeps them.
+ */
+export function ListCrown({ children }: { children: React.ReactNode }) {
+  const styles = useThemedStyles(styleDefinitions);
+  // How tall the buttons are (measured while they are there; the browser's zoom makes them taller), and whether they still fit.
+  const tall = useSharedValue(0);
+  const [gone, setGone] = useState(false);
+  useAnimatedReaction(
+    () => tall.value > 0 && listHeadroom.value < tall.value,
+    (now, before) => { if (now !== before) runOnJS(setGone)(now); },
+  );
+  // Fading over the last stretch before they no longer fit.
+  const look = useAnimatedStyle(() => ({ opacity: tall.value > 0 ? Math.max(0, Math.min(1, (listHeadroom.value - tall.value) / 60)) : 1 }));
+  return (
+    <Animated.View style={[styles.crownThrough, look]}>
+      {gone ? null : (
+        <View style={styles.crownThrough} onLayout={(e) => { const h = e.nativeEvent.layout.height; if (h > 0) tall.value = h; }}>
+          {children}
         </View>
       )}
     </Animated.View>
@@ -1219,6 +1274,8 @@ const styleDefinitions = StyleSheet.create({
   cityChipText: { ...typography.smallStrong, color: colors.text, fontVariant: ['tabular-nums'] },
   cityChipRule: { width: StyleSheet.hairlineWidth, height: 14, marginHorizontal: 3, backgroundColor: colors.borderStrong },
   credit: { padding: 2, opacity: 0.7 },
+  // The map's buttons riding on the players list (ListCrown): taps pass through around them, in a browser too (a compiled style).
+  crownThrough: { pointerEvents: 'box-none' },
   creditWrap: { zIndex: 20 },
   creditCard: { position: 'absolute', bottom: 22, gap: 6, paddingHorizontal: 12, paddingVertical: 9, borderRadius: radius.md, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 4 },
   creditText: { ...typography.caption, color: colors.textMuted, letterSpacing: 0 },
@@ -1232,20 +1289,28 @@ const styleDefinitions = StyleSheet.create({
   sheet: { backgroundColor: colors.surface, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, paddingTop: spacing.sm, paddingBottom: spacing.md, gap: spacing.sm, shadowColor: '#000', shadowOpacity: 0.14, shadowRadius: 22, shadowOffset: { width: 0, height: -8 } },
   grabber: { alignSelf: 'center', width: 36, height: 4, borderRadius: 2, backgroundColor: colors.border, marginBottom: spacing.xs },
   sheetHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.lg, paddingBottom: 2 },
-  sheetHeadRight: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  // The list's title, which a pull down closes: its grab area runs up to the sheet's top edge.
-  listHead: { paddingTop: spacing.sm, marginTop: -spacing.sm },
+  // The players list (Oct 8, compact): the sheet's look with no padding of its own, its parts measured out
+  // (listStops: LIST_HEAD_H for the head, LIST_ROW_H a row), so its two heights land where they should.
+  listSheet: { backgroundColor: colors.surface, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, shadowColor: '#000', shadowOpacity: 0.14, shadowRadius: 22, shadowOffset: { width: 0, height: -8 } },
+  // Its handle and one line: 4 + 12 + 32 + 4 = LIST_HEAD_H. The whole strip takes the drag, up to the sheet's top edge.
+  listHead: { paddingTop: 4, paddingBottom: 4, paddingHorizontal: spacing.lg },
+  listGrabberHit: { alignSelf: 'center', paddingVertical: 4, paddingHorizontal: spacing.lg },
+  listGrabber: { marginBottom: 0 },
+  listTitleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 32 },
+  listTitle: { ...typography.heading, color: colors.text, flex: 1 },
+  listScroll: { flexGrow: 0 },
+  // Under the head when nobody is listed: the reason, or the nearest courts.
+  listEmpty: { paddingTop: 2, paddingBottom: spacing.md },
   list: { paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
-  listRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: 10 },
+  // A contacts list's row: LIST_ROW_H tall (more only if the words are set larger), the face 47 across with its ring's room.
+  listRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: 60, paddingVertical: 6 },
+  // The hairline between rows, from the names across (the face's 47 and the gap before the words).
+  listRowRule: { position: 'absolute', top: 0, left: 47 + spacing.md, right: 0, height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
   listRule: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   listPressed: { opacity: 0.7 },
   listWords: { flex: 1, gap: 2 },
   listName: { ...typography.bodyStrong, color: colors.text, flexShrink: 1 },
   sheetTitle: { ...typography.heading, color: colors.text, flexShrink: 1 },
-  sheetTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 10, flexShrink: 1 },
-  sheetWeather: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  sheetWeatherText: { ...typography.smallStrong, color: colors.textMuted, fontVariant: ['tabular-nums'] },
-  sheetCount: { ...typography.small, color: colors.textMuted },
   sheetEmpty: { ...typography.small, color: colors.textMuted, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
   // The empty players list's nearest courts: the search results' rows, under one quiet line.
   emptyCourts: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xs },
@@ -1256,8 +1321,8 @@ const styleDefinitions = StyleSheet.create({
   lockWords: { ...typography.small, color: colors.textMuted },
   lockAction: { flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'flex-start', paddingVertical: 6 },
   lockActionText: { ...typography.smallStrong, color: colors.brand },
-  // A face in the list: the open-to-hit ring's room kept either way, green when they are.
-  listRing: { padding: 2, borderRadius: 27, borderWidth: 2, borderColor: 'transparent' },
+  // A face in the list: the open-to-hit ring's room kept either way (40 + 2 × 3.5 = 47), green when they are.
+  listRing: { padding: 1.5, borderRadius: 24, borderWidth: 2, borderColor: 'transparent' },
   listRingOn: { borderColor: colors.open },
   personRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg },
   personWords: { flex: 1, gap: 3 },
