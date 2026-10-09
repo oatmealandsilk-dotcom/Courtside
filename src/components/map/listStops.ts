@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Platform } from 'react-native';
+import { AccessibilityInfo, Platform } from 'react-native';
 import { Gesture } from 'react-native-gesture-handler';
 import type Animated from 'react-native-reanimated';
-import { cancelAnimation, makeMutable, runOnJS, scrollTo, useAnimatedReaction, useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import { cancelAnimation, makeMutable, runOnJS, runOnUI, scrollTo, useAnimatedReaction, useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 
 import { sheetFling } from '@/components/map/sheetFling';
 
@@ -86,6 +86,8 @@ export function useListStops({ rows, room, windowH, openTall, onTall, onClose }:
   const top = canTall ? Math.min(tallList, contentH) : floor;
   // Which height it is at or going to: the list scrolls only once it is tall (on a phone).
   const [up, setUp] = useState(openTall);
+  // With VoiceOver or TalkBack on, the list scrolls at the peek too, so every player can be reached by swiping through it.
+  const reader = useScreenReader();
 
   const max = useSharedValue(openTall ? tallList : peekList);
   const y = useSharedValue(0);
@@ -129,12 +131,18 @@ export function useListStops({ rows, room, windowH, openTall, onTall, onClose }:
     max.value = withSpring(stop.value === 1 ? top : floor, SETTLE);
   }, [floor, top, contentH, listed, canTall, base]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /** Where it is going, tall or the peek: there on the spring, picking up the finger's speed. */
+  /**
+   * Where it is going, tall or the peek: there on the spring, picking up the finger's speed.
+   * Back at the peek the list starts again from its first player. A phone holds the list
+   * still there, so one left halfway down could be neither scrolled nor pulled up by
+   * itself, and a browser would take a scroll back up it for a pull up (Oct 9, review).
+   */
   const goTo = (toTall: boolean, velocity: number) => {
     'worklet';
     if (stop.value !== (toTall ? 1 : 0)) runOnJS(settle)(toTall);
     stop.value = toTall ? 1 : 0;
     max.value = withSpring(toTall ? topV.value : floorV.value, { ...SETTLE, velocity });
+    if (!toTall && listedV.value && listY.value > 0) scrollTo(listRef, 0, 0, true);
   };
   /** A finger takes it, wherever it is right now (mid-spring included). */
   const begin = () => {
@@ -221,16 +229,18 @@ export function useListStops({ rows, room, windowH, openTall, onTall, onClose }:
 
   const onScroll = useAnimatedScrollHandler({
     onScroll: (e) => {
+      const was = listY.value;
       listY.value = e.contentOffset.y;
-      // In a browser, scrolling the list at its peek (a wheel, a finger) raises it to tall.
-      if (WEB && stop.value === 0 && !held.value && topV.value > floorV.value + 1 && e.contentOffset.y > 2) goTo(true, 0);
+      // In a browser, scrolling down the list at its peek (a wheel, a finger) raises it to tall;
+      // the list going back up to its first player (as it does on the way down to the peek) never does.
+      if (WEB && stop.value === 0 && !held.value && topV.value > floorV.value + 1 && e.contentOffset.y > 2 && e.contentOffset.y > was) goTo(true, 0);
     },
   });
 
-  /** A tap on the handle: tall, or back to the peek. */
+  /** A tap on the handle: tall, or back to the peek (on the animation thread, where the list can be scrolled back to its top). */
   const toggle = useCallback(() => {
     if (topV.value <= floorV.value + 1) return;
-    goTo(stop.value !== 1, 0);
+    runOnUI(goTo)(stop.value !== 1, 0);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The map left above it, for the buttons riding on it (an empty list's few words leave plenty).
@@ -256,6 +266,19 @@ export function useListStops({ rows, room, windowH, openTall, onTall, onClose }:
     sheetStyle,
     listStyle,
     // On a phone the list holds still at the peek, so a drag on it raises it; a browser scrolls it there to raise it.
-    scrollEnabled: WEB || up || !canTall,
+    scrollEnabled: WEB || up || !canTall || reader,
   };
+}
+
+/** Whether VoiceOver or TalkBack is on (never in a browser, where the list always scrolls). */
+function useScreenReader(): boolean {
+  const [on, setOn] = useState(false);
+  useEffect(() => {
+    if (WEB) return;
+    let live = true;
+    AccessibilityInfo.isScreenReaderEnabled().then((now) => { if (live) setOn(now); }).catch(() => undefined);
+    const sub = AccessibilityInfo.addEventListener('screenReaderChanged', setOn);
+    return () => { live = false; sub.remove(); };
+  }, []);
+  return on;
 }
