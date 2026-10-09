@@ -1,17 +1,17 @@
 import React, { useMemo } from 'react';
-import { Image, StyleSheet, Text, View } from 'react-native';
+import { Image, StyleSheet, Text, View, type TextStyle } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
-import { BrandMark } from '@/components/BrandMark';
 import { SessionCard } from '@/components/session/SessionCard';
 import { SessionStamp } from '@/components/share/SessionStamp';
+import { ShadedMark, type Halo } from '@/components/share/ShadedMark';
 import { duration } from '@/lib/format';
 import { scoreLine } from '@/features/activity/format';
 import { formatDistance } from '@/features/activity/workouts';
 import type { ID } from '@/data/types';
 import type { SessionStory } from '@/features/share/sessionStory';
 import { useTheme } from '@/theme/ThemeProvider';
-import { colors, font } from '@/theme';
+import { colors, font, inkOn } from '@/theme';
 
 /** The three pictures a session can be shared as, in the order they are offered. */
 export type StoryDesign = 'photo' | 'card' | 'sticker' | 'overlay';
@@ -77,18 +77,26 @@ export function SessionStoryArt({ design, story, width, photo, hidden = [], onPh
       s.maxHr != null ? { label: 'Max HR', value: `${s.maxHr} bpm` } : null,
     ].filter((x): x is { label: string; value: string } => !!x);
     const u = width / 360;
+    // The halo the logo's own colour reads against: light round the deep greens, dark under a light colour.
+    const halo: Halo = inkOn(colors.brand.slice(0, 7)) === '#FFFFFF' ? 'light' : 'dark';
     return (
-      <View collapsable={false} style={[styles.centre, { width, height, gap: 14 * u }]}>
+      // Centred on what Instagram leaves clear (its buttons cover about 13% at the top and 17% at the
+      // foot), so the bigger logo under the numbers stays clear of the reply bar.
+      <View collapsable={false} style={[styles.centre, { width, height, gap: 14 * u, paddingBottom: 26 * u }]}>
         {stats.map((st) => (
           <View key={st.label} style={styles.centre}>
             <Text style={[styles.overLabel, { fontSize: 15 * u, lineHeight: 20 * u }]}>{st.label}</Text>
             <Text style={[styles.overValue, { fontSize: 36 * u, lineHeight: 42 * u }]}>{st.value}</Text>
           </View>
         ))}
-        <View style={[styles.overBrand, { gap: 6 * u, marginTop: 10 * u }]}>
-          {/* The logo in CourtSide's own colour (Oct 4, owner), with a soft light edge so it holds on a dark photo too. */}
-          <BrandMark size={22 * u} color={colors.brand} />
-          <Text style={[styles.overWord, { fontSize: 20 * u, lineHeight: 26 * u, color: colors.brand }]}>CourtSide</Text>
+        {/* The logo in CourtSide's own colour (Oct 4, owner), half as big again (Oct 9, owner: "our logo rn
+            is good. lets just make it bigger more prominent"): the wordmark as the sign-in page sets it, a
+            little under the numbers' size. Its soft light edge is wider and brighter, so the deep green
+            stands off a green, blue or night court; a lighter brand colour (Night's, Melbourne's, New
+            York's) gets a soft dark shadow instead, as the white numbers have. */}
+        <View style={[styles.overBrand, { gap: 8 * u, marginTop: 12 * u }]}>
+          <ShadedMark size={33 * u} u={u} color={colors.brand} halo={halo} />
+          <Text style={[styles.overWord, { fontSize: 30 * u, lineHeight: 36 * u, letterSpacing: -0.9 * u, color: colors.brand }, wordHalo(halo, u)]}>CourtSide</Text>
         </View>
       </View>
     );
@@ -124,12 +132,19 @@ export function SessionStoryArt({ design, story, width, photo, hidden = [], onPh
   );
 }
 
+/** The wordmark's halo, matching the mark's (ShadedMark): a glow all round, or a shadow a touch below. */
+function wordHalo(halo: Halo, u: number): TextStyle {
+  return halo === 'light'
+    ? { textShadowColor: 'rgba(255,255,255,0.8)', textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 8 * u }
+    : { textShadowColor: 'rgba(0,0,0,0.55)', textShadowOffset: { width: 0, height: 0.8 * u }, textShadowRadius: 7 * u };
+}
+
 const styles = StyleSheet.create({
   centre: { alignItems: 'center', justifyContent: 'center' },
   overLabel: { color: '#FFFFFF', ...font('600'), textShadowColor: 'rgba(0,0,0,0.35)', textShadowRadius: 6 },
   overValue: { color: '#FFFFFF', ...font('700'), letterSpacing: -0.5, textShadowColor: 'rgba(0,0,0,0.35)', textShadowRadius: 8 },
   overBrand: { flexDirection: 'row', alignItems: 'center' },
-  overWord: { ...font('700'), letterSpacing: -0.4, textShadowColor: 'rgba(255,255,255,0.55)', textShadowRadius: 8 },
+  overWord: { ...font('700') },
   shade: { position: 'absolute', left: 0, right: 0, bottom: 0 },
   sticker: { position: 'absolute', boxShadow: '0px 6px 22px rgba(0, 0, 0, 0.32)' },
 });

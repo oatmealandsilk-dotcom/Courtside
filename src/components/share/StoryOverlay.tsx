@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Image, Platform, StyleSheet, Text, View, type TextStyle } from 'react-native';
+import { Image, StyleSheet, Text, View, type TextStyle } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
-import { BrandMark } from '@/components/BrandMark';
+import { ShadedMark } from '@/components/share/ShadedMark';
 import { storyFill } from '@/features/share/storyOverlay';
 import { font } from '@/theme';
 
@@ -30,10 +30,17 @@ const SOFT = 'rgba(255,255,255,0.88)';
 
 /** The overlay's corner on a 360 × 640 story: in from the left, and clear of Instagram's reply bar below. */
 export const OVERLAY_INSET = { left: 24, bottom: 100 } as const;
-/** At most a little over half the story's width, so a long @handle stops short of the middle. */
-const MAX_W = 200;
+/**
+ * Half as big again as it was (Oct 9, owner: "our logo rn is good. lets just
+ * make it bigger more prominent"): the same mark and words, in units of 360.
+ */
+const MARK = 36;
+const HANDLE = { size: 21.5, line: 25 };
+const SUB = { size: 16, line: 19 };
+/** At most about two thirds of the story's width: room for a 15-letter @handle, a longer one ends in "…". */
+const MAX_W = 250;
 /** The overlay's height (the mark beside two lines), for laying a photo out above it. */
-const OVERLAY_H = 34;
+const OVERLAY_H = HANDLE.line + SUB.line;
 
 /**
  * How big Instagram shows the 1080 × 1920 see-through sticker, as a share of
@@ -49,30 +56,6 @@ export const STICKER_SHOWN_AT = 1;
 const TOP_BAR = 72;
 
 /**
- * The mark in white with a soft shadow under it. iPhone draws a view's shadow
- * from its own shapes when it has no background; Android cannot (and its
- * snapshot skips the blur effects that could), so there a faint dark copy sits
- * just under it instead.
- */
-function Mark({ size, u }: { size: number; u: number }) {
-  if (Platform.OS === 'ios') {
-    return (
-      <View style={{ shadowColor: '#000000', shadowOpacity: 0.45, shadowRadius: 2.5 * u, shadowOffset: { width: 0, height: 0.5 * u } }}>
-        <BrandMark size={size} color={WHITE} />
-      </View>
-    );
-  }
-  return (
-    <View style={{ width: size, height: size }}>
-      <View style={{ position: 'absolute', left: 0, top: 0.8 * u }}>
-        <BrandMark size={size} color="rgba(0,0,0,0.32)" />
-      </View>
-      <BrandMark size={size} color={WHITE} />
-    </View>
-  );
-}
-
-/**
  * The overlay itself: the CourtSide mark beside "@handle" over "on
  * CourtSide", at most `MAX_W` of 360 wide. Drawn by StoryOverlayCanvas at the
  * story's lower left.
@@ -82,15 +65,16 @@ export function StoryOverlay({ handle, u }: {
   /** One unit of a 360-wide story. */
   u: number;
 }) {
-  const shade: TextStyle = { textShadowColor: 'rgba(0,0,0,0.45)', textShadowOffset: { width: 0, height: 0.5 * u }, textShadowRadius: 5 * u };
+  // A little deeper and wider than it was, to go with the bigger words on a busy clip.
+  const shade: TextStyle = { textShadowColor: 'rgba(0,0,0,0.55)', textShadowOffset: { width: 0, height: 0.8 * u }, textShadowRadius: 7 * u };
   return (
     <View style={{ maxWidth: MAX_W * u }}>
-      <View style={[styles.row, { gap: 7 * u }]}>
+      <View style={[styles.row, { gap: 10 * u }]}>
         {/* Pulled left by the mark's own margin, so the mark itself, not the space round it, starts at the corner. */}
-        <View style={{ marginLeft: -3 * u }}><Mark size={24 * u} u={u} /></View>
+        <View style={{ marginLeft: -(MARK * 0.125) * u }}><ShadedMark size={MARK * u} u={u} color={WHITE} halo="dark" /></View>
         <View style={{ flexShrink: 1 }}>
-          <Text allowFontScaling={false} numberOfLines={1} style={[{ ...font('700'), fontSize: 14.5 * u, lineHeight: 17 * u, color: WHITE }, shade]}>@{handle}</Text>
-          <Text allowFontScaling={false} numberOfLines={1} style={[{ ...font('600'), fontSize: 11 * u, lineHeight: 14 * u, color: SOFT }, shade]}>on CourtSide</Text>
+          <Text allowFontScaling={false} numberOfLines={1} style={[{ ...font('700'), fontSize: HANDLE.size * u, lineHeight: HANDLE.line * u, color: WHITE }, shade]}>@{handle}</Text>
+          <Text allowFontScaling={false} numberOfLines={1} style={[{ ...font('700'), fontSize: SUB.size * u, lineHeight: SUB.line * u, color: SOFT }, shade]}>on CourtSide</Text>
         </View>
       </View>
     </View>

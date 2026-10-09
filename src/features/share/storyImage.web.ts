@@ -47,6 +47,29 @@ export function storyNoteOk(said: string): boolean {
   return said.startsWith('Copied') || said.startsWith('Saved');
 }
 
+/**
+ * html2canvas draws a text shadow's blur at the page's size, not the
+ * picture's (its offsets it does scale), so at 3x a shadow came out a third
+ * as wide as on screen: the Overlay's soft shadows round the numbers and the
+ * CourtSide word hugged the letters in the saved picture. Each blur in the
+ * copy it draws from is scaled up to match. All read first, then all
+ * written, since a written shadow would pass on, already scaled, to the
+ * words inside.
+ */
+function scaleTextShadows(root: HTMLElement, scale: number) {
+  const view = root.ownerDocument.defaultView;
+  if (!view || scale === 1) return;
+  const found: [HTMLElement, string][] = [];
+  for (const el of [root, ...Array.from(root.querySelectorAll<HTMLElement>('*'))]) {
+    const shadow = view.getComputedStyle(el).textShadow;
+    if (shadow && shadow !== 'none') found.push([el, shadow]);
+  }
+  for (const [el, shadow] of found) {
+    // "rgba(0, 0, 0, 0.35) 0px 1px 8px": the third length of each shadow is its blur.
+    el.style.textShadow = shadow.replace(/(-?[\d.]+)px\s+(-?[\d.]+)px\s+([\d.]+)px/g, (_, x: string, y: string, blur: string) => `${x}px ${y}px ${Number(blur) * scale}px`);
+  }
+}
+
 /** The picture as a PNG file, ready to share or save. Exported for the demo's own check. */
 export async function storyBlob(view: View | null): Promise<Blob | string> {
   const node = view as unknown as HTMLElement | null;
@@ -54,13 +77,15 @@ export async function storyBlob(view: View | null): Promise<Blob | string> {
   if (document.fonts?.ready) await document.fonts.ready;
   let html2canvas: (typeof import('html2canvas'))['default'];
   try { ({ default: html2canvas } = await loadDrawing()); } catch { return 'The picture could not be made. Refresh the page, then try again.'; }
+  const scale = STORY_PX.width / node.offsetWidth;
   const canvas = await html2canvas(node, {
     useCORS: true,
     backgroundColor: null,
     logging: false,
-    scale: STORY_PX.width / node.offsetWidth,
+    scale,
     width: node.offsetWidth,
     height: node.offsetHeight,
+    onclone: (_doc, copy) => scaleTextShadows(copy, scale),
   });
   const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
   return blob ?? 'The picture could not be made. Try again.';
