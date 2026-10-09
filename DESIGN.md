@@ -203,7 +203,7 @@ scale.
 - **Hard** (`hard` / `info`): cool blue; the Coaching tab's active tint.
 - **Grass** (`grass`): desaturated lawn. `warning` is the Community tab's active tint.
 - **Open Green** (`open`): Open to hit, and nothing else. The ring a
-  player wears on the map, in the tray and on their card; the dot before a name (and before "You"
+  player wears on the map, in the players list and on their card; the dot before a name (and before "You"
   on your own pin) and before "Open to hit today"; the track of the Open to hit switch on your card,
   the one switch not in the brand colour, because it is the switch that puts the green ring on.
   Fresher than the brand so it reads as "up for it now", and green on every court, New York's

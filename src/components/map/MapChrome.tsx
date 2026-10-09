@@ -71,8 +71,8 @@ export { CourtGlyph };
  * an address, a park: `places`), a pick taking the map there with that
  * place's courts listed. Return picks a court or place named exactly what
  * was typed ("Raleigh" is the city, not The Raleigh Racquet Club), else the
- * top row. Players still filter the tray below as before (`players` says how
- * many match, so "No places found" never hangs over a name that found someone).
+ * top row. Players still filter the pins and the players list as before (`players`
+ * says how many match, so "No places found" never hangs over a name that found someone).
  */
 export function MapTopBar({ onBack, query, onQuery, locationOn, locating, onToggleLocation, results, onPickCourt, places, onPickPlace, players = 0, locationMenu = false }: { onBack?: () => void; query: string; onQuery: (next: string) => void; locationOn?: boolean; locating?: boolean; onToggleLocation?: () => void; results?: CourtRow[]; onPickCourt?: (c: Court) => void; /** The place search as you type (usePlaceSearch). */ places?: PlaceSearch; onPickPlace?: (p: FoundPlace) => void; /** Players whose names match what is typed. */ players?: number; /** With Location on, the button opens who can see you (and Location off) rather than switching off. */ locationMenu?: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
@@ -82,7 +82,7 @@ export function MapTopBar({ onBack, query, onQuery, locationOn, locating, onTogg
   // A place that is one of the courts listed is already there, as the court.
   const courtNames = new Set(allCourts.slice(0, 5).map((r) => plain(labelOf(r.c))));
   const placeRows = onPickPlace && typed && places ? places.places.filter((p) => !courtNames.has(plain(p.title))).slice(0, 4) : [];
-  // Fewer courts when places are listed too, so the list never runs down over the tray.
+  // Fewer courts when places are listed too, so the list never runs down over the map's buttons.
   const found = allCourts.slice(0, placeRows.length ? 3 : 5);
   const placeNote = !onPickPlace || !typed || !places ? null
     : places.failed ? 'Search isn’t working right now'
@@ -282,13 +282,14 @@ export function WeatherChip({ weather }: { weather: Weather | null }) {
 /**
  * Back to me, and on a computer the zoom buttons a mouse needs; the map's
  * credits (ⓘ) at the other end of the row. `lead`, with nothing up over the
- * map, is the "All N players" pill (PlayersPill), at the row's start.
+ * map, is the "All N players" pill (PlayersPill), at the row's start, the
+ * credits just above it.
  */
 export function MapButtons({ onRecentre, onZoomIn, onZoomOut, lead }: { onRecentre: () => void; onZoomIn?: () => void; onZoomOut?: () => void; lead?: React.ReactNode }) {
   const styles = useThemedStyles(styleDefinitions);
   return (
     <View pointerEvents="box-none" style={styles.buttonsRow}>
-    {lead ? <View pointerEvents="box-none" style={styles.buttonsLead}>{lead}<MapCredit /></View> : <MapCredit />}
+    {lead ? <View pointerEvents="box-none" style={styles.buttonsLead}><MapCredit />{lead}</View> : <MapCredit />}
     <View style={styles.buttons}>
       {onZoomIn && onZoomOut ? (
         <View style={styles.zoom}>
@@ -360,7 +361,7 @@ function listCount(items: Placed[], query: string, filter: MapFilter, courts: Co
 function emptyLine(query: string, filter: MapFilter, courts: CourtRow[], locked: NearbyLock): string {
   if (query.trim()) return `No players named “${query.trim()}”`;
   if (locked === 'location') return 'Turn on Location to see players';
-  if (locked === 'hidden') return 'On Only me, players nearby are hidden';
+  if (locked === 'hidden') return 'On Only me, players are hidden';
   if (filter === 'following') return 'Nobody you follow is sharing nearby';
   if (filter !== 'all') return 'Nobody nearby matches that';
   return courts.length ? `No one sharing yet · ${courts.length} ${courts.length === 1 ? 'court' : 'courts'} nearby` : 'No one sharing nearby yet';
@@ -370,7 +371,8 @@ function emptyLine(query: string, filter: MapFilter, courts: CourtRow[], locked:
  * "All 11 players", beside Back to me: the full map's one way to its list.
  * With nobody to list it says why instead ("Turn on Location to see players",
  * "No one sharing yet · 3 courts nearby"), and still opens the list, which
- * says it in full with the tap that changes it.
+ * says it in full with the tap that changes it. The reason goes without the
+ * pill's ⌃, so it fits whole on a narrow phone (Android's common 360 points).
  */
 export function PlayersPill({ items, query = '', filter = 'all', courts = [], lock = null, onOpen }: { items: Placed[]; query?: string; filter?: MapFilter; courts?: CourtRow[]; lock?: NearbyLock; onOpen: () => void }) {
   const styles = useThemedStyles(styleDefinitions);
@@ -381,7 +383,7 @@ export function PlayersPill({ items, query = '', filter = 'all', courts = [], lo
       <Glass radius={21} style={styles.playersPill}>
         <Ionicons name={n ? 'people' : 'people-outline'} size={15} color={colors.brand} />
         <Text style={styles.playersPillText} numberOfLines={1}>{words}</Text>
-        <Ionicons name="chevron-up" size={14} color={colors.textMuted} />
+        {n ? <Ionicons name="chevron-up" size={14} color={colors.textMuted} /> : null}
       </Glass>
     </Pressable>
   );
@@ -538,7 +540,7 @@ function LockNote({ lock, onUnlock }: { lock: 'location' | 'hidden'; onUnlock?: 
  * Pulling a card down closes it, the way a sheet does. Let go far enough
  * (or flick it) and it closes there and then: the card stage carries it on
  * down from where the finger left it, at speed (sheetFling), so the
- * swipe, the card sliding away and the tray settling back are one motion.
+ * swipe, the card sliding away and what was under it settling back are one motion.
  */
 function useDragToClose(onClose: () => void) {
   const y = useSharedValue(0);
@@ -939,8 +941,8 @@ function milesFromPlace(miles: number, place: FoundPlace): string {
  * the nearest. Each row says how far from the place (naming it, since the
  * court's card says how far from you), how many courts and whether there
  * are lights, and opens that court's card; closing the card comes back
- * here. Close (or a swipe down) puts the list away and the players tray
- * comes back; the map stays where it is.
+ * here. Close (or a swipe down) puts the list away, back to the bare map (or
+ * the players list, if that was open); the map stays where it is.
  */
 export function PlaceSheet({ place, rows, loading, failed, onPickCourt, onRetry, onClose, played }: { place: FoundPlace; rows: CourtRow[]; loading: boolean; failed: boolean; onPickCourt: (c: Court) => void; onRetry: () => void; onClose: () => void; /** Whether a court was played on this week (the map's ring). */ played: (c: Court) => boolean }) {
   const styles = useThemedStyles(styleDefinitions);
@@ -1202,11 +1204,12 @@ const styleDefinitions = StyleSheet.create({
   weather: { marginLeft: 6, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
   weatherText: { ...typography.smallStrong, color: colors.text, fontVariant: ['tabular-nums'] },
   buttonsRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', paddingHorizontal: spacing.md },
-  // The "All N players" pill and the credits, at the start of the buttons' row: the pill gives way first on a narrow phone.
-  buttonsLead: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexShrink: 1, marginRight: spacing.sm },
+  // The credits over the "All N players" pill, at the start of the buttons' row: stacked, so the pill has
+  // the row's whole width to say why nobody shows on a narrow phone (375 points), and gives way first.
+  buttonsLead: { alignItems: 'flex-start', gap: 6, flexShrink: 1, marginRight: spacing.sm },
   buttons: { alignItems: 'flex-end', gap: spacing.sm },
   // A floating pill's shadow lives on a wrapper: the glass inside clips to its own round corners.
-  pillLift: { flexShrink: 1, borderRadius: 21, shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 4 },
+  pillLift: { flexShrink: 1, maxWidth: '100%', borderRadius: 21, shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 4 },
   // "All 11 players": as tall as Back to me beside it, in the same glass.
   playersPill: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, height: 42, borderWidth: StyleSheet.hairlineWidth, borderColor: `${colors.borderStrong}55` },
   playersPillText: { ...typography.smallStrong, color: colors.text, flexShrink: 1 },
@@ -1244,7 +1247,7 @@ const styleDefinitions = StyleSheet.create({
   sheetWeatherText: { ...typography.smallStrong, color: colors.textMuted, fontVariant: ['tabular-nums'] },
   sheetCount: { ...typography.small, color: colors.textMuted },
   sheetEmpty: { ...typography.small, color: colors.textMuted, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
-  // The empty tray's nearest courts: the search results' rows, under one quiet line.
+  // The empty players list's nearest courts: the search results' rows, under one quiet line.
   emptyCourts: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xs },
   emptyCourtsTitle: { ...typography.small, color: colors.textMuted, paddingBottom: 2 },
   // Why no players nearby show, and the tap that changes it (LockNote).

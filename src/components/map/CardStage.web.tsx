@@ -126,8 +126,8 @@ export function CardStage({ cardKey, kind, crown, children }: { cardKey: string;
 // works from a compiled style: an inline pointerEvents is ignored there
 // (react-native-web), which left that strip of map untappable.
 const styles = StyleSheet.create({
-  // zIndex 0 keeps the layers' own stacking inside the stage (as on the phone), so the strip
-  // under the tab bar, drawn after it, always lies over a card's shadow.
+  // zIndex 0 keeps the layers' own stacking inside the stage (as on the phone); the strip under
+  // the tab bar is part of each card, drawn after it, so it always lies over the card's shadow.
   stage: { position: 'relative', zIndex: 0, pointerEvents: 'box-none' },
   through: { pointerEvents: 'box-none' },
   out: { pointerEvents: 'none', position: 'absolute', left: 0, right: 0, bottom: 0 },
