@@ -140,8 +140,8 @@ export const fontFamily = {
   medium: 'Inter_500Medium',
   semibold: 'Inter_600SemiBold',
   bold: 'Inter_700Bold',
-  // The share overlays' wordmark only (Oct 9, owner: the logo was "too thin").
-  black: 'Inter_900Black',
+  // The share overlays' wordmark only (Oct 9, owner: "too thin", then Black a tiny bit too thick).
+  black: 'Inter_800ExtraBold',
 } as const;
 
 /** A weight as a style: `{...font('500')}` where a literal fontWeight used to be. */

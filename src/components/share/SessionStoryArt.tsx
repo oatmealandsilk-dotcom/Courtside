@@ -95,7 +95,7 @@ export function SessionStoryArt({ design, story, width, photo, hidden = [], onPh
             stands off a green, blue or night court; a lighter brand colour (Night's, Melbourne's, New
             York's) gets a soft dark shadow instead, as the white numbers have. */}
         <View style={[styles.overBrand, { gap: 8 * u, marginTop: 12 * u }]}>
-          <ShadedMark size={33 * u} u={u} color={colors.brandBright} halo={halo} weight={1.6} />
+          <ShadedMark size={33 * u} u={u} color={colors.brandBright} halo={halo} weight={1.35} />
           <Text style={[styles.overWord, { fontSize: 30 * u, lineHeight: 36 * u, letterSpacing: -0.9 * u, color: colors.brandBright }, wordHalo(halo, u)]}>CourtSide</Text>
         </View>
       </View>
@@ -144,7 +144,7 @@ const styles = StyleSheet.create({
   overLabel: { color: '#FFFFFF', ...font('600'), textShadowColor: 'rgba(0,0,0,0.35)', textShadowRadius: 6 },
   overValue: { color: '#FFFFFF', ...font('700'), letterSpacing: -0.5, textShadowColor: 'rgba(0,0,0,0.35)', textShadowRadius: 8 },
   overBrand: { flexDirection: 'row', alignItems: 'center' },
-  // Inter Black: the logo was "too thin" over a photo (Oct 9, owner).
+  // Inter ExtraBold: the logo was "too thin" over a photo, Black a tiny bit too thick (Oct 9, owner).
   overWord: { ...font('900') },
   shade: { position: 'absolute', left: 0, right: 0, bottom: 0 },
   sticker: { position: 'absolute', boxShadow: '0px 6px 22px rgba(0, 0, 0, 0.32)' },
