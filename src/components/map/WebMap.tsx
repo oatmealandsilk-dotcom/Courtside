@@ -65,7 +65,8 @@ maplibregl.setWorkerUrl(`${BASE}/maplibre/maplibre-gl-worker.mjs`);
  * never placed by their profile's city); courts and open hits have their own
  * marks. The controls laid over it are shared with the phone. Nothing lies
  * along the bottom of the full map (Oct 8, owner): the pins carry the faces,
- * and an "All N players" pill beside Back to me opens the list of everyone.
+ * and an "All N players" pill beside Back to me opens a short tray of
+ * everyone side by side, Snap Map's way (Oct 9), pulled up into the full list.
  */
 export function NearbyMap(props: NearbyMapProps) {
   const { me, players, onOpen, onExpand, expanded = false, onBack, at, locationOn, locating = false, onToggleLocation, focusCourt, focusHit, focusUser, focusSpot, focusPlace, holdPins = false, hitCount, inviting = false, cardHeight } = props;
@@ -91,10 +92,13 @@ export function NearbyMap(props: NearbyMapProps) {
   const toggleOpen = useOpenToHitToggle();
   // Your own pin, tapped: the card with your open-to-hit switch.
   const [meOpen, setMeOpen] = useState(false);
-  // The list of everyone around, opened from the "All N players" pill. A player's card opened from it comes back to it on closing.
+  // Everyone around, opened from the "All N players" pill: a short tray of faces side by side (Oct 9), pulled up into the full list.
+  // A player's card opened from it comes back to it on closing.
   const [listOpen, setListOpen] = useState(false);
-  // The list at its tall height (listStops): a player's card opened from it comes back to it tall; the pill opens it low again.
+  // The tray opened into the full list (listStops): a player's card opened from it comes back to the list; the pill opens the tray again.
   const [listTall, setListTall] = useState(false);
+  // How far along the tray's faces were scrolled: a player's card opened from it comes back to the same place; the pill starts it again.
+  const trayAt = useRef(0);
   // Where the list may reach: the full map's height, and the foot of the filters (it stops under them, so they still work).
   const [mapH, setMapH] = useState(0);
   const [chipsEnd, setChipsEnd] = useState(0);
@@ -421,7 +425,7 @@ export function NearbyMap(props: NearbyMapProps) {
   // Into one of your groups (the sheet says if they can't be).
   const addToGroup = (id: string) => router.push({ pathname: '/pick-group', params: { user: id } });
   // The map's buttons, riding on whatever is up along the bottom; on the players list, they fade as it rises (ListCrown).
-  const buttons = <View pointerEvents="box-none" style={styles.crown}><MapButtons lead={bare ? <PlayersPill items={model.tray} query={model.query} filter={model.filter} courts={model.nearestCourts} lock={lock} onOpen={() => { setListTall(false); setListOpen(true); }} /> : undefined} onRecentre={() => { model.select(null); model.selectCourt(null); model.selectHit(null); model.clearPlace(); map.current?.flyTo({ center: [model.homeView.center.lng, model.homeView.center.lat], zoom: model.homeView.zoom ?? START_ZOOM, duration: 600 }); }} onZoomIn={() => map.current?.zoomIn()} onZoomOut={() => map.current?.zoomOut()} /></View>;
+  const buttons = <View pointerEvents="box-none" style={styles.crown}><MapButtons lead={bare ? <PlayersPill items={model.tray} query={model.query} filter={model.filter} courts={model.nearestCourts} lock={lock} onOpen={() => { setListTall(false); trayAt.current = 0; setListOpen(true); }} /> : undefined} onRecentre={() => { model.select(null); model.selectCourt(null); model.selectHit(null); model.clearPlace(); map.current?.flyTo({ center: [model.homeView.center.lng, model.homeView.center.lat], zoom: model.homeView.zoom ?? START_ZOOM, duration: 600 }); }} onZoomIn={() => map.current?.zoomIn()} onZoomOut={() => map.current?.zoomOut()} /></View>;
   return (
     <View style={styles.fill} onLayout={(e) => setMapH(Math.round(e.nativeEvent.layout.height))}>
       {canvas}
@@ -449,7 +453,7 @@ export function NearbyMap(props: NearbyMapProps) {
           ) : foot(stageKey === 'where' ? (
             <WhereCard locating={locating} onLocation={onToggleLocation} />
           ) : stageKey === 'list' ? (
-            <PlayersSheet items={model.tray} cityName={cityName} onSelect={model.select} query={model.query} filter={model.filter} courts={model.nearestCourts} onPickCourt={model.selectCourt} lock={lock} onUnlock={unlock} onClose={() => setListOpen(false)} openTall={listTall} onTall={setListTall} room={{ height: mapH, top: chipsEnd, foot: barInset }} />
+            <PlayersSheet items={model.tray} cityName={cityName} onSelect={model.select} query={model.query} filter={model.filter} courts={model.nearestCourts} onPickCourt={model.selectCourt} lock={lock} onUnlock={unlock} onClose={() => setListOpen(false)} openTall={listTall} onTall={setListTall} room={{ height: mapH, top: chipsEnd, foot: barInset }} stripAt={trayAt} />
           ) : meOpen ? (
             <YouSheet me={me} open={openToHit} teen={teen} onToggle={(on) => { void toggleOpen(on); }} onProfile={() => { setMeOpen(false); router.push('/(tabs)/profile'); }} onClose={() => setMeOpen(false)} seenBy={mapVisibility} onSeenBy={choosing ? () => { void askWhoSeesYou('manage'); } : undefined} />
           ) : model.selected ? (
