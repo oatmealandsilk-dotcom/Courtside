@@ -1,6 +1,6 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Gesture, GestureDetector, ScrollView as GestureScrollView } from 'react-native-gesture-handler';
 import Animated, { Easing, FadeIn, FadeOut, interpolateColor, runOnJS, useAnimatedReaction, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSpring, withTiming } from 'react-native-reanimated';
@@ -40,13 +40,14 @@ import { openCourt, openCourtReel, playHere, postFromCourt, sendCourtToChat } fr
 import { Toggle } from '@/components/ui';
 import type { MapFilter, Placed } from '@/features/players/mapModel';
 import type { Weather } from '@/lib/weather';
-import { colors, pageIsDark, radius, spacing, typography, withAlpha } from '@/theme';
-import { agoLabel } from '@/components/map/markers';
+import { colors, font, pageIsDark, radius, spacing, typography, withAlpha } from '@/theme';
+import { levelBadge } from '@/lib/badges';
+import { agoLabel, agoShort } from '@/components/map/markers';
 import { MAP_CREDITS } from '@/components/map/credits';
 import { AccessTag, CourtFactsLine, FollowHeart, NowTags, RegularsRow } from '@/components/place/CourtLife';
 import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { sheetFling } from '@/components/map/sheetFling';
-import { listHeadroom, useListStops, type ListRoom } from '@/components/map/listStops';
+import { LIST_PAD_BOTTOM, TRAY_FACE, TRAY_GAP, TRAY_ITEM_W, TRAY_PAD, listHeadroom, useListStops, type ListRoom } from '@/components/map/listStops';
 import { OpenRing } from '@/components/map/OpenRing';
 import { mix } from '@/components/map/look';
 import { notKnownAdult } from '@/features/players/age';
@@ -344,9 +345,10 @@ const GHScrollView = Platform.OS === 'web' ? ScrollView : GestureScrollView;
 /*
  * The full map's players (Oct 8, owner: "taking the island on the bottom out
  * entirely"). Nothing lies along the bottom of the map any more: the pins
- * carry the faces, and one small pill beside Back to me opens the list of
- * everyone (PlayersSheet), the city and its weather moving to a chip under
- * the filters (CityWeatherChip).
+ * carry the faces, and one small pill beside Back to me opens everyone
+ * (PlayersSheet: since Oct 9 a tray of faces side by side, pulled up into the
+ * full list), the city and its weather moving to a chip under the filters
+ * (CityWeatherChip).
  */
 
 /** What keeps players from you (nearbyLock), as the list says it: not with a name typed, or on Following, neither of which depends on it. */
@@ -428,38 +430,67 @@ export function CityWeatherChip({ cityName, weather }: { cityName: string; weath
 }
 
 /**
- * Everyone around, nearest first: the list the pill opens, rising like a
- * card. Since Oct 8 (owner: "This show players pop up covers too much of the
- * screen") it is a compact list at two heights (listStops): it opens low,
- * three and a half rows with the map and its pins in view above, and a pull
- * up on its handle (or on a phone, on the list) raises it to tall, under the
- * search and the filters. One line on top says how many and where ("10
- * players near Raleigh"; the city chip under the filters already gives the
- * weather), and each row is a contacts list's: a face, the name and level,
- * how far and how long ago under it. The search and the chips filter it as
- * they do the pins; a row opens that player's card (and closing the card
- * comes back to the list, at the height it was). With nobody to list it says
- * why, with the tap that changes it, or names the nearest courts. × (or a
- * pull down past its peek) closes it, back to the bare map.
+ * Everyone around, nearest first: what the pill opens, rising like a card.
+ * Since Oct 9 (owner: "maybe make it more like the snapchat map with
+ * profiles horizontal?") it opens as a short tray, Snap Map's friends tray in
+ * CourtSide's look: one line on top says how many and where ("10 players
+ * near Raleigh"; the city chip under the filters already gives the weather),
+ * and under it everyone side by side, scrolled sideways: a big round face
+ * (wearing the green ring when they are open to hit), the first name, their
+ * level and how far and how long ago. A face flies the map to that player's
+ * pin with their card up, and closing the card comes back to the tray, at
+ * the same place along it. Pulled up (by the title, or on a phone the faces),
+ * or See all, it opens into the full list of Oct 8 (listStops), one player a
+ * row, under the search and the filters; pulled back down it is the tray
+ * again. The search and the chips filter it as they do the pins. With nobody
+ * to list it says why in a line, with the tap that changes it, or names the
+ * nearest courts. × (or a pull down past the tray, or a tap on the map)
+ * closes it, back to the bare map.
  */
-export function PlayersSheet({ items, cityName, onSelect, query = '', filter = 'all', courts = [], onPickCourt, lock = null, onUnlock, onClose, openTall = false, onTall, room }: { items: Placed[]; cityName: string; onSelect: (id: string) => void; /** What is typed in the search, which the players are filtered by. */ query?: string; /** Which chip is on, so an empty list says why. */ filter?: MapFilter; /** With nobody sharing nearby, the nearest few places anyone may play, to tap. */ courts?: CourtRow[]; onPickCourt?: (id: string) => void; /** What keeps "Players nearby" from you (nearbyLock): an empty list says so, not that nobody is there. */ lock?: NearbyLock; /** The one tap that lifts it: Location on, or who can see you. */ onUnlock?: () => void; onClose: () => void; /** Opens at its tall height (it was tall when a row opened a player's card). */ openTall?: boolean; /** Which height it is going to (tall, or the peek), each time that changes. */ onTall?: (tall: boolean) => void; /** Where the list may reach (the map's height, the foot of the filters, the strip under the home indicator). */ room?: ListRoom }) {
+export function PlayersSheet({ items, cityName, onSelect, query = '', filter = 'all', courts = [], onPickCourt, lock = null, onUnlock, onClose, openTall = false, onTall, room, stripAt }: { items: Placed[]; cityName: string; onSelect: (id: string) => void; /** What is typed in the search, which the players are filtered by. */ query?: string; /** Which chip is on, so an empty list says why. */ filter?: MapFilter; /** With nobody sharing nearby, the nearest few places anyone may play, to tap. */ courts?: CourtRow[]; onPickCourt?: (id: string) => void; /** What keeps "Players nearby" from you (nearbyLock): an empty list says so, not that nobody is there. */ lock?: NearbyLock; /** The one tap that lifts it: Location on, or who can see you. */ onUnlock?: () => void; onClose: () => void; /** Opens as the full list (it was when a row opened a player's card). */ openTall?: boolean; /** Which height it is going to (the full list, or the tray), each time that changes. */ onTall?: (tall: boolean) => void; /** Where the list may reach (the map's height, the foot of the filters, the strip under the home indicator). */ room?: ListRoom; /** How far along the tray's faces were scrolled, kept by the map, so closing a player's card comes back to the same place. */ stripAt?: { current: number } }) {
   const styles = useThemedStyles(styleDefinitions);
-  const { height: windowH } = useWindowDimensions();
-  const stops = useListStops({ rows: items.length, room, windowH, openTall, onTall, onClose });
+  const { height: windowH, width: windowW } = useWindowDimensions();
+  const stops = useListStops({ rows: items.length, room, windowH, windowW, openTall, onTall, onClose });
   // Since migration 98 you share to see: with Location off or on Only me the
   // server sends only your friends, so an empty list says how to see the
   // players near you instead of "No one sharing nearby yet".
   const locked = lockOf(lock, query, filter);
   const grabber = <View style={[styles.grabber, styles.listGrabber]} />;
-  const list = items.length ? (
+  // Back from a player's card: the faces scroll to where they were, once they are laid out.
+  const strip = useRef<ScrollView>(null);
+  const restored = useRef(false);
+  const onStripSize = (w: number, h: number) => {
+    stops.onStripSize(w, h);
+    if (restored.current || w <= 0) return;
+    restored.current = true;
+    if (stripAt?.current) strip.current?.scrollTo({ x: stripAt.current, animated: false });
+  };
+  const pick = (id: string) => { if (!stops.justDragged()) onSelect(id); };
+  // Where the faces are scrolled to, as they go and where they come to rest (a fling's last move can fall between two scroll events).
+  const keepAt = (e: NativeSyntheticEvent<NativeScrollEvent>) => { if (stripAt) stripAt.current = e.nativeEvent.contentOffset.x; };
+  const faces = (
+    <ScrollView
+      ref={strip}
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={styles.trayRow}
+      scrollEventThrottle={32}
+      onScroll={keepAt}
+      onScrollEndDrag={keepAt}
+      onMomentumScrollEnd={keepAt}
+      onContentSizeChange={onStripSize}
+    >
+      {items.map((p) => <TrayFace key={p.user.id} placed={p} onPress={() => pick(p.user.id)} />)}
+    </ScrollView>
+  );
+  const list = (
     <Animated.ScrollView
       ref={stops.listRef}
-      style={[styles.listScroll, stops.listStyle]}
+      style={StyleSheet.absoluteFill}
       contentContainerStyle={styles.list}
       showsVerticalScrollIndicator={false}
       scrollEventThrottle={16}
       bounces={false}
-      scrollEnabled={stops.scrollEnabled}
       onScroll={stops.onScroll}
       onContentSizeChange={stops.onContentSizeChange}
     >
@@ -479,10 +510,10 @@ export function PlayersSheet({ items, cityName, onSelect, query = '', filter = '
         </Pressable>
       ))}
     </Animated.ScrollView>
-  ) : null;
+  );
   return (
-    <Animated.View style={[styles.listSheet, stops.sheetStyle]}>
-      {/* The handle and the title: a drag up raises the list, a drag down lowers it and then closes it. */}
+    <Animated.View style={[styles.listSheet, stops.sheetStyle]} onLayout={stops.onSheetLayout}>
+      {/* The handle and the title: a drag up opens the full list, a drag down brings it back to the tray and then closes it. */}
       <GestureDetector gesture={stops.headGesture}>
         <View style={styles.listHead}>
           {stops.canTall ? (
@@ -492,14 +523,40 @@ export function PlayersSheet({ items, cityName, onSelect, query = '', filter = '
           )}
           <View style={styles.listTitleRow}>
             <Text accessibilityRole="header" style={styles.listTitle} numberOfLines={1}>{listTitle(items, query, filter, courts, cityName)}</Text>
+            {/* More players than fit across: See all opens them as the full list. */}
+            {stops.canTall && !stops.up ? (
+              <Pressable accessibilityRole="button" accessibilityLabel="See all players" hitSlop={8} onPress={() => { haptics.tap(); stops.expand(); }} style={({ pressed }) => [styles.seeAll, pressed && styles.closePressed]}>
+                <Text style={styles.seeAllText}>See all</Text>
+              </Pressable>
+            ) : null}
             <Pressable accessibilityRole="button" accessibilityLabel="Close" hitSlop={10} onPress={onClose} style={({ pressed }) => [styles.close, pressed && styles.closePressed]}>
               <Ionicons name="close" size={17} color={colors.textMuted} />
             </Pressable>
           </View>
         </View>
       </GestureDetector>
-      {list ? (
-        stops.listGesture ? <GestureDetector gesture={stops.listGesture}>{list}</GestureDetector> : list
+      {items.length ? (
+        // The tray's faces on top, the full list behind them; whichever is showing takes the touches and is read out.
+        <View ref={stops.body}>
+          <Animated.View style={[styles.trayBody, stops.bodyStyle]}>
+            <Animated.View
+              style={[StyleSheet.absoluteFill, stops.listStyle, !stops.up && styles.noTouch]}
+              accessibilityElementsHidden={!stops.up}
+              importantForAccessibility={stops.up ? 'auto' : 'no-hide-descendants'}
+              aria-hidden={!stops.up}
+            >
+              {stops.listGesture ? <GestureDetector gesture={stops.listGesture}>{list}</GestureDetector> : list}
+            </Animated.View>
+            <Animated.View
+              style={[styles.trayStrip, stops.stripStyle, stops.up && styles.noTouch]}
+              accessibilityElementsHidden={stops.up}
+              importantForAccessibility={stops.up ? 'no-hide-descendants' : 'auto'}
+              aria-hidden={stops.up}
+            >
+              {stops.stripGesture ? <GestureDetector gesture={stops.stripGesture}>{faces}</GestureDetector> : faces}
+            </Animated.View>
+          </Animated.View>
+        </View>
       ) : (
         <View style={styles.listEmpty}>
           {locked && (filter !== 'all' || !courts.length) ? (
@@ -508,28 +565,29 @@ export function PlayersSheet({ items, cityName, onSelect, query = '', filter = '
             </View>
           ) : query.trim() || filter !== 'all' || !courts.length ? (
             // With a name typed, say only that no player has it: a court's name finds the court, and the players are still there.
-            <Text style={styles.sheetEmpty}>
+            <Text style={styles.sheetEmpty} numberOfLines={2}>
               {query.trim() ? `No players named “${query.trim()}”`
                 : filter === 'following' ? 'Nobody you follow is sharing their spot nearby.'
                   : filter !== 'all' ? 'Nobody nearby matches that.'
                     : 'No one sharing nearby yet. Tap a court to see what’s played there.'}
             </Text>
           ) : (
-            // Nobody sharing yet: the nearest places to play instead of an empty list, each a tap from its card.
+            // Nobody sharing yet: the nearest places to play instead, side by side like the faces, each a tap from its card.
             <View style={styles.emptyCourts}>
-              {locked ? <LockNote lock={locked} onUnlock={onUnlock} /> : null}
-              <Text style={styles.emptyCourtsTitle}>{locked ? 'The nearest courts:' : 'No one sharing nearby yet. The nearest courts:'}</Text>
-              {courts.map(({ c, miles }, i) => (
-                <Pressable key={c.id} accessibilityRole="button" accessibilityLabel={`${c.name}, ${formatMiles(miles)}. Show on the map`} onPress={() => { haptics.tap(); onPickCourt?.(c.id); }} style={({ pressed }) => [styles.resultRow, i > 0 && styles.listRule, pressed && styles.listPressed]}>
-                  <View style={styles.resultTile}><CourtGlyph size={13} color={colors.brand} /></View>
-                  <View style={styles.listWords}>
-                    {/* The court's own name; an unnamed one (only listed when a town has no named court) says just "Tennis courts", never "public". */}
-                    <Text style={styles.listName} numberOfLines={1}>{c.name}</Text>
-                    <Text style={styles.personMeta} numberOfLines={1}>{[formatMiles(miles), c.count > 1 ? `${c.count} courts` : null, c.lit ? 'lights' : null].filter(Boolean).join(' · ')}</Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={14} color={colors.textFaint} />
-                </Pressable>
-              ))}
+              {locked ? <View style={styles.lockBox}><LockNote lock={locked} onUnlock={onUnlock} /></View> : null}
+              <Text style={styles.emptyCourtsTitle} numberOfLines={1}>{locked ? 'The nearest courts:' : 'No one sharing nearby yet. The nearest courts:'}</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.courtStrip}>
+                {courts.map(({ c, miles }) => (
+                  <Pressable key={c.id} accessibilityRole="button" accessibilityLabel={`${c.name}, ${formatMiles(miles)}. Show on the map`} onPress={() => { haptics.tap(); onPickCourt?.(c.id); }} style={({ pressed }) => [styles.courtChip, pressed && styles.listPressed]}>
+                    <View style={styles.resultTile}><CourtGlyph size={13} color={colors.brand} /></View>
+                    <View style={styles.courtChipWords}>
+                      {/* The court's own name; an unnamed one (only listed when a town has no named court) says just "Tennis courts", never "public". */}
+                      <Text style={styles.courtChipName} numberOfLines={1}>{c.name}</Text>
+                      <Text style={styles.personMeta} numberOfLines={1}>{[formatMiles(miles), c.count > 1 ? `${c.count} courts` : null, c.lit ? 'lights' : null].filter(Boolean).join(' · ')}</Text>
+                    </View>
+                  </Pressable>
+                ))}
+              </ScrollView>
             </View>
           )}
         </View>
@@ -539,12 +597,33 @@ export function PlayersSheet({ items, cityName, onSelect, query = '', filter = '
 }
 
 /**
+ * One player in the tray, Snap Map's way: the face first and big (the green
+ * ring round it when they are open to hit, the coach's mark on it), their
+ * first name, their level, and how far and how long ago, small.
+ */
+function TrayFace({ placed: p, onPress }: { placed: Placed; onPress: () => void }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const open = isOpenToHit(p.user);
+  const far = formatSpotMiles(p.miles, p.rough);
+  const ago = p.seenAt ? agoShort(p.seenAt) : '';
+  const said = [p.user.name, levelBadge(p.user.profile).label, far, p.seenAt ? agoLabel(p.seenAt) : null, open ? 'open to hit' : null].filter(Boolean).join(', ');
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={`${said}. Show on the map`} onPress={onPress} style={({ pressed }) => [styles.trayFace, pressed && styles.listPressed]}>
+      <OpenRing open={open} size={TRAY_FACE} halo="small"><Avatar name={p.user.name} seed={p.user.avatarSeed} size={TRAY_FACE} ring={p.user.isCoach} /></OpenRing>
+      <Text style={styles.trayName} numberOfLines={1}>{p.user.name.split(' ')[0]}</Text>
+      <LevelPill profile={p.user.profile} small style={styles.trayLevel} />
+      <Text style={styles.trayMeta} numberOfLines={1}>{[far, ago].filter(Boolean).join(' · ')}</Text>
+    </Pressable>
+  );
+}
+
+/**
  * The map's buttons (Back to me, the zoom, the credits) riding on the
- * players list. As the list is pulled up and the map left above it runs
- * short (listHeadroom) they fade out, and once they would no longer fit
- * under the filters they are gone, taking no taps, so nothing ever lies over
- * the list or the filters; pulled back down, they fade back in. A short list
- * that rises only a little keeps them.
+ * players tray. As it is pulled up into the full list and the map left above
+ * it runs short (listHeadroom) they fade out, and once they would no longer
+ * fit under the filters they are gone, taking no taps, so nothing ever lies
+ * over the list or the filters; pulled back down to the tray, they fade back
+ * in. A short list that rises only a little keeps them.
  */
 export function ListCrown({ children }: { children: React.ReactNode }) {
   const styles = useThemedStyles(styleDefinitions);
@@ -1289,19 +1368,33 @@ const styleDefinitions = StyleSheet.create({
   sheet: { backgroundColor: colors.surface, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, paddingTop: spacing.sm, paddingBottom: spacing.md, gap: spacing.sm, shadowColor: '#000', shadowOpacity: 0.14, shadowRadius: 22, shadowOffset: { width: 0, height: -8 } },
   grabber: { alignSelf: 'center', width: 36, height: 4, borderRadius: 2, backgroundColor: colors.border, marginBottom: spacing.xs },
   sheetHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.lg, paddingBottom: 2 },
-  // The players list (Oct 8, compact): the sheet's look with no padding of its own, its parts measured out
-  // (listStops: LIST_HEAD_H for the head, LIST_ROW_H a row), so its two heights land where they should.
+  // The players tray and its full list (Oct 9): the sheet's look with no padding of its own, its parts measured
+  // out (listStops: LIST_HEAD_H for the head, the faces' row, LIST_ROW_H a row), so its two heights land where they should.
   listSheet: { backgroundColor: colors.surface, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, shadowColor: '#000', shadowOpacity: 0.14, shadowRadius: 22, shadowOffset: { width: 0, height: -8 } },
-  // Its handle and one line: 4 + 12 + 32 + 4 = LIST_HEAD_H. The whole strip takes the drag, up to the sheet's top edge.
-  listHead: { paddingTop: 4, paddingBottom: 4, paddingHorizontal: spacing.lg },
+  // Its handle and one line: 2 + 12 + 32 = LIST_HEAD_H. The whole strip takes the drag, up to the sheet's top edge.
+  listHead: { paddingTop: 2, paddingHorizontal: spacing.lg },
   listGrabberHit: { alignSelf: 'center', paddingVertical: 4, paddingHorizontal: spacing.lg },
   listGrabber: { marginBottom: 0 },
   listTitleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 32 },
   listTitle: { ...typography.heading, color: colors.text, flex: 1 },
-  listScroll: { flexGrow: 0 },
-  // Under the head when nobody is listed: the reason, or the nearest courts.
+  // "See all", beside ×: the brand's colour, the way a section's "See all" reads everywhere in the app.
+  seeAll: { height: 32, justifyContent: 'center', paddingHorizontal: 4 },
+  seeAllText: { ...typography.smallStrong, color: colors.brand },
+  // The tray's body: its height moves (listStops), the faces at its top and the full list filling it behind them.
+  trayBody: { overflow: 'hidden' },
+  trayStrip: { position: 'absolute', left: 0, right: 0, top: 0 },
+  // The faces' row: the sheet's margin at either end, and a little room above for the open ring's breath.
+  trayRow: { paddingHorizontal: TRAY_PAD, paddingTop: 6, paddingBottom: 6, gap: TRAY_GAP, alignItems: 'flex-start' },
+  // One player: 6 + (64 + 13) + 2 + 16 + 3 + 19 + 2 + 14 + 6 = TRAY_BODY_H, the face's ring and its words.
+  trayFace: { width: TRAY_ITEM_W, alignItems: 'center' },
+  trayName: { ...typography.smallStrong, color: colors.text, marginTop: 2, maxWidth: TRAY_ITEM_W },
+  trayLevel: { alignSelf: 'center', marginTop: 3 },
+  trayMeta: { ...typography.caption, ...font('500'), letterSpacing: 0, color: colors.textMuted, marginTop: 2, maxWidth: TRAY_ITEM_W },
+  // Not the one showing: no touches (a compiled style, so a browser keeps it too).
+  noTouch: { pointerEvents: 'none' },
+  // Under the head when nobody is listed: the reason in a line, or the nearest courts side by side.
   listEmpty: { paddingTop: 2, paddingBottom: spacing.md },
-  list: { paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
+  list: { paddingHorizontal: spacing.lg, paddingBottom: LIST_PAD_BOTTOM },
   // A contacts list's row: LIST_ROW_H tall (more only if the words are set larger), the face 47 across with its ring's room.
   listRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: 60, paddingVertical: 6 },
   // The hairline between rows, from the names across (the face's 47 and the gap before the words).
@@ -1312,9 +1405,13 @@ const styleDefinitions = StyleSheet.create({
   listName: { ...typography.bodyStrong, color: colors.text, flexShrink: 1 },
   sheetTitle: { ...typography.heading, color: colors.text, flexShrink: 1 },
   sheetEmpty: { ...typography.small, color: colors.textMuted, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
-  // The empty players list's nearest courts: the search results' rows, under one quiet line.
-  emptyCourts: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xs },
-  emptyCourtsTitle: { ...typography.small, color: colors.textMuted, paddingBottom: 2 },
+  // The empty tray's nearest courts: one quiet line, then the courts side by side, each the search results' tile and words.
+  emptyCourts: { paddingBottom: spacing.xs },
+  emptyCourtsTitle: { ...typography.small, color: colors.textMuted, paddingBottom: 6, paddingHorizontal: spacing.lg },
+  courtStrip: { paddingHorizontal: spacing.lg, gap: spacing.sm },
+  courtChip: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, maxWidth: 240, paddingLeft: 8, paddingRight: spacing.md, paddingVertical: 8, borderRadius: radius.lg, backgroundColor: colors.bgElevated, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
+  courtChipWords: { flexShrink: 1, gap: 1 },
+  courtChipName: { ...typography.smallStrong, color: colors.text },
   // Why no players nearby show, and the tap that changes it (LockNote).
   lockBox: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xs },
   lockNote: { paddingBottom: spacing.xs },
