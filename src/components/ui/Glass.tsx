@@ -1,10 +1,33 @@
 import { useTheme } from '@/theme/ThemeProvider';
-import React from 'react';
+import React, { createContext, useContext } from 'react';
 import { Platform, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { GlassView, isLiquidGlassAvailable } from 'expo-glass-effect';
 
 import { colors } from '@/theme';
+
+/**
+ * Put the glass inside up afresh: each new value makes the iPhone build its
+ * glass again. For glass that first appears inside something still fading
+ * in (the full map's buttons, riding on a card or the bare map as it
+ * arrives: CardStage), given a new value once that has finished.
+ *
+ * Why (Oct 10, owner: the players pill was "white around the font" on
+ * opening the map, and see-through only after a filter was tapped): iOS
+ * draws Apple's glass as a flat white plate when it is put up while
+ * something round it is fading in, and keeps it that way however solid
+ * that later becomes (expo/expo#41024, iOS 26.1 on), seemingly until the
+ * glass itself changes (the pill's words changing length, on a filter).
+ * Glass put up once everything round it is still is real glass (the city
+ * chip, which comes later, always was), so that is when it is put up
+ * again. Android and the browser draw theirs another way and never need it.
+ *
+ * Glass under it never takes a touch itself (the button round it does): a
+ * finger down on glass that is put up again under it would lose its tap. So
+ * only for glass whose button is round it, with nothing to tap inside.
+ * Outside it (null) glass is never rebuilt and takes touches as ever.
+ */
+export const GlassRenew = createContext<number | null>(null);
 
 /**
  * Liquid glass, where the phone has it: on iOS 26 the surface is Apple's
@@ -21,14 +44,17 @@ import { colors } from '@/theme';
 export function Glass({ children, style, radius = 999, interactive = false, tint, clear = false }: { children?: React.ReactNode; style?: StyleProp<ViewStyle>; radius?: number; interactive?: boolean; /** A hint of colour in the glass; the theme's ground by default. */ tint?: string; /** More glass, less tint: what is beneath shows through (the tab bar, Oct 4). */ clear?: boolean }) {
   // Dark glass on a dark page (Night, and New York's navy).
   const { dark } = useTheme();
+  // A new value builds the iPhone's glass again (GlassRenew, above); the button round it takes the touches.
+  const renew = useContext(GlassRenew);
+  const through = renew === null ? undefined : 'none' as const;
   const rounded = { borderRadius: radius, overflow: 'hidden' as const };
   // Read at draw time, so the veil is the court you are on, not the one the file loaded with.
   const veil = { backgroundColor: `${(tint ?? colors.surface).slice(0, 7)}${clear ? 'B3' : 'CC'}` };
   if (Platform.OS === 'ios' && isLiquidGlassAvailable()) {
-    return <GlassView glassEffectStyle="regular" isInteractive={interactive || clear} tintColor={clear && tint ? `${tint.slice(0, 7)}BF` : tint} colorScheme={dark ? 'dark' : 'light'} style={[rounded, style]}>{children}</GlassView>;
+    return <GlassView key={renew ?? 0} pointerEvents={through} glassEffectStyle="regular" isInteractive={interactive || clear} tintColor={clear && tint ? `${tint.slice(0, 7)}BF` : tint} colorScheme={dark ? 'dark' : 'light'} style={[rounded, style]}>{children}</GlassView>;
   }
   if (Platform.OS === 'ios') {
-    return <BlurView intensity={clear ? 80 : 55} tint={dark ? 'dark' : 'light'} style={[rounded, veil, style]}>{children}</BlurView>;
+    return <BlurView key={renew ?? 0} pointerEvents={through} intensity={clear ? 80 : 55} tint={dark ? 'dark' : 'light'} style={[rounded, veil, style]}>{children}</BlurView>;
   }
   if (Platform.OS === 'android') {
     return <View style={[rounded, { backgroundColor: `${(tint ?? colors.surface).slice(0, 7)}${clear ? 'E6' : 'F2'}` }, style]}>{children}</View>;

@@ -14,6 +14,11 @@ import { layerZ, useStageLayers, type Crown, type StageKind, type StageLayer } f
  * The card that is up sits in the page's flow and sets the stage's height;
  * one on its way out is lifted out of the flow, pinned to the bottom edge
  * where it already was, and removed once its animation ends.
+ *
+ * The phone's stage also puts its buttons' glass up again once they have
+ * arrived (GlassRenew), for an iPhone that draws it white otherwise. Not
+ * here: the browser's frosted glass is a live style that is right on any
+ * frame (checked Oct 10, the players pill from its first frame on /map).
  */
 
 /** Apple's own sheet curve: a quick start that glides to rest, the browser's stand-in for the phone's spring. */
