@@ -55,6 +55,12 @@ export type ProfilePatch = { name?: string; bio?: string; location?: string; cit
 /** One person who has invited anyone, as the admin Invites page shows them (migration 71). */
 export interface InviteSummaryRow {
   id: ID; name: string; handle: string; avatarUrl?: string; suspended?: boolean;
+  /**
+   * On the server's affiliates list (migration 156, the same check as
+   * my_affiliate_stats): only they are paid, so for anyone else owed is 0
+   * and "Mark paid" is refused. Missing until migration 156 runs.
+   */
+  isAffiliate?: boolean;
   /** Worth a look (migration 80): their people share phones, >10 joined in an hour, or >20 counted in a day. Only a flag. */
   suspicious?: boolean;
   /** Signed up through their link (not deleted, not suspended, never themselves). */
@@ -2740,10 +2746,14 @@ export const remote = {
     if (error) throw new Error(missingFunction(error) ? 'The Invites page needs migration 71 in Supabase.' : error.message);
     return (data ?? []) as InviteeRow[];
   },
-  /** Admin: records a payout covering `count` qualified players. The server refuses more than is owed. */
+  /** Admin: records a payout covering `count` qualified players. The server refuses more than is owed, and anyone not an affiliate (migration 156). */
   async markInvitesPaid(referrer: ID, count: number, note?: string): Promise<void> {
     const { error } = await need().rpc('admin_mark_invites_paid', { referrer, count, note: note ?? null });
-    if (error) throw new Error(/only \d+ owed/.test(error.message) ? 'Some of that was already marked paid. The numbers are refreshed.' : error.message);
+    if (error) {
+      throw new Error(/only \d+ owed/.test(error.message) ? 'Some of that was already marked paid. The numbers are refreshed.'
+        : /not an affiliate/.test(error.message) ? 'They are not on the affiliates list, so nothing is owed to them.'
+        : error.message);
+    }
   },
 
   /** Just enough of some posts to show them small: their picture and what kind they are. For notifications. */

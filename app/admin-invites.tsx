@@ -18,14 +18,25 @@ import { colors, radius, spacing, typography } from '@/theme';
 
 const dollars = (cents: number) => `$${cents % 100 ? (cents / 100).toFixed(2) : cents / 100}`;
 const shortDate = (iso: string) => new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+/** On the server's affiliates list (migration 156): the only people paid. */
+const isAffiliate = (row: InviteSummaryRow) => row.isAffiliate === true;
 
 /**
- * Admin: paying people for the players they bring ($1 each). One row per
- * person who has invited anyone: their link, how many qualified, how many
- * were paid for, and what is owed, with "Mark paid" for after the money has
- * gone. Qualified (worked out by the server, migration 71): joined through
+ * Admin: paying the affiliates for the players they bring ($1 each). One row
+ * per person who has invited anyone: their link and how many qualified.
+ * Qualified (worked out by the server, migrations 71 and 80): joined through
  * their link, finished setting up, and was seen again on a later day.
  * Deleted and suspended accounts never count. Tap a row for their people.
+ *
+ * Only affiliates are paid (Oct 10, owner: "i shouldnt have to pay non
+ * affiliates"). Who is one is the server's 'affiliates' list (migration 147),
+ * the same check that gives them the money page on their phone, and the
+ * server says so on each row (isAffiliate, migration 156). Affiliates come
+ * first, marked "Affiliate", with what was paid, what is owed and "Mark
+ * paid"; everyone else follows with their counts only (signed up, set up,
+ * qualified): nothing owed, no Mark paid (the server refuses it too), and
+ * left out of the total. Before migration 156 runs nobody can be told apart,
+ * so no money shows at all and the page says why.
  */
 export default function AdminInvites() {
   const styles = useThemedStyles(styleDefinitions);
@@ -60,7 +71,7 @@ export default function AdminInvites() {
     showToast({ title: `Copied @${row.handle}'s link`, icon: 'link-outline' });
   };
 
-  const markPaid = (row: InviteSummaryRow) => confirm({
+  const markPaid = (row: InviteSummaryRow) => isAffiliate(row) && confirm({
     title: `Mark ${dollars(row.owedCents)} paid?`,
     message: `Records ${row.owed} ${row.owed === 1 ? 'player' : 'players'} as paid to @${row.handle}. Do this after the money has been sent.`,
     confirmLabel: 'Mark paid',
@@ -86,7 +97,7 @@ export default function AdminInvites() {
     return (
       <Screen title={`@${fresh.handle}`} compactTitle onBack={() => { setOpen(null); setPeople(null); }} onRefresh={() => openRow(fresh)}>
         <Text style={styles.lead}>
-          {fresh.invited} signed up · {fresh.setUp} set up · {fresh.qualified} qualified · {fresh.paid} paid
+          {fresh.invited} signed up · {fresh.setUp} set up · {fresh.qualified} qualified · {isAffiliate(fresh) ? `${fresh.paid} paid` : 'not an affiliate, not paid'}
         </Text>
         {error ? <Text style={styles.error} accessibilityLiveRegion="polite">{error}</Text> : null}
         {people === null ? (
@@ -120,59 +131,82 @@ export default function AdminInvites() {
     );
   }
 
-  const owedTotal = rows?.reduce((sum, r) => sum + r.owedCents, 0) ?? 0;
+  // Affiliates first (the server sends them first too; kept in its order within each).
+  const listed = rows ? [...rows].sort((a, b) => Number(isAffiliate(b)) - Number(isAffiliate(a))) : null;
+  const owedTotal = rows?.reduce((sum, r) => sum + (isAffiliate(r) ? r.owedCents : 0), 0) ?? 0;
+  // Before migration 156 the server does not say who is an affiliate.
+  const unmarked = !!rows?.length && !rows.some((r) => typeof r.isAffiliate === 'boolean');
 
   return (
     <Screen title="Invites" compactTitle onBack={() => goBack()} onRefresh={load}>
       <Text style={styles.lead}>
-        $1 for each real player someone brings: joined through their link or code, set up, has a confirmed email (or Apple or Google), came back on a later day within 2 weeks, did something (followed, posted, messaged, joined a hit or logged a session), and never signed in on the inviter's phone. "Suspicious" means their people share phones, more than 10 joined in an hour, or over 20 counted in a day; nothing is held back. {rows?.length ? (owedTotal ? `${dollars(owedTotal)} owed in all.` : 'Nothing owed right now.') : ''}
+        Affiliates are paid $1 for each real player they bring: joined through their link or code, set up, has a confirmed email (or Apple or Google), came back on a later day within 2 weeks, did something (followed, posted, messaged, joined a hit or logged a session), and never signed in on the inviter's phone. "Suspicious" means their people share phones, more than 10 joined in an hour, or over 20 counted in a day; nothing is held back. Anyone else who has invited people is listed after the affiliates with counts only: they are not paid. {rows?.length ? (owedTotal ? `${dollars(owedTotal)} owed to affiliates in all.` : 'Nothing owed right now.') : ''}
       </Text>
+      {unmarked ? <Text style={styles.error}>Affiliates can't be told apart until migration 156 runs in Supabase, so no money is shown.</Text> : null}
       {error ? <Text style={styles.error} accessibilityLiveRegion="polite">{error}</Text> : null}
-      {rows === null ? (
+      {listed === null ? (
         <View style={styles.loading}><CourtSpinner size={28} /></View>
-      ) : !rows.length ? (
+      ) : !listed.length ? (
         error ? null : <EmptyState icon="people-outline" title="No invites yet" body="When someone joins through a person's link, that person shows up here." />
       ) : (
         <View style={styles.list}>
-          {rows.map((row, index) => (
-            <Pressable
-              key={row.id}
-              accessibilityRole="button"
-              accessibilityLabel={`${row.name}${row.suspicious ? ' (suspicious)' : ''}: ${row.qualified} qualified, ${row.paid} paid, ${dollars(row.owedCents)} owed. Shows their people.`}
-              onPress={() => void openRow(row)}
-              style={({ pressed }) => [styles.block, index > 0 && styles.rowLine, pressed && { backgroundColor: colors.surfaceAlt }]}
-            >
-              <View style={styles.rowTop}>
-                <Avatar uri={row.avatarUrl} name={row.name} seed={row.id} size={40} />
-                <View style={styles.words}>
-                  <Text style={styles.name} numberOfLines={1}>{row.name}</Text>
-                  <Text style={styles.meta} numberOfLines={1}>@{row.handle}{row.suspended ? ' · suspended' : ''}</Text>
-                  {row.suspicious ? (
-                    <View style={styles.flag} accessibilityLabel="Suspicious: shared phones, a burst of sign-ups, or over 20 in a day. Nothing is held back.">
-                      <Ionicons name="alert-circle-outline" size={12} color={colors.warning} />
-                      <Text style={styles.flagText}>Suspicious</Text>
+          {listed.map((row, index) => {
+            const affiliate = isAffiliate(row);
+            return (
+              <Pressable
+                key={row.id}
+                accessibilityRole="button"
+                accessibilityLabel={affiliate
+                  ? `${row.name}, affiliate${row.suspicious ? ' (suspicious)' : ''}: ${row.qualified} qualified, ${row.paid} paid, ${dollars(row.owedCents)} owed. Shows their people.`
+                  : `${row.name}${row.suspicious ? ' (suspicious)' : ''}: ${row.invited} signed up, ${row.setUp} set up, ${row.qualified} qualified. Not an affiliate, not paid. Shows their people.`}
+                onPress={() => void openRow(row)}
+                style={({ pressed }) => [styles.block, index > 0 && styles.rowLine, pressed && { backgroundColor: colors.surfaceAlt }]}
+              >
+                <View style={styles.rowTop}>
+                  <Avatar uri={row.avatarUrl} name={row.name} seed={row.id} size={40} />
+                  <View style={styles.words}>
+                    <View style={styles.nameRow}>
+                      <Text style={[styles.name, styles.nameShrink]} numberOfLines={1}>{row.name}</Text>
+                      {affiliate ? <View style={styles.tag}><Text style={styles.tagText}>Affiliate</Text></View> : null}
                     </View>
-                  ) : null}
-                </View>
-                <Pressable accessibilityRole="button" accessibilityLabel={`Copy @${row.handle}'s invite link`} hitSlop={8} onPress={() => void copyLink(row)} style={styles.copy}>
-                  <Ionicons name="link-outline" size={14} color={colors.text} />
-                  <Text style={styles.copyText}>Copy link</Text>
-                </Pressable>
-              </View>
-              <View style={styles.numbers}>
-                <Num label="Qualified" value={String(row.qualified)} />
-                <Num label="Paid" value={String(row.paid)} />
-                <Num label="Owed" value={dollars(row.owedCents)} strong={row.owed > 0} />
-                {row.owed > 0 ? (
-                  <Pressable accessibilityRole="button" accessibilityLabel={`Mark ${dollars(row.owedCents)} paid to @${row.handle}`} disabled={busy === row.id} onPress={() => markPaid(row)} style={[styles.pay, busy === row.id && styles.payBusy]}>
-                    <Text style={styles.payText}>{busy === row.id ? 'Saving…' : 'Mark paid'}</Text>
+                    <Text style={styles.meta} numberOfLines={1}>@{row.handle}{row.suspended ? ' · suspended' : ''}</Text>
+                    {row.suspicious ? (
+                      <View style={styles.flag} accessibilityLabel="Suspicious: shared phones, a burst of sign-ups, or over 20 in a day. Nothing is held back.">
+                        <Ionicons name="alert-circle-outline" size={12} color={colors.warning} />
+                        <Text style={styles.flagText}>Suspicious</Text>
+                      </View>
+                    ) : null}
+                  </View>
+                  <Pressable accessibilityRole="button" accessibilityLabel={`Copy @${row.handle}'s invite link`} hitSlop={8} onPress={() => void copyLink(row)} style={styles.copy}>
+                    <Ionicons name="link-outline" size={14} color={colors.text} />
+                    <Text style={styles.copyText}>Copy link</Text>
                   </Pressable>
+                </View>
+                {affiliate ? (
+                  <View style={styles.numbers}>
+                    <Num label="Qualified" value={String(row.qualified)} />
+                    <Num label="Paid" value={String(row.paid)} />
+                    <Num label="Owed" value={dollars(row.owedCents)} strong={row.owed > 0} />
+                    {row.owed > 0 ? (
+                      <Pressable accessibilityRole="button" accessibilityLabel={`Mark ${dollars(row.owedCents)} paid to @${row.handle}`} disabled={busy === row.id} onPress={() => markPaid(row)} style={[styles.pay, busy === row.id && styles.payBusy]}>
+                        <Text style={styles.payText}>{busy === row.id ? 'Saving…' : 'Mark paid'}</Text>
+                      </Pressable>
+                    ) : (
+                      <Text style={styles.settled}>{row.lastPaidAt ? `Paid ${shortDate(row.lastPaidAt)}` : row.invited ? `${row.invited} signed up` : ''}</Text>
+                    )}
+                  </View>
                 ) : (
-                  <Text style={styles.settled}>{row.lastPaidAt ? `Paid ${shortDate(row.lastPaidAt)}` : row.invited ? `${row.invited} signed up` : ''}</Text>
+                  // Not an affiliate: their counts, never money ("Not paid": short enough for a small phone).
+                  <View style={styles.numbers}>
+                    <Num label="Signed up" value={String(row.invited)} />
+                    <Num label="Set up" value={String(row.setUp)} />
+                    <Num label="Qualified" value={String(row.qualified)} />
+                    <Text style={styles.settled}>Not paid</Text>
+                  </View>
                 )}
-              </View>
-            </Pressable>
-          ))}
+              </Pressable>
+            );
+          })}
         </View>
       )}
     </Screen>
@@ -200,6 +234,11 @@ const styleDefinitions = StyleSheet.create({
   rowLine: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   words: { flex: 1, gap: 1, minWidth: 0 },
   name: { ...typography.bodyStrong, color: colors.text },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6, minWidth: 0 },
+  nameShrink: { flexShrink: 1 },
+  // "Affiliate": the court's colour with its own ink on it, which reads on every court.
+  tag: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: radius.pill, backgroundColor: colors.brand },
+  tagText: { ...typography.caption, fontSize: 11, letterSpacing: 0.2, color: colors.brandInk, fontWeight: '700' },
   meta: { ...typography.small, color: colors.textMuted },
   flag: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start', marginTop: 2 },
   flagText: { ...typography.small, color: colors.warning, fontWeight: '600' },
