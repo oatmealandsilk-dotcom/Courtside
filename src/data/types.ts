@@ -1782,6 +1782,12 @@ export interface AffiliateStats {
   /** What one player is worth, in cents ($1). */
   rateCents: number;
   lastPaidAt?: string;
+  /**
+   * Their short code, when the owner gave them one (migration 157): typed at
+   * "Invited by?" or carried as courtsidebase.com/?ref=<code>, it credits them
+   * exactly as their @handle does. Absent: their code is their @handle.
+   */
+  code?: string;
 }
 
 /** A CourtSide player found in your phone's contacts (migration 88). `phone`/`email` is the contact detail that matched, as you sent it. */

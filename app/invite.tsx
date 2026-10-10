@@ -9,7 +9,7 @@ import { DragSheet } from '@/components/DragSheet';
 import { Avatar } from '@/components/ui';
 import type { AffiliateStats, Invitee } from '@/data/types';
 import { AffiliateDashboard } from '@/features/invite/AffiliateDashboard';
-import { inviteLink } from '@/features/invite/referral';
+import { inviteLink, shortInviteLink } from '@/features/invite/referral';
 import { FRIENDS_LINE } from '@/features/invite/friendsWords';
 import { notKnownAdult } from '@/features/players/age';
 import * as haptics from '@/lib/haptics';
@@ -109,15 +109,20 @@ export default function Invite() {
     if (id) router.replace(`/user/${id}`);
     else router.back();
   };
-  const link = currentUser ? inviteLink(currentUser.handle) : '';
+  // An affiliate with a short code (migration 157) shares the short link
+  // (courtsidebase.com/?ref=blick); everyone else their join link.
+  const shortCode = mode === 'affiliate' ? affiliate?.code : undefined;
+  const link = shortCode ? shortInviteLink(shortCode) : currentUser ? inviteLink(currentUser.handle) : '';
   const share = async () => {
     try { if ((await shareOutside('Hit with me on CourtSide', link)) !== null) haptics.commit(); } catch { /* the sheet was closed */ }
   };
   const copy = async () => { await Clipboard.setStringAsync(link); haptics.tap(); setCopied(true); setTimeout(() => setCopied(false), 1600); };
-  // An affiliate's code is their @handle, typed at "Invited by?" (migration 80).
+  // An affiliate's code, typed at "Invited by?": their short code when they
+  // have one (migration 157), else their @handle (migration 80).
+  const code = shortCode ?? currentUser?.handle ?? '';
   const copyCode = async () => {
-    if (!currentUser) return;
-    await Clipboard.setStringAsync(currentUser.handle);
+    if (!code) return;
+    await Clipboard.setStringAsync(code);
     haptics.tap();
     setCopiedCode(true);
     setTimeout(() => setCopiedCode(false), 1600);
@@ -162,7 +167,7 @@ export default function Invite() {
             people={people ? list : null}
             peopleAsked={loaded}
             userId={currentUser.id}
-            handle={currentUser.handle}
+            code={code}
             link={link}
             friendsOnly={friendsOnly}
             copied={copied}

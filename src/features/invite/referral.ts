@@ -17,6 +17,13 @@ export const inviteLink = (handle: string, court?: InviteCourt | null) => {
   return `${base}&court=${encodeURIComponent(court.id)}&name=${encodeURIComponent(court.name)}&lat=${court.lat.toFixed(5)}&lng=${court.lng.toFixed(5)}`;
 };
 
+/**
+ * An affiliate's short link (migration 157): the website with their short
+ * code on it (courtsidebase.com/?ref=blick). The page hands the code on to
+ * the app untouched, and the server credits it exactly as their @handle.
+ */
+export const shortInviteLink = (code: string) => `https://courtsidebase.com/?ref=${encodeURIComponent(code)}`;
+
 const KEY = 'courtside-ref';
 const COURT_KEY = 'courtside-ref-court';
 
@@ -39,7 +46,9 @@ const take = async (key: string): Promise<string | null> => {
  * (…/join?ref=handle, courtsidebase.com/?ref=handle) or a profile link.
  * A friend's waitlist link (courtsidebase.com/?r=1a2b3c4d) comes back as
  * "r=1a2b3c4d": not a handle, but the server finds the friend from it.
- * The server reads it the same way (invite_handle_from, migration 116).
+ * The server reads it the same way (invite_handle_from, migration 116), and
+ * turns an affiliate's short code ("blick") into their handle there
+ * (migration 157), so a code is passed on as it was typed.
  */
 export function handleFromText(text: string): string {
   let t = text.trim().toLowerCase();

@@ -1119,6 +1119,9 @@
   // label that is nobody's (a new campaign, a typo) shows nothing, so nobody
   // is told to type a handle the app would refuse. Our own campaign labels
   // never name anyone, even if someone took that handle.
+  // An affiliate's short code (?ref=blick, migration 157) is not a campaign:
+  // never list one here. handle_status calls it taken, so it is shown to type
+  // and carried to the web app's /join exactly as it came.
   const maybeHandle = source && /^[a-z0-9_]{2,24}$/.test(source) ? source : null;
   const CAMPAIGNS = new Set(['instagram', 'ig', 'insta', 'courtsidebase', 'courtside', 'reddit', 'tiktok', 'facebook', 'fb', 'twitter', 'threads', 'youtube', 'snapchat', 'whatsapp', 'discord', 'linktree', 'linkinbio', 'bio', 'email', 'newsletter', 'qr', 'flyer', 'poster', 'google', 'share', 'web', 'app', 'testflight', 'beta', 'robertzchen', 'robchzn', 'gipsperformance']);
   const refParam = ((params.get('ref') || '').trim().toLowerCase().replace(/^@+/, ''));

@@ -2692,7 +2692,8 @@ export const remote = {
     return data as Invitee[];
   },
   /**
-   * My own numbers as an affiliate (migration 147): earned, paid, owed, counted.
+   * My own numbers as an affiliate (migration 147): earned, paid, owed, counted,
+   * and my short code when I have one (migration 157).
    * Null for everyone who is not on the server's affiliates list, and while the
    * function is missing or could not be asked: the Invites page is then the plain one.
    */
@@ -2708,6 +2709,7 @@ export const remote = {
       invited: n(row.invited), qualified: n(row.qualified), paid: n(row.paid), paidCents, owed: n(row.owed), owedCents,
       earnedCents: n(row.earnedCents) || paidCents + owedCents, rateCents: n(row.rateCents) || 100,
       lastPaidAt: typeof row.lastPaidAt === 'string' ? row.lastPaidAt : undefined,
+      code: typeof row.code === 'string' && /^[a-z0-9_]{3,24}$/.test(row.code) ? row.code : undefined,
     };
   },
 

@@ -33,21 +33,26 @@ const played = new Set<string>();
  * 2. The rewards ladder: three steps (the tee at 20, the performance tee at
  *    40, the hoodie and badge at 75), "N more to your CourtSide tee", and
  *    the rewards on rows, the ones reached ticked.
- * 3. Their link and code, with Share and Copy (the page's own actions).
+ * 3. Their link and code, with Share and Copy (the page's own actions). With
+ *    a short code (migration 157, "blick") that is the code shown and the
+ *    link is the short one, courtsidebase.com/?ref=blick; otherwise their
+ *    @handle and their join link.
  * 4. Their players: counted first, newest first, each with "Counted" or
  *    "Not counted yet" and, when it is theirs to know, the one plain reason.
  *
  * The page's ScrollView, the sheet and the actions belong to the page
  * (app/invite.tsx); this draws what is inside.
  */
-export function AffiliateDashboard({ stats, people, peopleAsked, userId, handle, link, friendsOnly, copied, copiedCode, onShare, onCopy, onCopyCode, onOpen, tools }: {
+export function AffiliateDashboard({ stats, people, peopleAsked, userId, code, link, friendsOnly, copied, copiedCode, onShare, onCopy, onCopyCode, onOpen, tools }: {
   stats: AffiliateStats;
   /** Counted first, newest first; null while unknown. */
   people: Invitee[] | null;
   /** The list has been asked for and answered (or failed): null after this means it could not be fetched. */
   peopleAsked: boolean;
   userId: string;
-  handle: string;
+  /** What they tell people to type at "Invited by?": their short code, else their @handle. */
+  code: string;
+  /** The link they share: the short link with their short code, else their join link. */
   link: string;
   /** A teen, or anyone not known to be an adult: told to send it to their friends, as the plain page says (no poster either; the page leaves it out of `tools`). */
   friendsOnly: boolean;
@@ -70,12 +75,12 @@ export function AffiliateDashboard({ stats, people, peopleAsked, userId, handle,
       <View style={styles.card}>
         <View style={styles.cardHead}>
           <Text style={styles.cardTitle}>Your link</Text>
-          <Pressable accessibilityRole="button" accessibilityLabel={`Copy your code, ${handle}`} hitSlop={6} onPress={onCopyCode} style={({ pressed }) => [styles.code, pressed && { opacity: 0.7 }]}>
-            <Text style={styles.codeText} numberOfLines={1}>{copiedCode ? 'Copied' : `code: ${handle}`}</Text>
+          <Pressable accessibilityRole="button" accessibilityLabel={`Copy your code, ${code}`} hitSlop={6} onPress={onCopyCode} style={({ pressed }) => [styles.code, pressed && { opacity: 0.7 }]}>
+            <Text style={styles.codeText} numberOfLines={1}>{copiedCode ? 'Copied' : `code: ${code}`}</Text>
           </Pressable>
         </View>
         <Text style={styles.cardLead}>
-          {friendsOnly ? 'Send it to your friends' : 'Share it anywhere'}, or they type <Text style={styles.strong}>{handle}</Text> at “Invited by?” when they sign up.
+          {friendsOnly ? 'Send it to your friends' : 'Share it anywhere'}, or they type <Text style={styles.strong}>{code}</Text> at “Invited by?” when they sign up.
         </Text>
         <View style={styles.linkBox}>
           <Ionicons name="link-outline" size={16} color={colors.textMuted} />
@@ -98,7 +103,7 @@ export function AffiliateDashboard({ stats, people, peopleAsked, userId, handle,
       <View style={styles.foot}>
         <Text style={styles.footTitle}>What counts</Text>
         <Text style={styles.footText}>
-          Someone counts when they join with your link or type {handle} at “Invited by?”, then come back another day to actually use the app. Fake or duplicate accounts never count.
+          Someone counts when they join with your link or type {code} at “Invited by?”, then come back another day to actually use the app. Fake or duplicate accounts never count.
         </Text>
       </View>
     </View>
