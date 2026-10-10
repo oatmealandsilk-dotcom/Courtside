@@ -221,17 +221,21 @@ function TopBar({ name, top, offsetY, strip, solidAt }: { name: string; top: num
   const ground = useAnimatedStyle(() => ({ opacity: fill.value }));
   const title = useAnimatedStyle(() => ({ opacity: fill.value, transform: [{ translateY: (1 - fill.value) * 6 }] }));
   const dark = pageIsDark();
+  // Over the map, only Back takes a tap: the rest of the bar lets it through, so a tap on the
+  // pin opens the map. Once solid, the whole bar takes taps, so none lands on a post hidden under it.
   return (
     <View pointerEvents="box-none" style={[styles.bar, { height: top + BAR_H }]}>
-      <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.barGround, ground]} />
+      <Animated.View pointerEvents={solid ? 'auto' : 'none'} style={[StyleSheet.absoluteFill, styles.barGround, ground]} />
       <View pointerEvents="box-none" style={[styles.barRow, { marginTop: top }]}>
         <Pressable accessibilityRole="button" accessibilityLabel="Go back" hitSlop={6} onPress={() => goBack()} style={({ pressed }) => [styles.back, pressed && styles.backPressed]}>
           <Glass radius={19} tint={dark ? colors.surfaceAlt : undefined} style={[styles.backGlass, dark && styles.backGlassDark]}>
             <Ionicons name="chevron-back" size={21} color={colors.text} style={styles.backGlyph} />
           </Glass>
         </Pressable>
-        <Animated.Text style={[styles.barTitle, title]} numberOfLines={1} accessibilityElementsHidden={!solid} importantForAccessibility={solid ? 'auto' : 'no-hide-descendants'}>{name}</Animated.Text>
-        <View style={styles.barEnd} />
+        <View pointerEvents="none" style={styles.barTitleWrap}>
+          <Animated.Text style={[styles.barTitle, title]} numberOfLines={1} accessibilityElementsHidden={!solid} importantForAccessibility={solid ? 'auto' : 'no-hide-descendants'}>{name}</Animated.Text>
+        </View>
+        <View pointerEvents="none" style={styles.barEnd} />
       </View>
     </View>
   );
@@ -412,6 +416,7 @@ const styleDefinitions = StyleSheet.create({
   // On a dark court the map's tiles are dark too: a lighter frost and a firmer edge keep the button found.
   backGlassDark: { borderWidth: 1, borderColor: colors.borderStrong, boxShadow: '0px 2px 10px rgba(0, 0, 0, 0.45)' },
   backGlyph: { marginLeft: -2 },
-  barTitle: { ...typography.heading, color: colors.text, flex: 1, minWidth: 0 },
+  barTitleWrap: { flex: 1, minWidth: 0, justifyContent: 'center' },
+  barTitle: { ...typography.heading, color: colors.text },
   barEnd: { width: 44 },
 });

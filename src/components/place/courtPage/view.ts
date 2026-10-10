@@ -37,8 +37,6 @@ export interface CourtView {
   status: CourtPostsStatus;
   more: boolean;
   loadingOlder: boolean;
-  /** The first page of posts is still on its way. */
-  counting: boolean;
   /** The post Watch all opens on (a clip with a picture first). */
   lead: Post | null;
   /** The people behind the posts, newest first, you aside. */

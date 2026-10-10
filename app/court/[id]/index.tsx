@@ -125,7 +125,6 @@ function CourtPage() {
   // Watch all opens on a clip when there is one; the reel still holds every
   // post, so the newer ones are a swipe away.
   const lead = list.find((p) => isClip(p) && (p.thumbnailUrl || p.imageUrl)) ?? cover ?? newest;
-  const counting = court.status !== 'ready' && !list.length;
   // How fresh the court is, the way a place's story says "2h".
   const when = newest ? relativeTime(newest.createdAt) : null;
   const lastPost = !when ? null : /^\d+[mh]$/.test(when) ? `Last post ${when} ago` : when === 'just now' ? 'Last post just now' : `Last post ${when}`;
@@ -170,7 +169,6 @@ function CourtPage() {
     status: court.status,
     more: court.more,
     loadingOlder: court.loadingOlder,
-    counting,
     lead,
     players,
     playedBy,
