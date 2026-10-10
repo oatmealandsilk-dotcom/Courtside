@@ -80,7 +80,10 @@ const HEAD = { label: 16, value: 40, gap: 46 };
  * The zone rows: the whole block's width, the name and minutes columns at
  * either end of the track, the gap either side of it, the bar's thickness,
  * one row's height and the words' size ("Moderate" and "240m" fit their
- * columns at 16).
+ * columns at 16). "Moderate" fills its column to within about 2%, so the
+ * columns are least widths, not fixed ones: a phone that measures a word a
+ * hair wider (Android's small preview) moves the row a hair over rather than
+ * breaking the word onto a second line over the next row.
  */
 const ROWS = { width: 316, name: 76, minutes: 50, gap: 12, bar: 13, row: 30, text: 16 };
 /** Space between the parts: headline to the bars, bars to the heart-rate line, that line to the logo. */
@@ -188,7 +191,7 @@ export function HeartRateOverlay({ hr, width }: { hr: HeartNumbers; width: numbe
             const fillW = m > 0 ? Math.max(bar, (m / top) * trackW) : 0;
             return (
               <View key={z.n} style={[styles.row, { height: ROWS.row * u, gap: ROWS.gap * u }]}>
-                <View style={{ width: ROWS.name * u }}>
+                <View style={[styles.end, { minWidth: ROWS.name * u }]}>
                   <Words style={[small, { textAlign: 'right' }]} shadow={SMALL} u={u}>{z.name}</Words>
                 </View>
                 <View style={{ width: trackW, height: bar }}>
@@ -196,7 +199,7 @@ export function HeartRateOverlay({ hr, width }: { hr: HeartNumbers; width: numbe
                   <View style={[styles.bar, { width: trackW, height: bar, borderRadius: bar / 2, backgroundColor: TRACK }]} />
                   {fillW ? <View style={[styles.bar, { width: fillW, height: bar, borderRadius: bar / 2, backgroundColor: fills[z.n - 1] }]} /> : null}
                 </View>
-                <View style={{ width: ROWS.minutes * u }}>
+                <View style={[styles.end, { minWidth: ROWS.minutes * u }]}>
                   <Words style={num} shadow={SMALL} u={u}>{`${m}m`}</Words>
                 </View>
               </View>
@@ -229,6 +232,8 @@ const styles = StyleSheet.create({
   centre: { alignItems: 'center', justifyContent: 'center' },
   pair: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'center' },
   row: { flexDirection: 'row', alignItems: 'center' },
+  // A name or minutes column: its words against the track's side, never wrapped (see ROWS).
+  end: { alignItems: 'flex-end', flexShrink: 0 },
   bar: { position: 'absolute', left: 0, top: 0 },
   lockup: { flexDirection: 'row', alignItems: 'center' },
   // Inter ExtraBold, as today's Overlay sets the wordmark (Oct 9, owner).
