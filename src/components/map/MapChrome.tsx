@@ -639,7 +639,7 @@ export function ListCrown({ children }: { children: React.ReactNode }) {
   // Fading over the last stretch before they no longer fit.
   const look = useAnimatedStyle(() => ({ opacity: tall.value > 0 ? Math.max(0, Math.min(1, (listHeadroom.value - tall.value) / 60)) : 1 }));
   // Faded, then back at full strength: the glass on them put up again (on top of the stage's own renewals).
-  const outer = useContext(GlassRenew);
+  const outer = useContext(GlassRenew) ?? 0;
   const [renew, setRenew] = useState(0);
   const solidAgain = useCallback(() => setRenew((n) => n + 1), []);
   useAnimatedReaction(
