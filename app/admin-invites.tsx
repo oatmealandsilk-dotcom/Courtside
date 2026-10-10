@@ -97,7 +97,7 @@ export default function AdminInvites() {
     return (
       <Screen title={`@${fresh.handle}`} compactTitle onBack={() => { setOpen(null); setPeople(null); }} onRefresh={() => openRow(fresh)}>
         <Text style={styles.lead}>
-          {fresh.invited} signed up · {fresh.setUp} set up · {fresh.qualified} qualified · {isAffiliate(fresh) ? `${fresh.paid} paid` : 'not an affiliate, not paid'}
+          {fresh.invited} signed up · {fresh.setUp} set up · {fresh.qualified} qualified{isAffiliate(fresh) ? ` · ${fresh.paid} paid` : fresh.isAffiliate === false ? ' · not an affiliate, not paid' : ''}
         </Text>
         {error ? <Text style={styles.error} accessibilityLiveRegion="polite">{error}</Text> : null}
         {people === null ? (
@@ -158,7 +158,7 @@ export default function AdminInvites() {
                 accessibilityRole="button"
                 accessibilityLabel={affiliate
                   ? `${row.name}, affiliate${row.suspicious ? ' (suspicious)' : ''}: ${row.qualified} qualified, ${row.paid} paid, ${dollars(row.owedCents)} owed. Shows their people.`
-                  : `${row.name}${row.suspicious ? ' (suspicious)' : ''}: ${row.invited} signed up, ${row.setUp} set up, ${row.qualified} qualified. Not an affiliate, not paid. Shows their people.`}
+                  : `${row.name}${row.suspicious ? ' (suspicious)' : ''}: ${row.invited} signed up, ${row.setUp} set up, ${row.qualified} qualified.${row.isAffiliate === false ? ' Not an affiliate, not paid.' : ''} Shows their people.`}
                 onPress={() => void openRow(row)}
                 style={({ pressed }) => [styles.block, index > 0 && styles.rowLine, pressed && { backgroundColor: colors.surfaceAlt }]}
               >
@@ -197,11 +197,12 @@ export default function AdminInvites() {
                   </View>
                 ) : (
                   // Not an affiliate: their counts, never money ("Not paid": short enough for a small phone).
+                  // Before migration 156 nobody is known to be one either way, so it says nothing about pay.
                   <View style={styles.numbers}>
                     <Num label="Signed up" value={String(row.invited)} />
                     <Num label="Set up" value={String(row.setUp)} />
                     <Num label="Qualified" value={String(row.qualified)} />
-                    <Text style={styles.settled}>Not paid</Text>
+                    {row.isAffiliate === false ? <Text style={styles.settled}>Not paid</Text> : null}
                   </View>
                 )}
               </Pressable>
