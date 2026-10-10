@@ -5,7 +5,8 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import Animated, { FadeIn } from 'react-native-reanimated';
 
 import { CrownGlyph } from '@/components/place/CrownGlyph';
-import { Avatar, DottedRule } from '@/components/ui';
+import { SectionHead } from '@/components/place/courtPage/parts';
+import { Avatar } from '@/components/ui';
 import type { CourtKings, ID, User } from '@/data/types';
 import { useTennisFlags } from '@/features/activity/useTennisFlags';
 import { localDay } from '@/features/practice/stats';
@@ -39,14 +40,16 @@ const wins = (n: number) => plural(n, 'win', 'wins');
  * the last 90 days wears the crown, then numbers 2 and 3, then your own line
  * ("You · #5 · 2 more wins to take #3"). Ties go to the latest win. Nobody
  * has won there yet: "No King yet" first, the same quiet line as an empty
- * court, then the regulars (most days played there) in a card of their
- * own, labelled "Regulars here", so its #1 never reads as the King. Nothing
- * posted there at all: that one quiet line, so an empty court's page leads
- * with Play here, not with three prompts.
+ * court, then the regulars (most days played there) under a head of their
+ * own, "Regulars", so its #1 never reads as the King. Nothing posted there
+ * at all: that one quiet line, so an empty court's page leads with Play
+ * here, not with three prompts.
  *
- * The rule is said once, under the title (or in the regulars' label); the
+ * Both heads are the court page's one section head (SectionHead), so King
+ * of the Court and Regulars open the way Posts, Open hits and What players
+ * say do. The rule is said once, under the title (or under Regulars); the
  * (i) opens the fine print in place (2 a day, ties), never as a toast over
- * the top of the page.
+ * the top of the page. Every row is the same height.
  *
  * Who is on a board is the server's call (court_kings, migration 130): only
  * accounts it may rank, never anyone you are blocked with. A player it
@@ -55,8 +58,7 @@ const wins = (n: number) => plural(n, 'win', 'wins');
  * win one to take the crown. Signed in only; nothing
  * on a database without it, or at someone's home court. While it loads, its
  * title and one quiet line hold the place, so the page does not jump for an
- * empty court. It brings its own dotted rule below, so the page has no empty
- * gap when there is no card.
+ * empty court. The page spaces its sections, so it draws no rule of its own.
  *
  * Built to stand alone (a court id and a name), so the Tennis profile can
  * show a crown with it later.
@@ -93,19 +95,19 @@ export function CourtKing({ courtId, name, refresh = 0 }: { courtId: string; nam
   // Your wins here, when the server won't put you on a board: said plainly, with no reason.
   const unranked = !loading && !kings.me.ranked && kings.me.wins > 0 && !!me;
 
-  // The rule under the title, for the King's board only: the regulars say theirs in their own card's label.
+  // The rule under the title, for the King's board only: the regulars say theirs under their own head.
   const sub = !loading && !empty && kings.mode === 'wins' ? 'Most wins posted here · last 90 days' : null;
   const head = (
     <View>
-      <View style={styles.head}>
-        <View style={styles.headWords}>
-          <Text accessibilityRole="header" style={styles.title}>King of the Court</Text>
-          {sub ? <Text style={styles.sub}>{sub}</Text> : null}
-        </View>
-        <Pressable accessibilityRole="button" accessibilityLabel="How King of the Court works" accessibilityState={{ expanded: info }} hitSlop={6} onPress={() => setInfo((v) => !v)} style={({ pressed }) => [styles.info, pressed && styles.pressed]}>
-          <Ionicons name={info ? 'information-circle' : 'information-circle-outline'} size={22} color={info ? colors.text : colors.textMuted} />
-        </Pressable>
-      </View>
+      <SectionHead
+        title="King of the Court"
+        sub={sub}
+        accessory={(
+          <Pressable accessibilityRole="button" accessibilityLabel="How King of the Court works" accessibilityState={{ expanded: info }} hitSlop={6} onPress={() => setInfo((v) => !v)} style={({ pressed }) => [styles.info, pressed && styles.pressed]}>
+            <Ionicons name={info ? 'information-circle' : 'information-circle-outline'} size={22} color={info ? colors.text : colors.textMuted} />
+          </Pressable>
+        )}
+      />
       {info ? (
         <Animated.View entering={FadeIn.duration(160)} style={styles.note}>
           <Text style={styles.noteText}>Up to 2 wins a day count. Ties go to the latest win.</Text>
@@ -142,24 +144,21 @@ export function CourtKing({ courtId, name, refresh = 0 }: { courtId: string; nam
   // Still asking, or nothing posted here yet: the title and one quiet line, no card.
   if (loading || empty) {
     return (
-      <>
-        <View style={styles.wrap}>
-          {head}
-          {loading ? (
-            // As tall as the empty court's line (two lines on a phone), so the page holds still for most courts.
-            <View style={styles.skeletonWrap} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-              <View style={styles.skeleton} />
-              <View style={[styles.skeleton, styles.skeletonShort]} />
-            </View>
-          ) : (
-            <Animated.View entering={FadeIn.duration(200)} style={styles.wrap}>
-              {noKing}
-              {mineUnranked ? <View style={[styles.card, styles.cardSolo]}>{mineUnranked}</View> : null}
-            </Animated.View>
-          )}
-        </View>
-        <DottedRule />
-      </>
+      <View style={styles.wrap}>
+        {head}
+        {loading ? (
+          // As tall as the empty court's line (two lines on a phone), so the page holds still for most courts.
+          <View style={styles.skeletonWrap} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+            <View style={styles.skeleton} />
+            <View style={[styles.skeleton, styles.skeletonShort]} />
+          </View>
+        ) : (
+          <Animated.View entering={FadeIn.duration(200)} style={styles.wrap}>
+            {noKing}
+            {mineUnranked ? <View style={[styles.card, styles.cardSolo]}>{mineUnranked}</View> : null}
+          </Animated.View>
+        )}
+      </View>
     );
   }
 
@@ -184,93 +183,79 @@ export function CourtKing({ courtId, name, refresh = 0 }: { courtId: string; nam
   const regulars = kings.mode === 'regulars';
   const rows = regulars ? top : rest;
   return (
-    <>
-      <Animated.View entering={FadeIn.duration(220)} style={styles.wrap}>
-        {head}
-        {/* No King yet: said first, as on an empty court (with your own wins, if only you see them), then the regulars. */}
-        {regulars ? noKing : null}
-        {regulars && mineUnranked ? <View style={[styles.card, styles.cardSolo]}>{mineUnranked}</View> : null}
-        <View style={styles.card}>
-          {regulars ? (
-            // The regulars' own label, so their #1 is never read as the King.
-            <View style={styles.regularsHead}>
-              <Ionicons name="calendar-outline" size={14} color={colors.brand} />
-              <Text style={styles.regularsLabel} numberOfLines={1}>Regulars here</Text>
-              <Text style={styles.regularsWhen} numberOfLines={1}>last 90 days</Text>
+    <Animated.View entering={FadeIn.duration(220)} style={styles.wrap}>
+      {head}
+      {/* No King yet: said first, as on an empty court (with your own wins, if only you see them), then the regulars. */}
+      {regulars ? noKing : null}
+      {regulars && mineUnranked ? <View style={[styles.card, styles.cardSolo]}>{mineUnranked}</View> : null}
+      {/* The regulars under a head of their own, in the page's one head style, so their #1 is never read as the King. */}
+      {regulars ? <View style={styles.regularsHead}><SectionHead title="Regulars" sub="Most days played here · last 90 days" /></View> : null}
+      <View style={styles.card}>
+        {kings.mode === 'wins' ? (
+          // The crown: the King, big, in a gold ring. The crown and the name say it; no label above.
+          <Pressable accessibilityRole="link" accessibilityLabel={`King of ${place}: ${firstIsMe ? 'you' : first.user.name}, ${unit(first.n)}. Open profile`} onPress={() => open(first.userId)} style={({ pressed }) => [styles.king, firstIsMe && styles.mine, pressed && styles.pressed]}>
+            <View style={styles.kingFace}>
+              <View style={[styles.ring, { borderColor: withAlpha(colors.sun, 0.7) }]}>
+                <Avatar name={first.user.name} seed={first.user.avatarSeed} uri={first.user.avatarUrl} size={60} />
+              </View>
+              <View style={styles.crownOn}><CrownGlyph size={24} color={colors.sun} /></View>
             </View>
-          ) : null}
-          {kings.mode === 'wins' ? (
-            // The crown: the King, big, in a gold ring. The crown and the name say it; no label above.
-            <Pressable accessibilityRole="link" accessibilityLabel={`King of ${place}: ${firstIsMe ? 'you' : first.user.name}, ${unit(first.n)}. Open profile`} onPress={() => open(first.userId)} style={({ pressed }) => [styles.king, firstIsMe && styles.mine, pressed && styles.pressed]}>
-              <View style={styles.kingFace}>
-                <View style={[styles.ring, { borderColor: withAlpha(colors.sun, 0.7) }]}>
-                  <Avatar name={first.user.name} seed={first.user.avatarSeed} uri={first.user.avatarUrl} size={60} />
-                </View>
-                <View style={styles.crownOn}><CrownGlyph size={24} color={colors.sun} /></View>
-              </View>
-              <View style={styles.kingWords}>
-                <Text style={styles.kingName} numberOfLines={1}>{firstIsMe ? 'You' : first.user.name}</Text>
-                {/* The handle, then the last win on a line of its own: side by side they were cut off on a small phone. */}
-                <Text style={styles.kingWhen} numberOfLines={1}>@{first.user.handle}</Text>
-                {first.last ? <Text style={styles.kingWhen} numberOfLines={1}>{`Last win ${lastWin(first.last)}`}</Text> : null}
-              </View>
-              <View style={styles.kingCount}>
-                <Text style={styles.kingNumber}>{first.n}</Text>
-                <Text style={styles.kingUnit}>{first.n === 1 ? 'win' : 'wins'}</Text>
-              </View>
-            </Pressable>
-          ) : null}
-          {rows.map((t, i) => {
-            const rank = (kings.mode === 'wins' ? 2 : 1) + i;
-            const mine = t.userId === currentUserId;
-            const hint = mine ? climb(rank) : null;
-            return (
-              <Pressable key={t.userId} accessibilityRole="link" accessibilityLabel={`Number ${rank}: ${mine ? 'you' : t.user.name}, ${unit(t.n)}. Open profile`} onPress={() => open(t.userId)} style={({ pressed }) => [styles.row, styles.line, mine && styles.mine, pressed && styles.pressed]}>
-                <Text style={[styles.rank, mine && styles.rankMine]}>{rank}</Text>
-                <Avatar name={t.user.name} seed={t.user.avatarSeed} uri={t.user.avatarUrl} size={36} />
-                <View style={styles.rowWords}>
-                  <Text style={styles.rowName} numberOfLines={1}>{mine ? 'You' : t.user.name}</Text>
-                  <Text style={[styles.rowHandle, hint ? styles.hint : null]} numberOfLines={1}>{hint ?? `@${t.user.handle}`}</Text>
-                </View>
-                <Text style={styles.count}><Text style={styles.countNumber}>{t.n}</Text>{` ${kings.mode === 'wins' ? (t.n === 1 ? 'win' : 'wins') : (t.n === 1 ? 'day' : 'days')}`}</Text>
-              </Pressable>
-            );
-          })}
-          {/* Your own line, under the top three: your place and what it takes, or your wins when you aren't on the board. */}
-          {kings.mode === 'wins' && ((myRank && myRank > 3) || myOver) && me ? (
-            <View style={[styles.row, styles.line, styles.mine]} accessible accessibilityLabel={`You: ${myOver ? 'outside the top 10' : `number ${myRank}`}, ${wins(kings.me.wins)}. ${climb(myRank ?? 11) ?? ''}`}>
-              <Text style={[styles.rank, styles.rankMine, myOver && styles.rankOver]}>{myOver ? '10+' : myRank}</Text>
-              <Avatar name={me.name} seed={me.avatarSeed} uri={me.avatarUrl} size={36} />
+            <View style={styles.kingWords}>
+              <Text style={styles.kingName} numberOfLines={1}>{firstIsMe ? 'You' : first.user.name}</Text>
+              {/* The handle, then the last win on a line of its own: side by side they were cut off on a small phone. */}
+              <Text style={styles.kingWhen} numberOfLines={1}>@{first.user.handle}</Text>
+              {first.last ? <Text style={styles.kingWhen} numberOfLines={1}>{`Last win ${lastWin(first.last)}`}</Text> : null}
+            </View>
+            <View style={styles.kingCount}>
+              <Text style={styles.kingNumber}>{first.n}</Text>
+              <Text style={styles.kingUnit}>{first.n === 1 ? 'win' : 'wins'}</Text>
+            </View>
+          </Pressable>
+        ) : null}
+        {rows.map((t, i) => {
+          const rank = (kings.mode === 'wins' ? 2 : 1) + i;
+          const mine = t.userId === currentUserId;
+          const hint = mine ? climb(rank) : null;
+          return (
+            <Pressable key={t.userId} accessibilityRole="link" accessibilityLabel={`Number ${rank}: ${mine ? 'you' : t.user.name}, ${unit(t.n)}. Open profile`} onPress={() => open(t.userId)} style={({ pressed }) => [styles.row, (i > 0 || !regulars) && styles.line, mine && styles.mine, pressed && styles.pressed]}>
+              <Text style={[styles.rank, mine && styles.rankMine]}>{rank}</Text>
+              <Avatar name={t.user.name} seed={t.user.avatarSeed} uri={t.user.avatarUrl} size={36} />
               <View style={styles.rowWords}>
-                <Text style={styles.rowName}>You</Text>
-                <Text style={[styles.rowHandle, styles.hint]} numberOfLines={1}>{climb(myRank ?? 11)}</Text>
+                <Text style={styles.rowName} numberOfLines={1}>{mine ? 'You' : t.user.name}</Text>
+                <Text style={[styles.rowHandle, hint ? styles.hint : null]} numberOfLines={1}>{hint ?? `@${t.user.handle}`}</Text>
               </View>
-              <Text style={styles.count}><Text style={styles.countNumber}>{kings.me.wins}</Text>{` ${kings.me.wins === 1 ? 'win' : 'wins'}`}</Text>
+              <Text style={styles.count}><Text style={styles.countNumber}>{t.n}</Text>{` ${kings.mode === 'wins' ? (t.n === 1 ? 'win' : 'wins') : (t.n === 1 ? 'day' : 'days')}`}</Text>
+            </Pressable>
+          );
+        })}
+        {/* Your own line, under the top three: your place and what it takes, or your wins when you aren't on the board. */}
+        {kings.mode === 'wins' && ((myRank && myRank > 3) || myOver) && me ? (
+          <View style={[styles.row, styles.line, styles.mine]} accessible accessibilityLabel={`You: ${myOver ? 'outside the top 10' : `number ${myRank}`}, ${wins(kings.me.wins)}. ${climb(myRank ?? 11) ?? ''}`}>
+            <Text style={[styles.rank, styles.rankMine, myOver && styles.rankOver]}>{myOver ? '10+' : myRank}</Text>
+            <Avatar name={me.name} seed={me.avatarSeed} uri={me.avatarUrl} size={36} />
+            <View style={styles.rowWords}>
+              <Text style={styles.rowName}>You</Text>
+              <Text style={[styles.rowHandle, styles.hint]} numberOfLines={1}>{climb(myRank ?? 11)}</Text>
             </View>
-          ) : !regulars && mineUnranked ? <View style={styles.line}>{mineUnranked}</View> : null}
-          {/* How to get on the board: the King's board only (the regulars' "No King yet" line above says it). */}
-          {regulars ? null : (
-            <View style={[styles.foot, styles.line]}>
-              <Ionicons name="trophy-outline" size={15} color={colors.textMuted} />
-              <Text style={styles.footText}>Log a match, mark it won and post it here.</Text>
-            </View>
-          )}
-        </View>
-      </Animated.View>
-      <DottedRule />
-    </>
+            <Text style={styles.count}><Text style={styles.countNumber}>{kings.me.wins}</Text>{` ${kings.me.wins === 1 ? 'win' : 'wins'}`}</Text>
+          </View>
+        ) : !regulars && mineUnranked ? <View style={styles.line}>{mineUnranked}</View> : null}
+        {/* How to get on the board: the King's board only (the regulars' "No King yet" line above says it). */}
+        {regulars ? null : (
+          <View style={[styles.foot, styles.line]}>
+            <Ionicons name="trophy-outline" size={15} color={colors.textMuted} />
+            <Text style={styles.footText}>Log a match, mark it won and post it here.</Text>
+          </View>
+        )}
+      </View>
+    </Animated.View>
   );
 }
 
 const styleDefinitions = StyleSheet.create({
   wrap: { gap: spacing.md },
-  head: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
-  headWords: { flex: 1, gap: 2 },
-  // The same head as the page's other parts (What players say, Open hits).
-  title: { ...typography.heading, color: colors.text },
-  sub: { ...typography.small, color: colors.textMuted },
-  // A 44pt target, drawn as the 22pt glyph, its top level with the title's.
-  info: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', marginVertical: -11, marginRight: -11 },
+  // A 44pt target, drawn as the 22pt glyph, level with the title.
+  info: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', marginVertical: -9, marginRight: -11 },
   // The fine print, opened in place under the title.
   note: { marginTop: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: 10, borderRadius: radius.md, backgroundColor: colors.bgElevated },
   noteText: { ...typography.small, color: colors.textMuted, lineHeight: 19 },
@@ -291,12 +276,10 @@ const styleDefinitions = StyleSheet.create({
   kingCount: { alignItems: 'flex-end' },
   kingNumber: { ...font('600'), fontSize: 34, lineHeight: 38, letterSpacing: -1.2, color: colors.text, fontVariant: ['tabular-nums'] },
   kingUnit: { ...typography.small, color: colors.textMuted, marginTop: -2 },
-  // The regulars' label, over their list.
-  regularsHead: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: spacing.lg, paddingTop: 14, paddingBottom: 10 },
-  regularsLabel: { ...typography.smallStrong, color: colors.textMuted, flexShrink: 1 },
-  regularsWhen: { ...typography.small, color: colors.textMuted, marginLeft: 'auto', paddingLeft: spacing.sm },
-  // 2, 3, and you.
-  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: 11 },
+  // The regulars' own head, a little apart from "No King yet".
+  regularsHead: { marginTop: spacing.sm },
+  // 2, 3, and you: every row the same 56pt.
+  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: 10, minHeight: 56 },
   rank: { width: 22, ...font('600'), fontSize: 15, color: colors.textMuted, textAlign: 'center', fontVariant: ['tabular-nums'] },
   rankMine: { color: colors.brand },
   // "10+" in the same column as 2 and 3.
@@ -308,7 +291,7 @@ const styleDefinitions = StyleSheet.create({
   hint: { color: colors.brand, ...font('500') },
   count: { ...typography.small, color: colors.textMuted },
   countNumber: { ...font('600'), fontSize: 15, color: colors.text, fontVariant: ['tabular-nums'] },
-  foot: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: 12 },
+  foot: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: 10, minHeight: 48 },
   footText: { flex: 1, ...typography.small, color: colors.textMuted, lineHeight: 18 },
   // Nothing posted here yet (or still asking): one quiet line, no card.
   quiet: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, minHeight: 19 },

@@ -105,6 +105,13 @@ interface Props {
    * the end of their own content, so no room is kept here.
    */
   scrollsInside?: boolean;
+  /**
+   * On a phone, the page starts at the very top of the screen, under the
+   * status bar, rather than below it: for a page whose top is a picture
+   * running edge to edge (a court's page, its map at the top), with its
+   * own way back drawn over it. Only for a page with no title here.
+   */
+  bleedTop?: boolean;
 }
 
 export function Screen({
@@ -126,6 +133,7 @@ export function Screen({
   wash = true,
   bar = true,
   scrollsInside = false,
+  bleedTop = false,
 }: Props) {
   // The floating tab bar covers this much of the bottom; a page's last line stays above it.
   const barInset = useBarInset();
@@ -148,6 +156,9 @@ export function Screen({
   const strip = Platform.OS !== 'web' && onRefresh ? PULL_GAP : 0;
   const restored = useRef(initial.current === 0);
   const { isPhone, isDesktop } = useResponsive();
+  // Running up under the status bar (bleedTop): the pull's disc and its note keep below it.
+  const bled = bleedTop && isPhone;
+  const underBar = bled ? { marginTop: insets.top } : null;
   // The page's own height. A short page must still be able to scroll past the
   // pull strip, or it rests on the strip and its disc shows for good.
   const [viewH, setViewH] = useState(0);
@@ -472,7 +483,7 @@ export function Screen({
 
   // Under the header, over the top of the page: a small note once a pull has fetched.
   const updatedNote = onRefresh ? (
-    <Animated.View pointerEvents="none" style={[styles.updated, { opacity: updated, transform: [{ translateY: updated.interpolate({ inputRange: [0, 1], outputRange: [-8, 0] }) }, { scale: updated.interpolate({ inputRange: [0, 1], outputRange: [0.92, 1] }) }] }]}>
+    <Animated.View pointerEvents="none" style={[styles.updated, underBar, { opacity: updated, transform: [{ translateY: updated.interpolate({ inputRange: [0, 1], outputRange: [-8, 0] }) }, { scale: updated.interpolate({ inputRange: [0, 1], outputRange: [0.92, 1] }) }] }]}>
       <Ionicons name="checkmark-circle" size={14} color={colors.brand} />
       <Text style={styles.updatedText}>Updated</Text>
     </Animated.View>
@@ -551,7 +562,7 @@ export function Screen({
     <KeyboardScrollContext.Provider value={scroll ? reveal : null}>
     <PageWashContext.Provider value={wash && scroll && Platform.OS === 'web' ? washFrame : null}>
     <KeyboardAvoidingView
-      style={[styles.root, { paddingTop: isPhone ? insets.top : wideNative ? Math.max(insets.top, spacing.sm) : spacing.sm }]}
+      style={[styles.root, { paddingTop: bled ? 0 : isPhone ? insets.top : wideNative ? Math.max(insets.top, spacing.sm) : spacing.sm }]}
       // A scrolling page moves the box itself; a fixed page lifts everything.
       behavior={Platform.OS === 'ios' && !scroll ? 'padding' : undefined}
       enabled={Platform.OS === 'ios' && !scroll}
@@ -612,7 +623,7 @@ export function Screen({
             pull, closes at the line and turns while it fetches. In front, so it is never seen
             through the page or hidden by it; it only ever shows inside the gap. */}
         {strip > 0 ? (
-          <Reanimated.View pointerEvents="none" style={[styles.pullRow, rowStyle]}>
+          <Reanimated.View pointerEvents="none" style={[styles.pullRow, underBar, rowStyle]}>
             <PullDisc gap={gap} disc={disc} line={PULL_LINE} />
           </Reanimated.View>
         ) : null}
@@ -626,7 +637,7 @@ export function Screen({
         </View>
       )}
       {onRefresh && Platform.OS === 'web' ? (
-        <Reanimated.View pointerEvents="none" style={[styles.webRefresh, webDiscStyle]}>
+        <Reanimated.View pointerEvents="none" style={[styles.webRefresh, underBar, webDiscStyle]}>
           <PullDisc gap={gap} disc={disc} line={WEB_PULL_LINE} />
         </Reanimated.View>
       ) : null}

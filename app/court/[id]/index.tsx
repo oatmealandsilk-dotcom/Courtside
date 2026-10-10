@@ -1,18 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { CourtSpinner } from '@/components/CourtSpinner';
-import { CourtDisc } from '@/components/place/CourtDisc';
-import { CourtGrid } from '@/components/place/CourtGrid';
-import { CourtHits } from '@/components/place/CourtHits';
-import { CourtKing } from '@/components/place/CourtKing';
-import { CourtSays } from '@/components/place/CourtSays';
-import { AccessTag, FollowHeart, NowTags } from '@/components/place/CourtLife';
-import { Avatar, Button, DottedRule, EmptyState, Screen } from '@/components/ui';
+import { PlaceCard } from '@/components/place/courtPage/PlaceCard';
+import type { CourtView } from '@/components/place/courtPage/view';
+import { EmptyState, Screen } from '@/components/ui';
 import type { Post, User } from '@/data/types';
-import { countLabel, isClip, parseCourtParams, sameCourt } from '@/features/places/court';
+import { isClip, parseCourtParams, sameCourt } from '@/features/places/court';
 import { areaOf } from '@/features/places/search';
 import { useCourtPosts } from '@/features/places/useCourtPosts';
 import { fetchCourts, isClosedCourt, type Court } from '@/features/players/courts';
@@ -28,21 +23,23 @@ import { goBack } from '@/lib/goBack';
 import { useStillLoading } from '@/lib/useStillLoading';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import { colors, spacing, typography } from '@/theme';
 import { publicRoute } from '@/features/share/publicRoute';
 
 type Params = { id: string; name?: string; lat?: string; lng?: string };
 
 /**
- * A court's own page, the way a place has a page of its own on Snapchat or
- * Instagram: its name, town and distance; a clip in a ring, how fresh the
- * posts are, who has played here and how many follow it; who may play
- * there and how it is right now; Watch all; what players say about it
- * (lights, busy times, the surface), with Add what you know; the open hits
- * here, with Play here; then everything posted there as a grid, newest
- * first. A tile opens the court's reel on that post. The heart up top
- * follows it. Under Watch all and Directions, Start a session here: the
- * clock, with this court already chosen (or the session already going).
+ * A court's own page, laid out the way Apple Maps shows a place (owner,
+ * Oct 10: "Do b."; the place card, components/place/courtPage/PlaceCard):
+ * its map at the top, the page rising over it as a sheet with the name,
+ * town, distance and followers, who has played here, how it is right now,
+ * Start a session here, the round actions (Directions, Follow, Play here,
+ * Post, Share) and the court's facts; then its posts as a grid, the open
+ * hits, King of the Court and what players say.
+ *
+ * This works out everything the page shows, by the court's own rules (what
+ * the map knows, who may play, lights said once, who has played here, the
+ * session's state), and hands it to the place card as one CourtView, which
+ * only lays it out.
  */
 function CourtPage() {
   const styles = useThemedStyles(styleDefinitions);
@@ -68,7 +65,7 @@ function CourtPage() {
 
   // The town it is in. Nothing found, the distance stands alone.
   const [area, setArea] = useState<string | null>(null);
-  // Until the first answer, the subtitle keeps its line, so the title does not jump when the town lands.
+  // Until the first answer, the town keeps its line, so the name does not jump when it lands.
   const [areaDone, setAreaDone] = useState(false);
   const askArea = useCallback(async () => {
     if (!place) return;
@@ -93,7 +90,6 @@ function CourtPage() {
   // Only from somewhere real: where the phone says you are, or the city on your profile. Never a guess.
   const viewer = detectedCoords ?? currentUser?.cityAt ?? null;
   const distance = place && viewer ? formatMiles(milesBetween(viewer, place)) : null;
-  const subtitle = [area, distance].filter(Boolean).join(' · ') || undefined;
   // Lights from the map only while no player has said: then "What players
   // say" is the one place lights are mentioned, and the two never disagree.
   const playersOnLights = !!said && said.lights.yes + said.lights.no > 0;
@@ -126,15 +122,13 @@ function CourtPage() {
   const list = court.posts;
   const newest = list[0] ?? null;
   const cover = list.find((p) => p.thumbnailUrl || p.imageUrl) ?? null;
-  // The ring shows a clip when there is one, and the ring and Watch all open the
-  // post it shows; the reel still holds every post, so the newer ones are a swipe away.
+  // Watch all opens on a clip when there is one; the reel still holds every
+  // post, so the newer ones are a swipe away.
   const lead = list.find((p) => isClip(p) && (p.thumbnailUrl || p.imageUrl)) ?? cover ?? newest;
-  const allClips = list.length > 0 && list.every(isClip);
   const counting = court.status !== 'ready' && !list.length;
   // How fresh the court is, the way a place's story says "2h".
   const when = newest ? relativeTime(newest.createdAt) : null;
   const lastPost = !when ? null : /^\d+[mh]$/.test(when) ? `Last post ${when} ago` : when === 'just now' ? 'Last post just now' : `Last post ${when}`;
-  const freshness = [lastPost, facts].filter(Boolean).join(' · ');
   // Posting needs the court's map id to tag it; a place without one has no Post from here.
   const postHere = noteId ? () => postFromCourt({ id: noteId, name, lat: place.lat, lng: place.lng }) : undefined;
   // The court as the rest of the app should know it: the map's id even for a
@@ -155,124 +149,55 @@ function CourtPage() {
         : players.length === 3 ? `${first(players[0])}, ${first(players[1])} and ${first(players[2])}`
           : `${first(players[0])}, ${first(players[1])} and ${players.length - 2} others`;
 
-  return (
-    <Screen
-      title={name}
-      subtitle={subtitle ?? (areaDone ? undefined : '\u00A0')}
-      compactTitle
-      // A long name ("Bellwood Recreation Center") ran to three lines beside the icons on a small
-      // phone: held to two, and a step smaller only when it would wrap at the usual size, so
-      // "Alder Park" and a longer name that still fits on one line read the same size.
-      titleLines={2}
-      onBack={() => goBack()}
-      onRefresh={isDesktopBrowser() ? undefined : refresh}
-      right={
-        <View style={styles.icons}>
-          {extras && factsId ? <FollowHeart court={{ id: factsId, name, lat: place.lat, lng: place.lng, access }} style={styles.icon} size={20} /> : null}
-          <Pressable accessibilityRole="button" accessibilityLabel={`See ${name} on the map`} hitSlop={8} onPress={() => showCourtOnMap({ id: noteId, name, lat: place.lat, lng: place.lng })} style={({ pressed }) => [styles.icon, pressed && styles.pressed]}>
-            <Ionicons name="map-outline" size={20} color={colors.textMuted} />
-          </Pressable>
-          <Pressable accessibilityRole="button" accessibilityLabel={`Send ${name} to a chat`} hitSlop={8} onPress={() => sendCourtToChat(here)} style={({ pressed }) => [styles.icon, pressed && styles.pressed]}>
-            <Ionicons name="paper-plane-outline" size={20} color={colors.textMuted} />
-          </Pressable>
-        </View>
-      }
-    >
-      <View style={styles.hero}>
-        <CourtDisc cover={lead} label={`Watch ${list.length} ${allClips ? (list.length === 1 ? 'clip' : 'clips') : list.length === 1 ? 'post' : 'posts'} from ${name}`} onPress={() => { if (lead) openReel(lead); }} />
-        <View style={styles.heroWords}>
-          {counting ? null : <Text style={styles.count}>{countLabel(list, court.more)}</Text>}
-          {freshness ? <Text style={styles.facts} numberOfLines={2}>{freshness}</Text> : null}
-          {players.length ? (
-            <View style={styles.playedBy}>
-              <View style={styles.faces}>
-                {players.slice(0, 4).map((u, i) => (
-                  <Pressable key={u.id} accessibilityRole="link" accessibilityLabel={`${u.name}, open profile`} hitSlop={4} onPress={() => router.push(`/user/${u.id}`)} style={({ pressed }) => [i > 0 && styles.faceOver, pressed && styles.pressed]}>
-                    <Avatar name={u.name} seed={u.avatarSeed} uri={u.avatarUrl} size={26} style={styles.face} />
-                  </Pressable>
-                ))}
-              </View>
-              <Text style={styles.playedByText} numberOfLines={1}>Played here by {playedBy}</Text>
-            </View>
-          ) : null}
-          {/* A count, never names: who follows a court is theirs to know. */}
-          {extras && followers ? <Text style={styles.followers}>{followers === 1 ? '1 player follows this court' : `${followers} players follow this court`}</Text> : null}
-        </View>
-      </View>
-      {access !== 'unknown' || bookUrl || extras ? (
-        <View style={styles.tags}>
-          <AccessTag access={access} bookUrl={bookUrl} />
-          {extras && factsId ? <NowTags courtId={factsId} name={name} access={access} /> : null}
-        </View>
-      ) : null}
-      <View style={styles.pills}>
-        {lead ? <View style={styles.pill}><Button full label="Watch all" onPress={() => openReel(lead)} /></View>
-          : postHere && !counting ? <View style={styles.pill}><Button full label="Post from here" onPress={postHere} /></View>
-          : null}
-        <View style={styles.pill}><Button full label="Directions" variant="secondary" onPress={() => directionsTo({ name, lat: place.lat, lng: place.lng })} /></View>
-        {/* Directions alone (still loading, or nowhere to post) stays pill-sized, not a bar across the page. */}
-        {!lead && (!postHere || counting) ? <View style={styles.pill} /> : null}
-      </View>
-      {/* Start a session here (Oct 6, owner chose "A"): starting is "I'm at this court", so the start step opens
-          with this court chosen; it checks you in by the court sheet's rules, and a teen, or anyone at a club's or
-          someone's home court, gets the timer alone. A session already going: that one, never a second. */}
-      <View style={styles.startRow}>
-        <Button
-          full
-          variant="secondary"
-          label={!liveNow ? 'Start a session here' : liveNow === 'finished' ? 'Log your session' : 'Session in progress'}
-          onPress={() => (!liveNow ? startSessionHere(here, access) : liveNow === 'finished' && liveSession ? finishLive(liveSession, actions) : router.push('/live-session'))}
-        />
-      </View>
-      <DottedRule />
-      {/* King of the Court (migration 130): signed in, at a court on the map, never at someone's home court, and only while its switch is on for you (migration 140; admins for now). Brings its own rule below. */}
-      {factsId && currentUserId && access !== 'private' ? <CourtKing courtId={factsId} name={name} refresh={kingTick} /> : null}
-      {extras && factsId ? (
-        <>
-          <CourtSays courtId={factsId} name={name} />
-          <DottedRule />
-        </>
-      ) : null}
-      <CourtHits place={here} closed={closed} />
-      <DottedRule />
-      <CourtGrid
-        posts={list}
-        users={users}
-        status={court.status}
-        more={court.more}
-        loadingOlder={court.loadingOlder}
-        courtName={name}
-        onOpen={openReel}
-        onOlder={() => { void court.loadOlder(); }}
-        onPost={postHere}
-        onRetry={() => { void court.refresh(); }}
-      />
-      {facts ? <Text style={styles.credit}>Court details from OpenStreetMap</Text> : null}
-    </Screen>
-  );
+  const view: CourtView = {
+    name,
+    area,
+    distance,
+    areaPending: !areaDone,
+    here,
+    factsId,
+    extras,
+    access,
+    bookUrl,
+    closed,
+    // A count, never names: who follows a court is theirs to know.
+    followers: extras ? followers : 0,
+    map: mapCourt ? { count: mapCourt.count, surface: mapCourt.surface, lit: !!mapCourt.lit } : null,
+    playersOnLights,
+    factsLine: facts,
+    posts: list,
+    users,
+    status: court.status,
+    more: court.more,
+    loadingOlder: court.loadingOlder,
+    counting,
+    lead,
+    players,
+    playedBy,
+    lastPost,
+    currentUserId,
+    kingTick,
+    // Start a session here (Oct 6, owner chose "A"): starting is "I'm at this court", so the start step opens
+    // with this court chosen; it checks you in by the court sheet's rules, and a teen, or anyone at a club's or
+    // someone's home court, gets the timer alone. A session already going: that one, never a second.
+    session: {
+      state: !liveNow ? 'start' : liveNow === 'finished' ? 'finished' : 'live',
+      onPress: () => (!liveNow ? startSessionHere(here, access) : liveNow === 'finished' && liveSession ? finishLive(liveSession, actions) : router.push('/live-session')),
+    },
+    onDirections: () => directionsTo({ name, lat: place.lat, lng: place.lng }),
+    onMap: () => showCourtOnMap({ id: noteId, name, lat: place.lat, lng: place.lng }),
+    onShare: () => sendCourtToChat(here),
+    onPost: postHere,
+    onRefresh: isDesktopBrowser() ? undefined : refresh,
+    onOpenReel: openReel,
+    onOlder: () => { void court.loadOlder(); },
+    onRetry: () => { void court.refresh(); },
+  };
+  return <PlaceCard view={view} />;
 }
 
 const styleDefinitions = StyleSheet.create({
-  icons: { flexDirection: 'row', alignItems: 'center', gap: 2 },
-  icon: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center' },
-  pressed: { opacity: 0.6 },
-  hero: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg, paddingTop: spacing.xs },
-  heroWords: { flex: 1, gap: 2 },
-  count: { ...typography.bodyStrong, color: colors.text },
-  facts: { ...typography.small, color: colors.textMuted, lineHeight: 19 },
-  followers: { ...typography.small, color: colors.textMuted },
-  tags: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: spacing.lg },
-  playedBy: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: 6 },
-  faces: { flexDirection: 'row', alignItems: 'center' },
-  faceOver: { marginLeft: -8 },
-  face: { borderWidth: 2, borderColor: colors.bg, borderRadius: 15 },
-  playedByText: { ...typography.small, color: colors.textMuted, flexShrink: 1 },
-  credit: { ...typography.caption, color: colors.textFaint, textAlign: 'center', marginTop: spacing.xl },
   wait: { paddingVertical: 60, alignItems: 'center' },
-  // Two pills, never wider together than a phone's row: on a computer they stay pill-sized.
-  pills: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.lg, maxWidth: 440 },
-  pill: { flex: 1 },
-  startRow: { marginTop: spacing.sm, maxWidth: 440 },
 });
 
 // A link shared outside the app opens here for anyone; signed out, it shows the public look (see SharedPage).

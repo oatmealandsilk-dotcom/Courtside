@@ -118,19 +118,7 @@ export function FollowHeart({ court, style, size = 18 }: { court: CourtToFollow;
  */
 export function CourtFactsLine({ courtId, name, note = true, lines }: { courtId: string; name: string; /** The newest note under the line. */ note?: boolean; lines?: number }) {
   const styles = useThemedStyles(styleDefinitions);
-  const { courtFacts, myCourtReviews, reportedIds, currentUserId, actions } = useApp();
-  const facts = courtFacts[courtId];
-  const said = summarizeFacts(facts && reportedIds.length ? { ...facts, notes: facts.notes.filter((n) => !reportedIds.includes(courtNoteKey(courtId, n.text))) } : facts);
-  const mine = !!myCourtReviews[courtId];
-  // Your own note (the newest may be yours) has no flag: Update yours is there for it.
-  // Compared space for space as the database keeps it (a line break saved becomes one space).
-  const quoted = note ? said.note : undefined;
-  const asKept = (text?: string) => text?.replace(/\s+/g, ' ').trim();
-  const canReport = !!quoted && !!currentUserId && asKept(myCourtReviews[courtId]?.notes) !== asKept(quoted.text);
-  const reportNote = () => {
-    if (!quoted) return;
-    confirmReport('note', () => afterReport(actions.reportUser(null, `court-note:${courtNoteKey(courtId, quoted.text)}`, quoted.text)));
-  };
+  const { said, mine, quoted, canReport, reportNote } = useCourtSaid(courtId, note);
   const add = (
     <Text accessibilityRole="link" accessibilityLabel={mine ? `Update what you said about ${name}` : `Add what you know about ${name}`} onPress={() => openCourtReview(courtId, { name })} style={styles.link}>
       {mine ? 'Update yours' : 'Add what you know'}
@@ -155,6 +143,30 @@ export function CourtFactsLine({ courtId, name, note = true, lines }: { courtId:
       <Text style={styles.factsQuiet}>{add}</Text>
     </View>
   );
+}
+
+/**
+ * What players say about a court, worked out once for every place that
+ * shows it (the line above, and the court page's What players say): the summary with
+ * any note you reported left out, whether you have said something yourself,
+ * the newest note (`note`: shown at all), whether it can be reported (never
+ * your own), and the report itself, asked first as every report is.
+ */
+export function useCourtSaid(courtId: string, note = true) {
+  const { courtFacts, myCourtReviews, reportedIds, currentUserId, actions } = useApp();
+  const facts = courtFacts[courtId];
+  const said = summarizeFacts(facts && reportedIds.length ? { ...facts, notes: facts.notes.filter((n) => !reportedIds.includes(courtNoteKey(courtId, n.text))) } : facts);
+  const mine = !!myCourtReviews[courtId];
+  // Your own note (the newest may be yours) has no flag: Update yours is there for it.
+  // Compared space for space as the database keeps it (a line break saved becomes one space).
+  const quoted = note ? said.note : undefined;
+  const asKept = (text?: string) => text?.replace(/\s+/g, ' ').trim();
+  const canReport = !!quoted && !!currentUserId && asKept(myCourtReviews[courtId]?.notes) !== asKept(quoted.text);
+  const reportNote = () => {
+    if (!quoted) return;
+    confirmReport('note', () => afterReport(actions.reportUser(null, `court-note:${courtNoteKey(courtId, quoted.text)}`, quoted.text)));
+  };
+  return { said, mine, quoted, canReport, reportNote };
 }
 
 /**

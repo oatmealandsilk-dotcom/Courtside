@@ -8,9 +8,6 @@ import { milesBetween } from '@/features/players/geo';
  */
 export interface CourtPlace { id?: string; name: string; lat: number; lng: number }
 
-/** Grid tiles are as tall as the clips they stand for, so a cover is never cropped. */
-export const TILE_RATIO = 16 / 9;
-
 /**
  * The same court: the same map id, or tagged within 0.15 mi of it (the map's
  * own rule). A tag stores its court's own spot, so the distance only matters
