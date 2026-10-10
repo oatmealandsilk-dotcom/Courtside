@@ -39,12 +39,42 @@ export function postZones(s: SessionDetail | undefined): number[] | null {
 /** "Zones 4–5": minutes in Hard and Peak together. */
 export const hardMinutes = (z: number[]) => (z[3] ?? 0) + (z[4] ?? 0);
 
+/** How light a #RRGGBB colour looks, 0 to 1 (0.5 for anything else). */
+export function lightness(c: string): number {
+  if (!/^#[0-9a-f]{6}$/i.test(c)) return 0.5;
+  const ch = (i: number) => parseInt(c.slice(1 + i * 2, 3 + i * 2), 16);
+  return (ch(0) * 299 + ch(1) * 587 + ch(2) * 114) / 255000;
+}
+
 /** `t` of the way from one #RRGGBB colour to another. */
 export function mixHex(a: string, b: string, t: number): string {
   const ok = (c: string) => /^#[0-9a-f]{6}$/i.test(c);
   if (!ok(a) || !ok(b)) return a;
   const ch = (c: string, i: number) => parseInt(c.slice(1 + i * 2, 3 + i * 2), 16);
   return `#${[0, 1, 2].map((i) => Math.round(ch(a, i) + (ch(b, i) - ch(a, i)) * t).toString(16).padStart(2, '0')).join('')}`;
+}
+
+/**
+ * A #RRGGBB colour `by` darker (0 to 1 of lightness), its hue and strength
+ * kept: New York's yellow deepens to gold. Mixing it with black instead
+ * turns it olive.
+ */
+export function deepen(c: string, by: number): string {
+  if (!/^#[0-9a-f]{6}$/i.test(c)) return c;
+  const [r, g, b] = [0, 1, 2].map((i) => parseInt(c.slice(1 + i * 2, 3 + i * 2), 16) / 255);
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const d = max - min;
+  const l = (max + min) / 2;
+  const s = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1));
+  // The hue in sixths of the colour wheel, 0 to 6.
+  const h = d === 0 ? 0 : max === r ? ((g - b) / d + 6) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  const L = Math.max(0, l - by);
+  const C = (1 - Math.abs(2 * L - 1)) * s;
+  const X = C * (1 - Math.abs((h % 2) - 1));
+  const m = L - C / 2;
+  const rgb = h < 1 ? [C, X, 0] : h < 2 ? [X, C, 0] : h < 3 ? [0, C, X] : h < 4 ? [0, X, C] : h < 5 ? [X, 0, C] : [C, 0, X];
+  return `#${rgb.map((v) => Math.round(Math.min(1, Math.max(0, v + m)) * 255).toString(16).padStart(2, '0')).join('')}`;
 }
 
 /**
@@ -55,10 +85,23 @@ export function mixHex(a: string, b: string, t: number): string {
  *   yellow never goes olive, and its steps stay apart).
  * - 'brand': on a card filled with the brand colour: its ink, stronger by zone.
  * - 'media': over a photo, in white rising to the brand colour.
+ * - 'story': over a photo in a shared story (Share → Heart rate): the same
+ *   rise, solid (a see-through fill over its own shadow came out grey):
+ *   Easy white, Light a tint, Moderate the brand's bright colour (the
+ *   logo's there), Hard and Peak deeper towards the brand itself, so the
+ *   five step apart on a green, blue, clay or night court.
  * Read as the screen draws, so each theme gets its own.
  */
-export function zoneColors(on: 'page' | 'brand' | 'media'): string[] {
+export function zoneColors(on: 'page' | 'brand' | 'media' | 'story'): string[] {
   if (on === 'brand') return [0.22, 0.36, 0.52, 0.74, 1].map((a) => withAlpha(colors.brandInk, a));
+  if (on === 'story') {
+    const bright = colors.brandBright;
+    // Deeper than the bright colour: the brand itself where it is darker enough (it is not on a dark page
+    // or New York, whose brand is its bright colour), else the bright colour deepened, its hue kept
+    // (New York's Hard and Peak gold, not olive).
+    const deep = lightness(colors.brand) < lightness(bright) - 0.2 ? colors.brand : deepen(bright, 0.3);
+    return ['#FFFFFF', mixHex('#FFFFFF', bright, 0.45), bright, mixHex(bright, deep, 0.35), mixHex(bright, deep, 0.62)];
+  }
   if (on === 'media') return ['rgba(255, 255, 255, 0.35)', 'rgba(255, 255, 255, 0.55)', mixHex('#FFFFFF', colors.brand, 0.6), mixHex('#FFFFFF', colors.brand, 0.85), colors.brand];
   // On a dark page the brand colour is laid over the page at rising strength
   // (40%, 68%, full), so Moderate, Hard and Peak step clearly apart; a mix

@@ -8,7 +8,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CourtSpinner } from '@/components/CourtSpinner';
-import { SessionStoryArt, STORY_DESIGNS, type StoryDesign } from '@/components/share/SessionStoryArt';
+import { SessionStoryArt, storyDesigns, type StoryDesign } from '@/components/share/SessionStoryArt';
 import { ShareActions } from '@/components/share/ShareActions';
 import { EmptyState, Screen } from '@/components/ui';
 import { postedIndex, sourceOn } from '@/features/activity/recent';
@@ -29,7 +29,9 @@ import { colors, font, pageIsDark, radius, spacing } from '@/theme';
  * Share a session to Instagram, the way Strava does: four pictures to swipe
  * between (your photo with the session card on it, the card filling the
  * story, the card alone as a see-through sticker, and the numbers alone as a
- * see-through overlay), then Instagram Stories, Copy, Save or More. Opened
+ * see-through overlay), and a fifth, Heart rate, when the post shares its
+ * zones and heart rate (the time and calories over one bar per zone, also
+ * see-through), then Instagram Stories, Copy, Save or More. Opened
  * with ?post= (one of your posts with a session) or ?session= (a session in
  * your log; when it is on a post, the post's numbers and photo are used).
  * Only your own: anyone else's is not found.
@@ -52,7 +54,7 @@ const CHROME_H = 380;
 
 /**
  * How Instagram's story editor gets each design: Photo and Card as the whole
- * story; Sticker and Overlay as a sticker over two colours. The stamp sits on
+ * story; Sticker, Overlay and Heart rate as a sticker over two colours. The stamp sits on
  * the court's own brand and page colours. The Overlay is white numbers, so it
  * goes over the court's darkest colour, faintly tinted with the court at the
  * top (Oct 4 audit): on brand-to-page it faded into the cream at the bottom on
@@ -64,7 +66,8 @@ const CHROME_H = 380;
  * court changed meanwhile is used.
  */
 function storyLook(design: StoryDesign): StoryLook {
-  if (design === 'overlay') {
+  // Heart rate is white words on nothing too, so it goes over the same two colours.
+  if (design === 'overlay' || design === 'heart') {
     const deep = (pageIsDark() ? colors.bg : colors.text).slice(0, 7);
     return { sticker: true, top: mixHex(deep, colors.court.slice(0, 7), 0.15), bottom: deep };
   }
@@ -132,9 +135,11 @@ export default function ShareSession() {
   const log = logId ? sessions.find((s) => s.id === logId && s.userId === currentUserId) : undefined;
   const addScore = log && canScore(log.kind) && !log.fromSessionId && !log.sets?.length && !story?.session.sets?.length ? log.id : undefined;
   const photo = picked ?? story?.photo;
+  // The four designs, and Heart rate after them when the post shares its zones and heart rate (storyDesigns).
+  const designs = useMemo(() => storyDesigns(story), [story]);
   const [index, setIndex] = useState<number | null>(null);
-  const shownIndex = index ?? (story?.photo ? 0 : 1);
-  const design: StoryDesign = STORY_DESIGNS[shownIndex].key;
+  const shownIndex = Math.min(index ?? (story?.photo ? 0 : 1), designs.length - 1);
+  const design: StoryDesign = designs[shownIndex].key;
 
   const pager = useRef<ScrollView>(null);
   const placed = useRef(false);
@@ -145,7 +150,7 @@ export default function ShareSession() {
   }, [pageW, story, shownIndex, step]);
   const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     if (!pageW) return;
-    const i = Math.max(0, Math.min(STORY_DESIGNS.length - 1, Math.round(e.nativeEvent.contentOffset.x / step)));
+    const i = Math.max(0, Math.min(designs.length - 1, Math.round(e.nativeEvent.contentOffset.x / step)));
     if (i !== shownIndex) setIndex(i);
   };
   const goTo = (i: number) => {
@@ -237,7 +242,7 @@ export default function ShareSession() {
                   contentContainerStyle={{ paddingHorizontal: sidePad }}
                   style={{ width: pageW, height: cardH + SHADOW_ROOM * 2, flexGrow: 0 }}
                 >
-                  {STORY_DESIGNS.map((d, i) => {
+                  {designs.map((d, i) => {
                     // The one in the middle full size; its neighbours a touch smaller and quieter, easing as you swipe.
                     const range = [(i - 1) * step, i * step, (i + 1) * step];
                     const look = {
@@ -249,7 +254,7 @@ export default function ShareSession() {
                         <Pressable disabled={i === shownIndex} onPress={() => goTo(i)} accessible={false}>
                           <View style={[styles.frame, { width: cardW, height: cardH }]} accessible accessibilityLabel={`${d.label} design`}>
                             {/* A see-through design is shown over what it will sit on (StickerGround). */}
-                            {d.key === 'sticker' || d.key === 'overlay' ? <StickerGround design={d.key} photo={photo} /> : null}
+                            {d.key === 'sticker' || d.key === 'overlay' || d.key === 'heart' ? <StickerGround design={d.key} photo={photo} /> : null}
                             <SessionStoryArt design={d.key} story={story} width={cardW} photo={photo} hidden={blockedIds} />
                             {d.key === 'photo' ? (
                               <Pressable accessibilityRole="button" accessibilityLabel={photo ? 'Change photo' : 'Choose a photo'} onPress={() => { void choosePhoto(); }} style={({ pressed }) => [styles.photoButton, pressed && styles.pressed]}>
@@ -269,7 +274,7 @@ export default function ShareSession() {
 
               {/* The designs' names under the cards, the one showing marked with a dot; a tap goes to it. */}
               <View style={styles.designs} accessibilityRole="tablist">
-                {STORY_DESIGNS.map((d, i) => {
+                {designs.map((d, i) => {
                   const on = i === shownIndex;
                   return (
                     <Pressable key={d.key} accessibilityRole="tab" accessibilityState={{ selected: on }} onPress={() => goTo(i)} style={styles.design}>

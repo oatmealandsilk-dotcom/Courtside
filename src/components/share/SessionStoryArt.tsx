@@ -4,6 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 
 import { SessionCard } from '@/components/session/SessionCard';
 import { SessionStamp } from '@/components/share/SessionStamp';
+import { HeartRateOverlay, heartRateOf } from '@/components/share/HeartRateOverlay';
 import { ShadedMark, type Halo } from '@/components/share/ShadedMark';
 import { duration } from '@/lib/format';
 import { scoreLine } from '@/features/activity/format';
@@ -13,14 +14,25 @@ import type { SessionStory } from '@/features/share/sessionStory';
 import { useTheme } from '@/theme/ThemeProvider';
 import { colors, font } from '@/theme';
 
-/** The three pictures a session can be shared as, in the order they are offered. */
-export type StoryDesign = 'photo' | 'card' | 'sticker' | 'overlay';
+/** The pictures a session can be shared as, in the order they are offered. */
+export type StoryDesign = 'photo' | 'card' | 'sticker' | 'overlay' | 'heart';
 export const STORY_DESIGNS: { key: StoryDesign; label: string }[] = [
   { key: 'photo', label: 'Photo' },
   { key: 'card', label: 'Card' },
   { key: 'sticker', label: 'Sticker' },
   { key: 'overlay', label: 'Overlay' },
 ];
+
+/**
+ * The designs offered for this session: the four, and "Heart rate"
+ * (HeartRateOverlay.tsx) after the Overlay for a post that shares both its
+ * zones and its heart rate (Oct 10, owner), for everyone, on a phone and on
+ * the web. A session never posted, or posted without them, has the four.
+ */
+export function storyDesigns(story: SessionStory | null): { key: StoryDesign; label: string }[] {
+  if (!story || !heartRateOf(story.session)) return STORY_DESIGNS;
+  return [...STORY_DESIGNS, { key: 'heart', label: 'Heart rate' }];
+}
 
 /**
  * A session as an Instagram story, 9:16, drawn at any width (everything
@@ -32,7 +44,11 @@ export const STORY_DESIGNS: { key: StoryDesign; label: string }[] = [
  *   edge, the card small over its lower left, clear of Instagram's buttons;
  * - 'card':  the card itself filling the story;
  * - 'sticker': the card alone on a see-through ground, to lay over a story
- *   of your own.
+ *   of your own;
+ * - 'overlay': the numbers and the logo alone, white on nothing;
+ * - 'heart': the time and calories over one bar per heart-rate zone, white
+ *   on nothing like the Overlay, only for a post that shares its zones and
+ *   heart rate (HeartRateOverlay.tsx).
  *
  * Only what `story` carries is drawn: its maker (sessionStory.ts) has
  * already left out health numbers that were not shared and a teen's court.
@@ -63,7 +79,14 @@ export function SessionStoryArt({ design, story, width, photo, hidden = [], onPh
     );
   }
 
-  if (design === 'overlay') {
+  if (design === 'heart') {
+    // The zones as bars under the time and calories (Oct 10, owner): only when the post shares them;
+    // else (never offered then, but asked for anyway) the Overlay below.
+    const hr = heartRateOf(story.session);
+    if (hr) return <HeartRateOverlay hr={hr} width={width} />;
+  }
+
+  if (design === 'overlay' || design === 'heart') {
     // Strava's overlay (Oct 4): just the numbers and the mark in white on nothing, to lay over any story.
     const s = story.session;
     const score = scoreLine(s);
