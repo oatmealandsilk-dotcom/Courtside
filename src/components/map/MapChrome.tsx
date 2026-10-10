@@ -1,5 +1,5 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Gesture, GestureDetector, ScrollView as GestureScrollView } from 'react-native-gesture-handler';
@@ -7,7 +7,7 @@ import Animated, { Easing, FadeIn, FadeOut, interpolateColor, runOnJS, useAnimat
 import { useReducedMotion } from '@/lib/useReducedMotion';
 
 import { Avatar, BrandWash } from '@/components/ui';
-import { Glass } from '@/components/ui/Glass';
+import { Glass, GlassRenew } from '@/components/ui/Glass';
 import { FollowShrink } from '@/components/FollowPill';
 import { MenuSheet, type MenuSheetItem } from '@/components/MenuSheet';
 import { afterMenu } from '@/lib/confirm';
@@ -623,7 +623,9 @@ function TrayFace({ placed: p, onPress }: { placed: Placed; onPress: () => void 
  * it runs short (listHeadroom) they fade out, and once they would no longer
  * fit under the filters they are gone, taking no taps, so nothing ever lies
  * over the list or the filters; pulled back down to the tray, they fade back
- * in. A short list that rises only a little keeps them.
+ * in. A short list that rises only a little keeps them. Back at full
+ * strength, their glass is put up afresh: on an iPhone, glass that appeared
+ * while they were fading in is a flat white plate until then (GlassRenew).
  */
 export function ListCrown({ children }: { children: React.ReactNode }) {
   const styles = useThemedStyles(styleDefinitions);
@@ -636,11 +638,19 @@ export function ListCrown({ children }: { children: React.ReactNode }) {
   );
   // Fading over the last stretch before they no longer fit.
   const look = useAnimatedStyle(() => ({ opacity: tall.value > 0 ? Math.max(0, Math.min(1, (listHeadroom.value - tall.value) / 60)) : 1 }));
+  // Faded, then back at full strength: the glass on them put up again (on top of the stage's own renewals).
+  const outer = useContext(GlassRenew);
+  const [renew, setRenew] = useState(0);
+  const solidAgain = useCallback(() => setRenew((n) => n + 1), []);
+  useAnimatedReaction(
+    () => tall.value <= 0 || listHeadroom.value - tall.value >= 60,
+    (full, before) => { if (full && before === false) runOnJS(solidAgain)(); },
+  );
   return (
     <Animated.View style={[styles.crownThrough, look]}>
       {gone ? null : (
         <View style={styles.crownThrough} onLayout={(e) => { const h = e.nativeEvent.layout.height; if (h > 0) tall.value = h; }}>
-          {children}
+          <GlassRenew.Provider value={outer + renew}>{children}</GlassRenew.Provider>
         </View>
       )}
     </Animated.View>
