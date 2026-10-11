@@ -3,9 +3,9 @@ import { useSoundMuted } from '@/features/feed/sound';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import * as haptics from '@/lib/haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { GlassFill, liquidGlass, useGlassRenewal } from '@/components/ui/Glass';
+import { GlassFill, liquidGlass } from '@/components/ui/Glass';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { ClipVideo } from './ClipVideo';
@@ -103,19 +103,13 @@ function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, 
   // the App Store build.)
   const disc = useSharedValue(0);
   const discTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // The disc's glass is put up unseen and eases in with it, and an iPhone keeps glass put up while easing in as a
-  // flat white plate (GlassRenew, Oct 11): so it is put up again once, the first time the disc is fully up. Glass
-  // that was real glass stays so as it fades out and back, so never again after that.
-  const discGlass = useGlassRenewal();
-  const discGlassUp = useRef(false);
-  const discUp = () => { if (discGlassUp.current) return; discGlassUp.current = true; discGlass.settle(); };
   const showDisc = () => {
-    disc.value = withTiming(1, { duration: 160, easing: Easing.out(Easing.quad) }, (done) => { if (done) runOnJS(discUp)(); });
+    disc.value = withTiming(1, { duration: 160, easing: Easing.out(Easing.quad) });
     if (discTimer.current) clearTimeout(discTimer.current);
     discTimer.current = setTimeout(() => { disc.value = withTiming(0, { duration: 140 }); }, 1800);
   };
   useEffect(() => {
-    if (discPinned) { disc.value = withTiming(1, { duration: 160 }, (done) => { if (done) runOnJS(discUp)(); }); return; }
+    if (discPinned) { disc.value = withTiming(1, { duration: 160 }); return; }
     if (active && !silent && !bare) showDisc();
     return () => { if (discTimer.current) clearTimeout(discTimer.current); };
   }, [active, silent, bare, discPinned]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -188,7 +182,7 @@ function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, 
       {silent || bare ? null : (
         <Pressable accessibilityRole="button" accessibilityLabel={muted ? 'Unmute clip' : 'Mute clip'} hitSlop={12} onPress={() => { setMuted((v) => !v); if (!discPinned) showDisc(); }} style={[styles.soundHit, { top: insets.top + drop + (discInk ? 25 : 22) }]}>
           <Animated.View style={[styles.sound, discInk ? styles.soundThemed : null, discInk && liquidGlass ? styles.soundLiquid : null, discStyle]}>
-            {discInk ? <GlassFill renew={discGlass.renew} radius={18} tint={colors.brand} strength={0.22} /> : null}
+            {discInk ? <GlassFill radius={18} tint={colors.brand} strength={0.22} /> : null}
             <Ionicons name={muted ? 'volume-mute' : 'volume-high'} size={17} color="white" />
           </Animated.View>
         </Pressable>
