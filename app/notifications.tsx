@@ -19,7 +19,7 @@ import { allTennis, foundBursts, foundHref, foundLine, foundTitle } from '@/feat
 import { tagState, yourResult } from '@/features/activity/sessionTags';
 import { useApp } from '@/store/AppContext';
 import { confirmUnfollow } from '@/lib/confirm';
-import type { DetectedActivity, Notification, NotificationKind, PostKind } from '@/data/types';
+import type { DetectedActivity, Notification, NotificationKind, Post, PostKind, User } from '@/data/types';
 import { isTennisActivity } from '@/features/activity/workouts';
 import { colors, radius, spacing, surfaceColorFor, typography } from '@/theme';
 import { CourtGlyph } from '@/components/map/CourtGlyph';
@@ -33,6 +33,7 @@ import { FRIENDS_LINE } from '@/features/invite/friendsWords';
 import { reasonFromLabel } from '@/features/moderation/reasons';
 import { openRules } from '@/features/moderation/RemovedNote';
 import { useInstantsOn, withoutInstantRows } from '@/features/stories/instantsSwitch';
+import { useArrived } from '@/lib/useArrived';
 
 /**
  * One row per thing that happened to you, the way Instagram does it.
@@ -241,6 +242,8 @@ function sectionFor(unread: boolean, at: string): string {
   return 'Earlier';
 }
 const SECTIONS = ['New', 'Today', 'This week', 'This month', 'Earlier'];
+/** Rows drawn with the page, a screenful and a half; the rest once it has slid in (see useArrived). */
+const FIRST_ROWS = 18;
 
 /**
  * The server writes a session's length the long way ("1 hr 24 min · from
@@ -290,6 +293,19 @@ function activityNow(a: DetectedActivity | undefined): { who: string; verb: stri
 export default function Notifications() {
   const styles = useThemedStyles(styleDefinitions);
   const { notifications, users, posts, stories, comments, hitRequests, conversations, messages, questions, currentUserId, currentUser, followRequests, followingIds, followedCourts, sessionTags, detectedActivities, actions, blockedIds } = useApp();
+  // Each person and post by id, once: every row looks its people and its post up several times, and
+  // searching the whole list each time was slow to open (Oct 10, owner: "the buttons like the settings.
+  // msg notifications, etc respond too slow"). The first of any id wins, as searching found it.
+  const usersById = useMemo(() => {
+    const byId = new Map<string, User>();
+    for (const u of users) if (!byId.has(u.id)) byId.set(u.id, u);
+    return byId;
+  }, [users]);
+  const postsById = useMemo(() => {
+    const byId = new Map<string, Post>();
+    for (const p of posts) if (!byId.has(p.id)) byId.set(p.id, p);
+    return byId;
+  }, [posts]);
   // CourtSide's own welcome, for a new player (welcomeNote): seen once this page opens, though its tint stays until you leave.
   const welcome = useWelcomeNote(currentUser);
   const [welcomeTint] = useState(welcome.unread);
@@ -398,7 +414,7 @@ export default function Notifications() {
     const act = group.kind === 'like' ? 'liked' : group.kind === 'comment' ? 'commented on' : 'shared';
     if (group.targetKind === 'hit') return `${act} your Instant`;
     if (group.targetKind === 'question') return `${act} your thread`;
-    const post = posts.find((p) => p.id === group.targetId);
+    const post = postsById.get(group.targetId);
     const thing = !post ? 'post' : post.kind === 'clip' ? 'clip' : post.videoUrl ? 'video' : post.imageUrl ? 'photo' : 'post';
     return `${act} your ${thing}`;
   };
@@ -488,7 +504,7 @@ export default function Notifications() {
   // null: asked, and the post is gone (deleted, or never there), so the row shows no picture.
   const [thumbs, setThumbs] = useState<Record<string, { thumb?: string; kind: PostKind } | null>>({});
   useEffect(() => {
-    const missing = [...new Set(groups.filter((g) => g.targetKind === 'post' && !posts.some((p) => p.id === g.targetId) && !(g.targetId in thumbs)).map((g) => g.targetId))];
+    const missing = [...new Set(groups.filter((g) => g.targetKind === 'post' && !postsById.has(g.targetId) && !(g.targetId in thumbs)).map((g) => g.targetId))];
     if (!missing.length) return;
     let on = true;
     void actions.loadPostThumbs(missing).then((found) => {
@@ -499,7 +515,7 @@ export default function Notifications() {
   const thumbFor = (group: Group): { uri?: string; clip: boolean; words: boolean; seed: string } | null => {
     const seed = group.targetId;
     if (group.targetKind === 'post') {
-      const p = posts.find((x) => x.id === group.targetId);
+      const p = postsById.get(group.targetId);
       if (p) return { uri: p.thumbnailUrl ?? p.imageUrl, clip: p.kind === 'clip', words: p.kind === 'note' && !p.imageUrl && !p.videoUrl, seed };
       const t = thumbs[group.targetId];
       return t ? { uri: t.thumb, clip: t.kind === 'clip', words: t.kind === 'note' && !t.thumb, seed } : null;
@@ -519,10 +535,14 @@ export default function Notifications() {
     return () => clearTimeout(t);
   }, [actions]);
 
-  const nameOf = (id: string) => users.find((u) => u.id === id)?.name ?? 'Someone';
-  const photoOf = (id: string) => users.find((u) => u.id === id)?.avatarUrl;
+  const nameOf = (id: string) => usersById.get(id)?.name ?? 'Someone';
+  const photoOf = (id: string) => usersById.get(id)?.avatarUrl;
   // The face's colours, the same as on their profile and in every sheet they open.
-  const seedOf = (id: string) => users.find((u) => u.id === id)?.avatarSeed ?? id;
+  const seedOf = (id: string) => usersById.get(id)?.avatarSeed ?? id;
+  // The first screenful with the page, every row once it has slid in (see useArrived). The headings
+  // still look one row back in `groups`: the rows drawn are always its first ones.
+  const arrived = useArrived();
+  const shownGroups = arrived ? groups : groups.slice(0, FIRST_ROWS);
   // A take-down's or a kept review's reason and thing, from the row's own words.
   const reasonOf = (group: Group) => (group.kind === 'removed' ? removedNotice(group.preview).reason : reviewNotice(group.preview).reason);
   const thingOf = (group: Group) => (group.kind === 'removed' ? removedNotice(group.preview).thing : reviewNotice(group.preview).thing);
@@ -561,14 +581,14 @@ export default function Notifications() {
         />
       ) : (
         <View style={styles.list}>
-          {groups.map((group, index) => {
+          {shownGroups.map((group, index) => {
             const icon = ICON[group.kind] ?? { name: 'notifications', tint: 'brand' };
             const [first, ...rest] = group.actorIds;
             // A tracker's session this row is about, when the app holds it (never for a row of several found at once).
             const activity = group.kind === 'activity' && !group.found ? detectedActivities.find((a) => a.id === group.targetId) : undefined;
             const who =
               group.kind === 'milestone'
-                ? (posts.find((p) => p.id === group.targetId)?.kind === 'clip' ? 'Your clip' : 'Your post')
+                ? (postsById.get(group.targetId)?.kind === 'clip' ? 'Your clip' : 'Your post')
                 : group.kind === 'posted'
                 ? (group.preview?.startsWith('Instant') || group.preview?.startsWith('Hit')) ? 'Your Instant' : group.targetKind === 'question' ? 'Your question' : 'Your post'
                 : group.kind === 'coach-application' || group.kind === 'refund' || group.kind === 'removed' || group.kind === 'review' ? 'CourtSide'
@@ -587,13 +607,14 @@ export default function Notifications() {
             const thumb = thumbFor(group);
             const hitChat = hitChatFor(group);
             const tag = tagFor(group);
+            const verb = verbFor(group);
 
             return (
               <React.Fragment key={group.key}>
               {heading ? <Text style={[styles.heading, index > 0 && { marginTop: spacing.lg }]}>{heading}</Text> : null}
               <Pressable
                 accessibilityRole={dead ? 'text' : 'link'}
-                accessibilityLabel={`${who} ${verbFor(group)}`}
+                accessibilityLabel={`${who} ${verb}`}
                 disabled={dead}
                 onPress={() => {
                   const reply = replyAt(group);
@@ -638,7 +659,7 @@ export default function Notifications() {
                 <View style={styles.body}>
                   <Text style={styles.text}>
                     <Text style={styles.who}>{who}</Text>
-                    <Text> {verbFor(group)}</Text>
+                    <Text> {verb}</Text>
                   </Text>
                   {group.kind === 'session-tag' ? (
                     // Where the tag stands first (the one thing that changes), then what it was from your side: "Declined · You won · Sep 30 · 1h 15m".

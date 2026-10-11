@@ -4,8 +4,8 @@ import { PlayerName } from '@/components/PlayerName';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { onSkippedSaved, readSkipped, type SetupStep } from '@/features/onboarding/setupProgress';
-import { Image, Modal, Pressable, Share, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
-import { router, usePathname } from 'expo-router';
+import { Image, Modal, Pressable, Share, StyleSheet, Text, View, useWindowDimensions, type StyleProp, type ViewStyle } from 'react-native';
+import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Avatar, Button, EmptyState, Screen } from '@/components/ui';
 import { SectionPager } from '@/components/SectionPager';
@@ -36,7 +36,7 @@ import { forNewPlayer, useTip } from '@/features/tips/tips';
 import { useWelcomeNote } from '@/features/welcome/welcomeNote';
 import { useFirstMoveDone } from '@/features/onboarding/firstMoveDone';
 import { notKnownAdult } from '@/features/players/age';
-import { useIsFocused } from '@/lib/useIsFocused';
+import { useShownAt } from '@/features/navigation/shownAt';
 import { useResponsive } from '@/lib/useResponsive';
 import { isTaggedIn } from '@/features/activity/sessionTags';
 import { studioLine } from '@/features/coaching/studioSummary';
@@ -62,11 +62,10 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
  const { width: windowWidth } = useWindowDimensions();
  // The first time a new player opens Profile on a phone, a tip at the paper plane (Oct 5: it was
  // the tutorial's last tip). Only on this tab, never a picture of it sliding in, never under the tutorial.
- const pathname = usePathname();
- const focused = useIsFocused();
+ // Whether this tab is on show is asked by the tip itself (InboxTip), not here (see useShownAt).
  const tourOpen = useTourOpen();
  const { isPhone } = useResponsive();
- const inboxTip = useTip('messages', focused && pathname === '/profile' && isPhone && !tourOpen && previewSection === undefined && forNewPlayer(user?.joinedAt));
+ const inboxTipEligible = isPhone && !tourOpen && previewSection === undefined && forNewPlayer(user?.joinedAt);
  // The section lives here, not in the address (see discuss.tsx for why).
  const [localTab, setLocalTab] = useState<'Posts' | 'Clips' | 'Tagged'>('Posts');
  const section = previewSection ?? localTab;
@@ -164,7 +163,7 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
   const body = <>
    {/* At the top of the page, in its flow, its pointer under the paper plane in the header: it lines up with the cards
        and covers nothing (the first-move card included), and the page eases back up once it is closed. */}
-   {live ? <TipBubble tip="messages" shown={inboxTip.shown} onClose={inboxTip.close} pointer="up" pointerRight={INBOX_POINTER} inline on="page" style={styles.inboxTip} /> : null}
+   <InboxTip eligible={inboxTipEligible} live={live} style={styles.inboxTip} />
    {!hasMoved && <Pressable accessibilityRole="link" accessibilityLabel="Make your first move" onPress={() => router.push({ pathname: '/first-move', params: { from: 'profile' } })} style={styles.setup}>
      <Ionicons name="videocam-outline" size={20} color={colors.brand}/>
      <View style={{ flex: 1 }}><Text style={styles.setupTitle}>Make your first move</Text><Text style={styles.meta}>{user && notKnownAdult(user) ? 'Add your friends, or post your first clip.' : 'Bring your hitting partners, or post your first clip.'}</Text></View>
@@ -234,6 +233,15 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
  </View>}>
    {page(tab, previewSection === undefined)}
  </Screen>;
+}
+/**
+ * The paper plane's first-visit tip, while Profile is the page on show. It asks that itself, so a
+ * page opening anywhere redraws this, not the whole tab (see useShownAt). Drawn only on the live
+ * page (`live`), never a picture of it; asked for either way, as when Profile asked.
+ */
+function InboxTip({ eligible, live, style }: { eligible: boolean; live: boolean; style: StyleProp<ViewStyle> }) {
+ const inboxTip = useTip('messages', useShownAt('/profile') && eligible);
+ return live ? <TipBubble tip="messages" shown={inboxTip.shown} onClose={inboxTip.close} pointer="up" pointerRight={INBOX_POINTER} inline on="page" style={style} /> : null;
 }
 /**
  * ☰ at the top of your profile: a small menu under it with Groups (and how

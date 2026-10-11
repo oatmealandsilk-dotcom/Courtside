@@ -2,8 +2,8 @@ import { asTabRoute } from '@/features/navigation/tabFocus';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { PlayerName } from '@/components/PlayerName';
 import React, { useRef } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { router, usePathname } from 'expo-router';
+import { Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { Avatar, Button, Screen } from '@/components/ui';
@@ -20,7 +20,7 @@ import { isDesktopBrowser } from '@/lib/browserDevice';
 import { useTourOpen } from '@/features/tour/tourStore';
 import { TipBubble } from '@/components/TipBubble';
 import { forNewPlayer, learned, useTip } from '@/features/tips/tips';
-import { useIsFocused } from '@/lib/useIsFocused';
+import { useShownAt } from '@/features/navigation/shownAt';
 
 function Coaching() {
   const styles = useThemedStyles(styleDefinitions);
@@ -31,11 +31,10 @@ function Coaching() {
   const askPill = useRef<View>(null);
   // The first time a new player opens Coaching, a tip over the box (Oct 5: it
   // was the tutorial's fifth tip). Only on this tab, never a picture of it
-  // sliding in, and never under the tutorial.
-  const pathname = usePathname();
-  const focused = useIsFocused();
+  // sliding in, and never under the tutorial. Whether this tab is on show is asked
+  // by the tip itself (AskTip), not here (see useShownAt).
   const tourOpen = useTourOpen();
-  const askTip = useTip('ask-coach', focused && pathname === '/coaches' && !tourOpen && forNewPlayer(currentUser?.joinedAt));
+  const askTipEligible = !tourOpen && forNewPlayer(currentUser?.joinedAt);
   const openAsk = () => {
     learned('ask-coach');
     const pill = askPill.current;
@@ -102,7 +101,7 @@ function Coaching() {
       {/* The first-visit tip, in the page's flow just above the box and pointing down at it:
           it covers nothing (not the note under the box, the one place the tab says asking is
           public), and the box eases back up once it is closed. */}
-      <TipBubble tip="ask-coach" shown={askTip.shown} onClose={askTip.close} pointer="down" inline on="page" style={styles.askTip} />
+      <AskTip eligible={askTipEligible} style={styles.askTip} />
       {/* Tapped, this box grows and lifts into the full question page (see ask-coach), where you type from the start. */}
       <Pressable
         ref={askPill}
@@ -328,5 +327,14 @@ const styleDefinitions = StyleSheet.create({
   ai: { ...lift, flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.lg, paddingVertical: spacing.md, paddingHorizontal: spacing.lg, borderRadius: 20, backgroundColor: colors.surface },
   aiMark: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
 });
+
+/**
+ * The box's first-visit tip, while Coaching is the page on show. It asks that itself, so a page
+ * opening anywhere redraws this, not the whole tab (see useShownAt).
+ */
+function AskTip({ eligible, style }: { eligible: boolean; style: StyleProp<ViewStyle> }) {
+  const askTip = useTip('ask-coach', useShownAt('/coaches') && eligible);
+  return <TipBubble tip="ask-coach" shown={askTip.shown} onClose={askTip.close} pointer="down" inline on="page" style={style} />;
+}
 
 export default asTabRoute(Coaching);

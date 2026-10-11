@@ -172,10 +172,14 @@ export function NearbyMap(props: NearbyMapProps) {
   const selectedId = model.selected?.user.id ?? null;
   const selectedCourtId = model.selectedCourt?.id ?? null;
   const selectedHitId = model.selectedHit?.hit.id ?? null;
+  // The pins' clock: a player's open-to-hit time running out takes their green ring off (and midnight
+  // moves a hit's "Tomorrow" to "Today") by itself. The player list is kept while unchanged, so the
+  // pins are no longer rebuilt on every redraw of the tab under them and need telling when time passes.
+  const pinClock = useOpenClock(shown.map((p) => p.user.openToHitUntil));
   // Everything drawn on the map, the same list the browser's map draws (pinList).
   const markers = useMemo<CanvasMarker[]>(
     () => mapMarkers({ model, expanded, me, shown, selectedId, selectedCourtId, selectedHitId, hidden: hiddenMe, playing }),
-    [model.courts, model.ringed, model.cardCourts, model.cardRinged, model.hits, shown, selectedId, selectedCourtId, selectedHitId, expanded, me, theme, openToHit, model.mePos, hiddenMe, playing?.courtId, playing?.courtName], // eslint-disable-line react-hooks/exhaustive-deps
+    [model.courts, model.ringed, model.cardCourts, model.cardRinged, model.hits, shown, selectedId, selectedCourtId, selectedHitId, expanded, me, theme, openToHit, model.mePos, hiddenMe, playing?.courtId, playing?.courtName, pinClock], // eslint-disable-line react-hooks/exhaustive-deps
   );
   // What "+N" pins look like, in this theme's colours.
   const tpl = useMemo(() => clusterTemplates(), [theme]); // eslint-disable-line react-hooks/exhaustive-deps

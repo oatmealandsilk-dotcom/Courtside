@@ -1,3 +1,31 @@
+/**
+ * Dates and times in words, from formatters made once and kept: a Date's
+ * toLocaleDateString and toLocaleTimeString, given options, make a new
+ * formatter on every call, and on a phone that costs enough to show on a page
+ * that puts a date on every row: Notifications and the inbox were slow to
+ * open (Oct 10, owner: "the buttons like the settings. msg notifications, etc
+ * respond too slow"). The words are the same as theirs, with the same
+ * options. Kept per time zone, as chatTime's formatter is (below).
+ */
+export const SHORT_DATE: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' };
+export const SHORT_DATE_YEAR: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric', year: 'numeric' };
+export const SHORT_WEEKDAY: Intl.DateTimeFormatOptions = { weekday: 'short' };
+export const CLOCK_TIME: Intl.DateTimeFormatOptions = { hour: 'numeric', minute: '2-digit' };
+const keptFormats = new Map<Intl.DateTimeFormatOptions, Intl.DateTimeFormat>();
+let keptZone: number | null = null;
+/** `when` in words by one of the options above (a date, or a time when it has an hour), the way toLocaleDateString / toLocaleTimeString say it. */
+export function inWords(when: Date, options: Intl.DateTimeFormatOptions): string {
+  try {
+    const zone = new Date().getTimezoneOffset();
+    if (keptZone !== zone) { keptFormats.clear(); keptZone = zone; }
+    let format = keptFormats.get(options);
+    if (!format) { format = new Intl.DateTimeFormat(undefined, options); keptFormats.set(options, format); }
+    return format.format(when);
+  } catch {
+    return options.hour !== undefined ? when.toLocaleTimeString(undefined, options) : when.toLocaleDateString(undefined, options);
+  }
+}
+
 export function relativeTime(iso: string, now: Date = new Date()): string {
   const then = new Date(iso).getTime();
   const diff = Math.max(0, now.getTime() - then);
@@ -11,7 +39,7 @@ export function relativeTime(iso: string, now: Date = new Date()): string {
   // Past a day, the date says more than "3d" does; the year only when it differs.
   const when = new Date(iso);
   const sameYear = when.getFullYear() === now.getFullYear();
-  return when.toLocaleDateString(undefined, sameYear ? { month: 'short', day: 'numeric' } : { month: 'short', day: 'numeric', year: 'numeric' });
+  return inWords(when, sameYear ? SHORT_DATE : SHORT_DATE_YEAR);
 }
 
 /**
@@ -30,7 +58,7 @@ export function agoInWords(iso: string, now: Date = new Date()): string {
   if (days < 7) return `${days} ${days === 1 ? 'day' : 'days'} ago`;
   const when = new Date(iso);
   const sameYear = when.getFullYear() === now.getFullYear();
-  return when.toLocaleDateString(undefined, sameYear ? { month: 'short', day: 'numeric' } : { month: 'short', day: 'numeric', year: 'numeric' });
+  return inWords(when, sameYear ? SHORT_DATE : SHORT_DATE_YEAR);
 }
 
 /**
@@ -63,14 +91,14 @@ export function chatStamp(iso: string, now: Date = new Date()): string {
 /** A chat's time line in its two parts, the day ("Today", "Mon", "Sep 25") and the time ("2:14 PM"), for the day to be set a little stronger. */
 export function chatStampParts(iso: string, now: Date = new Date()): { day: string; time: string } {
   const when = new Date(iso);
-  const time = when.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  const time = inWords(when, CLOCK_TIME);
   const startOf = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
   const days = Math.round((startOf(now) - startOf(when)) / 86_400_000);
   if (days === 0) return { day: 'Today', time };
   if (days === 1) return { day: 'Yesterday', time };
-  if (days < 7) return { day: when.toLocaleDateString(undefined, { weekday: 'short' }), time };
+  if (days < 7) return { day: inWords(when, SHORT_WEEKDAY), time };
   const sameYear = when.getFullYear() === now.getFullYear();
-  return { day: when.toLocaleDateString(undefined, sameYear ? { month: 'short', day: 'numeric' } : { month: 'short', day: 'numeric', year: 'numeric' }), time };
+  return { day: inWords(when, sameYear ? SHORT_DATE : SHORT_DATE_YEAR), time };
 }
 
 export function compactNumber(value: number): string {

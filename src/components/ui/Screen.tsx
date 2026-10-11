@@ -114,7 +114,22 @@ interface Props {
   bleedTop?: boolean;
 }
 
-export function Screen({
+/**
+ * The address is read out here, in a thin shell, and handed in as `routeKey`:
+ * a page that names itself (memoryKey: the four tabs, which stay drawn under
+ * every page opened over them) then gets the same props when only the
+ * address changed, and is not drawn again each time any page opens or closes
+ * (Oct 10, owner: "the buttons like the settings. msg notifications, etc
+ * respond too slow"). A page that does not name itself is keyed by the
+ * address, as before.
+ */
+export function Screen(props: Props) {
+  const pathname = usePathname();
+  return <ScreenBody {...props} routeKey={props.memoryKey ?? pathname} />;
+}
+
+const ScreenBody = React.memo(function ScreenBody({
+  routeKey,
   children,
   title,
   subtitle,
@@ -134,15 +149,14 @@ export function Screen({
   bar = true,
   scrollsInside = false,
   bleedTop = false,
-}: Props) {
+}: Props & { routeKey: string }) {
   // The floating tab bar covers this much of the bottom; a page's last line stays above it.
   const barInset = useBarInset();
   const styles = useThemedStyles(styleDefinitions);
   const insets = useSafeAreaInsets();
-  const pathname = usePathname();
   // While a sideways page swipe is under way, this scroller stands down.
   const swiping = useSyncExternalStore(subscribePageDragging, isPageDragging, () => false);
-  const key = memoryKey ?? pathname;
+  const key = routeKey;
   // Only a page that names itself picks up where it was left (see scrollMemory).
   const remembers = memoryKey !== undefined;
   const scroller = useRef<ScrollView | null>(null);
@@ -645,7 +659,7 @@ export function Screen({
     </PageWashContext.Provider>
     </KeyboardScrollContext.Provider>
   );
-}
+});
 
 const styleDefinitions = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },

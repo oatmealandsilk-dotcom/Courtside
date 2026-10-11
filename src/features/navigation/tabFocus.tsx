@@ -2,6 +2,7 @@ import React, { createContext, useContext } from 'react';
 import { Platform } from 'react-native';
 import { useIsFocused as useRouteFocused } from 'expo-router';
 import { AppStateLater } from '@/store/AppContext';
+import { TabOnShowContext, useIsFocused } from '@/lib/useIsFocused';
 
 /**
  * Whether the tab a component sits in is the one on screen.
@@ -14,7 +15,16 @@ import { AppStateLater } from '@/store/AppContext';
 const TabFocusContext = createContext<boolean | undefined>(undefined);
 
 export function TabFocus({ active, children }: { active: boolean; children: React.ReactNode }) {
-  return <TabFocusContext.Provider value={active}>{children}</TabFocusContext.Provider>;
+  // Whether this tab is on show (its slot on screen, and no page opened over the tabs), worked out
+  // here once for the whole tab: see useIsFocused. A page opening over the tabs then redraws only
+  // the tab on show, not all four, before it can slide in (Oct 10, owner: "the buttons like the
+  // settings. msg notifications, etc respond too slow").
+  const routeFocused = useRouteFocused();
+  return (
+    <TabFocusContext.Provider value={active}>
+      <TabOnShowContext.Provider value={routeFocused && active}>{children}</TabOnShowContext.Provider>
+    </TabFocusContext.Provider>
+  );
 }
 
 export function useTabActive(): boolean {
@@ -48,8 +58,7 @@ export function asTabRoute<P extends object>(Screen: React.ComponentType<P>) {
  * screen again, it reads the live state at once (AppStateLater).
  */
 function OffScreenLater({ children }: { children: React.ReactNode }) {
-  // Both hooks run every time (see useIsFocused): a hook behind `&&` would be skipped.
-  const routeFocused = useRouteFocused();
-  const tabActive = useTabActive();
-  return <AppStateLater hidden={!(routeFocused && tabActive)}>{children}</AppStateLater>;
+  // On show: the route on top and, in the tab row, this tab on screen (see useIsFocused).
+  const onShow = useIsFocused();
+  return <AppStateLater hidden={!onShow}>{children}</AppStateLater>;
 }

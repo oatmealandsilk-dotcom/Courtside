@@ -23,8 +23,11 @@ import type { Conversation, Message, User } from '@/data/types';
 import { colors, spacing, typography, font } from '@/theme';
 import { isDesktopBrowser } from '@/lib/browserDevice';
 import { learned } from '@/features/tips/tips';
+import { useArrived } from '@/lib/useArrived';
 
 type Section = 'all' | 'groups' | 'coaches' | 'clients';
+/** Chats drawn with the page, a screenful and a half; the rest once it has slid in (see useArrived). */
+const FIRST_ROWS = 14;
 
 interface Thread {
   conversation: Conversation;
@@ -143,6 +146,12 @@ export default function Inbox() {
         return Date.parse(b.at) - Date.parse(a.at);
       });
   }, [all, search, section]);
+
+  // The first screenful of chats with the page, every chat once it has slid in (see useArrived): each
+  // chat is a row that slides, and drawing them all first held the tap up (Oct 10, owner: "the buttons
+  // like the settings. msg notifications, etc respond too slow"). A search always looks through them all.
+  const arrived = useArrived();
+  const shownThreads = arrived || search.trim() ? threads : threads.slice(0, FIRST_ROWS);
 
   // Up to hit today: people you can message (or already talk to) who said so today, never someone blocked.
   const upToday = useMemo(() => {
@@ -273,7 +282,7 @@ export default function Inbox() {
         <EmptyState icon="chatbubble-ellipses-outline" title={emptyCopy.title} body={emptyCopy.body} action={{ label: 'New message', onPress: () => router.push('/messages/new') }} />
       ) : (
         <View style={styles.list}>
-          {threads.map((t, index) => {
+          {shownThreads.map((t, index) => {
             const { conversation, muted, unread, name } = t;
             // Their message arriving ends it at once.
             const typer = typingIn[conversation.id];
