@@ -1,5 +1,5 @@
 import type { SessionDetail } from '@/data/types';
-import { colors, pageIsDark, withAlpha } from '@/theme';
+import { colors, lightColors, pageIsDark, withAlpha } from '@/theme';
 
 /*
  * Heart-rate zones: how long a session spent in each of five zones, as WHOOP
@@ -95,11 +95,10 @@ export function deepen(c: string, by: number): string {
 export function zoneColors(on: 'page' | 'brand' | 'media' | 'story'): string[] {
   if (on === 'brand') return [0.22, 0.36, 0.52, 0.74, 1].map((a) => withAlpha(colors.brandInk, a));
   if (on === 'story') {
+    // CourtSide's own greens on every court (Oct 10, owner: "Green but cards can be themed"): the
+    // bright green of the share's logo, deepening to the cream court's brand green.
     const bright = colors.brandBright;
-    // Deeper than the bright colour: the brand itself where it is darker enough (it is not on a dark page
-    // or New York, whose brand is its bright colour), else the bright colour deepened, its hue kept
-    // (New York's Hard and Peak gold, not olive).
-    const deep = lightness(colors.brand) < lightness(bright) - 0.2 ? colors.brand : deepen(bright, 0.3);
+    const deep = lightColors.brand;
     return ['#FFFFFF', mixHex('#FFFFFF', bright, 0.45), bright, mixHex(bright, deep, 0.35), mixHex(bright, deep, 0.62)];
   }
   if (on === 'media') return ['rgba(255, 255, 255, 0.35)', 'rgba(255, 255, 255, 0.55)', mixHex('#FFFFFF', colors.brand, 0.6), mixHex('#FFFFFF', colors.brand, 0.85), colors.brand];

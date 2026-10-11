@@ -115,8 +115,8 @@ export function SessionStoryArt({ design, story, width, photo, hidden = [], onPh
         {/* The logo in CourtSide's own colour (Oct 4, owner), half as big again (Oct 9, owner: "our logo rn
             is good. lets just make it bigger more prominent"): the wordmark as the sign-in page sets it, a
             little under the numbers' size. Its soft light edge is wider and brighter, so the deep green
-            stands off a green, blue or night court; a lighter brand colour (Night's, Melbourne's, New
-            York's) gets a soft dark shadow instead, as the white numbers have. */}
+            stands off a green, blue or night court; the bright green, the same on
+            every court (Oct 10, owner), gets a soft dark shadow instead, as the white numbers have. */}
         <View style={[styles.overBrand, { gap: 8 * u, marginTop: 12 * u }]}>
           <ShadedMark size={33 * u} u={u} color={colors.brandBright} halo={halo} weight={1.5} sideWeight={1.05} />
           <Text style={[styles.overWord, { fontSize: 30 * u, lineHeight: 36 * u, letterSpacing: -0.9 * u, color: colors.brandBright }, wordHalo(halo, u)]}>CourtSide</Text>

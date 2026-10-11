@@ -6,6 +6,8 @@ export const lightColors = {
   text: '#24251F', textMuted: '#5D584C', textFaint: '#6C665A',
   brand: '#3F7049', brandInk: '#FAF8F0', brandDim: '#E3E7D9',
   // The logo laid over a photo on a share (Oct 9, owner): a brighter brand colour that reads on any court.
+  // The same green on every court (Oct 10, owner: "Green but cards can be themed"): a share is CourtSide's
+  // sign to people without the app, so it is always our green, as Strava's is always its orange.
   brandBright: '#7ED492',
   court: '#527C56', clay: '#A06F53', hard: '#3E6982', grass: '#748360',
   info: '#3E6982', success: '#527C56', warning: '#957328', danger: '#A34D40',
