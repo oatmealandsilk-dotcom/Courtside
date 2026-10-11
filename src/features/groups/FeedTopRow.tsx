@@ -24,8 +24,14 @@ import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
  * The "+" is always on screen (Oct 7): it rides at the row's end until that
  * end would run past the right edge (2 groups or more, or Activities in the
  * middle), then it stays put at the edge, over the clip's sound disc, and the
- * words pass behind it, cut off just before it the way they leave the left
- * edge of the screen.
+ * words pass behind it, stopping just before it. A word that reaches it ends
+ * in "…" there rather than being cut through a letter (UI audit, Oct 11).
+ *
+ * Where each word sits, and so where the "+" goes, is added up from the
+ * words' widths, never read from where each one was last seen: on the web a
+ * thing that only moves (a group's name arriving in front of the "+", the
+ * font coming in) is never reported again, and the "+" stayed at the old end
+ * of the row, on top of the first group's name (UI audit, Oct 11).
  */
 
 /** The "+": its box, and how far it keeps from the right edge once it stops there (over the sound disc's middle). */
@@ -35,6 +41,13 @@ const PLUS_RIGHT = 24;
 const PLUS_ROOM = 12;
 /** Everything right of this many points from the right edge belongs to a "+" kept there. */
 const PLUS_ZONE = PLUS_RIGHT + PLUS + PLUS_ROOM;
+/** The space either side of a dot, and the "+"'s extra space after the last word (15 in all). */
+const GAP = 9;
+const PLUS_GAP = 6;
+/** The widest a word gets; a longer name ends in "…". */
+const WORD_MAX = 150;
+/** Where a "+" that has not been placed yet waits: at its stop by the edge, where it can never cover a word. */
+const PLUS_UNPLACED = 100_000;
 
 interface Props {
   groups: { id: string; name: string }[];
@@ -62,39 +75,59 @@ export function FeedTopRow({ groups, selected, onSelect, onPlus, onPicture, hidd
   // The camera's mode picker (Oct 4, owner): the word on show always sits in
   // the middle of the screen, and a tap slides the row so the new one glides
   // there, the others passing left or right. "+" rides at the row's end.
-  const spots = useRef(new Map<string, { x: number; w: number }>());
   const [viewW, setViewW] = useState(0);
-  const [measured, setMeasured] = useState(0);
+  // Each word's width, and the dots' (all alike): a change of size is always reported, on every platform.
+  const [widths, setWidths] = useState<Record<string, number>>({});
+  const [dotW, setDotW] = useState(0);
+  // Where each word sits along the row and where the "+" goes after the last one, added up
+  // the way the row lays them out: word, gap, dot, gap, word … gap, "+". Null until all are measured.
+  const layout = (() => {
+    const at = new Map<string, { x: number; w: number }>();
+    let x = 0;
+    for (const [i, w] of words.entries()) {
+      const width = widths[w.id ?? 'for-you'];
+      if (width === undefined || (i > 0 && !dotW)) return null;
+      if (i > 0) x += GAP + dotW + GAP;
+      at.set(w.id ?? 'for-you', { x, w: width });
+      x += width;
+    }
+    return { at, plusAt: x + GAP + PLUS_GAP };
+  })();
   const shift = useSharedValue(0);
   const placed = useRef(false);
   const target = useRef(0);
+  const home = layout?.at.get(selected ?? 'for-you');
+  const homeMid = home ? home.x + home.w / 2 : null;
   useEffect(() => {
-    const at = spots.current.get(selected ?? 'for-you');
-    if (!at || !viewW) return;
-    const to = viewW / 2 - (at.x + at.w / 2);
+    if (homeMid === null || !viewW) return;
+    const to = viewW / 2 - homeMid;
     if (!placed.current) { placed.current = true; target.current = to; shift.value = to; return; }
     // Already heading there (the tap began it): leave the glide running untouched.
     if (Math.abs(target.current - to) < 0.5) return;
     target.current = to;
     // One smooth glide, Apple's ease-out, no bounce: a spring re-aimed mid-flight read as a jolt.
     shift.value = withTiming(to, { duration: 380, easing: Easing.bezier(0.22, 1, 0.36, 1) });
-  }, [selected, viewW, measured, shift]);
+  }, [homeMid, viewW, shift]);
   // The glide starts on the tap itself; the feed underneath switches a frame later,
   // so its heavy first draw never holds the row back.
   // The feed underneath is switched only once the glide has landed: building a
   // whole new feed mid-glide froze the screen for a few frames (Oct 4, owner: "smoother, by a lot").
   const glideTo = (key: string, then: () => void) => {
-    const at = spots.current.get(key);
+    const at = layout?.at.get(key);
     if (!at || !viewW) { then(); return; }
     target.current = viewW / 2 - (at.x + at.w / 2);
     shift.value = withTiming(target.current, { duration: 320, easing: Easing.bezier(0.22, 1, 0.36, 1) }, (done) => { if (done) runOnJS(then)(); });
   };
   const slide = useAnimatedStyle(() => ({ transform: [{ translateX: shift.value }] }));
-  // Where the "+" would sit at the row's end (-1 until laid out); it goes no further right than its stop at the edge.
-  const plusAt = useSharedValue(-1);
+  // Where the "+" would sit at the row's end; it goes no further right than its stop at the edge.
+  // A word just added and not measured yet keeps the "+" at its stop for that moment.
+  const plusAt = layout ? layout.plusAt : PLUS_UNPLACED;
   const plusStop = viewW - PLUS_RIGHT - PLUS;
-  const plusSlide = useAnimatedStyle(() => ({ transform: [{ translateX: Math.min(shift.value + plusAt.value, plusStop) }] }));
-  const ready = viewW && measured ? 1 : 0;
+  const plusSlide = useAnimatedStyle(() => ({ transform: [{ translateX: Math.min(shift.value + plusAt, plusStop) }] }));
+  // Shown once everything has been measured, and kept shown while a new group's name is measured.
+  const shown = useRef(false);
+  useEffect(() => { if (viewW && layout) shown.current = true; });
+  const ready = viewW && (layout || shown.current) ? 1 : 0;
   return (
     <View pointerEvents={hidden ? 'none' : 'box-none'} style={[styles.layer, { top: insets.top + TOP_BAND_TOP, opacity: hidden ? 0 : 1 }]}>
       <View style={styles.clip} onLayout={(e) => setViewW(e.nativeEvent.layout.width)} pointerEvents="box-none">
@@ -103,27 +136,28 @@ export function FeedTopRow({ groups, selected, onSelect, onPlus, onPicture, hidd
           <Animated.View style={[styles.row, slide, { opacity: ready }]}>
             {words.map((w, i) => {
               const on = w.id === selected;
+              const key = w.id ?? 'for-you';
               return (
-                <React.Fragment key={w.id ?? 'for-you'}>
-                  {i > 0 ? <Text style={[styles.dot, { color: ink }, edge]}>·</Text> : null}
+                <React.Fragment key={key}>
+                  {i > 0 ? (
+                    <Text
+                      style={[styles.dot, { color: ink }, edge]}
+                      onLayout={(e) => { const width = e.nativeEvent.layout.width; setDotW((d) => (d === width ? d : width)); }}
+                    >·</Text>
+                  ) : null}
                   <Pressable
                     accessibilityRole="tab"
                     accessibilityState={{ selected: on }}
                     accessibilityLabel={w.id === 'activities' ? 'Activities' : w.id ? `${w.name}, group feed` : 'For you'}
                     hitSlop={{ top: 10, bottom: 10, left: 4, right: 4 }}
-                    onPress={() => { if (on) return; haptics.tap(); const id = w.id; glideTo(id ?? 'for-you', () => onSelect(id)); }}
-                    onLayout={(e) => {
-                      spots.current.set(w.id ?? 'for-you', { x: e.nativeEvent.layout.x, w: e.nativeEvent.layout.width });
-                      if (spots.current.size >= words.length) setMeasured((n) => n + 1);
-                    }}
+                    onPress={() => { if (on) return; haptics.tap(); const id = w.id; glideTo(key, () => onSelect(id)); }}
+                    onLayout={(e) => { const width = e.nativeEvent.layout.width; setWidths((m) => (m[key] === width ? m : { ...m, [key]: width })); }}
                   >
-                    <Word name={w.name} spotKey={w.id ?? 'for-you'} spots={spots} shift={shift} viewW={viewW} style={[styles.word, { color: ink }, edge]} />
+                    <Word name={w.name} at={layout?.at.get(key)} shift={shift} viewW={viewW} style={[styles.word, { color: ink }, edge]} />
                   </Pressable>
                 </React.Fragment>
               );
             })}
-            {/* The "+"'s place at the row's end, kept so the row is laid out as before; the "+" itself is drawn below. */}
-            <View pointerEvents="none" style={styles.plus} onLayout={(e) => { plusAt.value = e.nativeEvent.layout.x; }} />
           </Animated.View>
         </View>
         <Animated.View style={[styles.plusSpot, plusSlide, { opacity: ready }]}>
@@ -144,30 +178,49 @@ export function FeedTopRow({ groups, selected, onSelect, onPlus, onPicture, hidd
  * is, frame by frame on the animation thread, so the highlight travels with
  * the glide instead of jumping when the tap lands. Every word keeps one weight:
  * a word turning bold changed its width and moved the row's target mid-glide.
+ *
+ * A word that reaches the "+" at its stop ends in "…" just before it, also
+ * frame by frame. The word's room in the row never changes for that: an
+ * unseen copy of the whole word holds it, and the word drawn over it is the
+ * one cut short, so nothing else in the row moves.
  */
-function Word({ name, spotKey, spots, shift, viewW, style }: { name: string; spotKey: string; spots: React.MutableRefObject<Map<string, { x: number; w: number }>>; shift: SharedValue<number>; viewW: number; style: object }) {
-  const centre = useSharedValue(-1000);
-  const at = spots.current.get(spotKey);
-  useEffect(() => { if (at) centre.value = at.x + at.w / 2; });
+function Word({ name, at, shift, viewW, style }: { name: string; at: { x: number; w: number } | undefined; shift: SharedValue<number>; viewW: number; style: object }) {
+  const centre = at ? at.x + at.w / 2 : -1000;
+  const left = at ? at.x : 0;
+  const placed = !!at;
+  // The words' cut, just short of the "+" at its stop.
+  const cut = viewW - PLUS_ZONE;
   const look = useAnimatedStyle(() => {
-    const away = Math.abs(shift.value + centre.value - viewW / 2);
+    const away = Math.abs(shift.value + centre - viewW / 2);
     return { opacity: interpolate(away, [0, 60], [1, 0.5], 'clamp'), transform: [{ scale: interpolate(away, [0, 60], [1, 0.92], 'clamp') }] };
   });
-  return <Animated.Text numberOfLines={1} style={[style, look]}>{name}</Animated.Text>;
+  const room = useAnimatedStyle(() => ({ maxWidth: placed && viewW ? Math.min(WORD_MAX, Math.max(0, cut - (shift.value + left))) : WORD_MAX }));
+  return (
+    <View>
+      <Text numberOfLines={1} style={[style, wordStyles.holder]} aria-hidden accessibilityElementsHidden importantForAccessibility="no-hide-descendants">{name}</Text>
+      <Animated.Text numberOfLines={1} style={[style, wordStyles.drawn, look, room]}>{name}</Animated.Text>
+    </View>
+  );
 }
 
 const styleDefinitions = StyleSheet.create({
   layer: { position: 'absolute', left: 0, right: 0, height: TOP_BAND_HEIGHT, zIndex: 8, alignItems: 'center', justifyContent: 'center' },
   clip: { alignSelf: 'stretch', overflow: 'hidden', height: TOP_BAND_HEIGHT },
   words: { position: 'absolute', left: 0, top: 0, bottom: 0, right: PLUS_ZONE, overflow: 'hidden' },
-  row: { position: 'absolute', left: 0, top: 0, flexDirection: 'row', alignItems: 'center', gap: 9, height: TOP_BAND_HEIGHT },
-  word: { fontSize: 16, lineHeight: 22, ...font('600'), letterSpacing: -0.2, maxWidth: 150, paddingVertical: 2 },
+  row: { position: 'absolute', left: 0, top: 0, flexDirection: 'row', alignItems: 'center', gap: GAP, height: TOP_BAND_HEIGHT },
+  word: { fontSize: 16, lineHeight: 22, ...font('600'), letterSpacing: -0.2, maxWidth: WORD_MAX, paddingVertical: 2 },
   marker: { position: 'absolute', bottom: 3, width: 16, height: 2.5, borderRadius: 2 },
   markerEdge: { boxShadow: '0px 1px 3px rgba(0, 0, 0, 0.35)' },
   wordOn: { ...font('700') },
   dot: { fontSize: 14, lineHeight: 22, opacity: 0.3 },
-  plus: { marginLeft: 6, width: PLUS, height: PLUS },
   plusSpot: { position: 'absolute', left: 0, top: (TOP_BAND_HEIGHT - PLUS) / 2, width: PLUS, height: PLUS },
   plusHit: { width: PLUS, height: PLUS, alignItems: 'center', justifyContent: 'center' },
   waiting: { position: 'absolute', top: 2, right: 2, width: 8, height: 8, borderRadius: 4, backgroundColor: colors.brand, borderWidth: 1.5, borderColor: colors.bg },
+});
+
+const wordStyles = StyleSheet.create({
+  /** The unseen whole word that holds the word's room in the row. */
+  holder: { opacity: 0 },
+  /** The word as drawn, over it, which may end in "…". */
+  drawn: { position: 'absolute', left: 0, top: 0 },
 });
