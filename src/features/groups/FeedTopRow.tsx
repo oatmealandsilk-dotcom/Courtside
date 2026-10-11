@@ -24,8 +24,8 @@ import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
  * The "+" is always on screen (Oct 7): it rides at the row's end until that
  * end would run past the right edge (2 groups or more, or Activities in the
  * middle), then it stays put at the edge, over the clip's sound disc, and the
- * words pass behind it, stopping just before it. A word that reaches it ends
- * in "…" there rather than being cut through a letter (UI audit, Oct 11).
+ * words pass behind it, cut off just before it the way they leave the left
+ * edge of the screen.
  *
  * Where each word sits, and so where the "+" goes, is added up from the
  * words' widths, never read from where each one was last seen: on the web a
@@ -178,29 +178,14 @@ export function FeedTopRow({ groups, selected, onSelect, onPlus, onPicture, hidd
  * is, frame by frame on the animation thread, so the highlight travels with
  * the glide instead of jumping when the tap lands. Every word keeps one weight:
  * a word turning bold changed its width and moved the row's target mid-glide.
- *
- * A word that reaches the "+" at its stop ends in "…" just before it, also
- * frame by frame. The word's room in the row never changes for that: an
- * unseen copy of the whole word holds it, and the word drawn over it is the
- * one cut short, so nothing else in the row moves.
  */
 function Word({ name, at, shift, viewW, style }: { name: string; at: { x: number; w: number } | undefined; shift: SharedValue<number>; viewW: number; style: object }) {
   const centre = at ? at.x + at.w / 2 : -1000;
-  const left = at ? at.x : 0;
-  const placed = !!at;
-  // The words' cut, just short of the "+" at its stop.
-  const cut = viewW - PLUS_ZONE;
   const look = useAnimatedStyle(() => {
     const away = Math.abs(shift.value + centre - viewW / 2);
     return { opacity: interpolate(away, [0, 60], [1, 0.5], 'clamp'), transform: [{ scale: interpolate(away, [0, 60], [1, 0.92], 'clamp') }] };
   });
-  const room = useAnimatedStyle(() => ({ maxWidth: placed && viewW ? Math.min(WORD_MAX, Math.max(0, cut - (shift.value + left))) : WORD_MAX }));
-  return (
-    <View>
-      <Text numberOfLines={1} style={[style, wordStyles.holder]} aria-hidden accessibilityElementsHidden importantForAccessibility="no-hide-descendants">{name}</Text>
-      <Animated.Text numberOfLines={1} style={[style, wordStyles.drawn, look, room]}>{name}</Animated.Text>
-    </View>
-  );
+  return <Animated.Text numberOfLines={1} style={[style, look]}>{name}</Animated.Text>;
 }
 
 const styleDefinitions = StyleSheet.create({
@@ -218,9 +203,3 @@ const styleDefinitions = StyleSheet.create({
   waiting: { position: 'absolute', top: 2, right: 2, width: 8, height: 8, borderRadius: 4, backgroundColor: colors.brand, borderWidth: 1.5, borderColor: colors.bg },
 });
 
-const wordStyles = StyleSheet.create({
-  /** The unseen whole word that holds the word's room in the row. */
-  holder: { opacity: 0 },
-  /** The word as drawn, over it, which may end in "…". */
-  drawn: { position: 'absolute', left: 0, top: 0 },
-});
