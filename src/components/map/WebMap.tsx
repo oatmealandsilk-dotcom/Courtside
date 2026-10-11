@@ -6,9 +6,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as maplibregl from 'maplibre-gl';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
-import { ChipsNoteLine, CityLine, CitylessCard, CityWeatherChip, CourtSheet, CourtsZoomNote, FilterChips, HitSheet, ListCrown, MapCredit, YouSheet, MapButtons, MapTopBar, PlaceSheet, PlayerSheet, PlayersPill, PlayersSheet, PreviewOverlay, WhereCard } from '@/components/map/MapChrome';
+import { ChipsNoteLine, CitylessCard, CourtSheet, CourtsZoomNote, FilterChips, HitSheet, ListCrown, MapCredit, PIN_FIT_TOP, YouSheet, MapButtons, MapTopBar, PlaceSheet, PlayerSheet, PlayersPill, PlayersSheet, PreviewOverlay, WhereCard } from '@/components/map/MapChrome';
 import { CardStage } from '@/components/map/CardStage';
-import { MAP_TOP } from '@/components/map/mapTop';
 import { CARD_HEIGHT, CARD_ZOOM, onCard } from '@/components/map/cardFit';
 import type { NearbyMapProps } from '@/components/NearbyMap.types';
 import { placeZoom } from '@/features/places/geocode';
@@ -161,6 +160,10 @@ export function NearbyMap(props: NearbyMapProps) {
   // Held while "Who can see you on the map?" is over the map, read when a map is made.
   const holdNow = useRef(expanded && holdPins);
   holdNow.current = expanded && holdPins;
+  // Room kept clear when zooming to fit a "+N": the top's two rows (PIN_FIT_TOP) under the status bar, as on the phone (Oct 11; it was
+  // 130 from the window's top). One object the pins read as they zoom, so a status bar measured after the map was made still counts.
+  const fitPad = useRef({ top: PIN_FIT_TOP, bottom: 260, left: 60, right: 60 });
+  fitPad.current.top = insets.top + PIN_FIT_TOP;
   // Where the full map was looking when it last came to rest, so a map made again (a new theme) stays there.
   const camera = useRef<{ center: [number, number]; zoom: number } | null>(null);
 
@@ -281,7 +284,7 @@ export function NearbyMap(props: NearbyMapProps) {
       cascaded: () => { cascaded.current = true; },
       quiet: !expanded,
       box: expanded ? FULL_MAP_BOX : CARD_BOX,
-      pad: { top: 130, bottom: 260, left: 60, right: 60 },
+      pad: fitPad.current,
       tap: (id: string) => {
         const now = latest.current;
         // The still card is one button: any tap on it opens the full map.
@@ -439,23 +442,15 @@ export function NearbyMap(props: NearbyMapProps) {
     <View style={styles.fill} onLayout={(e) => setMapH(Math.round(e.nativeEvent.layout.height))}>
       {canvas}
       <View pointerEvents="box-none" style={[styles.top, { paddingTop: insets.top + spacing.sm }]}>
-        {/* On the two-row top (mapTop A) the city and its weather ride in the search bar itself. */}
-        <MapTopBar onBack={onBack} query={model.query} onQuery={model.setQuery} locationOn={locationOn} locating={locating} onToggleLocation={onToggleLocation} results={model.courtResults} onPickCourt={model.pickCourt} places={model.placeSearch} onPickPlace={model.pickPlace} players={model.query.trim() ? model.tray.length : 0} locationMenu={choosing} look={MAP_TOP} cityName={model.homeKnown ? cityName : ''} weather={model.homeKnown ? weather : null} />
+        {/* Two rows (Oct 11, owner: "Two rows weather in search"): Back, the search and Location, the city and its weather in the bar itself; then the filter chips. */}
+        <MapTopBar onBack={onBack} query={model.query} onQuery={model.setQuery} locationOn={locationOn} locating={locating} onToggleLocation={onToggleLocation} results={model.courtResults} onPickCourt={model.pickCourt} places={model.placeSearch} onPickPlace={model.pickPlace} players={model.query.trim() ? model.tray.length : 0} locationMenu={choosing} cityName={model.homeKnown ? cityName : ''} weather={model.homeKnown ? weather : null} />
         <View onLayout={(e) => { const { y, height } = e.nativeEvent.layout; setChipsEnd(Math.round(y + height)); }}>
-          <FilterChips filter={model.filter} onFilter={model.setFilter} courtsOn={model.courtsOn} onCourts={model.toggleCourts} courtsLoading={model.courtsLoading} look={MAP_TOP} />
+          <FilterChips filter={model.filter} onFilter={model.setFilter} courtsOn={model.courtsOn} onCourts={model.toggleCourts} courtsLoading={model.courtsLoading} />
         </View>
-        {MAP_TOP === 'A' ? (
-          // Only while zoomed out: "Zoom in to see courts", under the chips (as on the phone).
-          <ChipsNoteLine>
-            {zoomNote ? <CourtsZoomNote look="A" /> : null}
-          </ChipsNoteLine>
-        ) : (
-          // The city and its weather, a small chip under the filters; zoomed out, "Zoom in to see courts" on the same line, right after it (Oct 10).
-          <CityLine>
-            {model.homeKnown ? <CityWeatherChip cityName={cityName} weather={weather} /> : null}
-            {zoomNote ? <CourtsZoomNote /> : null}
-          </CityLine>
-        )}
+        {/* Only while zoomed out: "Zoom in to see courts", under the chips (as on the phone). */}
+        <ChipsNoteLine>
+          {zoomNote ? <CourtsZoomNote /> : null}
+        </ChipsNoteLine>
         {/* Slow to come, or didn't: a small pill under the chips, clear of the pins around you (as on the phone). */}
         <MapLoadPill status={load.status} onRetry={load.restart} />
       </View>

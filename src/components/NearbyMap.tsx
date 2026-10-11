@@ -5,9 +5,8 @@ import Reanimated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTimi
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { ChipsNoteLine, CityLine, CitylessCard, CityWeatherChip, CourtSheet, CourtsZoomNote, FilterChips, HitSheet, ListCrown, MapCredit, YouSheet, MapButtons, MapTopBar, PlaceSheet, PlayerSheet, PlayersPill, PlayersSheet, PreviewOverlay, WhereCard } from '@/components/map/MapChrome';
+import { ChipsNoteLine, CitylessCard, CourtSheet, CourtsZoomNote, FilterChips, HitSheet, ListCrown, MapCredit, PIN_FIT_TOP, YouSheet, MapButtons, MapTopBar, PlaceSheet, PlayerSheet, PlayersPill, PlayersSheet, PreviewOverlay, WhereCard } from '@/components/map/MapChrome';
 import { CardStage } from '@/components/map/CardStage';
-import { MAP_TOP } from '@/components/map/mapTop';
 import { MapCanvas, type CanvasMarker, type MapCanvasHandle, type MapLoadStatus } from '@/components/map/MapCanvas';
 import { MapCardFailed, MapCardLoading, MapLoadPill } from '@/components/map/MapLoadState';
 import { CARD_HEIGHT, CARD_ZOOM, onCard } from '@/components/map/cardFit';
@@ -200,7 +199,8 @@ export function NearbyMap(props: NearbyMapProps) {
       // Given up on: the opening curtain stops waiting for it, and the card (or the full map's pill) says so.
       onStatus={(status) => { setMapStatus(status); if (!expanded && status === 'failed') painted?.(); }}
       holdPins={expanded && holdPins}
-      pad={{ top: insets.top + 120, bottom: 250, left: 50, right: 50 }}
+      // Zooming to fit a "+N": the top's two rows (and a face's reach) kept clear, as in a browser (PIN_FIT_TOP).
+      pad={{ top: insets.top + PIN_FIT_TOP, bottom: 250, left: 50, right: 50 }}
       onTap={(id) => {
         // The still card is one button: any tap on it opens the full map.
         if (!expanded) { onExpand?.(); return; }
@@ -296,23 +296,15 @@ export function NearbyMap(props: NearbyMapProps) {
     <View style={styles.fill} onLayout={(e) => setMapH(Math.round(e.nativeEvent.layout.height))}>
       {mapView}
       <View pointerEvents="box-none" style={[styles.top, { paddingTop: insets.top + spacing.sm }]}>
-        {/* On the two-row top (mapTop A) the city and its weather ride in the search bar itself. */}
-        <MapTopBar onBack={onBack} query={model.query} onQuery={model.setQuery} locationOn={locationOn} locating={locating} onToggleLocation={onToggleLocation} results={model.courtResults} onPickCourt={model.pickCourt} places={model.placeSearch} onPickPlace={model.pickPlace} players={model.query.trim() ? model.tray.length : 0} locationMenu={choosing} look={MAP_TOP} cityName={model.homeKnown ? cityName : ''} weather={model.homeKnown ? weather : null} />
+        {/* Two rows (Oct 11, owner: "Two rows weather in search"): Back, the search and Location, the city and its weather in the bar itself; then the filter chips. */}
+        <MapTopBar onBack={onBack} query={model.query} onQuery={model.setQuery} locationOn={locationOn} locating={locating} onToggleLocation={onToggleLocation} results={model.courtResults} onPickCourt={model.pickCourt} places={model.placeSearch} onPickPlace={model.pickPlace} players={model.query.trim() ? model.tray.length : 0} locationMenu={choosing} cityName={model.homeKnown ? cityName : ''} weather={model.homeKnown ? weather : null} />
         <View onLayout={(e) => { const { y, height } = e.nativeEvent.layout; setChipsEnd(Math.round(y + height)); }}>
-          <FilterChips filter={model.filter} onFilter={model.setFilter} courtsOn={model.courtsOn} onCourts={model.toggleCourts} courtsLoading={model.courtsLoading} look={MAP_TOP} />
+          <FilterChips filter={model.filter} onFilter={model.setFilter} courtsOn={model.courtsOn} onCourts={model.toggleCourts} courtsLoading={model.courtsLoading} />
         </View>
-        {MAP_TOP === 'A' ? (
-          // Only while zoomed out: "Zoom in to see courts", under the chips.
-          <ChipsNoteLine>
-            {zoomNote ? <CourtsZoomNote look="A" /> : null}
-          </ChipsNoteLine>
-        ) : (
-          // The city and its weather, a small chip under the filters; zoomed out, "Zoom in to see courts" on the same line, right after it (Oct 10).
-          <CityLine>
-            {model.homeKnown ? <CityWeatherChip cityName={cityName} weather={weather} /> : null}
-            {zoomNote ? <CourtsZoomNote /> : null}
-          </CityLine>
-        )}
+        {/* Only while zoomed out: "Zoom in to see courts", under the chips. */}
+        <ChipsNoteLine>
+          {zoomNote ? <CourtsZoomNote /> : null}
+        </ChipsNoteLine>
         {/* Slow to come, or didn't: a small pill under the chips, clear of the pins around you. */}
         <MapLoadPill status={mapStatus} onRetry={() => canvas.current?.retry()} />
       </View>
