@@ -85,7 +85,7 @@ const HEAD = { label: 16, value: 40, gap: 46 };
  * hair wider (Android's small preview) moves the row a hair over rather than
  * breaking the word onto a second line over the next row.
  */
-const ROWS = { width: 316, name: 76, minutes: 50, gap: 12, bar: 13, row: 30, text: 16 };
+const ROWS = { width: 316, name: 76, minutes: 50, gap: 12, bar: 10.5, row: 30, text: 16 };
 /** Space between the parts: headline to the bars, bars to the heart-rate line, that line to the logo. */
 const GAPS = { bars: 20, beat: 14, logo: 24 };
 /** The logo, exactly as the Overlay sets it (SessionStoryArt). */
