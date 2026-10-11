@@ -101,11 +101,12 @@ const gamesProblem = (a: number, b: number): string | undefined =>
  *     It is kept as a set, [10, 7], exactly as "6-4 3-6 10-7" always was.
  * Square brackets are always a match tiebreak. Round ones around two
  * numbers are one when they come last, the sets before them are level (1-1
- * or 2-2) and the higher number is 7 or more: "6-4 6-7 (10-7)" read as the
- * second set's tiebreak would end the match at one set all, which nobody
- * logs, so it is the match tiebreak. Otherwise, straight after a set whose
- * games differ by one they are that set's tiebreak ("7-6 (7-5)"), and
- * anywhere else a match tiebreak again. Nothing typed is silently left out:
+ * or 2-2) and the higher number is 10 or more, a match tiebreak's length:
+ * "6-4 6-7 (10-7)" read as the second set's tiebreak would end the match at
+ * one set all, which nobody logs, so it is the match tiebreak. Under 10,
+ * straight after a set whose games differ by one, they are that set's
+ * tiebreak ("6-4 6-7 (5-7)", "7-6 (7-5)"); a 7-point match tiebreak there is
+ * typed in square brackets ("[7-5]"). Anywhere else a match tiebreak again. Nothing typed is silently left out:
  * points that fit no set say so.
  */
 export function readScore(text: string): { sets?: MatchSet[]; problem?: string } {
@@ -146,7 +147,7 @@ export function readScore(text: string): { sets?: MatchSet[]; problem?: string }
     const [x, y] = p.nums;
     const mine = sets.filter(([a, b]) => a > b).length;
     const level = sets.length >= 2 && mine * 2 === sets.length;
-    const decider = p.square || (i === pieces.length - 1 && level && Math.max(x, y) >= 7);
+    const decider = p.square || (i === pieces.length - 1 && level && Math.max(x, y) >= 10);
     if (!decider && prev) {
       if (x === y) return { problem: 'A tiebreak needs a winner, like 7-6(7-5).' };
       if (Math.min(x, y) > MAX_POINTS) return { problem: TOO_MANY_POINTS };
