@@ -522,7 +522,9 @@ const ScreenBody = React.memo(function ScreenBody({
           {onBack ? (
             <Pressable
               onPress={onBack}
-              style={styles.back}
+              // Dims the moment it is touched (Oct 11, owner: "the back button in top left corner" felt slow):
+              // the answer comes before the page under it is ready, the way iPhone's own back button does.
+              style={({ pressed }) => [styles.back, pressed && { opacity: 0.45 }]}
               accessibilityRole="button"
               accessibilityLabel="Go back"
             >

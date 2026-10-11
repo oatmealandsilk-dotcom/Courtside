@@ -223,7 +223,7 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
  };
  return <Screen memoryKey="profile" title="Profile" wash subtitle={`@${user.handle}`} onRefresh={previewSection === undefined && !isDesktopBrowser() ? actions.refresh : undefined} right={<View style={styles.headerActions}>
    <View style={styles.headerActions}>
-     <Tappable accessibilityRole="link" accessibilityLabel={unseen ? `Notifications, ${unseen} new` : 'Notifications'} onPress={() => router.push('/notifications')} hitSlop={10} style={styles.headerButton}>
+     <Tappable accessibilityRole="link" accessibilityLabel={unseen ? `Notifications, ${unseen} new` : 'Notifications'} onPress={() => router.push('/notifications')} hitSlop={10} dim style={styles.headerButton}>
        <Ionicons name={unseen ? 'notifications' : 'notifications-outline'} size={27} color={colors.text}/>
        <UnreadBadge count={unseen} />
      </Tappable>
@@ -262,7 +262,7 @@ function ProfileMenu({ groupsAsking, groupCount }: { groupsAsking: number; group
   useModalOpenWhile(!!at);
   return <>
     <View ref={anchor} collapsable={false}>
-      <Tappable accessibilityRole="button" accessibilityLabel={groupsAsking ? `Menu: groups and settings. ${groupsAsking} asking to join your groups` : 'Menu: groups and settings'} onPress={open} hitSlop={10} style={styles.headerButton}>
+      <Tappable accessibilityRole="button" accessibilityLabel={groupsAsking ? `Menu: groups and settings. ${groupsAsking} asking to join your groups` : 'Menu: groups and settings'} onPress={open} hitSlop={10} dim style={styles.headerButton}>
         <Ionicons name="menu-outline" size={30} color={colors.text}/>
         {groupsAsking ? <View style={styles.menuDot} /> : null}
       </Tappable>

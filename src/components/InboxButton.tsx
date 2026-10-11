@@ -80,6 +80,7 @@ export function InboxButton({ variant = 'plain', size = 24, ink, style, coaching
       accessibilityLabel={unread ? `Messages, ${unread} unread` : 'Messages'}
       onPress={() => router.push(coaching ? { pathname: '/messages', params: { section: coach ? 'clients' : 'coaches' } } : '/messages')}
       hitSlop={slop}
+      dim
       style={[tile ? styles.tile : styles.plain, style]}
     >
       <Ionicons name={unread ? 'paper-plane' : 'paper-plane-outline'} size={tile ? 21 : size} color={ink ?? colors.text} />
@@ -105,7 +106,7 @@ export function NotificationButton({ size = 24 }: { size?: number }) {
   const unseen = unseenCount(withoutInstantRows(notifications.filter((n) => n.userId === currentUserId && !blockedIds.includes(n.actorId)), instantsOn), detectedActivities) + (welcome.unread ? 1 : 0);
   const slop = Math.max(8, Math.ceil((44 - (size + 8)) / 2));
   return (
-    <Tappable accessibilityRole="link" accessibilityLabel={unseen ? `Notifications, ${unseen} new` : 'Notifications'} onPress={() => router.push('/notifications')} hitSlop={slop} style={styles.plain}>
+    <Tappable accessibilityRole="link" accessibilityLabel={unseen ? `Notifications, ${unseen} new` : 'Notifications'} onPress={() => router.push('/notifications')} hitSlop={slop} dim style={styles.plain}>
       <Ionicons name={unseen ? 'notifications' : 'notifications-outline'} size={size} color={colors.text} />
       <UnreadBadge count={unseen} />
     </Tappable>

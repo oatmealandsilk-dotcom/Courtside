@@ -14,6 +14,14 @@ interface Props {
   immediate?: boolean;
   /** How far it lifts on hover. Pointer devices only; phones never see this. */
   hoverTo?: number;
+  /**
+   * Dim instead of dip, for a small icon that opens a page (the bell, Messages, the menu): a scaled
+   * icon on iPhone is a resampled picture of itself and goes soft, and a tap that opens a page holds
+   * the dip until the page is ready, so the icon sat blurry for that moment (Oct 11, owner: "when i
+   * click msg or notifcaition button it gets really blurry kinda grainy and then changes"). Dimmed,
+   * it stays sharp, the way iPhone's own buttons answer a press.
+   */
+  dim?: boolean;
   style?: StyleProp<ViewStyle>;
   hitSlop?: number;
   accessibilityRole?: 'button' | 'link';
@@ -41,6 +49,7 @@ export function Tappable({
   scaleTo = 0.94,
   immediate = false,
   hoverTo = 1.04,
+  dim = false,
   style,
   hitSlop,
   accessibilityRole = 'button',
@@ -48,14 +57,22 @@ export function Tappable({
   accessibilityState,
 }: Props) {
   const scale = useRef(new Animated.Value(1)).current;
+  const fade = useRef(new Animated.Value(1)).current;
 
   // Quick: the dip is a short straight run, the release a fast spring, so a
   // tap reads as instant rather than as an animation you watch.
-  const spring = (to: number) =>
+  const spring = (to: number) => {
+    // A dimming control: down at once on the press, back up over a beat on release (and any hover lift undone).
+    if (dim && to <= 1) {
+      Animated.timing(fade, { toValue: to < 1 ? 0.45 : 1, duration: to < 1 ? 0 : 160, useNativeDriver: true }).start();
+      if (to === 1) Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 160, bounciness: 4 }).start();
+      return;
+    }
     (to < 1
       ? Animated.timing(scale, { toValue: to, duration: 60, useNativeDriver: true })
       : Animated.spring(scale, { toValue: to, useNativeDriver: true, speed: 160, bounciness: 4 })
     ).start();
+  };
 
   return (
     <Pressable
@@ -73,7 +90,7 @@ export function Tappable({
       onHoverIn={() => Platform.OS === 'web' && !disabled && spring(hoverTo)}
       onHoverOut={() => Platform.OS === 'web' && !disabled && spring(1)}
     >
-      <Animated.View style={[style, { transform: [{ scale }] }]}>{children}</Animated.View>
+      <Animated.View style={[style, dim ? { opacity: fade, transform: [{ scale }] } : { transform: [{ scale }] }]}>{children}</Animated.View>
     </Pressable>
   );
 }
