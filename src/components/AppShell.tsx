@@ -315,7 +315,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     sentTo.current = detour;
     router.replace(detour);
   }, [detour]);
-  const nav = <NavBar state={{ index: selected.current, routes }} navigation={{ navigate: name => {
+  const nav = <NavBar state={{ index: selected.current, routes }} faded={barOnStage} navigation={{ navigate: name => {
     const destination = paths[name as keyof typeof paths];
     if (!destination) return;
     // Community opens on its map, from the top, whenever the bar takes you there.

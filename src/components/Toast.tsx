@@ -10,7 +10,7 @@ import { STAGE_EASING } from '@/features/feed/commentStage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FullWindowOverlay } from 'react-native-screens';
 
-import { Glass } from '@/components/ui/Glass';
+import { Glass, useGlassRenewal } from '@/components/ui/Glass';
 import { HitGlyph } from '@/components/HitGlyph';
 import { ZoneGlyph } from '@/components/session/ZoneGlyph';
 import { DrawnTick } from '@/components/session/DrawnTick';
@@ -62,6 +62,10 @@ export function Toast() {
     if (was) closed(was.id);
     was?.onClosed?.(how, Date.now() - shownAt.current);
   };
+  // Its glass, put up again once it has faded fully in: on an iPhone, glass put up while fading in can stay a flat
+  // white plate (GlassRenew, Oct 11). Only the glass, behind the words: the tick drawing itself in and the count
+  // climbing carry on untouched. Never on the way out.
+  const { renew, settle: settleGlass, cancel: cancelGlass } = useGlassRenewal();
   // A message banner on the same strip: the toast sits just under it, never hidden behind it.
   const below = useBelowBanner(spacing.xs);
   const underBanner = useSharedValue(below);
@@ -77,6 +81,7 @@ export function Toast() {
 
   const hide = (how: ToastClosed = 'timeout') => {
     settle(how);
+    cancelGlass();
     if (timer.current) clearTimeout(timer.current);
     y.value = withTiming(-24, { duration: 200, easing: OUT });
     shown.value = withTiming(0, { duration: 200, easing: OUT }, (done) => { if (done) runOnJS(setToast)(null); });
@@ -92,8 +97,9 @@ export function Toast() {
     if (timer.current) clearTimeout(timer.current);
     y.value = -24;
     shown.value = 0;
+    cancelGlass();
     y.value = withTiming(0, { duration: 320, easing: IN });
-    shown.value = withTiming(1, { duration: 260, easing: IN });
+    shown.value = withTiming(1, { duration: 260, easing: IN }, (done) => { if (done) runOnJS(settleGlass)(); });
     const reader = screenReader.current;
     // VoiceOver doesn't read a toast that slides in, so one that says why
     // something was refused is spoken on an iPhone (TalkBack reads it by itself).
@@ -128,7 +134,7 @@ export function Toast() {
     <GestureDetector gesture={flick}>
       <Animated.View pointerEvents="box-none" style={[styles.wrap, { top: insets.top + spacing.xs }, style]}>
         <View style={styles.shadow}>
-          <Glass radius={22} style={styles.card}>
+          <Glass behind renew={renew} radius={22} style={styles.card}>
             <View style={styles.row}>
               <Pressable
                 accessibilityRole={toast.href ? 'link' : 'text'}

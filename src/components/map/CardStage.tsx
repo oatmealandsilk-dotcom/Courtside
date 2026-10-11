@@ -1,11 +1,10 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { View } from 'react-native';
-import { useNavigation } from 'expo-router';
 import Animated, { Easing, cancelAnimation, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming, type WithTimingConfig } from 'react-native-reanimated';
 import { useReducedMotion } from '@/lib/useReducedMotion';
 
 import { sheetFling } from '@/components/map/sheetFling';
-import { GlassRenew } from '@/components/ui/Glass';
+import { GlassRenew, useGlassRenewal, useOnPageArrival } from '@/components/ui/Glass';
 import { CrownFade, CrownLead, layerZ, takesOver, useStageLayers, type Crown, type StageKind, type StageLayer } from '@/components/map/stageLayers';
 
 /*
@@ -41,9 +40,13 @@ import { CrownFade, CrownLead, layerZ, takesOver, useStageLayers, type Crown, ty
  * - Reduce Motion: fades only.
  * - The buttons' glass (Back to me, the players pill) is put up again once
  *   they have fully arrived (riding down, once the pill has finished fading
- *   in too), and once the page itself has slid in: an iPhone draws glass
- *   that first appears while something round it is fading in as a flat
- *   white plate, and leaves it so (GlassRenew, Oct 10).
+ *   in too), and each time the page itself has finished coming in (opened,
+ *   or come back to from a page over it), whichever layer is up: an iPhone
+ *   draws glass that first appears while something round it is fading in as
+ *   a flat white plate, and leaves it so (GlassRenew, Oct 10). Never while a
+ *   finger is on them: a pressed pill is dimmed, and glass put up dimmed is
+ *   the same white plate (Oct 11, owner: "The island in the bottom sometimes
+ *   it's clear sometimes it's not").
  *
  * Each layer is its own view with its own position and opacity, on the
  * animation thread. The one that is up sits in the stage's flow; one on its
@@ -84,19 +87,24 @@ export function CardStage({ cardKey, kind, crown, children }: {
   const { layers, remove } = useStageLayers(cardKey, kind, children);
   // Each layer's buttons as it leaves, found by the layer taking its place (takesOver).
   const handoffs = useRef<Handoffs>(new Map()).current;
+  // Each time the page has finished coming in (opened, or come back to from a page over it): every layer's
+  // buttons' glass is put up again then, not only the first layer's (Oct 11: a bare map that came after the
+  // card asking where you are, or after a card closed, kept whatever glass it had when you came back).
+  const [pageIn, setPageIn] = useState(0);
+  useOnPageArrival(useCallback(() => setPageIn((n) => n + 1), []));
   return (
     // A view of its own that keeps its layers' stacking to itself. Without it the phone drops this
     // wrapper as layout-only and each card's zIndex reaches out to the map's other controls (Oct 7:
     // a card's shadow then fell on the strip under the tab bar, which each card now carries itself).
     <View pointerEvents="box-none" collapsable={false} style={{ zIndex: 0 }}>
       {layers.map((layer) => (
-        <Layer key={layer.id} layer={layer} out={layer.out} crown={crown} onGone={remove} handoffs={handoffs} />
+        <Layer key={layer.id} layer={layer} out={layer.out} crown={crown} onGone={remove} handoffs={handoffs} pageIn={pageIn} />
       ))}
     </View>
   );
 }
 
-function Layer({ layer, out, crown: crownFor, onGone, handoffs }: { layer: StageLayer; out: boolean; crown?: Crown; onGone: (layer: StageLayer) => void; handoffs: Handoffs }) {
+function Layer({ layer, out, crown: crownFor, onGone, handoffs, pageIn }: { layer: StageLayer; out: boolean; crown?: Crown; onGone: (layer: StageLayer) => void; handoffs: Handoffs; pageIn: number }) {
   // Its own buttons: one on its way out keeps the ones it had (the players list's, faded while it was tall).
   const crown = typeof crownFor === 'function' ? crownFor(layer.key) : crownFor;
   const reduce = useReducedMotion();
@@ -118,10 +126,9 @@ function Layer({ layer, out, crown: crownFor, onGone, handoffs }: { layer: Stage
   // What only the bare map's buttons have (the pill, the credits over it): unseen, on one that may take over a
   // closing card's, until it is known whether it does (CrownLead).
   const lead = useSharedValue(takeover ? 0 : 1);
-  // Its buttons' glass, put up afresh each time this changes (GlassRenew): once they have fully arrived.
-  const [renew, setRenew] = useState(0);
-  const arrived = useCallback(() => setRenew((n) => n + 1), []);
-  const navigation = useNavigation();
+  // Its buttons' glass, put up afresh (GlassRenew) a moment after they have fully arrived, never under a finger.
+  const glass = useGlassRenewal();
+  const arrived = glass.settle;
 
   // A card comes up from just below the edge, its own height plus a little, solid from the first frame.
   const rise = (h: number) => {
@@ -191,21 +198,21 @@ function Layer({ layer, out, crown: crownFor, onGone, handoffs }: { layer: Stage
     return () => { handoffs.delete(layer.id); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // There when the map opened: nothing of its own fades in, but it came with the page, which slides in
-  // over the one before; its glass is put up again once the page has arrived, as on any other layer.
+  // The page has finished coming in since this layer came (CardStage): the glass put up again, on the layer there
+  // when the map opened (nothing of its own fades in, but it came with the page) and on any other still up. Not
+  // on one leaving, nor on one only now arriving: its own arrival, above, puts its glass up again.
+  const pageSeen = useRef(pageIn);
   useEffect(() => {
-    if (!layer.first) return undefined;
-    let ended = false;
-    const events = navigation as unknown as { addListener?: (name: string, fn: (e?: { data?: { closing?: boolean } }) => void) => () => void };
-    const stop = events.addListener?.('transitionEnd', (e) => { if (!e?.data?.closing) { ended = true; arrived(); } });
-    // In case the page never says it has arrived (opened without a slide).
-    const fallback = setTimeout(() => { if (!ended) arrived(); }, 700);
-    return () => { clearTimeout(fallback); stop?.(); };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    if (pageIn === pageSeen.current) return;
+    pageSeen.current = pageIn;
+    if (!out) arrived();
+  }, [pageIn]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Leaving: from wherever it is right now, never snapped back first; gone once it has finished.
   useEffect(() => {
     if (!out) return;
+    // Its glass is never put up again on the way out: it is fading.
+    glass.cancel();
     const gone = () => onGone(layer);
     // Swiped away: it is already moving, so it keeps going rather than easing off from rest.
     const flung = layer.kind === 'card' && sheetFling.value > 0;
@@ -244,9 +251,9 @@ function Layer({ layer, out, crown: crownFor, onGone, handoffs }: { layer: Stage
         onLayout={(e) => { const h = e.nativeEvent.layout.height; if (h > 0) rise(h); }}
       >
         {crown ? (
-          <Animated.View ref={crownBox} pointerEvents="box-none" style={crownLook} onLayout={(e) => { crownH.current = e.nativeEvent.layout.height; }}>
+          <Animated.View ref={crownBox} pointerEvents="box-none" style={crownLook} onLayout={(e) => { crownH.current = e.nativeEvent.layout.height; }} {...glass.hold}>
             <CrownLead.Provider value={lead}>
-              <CrownFade.Provider value={crownFade}><GlassRenew.Provider value={renew}>{crown}</GlassRenew.Provider></CrownFade.Provider>
+              <CrownFade.Provider value={crownFade}><GlassRenew.Provider value={glass.renew}>{crown}</GlassRenew.Provider></CrownFade.Provider>
             </CrownLead.Provider>
           </Animated.View>
         ) : null}

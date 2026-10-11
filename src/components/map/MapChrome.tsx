@@ -7,7 +7,7 @@ import Animated, { Easing, FadeIn, FadeOut, interpolateColor, runOnJS, useAnimat
 import { useReducedMotion } from '@/lib/useReducedMotion';
 
 import { Avatar, BrandWash } from '@/components/ui';
-import { Glass, GlassRenew } from '@/components/ui/Glass';
+import { Glass, GlassRenew, useGlassRenewal, useOnPageArrival } from '@/components/ui/Glass';
 import { FollowShrink } from '@/components/FollowPill';
 import { MenuSheet, type MenuSheetItem } from '@/components/MenuSheet';
 import { afterMenu } from '@/lib/confirm';
@@ -92,6 +92,11 @@ export const PIN_FIT_TOP = 120;
  * hairline, so no chip of their own sits under the filters. Typing (or the
  * bar just tapped) the weather steps aside for the words, and the bar says
  * what it finds; the three across are 44 points tall, a finger's width.
+ *
+ * Its glass is put up again each time the page has finished coming in, and
+ * the list under it once it has faded in: glass an iPhone puts up while
+ * anything round it is moving can come out a flat white plate (GlassRenew,
+ * Oct 11). The bar's waits while you type in it, or a finger is on it.
  */
 export function MapTopBar({ onBack, query, onQuery, locationOn, locating, onToggleLocation, results, onPickCourt, places, onPickPlace, players = 0, locationMenu = false, cityName = '', weather = null }: { onBack?: () => void; query: string; onQuery: (next: string) => void; locationOn?: boolean; locating?: boolean; onToggleLocation?: () => void; results?: CourtRow[]; onPickCourt?: (c: Court) => void; /** The place search as you type (usePlaceSearch). */ places?: PlaceSearch; onPickPlace?: (p: FoundPlace) => void; /** Players whose names match what is typed. */ players?: number; /** With Location on, the button opens who can see you (and Location off) rather than switching off. */ locationMenu?: boolean; /** The town the bar names ("Search Los Angeles"); none yet, the bar's own words. */ cityName?: string; /** What it's like to play there today, at the bar's end. */ weather?: Weather | null }) {
   const styles = useThemedStyles(styleDefinitions);
@@ -134,18 +139,29 @@ export function MapTopBar({ onBack, query, onQuery, locationOn, locating, onTogg
   const short = city || 'Search places';
   const hint = focused ? 'Players, courts or places' : fieldW && sayW > fieldW ? short : say;
   const locationIcon = locating ? <ActivityIndicator size="small" color={locationOn ? colors.brandInk : colors.text} /> : <Ionicons name={locationOn ? 'navigate' : 'navigate-outline'} size={18} color={locationOn ? colors.brandInk : colors.text} />;
+  // The list under the bar: courts, then places, or why there are none.
+  const listUp = !!(found.length || placeRows.length || placeNote || searching);
+  // Its glass and the bar's, put up again once all round them is still (GlassRenew): the bar's never while you type
+  // in it (that would put the cursor away), the list's (only the glass, never its rows) once it has faded in.
+  const barGlass = useGlassRenewal({ blocked: focused });
+  const listGlass = useGlassRenewal();
+  const listShown = useRef(listUp);
+  listShown.current = listUp;
+  useOnPageArrival(() => { barGlass.settle(); if (listShown.current) listGlass.settle(); });
+  const { settle: settleList, cancel: cancelList } = listGlass;
+  useEffect(() => { if (listUp) settleList(LIST_IN_MS + 60); else cancelList(); }, [listUp, settleList, cancelList]);
   return (
     // Above the filter chips under it, so the location tip hangs over them.
     <View style={{ gap: spacing.sm, zIndex: 5 }}>
-    <View style={styles.topRow}>
+    <View style={styles.topRow} {...barGlass.hold}>
       {onBack ? (
         <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={onBack} style={({ pressed }) => [styles.barRoundHit, pressed && styles.barPressed]}>
-          <Glass radius={22} style={styles.barRound}><Ionicons name="chevron-back" size={22} color={colors.text} /></Glass>
+          <Glass radius={22} renew={barGlass.renew} style={styles.barRound}><Ionicons name="chevron-back" size={22} color={colors.text} /></Glass>
         </Pressable>
       ) : null}
       {/* The whole bar is the search: a tap anywhere on it (its weather too) puts the cursor in. */}
       <Pressable accessible={false} focusable={false} onPress={() => input.current?.focus()} style={styles.searchLift}>
-        <Glass radius={22} style={[styles.search, focused && styles.searchOn]}>
+        <Glass radius={22} renew={barGlass.renew} style={[styles.search, focused && styles.searchOn]}>
           <Ionicons name="search" size={17} color={colors.textMuted} />
           <View style={styles.searchField} onLayout={(e) => setFieldW(Math.floor(e.nativeEvent.layout.width))}>
             {/* "Search <town>" (or "Search a place or park") laid out unseen at its own width, to know whether it fits. */}
@@ -194,16 +210,16 @@ export function MapTopBar({ onBack, query, onQuery, locationOn, locating, onTogg
             {locationOn ? (
               <View style={[styles.barRound, styles.barRoundOn]}><BrandWash radius={22} />{locationIcon}</View>
             ) : (
-              <Glass radius={22} style={styles.barRound}>{locationIcon}</Glass>
+              <Glass radius={22} renew={barGlass.renew} style={styles.barRound}>{locationIcon}</Glass>
             )}
           </Pressable>
           <HideTip where="map" style={{ top: 52, right: 0 }} />
         </View>
       ) : null}
     </View>
-    {found.length || placeRows.length || placeNote || searching ? (
-      <Animated.View entering={FadeIn.duration(140)} style={styles.resultsWrap}>
-        <Glass radius={18} style={styles.results}>
+    {listUp ? (
+      <Animated.View entering={FadeIn.duration(LIST_IN_MS)} style={styles.resultsWrap}>
+        <Glass behind renew={listGlass.renew} radius={18} style={styles.results}>
           {found.map(({ c, miles }, i) => {
             const meta = [formatMiles(miles), c.count > 1 ? `${c.count} courts` : null, c.lit ? 'lights' : null].filter(Boolean).join(' · ');
             return (
@@ -239,6 +255,9 @@ export function MapTopBar({ onBack, query, onQuery, locationOn, locating, onTogg
     </View>
   );
 }
+
+/** The search's list fading in under the bar. */
+const LIST_IN_MS = 140;
 
 // A chip's touch reaches 6 above and below it, inside the row's own room (a scroll view takes no touch outside itself).
 const CHIP_REACH = { top: 6, bottom: 6 };

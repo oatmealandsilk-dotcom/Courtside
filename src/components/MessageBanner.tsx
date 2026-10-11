@@ -9,7 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FullWindowOverlay } from 'react-native-screens';
 
 import { Avatar } from '@/components/ui/Avatar';
-import { Glass } from '@/components/ui/Glass';
+import { Glass, useGlassRenewal } from '@/components/ui/Glass';
 import { GroupAvatar, groupName, isGroupChat, isMutedFor, messageSummary, named, nameList, othersIn } from '@/features/messages/groups';
 import { bannerReducer, emptyQueue, keepNews, newsCount, type ChatNews, type Keep, type News } from '@/features/messages/bannerQueue';
 import { setBannerReach } from '@/features/messages/bannerSpace';
@@ -214,6 +214,9 @@ export function MessageBanner({ enabled }: { enabled: boolean }) {
   const shownAt = useRef(0);
   /** A flick has already sent it on its way, from the gesture itself. */
   const flung = useRef(false);
+  // Its glass, put up again once it has faded fully in: on an iPhone, glass put up while fading in can stay a flat
+  // white plate (GlassRenew, Oct 11). Only the glass, behind the face and words. Never on the way out.
+  const { renew, settle: settleGlass, cancel: cancelGlass } = useGlassRenewal();
 
   const view = visible ? describe(visible) : null;
 
@@ -234,12 +237,12 @@ export function MessageBanner({ enabled }: { enabled: boolean }) {
       if (reduced) {
         y.value = 0;
         shown.value = 0;
-        shown.value = withTiming(1, { duration: 200, reduceMotion: NEVER });
+        shown.value = withTiming(1, { duration: 200, reduceMotion: NEVER }, (done) => { if (done) runOnJS(settleGlass)(); });
       } else {
         y.value = away;
         shown.value = 0;
         y.value = withSpring(0, SPRING);
-        shown.value = withTiming(1, { duration: 180, easing: Easing.out(Easing.quad), reduceMotion: NEVER });
+        shown.value = withTiming(1, { duration: 180, easing: Easing.out(Easing.quad), reduceMotion: NEVER }, (done) => { if (done) runOnJS(settleGlass)(); });
       }
       haptics.arrive();
     }
@@ -256,6 +259,7 @@ export function MessageBanner({ enabled }: { enabled: boolean }) {
   // On its way out: up and away (or a fade), then the next in line.
   useEffect(() => {
     if (!q.leaving) return;
+    cancelGlass();
     stopTimer();
     leftWhenHeld.current = 0;
     // A finger or pointer still counted as resting here would stop the next banner's clock for good.
@@ -372,7 +376,7 @@ export function MessageBanner({ enabled }: { enabled: boolean }) {
         style={[isPhone ? styles.cardPhone : styles.cardWide, style]}
       >
         <View style={styles.shadow}>
-          <Glass radius={22} tint={colors.surface} style={styles.card}>
+          <Glass behind renew={renew} radius={22} tint={colors.surface} style={styles.card}>
             <View style={styles.row}>
               <Pressable
                 accessibilityRole="button"

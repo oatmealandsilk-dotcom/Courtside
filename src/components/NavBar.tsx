@@ -7,7 +7,7 @@ import { Animated as RNAnimated } from 'react-native';
 import { BAR_TUCK, barCompact, DUCK } from '@/features/navigation/barShrink';
 import { useCurtainDown, useCurtainReady } from '@/features/feed/warmup';
 import { isStartTab } from '@/features/navigation/startTab';
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Easing, useSharedValue, withTiming } from 'react-native-reanimated';
 import { router, usePathname } from 'expo-router';
 import { closeCreateMenu } from '@/features/compose/createMenu';
@@ -16,7 +16,7 @@ import { BrandWash } from '@/components/ui/BrandWash';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { LAYOUT, useResponsive } from '@/lib/useResponsive';
-import { Glass } from '@/components/ui/Glass';
+import { Glass, useGlassRenewal } from '@/components/ui/Glass';
 import { TAB_BAR_H } from '@/features/navigation/barInset';
 import { useApp } from '@/store/AppContext';
 import { useWelcomeNote } from '@/features/welcome/welcomeNote';
@@ -50,6 +50,8 @@ const BAR_WAIT_MS = 7000;
 export interface NavBarProps {
   state: { index: number; routes: { key: string; name: string }[] };
   navigation: { navigate: (name: string) => void };
+  /** Faded with a clip's comments (AppShell's stage): its glass is put up again once it is back at full strength. */
+  faded?: boolean;
 }
 
 interface NavItem {
@@ -73,7 +75,7 @@ const ITEMS: NavItem[] = [
   { route: 'profile', label: 'Profile', icon: 'person-outline', activeIcon: 'person' },
 ];
 
-export function NavBar({ state, navigation }: NavBarProps) {
+export function NavBar({ state, navigation, faded = false }: NavBarProps) {
   const styles = useThemedStyles(styleDefinitions);
   const { isPhone, isCompactSidebar } = useResponsive();
   const { conversations, notifications, detectedActivities, currentUserId, currentUser, blockedIds } = useApp();
@@ -130,15 +132,26 @@ export function NavBar({ state, navigation }: NavBarProps) {
   const behindCurtain = !barUp && !warm && !curtainDown && isStartTab(pathname);
   if (behindCurtain && !waitUntil) waitUntil = Date.now() + BAR_WAIT_MS;
   const entrance = useSharedValue(behindCurtain ? 1 : 0);
+  // Fully in place: risen, the curtain gone, and not faded with a clip's comments.
+  const [risen, setRisen] = useState(false);
   useEffect(() => {
     const rise = () => {
       barUp = true;
-      entrance.value = withTiming(0, { duration: 480, easing: Easing.out(Easing.cubic) });
+      entrance.value = withTiming(0, { duration: 480, easing: Easing.out(Easing.cubic) }, (done) => { if (done) runOnJS(setRisen)(true); });
     };
     if (!behindCurtain) { rise(); return; }
     const t = setTimeout(rise, Math.max(0, waitUntil - Date.now()));
     return () => clearTimeout(t);
   }, [behindCurtain, entrance]);
+  // The bar's glass, put up again each time the bar has come fully into place: after it rises on opening (the
+  // curtain gone too), each time it comes back (from a page that hides it, the map or a chat), and once a clip's
+  // comments have given it back. Never while a finger is on it. On an iPhone, glass put up while anything round
+  // it is still moving can stay a flat white plate (GlassRenew; Oct 11, owner: "The island in the bottom
+  // sometimes it's clear sometimes it's not"); put up again once all is still, it is clear glass every time.
+  const glass = useGlassRenewal();
+  const steady = risen && curtainDown && !faded;
+  const { settle: settleGlass, cancel: cancelGlass } = glass;
+  useEffect(() => { if (steady) settleGlass(); else cancelGlass(); }, [steady, settleGlass, cancelGlass]);
   // Ducking tucks the pill a little toward the edge and lets the labels go,
   // leaving the icons centred: the page beneath never moves, because the bar
   // floats over it. Nothing is scaled. A scaled icon on iPhone is a resampled
@@ -158,8 +171,8 @@ export function NavBar({ state, navigation }: NavBarProps) {
       <Animated.View pointerEvents="box-none" importantForAccessibility={hideFromReader} style={[styles.float, { bottom: Math.max(insets.bottom, 12) }, duck]}>
         <Animated.View style={[styles.pillWrap, tuck]}>
           {/* The shadow lives on a rounded layer of its own: on the square wrapper its corners showed past the pill's ends. */}
-          <View style={styles.pillShadow}>
-          <Glass clear style={styles.pill} radius={TAB_BAR_H / 2} tint={colors.bg}>
+          <View style={styles.pillShadow} {...glass.hold}>
+          <Glass clear renew={glass.renew} style={styles.pill} radius={TAB_BAR_H / 2} tint={colors.bg}>
             {ITEMS.map((item, index) => {
               const active = item.route === activeRoute;
               return (
