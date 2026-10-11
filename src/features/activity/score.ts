@@ -174,18 +174,20 @@ export function setsWinner(sets: MatchSet[] | undefined): boolean | undefined {
 export const flipSets = (sets: MatchSet[]): MatchSet[] => sets.map(([a, b, points]) => setOf(b, a, points));
 
 /**
- * Whether the set at `i` is plainly a match tiebreak played instead of a
- * deciding set, to show in brackets: the last set, after the sets before it
- * ended level (1-1 or 2-2), first to 10, and by a margin no ordinary set
- * ends on (a long final set ends two games apart, 12-10, so "10-8" stays as
- * it is). Read from the games alone: nothing more is saved for it.
+ * Whether the set at `i` is a match tiebreak played instead of a deciding
+ * set, to show in brackets: the last set, after the sets before it ended
+ * level (1-1 or 2-2), with 10 or more on one side. Every 10-point match
+ * tiebreak qualifies, however it ended (10-7, 10-8, 12-10). A deciding set
+ * that long (a 10-8 final set) is far rarer in club tennis than a match
+ * tiebreak, so it shows in brackets too, and readScore reads "(10-8)" back
+ * as the same set. Read from the games alone: nothing more is saved for it,
+ * so a 7-point match tiebreak (7-5) stays plain, the way a 7-5 final set is.
  */
 const matchTiebreakAt = (sets: MatchSet[], i: number): boolean => {
   const [a, b, points] = sets[i];
   if (i !== sets.length - 1 || i < 2 || points !== undefined) return false;
   if (sets.slice(0, i).filter(([x, y]) => x > y).length * 2 !== i) return false;
-  const high = Math.max(a, b);
-  return high >= 10 && Math.min(a, b) !== high - 2;
+  return Math.max(a, b) >= 10;
 };
 
 /**
