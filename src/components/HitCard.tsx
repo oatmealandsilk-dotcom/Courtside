@@ -11,6 +11,7 @@ import { audienceLine, isHitOpen, joinedCount } from '@/features/hits/audience';
 import { FORMAT_LABEL, hitWhen, levelText } from '@/features/hits/format';
 import type { HitTip } from '@/features/hits/hitTips';
 import { learned, tipWaiting, useTip } from '@/features/tips/tips';
+import { useShownAt } from '@/features/navigation/shownAt';
 import { useOnScreen } from '@/lib/useOnScreen';
 import { openCourt } from '@/features/players/courtLink';
 import { formatMiles } from '@/features/players/geo';
@@ -65,8 +66,10 @@ import { colors, font, lift, radius, spacing, typography } from '@/theme';
  * someone else's hit, "Tap I'm in to join" pointing at I'm in; on the hit
  * you just posted, "We'll tell you when someone's in" pointing at who's in.
  * `tipReady` is the list's own moment (its page on show, no tutorial up).
+ * `tipAt`: the page's address, for a list that leaves "its page on show" to
+ * the tip (see useShownAt), so the page opening others is not redrawn.
  */
-export function HitCard({ hit, miles, linked = true, tip, tipReady = false }: { hit: HitRequest; miles?: number; linked?: boolean; tip?: HitTip; tipReady?: boolean }) {
+export function HitCard({ hit, miles, linked = true, tip, tipReady = false, tipAt }: { hit: HitRequest; miles?: number; linked?: boolean; tip?: HitTip; tipReady?: boolean; tipAt?: string }) {
   const styles = useThemedStyles(styleDefinitions);
   const { users, currentUserId, actions } = useApp();
   const [busy, setBusy] = useState(false);
@@ -196,7 +199,7 @@ export function HitCard({ hit, miles, linked = true, tip, tipReady = false }: { 
       ) : null}
       {/* The list's tip, if this card carries it: in the card's flow just above the foot,
           pointing down at I'm in (someone else's hit) or at who's in (the hit you just posted). */}
-      {tip && (tip === 'hit-posted' ? mine && total === 0 : !mine && !inIt && !full) ? <CardTip tip={tip} ready={tipReady} cardRef={cardRef} /> : null}
+      {tip && (tip === 'hit-posted' ? mine && total === 0 : !mine && !inIt && !full) ? <CardTip tip={tip} ready={tipReady} at={tipAt} cardRef={cardRef} /> : null}
       {/* Who's in, as their faces overlapping and in words; then the one thing to do. Every
           button here is the same height, border and label weight, so none reads heavier by accident.
           Your own hit with people in it has two things to do (Chat, Call off): who's in takes the
@@ -258,7 +261,8 @@ export function HitCard({ hit, miles, linked = true, tip, tipReady = false }: { 
  * tip unseen. Drawn only on the card that carries it: a tip's hook lets go of
  * the tip when it unmounts, so every card asking would let it go too.
  */
-function CardTip({ tip, ready, cardRef }: { tip: HitTip; ready: boolean; cardRef: RefObject<View | null> }) {
+function CardTip({ tip, ready: asked, at, cardRef }: { tip: HitTip; ready: boolean; at?: string; cardRef: RefObject<View | null> }) {
+  const ready = useShownAt(at) && asked;
   const seen = useOnScreen(cardRef, ready && tipWaiting(tip));
   // "We'll tell you when someone's in" answers the post just made, so it may follow another tip this visit.
   const shown = useTip(tip, ready && seen, tip === 'hit-posted');

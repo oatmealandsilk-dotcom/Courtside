@@ -1,7 +1,9 @@
 import type { HitRequest } from '@/data/types';
+import { CLOCK_TIME, SHORT_DATE, SHORT_WEEKDAY, inWords } from '@/lib/format';
 
 const DAY = 86_400_000;
-const time = (d: Date) => d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+// From kept formatters (see inWords): every hit card says when, each time its list is drawn.
+const time = (d: Date) => inWords(d, CLOCK_TIME);
 
 /** "Today 6:30 PM", "Tomorrow 9:00 AM", "Sat 9:00 AM", or a date further out. */
 export function hitWhen(startsAt: string, now = new Date()): string {
@@ -10,8 +12,8 @@ export function hitWhen(startsAt: string, now = new Date()): string {
   const days = Math.floor((d.getTime() - start.getTime()) / DAY);
   if (days === 0) return `Today ${time(d)}`;
   if (days === 1) return `Tomorrow ${time(d)}`;
-  if (days > 1 && days < 7) return `${d.toLocaleDateString([], { weekday: 'short' })} ${time(d)}`;
-  return `${d.toLocaleDateString([], { month: 'short', day: 'numeric' })} ${time(d)}`;
+  if (days > 1 && days < 7) return `${inWords(d, SHORT_WEEKDAY)} ${time(d)}`;
+  return `${inWords(d, SHORT_DATE)} ${time(d)}`;
 }
 
 export const FORMAT_LABEL: Record<HitRequest['format'], string> = { singles: 'Singles', doubles: 'Doubles', hit: 'Just hitting' };
@@ -42,6 +44,6 @@ export function hitShort(startsAt: string, now = new Date()): string {
   const days = Math.floor((d.getTime() - start.getTime()) / DAY);
   if (days === 0) return `Today ${shortTime(d)}`;
   if (days === 1) return `Tomorrow ${shortTime(d)}`;
-  if (days > 1 && days < 7) return `${d.toLocaleDateString([], { weekday: 'short' })} ${shortTime(d)}`;
-  return `${d.toLocaleDateString([], { month: 'short', day: 'numeric' })} ${shortTime(d)}`;
+  if (days > 1 && days < 7) return `${inWords(d, SHORT_WEEKDAY)} ${shortTime(d)}`;
+  return `${inWords(d, SHORT_DATE)} ${shortTime(d)}`;
 }

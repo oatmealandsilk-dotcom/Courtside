@@ -55,6 +55,11 @@ const SHEETS = new Set(['/compose', '/share', '/pick-group', '/find-groups', '/g
 const TAB_ORDER: string[] = Object.values(paths);
 /** How often an open app looks for new workouts and new Notifications rows: just over the two minutes the Apple Health look waits between looks. */
 const LIVE_LOOK_MS = 125_000;
+// The toast and the posting strip take nothing from the frame, so they are drawn again only when
+// their own news changes, not each time any page opens or anything in the app changes (Oct 10,
+// owner: "the buttons like the settings. msg notifications, etc respond too slow").
+const ToastLayer = React.memo(Toast);
+const UploadLayer = React.memo(UploadBar);
 /** The pages that can take a clip's stage (see commentStage): its comments, and its session stats. */
 const STAGE_ROUTES = new Set(['/comments', '/session-stats']);
 // An emailed link that has expired or was used already (or a Google sign-in that failed) comes
@@ -349,7 +354,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return <View style={{ flex: 1, minHeight: 0, backgroundColor: colors.bg, flexDirection: isPhone ? 'column' : 'row' }}>
     {showNav && !isPhone && nav}
     {/* While the tour is up, TalkBack reads only the tour, not the page under the dim. */}
-    <Reanimated.View importantForAccessibility={tourOpen ? 'no-hide-descendants' : 'auto'} style={[{ flex: 1, minWidth: 0, minHeight: 0 }, settle]}><RouteTransition>{children}</RouteTransition>{liveBarOn && !isPhone ? <LiveBar phone={false} /> : null}<Toast /><UploadBar /></Reanimated.View>
+    <Reanimated.View importantForAccessibility={tourOpen ? 'no-hide-descendants' : 'auto'} style={[{ flex: 1, minWidth: 0, minHeight: 0 }, settle]}><RouteTransition>{children}</RouteTransition>{liveBarOn && !isPhone ? <LiveBar phone={false} /> : null}<ToastLayer /><UploadLayer /></Reanimated.View>
     {showNav && isPhone ? (
       <Reanimated.View ref={((node: unknown) => { navLayer.current = node as HTMLElement | null; navFade.ref?.(node); }) as never} pointerEvents={barOnStage ? 'none' : 'box-none'} style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }, barOnStage && { overflow: 'hidden' }, navFade.style]}>
         <Reanimated.View ref={navHold.ref as never} pointerEvents="box-none" style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }, navHold.style]}>{nav}</Reanimated.View>

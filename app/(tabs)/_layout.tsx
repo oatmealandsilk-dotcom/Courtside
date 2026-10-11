@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View } from 'react-native';
 import { Redirect, Tabs, usePathname } from 'expo-router';
 
@@ -16,21 +16,28 @@ export default function TabsLayout() {
   useTheme();
   const pathname = usePathname();
   const { ready, currentUserId } = useApp();
+  // Both built once (the row only when the address changes): this layout hears every change in the
+  // app, for the two values above, and each one redrew the row and the hidden navigator with it
+  // (Oct 10, owner: "the buttons like the settings. msg notifications, etc respond too slow").
+  const hidden = useMemo(() => (
+    <View style={{ width: 0, height: 0, overflow: 'hidden' }} pointerEvents="none">
+      {/* In the strip's order, Community first. '/(tabs)' still means Home: an
+          address picks its screen by name, never by this order. What the order
+          does set is the "first tab" that Android's Back returns to. */}
+      <Tabs tabBar={() => null} screenOptions={{ headerShown: false, animation: 'none' }}>
+        <Tabs.Screen name="discuss" options={{ title: 'Community' }} />
+        <Tabs.Screen name="index" options={{ title: 'Feed' }} />
+        <Tabs.Screen name="coaches" options={{ title: 'Coaching' }} />
+        <Tabs.Screen name="profile" options={{ title: 'Profile' }} />
+      </Tabs>
+    </View>
+  ), []);
+  const row = useMemo(() => <TabsPager pathname={pathname} />, [pathname]);
   if (ready && !currentUserId) return <Redirect href="/sign-in" />;
   return (
     <View style={{ flex: 1 }}>
-      <TabsPager pathname={pathname} />
-      <View style={{ width: 0, height: 0, overflow: 'hidden' }} pointerEvents="none">
-        {/* In the strip's order, Community first. '/(tabs)' still means Home: an
-            address picks its screen by name, never by this order. What the order
-            does set is the "first tab" that Android's Back returns to. */}
-        <Tabs tabBar={() => null} screenOptions={{ headerShown: false, animation: 'none' }}>
-          <Tabs.Screen name="discuss" options={{ title: 'Community' }} />
-          <Tabs.Screen name="index" options={{ title: 'Feed' }} />
-          <Tabs.Screen name="coaches" options={{ title: 'Coaching' }} />
-          <Tabs.Screen name="profile" options={{ title: 'Profile' }} />
-        </Tabs>
-      </View>
+      {row}
+      {hidden}
     </View>
   );
 }

@@ -62,8 +62,6 @@ export default function RootLayout() {
   useInstantUpdates();
   // Inter ships in the bundle, so on a phone this resolves before the splash
   // has gone; in a browser it is one small fetch, kept after that.
-  const desktop = isDesktopBrowser();
-  const instantExit = useInstantExit();
   const [fontsReady] = useFonts({ Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, Inter_800ExtraBold, ...Ionicons.font });
   // While the fonts load, the launch picture's cream (not the theme's colour), so nothing changes colour under the logo.
   if (!fontsReady) return <View style={{ flex: 1, backgroundColor: lightColors.bg }} />;
@@ -74,87 +72,103 @@ export default function RootLayout() {
       <ThemeProvider><SafeAreaProvider>
       <AppProvider>
         <ThemedStatusBar/>
-        <AppShell><Stack
-          screenOptions={{
-            headerShown: false,
-            contentStyle: { backgroundColor: colors.bg },
-            // A tab tapped from a page that belongs to another tab: the page just goes (see instantExit).
-            animation: instantExit ? 'none' : 'slide_from_right',
-          }}
-        >
-          {/* Splash and sign-in fade; the app opens behind a curtain that is
-              the splash again, so it cuts straight in — a fade between two
-              identical screens only ever reads as a flicker. Pages opened
-              from inside the app slide. */}
-          <Stack.Screen name="index" options={{ animation: 'fade' }} />
-          <Stack.Screen name="(auth)" options={{ animation: 'fade' }} />
-          <Stack.Screen name="(tabs)" options={{ animation: 'none' }} />
-          {/* Edit Profile always slides away to the right, however you leave it (Oct 5, owner: it sometimes just vanished
-              when a tab was tapped, and slid when Back or Save was used). */}
-          <Stack.Screen name="edit-profile" options={{ animation: 'slide_from_right' }} />
-          {/* The Create box brings its own entrance (see compose.tsx); the page itself just fades. */}
-          <Stack.Screen name="compose" options={{ presentation: 'transparentModal', animation: 'fade', contentStyle: { backgroundColor: 'transparent' } }} />
-          <Stack.Screen name="ask" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
-          <Stack.Screen name="comments" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
-          {/* A session's stats: the comments' stage from a clip's pill, the plain sheet from a post (session-stats.tsx). */}
-          <Stack.Screen name="session-stats" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
-          {/* "Who you played", from the composer of a session's post: a sheet over it. */}
-          <Stack.Screen name="who-played" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
-          {/* "Share health data" → Choose, from the composer of a session's post: a sheet over it. */}
-          <Stack.Screen name="health-share" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
-          <Stack.Screen name="post-menu" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
-          <Stack.Screen name="invite" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
-          <Stack.Screen name="log-session" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
-          <Stack.Screen name="session-tag" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
-          <Stack.Screen name="court-report" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
-          <Stack.Screen name="court-now" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
-          {/* Start a session (where and what, then Start) and the live session's own page, its clock big: sheets over the page they came from (DragSheet). */}
-          <Stack.Screen name="start-session" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
-          <Stack.Screen name="live-session" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
-          {/* Flyby's list, "At Alder Park today" (migration 130): a sheet over the page it came from (DragSheet). */}
-          <Stack.Screen name="flyby" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
-          <Stack.Screen name="map-visibility" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
-          {/* Holding your own ring in Community's Open to hit row: until when, and how far (DragSheet). */}
-          <Stack.Screen name="open-to-hit" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
-          {/* The Tennis profile's small sheets: an injury or limit, a goal, every achievement (DragSheet). */}
-          <Stack.Screen name="tennis-sheet" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
-          {/* "Ask for a review" on something of yours taken down: a small sheet over it (DragSheet). */}
-          <Stack.Screen name="review-request" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
-          <Stack.Screen name="hit-request/new" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
-          <Stack.Screen name="edit-post" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
-          <Stack.Screen
-            name="share"
-            options={{
-              presentation: 'transparentModal',
-              animation: 'slide_from_bottom',
-              contentStyle: { backgroundColor: 'transparent' },
-            }}
-          />
-          {/* "Add to a group" from a profile or the map: a sheet that brings its own rise (DragSheet). */}
-          <Stack.Screen name="pick-group" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
-          {/* The Feed's "+": find a group to join, or start one; a sheet over the feed (DragSheet). */}
-          <Stack.Screen name="find-groups" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
-          {/* "Start a group" (three steps) and a group's "Edit": a tall sheet over the feed, the Groups list or the group's page (DragSheet). */}
-          <Stack.Screen name="group-form" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
-          {/* "Invite" on a group's page or its empty feed: the link and people you follow, a sheet (DragSheet). */}
-          <Stack.Screen name="group-invite" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
-          {/* "Send a court" from a chat: a sheet over the chat, so the chat (and its message bar) never moves under it. */}
-          <Stack.Screen name="pick-court" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
-          {/* "Add session stats" from a new Post or Clip: a sheet over the post, with its own rise (DragSheet). */}
-          <Stack.Screen name="pick-session" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
-          {/* The question page grows out of the Coaching tab's box itself (see ask-coach), so no stock animation. */}
-          <Stack.Screen name="ask-coach" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
-          {/* On a computer, New message is a box over the inbox (Instagram's way); on a phone it is a page. */}
-          {desktop ? <Stack.Screen name="messages/new" options={{ presentation: 'transparentModal', animation: 'fade', contentStyle: { backgroundColor: 'transparent' } }} /> : null}
-          <Stack.Screen name="pick-location" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
-          <Stack.Screen name="story/[id]" options={{ presentation: 'fullScreenModal', animation: 'fade' }} />
-          <Stack.Screen name="hit" options={{ presentation: 'fullScreenModal', animation: 'fade', contentStyle: { backgroundColor: '#000' } }} />
-        </Stack></AppShell>
+        <AppShell><RootStack /></AppShell>
         <SignOutCurtainHost />
         {/* "Delete post?" and the like: the app's own card, last so it sits above every sheet, menu and the tab bar. */}
         <ConfirmHost />
       </AppProvider>
     </SafeAreaProvider></ThemeProvider></GestureHandlerRootView>
+  );
+}
+
+/**
+ * The app's stack of pages, in a part of its own: whether a page leaving
+ * slides (instantExit) changes twice on a tab tapped from another tab's page,
+ * and asked for in RootLayout it redrew the whole app with it, the app's
+ * state and the frame included, both times (Oct 10, owner: "the buttons like
+ * the settings. msg notifications, etc respond too slow"). Now only the stack
+ * is drawn again.
+ */
+function RootStack() {
+  const desktop = isDesktopBrowser();
+  const instantExit = useInstantExit();
+  return (
+    <Stack
+      screenOptions={{
+        headerShown: false,
+        contentStyle: { backgroundColor: colors.bg },
+        // A tab tapped from a page that belongs to another tab: the page just goes (see instantExit).
+        animation: instantExit ? 'none' : 'slide_from_right',
+      }}
+    >
+      {/* Splash and sign-in fade; the app opens behind a curtain that is
+          the splash again, so it cuts straight in — a fade between two
+          identical screens only ever reads as a flicker. Pages opened
+          from inside the app slide. */}
+      <Stack.Screen name="index" options={{ animation: 'fade' }} />
+      <Stack.Screen name="(auth)" options={{ animation: 'fade' }} />
+      <Stack.Screen name="(tabs)" options={{ animation: 'none' }} />
+      {/* Edit Profile always slides away to the right, however you leave it (Oct 5, owner: it sometimes just vanished
+          when a tab was tapped, and slid when Back or Save was used). */}
+      <Stack.Screen name="edit-profile" options={{ animation: 'slide_from_right' }} />
+      {/* The Create box brings its own entrance (see compose.tsx); the page itself just fades. */}
+      <Stack.Screen name="compose" options={{ presentation: 'transparentModal', animation: 'fade', contentStyle: { backgroundColor: 'transparent' } }} />
+      <Stack.Screen name="ask" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
+      <Stack.Screen name="comments" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
+      {/* A session's stats: the comments' stage from a clip's pill, the plain sheet from a post (session-stats.tsx). */}
+      <Stack.Screen name="session-stats" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
+      {/* "Who you played", from the composer of a session's post: a sheet over it. */}
+      <Stack.Screen name="who-played" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
+      {/* "Share health data" → Choose, from the composer of a session's post: a sheet over it. */}
+      <Stack.Screen name="health-share" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
+      <Stack.Screen name="post-menu" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
+      <Stack.Screen name="invite" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
+      <Stack.Screen name="log-session" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
+      <Stack.Screen name="session-tag" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
+      <Stack.Screen name="court-report" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
+      <Stack.Screen name="court-now" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
+      {/* Start a session (where and what, then Start) and the live session's own page, its clock big: sheets over the page they came from (DragSheet). */}
+      <Stack.Screen name="start-session" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
+      <Stack.Screen name="live-session" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
+      {/* Flyby's list, "At Alder Park today" (migration 130): a sheet over the page it came from (DragSheet). */}
+      <Stack.Screen name="flyby" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
+      <Stack.Screen name="map-visibility" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
+      {/* Holding your own ring in Community's Open to hit row: until when, and how far (DragSheet). */}
+      <Stack.Screen name="open-to-hit" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
+      {/* The Tennis profile's small sheets: an injury or limit, a goal, every achievement (DragSheet). */}
+      <Stack.Screen name="tennis-sheet" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
+      {/* "Ask for a review" on something of yours taken down: a small sheet over it (DragSheet). */}
+      <Stack.Screen name="review-request" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
+      <Stack.Screen name="hit-request/new" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
+      <Stack.Screen name="edit-post" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
+      <Stack.Screen
+        name="share"
+        options={{
+          presentation: 'transparentModal',
+          animation: 'slide_from_bottom',
+          contentStyle: { backgroundColor: 'transparent' },
+        }}
+      />
+      {/* "Add to a group" from a profile or the map: a sheet that brings its own rise (DragSheet). */}
+      <Stack.Screen name="pick-group" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
+      {/* The Feed's "+": find a group to join, or start one; a sheet over the feed (DragSheet). */}
+      <Stack.Screen name="find-groups" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
+      {/* "Start a group" (three steps) and a group's "Edit": a tall sheet over the feed, the Groups list or the group's page (DragSheet). */}
+      <Stack.Screen name="group-form" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
+      {/* "Invite" on a group's page or its empty feed: the link and people you follow, a sheet (DragSheet). */}
+      <Stack.Screen name="group-invite" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
+      {/* "Send a court" from a chat: a sheet over the chat, so the chat (and its message bar) never moves under it. */}
+      <Stack.Screen name="pick-court" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
+      {/* "Add session stats" from a new Post or Clip: a sheet over the post, with its own rise (DragSheet). */}
+      <Stack.Screen name="pick-session" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
+      {/* The question page grows out of the Coaching tab's box itself (see ask-coach), so no stock animation. */}
+      <Stack.Screen name="ask-coach" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
+      {/* On a computer, New message is a box over the inbox (Instagram's way); on a phone it is a page. */}
+      {desktop ? <Stack.Screen name="messages/new" options={{ presentation: 'transparentModal', animation: 'fade', contentStyle: { backgroundColor: 'transparent' } }} /> : null}
+      <Stack.Screen name="pick-location" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+      <Stack.Screen name="story/[id]" options={{ presentation: 'fullScreenModal', animation: 'fade' }} />
+      <Stack.Screen name="hit" options={{ presentation: 'fullScreenModal', animation: 'fade', contentStyle: { backgroundColor: '#000' } }} />
+    </Stack>
   );
 }
 

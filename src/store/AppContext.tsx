@@ -1544,6 +1544,23 @@ function chatLockNoteFor(users: User[], userId: ID): string {
   return chatLockNote(them ? named(them, users) : undefined);
 }
 
+/**
+ * The same rows, in the same order, saying the same things. A list fetched
+ * again (on every return to the app, and on live updates) that brought
+ * nothing new keeps the list already held, so nothing redraws for it: each
+ * new list redrew every screen that is open, a tap made meanwhile waiting
+ * behind it (Oct 10, owner: "the buttons like the settings. msg
+ * notifications, etc respond too slow").
+ */
+function sameRows<T>(held: readonly T[], fetched: readonly T[]): boolean {
+  if (held === fetched) return true;
+  if (held.length !== fetched.length) return false;
+  for (let i = 0; i < held.length; i += 1) {
+    if (held[i] !== fetched[i] && JSON.stringify(held[i]) !== JSON.stringify(fetched[i])) return false;
+  }
+  return true;
+}
+
 const AppContext = createContext<AppContextValue | null>(null);
 const NO_USERS: User[] = [];
 /**
@@ -2469,13 +2486,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
           });
           return;
         }
-        setState((prev) => ({
-          ...prev,
+        setState((prev) => {
+          let changed = false;
           // Event lines are never "read by" anyone.
-          messages: prev.messages.map((m) => (m.conversationId === conversationId && m.kind !== 'system' && m.senderId !== userId && Date.parse(m.createdAt) <= upTo && !m.readAtBy?.[userId]
-            ? { ...m, readAtBy: { ...(m.readAtBy ?? {}), [userId]: readAt }, openedAtBy: { ...(m.openedAtBy ?? {}), [userId]: readAt } }
-            : m)),
-        }));
+          const messages = prev.messages.map((m) => {
+            if (!(m.conversationId === conversationId && m.kind !== 'system' && m.senderId !== userId && Date.parse(m.createdAt) <= upTo && !m.readAtBy?.[userId])) return m;
+            changed = true;
+            return { ...m, readAtBy: { ...(m.readAtBy ?? {}), [userId]: readAt }, openedAtBy: { ...(m.openedAtBy ?? {}), [userId]: readAt } };
+          });
+          // Nothing they had not read already: nothing to redraw (see sameRows).
+          return changed ? { ...prev, messages } : prev;
+        });
       });
     } catch { /* live updates are a nicety */ }
     return () => { disposed = true; if (retry) clearTimeout(retry); off?.(); offReads?.(); };
@@ -2492,7 +2513,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const refetch = () => {
       if (timer) clearTimeout(timer);
       timer = setTimeout(() => {
-        void remote.fetchHits(currentUserForLive).then((hits) => { if (on && hits) setState((prev) => ({ ...prev, hitRequests: hits })); }).catch(() => undefined);
+        void remote.fetchHits(currentUserForLive).then((hits) => { if (on && hits) setState((prev) => (sameRows(prev.hitRequests, hits) ? prev : { ...prev, hitRequests: hits })); }).catch(() => undefined);
       }, 400);
     };
     let off: (() => void) | undefined;
@@ -2531,7 +2552,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (timer) clearTimeout(timer);
       timer = setTimeout(() => {
         void remote.mySessionTags().then((got) => {
-          if (on && got) setState((prev) => (prev.currentUserId === currentUserForLive ? { ...prev, sessionTags: got, posts: reconcileWith(prev.posts, currentUserForLive, prev.sessions, got, prev.users) } : prev));
+          if (on && got) setState((prev) => {
+            if (prev.currentUserId !== currentUserForLive) return prev;
+            const posts = reconcileWith(prev.posts, currentUserForLive, prev.sessions, got, prev.users);
+            // The same tags, every post already in line with them: nothing to redraw (see sameRows).
+            return posts === prev.posts && sameRows(prev.sessionTags, got) ? prev : { ...prev, sessionTags: got, posts };
+          });
         }).catch(() => undefined);
       }, 400);
     };
@@ -3878,7 +3904,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const got = await remote.mySessionTags().catch(() => null);
     if (!got || stateRef.current.currentUserId !== me) return false;
     // A tag answered or taken off elsewhere changes the names on posts here too.
-    setState((prev) => ({ ...prev, sessionTags: got, posts: reconcileWith(prev.posts, me!, prev.sessions, got, prev.users) }));
+    setState((prev) => {
+      const posts = reconcileWith(prev.posts, me!, prev.sessions, got, prev.users);
+      // The same tags, every post already in line with them: nothing to redraw (see sameRows).
+      return posts === prev.posts && sameRows(prev.sessionTags, got) ? prev : { ...prev, sessionTags: got, posts };
+    });
     return true;
   }, []);
 
@@ -5435,11 +5465,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const me = stateRef.current.currentUserId;
     const unread = stateRef.current.notifications.filter((n) => !n.read && n.userId === me && UUID.test(n.id)).map((n) => n.id);
     if (me && live(me) && unread.length) void remote.markNotificationsRead(unread);
-    setState((prev) =>
+    // Background work, as for a chat opened (markConversationRead): Notifications asks for this just
+    // after it opens, and the badge clearing a frame later is not worth holding a tap up for (Oct 10,
+    // owner: "the buttons like the settings. msg notifications, etc respond too slow").
+    startTransition(() => setState((prev) =>
       prev.notifications.some((n) => !n.read)
         ? { ...prev, notifications: prev.notifications.map((n) => ({ ...n, read: true })) }
         : prev,
-    );
+    ));
   }, []);
 
   const markNotificationRead = useCallback((notificationId: ID) => {
@@ -8389,13 +8422,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (tick && !force && !news && !filed.length) return;
     const list = await remote.fetchActivities(me!);
     if (stateRef.current.currentUserId !== me) return;
-    if (list) setState((prev) => ({ ...prev, detectedActivities: list }));
+    if (list) setState((prev) => (sameRows(prev.detectedActivities, list) ? prev : { ...prev, detectedActivities: list }));
     // The "Tennis detected" and "Workout detected" rows the server filed, into
     // Notifications: after every check, as some are filed quietly (WHOOP's own
     // alert, or while WHOOP was being connected) and never come back from the check itself.
     const notes = await remote.fetchActivityNotes(me!);
     if (stateRef.current.currentUserId !== me) return;
-    if (notes.length) setState((prev) => ({ ...prev, notifications: [...notes.filter((n) => !prev.notifications.some((x) => x.id === n.id)), ...prev.notifications] }));
+    if (notes.length) setState((prev) => {
+      const fresh = notes.filter((n) => !prev.notifications.some((x) => x.id === n.id));
+      // All held already: nothing to redraw (see sameRows).
+      return fresh.length ? { ...prev, notifications: [...fresh, ...prev.notifications] } : prev;
+    });
     if (!filed.length) return;
     activityToast(new Set(filed).size, (list ?? stateRef.current.detectedActivities).filter((x) => filed.includes(x.id)).sort((x, y) => (x.startedAt < y.startedAt ? 1 : -1)));
   }, []);
@@ -8417,7 +8454,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const me = stateRef.current.currentUserId;
     if (!live(me)) return;
     const list = await remote.fetchActivities(me!);
-    if (list && stateRef.current.currentUserId === me) setState((prev) => ({ ...prev, detectedActivities: list }));
+    if (list && stateRef.current.currentUserId === me) setState((prev) => (sameRows(prev.detectedActivities, list) ? prev : { ...prev, detectedActivities: list }));
   }, []);
 
   // Read on its own and handed back, never added to your sessions list: an
@@ -8487,8 +8524,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // The workout among your sessions, and its "Workout detected" row in Notifications, as after a check.
     const [list, notes] = await Promise.all([remote.fetchActivities(me!).catch(() => null), remote.fetchActivityNotes(me!).catch(() => [])]);
     if (stateRef.current.currentUserId !== me) return null;
-    if (list) setState((prev) => ({ ...prev, detectedActivities: list }));
-    if (notes.length) setState((prev) => ({ ...prev, notifications: [...notes.filter((n) => !prev.notifications.some((x) => x.id === n.id)), ...prev.notifications] }));
+    if (list) setState((prev) => (sameRows(prev.detectedActivities, list) ? prev : { ...prev, detectedActivities: list }));
+    if (notes.length) setState((prev) => {
+      const fresh = notes.filter((n) => !prev.notifications.some((x) => x.id === n.id));
+      // All held already: nothing to redraw (see sameRows).
+      return fresh.length ? { ...prev, notifications: [...fresh, ...prev.notifications] } : prev;
+    });
     return r;
   }, []);
 
@@ -8537,8 +8578,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // Your sessions and Notifications read once for them all, as after a check.
     const [list, notes] = await Promise.all([remote.fetchActivities(me!).catch(() => null), remote.fetchActivityNotes(me!).catch(() => [])]);
     if (stateRef.current.currentUserId !== me) return [];
-    if (list) setState((prev) => ({ ...prev, detectedActivities: list }));
-    if (notes.length) setState((prev) => ({ ...prev, notifications: [...notes.filter((n) => !prev.notifications.some((x) => x.id === n.id)), ...prev.notifications] }));
+    if (list) setState((prev) => (sameRows(prev.detectedActivities, list) ? prev : { ...prev, detectedActivities: list }));
+    if (notes.length) setState((prev) => {
+      const fresh = notes.filter((n) => !prev.notifications.some((x) => x.id === n.id));
+      // All held already: nothing to redraw (see sameRows).
+      return fresh.length ? { ...prev, notifications: [...fresh, ...prev.notifications] } : prev;
+    });
     return ids;
   }, []);
 

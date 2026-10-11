@@ -355,6 +355,11 @@ const stageStyles = StyleSheet.create({
   blackStage: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#000', opacity: 0 },
 });
 
+// Only a browser builds the Feed out of sight before it is first shown (see `warming`), so only a browser asks the
+// router here. On the phone the answer was never used, yet asking it redrew the whole Feed each time a page opened or
+// closed over the tabs, before that page could slide in (Oct 10, owner: "the buttons like the settings. msg notifications, etc respond too slow").
+const useRouteFocusedInBrowser: () => boolean = Platform.OS === 'web' ? useRouteFocused : () => true;
+
 function Home({ scope, topRow, paused, onChrome }: {
   previewSection?: string;
   scope?: FeedScope;
@@ -475,7 +480,7 @@ function Home({ scope, topRow, paused, onChrome }: {
   // clip fetches, and only its opening: enough to start at once, without
   // spending anyone's data on clips they may never open. A picture of the
   // Feed sliding in under a finger is not this (its route is the one on screen).
-  const routeFocused = useRouteFocused();
+  const routeFocused = useRouteFocusedInBrowser();
   const warming = Platform.OS === 'web' && !scope && !routeFocused && !shownOnce.current;
   const latest = useRef(app);
   latest.current = app;

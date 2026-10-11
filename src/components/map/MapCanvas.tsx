@@ -93,7 +93,9 @@ export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas({
     },
     retry: () => load.restart(),
   }), []); // eslint-disable-line react-hooks/exhaustive-deps
-  const markerJson = JSON.stringify({ items: markers, tpl });
+  // Written out only when the pins change, not on every draw of the page around the map (Oct 10,
+  // owner: "the buttons like the settings. msg notifications, etc respond too slow").
+  const markerJson = useMemo(() => JSON.stringify({ items: markers, tpl }), [markers, tpl]);
   const markersNow = useRef(markerJson);
   markersNow.current = markerJson;
   useEffect(() => { send(`window.__cs.set(${markerJson})`); }, [markerJson]);
@@ -102,7 +104,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas({
   const stillNow = useRef(still);
   stillNow.current = still;
   useEffect(() => { send(`document.body.classList.toggle('cs-still',${still ? 'true' : 'false'})`); }, [still]);
-  const lookJson = JSON.stringify(look);
+  const lookJson = useMemo(() => JSON.stringify(look), [look]);
   // Same for the theme's colours: whatever is current when the map is ready is what it wears.
   const lookNow = useRef(lookJson);
   lookNow.current = lookJson;
