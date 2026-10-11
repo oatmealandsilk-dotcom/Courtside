@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useReducer, useRef } from 'react';
+import { createContext, useReducer, useRef } from 'react';
 
 /*
  * What the map's card stage (CardStage, and its browser twin) holds: the
@@ -27,6 +27,8 @@ export interface StageLayer {
   n: number;
   /** There when the map first appeared: it arrives with the page, no entrance. */
   first: boolean;
+  /** The layer it took the place of, if any: the bare map after a card closed takes over that card's buttons (CardStage). */
+  replaces: { id: string; kind: StageKind } | null;
 }
 
 /**
@@ -38,7 +40,7 @@ export function useStageLayers(cardKey: string, kind: StageKind, node: React.Rea
   const [, redraw] = useReducer((n: number) => n + 1, 0);
   const count = useRef(0);
   const layers = useRef<StageLayer[] | null>(null);
-  if (!layers.current) layers.current = [{ id: `${cardKey}#0`, key: cardKey, kind, node, out: false, n: 0, first: true }];
+  if (!layers.current) layers.current = [{ id: `${cardKey}#0`, key: cardKey, kind, node, out: false, n: 0, first: true, replaces: null }];
   const live = layers.current.find((l) => !l.out);
   if (live && live.key === cardKey) {
     live.node = node;
@@ -46,7 +48,7 @@ export function useStageLayers(cardKey: string, kind: StageKind, node: React.Rea
   } else {
     if (live) live.out = true;
     count.current += 1;
-    layers.current.push({ id: `${cardKey}#${count.current}`, key: cardKey, kind, node, out: false, n: count.current, first: false });
+    layers.current.push({ id: `${cardKey}#${count.current}`, key: cardKey, kind, node, out: false, n: count.current, first: false, replaces: live ? { id: live.id, kind: live.kind } : null });
   }
   const remove = (layer: StageLayer) => {
     if (!layers.current?.includes(layer)) return;
@@ -58,3 +60,21 @@ export function useStageLayers(cardKey: string, kind: StageKind, node: React.Rea
 
 /** The newest card stacks over the one leaving; a 'tray' layer always sits under the cards. */
 export const layerZ = (layer: StageLayer) => (layer.kind === 'tray' ? 1 : 2 + layer.n);
+
+/**
+ * A card closing back to the bare map (Oct 10, owner: "the drop down is
+ * good but there's like another weird thing"): the map's buttons ride down
+ * with it, from where they sat on the card to their own spot, rather than
+ * fading off the card while a second set faded in at the bottom. The bare
+ * map's layer takes over the card's buttons: it starts with its own in
+ * exactly their place and glides down on the card's own curve, the card's
+ * set put away the same moment (CardStage, and its browser twin).
+ */
+export const takesOver = (layer: StageLayer) => layer.kind === 'tray' && !layer.first && layer.replaces?.kind === 'card';
+
+/**
+ * True on the buttons taking over from a closing card (above): what only
+ * the bare map has (the players pill, and the credits over it) fades in as
+ * they ride down; Back to me and the zoom were there all along.
+ */
+export const CrownTakeover = createContext(false);

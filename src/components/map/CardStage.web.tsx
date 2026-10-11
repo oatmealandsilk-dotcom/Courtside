@@ -2,7 +2,7 @@ import React, { useLayoutEffect, useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { sheetFling } from '@/components/map/sheetFling';
-import { layerZ, useStageLayers, type Crown, type StageKind, type StageLayer } from '@/components/map/stageLayers';
+import { CrownTakeover, layerZ, takesOver, useStageLayers, type Crown, type StageKind, type StageLayer } from '@/components/map/stageLayers';
 
 /*
  * The browser's twin of CardStage (see there for the choreography): the
@@ -14,6 +14,10 @@ import { layerZ, useStageLayers, type Crown, type StageKind, type StageLayer } f
  * The card that is up sits in the page's flow and sets the stage's height;
  * one on its way out is lifted out of the flow, pinned to the bottom edge
  * where it already was, and removed once its animation ends.
+ *
+ * Closing back to the bare map, its buttons take over the card's and ride
+ * down with it, as on the phone (takesOver, Oct 10): measured here on the
+ * page itself, so they start exactly where the card's were.
  *
  * The phone's stage also puts its buttons' glass up again once they have
  * arrived (GlassRenew), for an iPhone that draws it white otherwise. Not
@@ -51,10 +55,44 @@ function enter(el: HTMLElement, crown: HTMLElement | null, kind: StageKind) {
   }
 }
 
-function leave(el: HTMLElement, crown: HTMLElement | null, kind: StageKind, done: () => void) {
+/** A leaving layer's buttons, for the bare map's to take over from (takesOver): where their foot is on the page, and the slide to ride. */
+interface Handoff { foot: number; slide: KeyframeAnimationOptions; crown: HTMLElement }
+
+/**
+ * Where the foot of a layer's buttons is on the page, if they are fully
+ * there: not still fading in, nor faded or tucked away on a players list
+ * pulled up (ListCrown, the first thing inside them there).
+ */
+function shownFoot(crown: HTMLElement | null): number | null {
+  if (!crown || crown.offsetHeight < 8) return null;
+  const solid = (n: Element | null) => (n ? Number(getComputedStyle(n).opacity || 1) : 1);
+  if (solid(crown) * solid(crown.firstElementChild) < 0.99) return null;
+  return crown.getBoundingClientRect().bottom;
+}
+
+/**
+ * The bare map taking over a closing card's buttons: its own start exactly
+ * where the card's are and ride down on the card's own slide, solid, the
+ * card's put away that moment (only the players pill fades in: MapButtons).
+ * False when there is nothing to ride (they would have to go up), and the
+ * usual entrance plays instead.
+ */
+function takeOver(el: HTMLElement, crown: HTMLElement | null, from: Handoff): boolean {
+  if (!crown) return false;
+  const lift = crown.getBoundingClientRect().bottom - from.foot;
+  if (lift <= 0) return false;
+  from.crown.getAnimations().forEach((a) => a.cancel());
+  from.crown.animate([{ opacity: 0 }, { opacity: 0 }], { duration: 1, fill: 'forwards' });
+  el.animate([{ transform: `translateY(${-lift}px)` }, { transform: 'translateY(0px)' }], from.slide);
+  return true;
+}
+
+/** Sends a layer on its way out, and says how it slides, for buttons riding on it to ride the same. */
+function leave(el: HTMLElement, crown: HTMLElement | null, kind: StageKind, done: () => void): KeyframeAnimationOptions {
   // Swiped away: it is already moving, so it keeps going rather than easing off from rest.
   const flung = kind === 'card' && sheetFling.value > 0;
   if (kind === 'card') sheetFling.value = 0;
+  const slide: KeyframeAnimationOptions = flung ? { duration: 220, easing: 'cubic-bezier(.25,.46,.45,.94)' } : { duration: SINK_MS, easing: SINK };
   const from = current(el);
   el.getAnimations().forEach((a) => a.cancel());
   if (crown) {
@@ -67,7 +105,7 @@ function leave(el: HTMLElement, crown: HTMLElement | null, kind: StageKind, done
     last = el.animate([{ opacity: from.opacity }, { opacity: 0 }], { duration: 160, easing: 'ease-in', fill: 'forwards' });
   } else if (kind === 'card') {
     const to = `translateY(${el.offsetHeight + 16}px)`;
-    last = el.animate([{ transform: from.transform }, { transform: to }], flung ? { duration: 220, easing: 'cubic-bezier(.25,.46,.45,.94)', fill: 'forwards' } : { duration: SINK_MS, easing: SINK, fill: 'forwards' });
+    last = el.animate([{ transform: from.transform }, { transform: to }], { ...slide, fill: 'forwards' });
     // Solid while it slides, so it reads as a card going down, then gone softly over the last stretch.
     el.animate([{ opacity: from.opacity }, { opacity: from.opacity, offset: 0.45 }, { opacity: 0 }], { duration: flung ? 220 : SINK_MS, easing: 'linear', fill: 'forwards' });
   } else {
@@ -75,6 +113,7 @@ function leave(el: HTMLElement, crown: HTMLElement | null, kind: StageKind, done
   }
   last.onfinish = done;
   last.oncancel = done;
+  return slide;
 }
 
 export function CardStage({ cardKey, kind, crown, children }: { cardKey: string; kind: StageKind; /** Rides on top of whatever is up: the map's buttons. Given as a function, it is told which card it rides on (its key). */ crown?: Crown; children: React.ReactNode }) {
@@ -87,21 +126,31 @@ export function CardStage({ cardKey, kind, crown, children }: { cardKey: string;
   const leaving = useRef(new Set<string>());
 
   useLayoutEffect(() => {
+    // Those leaving first: where their buttons were, measured before anything moves, for the bare map's to take over (takesOver).
+    const handoffs = new Map<string, Handoff>();
     for (const layer of layers) {
       const el = els.current.get(layer.id);
-      if (!el) continue;
+      if (!el || !layer.out || leaving.current.has(layer.id)) continue;
       const top = crowns.current.get(layer.id) ?? null;
-      if (!layer.out && !layer.first && !entered.current.has(layer.id)) { entered.current.add(layer.id); enter(el, top, layer.kind); }
-      if (layer.out && !leaving.current.has(layer.id)) {
-        leaving.current.add(layer.id);
-        leave(el, top, layer.kind, () => {
-          els.current.delete(layer.id);
-          crowns.current.delete(layer.id);
-          entered.current.delete(layer.id);
-          leaving.current.delete(layer.id);
-          remove(layer);
-        });
-      }
+      leaving.current.add(layer.id);
+      const foot = layer.kind === 'card' ? shownFoot(top) : null;
+      const slide = leave(el, top, layer.kind, () => {
+        els.current.delete(layer.id);
+        crowns.current.delete(layer.id);
+        entered.current.delete(layer.id);
+        leaving.current.delete(layer.id);
+        remove(layer);
+      });
+      if (foot !== null && top) handoffs.set(layer.id, { foot, slide, crown: top });
+    }
+    for (const layer of layers) {
+      const el = els.current.get(layer.id);
+      if (!el || layer.out || layer.first || entered.current.has(layer.id)) continue;
+      const top = crowns.current.get(layer.id) ?? null;
+      entered.current.add(layer.id);
+      const from = takesOver(layer) && layer.replaces && !still() ? handoffs.get(layer.replaces.id) : undefined;
+      if (from && takeOver(el, top, from)) continue;
+      enter(el, top, layer.kind);
     }
   });
 
@@ -117,7 +166,7 @@ export function CardStage({ cardKey, kind, crown, children }: { cardKey: string;
           {crown ? (
             <View ref={(el) => { if (el) crowns.current.set(layer.id, el as unknown as HTMLElement); }} style={styles.through}>
               {/* Its own buttons: one on its way out keeps the ones it had (the players list's, faded while it was tall). */}
-              {typeof crown === 'function' ? crown(layer.key) : crown}
+              <CrownTakeover.Provider value={takesOver(layer)}>{typeof crown === 'function' ? crown(layer.key) : crown}</CrownTakeover.Provider>
             </View>
           ) : null}
           {layer.node}

@@ -5,7 +5,7 @@ import Reanimated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTimi
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { CitylessCard, CityWeatherChip, CourtSheet, CourtsZoomNote, FilterChips, HitSheet, ListCrown, MapCredit, YouSheet, MapButtons, MapTopBar, PlaceSheet, PlayerSheet, PlayersPill, PlayersSheet, PreviewOverlay, WhereCard } from '@/components/map/MapChrome';
+import { CityLine, CitylessCard, CityWeatherChip, CourtSheet, CourtsZoomNote, FilterChips, HitSheet, ListCrown, MapCredit, YouSheet, MapButtons, MapTopBar, PlaceSheet, PlayerSheet, PlayersPill, PlayersSheet, PreviewOverlay, WhereCard } from '@/components/map/MapChrome';
 import { CardStage } from '@/components/map/CardStage';
 import { MapCanvas, type CanvasMarker, type MapCanvasHandle, type MapLoadStatus } from '@/components/map/MapCanvas';
 import { MapCardFailed, MapCardLoading, MapLoadPill } from '@/components/map/MapLoadState';
@@ -282,7 +282,9 @@ export function NearbyMap(props: NearbyMapProps) {
   // Into one of your groups (the sheet says if they can't be).
   const addToGroup = (id: string) => router.push({ pathname: '/pick-group', params: { user: id } });
   // The map's buttons, riding on whatever is up along the bottom; on the players list, they fade as it rises (ListCrown).
-  const buttons = <View pointerEvents="box-none" style={styles.crown}><MapButtons lead={bare ? <PlayersPill items={model.tray} query={model.query} filter={model.filter} courts={model.nearestCourts} lock={lock} onOpen={() => { setListTall(false); trayAt.current = 0; setListOpen(true); }} /> : undefined} onRecentre={() => { model.select(null); model.selectCourt(null); model.selectHit(null); model.clearPlace(); canvas.current?.flyTo(model.homeView.center, model.homeView.zoom ?? CITY_ZOOM, 600); }} /></View>;
+  // Made for each layer from its own key, so one on its way out keeps the buttons it had: only the bare map's carry the
+  // players pill (Oct 10: made from what was up now, a closing card's buttons grew the pill as it sank, the ⓘ jumping up over it).
+  const buttons = (pill: boolean) => <View pointerEvents="box-none" style={styles.crown}><MapButtons lead={pill ? <PlayersPill items={model.tray} query={model.query} filter={model.filter} courts={model.nearestCourts} lock={lock} onOpen={() => { setListTall(false); trayAt.current = 0; setListOpen(true); }} /> : undefined} onRecentre={() => { model.select(null); model.selectCourt(null); model.selectHit(null); model.clearPlace(); canvas.current?.flyTo(model.homeView.center, model.homeView.zoom ?? CITY_ZOOM, 600); }} /></View>;
   return (
     <View style={styles.fill} onLayout={(e) => setMapH(Math.round(e.nativeEvent.layout.height))}>
       {mapView}
@@ -291,9 +293,11 @@ export function NearbyMap(props: NearbyMapProps) {
         <View onLayout={(e) => { const { y, height } = e.nativeEvent.layout; setChipsEnd(Math.round(y + height)); }}>
           <FilterChips filter={model.filter} onFilter={model.setFilter} courtsOn={model.courtsOn} onCourts={model.toggleCourts} courtsLoading={model.courtsLoading} />
         </View>
-        {/* The city and its weather, a small chip under the filters. */}
-        {model.homeKnown ? <CityWeatherChip cityName={cityName} weather={weather} /> : null}
-        {model.courtsOn && far && !model.selectedCourt && !model.query.trim() ? <CourtsZoomNote /> : null}
+        {/* The city and its weather, a small chip under the filters; zoomed out, "Zoom in to see courts" on the same line, right after it (Oct 10). */}
+        <CityLine>
+          {model.homeKnown ? <CityWeatherChip cityName={cityName} weather={weather} /> : null}
+          {model.courtsOn && far && !model.selectedCourt && !model.query.trim() ? <CourtsZoomNote /> : null}
+        </CityLine>
         {/* Slow to come, or didn't: a small pill under the chips, clear of the pins around you. */}
         <MapLoadPill status={mapStatus} onRetry={() => canvas.current?.retry()} />
       </View>
@@ -302,7 +306,7 @@ export function NearbyMap(props: NearbyMapProps) {
         <CardStage
           cardKey={stageKey}
           kind={bare || stageKey === 'where' ? 'tray' : 'card'}
-          crown={(key) => (key === 'list' ? <ListCrown>{buttons}</ListCrown> : buttons)}
+          crown={(key) => (key === 'list' ? <ListCrown>{buttons(false)}</ListCrown> : buttons(key === 'bare'))}
         >
           {bare ? (
             // Nothing up: only the room the buttons above keep clear of the home indicator (no tab bar on the full map).

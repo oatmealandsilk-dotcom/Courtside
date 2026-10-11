@@ -1,12 +1,12 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { View } from 'react-native';
 import { useNavigation } from 'expo-router';
-import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming } from 'react-native-reanimated';
+import Animated, { Easing, cancelAnimation, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming, type WithTimingConfig } from 'react-native-reanimated';
 import { useReducedMotion } from '@/lib/useReducedMotion';
 
 import { sheetFling } from '@/components/map/sheetFling';
 import { GlassRenew } from '@/components/ui/Glass';
-import { layerZ, useStageLayers, type Crown, type StageKind, type StageLayer } from '@/components/map/stageLayers';
+import { CrownTakeover, layerZ, takesOver, useStageLayers, type Crown, type StageKind, type StageLayer } from '@/components/map/stageLayers';
 
 /*
  * The bottom of the full map: the card for whatever was tapped (or the list
@@ -18,15 +18,23 @@ import { layerZ, useStageLayers, type Crown, type StageKind, type StageLayer } f
  * - A card rises from the bottom edge on a soft spring (about a third of a
  *   second) while the bare map's buttons fade down out of the way.
  * - Closing (×, a tap on the map, a swipe down) slides the card down and
- *   fades it, then it is gone; the buttons settle back in under it. After a
- *   swipe the card carries on at the finger's speed rather than starting over.
+ *   fades it, then it is gone. After a swipe the card carries on at the
+ *   finger's speed rather than starting over.
+ * - Closing back to the bare map, the map's buttons ride down with the card,
+ *   from where they sat on it to their own spot, on the card's own curve:
+ *   one motion (Oct 10, owner: "the drop down is good but there's like
+ *   another weird thing"; they faded off the card mid-air while a second set
+ *   faded in at the bottom). The bare map's layer takes them over (takesOver):
+ *   its own buttons start in exactly their place, the card's are put away
+ *   that moment, and only what the bare map adds (the players pill) fades in.
  * - Tapping another pin while a card is up: the old card sinks as the new
  *   one rises over it.
  * - Every exit starts from wherever the layer is at that moment, so closing
  *   a card that is still rising, or tapping a pin just after closing one,
  *   never snaps anything back first.
- * - The map's buttons fade off the layer that is leaving and back on above
- *   the one arriving, once it has landed.
+ * - Opening a card, or swapping one for another, the map's buttons fade off
+ *   the layer that is leaving and back on above the one arriving, once it
+ *   has landed.
  * - Reduce Motion: fades only.
  * - The buttons' glass (Back to me, the players pill) is put up again once
  *   they have fully arrived, and once the page itself has slid in: an
@@ -49,6 +57,17 @@ const SINK = Easing.bezier(0.4, 0, 0.2, 1);
 /** Below the screen: where a card waits for its first measurement before it rises. */
 const OFFSTAGE = 4000;
 
+/** A leaving layer's buttons, for the bare map's to take over from (takesOver): where their foot is, and the slide to ride. */
+interface Handoff {
+  /** How far above the stage's bottom edge the foot of its buttons was as it started to leave. */
+  foot: number;
+  /** The card's own slide down, which the buttons taking over ride on. */
+  slide: WithTimingConfig;
+  /** Its buttons, put away at once: the ones taking over are in their place. */
+  hide: () => void;
+}
+type Handoffs = Map<string, () => Handoff | null>;
+
 export function CardStage({ cardKey, kind, crown, children }: {
   /** What is up ('bare', 'list', 'me', 'p:<id>', 'c:<id>'…); a new key is a new card. */
   cardKey: string;
@@ -59,19 +78,21 @@ export function CardStage({ cardKey, kind, crown, children }: {
   children: React.ReactNode;
 }) {
   const { layers, remove } = useStageLayers(cardKey, kind, children);
+  // Each layer's buttons as it leaves, found by the layer taking its place (takesOver).
+  const handoffs = useRef<Handoffs>(new Map()).current;
   return (
     // A view of its own that keeps its layers' stacking to itself. Without it the phone drops this
     // wrapper as layout-only and each card's zIndex reaches out to the map's other controls (Oct 7:
     // a card's shadow then fell on the strip under the tab bar, which each card now carries itself).
     <View pointerEvents="box-none" collapsable={false} style={{ zIndex: 0 }}>
       {layers.map((layer) => (
-        <Layer key={layer.id} layer={layer} out={layer.out} crown={crown} onGone={remove} />
+        <Layer key={layer.id} layer={layer} out={layer.out} crown={crown} onGone={remove} handoffs={handoffs} />
       ))}
     </View>
   );
 }
 
-function Layer({ layer, out, crown: crownFor, onGone }: { layer: StageLayer; out: boolean; crown?: Crown; onGone: (layer: StageLayer) => void }) {
+function Layer({ layer, out, crown: crownFor, onGone, handoffs }: { layer: StageLayer; out: boolean; crown?: Crown; onGone: (layer: StageLayer) => void; handoffs: Handoffs }) {
   // Its own buttons: one on its way out keeps the ones it had (the players list's, faded while it was tall).
   const crown = typeof crownFor === 'function' ? crownFor(layer.key) : crownFor;
   const reduce = useReducedMotion();
@@ -83,6 +104,11 @@ function Layer({ layer, out, crown: crownFor, onGone }: { layer: StageLayer; out
   const height = useRef(0);
   const risen = useRef(!rises);
   const inner = useRef<View>(null);
+  // Its buttons' height (none on a players list pulled up out of their room), and how it left: for the bare map's buttons to take over.
+  const crownBox = useRef<View>(null);
+  const crownH = useRef(0);
+  const exit = useRef<{ y0: number; shown: boolean; slide: WithTimingConfig } | null>(null);
+  const takeover = takesOver(layer);
   // Its buttons' glass, put up afresh each time this changes (GlassRenew): once they have fully arrived.
   const [renew, setRenew] = useState(0);
   const arrived = useCallback(() => setRenew((n) => n + 1), []);
@@ -111,9 +137,40 @@ function Layer({ layer, out, crown: crownFor, onGone }: { layer: StageLayer; out
       crownOpacity.value = withTiming(1, { duration: 200 }, (done) => { if (done) runOnJS(arrived)(); });
       return;
     }
+    // The bare map after a card closed: its buttons start where the card's were and ride down with it, solid (takesOver).
+    // (After the card's own leaving, below: an earlier sibling's effects run first.)
+    const from = takeover && layer.replaces ? handoffs.get(layer.replaces.id)?.() : null;
+    if (from) {
+      let ownH = 0;
+      let ownCrown = 0;
+      inner.current?.measure((_x, _y, _w, h) => { ownH = h; });
+      crownBox.current?.measure((_x, _y, _w, h) => { ownCrown = h; });
+      // How far above their own spot they were: only ever down (a card is taller than the bare map's strip).
+      const lift = from.foot - (ownH - ownCrown);
+      if (ownH > 0 && ownCrown > 0 && lift > 0) {
+        from.hide();
+        opacity.value = 1;
+        y.value = withSequence(withTiming(-lift, { duration: 0 }), withTiming(0, from.slide, (done) => { if (done) runOnJS(arrived)(); }));
+        return;
+      }
+    }
     // Under the card that is leaving: there to be uncovered as that slides away.
     opacity.value = withTiming(1, { duration: 200, easing: Easing.out(Easing.quad) }, (done) => { if (done) runOnJS(arrived)(); });
     y.value = withTiming(0, { duration: 320, easing: Easing.out(Easing.cubic) });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Leaving, its buttons can be taken over by the bare map's (takesOver): only when fully there, never faded or tucked away.
+  useEffect(() => {
+    handoffs.set(layer.id, () => {
+      const left = exit.current;
+      if (!left?.shown || crownH.current < 8 || height.current <= 0) return null;
+      return {
+        foot: height.current - crownH.current - left.y0,
+        slide: left.slide,
+        hide: () => { cancelAnimation(crownOpacity); crownOpacity.value = 0; },
+      };
+    });
+    return () => { handoffs.delete(layer.id); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // There when the map opened: nothing of its own fades in, but it came with the page, which slides in
@@ -132,17 +189,20 @@ function Layer({ layer, out, crown: crownFor, onGone }: { layer: StageLayer; out
   useEffect(() => {
     if (!out) return;
     const gone = () => onGone(layer);
-    crownOpacity.value = withTiming(0, { duration: 120 });
     // Swiped away: it is already moving, so it keeps going rather than easing off from rest.
     const flung = layer.kind === 'card' && sheetFling.value > 0;
     if (layer.kind === 'card') sheetFling.value = 0;
+    const slide: WithTimingConfig = flung ? { duration: 220, easing: Easing.out(Easing.quad) } : { duration: 260, easing: SINK };
+    // Where it was and how it goes, before anything moves, for the bare map's buttons to take over from (above).
+    exit.current = { y0: y.value, shown: risen.current && crownOpacity.value > 0.99, slide };
+    crownOpacity.value = withTiming(0, { duration: 120 });
     // A card that never got as far as rising was never seen: nothing to play.
     if (!risen.current) { gone(); return; }
     if (reduce) {
       opacity.value = withTiming(0, { duration: 160 }, (done) => { if (done) runOnJS(gone)(); });
     } else if (layer.kind === 'card') {
       const to = (height.current || 600) + 16;
-      y.value = withTiming(to, flung ? { duration: 220, easing: Easing.out(Easing.quad) } : { duration: 260, easing: SINK }, (done) => { if (done) runOnJS(gone)(); });
+      y.value = withTiming(to, slide, (done) => { if (done) runOnJS(gone)(); });
       // Solid while it slides, so it reads as a card going down, then gone softly over the last stretch.
       opacity.value = withDelay(flung ? 100 : 120, withTiming(0, { duration: flung ? 120 : 140 }));
     } else {
@@ -165,7 +225,11 @@ function Layer({ layer, out, crown: crownFor, onGone }: { layer: StageLayer; out
         // Kept up to date as the card's content settles, so its exit always clears the edge.
         onLayout={(e) => { const h = e.nativeEvent.layout.height; if (h > 0) rise(h); }}
       >
-        {crown ? <Animated.View pointerEvents="box-none" style={crownLook}><GlassRenew.Provider value={renew}>{crown}</GlassRenew.Provider></Animated.View> : null}
+        {crown ? (
+          <Animated.View ref={crownBox} pointerEvents="box-none" style={crownLook} onLayout={(e) => { crownH.current = e.nativeEvent.layout.height; }}>
+            <CrownTakeover.Provider value={takeover}><GlassRenew.Provider value={renew}>{crown}</GlassRenew.Provider></CrownTakeover.Provider>
+          </Animated.View>
+        ) : null}
         {layer.node}
       </View>
     </Animated.View>

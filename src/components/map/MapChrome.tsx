@@ -47,6 +47,7 @@ import { MAP_CREDITS } from '@/components/map/credits';
 import { AccessTag, CourtFactsLine, FollowHeart, NowTags, RegularsRow } from '@/components/place/CourtLife';
 import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { sheetFling } from '@/components/map/sheetFling';
+import { CrownTakeover } from '@/components/map/stageLayers';
 import { LIST_PAD_BOTTOM, TRAY_FACE, TRAY_GAP, TRAY_ITEM_W, TRAY_PAD, listHeadroom, useListStops, type ListRoom } from '@/components/map/listStops';
 import { OpenRing } from '@/components/map/OpenRing';
 import { mix } from '@/components/map/look';
@@ -256,9 +257,9 @@ export function FilterChips({ filter, onFilter, courtsOn, onCourts, courtsLoadin
 
 /**
  * Zoomed out past about a city, the court pins step aside (thousands of
- * them would say nothing at that size). This small note, under the chips,
- * says where they went. Not a button: the map under it still takes the
- * pinch and the drag.
+ * them would say nothing at that size). This small note says where they
+ * went, on the city chip's line, right after it (CityLine). Not a button:
+ * the map under it still takes the pinch and the drag.
  */
 export function CourtsZoomNote() {
   const styles = useThemedStyles(styleDefinitions);
@@ -289,9 +290,15 @@ export function WeatherChip({ weather }: { weather: Weather | null }) {
  */
 export function MapButtons({ onRecentre, onZoomIn, onZoomOut, lead }: { onRecentre: () => void; onZoomIn?: () => void; onZoomOut?: () => void; lead?: React.ReactNode }) {
   const styles = useThemedStyles(styleDefinitions);
+  // Taking over from a card closing under them (CrownTakeover, Oct 10): the pill and the credits over it fade in
+  // as the buttons ride down to their spot; the rest were already there, on the card.
+  const takeover = useContext(CrownTakeover);
+  const leadIn = useSharedValue(takeover ? 0 : 1);
+  useEffect(() => { if (takeover) leadIn.value = withTiming(1, { duration: 240, easing: Easing.out(Easing.quad) }); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const leadLook = useAnimatedStyle(() => ({ opacity: leadIn.value }));
   return (
     <View pointerEvents="box-none" style={styles.buttonsRow}>
-    {lead ? <View pointerEvents="box-none" style={styles.buttonsLead}><MapCredit />{lead}</View> : <MapCredit />}
+    {lead ? <Animated.View pointerEvents="box-none" style={[styles.buttonsLead, leadLook]}><MapCredit />{lead}</Animated.View> : <MapCredit />}
     <View style={styles.buttons}>
       {onZoomIn && onZoomOut ? (
         <View style={styles.zoom}>
@@ -403,6 +410,20 @@ export function PlayersPill({ items, query = '', filter = 'all', courts = [], lo
       </Glass>
     </Pressable>
   );
+}
+
+/**
+ * The line under the filters: the city chip, and zoomed out, "Zoom in to see
+ * courts" right after it, the two the same height and centred on one line
+ * (Oct 10, owner: "Zoom in to see courts could be better placed"; it sat
+ * alone on the next line, centred under nothing). A long city name on a
+ * narrow phone puts the note under the chip; with no chip the note starts
+ * the line. Taps go through it to the map.
+ */
+export function CityLine({ children }: { children: React.ReactNode }) {
+  const styles = useThemedStyles(styleDefinitions);
+  if (!React.Children.toArray(children).length) return null;
+  return <View pointerEvents="box-none" style={styles.cityLine}>{children}</View>;
 }
 
 /** The city and what it's like to play there today, a small chip under the filters. Nothing to say (no town named yet, no weather), no chip. */
@@ -1342,8 +1363,8 @@ const styleDefinitions = StyleSheet.create({
   chipPill: { position: 'absolute', left: 0, top: 0, height: 32, borderRadius: radius.pill, backgroundColor: colors.brand },
   chipText: { ...typography.smallStrong, color: colors.text },
   chipTextOn: { color: colors.brandInk },
-  // "Zoom in to see courts": a quiet pill under the chips, never in the way.
-  zoomNote: { alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: radius.pill, backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
+  // "Zoom in to see courts": a quiet pill beside the city chip, never in the way; as tall as the chip (30), so the two sit level.
+  zoomNote: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, height: 30, borderRadius: radius.pill, backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
   zoomNoteText: { ...typography.small, color: colors.textMuted },
   weather: { marginLeft: 6, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
   weatherText: { ...typography.smallStrong, color: colors.text, fontVariant: ['tabular-nums'] },
@@ -1357,8 +1378,11 @@ const styleDefinitions = StyleSheet.create({
   // "All 11 players": as tall as Back to me beside it, in the same glass.
   playersPill: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, height: 42, borderWidth: StyleSheet.hairlineWidth, borderColor: `${colors.borderStrong}55` },
   playersPillText: { ...typography.smallStrong, color: colors.text, flexShrink: 1 },
+  // The line under the chips (CityLine): the city chip at its start, "Zoom in to see courts" 8 after it, the two centred on each other;
+  // a long city name on a narrow phone puts the note on a line of its own under the chip.
+  cityLine: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 8, rowGap: 6, paddingHorizontal: spacing.md, paddingTop: 2 },
   // The city and its weather under the chips: quieter and smaller than they are.
-  cityChipWrap: { paddingHorizontal: spacing.md, paddingTop: 2, alignItems: 'flex-start' },
+  cityChipWrap: { flexShrink: 1, maxWidth: '100%', alignItems: 'flex-start' },
   cityChip: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 11, height: 30, borderWidth: StyleSheet.hairlineWidth, borderColor: `${colors.borderStrong}55` },
   cityChipText: { ...typography.smallStrong, color: colors.text, fontVariant: ['tabular-nums'] },
   cityChipRule: { width: StyleSheet.hairlineWidth, height: 14, marginHorizontal: 3, backgroundColor: colors.borderStrong },
