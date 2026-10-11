@@ -110,7 +110,11 @@ export function MapTopBar({ onBack, query, onQuery, locationOn, locating, onTogg
       : places.done && !placeRows.length && !found.length && !players ? 'No places found'
         : null;
   const searching = !!onPickPlace && typed && !!places?.searching && !placeRows.length && !found.length && !players;
+  // Picking something ends the search: the bar goes back to the town and its weather at once, on every
+  // phone (Oct 11: on iPhone it could stay in its typing look after a pick, green edge and all).
+  const done = () => { input.current?.blur(); setFocused(false); };
   const submit = () => {
+    done();
     const sameCourt = found.find((r) => plain(labelOf(r.c)) === key);
     const samePlace = placeRows.find((p) => plain(p.title) === key);
     if (sameCourt && onPickCourt) onPickCourt(sameCourt.c);
@@ -203,7 +207,7 @@ export function MapTopBar({ onBack, query, onQuery, locationOn, locating, onTogg
           {found.map(({ c, miles }, i) => {
             const meta = [formatMiles(miles), c.count > 1 ? `${c.count} courts` : null, c.lit ? 'lights' : null].filter(Boolean).join(' · ');
             return (
-              <Pressable key={c.id} accessibilityRole="button" accessibilityLabel={`${labelOf(c)}, ${meta}. Show on the map`} onPress={() => { haptics.tap(); onPickCourt?.(c); }} style={({ pressed }) => [styles.resultRow, i > 0 && styles.listRule, pressed && styles.listPressed]}>
+              <Pressable key={c.id} accessibilityRole="button" accessibilityLabel={`${labelOf(c)}, ${meta}. Show on the map`} onPress={() => { haptics.tap(); done(); onPickCourt?.(c); }} style={({ pressed }) => [styles.resultRow, i > 0 && styles.listRule, pressed && styles.listPressed]}>
                 <View style={styles.resultTile}><CourtGlyph size={13} color={colors.brand} /></View>
                 <View style={styles.listWords}>
                   <Text style={styles.listName} numberOfLines={1}>{labelOf(c)}</Text>
@@ -213,7 +217,7 @@ export function MapTopBar({ onBack, query, onQuery, locationOn, locating, onTogg
             );
           })}
           {placeRows.map((p, i) => (
-            <Pressable key={p.id} accessibilityRole="button" accessibilityLabel={`${p.title}${p.sub ? `, ${p.sub}` : ''}. Show its courts on the map`} onPress={() => { haptics.tap(); onPickPlace?.(p); }} style={({ pressed }) => [styles.resultRow, (found.length > 0 || i > 0) && styles.listRule, pressed && styles.listPressed]}>
+            <Pressable key={p.id} accessibilityRole="button" accessibilityLabel={`${p.title}${p.sub ? `, ${p.sub}` : ''}. Show its courts on the map`} onPress={() => { haptics.tap(); done(); onPickPlace?.(p); }} style={({ pressed }) => [styles.resultRow, (found.length > 0 || i > 0) && styles.listRule, pressed && styles.listPressed]}>
               <View style={styles.placeTile}><Ionicons name={p.kind === 'area' ? 'map-outline' : 'location-outline'} size={15} color={colors.textMuted} /></View>
               <View style={styles.listWords}>
                 <Text style={styles.listName} numberOfLines={1}>{p.title}</Text>
