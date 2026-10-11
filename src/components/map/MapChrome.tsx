@@ -47,7 +47,7 @@ import { MAP_CREDITS } from '@/components/map/credits';
 import { AccessTag, CourtFactsLine, FollowHeart, NowTags, RegularsRow } from '@/components/place/CourtLife';
 import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { sheetFling } from '@/components/map/sheetFling';
-import { CrownTakeover } from '@/components/map/stageLayers';
+import { CrownFade, CrownLead } from '@/components/map/stageLayers';
 import { LIST_PAD_BOTTOM, TRAY_FACE, TRAY_GAP, TRAY_ITEM_W, TRAY_PAD, listHeadroom, useListStops, type ListRoom } from '@/components/map/listStops';
 import { OpenRing } from '@/components/map/OpenRing';
 import { mix } from '@/components/map/look';
@@ -290,12 +290,10 @@ export function WeatherChip({ weather }: { weather: Weather | null }) {
  */
 export function MapButtons({ onRecentre, onZoomIn, onZoomOut, lead }: { onRecentre: () => void; onZoomIn?: () => void; onZoomOut?: () => void; lead?: React.ReactNode }) {
   const styles = useThemedStyles(styleDefinitions);
-  // Taking over from a card closing under them (CrownTakeover, Oct 10): the pill and the credits over it fade in
-  // as the buttons ride down to their spot; the rest were already there, on the card.
-  const takeover = useContext(CrownTakeover);
-  const leadIn = useSharedValue(takeover ? 0 : 1);
-  useEffect(() => { if (takeover) leadIn.value = withTiming(1, { duration: 240, easing: Easing.out(Easing.quad) }); }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  const leadLook = useAnimatedStyle(() => ({ opacity: leadIn.value }));
+  // The pill and the credits over it: as solid as the stage under them says (CrownLead, Oct 10). Taking over from a
+  // card closing under them they fade in as the buttons ride down to their spot; the rest were already there, on the card.
+  const leadIn = useContext(CrownLead);
+  const leadLook = useAnimatedStyle(() => ({ opacity: leadIn ? leadIn.value : 1 }));
   return (
     <View pointerEvents="box-none" style={styles.buttonsRow}>
     {lead ? <Animated.View pointerEvents="box-none" style={[styles.buttonsLead, leadLook]}><MapCredit />{lead}</Animated.View> : <MapCredit />}
@@ -658,7 +656,15 @@ export function ListCrown({ children }: { children: React.ReactNode }) {
     (now, before) => { if (now !== before) runOnJS(setGone)(now); },
   );
   // Fading over the last stretch before they no longer fit.
-  const look = useAnimatedStyle(() => ({ opacity: tall.value > 0 ? Math.max(0, Math.min(1, (listHeadroom.value - tall.value) / 60)) : 1 }));
+  const look = useAnimatedStyle(() => ({ opacity: listCrownFade(listHeadroom.value, tall.value) }));
+  // On the phone, told to the stage, which cannot see it (CrownFade, Oct 11): closing the list while they are part
+  // faded, it never swaps them for the bare map's at full strength in one frame; those fade in at the bottom instead.
+  const fade = useContext(CrownFade);
+  useEffect(() => {
+    if (!fade) return undefined;
+    fade.current = () => listCrownFade(listHeadroom.value, tall.value);
+    return () => { fade.current = null; };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   // Faded, then back at full strength: the glass on them put up again (on top of the stage's own renewals).
   const outer = useContext(GlassRenew) ?? 0;
   const [renew, setRenew] = useState(0);
@@ -676,6 +682,12 @@ export function ListCrown({ children }: { children: React.ReactNode }) {
       )}
     </Animated.View>
   );
+}
+
+/** How solid the buttons riding on the players list are with this much map left above it (ListCrown): faded over the last 60 before they no longer fit. */
+function listCrownFade(room: number, tall: number): number {
+  'worklet';
+  return tall > 0 ? Math.max(0, Math.min(1, (room - tall) / 60)) : 1;
 }
 
 /**

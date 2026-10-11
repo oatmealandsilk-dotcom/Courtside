@@ -6,7 +6,7 @@ import { useReducedMotion } from '@/lib/useReducedMotion';
 
 import { sheetFling } from '@/components/map/sheetFling';
 import { GlassRenew } from '@/components/ui/Glass';
-import { CrownTakeover, layerZ, takesOver, useStageLayers, type Crown, type StageKind, type StageLayer } from '@/components/map/stageLayers';
+import { CrownFade, CrownLead, layerZ, takesOver, useStageLayers, type Crown, type StageKind, type StageLayer } from '@/components/map/stageLayers';
 
 /*
  * The bottom of the full map: the card for whatever was tapped (or the list
@@ -26,7 +26,10 @@ import { CrownTakeover, layerZ, takesOver, useStageLayers, type Crown, type Stag
  *   another weird thing"; they faded off the card mid-air while a second set
  *   faded in at the bottom). The bare map's layer takes them over (takesOver):
  *   its own buttons start in exactly their place, the card's are put away
- *   that moment, and only what the bare map adds (the players pill) fades in.
+ *   that moment, and only what the bare map adds (the players pill) fades in,
+ *   done before they land. Never from a set that was not fully there: still
+ *   fading in, or part faded on a players list pulled up (CrownFade); the
+ *   bare map's then fade in at the bottom as usual.
  * - Tapping another pin while a card is up: the old card sinks as the new
  *   one rises over it.
  * - Every exit starts from wherever the layer is at that moment, so closing
@@ -37,9 +40,10 @@ import { CrownTakeover, layerZ, takesOver, useStageLayers, type Crown, type Stag
  *   has landed.
  * - Reduce Motion: fades only.
  * - The buttons' glass (Back to me, the players pill) is put up again once
- *   they have fully arrived, and once the page itself has slid in: an
- *   iPhone draws glass that first appears while something round it is
- *   fading in as a flat white plate, and leaves it so (GlassRenew, Oct 10).
+ *   they have fully arrived (riding down, once the pill has finished fading
+ *   in too), and once the page itself has slid in: an iPhone draws glass
+ *   that first appears while something round it is fading in as a flat
+ *   white plate, and leaves it so (GlassRenew, Oct 10).
  *
  * Each layer is its own view with its own position and opacity, on the
  * animation thread. The one that is up sits in the stage's flow; one on its
@@ -109,6 +113,11 @@ function Layer({ layer, out, crown: crownFor, onGone, handoffs }: { layer: Stage
   const crownH = useRef(0);
   const exit = useRef<{ y0: number; shown: boolean; slide: WithTimingConfig } | null>(null);
   const takeover = takesOver(layer);
+  // How solid the buttons are by their own doing (the players list's: ListCrown tells it), which this cannot see.
+  const crownFade = useRef<(() => number) | null>(null);
+  // What only the bare map's buttons have (the pill, the credits over it): unseen, on one that may take over a
+  // closing card's, until it is known whether it does (CrownLead).
+  const lead = useSharedValue(takeover ? 0 : 1);
   // Its buttons' glass, put up afresh each time this changes (GlassRenew): once they have fully arrived.
   const [renew, setRenew] = useState(0);
   const arrived = useCallback(() => setRenew((n) => n + 1), []);
@@ -133,6 +142,7 @@ function Layer({ layer, out, crown: crownFor, onGone, handoffs }: { layer: Stage
   useEffect(() => {
     if (layer.first || rises) return;
     if (reduce) {
+      lead.value = 1;
       opacity.value = withTiming(1, { duration: 200 });
       crownOpacity.value = withTiming(1, { duration: 200 }, (done) => { if (done) runOnJS(arrived)(); });
       return;
@@ -150,16 +160,24 @@ function Layer({ layer, out, crown: crownFor, onGone, handoffs }: { layer: Stage
       if (ownH > 0 && ownCrown > 0 && lift > 0) {
         from.hide();
         opacity.value = 1;
-        y.value = withSequence(withTiming(-lift, { duration: 0 }), withTiming(0, from.slide, (done) => { if (done) runOnJS(arrived)(); }));
+        // Their glass is put up again once both have finished, the ride down and the pill fading in: glass put up
+        // while the pill is still fading is a flat white plate (Oct 11; a swipe's slide, 220, was done before a 240 fade).
+        let waiting = 2;
+        const landed = () => { waiting -= 1; if (waiting === 0) arrived(); };
+        lead.value = withTiming(1, { duration: 200, easing: Easing.out(Easing.quad) }, (done) => { if (done) runOnJS(landed)(); });
+        y.value = withSequence(withTiming(-lift, { duration: 0 }), withTiming(0, from.slide, (done) => { if (done) runOnJS(landed)(); }));
         return;
       }
     }
+    // Nothing taken over: the pill comes with the rest of them, the whole layer unseen until it fades in below.
+    lead.value = 1;
     // Under the card that is leaving: there to be uncovered as that slides away.
     opacity.value = withTiming(1, { duration: 200, easing: Easing.out(Easing.quad) }, (done) => { if (done) runOnJS(arrived)(); });
     y.value = withTiming(0, { duration: 320, easing: Easing.out(Easing.cubic) });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Leaving, its buttons can be taken over by the bare map's (takesOver): only when fully there, never faded or tucked away.
+  // Leaving, its buttons can be taken over by the bare map's (takesOver): only when fully there, never faded (by the stage,
+  // or by the players list as it was pulled up: crownFade) or tucked away.
   useEffect(() => {
     handoffs.set(layer.id, () => {
       const left = exit.current;
@@ -194,7 +212,7 @@ function Layer({ layer, out, crown: crownFor, onGone, handoffs }: { layer: Stage
     if (layer.kind === 'card') sheetFling.value = 0;
     const slide: WithTimingConfig = flung ? { duration: 220, easing: Easing.out(Easing.quad) } : { duration: 260, easing: SINK };
     // Where it was and how it goes, before anything moves, for the bare map's buttons to take over from (above).
-    exit.current = { y0: y.value, shown: risen.current && crownOpacity.value > 0.99, slide };
+    exit.current = { y0: y.value, shown: risen.current && crownOpacity.value * (crownFade.current?.() ?? 1) > 0.99, slide };
     crownOpacity.value = withTiming(0, { duration: 120 });
     // A card that never got as far as rising was never seen: nothing to play.
     if (!risen.current) { gone(); return; }
@@ -227,7 +245,9 @@ function Layer({ layer, out, crown: crownFor, onGone, handoffs }: { layer: Stage
       >
         {crown ? (
           <Animated.View ref={crownBox} pointerEvents="box-none" style={crownLook} onLayout={(e) => { crownH.current = e.nativeEvent.layout.height; }}>
-            <CrownTakeover.Provider value={takeover}><GlassRenew.Provider value={renew}>{crown}</GlassRenew.Provider></CrownTakeover.Provider>
+            <CrownLead.Provider value={lead}>
+              <CrownFade.Provider value={crownFade}><GlassRenew.Provider value={renew}>{crown}</GlassRenew.Provider></CrownFade.Provider>
+            </CrownLead.Provider>
           </Animated.View>
         ) : null}
         {layer.node}

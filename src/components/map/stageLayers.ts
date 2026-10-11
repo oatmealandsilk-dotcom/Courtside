@@ -1,5 +1,6 @@
 import type React from 'react';
 import { createContext, useReducer, useRef } from 'react';
+import type { SharedValue } from 'react-native-reanimated';
 
 /*
  * What the map's card stage (CardStage, and its browser twin) holds: the
@@ -73,8 +74,23 @@ export const layerZ = (layer: StageLayer) => (layer.kind === 'tray' ? 1 : 2 + la
 export const takesOver = (layer: StageLayer) => layer.kind === 'tray' && !layer.first && layer.replaces?.kind === 'card';
 
 /**
- * True on the buttons taking over from a closing card (above): what only
- * the bare map has (the players pill, and the credits over it) fades in as
- * they ride down; Back to me and the zoom were there all along.
+ * How solid what only the bare map's buttons have is (the players pill, and
+ * the credits over it), set by the stage under them. On the bare map that
+ * may take over a closing card's buttons (above) it is unseen until the
+ * stage knows whether it does: if so it fades in as they ride down (Back to
+ * me and the zoom were there all along, on the card), done before they land;
+ * if not it comes with the rest of them (Oct 11: it faded in on its own
+ * either way, so on the phone their glass could be put up again while it
+ * was still fading, and stay a flat white plate). Outside a stage, solid.
  */
-export const CrownTakeover = createContext(false);
+export const CrownLead = createContext<SharedValue<number> | null>(null);
+
+/**
+ * On the phone, how solid a layer's buttons are by their own doing (the
+ * players list's, faded as it is pulled up: ListCrown), which its stage
+ * cannot see for itself: so it never swaps a half-faded set for the bare
+ * map's at full strength (Oct 11; the browser's stage reads it off the page).
+ * The buttons put a reader in here; none, and they are as solid as the
+ * stage made them.
+ */
+export const CrownFade = createContext<{ current: (() => number) | null } | null>(null);

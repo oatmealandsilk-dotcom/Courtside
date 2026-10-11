@@ -1,8 +1,9 @@
 import React, { useLayoutEffect, useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
+import { Easing, makeMutable, withTiming, type SharedValue } from 'react-native-reanimated';
 
 import { sheetFling } from '@/components/map/sheetFling';
-import { CrownTakeover, layerZ, takesOver, useStageLayers, type Crown, type StageKind, type StageLayer } from '@/components/map/stageLayers';
+import { CrownLead, layerZ, takesOver, useStageLayers, type Crown, type StageKind, type StageLayer } from '@/components/map/stageLayers';
 
 /*
  * The browser's twin of CardStage (see there for the choreography): the
@@ -17,7 +18,9 @@ import { CrownTakeover, layerZ, takesOver, useStageLayers, type Crown, type Stag
  *
  * Closing back to the bare map, its buttons take over the card's and ride
  * down with it, as on the phone (takesOver, Oct 10): measured here on the
- * page itself, so they start exactly where the card's were.
+ * page itself, so they start exactly where the card's were. Only the players
+ * pill fades in as they go, and only then (CrownLead); otherwise it comes
+ * with the rest of them.
  *
  * The phone's stage also puts its buttons' glass up again once they have
  * arrived (GlassRenew), for an iPhone that draws it white otherwise. Not
@@ -73,7 +76,7 @@ function shownFoot(crown: HTMLElement | null): number | null {
 /**
  * The bare map taking over a closing card's buttons: its own start exactly
  * where the card's are and ride down on the card's own slide, solid, the
- * card's put away that moment (only the players pill fades in: MapButtons).
+ * card's put away that moment (only the players pill fades in: CrownLead).
  * False when there is nothing to ride (they would have to go up), and the
  * usual entrance plays instead.
  */
@@ -124,6 +127,14 @@ export function CardStage({ cardKey, kind, crown, children }: { cardKey: string;
   // Whose entrance and exit have been played: once each, however often the stage redraws meanwhile.
   const entered = useRef(new Set<string>());
   const leaving = useRef(new Set<string>());
+  // What only the bare map's buttons have (the players pill, the credits over it): unseen, on one that may take over a
+  // closing card's, until it is known whether it does (CrownLead, as on the phone).
+  const leads = useRef(new Map<string, SharedValue<number>>());
+  const leadOf = (layer: StageLayer) => {
+    let lead = leads.current.get(layer.id);
+    if (!lead) { lead = makeMutable(takesOver(layer) ? 0 : 1); leads.current.set(layer.id, lead); }
+    return lead;
+  };
 
   useLayoutEffect(() => {
     // Those leaving first: where their buttons were, measured before anything moves, for the bare map's to take over (takesOver).
@@ -139,6 +150,7 @@ export function CardStage({ cardKey, kind, crown, children }: { cardKey: string;
         crowns.current.delete(layer.id);
         entered.current.delete(layer.id);
         leaving.current.delete(layer.id);
+        leads.current.delete(layer.id);
         remove(layer);
       });
       if (foot !== null && top) handoffs.set(layer.id, { foot, slide, crown: top });
@@ -149,7 +161,14 @@ export function CardStage({ cardKey, kind, crown, children }: { cardKey: string;
       const top = crowns.current.get(layer.id) ?? null;
       entered.current.add(layer.id);
       const from = takesOver(layer) && layer.replaces && !still() ? handoffs.get(layer.replaces.id) : undefined;
-      if (from && takeOver(el, top, from)) continue;
+      const lead = leads.current.get(layer.id);
+      if (from && takeOver(el, top, from)) {
+        // The pill fades in as they ride down, done before they land.
+        if (lead) lead.value = withTiming(1, { duration: 200, easing: Easing.out(Easing.quad) });
+        continue;
+      }
+      // Nothing taken over: the pill comes with the rest of them, as the whole layer fades in.
+      if (lead) lead.value = 1;
       enter(el, top, layer.kind);
     }
   });
@@ -166,7 +185,7 @@ export function CardStage({ cardKey, kind, crown, children }: { cardKey: string;
           {crown ? (
             <View ref={(el) => { if (el) crowns.current.set(layer.id, el as unknown as HTMLElement); }} style={styles.through}>
               {/* Its own buttons: one on its way out keeps the ones it had (the players list's, faded while it was tall). */}
-              <CrownTakeover.Provider value={takesOver(layer)}>{typeof crown === 'function' ? crown(layer.key) : crown}</CrownTakeover.Provider>
+              <CrownLead.Provider value={leadOf(layer)}>{typeof crown === 'function' ? crown(layer.key) : crown}</CrownLead.Provider>
             </View>
           ) : null}
           {layer.node}
