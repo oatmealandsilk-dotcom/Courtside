@@ -6,8 +6,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as maplibregl from 'maplibre-gl';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
-import { CityLine, CitylessCard, CityWeatherChip, CourtSheet, CourtsZoomNote, FilterChips, HitSheet, ListCrown, MapCredit, YouSheet, MapButtons, MapTopBar, PlaceSheet, PlayerSheet, PlayersPill, PlayersSheet, PreviewOverlay, WhereCard } from '@/components/map/MapChrome';
+import { ChipsNoteLine, CityLine, CitylessCard, CityWeatherChip, CourtSheet, CourtsZoomNote, FilterChips, HitSheet, ListCrown, MapCredit, YouSheet, MapButtons, MapTopBar, PlaceSheet, PlayerSheet, PlayersPill, PlayersSheet, PreviewOverlay, WhereCard } from '@/components/map/MapChrome';
 import { CardStage } from '@/components/map/CardStage';
+import { MAP_TOP } from '@/components/map/mapTop';
 import { CARD_HEIGHT, CARD_ZOOM, onCard } from '@/components/map/cardFit';
 import type { NearbyMapProps } from '@/components/NearbyMap.types';
 import { placeZoom } from '@/features/places/geocode';
@@ -432,19 +433,29 @@ export function NearbyMap(props: NearbyMapProps) {
   // Made for each layer from its own key, so one on its way out keeps the buttons it had: only the bare map's carry the
   // players pill (Oct 10: made from what was up now, a closing card's buttons grew the pill as it sank, the ⓘ jumping up over it).
   const buttons = (pill: boolean) => <View pointerEvents="box-none" style={styles.crown}><MapButtons lead={pill ? <PlayersPill items={model.tray} query={model.query} filter={model.filter} courts={model.nearestCourts} lock={lock} onOpen={() => { setListTall(false); trayAt.current = 0; setListOpen(true); }} /> : undefined} onRecentre={() => { model.select(null); model.selectCourt(null); model.selectHit(null); model.clearPlace(); map.current?.flyTo({ center: [model.homeView.center.lng, model.homeView.center.lat], zoom: model.homeView.zoom ?? START_ZOOM, duration: 600 }); }} onZoomIn={() => map.current?.zoomIn()} onZoomOut={() => map.current?.zoomOut()} /></View>;
+  // Zoomed out past about a city with the courts on: "Zoom in to see courts" (not over a court's card, nor a search).
+  const zoomNote = model.courtsOn && far && !model.selectedCourt && !model.query.trim();
   return (
     <View style={styles.fill} onLayout={(e) => setMapH(Math.round(e.nativeEvent.layout.height))}>
       {canvas}
       <View pointerEvents="box-none" style={[styles.top, { paddingTop: insets.top + spacing.sm }]}>
-        <MapTopBar onBack={onBack} query={model.query} onQuery={model.setQuery} locationOn={locationOn} locating={locating} onToggleLocation={onToggleLocation} results={model.courtResults} onPickCourt={model.pickCourt} places={model.placeSearch} onPickPlace={model.pickPlace} players={model.query.trim() ? model.tray.length : 0} locationMenu={choosing} />
+        {/* On the two-row top (mapTop A) the city and its weather ride in the search bar itself. */}
+        <MapTopBar onBack={onBack} query={model.query} onQuery={model.setQuery} locationOn={locationOn} locating={locating} onToggleLocation={onToggleLocation} results={model.courtResults} onPickCourt={model.pickCourt} places={model.placeSearch} onPickPlace={model.pickPlace} players={model.query.trim() ? model.tray.length : 0} locationMenu={choosing} look={MAP_TOP} cityName={model.homeKnown ? cityName : ''} weather={model.homeKnown ? weather : null} />
         <View onLayout={(e) => { const { y, height } = e.nativeEvent.layout; setChipsEnd(Math.round(y + height)); }}>
-          <FilterChips filter={model.filter} onFilter={model.setFilter} courtsOn={model.courtsOn} onCourts={model.toggleCourts} courtsLoading={model.courtsLoading} />
+          <FilterChips filter={model.filter} onFilter={model.setFilter} courtsOn={model.courtsOn} onCourts={model.toggleCourts} courtsLoading={model.courtsLoading} look={MAP_TOP} />
         </View>
-        {/* The city and its weather, a small chip under the filters; zoomed out, "Zoom in to see courts" on the same line, right after it (Oct 10). */}
-        <CityLine>
-          {model.homeKnown ? <CityWeatherChip cityName={cityName} weather={weather} /> : null}
-          {model.courtsOn && far && !model.selectedCourt && !model.query.trim() ? <CourtsZoomNote /> : null}
-        </CityLine>
+        {MAP_TOP === 'A' ? (
+          // Only while zoomed out: "Zoom in to see courts", under the chips (as on the phone).
+          <ChipsNoteLine>
+            {zoomNote ? <CourtsZoomNote look="A" /> : null}
+          </ChipsNoteLine>
+        ) : (
+          // The city and its weather, a small chip under the filters; zoomed out, "Zoom in to see courts" on the same line, right after it (Oct 10).
+          <CityLine>
+            {model.homeKnown ? <CityWeatherChip cityName={cityName} weather={weather} /> : null}
+            {zoomNote ? <CourtsZoomNote /> : null}
+          </CityLine>
+        )}
         {/* Slow to come, or didn't: a small pill under the chips, clear of the pins around you (as on the phone). */}
         <MapLoadPill status={load.status} onRetry={load.restart} />
       </View>

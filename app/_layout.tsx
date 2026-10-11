@@ -1,6 +1,8 @@
 // First, before any text is drawn: text follows the phone's size setting, with a ceiling.
 import '@/lib/textScale';
 import '@/lib/launchSplash';
+// The full map's top on trial (?maptop=A, in a browser): read as the page loads, before signing in moves the address on.
+import '@/components/map/mapTop';
 import React, { useEffect } from 'react';
 import { usePauseWhenHidden } from '@/features/feed/pauseWhenHidden';
 import { Pressable, Text, View } from 'react-native';

@@ -58,6 +58,7 @@ import type { MapVisibility } from '@/data/types';
 import type { FoundPlace } from '@/features/places/geocode';
 import type { PlaceSearch } from '@/features/places/usePlaceSearch';
 import { plain } from '@/features/search/words';
+import type { MapTopLook } from '@/components/map/mapTop';
 
 // Kept here too, for the screens that already import it from the map's chrome.
 export { CourtGlyph };
@@ -76,9 +77,17 @@ export { CourtGlyph };
  * was typed ("Raleigh" is the city, not The Raleigh Racquet Club), else the
  * top row. Players still filter the pins and the players list as before (`players`
  * says how many match, so "No places found" never hangs over a name that found someone).
+ *
+ * The two-row top (`look` A, see mapTop): the city and its weather live in
+ * the bar itself, "Search Los Angeles" with "☁ 69°" at its end behind a
+ * hairline, so no chip of their own sits under the filters. Typing (or the
+ * bar just tapped) the weather steps aside for the words, and the bar says
+ * what it finds; the three across are 44 points tall, a finger's width.
  */
-export function MapTopBar({ onBack, query, onQuery, locationOn, locating, onToggleLocation, results, onPickCourt, places, onPickPlace, players = 0, locationMenu = false }: { onBack?: () => void; query: string; onQuery: (next: string) => void; locationOn?: boolean; locating?: boolean; onToggleLocation?: () => void; results?: CourtRow[]; onPickCourt?: (c: Court) => void; /** The place search as you type (usePlaceSearch). */ places?: PlaceSearch; onPickPlace?: (p: FoundPlace) => void; /** Players whose names match what is typed. */ players?: number; /** With Location on, the button opens who can see you (and Location off) rather than switching off. */ locationMenu?: boolean }) {
+export function MapTopBar({ onBack, query, onQuery, locationOn, locating, onToggleLocation, results, onPickCourt, places, onPickPlace, players = 0, locationMenu = false, look = 'today', cityName = '', weather = null }: { onBack?: () => void; query: string; onQuery: (next: string) => void; locationOn?: boolean; locating?: boolean; onToggleLocation?: () => void; results?: CourtRow[]; onPickCourt?: (c: Court) => void; /** The place search as you type (usePlaceSearch). */ places?: PlaceSearch; onPickPlace?: (p: FoundPlace) => void; /** Players whose names match what is typed. */ players?: number; /** With Location on, the button opens who can see you (and Location off) rather than switching off. */ locationMenu?: boolean; /** Which top the map wears (mapTop): A puts the city and its weather in the bar. */ look?: MapTopLook; /** A: the town the bar names ("Search Los Angeles"); none yet, the bar's own words. */ cityName?: string; /** A: what it's like to play there today, at the bar's end. */ weather?: Weather | null }) {
   const styles = useThemedStyles(styleDefinitions);
+  const input = useRef<TextInput>(null);
+  const [focused, setFocused] = useState(false);
   const key = plain(query);
   const typed = !!key;
   const allCourts = onPickCourt && typed ? (results ?? []) : [];
@@ -100,10 +109,87 @@ export function MapTopBar({ onBack, query, onQuery, locationOn, locating, onTogg
     else if (found[0] && onPickCourt) onPickCourt(found[0].c);
     else if (placeRows[0] && onPickPlace) onPickPlace(placeRows[0]);
   };
+  // A: the town in the bar's words ("you" is the list's stand-in for a town not named yet, never a name).
+  const city = cityName && cityName !== 'you' ? cityName : '';
+  // "Search Kapolei" where it fits whole; where it doesn't ("Search Los Angeles" on a 390-point phone), the town alone,
+  // the magnifier before it still saying what the bar is for; a town too long even alone trails off "…".
+  const [fieldW, setFieldW] = useState(0);
+  const [sayW, setSayW] = useState(0);
+  const say = city ? `Search ${city}` : '';
+  const hint = focused ? 'Players, courts or places' : !city ? 'Search a place or park' : fieldW && sayW > fieldW ? city : say;
+  const locationIcon = locating ? <ActivityIndicator size="small" color={locationOn ? colors.brandInk : colors.text} /> : <Ionicons name={locationOn ? 'navigate' : 'navigate-outline'} size={18} color={locationOn ? colors.brandInk : colors.text} />;
+  const twoRow = look === 'A' ? (
+    <View style={styles.topRow}>
+      {onBack ? (
+        <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={onBack} style={({ pressed }) => [styles.aRoundHit, pressed && styles.aPressed]}>
+          <Glass radius={22} style={styles.aRound}><Ionicons name="chevron-back" size={22} color={colors.text} /></Glass>
+        </Pressable>
+      ) : null}
+      {/* The whole bar is the search: a tap anywhere on it (its weather too) puts the cursor in. */}
+      <Pressable accessible={false} focusable={false} onPress={() => input.current?.focus()} style={styles.aSearchLift}>
+        <Glass radius={22} style={[styles.aSearch, focused && styles.aSearchOn]}>
+          <Ionicons name="search" size={17} color={colors.textMuted} />
+          <View style={styles.aField} onLayout={(e) => setFieldW(Math.floor(e.nativeEvent.layout.width))}>
+            {/* "Search <town>" laid out unseen at its own width, to know whether it fits. */}
+            {say ? (
+              <View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.aMeasure}>
+                <Text style={styles.aHint} onLayout={(e) => setSayW(Math.ceil(e.nativeEvent.layout.width))}>{say}</Text>
+              </View>
+            ) : null}
+            {/* The bar's words, drawn here rather than as the field's placeholder, so a long town trails off "…" on every phone. */}
+            {!query ? (
+              <View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.aHintBox}>
+                <Text style={styles.aHint} numberOfLines={1}>{hint}</Text>
+              </View>
+            ) : null}
+            <TextInput
+              ref={input}
+              accessibilityLabel="Search players, courts, or a city, address or park"
+              accessibilityHint={city ? `Around ${city}` : undefined}
+              value={query}
+              onChangeText={onQuery}
+              onFocus={() => setFocused(true)}
+              onBlur={() => setFocused(false)}
+              autoCorrect={false}
+              autoCapitalize="words"
+              returnKeyType="search"
+              onSubmitEditing={submit}
+              style={styles.aInput}
+            />
+          </View>
+          {query ? (
+            <Pressable accessibilityRole="button" accessibilityLabel="Clear search" hitSlop={14} onPress={() => onQuery('')} style={styles.aClear}>
+              <Ionicons name="close-circle" size={17} color={colors.textFaint} />
+            </Pressable>
+          ) : weather && !focused ? (
+            // Quiet, after a hairline: the sky and the temperature, the way a phone's weather reads.
+            <Animated.View entering={FadeIn.duration(180)} exiting={FadeOut.duration(120)} pointerEvents="none" style={styles.aWeather}>
+              <View style={styles.aWeatherRule} />
+              <Ionicons name={weather.icon as keyof typeof Ionicons.glyphMap} size={15} color={colors.textMuted} />
+              <Text style={styles.aWeatherText} accessibilityLabel={`${weather.tempF} degrees, ${weather.label}`}>{weather.tempF}°</Text>
+            </Animated.View>
+          ) : null}
+        </Glass>
+      </Pressable>
+      {onToggleLocation ? (
+        <View>
+          <TipPulse where="map" size={44} />
+          <Pressable accessibilityRole="switch" accessibilityState={{ checked: !!locationOn }} accessibilityLabel={locationOn ? (locationMenu ? 'Location on. Who can see you' : 'Turn location off') : 'Turn location on'} onPress={onToggleLocation} style={({ pressed }) => [styles.aRoundHit, pressed && styles.aPressed]}>
+            {locationOn ? (
+              <View style={[styles.aRound, styles.aRoundOn]}><BrandWash radius={22} />{locationIcon}</View>
+            ) : (
+              <Glass radius={22} style={styles.aRound}>{locationIcon}</Glass>
+            )}
+          </Pressable>
+          <HideTip where="map" style={{ top: 52, right: 0 }} />
+        </View>
+      ) : null}
+    </View>
+  ) : null;
   return (
     // Above the filter chips under it, so the location tip hangs over them.
     <View style={{ gap: spacing.sm, zIndex: 5 }}>
-    <View style={styles.topRow}>
+    {twoRow ?? <View style={styles.topRow}>
       {onBack ? (
         <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={onBack} style={styles.roundHit}>
           <Glass radius={21} style={styles.roundGlass}><Ionicons name="chevron-back" size={22} color={colors.text} /></Glass>
@@ -140,7 +226,7 @@ export function MapTopBar({ onBack, query, onQuery, locationOn, locating, onTogg
           <HideTip where="map" style={{ top: 50, right: 0 }} />
         </View>
       ) : null}
-    </View>
+    </View>}
     {found.length || placeRows.length || placeNote || searching ? (
       <Animated.View entering={FadeIn.duration(140)} style={styles.resultsWrap}>
         <Glass radius={18} style={styles.results}>
@@ -190,9 +276,17 @@ const FILTERS: { key: MapFilter; label: string }[] = [
   { key: 'coaches', label: 'Coaches' },
 ];
 
-/** Who to show, plus the courts layer, as one row of chips. */
-export function FilterChips({ filter, onFilter, courtsOn, onCourts, courtsLoading }: { filter: MapFilter; onFilter: (next: MapFilter) => void; courtsOn: boolean; onCourts: () => void; courtsLoading: boolean }) {
+/**
+ * Who to show, plus the courts layer, as one row of chips. On the two-row top
+ * (`look` A) the row runs to the screen's edge, the chips sliding out under it
+ * rather than stopping short, and each chip takes a touch 44 points tall
+ * though it shows 32.
+ */
+export function FilterChips({ filter, onFilter, courtsOn, onCourts, courtsLoading, look = 'today' }: { filter: MapFilter; onFilter: (next: MapFilter) => void; courtsOn: boolean; onCourts: () => void; courtsLoading: boolean; look?: MapTopLook }) {
   const styles = useThemedStyles(styleDefinitions);
+  const a = look === 'A';
+  // A: the touch reaches 6 above and below the chip, inside the row's own room (a scroll view takes no touch outside itself).
+  const reach = a ? { top: 6, bottom: 6 } : undefined;
   // Where each chip sits, so one filled pill can slide from the old choice to the new, the way a segmented control does.
   const spots = useRef<Partial<Record<MapFilter, { x: number; w: number }>>>({});
   const x = useSharedValue(0);
@@ -223,13 +317,14 @@ export function FilterChips({ filter, onFilter, courtsOn, onCourts, courtsLoadin
     pending.current = setTimeout(() => { pending.current = null; onFilter(key); }, Platform.OS === 'web' ? 200 : 16);
   };
   return (
-    <View style={styles.chipsRow}>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips} style={styles.chipsWrap}>
-        {measured ? FILTERS.map((f) => { const spot = spots.current[f.key]; return spot ? <View key={`plate-${f.key}`} pointerEvents="none" style={[styles.chipPlate, { left: spot.x, width: spot.w }]} /> : null; }) : null}
-        {measured ? <Animated.View pointerEvents="none" style={[styles.chipPill, pill]}><BrandWash /></Animated.View> : null}
+    <View style={a ? styles.aChipsRow : styles.chipsRow}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.chips, a && styles.aChips]} style={styles.chipsWrap}>
+        {measured ? FILTERS.map((f) => { const spot = spots.current[f.key]; return spot ? <View key={`plate-${f.key}`} pointerEvents="none" style={[styles.chipPlate, a && styles.aChipTop, { left: spot.x, width: spot.w }]} /> : null; }) : null}
+        {measured ? <Animated.View pointerEvents="none" style={[styles.chipPill, a && styles.aChipTop, pill]}><BrandWash /></Animated.View> : null}
         {FILTERS.map((f) => (
           <Pressable
             key={f.key}
+            hitSlop={reach}
             accessibilityRole="tab"
             accessibilityState={{ selected: active === f.key }}
             onPress={() => pick(f.key)}
@@ -245,7 +340,7 @@ export function FilterChips({ filter, onFilter, courtsOn, onCourts, courtsLoadin
         ))}
         {/* Courts is an on/off switch, not one of the choices: a hairline sets it apart, and it scrolls with the row so nothing is ever tucked behind it. */}
         <View style={styles.chipGap} />
-        <Pressable accessibilityRole="switch" accessibilityState={{ checked: courtsOn }} accessibilityLabel="Show courts" onPress={() => { haptics.tap(); onCourts(); }} style={[styles.chip, courtsOn && styles.chipOn]}>
+        <Pressable accessibilityRole="switch" accessibilityState={{ checked: courtsOn }} accessibilityLabel="Show courts" hitSlop={reach} onPress={() => { haptics.tap(); onCourts(); }} style={[styles.chip, courtsOn && styles.chipOn]}>
           {courtsOn ? <BrandWash /> : null}
           {courtsLoading ? <ActivityIndicator size="small" color={courtsOn ? colors.brandInk : colors.text} /> : <CourtGlyph size={15} color={courtsOn ? colors.brandInk : colors.text} />}
           <Text style={[styles.chipText, courtsOn && styles.chipTextOn]}>Courts</Text>
@@ -261,10 +356,10 @@ export function FilterChips({ filter, onFilter, courtsOn, onCourts, courtsLoadin
  * went, on the city chip's line, right after it (CityLine). Not a button:
  * the map under it still takes the pinch and the drag.
  */
-export function CourtsZoomNote() {
+export function CourtsZoomNote({ look = 'today' }: { look?: MapTopLook }) {
   const styles = useThemedStyles(styleDefinitions);
   return (
-    <Animated.View entering={FadeIn.duration(180)} exiting={FadeOut.duration(140)} pointerEvents="none" style={styles.zoomNote}>
+    <Animated.View entering={FadeIn.duration(180)} exiting={FadeOut.duration(140)} pointerEvents="none" style={[styles.zoomNote, look === 'A' && styles.aZoomNote]}>
       <CourtGlyph size={12} color={colors.textMuted} />
       <Text style={styles.zoomNoteText}>Zoom in to see courts</Text>
     </Animated.View>
@@ -422,6 +517,18 @@ export function CityLine({ children }: { children: React.ReactNode }) {
   const styles = useThemedStyles(styleDefinitions);
   if (!React.Children.toArray(children).length) return null;
   return <View pointerEvents="box-none" style={styles.cityLine}>{children}</View>;
+}
+
+/**
+ * The two-row top (look A, mapTop): the line under the chips, there only
+ * while zoomed out, with "Zoom in to see courts" at its start, in line with
+ * Back and the first chip, 8 under them as the chips are 8 under the bar.
+ * Nothing to say, no line. Taps go through it to the map.
+ */
+export function ChipsNoteLine({ children }: { children: React.ReactNode }) {
+  const styles = useThemedStyles(styleDefinitions);
+  if (!React.Children.toArray(children).length) return null;
+  return <View pointerEvents="box-none" style={styles.aNoteLine}>{children}</View>;
 }
 
 /** The city and what it's like to play there today, a small chip under the filters. Nothing to say (no town named yet, no weather), no chip. */
@@ -1398,6 +1505,35 @@ const styleDefinitions = StyleSheet.create({
   cityChip: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 11, height: 30, borderWidth: StyleSheet.hairlineWidth, borderColor: `${colors.borderStrong}55` },
   cityChipText: { ...typography.smallStrong, color: colors.text, fontVariant: ['tabular-nums'] },
   cityChipRule: { width: StyleSheet.hairlineWidth, height: 14, marginHorizontal: 3, backgroundColor: colors.borderStrong },
+  // The two-row top (look A, mapTop). Back, the bar and Location: 44 tall, one glass, one soft lift each.
+  aRoundHit: { width: 44, height: 44, borderRadius: 22, shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } },
+  aRound: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: `${colors.borderStrong}55` },
+  aRoundOn: { borderRadius: 22, backgroundColor: colors.brand, borderColor: colors.brand },
+  // Pressed, a button dims rather than shrinks (a shrunk icon goes soft on an iPhone, Oct 11).
+  aPressed: { opacity: 0.7 },
+  aSearchLift: { flex: 1, minWidth: 0, borderRadius: 22, shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } },
+  aSearch: { height: 44, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: 14, borderWidth: StyleSheet.hairlineWidth, borderColor: `${colors.borderStrong}55` },
+  // The words' room: the field fills it, the bar's own words ("Search Los Angeles") under it while nothing is typed.
+  aField: { flex: 1, minWidth: 0, alignSelf: 'stretch', justifyContent: 'center' },
+  aHintBox: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, justifyContent: 'center' },
+  aHint: { ...typography.body, fontSize: 16, color: colors.textFaint },
+  // Unseen, wide enough that nothing squeezes the words it measures.
+  aMeasure: { position: 'absolute', left: 0, top: 0, width: 600, flexDirection: 'row', alignItems: 'flex-start', opacity: 0 },
+  // In a browser no ring of its own round the words: the bar's edge says it is being typed in (aSearchOn).
+  aInput: { ...typography.body, fontSize: 16, color: colors.text, minHeight: 40, paddingVertical: 9, paddingHorizontal: 0, backgroundColor: 'transparent', ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : {}) },
+  aSearchOn: { borderColor: colors.brand },
+  aClear: { paddingLeft: 2 },
+  // The weather at the bar's end: a hairline, the sky, the temperature.
+  aWeather: { flexDirection: 'row', alignItems: 'center', gap: 5, height: 44 },
+  aWeatherRule: { width: StyleSheet.hairlineWidth, height: 18, marginRight: 4, backgroundColor: colors.borderStrong },
+  aWeatherText: { ...typography.smallStrong, fontSize: 14, color: colors.textMuted, fontVariant: ['tabular-nums'] },
+  // The chips' row to the screen's edge, its 6 above and below the chips their touch's reach (44 in all).
+  aChipsRow: { flexDirection: 'row', alignItems: 'center' },
+  aChips: { paddingVertical: 6 },
+  aChipTop: { top: 6 },
+  // Zoomed out, under the chips: the note, a touch smaller than they are.
+  aNoteLine: { flexDirection: 'row', paddingHorizontal: spacing.md },
+  aZoomNote: { height: 28 },
   credit: { padding: 2, opacity: 0.7 },
   // The map's buttons riding on the players list (ListCrown): taps pass through around them, in a browser too (a compiled style).
   crownThrough: { pointerEvents: 'box-none' },
