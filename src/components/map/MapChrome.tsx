@@ -122,10 +122,13 @@ export function MapTopBar({ onBack, query, onQuery, locationOn, locating, onTogg
   const city = cityName && cityName !== 'you' ? cityName : '';
   // "Search Kapolei" where it fits whole; where it doesn't ("Search Los Angeles" on a 390-point phone), the town alone,
   // the magnifier before it still saying what the bar is for; a town too long even alone trails off "…".
+  // No town named yet (its name still being looked up, or never found): the old bar's "Search a place or park"
+  // where it fits, else "Search places", which fits beside the weather (Oct 11: the long one read "Search a place o…").
   const [fieldW, setFieldW] = useState(0);
   const [sayW, setSayW] = useState(0);
-  const say = city ? `Search ${city}` : '';
-  const hint = focused ? 'Players, courts or places' : !city ? 'Search a place or park' : fieldW && sayW > fieldW ? city : say;
+  const say = city ? `Search ${city}` : 'Search a place or park';
+  const short = city || 'Search places';
+  const hint = focused ? 'Players, courts or places' : fieldW && sayW > fieldW ? short : say;
   const locationIcon = locating ? <ActivityIndicator size="small" color={locationOn ? colors.brandInk : colors.text} /> : <Ionicons name={locationOn ? 'navigate' : 'navigate-outline'} size={18} color={locationOn ? colors.brandInk : colors.text} />;
   return (
     // Above the filter chips under it, so the location tip hangs over them.
@@ -141,12 +144,10 @@ export function MapTopBar({ onBack, query, onQuery, locationOn, locating, onTogg
         <Glass radius={22} style={[styles.search, focused && styles.searchOn]}>
           <Ionicons name="search" size={17} color={colors.textMuted} />
           <View style={styles.searchField} onLayout={(e) => setFieldW(Math.floor(e.nativeEvent.layout.width))}>
-            {/* "Search <town>" laid out unseen at its own width, to know whether it fits. */}
-            {say ? (
-              <View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.searchMeasure}>
-                <Text style={styles.searchHint} onLayout={(e) => setSayW(Math.ceil(e.nativeEvent.layout.width))}>{say}</Text>
-              </View>
-            ) : null}
+            {/* "Search <town>" (or "Search a place or park") laid out unseen at its own width, to know whether it fits. */}
+            <View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.searchMeasure}>
+              <Text style={styles.searchHint} onLayout={(e) => setSayW(Math.ceil(e.nativeEvent.layout.width))}>{say}</Text>
+            </View>
             {/* The bar's words, drawn here rather than as the field's placeholder, so a long town trails off "…" on every phone. */}
             {!query ? (
               <View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.searchHintBox}>
