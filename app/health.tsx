@@ -30,8 +30,8 @@ import { colors, radius, spacing, typography } from '@/theme';
 const ABOUT: Partial<Record<Integration['provider'], { icon: keyof typeof Ionicons.glyphMap; line: string; how: string }>> = {
   'apple-health': { icon: 'heart-outline', line: 'Sleep, HRV, resting heart rate, steps, active energy, food.', how: 'Reads the Health app on this phone.' },
   whoop: { icon: 'pulse-outline', line: 'Recovery, strain, HRV, resting heart rate, sleep.', how: 'Signs in to WHOOP once; then it syncs on its own.' },
-  // Tennis sessions only, through the server's trackers function (migration 69).
-  fitbit: { icon: 'watch-outline', line: 'Tennis sessions and your heart rate during them.', how: 'Sign in to Fitbit once. Tennis you record shows up here.' },
+  // Tennis sessions only, through the server's trackers function (migration 69). Fitbit signs in with Google since Oct 10 (Google's Health API).
+  fitbit: { icon: 'watch-outline', line: 'Tennis sessions and your heart rate during them.', how: 'Sign in once with the Google account your Fitbit uses. Tennis you record shows up here.' },
   oura: { icon: 'ellipse-outline', line: 'Tennis workouts and your heart rate during them.', how: 'Sign in to Oura once. Tennis it records shows up here.' },
   polar: { icon: 'stopwatch-outline', line: 'Tennis sessions and their heart rate.', how: 'Sign in to Polar Flow once. Tennis you record shows up here.' },
   garmin: {

@@ -44,8 +44,8 @@ export const providerSetup: Record<IntegrationProvider, ProviderSetup> = {
   fitbit: {
     provider: 'fitbit',
     authMethod: 'oauth2',
-    docsUrl: 'https://dev.fitbit.com/build/reference/web-api/',
-    todo: 'Live through the trackers function (migration 69) once its keys are set: tennis sessions only.',
+    docsUrl: 'https://developers.google.com/health',
+    todo: 'Live through the trackers function (migration 69) once its keys are set: tennis sessions only, through Google\'s Health API (Fitbit\'s own Web API shuts Oct 30, 2026). The keys are a Google Cloud OAuth client\'s.',
   },
   oura: {
     provider: 'oura',

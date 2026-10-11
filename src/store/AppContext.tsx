@@ -1515,10 +1515,12 @@ function withMapRings(users: User[], seen: Record<ID, LastSeen>, me: ID | null, 
 const isRefusal = (result: string): result is GroupRefusal | 'failed' => ['blocked', 'teen', 'full', 'not-admin', 'words', 'failed'].includes(result);
 
 // In a browser, WHOOP's tennis sign-in (and Fitbit's, Oura's or Polar's) comes
-// back in its own small window (?whoop=pending, ?tracker=pending): that window
+// back in its own small window (?whoop=pending, ?tracker=…): that window
 // hands the address to the one that opened it, which collects the sign-in
-// (connectWhoop, connectTracker). Every other page load: nothing.
-if (Platform.OS === 'web' && typeof window !== 'undefined' && /[?&](whoop|tracker)=pending/.test(window.location?.search ?? '')) {
+// (connectWhoop, connectTracker). A tracker's every answer goes back
+// (?tracker=notlinked, unavailable, expired…), so the app says why it did not
+// connect, as on a phone. Every other page load: nothing.
+if (Platform.OS === 'web' && typeof window !== 'undefined' && /[?&](whoop=pending|tracker=)/.test(window.location?.search ?? '')) {
   try { WebBrowser.maybeCompleteAuthSession(); } catch { /* the opener has gone; trying again starts afresh */ }
 }
 
@@ -8310,7 +8312,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const result = await WebBrowser.openAuthSessionAsync(start.url, back);
     if (result.type !== 'success') throw new Error(`${label} was not connected.`);
     const n = /[?&]n=([0-9a-f-]{36})/i.exec(result.url)?.[1];
-    if (!n) throw new Error(/tracker=expired/.test(result.url) ? 'That sign-in took too long. Try again.' : `${label} was not connected.`);
+    // Fitbit signs in with Google since Oct 10: a Google account with no Google Health profile yet is told what to do (Google's own advice).
+    if (!n) throw new Error(/tracker=expired/.test(result.url) ? 'That sign-in took too long. Try again.'
+      : /tracker=notlinked/.test(result.url) ? 'That Google account isn’t linked to Google Health yet. Open the Google Health app, sign in with Google (or move your Fitbit account to Google there), then connect again.'
+      // Google has not let CourtSide's project in yet (its private preview).
+      : /tracker=unavailable/.test(result.url) ? `${label} isn’t available in CourtSide yet. Try again later.`
+      : `${label} was not connected.`);
     await remote.trackers('finish', { n });
     // The sign-in itself looks back three days; this goes back a week (as Sync now does), so tennis from before connecting is there to log.
     // Waited for, so the check that follows connecting already finds those sessions.
