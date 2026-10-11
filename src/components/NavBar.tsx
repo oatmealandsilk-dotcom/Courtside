@@ -146,8 +146,11 @@ export function NavBar({ state, navigation, faded = false }: NavBarProps) {
   // The bar's glass, put up again each time the bar has come fully into place: after it rises on opening (the
   // curtain gone too), each time it comes back (from a page that hides it, the map or a chat), and once a clip's
   // comments have given it back. Never while a finger is on it. On an iPhone, glass put up while anything round
-  // it is still moving can stay a flat white plate (GlassRenew; Oct 11, owner: "The island in the bottom
-  // sometimes it's clear sometimes it's not"); put up again once all is still, it is clear glass every time.
+  // it is fading can stay a flat white plate (GlassRenew; Oct 11, owner: "The island in the bottom sometimes
+  // it's clear sometimes it's not"). Of these only the comments fade the bar (the curtain lies over it, the rise
+  // and the duck only move it), so the rest are a safeguard. Not the whole answer to "sometimes clear": the bar's
+  // glass (regular, with three quarters of the cream in it) also looks more solid over a light page than over a
+  // dark clip, which this does not change; still to be checked on an iPhone (Oct 11 review).
   const glass = useGlassRenewal();
   const steady = risen && curtainDown && !faded;
   const { settle: settleGlass, cancel: cancelGlass } = glass;

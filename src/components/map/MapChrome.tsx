@@ -97,6 +97,10 @@ export const PIN_FIT_TOP = 120;
  * the list under it once it has faded in: glass an iPhone puts up while
  * anything round it is moving can come out a flat white plate (GlassRenew,
  * Oct 11). The bar's waits while you type in it, or a finger is on it.
+ * Only the glass is rebuilt, a layer behind (Glass's `behind`), never what
+ * it holds: the field you type in stays the same one, so a tap on the bar
+ * just as the map arrives always puts the cursor in, and the weather never
+ * fades out over a renewal (Oct 11 review).
  */
 export function MapTopBar({ onBack, query, onQuery, locationOn, locating, onToggleLocation, results, onPickCourt, places, onPickPlace, players = 0, locationMenu = false, cityName = '', weather = null }: { onBack?: () => void; query: string; onQuery: (next: string) => void; locationOn?: boolean; locating?: boolean; onToggleLocation?: () => void; results?: CourtRow[]; onPickCourt?: (c: Court) => void; /** The place search as you type (usePlaceSearch). */ places?: PlaceSearch; onPickPlace?: (p: FoundPlace) => void; /** Players whose names match what is typed. */ players?: number; /** With Location on, the button opens who can see you (and Location off) rather than switching off. */ locationMenu?: boolean; /** The town the bar names ("Search Los Angeles"); none yet, the bar's own words. */ cityName?: string; /** What it's like to play there today, at the bar's end. */ weather?: Weather | null }) {
   const styles = useThemedStyles(styleDefinitions);
@@ -141,8 +145,10 @@ export function MapTopBar({ onBack, query, onQuery, locationOn, locating, onTogg
   const locationIcon = locating ? <ActivityIndicator size="small" color={locationOn ? colors.brandInk : colors.text} /> : <Ionicons name={locationOn ? 'navigate' : 'navigate-outline'} size={18} color={locationOn ? colors.brandInk : colors.text} />;
   // The list under the bar: courts, then places, or why there are none.
   const listUp = !!(found.length || placeRows.length || placeNote || searching);
-  // Its glass and the bar's, put up again once all round them is still (GlassRenew): the bar's never while you type
-  // in it (that would put the cursor away), the list's (only the glass, never its rows) once it has faded in.
+  // Its glass and the bar's, put up again once all round them is still (GlassRenew): the bar's (Back, the search and
+  // Location) never while you type in it, the list's once it has faded in. Only ever the glass, a layer behind, never
+  // the field, the weather, the icons or the rows (Oct 11 review: the field built again under a tap lost the cursor,
+  // and the weather's fade out held the old glass over the new).
   const barGlass = useGlassRenewal({ blocked: focused });
   const listGlass = useGlassRenewal();
   const listShown = useRef(listUp);
@@ -156,12 +162,12 @@ export function MapTopBar({ onBack, query, onQuery, locationOn, locating, onTogg
     <View style={styles.topRow} {...barGlass.hold}>
       {onBack ? (
         <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={onBack} style={({ pressed }) => [styles.barRoundHit, pressed && styles.barPressed]}>
-          <Glass radius={22} renew={barGlass.renew} style={styles.barRound}><Ionicons name="chevron-back" size={22} color={colors.text} /></Glass>
+          <Glass behind radius={22} renew={barGlass.renew} style={styles.barRound}><Ionicons name="chevron-back" size={22} color={colors.text} /></Glass>
         </Pressable>
       ) : null}
       {/* The whole bar is the search: a tap anywhere on it (its weather too) puts the cursor in. */}
       <Pressable accessible={false} focusable={false} onPress={() => input.current?.focus()} style={styles.searchLift}>
-        <Glass radius={22} renew={barGlass.renew} style={[styles.search, focused && styles.searchOn]}>
+        <Glass behind radius={22} renew={barGlass.renew} style={[styles.search, focused && styles.searchOn]}>
           <Ionicons name="search" size={17} color={colors.textMuted} />
           <View style={styles.searchField} onLayout={(e) => setFieldW(Math.floor(e.nativeEvent.layout.width))}>
             {/* "Search <town>" (or "Search a place or park") laid out unseen at its own width, to know whether it fits. */}
@@ -210,7 +216,7 @@ export function MapTopBar({ onBack, query, onQuery, locationOn, locating, onTogg
             {locationOn ? (
               <View style={[styles.barRound, styles.barRoundOn]}><BrandWash radius={22} />{locationIcon}</View>
             ) : (
-              <Glass radius={22} renew={barGlass.renew} style={styles.barRound}>{locationIcon}</Glass>
+              <Glass behind radius={22} renew={barGlass.renew} style={styles.barRound}>{locationIcon}</Glass>
             )}
           </Pressable>
           <HideTip where="map" style={{ top: 52, right: 0 }} />

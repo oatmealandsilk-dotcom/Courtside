@@ -41,6 +41,13 @@ export const GlassRenew = createContext<number | null>(null);
 const SETTLE_MS = 120;
 /** A finger "on the glass" for longer than this is taken as gone, so one whose lift was never heard never holds the glass back for good. */
 const HOLD_MAX_MS = 4000;
+/**
+ * How long glass that came due under a finger waits once it lifts. A button
+ * stays dimmed for up to 130 ms after a quick tap (the phone's shortest
+ * press), and glass put up dimmed is the white plate (Oct 11), so it waits
+ * that out, and a frame or two for the button to be drawn bright again.
+ */
+const LIFT_MS = 200;
 
 /**
  * Glass that is clear every time (Oct 11, owner: "The island in the bottom
@@ -49,7 +56,8 @@ const HOLD_MAX_MS = 4000;
  * moment it has finished calls `settle`; a moment later `renew` changes, and
  * the glass given it is built afresh, as real glass. Once per finish, never
  * on a loop, and never while a finger is on it or its button (`hold`,
- * spread on a view round both) nor while `blocked` (the search bar while
+ * spread on a view round both; once the finger lifts, not until the button
+ * has stopped looking pressed) nor while `blocked` (the search bar while
  * you type in it): then it waits for that to end. On an iPhone without
  * Apple's glass, Android and the browser it does nothing at all.
  */
@@ -95,8 +103,11 @@ export function useGlassRenewal({ blocked = false }: { blocked?: boolean } = {})
     if (!liquidGlass) return {};
     const lifted = (e: GestureResponderEvent) => {
       if (e.nativeEvent.touches?.length) return;
-      state.current.touchedAt = 0;
-      pay();
+      const s = state.current;
+      s.touchedAt = 0;
+      // One that came due under the finger is put up a moment later, not now: the button it is on is still
+      // dimmed just after a quick tap, and glass put up dimmed is the white plate (Oct 11; LIFT_MS).
+      if (s.due && !s.timer) s.timer = setTimeout(() => { s.timer = null; pay(); }, LIFT_MS);
     };
     return { onTouchStart: () => { state.current.touchedAt = Date.now(); }, onTouchEnd: lifted, onTouchCancel: lifted };
   }, [pay]);
@@ -139,8 +150,8 @@ export function Glass({ children, style, radius = 999, interactive = false, tint
   children?: React.ReactNode; style?: StyleProp<ViewStyle>; radius?: number; interactive?: boolean;
   /** A hint of colour in the glass; the theme's ground by default. */ tint?: string;
   /** More glass, less tint: what is beneath shows through (the tab bar, Oct 4). */ clear?: boolean;
-  /** Each new value builds the iPhone's glass afresh (useGlassRenewal). What it holds is built again with it, so whoever changes it holds off while a finger is on it (the hook's `hold`). */ renew?: number;
-  /** The glass a layer of its own behind what it holds: put up again, only the glass is rebuilt, never what it holds (a toast's tick drawing itself in). Not for glass that answers a touch (`clear`, `interactive`): that needs what it holds inside it. */ behind?: boolean;
+  /** Each new value builds the iPhone's glass afresh (useGlassRenewal). What it holds is built again with it, so whoever changes it holds off while a finger is on it (the hook's `hold`); and anything inside with a fade out of its own would keep the old glass on screen over the new while it fades, so glass holding that, or a field you type in, is `behind`. */ renew?: number;
+  /** The glass a layer of its own behind what it holds: put up again, only the glass is rebuilt, never what it holds (a toast's tick drawing itself in, the map search's field and weather). Not for glass that answers a touch (`clear`, `interactive`): that needs what it holds inside it. */ behind?: boolean;
 }) {
   // Dark glass on a dark page (Night, and New York's navy).
   const { dark } = useTheme();
@@ -163,7 +174,7 @@ export function Glass({ children, style, radius = 999, interactive = false, tint
         </View>
       );
     }
-    // Built again, what it holds comes back as it was, never playing its entrance over (the weather easing into the search bar).
+    // Built again, what it holds comes back as it was, never playing an entrance of its own over.
     const again = !!outer || !!renew;
     return <GlassView key={key} pointerEvents={through} {...look} style={[rounded, style]}>{again ? <LayoutAnimationConfig skipEntering>{children}</LayoutAnimationConfig> : children}</GlassView>;
   }
