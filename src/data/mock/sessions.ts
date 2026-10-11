@@ -26,7 +26,8 @@ const at = (park: number) => DEMO_PARK(park).id;
 const loggedAt = (n: number, hour: number) => { const d = new Date(); d.setDate(d.getDate() - n); d.setHours(hour, 10, 0, 0); return d.toISOString(); };
 
 export const demoSessions: PracticeSession[] = [
-  { id: 'ses-demo-1', userId: CURRENT_USER_ID, day: dayAgo(1), minutes: 90, kind: 'match', won: true, sets: [[6, 4], [3, 6], [10, 7]], note: 'At Alder Park', courtId: at(1), createdAt: loggedAt(1, 20) },
+  // Two tiebreaks (Oct 10): the first set's, 7-6(5), and a match tiebreak instead of a third set, so the demo shows "7–6(5) 3–6 (10–7)".
+  { id: 'ses-demo-1', userId: CURRENT_USER_ID, day: dayAgo(1), minutes: 90, kind: 'match', won: true, sets: [[7, 6, 5], [3, 6], [10, 7]], note: 'At Alder Park', courtId: at(1), createdAt: loggedAt(1, 20) },
   { id: 'ses-demo-2', userId: CURRENT_USER_ID, day: dayAgo(2), minutes: 62, kind: 'practice', activityId: 'act-demo-2', createdAt: loggedAt(2, 19) },
   { id: 'ses-demo-10', userId: CURRENT_USER_ID, day: dayAgo(3), minutes: 75, kind: 'match', won: true, sets: [[6, 3], [7, 5]], note: 'At Alder Park', courtId: at(1), createdAt: loggedAt(3, 19) },
   { id: 'ses-demo-3', userId: CURRENT_USER_ID, day: dayAgo(4), minutes: 45, kind: 'drills', createdAt: loggedAt(4, 8) },
@@ -47,7 +48,7 @@ export const demoSessions: PracticeSession[] = [
  * you made (your result) and the ones of you (the result from your side).
  */
 export const demoSessionTags: SessionTag[] = [
-  { id: 'stag-demo-1', sessionId: 'ses-demo-1', taggerId: CURRENT_USER_ID, taggedId: 'u-mira', role: 'opponent', status: 'accepted', createdAt: loggedAt(1, 20), respondedAt: isoDaysAgo(0, 11), kind: 'match', day: dayAgo(1), minutes: 90, won: true, sets: [[6, 4], [3, 6], [10, 7]] },
+  { id: 'stag-demo-1', sessionId: 'ses-demo-1', taggerId: CURRENT_USER_ID, taggedId: 'u-mira', role: 'opponent', status: 'accepted', createdAt: loggedAt(1, 20), respondedAt: isoDaysAgo(0, 11), kind: 'match', day: dayAgo(1), minutes: 90, won: true, sets: [[7, 6, 5], [3, 6], [10, 7]] },
   { id: 'stag-demo-10', sessionId: 'ses-demo-10', taggerId: CURRENT_USER_ID, taggedId: 'u-mira', role: 'opponent', status: 'accepted', createdAt: loggedAt(3, 19), respondedAt: isoDaysAgo(2, 4), kind: 'match', day: dayAgo(3), minutes: 75, won: true, sets: [[6, 3], [7, 5]] },
   { id: 'stag-demo-13', sessionId: 'ses-demo-13', taggerId: CURRENT_USER_ID, taggedId: 'u-mira', role: 'opponent', status: 'accepted', createdAt: loggedAt(7, 20), respondedAt: isoDaysAgo(6, 4), kind: 'match', day: dayAgo(7), minutes: 96, won: true },
   { id: 'stag-demo-6', sessionId: 'ses-demo-6', taggerId: CURRENT_USER_ID, taggedId: 'u-june', role: 'opponent', status: 'pending', createdAt: loggedAt(9, 12), kind: 'match', day: dayAgo(9), minutes: 120, won: false, sets: [[4, 6], [6, 7]] },

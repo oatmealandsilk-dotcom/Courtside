@@ -4082,6 +4082,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (same) return;
     // An even count (a match stopped at one set all) keeps the result you chose. A practice has no result.
     const won = match ? setsWinner(next) ?? had.won : had.won;
+    // Only the games and the result are what a tagged player said yes to: tiebreak points added or
+    // changed on their own (Oct 10) ask nobody again, here or on the server (migration 158).
+    const games = (x: MatchSet[] | undefined) => JSON.stringify((x ?? []).map(([a, b]) => [a, b]));
+    const reask = match && (games(had.sets) !== games(next) || won !== had.won);
     const before = stateRef.current;
     const patch = (x: PracticeSession): PracticeSession => {
       const { sets: _old, ...rest } = x;
@@ -4100,7 +4104,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // On a match, anyone who said yes is asked again, as on the server: what they accepted has changed.
       // A practice's score is the logger's own: their tags never show it, so nobody is asked again (Oct 6).
       sessionTags: match ? prev.sessionTags.map((t) => (t.sessionId === sessionId && t.taggerId === me
-        ? { ...t, won, sets: next, ...(t.status === 'accepted' ? { status: 'pending' as const, respondedAt: undefined } : {}) }
+        ? { ...t, won, sets: next, ...(reask && t.status === 'accepted' ? { status: 'pending' as const, respondedAt: undefined } : {}) }
         : t)) : prev.sessionTags,
     }));
     if (!live(me, sessionId)) return;

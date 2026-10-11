@@ -25,7 +25,7 @@ import { noteStep } from '@/lib/crashReporting';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
 import type { Answer, FriendStreak, ChatEvent, ChatPhoto, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, DetectedActivity, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, HiddenWords, HiddenWordsKind, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, CourtNote, LastSeen, MapPlace, MapVisibility, TaggedCourt, Question, Removed, RemovedItem, ReviewRequest, ReviewStatus, Story, SurfacePreference, TakedownKind, TakedownReason, Tip, TournamentEntry, User, PublicStreak, CoachApplication, CourtAccess, CourtAccessSource, CourtDayPart, CourtFacts, CourtFollowCount, CourtNow, CourtKings, CourtRegulars, CourtReview, CourtRightNow, CourtRing, FlybyPerson, FollowedCourt, SessionTag, SessionTagRefusal, SessionTagRole, FeedGroup, FeedGroupCard, DiscoverGroup, GroupLook, Invitee, AffiliateStats, ContactMatch, HeadToHead, MatchSet, SessionWith } from './types';
-import { canScore, validSets } from '@/features/activity/score';
+import { canScore, splitTiebreaks, validSets, withTiebreaks } from '@/features/activity/score';
 import { keptAvgHr, keptKcal } from '@/features/activity/manualStats';
 import { TERMS_VERSION } from '@/lib/legal';
 import { readinessOf, sessionTagNamesLive, sessionToSend, setSessionTagNamesLive, trustedSession } from './sessionTagGate';
@@ -502,10 +502,11 @@ export interface RemoteData {
   userStateFailed?: boolean;
 }
 
-interface SessionRow { id: string; user_id: string; day: string; minutes: number; kind: PracticeSession['kind']; won: boolean | null; opponent: string | null; note: string | null; created_at: string; activity_id?: string | null; from_session_id?: string | null; sets?: unknown; workout?: string | null; court_id?: string | null; kcal?: number | null; avg_hr?: number | null }
+interface SessionRow { id: string; user_id: string; day: string; minutes: number; kind: PracticeSession['kind']; won: boolean | null; opponent: string | null; note: string | null; created_at: string; activity_id?: string | null; from_session_id?: string | null; sets?: unknown; set_tiebreaks?: unknown; workout?: string | null; court_id?: string | null; kcal?: number | null; avg_hr?: number | null }
 const toSession = (r: SessionRow): PracticeSession => {
-  // A tennis session's score (migration 91 for a match, 136 for a practice or drills; absent before they run), kept only when it is a good one.
-  const sets = canScore(r.kind) ? validSets(r.sets) : undefined;
+  // A tennis session's score (migration 91 for a match, 136 for a practice or drills; absent before they run), kept only when it is a good one,
+  // with its tiebreak points put back on (migration 158; absent before it runs).
+  const sets = canScore(r.kind) ? withTiebreaks(validSets(r.sets), r.set_tiebreaks) : undefined;
   return {
     id: r.id, userId: r.user_id, day: r.day, minutes: r.minutes, kind: r.kind, won: r.won ?? undefined, opponent: r.opponent ?? undefined, note: r.note ?? undefined,
     activityId: r.activity_id ?? undefined, fromSessionId: r.from_session_id ?? undefined, ...(sets ? { sets } : {}),
@@ -527,6 +528,8 @@ interface SessionTagRow {
   kind: PracticeSession['kind']; day: string; minutes: number; won: boolean | null;
   /** The score from your side (migration 91; absent before it runs). */
   sets?: unknown;
+  /** Its tiebreak points, the same from either side (migration 158; absent before it runs). */
+  set_tiebreaks?: unknown;
 }
 const toSessionTag = (r: SessionTagRow): SessionTag => ({
   id: r.id, sessionId: r.session_id, taggerId: r.tagger_id, taggedId: r.tagged_id, role: r.role, status: r.status,
@@ -534,7 +537,7 @@ const toSessionTag = (r: SessionTagRow): SessionTag => ({
   mirroredSessionId: r.mirrored_session_id ?? undefined, createdAt: r.created_at, respondedAt: r.responded_at ?? undefined,
   // A date column arrives as "2026-09-29"; anything longer is cut to the day.
   kind: r.kind, day: String(r.day).slice(0, 10), minutes: r.minutes, won: r.won ?? undefined,
-  ...(r.kind === 'match' && validSets(r.sets) ? { sets: validSets(r.sets) } : {}),
+  ...(r.kind === 'match' && validSets(r.sets) ? { sets: withTiebreaks(validSets(r.sets), r.set_tiebreaks) } : {}),
 });
 /** The exact word a session-tag function raised ('teen_closed', 'too_many'…), or the message as it came. */
 const tagRefusal = (error: { message?: string }) => (error.message ?? '').trim();
@@ -1548,6 +1551,8 @@ let userStateLacksContactsFindable = false;
 let lacksOpenToHitMiles = false;
 /** A database without where a session was played (migration 130): not sent again this session. */
 let sessionsLackCourt = false;
+/** A database without tiebreak points beside a score (migration 158): not sent again this session. */
+let sessionsLackTiebreaks = false;
 /** Set once a settings save finds no push_recap column (a database before migration 130). */
 let userStateLacksPushRecap = false;
 /** Set once a settings save finds no push_joined / push_streak columns (a database before migration 146). */
@@ -3344,8 +3349,14 @@ export const remote = {
   async insertSession(s: PracticeSession): Promise<{ scoreDropped: boolean }> {
     const db = need();
     const row: Record<string, unknown> = { id: s.id, user_id: s.userId, day: s.day, minutes: s.minutes, kind: s.kind, won: s.won ?? null, opponent: s.opponent ?? null, note: s.note ?? null, created_at: s.createdAt };
-    // A score only when there is one (migration 91), so a session with none saves on a database without it.
-    if (s.sets?.length) row.sets = s.sets;
+    // A score only when there is one (migration 91), so a session with none saves on a database without it:
+    // the games as every app reads them, and any tiebreak points beside them (migration 158), only when the
+    // database has them.
+    if (s.sets?.length) {
+      const { games, points } = splitTiebreaks(s.sets);
+      row.sets = games;
+      if (points && !sessionsLackTiebreaks) row.set_tiebreaks = points;
+    }
     // What a workout was (migration 107), only when there is one, the same way.
     if (s.workout) row.workout = s.workout;
     // Where it was played (migration 130), only when there is one and the database has it.
@@ -3362,6 +3373,12 @@ export const remote = {
       return res;
     };
     let { error } = await send(s.activityId ? { ...row, activity_id: s.activityId } : row);
+    // A database before migration 158 has no set_tiebreaks: the score still saves, its games without the points.
+    if (error && row.set_tiebreaks && /set_tiebreaks/.test(error.message)) {
+      sessionsLackTiebreaks = true;
+      delete row.set_tiebreaks;
+      ({ error } = await send(s.activityId ? { ...row, activity_id: s.activityId } : row));
+    }
     // A database before migration 130 has no court_id: the session still counts, without where it was.
     if (error && row.court_id && /court_id/.test(error.message)) {
       sessionsLackCourt = true;
@@ -3403,10 +3420,21 @@ export const remote = {
    * log (migration 91), with the result it gives on a match. The server works
    * the result out again from the sets, so the two never disagree. A practice
    * or drills (Oct 6) has no result: `won` is left out and only the sets go.
+   * Tiebreak points go beside the games (migration 158), always, so taking
+   * them off clears them too; a database without them gets the games alone.
    * Throws a plain sentence.
    */
   async updateSessionScore(id: ID, sets: MatchSet[] | null, won?: boolean | null) {
-    const { data, error } = await need().from('practice_sessions').update(won === undefined ? { sets } : { sets, won }).eq('id', id).select('sets');
+    const split = sets?.length ? splitTiebreaks(sets) : null;
+    const body: Record<string, unknown> = { sets: split?.games ?? null, ...(won === undefined ? {} : { won }) };
+    if (!sessionsLackTiebreaks) body.set_tiebreaks = split?.points ?? null;
+    const save = () => need().from('practice_sessions').update(body).eq('id', id).select('sets');
+    let { data, error } = await save();
+    if (error && 'set_tiebreaks' in body && /set_tiebreaks/.test(error.message)) {
+      sessionsLackTiebreaks = true;
+      delete body.set_tiebreaks;
+      ({ data, error } = await save());
+    }
     if (error) {
       fail('session score')(error);
       if (/\bsets\b/.test(error.message) && /column|schema/i.test(error.message)) throw new Error('Scores aren’t ready yet. Try again later.');
@@ -3427,8 +3455,9 @@ export const remote = {
     const { data, error } = await need().rpc('head_to_head', { other });
     if (error) { if (!missingFunction(error)) fail('head to head')(error); return null; }
     if (!data || typeof data !== 'object') return null;
-    const r = data as { wins?: number; losses?: number; last?: { sessionId?: string; day?: string; won?: boolean; sets?: unknown } };
-    const sets = validSets(r.last?.sets);
+    const r = data as { wins?: number; losses?: number; last?: { sessionId?: string; day?: string; won?: boolean; sets?: unknown; tiebreaks?: unknown } };
+    // Its tiebreak points beside the games (migration 158; absent before it runs).
+    const sets = withTiebreaks(validSets(r.last?.sets), r.last?.tiebreaks);
     return {
       userId: other, wins: Number(r.wins) || 0, losses: Number(r.losses) || 0,
       ...(r.last && sets && typeof r.last.won === 'boolean' && r.last.sessionId ? { last: { sessionId: r.last.sessionId, day: String(r.last.day ?? '').slice(0, 10), won: r.last.won, sets } } : {}),

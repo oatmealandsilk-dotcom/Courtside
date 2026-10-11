@@ -8,7 +8,7 @@ import { BrandMark } from '@/components/BrandMark';
 import { Avatar, BrandWash, ShirtWash } from '@/components/ui';
 import type { ID, SessionDetail } from '@/data/types';
 import { onCourtWord, resultWord, scoreLine, sessionEyebrow, sourceLabel, spokenDuration } from '@/features/activity/format';
-import { spokenScore } from '@/features/activity/score';
+import { scoreScale, spokenScore } from '@/features/activity/score';
 import { sessionPeople } from '@/features/activity/sessionTags';
 import { postZones, zoneColors } from '@/features/activity/zones';
 import { distanceFigure } from '@/features/activity/workouts';
@@ -305,7 +305,8 @@ export function SessionCard({ session, width, height, play = false, people, hidd
         <Duration minutes={session.minutes} size={96 * k} color={look.figure} unitColor={look.muted} play={play} delay={120} duration={700} />
         <Text style={{ ...font('500'), fontSize: small(14, 10), color: look.muted, marginTop: 2 * k }} maxFontSizeMultiplier={1.2}>{onCourtWord(session)}</Text>
         {score ? (
-          <Text style={{ ...font('700'), fontSize: 26 * k, letterSpacing: -0.4 * k, color: look.figure, fontVariant: ['tabular-nums'], marginTop: 8 * k }} numberOfLines={1} maxFontSizeMultiplier={1.2}>{score}</Text>
+          // A long score (tiebreak points, Oct 10) a little smaller, so it all fits on its line.
+          <Text style={{ ...font('700'), fontSize: 26 * k * scoreScale(score, 20), letterSpacing: -0.4 * k, color: look.figure, fontVariant: ['tabular-nums'], marginTop: 8 * k }} numberOfLines={1} maxFontSizeMultiplier={1.2}>{score}</Text>
         ) : null}
         {far ? (
           <View style={{ marginTop: 8 * k }}>
@@ -443,7 +444,8 @@ function Sideways({ session, look, width, height, play, top, result, score, stat
         <Duration minutes={session.minutes} size={hero} color={look.figure} unitColor={look.muted} play={play} delay={120} duration={700} />
         <Text style={{ ...font('500'), fontSize: small(14, 10), lineHeight: line(small(14, 10)), color: look.muted, marginTop: 2 * k }} maxFontSizeMultiplier={1.2}>{onCourtWord(session)}</Text>
         {score ? (
-          <Text style={{ ...font('700'), fontSize: 22 * k, lineHeight: Math.round(22 * k * 1.25), letterSpacing: -0.4 * k, color: look.figure, fontVariant: ['tabular-nums'], marginTop: 6 * k }} numberOfLines={1} maxFontSizeMultiplier={1.2}>{score}</Text>
+          // A long score a little smaller (Oct 10), on the same line height the card measured.
+          <Text style={{ ...font('700'), fontSize: 22 * k * scoreScale(score, 22), lineHeight: Math.round(22 * k * 1.25), letterSpacing: -0.4 * k, color: look.figure, fontVariant: ['tabular-nums'], marginTop: 6 * k }} numberOfLines={1} maxFontSizeMultiplier={1.2}>{score}</Text>
         ) : null}
         {stats.length ? (
           <View style={[styles.statRow, { gap: 10 * k, marginTop: 14 * k, paddingTop: 10 * k, borderTopColor: look.lines }]}>

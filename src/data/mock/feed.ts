@@ -335,8 +335,8 @@ export const posts: Post[] = [
     body: 'Two tiebreaks and a lot of running. The first serve finally showed up in the second set.',
     session: {
       focus: 'Match · Won', minutes: 90, drills: [], sessionId: 'ses-demo-1', kind: 'match', won: true, day: dayAgo(1),
-      // The score as ses-demo-1 logged it (mock/sessions), so the share card shows it too.
-      sets: [[6, 4], [3, 6], [10, 7]],
+      // The score as ses-demo-1 logged it (mock/sessions), so the share card shows it too: "7–6(5) 3–6 (10–7)".
+      sets: [[7, 6, 5], [3, 6], [10, 7]],
       with: [{ id: 'u-mira', handle: 'miraplays', name: 'Mira Okafor', role: 'opponent' }],
     },
     likedBy: ['u-mira', 'u-dev'],

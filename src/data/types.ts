@@ -213,8 +213,16 @@ export interface PracticeSession {
   createdAt: string;
 }
 
-/** One set of a match: [your games, their games]. */
-export type MatchSet = [number, number];
+/**
+ * One set of a match: [your games, their games], and on a set that went to
+ * a tiebreak (7-6, 6-7) maybe a third number, the points its loser won:
+ * 7-6(5) is [7, 6, 5] (Oct 10, owner: "You should be able to use () in
+ * caption for match score"). The server keeps the games as two numbers and
+ * the points in a list of their own (set_tiebreaks, migration 158), so
+ * older apps read the games exactly as before; features/activity/score.ts
+ * puts them together.
+ */
+export type MatchSet = [number, number, number?];
 
 /**
  * Your record against one player (head_to_head, migration 91): only matches

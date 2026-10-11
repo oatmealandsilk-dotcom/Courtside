@@ -8,6 +8,7 @@ import { CardWash, cardLook } from '@/components/session/SessionCard';
 import { Duration, Figure } from '@/components/session/Duration';
 import type { ID, SessionDetail } from '@/data/types';
 import { resultWord, scoreLine } from '@/features/activity/format';
+import { scoreScale } from '@/features/activity/score';
 import { sessionPeople } from '@/features/activity/sessionTags';
 import { distanceFigure } from '@/features/activity/workouts';
 import { font } from '@/theme';
@@ -60,7 +61,8 @@ export function SessionStamp({ session, width, eyebrow, place, hidden = [] }: {
         ) : null}
       </View>
       <Duration minutes={session.minutes} size={68 * u} color={look.figure} unitColor={look.muted} style={{ marginTop: 6 * u }} />
-      {score ? <Text numberOfLines={1} style={{ ...font('700'), fontSize: 24 * u, letterSpacing: -0.4 * u, color: look.figure, fontVariant: ['tabular-nums'], marginTop: 2 * u }}>{score}</Text> : null}
+      {/* A long score (tiebreak points, Oct 10) a little smaller, so it all fits on its line. */}
+      {score ? <Text numberOfLines={1} style={{ ...font('700'), fontSize: 24 * u * scoreScale(score, 18), letterSpacing: -0.4 * u, color: look.figure, fontVariant: ['tabular-nums'], marginTop: 2 * u }}>{score}</Text> : null}
       {far ? (
         <View style={{ marginTop: 2 * u }}>
           <Figure value={far.value} part={far.value < 10 ? 'dec1' : 'int'} unit={far.unit} baseline size={24 * u} unitScale={0.5} color={look.figure} unitColor={look.muted} />

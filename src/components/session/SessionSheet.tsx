@@ -10,7 +10,7 @@ import { Avatar } from '@/components/ui';
 import type { DetectedActivity, ID, MatchSet, Post, PracticeSession, SessionTag, User } from '@/data/types';
 import { resultWord, scoreLine, sessionEyebrow, sourceLabel } from '@/features/activity/format';
 import { loggedNumbers } from '@/features/activity/healthShare';
-import { flipSets, spokenScore } from '@/features/activity/score';
+import { flipSets, scoreScale, spokenScore } from '@/features/activity/score';
 import { isActive, sessionPeople, tagsOnSession } from '@/features/activity/sessionTags';
 import { overUsual } from '@/features/activity/usual';
 import { cleanZones, hardMinutes, postZones } from '@/features/activity/zones';
@@ -194,7 +194,8 @@ export function SessionSheet({ post, me, users, sessions, sessionTags, activitie
         ) : null}
       </View>
       {score ? (
-        <Text style={styles.score} accessibilityLabel={`Score ${spokenScore(s.sets)}`} numberOfLines={1} maxFontSizeMultiplier={1.2}>{score}</Text>
+        // A long score (tiebreak points, Oct 10) a little smaller, so it all fits on its line.
+        <Text style={[styles.score, { fontSize: 26 * scoreScale(score, 22) }]} accessibilityLabel={`Score ${spokenScore(s.sets)}`} numberOfLines={1} maxFontSizeMultiplier={1.2}>{score}</Text>
       ) : null}
       {over ? (
         <View style={styles.usual} accessible accessibilityLabel={`${over} minutes over your usual. Only you see this.`}>

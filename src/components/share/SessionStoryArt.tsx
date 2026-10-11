@@ -8,6 +8,7 @@ import { HeartRateOverlay, heartRateOf } from '@/components/share/HeartRateOverl
 import { ShadedMark, type Halo } from '@/components/share/ShadedMark';
 import { duration } from '@/lib/format';
 import { scoreLine } from '@/features/activity/format';
+import { scoreScale } from '@/features/activity/score';
 import { formatDistance } from '@/features/activity/workouts';
 import type { ID } from '@/data/types';
 import type { SessionStory } from '@/features/share/sessionStory';
@@ -106,12 +107,17 @@ export function SessionStoryArt({ design, story, width, photo, hidden = [], onPh
       // Centred on what Instagram leaves clear (its buttons cover about 13% at the top and 17% at the
       // foot), so the bigger logo under the numbers stays clear of the reply bar.
       <View collapsable={false} style={[styles.centre, { width, height, gap: 14 * u, paddingBottom: 26 * u }]}>
-        {stats.map((st) => (
-          <View key={st.label} style={styles.centre}>
-            <Text style={[styles.overLabel, { fontSize: 15 * u, lineHeight: 20 * u }]}>{st.label}</Text>
-            <Text style={[styles.overValue, { fontSize: 36 * u, lineHeight: 42 * u }]}>{st.value}</Text>
-          </View>
-        ))}
+        {stats.map((st) => {
+          // A long score (tiebreak points since Oct 10, like 7–6(5) 6–7(3) (10–7)) a little smaller, so it stays on
+          // one line across the story; a longer one still (five sets with tiebreaks) goes onto a second line, centred.
+          const k = st.label === 'Score' ? scoreScale(st.value, 15) : 1;
+          return (
+            <View key={st.label} style={styles.centre}>
+              <Text style={[styles.overLabel, { fontSize: 15 * u, lineHeight: 20 * u }]}>{st.label}</Text>
+              <Text style={[styles.overValue, { fontSize: 36 * u * k, lineHeight: 42 * u * k, maxWidth: 320 * u, textAlign: 'center' }]}>{st.value}</Text>
+            </View>
+          );
+        })}
         {/* The logo in CourtSide's own colour (Oct 4, owner), half as big again (Oct 9, owner: "our logo rn
             is good. lets just make it bigger more prominent"): the wordmark as the sign-in page sets it, a
             little under the numbers' size. Its soft light edge is wider and brighter, so the deep green
