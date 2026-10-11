@@ -19,7 +19,9 @@
 //                         becomes keys, which wait (?tracker=pending&p=…&n=…)
 //                         until the phone that started it collects them.
 //                         Fitbit: ?tracker=notlinked when the Google account
-//                         has no Google Health profile yet
+//                         has no Google Health profile yet (or is an old
+//                         Fitbit login), ?tracker=unavailable when Google has
+//                         not let CourtSide's project in
 //   /finish             — (signed-in) {n}: that phone collects the sign-in, as the
 //                         same player. Only then is the tracker put on the account
 //                         (so a sign-in link sent to someone else can never put
@@ -235,11 +237,28 @@ async function apiGet(uid: string, p: ProviderId, address: string, post?: unknow
 type Found = { sessions: Session[]; tennisIds: Set<string>; complete: boolean; refused: boolean };
 const day = (d: Date) => d.toISOString().slice(0, 10);
 
-/** Google's word for why it said no ('ACCOUNT_NOT_LINKED', 'MISSING_OAUTH_SCOPE', …), else its status, else ''. Reads the answer's body. */
-async function googleReason(res: Response): Promise<string> {
-  const b = await res.json().catch(() => ({})) as { error?: { status?: string; details?: { reason?: string }[] } };
-  return String(b.error?.details?.find((d) => typeof d?.reason === 'string')?.reason ?? b.error?.status ?? '');
+/**
+ * Google's words for why it said no: every reason code in its answer, both
+ * ErrorInfo's reason ('ACCOUNT_NOT_LINKED', 'MISSING_OAUTH_SCOPE', …) and the
+ * codes in its metadata.detailedReasons, where Google puts a refused filter's
+ * exact code (developers.google.com/health/filters); else its status
+ * ('PERMISSION_DENIED'). Plus its message, for the log. Reads the answer's body.
+ */
+type GoogleNo = { reasons: string[]; message: string };
+async function googleError(res: Response): Promise<GoogleNo> {
+  const b = await res.json().catch(() => ({})) as { error?: { status?: unknown; message?: unknown; details?: unknown } };
+  const codes = (v: unknown): string[] => Array.isArray(v) ? v.flatMap(codes) : typeof v === 'string' ? v.match(/[A-Z][A-Z0-9_]{2,}/g) ?? [] : [];
+  const details = (Array.isArray(b.error?.details) ? b.error.details : []) as { reason?: unknown; metadata?: { detailedReasons?: unknown } }[];
+  const reasons = [...new Set(details.flatMap((d) => [...codes(d?.reason), ...codes(d?.metadata?.detailedReasons)]))];
+  if (!reasons.length) reasons.push(...codes(b.error?.status));
+  return { reasons, message: typeof b.error?.message === 'string' ? b.error.message.slice(0, 200) : '' };
 }
+/** Google's codes for a key without the yes CourtSide needs (its error catalog; the second is Google's general one). */
+const SCOPE_GONE = new Set(['MISSING_OAUTH_SCOPE', 'ACCESS_TOKEN_SCOPE_INSUFFICIENT']);
+/** Google's codes for CourtSide's project not being let in (private preview) or the API not switched on in it. */
+const NOT_OPEN = new Set(['API_PRIVATE_PREVIEW_ACCESS_DENIED', 'SERVICE_DISABLED']);
+/** A Google refusal as one log line: "403 API_PRIVATE_PREVIEW_ACCESS_DENIED User is not eligible …". */
+const said = (status: number | undefined, no: GoogleNo) => [status ?? 'network', no.reasons.join(',') || '-', no.message].join(' ').trim();
 
 /**
  * Hands a Google sign-in back: one POST of either key withdraws CourtSide's
@@ -282,22 +301,39 @@ async function fitbitTennis(uid: string, since: Date): Promise<Found> {
   // did. A workout that started before that ends the list.
   const early = since.getTime() - 86_400_000;
   let filter: string | null = `exercise.interval.civil_start_time >= "${day(new Date(early))}"`;
+  // Only workouts a Google or Fitbit tracker recorded (a Fitbit, a Pixel
+  // Watch): Google's own definition ("google-wearables"), which leaves out
+  // other apps' workouts and ones typed in by hand. fitbitFromOtherApp stays
+  // as the backstop for when Google refuses this.
+  let family: string | null = 'users/me/dataSourceFamilies/google-wearables';
+  let retries = 0;
   const tennis: FitbitExercise[] = [];
   let next = '';
   for (let i = 0; i < 8; i += 1) {
-    const q = new URLSearchParams({ pageSize: '25', ...(filter ? { filter } : {}), ...(next ? { pageToken: next } : {}) });
+    const q = new URLSearchParams({ pageSize: '25', ...(filter ? { filter } : {}), ...(family ? { dataSourceFamily: family } : {}), ...(next ? { pageToken: next } : {}) });
     const res = await apiGet(uid, 'fitbit', `${GOOGLE_HEALTH}/dataTypes/exercise/dataPoints?${q.toString().replace(/\+/g, '%20')}`);
     if (!res) return out;
     if (!res.ok) {
-      const why = await googleReason(res);
-      // One report (June 2026) of Google refusing this filter: then once more
-      // with none. Newest come first, so the day early still ends the list.
-      if (res.status === 400 && filter && !next && /FILTER/.test(why)) { filter = null; i -= 1; continue; }
-      console.error('[trackers] fitbit list', res.status, why);
-      // The player took back CourtSide's yes to their workouts, or their Google
-      // account has no Google Health profile any more: tennis off, and the app
-      // offers to connect again.
-      if (res.status === 403 || why === 'ACCOUNT_NOT_LINKED') out.refused = true;
+      const no = await googleError(res);
+      const unlinked = no.reasons.includes('ACCOUNT_NOT_LINKED');
+      // One report (June 2026) of Google refusing this filter. Its exact code
+      // may sit only in detailedReasons under a general reason, so any 400 on
+      // the first page counts: ask again without the part Google named (the
+      // source family), else the filter, then the other. Newest come first,
+      // so the day early still ends the list.
+      if (res.status === 400 && !next && !unlinked && retries < 2 && (filter || family)) {
+        if (family && (!filter || no.reasons.some((r) => r.includes('SOURCE_FAMILY')))) family = null; else filter = null;
+        retries += 1; i -= 1; continue;
+      }
+      console.error('[trackers] fitbit list', said(res.status, no));
+      // Only the player's own account turns tennis off (and the app offers to
+      // connect again): their Google account has no Google Health profile any
+      // more, or the yes to their workouts is missing. Any other refusal is
+      // Google's side or CourtSide's project (API_PRIVATE_PREVIEW_ACCESS_DENIED,
+      // DATA_ACCESS_DENIED, the API switched off, …): logged, tennis left on,
+      // tried again next sync. A player taking back the whole yes shows up as
+      // invalid_grant on the refresh instead (tokensFor).
+      if (unlinked || no.reasons.some((r) => SCOPE_GONE.has(r))) out.refused = true;
       return out;
     }
     const body = await res.json() as { dataPoints?: FitbitExercise[]; nextPageToken?: string };
@@ -477,9 +513,18 @@ Deno.serve(async (req) => {
       // over) says ACCOUNT_NOT_LINKED, and the app says what to do.
       const who = await fetch(`${GOOGLE_HEALTH}/identity`, { headers: { authorization: `Bearer ${answer.access_token}`, accept: 'application/json' }, signal: AbortSignal.timeout(10_000) }).catch(() => null);
       if (!who?.ok) {
-        const why = who ? await googleReason(who) : 'network';
-        console.error('[trackers] fitbit identity', who?.status, why);
-        return drop(why === 'ACCOUNT_NOT_LINKED' ? 'notlinked' : 'failed');
+        const no: GoogleNo = who ? await googleError(who) : { reasons: [], message: '' };
+        console.error('[trackers] fitbit identity', said(who?.status, no));
+        const why = no.reasons;
+        // Google has not let CourtSide's project in (its private preview), or
+        // the API is not switched on in it: "Fitbit isn't available yet".
+        // Another 403 about the player (Google's troubleshooting: a legacy
+        // Fitbit login agreed instead of a Google account) gets the same
+        // advice as no Google Health profile: sign in to Google Health with Google.
+        return drop(why.includes('ACCOUNT_NOT_LINKED') ? 'notlinked'
+          : why.some((r) => NOT_OPEN.has(r)) ? 'unavailable'
+          : who?.status === 403 && !why.some((r) => r === 'DISALLOWED_OAUTH_SCOPES' || SCOPE_GONE.has(r)) ? 'notlinked'
+          : 'failed');
       }
       const id = await who.json().catch(() => ({})) as { healthUserId?: unknown };
       // Google's id for the player in its Health API (1 to 63 letters), as Fitbit's own user id was kept.

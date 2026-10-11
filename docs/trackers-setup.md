@@ -45,11 +45,13 @@ in with the Google account their Fitbit is on, and CourtSide only ever reads.
 
 **Read this first: the one big unknown.** Google's own pages say it is "not
 onboarding new projects at this time", with no waiting list to join. Nobody
-can tell in advance whether a brand-new CourtSide project is let in. Step 4
-below (switching the API on) is the test: if it works, carry on; if Google
-refuses, stop there and tell Claude. Nothing in these steps should cost money:
-if Google asks for a card or a billing account at any point, stop and tell
-Claude.
+can tell in advance whether a brand-new CourtSide project is let in, and
+**every step below can work even when it isn't**: Google only says no the
+first time CourtSide asks it for someone's Fitbit data. So the real yes-or-no
+test is **the first time you press Connect on Fitbit in CourtSide**, after
+the keys are in ("After that", below). If an earlier step already fails, stop
+there and tell Claude. Nothing in these steps should cost money: if Google
+asks for a card or a billing account at any point, stop and tell Claude.
 
 ### Words for this section
 
@@ -91,6 +93,8 @@ Claude.
    - If it isn't found, the button is grey, or you see an error or a "request
      access" message: **stop here** and send Claude a screenshot. That is
      Google's "not onboarding new projects" block.
+   - If **Enable** works, carry on, but that does not yet mean Google has let
+     CourtSide in. Only the first Connect ("After that", below) tells.
 5. **Start the sign-in page.** **☰** → **APIs & Services** → **OAuth consent
    screen**. This opens **Google Auth Platform**. If it says "Google Auth
    Platform not configured yet", click **Get started**, then:
@@ -137,11 +141,28 @@ Claude.
 `FITBIT_CLIENT_SECRET` (the Client secret). The names still say Fitbit, so
 the app's Fitbit button keeps working; the codes inside are Google's.
 
-**After that:** tell Claude "Google keys are in". Then connect Fitbit in
-CourtSide as an admin, record one real **Tennis** workout on the Fitbit (or
-Pixel Watch), let it sync in the Google Health app, and tell Claude, who checks
-it arrives as tennis (Google has not written down how a Fitbit "Tennis"
-workout is labelled, so one real session settles it).
+**After that: the real test.** Tell Claude "Google keys are in". When Claude
+says the server part is on, open CourtSide on your phone, signed in as an
+admin → **Settings** → **Health and nutrition** → on the **Fitbit** row tap
+**Connect** → sign in with the Google account your Fitbit is on → **Allow**.
+What CourtSide says next is Google's answer:
+
+- **Fitbit shows as connected:** Google has let CourtSide in. Carry on below.
+- **"Fitbit isn't available in CourtSide yet. Try again later."**: Google
+  has not let CourtSide's project in (the "not onboarding new projects"
+  block). Tell Claude. The server's log then reads
+  `[trackers] fitbit identity 403 API_PRIVATE_PREVIEW_ACCESS_DENIED`, and
+  there is nothing more to do until Google opens up.
+- **"That Google account isn't linked to Google Health yet…"**: do step 1 on
+  your phone, then tap **Connect** again.
+- **"Fitbit was not connected."**: tell Claude, who reads the reason in the
+  server's log.
+
+Once it shows as connected, record one real **Tennis** workout on the Fitbit
+(or Pixel Watch), let it sync in the Google Health app, and tell Claude, who
+checks it arrives as tennis (Google has not written down how a Fitbit "Tennis"
+workout is labelled, so one real session settles it). Only what the watch
+records counts: tennis typed into the Fitbit app by hand does not come in.
 
 ### Limits until Google has checked CourtSide (read before opening Fitbit to everyone)
 
@@ -263,10 +284,17 @@ update server_settings set value = 'on', updated_at = now() where key = 'flag:te
    `https://auth.courtsidebase.com/functions/v1/trackers`) and change the
    redirect URL on each tracker's developer page to match (Fitbit's lives in
    Google Auth Platform → **Clients** → **CourtSide server**).
-5. Fitbit only: the function's logs say why a Google sign-in failed.
-   `[trackers] fitbit identity 403 API_PRIVATE_PREVIEW_ACCESS_DENIED` means
-   Google has not let the project in yet; `ACCOUNT_NOT_LINKED` means that
-   player's Google account has no Google Health profile (the app tells them).
+5. Fitbit only: the function's logs say why a Google sign-in failed. A line
+   starting `[trackers] fitbit identity 403 API_PRIVATE_PREVIEW_ACCESS_DENIED`
+   means Google has not let the project in yet (the app says "Fitbit isn't
+   available in CourtSide yet"; `SERVICE_DISABLED` means the same for an API
+   not switched on); `ACCOUNT_NOT_LINKED`, or another 403 such as Google's
+   "Could not mint UberMint from GaiaMint" (an old Fitbit login agreed instead
+   of a Google account), means that player should sign in to the Google Health
+   app with Google (the app tells them). Later, `[trackers] fitbit list …` lines
+   are Google refusing a sync: only `ACCOUNT_NOT_LINKED` or a missing
+   permission turns that player's Fitbit tennis off; anything else is tried
+   again on the next sync.
 
 How it works, briefly: the app asks the server for the tracker's sign-in page;
 the player says yes on the tracker's site; the tracker sends them back to

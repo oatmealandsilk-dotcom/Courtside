@@ -87,13 +87,15 @@ export const fitbitIsTennis = (e: FitbitExercise) =>
 
 /**
  * Workouts another app put into Google Health (an Apple Watch's through Apple
- * Health, a Galaxy Watch's through Health Connect, an app writing to Google's
- * own API or a Google partner): never filed as the player's Fitbit. CourtSide
- * reads the phone's Health itself, so they would come in twice, and under the
- * wrong name. A Fitbit, a Pixel Watch and a workout logged in the Fitbit app
- * all stay.
+ * Health, a Galaxy Watch's through Health Connect, Google Fit's, an app
+ * writing to Google's own API, to Fitbit's old Web API or through a Google
+ * partner): never filed as the player's Fitbit. CourtSide reads the phone's
+ * Health itself, so they would come in twice, and under the wrong name.
+ * index.ts already asks Google for only what a Fitbit or Pixel Watch recorded
+ * (its "google-wearables" source family); this is the backstop for when
+ * Google refuses that, and a Fitbit's or Pixel Watch's own workouts stay.
  */
-const OTHER_APPS = new Set(['HEALTH_KIT', 'HEALTH_CONNECT', 'GOOGLE_WEB_API', 'GOOGLE_PARTNER_INTEGRATION']);
+const OTHER_APPS = new Set(['HEALTH_KIT', 'HEALTH_CONNECT', 'FIT', 'FITBIT_WEB_API', 'GOOGLE_WEB_API', 'GOOGLE_PARTNER_INTEGRATION']);
 export const fitbitFromOtherApp = (e: FitbitExercise) => OTHER_APPS.has(e.dataSource?.platform ?? '');
 
 /**
