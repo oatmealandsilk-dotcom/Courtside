@@ -13,6 +13,7 @@ breaks. You can set up one, two or all three, in any order.
 - **Developer app**: a registration on the tracker company's website that says
   "CourtSide is allowed to ask people for their workouts". Like a shop applying
   for a card machine: you do it once, for the whole app, not per player.
+  (For Fitbit, this is a project in Google's Cloud Console: see section 1.)
 - **Client ID and client secret**: the two codes the tracker gives you when you
   register. The ID is like a username for CourtSide; the secret is like its
   password. Never post the secret anywhere public.
@@ -33,36 +34,137 @@ part (the "trackers" function). Claude does those only when you say go.
 
 ---
 
-## 1. Fitbit
+## 1. Fitbit (through Google)
 
-**Why:** so Fitbit lets CourtSide ask its users for their tennis sessions.
+**Why:** Fitbit belongs to Google now. Fitbit's own developer site stopped
+taking new apps, and its old connection switches off for good on
+**Oct 30, 2026**. The replacement is Google's **Google Health API**. (An
+**API** is a door one program uses to ask another for data: this one is how
+CourtSide's server asks Google for a player's Fitbit workouts.) Players sign
+in with the Google account their Fitbit is on, and CourtSide only ever reads.
 
-1. Open https://dev.fitbit.com/apps/new and sign in with the Google account you
-   want to own CourtSide's Fitbit app. (Fitbit accounts are Google accounts now.)
-2. Fill in the form:
-   - **Application Name:** CourtSide
-   - **Description:** Tennis app. Reads your tennis workouts so you can log them.
-   - **Application Website URL:** https://courtsidebase.com
-   - **Organization:** CourtSide
-   - **Organization Website URL:** https://courtsidebase.com
-   - **Terms of Service URL** and **Privacy Policy URL:** CourtSide's own pages
-     (the same ones the App Store listing uses).
-   - **OAuth 2.0 Application Type:** choose **Server**. (Not "Personal":
-     that only works for your own Fitbit.)
-   - **Redirect URL:** paste exactly
-     `https://auth.courtsidebase.com/functions/v1/trackers/callback/fitbit`
-   - **Default Access Type:** Read Only
-3. Tick the terms box and press **Register**.
-4. The next page shows **OAuth 2.0 Client ID** and **Client Secret**. Keep the
-   page open for step 5 below.
+**Read this first: the one big unknown.** Google's own pages say it is "not
+onboarding new projects at this time", with no waiting list to join. Nobody
+can tell in advance whether a brand-new CourtSide project is let in. Step 4
+below (switching the API on) is the test: if it works, carry on; if Google
+refuses, stop there and tell Claude. Nothing in these steps should cost money:
+if Google asks for a card or a billing account at any point, stop and tell
+Claude.
 
-Scopes CourtSide asks for (nothing to tick on Fitbit's form; for your
-information): `activity` and `heartrate`.
+### Words for this section
 
-**Supabase secret names:** `FITBIT_CLIENT_ID` and `FITBIT_CLIENT_SECRET`.
+- **Google Cloud Console**: Google's website for developers, where an app is
+  registered to use Google's services. Like the back office of a shop.
+- **Project**: a folder in the Console that holds one app's settings and keys.
+- **Google Auth Platform**: the part of the Console that sets up the "Sign in
+  with Google" page players see: "CourtSide wants to see your workouts. Allow?"
+  (Older screens call it the **OAuth consent screen**. **OAuth** is the
+  standard way one app asks for another app's data without ever seeing the
+  player's password.)
+- **OAuth client**: CourtSide's username and password with Google: a **Client
+  ID** (the username) and a **Client secret** (the password).
+- **Scope**: one line in the list of what CourtSide asks to read.
+- **Test users**: while CourtSide's Google setup is "in Testing", only these
+  Google accounts can connect.
 
-Note: Google is moving Fitbit's developer tools over to a newer "Google Health
-API". If the Fitbit page says new apps are closed, stop there and tell Claude.
+### Steps
+
+1. **On your phone first** (why: Google only shares Fitbit data for a Google
+   account that has a Google Health profile). Install the **Google Health**
+   app from the App Store, open it, tap **Sign in with Google**, and pick the
+   Google account your Fitbit is on. If it offers to move your Fitbit account
+   to Google, do that. Check your Fitbit workouts show up in it. Every player
+   does this once; if someone hasn't, CourtSide tells them what to do when
+   they press Connect.
+2. Open https://console.cloud.google.com and sign in with the Google account
+   that should own CourtSide's Google setup. Accept Google Cloud's terms if it
+   asks.
+3. **Create the project.** Click the project picker at the top left (next to
+   the Google Cloud logo; it may say **Select a project**) → **New project** →
+   Project name: `CourtSide` → leave Location as it is → **Create**. When the
+   bell at the top right says it's done, open the project picker again and
+   click **CourtSide**, so every step below happens inside it.
+4. **Switch on the Google Health API** (why: Google refuses every request from
+   a project until its API is switched on). Click **☰** (top left) →
+   **APIs & Services** → **Library** → type `Google Health API` in the search
+   box → click the **Google Health API** result → **Enable**.
+   - If it isn't found, the button is grey, or you see an error or a "request
+     access" message: **stop here** and send Claude a screenshot. That is
+     Google's "not onboarding new projects" block.
+5. **Start the sign-in page.** **☰** → **APIs & Services** → **OAuth consent
+   screen**. This opens **Google Auth Platform**. If it says "Google Auth
+   Platform not configured yet", click **Get started**, then:
+   - **App information:** App name `CourtSide`; User support email: your
+     email → **Next**
+   - **Audience:** **External** → **Next**
+   - **Contact information:** your email → **Next**
+   - **Finish:** tick "I agree to the Google API Services: User Data Policy" →
+     **Continue** → **Create**
+6. **Branding** (left menu → **Branding**): Application home page
+   `https://courtsidebase.com`; Application privacy policy link and Application
+   terms of service link: CourtSide's own pages (the same ones the App Store
+   listing uses). Under **Authorized domains** click **+ Add domain** →
+   `courtsidebase.com` → **Save**. Leave the logo empty for now: adding one
+   starts a Google review.
+7. **Who may connect** (left menu → **Audience**): check that Publishing
+   status says **Testing** and User type says **External**. Under
+   **Test users** click **+ Add users**, type the Google email of every admin
+   who will test Fitbit (yours first) → **Save**. Do **not** press
+   **Publish app** (see "Limits" below).
+8. **What CourtSide may read** (left menu → **Data Access**) → **Add or remove
+   scopes** → type `Google Health API` in the filter box → tick exactly these
+   two rows:
+   - `.../auth/googlehealth.activity_and_fitness.readonly`: workouts, with
+     their calories, average heart rate and time in each heart-rate zone
+   - `.../auth/googlehealth.health_metrics_and_measurements.readonly`: heart
+     rate, for a session's highest beat
+
+   → **Update** → **Save**. Both end in "readonly": CourtSide can never change
+   anyone's Fitbit data.
+9. **CourtSide's key pair** (left menu → **Clients**) → **+ Create client** →
+   Application type: **Web application** → Name: `CourtSide server` → leave
+   "Authorized JavaScript origins" empty → under **Authorized redirect URIs**
+   click **+ Add URI** and paste exactly
+   `https://auth.courtsidebase.com/functions/v1/trackers/callback/fitbit`
+   (no spaces, no slash at the end) → **Create**.
+10. A box shows the **Client ID** (it ends in `.apps.googleusercontent.com`)
+    and the **Client secret** (it usually starts with `GOCSPX-`). **Google
+    shows the secret only once**: click **Download JSON** straight away and
+    keep that file private, or keep the box open for "5. Paste the codes into
+    Supabase" below. Never paste either one into chat.
+
+**Supabase secret names:** `FITBIT_CLIENT_ID` (the Client ID) and
+`FITBIT_CLIENT_SECRET` (the Client secret). The names still say Fitbit, so
+the app's Fitbit button keeps working; the codes inside are Google's.
+
+**After that:** tell Claude "Google keys are in". Then connect Fitbit in
+CourtSide as an admin, record one real **Tennis** workout on the Fitbit (or
+Pixel Watch), let it sync in the Google Health app, and tell Claude, who checks
+it arrives as tennis (Google has not written down how a Fitbit "Tennis"
+workout is labelled, so one real session settles it).
+
+### Limits until Google has checked CourtSide (read before opening Fitbit to everyone)
+
+- **100 people, ever.** A Google setup that Google hasn't verified can be used
+  by at most 100 Google accounts in total.
+- **Testing** (where these steps leave you): only the test users from step 7
+  can connect, and Google makes them connect again every 7 days. When that
+  happens, the app turns Fitbit tennis off and offers to connect again.
+- **The warning screen.** Testers see "Google hasn't verified this app". Tap
+  **Advanced** → **Go to CourtSide (unsafe)**. That is Google's standard
+  warning for any app it has not reviewed yet, not a sign anything is wrong.
+  On the next page, leave both boxes ticked and tap **Continue**.
+- **In production** (Audience → **Publish app**) ends the weekly reconnect,
+  but the 100-person cap and the warning screen stay, and Google's rules say a
+  public app should not use these health permissions unverified. Claude asks
+  before this is ever pressed.
+- **More than 100 people** needs **Google's verification**: Google's team
+  checks CourtSide's privacy policy, a short demo video and a reason for each
+  permission (free, takes several weeks), plus a yearly security check called
+  **CASA** (Cloud Application Security Assessment), done by an outside company
+  Google approves. **CASA costs money: about US$500–4,500 every year**, and
+  takes 2–6 weeks. Nothing here starts without your yes.
+- Fitbit's kids' watches (Fitbit Ace) do not work through Google Health.
 
 ## 2. Oura
 
@@ -124,8 +226,8 @@ never be inside the app itself.
 
 | Tracker | Key (name)             | Value (paste)            |
 |---------|------------------------|--------------------------|
-| Fitbit  | `FITBIT_CLIENT_ID`     | Fitbit's Client ID       |
-| Fitbit  | `FITBIT_CLIENT_SECRET` | Fitbit's Client Secret   |
+| Fitbit  | `FITBIT_CLIENT_ID`     | Google's Client ID (section 1, step 10)     |
+| Fitbit  | `FITBIT_CLIENT_SECRET` | Google's Client secret (section 1, step 10) |
 | Oura    | `OURA_CLIENT_ID`       | Oura's Client ID         |
 | Oura    | `OURA_CLIENT_SECRET`   | Oura's Client Secret     |
 | Polar   | `POLAR_CLIENT_ID`      | Polar's Client ID        |
@@ -159,7 +261,12 @@ update server_settings set value = 'on', updated_at = now() where key = 'flag:te
 4. If the function ever needs a different callback address, set the secret
    `TRACKERS_CALLBACK_BASE` (default
    `https://auth.courtsidebase.com/functions/v1/trackers`) and change the
-   redirect URL on each tracker's developer page to match.
+   redirect URL on each tracker's developer page to match (Fitbit's lives in
+   Google Auth Platform → **Clients** → **CourtSide server**).
+5. Fitbit only: the function's logs say why a Google sign-in failed.
+   `[trackers] fitbit identity 403 API_PRIVATE_PREVIEW_ACCESS_DENIED` means
+   Google has not let the project in yet; `ACCOUNT_NOT_LINKED` means that
+   player's Google account has no Google Health profile (the app tells them).
 
 How it works, briefly: the app asks the server for the tracker's sign-in page;
 the player says yes on the tracker's site; the tracker sends them back to

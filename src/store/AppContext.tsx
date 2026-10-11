@@ -8306,7 +8306,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const result = await WebBrowser.openAuthSessionAsync(start.url, back);
     if (result.type !== 'success') throw new Error(`${label} was not connected.`);
     const n = /[?&]n=([0-9a-f-]{36})/i.exec(result.url)?.[1];
-    if (!n) throw new Error(/tracker=expired/.test(result.url) ? 'That sign-in took too long. Try again.' : `${label} was not connected.`);
+    // Fitbit signs in with Google since Oct 10: a Google account with no Google Health profile yet is told what to do (Google's own advice).
+    if (!n) throw new Error(/tracker=expired/.test(result.url) ? 'That sign-in took too long. Try again.'
+      : /tracker=notlinked/.test(result.url) ? 'That Google account isn’t linked to Google Health yet. Open the Google Health app, sign in with Google (or move your Fitbit account to Google there), then connect again.'
+      : `${label} was not connected.`);
     await remote.trackers('finish', { n });
     // The sign-in itself looks back three days; this goes back a week (as Sync now does), so tennis from before connecting is there to log.
     // Waited for, so the check that follows connecting already finds those sessions.

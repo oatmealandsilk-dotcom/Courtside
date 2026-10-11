@@ -1,4 +1,7 @@
 // CourtSide ↔ Fitbit, Oura and Polar — one Supabase Edge Function for all three.
+// Fitbit goes through Google's Health API since Oct 10, 2026 (owner, Oct 10:
+// "Also can we make fibit work too"): Fitbit's own Web API shuts on Oct 30,
+// 2026, and a Fitbit now signs in with the Google account it belongs to.
 //
 // Each tracker only brings in tennis sessions, the same way WHOOP's do
 // (migration 58): its tennis workouts are read and filed with
@@ -14,7 +17,9 @@
 //                         or its switch is off for this person
 //   /callback/<provider> — the tracker sends the browser back here; the code
 //                         becomes keys, which wait (?tracker=pending&p=…&n=…)
-//                         until the phone that started it collects them
+//                         until the phone that started it collects them.
+//                         Fitbit: ?tracker=notlinked when the Google account
+//                         has no Google Health profile yet
 //   /finish             — (signed-in) {n}: that phone collects the sign-in, as the
 //                         same player. Only then is the tracker put on the account
 //                         (so a sign-in link sent to someone else can never put
@@ -32,8 +37,10 @@
 //           (the trackers' redirects carry no app token; /start, /finish,
 //            /sync and /disconnect check the person's token themselves).
 //           Run migration 69 first.
-// Secrets:  FITBIT_CLIENT_ID / FITBIT_CLIENT_SECRET, OURA_CLIENT_ID /
-//           OURA_CLIENT_SECRET, POLAR_CLIENT_ID / POLAR_CLIENT_SECRET.
+// Secrets:  FITBIT_CLIENT_ID / FITBIT_CLIENT_SECRET (a Google Cloud OAuth
+//           client of type "Web application", with the Google Health API
+//           switched on), OURA_CLIENT_ID / OURA_CLIENT_SECRET,
+//           POLAR_CLIENT_ID / POLAR_CLIENT_SECRET.
 //           Any pair left out keeps that tracker "Coming soon".
 // Redirect URL to give each tracker:
 //           https://auth.courtsidebase.com/functions/v1/trackers/callback/<provider>
@@ -42,7 +49,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import {
   isProvider, PROVIDERS, type ProviderId, type Session,
-  fitbitIsTennis, fitbitSession, type FitbitActivity,
+  fitbitFromOtherApp, fitbitIsTennis, fitbitSession, type FitbitExercise,
   ouraIsTennis, ouraSession, type OuraBeat, type OuraWorkout,
   polarIsTennis, polarSession, type PolarExercise,
 } from './workouts.ts';
@@ -60,15 +67,32 @@ const NAME: Record<ProviderId, string> = { fitbit: 'Fitbit', oura: 'Oura', polar
 /** Each tracker's addresses and how it signs in. */
 type Config = {
   auth: string; token: string; scope: string;
-  /** Fitbit asks for PKCE as well as the secret. */
+  /** Fitbit's sign-in (Google's) takes PKCE as well as the secret. */
   pkce: boolean;
-  /** The secret goes in a Basic header (Fitbit, Polar) rather than the form (Oura). */
+  /** The secret goes in a Basic header (Polar) rather than the form (Google for Fitbit, Oura). */
   basic: boolean;
+  /** More for the sign-in page's address, when the tracker needs it. */
+  extra?: Record<string, string>;
   id: string; secret: string;
 };
 const env = (k: string) => (Deno.env.get(k) ?? '').trim();
+/**
+ * What CourtSide asks Google for, both read-only: workouts (with their
+ * average heart rate, zones and calories), and heart rate, for a session's
+ * highest beat. The player may untick either on Google's page.
+ */
+const FITBIT_WORKOUTS = 'https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly';
+const FITBIT_HEART = 'https://www.googleapis.com/auth/googlehealth.health_metrics_and_measurements.readonly';
+const GOOGLE_HEALTH = 'https://health.googleapis.com/v4/users/me';
 const CONFIG: Record<ProviderId, Config> = {
-  fitbit: { auth: 'https://www.fitbit.com/oauth2/authorize', token: 'https://api.fitbit.com/oauth2/token', scope: 'activity heartrate', pkce: true, basic: true, id: env('FITBIT_CLIENT_ID'), secret: env('FITBIT_CLIENT_SECRET') },
+  // FITBIT_CLIENT_ID / FITBIT_CLIENT_SECRET now hold a Google Cloud OAuth client's (docs/trackers-setup.md).
+  // A refresh key comes only with access_type=offline, and on a second sign-in (after Disconnect) only when
+  // Google asks again (consent); select_account lets someone with two Google accounts pick their Fitbit's.
+  fitbit: {
+    auth: 'https://accounts.google.com/o/oauth2/v2/auth', token: 'https://oauth2.googleapis.com/token', scope: `${FITBIT_WORKOUTS} ${FITBIT_HEART}`,
+    pkce: true, basic: false, extra: { access_type: 'offline', prompt: 'consent select_account' },
+    id: env('FITBIT_CLIENT_ID'), secret: env('FITBIT_CLIENT_SECRET'),
+  },
   oura: { auth: 'https://cloud.ouraring.com/oauth/authorize', token: 'https://api.ouraring.com/oauth/token', scope: 'workout heartrate', pkce: false, basic: false, id: env('OURA_CLIENT_ID'), secret: env('OURA_CLIENT_SECRET') },
   polar: { auth: 'https://flow.polar.com/oauth2/authorization', token: 'https://polarremote.com/v2/oauth2/token', scope: 'accesslink.read_all', pkce: false, basic: true, id: env('POLAR_CLIENT_ID'), secret: env('POLAR_CLIENT_SECRET') },
 };
@@ -97,7 +121,7 @@ async function open(state: string): Promise<State | null> {
     return JSON.parse(new TextDecoder().decode(unb64(body)));
   } catch { return null; }
 }
-/** Fitbit's PKCE secret for one sign-in, worked out again from its code rather than stored or sent anywhere. */
+/** Fitbit's (Google's) PKCE secret for one sign-in, worked out again from its code rather than stored or sent anywhere. */
 const verifierFor = (n: string) => mac('pkce:' + n);
 const challengeOf = async (verifier: string) => b64(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)));
 
@@ -127,7 +151,7 @@ async function tokenCall(p: ProviderId, form: Record<string, string>): Promise<{
   try { res = await fetch(c.token, { method: 'POST', headers, body, signal: AbortSignal.timeout(10_000) }); } catch (e) { console.error(`[trackers] ${p} token`, e); return { ok: false, error: 'network' }; }
   const t = await res.json().catch(() => ({})) as Record<string, unknown>;
   if (res.ok && typeof t.access_token === 'string') return { ok: true, t };
-  // Fitbit says {errors: [{errorType}]}, the others {error}.
+  // Google (for Fitbit), Oura and Polar say {error}; {errors: [{errorType}]} was Fitbit's own API.
   const errs = (t.errors as { errorType?: string }[] | undefined) ?? [];
   return { ok: false, error: String(t.error ?? errs[0]?.errorType ?? res.status) };
 }
@@ -143,10 +167,14 @@ const tokenRow = async (uid: string, p: ProviderId) => (await admin.from('tracke
 /**
  * A working key for this person's tracker, refreshed when it is about to run
  * out or when `stale` (a key the tracker just refused) is still the stored
- * one. Fitbit and Oura invalidate the old refresh key on every refresh, so
- * only the request holding claim_tracker_refresh refreshes; others wait for
- * its key. Tennis is turned off only when the tracker says the refresh key is
- * dead, never on a network error. Polar's keys do not run out.
+ * one. Oura invalidates the old refresh key on every refresh, so only the
+ * request holding claim_tracker_refresh refreshes; others wait for its key.
+ * Google (for Fitbit) keeps the same refresh key and usually sends none back:
+ * then the stored one stays. Its sign-in keys last an hour (Fitbit's own
+ * lasted eight). Tennis is turned off only when the tracker says the refresh
+ * key is dead (Google: "invalid_grant", which is also what a Google project
+ * still in Testing says after 7 days), never on a network error. Polar's keys
+ * do not run out.
  */
 async function tokensFor(uid: string, p: ProviderId, stale?: string): Promise<{ access: string; member: string | null } | null> {
   for (let i = 0; i < 6; i += 1) {
@@ -184,11 +212,17 @@ async function tokensFor(uid: string, p: ProviderId, stale?: string): Promise<{ 
   return null;
 }
 
-/** One GET from a tracker's API as this person. A refused key is swapped once and the call tried again. Null when there is no key. */
-async function apiGet(uid: string, p: ProviderId, address: string): Promise<Response | null> {
+/**
+ * One GET from a tracker's API as this person (or, with `post`, one POST of it
+ * as JSON: Google's heart-rate roll-up). A refused key is swapped once and the
+ * call tried again. Null when there is no key.
+ */
+async function apiGet(uid: string, p: ProviderId, address: string, post?: unknown): Promise<Response | null> {
   const t = await tokensFor(uid, p);
   if (!t) return null;
-  const go = (access: string) => fetch(address, { headers: { authorization: `Bearer ${access}`, accept: 'application/json' }, signal: AbortSignal.timeout(15_000) });
+  const go = (access: string) => fetch(address, post === undefined
+    ? { headers: { authorization: `Bearer ${access}`, accept: 'application/json' }, signal: AbortSignal.timeout(15_000) }
+    : { method: 'POST', headers: { authorization: `Bearer ${access}`, accept: 'application/json', 'content-type': 'application/json' }, body: JSON.stringify(post), signal: AbortSignal.timeout(15_000) });
   const res = await go(t.access);
   if (res.status !== 401) return res;
   await res.body?.cancel();
@@ -201,26 +235,87 @@ async function apiGet(uid: string, p: ProviderId, address: string): Promise<Resp
 type Found = { sessions: Session[]; tennisIds: Set<string>; complete: boolean; refused: boolean };
 const day = (d: Date) => d.toISOString().slice(0, 10);
 
+/** Google's word for why it said no ('ACCOUNT_NOT_LINKED', 'MISSING_OAUTH_SCOPE', …), else its status, else ''. Reads the answer's body. */
+async function googleReason(res: Response): Promise<string> {
+  const b = await res.json().catch(() => ({})) as { error?: { status?: string; details?: { reason?: string }[] } };
+  return String(b.error?.details?.find((d) => typeof d?.reason === 'string')?.reason ?? b.error?.status ?? '');
+}
+
+/**
+ * Hands a Google sign-in back: one POST of either key withdraws CourtSide's
+ * whole yes (developers.google.com/identity/protocols/oauth2/web-server).
+ * Best effort.
+ */
+const googleRevoke = (token: string) =>
+  fetch('https://oauth2.googleapis.com/revoke', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ token }), signal: AbortSignal.timeout(8_000) })
+    .then((r) => r.body?.cancel()).catch(() => undefined);
+
+/**
+ * Google's heart rate over exactly one Fitbit workout: its highest beat (the
+ * workout itself has only the average) and its average, in one window as long
+ * as the workout. Best effort, as Oura's: with no heart rate, or a player who
+ * unticked heart rate on Google's page, the session still comes in.
+ */
+async function fitbitHeart(uid: string, e: FitbitExercise): Promise<{ avg: number | null; max: number | null } | null> {
+  const t0 = Date.parse(e.exercise?.interval?.startTime ?? '');
+  const t1 = Date.parse(e.exercise?.interval?.endTime ?? '');
+  if (!Number.isFinite(t0) || !(t1 > t0)) return null;
+  try {
+    const res = await apiGet(uid, 'fitbit', `${GOOGLE_HEALTH}/dataTypes/heart-rate/dataPoints:rollUp`, {
+      range: { startTime: new Date(t0).toISOString(), endTime: new Date(t1).toISOString() },
+      windowSize: `${Math.ceil((t1 - t0) / 1000)}s`,
+    });
+    if (!res?.ok) { await res?.body?.cancel(); return null; }
+    const body = await res.json() as { rollupDataPoints?: { heartRate?: { beatsPerMinuteAvg?: number; beatsPerMinuteMax?: number } }[] };
+    const hr = (body.rollupDataPoints ?? []).map((r) => r.heartRate)
+      .filter((h): h is { beatsPerMinuteAvg?: number; beatsPerMinuteMax: number } => !!h && typeof h.beatsPerMinuteMax === 'number');
+    if (!hr.length) return null;
+    // One window; were Google ever to split it, the highest of them, and no average.
+    return { avg: hr.length === 1 ? hr[0].beatsPerMinuteAvg ?? null : null, max: Math.max(...hr.map((h) => h.beatsPerMinuteMax)) };
+  } catch { return null; }
+}
+
 async function fitbitTennis(uid: string, since: Date): Promise<Found> {
   const out: Found = { sessions: [], tennisIds: new Set(), complete: false, refused: false };
-  // A day early, since Fitbit reads the date in the player's own time zone.
-  let next: string | null = `https://api.fitbit.com/1/user/-/activities/list.json?${new URLSearchParams({ afterDate: day(new Date(since.getTime() - 86_400_000)), sort: 'asc', offset: '0', limit: '100' })}`;
-  for (let i = 0; i < 3 && next; i += 1) {
-    const res = await apiGet(uid, 'fitbit', next);
+  // Google lists workouts newest first, 25 to a page, and picks them only by
+  // the local time they started: so from a day early, as Fitbit's own list
+  // did. A workout that started before that ends the list.
+  const early = since.getTime() - 86_400_000;
+  let filter: string | null = `exercise.interval.civil_start_time >= "${day(new Date(early))}"`;
+  const tennis: FitbitExercise[] = [];
+  let next = '';
+  for (let i = 0; i < 8; i += 1) {
+    const q = new URLSearchParams({ pageSize: '25', ...(filter ? { filter } : {}), ...(next ? { pageToken: next } : {}) });
+    const res = await apiGet(uid, 'fitbit', `${GOOGLE_HEALTH}/dataTypes/exercise/dataPoints?${q.toString().replace(/\+/g, '%20')}`);
     if (!res) return out;
-    if (res.status === 403) { await res.body?.cancel(); out.refused = true; return out; }
-    if (!res.ok) { await res.body?.cancel(); return out; }
-    const body = await res.json() as { activities?: FitbitActivity[]; pagination?: { next?: string } };
-    for (const a of body.activities ?? []) {
-      if (!fitbitIsTennis(a)) continue;
-      const s = fitbitSession(a);
-      if (!s) continue;
-      out.tennisIds.add(s.ext);
-      if (Date.parse(s.payload.ended_at) >= since.getTime()) out.sessions.push(s);
+    if (!res.ok) {
+      const why = await googleReason(res);
+      // One report (June 2026) of Google refusing this filter: then once more
+      // with none. Newest come first, so the day early still ends the list.
+      if (res.status === 400 && filter && !next && /FILTER/.test(why)) { filter = null; i -= 1; continue; }
+      console.error('[trackers] fitbit list', res.status, why);
+      // The player took back CourtSide's yes to their workouts, or their Google
+      // account has no Google Health profile any more: tennis off, and the app
+      // offers to connect again.
+      if (res.status === 403 || why === 'ACCOUNT_NOT_LINKED') out.refused = true;
+      return out;
     }
-    next = body.pagination?.next || null;
+    const body = await res.json() as { dataPoints?: FitbitExercise[]; nextPageToken?: string };
+    let ended = false;
+    for (const e of body.dataPoints ?? []) {
+      if (Date.parse(e.exercise?.interval?.startTime ?? '') < early) { ended = true; continue; }
+      if (fitbitIsTennis(e) && !fitbitFromOtherApp(e)) tennis.push(e);
+    }
+    next = body.nextPageToken ?? '';
+    if (!next || ended) { out.complete = true; break; }
   }
-  out.complete = !next;
+  for (const e of tennis) {
+    const s = fitbitSession(e);
+    if (!s) continue;
+    out.tennisIds.add(s.ext);
+    if (Date.parse(s.payload.ended_at) < since.getTime()) continue;
+    out.sessions.push(fitbitSession(e, await fitbitHeart(uid, e)) ?? s);
+  }
   return out;
 }
 
@@ -325,11 +420,11 @@ async function link(uid: string, p: ProviderId, a: Answer): Promise<{ error?: st
 async function revoke(uid: string, p: ProviderId) {
   const row = await tokenRow(uid, p);
   if (!row) return;
-  const c = CONFIG[p];
   const t = AbortSignal.timeout(8_000);
   try {
     if (p === 'fitbit') {
-      await fetch('https://api.fitbit.com/oauth2/revoke', { method: 'POST', signal: t, headers: { authorization: 'Basic ' + btoa(`${c.id}:${c.secret}`), 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ token: row.refresh_token ?? row.access_token }) }).then((r) => r.body?.cancel());
+      // The refresh key, so the whole yes goes (Google needs no secret for this).
+      await googleRevoke(row.refresh_token ?? row.access_token);
     } else if (p === 'oura') {
       await fetch(`https://api.ouraring.com/oauth/revoke?${new URLSearchParams({ access_token: row.access_token })}`, { signal: t }).then((r) => r.body?.cancel());
     } else if (row.member_id) {
@@ -358,15 +453,38 @@ Deno.serve(async (req) => {
     if (!isSetUp(p)) return go('failed');
     const r = await tokenCall(p, {
       grant_type: 'authorization_code', code: q.get('code')!, redirect_uri: redirectFor(p),
-      ...(p === 'fitbit' ? { client_id: CONFIG.fitbit.id, code_verifier: await verifierFor(opened.n) } : {}),
+      ...(CONFIG[p].pkce ? { code_verifier: await verifierFor(opened.n) } : {}),
     });
     if (!r.ok) { console.error(`[trackers] ${p} code`, r.error); return go('failed'); }
     const t = r.t;
     const answer: Answer = {
       access_token: String(t.access_token), refresh_token: typeof t.refresh_token === 'string' ? t.refresh_token : null,
       expires_at: expiry(t), scope: typeof t.scope === 'string' ? t.scope : null,
-      member: p === 'fitbit' && t.user_id != null ? String(t.user_id) : p === 'polar' && t.x_user_id != null ? String(t.x_user_id) : null,
+      member: p === 'polar' && t.x_user_id != null ? String(t.x_user_id) : null,
     };
+    if (p === 'fitbit') {
+      // A sign-in that cannot be used is handed straight back to Google.
+      const drop = async (result: string) => { await googleRevoke(answer.refresh_token ?? answer.access_token); return go(result); };
+      // Google lets the player untick what CourtSide asks for. Without their
+      // workouts there is nothing to connect; without heart rate, sessions
+      // come in without their highest beat.
+      if (answer.scope != null && !answer.scope.split(/\s+/).includes(FITBIT_WORKOUTS)) return drop('refused');
+      // Always sent with access_type=offline and prompt=consent; without one the sign-in would die within the hour.
+      if (!answer.refresh_token) { console.error('[trackers] fitbit: no refresh key'); return drop('failed'); }
+      // Google's answer names no account, so ask Google Health who this is.
+      // Google's rule: never call a Fitbit connected before this answers. A
+      // Google account with no Google Health profile yet (its Fitbit not moved
+      // over) says ACCOUNT_NOT_LINKED, and the app says what to do.
+      const who = await fetch(`${GOOGLE_HEALTH}/identity`, { headers: { authorization: `Bearer ${answer.access_token}`, accept: 'application/json' }, signal: AbortSignal.timeout(10_000) }).catch(() => null);
+      if (!who?.ok) {
+        const why = who ? await googleReason(who) : 'network';
+        console.error('[trackers] fitbit identity', who?.status, why);
+        return drop(why === 'ACCOUNT_NOT_LINKED' ? 'notlinked' : 'failed');
+      }
+      const id = await who.json().catch(() => ({})) as { healthUserId?: unknown };
+      // Google's id for the player in its Health API (1 to 63 letters), as Fitbit's own user id was kept.
+      answer.member = typeof id.healthUserId === 'string' && id.healthUserId && id.healthUserId.length <= 100 ? id.healthUserId : null;
+    }
     if (p === 'polar') {
       // Polar shares a person's data only once they are registered with CourtSide's app (409: already are).
       const reg = await fetch('https://www.polaraccesslink.com/v3/users', { method: 'POST', headers: { authorization: `Bearer ${answer.access_token}`, 'content-type': 'application/json', accept: 'application/json' }, body: JSON.stringify({ 'member-id': crypto.randomUUID() }) }).catch(() => null);
@@ -413,6 +531,7 @@ Deno.serve(async (req) => {
     const state = await sign({ uid, back: safeBack(typeof posted.back === 'string' ? posted.back : 'courtside://health'), p, n, exp: Date.now() + SIGN_IN_MS });
     const q = new URLSearchParams({ response_type: 'code', client_id: c.id, redirect_uri: redirectFor(p), scope: c.scope, state });
     if (c.pkce) { q.set('code_challenge', await challengeOf(await verifierFor(n))); q.set('code_challenge_method', 'S256'); }
+    for (const [k, v] of Object.entries(c.extra ?? {})) q.set(k, v);
     return json({ on: true, url: `${c.auth}?${q}` });
   }
 

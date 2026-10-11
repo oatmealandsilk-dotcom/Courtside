@@ -1,6 +1,7 @@
-// Fitbit, Oura and Polar workouts, and what of each CourtSide keeps. Pure,
-// so Node can test it too. Every tracker's tennis session becomes the same
-// payload WHOOP's does (record_activity, migrations 58 and 69).
+// Fitbit (through Google's Health API since Oct 10), Oura and Polar workouts,
+// and what of each CourtSide keeps. Pure, so Node can test it too. Every
+// tracker's tennis session becomes the same payload WHOOP's does
+// (record_activity, migrations 58 and 69).
 
 export type ProviderId = 'fitbit' | 'oura' | 'polar';
 export const PROVIDERS: ProviderId[] = ['fitbit', 'oura', 'polar'];
@@ -10,6 +11,8 @@ export const isProvider = (p: unknown): p is ProviderId => typeof p === 'string'
 export type Payload = {
   sport: 'tennis'; started_at: string; ended_at: string; tz_offset_min: number | null;
   avg_hr: number | null; max_hr: number | null; kcal: number | null; device: string;
+  /** Minutes in each heart-rate zone, easiest first (migration 65). Fitbit's only, and only when Google has them. */
+  hr_zones?: number[];
 };
 /** One tennis session, ready to file: the tracker's own id for it and the payload. */
 export type Session = { ext: string; payload: Payload };
@@ -38,25 +41,109 @@ export function offsetOf(iso: unknown): number | null {
 const iso = (ms: number) => new Date(ms).toISOString();
 
 // ------------------------------------------------------------------ Fitbit
-// GET /1/user/-/activities/list.json (dev.fitbit.com/build/reference/web-api/activity/get-activity-log-list)
-export type FitbitActivity = {
-  logId: number | string; activityName?: string; activityTypeId?: number; startTime?: string;
-  duration?: number; averageHeartRate?: number; calories?: number; source?: { name?: string };
+// Through Google's Health API since Oct 10, 2026 (owner, Oct 10: "Also can we
+// make fibit work too"): Fitbit's own Web API shuts on Oct 30, 2026, and a
+// Fitbit now belongs to the Google account it signs in with. One workout is
+// one "exercise" in
+// GET https://health.googleapis.com/v4/users/me/dataTypes/exercise/dataPoints
+// (developers.google.com/health/reference/rest/v4/users.dataTypes.dataPoints).
+// Google sends whole numbers as text ("148"), lengths of time as seconds with
+// an "s" ("900s", "-18000s"), and every time in UTC ("2026-02-23T06:00:00Z").
+export type FitbitExercise = {
+  /** "users/<player>/dataTypes/exercise/dataPoints/<the workout's own id>" */
+  name?: string;
+  dataSource?: { platform?: string; device?: { displayName?: string } };
+  exercise?: {
+    interval?: { startTime?: string; endTime?: string; startUtcOffset?: string };
+    exerciseType?: string; displayName?: string;
+    /** The workout without its pauses. */
+    activeDuration?: string;
+    metricsSummary?: {
+      caloriesKcal?: number; averageHeartRateBeatsPerMinute?: string | number;
+      heartRateZoneDurations?: { lightTime?: string; moderateTime?: string; vigorousTime?: string; peakTime?: string };
+    };
+  };
 };
-/** Fitbit's own "Tennis" (activity type 15675 in Fitbit's list). Never table tennis, paddle tennis, padel or pickleball. */
-export const FITBIT_TENNIS = 15675;
-export const fitbitIsTennis = (a: FitbitActivity) => lower(a.activityName) === 'tennis' || a.activityTypeId === FITBIT_TENNIS;
-export function fitbitSession(a: FitbitActivity): Session | null {
-  const t0 = Date.parse(a.startTime ?? '');
-  const dur = typeof a.duration === 'number' ? a.duration : NaN;
-  if (!Number.isFinite(t0) || !(dur > 0) || a.logId == null) return null;
+
+/** Google's "<seconds>s" ("900s", "-18000s", "1.5s") as seconds, or null. */
+export function googleSeconds(s: unknown): number | null {
+  if (typeof s !== 'string' || !/^-?\d+(\.\d+)?s$/.test(s.trim())) return null;
+  return parseFloat(s);
+}
+/** A number Google may send as text ("148"), kept as num() keeps it. */
+const whole = (v: unknown) => num(typeof v === 'string' && /^\d+(\.\d+)?$/.test(v.trim()) ? Number(v) : v);
+
+/**
+ * Google's own "TENNIS", exactly: never TABLE_TENNIS, PADEL, PICKELBALL
+ * (Google's spelling), SQUASH, BADMINTON, RACQUETBALL or the catch-all
+ * RACKET_SPORTS. Also a workout of type OTHER the player named "Tennis"
+ * themselves (only OTHER keeps a player's own name; Google names every other
+ * type itself). Google has not written down how Fitbit's old "Tennis"
+ * (activity type 15675) arrives: TENNIS is the plain reading, to be checked
+ * with one real session.
+ */
+export const fitbitIsTennis = (e: FitbitExercise) =>
+  e.exercise?.exerciseType === 'TENNIS' || (e.exercise?.exerciseType === 'OTHER' && lower(e.exercise?.displayName) === 'tennis');
+
+/**
+ * Workouts another app put into Google Health (an Apple Watch's through Apple
+ * Health, a Galaxy Watch's through Health Connect, an app writing to Google's
+ * own API or a Google partner): never filed as the player's Fitbit. CourtSide
+ * reads the phone's Health itself, so they would come in twice, and under the
+ * wrong name. A Fitbit, a Pixel Watch and a workout logged in the Fitbit app
+ * all stay.
+ */
+const OTHER_APPS = new Set(['HEALTH_KIT', 'HEALTH_CONNECT', 'GOOGLE_WEB_API', 'GOOGLE_PARTNER_INTEGRATION']);
+export const fitbitFromOtherApp = (e: FitbitExercise) => OTHER_APPS.has(e.dataSource?.platform ?? '');
+
+/**
+ * Google's time in its four heart-rate zones as CourtSide's five, in whole
+ * minutes, easiest first: [Easy, Light, Moderate, Hard, Peak], Google's
+ * "vigorous" being our Hard. Google has no zone below Light, so Easy is the
+ * rest of the workout's moving time, the way WHOOP's zone 0 is counted in
+ * Easy (zoneMinutes, whoop/workout.ts). A zone Google leaves out had no time
+ * in it. Null when Google gave no zones, or no heart rate for the workout at
+ * all. The server checks them again (migration 65).
+ */
+export function fitbitZones(e: FitbitExercise, spanMs: number): number[] | null {
+  const m = e.exercise?.metricsSummary;
+  const z = m?.heartRateZoneDurations;
+  if (!z || typeof z !== 'object' || whole(m?.averageHeartRateBeatsPerMinute) == null) return null;
+  const given = [z.lightTime, z.moderateTime, z.vigorousTime, z.peakTime];
+  if (given.every((v) => v == null)) return null;
+  const secs = given.map((v) => (v == null ? 0 : googleSeconds(v)));
+  if (secs.some((v) => v == null || v < 0)) return null;
+  const [light, moderate, vigorous, peak] = secs as number[];
+  const moving = Math.min(googleSeconds(e.exercise?.activeDuration) ?? Infinity, spanMs / 1000);
+  const easy = Math.max(0, moving - (light + moderate + vigorous + peak));
+  const out = [easy, light, moderate, vigorous, peak].map((s) => Math.round(s / 60));
+  return out.some((v) => v > 0) ? out : null;
+}
+
+/**
+ * One Fitbit workout as a tennis session. `hr` is Google's heart rate over
+ * exactly its time (index.ts asks for it): the highest beat is only there,
+ * never in the workout itself, and its average stands in when the workout has
+ * none. The workout's own id is the last part of its name.
+ */
+export function fitbitSession(e: FitbitExercise, hr?: { avg: number | null; max: number | null } | null): Session | null {
+  const span = e.exercise?.interval;
+  const t0 = Date.parse(span?.startTime ?? '');
+  const t1 = Date.parse(span?.endTime ?? '');
+  const ext = typeof e.name === 'string' ? e.name.split('/').pop() ?? '' : '';
+  if (!Number.isFinite(t0) || !Number.isFinite(t1) || t1 <= t0 || !ext || ext.length > 100) return null;
+  // Google's times are always UTC: the player's own clock comes apart, in seconds.
+  const off = googleSeconds(span?.startUtcOffset);
+  const sum = e.exercise?.metricsSummary;
+  const zones = fitbitZones(e, t1 - t0);
   return {
-    ext: String(a.logId),
+    ext,
     payload: {
-      sport: 'tennis', started_at: iso(t0), ended_at: iso(t0 + dur), tz_offset_min: offsetOf(a.startTime),
-      // Fitbit gives the average only; its zones are ranges, not the highest beat.
-      avg_hr: num(a.averageHeartRate), max_hr: null, kcal: num(a.calories),
-      device: (typeof a.source?.name === 'string' && a.source.name.trim()) || 'Fitbit',
+      sport: 'tennis', started_at: iso(t0), ended_at: iso(t1),
+      tz_offset_min: off != null && Math.abs(off) <= 14 * 3600 ? Math.round(off / 60) : null,
+      avg_hr: whole(sum?.averageHeartRateBeatsPerMinute) ?? num(hr?.avg), max_hr: num(hr?.max), kcal: num(sum?.caloriesKcal),
+      device: (typeof e.dataSource?.device?.displayName === 'string' && e.dataSource.device.displayName.trim()) || 'Fitbit',
+      ...(zones ? { hr_zones: zones } : {}),
     },
   };
 }
