@@ -220,7 +220,16 @@ export interface FeedChrome { picture: boolean; hidden: boolean }
  * 108) is in no feed: its author and admins see it only on its author's
  * own pages, marked.
  */
-const forYou = (p: { imageUrl?: string; videoUrl?: string; groupId?: string; removed?: unknown }) => reachable(p) && !p.groupId && !p.removed;
+const forYou = (p: { imageUrl?: string; videoUrl?: string; groupId?: string; removed?: unknown; session?: unknown; kind?: string; mediaLabel?: string }) => reachable(p) && !p.groupId && !p.removed && !sessionOnly(p);
+/**
+ * A session posted with no photo or clip (its numbers only) is dealt into
+ * Activities, never For you (Oct 12, owner: "since people are auto loggin
+ * their sessions now, its just filled with abunch of session" / "on the for
+ * you page, only sessions with videos or pictures can be there. activity tab
+ * is all sessions"). One with a photo or clip goes to both, as on Strava.
+ */
+const sessionOnly = (p: { imageUrl?: string; videoUrl?: string; session?: unknown; kind?: string; mediaLabel?: string }) =>
+  !!p.session && !p.imageUrl && !p.videoUrl && p.kind !== 'clip' && !p.mediaLabel;
 
 // On a phone — the app or a phone's browser — a vertical clip fills the whole
 // page, edge to edge. The tall 9:16 box in the middle is for computer windows.

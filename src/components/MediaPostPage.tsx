@@ -142,7 +142,6 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
   // Replies stay folded on the page: "View 2 replies" opens the sheet at them.
   // Never one hidden by the owner's Hidden words (migration 117), unless it is yours: the sheet lists those under "Hidden comments".
   const thread = threadsOf(comments, post.id, 'newest', currentUserId);
-  const [captionOpen, setCaptionOpen] = useState(false);
   // A photo: one tap opens it full screen (pinch to look closer, it snaps
   // back), two taps like it. The single tap waits out the double-tap window.
   const insets = useSafeAreaInsets();
@@ -355,8 +354,9 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
             <SessionStrip session={post.session} hidden={blockedIds} play={stripPlay} onPress={() => router.push({ pathname: '/session-stats', params: { kind: 'post', id: post.id } })} />
           ) : null}
           {post.body ? (
-            <Pressable accessibilityRole="button" accessibilityLabel={captionOpen ? 'Show less' : 'Show the whole caption'} onPress={() => setCaptionOpen((o) => !o)}>
-              <Text numberOfLines={captionOpen ? undefined : 2} style={styles.caption}><Text style={styles.captionName}>{author.handle} </Text><RichText style={styles.caption}>{post.body}</RichText></Text>
+            // A tap on the words opens the comments, the whole caption at their top, as on Instagram (Oct 12, owner).
+            <Pressable accessibilityRole="button" accessibilityLabel="Open the comments, with the whole caption" onPress={onComment}>
+              <Text numberOfLines={2} style={styles.caption}><Text style={styles.captionName}>{author.handle} </Text><RichText style={styles.caption}>{post.body}</RichText></Text>
             </Pressable>
           ) : null}
           {/* Who with, right under the words, out of the name's lines. */}

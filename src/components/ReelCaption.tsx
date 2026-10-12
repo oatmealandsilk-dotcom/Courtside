@@ -94,7 +94,7 @@ export const railCount = (n: number) => (n > 0 ? compactNumber(n) : ' ');
 /** Clips that have come on screen this visit, for the double-tap tip. */
 let clipsSeen = 0;
 
-export function ReelCaption({ post, author, onAuthor, onOpenStats, active = false }: { post: Post; author: User; onAuthor: () => void; /** Kept for the feed's call; the comments open from the rail. */ onOpenComments?: (from?: unknown) => void; onOpenStats?: () => void; active?: boolean }) {
+export function ReelCaption({ post, author, onAuthor, onOpenComments, onOpenStats, active = false }: { post: Post; author: User; onAuthor: () => void; /** The comments, opened from the rail and from a tap on the words. */ onOpenComments?: (from?: unknown) => void; onOpenStats?: () => void; active?: boolean }) {
   const { users, blockedIds } = useApp();
   // Tips (features/tips): the stats pill the first time one shows; double-tap on the third clip seen.
   const statsTip = useTip('see-stats', active && !!post.session && hasSessionStats(post.session));
@@ -136,7 +136,9 @@ export function ReelCaption({ post, author, onAuthor, onOpenStats, active = fals
             </Pressable>
           </ScrollView>
         ) : (
-          <FoldedWords text={text} onPress={() => setOpen(true)} hint="Shows the whole caption and when it was posted" />
+          // A tap on the words opens the comments, the whole caption at their top, as on Instagram
+          // (Oct 12, owner: "when yoiu click the cpation, instead of popping up the date, bring up the comment section").
+          <FoldedWords text={text} onPress={onOpenComments ? (from) => onOpenComments(from) : () => setOpen(true)} hint={onOpenComments ? 'Opens the comments, with the whole caption' : 'Shows the whole caption and when it was posted'} />
         )
       ) : null}
       {withWho ? (
