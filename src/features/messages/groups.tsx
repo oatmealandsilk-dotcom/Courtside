@@ -75,7 +75,7 @@ export function GroupAvatar({ people, size, photoUrl, name }: { people: User[]; 
         <Defs>
           <ClipPath id={clipId}><Path d={shape} /></ClipPath>
         </Defs>
-        <Path d={shape} fill={tintFor(b.avatarSeed)} />
+        <Path d={shape} fill={tintFor(b.id)} />
         {b.avatarUrl ? (
           <SvgImage href={{ uri: b.avatarUrl }} x={0} y={0} width={small} height={small} preserveAspectRatio="xMidYMid slice" clipPath={`url(#${clipId})`} />
         ) : (

@@ -16,8 +16,13 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
  * The little count in the corner of a header icon: a green pill, "9+" past
  * nine, gone at nought. When the number goes up it gives one small pop, so a
  * new message is noticed without anything flashing.
+ *
+ * The one badge for "something new" everywhere (Oct 12, owner: "2 is good"):
+ * the bell, Messages, and Profile in the tab bar all wear it, in the court's
+ * own brand colour, so nothing new ever reads as an error. `dot` draws it as
+ * a small dot with no number, for news that asks nothing of you.
  */
-export function UnreadBadge({ count, style }: { count: number; style?: StyleProp<ViewStyle> }) {
+export function UnreadBadge({ count, dot = false, style }: { count: number; dot?: boolean; style?: StyleProp<ViewStyle> }) {
   const styles = useThemedStyles(styleDefinitions);
   const scale = useSharedValue(1);
   const last = useRef(count);
@@ -33,8 +38,8 @@ export function UnreadBadge({ count, style }: { count: number; style?: StyleProp
   const pop = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
   if (count <= 0) return null;
   return (
-    <Reanimated.View pointerEvents="none" style={[styles.badge, style, pop]}>
-      <Text style={styles.badgeText}>{count > 9 ? '9+' : count}</Text>
+    <Reanimated.View pointerEvents="none" style={[styles.badge, dot && styles.dot, style, pop]}>
+      {dot ? null : <Text style={styles.badgeText}>{count > 9 ? '9+' : count}</Text>}
     </Reanimated.View>
   );
 }
@@ -118,6 +123,8 @@ const styleDefinitions = StyleSheet.create({
   // The Feed's tile: nearly solid page colour with a hairline, so it holds on anything.
   tile: { width: 40, height: 40, borderRadius: 12, backgroundColor: `${colors.bg}E6`, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
   badge: { position: 'absolute', top: -1, right: -2, minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 5, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.bg },
+  // The dot: the same green and the same page-coloured edge, with no number (12 points across, 8 of them green).
+  dot: { minWidth: 12, width: 12, height: 12, borderRadius: 6, paddingHorizontal: 0 },
   tileBadge: { top: -6, right: -6 },
   badgeText: { ...typography.caption, fontSize: 10, color: colors.brandInk },
 });

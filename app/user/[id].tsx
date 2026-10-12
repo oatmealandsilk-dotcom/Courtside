@@ -159,7 +159,7 @@ function UserProfile() {
       }
     >
       <View style={styles.identity}>
-        <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={92} ring={user.isCoach} style={{ backgroundColor: colors.brand, alignSelf: 'center' }} />
+        <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={92} ring={user.isCoach} style={{ alignSelf: 'center' }} />
         <View style={styles.nameRow}>
           {/* The name and, close after it, their streak's flame (3 days or more). */}
           <View style={styles.nameLine}>

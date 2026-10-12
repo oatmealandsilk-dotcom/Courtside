@@ -29,6 +29,8 @@ export const darkColors: Palette = {
   cardFill: '#15251D', cardGlowTop: '#22412D', cardGlowBottom: '#413425',
   cardFigure: '#6FB483', cardInk: '#6FB483', cardMuted: '#A6B1AB',
   launchLine: '#8A948F',
+  // The five initials shades (Oct 12), a step lighter so a face stands off the dark page; white still reads on each at 4.5:1.
+  avatarClay: '#9E634A', avatarHard: '#4A7598', avatarPlum: '#83567D', avatarInk: '#5A6577', avatarSand: '#866E4A',
 };
 
 /**
@@ -53,6 +55,8 @@ const cleanColors: Palette = {
   cardFill: '#2C7446', cardGlowTop: '#2C7446', cardGlowBottom: '#2C7446',
   cardFigure: '#FFFFFF', cardInk: '#FFFFFF', cardMuted: '#FFFFFF',
   launchLine: '#5F6871',
+  // The five initials shades (Oct 12): the CourtSide court's own, so a person keeps their colour.
+  avatarClay: '#9A5F40', avatarHard: '#3B6684', avatarPlum: '#73496E', avatarInk: '#3F4A5A', avatarSand: '#8A6D47',
 };
 
 /**
@@ -77,6 +81,8 @@ const aoColors: Palette = {
   cardFill: '#6EA8D5', cardGlowTop: '#9CCBEC', cardGlowBottom: '#8FE3DD',
   cardFigure: '#0B2A47', cardInk: '#0E2F4F', cardMuted: '#143858',
   launchLine: '#496273',
+  // The five initials shades (Oct 12): the CourtSide court's own, so a person keeps their colour.
+  avatarClay: '#9A5F40', avatarHard: '#3B6684', avatarPlum: '#73496E', avatarInk: '#3F4A5A', avatarSand: '#8A6D47',
 };
 
 /**
@@ -100,6 +106,8 @@ const rolandGarrosColors: Palette = {
   cardFill: '#A44627', cardGlowTop: '#B24D25', cardGlowBottom: '#A4570A',
   cardFigure: '#FAF8F0', cardInk: '#FAF8F0', cardMuted: '#F6EFE6',
   launchLine: '#6D5745',
+  // The five initials shades (Oct 12): the CourtSide court's own, so a person keeps their colour.
+  avatarClay: '#9A5F40', avatarHard: '#3B6684', avatarPlum: '#73496E', avatarInk: '#3F4A5A', avatarSand: '#8A6D47',
 };
 
 /**
@@ -122,6 +130,8 @@ const wimbledonColors: Palette = {
   cardFill: '#326F37', cardGlowTop: '#377A34', cardGlowBottom: '#615782',
   cardFigure: '#FAF8F0', cardInk: '#FAF8F0', cardMuted: '#F0F1E7',
   launchLine: '#586552',
+  // The five initials shades (Oct 12): the CourtSide court's own, so a person keeps their colour.
+  avatarClay: '#9A5F40', avatarHard: '#3B6684', avatarPlum: '#73496E', avatarInk: '#3F4A5A', avatarSand: '#8A6D47',
 };
 
 /**
@@ -146,6 +156,8 @@ const usOpenColors: Palette = {
   cardFill: '#22497B', cardGlowTop: '#325D91', cardGlowBottom: '#675A38',
   cardFigure: '#F5D460', cardInk: '#F5D460', cardMuted: '#CBD8E6',
   launchLine: '#A9B9CA',
+  // The five initials shades (Oct 12): Night's, a step lighter than the cream court's so a face stands off the navy.
+  avatarClay: '#9E634A', avatarHard: '#4A7598', avatarPlum: '#83567D', avatarInk: '#5A6577', avatarSand: '#866E4A',
 };
 
 export type ThemeName = 'default' | 'clean' | 'night' | 'ao' | 'roland-garros' | 'wimbledon' | 'us-open';
