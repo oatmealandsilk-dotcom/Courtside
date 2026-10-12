@@ -92,9 +92,9 @@ export function PlayerCard({ user, variant, onPress }: {
     <View accessible accessibilityRole="summary" accessibilityLabel={spoken} style={[styles.card, { backgroundColor: look.fill, borderColor: look.border }, look.dark && styles.bordered]}>
       <CardWash look={look} radius={20} />
       <View style={styles.identity}>
-        {/* The brand disc their profile page gives them, so the same person wears one colour; on a filled card,
-            a deeper shade of the card instead (a brand disc would vanish into it). */}
-        <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={52} ring={user.isCoach} style={{ backgroundColor: filled ? mixHex(look.fill, colors.text, 0.35) : colors.brand }} />
+        {/* Their own shade, the one their face wears on every screen (Oct 12); on a filled card, a deeper
+            shade of the card instead, as before (a face in the card's own family sits on it calmly). */}
+        <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={52} ring={user.isCoach} style={filled ? { backgroundColor: mixHex(look.fill, colors.text, 0.35) } : undefined} />
         <View style={styles.identityWords}>
           <Text numberOfLines={1} style={[styles.name, { color: look.ink }]}>{user.name}</Text>
           <Text numberOfLines={1} style={[styles.small, { color: look.muted }]}>@{user.handle}{user.location ? ` · ${cityOf(user.location)}` : ''}{user.isCoach ? ' · Coach' : ''}</Text>

@@ -6,18 +6,19 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { useUsers } from '@/store/AppContext';
 import { initials } from '@/lib/format';
-import { colors, inkOn, radius, font } from '@/theme';
+import { avatarFillFor, colors, inkOn, radius, font } from '@/theme';
 
 /**
- * A default picture takes one of the theme's own accents, chosen by the
- * person's seed so it never changes between visits — but it does change
- * with the court, so Roland Garros avatars are clay and Wimbledon's are grass.
+ * A default picture's colour, by the person's account id (Oct 12, owner:
+ * "4 is good"): one of five deeper shades, never green or beige, and the
+ * same one on every screen. Before, it was one of the court's accents
+ * picked by whatever the screen happened to know the person by (their seed
+ * on one screen, their id on the next), so Dev was blue in the feed and
+ * green on his profile, and some faces were a beige that read as a
+ * missing photo.
  */
-export function tintFor(seed: string): string {
-  const palette = [colors.brand, colors.court, colors.hard, colors.clay, colors.grass, colors.borderStrong];
-  let hash = 0;
-  for (let i = 0; i < seed.length; i += 1) hash = (hash * 31 + seed.charCodeAt(i)) % 100000;
-  return palette[hash % palette.length];
+export function tintFor(personId: string): string {
+  return avatarFillFor(personId);
 }
 
 interface Props {
@@ -43,10 +44,13 @@ export const Avatar = React.memo(function Avatar({ uri, name, seed, size = 40, s
   const styles = useThemedStyles(styleDefinitions);
   // Only the people list, not the whole app: a like or a message elsewhere does not redraw every face on screen.
   const users = useUsers();
-  const photo = uri ?? users.find(user => user.avatarSeed === seed || user.id === seed)?.avatarUrl;
-  const tint = tintFor(seed);
-  // The fill the initials actually sit on: a caller's own background (the profile's brand disc,
-  // the player card's deeper shade) wins over the seed's tint, so the ink is chosen against that.
+  // Screens hand over either the person's seed or their id: both find the same person, and the
+  // colour is always picked by their id, so it cannot differ between two screens.
+  const person = users.find(user => user.avatarSeed === seed || user.id === seed);
+  const photo = uri ?? person?.avatarUrl;
+  const tint = tintFor(person?.id ?? seed);
+  // The fill the initials actually sit on: a caller's own background (the player card's deeper
+  // shade on a coloured card) wins over the person's shade, so the ink is chosen against that.
   const drawn = StyleSheet.flatten(style)?.backgroundColor;
   const fill = typeof drawn === 'string' ? drawn : tint;
   const badge = Math.max(14, Math.round(size * 0.36));

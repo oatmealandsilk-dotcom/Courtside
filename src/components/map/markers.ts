@@ -3,7 +3,7 @@ import { hitShort } from '@/features/hits/format';
 import { isClosedCourt, type Court } from '@/features/players/courts';
 import { isOpenToHit } from '@/features/players/openToHit';
 import { initials } from '@/lib/format';
-import { colors, surfaceColorFor } from '@/theme';
+import { avatarFillFor, colors } from '@/theme';
 
 /*
  * The pins, as HTML: MapLibre draws markers as DOM, in the browser and
@@ -27,7 +27,8 @@ const safePicture = (url?: string): string => {
 
 const face = (user: User, size: number) => {
   const picture = safePicture(user.avatarUrl);
-  const fill = picture ? `background-image:url('${picture}');background-size:cover;` : `background:${surfaceColorFor(user.avatarSeed)};`;
+  // With no photo, the person's own shade (Oct 12): the colour their face wears everywhere else in the app.
+  const fill = picture ? `background-image:url('${picture}');background-size:cover;` : `background:${avatarFillFor(user.id)};`;
   return `<div style="width:${size}px;height:${size}px;border-radius:999px;${fill}color:#fff;${FONT};display:flex;align-items:center;justify-content:center">${picture ? '' : esc(initials(user.name))}</div>`;
 };
 

@@ -46,6 +46,11 @@ export const lightColors = {
   // (assets/splash.png), a shade lighter than textFaint: on this court the copy is the picture to the
   // pixel, so the line must not darken as the picture hands over (Oct 7). Every other court: its textFaint.
   launchLine: '#8B8373',
+  // A picture made of initials (UI audit, Oct 11; owner, Oct 12: "4 is good"): five deeper shades, none
+  // of them green, so the green Open to hit ring stands out on any face, and none beige, which read as a
+  // missing photo. Clay, hard-court blue, plum, ink and sand; each one carries white initials at 4.5:1
+  // or better. A person keeps one of them on every screen (avatarFillFor, by their account's id).
+  avatarClay: '#9A5F40', avatarHard: '#3B6684', avatarPlum: '#73496E', avatarInk: '#3F4A5A', avatarSand: '#8A6D47',
 } as const;
 
 export const colors: Record<keyof typeof lightColors, string> = { ...lightColors };
@@ -170,7 +175,27 @@ export const typography = {
   caption: { ...font('600'), fontSize: 11, letterSpacing: 0.4 },
 } as const;
 
-/** Muted avatar tints — deterministic per seed, none of them loud. */
+/** The five shades a picture made of initials can wear, in the order a person's number picks from. */
+const AVATAR_SHADES = ['avatarClay', 'avatarSand', 'avatarHard', 'avatarInk', 'avatarPlum'] as const;
+
+/**
+ * The colour of someone's initials picture (Oct 12): one of the court's five
+ * avatar shades, picked by their account's id, so the same person wears the
+ * same colour on every screen (before, a screen that knew them by id and one
+ * that knew them by their seed could pick two different colours). The pick
+ * is a stable mix of every letter of the id (FNV-1a), which spreads people
+ * evenly over the five; the shade itself is read from the live court.
+ */
+export function avatarFillFor(personId: string): string {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < personId.length; i += 1) {
+    hash ^= personId.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return colors[AVATAR_SHADES[(hash >>> 0) % AVATAR_SHADES.length]];
+}
+
+/** Muted tints for a picture that has not loaded (a post's or a court's), deterministic per seed. People's faces use avatarFillFor. */
 export const surfaceColorFor = (seed: string): string => {
   const palette = ['#527652', '#8A846A', '#667967', '#778565', '#788475', '#9B9074'];
   let hash = 0;
