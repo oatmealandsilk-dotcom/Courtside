@@ -8,7 +8,7 @@ import { recordLine, scoreText, spokenScore } from '@/features/activity/score';
 import { startRematch } from '@/features/hits/rematch';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import { colors, font, lift, numFont, numGaps, numberFace, radius, spacing, typography } from '@/theme';
+import { colors, font, lift, radius, spacing, typography } from '@/theme';
 
 /**
  * Your record against this player, on their profile (Oct 4, owner;
@@ -32,8 +32,7 @@ export function HeadToHeadCard({ userId, name }: { userId: ID; name: string }) {
   const line = recordLine(record, first);
   if (!record || !line) return null;
   const last = record.last;
-  // The numbers in the number face (Oct 12, owner: "ship 8 as well"), the words around them in Inter: "You lead 3–2".
-  const [lineWords, lineScore] = splitRecord(line);
+  const lastWords = last ? `Last: ${last.won ? 'Won' : 'Lost'} ${scoreText(last.sets)} · ${dayWords(last.day)}` : null;
   // Only someone you may message, as "Ask to hit" on the map (an adult, or a teen who follows you):
   // otherwise the form would open with nobody to invite (Oct 5, review).
   const canAsk = actions.canMessage(userId);
@@ -41,15 +40,9 @@ export function HeadToHeadCard({ userId, name }: { userId: ID; name: string }) {
     <View style={styles.card} accessible={false}>
       <View accessible accessibilityLabel={`Head to head with ${first}: ${line}.${last ? ` Last match, you ${last.won ? 'won' : 'lost'} ${spokenScore(last.sets)}, ${dayWords(last.day)}.` : ''}`} style={styles.words}>
         <Text style={styles.eyebrow}>Head to head</Text>
-        <Text style={styles.record} numberOfLines={1}>{lineWords}{lineScore ? <Text style={styles.recordScore}>{lineScore}</Text> : null}</Text>
+        <Text style={styles.record} numberOfLines={1}>{line}</Text>
         {/* Two lines: one cut the day off a three-set score ("· Yes…"). */}
-        {last ? (
-          <Text style={styles.last} numberOfLines={2}>
-            {`Last: ${last.won ? 'Won' : 'Lost'} `}
-            <Text style={styles.lastScore}>{numGaps(scoreText(last.sets))}</Text>
-            {` · ${dayWords(last.day)}`}
-          </Text>
-        ) : null}
+        {lastWords ? <Text style={styles.last} numberOfLines={2}>{lastWords}</Text> : null}
       </View>
       {canAsk ? (
         <Pressable
@@ -67,21 +60,12 @@ export function HeadToHeadCard({ userId, name }: { userId: ID; name: string }) {
   );
 }
 
-/** "You lead 3–2" as its words and its numbers: ["You lead ", "3–2"]. */
-function splitRecord(line: string): [string, string] {
-  const m = /^(.*?)(\d+–\d+)$/.exec(line);
-  return m ? [m[1], m[2]] : [line, ''];
-}
-
 const styleDefinitions = StyleSheet.create({
   card: { ...lift, flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: 16, borderRadius: 20, backgroundColor: colors.surface, marginBottom: spacing.md },
   words: { flex: 1, minWidth: 0, gap: 2 },
   eyebrow: { ...typography.smallStrong, color: colors.textMuted },
   record: { ...font('700'), fontSize: 20, letterSpacing: -0.4, color: colors.text, fontVariant: ['tabular-nums'] },
-  recordScore: { ...numFont('700'), fontSize: 23, letterSpacing: numberFace.tracking * 23 },
   last: { ...typography.small, color: colors.textMuted, fontVariant: ['tabular-nums'] },
-  // A touch bigger than the words (the face is narrower), not bolder: the line stays a quiet one.
-  lastScore: { ...numFont('500'), fontSize: 14 },
   rematch: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 36, paddingHorizontal: 14, borderRadius: radius.pill, backgroundColor: colors.brand },
   rematchText: { ...font('700'), fontSize: 14, color: colors.brandInk },
   pressed: { opacity: 0.7 },

@@ -10,7 +10,7 @@ import { Avatar } from '@/components/ui';
 import type { DetectedActivity, ID, MatchSet, Post, PracticeSession, SessionTag, User } from '@/data/types';
 import { resultWord, scoreLine, sessionEyebrow, sourceLabel } from '@/features/activity/format';
 import { loggedNumbers } from '@/features/activity/healthShare';
-import { flipSets } from '@/features/activity/score';
+import { flipSets, scoreScale, spokenScore } from '@/features/activity/score';
 import { isActive, sessionPeople, tagsOnSession } from '@/features/activity/sessionTags';
 import { overUsual } from '@/features/activity/usual';
 import { cleanZones, hardMinutes, postZones } from '@/features/activity/zones';
@@ -18,10 +18,9 @@ import { distanceFigure } from '@/features/activity/workouts';
 import { openCourt } from '@/features/players/courtLink';
 import { TipBubble } from '@/components/TipBubble';
 import { learned, useTip } from '@/features/tips/tips';
-import { colors, font, numFont, numberFace, withAlpha } from '@/theme';
+import { colors, font, withAlpha } from '@/theme';
 import { Duration, Figure } from './Duration';
 import { Pop } from './Pop';
-import { SetScores } from './SetScores';
 import { StatsGrid, type StatNumber } from './StatsGrid';
 import { ZoneRows } from './ZoneRows';
 
@@ -186,7 +185,7 @@ export function SessionSheet({ post, me, users, sessions, sessionTags, activitie
   return (
     <View style={styles.body}>
       <View style={styles.hero}>
-        <Duration minutes={s.minutes} size={68} color={colors.text} unitColor={colors.textMuted} play={play} delay={120} duration={900} face="num" />
+        <Duration minutes={s.minutes} size={68} color={colors.text} unitColor={colors.textMuted} play={play} delay={120} duration={900} />
         {result ? (
           <Pop delay={play ? 750 : 0} duration={300} from={0.7} rise={0} style={[styles.result, s.won ? styles.won : styles.lost]}>
             {s.won ? <Ionicons name="checkmark" size={15} color={colors.brandInk} /> : null}
@@ -194,8 +193,10 @@ export function SessionSheet({ post, me, users, sessions, sessionTags, activitie
           </Pop>
         ) : null}
       </View>
-      {/* The score like a scoreboard, a column a set, the set's winner bolder (Oct 12, owner: "ship 8 as well"). */}
-      {score && s.sets?.length ? <SetScores sets={s.sets} size={26} ink={colors.text} quiet={colors.textMuted} style={styles.score} /> : null}
+      {score ? (
+        // A long score (tiebreak points, Oct 10) a little smaller, so it all fits on its line.
+        <Text style={[styles.score, { fontSize: 26 * scoreScale(score, 22) }]} accessibilityLabel={`Score ${spokenScore(s.sets)}`} numberOfLines={1} maxFontSizeMultiplier={1.2}>{score}</Text>
+      ) : null}
       {over ? (
         <View style={styles.usual} accessible accessibilityLabel={`${over} minutes over your usual. Only you see this.`}>
           <Ionicons name="arrow-up" size={12} color={colors.brand} />
@@ -235,7 +236,7 @@ export function SessionSheet({ post, me, users, sessions, sessionTags, activitie
           </View>
           <View style={styles.onlyRow}>
             {owner.map((o) => (
-              <Column key={o.key} label={o.label}><Figure value={o.value} unit={o.unit || undefined} part={o.dec ? 'dec1' : 'int'} size={26} color={colors.text} unitColor={colors.textMuted} play={play} delay={400} face="num" /></Column>
+              <Column key={o.key} label={o.label}><Figure value={o.value} unit={o.unit || undefined} part={o.dec ? 'dec1' : 'int'} size={26} color={colors.text} unitColor={colors.textMuted} play={play} delay={400} /></Column>
             ))}
             {started ? (
               <Column label="STARTED">
@@ -248,8 +249,8 @@ export function SessionSheet({ post, me, users, sessions, sessionTags, activitie
           </View>
           {privateHr ? (
             <View style={styles.onlyRow}>
-              {privateHr.avgHr ? <Column label="AVG HEART RATE"><Figure value={privateHr.avgHr} unit="bpm" size={26} color={colors.text} unitColor={colors.textMuted} play={play} delay={400} face="num" /></Column> : null}
-              <Column label="MAX"><Figure value={privateHr.maxHr!} unit="bpm" size={26} color={colors.text} unitColor={colors.textMuted} play={play} delay={400} face="num" /></Column>
+              {privateHr.avgHr ? <Column label="AVG HEART RATE"><Figure value={privateHr.avgHr} unit="bpm" size={26} color={colors.text} unitColor={colors.textMuted} play={play} delay={400} /></Column> : null}
+              <Column label="MAX"><Figure value={privateHr.maxHr!} unit="bpm" size={26} color={colors.text} unitColor={colors.textMuted} play={play} delay={400} /></Column>
             </View>
           ) : null}
           {ownZones ? <ZoneRows zones={ownZones} play={play} delay={460} /> : null}
@@ -295,7 +296,7 @@ const styleDefinitions = StyleSheet.create({
   won: { backgroundColor: colors.brand },
   lost: { borderWidth: 1, borderColor: colors.borderStrong },
   resultText: { ...font('700'), fontSize: 14 },
-  score: { alignSelf: 'flex-start', marginTop: -4 },
+  score: { ...font('700'), fontSize: 26, letterSpacing: -0.6, color: colors.text, fontVariant: ['tabular-nums'], marginTop: -6 },
   usual: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999, backgroundColor: colors.brandDim, marginTop: -4 },
   usualText: { ...font('600'), fontSize: 12, color: colors.brand },
   peopleRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
@@ -316,7 +317,7 @@ const styleDefinitions = StyleSheet.create({
   onlyHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   onlyRow: { flexDirection: 'row', gap: 26 },
   clock: { flexDirection: 'row', alignItems: 'flex-end' },
-  clockTime: { ...numFont('600'), fontSize: 26, lineHeight: 29, letterSpacing: numberFace.tracking * 26, color: colors.text },
+  clockTime: { ...font('600'), fontSize: 26, lineHeight: 29, letterSpacing: -1, color: colors.text, fontVariant: ['tabular-nums'] },
   clockMark: { ...font('500'), fontSize: 11, color: colors.textMuted, marginLeft: 3, marginBottom: 3 },
   source: { ...font('600'), fontSize: 11, color: colors.textFaint, marginTop: 2 },
 });

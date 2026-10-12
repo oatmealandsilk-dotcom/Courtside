@@ -34,7 +34,7 @@ import * as haptics from '@/lib/haptics';
 import { useStillLoading } from '@/lib/useStillLoading';
 import { useApp } from '@/store/AppContext';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
-import { colors, font, numFont, numberFace, pageIsDark, spacing, typography } from '@/theme';
+import { colors, font, pageIsDark, spacing, typography } from '@/theme';
 
 /**
  * The Tennis profile (Oct 5): a player's tennis in one place, yours or
@@ -254,7 +254,7 @@ function ThisWeek({ user }: { user: User }) {
           {total > 0 ? (
             <View accessible accessibilityLabel={`${spokenDuration(minutes)} on court ${when}`} accessibilityLiveRegion="polite">
               {/* A new key for each day, so the figures count up afresh with every tap. */}
-              <Duration key={pick?.day ?? 'week'} minutes={minutes} size={34} color={colors.text} unitColor={colors.textMuted} play={counting} face="num" />
+              <Duration key={pick?.day ?? 'week'} minutes={minutes} size={34} color={colors.text} unitColor={colors.textMuted} play={counting} />
               <Text style={styles.weekCaption}>{`on court ${when}`}</Text>
             </View>
           ) : <Text style={styles.weekNone}>Nothing on court in the last 7 days</Text>}
@@ -270,7 +270,7 @@ function ThisWeek({ user }: { user: User }) {
                 <Text style={styles.weekLabel}>{n.matches === 1 && !n.told ? 'Match' : 'Matches'}</Text>
               </View>
               <View style={[styles.weekStat, styles.weekDivide]} accessible accessibilityLabel={`Longest, ${spokenDuration(n.longest)}`}>
-                <Duration minutes={n.longest} size={20} color={colors.text} unitColor={colors.textMuted} unitScale={0.65} face="num" />
+                <Duration minutes={n.longest} size={20} color={colors.text} unitColor={colors.textMuted} unitScale={0.65} />
                 <Text style={styles.weekLabel}>Longest</Text>
               </View>
             </View>
@@ -383,7 +383,7 @@ function SessionRow({ session: s, first, me, sessionTags, users, onRemove }: { s
     : <Ionicons name={s.kind === 'fitness' && s.workout ? workoutIcon(s.workout) : 'barbell-outline'} size={18} color={colors.textMuted} />;
   return (
     <Row first={first} minHeight={60} lead={<Tile>{icon}</Tile>} title={loggedLabel(s)} sub={sub}
-      right={<Duration minutes={s.minutes} size={15} color={colors.text} unitColor={colors.textMuted} unitScale={0.8} face="num" />}
+      right={<Duration minutes={s.minutes} size={15} color={colors.text} unitColor={colors.textMuted} unitScale={0.8} />}
       onPress={onOpen}
       onLongPress={{ label: 'Remove', run: onRemove }}
       accessibilityLabel={`${loggedLabel(s)}${sub ? `, ${sub}` : ''}, ${shortLength(s.minutes)}${onOpen ? '. Open' : ''}`}
@@ -527,7 +527,7 @@ function NextUp({ t, onPress }: { t: TournamentEntry; onPress?: () => void }) {
         <Chip label={status} icon={t.registered ? 'checkmark' : 'eye-outline'} on={t.registered} />
       </View>
       <View style={styles.heroCount}>
-        <Text maxFontSizeMultiplier={1.2} style={[styles.heroFigure, days > 0 && styles.heroNumber, { color: colors.brand }]}>{days <= 0 ? 'Today' : String(days)}</Text>
+        <Text maxFontSizeMultiplier={1.2} style={[styles.heroFigure, { color: colors.brand }]}>{days <= 0 ? 'Today' : String(days)}</Text>
         {days > 0 ? <Text style={styles.heroUnit}>{days === 1 ? 'day to go' : 'days to go'}</Text> : null}
       </View>
       <View style={styles.heroFoot}>
@@ -704,8 +704,7 @@ const styleDefinitions = StyleSheet.create({
   weekStats: { flexDirection: 'row', marginTop: spacing.lg, paddingTop: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   weekStat: { flex: 1, gap: 2 },
   weekDivide: { borderLeftWidth: StyleSheet.hairlineWidth, borderLeftColor: colors.border, paddingLeft: spacing.md },
-  // The week's numbers in the number face (Oct 12, owner: "ship 8 as well"), as the time over them.
-  weekFigure: { ...numFont('600'), fontSize: 20, lineHeight: 22, letterSpacing: numberFace.tracking * 20, color: colors.text },
+  weekFigure: { ...font('600'), fontSize: 20, lineHeight: 22, letterSpacing: -0.8, color: colors.text, fontVariant: ['tabular-nums'] },
   weekLabel: { fontSize: 12, lineHeight: 16, color: colors.textMuted },
   healthRow: { flexDirection: 'row', paddingTop: 14, paddingBottom: 14 },
   healthCell: { flex: 1, gap: 4 },
@@ -724,8 +723,6 @@ const styleDefinitions = StyleSheet.create({
   eyebrow: { ...typography.caption, letterSpacing: 0.6, textTransform: 'uppercase', color: colors.textMuted },
   heroCount: { flexDirection: 'row', alignItems: 'baseline', gap: 8, marginTop: 6 },
   heroFigure: { ...font('600'), fontSize: 44, lineHeight: 50, letterSpacing: -1.8, fontVariant: ['tabular-nums'] },
-  // The days to go, as the Tennis profile card counts them; "Today" stays a word.
-  heroNumber: { ...numFont('600'), letterSpacing: numberFace.tracking * 44 },
   heroUnit: { ...typography.body, ...font('500'), color: colors.textMuted },
   heroFoot: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: 10, paddingTop: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   heroWords: { flex: 1, minWidth: 0, gap: 3 },

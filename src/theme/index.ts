@@ -1,4 +1,4 @@
-import { Platform, type TextStyle } from 'react-native';
+import { Platform } from 'react-native';
 /** CourtSide: warm neutrals and muted court-green accents. */
 export const lightColors = {
   bg: '#F8F7F2', bgElevated: '#F1EFE6', surface: '#FFFEFA', surfaceAlt: '#E9E6DA',
@@ -149,8 +149,6 @@ export const fontFamily = {
   bold: 'Inter_700Bold',
   // The share overlays' wordmark only (Oct 9, owner: "too thin", then Black a tiny bit too thick).
   black: 'Inter_800ExtraBold',
-  // Scores and stats only: the number face below.
-  numbers: 'BarlowSemiCondensed_600SemiBold',
 } as const;
 
 /** A weight as a style: `{...font('500')}` where a literal fontWeight used to be. */
@@ -160,46 +158,6 @@ export const font = (weight: '400' | '500' | '600' | '700' | '900') => {
   // ever be slow; a phone takes exactly one name and has Inter in the bundle.
   return { fontFamily: Platform.OS === 'web' ? `${family}, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif` : family, fontWeight: weight };
 };
-
-/**
- * The number face (Oct 12, owner, of the audit's "scores like a scoreboard":
- * "ship 8 as well"): scores and stats only, so "7–6(5) 3–6" and "24–17" read
- * like a scoreboard rather than a caption. Barlow Semi Condensed, the
- * road-sign and scoreboard lettering of Google Fonts, with its figures all
- * one width so columns of games line up and a count never jiggles. Words
- * (labels, "on court", "days") stay in Inter. It loads with Inter when the
- * app opens (app/_layout.tsx), from the app's own files, so it reaches
- * phones with an update. The share pictures keep Inter (owner: "keep today's").
- */
-export const numberFace = {
-  medium: 'BarlowSemiCondensed_500Medium',
-  semibold: fontFamily.numbers,
-  bold: 'BarlowSemiCondensed_700Bold',
-  /** Where its baseline sits in a line box: half of (ascent − descent) as a share of the size. Inter's is 0.3633. */
-  centre: 0.4,
-  /** Its capitals' and figures' height as a share of the size. Inter's is 0.727. */
-  cap: 0.7,
-  /** Tracking per point of size: already narrow, so it needs almost none of Inter's tightening. */
-  tracking: -0.01,
-} as const;
-
-/** The number face at a weight, figures all one width: `{...numFont('700')}` on a score or a stat. */
-export const numFont = (weight: '500' | '600' | '700' = '600') => {
-  const family = { '500': numberFace.medium, '600': numberFace.semibold, '700': numberFace.bold }[weight];
-  const inter = { '500': fontFamily.medium, '600': fontFamily.semibold, '700': fontFamily.bold }[weight];
-  return {
-    fontFamily: Platform.OS === 'web' ? `${family}, ${inter}, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif` : family,
-    fontWeight: weight,
-    fontVariant: ['tabular-nums'] as TextStyle['fontVariant'],
-  };
-};
-
-/**
- * A score on one line in the number face, its spaces doubled: the face's own
- * space is narrow (0.2 of the size, Inter's 0.28), so "7–6(5) 3–6 (10–7)" ran
- * its sets together; doubled, each set stands apart, as on a scoreboard.
- */
-export const numGaps = (text: string) => text.replace(/ /g, '  ');
 
 /**
  * Lighter than it was: display and title at medium rather than black, with

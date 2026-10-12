@@ -15,19 +15,10 @@ import {
 } from '@/features/players/tennisProfile';
 import { usePerWeek } from '@/features/players/usePerWeek';
 import { useTheme } from '@/theme/ThemeProvider';
-import { colors, font, numFont, numberFace } from '@/theme';
+import { colors, font } from '@/theme';
 
 /** The rating's count: once per player per time the app is open, never on every visit. */
 const played = new Set<string>();
-
-/**
- * Where a face's capitals and figures start in a line box (both faces centre
- * their glyphs in it): Inter's stand 0.727 of the size over a baseline 0.3633
- * below the middle, the number face's its own (theme numberFace).
- */
-const capTop = (size: number, line: number, centre: number, cap: number) => line / 2 + centre * size - cap * size;
-const interCapTop = (size: number, line: number) => capTop(size, line, 0.3633, 0.727);
-const numCapTop = (size: number, line: number) => capTop(size, line, numberFace.centre, numberFace.cap);
 
 /**
  * A player's card: the session box's twin, coloured by the very same look
@@ -178,8 +169,7 @@ function Strip({ items, look, size, filled }: { items: StripItem[]; look: CardLo
         const divided = grid ? i % 2 === 1 : i > 0;
         return (
           <View key={item.key} style={[styles.cell, grid && styles.cellGrid, grid && i >= 2 && styles.cellLower, divided && { borderLeftWidth: StyleSheet.hairlineWidth, borderLeftColor: look.lines, paddingLeft: 12 }]}>
-            {/* The numbers in the number face (Oct 12, owner: "ship 8 as well"); a word ("Today") stays in Inter. */}
-            <Text numberOfLines={1} maxFontSizeMultiplier={1.25} style={[item.word ? { ...font('600'), fontSize: size - 4, lineHeight: Math.round(size * 1.15), letterSpacing: -0.4 } : { ...numFont('600'), fontSize: size, lineHeight: Math.round(size * 1.15), letterSpacing: numberFace.tracking * size }, styles.tabular, { color: look.figure }]}>
+            <Text numberOfLines={1} maxFontSizeMultiplier={1.25} style={[item.word ? { ...font('600'), fontSize: size - 4, lineHeight: Math.round(size * 1.15), letterSpacing: -0.4 } : { ...font('600'), fontSize: size, lineHeight: Math.round(size * 1.15), letterSpacing: -0.055 * size }, styles.tabular, { color: look.figure }]}>
               {item.figure}
               {item.unit ? <Text style={[styles.unit, { fontSize: Math.round(size * 0.62) }]}>{` ${item.unit}`}</Text> : null}
             </Text>
@@ -210,20 +200,19 @@ const styles = StyleSheet.create({
   small: { ...font('400'), fontSize: 13, lineHeight: 19 },
   /*
    * The rating and its system as one lockup: the system set small in spaced
-   * capitals beside the number, its capitals' tops on the number's figures'
-   * (capTop), so the pair reads as one mark with nothing hanging under it.
-   * The rating in the number face (Oct 12, owner: "ship 8 as well"), the
-   * system's letters in Inter.
+   * capitals beside the number, its capitals' tops on the number's (Inter's
+   * capitals stand 0.727 of the size above the baseline, the line box centred
+   * on 1.21 of it), so the pair reads as one mark with nothing hanging under it.
    */
   heroRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 7 },
   hero: { marginTop: 20 },
   bannerHero: { marginTop: 6 },
   // The rating, set big and tight; its line box trimmed so the words under it sit close.
-  figure: { ...numFont('600'), fontSize: 66, lineHeight: 66, letterSpacing: numberFace.tracking * 66, marginVertical: -5, minWidth: 40 },
-  bannerFigure: { ...numFont('600'), fontSize: 42, lineHeight: 46, letterSpacing: numberFace.tracking * 42 },
+  figure: { ...font('600'), fontSize: 66, lineHeight: 66, letterSpacing: -3.6, marginVertical: -5, minWidth: 40 },
+  bannerFigure: { ...font('600'), fontSize: 42, lineHeight: 46, letterSpacing: -2.2, fontVariant: ['tabular-nums'] },
   system: { ...font('600'), letterSpacing: 1.2 },
-  heroSystem: { fontSize: 13, lineHeight: 16, marginTop: Math.round(numCapTop(66, 66) - 5 - interCapTop(13, 16)) },
-  bannerSystem: { fontSize: 11, lineHeight: 14, letterSpacing: 1, marginTop: Math.round(numCapTop(42, 46) - interCapTop(11, 14)) },
+  heroSystem: { fontSize: 13, lineHeight: 16, marginTop: 1 },
+  bannerSystem: { fontSize: 11, lineHeight: 14, letterSpacing: 1, marginTop: 5 },
   play: { marginTop: 14, gap: 2 },
   facts: { flexDirection: 'row', flexWrap: 'wrap' },
   inline: { flexDirection: 'row', alignItems: 'center', marginTop: 4, minWidth: 0 },

@@ -2,7 +2,7 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { colors, font, numFont, numberFace } from '@/theme';
+import { colors, font } from '@/theme';
 import { Figure } from './Duration';
 import { ZoneRows } from './ZoneRows';
 
@@ -57,7 +57,7 @@ export function StatsGrid({ numbers, sets, zones, play }: {
                     <>
                       <Text style={styles.label} numberOfLines={1} maxFontSizeMultiplier={1.2}>{c.label}</Text>
                       {c.n ? (
-                        <Figure value={c.n.value} part={c.n.dec ? 'dec1' : 'int'} unit={c.n.unit} size={28} color={colors.text} unitColor={colors.textMuted} play={play} delay={200 + r * 60} face="num" />
+                        <Figure value={c.n.value} part={c.n.dec ? 'dec1' : 'int'} unit={c.n.unit} size={28} color={colors.text} unitColor={colors.textMuted} play={play} delay={200 + r * 60} />
                       ) : (
                         <Text style={styles.text} numberOfLines={1} maxFontSizeMultiplier={1.2}>{c.text}</Text>
                       )}
@@ -86,6 +86,5 @@ const styleDefinitions = StyleSheet.create({
   row: { flexDirection: 'row', gap: 14, paddingVertical: 12 },
   rowRule: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   cell: { flex: 1, gap: 5, minWidth: 0 },
-  // The numbers in the number face (Oct 12, owner: "ship 8 as well"), as the figures beside them.
-  text: { ...numFont('600'), fontSize: 28, lineHeight: 31, letterSpacing: numberFace.tracking * 28, color: colors.text },
+  text: { ...font('600'), fontSize: 28, lineHeight: 31, letterSpacing: -1.1, color: colors.text, fontVariant: ['tabular-nums'] },
 });

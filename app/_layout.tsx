@@ -19,11 +19,6 @@ import { Inter_500Medium } from '@expo-google-fonts/inter/500Medium';
 import { Inter_600SemiBold } from '@expo-google-fonts/inter/600SemiBold';
 import { Inter_700Bold } from '@expo-google-fonts/inter/700Bold';
 import { Inter_800ExtraBold } from '@expo-google-fonts/inter/800ExtraBold';
-// The number face for scores and stats (theme numberFace, Oct 12): the three weights it uses, loaded here
-// with Inter rather than built into the app, so it reaches phones with an update.
-import { BarlowSemiCondensed_500Medium } from '@expo-google-fonts/barlow-semi-condensed/500Medium';
-import { BarlowSemiCondensed_600SemiBold } from '@expo-google-fonts/barlow-semi-condensed/600SemiBold';
-import { BarlowSemiCondensed_700Bold } from '@expo-google-fonts/barlow-semi-condensed/700Bold';
 
 import { AppProvider } from '@/store/AppContext';
 import { AppShell } from '@/components/AppShell';
@@ -67,11 +62,7 @@ export default function RootLayout() {
   useInstantUpdates();
   // Inter ships in the bundle, so on a phone this resolves before the splash
   // has gone; in a browser it is one small fetch, kept after that.
-  const [fontsReady] = useFonts({
-    Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, Inter_800ExtraBold,
-    BarlowSemiCondensed_500Medium, BarlowSemiCondensed_600SemiBold, BarlowSemiCondensed_700Bold,
-    ...Ionicons.font,
-  });
+  const [fontsReady] = useFonts({ Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, Inter_800ExtraBold, ...Ionicons.font });
   // While the fonts load, the launch picture's cream (not the theme's colour), so nothing changes colour under the logo.
   if (!fontsReady) return <View style={{ flex: 1, backgroundColor: lightColors.bg }} />;
   return (

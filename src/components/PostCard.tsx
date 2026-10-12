@@ -32,7 +32,7 @@ import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { hasSessionStats } from '@/features/activity/format';
 import { requestSection } from '@/features/navigation/swipeOrder';
 import { goToTab } from '@/features/navigation/startTab';
-import { colors, numFont, radius, spacing, typography } from '@/theme';
+import { colors, radius, spacing, typography } from '@/theme';
 import { tagsNotInCaption } from '@/features/feed/tags';
 
 interface Props {
@@ -418,8 +418,7 @@ const styleDefinitions = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     paddingVertical: 2,
   },
-  // A set's score in the number face (Oct 12, owner: "ship 8 as well").
-  setText: { ...typography.smallStrong, ...numFont('700'), fontSize: 14, color: colors.text },
+  setText: { ...typography.smallStrong, color: colors.text },
   surfaceText: { ...typography.caption, color: colors.textFaint },
   drill: { ...typography.small, color: colors.textMuted, lineHeight: 20 },
   // A written plan's drills, under its session box.

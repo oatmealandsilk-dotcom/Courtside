@@ -13,10 +13,9 @@ import { sessionPeople } from '@/features/activity/sessionTags';
 import { postZones, zoneColors } from '@/features/activity/zones';
 import { distanceFigure } from '@/features/activity/workouts';
 import { useTheme, type ThemeName } from '@/theme/ThemeProvider';
-import { colors, font, numFont, numGaps, numberFace, pageIsDark, withAlpha } from '@/theme';
-import { Duration, Figure, durationWidth, type NumberFace } from './Duration';
+import { colors, font, pageIsDark, withAlpha } from '@/theme';
+import { Duration, Figure } from './Duration';
 import { Pop } from './Pop';
-import { SetScores, setScoresWidth } from './SetScores';
 import { ZoneBar } from './ZoneBar';
 
 /** Someone on the session as the card shows them; `pending` only ever on the author's own preview. */
@@ -226,8 +225,6 @@ export function SessionCard({ session, width, height, play = false, people, hidd
   const round = radius ?? Math.round(20 * k);
   // Taller than the feed's 4:5 (a whole story): the numbers sit in the middle.
   const tall = aspect < 4 / 5 - 0.01;
-  // Scores and stats in the number face in the app; a picture made to share keeps Inter, as it is (owner: "keep today's").
-  const face: NumberFace = picture ? 'text' : 'num';
   const shownTop = eyebrow ?? sessionEyebrow(session);
   // The small words keep a size you can read when the card is drawn small
   // (the composer's is about two thirds); the big figures scale freely.
@@ -305,16 +302,15 @@ export function SessionCard({ session, width, height, play = false, people, hidd
         ) : null}
       </View>
       <Reanimated.View layout={picture ? undefined : LinearTransition.duration(220)} style={[styles.middle, { justifyContent: health && !tall ? 'flex-start' : 'center', paddingTop: health && !tall ? 18 * k : 0 }]}>
-        <Duration minutes={session.minutes} size={96 * k} color={look.figure} unitColor={look.muted} play={play} delay={120} duration={700} face={face} />
+        <Duration minutes={session.minutes} size={96 * k} color={look.figure} unitColor={look.muted} play={play} delay={120} duration={700} />
         <Text style={{ ...font('500'), fontSize: small(14, 10), color: look.muted, marginTop: 2 * k }} maxFontSizeMultiplier={1.2}>{onCourtWord(session)}</Text>
         {score ? (
           // A long score (tiebreak points, Oct 10) a little smaller, so it all fits on its line.
-          // In the app in the number face (Oct 12, owner: "ship 8 as well"); one line here, so the text, not the board.
-          <Text style={{ ...(picture ? { ...font('700'), letterSpacing: -0.4 * k, fontVariant: ['tabular-nums' as const] } : { ...numFont('700'), letterSpacing: numberFace.tracking * 26 * k }), fontSize: 26 * k * scoreScale(score, 20), color: look.figure, marginTop: 8 * k }} numberOfLines={1} maxFontSizeMultiplier={1.2}>{picture ? score : numGaps(score)}</Text>
+          <Text style={{ ...font('700'), fontSize: 26 * k * scoreScale(score, 20), letterSpacing: -0.4 * k, color: look.figure, fontVariant: ['tabular-nums'], marginTop: 8 * k }} numberOfLines={1} maxFontSizeMultiplier={1.2}>{score}</Text>
         ) : null}
         {far ? (
           <View style={{ marginTop: 8 * k }}>
-            <Figure value={far.value} part={far.value < 10 ? 'dec1' : 'int'} unit={far.unit} baseline size={30 * k} color={look.figure} unitColor={look.muted} unitScale={0.46} play={play} delay={160} face={face} />
+            <Figure value={far.value} part={far.value < 10 ? 'dec1' : 'int'} unit={far.unit} baseline size={30 * k} color={look.figure} unitColor={look.muted} unitScale={0.46} play={play} delay={160} />
           </View>
         ) : null}
         {place ? (
@@ -327,15 +323,15 @@ export function SessionCard({ session, width, height, play = false, people, hidd
           <Reanimated.View entering={picture ? undefined : FadeIn.duration(220)} exiting={picture ? undefined : FadeOut.duration(160)} style={{ marginTop: 20 * k }}>
             {hr || avg ? (
               <View style={[styles.hrRow, { gap: 26 * k }]}>
-                {hr ? <Figure value={session.maxHr!} unit="max bpm" size={38 * k} color={look.figure} unitColor={look.muted} unitScale={0.33} play={play} delay={200} face={face} /> : null}
-                {avg ? <Figure value={avg} unit={hr ? 'avg' : 'avg bpm'} size={38 * k} color={look.figure} unitColor={look.muted} unitScale={0.33} play={play} delay={200} face={face} /> : null}
+                {hr ? <Figure value={session.maxHr!} unit="max bpm" size={38 * k} color={look.figure} unitColor={look.muted} unitScale={0.33} play={play} delay={200} /> : null}
+                {avg ? <Figure value={avg} unit={hr ? 'avg' : 'avg bpm'} size={38 * k} color={look.figure} unitColor={look.muted} unitScale={0.33} play={play} delay={200} /> : null}
               </View>
             ) : null}
             {zones ? <ZoneBar zones={zones} colors={look.zones} height={10 * k} play={play} delay={200} duration={600} style={{ marginTop: hr || avg ? 14 * k : 0 }} /> : null}
             {strain != null || kcal ? (
               <View style={[styles.hrRow, { gap: 22 * k, marginTop: hr || avg || zones ? 12 * k : 0 }]}>
-                {strain != null ? <Figure value={strain} part="dec1" baseline unit="Strain" size={24 * k} color={look.figure} unitColor={look.muted} unitScale={0.46} play={play} delay={260} face={face} /> : null}
-                {kcal ? <Figure value={kcal} baseline unit="cal" size={24 * k} color={look.figure} unitColor={look.muted} unitScale={0.46} play={play} delay={260} face={face} /> : null}
+                {strain != null ? <Figure value={strain} part="dec1" baseline unit="Strain" size={24 * k} color={look.figure} unitColor={look.muted} unitScale={0.46} play={play} delay={260} /> : null}
+                {kcal ? <Figure value={kcal} baseline unit="cal" size={24 * k} color={look.figure} unitColor={look.muted} unitScale={0.46} play={play} delay={260} /> : null}
               </View>
             ) : null}
           </Reanimated.View>
@@ -389,12 +385,6 @@ type SidewaysStat = { key: string; value: number; part?: 'int' | 'dec1'; label: 
  * zones under them, and who and where the numbers came from along the
  * bottom. `height` is whatever the page has room for: everything is drawn
  * to the scale that fits both ways (358 wide by about 250 tall is 1).
- *
- * A score sits beside the time like a scoreboard (Oct 12, owner, of the
- * audit's "scores like a scoreboard": "ship 8 as well"): a column a set
- * (SetScores), the time a little smaller when the two need it to fit side
- * by side. Should they not fit even then, the score stays the one line it
- * was, under the time. The figures are in the number face throughout.
  */
 function Sideways({ session, look, width, height, play, top, result, score, stats, zones, lead, more, vs, source }: {
   session: SessionDetail;
@@ -417,12 +407,6 @@ function Sideways({ session, look, width, height, play, top, result, score, stat
   const smallAt = (k: number, size: number, floor: number) => Math.max(floor, size * k);
   const line = (size: number) => Math.round(size * 1.3);
   const foot = !!lead || !!source;
-  // The score as a board beside the time: its games' size at scale k, and how big the time can be beside it.
-  const sets = score && session.sets?.length ? session.sets : null;
-  const boardAt = (k: number) => Math.round(28 * k);
-  const roomFor = (k: number) => (sets ? (width - 2 * Math.round(20 * k) - Math.round(16 * k) - setScoresWidth(sets, boardAt(k))) / durationWidth(session.minutes, 1) : Infinity);
-  // Beside the time while the time can stay at least 52 at full size; otherwise the line under it, as before.
-  const besideAt = (k: number) => !!sets && roomFor(k) >= 52 * k;
   // How tall everything is at scale k, so the scale can be the one that fits.
   const needAt = (k: number) =>
     2 * 18 * k
@@ -430,7 +414,7 @@ function Sideways({ session, look, width, height, play, top, result, score, stat
     + 12 * k
     + Math.round(64 * k * 1.08)
     + line(smallAt(k, 14, 10)) + 2 * k
-    + (score && !besideAt(k) ? 6 * k + Math.round(22 * k * 1.25) : 0)
+    + (score ? 6 * k + Math.round(22 * k * 1.25) : 0)
     + (stats.length ? 14 * k + 1 + 10 * k + Math.round(26 * k * 1.1) + 2 * k + line(smallAt(k, 12, 10)) : 0)
     + (zones ? 12 * k + 8 * k : 0)
     + (foot ? 14 * k + (lead ? Math.max(Math.round(26 * k), line(smallAt(k, 14, 10))) : line(smallAt(k, 11, 9))) : 0);
@@ -438,10 +422,7 @@ function Sideways({ session, look, width, height, play, top, result, score, stat
   for (let i = 0; i < 3; i++) k = Math.min(width / 358, (k * height) / needAt(k));
   // Room left over goes mostly to the time, up to about the tall card's size, so a
   // card with few numbers (drills, a practice with none shared) is not mostly empty.
-  const beside = besideAt(k);
-  const grown = Math.max(64 * k, Math.min(64 * k + (Math.max(0, height - needAt(k)) * 0.6) / 1.08, 92 * (width / 358)));
-  // Beside a score, never so big the two would not fit across.
-  const hero = beside ? Math.min(grown, roomFor(k)) : grown;
+  const hero = Math.max(64 * k, Math.min(64 * k + (Math.max(0, height - needAt(k)) * 0.6) / 1.08, 92 * (width / 358)));
   const small = (size: number, floor: number) => smallAt(k, size, floor);
   const pad = Math.round(18 * k);
   return (
@@ -460,25 +441,17 @@ function Sideways({ session, look, width, height, play, top, result, score, stat
         ) : null}
       </View>
       <View style={[styles.middle, styles.sidewaysMiddle, { paddingTop: 12 * k, paddingBottom: foot ? 14 * k : 0 }]}>
-        {/* Beside a score, the time and the score keep their size when the phone's text is set larger
-            (review, Oct 12): the two are measured to fill the row exactly, and growing them would push
-            the score's last set (often the decider) off the card's edge. Both are big already. On its
-            own, the time still grows with the phone's text as before. */}
-        <View style={[styles.heroRow, { gap: Math.round(16 * k) }]}>
-          <Duration minutes={session.minutes} size={hero} color={look.figure} unitColor={look.muted} play={play} delay={120} duration={700} face="num" maxGrow={beside ? 1 : undefined} />
-          {/* Its last row on the time's baseline (both faces' baselines 0.4 of the size under their line's middle). */}
-          {beside && sets ? <SetScores sets={sets} size={boardAt(k)} ink={look.figure} quiet={look.muted} accessible={false} maxGrow={1} style={{ marginBottom: Math.max(0, Math.round((Math.round(hero * 1.08) / 2 - numberFace.centre * hero) - (Math.round(boardAt(k) * 1.12) / 2 - numberFace.centre * boardAt(k)))) }} /> : null}
-        </View>
+        <Duration minutes={session.minutes} size={hero} color={look.figure} unitColor={look.muted} play={play} delay={120} duration={700} />
         <Text style={{ ...font('500'), fontSize: small(14, 10), lineHeight: line(small(14, 10)), color: look.muted, marginTop: 2 * k }} maxFontSizeMultiplier={1.2}>{onCourtWord(session)}</Text>
-        {score && !beside ? (
+        {score ? (
           // A long score a little smaller (Oct 10), on the same line height the card measured.
-          <Text style={{ ...numFont('700'), fontSize: 22 * k * scoreScale(score, 22), lineHeight: Math.round(22 * k * 1.25), letterSpacing: numberFace.tracking * 22 * k, color: look.figure, marginTop: 6 * k }} numberOfLines={1} maxFontSizeMultiplier={1.2}>{numGaps(score)}</Text>
+          <Text style={{ ...font('700'), fontSize: 22 * k * scoreScale(score, 22), lineHeight: Math.round(22 * k * 1.25), letterSpacing: -0.4 * k, color: look.figure, fontVariant: ['tabular-nums'], marginTop: 6 * k }} numberOfLines={1} maxFontSizeMultiplier={1.2}>{score}</Text>
         ) : null}
         {stats.length ? (
           <View style={[styles.statRow, { gap: 10 * k, marginTop: 14 * k, paddingTop: 10 * k, borderTopColor: look.lines }]}>
             {stats.map((s) => (
               <View key={s.key} style={styles.stat}>
-                <Figure value={s.value} part={s.part} size={26 * k} color={look.figure} unitColor={look.muted} play={play} delay={200} face="num" />
+                <Figure value={s.value} part={s.part} size={26 * k} color={look.figure} unitColor={look.muted} play={play} delay={200} />
                 <Text style={{ ...font('500'), fontSize: small(12, 10), lineHeight: line(small(12, 10)), color: look.muted, marginTop: 2 * k }} numberOfLines={1} maxFontSizeMultiplier={1.2}>{s.label}</Text>
               </View>
             ))}
@@ -522,8 +495,6 @@ const styles = StyleSheet.create({
   pill: { alignItems: 'center', justifyContent: 'center' },
   middle: { flex: 1 },
   sidewaysMiddle: { justifyContent: 'center', minHeight: 0 },
-  // The time, and a score's board at the far side of it.
-  heroRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' },
   statRow: { flexDirection: 'row', alignSelf: 'stretch', borderTopWidth: 1 },
   stat: { flex: 1, minWidth: 0 },
   hrRow: { flexDirection: 'row', alignItems: 'flex-end' },

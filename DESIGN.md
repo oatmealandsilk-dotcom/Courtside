@@ -246,15 +246,6 @@ first frame so nothing renders in a fallback. The web build resolves the same na
 `font(weight)` helper in `src/theme/index.ts` returns both `fontFamily` and `fontWeight`, and is the
 only sanctioned way to set a weight.
 
-**Number Font:** Barlow Semi Condensed (`@expo-google-fonts/barlow-semi-condensed`, 500/600/700),
-for scores and stats only (Oct 12, owner: "ship 8 as well"): set scores, a session's time, heart
-rate, the rating and record on the Tennis profile card, personal records, head-to-head. Its figures
-are all one width, so games line up in columns and a count never jiggles. Set it with
-`numFont(weight)`; `numberFace` in `src/theme/index.ts` holds its names and metrics. The words
-around a number ("on court", "days", "bpm", labels) stay in Inter, and the share pictures keep
-Inter throughout. It loads with Inter when the app opens, from the app's own files, so an update
-over the air carries it.
-
 **Character:** lighter than it was. Hierarchy still comes from size and weight, but the top of the
 scale is medium, not black, and it tightens as it grows. A 30px title at 500 with -1.05px tracking
 reads as set, not shouted.
@@ -272,12 +263,6 @@ reads as set, not shouted.
 - **Small** (400, 13px) and **Small Strong** (600, 13px): subtitles under titles, previews,
   timestamps, links inside cards. Subtitle and card body run at 19px line height.
 - **Caption** (600, 11px, +0.4px): stamps and tile labels; the only tracked-out style.
-- **Scoreboard** (number font): where there is room (the match post, the session sheet) a score
-  is a column per set, the logger's games over the other side's, the set winner's at 700 in the
-  full ink and the loser's at 500 in the muted ink, a tiebreak's points small and raised after the
-  loser's games (6⁵), a match tiebreak a size smaller (`SetScores`). On one line it stays the text,
-  "7–6(5) 3–6 (10–7)", in the number font, its spaces doubled (`numGaps`: the face's own space is
-  narrow) so the sets stand apart.
 
 ### Named Rules
 **The Medium Top Rule.** Nothing above 17px is set heavier than 500. A screen title at 700 or 800
