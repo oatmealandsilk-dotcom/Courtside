@@ -26,15 +26,23 @@ export function UnreadBadge({ count, dot = false, style }: { count: number; dot?
   const styles = useThemedStyles(styleDefinitions);
   const scale = useSharedValue(1);
   const last = useRef(count);
+  const lastDot = useRef(dot);
   useEffect(() => {
-    if (count > last.current && count > 0) {
+    // A dot and a number count different things (Profile's dot is everything new, its number only
+    // what waits on you), so a rise is only a rise within the same kind (review, Oct 12). Turning
+    // from a dot into a number is news that asks you something, so it pops; turning back into a dot
+    // after you answered is nothing new, so it does not.
+    const sameKind = dot === lastDot.current;
+    const rose = (sameKind && count > last.current) || (lastDot.current && !dot);
+    if (rose && count > 0) {
       scale.value = withSequence(
         withTiming(1.28, { duration: 130, easing: Easing.out(Easing.quad) }),
         withSpring(1, { damping: 9, stiffness: 260 }),
       );
     }
     last.current = count;
-  }, [count]); // eslint-disable-line react-hooks/exhaustive-deps
+    lastDot.current = dot;
+  }, [count, dot]); // eslint-disable-line react-hooks/exhaustive-deps
   const pop = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
   if (count <= 0) return null;
   return (
