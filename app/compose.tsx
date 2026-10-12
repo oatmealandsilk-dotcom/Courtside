@@ -1068,15 +1068,15 @@ function Compose() {
   // Straight to the phone's library from the + menu; a cancel leaves the menu up.
   const [pickError, setPickError] = useState('');
   // While a video is being picked and converted (a few seconds on iPhone), the box says so.
-  const [preparing, setPreparing] = useState<null | 'video' | 'all'>(null);
+  const [preparing, setPreparing] = useState<null | 'video' | 'photo' | 'all'>(null);
   // The ring closes fully before the note goes, so it is seen to finish.
   const [prepDone, setPrepDone] = useState(false);
   // One library at a time: a tap on the clip button in the moment before the
   // challenge opens the library by itself would otherwise ask for a second.
   const picking = useRef(false);
   // Where from first: "Take photo", "Record video" or "Choose from library" (see askMediaSource).
-  const openDevice = (selection: 'video' | 'all') => askMediaSource(selection, (source) => { void fetchMedia(selection, source); });
-  const fetchMedia = async (selection: 'video' | 'all', source: MediaSource = 'library') => {
+  const openDevice = (selection: 'video' | 'photo' | 'all') => askMediaSource(selection, (source) => { void fetchMedia(selection, source); });
+  const fetchMedia = async (selection: 'video' | 'photo' | 'all', source: MediaSource = 'library') => {
     if (picking.current) return;
     picking.current = true;
     setPickError('');
@@ -1332,7 +1332,7 @@ function Compose() {
                 replay={ticked ? 1 : 0}
                 preparing={preparing}
                 prepDone={prepDone}
-                onPhoto={() => { void openDevice('all'); }}
+                onPhoto={() => { void openDevice('photo'); }}
                 onClip={() => { void openDevice('video'); }}
                 onEdit={() => setStage('edit')}
                 onRemove={() => { setMedia(null); setPicked(null); setEdit({}); }}

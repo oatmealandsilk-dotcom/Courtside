@@ -49,7 +49,7 @@ export function LogComposerTop({ session, people, hidden, waiting, media, prepar
   hidden: ID[];
   waiting: boolean;
   media: PreviewMedia | null;
-  preparing: null | 'video' | 'all';
+  preparing: null | 'video' | 'photo' | 'all';
   prepDone: boolean;
   onPhoto: () => void;
   onClip: () => void;
@@ -86,7 +86,7 @@ export function LogComposerTop({ session, people, hidden, waiting, media, prepar
           </View>
         )}
         <View style={[styles.tiles, { width: size.tileW }]}>
-          <Tile icon="images-outline" label="Photo" height={size.tileH} busy={preparing === 'all'} done={prepDone} disabled={!session} onPress={onPhoto} />
+          <Tile icon="images-outline" label="Photo" height={size.tileH} busy={preparing === 'photo' || preparing === 'all'} done={prepDone} disabled={!session} onPress={onPhoto} />
           <Tile icon="videocam-outline" label="Clip" height={size.tileH} busy={preparing === 'video'} done={prepDone} disabled={!session} onPress={onClip} />
         </View>
       </View>
