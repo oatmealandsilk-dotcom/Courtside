@@ -460,10 +460,14 @@ function Sideways({ session, look, width, height, play, top, result, score, stat
         ) : null}
       </View>
       <View style={[styles.middle, styles.sidewaysMiddle, { paddingTop: 12 * k, paddingBottom: foot ? 14 * k : 0 }]}>
+        {/* Beside a score, the time and the score keep their size when the phone's text is set larger
+            (review, Oct 12): the two are measured to fill the row exactly, and growing them would push
+            the score's last set (often the decider) off the card's edge. Both are big already. On its
+            own, the time still grows with the phone's text as before. */}
         <View style={[styles.heroRow, { gap: Math.round(16 * k) }]}>
-          <Duration minutes={session.minutes} size={hero} color={look.figure} unitColor={look.muted} play={play} delay={120} duration={700} face="num" />
+          <Duration minutes={session.minutes} size={hero} color={look.figure} unitColor={look.muted} play={play} delay={120} duration={700} face="num" maxGrow={beside ? 1 : undefined} />
           {/* Its last row on the time's baseline (both faces' baselines 0.4 of the size under their line's middle). */}
-          {beside && sets ? <SetScores sets={sets} size={boardAt(k)} ink={look.figure} quiet={look.muted} accessible={false} style={{ marginBottom: Math.max(0, Math.round((Math.round(hero * 1.08) / 2 - numberFace.centre * hero) - (Math.round(boardAt(k) * 1.12) / 2 - numberFace.centre * boardAt(k)))) }} /> : null}
+          {beside && sets ? <SetScores sets={sets} size={boardAt(k)} ink={look.figure} quiet={look.muted} accessible={false} maxGrow={1} style={{ marginBottom: Math.max(0, Math.round((Math.round(hero * 1.08) / 2 - numberFace.centre * hero) - (Math.round(boardAt(k) * 1.12) / 2 - numberFace.centre * boardAt(k)))) }} /> : null}
         </View>
         <Text style={{ ...font('500'), fontSize: small(14, 10), lineHeight: line(small(14, 10)), color: look.muted, marginTop: 2 * k }} maxFontSizeMultiplier={1.2}>{onCourtWord(session)}</Text>
         {score && !beside ? (
