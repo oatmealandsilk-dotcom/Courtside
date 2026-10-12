@@ -10,7 +10,7 @@ import { localDay } from '@/features/practice/stats';
 import { weekRange } from '@/features/recap/recap';
 import { RECORD_ICON, RECORD_LABEL, recordValue } from '@/features/records/records';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import { colors, font, lift, spacing, typography } from '@/theme';
+import { colors, font, lift, numFont, numGaps, numberFace, spacing, typography } from '@/theme';
 
 /** A record set in the last week wears gold: the one to be proud of now. */
 const FRESH_DAYS = 7;
@@ -94,7 +94,7 @@ export function PersonalRecords({ records, sessions, sessionTags, users, current
           <Text style={styles.tileLabel} numberOfLines={1}>{RECORD_LABEL[key]}</Text>
         </View>
         <Text style={[styles.tileValue, { fontSize: valueSize(big) }]} numberOfLines={1} adjustsFontSizeToFit>
-          {big}
+          {key === 'win' && s?.sets?.length ? numGaps(big) : big}
           {unit ? <Text style={styles.unit}>{` ${unit}`}</Text> : null}
         </Text>
         {small ? <Text style={styles.tileSub} numberOfLines={1}>{small}</Text> : null}
@@ -157,10 +157,11 @@ const styleDefinitions = StyleSheet.create({
   tileHead: { flexDirection: 'row', alignItems: 'center', gap: 5, height: 18 },
   tileLabel: { ...typography.small, ...font('500'), color: colors.textMuted, flexShrink: 1 },
   // The line keeps its height whatever the size, so two tiles side by side keep their numbers level.
-  tileValue: { ...font('600'), fontSize: 24, lineHeight: 30, letterSpacing: -0.7, color: colors.text, fontVariant: ['tabular-nums'] },
+  // In the number face (Oct 12, owner: "ship 8 as well"): a record is a score or a stat; its word after it stays in Inter.
+  tileValue: { ...numFont('600'), fontSize: 24, lineHeight: 30, letterSpacing: numberFace.tracking * 24, color: colors.text },
   tileSub: { ...typography.small, color: colors.textMuted },
   streak: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: 10, paddingHorizontal: 14, paddingVertical: 12 },
-  streakValue: { ...font('600'), fontSize: 26, letterSpacing: -0.8, color: colors.text, fontVariant: ['tabular-nums'] },
+  streakValue: { ...numFont('600'), fontSize: 26, letterSpacing: numberFace.tracking * 26, color: colors.text },
   // The word after a big number ("days", "sessions"): small and quiet.
   // Its own short line height, so the smaller word never makes its line taller than a tile beside it.
   unit: { ...font('500'), fontSize: 14, lineHeight: 16, letterSpacing: 0, color: colors.textMuted },

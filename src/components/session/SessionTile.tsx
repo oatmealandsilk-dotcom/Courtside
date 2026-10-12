@@ -24,7 +24,7 @@ export function SessionTile({ session, width }: { session: SessionDetail; width:
       <Text style={{ ...font('600'), fontSize: 9 * k, letterSpacing: 0.8 * k, color: look.eyebrow }} numberOfLines={1} maxFontSizeMultiplier={1}>
         {[whatWord(session), result].filter(Boolean).join(' · ').toUpperCase()}
       </Text>
-      <Duration minutes={session.minutes} size={30 * k} color={look.figure} unitColor={look.muted} maxGrow={1} />
+      <Duration minutes={session.minutes} size={30 * k} color={look.figure} unitColor={look.muted} maxGrow={1} face="num" />
     </View>
   );
 }
