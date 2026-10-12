@@ -82,11 +82,9 @@ function QuestionDetail() {
   const thread = question.answerIds
     .map((aid) => answers.find((a) => a.id === aid))
     .filter((a): a is Answer => Boolean(a) && shownInList(a!, a!.authorId, currentUserId))
-    .sort((a, b) => {
-      if (question.acceptedAnswerId === a.id) return -1;
-      if (question.acceptedAnswerId === b.id) return 1;
-      return b.votes - a.votes;
-    });
+    // Most votes first. No "accepted" answer pinned on top any more (Oct 12, owner: "I don't think this
+    // feature is needed" / "Takes away from engagement"): a thread never reads as closed.
+    .sort((a, b) => b.votes - a.votes);
 
 
   // Taken down by an admin (migration 108): only its author and admins can open it, and nobody can reply.
@@ -222,7 +220,7 @@ function QuestionDetail() {
 
         <JumpProvider value={jump.ctx}>
           {thread.filter(answer => !answer.parentAnswerId || !thread.some(parent => parent.id === answer.parentAnswerId)).map(answer => (
-            <ThreadReply key={answer.id} answer={answer} thread={thread} acceptedId={question.acceptedAnswerId} askerId={question.authorId} closed={!!removed} onAccept={question.authorId === currentUserId ? (aid) => actions.acceptAnswer(question.id, aid) : undefined} />
+            <ThreadReply key={answer.id} answer={answer} thread={thread} askerId={question.authorId} closed={!!removed} />
           ))}
         </JumpProvider>
 

@@ -30,14 +30,12 @@ export function ThreadReplies({questionId, preview = false}:{questionId:string; 
   const {questions,answers,currentUserId,actions}=useApp();
   const question=questions.find(q=>q.id===questionId);
   // Never one hidden by the asker's Hidden words (migration 117), unless it is yours, nor a reply under one: the thread page lists those for the asker.
-  const thread=listedAnswers(answers,questionId,currentUserId).sort((a,b)=>Number(b.id===question?.acceptedAnswerId)-Number(a.id===question?.acceptedAnswerId)||b.votes-a.votes);
-  const canAccept = !!question && question.authorId === currentUserId && !preview;
-  return <View>{thread.filter(a=>!a.parentAnswerId||!thread.some(p=>p.id===a.parentAnswerId)).map(a=><ThreadReply key={a.id} answer={a} thread={thread} acceptedId={question?.acceptedAnswerId} askerId={question?.authorId} preview={preview} closed={!!question?.removed} onAccept={canAccept ? (id) => actions.acceptAnswer(questionId, id) : undefined}/>)}</View>;
+  const thread=listedAnswers(answers,questionId,currentUserId).sort((a,b)=>b.votes-a.votes);
+  return <View>{thread.filter(a=>!a.parentAnswerId||!thread.some(p=>p.id===a.parentAnswerId)).map(a=><ThreadReply key={a.id} answer={a} thread={thread} askerId={question?.authorId} preview={preview} closed={!!question?.removed}/>)}</View>;
 }
-export function ThreadReply({ answer, thread, acceptedId, askerId, depth = 0, preview = false, closed = false, onAccept }: {
-  answer: Answer; thread: Answer[]; acceptedId?: string; /** Who started the thread: their replies carry OP, Reddit's mark. */ askerId?: string; depth?: number; preview?:boolean;
+export function ThreadReply({ answer, thread, askerId, depth = 0, preview = false, closed = false }: {
+  answer: Answer; thread: Answer[]; /** Who started the thread: their replies carry OP, Reddit's mark. */ askerId?: string; depth?: number; preview?:boolean;
   /** The thread was taken down (migration 108): nobody can reply anywhere in it, so no Reply buttons. */ closed?: boolean;
-  /** The asker's: marks this as the answer that solved it. */ onAccept?: (answerId: string) => void;
 }) {
   const styles = useThemedStyles(styleDefinitions);
   const { users, currentUserId, currentUser, actions } = useApp();
@@ -114,7 +112,6 @@ export function ThreadReply({ answer, thread, acceptedId, askerId, depth = 0, pr
         {answer.fromCoach && <Ionicons name="shield-checkmark" size={14} color={colors.brand}/>}
       </Pressable>
       {!collapsed && <>
-        {acceptedId === answer.id && <Text style={styles.acceptedText}>Accepted by the asker</Text>}
         {answer.body ? (hold
           ? <Pressable accessibilityHint={askModerate ? (answer.removed ? 'Hold to restore it' : 'Hold to take it down') : mine ? 'Hold to delete' : 'Hold to report'} onLongPress={hold} delayLongPress={350}><RichText style={styles.replyBody}>{answer.body}</RichText></Pressable>
           : <RichText style={styles.replyBody}>{answer.body}</RichText>) : null}
@@ -127,9 +124,6 @@ export function ThreadReply({ answer, thread, acceptedId, askerId, depth = 0, pr
           {answer.removed || closed ? null : <Pressable accessibilityRole="button" accessibilityLabel={`Reply to ${responder?.name ?? 'player'}`} onPress={() => setReplying(true)} style={styles.replyButton}>
             <Ionicons name="chatbubble-outline" size={16} color={colors.textMuted}/><Text style={styles.time}>Reply</Text>
           </Pressable>}
-          {onAccept ? <Pressable accessibilityRole="button" accessibilityLabel={acceptedId === answer.id ? 'Unmark as the answer' : 'Mark as the answer'} onPress={() => onAccept(answer.id)} style={styles.replyButton}>
-            <Ionicons name={acceptedId === answer.id ? 'checkmark-circle' : 'checkmark-circle-outline'} size={16} color={acceptedId === answer.id ? colors.success : colors.textMuted}/><Text style={styles.time}>{acceptedId === answer.id ? 'Accepted' : 'Accept'}</Text>
-          </Pressable> : null}
         </View>}
         {replying && !closed && !answer.removed && <View style={styles.inlineComposer}>
           <MentionSuggestions candidates={tag.rows} onPick={tag.pick} maxHeight={176} />
@@ -155,7 +149,7 @@ export function ThreadReply({ answer, thread, acceptedId, askerId, depth = 0, pr
             ending at the last child's elbow, never at a grandchild. */}
         <View pointerEvents="none" style={[styles.rail, index === children.length - 1 ? {height:16} : {bottom:0}]} />
         <View pointerEvents="none" style={styles.elbow}/>
-        <ThreadReply answer={child} thread={thread} acceptedId={acceptedId} askerId={askerId} depth={depth + 1} preview={preview} closed={closed} onAccept={onAccept}/>
+        <ThreadReply answer={child} thread={thread} askerId={askerId} depth={depth + 1} preview={preview} closed={closed}/>
       </View>
     ))}
   </View>;

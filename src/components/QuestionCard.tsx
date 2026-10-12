@@ -97,12 +97,6 @@ function QuestionCardInner({
         <Pressable accessibilityRole="button" accessibilityLabel={`${meta.label} threads`} onPress={() => openTopic(question.topic)} hitSlop={6} style={({ pressed }) => [styles.tag, { borderColor: topicTint(question.topic) }, pressed && { opacity: 0.7 }]}>
           <Text style={styles.tagText}>{meta.label}</Text>
         </Pressable>
-        {answered ? (
-          <View style={[styles.tag, styles.tagDone]}>
-            <Ionicons name="checkmark" size={11} color={colors.text} />
-            <Text style={[styles.tagText, styles.tagDoneText]}>Answered</Text>
-          </View>
-        ) : null}
       </View>
 
       <View style={styles.footer}>

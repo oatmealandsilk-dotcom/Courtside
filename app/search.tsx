@@ -364,12 +364,11 @@ export default function Search() {
     const tint = topicTint(question.topic);
     const meta = TOPIC_META[question.topic];
     const replies = question.source?.replies ?? question.answerIds.length;
-    const answered = !!question.acceptedAnswerId;
     return (
       <Pressable
         key={question.id}
         accessibilityRole="link"
-        accessibilityLabel={`Thread: ${question.title}, ${meta?.label ?? ''}, ${replies} ${replies === 1 ? 'reply' : 'replies'}${answered ? ', answered' : ''}`}
+        accessibilityLabel={`Thread: ${question.title}, ${meta?.label ?? ''}, ${replies} ${replies === 1 ? 'reply' : 'replies'}`}
         onPress={() => openThread(question)}
         style={({ pressed }) => [styles.row, pressed && styles.pressed]}
       >
@@ -386,7 +385,6 @@ export default function Search() {
                 {tag ? <Text style={styles.rowTag}>#{highlightParts(tag, q.words).map((p, k) => (p.on ? <Text key={k} style={styles.rowTagMatch}>{p.s}</Text> : p.s))} · </Text> : null}
                 {meta?.label} · {replies} {replies === 1 ? 'reply' : 'replies'} · {relativeTime(question.createdAt)}
               </Text>
-              {answered ? <Ionicons name="checkmark-circle" size={13} color={colors.success} accessibilityLabel="Answered" /> : null}
             </View>
           )}
         </View>
