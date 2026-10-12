@@ -25,7 +25,7 @@ export function CoachCard({ coach, user, onPress }: Props) {
   return (
     <Card onPress={onPress} style={styles.card}>
       <View style={styles.header}>
-        <Avatar name={user?.name ?? 'Coach'} seed={user?.avatarSeed ?? coach.userId} size={52} ring />
+        <Avatar name={user?.name ?? 'Coach'} seed={user?.avatarSeed ?? coach.id} size={52} ring />
         <View style={styles.headerText}>
           <View style={styles.nameRow}>
             <PlayerName userId={user?.id} style={styles.name} numberOfLines={1}>

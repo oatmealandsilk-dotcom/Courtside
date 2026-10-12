@@ -179,7 +179,7 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
    <View style={styles.identity}>
      {/* Picture on the left, who you are beside it, the bio under — the way the apps people already use set it. */}
      <View style={styles.identityRow}>
-       <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={80}/>
+       <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={80} style={{ backgroundColor: colors.brand }}/>
        <View style={styles.identityWords}>
          {/* The flame after your name is what everyone else sees there (3 days or more). A screen reader hears it once, from the streak pill under it. */}
          <View style={styles.nameLine}><PlayerName userId={user.id} style={styles.name}>{user.name}</PlayerName><StreakFlame days={shownStreak(user, currentUserId)} size="large" silent/></View>
@@ -305,7 +305,7 @@ function ProfileSkeleton({ name, avatarUrl, seed }: { name?: string; avatarUrl?:
   return <>
    <View style={styles.identity}>
      <View style={styles.identityRow}>
-       <Avatar name={name ?? ''} seed={seed} uri={avatarUrl} size={80}/>
+       <Avatar name={name ?? ''} seed={seed} uri={avatarUrl} size={80} style={{ backgroundColor: colors.brand }}/>
        <View style={styles.identityWords}>
          {name ? <Text style={styles.name}>{name}</Text> : <Blank w={140} h={20} />}
          <Blank w={110} h={16} />

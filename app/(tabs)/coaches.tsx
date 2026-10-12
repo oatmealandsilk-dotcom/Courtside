@@ -159,9 +159,7 @@ function Coaching() {
             const price = coach.services.length ? Math.min(...coach.services.map((s) => s.priceCents)) : 0;
             return (
               <Pressable key={coach.id} accessibilityRole="link" onPress={() => router.push(`/coach/${coach.id}`)} style={({ pressed }) => [styles.coachCard, pressed && styles.pressed]}>
-                {/* The coach's own shade, as on every other screen (Oct 12: it was a beige with black letters,
-                    which read as a missing photo), and the coach tick when CourtSide has verified them. */}
-                <Avatar name={user?.name ?? 'Coach'} seed={coach.userId} uri={user?.avatarUrl} size={64} ring={coach.verified} />
+                <Avatar name={user?.name ?? 'Coach'} seed={coach.id} uri={user?.avatarUrl} size={64} style={{ backgroundColor: colors.borderStrong }} />
                 <View style={styles.coachWords}>
                   {/* The whole card is the coach's page; the name is not a second door. */}
                   <Text style={styles.coachName} numberOfLines={1}>{user?.name}</Text>

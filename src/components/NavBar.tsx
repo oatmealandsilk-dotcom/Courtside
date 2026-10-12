@@ -25,19 +25,6 @@ import { unseenCount } from '@/features/activity/found';
 import { useInstantsOn, withoutInstantRows } from '@/features/stories/instantsSwitch';
 import { colors, pageIsDark, radius, spacing, typography, font, withAlpha } from '@/theme';
 import { useTourOpen, useTourTarget } from '@/features/tour/tourStore';
-import { UnreadBadge } from '@/components/InboxButton';
-import type { NotificationKind } from '@/data/types';
-
-/**
- * What puts a number on Profile in the bar rather than a dot (Oct 12, owner:
- * "2 is good"): news that waits on you to answer it. Someone asked to follow
- * you, invited you to a hit, tagged you in a session (accept or decline), or
- * booked you; and, for an admin, a report or a review to look at. Chats with
- * something new count too: someone is waiting on a reply. Everything else
- * (likes, follows, comments, a workout found, a hit called off…) is a small
- * dot: worth a look, never a number nagging you.
- */
-const ASKS_YOU: ReadonlySet<NotificationKind> = new Set<NotificationKind>(['follow-request', 'hit-invite', 'session-tag', 'booking', 'report', 'review-request']);
 
 /** The screen's pixels per point, read once: the bar's moves are rounded to whole pixels. */
 const PX = PixelRatio.get();
@@ -96,20 +83,18 @@ export function NavBar({ state, navigation }: NavBarProps) {
   // Several workouts found at once are one row there, so they count once (features/activity/found).
   // Nothing about an Instant while they are hidden, as on the page (features/stories/instantsSwitch).
   const instantsOn = useInstantsOn();
-  const mine = withoutInstantRows(notifications.filter((n) => n.userId === currentUserId && !blockedIds.includes(n.actorId)), instantsOn);
-  const alerts = unseenCount(mine, detectedActivities);
+  const alerts = unseenCount(withoutInstantRows(notifications.filter((n) => n.userId === currentUserId && !blockedIds.includes(n.actorId)), instantsOn), detectedActivities);
   // The sidebar's bell counts CourtSide's own welcome too, until Notifications is first opened
   // (welcomeNote). Only the bell: it never adds to Profile's number in the bar, so a new
-  // player is not met with a badge for something nobody did.
+  // player is not met with a red badge for something nobody did.
   const welcome = useWelcomeNote(currentUser);
   const unseen = alerts + (welcome.unread ? 1 : 0);
   const insets = useSafeAreaInsets();
   const activeRoute = state.routes[state.index]?.name ?? 'index';
-  // Everything new for you, on Profile. The phone bar has no room for separate
-  // bell and inbox entries the way the sidebar does, so Profile carries the
-  // lot (it is where both of those live): a number for what waits on you to
-  // answer (ASKS_YOU, and chats), else a small dot for anything else new.
-  const asksYou = unread + mine.filter((n) => !n.read && ASKS_YOU.has(n.kind)).length;
+  // Everything waiting for you, in one number. The phone bar has no room for
+  // separate bell and inbox entries the way the sidebar does, so Profile
+  // carries the lot — it is where both of those live.
+  const profileAlerts = unread + alerts;
   // The first-run tour points at these; each button puts itself on its list. Nothing here looks any different.
   const tourDiscuss = useTourTarget('tab-discuss');
   const tourHome = useTourTarget('tab-home');
@@ -177,9 +162,6 @@ export function NavBar({ state, navigation }: NavBarProps) {
           <Glass clear style={styles.pill} radius={TAB_BAR_H / 2} tint={colors.bg}>
             {ITEMS.map((item, index) => {
               const active = item.route === activeRoute;
-              // The tab you are on is always the court's brand colour (Oct 12, owner: "2 is good"): it was
-              // mustard on Community and blue on Coaching, so the bar changed colour from tab to tab.
-              const tint = active ? colors.brand : colors.textMuted;
               return (
                 <React.Fragment key={item.route}>
                 {index === 2 && <View style={styles.createSlot}><Animated.View><Pressable ref={tourCreate} accessibilityRole="button" accessibilityLabel="Create a post" onPress={openCreate} style={[styles.createButton, pageIsDark() && styles.createButtonDark]}><BrandWash /><Ionicons name="add" size={28} color={colors.brandInk} /></Pressable></Animated.View></View>}
@@ -196,17 +178,15 @@ export function NavBar({ state, navigation }: NavBarProps) {
                     <Ionicons
                       name={active ? item.activeIcon : item.icon}
                       size={23}
-                      color={tint}
+                      color={active ? (item.route === 'coaches' ? colors.info : item.route === 'discuss' ? colors.warning : colors.brand) : colors.textMuted}
                     />
-                    {/* The bell's and Messages' own badge, in the brand colour (it was the error red): a number
-                        when something waits on you to answer, else a small dot when anything else is new. */}
-                    {item.route === 'profile' ? (
-                      <View pointerEvents="none" style={asksYou ? styles.bottomBadge : styles.bottomDot}>
-                        <UnreadBadge count={asksYou || alerts} dot={!asksYou} style={styles.badgeInPlace} />
+                    {item.route === 'profile' && profileAlerts > 0 ? (
+                      <View style={styles.bottomBadge}>
+                        <Text style={[styles.bottomBadgeText, { color: colors.onDanger }]}>{profileAlerts > 9 ? '9+' : profileAlerts}</Text>
                       </View>
                     ) : null}
                   </View>
-                  <Animated.Text style={[styles.bottomLabel, active && { color: tint }, labelFade]}>{item.label}</Animated.Text>
+                  <Animated.Text style={[styles.bottomLabel, active && { color: item.route === 'coaches' ? colors.info : item.route === 'discuss' ? colors.warning : colors.brand }, labelFade]}>{item.label}</Animated.Text>
                   </Animated.View>
                 </Pressable>
                 </React.Fragment>
@@ -300,7 +280,11 @@ export function NavBar({ state, navigation }: NavBarProps) {
         >
           <View>
             <Ionicons name={unseen || extra === 'notifications' ? 'notifications' : 'notifications-outline'} size={23} color={extra === 'notifications' ? colors.text : colors.textMuted} />
-            <UnreadBadge count={unseen} style={styles.sidebarBadge} />
+            {unseen > 0 ? (
+              <View style={styles.sidebarBadge}>
+                <Text style={styles.sidebarBadgeText}>{unseen > 9 ? '9+' : unseen}</Text>
+              </View>
+            ) : null}
           </View>
           {compact ? null : <Text style={[styles.sidebarLabel, extra === 'notifications' && styles.sidebarLabelActive]}>Notifications</Text>}
         </Pressable>
@@ -320,7 +304,11 @@ export function NavBar({ state, navigation }: NavBarProps) {
         >
           <View>
             <Ionicons name={extra === 'messages' ? 'paper-plane' : 'paper-plane-outline'} size={23} color={extra === 'messages' ? colors.text : colors.textMuted} />
-            <UnreadBadge count={unread} style={styles.sidebarBadge} />
+            {unread > 0 ? (
+              <View style={styles.sidebarBadge}>
+                <Text style={styles.sidebarBadgeText}>{unread > 9 ? '9+' : unread}</Text>
+              </View>
+            ) : null}
           </View>
           {compact ? null : <Text style={[styles.sidebarLabel, extra === 'messages' && styles.sidebarLabelActive]}>Messages</Text>}
         </Pressable>
@@ -360,12 +348,15 @@ const styleDefinitions = StyleSheet.create({
   pill: { height: TAB_BAR_H, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 6, borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255, 255, 255, 0.45)' },
   bottomItem: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   bottomInner: { alignItems: 'center', justifyContent: 'center', gap: 3 },
-  // Profile's badge sits off the icon's shoulder rather than on top of it, so the number has room to
-  // breathe: the number from where it always sat, the smaller dot a touch higher and further out.
-  bottomBadge: { position: 'absolute', top: -5, left: 14 },
-  bottomDot: { position: 'absolute', top: -3, left: 16 },
-  // The badge's own corner placement (made for a header icon) handed over to the spot above.
-  badgeInPlace: { position: 'relative', top: 0, right: 0 },
+  // Sits off the icon's shoulder rather than on top of it, so it needs no
+  // ring to stand apart, and the number has room to breathe.
+  bottomBadge: {
+    position: 'absolute', top: -5, left: 14,
+    minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 5,
+    backgroundColor: colors.danger, alignItems: 'center', justifyContent: 'center',
+  },
+  // Its colour is colors.onDanger, given where it is drawn (white, or dark on the two dark courts' lighter red).
+  bottomBadgeText: { fontSize: 11, lineHeight: 13, ...font('700'), fontVariant: ['tabular-nums'], includeFontPadding: false, textAlign: 'center' },
   bottomLabel: { ...typography.smallStrong, fontSize: 11, color: colors.textFaint, letterSpacing: 0.15 },
 
   sidebar: {
@@ -391,7 +382,18 @@ const styleDefinitions = StyleSheet.create({
   sidebarItemActive: { backgroundColor: colors.surface },
   sidebarLabel: { ...typography.body, color: colors.textMuted },
   sidebarLabelActive: { color: colors.text, ...font('700') },
-  // The same badge as the bell's in a page's header (it was the error red here too).
-  sidebarBadge: { top: -5, right: -8 },
+  sidebarBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -7,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    paddingHorizontal: 4,
+    backgroundColor: colors.danger,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sidebarBadgeText: { color: colors.brandInk, fontSize: 9, ...font('700') },
   sidebarFootnote: { ...typography.caption, color: colors.textFaint, paddingHorizontal: spacing.md },
 });

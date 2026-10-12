@@ -200,8 +200,8 @@ low-left pool and `brand` for the high-right one, so the wash is the one place c
 scale.
 - **Court** (`court`): the game and the success state.
 - **Clay** (`clay`): warm brick; the wash's warm half.
-- **Hard** (`hard` / `info`): cool blue.
-- **Grass** (`grass`): desaturated lawn.
+- **Hard** (`hard` / `info`): cool blue; the Coaching tab's active tint.
+- **Grass** (`grass`): desaturated lawn. `warning` is the Community tab's active tint.
 - **Open Green** (`open`): Open to hit, and nothing else. The ring a
   player wears on the map, in the players list and on their card; the dot before a name (and before "You"
   on your own pin) and before "Open to hit today"; the track of the Open to hit switch on your card,
@@ -397,14 +397,9 @@ one and never a band of surface colour.
 
 ### Navigation
 - **Phone:** four tabs on Ball Can Cream under a hairline, labels at 10.5px Small Strong in Faint
-  Ink. The active tab is always the brand colour, whichever tab it is (Oct 12; Coaching and
-  Community used to take `info` and `warning`). A 50px round green create button sits in the
-  centre and shrinks to 0.86 as the bar ducks on scroll.
-- **Badges:** one badge for anything new, everywhere: a brand pill with a 2px page-coloured edge
-  and its count in Green Ink, "9+" past nine (the bell, Messages, the sidebar, Profile in the
-  bar). Profile shows the number only for what waits on you to answer (chats with something new,
-  a follow request, a hit invite, a session tag, a booking; reports for an admin) and a 12px dot
-  of the same badge for anything else new. Danger red is for errors only, never a count.
+  Ink. The active tab takes a tint: brand for Home and Profile, `info` for Coaching, `warning` for
+  Community. A 50px round green create button sits in the centre and shrinks to 0.86 as the bar
+  ducks on scroll.
 - **Computer:** a 220px sidebar (76px compact) replaces the bar; the active item sits on `surface`.
 - **Header:** back chevron, display title, one Small muted subtitle; on a pushed screen the title
   compacts to Title size beside the chevron.
@@ -442,13 +437,8 @@ Icon at 24px in brand on a 56px brand-dim tile, Heading title, Small muted body 
 capped at 300px, 48px of vertical air.
 
 ### Court Placeholders
-Avatars with no photo are white initials on one of five deeper shades (Oct 12): clay, hard-court
-blue, plum, ink and sand (`avatarClay` … `avatarSand`, in every palette, a step lighter on the two
-dark ones), each holding white at 4.5:1 or better. None is green, so the Open ring stands out on
-any face, and none is beige, which read as a missing photo. `avatarFillFor` picks one by the
-person's account id, so the same person is the same colour on every screen and on the map; a
-verified coach adds the coach tick on the Coaching tab too. Media with nothing loaded is a tinted
-court card. No binary imagery ships.
+Unchanged from the previous world: avatars are initials on one of six muted tints chosen from the
+handle; media with nothing loaded is a tinted court card. No binary imagery ships.
 
 ## Do's and Don'ts
 
