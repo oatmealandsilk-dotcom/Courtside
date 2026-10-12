@@ -29,8 +29,11 @@ jobs:
       - name: Install dependencies
         run: npm install --legacy-peer-deps
 
-      - name: Align package versions with the installed Expo SDK
-        run: npx --yes expo install --fix && npm install --legacy-peer-deps
+      # Only reports versions Expo would update, never changes them: the site is built from the
+      # same locked versions the app was tested with. (Oct 12: Expo published newer packages and
+      # the old "--fix" here stopped every deploy, since it could not edit app.config.js.)
+      - name: Report package versions Expo would update
+        run: npx --yes expo install --check || true
 
       - name: Check the public Supabase settings are configured
         env:
