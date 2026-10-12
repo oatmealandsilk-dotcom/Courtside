@@ -11,7 +11,7 @@ import { RECORD_ICON, RECORD_LABEL, recordValue } from '@/features/records/recor
 import { CardWash, type CardLook } from '@/components/session/SessionCard';
 import { duration } from '@/lib/format';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import { colors, font, lift, radius, spacing, typography, withAlpha } from '@/theme';
+import { colors, font, lift, numFont, numberFace, radius, spacing, typography, withAlpha } from '@/theme';
 
 const DAY_LETTERS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
@@ -232,7 +232,8 @@ export function WeekSummary({ recap, label, look, onOpen, onClose, extra, childr
             <Text style={[styles.sumQuiet, { color: look.filled ? look.ink : colors.text }]} numberOfLines={1}>{onOpen ? 'A quiet week' : 'No tennis yet'}</Text>
           ) : (
             <Text style={[styles.sumBig, { color: look.figure }]} numberOfLines={1}>
-              {duration(recap.minutes)}
+              {/* The time in the number face (Oct 12, owner: "ship 8 as well"), "on court" in Inter. */}
+              <Text style={styles.sumNum}>{duration(recap.minutes)}</Text>
               <Text style={[styles.sumUnit, { color: look.muted }]}> on court</Text>
             </Text>
           )}
@@ -323,6 +324,7 @@ const styleDefinitions = StyleSheet.create({
   sumRow: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.lg },
   sumWords: { flex: 1, minWidth: 0, gap: 4 },
   sumBig: { ...font('600'), fontSize: 38, lineHeight: 44, letterSpacing: -1.4, color: colors.brand, fontVariant: ['tabular-nums'] },
+  sumNum: { ...numFont('600'), letterSpacing: numberFace.tracking * 38 },
   sumUnit: { ...font('500'), fontSize: 15, letterSpacing: 0, color: colors.textMuted },
   sumQuiet: { ...font('600'), fontSize: 22, lineHeight: 30, letterSpacing: -0.6, color: colors.text },
   sumLine: { ...typography.small, fontSize: 14, color: colors.textMuted },

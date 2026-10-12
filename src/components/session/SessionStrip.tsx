@@ -5,10 +5,10 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { router } from 'expo-router';
 
 import type { ID, SessionDetail } from '@/data/types';
-import { resultWithScore, sourceLabel, spokenDuration, whatWord } from '@/features/activity/format';
+import { resultWithScore, resultWord, scoreLine, sourceLabel, spokenDuration, whatWord } from '@/features/activity/format';
 import { distanceFigure, formatDistance } from '@/features/activity/workouts';
 import { sessionPeople } from '@/features/activity/sessionTags';
-import { colors, font, withAlpha } from '@/theme';
+import { colors, font, numFont, numGaps, numberFace, withAlpha } from '@/theme';
 import { Duration, Figure } from './Duration';
 import { CardWash, cardLook } from './SessionCard';
 import { ZoneGlyph } from './ZoneGlyph';
@@ -60,6 +60,15 @@ export function SessionStrip({ session, hidden = [], play = false, scale = 1, on
   const result = resultWithScore(session);
   const what = [whatWord(session), result].filter(Boolean).join(' · ');
   const title = titleAs ?? (far ? `${what} · ${formatDistance(session.distanceM)}` : what);
+  // The score in the number face (Oct 12, owner: "ship 8 as well"), still on the title's one line: "Match · Won 7–6(5) 3–6".
+  const score = !titleAs && !far ? scoreLine(session) : null;
+  const won = resultWord(session);
+  const titleShown = score ? (
+    <>
+      {[whatWord(session), won].filter(Boolean).join(' · ')}{won ? ' ' : ' · '}
+      <Text style={[styles.score, { fontSize: 15.5 * k, letterSpacing: numberFace.tracking * 15.5 * k }]}>{numGaps(score)}</Text>
+    </>
+  ) : title;
   const { opponents, partners } = sessionPeople(session, hidden);
   const all = [...opponents, ...partners];
   const lead = all[0];
@@ -72,11 +81,11 @@ export function SessionStrip({ session, hidden = [], play = false, scale = 1, on
   // the cream with green numbers on the CourtSide court (Oct 5).
   const look = cardLook(theme);
   const stats = [
-    kcal != null ? { key: 'kcal', label: 'Calories', node: <Figure value={kcal} baseline size={19 * k} color={look.figure} unitColor={look.muted} play={play} delay={200} duration={600} /> } : null,
-    avg ? { key: 'avg', label: 'Avg HR', node: <Figure value={avg} unit="bpm" baseline unitScale={0.62} size={19 * k} color={look.figure} unitColor={look.muted} play={play} delay={200} duration={600} /> } : null,
-    hr ? { key: 'max', label: 'Max HR', node: <Figure value={session.maxHr!} unit="bpm" baseline unitScale={0.62} size={19 * k} color={look.figure} unitColor={look.muted} play={play} delay={200} duration={600} /> } : null,
+    kcal != null ? { key: 'kcal', label: 'Calories', node: <Figure value={kcal} baseline size={19 * k} color={look.figure} unitColor={look.muted} play={play} delay={200} duration={600} face="num" /> } : null,
+    avg ? { key: 'avg', label: 'Avg HR', node: <Figure value={avg} unit="bpm" baseline unitScale={0.62} size={19 * k} color={look.figure} unitColor={look.muted} play={play} delay={200} duration={600} face="num" /> } : null,
+    hr ? { key: 'max', label: 'Max HR', node: <Figure value={session.maxHr!} unit="bpm" baseline unitScale={0.62} size={19 * k} color={look.figure} unitColor={look.muted} play={play} delay={200} duration={600} face="num" /> } : null,
   ].filter((x): x is { key: string; label: string; node: React.ReactElement } => !!x);
-  const time = <Duration minutes={session.minutes} size={19 * k} unitScale={0.62} color={look.figure} unitColor={look.muted} play={play} delay={120} duration={600} />;
+  const time = <Duration minutes={session.minutes} size={19 * k} unitScale={0.62} color={look.figure} unitColor={look.muted} play={play} delay={120} duration={600} face="num" />;
   // One panel, Strava's activity block in the theme's colour (Oct 4, owner: "needs big UI work"):
   // what it was and who with, then the numbers in even columns; with only the time shared, one line.
   return (
@@ -94,7 +103,7 @@ export function SessionStrip({ session, hidden = [], play = false, scale = 1, on
           <ZoneGlyph size={14 * k} color={look.ink} />
         </View>
         <View style={[styles.flex, { gap: 1 * k }]}>
-          <Text style={[styles.title, { color: look.ink }, { fontSize: 14.5 * k, lineHeight: Math.round(19 * k) }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>{title}</Text>
+          <Text style={[styles.title, { color: look.ink }, { fontSize: 14.5 * k, lineHeight: Math.round(19 * k) }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>{titleShown}</Text>
           {sub ? (
             <Text style={[styles.sub, small, { color: look.muted }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>{sub}</Text>
           ) : lead || source ? (
@@ -134,6 +143,7 @@ const styleDefinitions = StyleSheet.create({
   flat: { boxShadow: 'none' },
   badge: { alignItems: 'center', justifyContent: 'center', backgroundColor: withAlpha(colors.brand, 0.12) },
   title: { ...font('700'), color: colors.text, letterSpacing: -0.2 },
+  score: { ...numFont('700') },
   sub: { ...font('500'), color: colors.textMuted },
   columns: { alignItems: 'flex-start', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: withAlpha(colors.brand, 0.16) },
   col: { flex: 1, minWidth: 0 },

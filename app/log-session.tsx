@@ -589,7 +589,7 @@ function LogSession() {
             <View style={styles.hero} accessible accessibilityLabel={`${sessionEyebrow({ kind, day: heroDay, workout: kind === 'fitness' ? workout : undefined }).toLowerCase()}, ${duration(minutes)}`}>
               <Text style={styles.heroEyebrow}>{sessionEyebrow({ kind, day: heroDay, workout: kind === 'fitness' ? workout : undefined })}</Text>
               <View style={styles.heroRow}>
-                <Duration minutes={minutes} size={56} color={colors.text} unitColor={colors.textMuted} />
+                <Duration minutes={minutes} size={56} color={colors.text} unitColor={colors.textMuted} face="num" />
                 {kind === 'match' && shownWon ? (
                   <View style={[styles.result, shownWon === 'won' ? styles.resultWon : styles.resultLost]}>
                     <Text style={[styles.resultText, { color: shownWon === 'won' ? colors.brandInk : colors.textMuted }]}>{shownWon === 'won' ? 'Won' : 'Lost'}</Text>
