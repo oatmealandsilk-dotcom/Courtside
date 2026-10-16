@@ -23,6 +23,7 @@ import { confirm } from '@/lib/confirm';
 import { replayTour } from '@/features/tour/tourStore';
 import { TOUR_ON } from '@/features/tour/tourSeen';
 import { useTennisFlags } from '@/features/activity/useTennisFlags';
+import { isTracker } from '@/features/activity/flags';
 import { workoutWatchAvailable } from '@/features/health/workoutWatch';
 import { notKnownAdult } from '@/features/players/age';
 import { HitGlyph } from '@/components/HitGlyph';
@@ -83,14 +84,22 @@ export default function Settings() {
     if (tipsOn) { turnOffTips(); showToast({ title: 'Tips are off', icon: 'bulb-outline' }); }
     else { resetTips(); showToast({ title: 'Tips will show again', icon: 'bulb-outline' }); }
   } };
-  // The tennis-session alert switch shows once WHOOP's tennis sessions are switched on (migration 58),
-  // and on an iPhone that puts up its own alert after each Apple Health workout (build 15,
-  // features/health/workoutWatch), which obeys the same switch.
+  // The tennis-session alert switch shows only once a tracker is connected and sending sessions
+  // (Oct 15, owner: "Only show once it connects tracker"; before, everyone saw "From WHOOP"), and
+  // says which: WHOOP, Fitbit, Oura, Polar (migration 58 and the trackers function), and on an
+  // iPhone Apple Health, which puts up its own alert after each workout (build 15,
+  // features/health/workoutWatch) and obeys the same switch.
   const tennis = useTennisFlags();
   const appleRow = integrations.find((i) => i.provider === 'apple-health');
   const appleAlerts = workoutWatchAvailable() && !!appleRow?.connected && !!appleRow.readsWorkouts && (tennis.apple || (!!appleRow.readsAllWorkouts && tennis.workoutsApple));
   const appleAllAlerts = appleAlerts && !!appleRow?.readsAllWorkouts && tennis.workoutsApple;
-  const activityAlerts = tennis.whoop || appleAlerts;
+  const whoopRow = integrations.find((i) => i.provider === 'whoop');
+  const whoopAlerts = !!whoopRow?.connected && !!whoopRow.readsWorkouts && (tennis.whoop || (!!whoopRow.readsAllWorkouts && tennis.workoutsWhoop));
+  const whoopAllAlerts = whoopAlerts && !!whoopRow?.readsAllWorkouts && tennis.workoutsWhoop;
+  const trackerAlerts = integrations.filter((i) => isTracker(i.provider) && i.connected && !!i.readsWorkouts && tennis[i.provider]);
+  const alertSources = [...(whoopAlerts ? ['WHOOP'] : []), ...trackerAlerts.map((i) => i.label), ...(appleAlerts ? ['Apple Health'] : [])];
+  const activityAlerts = alertSources.length > 0;
+  const alertSourceWords = alertSources.length > 1 ? `${alertSources.slice(0, -1).join(', ')} and ${alertSources[alertSources.length - 1]}` : alertSources[0];
   const mapAdult = !!currentUser && !notKnownAdult(currentUser);
   // A teen on the map (migration 78) can hear when a friend who follows them back is up for a hit.
   const mapTeen = onTeenMap(currentUser, teenMap);
@@ -160,8 +169,8 @@ export default function Settings() {
         { icon: 'chatbubble-ellipses-outline' as const, label: 'Coach replies', toggle: { value: prefs.pushCoach, onChange: (v: boolean) => actions.setPref('pushCoach', v) } },
         ...(activityAlerts ? [{
           icon: 'stopwatch-outline' as const,
-          label: appleAllAlerts ? 'Workouts' : 'Tennis sessions',
-          detail: tennis.whoop && appleAlerts ? 'From WHOOP and Apple Health' : appleAlerts ? 'From Apple Health' : 'From WHOOP',
+          label: appleAllAlerts || whoopAllAlerts ? 'Workouts' : 'Tennis sessions',
+          detail: `From ${alertSourceWords}`,
           toggle: { value: prefs.pushActivity, onChange: (v: boolean) => actions.setPref('pushActivity', v) },
         }] : []),
         // Mondays at 8am your time (migration 130): last week on court. Off, it still lands in Notifications.
