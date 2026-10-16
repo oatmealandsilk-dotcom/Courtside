@@ -6,6 +6,7 @@ import { Highlighted, plain } from '@/components/CourtSearch';
 import { snippet, startsWord } from '@/features/search/match';
 import { TileViews } from '@/components/TileViews';
 import { TileCover } from '@/components/TileCover';
+import { CarouselMark } from '@/components/CarouselMark';
 import type { Post } from '@/data/types';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font } from '@/theme';
@@ -62,6 +63,8 @@ export function PostTile({ post, width, height, onPress, label, words }: {
       )}
       {picture ? <TileCover accessibilityIgnoresInvertColors uri={picture} style={StyleSheet.absoluteFill} contentFit="cover" recyclingKey={post.id} transition={120} /> : null}
       {clip ? <Ionicons name="play" size={14} color="#FFFFFF" style={styles.play} /> : null}
+      {/* Several photos: the stacked mark, where a clip has its play mark. */}
+      {picture ? <CarouselMark post={post} /> : null}
       {clip && (post.views ?? 0) > 0 ? <TileViews views={post.views ?? 0} /> : null}
     </Pressable>
   );

@@ -10,6 +10,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Avatar, Button, EmptyState, Screen } from '@/components/ui';
 import { SectionPager } from '@/components/SectionPager';
 import { TileCover } from '@/components/TileCover';
+import { CarouselMark } from '@/components/CarouselMark';
 import { SessionTile } from '@/components/session/SessionTile';
 import { hasSessionStats } from '@/features/activity/format';
 import Reanimated, { Easing, cancelAnimation, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
@@ -134,6 +135,8 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
      <View style={styles.grid} onLayout={(e) => { const w = Math.floor(e.nativeEvent.layout.width); if (w > 0 && w !== gridW) setGridW(w); }}>{items.map(p => <Pressable key={p.id} accessibilityRole="link" accessibilityLabel={`Open ${p.pinned && selected !== 'Tagged' ? 'pinned ' : ''}${p.kind}: ${p.body}`} onPress={() => router.push({ pathname: '/posts/[userId]', params: { userId: user.id, post: p.id, set: selected === 'Clips' ? 'clips' : selected === 'Tagged' ? 'tagged' : 'own' } })} style={[styles.tile, { width: tileW, height: tileH }]}>
        <View style={[StyleSheet.absoluteFill, styles.tileBlank]}><Text numberOfLines={5} style={styles.tileText}>{p.body}</Text></View>
        {p.thumbnailUrl ? <TileCover accessibilityIgnoresInvertColors uri={p.thumbnailUrl} style={StyleSheet.absoluteFill} contentFit="cover" recyclingKey={p.id} transition={120}/> : p.session && hasSessionStats(p.session) && !p.imageUrl && !p.videoUrl ? <SessionTile session={p.session} width={tileW}/> : null}
+       {/* Several photos: the stacked mark, where a clip has its play mark. */}
+       <CarouselMark post={p}/>
        {/* White on a picture or a session tile; on the pale text tile, the muted ink, so it still shows. */}
        {p.kind==='clip' && (() => { const bare = !p.thumbnailUrl && !(p.session && hasSessionStats(p.session) && !p.imageUrl && !p.videoUrl); return <Ionicons name="play" size={14} color={bare ? colors.textMuted : '#FFFFFF'} style={[styles.tilePlay, bare && styles.tilePlayFlat]}/>; })()}
        {/* Views, bottom left, the way Reels and TikTok grids show them. */}

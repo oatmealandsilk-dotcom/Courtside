@@ -7,6 +7,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { QuestionCard } from '@/components/QuestionCard';
 import { TileCover } from '@/components/TileCover';
+import { CarouselMark } from '@/components/CarouselMark';
 import { SessionTile } from '@/components/session/SessionTile';
 import { hasSessionStats } from '@/features/activity/format';
 import Reanimated from 'react-native-reanimated';
@@ -78,6 +79,8 @@ export default function Saved() {
                   </View>
                   {picture ? <TileCover accessibilityIgnoresInvertColors uri={picture} style={StyleSheet.absoluteFill} contentFit="cover" recyclingKey={post.id} transition={120} />
                     : sessionTile && post.session ? <SessionTile session={post.session} width={tileW} /> : null}
+                  {/* Several photos: the stacked mark, where a video has its play mark. */}
+                  {picture ? <CarouselMark post={post} size={15} /> : null}
                   {/* White on a picture; on the pale text tile, the muted ink, so it still shows. */}
                   {video ? <Ionicons name="play" size={15} color={picture || sessionTile ? '#FFFFFF' : colors.textMuted} style={[styles.tileMark, !(picture || sessionTile) && styles.tileMarkFlat]} /> : null}
                 </Pressable>

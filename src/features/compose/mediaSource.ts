@@ -1,6 +1,6 @@
 import { Linking, Platform } from 'react-native';
 
-import { captureFromCamera, pickFromDevice, type PickedMedia } from '@/components/MediaPicker';
+import { captureFromCamera, pickFromDevice, pickPostMedia, type PickedMedia } from '@/components/MediaPicker';
 import { isDesktopBrowser } from '@/lib/browserDevice';
 import { confirm } from '@/lib/confirm';
 
@@ -60,6 +60,21 @@ export async function fromSource(source: MediaSource, selection: 'video' | 'phot
   const got = await captureFromCamera(source);
   if (got === 'denied') { cameraOff(); return null; }
   return got;
+}
+
+/**
+ * The same as fromSource, for a plain post that can be a carousel (Oct 15):
+ * the library allows up to `limit` at once, the camera still takes one. The
+ * answer is always a list, in the order picked. Only "Create a post" uses
+ * this; clips, session logs and challenge entries keep fromSource.
+ */
+export async function fromSourceMany(source: Exclude<MediaSource, 'trim'>, selection: 'photo' | 'all', limit: number): Promise<PickedMedia[] | null> {
+  if (source !== 'library') {
+    const one = await fromSource(source, selection);
+    return one ? [one] : null;
+  }
+  if (Platform.OS !== 'web') await new Promise((done) => setTimeout(done, 180));
+  return pickPostMedia(limit, { photosOnly: selection === 'photo' });
 }
 
 /** The camera is off for CourtSide: one line, and the way to turn it back on. */

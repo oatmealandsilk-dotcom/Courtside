@@ -111,6 +111,39 @@ export async function pickFromDevice(selection: 'video' | 'photo' | 'all', optio
   }
 }
 
+/**
+ * The library for "Create a post" (Oct 15, carousels): up to `limit` at once,
+ * numbered in the order they were tapped, as Instagram's picker does. One
+ * pick is exactly what pickFromDevice hands back; several are a carousel,
+ * and the composer keeps only their photos (a video stays a post of its
+ * own). `photosOnly` is for adding more photos to a carousel already
+ * started. Apple's trimmer does not work with several at once, so this is
+ * never used for a clip. Null if cancelled.
+ */
+export async function pickPostMedia(limit: number, options?: { photosOnly?: boolean }): Promise<PickedMedia[] | null> {
+  const most = Math.max(1, Math.min(10, limit));
+  const kinds: ImagePicker.MediaType[] = options?.photosOnly ? ['images'] : ['images', 'videos'];
+  try {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: kinds, quality: 0.85, ...AS_IS,
+      allowsMultipleSelection: most > 1, selectionLimit: most, orderedSelection: true,
+    });
+    if (result.canceled || !result.assets.length) return null;
+    return result.assets.slice(0, most).map((asset) => {
+      const isVideo = asset.type === 'video';
+      return {
+        uri: asset.uri,
+        label: asset.fileName ?? 'Selected media',
+        kind: isVideo ? 'video' : 'photo',
+        thumbnailUrl: isVideo ? undefined : asset.uri,
+        orientation: asset.width && asset.height && asset.width > asset.height ? 'landscape' : 'portrait',
+      };
+    });
+  } catch (err) {
+    throw new Error(explainPickError(err));
+  }
+}
+
 /** The longest video "Record video" takes: a minute, the length of a reel. */
 export const CAMERA_MAX_SECONDS = 60;
 

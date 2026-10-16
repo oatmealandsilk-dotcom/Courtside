@@ -4,9 +4,11 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
+import { CarouselPhotoRow } from '@/components/CarouselPhotoRow';
 import { TileCover } from '@/components/TileCover';
 import { Avatar, Button, EmptyState, Field, Screen } from '@/components/ui';
 import type { ID, TakedownKind, TakedownReason } from '@/data/types';
+import { isCarousel, photosOf } from '@/features/compose/carousel';
 import { KIND_WORD, TAKEDOWN_REASONS, asKind, noticeFor } from '@/features/moderation/reasons';
 import { confirm } from '@/lib/confirm';
 import { goBack } from '@/lib/goBack';
@@ -54,9 +56,9 @@ export default function TakeDown() {
   const [sent, setSent] = useState(false);
 
   // What is being taken down, as far as this phone holds it: who posted it, a few words, a picture.
-  const item = useMemo((): { authorId?: ID; words?: string; picture?: string; clip?: boolean; down: boolean } => {
+  const item = useMemo((): { authorId?: ID; words?: string; picture?: string; photos?: string[]; clip?: boolean; down: boolean } => {
     switch (kind) {
-      case 'post': { const p = posts.find((x) => x.id === id); return p ? { authorId: p.authorId, words: p.body, picture: p.thumbnailUrl ?? p.imageUrl, clip: p.kind === 'clip', down: !!p.removed } : { down: false }; }
+      case 'post': { const p = posts.find((x) => x.id === id); return p ? { authorId: p.authorId, words: p.body, picture: p.thumbnailUrl ?? p.imageUrl, photos: isCarousel(p) ? photosOf(p) : undefined, clip: p.kind === 'clip', down: !!p.removed } : { down: false }; }
       case 'hit': { const st = stories.find((x) => x.id === id); return st ? { authorId: st.authorId, words: st.caption, picture: st.thumbnailUrl ?? st.imageUrl, down: !!st.removed } : { down: false }; }
       case 'comment': case 'hit-comment': { const c = comments.find((x) => x.id === id); return c ? { authorId: c.authorId, words: c.body, picture: c.imageUrl, down: !!c.removed } : { down: false }; }
       case 'question': { const q = questions.find((x) => x.id === id); return q ? { authorId: q.authorId, words: q.title, down: !!q.removed } : { down: false }; }
@@ -116,6 +118,8 @@ export default function TakeDown() {
         <View style={{ flex: 1, gap: 2 }}>
           <Text style={styles.kind}>{word.charAt(0).toUpperCase() + word.slice(1)}{author ? ` by @${author.handle}` : ''}</Text>
           {item.words?.trim() ? <Text style={styles.words} numberOfLines={3}>{item.words.trim()}</Text> : <Text style={styles.muted}>No words with it.</Text>}
+          {/* A carousel: every photo, not just the cover, before anyone decides. */}
+          <CarouselPhotoRow uris={item.photos} />
         </View>
         {item.picture ? <TileCover uri={item.picture} style={styles.thumb} accessibilityIgnoresInvertColors /> : null}
       </View>

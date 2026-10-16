@@ -42,6 +42,8 @@ import type { Post, User } from '@/data/types';
 import { colors, radius, spacing, typography } from '@/theme';
 import { tagsNotInCaption } from '@/features/feed/tags';
 import { openPlayer } from '@/features/navigation/openPlayer';
+import { PhotoCarousel } from '@/components/PhotoCarousel';
+import { photosOf } from '@/features/compose/carousel';
 
 interface Props {
   post: Post;
@@ -170,6 +172,12 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [full]); // eslint-disable-line react-hooks/exhaustive-deps
+  // A carousel's photos, cover first (one photo is a list of one), and the one in view:
+  // full screen opens on that one. Kept per post, so a redraw never jumps back to the first.
+  const photos = post.videoUrl ? [] : photosOf(post);
+  const [photoAt, setPhotoAt] = useState(0);
+  useEffect(() => { setPhotoAt(0); }, [post.id]);
+  const shownPhoto = photos[Math.min(photoAt, photos.length - 1)] ?? post.imageUrl ?? post.thumbnailUrl;
   const lastTap = useRef(0);
   const pendingTap = useRef<ReturnType<typeof setTimeout> | null>(null);
   const tapPicture = () => {
@@ -317,6 +325,33 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
       >
         {post.videoUrl ? (
           <PostVideo uri={post.videoUrl} poster={post.thumbnailUrl} active={active} preload={preload} onDoubleTap={onDoubleTap} trimStart={post.trimStart} trimEnd={post.trimEnd} speed={post.speed} volume={post.volume} crop={post.crop} silent={post.muted} discInk={discInk} onReady={onReady} onSize={landscape ? onSize : undefined} />
+        ) : photos.length > 1 && frameSize ? (
+          // A carousel: swipe sideways through the photos. Each one taps the
+          // way a single photo does: once for full screen, twice to like.
+          <PhotoCarousel
+            // A fresh row for each post: the row only reads where to start once.
+            key={post.id}
+            uris={photos}
+            index={Math.min(photoAt, photos.length - 1)}
+            onIndex={setPhotoAt}
+            bottomRoom={footZones ? 6 : 0}
+            style={StyleSheet.absoluteFill}
+            renderPage={(uri, i, near) => (
+              <Pressable accessibilityRole="image" accessibilityLabel={`${post.mediaLabel ?? 'Post photo'} ${i + 1} of ${photos.length}`} onPress={tapPicture} style={StyleSheet.absoluteFill}>
+                {/* The cover sets the frame's shape (Instagram's rule); a later photo of another shape
+                    stands whole in it, the sides its own blurred copy, so nothing of it is ever cut off. */}
+                {near && (i > 0 || frameSize.boxed) ? (
+                  <View style={StyleSheet.absoluteFill} pointerEvents="none" aria-hidden accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+                    <ExpoImage source={{ uri }} style={[StyleSheet.absoluteFill, styles.bands]} contentFit="cover" blurRadius={bandBlur} cachePolicy="memory-disk" />
+                    <View style={[StyleSheet.absoluteFill, styles.bandsShade]} />
+                  </View>
+                ) : null}
+                {near || i === 0 ? (
+                  <ExpoImage accessibilityIgnoresInvertColors source={{ uri }} style={StyleSheet.absoluteFill} contentFit={i > 0 || frameSize.boxed ? 'contain' : 'cover'} cachePolicy="memory-disk" onLoad={i === 0 ? () => onReady?.(true) : undefined} />
+                ) : null}
+              </Pressable>
+            )}
+          />
         ) : (
           <Pressable accessibilityRole="image" accessibilityLabel={post.mediaLabel ?? 'Post photo'} onPress={tapPicture} style={StyleSheet.absoluteFill}>
             {/* A photo standing whole in a wider frame: the bands either side are the photo itself, blurred and a little darker. */}
@@ -338,7 +373,7 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
           {/* Its own gesture root: on Android a Modal's pinch and swipe need one (see PostVideo). */}
           <GestureHandlerRootView style={styles.fullRoot}>
             <ZoomableMedia ref={zoom} home={home} onDismiss={() => { setFull(false); setHome(undefined); }}>
-              <ExpoImage accessibilityIgnoresInvertColors source={{ uri: post.imageUrl ?? post.thumbnailUrl }} style={StyleSheet.absoluteFill} contentFit="contain" cachePolicy="memory-disk" />
+              <ExpoImage accessibilityIgnoresInvertColors source={{ uri: shownPhoto }} style={StyleSheet.absoluteFill} contentFit="contain" cachePolicy="memory-disk" />
             </ZoomableMedia>
             <Pressable accessibilityRole="button" accessibilityLabel="Close full screen" onPress={closeFull} style={[styles.fullClose, { top: insets.top + 12 }]}>
               <Ionicons name="close" size={22} color="white" />

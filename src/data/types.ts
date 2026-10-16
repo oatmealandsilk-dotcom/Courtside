@@ -486,6 +486,13 @@ export interface Post {
   /** Placeholder media: rendered as a tinted court card, not a network image. */
   mediaLabel?: string;
   imageUrl?: string;
+  /**
+   * A carousel: every photo in order, set only when there are 2 to 10
+   * (owner, Oct 15: "select multiple photos, just posts though"). The first
+   * is always imageUrl, the cover, so every place that shows one picture
+   * (grids, shares, notifications, older app builds) simply shows the cover.
+   */
+  imageUrls?: string[];
   videoUrl?: string;
   /** Cover image shown before a clip plays and in every grid tile. */
   thumbnailUrl?: string;
