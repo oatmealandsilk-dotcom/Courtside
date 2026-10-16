@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { remote } from '@/data/remote';
-import type { ID, TrackerId } from '@/data/types';
+import type { DetectedActivity, ID, TrackerId } from '@/data/types';
 import { appleHealthAvailable, readWorkouts, type HealthWorkout } from '@/features/health/appleHealth';
 import { dismissWorkoutAlerts, presentedWorkoutAlerts } from '@/features/health/workoutWatch';
 
@@ -81,11 +81,16 @@ function forgetOld(now: number) {
 const openedFromAlert = new Set<string>();
 export function openingFromAlert(healthId: string) { openedFromAlert.add(healthId); }
 
-/** What the server is handed for one Apple Health workout (report_activity). */
-const reportOf = (w: HealthWorkout) => ({
+/**
+ * What the server is handed for one Apple Health workout (report_activity).
+ * Its heart-rate zones too, worked out on this phone (appleZones.ts): a
+ * server from before migration 160 drops them, as it always has.
+ */
+export const reportOf = (w: HealthWorkout) => ({
   sport: w.sport, started_at: w.startedAt, ended_at: w.endedAt, tz_offset_min: w.tzOffsetMin,
   avg_hr: w.avgHr ?? null, max_hr: w.maxHr ?? null, kcal: w.kcal ?? null, device: w.device ?? null,
   ...(w.distanceM ? { distance_m: w.distanceM } : {}),
+  ...(w.zones ? { hr_zones: w.zones } : {}),
 });
 
 /**
@@ -96,12 +101,12 @@ const reportOf = (w: HealthWorkout) => ({
  * Log it on; null when Health no longer has it or the server turned it
  * away; 'error' when it did not get through. Never throws.
  */
-export async function reportFromAlert(me: ID, w: { id: string; startedAt: string; endedAt: string }): Promise<ID | null | 'error'> {
+export async function reportFromAlert(me: ID, w: { id: string; startedAt: string; endedAt: string }, zoneMaxHr?: number): Promise<ID | null | 'error'> {
   openingFromAlert(w.id);
   try {
     const from = new Date(Date.parse(w.startedAt) - 60_000).toISOString();
     const to = new Date(Date.parse(w.endedAt) + 60_000).toISOString();
-    const [found] = await readWorkouts(from, { untilIso: to, limit: 1, skip: (id) => id !== w.id });
+    const [found] = await readWorkouts(from, { untilIso: to, limit: 1, skip: (id) => id !== w.id, zoneMaxHr });
     if (!found) return null;
     const r = await remote.reportActivity(found.id, reportOf(found));
     if (r === 'error') return 'error';
@@ -133,8 +138,10 @@ async function noteLook(key: string, at: number) {
  * over the past week may be used ('flag:workouts-apple' is on for this
  * person, so the server keeps a week-old session as news). `whoopEmpty`:
  * the app holds none of WHOOP's sessions, so WHOOP's look goes back a week.
+ * `zoneMaxHr`: the maximum heart rate Apple Health's zones are worked out
+ * against (appleZones.ts, from the player's age).
  */
-export type CheckSources = { apple: boolean; appleWorkouts?: boolean; whoop: boolean; whoopWorkouts?: boolean; whoopEmpty?: boolean; trackers?: TrackerId[]; weekBack?: boolean };
+export type CheckSources = { apple: boolean; appleWorkouts?: boolean; whoop: boolean; whoopWorkouts?: boolean; whoopEmpty?: boolean; trackers?: TrackerId[]; weekBack?: boolean; zoneMaxHr?: number };
 
 /** New tennis sessions and workouts: Apple Health read on this phone, WHOOP and the other trackers asked of the server. Never throws. */
 export function checkForTennis(me: ID, src: CheckSources, force = false): Promise<CheckResult> {
@@ -165,7 +172,7 @@ export function checkForTennis(me: ID, src: CheckSources, force = false): Promis
         for (const a of shown) openingFromAlert(a.workoutId);
         // At most 40 a look (the newest not handed over yet), well inside the server's 60 a day.
         // What the WHOOP app copied into Health is left out when WHOOP sends its own (tennis, and every workout once that is on).
-        const fresh = await readWorkouts(since, { sports, skipWhoopTennis: src.whoop, skipWhoopOther: !!src.whoopWorkouts, limit: 40, skip: (id) => handed.has(`${me}:${id}`) });
+        const fresh = await readWorkouts(since, { sports, skipWhoopTennis: src.whoop, skipWhoopOther: !!src.whoopWorkouts, limit: 40, skip: (id) => handed.has(`${me}:${id}`), zoneMaxHr: src.zoneMaxHr });
         for (const w of fresh) {
           const r = await remote.reportActivity(w.id, reportOf(w));
           if (r === 'error') { failed = true; continue; }
@@ -234,4 +241,67 @@ export function checkForTennis(me: ID, src: CheckSources, force = false): Promis
   })().catch((): CheckResult => ({ filed: [], news: false })).finally(() => { running.delete(me); });
   running.set(me, look);
   return look;
+}
+
+/*
+ * Zones for the Apple Health workouts already handed over (Oct 15): until
+ * migration 160 the server kept no zone times from a phone, so every Apple
+ * Watch session of the last 30 days has its heart rate but no zones. Once
+ * per install and account, each of those is read again from Health and its
+ * zones handed to the server (report_activity_zones), which keeps them only
+ * on your own row that has none yet, and only when they add up to the
+ * workout. Anything that fails is skipped quietly; it never holds up the app.
+ * A database without the function yet: nothing is sent, and it is tried
+ * again on a later open.
+ */
+const ZONES_FILLED = (me: ID) => `courtside-apple-zones-filled:${me}`;
+/** Accounts already tried in this app session: at most one go per open, however often the look runs. */
+const zonesTried = new Set<ID>();
+
+/** Your Apple Health workouts of the last 30 days with heart rate but no zones, newest first. */
+export function zonesToFill(rows: DetectedActivity[], me: ID, now = Date.now()): DetectedActivity[] {
+  const since = now - 30 * 86_400_000;
+  return rows
+    .filter((a) => a.userId === me && a.source === 'apple-health' && !!a.externalId && (!!a.avgHr || !!a.maxHr) && !a.zones?.length
+      && a.status !== 'withdrawn' && Date.parse(a.endedAt) >= since)
+    .sort((x, y) => y.startedAt.localeCompare(x.startedAt));
+}
+
+/**
+ * Fills in the zones, once. `loadRows`: your tracker sessions of the last 30
+ * days, from the server (null when they could not be read), asked for only
+ * when there is still something to do. True when any were filled in (your
+ * sessions are worth reading again). Never throws.
+ */
+export async function fillAppleZones(me: ID, loadRows: () => Promise<DetectedActivity[] | null>, zoneMaxHr?: number): Promise<boolean> {
+  if (zonesTried.has(me) || !appleHealthAvailable()) return false;
+  zonesTried.add(me);
+  try {
+    if ((await lastLook(ZONES_FILLED(me))) !== null) return false;
+    const rows = await loadRows();
+    if (!rows) return false;
+    let filled = false;
+    let again = false;
+    for (const a of zonesToFill(rows, me)) {
+      const ext = a.externalId!;
+      try {
+        const from = new Date(Date.parse(a.startedAt) - 60_000).toISOString();
+        const to = new Date(Date.parse(a.endedAt) + 60_000).toISOString();
+        const [found] = await readWorkouts(from, { untilIso: to, limit: 1, skip: (id) => id !== ext, zoneMaxHr });
+        if (!found?.zones) continue;
+        const r = await remote.reportActivityZones(ext, found.zones);
+        // A database without the function: nothing more to send, and a later open tries again.
+        if (r === 'missing') return filled;
+        if (r === 'error') { again = true; continue; }
+        if (r) filled = true;
+      } catch {
+        again = true;
+      }
+    }
+    // Done for good unless something did not get through (no connection, say): then the next open tries the rest.
+    if (!again) await noteLook(ZONES_FILLED(me), Date.now());
+    return filled;
+  } catch {
+    return false;
+  }
 }

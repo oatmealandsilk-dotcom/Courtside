@@ -632,6 +632,23 @@ export interface UserState {
   teenMap?: 'on';
   /** Your own "up for a hit today" when it is kept privately (not a known adult; migration 78). */
   ownOpenUntil?: string | null;
+  /**
+   * Your age in whole years, from your own birthday (readable only by you,
+   * migration 13): used on this phone only, for the heart-rate zones of your
+   * Apple Health workouts (features/activity/appleZones.ts). Never shown,
+   * never saved on the phone. Undefined when no birthday is on file.
+   */
+  ageYears?: number;
+}
+
+/** Whole years old today, for a date like "2009-04-17"; undefined for anything else. */
+function ageFromBirthDate(v: unknown, today = new Date()): number | undefined {
+  const m = typeof v === 'string' ? /^([0-9]{4})-([0-9]{2})-([0-9]{2})/.exec(v) : null;
+  if (!m) return undefined;
+  const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  let years = today.getFullYear() - y;
+  if (today.getMonth() + 1 < mo || (today.getMonth() + 1 === mo && today.getDate() < d)) years -= 1;
+  return years >= 0 && years <= 120 ? years : undefined;
 }
 
 /* Courts, migration 60: players' facts, follows, right now, rings. */
@@ -775,6 +792,7 @@ const toUserState = (r: UserStateRow): UserState => ({
   // The key is there only once migration 78 has run. Under 16s too (migration 119): the same rule as 16 and 17 year olds.
   teenMap: 'map_answered_at' in r ? 'on' : undefined,
   ownOpenUntil: 'open_to_hit_until' in r ? r.open_to_hit_until ?? null : undefined,
+  ...(ageFromBirthDate(r.birth_date) !== undefined ? { ageYears: ageFromBirthDate(r.birth_date) } : {}),
 });
 const asVisibility = (v: unknown): MapVisibility | null => (v === 'nearby' || v === 'mutuals' || v === 'none' ? v : null);
 
@@ -3743,6 +3761,19 @@ export const remote = {
     const { data, error } = await need().rpc('report_activity', { ext, p });
     if (error) return missingFunction(error) ? null : 'error';
     return (data as { id: ID; status: DetectedActivity['status']; notify: boolean } | null) ?? null;
+  },
+  /**
+   * Heart-rate zones worked out on this phone for one of your own Apple
+   * Health workouts already on the server without any (migration 160's
+   * report_activity_zones; the workouts handed over before it kept none).
+   * True when the server took them; false when it turned them away (already
+   * has zones, not yours, or they do not add up to the workout); 'missing'
+   * on a database without the function; 'error' when it did not get through.
+   */
+  async reportActivityZones(ext: string, zones: number[]): Promise<boolean | 'missing' | 'error'> {
+    const { data, error } = await need().rpc('report_activity_zones', { ext, z: zones });
+    if (error) return missingFunction(error) ? 'missing' : 'error';
+    return data === true;
   },
   /** "Not tennis": hides a session you have not logged, and its notification. */
   async dismissActivity(id: ID) {
