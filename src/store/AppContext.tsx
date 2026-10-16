@@ -41,7 +41,7 @@ import { isTennisActivity, workoutLine, workoutName } from '@/features/activity/
 import { detectedNote } from '@/features/activity/format';
 import { FOLD_OVER, allTennis as allTennisFound, foundBursts, foundHref, foundLine, foundTitle } from '@/features/activity/found';
 import { mergePast, readOneWithHeartRate, readPastHealth, type PastWorkout } from '@/features/activity/pastWorkouts';
-import { loggedNumbers, postShare, reshare, sameShare } from '@/features/activity/healthShare';
+import { loadHealthChoice, loggedNumbers, postShare, reshare, sameShare, shareWithZones } from '@/features/activity/healthShare';
 import { keptAvgHr, keptKcal } from '@/features/activity/manualStats';
 import { OPPONENT_MAX, REFUSALS, maxTagsFor, canTagKind, firstName, isActive, localRefusal, mirrorCopy, nameFor, patchWith, reconcileWith, refusalWords, roleOn, tagsOnSession, withEntry, withOnNewPost } from '@/features/activity/sessionTags';
 import { duration } from '@/lib/format';
@@ -8399,6 +8399,35 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   /**
+   * Your posts of the Apple Health sessions just given zones (fillAppleZones,
+   * Oct 15). Each was made when its session had none, so its list could not
+   * name zones and its Share → "Heart rate" had no bars. Zones go on the ones
+   * that share heart rate, unless your "Share health data" choice keeps zones
+   * off (shareWithZones), as a new post would; the server then writes them
+   * from the session (migration 72's posts trigger). Never marked "Edited".
+   * Quiet: one that does not save stays as it was.
+   */
+  const addZonesToPosts = useCallback(async (me: ID, ids: ID[]) => {
+    if (!ids.length || !live(me)) return;
+    const [choice, got] = await Promise.all([loadHealthChoice(me).catch(() => null), remote.fetchMySessionPosts(me).catch(() => null)]);
+    if (stateRef.current.currentUserId !== me) return;
+    // The server's copy of each (it may hold posts this phone does not), else the one held here.
+    const fetched = got?.posts ?? [];
+    const candidates = [...fetched, ...stateRef.current.posts.filter((p) => !fetched.some((f) => f.id === p.id))];
+    for (const post of candidates) {
+      const was = post.session;
+      if (post.authorId !== me || !was?.activityId || !ids.includes(was.activityId) || !live(me, post.id)) continue;
+      const share = shareWithZones(was, choice);
+      if (!share) continue;
+      const tracker = stateRef.current.detectedActivities.find((a) => a.id === was.activityId && a.userId === me);
+      const saved = await remote.setPostHealthShare(post.id, reshare(was, share, tracker)).catch(() => null);
+      if (!saved || stateRef.current.currentUserId !== me) continue;
+      // Not over a list changed here meanwhile (Edit post): that one counts.
+      setState((prev) => ({ ...prev, posts: prev.posts.map((p) => (p.id === post.id && sameShare(postShare(p.session), postShare(was)) ? { ...p, session: saved } : p)) }));
+    }
+  }, []);
+
+  /**
    * Looks for new tennis sessions and (Oct 5) other workouts, and says so
    * when one turns up. `rows` are the sources as just fetched, for a step
    * (turning sessions on) that cannot wait for the screen to catch up;
@@ -8433,10 +8462,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!src.apple && !src.appleWorkouts && !src.whoop && !src.whoopWorkouts && !src.trackers.length) return;
     const looked = await checkForTennis(me!, src, force);
     // Once: zones for the Apple Health workouts handed over before the server kept any (fillAppleZones),
-    // after this look and without holding it up. Your sessions are read again only when any were filled in.
+    // after this look and without holding it up. Your sessions are read again only when any were filled in,
+    // and then your posts of those sessions that share heart rate get the zones too (addZonesToPosts).
     if (src.apple || src.appleWorkouts) {
       void fillAppleZones(me!, () => remote.fetchActivitiesSince(me!, 31).catch(() => null), src.zoneMaxHr)
-        .then((filled) => { if (filled && stateRef.current.currentUserId === me) void refreshActivities(); })
+        .then(async (filled) => {
+          if (!filled.length || stateRef.current.currentUserId !== me) return;
+          await refreshActivities();
+          await addZonesToPosts(me!, filled);
+        })
         .catch(() => undefined);
     }
     const filed = [...new Set([...already, ...looked.filed])];

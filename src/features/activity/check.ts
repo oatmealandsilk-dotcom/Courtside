@@ -270,17 +270,18 @@ export function zonesToFill(rows: DetectedActivity[], me: ID, now = Date.now()):
 /**
  * Fills in the zones, once. `loadRows`: your tracker sessions of the last 30
  * days, from the server (null when they could not be read), asked for only
- * when there is still something to do. True when any were filled in (your
- * sessions are worth reading again). Never throws.
+ * when there is still something to do. The ids of the sessions filled in
+ * (your sessions, and the posts that carry these, are worth reading again);
+ * none when nothing was. Never throws.
  */
-export async function fillAppleZones(me: ID, loadRows: () => Promise<DetectedActivity[] | null>, zoneMaxHr?: number): Promise<boolean> {
-  if (zonesTried.has(me) || !appleHealthAvailable()) return false;
+export async function fillAppleZones(me: ID, loadRows: () => Promise<DetectedActivity[] | null>, zoneMaxHr?: number): Promise<ID[]> {
+  if (zonesTried.has(me) || !appleHealthAvailable()) return [];
   zonesTried.add(me);
+  const filled: ID[] = [];
   try {
-    if ((await lastLook(ZONES_FILLED(me))) !== null) return false;
+    if ((await lastLook(ZONES_FILLED(me))) !== null) return filled;
     const rows = await loadRows();
-    if (!rows) return false;
-    let filled = false;
+    if (!rows) return filled;
     let again = false;
     for (const a of zonesToFill(rows, me)) {
       const ext = a.externalId!;
@@ -293,7 +294,7 @@ export async function fillAppleZones(me: ID, loadRows: () => Promise<DetectedAct
         // A database without the function: nothing more to send, and a later open tries again.
         if (r === 'missing') return filled;
         if (r === 'error') { again = true; continue; }
-        if (r) filled = true;
+        if (r === true) filled.push(a.id);
       } catch {
         again = true;
       }
@@ -302,6 +303,6 @@ export async function fillAppleZones(me: ID, loadRows: () => Promise<DetectedAct
     if (!again) await noteLook(ZONES_FILLED(me), Date.now());
     return filled;
   } catch {
-    return false;
+    return filled;
   }
 }

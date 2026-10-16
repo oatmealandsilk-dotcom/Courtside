@@ -45,10 +45,13 @@
 -- What does not change: a post keeps exactly the numbers its author chose
 -- under "Share health data". A post made before its session had zones could
 -- not list zones (the app only offered what the session had), so nothing here
--- adds zones to it; the author adds them from Edit post → "Share health data"
--- → Choose. Until then its Share → "Heart rate" shows the time, calories and
--- heart rate without the bars (app side). A new post lists zones by default
--- with the rest, as WHOOP's always have.
+-- adds zones to it. The phone does, right after filling a session in: each of
+-- the author's posts of it that shares heart rate gets zones added to its
+-- list, unless the author's "Share health data" choice keeps zones off (the
+-- same update as Edit post → "Share health data" → Choose; the posts trigger
+-- then copies the zones from the session). Until then its Share → "Heart
+-- rate" shows the time, calories and heart rate without the bars (app side).
+-- A new post lists zones by default with the rest, as WHOOP's always have.
 --
 -- Stops without changing anything if report_activity has changed since the
 -- version this file was written against (107, as live on Oct 15), or if

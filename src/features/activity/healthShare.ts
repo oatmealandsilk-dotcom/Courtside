@@ -163,6 +163,22 @@ export function reshare(s: SessionDetail, share: HealthShareKey[], a: HealthNumb
   };
 }
 
+/**
+ * A post whose session got its zones only after it was made (an Apple Watch
+ * session filled in by fillAppleZones, Oct 15): its list could not name
+ * zones then, as the session had none. The list with zones added, when the
+ * post shares heart rate and the author's standing choice (`choice`, null
+ * when none is kept on this phone) does not keep zones off; null otherwise,
+ * so nothing goes on a post that the author would not have shared.
+ */
+export function shareWithZones(s: SessionDetail | undefined, choice: HealthChoice | null): HealthShareKey[] | null {
+  if (!s?.activityId) return null;
+  const share = postShare(s);
+  if (!share.includes('hr') || share.includes('zones')) return null;
+  if (choice && (!choice.on || choice.off.includes('zones'))) return null;
+  return HEALTH_KEYS.filter((k) => k === 'zones' || share.includes(k));
+}
+
 /** Remembered on this phone for the next post, one choice per account (a shared phone must not share someone else's numbers). */
 const storeKey = (userId: string) => `courtside-health-share:${userId}`;
 
