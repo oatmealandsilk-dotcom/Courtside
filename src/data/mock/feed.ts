@@ -30,6 +30,34 @@ const DUSK_COURT = `data:image/svg+xml;utf8,${encodeURIComponent(`<svg xmlns="ht
 <circle cx="520" cy="820" r="10" fill="#E3EF5A"/>
 </svg>`)}`;
 
+/**
+ * Three more drawn photos for the demo's carousel post (Oct 15): a court in
+ * the morning, the same court from above (wide, so the carousel's "stands
+ * whole in the frame" page shows), and a basket of balls by the net.
+ */
+const svg = (w: number, h: number, body: string) => `data:image/svg+xml;utf8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${body}</svg>`)}`;
+const MORNING_COURT = svg(800, 1000, `
+<defs><linearGradient id="m" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#BFD9EA"/><stop offset="1" stop-color="#EAF2F0"/></linearGradient></defs>
+<rect width="800" height="1000" fill="url(#m)"/>
+<rect x="0" y="400" width="800" height="600" fill="#6E9A6A"/>
+<path d="M220 440 L580 440 L740 1000 L60 1000 Z" fill="#B5654A"/>
+<g stroke="#FFFFFF" stroke-width="5" fill="none" opacity="0.9"><path d="M220 440 L580 440 L740 1000 L60 1000 Z"/><path d="M200 590 L600 590"/><path d="M400 590 L400 860"/><path d="M110 860 L690 860"/></g>
+<rect x="150" y="660" width="500" height="10" fill="#1F2A2F"/><rect x="150" y="616" width="500" height="6" fill="#F4F4F0"/>
+<circle cx="610" cy="140" r="56" fill="#F8E7A8" opacity="0.9"/>`);
+const COURT_FROM_ABOVE = svg(1200, 800, `
+<rect width="1200" height="800" fill="#5D8A62"/>
+<rect x="150" y="130" width="900" height="540" fill="#3D6E8F"/>
+<g stroke="#FFFFFF" stroke-width="6" fill="none"><rect x="150" y="130" width="900" height="540"/><path d="M150 200 L1050 200"/><path d="M150 600 L1050 600"/><path d="M380 200 L380 600"/><path d="M820 200 L820 600"/><path d="M380 400 L820 400"/></g>
+<rect x="596" y="110" width="8" height="580" fill="#1F2A2F"/>
+<circle cx="470" cy="330" r="9" fill="#E3EF5A"/><circle cx="880" cy="520" r="9" fill="#E3EF5A"/>`);
+const BALLS_BY_THE_NET = svg(800, 1000, `
+<rect width="800" height="1000" fill="#2B5876"/>
+<rect x="0" y="0" width="800" height="380" fill="#4E6E52"/>
+<g stroke="#1F2A2F" stroke-width="3" opacity="0.6">${Array.from({ length: 21 }, (_, i) => `<line x1="${i * 40}" y1="250" x2="${i * 40}" y2="420"/>`).join('')}</g>
+<rect x="0" y="244" width="800" height="12" fill="#F4F4F0"/>
+<rect x="250" y="560" width="300" height="300" rx="24" fill="#8A8F94"/>
+<g fill="#E3EF5A">${Array.from({ length: 15 }, (_, i) => `<circle cx="${290 + (i % 5) * 55}" cy="${590 - Math.floor(i / 5) * 40}" r="26"/>`).join('')}</g>`);
+
 export const posts: Post[] = [
   {
     // Dev's clip from WHOOP, heart rate and zones shared: the glass "See stats" pill over it, the stats over the playing clip.
@@ -88,6 +116,22 @@ export const posts: Post[] = [
     court: courtTag(1),
     location: courtTag(1).name,
     likedBy: ['u-mira', 'u-june', CURRENT_USER_ID],
+    commentIds: [],
+    tags: [],
+  },
+  {
+    // A carousel (Oct 15): three photos that swipe sideways, "1/3" and dots on the first.
+    // Yours, so it is in your Profile grid with the stacked-photos mark, and the auto-tester opens it from there.
+    id: 'p-demo-carousel',
+    authorId: CURRENT_USER_ID,
+    kind: 'note',
+    createdAt: isoDaysAgo(3, -2),
+    body: 'Saturday at the park: early start, empty courts, a full basket.',
+    imageUrl: MORNING_COURT,
+    imageUrls: [MORNING_COURT, COURT_FROM_ABOVE, BALLS_BY_THE_NET],
+    thumbnailUrl: MORNING_COURT,
+    mediaLabel: 'Saturday at the park',
+    likedBy: ['u-mira'],
     commentIds: [],
     tags: [],
   },

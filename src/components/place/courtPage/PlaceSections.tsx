@@ -5,6 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { TileCover } from '@/components/TileCover';
+import { CarouselMark } from '@/components/CarouselMark';
 import { CourtHits } from '@/components/place/CourtHits';
 import { useCourtSaid } from '@/components/place/CourtLife';
 import { Avatar, Button } from '@/components/ui';
@@ -157,6 +158,8 @@ function GridTile({ post, author, width, height, onPress }: { post: Post; author
           {/* A shade at the foot, so who and when read on any picture. A picture, not the page, is the ground: plain black. */}
           <LinearGradient pointerEvents="none" colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.55)']} style={styles.tileShade} />
           {clip ? <View style={styles.playBadge}><Ionicons name="play" size={11} color={colors.onMedia} style={styles.playGlyph} /></View> : null}
+          {/* Several photos: the stacked mark, where a clip has its play mark. */}
+          <CarouselMark post={post} />
           {foot(true)}
         </>
       ) : (

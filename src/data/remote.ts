@@ -28,6 +28,7 @@ import type { Answer, FriendStreak, ChatEvent, ChatPhoto, Coach, CoachResult, Co
 import { canScore, splitTiebreaks, validSets, withTiebreaks } from '@/features/activity/score';
 import { keptAvgHr, keptKcal } from '@/features/activity/manualStats';
 import { TERMS_VERSION } from '@/lib/legal';
+import { CAROUSEL_MAX } from '@/features/compose/carousel';
 import { readinessOf, sessionTagNamesLive, sessionToSend, setSessionTagNamesLive, trustedSession } from './sessionTagGate';
 import { isMapCourtId } from '@/features/places/courtName';
 import type { Openness } from '@/features/players/age';
@@ -231,6 +232,8 @@ type PostRow = {
   group_id?: string | null;
   id: string; author_id: string; kind: Post['kind']; body: string; media_label: string | null;
   image_url: string | null; video_url: string | null; thumbnail_url: string | null;
+  /** A carousel's photos in order, the cover first (migration 159). */
+  image_urls?: string[] | null;
   match: Post['match'] | null; session: Post['session'] | null; tags: string[]; tagged_user_ids: string[];
   archived: boolean; views: number; shares: number; created_at: string;
   orientation?: string | null;
@@ -337,6 +340,19 @@ function withSessionPlayer(row: FullPostRow, entry: SessionWith): FullPostRow {
   return { ...row, session: { ...session, with: [...list.filter((w) => w.role === 'opponent'), ...list.filter((w) => w.role !== 'opponent')] } };
 }
 
+/**
+ * A carousel's photos, cover first. Missing before migration 159 runs, and
+ * null on every single-photo post: both read as no carousel. The cover is
+ * always image_url, so a list that somehow disagrees is put right rather
+ * than showing one picture as the grid tile and another as the first page.
+ */
+const carouselOf = (row: PostRow): string[] | undefined => {
+  const list = (row.image_urls ?? []).filter((u): u is string => typeof u === 'string' && !!u);
+  if (list.length < 2 || !row.image_url) return undefined;
+  const photos = list[0] === row.image_url ? list : [row.image_url, ...list.filter((u) => u !== row.image_url)];
+  return photos.slice(0, CAROUSEL_MAX);
+};
+
 const toPost = (row: PostRow): Post => withRemoved<Post>({
   id: row.id,
   authorId: row.author_id,
@@ -345,6 +361,7 @@ const toPost = (row: PostRow): Post => withRemoved<Post>({
   body: row.body,
   mediaLabel: row.media_label ?? undefined,
   imageUrl: row.image_url ?? undefined,
+  imageUrls: carouselOf(row),
   videoUrl: row.video_url ?? undefined,
   thumbnailUrl: row.thumbnail_url ?? undefined,
   orientation: (row.orientation as 'portrait' | 'landscape' | null) ?? undefined,
@@ -1563,13 +1580,14 @@ const needs75 = (what: string) => console.warn(`[remote] ${what} needs the messa
 const needs54 = (what: string) => console.warn(`[remote] ${what} needs the group chat update. Open Supabase → SQL Editor → New query, paste the file supabase/migrations/20261001000054_group_chats.sql and press Run. It is safe to run more than once.`);
 
 /** The edits a post can carry, and the migration file that adds each one's column. */
-const OPTIONAL_COLUMNS = /trim_|muted|crop|location|speed|volume|feature_ok|court_/;
+const OPTIONAL_COLUMNS = /trim_|muted|crop|location|speed|volume|feature_ok|court_|image_urls/;
 const MIGRATION_FOR: Record<string, string> = {
   trim_start: '20260916000002_post_trim.sql', trim_end: '20260916000002_post_trim.sql', muted: '20260916000002_post_trim.sql',
   crop: '20260916000003_post_crop.sql', location: '20260916000004_post_edit.sql',
   speed: '20260925000026_post_speed_volume.sql', volume: '20260925000026_post_speed_volume.sql',
   feature_ok: '20260926000028_feature_ok_referrals.sql',
   court_id: '20260930000051_post_court.sql', court_name: '20260930000051_post_court.sql', court_lat: '20260930000051_post_court.sql', court_lng: '20260930000051_post_court.sql',
+  image_urls: '20261015000159_post_carousel.sql',
 };
 const missingColumnsNote = (cols: string[]) =>
   `[remote] The posts table has no "${cols.join('", "')}" column yet, so this post was saved without that edit (it still went up). To keep it next time, open Supabase → SQL Editor → New query, paste the file supabase/migrations/${MIGRATION_FOR[cols[0]] ?? '…'} and press Run. It is safe to run more than once.`;
@@ -4134,7 +4152,7 @@ export const remote = {
    * so the app says "Could not post" rather than "Posted" for a post nobody
    * else will ever see.
    */
-  async insertPost(post: Post) {
+  async insertPost(post: Post): Promise<string[]> {
     const row = {
       id: post.id,
       author_id: post.authorId,
@@ -4168,6 +4186,9 @@ export const remote = {
       ...(post.volume !== undefined && post.volume > 0 && post.volume < 1 ? { volume: post.volume } : {}),
       ...(post.featureOk === false ? { feature_ok: false } : {}),
       ...(post.court ? { court_id: post.court.id, court_name: post.court.name, court_lat: post.court.lat, court_lng: post.court.lng } : {}),
+      // A carousel's photos (migration 159). Before that runs it is dropped
+      // like any other edit and the post still goes up with its cover.
+      ...(post.imageUrls && post.imageUrls.length > 1 ? { image_urls: post.imageUrls.slice(0, CAROUSEL_MAX) } : {}),
     };
     const sending = { ...extras };
     const dropped: string[] = [];
@@ -4181,9 +4202,9 @@ export const remote = {
     let dropouts = 0;
     for (let attempt = 0; attempt < 8; attempt += 1) {
       const { error } = await need().from('posts').insert({ ...row, ...sending });
-      if (!error) { if (dropped.length) console.warn(missingColumnsNote(dropped)); return; }
+      if (!error) { if (dropped.length) console.warn(missingColumnsNote(dropped)); return dropped; }
       // Already saved under this id: the same post, sent again. Nothing more to do.
-      if (error.code === '23505') return;
+      if (error.code === '23505') return dropped;
       // The connection dropped (no answer from the database at all): the same
       // post, same id, is simply sent again, twice at most. If the first one
       // did get there, the second is told so (above) and it is still one post.
@@ -4202,6 +4223,13 @@ export const remote = {
         dropped.push(named);
         continue;
       }
+      // The photos list refused on its own (posts_image_urls_shape names no
+      // column): only it goes, so the court, the trim and the rest stay.
+      if ('image_urls' in sending && /image_urls/.test(error.message)) {
+        delete sending.image_urls;
+        dropped.push('image_urls');
+        continue;
+      }
       // A message about one of ours that names no column: send the post bare.
       if (Object.keys(sending).length && OPTIONAL_COLUMNS.test(error.message)) {
         dropped.push(...Object.keys(sending));
@@ -4218,11 +4246,11 @@ export const remote = {
       if (error.code === '23514' && /posts_tags_count/.test(error.message)) throw new Error(`A post can tag up to ${TAGS_MAX} people. Take some off and post it again.`);
       if (error.code === '23514' && /posts_body_len/.test(error.message)) throw new Error('The caption is too long. Shorten it and post it again.');
       // Before saying it failed (and you post it again, as a second post): is it there after all?
-      if (await landed()) return;
+      if (await landed()) return dropped;
       fail('post insert')(error);
       throw new Error('Your post could not be saved. Check your connection and try again.');
     }
-    if (await landed()) return;
+    if (await landed()) return dropped;
     throw new Error('Your post could not be saved. Try again in a moment.');
   },
 

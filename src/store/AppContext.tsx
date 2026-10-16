@@ -51,6 +51,7 @@ import { nearestPlace } from '@/data/locations';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getPosition } from '@/lib/geo';
 import { shrinkPhoto } from '@/features/compose/shrinkPhoto';
+import { carouselFor } from '@/features/compose/carousel';
 import { canBeFeatured } from '@/features/compose/featuring';
 import * as haptics from '@/lib/haptics';
 import * as Linking from 'expo-linking';
@@ -162,6 +163,8 @@ interface NewPostInput {
   session?: SessionDetail;
   mediaLabel?: string;
   imageUrl?: string;
+  /** A carousel's photos in order, the cover (imageUrl) first. Plain posts only. */
+  imageUrls?: string[];
   videoUrl?: string;
   thumbnailUrl?: string;
 }
@@ -4367,6 +4370,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         likedBy: [],
         commentIds: [],
         ...input,
+        // Two to ten photos, cover first, or none at all (a list of one is just the cover).
+        imageUrls: input.videoUrl ? undefined : carouselFor(input.imageUrl, input.imageUrls),
         // Who accepted a tag on the session shows straight away; the server works it out again and keeps its own (migration 62).
         session: withOnNewPost(input.session, me, now.sessions, now.sessionTags, now.users),
         // The server marks it too; this shows the tag before the round trip.
@@ -4378,7 +4383,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         body: post.groupId ? 'It is in the group’s feed.' : post.kind === 'clip' ? 'It is in the feed and on your profile.' : 'It is live in the feed.',
         href: '/', icon: post.kind === 'clip' ? 'play' : 'checkmark',
       };
-      const uploading = live(me) && (isLocalMedia(post.imageUrl) || isLocalMedia(post.videoUrl) || isLocalMedia(post.thumbnailUrl));
+      // A carousel's later photos are sent after the cover, each its own file.
+      const extraPhotos = (post.imageUrls ?? []).slice(1);
+      const uploading = live(me) && (isLocalMedia(post.imageUrl) || isLocalMedia(post.videoUrl) || isLocalMedia(post.thumbnailUrl) || extraPhotos.some((uri) => isLocalMedia(uri)));
       const label = post.body ? snippet(post.body, 60) : post.kind === 'clip' ? 'Your clip' : 'Your post';
       // Everyone tagged hears about it.
       const tell = (state: AppState) => (post.taggedUserIds ?? []).reduce(
@@ -4407,7 +4414,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
             // bucket. The video is nearly all of the bytes, so it owns nearly
             // all of the bar; the cover picture gets the last sliver.
             const local = [isLocalMedia(post.imageUrl), isLocalMedia(post.videoUrl), isLocalMedia(post.thumbnailUrl) && post.thumbnailUrl !== post.imageUrl];
-            const weights = [local[0] ? 0.85 : 0, local[1] ? 0.9 : 0, local[2] ? 0.1 : 0];
+            // A carousel's other photos weigh the same as the cover, so the bar
+            // moves evenly across all of them (they come after slots 0–2).
+            const extraLocal = extraPhotos.map((uri) => isLocalMedia(uri));
+            const weights = [local[0] ? 0.85 : 0, local[1] ? 0.9 : 0, local[2] ? 0.1 : 0, ...extraLocal.map((l) => (l ? 0.85 : 0))];
             const total = weights.reduce((a, b) => a + b, 0) || 1;
             const before = (i: number) => weights.slice(0, i).reduce((a, b) => a + b, 0) / total;
             const report = (i: number) => (f: number) => setUploadProgress(post.id, before(i) + (weights[i] / total) * f);
@@ -4417,11 +4427,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
             const videoUrl = local[1] ? await uploadMedia(me, post.videoUrl!, 'video', report(1)) : post.videoUrl;
             const thumbnailUrl = post.thumbnailUrl === post.imageUrl ? imageUrl
               : local[2] ? await uploadMedia(me, post.thumbnailUrl!, 'photo', report(2), { smallCover: true }) : post.thumbnailUrl;
-            const hosted = { ...post, imageUrl, videoUrl, thumbnailUrl };
+            // Then the carousel's other photos, in order, without the small grid
+            // copy (only the cover is ever a tile). Any one that fails throws,
+            // so the post fails whole: never half a carousel going up quietly.
+            const extraHosted: string[] = [];
+            for (let k = 0; k < extraPhotos.length; k += 1) {
+              extraHosted.push(extraLocal[k] ? await uploadMedia(me, extraPhotos[k], 'photo', report(3 + k)) : extraPhotos[k]);
+            }
+            let hosted: Post = { ...post, imageUrl, videoUrl, thumbnailUrl, imageUrls: post.imageUrls ? carouselFor(imageUrl, extraHosted.length ? [imageUrl, ...extraHosted] : undefined) : undefined };
             // Saved under the id made on this phone when Share was tapped:
             // sent twice, it is still one post (see remote.insertPost).
             await noteStep('saving the post');
-            await remote.insertPost(hosted);
+            const dropped = await remote.insertPost(hosted);
+            // The database has no photos list yet (migration 159 not run): it
+            // went up with its cover, and the poster is told rather than
+            // finding the other photos missing later.
+            if (hosted.imageUrls && dropped.includes('image_urls')) {
+              hosted = { ...hosted, imageUrls: undefined };
+              toast.show({ title: 'Posted with the first photo only', body: 'The other photos could not be added this time.', icon: 'alert' });
+            }
             // Kept in the note a few seconds more: Home rebuilds its pages around the new post now.
             void noteStep('post saved, Home moving it to the top');
             if (uploading) {
@@ -4430,7 +4454,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
               setState((prev) => tellAll(celebratePosted({ ...prev, posts: [hosted, ...prev.posts.filter((p) => p.id !== post.id)] }, { ...celebration, quiet: true })));
               requestFeedRefresh(`p:${post.id}`);
             } else {
-              setState((prev) => ({ ...prev, posts: prev.posts.map((p) => (p.id === post.id ? { ...p, imageUrl, videoUrl, thumbnailUrl } : p)) }));
+              setState((prev) => ({ ...prev, posts: prev.posts.map((p) => (p.id === post.id ? { ...p, imageUrl, videoUrl, thumbnailUrl, imageUrls: hosted.imageUrls } : p)) }));
             }
           } catch (error) {
             console.warn('[remote] post did not land', error);

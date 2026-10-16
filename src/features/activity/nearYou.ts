@@ -37,7 +37,7 @@ const townOf = (location: string | undefined) => (location ?? '').split(',')[0].
 
 /** A session posted to everyone with its numbers on it, and its picture (if any) reachable from anywhere. */
 export const isPostedSession = (p: Post) => !p.archived && !p.removed && !p.groupId && !!p.session && hasSessionStats(p.session)
-  && [p.imageUrl, p.videoUrl].every((u) => !u || /^(https?:|data:|blob:)/.test(u));
+  && [p.imageUrl, p.videoUrl, ...(p.imageUrls ?? [])].every((u) => !u || /^(https?:|data:|blob:)/.test(u));
 
 /**
  * The players whose posted sessions Activities may show you as "Near you":

@@ -188,6 +188,20 @@ export function pickFromDevice(selection: 'video' | 'photo' | 'all', _options?: 
 }
 
 /**
+ * The browser twin of the phone's post library (Oct 15, carousels): the file
+ * dialog with several allowed, up to `limit` (any past that are left out).
+ * One file is read exactly as pickFromDevice reads it. Several are a
+ * carousel: their photos are read in order, a photo this browser cannot open
+ * (an iPhone's HEIC in Chrome, say) is left out with a note, and a video
+ * among them comes back bare for the composer to leave out. Must be called
+ * from a click. Null when nothing was chosen.
+ */
+export function pickPostMedia(limit: number, options?: { photosOnly?: boolean }): Promise<PickedMedia[] | null> {
+  const most = Math.max(1, Math.min(10, limit));
+  return chooseFiles(options?.photosOnly ? 'image/*' : 'image/*,video/*', most);
+}
+
+/**
  * "Take photo" and "Record video" in a browser: a phone's browser opens its
  * camera straight away (the file box's capture setting), for a photo or a
  * video; a computer's has no such thing and shows the file dialog instead.
@@ -196,6 +210,68 @@ export function pickFromDevice(selection: 'video' | 'photo' | 'all', _options?: 
  */
 export function captureFromCamera(kind: 'photo' | 'video'): Promise<PickedMedia | null | 'denied'> {
   return chooseFile(kind === 'video' ? 'video/*' : 'image/*', true);
+}
+
+/** The file box with several allowed: one file is read as chooseFile reads it; several, as photos. */
+function chooseFiles(accept: string, most: number): Promise<PickedMedia[] | null> {
+  if (most <= 1) return chooseFile(accept, false).then((one) => (one ? [one] : null));
+  return new Promise((resolve) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = accept;
+    input.multiple = true;
+    input.style.display = 'none';
+    let settled = false;
+    const finish = (value: PickedMedia[] | null) => { if (!settled) { settled = true; resolve(value); input.remove(); } };
+    input.onchange = async () => {
+      const files = Array.from(input.files ?? []).filter((f) => f.type.startsWith('image/') || f.type.startsWith('video/')).slice(0, most);
+      if (!files.length) return finish(null);
+      // Just one: the very same reading as a single pick, a video's frames and all.
+      if (files.length === 1) return finish([await readFile(files[0])]);
+      const opened = await Promise.all(files.map((file) => new Promise<PickedMedia | null>((done) => {
+        const uri = URL.createObjectURL(file);
+        const label = file.name.replace(/\.[^.]+$/, '');
+        // A video among several is never read (no frames cut): the composer leaves it out.
+        if (file.type.startsWith('video/')) { done({ uri, label, kind: 'video' }); return; }
+        const img = new Image();
+        img.onload = () => done(img.naturalWidth && img.naturalHeight
+          ? { uri, label, kind: 'photo', thumbnailUrl: uri, orientation: img.naturalWidth > img.naturalHeight ? 'landscape' : 'portrait' }
+          : null);
+        img.onerror = () => { URL.revokeObjectURL(uri); done(null); };
+        img.src = uri;
+      })));
+      const picked = opened.filter((p): p is PickedMedia => !!p);
+      const skipped = opened.length - picked.length;
+      if (skipped) showToast({ title: skipped === 1 ? 'One photo couldn’t be opened' : `${skipped} photos couldn’t be opened`, body: 'This browser can’t read that kind of photo. Try a JPEG or PNG.', icon: 'image-outline' });
+      finish(picked.length ? picked : null);
+    };
+    // Cancelling the dialog fires no change event; a focus return is the cue.
+    window.addEventListener('focus', () => setTimeout(() => { if (!input.files?.length) finish(null); }, 800), { once: true });
+    document.body.appendChild(input);
+    input.click();
+  });
+}
+
+/** One chosen file, read into a playable PickedMedia: a video's length, shape and first frame; a photo's shape. */
+async function readFile(file: File): Promise<PickedMedia> {
+  const url = URL.createObjectURL(file);
+  const isVideo = file.type.startsWith('video');
+  let label = file.name.replace(/\.[^.]+$/, '');
+  let cover: string | undefined;
+  let shape: 'portrait' | 'landscape' = 'portrait';
+  if (isVideo) {
+    lastProbedShape = null;
+    const seconds = await probeDuration(url);
+    if (seconds) label = `${label} · ${clock(seconds)}`;
+    const shots = await grabFrames(url);
+    cover = shots[0]?.dataUrl;
+    // The file's own shape, read as its details loaded; the frame grab is a second opinion.
+    shape = lastProbedShape ?? (shots.length ? lastShape : 'portrait');
+  } else {
+    cover = url;
+    shape = await new Promise((r) => { const img = new Image(); img.onload = () => r(img.naturalWidth > img.naturalHeight ? 'landscape' : 'portrait'); img.onerror = () => r('portrait'); img.src = url; });
+  }
+  return { uri: url, label, kind: isVideo ? 'video' : 'photo', thumbnailUrl: cover, orientation: shape };
 }
 
 /** The one file box behind both: reads the chosen file into a playable PickedMedia, or null if closed. */
@@ -212,24 +288,7 @@ function chooseFile(accept: string, capture: boolean): Promise<PickedMedia | nul
     input.onchange = async () => {
       const file = input.files?.[0];
       if (!file) return finish(null);
-      const url = URL.createObjectURL(file);
-      const isVideo = file.type.startsWith('video');
-      let label = file.name.replace(/\.[^.]+$/, '');
-      let cover: string | undefined;
-      let shape: 'portrait' | 'landscape' = 'portrait';
-      if (isVideo) {
-        lastProbedShape = null;
-        const seconds = await probeDuration(url);
-        if (seconds) label = `${label} · ${clock(seconds)}`;
-        const shots = await grabFrames(url);
-        cover = shots[0]?.dataUrl;
-        // The file's own shape, read as its details loaded; the frame grab is a second opinion.
-        shape = lastProbedShape ?? (shots.length ? lastShape : 'portrait');
-      } else {
-        cover = url;
-        shape = await new Promise((r) => { const img = new Image(); img.onload = () => r(img.naturalWidth > img.naturalHeight ? 'landscape' : 'portrait'); img.onerror = () => r('portrait'); img.src = url; });
-      }
-      finish({ uri: url, label, kind: isVideo ? 'video' : 'photo', thumbnailUrl: cover, orientation: shape });
+      finish(await readFile(file));
     };
     // Cancelling the dialog fires no change event; a focus return is the cue.
     window.addEventListener('focus', () => setTimeout(() => { if (!input.files?.length) finish(null); }, 800), { once: true });

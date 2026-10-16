@@ -9,6 +9,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { MediaPlaceholder } from '@/components/MediaPlaceholder';
 import { SectionPager } from '@/components/SectionPager';
 import { TileCover } from '@/components/TileCover';
+import { CarouselMark } from '@/components/CarouselMark';
 import { EmptyState, Screen } from '@/components/ui';
 import { barCompact } from '@/features/navigation/barShrink';
 import { useBarInset } from '@/features/navigation/barInset';
@@ -126,6 +127,8 @@ export default function Archive() {
                   ) : (
                     <Ionicons name={post.kind === 'clip' ? 'play' : 'document-text-outline'} size={18} color={colors.textMuted} />
                   )}
+                  {/* Several photos: the stacked mark, small, as on the grids. */}
+                  {post.thumbnailUrl || post.imageUrl ? <CarouselMark post={post} size={11} inset={4} /> : null}
                 </View>
                 <View style={{ flex: 1, gap: 3 }}>
                   <Text style={styles.postKind}>{KIND[post.kind] ?? 'Post'} · {day(post.createdAt)}</Text>

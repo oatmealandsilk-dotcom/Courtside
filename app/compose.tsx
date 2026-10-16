@@ -9,8 +9,10 @@ import { whenLanded } from '@/lib/uploads';
 import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import Reanimated, { Easing, FadeInDown, FadeOut, LinearTransition, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 
-import { MediaPicker, type PickedMedia } from '@/components/MediaPicker';
-import { askMediaSource, fromSource, type MediaSource } from '@/features/compose/mediaSource';
+import { MediaPicker, pickPostMedia, type PickedMedia } from '@/components/MediaPicker';
+import { askMediaSource, fromSource, fromSourceMany, type MediaSource } from '@/features/compose/mediaSource';
+import { CAROUSEL_MAX } from '@/features/compose/carousel';
+import { CarouselStrip } from '@/components/CarouselStrip';
 import { MediaEditor, type EditedMedia } from '@/components/MediaEditor';
 import { takePendingShot } from '@/features/compose/pendingShot';
 import { registerCreateClose } from '@/features/compose/createMenu';
@@ -372,6 +374,12 @@ function Compose() {
   // The pick as it came off the device. The editor always opens on this, so
   // a cut photo is never cut twice and a clip's edits can be revisited.
   const [picked, setPicked] = useState<PickedMedia | null>(null);
+  // A carousel (Oct 15, owner: "select multiple photos, just posts though"):
+  // the photos after the cover, in order. `media` and `picked` stay the cover,
+  // so with one photo nothing here is any different from before. Only a plain
+  // "Create a post" ever fills it; never a clip, a session's post, a
+  // challenge entry, a story or an Instant.
+  const [album, setAlbum] = useState<PickedMedia[]>([]);
   const [orientation, setOrientation] = useState<'portrait' | 'landscape'>('portrait');
   // What the edit step decided: where a clip starts and stops, how fast and how loud it plays, and its crop.
   const [edit, setEdit] = useState<Pick<EditedMedia, 'trimStart' | 'trimEnd' | 'muted' | 'volume' | 'speed' | 'crop' | 'coverAt'>>({});
@@ -941,6 +949,9 @@ function Compose() {
       featureOk: stats || groupPost ? false : featureOk ? undefined : false,
       groupId: shareTo ?? undefined,
       imageUrl: media?.kind === 'photo' ? media.uri : undefined,
+      // A carousel's photos in order, the cover first; the cover is still imageUrl and the thumbnail.
+      imageUrls: mode === 'post' && media?.kind === 'photo' && media.uri && album.length
+        ? [media.uri, ...album.map((a) => a.uri).filter((u): u is string => !!u)] : undefined,
       videoUrl: media?.kind === 'video' ? media.uri : undefined,
       mediaLabel: media?.label,
       thumbnailUrl: media?.thumbnailUrl ?? (media?.kind === 'photo' ? media.uri : undefined),
@@ -1049,12 +1060,15 @@ function Compose() {
     whenLanded(postId, () => next.flyby(600 + (firstPost ? 4800 : record ? 5500 : 3000)));
   };
 
-  const pick = (next: PickedMedia | null) => {
+  const pick = (next: PickedMedia | null, rest: PickedMedia[] = []) => {
     if (!next) return;
     // A challenge entry is a clip. The phone's library shows only videos for
     // it; a browser's file box can still offer a photo, which is turned away.
     if (entering && next.kind !== 'video') { setPickError(`The ${challenge.title.toLowerCase()} challenge takes a clip. Pick a video.`); return; }
     addToBank(next);
+    rest.forEach(addToBank);
+    // A fresh pick starts a fresh carousel (or none: a single pick clears it).
+    setAlbum(rest);
     setPicked(next);
     setMedia(next);
     setOrientation(next.orientation ?? 'portrait');
@@ -1074,9 +1088,52 @@ function Compose() {
   // One library at a time: a tap on the clip button in the moment before the
   // challenge opens the library by itself would otherwise ask for a second.
   const picking = useRef(false);
+  /**
+   * Several picked at once for a plain post: one is today's post, photo or
+   * video. Several are a carousel of their photos, the first the cover; a
+   * video among them is left out and said so (a video stays a post of its
+   * own, as on Instagram).
+   */
+  const pickMany = (list: PickedMedia[]) => {
+    if (list.length === 1) { pick(list[0]); return; }
+    const photos = list.filter((m) => m.kind === 'photo' && !!m.uri);
+    if (!photos.length) { setPickError('A post with several things in it is photos only. Pick one video on its own, or several photos.'); return; }
+    if (photos.length < list.length) showToast({ title: 'Videos left out', body: 'A carousel is photos only, so just the photos were kept. Post a video on its own.', icon: 'images-outline' });
+    pick(photos[0], photos.slice(1, CAROUSEL_MAX));
+  };
+  // The carousel's own ✕: the cover out makes the next photo the cover, uncut, as it was picked.
+  const removePhoto = (index: number) => {
+    if (index === 0) {
+      const [next, ...rest] = album;
+      if (!next) return;
+      setMedia(next);
+      setPicked(next);
+      setOrientation(next.orientation ?? 'portrait');
+      setEdit({});
+      setAlbum(rest);
+      return;
+    }
+    setAlbum((was) => was.filter((_, k) => k !== index - 1));
+  };
+  // Its +: straight to your photos (photos only) for as many as are left of the ten.
+  const addPhotos = () => {
+    const room = CAROUSEL_MAX - 1 - album.length;
+    if (room <= 0) return;
+    pickPostMedia(room, { photosOnly: true })
+      .then((list) => {
+        const photos = (list ?? []).filter((m) => m.kind === 'photo' && !!m.uri);
+        if (!photos.length) return;
+        photos.forEach(addToBank);
+        setAlbum((was) => [...was, ...photos].slice(0, CAROUSEL_MAX - 1));
+      })
+      .catch((err) => showToast({ title: 'Couldn’t add photos', body: err instanceof Error ? err.message : String(err), icon: 'alert' }));
+  };
   // Where from first: "Take photo", "Record video" or "Choose from library" (see askMediaSource).
-  const openDevice = (selection: 'video' | 'photo' | 'all') => askMediaSource(selection, (source) => { void fetchMedia(selection, source); });
-  const fetchMedia = async (selection: 'video' | 'photo' | 'all', source: MediaSource = 'library') => {
+  // `many` is only ever set by "Create a post" (and its own way back to the
+  // library), never read from `mode`, which is set in the same tap and so
+  // not yet changed when this runs.
+  const openDevice = (selection: 'video' | 'photo' | 'all', many = false) => askMediaSource(selection, (source) => { void fetchMedia(selection, source, many); });
+  const fetchMedia = async (selection: 'video' | 'photo' | 'all', source: MediaSource = 'library', many = false) => {
     if (picking.current) return;
     picking.current = true;
     setPickError('');
@@ -1087,8 +1144,14 @@ function Compose() {
     let chosen: PickedMedia | null = null;
     let failed = false;
     try {
-      chosen = await fromSource(source, selection);
-      if (chosen) pick(chosen);
+      if (many && source !== 'trim' && selection !== 'video') {
+        const list = await fromSourceMany(source, selection, CAROUSEL_MAX);
+        chosen = list?.[0] ?? null;
+        if (list?.length) pickMany(list);
+      } else {
+        chosen = await fromSource(source, selection);
+        if (chosen) pick(chosen);
+      }
     } catch (err) {
       failed = true;
       setPickError(err instanceof Error ? err.message : String(err));
@@ -1182,7 +1245,7 @@ function Compose() {
         {preparing === 'video' ? <PreparingRing size={choiceIcon} done={prepDone} /> : <Ionicons name={entering ? 'trophy-outline' : 'videocam-outline'} size={choiceIcon} color={entering ? colors.brand : colors.textMuted}/>}<Text style={styles.choiceLabel}>{entering ? 'Choose your clip' : 'Clip'}</Text><Text style={styles.note}>{preparing === 'video' ? 'Getting your video ready — shrinking it so it posts fast.' : entering ? `A video from your phone. #${challenge.tag} is already in the caption.` : 'Share a video from your device.'}</Text>
       </Pressable></Reanimated.View>
       {/* Entering the challenge: the clip is the only way in, so nothing else is offered. */}
-      {entering ? null : <Reanimated.View entering={arrive(2)}><Pressable accessibilityRole="button" accessibilityLabel="Create a post" onPress={() => { setMode('post'); void openDevice('all'); }} style={[styles.choiceOption, tight && styles.choiceOptionTight, tighter && styles.choiceOptionTighter]}>
+      {entering ? null : <Reanimated.View entering={arrive(2)}><Pressable accessibilityRole="button" accessibilityLabel="Create a post" onPress={() => { setMode('post'); void openDevice('all', true); }} style={[styles.choiceOption, tight && styles.choiceOptionTight, tighter && styles.choiceOptionTighter]}>
         {preparing === 'all' ? <PreparingRing size={choiceIcon} done={prepDone} /> : <Ionicons name="images-outline" size={choiceIcon} color={colors.textMuted}/>}<Text style={styles.choiceLabel}>Post</Text><Text style={styles.note}>{preparing === 'all' ? 'Getting it ready…' : 'Choose from your photos and videos.'}</Text>
       </Pressable></Reanimated.View>}
       {pickError ? <Text style={styles.pickError}>{pickError}</Text> : null}
@@ -1224,7 +1287,9 @@ function Compose() {
       if (opened || liveOnly) { if (!returning) { setMedia(null); setPicked(null); } setStage('form'); return; }
       if (params.mode === 'story') { setStage('library'); return; }
       setStage('choose');
-      void openDevice(mode === 'clip' ? 'video' : 'all');
+      // Picking again starts the carousel again too.
+      setAlbum([]);
+      void openDevice(mode === 'clip' ? 'video' : 'all', mode === 'post');
     };
     stageBack.current = () => { editBack(); return true; };
     return (
@@ -1554,12 +1619,18 @@ function Compose() {
                     picture sits small at its left, the words beside it, the way Instagram's share screen has them.
                     Tapping the picture opens the larger preview, and Edit cover the Cover page, as before. */}
                 {withThumb ? (
+                  <>
                   <View style={styles.captionRow}>
                     <MediaPicker bare thumb={thumb} orientation={orientation} portraitRatio={portraitRatio} selection={mode === 'clip' ? 'video' : 'all'} value={media} onChange={setMedia} trim={edit} onCoverAt={(at) => setEdit((was) => ({ ...was, coverAt: at }))} />
                     <View style={styles.flex}>
                       <Field bare accessibilityLabel="Caption" value={body} onChangeText={setBody} placeholder={opened && !openedPosted ? `${pickCaption(opened)} — how did it go?` : 'Write a caption…'} multiline minHeight={Math.max(64, thumb.height)} mentions maxLength={POST_MAX} />
                     </View>
                   </View>
+                  {/* A carousel's photos in order, under the caption: ✕ to take one out, + for more. */}
+                  {mode === 'post' && !opened && media?.kind === 'photo' && album.length ? (
+                    <CarouselStrip photos={[media, ...album]} max={CAROUSEL_MAX} onRemove={removePhoto} onAdd={addPhotos} />
+                  ) : null}
+                  </>
                 ) : (
                   <View style={styles.caption}>
                     <Field accessibilityLabel="Caption" value={body} onChangeText={setBody} placeholder={opened && !openedPosted ? `${pickCaption(opened)} — how did it go?` : 'Write a caption…'} multiline minHeight={88} mentions maxLength={POST_MAX} />

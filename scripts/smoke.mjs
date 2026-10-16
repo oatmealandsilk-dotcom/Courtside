@@ -759,6 +759,24 @@ const STEPS = [
     expect: [{ text: 'Edit Profile' }, { text: '@you' }],
   },
   {
+    // Carousel posts (Oct 15): the demo's three-photo post, opened from your grid, moves to its second photo.
+    // The dots are tapped rather than the photos swiped: a tap lands the same way every run.
+    name: 'carousel',
+    title: 'A carousel post: on to photo 2',
+    async run(page) {
+      await page.reveal({ label: /^Open note: Saturday at the park/ });
+      await page.tap({ label: /^Open note: Saturday at the park/ });
+      // The "1/3" counter lets touches through to the photo, so it is looked for whether or not it is on top.
+      await page.waitFor({ label: 'Photos, 1 of 3' });
+      await page.waitFor({ text: '1/3', any: true });
+      await page.tap({ label: 'Show photo 2 of 3' });
+    },
+    expect: [{ label: 'Photos, 2 of 3' }, { text: '2/3', any: true }],
+    // Back on Profile, still scrolled down to the grid: up again to Edit Profile (brought to the middle of
+    // the screen, clear of a note such as "How was the hit at …?" along the top), as the next step expects.
+    after: async (page) => { await page.tap({ label: 'Go back' }); await page.reveal({ text: 'Edit Profile' }); await page.waitFor({ text: 'Edit Profile' }); },
+  },
+  {
     name: 'settings',
     title: 'Settings',
     async run(page) {

@@ -89,8 +89,8 @@ import { useAndroidBack } from '@/lib/androidBack';
  * Something that can be tapped away: it shrinks and fades in one short move,
  * then tells its page it is gone. The page decides how long to remember that.
  */
-/** Media the internet can reach: a file:// link only ever worked on the phone that made it. */
-const reachable = (p: { imageUrl?: string; videoUrl?: string }) => [p.imageUrl, p.videoUrl].every((u) => !u || /^(https?:|data:|blob:)/.test(u));
+/** Media the internet can reach: a file:// link only ever worked on the phone that made it. Every photo of a carousel too. */
+const reachable = (p: { imageUrl?: string; videoUrl?: string; imageUrls?: string[] }) => [p.imageUrl, p.videoUrl, ...(p.imageUrls ?? [])].every((u) => !u || /^(https?:|data:|blob:)/.test(u));
 /**
  * One for Activities: a session with its numbers, yours or by someone you follow, out on the feed (not archived, taken down or group-only).
  * For a new player (following fewer than five), also one by a player near them (`near`, features/activity/nearYou), marked "Near you".
@@ -220,7 +220,7 @@ export interface FeedChrome { picture: boolean; hidden: boolean }
  * 108) is in no feed: its author and admins see it only on its author's
  * own pages, marked.
  */
-const forYou = (p: { imageUrl?: string; videoUrl?: string; groupId?: string; removed?: unknown; session?: unknown; kind?: string; mediaLabel?: string }) => reachable(p) && !p.groupId && !p.removed && !sessionOnly(p);
+const forYou = (p: { imageUrl?: string; videoUrl?: string; imageUrls?: string[]; groupId?: string; removed?: unknown; session?: unknown; kind?: string; mediaLabel?: string }) => reachable(p) && !p.groupId && !p.removed && !sessionOnly(p);
 /**
  * A session posted with no photo or clip (its numbers only) is dealt into
  * Activities, never For you (Oct 12, owner: "since people are auto loggin
@@ -1553,6 +1553,9 @@ function Home({ scope, topRow, paused, onChrome }: {
       if (item.type === 'post' && !item.post.videoUrl) {
         const uri = item.post.imageUrl ?? item.post.thumbnailUrl;
         if (uri) Image.prefetch(uri).then(() => markReady(item.post.id, true)).catch(() => markReady(item.post.id, true));
+        // A carousel's second photo too, so the first swipe lands on a picture; the page never waits for it.
+        const second = item.post.imageUrls?.[1];
+        if (second) Image.prefetch(second).catch(() => undefined);
       }
       if (item.type === 'hit' && !item.story.videoUrl && item.story.imageUrl) {
         Image.prefetch(item.story.imageUrl).then(() => markReady(item.story.id, true)).catch(() => markReady(item.story.id, true));
