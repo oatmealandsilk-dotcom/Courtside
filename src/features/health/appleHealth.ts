@@ -2,6 +2,7 @@ import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { NativeModules, Platform, TurboModuleRegistry } from 'react-native';
 
 import type { DailyHealth } from '@/data/types';
+import { appleZones, estimatedMaxHr } from '@/features/activity/appleZones';
 import { slugOfAppleWorkout } from '@/features/activity/workouts';
 
 /** A day of body numbers from the Health app. */
@@ -95,8 +96,13 @@ export async function connectAppleHealth(opts: { workouts?: boolean } = {}): Pro
 /** The library writes '+0100' with no colon, which not every date parser takes. */
 const isoOf = (s: string) => new Date(s.replace(/([+-][0-9]{2})([0-9]{2})$/, '$1:$2')).toISOString();
 
-/** A tennis workout from Health, with its heart rate read over the same minutes. */
-export type TennisWorkout = { id: string; startedAt: string; endedAt: string; minutes: number; kcal?: number; avgHr?: number; maxHr?: number; device?: string; tzOffsetMin: number };
+/**
+ * A tennis workout from Health, with its heart rate read over the same
+ * minutes, and the minutes in each heart-rate zone worked out from those
+ * same readings (features/activity/appleZones.ts; Health has no zone times
+ * of its own), easiest first.
+ */
+export type TennisWorkout = { id: string; startedAt: string; endedAt: string; minutes: number; kcal?: number; avgHr?: number; maxHr?: number; zones?: number[]; device?: string; tzOffsetMin: number };
 
 /**
  * Any workout from Health (owner, Oct 5): what it was as a short name
@@ -118,9 +124,10 @@ const metresOf = (miles: number | undefined) => (typeof miles === 'number' && Nu
  * false` skips the heart-rate read (one ask of Health per workout, the slow
  * part), for a plain list. `skip` leaves out workouts by Health's id (ones
  * already handed to the server), before their heart rate is read and before
- * `limit` counts them. Never throws.
+ * `limit` counts them. `zoneMaxHr`: the maximum heart rate the zones are
+ * shares of (from the player's age; a 30-year-old's when not given). Never throws.
  */
-export async function readWorkouts(sinceIso: string, opts: { sports?: ('tennis' | 'other')[]; skipWhoopTennis?: boolean; skipWhoopOther?: boolean; limit?: number; heartRate?: boolean; untilIso?: string; skip?: (id: string) => boolean } = {}): Promise<HealthWorkout[]> {
+export async function readWorkouts(sinceIso: string, opts: { sports?: ('tennis' | 'other')[]; skipWhoopTennis?: boolean; skipWhoopOther?: boolean; limit?: number; heartRate?: boolean; untilIso?: string; skip?: (id: string) => boolean; zoneMaxHr?: number } = {}): Promise<HealthWorkout[]> {
   const h = load();
   if (!h) return [];
   const settle = async <T,>(p: Promise<T>) => { try { return await p; } catch { return null; } };
@@ -142,13 +149,22 @@ export async function readWorkouts(sinceIso: string, opts: { sports?: ('tennis' 
       try { startedAt = isoOf(w.start); endedAt = isoOf(w.end); } catch { continue; }
       let maxHr: number | undefined;
       let avgHr: number | undefined;
+      let zones: number[] | null = null;
       if (opts.heartRate !== false) {
         const hr = await settle(call<HrSample[]>((cb) => h.getHeartRateSamples({ startDate: w.start, endDate: w.end, ascending: true }, cb)));
         // The workout's own watch first; any other source's beats only when it saved none.
         const own = (hr ?? []).filter((s) => s.sourceId === w.sourceId);
-        const vals = (own.length ? own : hr ?? []).map((s) => s.value).filter((v) => v >= 30 && v <= 250);
+        const picked = own.length ? own : hr ?? [];
+        const vals = picked.map((s) => s.value).filter((v) => v >= 30 && v <= 250);
         maxHr = vals.length ? Math.round(Math.max(...vals)) : undefined;
         avgHr = vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) : undefined;
+        // The minutes in each zone, from the same readings (appleZones.ts). A reading with an unreadable time is left out.
+        try {
+          const beats = picked.map((s) => { let at = NaN; try { at = Date.parse(isoOf(s.startDate)); } catch { /* left out */ } return { at, bpm: s.value }; });
+          zones = vals.length ? appleZones(beats, Date.parse(startedAt), Date.parse(endedAt), opts.zoneMaxHr ?? estimatedMaxHr()) : null;
+        } catch {
+          zones = null;
+        }
       }
       out.push({
         id: w.id,
@@ -161,6 +177,7 @@ export async function readWorkouts(sinceIso: string, opts: { sports?: ('tennis' 
         distanceM: sport === 'tennis' ? undefined : metresOf(w.distance),
         maxHr,
         avgHr,
+        ...(zones ? { zones } : {}),
         device: w.device || w.sourceName || undefined,
         tzOffsetMin: -new Date(startedAt).getTimezoneOffset(),
       });

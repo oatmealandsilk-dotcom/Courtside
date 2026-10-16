@@ -339,8 +339,10 @@ export interface DetectedActivity {
   device?: string;
   /**
    * Minutes in each heart-rate zone, easiest first: [zone 1 Easy, 2 Light,
-   * 3 Moderate, 4 Hard, 5 Peak]. WHOOP only (migration 65), and only when the
-   * strap was on for at least half the session. Private, like the rest.
+   * 3 Moderate, 4 Hard, 5 Peak]. WHOOP's (migration 65) and Fitbit's own, and
+   * since Oct 15 Apple Health's, worked out on the phone from the workout's
+   * heart-rate readings (migration 160, features/activity/appleZones.ts). Only
+   * when the heart was heard for at least half the session. Private, like the rest.
    */
   zones?: number[];
   status: 'new' | 'logged' | 'dismissed' | 'duplicate' | 'withdrawn';

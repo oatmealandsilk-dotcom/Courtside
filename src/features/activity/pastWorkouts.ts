@@ -98,11 +98,11 @@ export function readPastHealth(flags: TennisFlags, whoopTennis: boolean, whoopAl
   return readWorkouts(since, { sports, skipWhoopTennis: whoopTennis, skipWhoopOther: whoopAll, limit: 200, heartRate: false });
 }
 
-/** One Health workout read again, with its heart rate this time, to hand to the server. Null when Health no longer has it. */
-export async function readOneWithHeartRate(w: HealthWorkout): Promise<HealthWorkout | null> {
+/** One Health workout read again, with its heart rate (and zones, against `zoneMaxHr`) this time, to hand to the server. Null when Health no longer has it. */
+export async function readOneWithHeartRate(w: HealthWorkout, zoneMaxHr?: number): Promise<HealthWorkout | null> {
   const from = new Date(Date.parse(w.startedAt) - 60_000).toISOString();
   const to = new Date(Date.parse(w.endedAt) + 60_000).toISOString();
-  const found = await readWorkouts(from, { untilIso: to, limit: 20 });
+  const found = await readWorkouts(from, { untilIso: to, limit: 20, zoneMaxHr });
   return found.find((x) => x.id === w.id) ?? null;
 }
 

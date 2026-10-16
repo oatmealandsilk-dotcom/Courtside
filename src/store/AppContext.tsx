@@ -34,13 +34,14 @@ import { readReceiptPreference, saveReceiptPreference } from '@/features/messagi
 import { connectProvider, disconnectProvider, withCatalog } from '@/lib/integrations';
 import { appleHealthAvailable, connectAppleHealth, readAppleHealth, readAppleNutrition } from '@/features/health/appleHealth';
 import { isTracker, tennisFlags, TRACKERS } from '@/features/activity/flags';
-import { checkForTennis, reportFromAlert } from '@/features/activity/check';
+import { estimatedMaxHr } from '@/features/activity/appleZones';
+import { checkForTennis, fillAppleZones, reportFromAlert, reportOf } from '@/features/activity/check';
 import { pickSource } from '@/features/activity/recent';
 import { isTennisActivity, workoutLine, workoutName } from '@/features/activity/workouts';
 import { detectedNote } from '@/features/activity/format';
 import { FOLD_OVER, allTennis as allTennisFound, foundBursts, foundHref, foundLine, foundTitle } from '@/features/activity/found';
 import { mergePast, readOneWithHeartRate, readPastHealth, type PastWorkout } from '@/features/activity/pastWorkouts';
-import { loggedNumbers, postShare, reshare, sameShare } from '@/features/activity/healthShare';
+import { loadHealthChoice, loggedNumbers, postShare, reshare, sameShare, shareWithZones } from '@/features/activity/healthShare';
 import { keptAvgHr, keptKcal } from '@/features/activity/manualStats';
 import { OPPONENT_MAX, REFUSALS, maxTagsFor, canTagKind, firstName, isActive, localRefusal, mirrorCopy, nameFor, patchWith, reconcileWith, refusalWords, roleOn, tagsOnSession, withEntry, withOnNewPost } from '@/features/activity/sessionTags';
 import { duration } from '@/lib/format';
@@ -2587,6 +2588,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // would wipe the account's blocks, mutes and saved threads on the server.
   const settingsRead = useRef<ID | null>(null);
   /**
+   * Your own age in years, from your birthday as your settings row last
+   * came down (remote UserState.ageYears): kept here only, never in what the
+   * screens hold or the saved copy, for the heart-rate zones of your Apple
+   * Health workouts (appleZones.ts).
+   */
+  const zoneAge = useRef<{ who: ID; years?: number } | null>(null);
+  /**
    * Your settings row as just read (`got`; null: there is none), taken as
    * what the server has, with any change made here meanwhile kept on top
    * (and then sent up by the effect below).
@@ -2594,6 +2602,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const takeServerSettings = useCallback((me: ID, got: UserState | null) => {
     const s = stateRef.current;
     if (s.currentUserId !== me) return;
+    if (got) zoneAge.current = { who: me, years: got.ageYears };
     const base = settingsSeen.current?.who === me && settingsSeen.current.json ? settingsSeen.current.json : settingsJson(s);
     const changedHere = settingsJson(s) !== base;
     const merged = withServerSettings(s, base, got);
@@ -2733,6 +2742,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       heardNotes(me, data.notifications);
       // One deleted for yourself a moment ago, before the server had it, stays gone too.
       const shown = { ...data, messages: unhidden(me, data.messages) };
+      if (data.userState) zoneAge.current = { who: me, years: data.userState.ageYears };
       setState((prev) => mergeRemote(prev, shown, me, email, snap, false));
       // Your settings row came down (or there is none): what is on screen may be saved from now on.
       if (!data.userStateFailed) settingsRead.current = me;
@@ -8424,6 +8434,41 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return done?.fresh ?? [];
   }, []);
 
+  /** The maximum heart rate your Apple Health zones are shares of: from your age, else an adult's (or a teen's) estimate (appleZones.ts). */
+  const zoneMaxHr = useCallback((me: ID | null | undefined) => {
+    const known = me && zoneAge.current?.who === me ? zoneAge.current.years : undefined;
+    return estimatedMaxHr(known, stateRef.current.users.find((u) => u.id === me)?.ageGroup === 'teen');
+  }, []);
+
+  /**
+   * Your posts of the Apple Health sessions just given zones (fillAppleZones,
+   * Oct 15). Each was made when its session had none, so its list could not
+   * name zones and its Share → "Heart rate" had no bars. Zones go on the ones
+   * that share heart rate, unless your "Share health data" choice keeps zones
+   * off (shareWithZones), as a new post would; the server then writes them
+   * from the session (migration 72's posts trigger). Never marked "Edited".
+   * Quiet: one that does not save stays as it was.
+   */
+  const addZonesToPosts = useCallback(async (me: ID, ids: ID[]) => {
+    if (!ids.length || !live(me)) return;
+    const [choice, got] = await Promise.all([loadHealthChoice(me).catch(() => null), remote.fetchMySessionPosts(me).catch(() => null)]);
+    if (stateRef.current.currentUserId !== me) return;
+    // The server's copy of each (it may hold posts this phone does not), else the one held here.
+    const fetched = got?.posts ?? [];
+    const candidates = [...fetched, ...stateRef.current.posts.filter((p) => !fetched.some((f) => f.id === p.id))];
+    for (const post of candidates) {
+      const was = post.session;
+      if (post.authorId !== me || !was?.activityId || !ids.includes(was.activityId) || !live(me, post.id)) continue;
+      const share = shareWithZones(was, choice);
+      if (!share) continue;
+      const tracker = stateRef.current.detectedActivities.find((a) => a.id === was.activityId && a.userId === me);
+      const saved = await remote.setPostHealthShare(post.id, reshare(was, share, tracker)).catch(() => null);
+      if (!saved || stateRef.current.currentUserId !== me) continue;
+      // Not over a list changed here meanwhile (Edit post): that one counts.
+      setState((prev) => ({ ...prev, posts: prev.posts.map((p) => (p.id === post.id && sameShare(postShare(p.session), postShare(was)) ? { ...p, session: saved } : p)) }));
+    }
+  }, []);
+
   /**
    * Looks for new tennis sessions and (Oct 5) other workouts, and says so
    * when one turns up. `rows` are the sources as just fetched, for a step
@@ -8454,9 +8499,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // The one-time look back over the past week (tennis too) only once 'flag:workouts-apple' is on for this
       // person: that switch exists only once migration 107 keeps a week-old session as news, and it is tried
       // on the owner's iPhone before everyone has it.
-      weekBack: flags.workoutsApple };
+      weekBack: flags.workoutsApple,
+      zoneMaxHr: zoneMaxHr(me) };
     if (!src.apple && !src.appleWorkouts && !src.whoop && !src.whoopWorkouts && !src.trackers.length) return;
     const looked = await checkForTennis(me!, src, force);
+    // Once: zones for the Apple Health workouts handed over before the server kept any (fillAppleZones),
+    // after this look and without holding it up. Your sessions are read again only when any were filled in,
+    // and then your posts of those sessions that share heart rate get the zones too (addZonesToPosts).
+    if (src.apple || src.appleWorkouts) {
+      void fillAppleZones(me!, () => remote.fetchActivitiesSince(me!, 31).catch(() => null), src.zoneMaxHr)
+        .then(async (filled) => {
+          if (!filled.length || stateRef.current.currentUserId !== me) return;
+          await refreshActivities();
+          await addZonesToPosts(me!, filled);
+        })
+        .catch(() => undefined);
+    }
     const filed = [...new Set([...already, ...looked.filed])];
     const { news } = looked;
     if (stateRef.current.currentUserId !== me) return;
@@ -8546,12 +8604,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (w.row) return w.row.id;
     if (!live(me) || !w.health) throw new Error('That workout can’t be logged from here.');
     // Handed to the server as the check would have, its heart rate read now.
-    const full = (await readOneWithHeartRate(w.health).catch(() => null)) ?? w.health;
-    const r = await remote.reportActivity(full.id, {
-      sport: full.sport, started_at: full.startedAt, ended_at: full.endedAt, tz_offset_min: full.tzOffsetMin,
-      avg_hr: full.avgHr ?? null, max_hr: full.maxHr ?? null, kcal: full.kcal ?? null, device: full.device ?? null,
-      ...(full.distanceM ? { distance_m: full.distanceM } : {}),
-    });
+    const full = (await readOneWithHeartRate(w.health, zoneMaxHr(me)).catch(() => null)) ?? w.health;
+    // Its heart-rate zones too (reportOf), worked out from the same readings.
+    const r = await remote.reportActivity(full.id, reportOf(full));
     if (r === 'error') throw new Error('That didn’t go through. Try again.');
     if (!r) throw new Error('That workout can’t be logged. It may be too old, or too short.');
     void refreshActivities();
@@ -8561,7 +8616,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const reportWorkoutFromAlert = useCallback(async (w: { id: string; startedAt: string; endedAt: string }): Promise<ID | null> => {
     const me = stateRef.current.currentUserId;
     if (!live(me) || !appleHealthAvailable()) return null;
-    const r = await reportFromAlert(me!, w);
+    const r = await reportFromAlert(me!, w, zoneMaxHr(me));
     if (r === 'error' || stateRef.current.currentUserId !== me) return null;
     // The workout among your sessions, and its "Workout detected" row in Notifications, as after a check.
     const [list, notes] = await Promise.all([remote.fetchActivities(me!).catch(() => null), remote.fetchActivityNotes(me!).catch(() => [])]);

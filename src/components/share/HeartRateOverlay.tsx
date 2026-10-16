@@ -31,8 +31,13 @@ import { colors, font } from '@/theme';
  * touch below the middle of what Instagram leaves clear (its bars cover
  * about the top 13% and the foot 17%), all of it inside.
  *
- * Only drawn for a post that shares both its zones and its heart rate
- * (heartRateOf): the post carries only the numbers its author chose under
+ * Only drawn for a post that shares its heart rate (heartRateOf), with the
+ * zone rows only when it shares its zones too. A post that shares its heart
+ * rate but has no zones (an Apple Watch session from before Oct 15, when the
+ * server kept no zone times from a phone; owner, Oct 15: "Let's make sure
+ * this never happens") still gets the design: the time, the calories and the
+ * heart-rate line, with no bars at all rather than made-up ones. The post
+ * carries only the numbers its author chose under
  * "Share health data", off by default for anyone not known to be an adult
  * (healthShare.ts, migration 72), so nothing here can show more than the
  * post does. Calories only when the post shares them too.
@@ -45,10 +50,10 @@ import { colors, font } from '@/theme';
  * Sizes are in units of a 360-wide story (`u`), as SessionStoryArt draws.
  */
 
-/** What the design draws: the post's own numbers, only when it shares both its zones and its heart rate. */
+/** What the design draws: the post's own numbers, only when it shares its heart rate (and its zones, for the bars). */
 export interface HeartNumbers {
-  /** Minutes per zone, easiest first. */
-  zones: number[];
+  /** Minutes per zone, easiest first; null when the post has none to show (no bars are drawn). */
+  zones: number[] | null;
   avgHr?: number;
   maxHr?: number;
   minutes: number;
@@ -56,10 +61,11 @@ export interface HeartNumbers {
 }
 
 export function heartRateOf(s: SessionDetail | undefined): HeartNumbers | null {
-  const zones = postZones(s);
-  if (!s || !zones || (!s.avgHr && !s.maxHr)) return null;
+  if (!s || (!s.avgHr && !s.maxHr)) return null;
   const shared = postShare(s);
-  if (!shared.includes('zones') || !shared.includes('hr')) return null;
+  if (!shared.includes('hr')) return null;
+  // The bars only for zones the post shares; without them the design still shows the heart rate (see above).
+  const zones = shared.includes('zones') ? postZones(s) : null;
   return {
     zones,
     avgHr: s.avgHr || undefined,
@@ -153,14 +159,16 @@ export function HeartRateOverlay({ hr, width }: { hr: HeartNumbers; width: numbe
   const u = width / 360;
   const height = (width * 16) / 9;
   const fills = zoneColors('story');
-  const top = Math.max(1, ...hr.zones);
+  const zones = hr.zones;
+  const top = Math.max(1, ...(zones ?? []));
   const trackW = (ROWS.width - ROWS.name - ROWS.minutes - 2 * ROWS.gap) * u;
   const bar = ROWS.bar * u;
 
   const time = duration(hr.minutes);
   const kcal = hr.kcal ? grouped(hr.kcal) : null;
   const beat = [hr.avgHr ? `Avg ${hr.avgHr}` : null, hr.maxHr ? `Max ${hr.maxHr}` : null].filter(Boolean).join('  ·  ') + ' bpm';
-  const spoken = `${time}${kcal ? `, ${kcal} calories` : ''}. Heart rate zones: ${ZONE_NAMES.map((z) => { const m = hr.zones[z.n - 1]; return `${z.name} ${m} ${m === 1 ? 'minute' : 'minutes'}`; }).join(', ')}. ${beat.replace('bpm', 'beats a minute')}.`;
+  const zoneWords = zones ? ` Heart rate zones: ${ZONE_NAMES.map((z) => { const m = zones[z.n - 1]; return `${z.name} ${m} ${m === 1 ? 'minute' : 'minutes'}`; }).join(', ')}.` : '';
+  const spoken = `${time}${kcal ? `, ${kcal} calories` : ''}.${zoneWords} ${beat.replace('bpm', 'beats a minute')}.`;
 
   const valueStyle: TextStyle = { ...font('700'), color: '#FFFFFF', fontSize: HEAD.value * u, lineHeight: HEAD.value * 1.16 * u, letterSpacing: -0.012 * HEAD.value * u, textAlign: 'center' };
   const labelStyle: TextStyle = { ...font('600'), color: '#FFFFFF', fontSize: HEAD.label * u, lineHeight: HEAD.label * 1.3 * u, textAlign: 'center' };
@@ -184,10 +192,11 @@ export function HeartRateOverlay({ hr, width }: { hr: HeartNumbers; width: numbe
           {kcal ? stat(kcal, 'Calories') : null}
         </View>
 
-        {/* One row per zone, Peak at the top: its name, its bar on a faint track, its minutes. */}
+        {/* One row per zone, Peak at the top: its name, its bar on a faint track, its minutes. None without zones. */}
+        {zones ? (
         <View style={{ width: ROWS.width * u, marginTop: GAPS.bars * u }}>
           {ZONE_NAMES.map((z) => {
-            const m = hr.zones[z.n - 1];
+            const m = zones[z.n - 1];
             const fillW = m > 0 ? Math.max(bar, (m / top) * trackW) : 0;
             return (
               <View key={z.n} style={[styles.row, { height: ROWS.row * u, gap: ROWS.gap * u }]}>
@@ -206,9 +215,10 @@ export function HeartRateOverlay({ hr, width }: { hr: HeartNumbers; width: numbe
             );
           })}
         </View>
+        ) : null}
 
-        {/* The average and top heart rate, in the rows' size. */}
-        <View style={{ marginTop: GAPS.beat * u }}>
+        {/* The average and top heart rate, in the rows' size: under the bars, or straight under the time and calories without them. */}
+        <View style={{ marginTop: (zones ? GAPS.beat : GAPS.bars) * u }}>
           <Words style={[small, { textAlign: 'center' }]} shadow={SMALL} u={u}>{beat}</Words>
         </View>
 
