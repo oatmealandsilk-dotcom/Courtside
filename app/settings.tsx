@@ -219,6 +219,8 @@ export default function Settings() {
         { icon: 'arrow-down-circle-outline' as const, label: 'Pushed-down posts', onPress: () => router.push('/admin-pushed-down') },
         { icon: 'mail-outline' as const, label: 'Waitlist', onPress: () => router.push('/admin-waitlist') },
         { icon: 'people-outline' as const, label: 'Invites', onPress: () => router.push('/admin-invites') },
+        // What each website link brought: his Facebook links and the rest (Oct 16, migration 161).
+        { icon: 'link-outline' as const, label: 'Links', onPress: () => router.push('/admin-links') },
         { icon: 'school-outline' as const, label: 'Coaches and payments', onPress: () => router.push('/admin-coaches') },
       ],
     }] : []),

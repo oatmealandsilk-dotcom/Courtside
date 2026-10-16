@@ -1123,7 +1123,8 @@
   // never list one here. handle_status calls it taken, so it is shown to type
   // and carried to the web app's /join exactly as it came.
   const maybeHandle = source && /^[a-z0-9_]{2,24}$/.test(source) ? source : null;
-  const CAMPAIGNS = new Set(['instagram', 'ig', 'insta', 'courtsidebase', 'courtside', 'reddit', 'tiktok', 'facebook', 'fb', 'twitter', 'threads', 'youtube', 'snapchat', 'whatsapp', 'discord', 'linktree', 'linkinbio', 'bio', 'email', 'newsletter', 'qr', 'flyer', 'poster', 'google', 'share', 'web', 'app', 'testflight', 'beta', 'robertzchen', 'robchzn', 'gipsperformance']);
+  // Keep in step with the server's campaign_label (fbdm and fbgroup added Oct 16, migration 161).
+  const CAMPAIGNS = new Set(['instagram', 'ig', 'insta', 'courtsidebase', 'courtside', 'reddit', 'tiktok', 'facebook', 'fb', 'fbdm', 'fbgroup', 'twitter', 'threads', 'youtube', 'snapchat', 'whatsapp', 'discord', 'linktree', 'linkinbio', 'bio', 'email', 'newsletter', 'qr', 'flyer', 'poster', 'google', 'share', 'web', 'app', 'testflight', 'beta', 'robertzchen', 'robchzn', 'gipsperformance']);
   const refParam = ((params.get('ref') || '').trim().toLowerCase().replace(/^@+/, ''));
   const refCandidate = /^[a-z0-9_]{2,24}$/.test(refParam) && !CAMPAIGNS.has(refParam) ? refParam : null;
   // Set once the server says an account has that handle.
@@ -1143,9 +1144,10 @@
       el.hidden = false;
     });
   }
-  async function rpc(name, body) {
+  async function rpc(name, body, keepalive = false) {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${name}`, {
       method: 'POST',
+      keepalive,
       headers: { apikey: SUPABASE_KEY, 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
@@ -1194,6 +1196,56 @@
     });
   }
   carryRef(document);
+
+  // Counting each link (Oct 16, owner: "ok im gonna start promoting on
+  // facebook and msg people, but i want a new link to track the leads").
+  // courtsidebase.com/?ref=fb (posts and groups) and ?ref=fbdm (links sent in
+  // Facebook messages), or any other label: the server notes a visit once a
+  // day, and a tap on "Get the app" (TestFlight cannot carry the label into
+  // the app) or "Use CourtSide on the web" (migration 161). An email left
+  // here is already counted from the waitlist's own label, so it is not sent
+  // twice. All that goes is the label, which kind, and a random id this
+  // browser makes up for itself: no name, no email, nothing about who it is.
+  // The server ignores labels that are nobody's. Nothing waits for an answer
+  // and a failure changes nothing on the page: the links open as they always
+  // did (keepalive lets the note land while the phone moves on).
+  (function countLink() {
+    if (!/^[a-z0-9_]{2,24}$/.test(refParam)) return;
+    let visitor = null;
+    try {
+      visitor = localStorage.getItem('courtside-visitor');
+      if (!/^[0-9a-f-]{36}$/.test(visitor || '')) {
+        visitor = crypto.randomUUID();
+        localStorage.setItem('courtside-visitor', visitor);
+      }
+    } catch {}
+    // No storage (a private window): an id for this page only, so taps still count.
+    if (!visitor) {
+      try { visitor = crypto.randomUUID(); } catch { return; }
+    }
+    const sent = new Set();
+    const note = (kind) => {
+      if (sent.has(kind)) return;
+      sent.add(kind);
+      try { rpc('log_link_event', { p_label: refParam, p_kind: kind, p_visitor: visitor }, true).catch(() => {}); } catch {}
+    };
+    // Once a day per label from this browser (the server holds to that too).
+    const today = new Date().toDateString();
+    let seen = null;
+    try { seen = localStorage.getItem(`courtside-seen-${refParam}`); } catch {}
+    if (seen !== today) {
+      note('visit');
+      try { localStorage.setItem(`courtside-seen-${refParam}`, today); } catch {}
+    }
+    // Watched before any other click handler, and never stops the link.
+    document.addEventListener('click', (event) => {
+      const link = event.target.closest && event.target.closest('a[href]');
+      if (!link) return;
+      const href = link.getAttribute('href') || '';
+      if (href.startsWith('https://testflight.apple.com/')) note('app');
+      else if (href.startsWith('https://app.courtsidebase.com')) note('web');
+    }, true);
+  })();
 
   (function inviteStep() {
     const step = document.getElementById('invite-step');
