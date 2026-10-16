@@ -82,6 +82,18 @@ export interface MyInviter { id?: ID; handle?: string; name?: string; canSet: bo
 export type InviteCodeResult =
   | { ok: true; id: ID; handle: string; followed: boolean; error?: undefined }
   | { ok?: undefined; error: 'not-found' | 'self' | 'already' | 'too-late' | 'offline'; handle?: string };
+/**
+ * Admin: one website link label (?ref=fb, ?ref=fbdm, a player's handle…) and
+ * what it brought (migration 161). Visitors are browsers, not people: each
+ * counted once however often they come back.
+ */
+export interface LinkStatRow {
+  label: string;
+  /** In the window asked for (7 or 30 days). */
+  visitors: number; appTaps: number; webTaps: number; emails: number;
+  /** Since counting began. */
+  visitorsAll: number; appTapsAll: number; webTapsAll: number; emailsAll: number;
+}
 /** Someone one person brought: only their name, @handle and dates. */
 export interface InviteeRow { id: ID; name: string; handle: string; avatarUrl?: string; joinedAt: string; setUp: boolean; qualifiedAt?: string }
 export interface FirstDayStats { new30: number; moved30: number; cohort: number; movers: number; moversBack: number; othersBack: number; picked: Record<FirstMove, number> }
@@ -2784,6 +2796,17 @@ export const remote = {
     const { data, error } = await need().rpc('admin_invite_summary');
     if (error) throw new Error(missingFunction(error) ? 'The Invites page needs migration 71 in Supabase.' : error.message);
     return (data ?? []) as InviteSummaryRow[];
+  },
+  /** Admin: what each website link brought in the last `days` days and all time (migration 161). */
+  async fetchLinkStats(days: number): Promise<LinkStatRow[]> {
+    const { data, error } = await need().rpc('admin_link_stats', { p_days: days });
+    if (error) throw new Error(missingFunction(error) ? 'The Links page needs migration 161 in Supabase.' : error.message);
+    const n = (v: unknown) => Number(v) || 0;
+    return ((data ?? []) as Record<string, unknown>[]).map((r) => ({
+      label: String(r.label ?? ''),
+      visitors: n(r.visitors), appTaps: n(r.app_taps), webTaps: n(r.web_taps), emails: n(r.emails),
+      visitorsAll: n(r.visitors_all), appTapsAll: n(r.app_taps_all), webTapsAll: n(r.web_taps_all), emailsAll: n(r.emails_all),
+    }));
   },
   /** Admin: the people one person brought. */
   async fetchInvitees(referrer: ID): Promise<InviteeRow[]> {
