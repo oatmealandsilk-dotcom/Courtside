@@ -89,7 +89,7 @@ function ThemeCard({ option, active, onPick, styles }: { option: (typeof themeLi
   }));
   const ringStyle = useAnimatedStyle(() => ({ opacity: 1 - on.value }));
   return (
-    <Pressable accessibilityRole="radio" aria-selected={active} accessibilityLabel={`${option.label} theme`} onPress={pick}>
+    <Pressable accessibilityRole="radio" aria-checked={active} accessibilityLabel={`${option.label} theme`} onPress={pick}>
       <Animated.View style={[styles.card, cardStyle]}>
         <View style={[styles.swatch, { backgroundColor: palette.bg, borderColor: palette.border }]}>
           <Wash theme={option.name} height={48} strength={0.7} fade={palette.bg} />

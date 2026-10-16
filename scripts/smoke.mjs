@@ -704,7 +704,7 @@ function watchThemeChange(label, bg) {
   const frame = () => {
     if (tapped != null) {
       const now = Math.round(performance.now() - tapped);
-      if (timing.ring == null && card()?.getAttribute('aria-selected') === 'true') timing.ring = now;
+      if (timing.ring == null && card()?.getAttribute('aria-checked') === 'true') timing.ring = now;
       if (timing.page == null && pageColour() === bg) timing.page = now;
     }
     if (timing.ring == null || timing.page == null) requestAnimationFrame(frame);
@@ -844,7 +844,7 @@ const STEPS = [
       log(`theme: check moved ${took.ring} ms after the tap, page colour ${took.page} ms`);
       await themeFadeDone(page);
     },
-    expect: [{ css: '[aria-label="Paris theme"][aria-selected="true"]' }, { css: '[aria-label="CourtSide theme"][aria-selected="false"]' }],
+    expect: [{ css: '[aria-label="Paris theme"][aria-checked="true"]' }, { css: '[aria-label="CourtSide theme"][aria-checked="false"]' }],
     // Back to the default court, so every later step sees the app as it always was.
     after: async (page) => {
       await page.call(watchThemeChange, 'CourtSide theme', DEFAULT_BG);

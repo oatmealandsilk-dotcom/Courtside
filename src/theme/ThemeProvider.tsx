@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { crossfade } from './crossfade';
 import { Image, Platform, StyleSheet, View } from 'react-native';
-import Animated, { Easing, useAnimatedStyle, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
+import Animated, { Easing, ReduceMotion, useAnimatedStyle, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, lightColors } from './index';
 
@@ -282,7 +282,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     // Up at once. Already up (a tap a moment ago): its colour slides to this court instead of jumping.
     if (veil.value < 0.05) veilColor.value = themes[name].bg;
     else veilColor.value = withTiming(themes[name].bg, { duration: 120 });
-    veil.value = withTiming(VEIL_PEAK, { duration: 40 });
+    // Never skipped for Reduce Motion: a soft fade is the gentle way, the alternative a hard tinted blink.
+    veil.value = withTiming(VEIL_PEAK, { duration: 40, reduceMotion: ReduceMotion.Never });
     // One frame for the veil to show, then the redraw. A later tap in that frame wins.
     requestAnimationFrame(() => { if (target.current === name) apply(name); });
   };
@@ -292,7 +293,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     target.current = null;
     const frame = requestAnimationFrame(() => {
       if (target.current) return; // another tap is on its way: that one lifts it
-      veil.value = withDelay(VEIL_HOLD, withTiming(0, { duration: 180, easing: Easing.out(Easing.quad) }));
+      veil.value = withDelay(VEIL_HOLD, withTiming(0, { duration: 180, easing: Easing.out(Easing.quad), reduceMotion: ReduceMotion.Never }), ReduceMotion.Never);
     });
     return () => cancelAnimationFrame(frame);
   }, [theme, stamp, veil]);
