@@ -1,17 +1,18 @@
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View, type TextStyle } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { BrandMark } from '@/components/BrandMark';
 import { Avatar } from '@/components/ui';
-import { CardWash, cardLook } from '@/components/session/SessionCard';
+import { CardWash, cardLook, type CardLook } from '@/components/session/SessionCard';
+import { ShadedMark } from '@/components/share/ShadedMark';
 import { Duration, Figure } from '@/components/session/Duration';
 import type { ID, SessionDetail } from '@/data/types';
 import { resultWord, scoreLine } from '@/features/activity/format';
 import { scoreScale } from '@/features/activity/score';
 import { sessionPeople } from '@/features/activity/sessionTags';
 import { distanceFigure } from '@/features/activity/workouts';
-import { font } from '@/theme';
+import { colors, font, withAlpha } from '@/theme';
 import { useTheme } from '@/theme/ThemeProvider';
 
 /*
@@ -22,17 +23,27 @@ import { useTheme } from '@/theme/ThemeProvider';
  * (as the post's own stats row reads), and the CourtSide mark with who it was
  * with along the bottom. No address and no tracker line: at this size they
  * only came out as specks. Everything scales with `width` (300 is the base).
+ *
+ * `clear` (Oct 15, owner: "make a card version that is clear, no theme"):
+ * the same stamp with nothing filled and no court's colours, for the Clear
+ * share: white words and numbers with the Overlay's soft shadow, the mark in
+ * CourtSide's own bright green (as on every see-through share, Oct 10),
+ * translucent white rules, and the result as an outline.
  */
-export function SessionStamp({ session, width, eyebrow, place, hidden = [] }: {
+export function SessionStamp({ session, width, eyebrow, place, hidden = [], clear = false }: {
   session: SessionDetail;
   width: number;
   eyebrow: string;
   place?: string;
   hidden?: ID[];
+  clear?: boolean;
 }) {
   const { theme } = useTheme();
-  const look = cardLook(theme);
+  const look = clear ? clearLook() : cardLook(theme);
   const u = width / 300;
+  // The Overlay's own soft shadow under white words (SessionStoryArt), so they read on a bright photo; none on a card.
+  const shade: TextStyle | undefined = clear ? CLEAR_SHADE : undefined;
+  const brandInk = clear ? colors.brandBright : look.figure;
   const result = resultWord(session);
   // The session's saved score (a match's, or a practice's since Oct 6), under the time.
   const score = scoreLine(session);
@@ -51,27 +62,27 @@ export function SessionStamp({ session, width, eyebrow, place, hidden = [] }: {
   const rule = { height: StyleSheet.hairlineWidth * 2, backgroundColor: look.lines, marginVertical: 14 * u };
   return (
     <View style={[styles.card, { width, borderRadius: 20 * u, padding: 18 * u, backgroundColor: look.fill }]}>
-      <CardWash look={look} radius={20 * u} />
+      {clear ? null : <CardWash look={look} radius={20 * u} />}
       <View style={styles.row}>
-        <Text numberOfLines={1} style={[styles.eyebrow, { fontSize: 10.5 * u, letterSpacing: 1.2 * u, color: look.eyebrow }]}>{eyebrow}</Text>
+        <Text numberOfLines={1} style={[styles.eyebrow, { fontSize: 10.5 * u, letterSpacing: 1.2 * u, color: look.eyebrow }, shade]}>{eyebrow}</Text>
         {result ? (
-          <View style={[styles.pill, { height: 20 * u, borderRadius: 10 * u, paddingHorizontal: 8 * u, backgroundColor: look.pillFill }]}>
-            <Text style={{ ...font('700'), fontSize: 10.5 * u, color: look.pillInk }}>{result}</Text>
+          <View style={[styles.pill, { height: 20 * u, borderRadius: 10 * u, paddingHorizontal: 8 * u, backgroundColor: look.pillFill }, clear && { borderWidth: Math.max(1, 1.2 * u), borderColor: look.lines }]}>
+            <Text style={{ ...font('700'), fontSize: 10.5 * u, color: look.pillInk, ...shade }}>{result}</Text>
           </View>
         ) : null}
       </View>
-      <Duration minutes={session.minutes} size={68 * u} color={look.figure} unitColor={look.muted} style={{ marginTop: 6 * u }} />
+      <Duration minutes={session.minutes} size={68 * u} color={look.figure} unitColor={look.muted} style={{ marginTop: 6 * u }} textStyle={shade} />
       {/* A long score (tiebreak points, Oct 10) a little smaller, so it all fits on its line. */}
-      {score ? <Text numberOfLines={1} style={{ ...font('700'), fontSize: 24 * u * scoreScale(score, 18), letterSpacing: -0.4 * u, color: look.figure, fontVariant: ['tabular-nums'], marginTop: 2 * u }}>{score}</Text> : null}
+      {score ? <Text numberOfLines={1} style={{ ...font('700'), fontSize: 24 * u * scoreScale(score, 18), letterSpacing: -0.4 * u, color: look.figure, fontVariant: ['tabular-nums'], marginTop: 2 * u, ...shade }}>{score}</Text> : null}
       {far ? (
         <View style={{ marginTop: 2 * u }}>
-          <Figure value={far.value} part={far.value < 10 ? 'dec1' : 'int'} unit={far.unit} baseline size={24 * u} unitScale={0.5} color={look.figure} unitColor={look.muted} />
+          <Figure value={far.value} part={far.value < 10 ? 'dec1' : 'int'} unit={far.unit} baseline size={24 * u} unitScale={0.5} color={look.figure} unitColor={look.muted} textStyle={shade} />
         </View>
       ) : null}
       {place ? (
         <View style={[styles.row, { gap: 4 * u, marginTop: 2 * u }]}>
           <Ionicons name="location-outline" size={12 * u} color={look.muted} />
-          <Text numberOfLines={1} style={{ ...font('500'), fontSize: 12.5 * u, color: look.muted, flexShrink: 1 }}>{place}</Text>
+          <Text numberOfLines={1} style={{ ...font('500'), fontSize: 12.5 * u, color: look.muted, flexShrink: 1, ...shade }}>{place}</Text>
         </View>
       ) : null}
       {stats.length ? (
@@ -80,8 +91,8 @@ export function SessionStamp({ session, width, eyebrow, place, hidden = [] }: {
           <View style={[styles.row, { gap: 18 * u }]}>
             {stats.map((st) => (
               <View key={st.label} style={{ gap: 2 * u }}>
-                <Text style={{ ...font('500'), fontSize: 10.5 * u, color: look.muted }}>{st.label}</Text>
-                <Figure value={st.value} unit={st.unit} baseline size={21 * u} unitScale={0.5} color={look.figure} unitColor={look.muted} />
+                <Text style={{ ...font('500'), fontSize: 10.5 * u, color: look.muted, ...shade }}>{st.label}</Text>
+                <Figure value={st.value} unit={st.unit} baseline size={21 * u} unitScale={0.5} color={look.figure} unitColor={look.muted} textStyle={shade} />
               </View>
             ))}
           </View>
@@ -89,13 +100,14 @@ export function SessionStamp({ session, width, eyebrow, place, hidden = [] }: {
       ) : null}
       <View style={rule} />
       <View style={[styles.row, { gap: 6 * u }]}>
-        <BrandMark size={15 * u} color={look.figure} />
-        <Text style={{ ...font('700'), fontSize: 13.5 * u, letterSpacing: -0.3 * u, color: look.ink }}>CourtSide</Text>
+        {/* Clear: the Overlay's mark and wordmark, bright green with its soft dark shadow. */}
+        {clear ? <ShadedMark size={15 * u} u={u * 0.45} color={brandInk} halo="dark" /> : <BrandMark size={15 * u} color={look.figure} />}
+        <Text style={{ ...font('700'), fontSize: 13.5 * u, letterSpacing: -0.3 * u, color: clear ? brandInk : look.ink, ...(clear ? wordShade(u * 0.45) : null) }}>CourtSide</Text>
         <View style={styles.grow} />
         {lead ? (
           <View style={[styles.row, { gap: 5 * u, flexShrink: 1 }]}>
             <Avatar name={lead.name} seed={lead.id} size={Math.round(18 * u)} />
-            <Text numberOfLines={1} style={{ ...font('600'), fontSize: 12 * u, color: look.ink, flexShrink: 1 }}>
+            <Text numberOfLines={1} style={{ ...font('600'), fontSize: 12 * u, color: look.ink, flexShrink: 1, ...shade }}>
               {opponents.length ? 'vs' : 'with'} @{lead.handle}{others > 0 ? ` +${others}` : ''}
             </Text>
           </View>
@@ -104,6 +116,22 @@ export function SessionStamp({ session, width, eyebrow, place, hidden = [] }: {
     </View>
   );
 }
+
+/** The Clear stamp's colours: white on nothing, whatever the court. */
+function clearLook(): CardLook {
+  const ink = colors.onMedia;
+  return {
+    dark: true, wash: 'brand', filled: false, fill: 'transparent', border: 'transparent', rim: null,
+    figure: ink, ink, eyebrow: ink, muted: withAlpha(ink, 0.85), faint: withAlpha(ink, 0.7),
+    pillFill: 'transparent', pillInk: ink, lines: withAlpha(ink, 0.45), zones: [],
+  };
+}
+
+/** The Overlay's soft shadow under its white numbers (SessionStoryArt's overLabel). */
+const CLEAR_SHADE: TextStyle = { textShadowColor: 'rgba(0,0,0,0.35)', textShadowRadius: 6 };
+
+/** The Overlay's shadow under its wordmark (SessionStoryArt's wordHalo, dark), `u` a unit of a 360-wide story. */
+const wordShade = (u: number): TextStyle => ({ textShadowColor: 'rgba(0,0,0,0.55)', textShadowOffset: { width: 0, height: 0.8 * u }, textShadowRadius: 7 * u });
 
 const styles = StyleSheet.create({
   card: { overflow: 'hidden' },

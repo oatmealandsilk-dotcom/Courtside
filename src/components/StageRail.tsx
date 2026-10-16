@@ -1,13 +1,13 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { router } from 'expo-router';
 import Reanimated, { useSharedValue } from 'react-native-reanimated';
 
 import { LikeButton } from '@/components/LikeButton';
 import { Tappable } from '@/components/Tappable';
 import { COUNT_EDGE, GLYPH_EDGE, MAX_GROW, railCount } from '@/components/ReelCaption';
 import { useRailLive, useStageMotion } from '@/features/feed/useStageMotion';
+import { shareLabel, sharePost } from '@/features/share/sharePost';
 import { useApp } from '@/store/AppContext';
 import { font } from '@/theme';
 
@@ -39,7 +39,8 @@ export function StageRail({ kind, id }: { kind: 'post' | 'hit'; id: string }) {
       {post ? (
         <>
           <LikeButton ledgerKey={`p:${post.id}`} liked={liked} count={post.likedBy.length} onToggle={() => actions.toggleLike(post.id)} likesRoute={{ pathname: '/likes', params: { id: post.id } }} what="clip" size={26} style={styles.action} glyphStyle={GLYPH_EDGE} labelStyle={styles.count} />
-          <Tappable accessibilityLabel="Send this clip to someone" onPress={() => router.push(`/share?kind=post&id=${post.id}`)} scaleTo={0.78} style={styles.action}>
+          {/* Your own session opens Share session (sharePost.ts); anything else sends, as before. */}
+          <Tappable accessibilityLabel={shareLabel(post, currentUserId, 'clip')} onPress={() => sharePost(post, currentUserId)} scaleTo={0.78} style={styles.action}>
             <Ionicons name="arrow-redo-outline" size={26} color="white" style={GLYPH_EDGE} />
             <Text style={styles.count} maxFontSizeMultiplier={MAX_GROW}>{railCount(post.shares ?? 0)}</Text>
           </Tappable>

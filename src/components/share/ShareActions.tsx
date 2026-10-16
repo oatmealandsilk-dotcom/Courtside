@@ -24,14 +24,20 @@ const ACTIONS: { key: StoryAction; label: string; spoken: string; icon: React.Co
  * stays put (an older iPhone build hands the picture over by the clipboard:
  * see INSTAGRAM_NOTE). A toast would come and go while Instagram was in
  * front, so the steps wait here for the person coming back (Oct 6 review).
+ *
+ * `onSend`: a last button, Send, to send it to someone on CourtSide (a
+ * session's share screen, since a post's share arrow opens it, Oct 15).
  */
-export function ShareActions({ busy, onRun, steps }: { busy: StoryAction | null; onRun: (action: StoryAction) => void; steps?: string | null }) {
+export function ShareActions({ busy, onRun, steps, onSend }: { busy: StoryAction | null; onRun: (action: StoryAction) => void; steps?: string | null; onSend?: () => void }) {
   const styles = useThemedStyles(styleDefinitions);
   const save = canSaveStory();
+  const shown = ACTIONS.filter((a) => (a.key !== 'save' || save) && (a.key !== 'copy' || canCopyStory()));
+  // Five buttons sit a little closer, so the row still fits a small phone.
+  const five = !!onSend && shown.length >= 4;
   return (
     <View style={styles.block}>
-      <View style={styles.actions}>
-        {ACTIONS.filter((a) => (a.key !== 'save' || save) && (a.key !== 'copy' || canCopyStory())).map((a) => {
+      <View style={[styles.actions, five && styles.actionsFive]}>
+        {shown.map((a) => {
           const lead = a.key === 'instagram';
           return (
             <Pressable
@@ -41,7 +47,7 @@ export function ShareActions({ busy, onRun, steps }: { busy: StoryAction | null;
               accessibilityState={{ disabled: !!busy, busy: busy === a.key }}
               disabled={!!busy}
               onPress={() => onRun(a.key)}
-              style={({ pressed }) => [styles.action, pressed && styles.pressed, !!busy && busy !== a.key && styles.dimmed]}
+              style={({ pressed }) => [styles.action, five && styles.actionFive, pressed && styles.pressed, !!busy && busy !== a.key && styles.dimmed]}
             >
               <View style={[styles.circle, lead && styles.lead]}>
                 {busy === a.key ? <CourtSpinner size={22} ink={lead ? colors.brandInk : colors.text} /> : <Ionicons name={a.icon} size={24} color={lead ? colors.brandInk : colors.text} />}
@@ -50,6 +56,21 @@ export function ShareActions({ busy, onRun, steps }: { busy: StoryAction | null;
             </Pressable>
           );
         })}
+        {onSend ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Send to someone on CourtSide"
+            accessibilityState={{ disabled: !!busy }}
+            disabled={!!busy}
+            onPress={onSend}
+            style={({ pressed }) => [styles.action, five && styles.actionFive, pressed && styles.pressed, !!busy && styles.dimmed]}
+          >
+            <View style={styles.circle}>
+              <Ionicons name="paper-plane-outline" size={23} color={colors.text} />
+            </View>
+            <Text style={styles.label} numberOfLines={1}>Send</Text>
+          </Pressable>
+        ) : null}
       </View>
       {steps ? (
         <Text style={styles.steps} accessibilityLiveRegion="polite" {...(Platform.OS === 'web' ? { role: 'status' } : {})}>{steps}</Text>
@@ -61,7 +82,9 @@ export function ShareActions({ busy, onRun, steps }: { busy: StoryAction | null;
 const styleDefinitions = StyleSheet.create({
   block: { gap: spacing.md },
   actions: { flexDirection: 'row', justifyContent: 'center', gap: spacing.lg, paddingHorizontal: spacing.lg },
+  actionsFive: { gap: spacing.sm, paddingHorizontal: spacing.md },
   action: { alignItems: 'center', gap: 6, width: 64 },
+  actionFive: { width: 60 },
   circle: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
   lead: { backgroundColor: colors.brand, borderColor: colors.brand },
   label: { ...font('500'), fontSize: 12.5, color: colors.text },

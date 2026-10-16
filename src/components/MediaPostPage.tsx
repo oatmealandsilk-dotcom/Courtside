@@ -15,6 +15,7 @@ import { Heart } from '@/components/Heart';
 import { PostVideo } from '@/components/PostVideo';
 import { CommentThread, CommentsPeek, threadsOf } from '@/components/CommentThread';
 import { useApp } from '@/store/AppContext';
+import { shareLabel } from '@/features/share/sharePost';
 import { isDesktopBrowser } from '@/lib/browserDevice';
 import { lockPageSwipe } from '@/features/navigation/swipeLock';
 import { useHoldTour } from '@/features/tour/tourHold';
@@ -388,7 +389,7 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
             </Tappable>
             {/* Nobody else can open something taken down, so there is nothing to send. */}
             {closed ? null : (
-              <Tappable onPress={onShare} scaleTo={0.78} style={styles.action} accessibilityLabel="Send this post to someone">
+              <Tappable onPress={onShare} scaleTo={0.78} style={styles.action} accessibilityLabel={shareLabel(post, currentUserId)}>
                 <Ionicons name="arrow-redo-outline" size={ICON} color={colors.text} />
                 {post.shares ? <Text style={styles.actionText}>{compactNumber(post.shares)}</Text> : null}
               </Tappable>

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Platform, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Platform, StyleSheet, Text, View, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
 
 import { durationParts, spokenDuration } from '@/features/activity/format';
 import { font } from '@/theme';
@@ -19,7 +19,7 @@ const lift = (size: number, lineHeight: number, unit: number, unitLine: number) 
  * pulled tight; units 0.4 of their size, weight 500, in a quieter ink.
  * One sentence for a screen reader ("1 hour 24 minutes").
  */
-export function Duration({ minutes, size, color, unitColor, play = false, delay = 0, duration = 700, style, maxGrow = 1.2, unitScale }: {
+export function Duration({ minutes, size, color, unitColor, play = false, delay = 0, duration = 700, style, maxGrow = 1.2, unitScale, textStyle }: {
   minutes: number;
   size: number;
   color: string;
@@ -31,12 +31,14 @@ export function Duration({ minutes, size, color, unitColor, play = false, delay 
   maxGrow?: number;
   /** Units as a share of the figures' size, set on their baseline ("2h 08m" read as one line); leave it off for the headline's small units. */
   unitScale?: number;
+  /** Laid over the figures' and units' own look: the Clear share's soft shadow (SessionStamp). */
+  textStyle?: TextStyle;
 }) {
   const parts = durationParts(minutes);
   const unit = Math.round(size * (unitScale ?? 0.4));
   const unitLine = Math.round(unit * 1.25);
   const figure = { ...font('600'), fontSize: size, lineHeight: Math.round(size * 1.08), letterSpacing: -0.055 * size, color, ...(Platform.OS === 'web' ? { fontVariant: ['tabular-nums' as const] } : {}) };
-  const unitStyle = { ...font('500'), fontSize: unit, lineHeight: unitLine, color: unitColor, marginBottom: unitScale == null ? Math.round(size * 0.1) : lift(size, Math.round(size * 1.08), unit, unitLine), marginLeft: Math.max(1, Math.round(size * 0.03)) };
+  const unitStyle = { ...font('500'), fontSize: unit, lineHeight: unitLine, color: unitColor, marginBottom: unitScale == null ? Math.round(size * 0.1) : lift(size, Math.round(size * 1.08), unit, unitLine), marginLeft: Math.max(1, Math.round(size * 0.03)), ...textStyle };
   return (
     <View style={[styles.row, style]} accessible accessibilityRole="text" accessibilityLabel={spokenDuration(minutes)}>
       {parts.map((p, i) => (
@@ -52,7 +54,7 @@ export function Duration({ minutes, size, color, unitColor, play = false, delay 
             play={play}
             delay={delay}
             duration={parts.length === 1 ? duration : Math.max(duration, 1100)}
-            style={[figure, i > 0 ? { marginLeft: Math.round(size * 0.12) } : null]}
+            style={[figure, i > 0 ? { marginLeft: Math.round(size * 0.12) } : null, textStyle]}
             maxFontSizeMultiplier={maxGrow}
           />
           <Text style={unitStyle} maxFontSizeMultiplier={maxGrow}>{p.u}</Text>
@@ -63,7 +65,7 @@ export function Duration({ minutes, size, color, unitColor, play = false, delay 
 }
 
 /** A plain figure with its small unit after it ("171 bpm"), counting up like the time. */
-export function Figure({ value, unit, size, color, unitColor, play = false, delay = 0, duration = 700, part = 'int', maxGrow = 1.2, unitScale = 0.4, baseline = false }: {
+export function Figure({ value, unit, size, color, unitColor, play = false, delay = 0, duration = 700, part = 'int', maxGrow = 1.2, unitScale = 0.4, baseline = false, textStyle }: {
   value: number;
   unit?: string;
   size: number;
@@ -77,6 +79,8 @@ export function Figure({ value, unit, size, color, unitColor, play = false, dela
   unitScale?: number;
   /** The unit on the figure's baseline, rather than the headline's small raised-off-the-floor unit. */
   baseline?: boolean;
+  /** Laid over the figure's and unit's own look, as Duration's. */
+  textStyle?: TextStyle;
 }) {
   // A floor so a unit stays readable, but never bigger than its number on a small card (Oct 4: "333 cal" on the story's corner card).
   const u = Math.round(Math.max(Math.min(10, size * 0.6), size * unitScale));
@@ -85,8 +89,8 @@ export function Figure({ value, unit, size, color, unitColor, play = false, dela
   return (
     <View style={styles.row}>
       <CountUp value={value} part={part} play={play} delay={delay} duration={duration} maxFontSizeMultiplier={maxGrow}
-        style={{ ...font('600'), fontSize: size, lineHeight: line, letterSpacing: -0.04 * size, color }} />
-      {unit ? <Text maxFontSizeMultiplier={maxGrow} style={{ ...font('500'), fontSize: u, lineHeight: uLine, color: unitColor, marginLeft: baseline ? Math.max(3, Math.round(size * 0.2)) : Math.max(3, Math.round(size * 0.1)), marginBottom: baseline ? lift(size, line, u, uLine) : Math.round(size * 0.1) }}>{unit}</Text> : null}
+        style={{ ...font('600'), fontSize: size, lineHeight: line, letterSpacing: -0.04 * size, color, ...textStyle }} />
+      {unit ? <Text maxFontSizeMultiplier={maxGrow} style={{ ...font('500'), fontSize: u, lineHeight: uLine, color: unitColor, marginLeft: baseline ? Math.max(3, Math.round(size * 0.2)) : Math.max(3, Math.round(size * 0.1)), marginBottom: baseline ? lift(size, line, u, uLine) : Math.round(size * 0.1), ...textStyle }}>{unit}</Text> : null}
     </View>
   );
 }

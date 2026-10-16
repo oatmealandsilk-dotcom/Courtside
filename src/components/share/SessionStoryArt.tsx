@@ -16,13 +16,21 @@ import { useTheme } from '@/theme/ThemeProvider';
 import { colors, font } from '@/theme';
 
 /** The pictures a session can be shared as, in the order they are offered. */
-export type StoryDesign = 'photo' | 'card' | 'sticker' | 'overlay' | 'heart';
+export type StoryDesign = 'photo' | 'card' | 'sticker' | 'clear' | 'overlay' | 'heart';
 export const STORY_DESIGNS: { key: StoryDesign; label: string }[] = [
   { key: 'photo', label: 'Photo' },
   { key: 'card', label: 'Card' },
   { key: 'sticker', label: 'Sticker' },
+  // The Sticker with nothing filled and no court's colours (Oct 15, owner: "a card version that is clear, no theme").
+  { key: 'clear', label: 'Clear' },
   { key: 'overlay', label: 'Overlay' },
 ];
+
+/** The designs laid over a story of your own as a see-through sticker: everything but Photo and Card. */
+export const seeThrough = (design: StoryDesign) => design !== 'photo' && design !== 'card';
+
+/** The designs drawn in a court's colours, which the share screen's colour dots change: Photo, Card and Sticker. */
+export const themed = (design: StoryDesign) => design === 'photo' || design === 'card' || design === 'sticker';
 
 /**
  * The designs offered for this session: the four, and "Heart rate"
@@ -46,6 +54,8 @@ export function storyDesigns(story: SessionStory | null): { key: StoryDesign; la
  * - 'card':  the card itself filling the story;
  * - 'sticker': the card alone on a see-through ground, to lay over a story
  *   of your own;
+ * - 'clear': the Sticker's own layout with nothing filled and no court's
+ *   colours: white words, the mark in CourtSide's bright green;
  * - 'overlay': the numbers and the logo alone, white on nothing;
  * - 'heart': the time and calories over one bar per heart-rate zone, white
  *   on nothing like the Overlay, only for a post that shares its zones and
@@ -127,6 +137,16 @@ export function SessionStoryArt({ design, story, width, photo, hidden = [], onPh
           <ShadedMark size={33 * u} u={u} color={colors.brandBright} halo={halo} weight={1.5} sideWeight={1.05} />
           <Text style={[styles.overWord, { fontSize: 30 * u, lineHeight: 36 * u, letterSpacing: -0.9 * u, color: colors.brandBright }, wordHalo(halo, u)]}>CourtSide</Text>
         </View>
+      </View>
+    );
+  }
+
+  if (design === 'clear') {
+    // The Sticker without its card: the same size and place, white on nothing, no shadow round a box that is not there.
+    const cardW = Math.round(width * 0.62);
+    return (
+      <View collapsable={false} style={[styles.centre, { width, height }]}>
+        <SessionStamp session={story.session} eyebrow={story.eyebrow} place={story.place} hidden={hidden} width={cardW} clear />
       </View>
     );
   }

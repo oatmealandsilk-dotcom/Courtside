@@ -68,6 +68,7 @@ import { lockPageSwipe } from '@/features/navigation/swipeLock';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useApp } from '@/store/AppContext';
 import { warmOpenOutside } from '@/features/share/openOutside';
+import { shareLabel, sharePost } from '@/features/share/sharePost';
 import type { Post } from '@/data/types';
 import { confirmUnfollow } from '@/lib/confirm';
 import { isSupabaseConfigured } from '@/lib/supabase';
@@ -1423,7 +1424,10 @@ function Home({ scope, topRow, paused, onChrome }: {
       showToast({ title: 'This was taken down', body: 'Only whoever posted it and CourtSide’s admins can see it, so it can’t be shared.', icon: 'eye-off-outline' });
       return;
     }
-    router.push(`/share?kind=${kind}&id=${id}`);
+    // Your own post with a session opens the Share session screen, Strava's way (sharePost.ts); Send is on it.
+    const post = kind === 'post' ? posts.find((p) => p.id === id) : undefined;
+    if (post) sharePost(post, currentUserId);
+    else router.push(`/share?kind=${kind}&id=${id}`);
   };
 
   /**
@@ -2057,7 +2061,7 @@ function Home({ scope, topRow, paused, onChrome }: {
                     {/* Taken down, nobody else could open it: nothing to send. */}
                     {post.removed ? null : (
                       <Tappable
-                        accessibilityLabel="Send this clip to someone"
+                        accessibilityLabel={shareLabel(post, currentUserId, 'clip')}
                         onPress={() => share('post', post.id)}
                         scaleTo={0.78}
                         style={styles.action}

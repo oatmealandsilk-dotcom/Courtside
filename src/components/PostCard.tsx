@@ -28,6 +28,7 @@ import { RichText } from '@/components/RichText';
 import { SessionCard } from '@/components/session/SessionCard';
 import { SessionStrip } from '@/components/session/SessionStrip';
 import { useApp } from '@/store/AppContext';
+import { shareLabel } from '@/features/share/sharePost';
 import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { hasSessionStats } from '@/features/activity/format';
 import { requestSection } from '@/features/navigation/swipeOrder';
@@ -317,7 +318,7 @@ function PostCardInner({
           {post.commentIds.length ? <Text style={styles.actionText}>{compactNumber(post.commentIds.length)}</Text> : null}
         </Tappable>
         {onShare ? (
-          <Tappable onPress={onShare} scaleTo={0.8} style={styles.action} accessibilityLabel="Send this post to someone">
+          <Tappable onPress={onShare} scaleTo={0.8} style={styles.action} accessibilityLabel={shareLabel(post, currentUserId)}>
             <Ionicons name="arrow-redo-outline" size={ICON} color={colors.text} />
             {post.shares ? <Text style={styles.actionText}>{compactNumber(post.shares)}</Text> : null}
           </Tappable>

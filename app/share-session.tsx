@@ -1,14 +1,13 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Animated, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import { Image as ExpoImage } from 'expo-image';
-import { LinearGradient } from 'expo-linear-gradient';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import Svg, { Defs, Pattern, Rect } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CourtSpinner } from '@/components/CourtSpinner';
-import { SessionStoryArt, storyDesigns, type StoryDesign } from '@/components/share/SessionStoryArt';
+import { SessionStoryArt, seeThrough, storyDesigns, themed, type StoryDesign } from '@/components/share/SessionStoryArt';
 import { ShareActions } from '@/components/share/ShareActions';
 import { EmptyState, Screen } from '@/components/ui';
 import { postedIndex, sourceOn } from '@/features/activity/recent';
@@ -22,7 +21,7 @@ import { goBack } from '@/lib/goBack';
 import * as haptics from '@/lib/haptics';
 import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
-import { useThemedStyles } from '@/theme/ThemeProvider';
+import { ThemeScope, themes, useTheme, useThemedStyles, type ThemeName } from '@/theme/ThemeProvider';
 import { colors, font, pageIsDark, radius, spacing } from '@/theme';
 
 /**
@@ -42,6 +41,12 @@ import { colors, font, pageIsDark, radius, spacing } from '@/theme';
  * Instagram's own steps, when an older iPhone build hands the picture over by
  * the clipboard, stay on a line under the buttons until you change design.
  *
+ * Since Oct 15: Clear after the Sticker (the stamp with nothing filled, no
+ * court's colours); every see-through design previewed on a checkerboard,
+ * never your photo; colour dots under the names that redraw Photo, Card and
+ * Sticker in another court's colours (these pictures only, never the app);
+ * and Send, to someone on CourtSide, since a post's share arrow opens here.
+ *
  * Each picture is drawn twice: small to look at, and once more out of sight
  * at exactly 1080 × 1920 pixels, which is the one photographed (storyImage.ts).
  */
@@ -49,8 +54,25 @@ import { colors, font, pageIsDark, radius, spacing } from '@/theme';
 const SHADOW_ROOM = 16;
 /** Space between the designs as they sit side by side. */
 const CARD_GAP = 14;
-/** What the page keeps for everything but the pictures: the title, the designs' names, Add score and the buttons. */
-const CHROME_H = 380;
+/** What the page keeps for everything but the pictures: the title, the designs' names, the colour dots, Add score and the buttons. */
+const CHROME_H = 424;
+/** One side of a square of the see-through checkerboard, in points: small, so it reads as a calm texture. */
+const CHECK = 6;
+
+/**
+ * The colour dots under the pictures (Oct 15, owner: "do the color changing
+ * for the cards"): one per court, named for its city, never the tournament
+ * (trademarks). Clean only when it is the court you use, so the dot you
+ * start on is always there.
+ */
+const PAINTS: { name: ThemeName; label: string }[] = [
+  { name: 'default', label: 'Light' },
+  { name: 'night', label: 'Dark' },
+  { name: 'ao', label: 'Melbourne' },
+  { name: 'roland-garros', label: 'Paris' },
+  { name: 'wimbledon', label: 'London' },
+  { name: 'us-open', label: 'New York' },
+];
 
 /**
  * How Instagram's story editor gets each design: Photo and Card as the whole
@@ -65,32 +87,39 @@ const CHROME_H = 380;
  * 2.2:1 or better where it sits, plus its light edge. Read when tapped, so a
  * court changed meanwhile is used.
  */
-function storyLook(design: StoryDesign): StoryLook {
-  // Heart rate is white words on nothing too, so it goes over the same two colours.
-  if (design === 'overlay' || design === 'heart') {
+function storyLook(design: StoryDesign, paint: ThemeName): StoryLook {
+  // Heart rate and Clear are white words on nothing too, so they go over the same two colours.
+  if (design === 'overlay' || design === 'heart' || design === 'clear') {
     const deep = (pageIsDark() ? colors.bg : colors.text).slice(0, 7);
     return { sticker: true, top: mixHex(deep, colors.court.slice(0, 7), 0.15), bottom: deep };
   }
-  return { sticker: design === 'sticker', top: colors.brand.slice(0, 7), bottom: colors.bg.slice(0, 7) };
+  // Photo, Card and Sticker: the court picked with the colour dots.
+  const court = themes[paint];
+  return { sticker: design === 'sticker', top: court.brand.slice(0, 7), bottom: court.bg.slice(0, 7) };
 }
 
 /**
- * What a see-through design is previewed over: your photo when there is one
- * (where a pasted sticker usually lands), else the two colours Instagram
- * Stories will put behind it (storyLook), so the preview is what you get.
+ * What a see-through design is previewed on: the checkerboard that means
+ * "see-through" everywhere (Oct 15, owner: "the options should be transparent
+ * background not with the photo in the back"), so nobody wonders whether the
+ * photo goes too. Two dark greys, so the white numbers and the green mark read
+ * on it. One drawn tile of four squares, repeated: cheap at any size.
  */
-function StickerGround({ design, photo }: { design: StoryDesign; photo?: string }) {
-  const look = storyLook(design);
-  if (photo) {
-    return (
-      <>
-        <ExpoImage source={{ uri: photo }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" />
-        {/* A touch of shade, as a story's own text sits on: white numbers read on a bright photo too. */}
-        <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.22)' }]} />
-      </>
-    );
-  }
-  return <LinearGradient colors={[look.top, look.bottom]} style={StyleSheet.absoluteFill} />;
+function Checker() {
+  const id = `check${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
+  return (
+    <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: colors.checker }]}>
+      <Svg width="100%" height="100%">
+        <Defs>
+          <Pattern id={id} width={CHECK * 2} height={CHECK * 2} patternUnits="userSpaceOnUse">
+            <Rect x={0} y={0} width={CHECK} height={CHECK} fill={colors.checkerAlt} />
+            <Rect x={CHECK} y={CHECK} width={CHECK} height={CHECK} fill={colors.checkerAlt} />
+          </Pattern>
+        </Defs>
+        <Rect x={0} y={0} width="100%" height="100%" fill={`url(#${id})`} />
+      </Svg>
+    </View>
+  );
 }
 
 export default function ShareSession() {
@@ -99,6 +128,11 @@ export default function ShareSession() {
   const { post: postParam, session: sessionParam } = useLocalSearchParams<{ post?: string; session?: string }>();
   const { posts, sessions, detectedActivities, currentUser, currentUserId, blockedIds, ready } = useApp();
   const flags = useTennisFlags();
+  const { theme } = useTheme();
+  // The court the share pictures are drawn in: your own until you tap a colour dot. Only these pictures change.
+  const [painted, setPainted] = useState<ThemeName | null>(null);
+  const paint = painted ?? theme;
+  const paints = theme === 'clean' ? [...PAINTS, { name: 'clean' as ThemeName, label: 'Clean' }] : PAINTS;
 
   const story = useMemo((): SessionStory | null => {
     const me = currentUser ?? undefined;
@@ -182,7 +216,7 @@ export default function ShareSession() {
         for (let t = 0; t < 50 && waitFor.current === 'loading'; t += 1) await new Promise((r) => setTimeout(r, 100));
       }
       // Your invite link goes along as words (Copy, More), never on the picture: Strava's way (Oct 5).
-      const said = await exportStory(stage.current, action, 'My session on CourtSide', storyLook(design), story?.invite);
+      const said = await exportStory(stage.current, action, 'My session on CourtSide', storyLook(design, paint), story?.invite);
       if (!said) haptics.commit();
       else if (said === INSTAGRAM_NOTE) { haptics.commit(); setSteps(said); }
       else if (storyNoteOk(said)) { haptics.commit(); showToast({ title: said, icon: 'checkmark-circle-outline', long: said.length > 40 }); }
@@ -221,7 +255,9 @@ export default function ShareSession() {
       {/* The copy that is photographed: full size, out of sight under the page. */}
       <View pointerEvents="none" aria-hidden accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={[styles.stage, size]}>
         <View ref={stage} collapsable={false} style={size}>
-          <SessionStoryArt design={design} story={story} width={size.width} photo={photo} hidden={blockedIds} onPhotoLoad={(ok) => { if (photo) setLoaded((was) => (was?.uri === photo && was.ok === ok ? was : { uri: photo, ok })); }} />
+          <ThemeScope theme={themed(design) ? paint : theme}>
+            <SessionStoryArt design={design} story={story} width={size.width} photo={photo} hidden={blockedIds} onPhotoLoad={(ok) => { if (photo) setLoaded((was) => (was?.uri === photo && was.ok === ok ? was : { uri: photo, ok })); }} />
+          </ThemeScope>
         </View>
       </View>
       <View style={styles.page}>
@@ -253,9 +289,11 @@ export default function ShareSession() {
                       <Animated.View key={d.key} style={[styles.pageSlot, { width: step, height: cardH + SHADOW_ROOM * 2 }, look]}>
                         <Pressable disabled={i === shownIndex} onPress={() => goTo(i)} accessible={false}>
                           <View style={[styles.frame, { width: cardW, height: cardH }]} accessible accessibilityLabel={`${d.label} design`}>
-                            {/* A see-through design is shown over what it will sit on (StickerGround). */}
-                            {d.key === 'sticker' || d.key === 'overlay' || d.key === 'heart' ? <StickerGround design={d.key} photo={photo} /> : null}
-                            <SessionStoryArt design={d.key} story={story} width={cardW} photo={photo} hidden={blockedIds} />
+                            {/* A see-through design is shown on the see-through checkerboard, never your photo: only Photo has the photo. */}
+                            {seeThrough(d.key) ? <Checker /> : null}
+                            <ThemeScope theme={themed(d.key) ? paint : theme}>
+                              <SessionStoryArt design={d.key} story={story} width={cardW} photo={photo} hidden={blockedIds} />
+                            </ThemeScope>
                             {d.key === 'photo' ? (
                               <Pressable accessibilityRole="button" accessibilityLabel={photo ? 'Change photo' : 'Choose a photo'} onPress={() => { void choosePhoto(); }} style={({ pressed }) => [styles.photoButton, pressed && styles.pressed]}>
                                 <View style={styles.photoChip}>
@@ -284,12 +322,52 @@ export default function ShareSession() {
                   );
                 })}
               </View>
+
+              {/* The colour dots: a court's colours for Photo, Card and Sticker. Clear, Overlay and Heart rate
+                  stay CourtSide's own (Oct 10), so the dots fade out for them, keeping their room so nothing moves. */}
+              <View
+                style={[styles.paints, !themed(design) && styles.paintsOff]}
+                pointerEvents={themed(design) ? 'auto' : 'none'}
+                accessibilityElementsHidden={!themed(design)}
+                importantForAccessibility={themed(design) ? 'auto' : 'no-hide-descendants'}
+                aria-hidden={!themed(design)}
+                accessibilityRole="radiogroup"
+                accessibilityLabel="Colours"
+              >
+                {paints.map((p) => {
+                  const on = p.name === paint;
+                  const court = themes[p.name];
+                  return (
+                    <Pressable
+                      key={p.name}
+                      accessibilityRole="radio"
+                      accessibilityLabel={p.label}
+                      accessibilityState={{ checked: on }}
+                      onPress={() => { if (!on) { haptics.tap(); setPainted(p.name); } }}
+                      style={({ pressed }) => [styles.paint, pressed && styles.pressed]}
+                    >
+                      {/* The court's own card colour, with its lettering's colour in the middle. */}
+                      <View style={[styles.paintRing, on && styles.paintRingOn]}>
+                        <View style={[styles.paintDot, { backgroundColor: court.cardFill }]}>
+                          <View style={[styles.paintInner, { backgroundColor: court.cardFigure }]} />
+                        </View>
+                      </View>
+                    </Pressable>
+                  );
+                })}
+              </View>
             </View>
 
             {/* The controls, at the bottom in thumb's reach. */}
             <View style={[styles.bottom, { paddingBottom: insets.bottom + spacing.lg }]}>
               {addScore ? <AddScore sessionId={addScore} /> : null}
-              <ShareActions busy={busy} onRun={(a) => { void run(a); }} steps={steps} />
+              <ShareActions
+                busy={busy}
+                onRun={(a) => { void run(a); }}
+                steps={steps}
+                // Send it to someone on CourtSide, as the post's share arrow did before it came here (Oct 15).
+                onSend={story.postId ? () => router.push({ pathname: '/share', params: { kind: 'post', id: story.postId! } }) : undefined}
+              />
             </View>
           </View>
         </Screen>
@@ -320,4 +398,12 @@ const styleDefinitions = StyleSheet.create({
   designTextOn: { color: colors.text },
   designDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: 'transparent' },
   designDotOn: { backgroundColor: colors.brand },
+  paints: { flexDirection: 'row', alignSelf: 'center', height: 44, marginTop: -spacing.sm },
+  paintsOff: { opacity: 0 },
+  // Each dot a full 44-point target; the one showing wears a thin ring in the page's ink.
+  paint: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  paintRing: { width: 34, height: 34, borderRadius: 17, borderWidth: 2, borderColor: 'transparent', alignItems: 'center', justifyContent: 'center' },
+  paintRingOn: { borderColor: colors.text },
+  paintDot: { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.borderStrong },
+  paintInner: { width: 9, height: 9, borderRadius: 5 },
 });

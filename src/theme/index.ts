@@ -46,6 +46,9 @@ export const lightColors = {
   // (assets/splash.png), a shade lighter than textFaint: on this court the copy is the picture to the
   // pixel, so the line must not darken as the picture hands over (Oct 7). Every other court: its textFaint.
   launchLine: '#8B8373',
+  // The "see-through" checkerboard a share's sticker is previewed on (Oct 15, owner: "the background is
+  // clear"): two dark greys, the same on every court, so the white numbers and the green mark read on it.
+  checker: '#26292A', checkerAlt: '#323637',
 } as const;
 
 export const colors: Record<keyof typeof lightColors, string> = { ...lightColors };

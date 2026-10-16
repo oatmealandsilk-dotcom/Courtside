@@ -29,6 +29,7 @@ export const darkColors: Palette = {
   cardFill: '#15251D', cardGlowTop: '#22412D', cardGlowBottom: '#413425',
   cardFigure: '#6FB483', cardInk: '#6FB483', cardMuted: '#A6B1AB',
   launchLine: '#8A948F',
+  checker: '#26292A', checkerAlt: '#323637',
 };
 
 /**
@@ -53,6 +54,7 @@ const cleanColors: Palette = {
   cardFill: '#2C7446', cardGlowTop: '#2C7446', cardGlowBottom: '#2C7446',
   cardFigure: '#FFFFFF', cardInk: '#FFFFFF', cardMuted: '#FFFFFF',
   launchLine: '#5F6871',
+  checker: '#26292A', checkerAlt: '#323637',
 };
 
 /**
@@ -77,6 +79,7 @@ const aoColors: Palette = {
   cardFill: '#6EA8D5', cardGlowTop: '#9CCBEC', cardGlowBottom: '#8FE3DD',
   cardFigure: '#0B2A47', cardInk: '#0E2F4F', cardMuted: '#143858',
   launchLine: '#496273',
+  checker: '#26292A', checkerAlt: '#323637',
 };
 
 /**
@@ -100,6 +103,7 @@ const rolandGarrosColors: Palette = {
   cardFill: '#A44627', cardGlowTop: '#B24D25', cardGlowBottom: '#A4570A',
   cardFigure: '#FAF8F0', cardInk: '#FAF8F0', cardMuted: '#F6EFE6',
   launchLine: '#6D5745',
+  checker: '#26292A', checkerAlt: '#323637',
 };
 
 /**
@@ -122,6 +126,7 @@ const wimbledonColors: Palette = {
   cardFill: '#326F37', cardGlowTop: '#377A34', cardGlowBottom: '#615782',
   cardFigure: '#FAF8F0', cardInk: '#FAF8F0', cardMuted: '#F0F1E7',
   launchLine: '#586552',
+  checker: '#26292A', checkerAlt: '#323637',
 };
 
 /**
@@ -146,6 +151,7 @@ const usOpenColors: Palette = {
   cardFill: '#22497B', cardGlowTop: '#325D91', cardGlowBottom: '#675A38',
   cardFigure: '#F5D460', cardInk: '#F5D460', cardMuted: '#CBD8E6',
   launchLine: '#A9B9CA',
+  checker: '#26292A', checkerAlt: '#323637',
 };
 
 export type ThemeName = 'default' | 'clean' | 'night' | 'ao' | 'roland-garros' | 'wimbledon' | 'us-open';
@@ -324,6 +330,39 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 const VEIL_PEAK = 0.72;
 
 export const useTheme = () => useContext(ThemeContext);
+
+/**
+ * Draws what is inside it in another court's colours, and only that: the
+ * share screen's colour dots (Oct 15, owner: "do the color changing for the
+ * cards") recolour the share pictures and nothing else. The app's theme and
+ * Settings are untouched.
+ *
+ * Inside, `useTheme()` says the chosen court, so themed styles and the
+ * session box's look (cardLook) follow it; the live `colors` object is the
+ * chosen court's while the inside is drawn, and is put back to the app's
+ * own the moment it is done (the empty sibling after it, which React draws
+ * next, and once more when the screen settles), so whatever is drawn after
+ * it is in the app's colours as always.
+ */
+export function ThemeScope({ theme, children }: { theme: ThemeName; children: React.ReactNode }) {
+  const outer = useContext(ThemeContext);
+  const value = useMemo(() => ({ ...outer, theme, night: theme === 'night', dark: DARK_THEMES.has(theme) }), [outer, theme]);
+  // Always the same shape, the app's own court too, so a change of court never starts the inside over.
+  React.useLayoutEffect(() => { Object.assign(colors, themes[outer.theme]); });
+  Object.assign(colors, themes[theme]);
+  return (
+    <>
+      <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>
+      <PutBack theme={outer.theme} />
+    </>
+  );
+}
+
+/** Puts the live colours back to the app's own court, right after a ThemeScope's inside is drawn. */
+function PutBack({ theme }: { theme: ThemeName }) {
+  Object.assign(colors, themes[theme]);
+  return null;
+}
 
 /**
  * Recolours style definitions written against any one palette.

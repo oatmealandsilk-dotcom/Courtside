@@ -203,6 +203,16 @@ export function SessionSheet({ post, me, users, sessions, sessionTags, activitie
           <Text style={styles.usualText} maxFontSizeMultiplier={1.2}>{over}m over your usual</Text>
         </View>
       ) : null}
+      {/* Share, near the top where it is seen, as Strava's is (Oct 15, owner: "right now it's kind of tucked away"). */}
+      {mine && onShare ? (
+        <View>
+          {shareTip.shown ? <TipBubble tip="share-session" shown onClose={shareTip.close} pointer="down" style={{ position: 'relative', alignSelf: 'center', marginBottom: 6 }} /> : null}
+          <Pressable accessibilityRole="button" accessibilityLabel="Share your session" onPress={() => { learned('share-session'); onShare(); }} style={({ pressed }) => [styles.share, pressed && styles.pressed]}>
+            <Ionicons name="share-outline" size={18} color={colors.brandInk} />
+            <Text style={styles.shareText} maxFontSizeMultiplier={1.2}>Share your session</Text>
+          </Pressable>
+        </View>
+      ) : null}
       {peopleRow}
       {sparse && court ? (
         <FormRow lead={<CourtGlyph size={16} color={colors.brand} />} label={court.name} chevron onPress={() => openCourt(court)} accessibilityLabel={`${court.name}, see posts from here`} />
@@ -256,12 +266,6 @@ export function SessionSheet({ post, me, users, sessions, sessionTags, activitie
           {ownZones ? <ZoneRows zones={ownZones} play={play} delay={460} /> : null}
         </Pop>
       ) : null}
-      {mine && onShare ? (
-        <View>
-          {shareTip.shown ? <TipBubble tip="share-session" shown onClose={shareTip.close} pointer="down" style={{ position: 'relative', alignSelf: 'center', marginBottom: 6 }} /> : null}
-          <FormRow icon="logo-instagram" label="Share to Instagram" chevron onPress={() => { learned('share-session'); onShare(); }} />
-        </View>
-      ) : null}
       {/* A workout's log (a run, the gym: migration 107) has nobody to tag and no score, so nothing to edit there. */}
       {mine && log && onEdit && !(log.kind === 'fitness' && log.workout) ? (
         <FormRow icon="create-outline" label="Edit session" chevron onPress={() => onEdit(log.id)} />
@@ -299,6 +303,9 @@ const styleDefinitions = StyleSheet.create({
   score: { ...font('700'), fontSize: 26, letterSpacing: -0.6, color: colors.text, fontVariant: ['tabular-nums'], marginTop: -6 },
   usual: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999, backgroundColor: colors.brandDim, marginTop: -4 },
   usualText: { ...font('600'), fontSize: 12, color: colors.brand },
+  // "Share your session": the brand's own filled pill, full width, a 44-point target.
+  share: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 44, borderRadius: 999, backgroundColor: colors.brand, paddingHorizontal: 16 },
+  shareText: { ...font('600'), fontSize: 15, color: colors.brandInk },
   peopleRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   people: { flex: 1, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 12, rowGap: 8 },
   person: { flexDirection: 'row', alignItems: 'center', gap: 6, maxWidth: '100%' },
