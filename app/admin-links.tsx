@@ -18,13 +18,14 @@ import { colors, radius, spacing, typography } from '@/theme';
 type Range = '7' | '30' | 'all';
 
 /**
- * The owner's own links, always at the top with Copy (Oct 16, owner: "ok im
+ * The owner's own link, always at the top with Copy (Oct 16, owner: "ok im
  * gonna start promoting on facebook and msg people, but i want a new link to
- * track the leads"). fb was already ours; fbdm is new (migration 161).
+ * track the leads", then "just make one link"): fb, for posts and messages
+ * alike. fbdm and fbgroup stay reserved labels (migration 161) should he
+ * ever want them apart.
  */
 const MY_LINKS: { label: string; title: string }[] = [
-  { label: 'fb', title: 'Facebook posts and groups' },
-  { label: 'fbdm', title: 'Facebook messages' },
+  { label: 'fb', title: 'Facebook' },
 ];
 const linkFor = (label: string) => `https://courtsidebase.com/?ref=${label}`;
 
@@ -87,9 +88,14 @@ export default function AdminLinks() {
   }
 
   const copy = async (label: string, title: string) => {
-    await Clipboard.setStringAsync(linkFor(label));
-    haptics.tap();
-    showToast({ title: `Copied the ${title.toLowerCase()} link`, icon: 'link-outline' });
+    try {
+      await Clipboard.setStringAsync(linkFor(label));
+      haptics.tap();
+      showToast({ title: `Copied the ${title} link`, icon: 'link-outline' });
+    } catch {
+      // A browser that refuses the clipboard: the address stays on screen to copy by hand.
+      showToast({ title: 'Couldn’t copy. Hold the link to copy it.', icon: 'alert-circle-outline' });
+    }
   };
 
   return (
@@ -98,7 +104,7 @@ export default function AdminLinks() {
         Who came through each link. Visitors: phones or computers that opened the page through it (each counted once). App: tapped Get the app. Web: tapped Use CourtSide on the web. Emails: left their email.
       </Text>
 
-      <Text style={styles.section}>Your Facebook links</Text>
+      <Text style={styles.section}>Your Facebook link</Text>
       <View style={styles.list}>
         {MY_LINKS.map((l, index) => (
           <View key={l.label} style={[styles.linkRow, index > 0 && styles.rowLine]}>
@@ -108,7 +114,7 @@ export default function AdminLinks() {
             </View>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={`Copy the ${l.title.toLowerCase()} link`}
+              accessibilityLabel={`Copy the ${l.title} link`}
               hitSlop={8}
               onPress={() => void copy(l.label, l.title)}
               style={({ pressed }) => [styles.copy, pressed && { backgroundColor: colors.border }]}
