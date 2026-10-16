@@ -205,6 +205,13 @@ const ThemeContext = createContext({
    */
   dark: false,
   setNight: (_value: boolean) => {},
+  /**
+   * Inside a ThemeScope (the share screen's colour dots): the court here is
+   * not the app's, so a themed style drawn here must never copy it into the
+   * live `colors` the rest of the app reads (ThemeScope sets and puts back
+   * those itself).
+   */
+  scoped: false,
 });
 
 /** Themes whose page is dark. */
@@ -310,7 +317,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const setNight = (value: boolean) => setTheme(value ? 'night' : 'default');
 
   return (
-    <ThemeContext.Provider value={{ theme, setTheme, night: theme === 'night', dark: DARK_THEMES.has(theme), setNight }}>
+    <ThemeContext.Provider value={{ theme, setTheme, night: theme === 'night', dark: DARK_THEMES.has(theme), setNight, scoped: false }}>
       <View style={{ flex: 1, backgroundColor: loaded ? undefined : lightColors.bg }}>
         {/* While your last theme is read (a blink), the launch picture itself, not a bare cream
             screen: the logo never drops out between the phone's picture and the app's (Oct 4). */}
@@ -346,7 +353,7 @@ export const useTheme = () => useContext(ThemeContext);
  */
 export function ThemeScope({ theme, children }: { theme: ThemeName; children: React.ReactNode }) {
   const outer = useContext(ThemeContext);
-  const value = useMemo(() => ({ ...outer, theme, night: theme === 'night', dark: DARK_THEMES.has(theme) }), [outer, theme]);
+  const value = useMemo(() => ({ ...outer, theme, night: theme === 'night', dark: DARK_THEMES.has(theme), scoped: true }), [outer, theme]);
   // Always the same shape, the app's own court too, so a change of court never starts the inside over.
   React.useLayoutEffect(() => { Object.assign(colors, themes[outer.theme]); });
   Object.assign(colors, themes[theme]);
@@ -385,11 +392,13 @@ for (const key of slotKeys) {
 }
 
 export function useThemedStyles<T extends object>(definitions: T): T {
-  const { theme } = useTheme();
+  const { theme, scoped } = useTheme();
   // The live colour object is brought in line with the theme every time a
   // themed screen draws, so a button reading `colors.brand` can never be a
-  // theme behind the page it sits on.
-  if (colors.bg !== themes[theme].bg || colors.brand !== themes[theme].brand) Object.assign(colors, themes[theme]);
+  // theme behind the page it sits on. Not inside a ThemeScope: a share
+  // picture redrawing on its own (an avatar hearing new people) would
+  // otherwise leave its court in the colours the rest of the app reads.
+  if (!scoped && (colors.bg !== themes[theme].bg || colors.brand !== themes[theme].brand)) Object.assign(colors, themes[theme]);
   return useMemo(() => {
     const target = themes[theme];
     const remap = (value: unknown): unknown => {

@@ -342,7 +342,10 @@ export default function ShareSession() {
                       key={p.name}
                       accessibilityRole="radio"
                       accessibilityLabel={p.label}
-                      accessibilityState={{ checked: on }}
+                      accessibilityState={{ checked: on, disabled: !themed(design) }}
+                      // Faded out (Clear, Overlay, Heart rate): out of a keyboard's reach too.
+                      disabled={!themed(design)}
+                      focusable={themed(design)}
                       onPress={() => { if (!on) { haptics.tap(); setPainted(p.name); } }}
                       style={({ pressed }) => [styles.paint, pressed && styles.pressed]}
                     >

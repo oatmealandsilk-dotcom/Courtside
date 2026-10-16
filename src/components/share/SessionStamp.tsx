@@ -106,7 +106,7 @@ export function SessionStamp({ session, width, eyebrow, place, hidden = [], clea
         <View style={styles.grow} />
         {lead ? (
           <View style={[styles.row, { gap: 5 * u, flexShrink: 1 }]}>
-            <Avatar name={lead.name} seed={lead.id} size={Math.round(18 * u)} />
+            <Avatar name={lead.name} seed={lead.id} size={Math.round(18 * u)} style={clear ? { backgroundColor: withAlpha(colors.onMedia, 0.25) } : undefined} />
             <Text numberOfLines={1} style={{ ...font('600'), fontSize: 12 * u, color: look.ink, flexShrink: 1, ...shade }}>
               {opponents.length ? 'vs' : 'with'} @{lead.handle}{others > 0 ? ` +${others}` : ''}
             </Text>
