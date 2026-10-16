@@ -834,7 +834,7 @@ const STEPS = [
     async run(page) {
       await page.tap({ label: /^Share to Instagram: / });
     },
-    expect: [{ label: 'Share to Instagram Stories' }, { label: 'Save the picture' }, { text: 'Card' }, { text: 'Clear' }, { label: 'Melbourne' }],
+    expect: [{ label: 'Share to Instagram Stories' }, { label: 'Save the picture' }, { text: 'Card' }, { label: 'Clear' }, { label: 'Melbourne' }],
     after: async (page) => { await page.tap({ label: 'Go back' }); await showFirstSession(page); await page.waitFor({ label: /^Share to Instagram: / }); },
   },
   {

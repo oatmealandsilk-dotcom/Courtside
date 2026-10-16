@@ -1,10 +1,11 @@
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View, type TextStyle } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import Reanimated, { FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated';
 import Svg, { Line } from 'react-native-svg';
 
 import { BrandMark } from '@/components/BrandMark';
+import { ShadedMark } from '@/components/share/ShadedMark';
 import { Avatar, BrandWash, ShirtWash } from '@/components/ui';
 import type { ID, SessionDetail } from '@/data/types';
 import { onCourtWord, resultWord, scoreLine, sessionEyebrow, sourceLabel, spokenDuration } from '@/features/activity/format';
@@ -158,6 +159,33 @@ export function creamFill(theme: ThemeName): string {
 }
 
 /**
+ * The Clear colours (Oct 15, owner: "a card version that is clear, no
+ * theme", then Clear as the first colour dot): white on nothing, whatever the
+ * court, the quiet words near-white and the rules firm, since nothing behind
+ * them holds them together. Shared by the share stamp (SessionStamp) and the
+ * Card picture.
+ */
+export function clearLook(): CardLook {
+  const ink = colors.onMedia;
+  return {
+    dark: true, wash: 'brand', filled: false, fill: 'transparent', border: 'transparent', rim: null,
+    figure: ink, ink, eyebrow: ink, muted: withAlpha(ink, 0.92), faint: withAlpha(ink, 0.82),
+    pillFill: 'transparent', pillInk: ink, lines: withAlpha(ink, 0.7),
+    zones: [0.3, 0.45, 0.6, 0.8, 1].map((a) => withAlpha(ink, a)),
+  };
+}
+
+/**
+ * A soft dark shadow under Clear's white words, so they hold on a bright
+ * photo too (Oct 15, owner: "make the clear one more visable"). Dark, never a
+ * white glow (Oct 9, owner: the white halo was "off putting").
+ */
+export const CLEAR_SHADE: TextStyle = { textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 8 };
+
+/** The shadow under Clear's wordmark, as the Overlay's (SessionStoryArt's wordHalo, dark); `u` a unit of a 360-wide story. */
+export const clearWordShade = (u: number): TextStyle => ({ textShadowColor: 'rgba(0,0,0,0.55)', textShadowOffset: { width: 0, height: 0.8 * u }, textShadowRadius: 7 * u });
+
+/**
  * The fade inside a session box, laid as its first child: the court's shirt
  * (with the cream box's hairline, unless `edge` is off for a picture drawn
  * edge to edge), or the brand's wash in the plain green box.
@@ -176,7 +204,7 @@ export function CardWash({ look, radius, edge = true }: { look: CardLook; radius
  * from. `width` sets the scale: 358 is the full size, the composer's is
  * about two thirds of it. The feed's post draws it sideways (`height`).
  */
-export function SessionCard({ session, width, height, play = false, people, hidden = [], onPress, showSource = true, accessibilityHint, aspect = 4 / 5, radius, eyebrow, place, brand = false, scale = 1, inset, picture = false }: {
+export function SessionCard({ session, width, height, play = false, people, hidden = [], onPress, showSource = true, accessibilityHint, aspect = 4 / 5, radius, eyebrow, place, brand = false, scale = 1, inset, picture = false, clear = false }: {
   session: SessionDetail;
   width: number;
   /**
@@ -208,6 +236,13 @@ export function SessionCard({ session, width, height, play = false, people, hidd
    * browser's copy for the picture would catch it part way).
    */
   picture?: boolean;
+  /**
+   * The share Card under the Clear colour dot (Oct 15): nothing filled, no
+   * wash or court, in no court's colours: white words with a soft dark
+   * shadow, the mark in CourtSide's bright green, the result as an outline.
+   * Only for the pictures (with `picture`), never the feed's card.
+   */
+  clear?: boolean;
   /** Count the numbers up (once, when the card comes into view). */
   play?: boolean;
   /** The author's own preview: the players picked, waiting ones faded. Otherwise only those who accepted (session.with). */
@@ -219,7 +254,9 @@ export function SessionCard({ session, width, height, play = false, people, hidd
   accessibilityHint?: string;
 }) {
   const { theme } = useTheme();
-  const look = cardLook(theme);
+  const look = clear ? clearLook() : cardLook(theme);
+  // Clear's soft shadow under every word and number; nothing on a filled card.
+  const shade: TextStyle | undefined = clear ? CLEAR_SHADE : undefined;
   const k = (width / 358) * scale;
   const pad = Math.round(22 * k);
   const round = radius ?? Math.round(20 * k);
@@ -288,50 +325,50 @@ export function SessionCard({ session, width, height, play = false, people, hidd
     />
   ) : (
     <View collapsable={false} style={[styles.card, { width, aspectRatio: aspect, borderRadius: round, padding: pad, paddingTop: inset ? inset.top : pad, paddingBottom: inset ? inset.bottom : pad, backgroundColor: look.fill, borderColor: look.border, borderWidth: look.dark && round > 0 ? 1 : 0 }]}>
-      <CardWash look={look} radius={round} edge={round > 0} />
-      {/* The faint court is tennis's: a run or the gym has none. */}
-      {session.kind === 'fitness' || session.workout ? null : <CourtLines color={look.lines} />}
+      {clear ? null : <CardWash look={look} radius={round} edge={round > 0} />}
+      {/* The faint court is tennis's: a run or the gym has none. Clear has none either: nothing behind the words. */}
+      {clear || session.kind === 'fitness' || session.workout ? null : <CourtLines color={look.lines} />}
       <View style={styles.top}>
-        <Reanimated.Text key={shownTop} entering={picture ? undefined : FadeIn.duration(160)} style={{ ...font('600'), fontSize: small(11.5, 9), letterSpacing: Math.max(0.8, 1.1 * k), color: look.eyebrow, flex: 1 }} numberOfLines={1} maxFontSizeMultiplier={1.2}>
+        <Reanimated.Text key={shownTop} entering={picture ? undefined : FadeIn.duration(160)} style={{ ...font('600'), fontSize: small(11.5, 9), letterSpacing: Math.max(0.8, 1.1 * k), color: look.eyebrow, flex: 1, ...shade }} numberOfLines={1} maxFontSizeMultiplier={1.2}>
           {shownTop}
         </Reanimated.Text>
         {result ? (
-          <Pop token={result} style={[styles.pill, { height: small(26, 20), borderRadius: small(13, 10), paddingHorizontal: small(11, 8), backgroundColor: look.pillFill }]}>
-            <Text style={{ ...font('700'), fontSize: small(13, 10), color: look.pillInk }} maxFontSizeMultiplier={1.2}>{result}</Text>
+          <Pop token={result} style={[styles.pill, { height: small(26, 20), borderRadius: small(13, 10), paddingHorizontal: small(11, 8), backgroundColor: look.pillFill }, clear && { borderWidth: Math.max(1, 1.6 * k), borderColor: look.ink }]}>
+            <Text style={{ ...font('700'), fontSize: small(13, 10), color: look.pillInk, ...shade }} maxFontSizeMultiplier={1.2}>{result}</Text>
           </Pop>
         ) : null}
       </View>
       <Reanimated.View layout={picture ? undefined : LinearTransition.duration(220)} style={[styles.middle, { justifyContent: health && !tall ? 'flex-start' : 'center', paddingTop: health && !tall ? 18 * k : 0 }]}>
-        <Duration minutes={session.minutes} size={96 * k} color={look.figure} unitColor={look.muted} play={play} delay={120} duration={700} />
-        <Text style={{ ...font('500'), fontSize: small(14, 10), color: look.muted, marginTop: 2 * k }} maxFontSizeMultiplier={1.2}>{onCourtWord(session)}</Text>
+        <Duration minutes={session.minutes} size={96 * k} color={look.figure} unitColor={look.muted} play={play} delay={120} duration={700} textStyle={shade} />
+        <Text style={{ ...font('500'), fontSize: small(14, 10), color: look.muted, marginTop: 2 * k, ...shade }} maxFontSizeMultiplier={1.2}>{onCourtWord(session)}</Text>
         {score ? (
           // A long score (tiebreak points, Oct 10) a little smaller, so it all fits on its line.
-          <Text style={{ ...font('700'), fontSize: 26 * k * scoreScale(score, 20), letterSpacing: -0.4 * k, color: look.figure, fontVariant: ['tabular-nums'], marginTop: 8 * k }} numberOfLines={1} maxFontSizeMultiplier={1.2}>{score}</Text>
+          <Text style={{ ...font('700'), fontSize: 26 * k * scoreScale(score, 20), letterSpacing: -0.4 * k, color: look.figure, fontVariant: ['tabular-nums'], marginTop: 8 * k, ...shade }} numberOfLines={1} maxFontSizeMultiplier={1.2}>{score}</Text>
         ) : null}
         {far ? (
           <View style={{ marginTop: 8 * k }}>
-            <Figure value={far.value} part={far.value < 10 ? 'dec1' : 'int'} unit={far.unit} baseline size={30 * k} color={look.figure} unitColor={look.muted} unitScale={0.46} play={play} delay={160} />
+            <Figure value={far.value} part={far.value < 10 ? 'dec1' : 'int'} unit={far.unit} baseline size={30 * k} color={look.figure} unitColor={look.muted} unitScale={0.46} play={play} delay={160} textStyle={shade} />
           </View>
         ) : null}
         {place ? (
           <View style={[styles.place, { gap: 4 * k, marginTop: 8 * k }]}>
             <Ionicons name="location-outline" size={small(13, 10)} color={look.muted} />
-            <Text style={{ ...font('500'), fontSize: small(13, 10), color: look.muted, flexShrink: 1 }} numberOfLines={1} maxFontSizeMultiplier={1.2}>{place}</Text>
+            <Text style={{ ...font('500'), fontSize: small(13, 10), color: look.muted, flexShrink: 1, ...shade }} numberOfLines={1} maxFontSizeMultiplier={1.2}>{place}</Text>
           </View>
         ) : null}
         {health ? (
           <Reanimated.View entering={picture ? undefined : FadeIn.duration(220)} exiting={picture ? undefined : FadeOut.duration(160)} style={{ marginTop: 20 * k }}>
             {hr || avg ? (
               <View style={[styles.hrRow, { gap: 26 * k }]}>
-                {hr ? <Figure value={session.maxHr!} unit="max bpm" size={38 * k} color={look.figure} unitColor={look.muted} unitScale={0.33} play={play} delay={200} /> : null}
-                {avg ? <Figure value={avg} unit={hr ? 'avg' : 'avg bpm'} size={38 * k} color={look.figure} unitColor={look.muted} unitScale={0.33} play={play} delay={200} /> : null}
+                {hr ? <Figure value={session.maxHr!} unit="max bpm" size={38 * k} color={look.figure} unitColor={look.muted} unitScale={0.33} play={play} delay={200} textStyle={shade} /> : null}
+                {avg ? <Figure value={avg} unit={hr ? 'avg' : 'avg bpm'} size={38 * k} color={look.figure} unitColor={look.muted} unitScale={0.33} play={play} delay={200} textStyle={shade} /> : null}
               </View>
             ) : null}
             {zones ? <ZoneBar zones={zones} colors={look.zones} height={10 * k} play={play} delay={200} duration={600} style={{ marginTop: hr || avg ? 14 * k : 0 }} /> : null}
             {strain != null || kcal ? (
               <View style={[styles.hrRow, { gap: 22 * k, marginTop: hr || avg || zones ? 12 * k : 0 }]}>
-                {strain != null ? <Figure value={strain} part="dec1" baseline unit="Strain" size={24 * k} color={look.figure} unitColor={look.muted} unitScale={0.46} play={play} delay={260} /> : null}
-                {kcal ? <Figure value={kcal} baseline unit="cal" size={24 * k} color={look.figure} unitColor={look.muted} unitScale={0.46} play={play} delay={260} /> : null}
+                {strain != null ? <Figure value={strain} part="dec1" baseline unit="Strain" size={24 * k} color={look.figure} unitColor={look.muted} unitScale={0.46} play={play} delay={260} textStyle={shade} /> : null}
+                {kcal ? <Figure value={kcal} baseline unit="cal" size={24 * k} color={look.figure} unitColor={look.muted} unitScale={0.46} play={play} delay={260} textStyle={shade} /> : null}
               </View>
             ) : null}
           </Reanimated.View>
@@ -340,8 +377,8 @@ export function SessionCard({ session, width, height, play = false, people, hidd
       <View style={styles.foot}>
         {lead ? (
           <View style={[styles.who, lead.pending && styles.pending]}>
-            <Avatar name={lead.name} seed={lead.id} size={Math.round(26 * k)} />
-            <Text style={{ ...font('600'), fontSize: small(14, 10), color: look.ink, flexShrink: 1 }} numberOfLines={1} maxFontSizeMultiplier={1.2}>
+            <Avatar name={lead.name} seed={lead.id} size={Math.round(26 * k)} style={clear ? { backgroundColor: withAlpha(colors.onMedia, 0.25) } : undefined} />
+            <Text style={{ ...font('600'), fontSize: small(14, 10), color: look.ink, flexShrink: 1, ...shade }} numberOfLines={1} maxFontSizeMultiplier={1.2}>
               {vs} @{lead.handle}{list.length > 1 ? ` +${list.length - 1}` : ''}
             </Text>
             {/* The clock alone didn't say what it meant: a quiet word after it (Oct 4, owner). */}
@@ -353,14 +390,15 @@ export function SessionCard({ session, width, height, play = false, people, hidd
             ) : null}
           </View>
         ) : <View style={{ flex: 1 }} />}
-        {tracker && showSource ? <Text style={{ ...font('600'), fontSize: small(11, 9), color: look.faint }} maxFontSizeMultiplier={1.2}>{sourceLabel(session.source ?? 'apple-health')}</Text> : null}
+        {tracker && showSource ? <Text style={{ ...font('600'), fontSize: small(11, 9), color: look.faint, ...shade }} maxFontSizeMultiplier={1.2}>{sourceLabel(session.source ?? 'apple-health')}</Text> : null}
       </View>
       {brand ? (
-        <View style={[styles.brand, { gap: 6 * k, marginTop: 14 * k, paddingTop: 12 * k, borderTopColor: look.lines }]}>
-          <BrandMark size={Math.round(small(17, 12))} color={look.figure} />
-          <Text style={{ ...font('600'), fontSize: small(14, 10), letterSpacing: -0.35 * k, color: look.ink }} maxFontSizeMultiplier={1}>CourtSide</Text>
+        <View style={[styles.brand, { gap: 6 * k, marginTop: 14 * k, paddingTop: 12 * k, borderTopColor: look.lines }, clear && { borderTopWidth: Math.max(1, 1.5 * k) }]}>
+          {/* Clear: the Overlay's mark and wordmark, CourtSide's bright green with its soft dark shadow. */}
+          {clear ? <ShadedMark size={Math.round(small(17, 12))} u={k * 0.5} color={colors.brandBright} halo="dark" /> : <BrandMark size={Math.round(small(17, 12))} color={look.figure} />}
+          <Text style={{ ...font('600'), fontSize: small(14, 10), letterSpacing: -0.35 * k, color: clear ? colors.brandBright : look.ink, ...(clear ? clearWordShade(k * 0.5) : null) }} maxFontSizeMultiplier={1}>CourtSide</Text>
           <View style={{ flex: 1 }} />
-          <Text style={{ ...font('500'), fontSize: small(11, 9), color: look.faint }} maxFontSizeMultiplier={1}>courtsidebase.com</Text>
+          <Text style={{ ...font('500'), fontSize: small(11, 9), color: look.faint, ...shade }} maxFontSizeMultiplier={1}>courtsidebase.com</Text>
         </View>
       ) : null}
     </View>

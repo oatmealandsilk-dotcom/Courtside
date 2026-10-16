@@ -4,7 +4,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { BrandMark } from '@/components/BrandMark';
 import { Avatar } from '@/components/ui';
-import { CardWash, cardLook, type CardLook } from '@/components/session/SessionCard';
+import { CLEAR_SHADE, CardWash, cardLook, clearLook, clearWordShade as wordShade } from '@/components/session/SessionCard';
 import { ShadedMark } from '@/components/share/ShadedMark';
 import { Duration, Figure } from '@/components/session/Duration';
 import type { ID, SessionDetail } from '@/data/types';
@@ -117,28 +117,6 @@ export function SessionStamp({ session, width, eyebrow, place, hidden = [], clea
     </View>
   );
 }
-
-/** The Clear stamp's colours: white on nothing, whatever the court. */
-function clearLook(): CardLook {
-  const ink = colors.onMedia;
-  return {
-    dark: true, wash: 'brand', filled: false, fill: 'transparent', border: 'transparent', rim: null,
-    // Near-white even for the quiet words, and firmer rules (Oct 15, owner: "make the clear one more visable").
-    figure: ink, ink, eyebrow: ink, muted: withAlpha(ink, 0.92), faint: withAlpha(ink, 0.82),
-    pillFill: 'transparent', pillInk: ink, lines: withAlpha(ink, 0.7), zones: [],
-  };
-}
-
-/**
- * A soft dark shadow under the white words, a little firmer than the Overlay's
- * (SessionStoryArt's overLabel) so the Clear stamp holds on a bright photo
- * too (Oct 15, owner: "make the clear one more visable"). Dark, never a white
- * glow (Oct 9, owner: the white halo was "off putting").
- */
-const CLEAR_SHADE: TextStyle = { textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 8 };
-
-/** The Overlay's shadow under its wordmark (SessionStoryArt's wordHalo, dark), `u` a unit of a 360-wide story. */
-const wordShade = (u: number): TextStyle => ({ textShadowColor: 'rgba(0,0,0,0.55)', textShadowOffset: { width: 0, height: 0.8 * u }, textShadowRadius: 7 * u });
 
 const styles = StyleSheet.create({
   card: { overflow: 'hidden' },

@@ -41,12 +41,12 @@ import { colors, font, pageIsDark, radius, spacing, withAlpha } from '@/theme';
  * Instagram's own steps, when an older iPhone build hands the picture over by
  * the clipboard, stay on a line under the buttons until you change design.
  *
- * Since Oct 15: Clear after the Sticker (the stamp with nothing filled, no
- * court's colours); every see-through design previewed on a checkerboard,
- * never your photo; colour dots under the names that redraw Photo, Card and
+ * Since Oct 15: every see-through design previewed on a checkerboard, never
+ * your photo; colour dots under the names that redraw Photo, Card and
  * Sticker in another court's colours (these pictures only, never the app),
- * Clear the first of them, which draws those three with the Clear stamp;
- * and Send, to someone on CourtSide, since a post's share arrow opens here.
+ * Clear the first of them and where the screen starts, which draws those
+ * three with nothing filled; and Send, to someone on CourtSide, since a
+ * post's share arrow opens here.
  *
  * Each picture is drawn twice: small to look at, and once more out of sight
  * at exactly 1080 × 1920 pixels, which is the one photographed (storyImage.ts).
@@ -94,9 +94,9 @@ const PAINTS: { name: Paint; label: string }[] = [
  * court changed meanwhile is used.
  */
 function storyLook(design: StoryDesign, paint: Paint, own: ThemeName): StoryLook {
-  // Heart rate and Clear are white words on nothing too, so they go over the same two colours;
-  // so do Card and Sticker under the Clear dot.
-  if (design === 'overlay' || design === 'heart' || design === 'clear' || (paint === 'clear' && (design === 'card' || design === 'sticker'))) {
+  // Heart rate is white words on nothing too, so it goes over the same two colours; so do Card and
+  // Sticker under the Clear dot.
+  if (design === 'overlay' || design === 'heart' || (paint === 'clear' && (design === 'card' || design === 'sticker'))) {
     const deep = (pageIsDark() ? colors.bg : colors.text).slice(0, 7);
     return { sticker: true, top: mixHex(deep, colors.court.slice(0, 7), 0.15), bottom: deep };
   }
@@ -138,9 +138,10 @@ export default function ShareSession() {
   const { posts, sessions, detectedActivities, currentUser, currentUserId, blockedIds, ready } = useApp();
   const flags = useTennisFlags();
   const { theme } = useTheme();
-  // The court the share pictures are drawn in: your own until you tap a colour dot. Only these pictures change.
+  // What the share pictures are drawn in: Clear until you tap a colour dot (Oct 15, owner: "it should
+  // start on clear"). Only these pictures change, never the app.
   const [painted, setPainted] = useState<Paint | null>(null);
-  const paint: Paint = painted ?? theme;
+  const paint: Paint = painted ?? 'clear';
   const paints = theme === 'clean' ? [...PAINTS, { name: 'clean' as Paint, label: 'Clean' }] : PAINTS;
   // The Clear dot: Photo, Card and Sticker with the Clear stamp, and in no court's colours (your own court around them).
   const clearPaint = paint === 'clear';
@@ -336,7 +337,7 @@ export default function ShareSession() {
                 })}
               </View>
 
-              {/* The colour dots: a court's colours for Photo, Card and Sticker. Clear, Overlay and Heart rate
+              {/* The colour dots: Clear or a court's colours for Photo, Card and Sticker. Overlay and Heart rate
                   stay CourtSide's own (Oct 10), so the dots fade out for them, keeping their room so nothing moves. */}
               <View
                 style={[styles.paints, !themed(design) && styles.paintsOff]}
@@ -356,7 +357,7 @@ export default function ShareSession() {
                       accessibilityRole="radio"
                       accessibilityLabel={p.label}
                       accessibilityState={{ checked: on, disabled: !themed(design) }}
-                      // Faded out (Clear, Overlay, Heart rate): out of a keyboard's reach too.
+                      // Faded out (Overlay, Heart rate): out of a keyboard's reach too.
                       disabled={!themed(design)}
                       focusable={themed(design)}
                       onPress={() => { if (!on) { haptics.tap(); setPainted(p.name); } }}

@@ -16,13 +16,13 @@ import { useTheme } from '@/theme/ThemeProvider';
 import { colors, font } from '@/theme';
 
 /** The pictures a session can be shared as, in the order they are offered. */
-export type StoryDesign = 'photo' | 'card' | 'sticker' | 'clear' | 'overlay' | 'heart';
+export type StoryDesign = 'photo' | 'card' | 'sticker' | 'overlay' | 'heart';
 export const STORY_DESIGNS: { key: StoryDesign; label: string }[] = [
   { key: 'photo', label: 'Photo' },
   { key: 'card', label: 'Card' },
   { key: 'sticker', label: 'Sticker' },
-  // The Sticker with nothing filled and no court's colours (Oct 15, owner: "a card version that is clear, no theme").
-  { key: 'clear', label: 'Clear' },
+  // Clear is no longer a design of its own but the first colour dot (Oct 15, owner: "there should not be
+  // multiple of same formats"): Sticker under it was the very same picture.
   { key: 'overlay', label: 'Overlay' },
 ];
 
@@ -58,16 +58,18 @@ export function storyDesigns(story: SessionStory | null): { key: StoryDesign; la
  * - 'card':  the card itself filling the story;
  * - 'sticker': the card alone on a see-through ground, to lay over a story
  *   of your own;
- * - 'clear': the Sticker's own layout with nothing filled and no court's
- *   colours: white words, the mark in CourtSide's bright green;
  * - 'overlay': the numbers and the logo alone, white on nothing;
  * - 'heart': the time and calories over one bar per heart-rate zone, white
  *   on nothing like the Overlay, only for a post that shares its zones and
  *   heart rate (HeartRateOverlay.tsx).
  *
  * `clear` is the share screen's Clear colour dot (Oct 15, owner: "make clear
- * also a dot, and make it the first one"): Photo, Card and Sticker drawn with
- * the Clear stamp, nothing filled, in no court's colours.
+ * also a dot, and make it the first one", where the screen now starts): Photo,
+ * Card and Sticker with nothing filled and in no court's colours, white words
+ * and the mark in CourtSide's bright green. Each stays its own shape, so no
+ * two pictures are the same (owner: "there should not be multiple of same
+ * formats"): the Card's whole-story layout, the Sticker's small stamp, the
+ * stamp in the corner of the photo.
  *
  * Only what `story` carries is drawn: its maker (sessionStory.ts) has
  * already left out health numbers that were not shared and a teen's court.
@@ -81,7 +83,7 @@ export function SessionStoryArt({ design, story, width, photo, hidden = [], onPh
   hidden?: ID[];
   /** Told when the photo has drawn (or failed), so the picture waits for it. */
   onPhotoLoad?: (ok: boolean) => void;
-  /** The Clear colour dot: Photo, Card and Sticker with the Clear stamp. */
+  /** The Clear colour dot: Photo, Card and Sticker with nothing filled. */
   clear?: boolean;
 }) {
   useTheme();
@@ -90,12 +92,12 @@ export function SessionStoryArt({ design, story, width, photo, hidden = [], onPh
   const height = Math.round((width * 16) / 9);
   const common = { session: story.session, eyebrow: story.eyebrow, place: story.place, hidden, brand: true, play: false, picture: true } as const;
 
-  if (design === 'card' && !clear) {
+  if (design === 'card') {
     return (
       <View collapsable={false} style={{ width, height }}>
         {/* Instagram's own buttons cover roughly the top 13% and the bottom 17%: the numbers keep clear of both. */}
         {/* The session's saved score is on it by itself (Oct 6): added or changed in the session's edit, never here. */}
-        <SessionCard {...common} width={width} aspect={9 / 16} radius={0} scale={1.14} inset={{ top: Math.round(height * 0.12), bottom: Math.round(height * 0.11) }} />
+        <SessionCard {...common} width={width} aspect={9 / 16} radius={0} scale={1.14} inset={{ top: Math.round(height * 0.12), bottom: Math.round(height * 0.11) }} clear={clear} />
       </View>
     );
   }
@@ -151,11 +153,10 @@ export function SessionStoryArt({ design, story, width, photo, hidden = [], onPh
     );
   }
 
-  if (design === 'clear' || (clear && (design === 'sticker' || design === 'card'))) {
+  if (clear && design === 'sticker') {
     // The Sticker without its card: white on nothing, no shadow round a box that is not there. Bigger than the
-    // Sticker (Oct 15, owner: "make the clear one more visable"): with no box to frame it, its words need the room.
-    // On Card (the Clear dot) a touch bigger again, as the Card fills more of the story than the Sticker.
-    const cardW = Math.round(width * (design === 'card' ? 0.88 : 0.84));
+    // filled Sticker (Oct 15, owner: "make the clear one more visable"): with no box to frame it, its words need the room.
+    const cardW = Math.round(width * 0.84);
     return (
       <View collapsable={false} style={[styles.centre, { width, height }]}>
         <SessionStamp session={story.session} eyebrow={story.eyebrow} place={story.place} hidden={hidden} width={cardW} clear />
