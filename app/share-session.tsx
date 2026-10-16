@@ -16,13 +16,15 @@ import { storyFromLog, storyFromPost, type SessionStory } from '@/features/share
 import { canScore } from '@/features/activity/score';
 import { AddScore } from '@/components/session/ScoreField';
 import { INSTAGRAM_NOTE, exportStory, stageSize, storyNoteOk, warmStory, type StoryAction, type StoryLook } from '@/features/share/storyImage';
+import { closedWithoutSharing, sharedFromScreen } from '@/features/share/afterPost';
 import { mixHex } from '@/features/activity/zones';
-import { goBack } from '@/lib/goBack';
+import { HOME, goBack } from '@/lib/goBack';
 import * as haptics from '@/lib/haptics';
 import { show as showToast } from '@/lib/toast';
+import { setUploadAside, useUploadState } from '@/lib/uploads';
 import { useApp } from '@/store/AppContext';
 import { ThemeScope, themes, useTheme, useThemedStyles, type ThemeName } from '@/theme/ThemeProvider';
-import { colors, font, pageIsDark, radius, spacing, withAlpha } from '@/theme';
+import { colors, font, pageIsDark, radius, spacing, typography, withAlpha } from '@/theme';
 
 /**
  * Share a session to Instagram, the way Strava does: four pictures to swipe
@@ -48,6 +50,12 @@ import { colors, font, pageIsDark, radius, spacing, withAlpha } from '@/theme';
  * Clear the first of them, which draws those three with the Clear stamp;
  * and Send, to someone on CourtSide, since a post's share arrow opens here.
  *
+ * And it opens by itself straight after a session's post goes up, Strava's
+ * way (?posted=1, Oct 15, owner: "Like strava"; features/share/afterPost.ts):
+ * then it is "Share your session", with a quiet line saying the post is up
+ * (or still going up) and Done, back to the feed, in place of the back arrow.
+ * Everything else is as ever.
+ *
  * Each picture is drawn twice: small to look at, and once more out of sight
  * at exactly 1080 × 1920 pixels, which is the one photographed (storyImage.ts).
  */
@@ -57,6 +65,8 @@ const SHADOW_ROOM = 16;
 const CARD_GAP = 14;
 /** What the page keeps for everything but the pictures: the title, the designs' names, the colour dots, Add score and the buttons. */
 const CHROME_H = 424;
+/** Straight after posting, the quiet line under the title and its gap: the pictures give up that much. */
+const POSTED_LINE = 20;
 /** One side of a square of the see-through checkerboard, in points: small, so it reads as a calm texture. */
 const CHECK = 6;
 
@@ -134,8 +144,10 @@ function Checker({ check = CHECK, light = false }: { check?: number; light?: boo
 export default function ShareSession() {
   const styles = useThemedStyles(styleDefinitions);
   const insets = useSafeAreaInsets();
-  const { post: postParam, session: sessionParam } = useLocalSearchParams<{ post?: string; session?: string }>();
-  const { posts, sessions, detectedActivities, currentUser, currentUserId, blockedIds, ready } = useApp();
+  const { post: postParam, session: sessionParam, posted: postedParam } = useLocalSearchParams<{ post?: string; session?: string; posted?: string }>();
+  const { posts, sessions, detectedActivities, currentUser, currentUserId, blockedIds, ready, actions } = useApp();
+  // Opened by itself straight after posting (see above): "Share your session", with Done.
+  const posted = postedParam === '1' && !!postParam;
   const flags = useTennisFlags();
   const { theme } = useTheme();
   // The court the share pictures are drawn in: your own until you tap a colour dot. Only these pictures change.
@@ -147,9 +159,15 @@ export default function ShareSession() {
   const courtOf = (d: StoryDesign): ThemeName => (themed(d) && paint !== 'clear' ? paint : theme);
   const clearOf = (d: StoryDesign) => clearPaint && themed(d);
 
-  const story = useMemo((): SessionStory | null => {
+  const liveStory = useMemo((): SessionStory | null => {
     const me = currentUser ?? undefined;
     let post = postParam ? posts.find((p) => p.id === postParam && p.authorId === currentUserId) : undefined;
+    // Straight after posting, one whose photo or clip is still going up is in nobody's list yet: drawn from
+    // what is going up (its picture still on this phone), so the screen never waits for the upload.
+    if (!post && posted && postParam) {
+      const going = actions.outgoingPost(postParam);
+      if (going?.authorId === currentUserId) post = going;
+    }
     const log = sessionParam ? sessions.find((s) => s.id === sessionParam && s.userId === currentUserId) : undefined;
     // A session already on a post shares as the post shows it: its numbers, its photo.
     if (!post && log) {
@@ -163,12 +181,20 @@ export default function ShareSession() {
       return storyFromLog(log, me, found && sourceOn(found, flags) ? found : undefined);
     }
     return null;
-  }, [postParam, sessionParam, posts, sessions, detectedActivities, currentUser, currentUserId, flags]);
+  }, [postParam, sessionParam, posts, sessions, detectedActivities, currentUser, currentUserId, flags, posted, actions]);
+  // Posted, then gone (a photo or clip that didn't go up after all): the pictures stay as last drawn, the session still yours to share.
+  const lastDrawn = useRef<SessionStory | null>(null);
+  if (posted && liveStory) lastDrawn.current = liveStory;
+  const story = liveStory ?? (posted ? lastDrawn.current : null);
+  const postGone = posted && !liveStory && !!story;
+  // How its upload is going, if it has one, said in the line under the title (the strip stands aside meanwhile, below).
+  const upload = useUploadState(posted ? postParam : undefined);
 
   const { height: windowH } = useWindowDimensions();
   const [pageW, setPageW] = useState(0);
   // Narrow enough that the designs either side peek in, the way Strava's share screen shows there is more to swipe (Oct 5, owner).
-  const cardW = Math.floor(Math.max(150, Math.min(290, pageW - 96, ((windowH - CHROME_H - insets.top - insets.bottom) * 9) / 16)));
+  const chrome = CHROME_H + (posted ? POSTED_LINE : 0);
+  const cardW = Math.floor(Math.max(150, Math.min(290, pageW - 96, ((windowH - chrome - insets.top - insets.bottom) * 9) / 16)));
   const cardH = Math.round((cardW * 16) / 9);
   const step = cardW + CARD_GAP;
   const sidePad = Math.max(0, (pageW - cardW) / 2 - CARD_GAP / 2);
@@ -181,7 +207,11 @@ export default function ShareSession() {
   const logId = sessionParam ?? story?.session.sessionId;
   const log = logId ? sessions.find((s) => s.id === logId && s.userId === currentUserId) : undefined;
   const addScore = log && canScore(log.kind) && !log.fromSessionId && !log.sets?.length && !story?.session.sets?.length ? log.id : undefined;
-  const photo = picked ?? story?.photo;
+  // Straight after posting, the picture first drawn stays: a photo still going up is the copy on this phone,
+  // and it never blinks out while the hosted one loads once the post has landed.
+  const heldPhoto = useRef<string | undefined>(undefined);
+  if (posted && !heldPhoto.current && story?.photo) heldPhoto.current = story.photo;
+  const photo = picked ?? heldPhoto.current ?? story?.photo;
   // The four designs, and Heart rate after them when the post shares its zones and heart rate (storyDesigns).
   const designs = useMemo(() => storyDesigns(story), [story]);
   const [index, setIndex] = useState<number | null>(null);
@@ -214,6 +244,26 @@ export default function ShareSession() {
   waitFor.current = photoState;
   useEffect(() => { warmStory(); }, []);
 
+  // Straight after posting, the post's upload is said in the line under the title, not on the strip across
+  // the top, which would sit over the title and Done (a failure still shows there). Back on it once closed.
+  useEffect(() => {
+    if (!posted || !postParam) return undefined;
+    setUploadAside(postParam, true);
+    return () => setUploadAside(postParam, false);
+  }, [posted, postParam]);
+  // Strava's way without the nag (afterPost.ts): closed straight after posting without sharing counts toward
+  // it no longer opening by itself; anything shared from here, however it was opened, starts the count again.
+  const shared = useRef(false);
+  const noteShared = () => {
+    shared.current = true;
+    if (currentUserId) sharedFromScreen(currentUserId);
+  };
+  useEffect(() => {
+    if (!posted || !currentUserId) return undefined;
+    const me = currentUserId;
+    return () => { if (!shared.current && lastDrawn.current) closedWithoutSharing(me); };
+  }, [posted, currentUserId]);
+
   const [busy, setBusy] = useState<StoryAction | null>(null);
   // Instagram's steps (INSTAGRAM_NOTE), kept under the buttons for when you come back from Instagram;
   // gone once you pick another design or tap again.
@@ -221,6 +271,7 @@ export default function ShareSession() {
   useEffect(() => { setSteps(null); }, [design]);
   const run = async (action: StoryAction) => {
     if (busy) return;
+    noteShared();
     setBusy(action);
     setSteps(null);
     try {
@@ -252,9 +303,23 @@ export default function ShareSession() {
     }
   };
 
+  // Straight after posting: Done, in place of the back arrow, back to the feed the post landed on (the feed
+  // itself when this was the first page opened, a browser reloaded on it). Otherwise the way back, as ever.
+  const doneButton = (
+    <Pressable accessibilityRole="button" accessibilityLabel="Done" hitSlop={{ top: 9, bottom: 9, left: 10, right: 10 }} onPress={() => goBack(HOME)} style={({ pressed }) => [styles.done, pressed && styles.pressed]}>
+      <Text style={styles.doneText}>Done</Text>
+    </Pressable>
+  );
+  const header = posted ? { title: 'Share your session', right: doneButton } : { title: 'Share', onBack: () => goBack('/your-sessions') };
+  // Under the title: the post is up (or still going up, or didn't go up after all), and the ask.
+  const postedLine = !posted ? undefined
+    : postGone ? 'Your post didn’t go up.'
+    : upload === 'uploading' ? 'Posting… Add it to your story?'
+    : 'Posted. Add it to your story?';
+
   if (!story) {
     return (
-      <Screen title="Share" compactTitle onBack={() => goBack('/your-sessions')} bar={false}>
+      <Screen {...header} compactTitle bar={false}>
         {/* Opened from a link while the app is still loading: wait for it before saying it is gone. */}
         {!ready ? <View style={styles.wait}><CourtSpinner size={28} /></View> : (
           <EmptyState icon="image-outline" title="This session is not here any more" body="It may have been deleted, or it is not yours to share." />
@@ -274,7 +339,7 @@ export default function ShareSession() {
         </View>
       </View>
       <View style={styles.page}>
-        <Screen title="Share" compactTitle onBack={() => goBack('/your-sessions')} bar={false} padded={false} scroll={false}>
+        <Screen {...header} subtitle={postedLine} compactTitle bar={false} padded={false} scroll={false}>
           <View style={styles.body}>
             {/* The pictures, centred in all the room above the controls. */}
             <View style={styles.top} onLayout={(e) => setPageW(Math.round(e.nativeEvent.layout.width))}>
@@ -388,7 +453,12 @@ export default function ShareSession() {
                 onRun={(a) => { void run(a); }}
                 steps={steps}
                 // Send it to someone on CourtSide, as the post's share arrow did before it came here (Oct 15).
-                onSend={story.postId ? () => router.push({ pathname: '/share', params: { kind: 'post', id: story.postId! } }) : undefined}
+                // Straight after posting, once the post is up: still going up, there is nothing yet for a chat to open.
+                onSend={story.postId && !postGone ? () => {
+                  noteShared();
+                  if (!posts.some((p) => p.id === story.postId)) { showToast({ title: 'Your post is still uploading', body: 'Send it once it is up.', icon: 'cloud-upload-outline' }); return; }
+                  router.push({ pathname: '/share', params: { kind: 'post', id: story.postId! } });
+                } : undefined}
               />
             </View>
           </View>
@@ -413,6 +483,10 @@ const styleDefinitions = StyleSheet.create({
   photoChip: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: colors.overlay },
   photoButtonText: { ...font('600'), fontSize: 12, color: colors.onMedia },
   pressed: { opacity: 0.7 },
+  // Done, straight after posting: the way out, in the brand's colour, level with the title (its line is
+  // about 27 points tall) rather than halfway down to the line under it; its hitSlop makes the 44-point target.
+  done: { alignSelf: 'flex-start', minHeight: 27, minWidth: 44, alignItems: 'flex-end', justifyContent: 'center' },
+  doneText: { ...typography.bodyStrong, color: colors.brand },
   designs: { flexDirection: 'row', alignSelf: 'center' },
   // Each name is a full 44-point target; the names keep their 16-point rhythm between them.
   design: { alignItems: 'center', justifyContent: 'center', gap: 5, minHeight: 44, paddingHorizontal: spacing.sm },

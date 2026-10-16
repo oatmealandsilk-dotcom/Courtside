@@ -22,6 +22,12 @@ export interface UploadJob {
   reason?: string;
   /** The post's hashtags, so the weekly challenge can say "your entry is posting" before it lands. */
   tags?: string[];
+  /**
+   * Kept off the strip while a page that says how this post is going is up
+   * (the Share session screen, straight after posting: Oct 15), since the
+   * strip would sit over that page's title and Done. A failure always shows.
+   */
+  aside?: boolean;
 }
 
 /** The words every "too big to send" reason carries, so the strip knows to offer the trim. */
@@ -101,6 +107,17 @@ export function cancelUpload(id: string) {
   emit();
 }
 
+/**
+ * Keeps a post's upload off the strip while its own page says how it is
+ * going, or puts it back on (see UploadJob.aside). Back on before it has
+ * gone, it shows where it has got to: "Posting… 40%", or "Posted".
+ */
+export function setUploadAside(id: string, aside: boolean) {
+  if (!jobs.some((j) => j.id === id && !!j.aside !== aside)) return;
+  jobs = jobs.map((j) => (j.id === id ? { ...j, aside } : j));
+  emit();
+}
+
 /** The demo build has nowhere to upload to: walk the bar up so the moment still reads. */
 export function simulateUpload(id: string, label: string, thumb?: string, tags?: string[]) {
   startUpload(id, label, thumb, tags);
@@ -158,6 +175,16 @@ export function useAnyUploading(): boolean {
  */
 export function useTagPosting(tag: string): boolean {
   const get = () => jobs.some((j) => j.state === 'uploading' && !!j.tags?.includes(tag));
+  return useSyncExternalStore(subscribe, get, get);
+}
+
+/**
+ * How one post's upload stands: going up, landed or failed, or undefined
+ * when nothing of it is on the list (never was, or gone from it since).
+ * Redraws only when that changes, never on every percent.
+ */
+export function useUploadState(id: string | undefined): UploadJob['state'] | undefined {
+  const get = () => (id ? jobs.find((j) => j.id === id)?.state : undefined);
   return useSyncExternalStore(subscribe, get, get);
 }
 
