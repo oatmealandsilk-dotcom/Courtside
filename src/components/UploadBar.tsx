@@ -22,7 +22,8 @@ export function UploadBar() {
   const styles = useThemedStyles(styleDefinitions);
   const insets = useSafeAreaInsets();
   const jobs = useUploads();
-  const job = jobs[jobs.length - 1];
+  // The newest, unless its own page is up and says how it is going (UploadJob.aside); a failure always shows.
+  const job = jobs.filter((j) => !j.aside || j.state === 'failed').pop();
   // The strip stays mounted for the exit animation after the job is gone.
   const [shown, setShown] = useState<UploadJob | null>(null);
   // The strip's place, kept on the animation thread so a swipe never waits on the busy JS thread.

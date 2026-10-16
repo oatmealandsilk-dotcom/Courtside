@@ -855,7 +855,17 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions, LiveSessionAct
 
   /** `wantOn` says which way (a double tap only ever likes); without it, the other way from the last tap. */
   toggleLike: (postId: ID, wantOn?: boolean) => void;
-  addPost: (input: NewPostInput) => ID;
+  /**
+   * `quiet`: no "Posted" note, for a post whose next page says so itself
+   * (the Share session screen that opens straight after a session's post).
+   */
+  addPost: (input: NewPostInput, options?: { quiet?: boolean }) => ID;
+  /**
+   * One of your posts still going up from this phone (its photo or clip on
+   * the way): in nobody's list until it lands, but the Share session screen
+   * that opens straight after posting draws it from here meanwhile.
+   */
+  outgoingPost: (postId: ID) => Post | undefined;
   /** Puts one of your posts away, or brings it back. */
   toggleArchivePost: (postId: ID, quiet?: boolean) => void;
   togglePinPost: (postId: ID, quiet?: boolean) => void;
@@ -4365,9 +4375,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Share of the same file while the first is still going (a tap that got
   // through twice, a second Create box) is that same post, never a new one.
   const sending = useRef(new Map<string, ID>());
+  // Posts going up from this phone, by id, from Share until they land or fail (outgoingPost).
+  const outgoing = useRef(new Map<ID, Post>());
+  const outgoingPost = useCallback((postId: ID): Post | undefined => outgoing.current.get(postId), []);
 
   const addPost = useCallback(
-    (input: NewPostInput): ID => {
+    (input: NewPostInput, options?: { quiet?: boolean }): ID => {
       const me = requireUser();
       const source = [input.videoUrl, input.imageUrl].find((uri) => isLocalMedia(uri));
       const already = source ? sending.current.get(source) : undefined;
@@ -4412,9 +4425,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
         // file still being shrunk and sent here.
         startUpload(post.id, label, post.thumbnailUrl ?? post.imageUrl, post.tags);
         if (source) sending.current.set(source, post.id);
+        outgoing.current.set(post.id, post);
       } else {
         if (post.videoUrl || post.imageUrl) simulateUpload(post.id, label, post.thumbnailUrl ?? post.imageUrl, post.tags);
-        setState((prev) => tellAll(celebratePosted({ ...prev, posts: [post, ...prev.posts] }, { ...celebration, quiet: !!(post.videoUrl || post.imageUrl) })));
+        setState((prev) => tellAll(celebratePosted({ ...prev, posts: [post, ...prev.posts] }, { ...celebration, quiet: !!(post.videoUrl || post.imageUrl) || !!options?.quiet })));
         // Nothing to send first (words only, or media already online): it is at the top of Home straight away.
         requestFeedRefresh(`p:${post.id}`);
       }
@@ -4496,6 +4510,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
             haptics.reject();
           } finally {
             if (source && sending.current.get(source) === post.id) sending.current.delete(source);
+            // Landed (it is in the store now) or failed: in the same moment as either, so a page never sees it in neither place.
+            outgoing.current.delete(post.id);
             // Cleared a few seconds on, unless another post is still going up (its own steps stay).
             setTimeout(() => { if (!anyUploading()) void noteStep(''); }, 5000);
           }
@@ -8899,6 +8915,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       updateIdentity,
       toggleLike,
       addPost,
+      outgoingPost,
       toggleArchivePost,
       togglePinPost,
       editPost,
@@ -9129,6 +9146,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       updateIdentity,
       toggleLike,
       addPost,
+      outgoingPost,
       toggleArchivePost,
       togglePinPost,
       editPost,

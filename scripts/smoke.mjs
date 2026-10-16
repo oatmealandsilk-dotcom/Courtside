@@ -930,6 +930,25 @@ const STEPS = [
     expect: [{ text: 'Open until' }, { text: /^Save$|^I’m free till / }],
     after: async (page) => { await page.tap({ label: 'Close' }); await page.gone({ text: 'Open until' }); },
   },
+  {
+    // Strava's share after posting (Oct 15): a session posted from Your sessions ("Post it") opens the Share
+    // session screen by itself, and Done goes back to the feed it landed on. Last, since it adds a post.
+    name: 'post-session-share',
+    title: 'Post a session: its share screen opens',
+    async run(page) {
+      await page.tap({ label: 'Profile' });
+      await page.tap({ label: /tennis profile\./ });
+      await page.reveal({ label: 'See all your sessions' });
+      await page.tap({ label: 'See all your sessions' });
+      await page.reveal({ label: /^Post it: / });
+      await page.tap({ label: /^Post it: / });
+      // "Post session" on a tracker's session ("Log it"), "Share" on one logged by hand: on once your posts have been checked.
+      await page.tap({ css: '[aria-label="Post session"]:not([aria-disabled="true"]), [aria-label="Share"]:not([aria-disabled="true"])' });
+    },
+    expect: [{ text: 'Share your session' }, { text: 'Posted. Add it to your story?' }, { label: 'Done' }, { label: 'Share to Instagram Stories' }],
+    // Back on the feed (looked for even under a note along the top, such as "How was the hit at …?").
+    after: async (page) => { await page.tap({ label: 'Done' }); await page.gone({ text: 'Share your session' }); await page.waitFor({ label: 'For you', any: true }); },
+  },
 ];
 
 // ---------------------------------------------------------------------------

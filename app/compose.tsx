@@ -5,7 +5,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { show as showToast } from '@/lib/toast';
 import { BLOCKED_WORDS_NOTE } from '@/features/hiddenWords/hiddenWords';
-import { whenLanded } from '@/lib/uploads';
+import { setUploadAside, whenLanded } from '@/lib/uploads';
+import { openShareAfterPost, opensAfterPost, warmShareAfterPost } from '@/features/share/afterPost';
 import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import Reanimated, { Easing, FadeInDown, FadeOut, LinearTransition, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 
@@ -286,6 +287,8 @@ function Compose() {
   // the phone's videos open straight away, and a photo is never taken.
   const challenge = useMemo(() => challengeFor(), []);
   const entering = params.challenge === challenge.tag;
+  // Whether a session's post opens the Share session screen once posted (sharesAfter, below): known before Share is tapped.
+  useEffect(() => { warmShareAfterPost(currentUserId); }, [currentUserId]);
   // From "Trim to under a minute" on the posting strip (a clip too big to send): straight into Apple's trimmer.
   const trimming = params.trim === '1' && Platform.OS === 'ios';
   useEffect(() => { if (params.mode === 'story') router.replace('/hit'); }, [params.mode]);
@@ -867,6 +870,21 @@ function Compose() {
     confirm({ title: workoutLog ? 'Hide this workout?' : 'Hide this session?', message: 'It won’t count toward your streak.', confirmLabel: 'Hide', destructive: true, onConfirm: () => { actions.dismissActivity(id); goBackNow(); } });
   };
 
+  /*
+   * Strava's share after saving (Oct 15, owner: "Like strava"): a post that
+   * carries a session opens the Share session screen by itself once it is
+   * posted, over the feed it lands on (features/share/afterPost.ts). Never
+   * for a challenge entry (any clip or video with this week's tag is one:
+   * features/challenge/weekly), nor for a post to one group only, which stays
+   * out of everything public; and no longer once you have closed that screen
+   * three times running without sharing.
+   */
+  const sharesAfter = (session: SessionDetail | null | undefined, groupId?: string | null) => {
+    if (!session || groupId || !currentUserId) return false;
+    if ((mode === 'clip' || media?.kind === 'video') && new RegExp(`#${challenge.tag}\\b`, 'i').test(body)) return false;
+    return opensAfterPost(currentUserId);
+  };
+
   // A quick second tap on Share would post it twice.
   const sent = useRef(false);
   const submit = () => {
@@ -903,6 +921,8 @@ function Compose() {
       // that rule too). Not a post type of its own: a Clip with a video, a
       // Post otherwise, as from "Add session stats".
       const stats = withStats && postsChecked;
+      const session = stats ? statsOf(opened, shareFor(opened)) : undefined;
+      const shareAfter = sharesAfter(session, shareTo);
       applyWho();
       const postId = actions.addPost({
         kind: openedClip ? 'clip' : 'note',
@@ -919,10 +939,12 @@ function Compose() {
         videoUrl: media?.kind === 'video' ? media.uri : undefined,
         mediaLabel: media?.label,
         thumbnailUrl: media?.thumbnailUrl ?? (media?.kind === 'photo' ? media.uri : undefined),
-        session: stats ? statsOf(opened, shareFor(opened)) : undefined,
-      });
+        session,
+      }, { quiet: shareAfter });
       const firstPost = !posts.some((p) => p.authorId === currentUserId);
       if (shareTo) openGroupFeed(shareTo); else landOnFeed();
+      // Then the Share session screen over the feed, Strava's way (sharesAfter). It says "Posted" itself, so no note does (quiet).
+      if (shareAfter) openShareAfterPost(postId);
       // Said once the post has actually landed, never while it is still going up (or if it fails).
       if (firstPost) whenLanded(postId, () => setTimeout(() => showToast({ title: 'Your first post is up', body: 'Tap to invite the people you hit with.', icon: 'people-outline', href: '/invite?first=1' }), 1800));
       // A session posted at a court: who else was there that day, once it has landed (Flyby, migration 130).
@@ -935,6 +957,8 @@ function Compose() {
     // a Post or a Clip (and lands under Posts or Clips on the profile). Like a
     // post made from a session, it is never offered for CourtSide's Instagram.
     const stats = statsRow && statsPick ? statsOf(statsPick, shareFor(statsPick)) : undefined;
+    const session: SessionDetail | undefined = stats ?? (onCourt > 0 ? { focus: 'On court', minutes: onCourt, drills: [] } : undefined);
+    const shareAfter = sharesAfter(session, shareTo);
     applyWho();
     const postId = actions.addPost({
       kind: mode === 'clip' ? 'clip' : 'note',
@@ -955,15 +979,14 @@ function Compose() {
       videoUrl: media?.kind === 'video' ? media.uri : undefined,
       mediaLabel: media?.label,
       thumbnailUrl: media?.thumbnailUrl ?? (media?.kind === 'photo' ? media.uri : undefined),
-      session:
-        stats ?? (onCourt > 0
-          ? { focus: 'On court', minutes: onCourt, drills: [] }
-          : undefined),
-    });
+      session,
+    }, { quiet: shareAfter });
     // The first post is the moment to ask who they hit with, but only after
     // they have seen it go up: a light nudge on the feed, not a whole screen.
     const firstPost = !posts.some((p) => p.authorId === currentUserId);
     if (shareTo) openGroupFeed(shareTo); else landOnFeed();
+    // With a session on it, the Share session screen over the feed (sharesAfter), as above.
+    if (shareAfter) openShareAfterPost(postId);
     if (firstPost) whenLanded(postId, () => setTimeout(() => showToast({ title: 'Your first post is up', body: 'Tap to invite the people you hit with.', icon: 'people-outline', href: '/invite?first=1' }), 1800));
     if (stats && statsPick) flybyForPost(postId, statsPick, firstPost);
   };
@@ -1018,6 +1041,7 @@ function Compose() {
     const scoreGone = freshLog && tookScoreNotKept(logId);
     const postSession = sessionFor(logId);
     if (postSession && scoreGone) delete postSession.sets;
+    const shareAfter = sharesAfter(postSession);
     let postId: string | undefined;
     try {
       postId = actions.addPost({
@@ -1035,7 +1059,7 @@ function Compose() {
         mediaLabel: media?.label,
         thumbnailUrl: media?.thumbnailUrl ?? (media?.kind === 'photo' ? media.uri : undefined),
         session: postSession ?? undefined,
-      });
+      }, { quiet: shareAfter });
     } catch {
       // Logged, but the post did not go: the session waits in Your sessions, ready to post.
       landOnFeed();
@@ -1043,19 +1067,24 @@ function Compose() {
       showToast({ title: 'Logged. The post didn’t go up.', icon: 'alert-circle-outline', ...(again ? { action: { label: 'Try again', onPress: () => router.push({ pathname: '/compose', params: again }) } } : {}) });
       return;
     }
-    // Posted: the tick on Post session and the streak rolling up, then on to the feed, where it goes up.
+    // Posted: the tick on Post session and the streak rolling up, then on to the feed, where it goes up,
+    // and (Strava's way, sharesAfter) the Share session screen over it. That says "Posted" itself, so no
+    // note does (quiet), and how the upload is going is told there, not on the strip over this moment.
     celebrate('share');
-    leaveAfter(landOnFeed, CELEBRATE_SHARE_MS);
+    const shareId = shareAfter ? postId : undefined;
+    if (shareId) setUploadAside(shareId, true);
+    leaveAfter(() => { landOnFeed(); if (shareId) openShareAfterPost(shareId); }, CELEBRATE_SHARE_MS);
     const next = afterLog(freshLog ? logId : undefined, shareInput, day, shareInput.minutes ?? baseMinutes);
     const record = freshLog ? next.record : null;
     // Said once the post has actually landed, never while it is still going up (or if it fails).
     if (firstPost) whenLanded(postId, () => setTimeout(() => showToast({ title: 'Your first post is up', body: 'Tap to invite the people you hit with.', icon: 'people-outline', href: '/invite?first=1' }), 1800));
     else if (scoreGone) whenLanded(postId, () => setTimeout(() => showToast({ title: 'Posted without the score', body: 'Scores aren’t ready yet. Add it later from Your sessions.', icon: 'alert-circle-outline', long: true }), 600));
-    // A beaten record is the moment: "New record!" on gold, with the same Instagram button.
-    else if (record) whenLanded(postId, () => setTimeout(() => { haptics.reward(); showToast({ title: record.title, body: record.body, glyph: 'record', action: shareAction({ post: postId, session: logId }) }); }, 600));
+    // A beaten record is the moment: "New record!" on gold, with the same Instagram button (none over the Share session screen: it is up).
+    else if (record) whenLanded(postId, () => setTimeout(() => { haptics.reward(); showToast({ title: record.title, body: record.body, glyph: 'record', ...(shareId ? {} : { action: shareAction({ post: postId, session: logId }) }) }); }, 600));
     // Otherwise "Posted" with an Instagram button: the session as a story
     // picture, from the post once it has landed, from your log until then.
-    else whenLanded(postId, () => setTimeout(() => showToast({ title: 'Posted', body: 'Share it to your story too.', icon: 'checkmark', action: shareAction({ post: postId, session: logId }) }), 600));
+    // Not with the Share session screen up: it is that, already open.
+    else if (!shareId) whenLanded(postId, () => setTimeout(() => showToast({ title: 'Posted', body: 'Share it to your story too.', icon: 'checkmark', action: shareAction({ post: postId, session: logId }) }), 600));
     // Then who else was at that court today (the post, landed, is how the server knows you were there too).
     whenLanded(postId, () => next.flyby(600 + (firstPost ? 4800 : record ? 5500 : 3000)));
   };
