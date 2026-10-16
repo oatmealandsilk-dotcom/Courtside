@@ -51,6 +51,7 @@ import { nearestPlace } from '@/data/locations';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getPosition } from '@/lib/geo';
 import { shrinkPhoto } from '@/features/compose/shrinkPhoto';
+import { smallCoverOf } from '@/lib/smallCover';
 import { carouselFor } from '@/features/compose/carousel';
 import { canBeFeatured } from '@/features/compose/featuring';
 import * as haptics from '@/lib/haptics';
@@ -4408,6 +4409,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
         requestFeedRefresh(`p:${post.id}`);
       }
       if (live(me)) {
+        // Every file this post has put on the shelf so far, and whether the
+        // save itself has started: a post that fails before then takes its
+        // files back down, so a carousel that stops at photo 6 does not leave
+        // five photos using up today's upload limit (review, Oct 15).
+        const sentFiles: string[] = [];
+        let saving = false;
+        const send: typeof uploadMedia = async (...args) => {
+          const url = await uploadMedia(...args);
+          sentFiles.push(url);
+          const small = args[4]?.smallCover ? smallCoverOf(url) : undefined;
+          if (small) sentFiles.push(small);
+          return url;
+        };
         (async () => {
           try {
             // Media picked on the device goes up first so the row points at the
@@ -4423,21 +4437,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
             const report = (i: number) => (f: number) => setUploadProgress(post.id, before(i) + (weights[i] / total) * f);
             // Whichever picture is the cover also gets a small copy for grid tiles (see smallCover.ts).
             const photoIsCover = !post.thumbnailUrl || post.thumbnailUrl === post.imageUrl;
-            const imageUrl = local[0] ? await uploadMedia(me, post.imageUrl!, 'photo', report(0), { smallCover: photoIsCover }) : post.imageUrl;
-            const videoUrl = local[1] ? await uploadMedia(me, post.videoUrl!, 'video', report(1)) : post.videoUrl;
+            const imageUrl = local[0] ? await send(me, post.imageUrl!, 'photo', report(0), { smallCover: photoIsCover }) : post.imageUrl;
+            const videoUrl = local[1] ? await send(me, post.videoUrl!, 'video', report(1)) : post.videoUrl;
             const thumbnailUrl = post.thumbnailUrl === post.imageUrl ? imageUrl
-              : local[2] ? await uploadMedia(me, post.thumbnailUrl!, 'photo', report(2), { smallCover: true }) : post.thumbnailUrl;
+              : local[2] ? await send(me, post.thumbnailUrl!, 'photo', report(2), { smallCover: true }) : post.thumbnailUrl;
             // Then the carousel's other photos, in order, without the small grid
             // copy (only the cover is ever a tile). Any one that fails throws,
             // so the post fails whole: never half a carousel going up quietly.
             const extraHosted: string[] = [];
             for (let k = 0; k < extraPhotos.length; k += 1) {
-              extraHosted.push(extraLocal[k] ? await uploadMedia(me, extraPhotos[k], 'photo', report(3 + k)) : extraPhotos[k]);
+              extraHosted.push(extraLocal[k] ? await send(me, extraPhotos[k], 'photo', report(3 + k)) : extraPhotos[k]);
             }
             let hosted: Post = { ...post, imageUrl, videoUrl, thumbnailUrl, imageUrls: post.imageUrls ? carouselFor(imageUrl, extraHosted.length ? [imageUrl, ...extraHosted] : undefined) : undefined };
             // Saved under the id made on this phone when Share was tapped:
             // sent twice, it is still one post (see remote.insertPost).
             await noteStep('saving the post');
+            saving = true;
             const dropped = await remote.insertPost(hosted);
             // The database has no photos list yet (migration 159 not run): it
             // went up with its cover, and the poster is told rather than
@@ -4465,6 +4480,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
             // The post never reached the server; leaving it in the feed would
             // show something nobody else can see.
             setState((prev) => ({ ...prev, posts: prev.posts.filter((p) => p.id !== post.id) }));
+            // Its files come back down, best effort. Not once the save was sent:
+            // the post may have landed even though no answer came back.
+            if (!saving && sentFiles.length) void remote.removeMedia(me, sentFiles);
             haptics.reject();
           } finally {
             if (source && sending.current.get(source) === post.id) sending.current.delete(source);

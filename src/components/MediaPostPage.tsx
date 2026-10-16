@@ -328,6 +328,8 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
           // A carousel: swipe sideways through the photos. Each one taps the
           // way a single photo does: once for full screen, twice to like.
           <PhotoCarousel
+            // A fresh row for each post: the row only reads where to start once.
+            key={post.id}
             uris={photos}
             index={Math.min(photoAt, photos.length - 1)}
             onIndex={setPhotoAt}

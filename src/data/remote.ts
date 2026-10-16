@@ -1539,6 +1539,8 @@ const toReviewRequest = (r: ReviewRow): ReviewRequest[] => {
 /** A reported post or Instant as the Reports screen shows it. */
 export interface ReportedItem {
   body: string; picture?: string; removed: boolean; reason?: TakedownReason;
+  /** A carousel post's photos, cover first (two or more), so a moderator sees every one, not just the cover. */
+  photos?: string[];
   /** What it sits under, so the report opens it in place: a comment's post or Instant, a reply's thread or coach question. */
   parentId?: ID;
   /** A comment on an Instant (story_comments), not on a post: its own kind to take down. */
@@ -2930,9 +2932,10 @@ export const remote = {
       const removed = removedOf(row);
       // A comment, reply or coach reply opens where it sits: its post or Instant, its thread, its question.
       const parentId = kind === 'comment' ? row.story_id ?? row.post_id ?? undefined : kind === 'answer' || kind === 'coach-reply' ? row.question_id ?? undefined : undefined;
+      const photos = table === 'posts' ? carouselOf(data as PostRow) : undefined;
       return {
         body: words, picture: row.thumbnail_url ?? row.image_url ?? undefined, removed: !!removed, ...(removed ? { reason: removed.reason } : {}),
-        ...(parentId ? { parentId } : {}), ...(table === 'story_comments' ? { onHit: true } : {}),
+        ...(parentId ? { parentId } : {}), ...(table === 'story_comments' ? { onHit: true } : {}), ...(photos ? { photos } : {}),
       };
     }
     return null;
@@ -4667,7 +4670,8 @@ async function sendSmallCover(me: ID, path: string, picture: string): Promise<vo
 
 /**
  * The bucket takes at most 60 files from each player in any 24 hours (the
- * "upload into your folder" rule), and a small copy uses one of them like
+ * "upload into your folder" rule; 250 once migration 159 runs, for
+ * carousels), and a small copy uses one of them like
  * any other file. So once a player has sent 40 in the last 24 hours, covers
  * go up without a small copy and the last 20 are kept for real posts; a tile
  * without one just shows the full cover. If the count cannot be read, no
@@ -4771,9 +4775,16 @@ export async function uploadMedia(me: ID, original: string, kind: 'photo' | 'vid
   } catch (error) {
     fail('media upload')(error);
     const message = error instanceof Error ? error.message : String(error);
-    throw new Error(/exceeded the maximum allowed size/i.test(message) ? tooBigReason(kind, Math.round(MAX_UPLOAD_BYTES / 1024 / 1024)) : message);
+    // The shelf turns a file away with the database's own words ("new row
+    // violates row-level security policy") once today's upload limit is
+    // used up (the "upload into your folder" rule): said plainly instead.
+    throw new Error(/exceeded the maximum allowed size/i.test(message) ? tooBigReason(kind, Math.round(MAX_UPLOAD_BYTES / 1024 / 1024))
+      : /row-level security/i.test(message) ? UPLOAD_LIMIT_REACHED : message);
   }
 }
+
+/** What a poster is told when the media shelf takes no more of their files today. */
+export const UPLOAD_LIMIT_REACHED = 'You’ve reached today’s upload limit. Try again tomorrow.';
 
 /** The private shelf chat photos go on (migration 61), and how long a link to one keeps working. */
 const CHAT_PHOTOS = 'chat-photos';

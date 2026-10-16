@@ -6,6 +6,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { goBack } from '@/lib/goBack';
 
 import { CourtSpinner } from '@/components/CourtSpinner';
+import { CarouselPhotoRow } from '@/components/CarouselPhotoRow';
 import { TileCover } from '@/components/TileCover';
 import { Avatar, Button, EmptyState, Screen, SegmentedControl } from '@/components/ui';
 import type { AdminReport, ReportEvidence, ReportedChat, ReportedItem, ReportedItemKind } from '@/data/remote';
@@ -307,6 +308,8 @@ export default function AdminReports() {
                     <Text style={styles.body} numberOfLines={report.kind === 'post' || report.kind === 'hit' ? 2 : 6}>{item.body || 'No caption'}</Text>
                     <Text style={styles.muted} numberOfLines={1}>{person ? `by @${person.handle}` : ''}</Text>
                     {item.removed ? <Text style={styles.removedLine} numberOfLines={1}>Removed{item.reason ? `: ${reasonLabel(item.reason)}` : ''}</Text> : null}
+                    {/* A carousel: every photo, not just the cover, before anyone decides. */}
+                    <CarouselPhotoRow uris={item.photos} />
                   </View>
                 </>
               )}

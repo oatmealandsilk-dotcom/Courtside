@@ -50,6 +50,11 @@ export function PhotoCarousel({ uris, index, onIndex, renderPage, bottomRoom = 0
   const headingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Where the row last was, so a glide cut short by a finger still ends on the photo it stopped at.
   const lastX = useRef(index * W);
+  // The photo the row opens on, read once. The row's starting place is set
+  // from this and never again: on a phone, a new starting place moves the
+  // row at once, and the photo in view changes half way through a drag, so
+  // following it made the photos jump under the finger (review, Oct 15).
+  const openAt = useRef(index);
   const goTo = (i: number) => {
     const next = Math.max(0, Math.min(count - 1, i));
     if (!W || next === at.current) return;
@@ -61,8 +66,9 @@ export function PhotoCarousel({ uris, index, onIndex, renderPage, bottomRoom = 0
       const settled = Math.max(0, Math.min(count - 1, Math.round(lastX.current / Math.max(1, W))));
       if (settled !== at.current) onIndex(settled);
     }, 700);
-    onIndex(next);
+    // The glide starts first, then the count and dots follow.
     row.current?.scrollTo({ x: next * W, y: 0, animated: true });
+    onIndex(next);
   };
   useEffect(() => () => { if (headingTimer.current) clearTimeout(headingTimer.current); }, []);
   const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -101,7 +107,7 @@ export function PhotoCarousel({ uris, index, onIndex, renderPage, bottomRoom = 0
           showsHorizontalScrollIndicator={false}
           scrollEventThrottle={16}
           onScroll={onScroll}
-          contentOffset={{ x: index * size.w, y: 0 }}
+          contentOffset={{ x: openAt.current * size.w, y: 0 }}
           accessibilityLabel={`Photos, ${index + 1} of ${count}`}
           style={StyleSheet.absoluteFill}
         >

@@ -3,12 +3,14 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
+import { CarouselPhotoRow } from '@/components/CarouselPhotoRow';
 import { DragSheet } from '@/components/DragSheet';
 import { TileCover } from '@/components/TileCover';
 import { Field } from '@/components/ui';
 import { Fine, SheetTitle, Submit, formBody } from '@/components/sheet/SheetForm';
 import { REVIEW_NOTE_MAX } from '@/data/remote';
 import type { Removed } from '@/data/types';
+import { isCarousel, photosOf } from '@/features/compose/carousel';
 import { asKind, removedLine, thingWord } from '@/features/moderation/reasons';
 import { openRules, useReviewOf } from '@/features/moderation/RemovedNote';
 import { show as showToast } from '@/lib/toast';
@@ -40,9 +42,9 @@ export default function ReviewRequestSheet() {
   const [contentH, setContentH] = useState(0);
 
   // What it is, as this phone holds it: whose, why it came down, a few words and a picture.
-  const item = useMemo((): { authorId?: string; removed?: Removed; words?: string; picture?: string; clip?: boolean } => {
+  const item = useMemo((): { authorId?: string; removed?: Removed; words?: string; picture?: string; photos?: string[]; clip?: boolean } => {
     switch (kind) {
-      case 'post': { const p = posts.find((x) => x.id === id); return p ? { authorId: p.authorId, removed: p.removed, words: p.body, picture: p.thumbnailUrl ?? p.imageUrl, clip: p.kind === 'clip' } : {}; }
+      case 'post': { const p = posts.find((x) => x.id === id); return p ? { authorId: p.authorId, removed: p.removed, words: p.body, picture: p.thumbnailUrl ?? p.imageUrl, photos: isCarousel(p) ? photosOf(p) : undefined, clip: p.kind === 'clip' } : {}; }
       case 'hit': { const st = stories.find((x) => x.id === id); return st ? { authorId: st.authorId, removed: st.removed, words: st.caption, picture: st.thumbnailUrl ?? st.imageUrl } : {}; }
       case 'comment': case 'hit-comment': { const c = comments.find((x) => x.id === id); return c ? { authorId: c.authorId, removed: c.removed, words: c.body, picture: c.imageUrl } : {}; }
       case 'question': { const q = questions.find((x) => x.id === id); return q ? { authorId: q.authorId, removed: q.removed, words: q.title } : {}; }
@@ -96,6 +98,8 @@ export default function ReviewRequestSheet() {
               <View style={{ flex: 1, gap: 2 }}>
                 <Text style={styles.kind}>Your {thing}</Text>
                 {item.words?.trim() ? <Text style={styles.words} numberOfLines={2}>{item.words.trim()}</Text> : <Text style={styles.muted}>No words with it</Text>}
+                {/* A carousel: all of its photos, as the team will see them. */}
+                <CarouselPhotoRow uris={item.photos} />
               </View>
             </View>
 

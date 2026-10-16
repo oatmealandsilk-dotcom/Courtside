@@ -25,6 +25,11 @@
 --   4. A suspended account cannot change its photos list either: the
 --      "frozen while suspended" check on posts (migration 115) now watches
 --      image_urls too. Nothing else about that check changes.
+--   5. The daily upload limit goes from 60 files to 250 per person. Each
+--      photo is its own file, and a carousel's cover also gets a small copy
+--      for grid tiles, so a ten-photo post is 11 files: under the old limit
+--      the sixth full carousel in a day would fail part way. The rule is
+--      copied word for word from migration 36; only the number changes.
 --
 -- Who can read the column: the same people who can read the post, under the
 -- posts table's existing rules. No new permission is given to anyone.
@@ -64,6 +69,18 @@ begin
   end if;
 end $$;
 
+-- The upload rule on the media shelf (migration 36's "upload into your
+-- folder"), with 250 a day in place of 60. Still only into your own folder,
+-- and still only the photo and video types the shelf already allows.
+drop policy if exists "upload into your folder" on storage.objects;
+create policy "upload into your folder" on storage.objects for insert
+  with check (
+    bucket_id = 'media'
+    and auth.uid()::text = (storage.foldername(name))[1]
+    and (select count(*) from storage.objects o
+         where o.bucket_id = 'media' and o.name like auth.uid()::text || '/%' and o.created_at > now() - interval '1 day') < 250
+  );
+
 -- PostgREST learns about the new column straight away (no restart needed).
 notify pgrst, 'reload schema';
 
@@ -79,3 +96,7 @@ notify pgrst, 'reload schema';
 -- (c) The posts trigger watches image_urls (one row whose tgargs mention image_urls):
 --   select tgname, encode(tgargs, 'escape') from pg_trigger
 --   where tgrelid = 'public.posts'::regclass and tgname = 'refuse_suspended_edit';
+--
+-- (d) The upload rule allows 250 a day (one row whose check mentions 250):
+--   select policyname, with_check from pg_policies
+--   where schemaname = 'storage' and tablename = 'objects' and policyname = 'upload into your folder';
