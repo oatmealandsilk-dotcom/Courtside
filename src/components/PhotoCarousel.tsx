@@ -55,16 +55,26 @@ export function PhotoCarousel({ uris, index, onIndex, renderPage, bottomRoom = 0
   // row at once, and the photo in view changes half way through a drag, so
   // following it made the photos jump under the finger (review, Oct 15).
   const openAt = useRef(index);
+  // A finger took the row during a glide: where it stops is then the photo in view.
+  const dragged = useRef(false);
   const goTo = (i: number) => {
     const next = Math.max(0, Math.min(count - 1, i));
     if (!W || next === at.current) return;
     heading.current = next;
+    dragged.current = false;
     if (headingTimer.current) clearTimeout(headingTimer.current);
-    // In case the row never quite reports arriving.
+    // In case the row never quite reports arriving. A slow phone (or a busy
+    // browser) can still be gliding, or never send the scroll at all: then the
+    // row is put on the photo asked for, and the count stays where the tap
+    // put it. Only a finger that took over decides from where the row stopped.
     headingTimer.current = setTimeout(() => {
       heading.current = null;
-      const settled = Math.max(0, Math.min(count - 1, Math.round(lastX.current / Math.max(1, W))));
-      if (settled !== at.current) onIndex(settled);
+      if (dragged.current) {
+        const settled = Math.max(0, Math.min(count - 1, Math.round(lastX.current / Math.max(1, W))));
+        if (settled !== at.current) onIndex(settled);
+      } else if (Math.abs(lastX.current - next * W) >= 2) {
+        row.current?.scrollTo({ x: next * W, y: 0, animated: false });
+      }
     }, 700);
     // The glide starts first, then the count and dots follow.
     row.current?.scrollTo({ x: next * W, y: 0, animated: true });
@@ -107,6 +117,7 @@ export function PhotoCarousel({ uris, index, onIndex, renderPage, bottomRoom = 0
           showsHorizontalScrollIndicator={false}
           scrollEventThrottle={16}
           onScroll={onScroll}
+          onScrollBeginDrag={() => { if (heading.current !== null) dragged.current = true; }}
           contentOffset={{ x: openAt.current * size.w, y: 0 }}
           accessibilityLabel={`Photos, ${index + 1} of ${count}`}
           style={StyleSheet.absoluteFill}
