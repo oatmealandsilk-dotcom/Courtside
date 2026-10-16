@@ -1001,6 +1001,20 @@ const STEPS = [
     after: async (page) => { await page.tap({ label: 'Close' }); await page.gone({ text: 'Open until' }); },
   },
   {
+    // The Session sheet (Oct 16, owner: "do a with week strip"): + → Session opens your week, Start a session,
+    // the demo's tracker sessions each with its Log it, and Log one yourself. Closed again, nothing logged,
+    // so the next step still finds a session to post. Before it, since that one adds a post.
+    name: 'session-sheet',
+    title: 'Create → Session: the Session sheet',
+    async run(page) {
+      await page.tap({ label: 'Create a post' });
+      await page.tap({ label: /^Session\. Start one now/ });
+    },
+    expect: [{ label: /^This week: / }, { label: /^Start a session/ }, { label: /^Log it: / }, { label: 'Log one yourself' }],
+    // Back on Community where + was pressed (still scrolled down, so its tab rather than "Find Players").
+    after: async (page) => { await page.tap({ label: 'Close' }); await page.gone({ label: 'Log one yourself' }); await page.waitFor({ label: 'Community' }); },
+  },
+  {
     // Strava's share after posting (Oct 15): a session posted from Your sessions ("Post it") opens the Share
     // session screen by itself, and Done goes back to the feed it landed on. Last, since it adds a post.
     name: 'post-session-share',

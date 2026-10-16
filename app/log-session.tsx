@@ -145,7 +145,7 @@ function ToComposer({ activity, hit }: { activity: string; hit?: string }) {
  */
 function LogSession() {
   const styles = useThemedStyles(styleDefinitions);
-  const { activity, hit, edit, focus } = useLocalSearchParams<{ activity?: string; hit?: string; edit?: string; focus?: string }>();
+  const { activity, hit, edit, focus, hand } = useLocalSearchParams<{ activity?: string; hit?: string; edit?: string; focus?: string; hand?: string }>();
   const { actions, detectedActivities, remoteLoaded, ready, hitRequests, currentUserId, users, posts, stories, sessions, sessionTags, sessionTagsReady, manualStatsReady } = useApp();
   // The box you type in stays above a phone's keyboard, and so do the names listed under it.
   const { scroller, onScroll, reveal } = useKeyboardReveal();
@@ -267,8 +267,10 @@ function LogSession() {
     if (unlogged.length > 0) setOffered(true);
     else if (listLoaded || waitedOut) setOffered(false);
   }, [offered, unlogged.length, listLoaded, waitedOut]);
-  const deciding = plain && offered === null;
-  const [byHand, setByHand] = useState(false);
+  // ?hand=1 (the Session sheet's "Log one yourself", new-session.tsx; Oct 16): straight to the by-hand form,
+  // never the tracker's list first (the sheet has just shown it), and never a wait for that list.
+  const [byHand, setByHand] = useState(hand === '1');
+  const deciding = plain && !byHand && offered === null;
   const choosing = !!offered && !byHand && unlogged.length > 0;
   const logThis = (x: DetectedActivity) => { next.current = x.id; close(); };
 

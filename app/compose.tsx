@@ -18,7 +18,6 @@ import { MediaEditor, type EditedMedia } from '@/components/MediaEditor';
 import { takePendingShot } from '@/features/compose/pendingShot';
 import { registerCreateClose } from '@/features/compose/createMenu';
 import { SheetBackdrop } from '@/components/SheetBackdrop';
-import { MenuSheet } from '@/components/MenuSheet';
 import { Button, Chip, Field, Screen, Toggle } from '@/components/ui';
 import { alsoShowsIn } from '@/features/groups/groupFeed';
 import { openGroupFeed } from '@/features/groups/openGroupFeed';
@@ -343,8 +342,6 @@ function Compose() {
   const menuMaxH = Math.max(320, windowH - insets.top - insets.bottom - 40);
   const tight = windowH < 900 && !entering;
   const tighter = windowH < 760 && !entering;
-  // The Session card's small menu: Start now, or Log a past one.
-  const [sessionChoice, setSessionChoice] = useState(false);
   const choiceIcon = tighter ? 24 : 28;
   const navigation = useNavigation();
   const closing = useRef(false);
@@ -1256,14 +1253,14 @@ function Compose() {
       <View style={styles.choiceHeader}><Text style={styles.choiceTitle}>{entering ? challenge.title : 'Create'}</Text><Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={closeMenu} hitSlop={10}><Ionicons name="close" size={24} color={colors.text}/></Pressable></View>
       <ScrollView style={styles.choiceScroll} contentContainerStyle={[styles.choiceList, tight && styles.choiceListTight]} bounces={false} showsVerticalScrollIndicator={false}>
       {/* Session (Oct 6, owner chose "A": one card for both, so the menu stays five cards): a card like the
-          others. Tapped, a small menu asks Start now (the clock, and a check-in at your court) or Log a past
-          one (the log sheet: private, for the streak). While one is going it opens that one instead; finished
-          and not logged yet, its log. Someone not known to be an adult never checks in (mapPrivacy.canCheckIn),
-          so theirs promises only the timer. */}
+          others. Tapped, it opens the Session sheet (new-session.tsx; Oct 16, owner: "do a with week strip"):
+          your week, Start a session, your tracker's sessions waiting to log, and Log one yourself. It took the
+          place of a small two-row menu (Start now / Log a past one). While one is going the card opens that
+          one instead, never the sheet; finished and not logged yet, its log. */}
       {entering ? null : <Reanimated.View entering={arrive(0)}><Pressable
         accessibilityRole="button"
         accessibilityLabel={!liveSession ? 'Session. Start one now, or log one you’ve played' : liveState(liveSession) === 'finished' ? 'Log your finished session' : 'Session in progress. Open it'}
-        onPress={() => (!liveSession ? setSessionChoice(true) : liveState(liveSession) === 'finished' ? finishLive(liveSession, actions, { open: () => openLiveLog('replace') }) : router.replace('/live-session'))}
+        onPress={() => (!liveSession ? router.replace('/new-session') : liveState(liveSession) === 'finished' ? finishLive(liveSession, actions, { open: () => openLiveLog('replace') }) : router.replace('/live-session'))}
         style={[styles.choiceOption, tight && styles.choiceOptionTight, tighter && styles.choiceOptionTighter]}
       >
         <Ionicons name={liveSession ? 'radio-button-on' : 'stopwatch-outline'} size={choiceIcon} color={liveSession ? colors.open : colors.textMuted}/>
@@ -1288,15 +1285,6 @@ function Compose() {
       </Pressable></Reanimated.View>}
       </ScrollView>
     </Reanimated.View>
-    <MenuSheet
-      visible={sessionChoice}
-      onClose={() => setSessionChoice(false)}
-      title="Session"
-      items={[
-        { icon: 'stopwatch-outline', label: 'Start now', note: adult ? 'A timer, and a check-in at your court.' : 'A timer, from Start to Finish.', onPress: () => router.replace('/start-session') },
-        { icon: 'add-circle-outline', label: 'Log a past one', note: 'Private · counts toward your streak', onPress: () => router.replace('/log-session') },
-      ]}
-    />
   </View>;
 
   if (stage === 'edit' && media) {

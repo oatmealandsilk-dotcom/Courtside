@@ -17,7 +17,7 @@ import { useApp } from '@/store/AppContext';
  * Pages where someone is writing or posting: the question waits until they are done. Sharing a session
  * too, which opens by itself straight after posting one (Oct 15): the note would sit over its title and Done.
  */
-const BUSY = new Set(['/compose', '/edit-post', '/ask', '/ask-coach', '/log-session', '/start-session', '/live-session', '/pick-session', '/session-tag', '/pick-location', '/court-report', '/court-now', '/map-visibility', '/open-to-hit', '/hit-request/new', '/hit', '/comments', '/session-stats', '/who-played', '/health-share', '/tennis-sheet', '/share-session']);
+const BUSY = new Set(['/compose', '/edit-post', '/ask', '/ask-coach', '/log-session', '/start-session', '/live-session', '/pick-session', '/session-tag', '/pick-location', '/court-report', '/court-now', '/map-visibility', '/open-to-hit', '/hit-request/new', '/hit', '/comments', '/session-stats', '/who-played', '/health-share', '/tennis-sheet', '/share-session', '/new-session']);
 /** The inbox and every chat: the note would sit over a chat's header and the inbox's title, mid-conversation. (Still playing? waits the same way.) */
 export const isBusy = (path: string) => BUSY.has(path) || path === '/messages' || path.startsWith('/messages/');
 /** A moment after the way is clear, so it never lands on the app's own opening notes. */

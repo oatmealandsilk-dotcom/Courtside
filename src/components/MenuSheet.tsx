@@ -22,8 +22,7 @@ export interface MenuSheetItem {
  * title, one row per choice on hairlines, red for Report and Block). It
  * closes before a row's action runs, so a question asked next should use
  * confirmAfterMenu (or confirmReport / confirmBlock with fromMenu).
- * A row may carry a short note under its label (the Create box's Session
- * card: Start now, or Log a past one).
+ * A row may carry a short note under its label.
  */
 export function MenuSheet({ visible, onClose, title, items }: { visible: boolean; onClose: () => void; title?: string; items: MenuSheetItem[] }) {
   const styles = useThemedStyles(styleDefinitions);

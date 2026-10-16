@@ -51,7 +51,7 @@ const routes = Object.keys(paths).map(name => ({ key: name, name }));
  * The comments close themselves on Escape, with their own animation (see
  * DragSheet.web), so they are not here: a second step back closed the page under them too.
  */
-const SHEETS = new Set(['/compose', '/share', '/pick-group', '/find-groups', '/group-form', '/group-invite', '/pick-court', '/ask', '/post-menu', '/edit-post', '/messages/new', '/log-session', '/pick-session', '/session-tag', '/hit-request/new', '/court-report', '/court-now', '/map-visibility', '/open-to-hit', '/tennis-sheet', '/review-request', '/start-session', '/live-session']);
+const SHEETS = new Set(['/compose', '/share', '/pick-group', '/find-groups', '/group-form', '/group-invite', '/pick-court', '/ask', '/post-menu', '/edit-post', '/messages/new', '/log-session', '/pick-session', '/session-tag', '/hit-request/new', '/court-report', '/court-now', '/map-visibility', '/open-to-hit', '/tennis-sheet', '/review-request', '/start-session', '/live-session', '/new-session']);
 const TAB_ORDER: string[] = Object.values(paths);
 /** How often an open app looks for new workouts and new Notifications rows: just over the two minutes the Apple Health look waits between looks. */
 const LIVE_LOOK_MS = 125_000;
@@ -246,7 +246,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // hide it everywhere.
   // The full map (owner, Oct 8: "without the feed community profile etc.") runs without it too:
   // the map fills the screen and its own Back (or the edge swipe) leaves it.
-  const phoneOnlyHide = ['/map', '/compose', '/edit-post', '/ask', '/ask-coach', '/coach-apply', '/pick-location', '/pick-court', '/invite', '/comments', '/session-stats', '/who-played', '/share', '/pick-group', '/find-groups', '/group-form', '/group-invite', '/likes', '/post-menu', '/log-session', '/pick-session', '/session-tag', '/hit-request/new', '/court-report', '/court-now', '/map-visibility', '/open-to-hit', '/wrapped', '/health-share', '/share-session', '/share-card', '/tennis-sheet', '/flyby', '/weekly-recap', '/review-request', '/start-session', '/live-session'].includes(pathname) || pathname === '/messages' || pathname.startsWith('/messages/');
+  const phoneOnlyHide = ['/map', '/compose', '/edit-post', '/ask', '/ask-coach', '/coach-apply', '/pick-location', '/pick-court', '/invite', '/comments', '/session-stats', '/who-played', '/share', '/pick-group', '/find-groups', '/group-form', '/group-invite', '/likes', '/post-menu', '/log-session', '/pick-session', '/session-tag', '/hit-request/new', '/court-report', '/court-now', '/map-visibility', '/open-to-hit', '/wrapped', '/health-share', '/share-session', '/share-card', '/tennis-sheet', '/flyby', '/weekly-recap', '/review-request', '/start-session', '/live-session', '/new-session'].includes(pathname) || pathname === '/messages' || pathname.startsWith('/messages/');
   // Arriving from the password-reset email is its own calm page, with no app around it yet.
   // (The comments' own address says which clip they are about, for the stage below.)
   const { reset, kind: routeKind, id: routeId, stage: routeStage } = useGlobalSearchParams<{ reset?: string; kind?: string; id?: string; stage?: string }>();
