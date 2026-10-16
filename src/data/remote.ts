@@ -4670,7 +4670,7 @@ async function sendSmallCover(me: ID, path: string, picture: string): Promise<vo
 
 /**
  * The bucket takes at most 60 files from each player in any 24 hours (the
- * "upload into your folder" rule; 250 once migration 159 runs, for
+ * "upload into your folder" rule; 150 once migration 159 runs, for
  * carousels), and a small copy uses one of them like
  * any other file. So once a player has sent 40 in the last 24 hours, covers
  * go up without a small copy and the last 20 are kept for real posts; a tile
