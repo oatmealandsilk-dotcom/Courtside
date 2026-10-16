@@ -15,7 +15,10 @@ export function crossfade(update: () => void): boolean {
   if (!styled) {
     styled = true;
     const style = doc.createElement('style');
-    style.textContent = '::view-transition-old(root),::view-transition-new(root){animation-duration:420ms;animation-timing-function:cubic-bezier(0.4,0,0.2,1)}';
+    // 180 ms, down from 420 (Oct 16, owner: "lets make it instant"): long enough to hide the repaint,
+    // short enough to read as at once. It matters twice over: while it fades the browser shows a
+    // picture of the page, and a tap in that moment lands on nothing.
+    style.textContent = '::view-transition-old(root),::view-transition-new(root){animation-duration:180ms;animation-timing-function:cubic-bezier(0.2,0,0.2,1)}';
     doc.head.appendChild(style);
   }
   doc.startViewTransition(() => { flushSync(update); });

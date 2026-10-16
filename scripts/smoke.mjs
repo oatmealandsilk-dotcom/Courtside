@@ -678,6 +678,46 @@ const showFirstSession = (page) => page.waitUntil(() => page.call(() => {
   return true;
 }), 15000, 'a session in Your sessions');
 
+/** The page colours of the Paris and CourtSide courts, as the browser writes them (src/theme). */
+const PARIS_BG = 'rgb(248, 240, 233)';
+const DEFAULT_BG = 'rgb(248, 247, 242)';
+
+/**
+ * Runs inside the page, just before a theme card is tapped: from the tap on,
+ * notes how many milliseconds until that card says it is chosen and until the
+ * screen's own page colour is `bg`, in window.__themeTiming.
+ */
+function watchThemeChange(label, bg) {
+  const timing = { ring: null, page: null };
+  window.__themeTiming = timing;
+  let tapped = null;
+  const card = () => document.querySelector(`[aria-label="${label}"]`);
+  // The screen's own page: the first wall-to-wall, coloured box the card sits on.
+  const pageColour = () => {
+    for (let el = card(); el && el !== document.body; el = el.parentElement) {
+      const colour = getComputedStyle(el).backgroundColor;
+      if (el.getBoundingClientRect().width >= innerWidth - 1 && colour !== 'rgba(0, 0, 0, 0)') return colour;
+    }
+    return null;
+  };
+  addEventListener('touchend', () => { if (tapped == null) tapped = performance.now(); }, { capture: true, once: true });
+  const frame = () => {
+    if (tapped != null) {
+      const now = Math.round(performance.now() - tapped);
+      if (timing.ring == null && card()?.getAttribute('aria-selected') === 'true') timing.ring = now;
+      if (timing.page == null && pageColour() === bg) timing.page = now;
+    }
+    if (timing.ring == null || timing.page == null) requestAnimationFrame(frame);
+  };
+  requestAnimationFrame(frame);
+}
+
+/**
+ * Waits out the browser's theme cross-fade: while it runs, the browser draws a picture of the page
+ * over it and a tap lands on nothing (Back would not go back).
+ */
+const themeFadeDone = (page) => page.waitUntil(() => page.call(() => !document.getAnimations().some((a) => /^::view-transition/.test(a.effect?.pseudoElement ?? ''))), 5000, 'the theme cross-fade to finish');
+
 /** A day's bar in the This week chart, named by its weekday ("Thursday, 1 hour 20 minutes"); today's says "Today". */
 const WEEKDAY_BAR = /^(Sun|Mon|Tues|Wednes|Thurs|Fri|Satur)day, /;
 
@@ -785,7 +825,37 @@ const STEPS = [
       await page.tap({ label: 'Settings' });
     },
     expect: [{ label: 'Account center' }, { label: 'Privacy center' }],
-    after: async (page) => { await page.tap({ label: 'Go back' }); await page.waitFor({ text: 'Edit Profile' }); },
+  },
+  {
+    // Oct 16, owner: "changing themes in settings has a slight delay in animation, lets make it instant".
+    // Settings → Theme, tap Paris: its check moves and the page turns Paris's clay-dust colour. How long
+    // each took is written down (--verbose), not judged: a busy test machine is slow, the app is not.
+    name: 'theme-pick',
+    title: 'Theme: pick Paris',
+    async run(page) {
+      await page.tap({ label: /^Theme, / });
+      await page.waitForStill({ label: 'Paris theme' });
+      await page.call(watchThemeChange, 'Paris theme', PARIS_BG);
+      await page.tap({ label: 'Paris theme' });
+      const took = await page.waitUntil(() => page.call(() => {
+        const t = window.__themeTiming;
+        return t && t.ring != null && t.page != null ? t : null;
+      }), 10000, 'the Paris check and the Paris page colour');
+      log(`theme: check moved ${took.ring} ms after the tap, page colour ${took.page} ms`);
+      await themeFadeDone(page);
+    },
+    expect: [{ css: '[aria-label="Paris theme"][aria-selected="true"]' }, { css: '[aria-label="CourtSide theme"][aria-selected="false"]' }],
+    // Back to the default court, so every later step sees the app as it always was.
+    after: async (page) => {
+      await page.call(watchThemeChange, 'CourtSide theme', DEFAULT_BG);
+      await page.tap({ label: 'CourtSide theme' });
+      await page.waitUntil(() => page.call(() => window.__themeTiming?.page != null), 10000, 'the CourtSide page colour back');
+      await themeFadeDone(page);
+      await page.tap({ label: 'Go back' });
+      await page.waitFor({ label: 'Account center' });
+      await page.tap({ label: 'Go back' });
+      await page.waitFor({ text: 'Edit Profile' });
+    },
   },
   {
     name: 'week-chart',

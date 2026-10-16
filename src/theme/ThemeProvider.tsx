@@ -1,8 +1,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { crossfade } from './crossfade';
-import { snapshotScreen } from './snapshot';
 import { Image, Platform, StyleSheet, View } from 'react-native';
-import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, { Easing, useAnimatedStyle, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, lightColors } from './index';
 
@@ -248,70 +247,56 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   // A theme change redraws the whole app — every tab, the feed, the map —
   // and the phone's own layers (blur, glass, gradients, the map's web view)
   // catch up a moment after the rest. Seen bare, that is a screen repainting
-  // in patches. So on a phone the screen is photographed first; the photo
-  // covers the screen, everything recolours beneath it, and the photo fades
-  // away once the last layer has caught up — a true cross-fade. Tapping
-  // themes one after another just photographs the half-faded screen again,
-  // so it blends from wherever it is instead of stacking tints. If the phone
-  // cannot take the photo, a light veil of the new court does the covering.
-  // Both run on the animation thread, so they stay smooth however busy the redraw is.
-  const [veilColor, setVeilColor] = useState<string | null>(null);
+  // in patches. So on a phone a veil in the new court's page colour rises the
+  // moment you tap, the app recolours beneath it, and the veil lifts as soon
+  // as the new colours have landed.
+  // Oct 16, owner: "changing themes in settings has a slight delay in
+  // animation, lets make it instant". The phone used to photograph the screen
+  // first and wait for the photo before recolouring: a third to half a second
+  // of nothing, the delay he felt. Now nothing is waited for. The veil is
+  // always there, see-through, so raising it needs no redraw; its colour and
+  // how see-through it is run on the animation thread, so it answers on the
+  // very next frame however busy the redraw is. Tapping themes one after
+  // another moves the one veil from court to court: it never stacks or blinks.
   const veil = useSharedValue(0);
-  const pending = useRef<ThemeName | null>(null);
-  const [shot, setShot] = useState<string | null>(null);
-  const shotOpacity = useSharedValue(0);
-  // What to redraw once the photo is on screen, and which tap it belongs to.
-  const afterShot = useRef<(() => void) | null>(null);
-  const tap = useRef(0);
+  const veilColor = useSharedValue<string>(themes[theme].bg);
+  // The court last asked for, until it is on screen.
+  const target = useRef<ThemeName | null>(null);
+  // Counts every recolour, so the veil lifts even when a quick tap back lands on
+  // the court already showing (React then has nothing new to draw).
+  const [stamp, setStamp] = useState(0);
   const apply = (name: ThemeName) => {
     Object.assign(colors, themes[name]);
     updateTheme(name);
+    setStamp((n) => n + 1);
   };
   const setTheme = (name: ThemeName) => {
-    if (name === theme && !pending.current) return;
+    if (name === (target.current ?? theme)) return;
     try {
       if (Platform.OS === 'web') localStorage.setItem(STORAGE_KEY, name);
       else void AsyncStorage.setItem(STORAGE_KEY, name);
     } catch {}
     // A browser that can cross-fade does it properly: the old look fades straight into the new one.
     if (crossfade(() => apply(name))) return;
-    pending.current = name;
-    if (Platform.OS !== 'web') {
-      const mine = ++tap.current;
-      void snapshotScreen().then((uri) => {
-        if (mine !== tap.current) return; // a later tap has its own photo coming
-        if (uri) {
-          afterShot.current = () => apply(name);
-          shotOpacity.value = 1;
-          setShot(uri);
-        } else {
-          veilTo(name);
-        }
-      });
-      return;
-    }
-    veilTo(name);
+    target.current = name;
+    // Up at once. Already up (a tap a moment ago): its colour slides to this court instead of jumping.
+    if (veil.value < 0.05) veilColor.value = themes[name].bg;
+    else veilColor.value = withTiming(themes[name].bg, { duration: 120 });
+    veil.value = withTiming(VEIL_PEAK, { duration: 40 });
+    // One frame for the veil to show, then the redraw. A later tap in that frame wins.
+    requestAnimationFrame(() => { if (target.current === name) apply(name); });
   };
-  const veilTo = (name: ThemeName) => {
-    // On a phone, a light tint of the new court rather than a solid cover:
-    // the old look fades toward the new one instead of blanking.
-    setVeilColor(themes[name].bg);
-    veil.value = withTiming(VEIL_PEAK, { duration: 180, easing: Easing.out(Easing.quad) }, (done) => { if (done) runOnJS(apply)(name); });
-  };
-  // After the redraw has landed (and a beat for the native layers), the photo fades or the veil lifts.
+  // The redraw has landed: a beat for the phone's own layers, then the veil lifts quickly.
   useEffect(() => {
-    if (pending.current !== theme) return;
-    pending.current = null;
-    const t = setTimeout(() => {
-      shotOpacity.value = withTiming(0, { duration: 300, easing: Easing.inOut(Easing.quad) }, (done) => { if (done) runOnJS(setShot)(null); });
-      veil.value = withTiming(0, { duration: 360, easing: Easing.inOut(Easing.quad) }, (done) => { if (done) runOnJS(setVeilColor)(null); });
-    }, 90);
-    return () => clearTimeout(t);
-  }, [theme, veil, shotOpacity]);
-  const veilStyle = useAnimatedStyle(() => ({ opacity: veil.value }));
-  const shotStyle = useAnimatedStyle(() => ({ opacity: shotOpacity.value }));
-  // The photo is up: now it is safe to redraw beneath it.
-  const shotShown = () => { const run = afterShot.current; afterShot.current = null; run?.(); };
+    if (!target.current || target.current !== theme) return undefined;
+    target.current = null;
+    const frame = requestAnimationFrame(() => {
+      if (target.current) return; // another tap is on its way: that one lifts it
+      veil.value = withDelay(VEIL_HOLD, withTiming(0, { duration: 180, easing: Easing.out(Easing.quad) }));
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [theme, stamp, veil]);
+  const veilStyle = useAnimatedStyle(() => ({ opacity: veil.value, backgroundColor: veilColor.value }));
 
   // Kept so existing callers of the old night-mode switch keep working.
   const setNight = (value: boolean) => setTheme(value ? 'night' : 'default');
@@ -322,19 +307,23 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         {/* While your last theme is read (a blink), the launch picture itself, not a bare cream
             screen: the logo never drops out between the phone's picture and the app's (Oct 4). */}
         {loaded ? children : <Image source={require('../../assets/splash.png')} resizeMode="cover" style={StyleSheet.absoluteFill} />}
-        {shot ? (
-          <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { zIndex: 9999 }, shotStyle]}>
-            <Image source={{ uri: shot }} onLoad={shotShown} onError={shotShown} fadeDuration={0} resizeMode="cover" style={StyleSheet.absoluteFill} />
-          </Animated.View>
-        ) : null}
-        {veilColor ? <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: veilColor, zIndex: 9999 }, veilStyle]} /> : null}
+        {/* Always here and see-through until a theme change raises it: showing it needs no redraw. */}
+        <Animated.View pointerEvents="none" accessible={false} importantForAccessibility="no-hide-descendants" style={[StyleSheet.absoluteFill, { zIndex: 9999 }, veilStyle]} />
       </View>
     </ThemeContext.Provider>
   );
 }
 
-/** How far the phone's tint rises: enough to soften the repaint, never a blank screen. */
-const VEIL_PEAK = 0.72;
+/**
+ * How far the phone's tint rises: enough to hide the repaint, never a blank
+ * screen. Lower than the old 0.72 now that it rises in a frame instead of
+ * easing up for 180 ms: the tap reads as the screen turning to the new court
+ * at once, not as a curtain dropping, and with the tint in the new court's own
+ * page colour, the parts already redrawn are hidden by it all the same.
+ */
+const VEIL_PEAK = 0.62;
+/** How long the veil stays up once the redraw lands, for blur, glass and the map to catch up (was 90 ms, then a 360 ms lift). */
+const VEIL_HOLD = 60;
 
 export const useTheme = () => useContext(ThemeContext);
 
