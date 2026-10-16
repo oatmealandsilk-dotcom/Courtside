@@ -59,14 +59,15 @@ export function SessionStamp({ session, width, eyebrow, place, hidden = [], clea
   const { opponents, partners } = sessionPeople(session, hidden);
   const lead = [...opponents, ...partners][0];
   const others = opponents.length + partners.length - 1;
-  const rule = { height: StyleSheet.hairlineWidth * 2, backgroundColor: look.lines, marginVertical: 14 * u };
+  // Clear's rules a real line, not a hairline: with no card behind them they are what holds it together (Oct 15).
+  const rule = { height: clear ? Math.max(1, 1.5 * u) : StyleSheet.hairlineWidth * 2, backgroundColor: look.lines, marginVertical: 14 * u };
   return (
     <View style={[styles.card, { width, borderRadius: 20 * u, padding: 18 * u, backgroundColor: look.fill }]}>
       {clear ? null : <CardWash look={look} radius={20 * u} />}
       <View style={styles.row}>
         <Text numberOfLines={1} style={[styles.eyebrow, { fontSize: 10.5 * u, letterSpacing: 1.2 * u, color: look.eyebrow }, shade]}>{eyebrow}</Text>
         {result ? (
-          <View style={[styles.pill, { height: 20 * u, borderRadius: 10 * u, paddingHorizontal: 8 * u, backgroundColor: look.pillFill }, clear && { borderWidth: Math.max(1, 1.2 * u), borderColor: look.lines }]}>
+          <View style={[styles.pill, { height: 20 * u, borderRadius: 10 * u, paddingHorizontal: 8 * u, backgroundColor: look.pillFill }, clear && { borderWidth: Math.max(1, 1.6 * u), borderColor: look.ink }]}>
             <Text style={{ ...font('700'), fontSize: 10.5 * u, color: look.pillInk, ...shade }}>{result}</Text>
           </View>
         ) : null}
@@ -122,13 +123,19 @@ function clearLook(): CardLook {
   const ink = colors.onMedia;
   return {
     dark: true, wash: 'brand', filled: false, fill: 'transparent', border: 'transparent', rim: null,
-    figure: ink, ink, eyebrow: ink, muted: withAlpha(ink, 0.85), faint: withAlpha(ink, 0.7),
-    pillFill: 'transparent', pillInk: ink, lines: withAlpha(ink, 0.45), zones: [],
+    // Near-white even for the quiet words, and firmer rules (Oct 15, owner: "make the clear one more visable").
+    figure: ink, ink, eyebrow: ink, muted: withAlpha(ink, 0.92), faint: withAlpha(ink, 0.82),
+    pillFill: 'transparent', pillInk: ink, lines: withAlpha(ink, 0.7), zones: [],
   };
 }
 
-/** The Overlay's soft shadow under its white numbers (SessionStoryArt's overLabel). */
-const CLEAR_SHADE: TextStyle = { textShadowColor: 'rgba(0,0,0,0.35)', textShadowRadius: 6 };
+/**
+ * A soft dark shadow under the white words, a little firmer than the Overlay's
+ * (SessionStoryArt's overLabel) so the Clear stamp holds on a bright photo
+ * too (Oct 15, owner: "make the clear one more visable"). Dark, never a white
+ * glow (Oct 9, owner: the white halo was "off putting").
+ */
+const CLEAR_SHADE: TextStyle = { textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 8 };
 
 /** The Overlay's shadow under its wordmark (SessionStoryArt's wordHalo, dark), `u` a unit of a 360-wide story. */
 const wordShade = (u: number): TextStyle => ({ textShadowColor: 'rgba(0,0,0,0.55)', textShadowOffset: { width: 0, height: 0.8 * u }, textShadowRadius: 7 * u });

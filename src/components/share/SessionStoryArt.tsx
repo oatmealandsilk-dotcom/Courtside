@@ -26,8 +26,12 @@ export const STORY_DESIGNS: { key: StoryDesign; label: string }[] = [
   { key: 'overlay', label: 'Overlay' },
 ];
 
-/** The designs laid over a story of your own as a see-through sticker: everything but Photo and Card. */
-export const seeThrough = (design: StoryDesign) => design !== 'photo' && design !== 'card';
+/**
+ * The designs laid over a story of your own as a see-through sticker:
+ * everything but Photo and Card, and Card too when the Clear colour dot is
+ * picked (`clear`: it has nothing filled then).
+ */
+export const seeThrough = (design: StoryDesign, clear = false) => design !== 'photo' && (design !== 'card' || clear);
 
 /** The designs drawn in a court's colours, which the share screen's colour dots change: Photo, Card and Sticker. */
 export const themed = (design: StoryDesign) => design === 'photo' || design === 'card' || design === 'sticker';
@@ -61,10 +65,14 @@ export function storyDesigns(story: SessionStory | null): { key: StoryDesign; la
  *   on nothing like the Overlay, only for a post that shares its zones and
  *   heart rate (HeartRateOverlay.tsx).
  *
+ * `clear` is the share screen's Clear colour dot (Oct 15, owner: "make clear
+ * also a dot, and make it the first one"): Photo, Card and Sticker drawn with
+ * the Clear stamp, nothing filled, in no court's colours.
+ *
  * Only what `story` carries is drawn: its maker (sessionStory.ts) has
  * already left out health numbers that were not shared and a teen's court.
  */
-export function SessionStoryArt({ design, story, width, photo, hidden = [], onPhotoLoad }: {
+export function SessionStoryArt({ design, story, width, photo, hidden = [], onPhotoLoad, clear = false }: {
   design: StoryDesign;
   story: SessionStory;
   width: number;
@@ -73,6 +81,8 @@ export function SessionStoryArt({ design, story, width, photo, hidden = [], onPh
   hidden?: ID[];
   /** Told when the photo has drawn (or failed), so the picture waits for it. */
   onPhotoLoad?: (ok: boolean) => void;
+  /** The Clear colour dot: Photo, Card and Sticker with the Clear stamp. */
+  clear?: boolean;
 }) {
   useTheme();
   // One source object per photo: a new one each draw makes a browser load it again.
@@ -80,7 +90,7 @@ export function SessionStoryArt({ design, story, width, photo, hidden = [], onPh
   const height = Math.round((width * 16) / 9);
   const common = { session: story.session, eyebrow: story.eyebrow, place: story.place, hidden, brand: true, play: false, picture: true } as const;
 
-  if (design === 'card') {
+  if (design === 'card' && !clear) {
     return (
       <View collapsable={false} style={{ width, height }}>
         {/* Instagram's own buttons cover roughly the top 13% and the bottom 17%: the numbers keep clear of both. */}
@@ -141,9 +151,11 @@ export function SessionStoryArt({ design, story, width, photo, hidden = [], onPh
     );
   }
 
-  if (design === 'clear') {
-    // The Sticker without its card: the same size and place, white on nothing, no shadow round a box that is not there.
-    const cardW = Math.round(width * 0.62);
+  if (design === 'clear' || (clear && (design === 'sticker' || design === 'card'))) {
+    // The Sticker without its card: white on nothing, no shadow round a box that is not there. Bigger than the
+    // Sticker (Oct 15, owner: "make the clear one more visable"): with no box to frame it, its words need the room.
+    // On Card (the Clear dot) a touch bigger again, as the Card fills more of the story than the Sticker.
+    const cardW = Math.round(width * (design === 'card' ? 0.88 : 0.84));
     return (
       <View collapsable={false} style={[styles.centre, { width, height }]}>
         <SessionStamp session={story.session} eyebrow={story.eyebrow} place={story.place} hidden={hidden} width={cardW} clear />
@@ -174,9 +186,16 @@ export function SessionStoryArt({ design, story, width, photo, hidden = [], onPh
       )}
       {/* A soft shade low down, so the card reads on a bright photo too. */}
       <LinearGradient colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.22)']} style={[styles.shade, { height: height * 0.35 }]} />
-      <View style={[styles.sticker, { left: Math.round(width * 0.06), bottom: Math.round(height * 0.17), borderRadius: Math.round(20 * (cardW / 300)) }]}>
-        <SessionStamp session={story.session} eyebrow={story.eyebrow} place={story.place} hidden={hidden} width={cardW} />
-      </View>
+      {clear ? (
+        // The Clear dot: the stamp with nothing filled straight on the photo, a little bigger so its words carry.
+        <View style={[styles.corner, { left: Math.round(width * 0.06), bottom: Math.round(height * 0.17) }]}>
+          <SessionStamp session={story.session} eyebrow={story.eyebrow} place={story.place} hidden={hidden} width={Math.round(width * 0.68)} clear />
+        </View>
+      ) : (
+        <View style={[styles.sticker, { left: Math.round(width * 0.06), bottom: Math.round(height * 0.17), borderRadius: Math.round(20 * (cardW / 300)) }]}>
+          <SessionStamp session={story.session} eyebrow={story.eyebrow} place={story.place} hidden={hidden} width={cardW} />
+        </View>
+      )}
     </View>
   );
 }
@@ -197,4 +216,5 @@ const styles = StyleSheet.create({
   overWord: { ...font('900') },
   shade: { position: 'absolute', left: 0, right: 0, bottom: 0 },
   sticker: { position: 'absolute', boxShadow: '0px 6px 22px rgba(0, 0, 0, 0.32)' },
+  corner: { position: 'absolute' },
 });

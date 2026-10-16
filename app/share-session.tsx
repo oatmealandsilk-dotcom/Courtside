@@ -22,7 +22,7 @@ import * as haptics from '@/lib/haptics';
 import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
 import { ThemeScope, themes, useTheme, useThemedStyles, type ThemeName } from '@/theme/ThemeProvider';
-import { colors, font, pageIsDark, radius, spacing } from '@/theme';
+import { colors, font, pageIsDark, radius, spacing, withAlpha } from '@/theme';
 
 /**
  * Share a session to Instagram, the way Strava does: four pictures to swipe
@@ -44,7 +44,8 @@ import { colors, font, pageIsDark, radius, spacing } from '@/theme';
  * Since Oct 15: Clear after the Sticker (the stamp with nothing filled, no
  * court's colours); every see-through design previewed on a checkerboard,
  * never your photo; colour dots under the names that redraw Photo, Card and
- * Sticker in another court's colours (these pictures only, never the app);
+ * Sticker in another court's colours (these pictures only, never the app),
+ * Clear the first of them, which draws those three with the Clear stamp;
  * and Send, to someone on CourtSide, since a post's share arrow opens here.
  *
  * Each picture is drawn twice: small to look at, and once more out of sight
@@ -59,13 +60,18 @@ const CHROME_H = 424;
 /** One side of a square of the see-through checkerboard, in points: small, so it reads as a calm texture. */
 const CHECK = 6;
 
+/** What a colour dot paints with: a court, or Clear (nothing filled, no court's colours). */
+type Paint = ThemeName | 'clear';
+
 /**
  * The colour dots under the pictures (Oct 15, owner: "do the color changing
- * for the cards"): one per court, named for its city, never the tournament
- * (trademarks). Clean only when it is the court you use, so the dot you
- * start on is always there.
+ * for the cards"): Clear first (owner, the same night: "make clear also a dot,
+ * and make it the first one"), then one per court, named for its city, never
+ * the tournament (trademarks). Clean only when it is the court you use, so
+ * the dot you start on is always there.
  */
-const PAINTS: { name: ThemeName; label: string }[] = [
+const PAINTS: { name: Paint; label: string }[] = [
+  { name: 'clear', label: 'Clear' },
   { name: 'default', label: 'Light' },
   { name: 'night', label: 'Dark' },
   { name: 'ao', label: 'Melbourne' },
@@ -87,14 +93,15 @@ const PAINTS: { name: ThemeName; label: string }[] = [
  * 2.2:1 or better where it sits, plus its light edge. Read when tapped, so a
  * court changed meanwhile is used.
  */
-function storyLook(design: StoryDesign, paint: ThemeName): StoryLook {
-  // Heart rate and Clear are white words on nothing too, so they go over the same two colours.
-  if (design === 'overlay' || design === 'heart' || design === 'clear') {
+function storyLook(design: StoryDesign, paint: Paint, own: ThemeName): StoryLook {
+  // Heart rate and Clear are white words on nothing too, so they go over the same two colours;
+  // so do Card and Sticker under the Clear dot.
+  if (design === 'overlay' || design === 'heart' || design === 'clear' || (paint === 'clear' && (design === 'card' || design === 'sticker'))) {
     const deep = (pageIsDark() ? colors.bg : colors.text).slice(0, 7);
     return { sticker: true, top: mixHex(deep, colors.court.slice(0, 7), 0.15), bottom: deep };
   }
-  // Photo, Card and Sticker: the court picked with the colour dots.
-  const court = themes[paint];
+  // Photo, Card and Sticker: the court picked with the colour dots (your own under a Clear Photo).
+  const court = themes[paint === 'clear' ? own : paint];
   return { sticker: design === 'sticker', top: court.brand.slice(0, 7), bottom: court.bg.slice(0, 7) };
 }
 
@@ -105,15 +112,17 @@ function storyLook(design: StoryDesign, paint: ThemeName): StoryLook {
  * photo goes too. Two dark greys, so the white numbers and the green mark read
  * on it. One drawn tile of four squares, repeated: cheap at any size.
  */
-function Checker() {
+function Checker({ check = CHECK, light = false }: { check?: number; light?: boolean }) {
   const id = `check${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
+  // `light`: white and pale grey, the see-through sign everyone knows, for the small Clear dot.
+  const square = light ? withAlpha(colors.checkerAlt, 0.28) : colors.checkerAlt;
   return (
-    <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: colors.checker }]}>
+    <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: light ? colors.onMedia : colors.checker }]}>
       <Svg width="100%" height="100%">
         <Defs>
-          <Pattern id={id} width={CHECK * 2} height={CHECK * 2} patternUnits="userSpaceOnUse">
-            <Rect x={0} y={0} width={CHECK} height={CHECK} fill={colors.checkerAlt} />
-            <Rect x={CHECK} y={CHECK} width={CHECK} height={CHECK} fill={colors.checkerAlt} />
+          <Pattern id={id} width={check * 2} height={check * 2} patternUnits="userSpaceOnUse">
+            <Rect x={0} y={0} width={check} height={check} fill={square} />
+            <Rect x={check} y={check} width={check} height={check} fill={square} />
           </Pattern>
         </Defs>
         <Rect x={0} y={0} width="100%" height="100%" fill={`url(#${id})`} />
@@ -130,9 +139,13 @@ export default function ShareSession() {
   const flags = useTennisFlags();
   const { theme } = useTheme();
   // The court the share pictures are drawn in: your own until you tap a colour dot. Only these pictures change.
-  const [painted, setPainted] = useState<ThemeName | null>(null);
-  const paint = painted ?? theme;
-  const paints = theme === 'clean' ? [...PAINTS, { name: 'clean' as ThemeName, label: 'Clean' }] : PAINTS;
+  const [painted, setPainted] = useState<Paint | null>(null);
+  const paint: Paint = painted ?? theme;
+  const paints = theme === 'clean' ? [...PAINTS, { name: 'clean' as Paint, label: 'Clean' }] : PAINTS;
+  // The Clear dot: Photo, Card and Sticker with the Clear stamp, and in no court's colours (your own court around them).
+  const clearPaint = paint === 'clear';
+  const courtOf = (d: StoryDesign): ThemeName => (themed(d) && paint !== 'clear' ? paint : theme);
+  const clearOf = (d: StoryDesign) => clearPaint && themed(d);
 
   const story = useMemo((): SessionStory | null => {
     const me = currentUser ?? undefined;
@@ -216,7 +229,7 @@ export default function ShareSession() {
         for (let t = 0; t < 50 && waitFor.current === 'loading'; t += 1) await new Promise((r) => setTimeout(r, 100));
       }
       // Your invite link goes along as words (Copy, More), never on the picture: Strava's way (Oct 5).
-      const said = await exportStory(stage.current, action, 'My session on CourtSide', storyLook(design, paint), story?.invite);
+      const said = await exportStory(stage.current, action, 'My session on CourtSide', storyLook(design, paint, theme), story?.invite);
       if (!said) haptics.commit();
       else if (said === INSTAGRAM_NOTE) { haptics.commit(); setSteps(said); }
       else if (storyNoteOk(said)) { haptics.commit(); showToast({ title: said, icon: 'checkmark-circle-outline', long: said.length > 40 }); }
@@ -255,8 +268,8 @@ export default function ShareSession() {
       {/* The copy that is photographed: full size, out of sight under the page. */}
       <View pointerEvents="none" aria-hidden accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={[styles.stage, size]}>
         <View ref={stage} collapsable={false} style={size}>
-          <ThemeScope theme={themed(design) ? paint : theme}>
-            <SessionStoryArt design={design} story={story} width={size.width} photo={photo} hidden={blockedIds} onPhotoLoad={(ok) => { if (photo) setLoaded((was) => (was?.uri === photo && was.ok === ok ? was : { uri: photo, ok })); }} />
+          <ThemeScope theme={courtOf(design)}>
+            <SessionStoryArt design={design} story={story} width={size.width} photo={photo} hidden={blockedIds} clear={clearOf(design)} onPhotoLoad={(ok) => { if (photo) setLoaded((was) => (was?.uri === photo && was.ok === ok ? was : { uri: photo, ok })); }} />
           </ThemeScope>
         </View>
       </View>
@@ -290,9 +303,9 @@ export default function ShareSession() {
                         <Pressable disabled={i === shownIndex} onPress={() => goTo(i)} accessible={false}>
                           <View style={[styles.frame, { width: cardW, height: cardH }]} accessible accessibilityLabel={`${d.label} design`}>
                             {/* A see-through design is shown on the see-through checkerboard, never your photo: only Photo has the photo. */}
-                            {seeThrough(d.key) ? <Checker /> : null}
-                            <ThemeScope theme={themed(d.key) ? paint : theme}>
-                              <SessionStoryArt design={d.key} story={story} width={cardW} photo={photo} hidden={blockedIds} />
+                            {seeThrough(d.key, clearOf(d.key)) ? <Checker /> : null}
+                            <ThemeScope theme={courtOf(d.key)}>
+                              <SessionStoryArt design={d.key} story={story} width={cardW} photo={photo} hidden={blockedIds} clear={clearOf(d.key)} />
                             </ThemeScope>
                             {d.key === 'photo' ? (
                               <Pressable accessibilityRole="button" accessibilityLabel={photo ? 'Change photo' : 'Choose a photo'} onPress={() => { void choosePhoto(); }} style={({ pressed }) => [styles.photoButton, pressed && styles.pressed]}>
@@ -336,7 +349,7 @@ export default function ShareSession() {
               >
                 {paints.map((p) => {
                   const on = p.name === paint;
-                  const court = themes[p.name];
+                  const court = p.name === 'clear' ? null : themes[p.name];
                   return (
                     <Pressable
                       key={p.name}
@@ -349,11 +362,17 @@ export default function ShareSession() {
                       onPress={() => { if (!on) { haptics.tap(); setPainted(p.name); } }}
                       style={({ pressed }) => [styles.paint, pressed && styles.pressed]}
                     >
-                      {/* The court's own card colour, with its lettering's colour in the middle. */}
+                      {/* The court's own card colour, with its lettering's colour in the middle; Clear, the checkerboard that means see-through. */}
                       <View style={[styles.paintRing, on && styles.paintRingOn]}>
-                        <View style={[styles.paintDot, { backgroundColor: court.cardFill }]}>
-                          <View style={[styles.paintInner, { backgroundColor: court.cardFigure }]} />
-                        </View>
+                        {court ? (
+                          <View style={[styles.paintDot, { backgroundColor: court.cardFill }]}>
+                            <View style={[styles.paintInner, { backgroundColor: court.cardFigure }]} />
+                          </View>
+                        ) : (
+                          <View style={[styles.paintDot, styles.paintClear]}>
+                            <Checker check={4} light />
+                          </View>
+                        )}
                       </View>
                     </Pressable>
                   );
@@ -409,4 +428,5 @@ const styleDefinitions = StyleSheet.create({
   paintRingOn: { borderColor: colors.text },
   paintDot: { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.borderStrong },
   paintInner: { width: 9, height: 9, borderRadius: 5 },
+  paintClear: { overflow: 'hidden' },
 });
