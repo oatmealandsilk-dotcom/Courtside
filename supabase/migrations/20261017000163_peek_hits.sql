@@ -127,6 +127,7 @@ language sql stable security definer set search_path = public as $$
     select h.id, h.starts_at, h.format, greatest(h.spots - h.joined_count, 0) as spots_left,
            h.level_min, h.level_max, h.place,
            p.name as host_name, p.location as host_location, p.city_lat, p.city_lng, p.profile as host_profile,
+           c.name as list_name,
            -- The court's spot (the courts list's for a picked court, else the place's own), to about a kilometre.
            round(coalesce(c.lat, case when jsonb_typeof(h.place->'lat') = 'number' then (h.place->>'lat')::double precision end)::numeric, 2)::double precision as plat,
            round(coalesce(c.lng, case when jsonb_typeof(h.place->'lng') = 'number' then (h.place->>'lng')::double precision end)::numeric, 2)::double precision as plng
@@ -134,6 +135,9 @@ language sql stable security definer set search_path = public as $$
       join public.profiles p on p.id = h.author_id
       left join public.courts c on c.id = h.place->>'id'
      where not h.cancelled
+       -- Someone not signed in sees only hits at a real court from the courts list, never a place a
+       -- host typed (it could be a home address), Oct 17 privacy pass.
+       and (auth.uid() is not null or c.id is not null)
        and h.starts_at > now() and h.starts_at < now() + interval '7 days'
        and h.spots - h.joined_count > 0
        and public.hit_is_open(h.id)
@@ -152,13 +156,15 @@ language sql stable security definer set search_path = public as $$
          o.level_min, o.level_max,
          case when o.host_profile->>'skillSystem' in ('NTRP', 'UTR', 'ITF') then o.host_profile->>'skillSystem' end,
          case when (o.place->>'id') ~ '^(node|way|relation)[0-9]{1,15}$' then o.place->>'id' end,
-         left(o.place->>'name', 120),
+         case when auth.uid() is null then left(o.list_name, 120) else left(o.place->>'name', 120) end,
          case when o.plat is not null and o.city_lat is not null and o.city_lng is not null
                    and public.km_between(o.plat, o.plng, o.city_lat, o.city_lng) <= 40
               then nullif(left(btrim(split_part(coalesce(o.host_location, ''), ',', 1)), 40), '') end,
          case when here.lat is not null and o.plat is not null
               then round(public.km_between(here.lat, here.lng, o.plat, o.plng)::numeric, 1) end as km,
-         coalesce(nullif(left(split_part(btrim(coalesce(o.host_name, '')), ' ', 1), 30), ''), 'A player')
+         -- No name at all for someone not signed in: the hit says who it suits (level), not who posted it.
+         case when auth.uid() is null then null
+              else coalesce(nullif(left(split_part(btrim(coalesce(o.host_name, '')), ' ', 1), 30), ''), 'A player') end
     from open_hits o cross join here
    order by km nulls last, o.starts_at, o.id
    limit least(greatest(coalesce(p_limit, 20), 1), 30)

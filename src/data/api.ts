@@ -684,7 +684,7 @@ export async function fetchPeekHits(near?: { lat: number; lng: number } | null, 
       return [{
         id, startsAt, format, spotsLeft: num(r.spots_left) ?? 0, levelMin: num(r.level_min), levelMax: num(r.level_max), skillSystem: system,
         court: { id: text(r.court_id), name: text(r.court_name) || 'A court', area: text(r.area) },
-        km: num(r.km), hostFirst: text(r.host_first) || 'A player',
+        km: num(r.km), hostFirst: text(r.host_first) || '',
       }];
     });
   }

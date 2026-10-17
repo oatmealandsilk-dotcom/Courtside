@@ -99,7 +99,7 @@ export default function Peek() {
   const signUp = async (hit: PeekHit | null, create: boolean) => {
     if (hit) {
       await rememberShareTarget(`/hit-request/${hit.id}`, hit.id, {
-        label: `Make a free account to join ${hit.hostFirst}’s hit ${whenInWords(hit.startsAt)}`,
+        label: hit.hostFirst ? `Make a free account to join ${hit.hostFirst}’s hit ${whenInWords(hit.startsAt)}` : `Make a free account to join this hit ${whenInWords(hit.startsAt)}`,
         host: hit.hostFirst,
       });
     } else {
@@ -233,7 +233,8 @@ function HitCard({ hit, index, onJoin }: { hit: PeekHit; index: number; onJoin: 
       </View>
       <View style={styles.divider} />
       <View style={styles.cardFoot}>
-        <Text style={styles.host} numberOfLines={1}><Text style={styles.hostName}>{hit.hostFirst}</Text> is looking for a hit</Text>
+        {/* Signed out there is no name (Oct 17 privacy pass): "A player is looking for a hit". */}
+        <Text style={styles.host} numberOfLines={1}><Text style={styles.hostName}>{hit.hostFirst || 'A player'}</Text> is looking for a hit</Text>
         <Button label="I'm in" size="sm" onPress={onJoin} />
       </View>
     </Animated.View>
@@ -252,7 +253,7 @@ function JoinPrompt({ hit, onClose, onGo }: { hit: PeekHit; onClose: () => void;
       <Animated.View entering={FadeInDown.duration(280)} style={[styles.sheet, { paddingBottom: insets.bottom + spacing.lg }]} accessibilityViewIsModal>
         <View style={styles.sheetInner}>
           <View style={styles.sheetIcon}><HitGlyph size={22} color={colors.brand} /></View>
-          <Text style={styles.sheetTitle}>Make a free account to join {hit.hostFirst}’s hit {whenInWords(hit.startsAt)}</Text>
+          <Text style={styles.sheetTitle}>{hit.hostFirst ? `Make a free account to join ${hit.hostFirst}’s hit ${whenInWords(hit.startsAt)}` : `Make a free account to join this hit ${whenInWords(hit.startsAt)}`}</Text>
           <Text style={styles.sheetBody}>{hit.court.name} · {FORMAT_LABEL[hit.format]} · {spotsText(hit.spotsLeft)}</Text>
           <Text style={styles.sheetNote}>It takes a minute. Once you’re in, the app opens on this hit and joins it for you. Add your birthday when you sign up: hits with players you don’t follow yet are for players 18 and over.</Text>
           <Button label="Create a free account" full onPress={() => onGo(true)} />
