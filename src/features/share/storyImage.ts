@@ -20,15 +20,15 @@ import * as Clipboard from 'expo-clipboard';
  * Sharper (Oct 16, owner: "the courtside overlays are kinda blurry,
  * pixelated, make it super high quality"). A see-through design (the
  * Overlay, Heart rate, the Sticker, the Clear Card) goes into a story as
- * Instagram's sticker, and it used to go as the whole 1080 × 1920 story,
- * nearly all of it empty: Instagram shrinks a sticker to fit, so the numbers
- * came in small, and pinched back up they were only about 700 real pixels
- * across, blurry. Now the share screen draws that art a second time, out of
- * sight and twice as big (stickerDensity), and only the art itself, with a
- * little room for its shadows, is photographed and handed over as the
- * sticker (or copied): about 1500 pixels of real detail across, the same
- * vector drawing, as a see-through PNG. Instagram puts a sticker in the
- * middle either way, where the art already sat. Whole pictures (Photo, a
+ * Instagram's sticker: the whole 1080 × 1920 story, nearly all of it empty,
+ * so Instagram shrinks it to fit, and pinched back up the numbers were only
+ * about 700 real pixels across, blurry. Now the share screen draws that
+ * story a second time, out of sight and twice as big (stickerDensity), and
+ * that is the sticker (or what Copy puts on the clipboard): the very same
+ * picture, framed exactly as before, so Instagram drops it in at the size
+ * and spot it always has (Oct 17: the art alone would have opened bigger and
+ * centred, not the look the owner kept), only with twice the pixels, about
+ * 1400 across the numbers, as a see-through PNG. Whole pictures (Photo, a
  * filled Card, Save, More) stay the whole story at exactly 1080 × 1920.
  */
 
@@ -42,9 +42,9 @@ export function stageSize(): { width: number; height: number } {
 
 /**
  * How many times finer than the story a see-through sticker is drawn (see
- * above): twice for art that sits in the middle of the story, half again for
- * the Clear Card, which fills most of it (1620 × 2880, so an older iPhone
- * never holds a 4K picture in memory).
+ * above): twice (2160 × 3840) for art that sits in the middle of the story,
+ * half again for the Clear Card, which fills most of it (1620 × 2880, a
+ * smaller file for a picture with that much in it).
  */
 export function stickerDensity(fillsStory: boolean): number {
   return fillsStory ? 1.5 : 2;
@@ -180,7 +180,7 @@ async function androidToStories(b64: string, look: StoryLook): Promise<Handoff> 
 /** How the picture goes into a story: as a sticker over two colours, or as the whole background. */
 export interface StoryLook { sticker: boolean; top: string; bottom: string }
 
-/** A see-through design's art alone (SessionStoryArt's artRef), drawn `density` times finer: what Instagram gets as the sticker. */
+/** A see-through design's whole story drawn `density` times bigger (share-session's second copy): what Instagram gets as the sticker. */
 export interface StorySticker { view: View | null; density: number }
 
 /**
@@ -195,14 +195,21 @@ function wholeStory<R extends 'base64' | 'tmpfile'>(view: View, result: R) {
 }
 
 /**
- * The sticker alone, as a see-through PNG at its own size (points times the
- * screen's pixels on an iPhone, pixels on Android): never asked for a size,
- * so never stretched. On an iPhone it is drawn layer by layer
- * (useRenderInContext, as mediaStory's photo is), since the bigger copy runs
- * past the screen's edges, where an on-screen snapshot would come out blank.
+ * The sticker, as a see-through PNG at its own size (points times the
+ * screen's pixels on an iPhone, pixels on Android: 1080 × 1920 times its
+ * density either way), never asked for a size, so never stretched. An
+ * iPhone draws it the way it draws today's pictures, as the screen shows
+ * them (drawViewHierarchyInRect): the other way (renderInContext) leaves out
+ * any layer with a mask, which is how the Sticker's drop shadow is drawn
+ * (Oct 17). Should the big copy not come out, today's 1080 × 1920 story goes
+ * instead, so the share never fails over it.
  */
-function stickerPicture(view: View) {
-  return captureRef(view, { format: 'png', quality: 1, result: 'base64', ...(Platform.OS === 'ios' ? { useRenderInContext: true } : {}) });
+async function stickerPicture(view: View, whole: View) {
+  try {
+    return await captureRef(view, { format: 'png', quality: 1, result: 'base64' });
+  } catch {
+    return wholeStory(whole, 'base64');
+  }
 }
 
 /** Once the share sheet has closed on an iPhone, the picture's file is let go, so pictures do not pile up in the app's cache. Android's may still be reading it, and its cache is cleared by the phone. */
@@ -226,10 +233,10 @@ function letGo(uri: string) {
  */
 export async function exportStory(view: View | null, action: StoryAction, title: string, look?: StoryLook, link?: string, sticker?: StorySticker): Promise<string | null> {
   if (!view) return 'The picture is not ready yet. Try again in a moment.';
-  // What a story pastes or takes as its sticker: the art alone, bigger, for a see-through design
-  // (Oct 16, see the top); the whole story for anything else, or should the art not be there.
+  // What a story pastes or takes as its sticker: the story drawn bigger, for a see-through design
+  // (Oct 16, see the top); today's story for anything else, or should the bigger copy not be there.
   const asSticker = look?.sticker && sticker?.view ? sticker.view : null;
-  const forStory = () => (asSticker ? stickerPicture(asSticker) : wholeStory(view, 'base64'));
+  const forStory = () => (asSticker ? stickerPicture(asSticker, view) : wholeStory(view, 'base64'));
   if (action === 'copy') {
     // On the clipboard as a picture, so a story pastes it as a sticker, the way Strava's overlay goes on.
     const b64 = await forStory();

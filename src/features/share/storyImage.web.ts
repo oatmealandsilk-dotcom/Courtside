@@ -96,8 +96,9 @@ function scaleShadows(root: HTMLElement, scale: number, density: number) {
  * The picture as a PNG file, ready to share or save. Exported for the demo's
  * own check. The whole hidden copy comes out at 1080 × 1920 (three times its
  * 360 on the page, whatever the screen's own pixels). A see-through
- * design's art alone (`density` above 1, Oct 16) comes out that many times
- * finer again: the sticker Copy hands a story (see storyImage.ts).
+ * design's sticker (`density` above 1, Oct 16) is the same whole story that
+ * many times finer again, framed as ever: what Copy hands a story (see
+ * storyImage.ts).
  */
 export async function storyBlob(view: View | null, density = 1): Promise<Blob | string> {
   const node = view as unknown as HTMLElement | null;
@@ -132,7 +133,7 @@ function download(blob: Blob, name: string) {
 /** How the picture goes into a story (phones only; the browser shares a file). */
 export interface StoryLook { sticker: boolean; top: string; bottom: string }
 
-/** A see-through design's art alone (SessionStoryArt's artRef), made `density` times finer: what Copy hands a story. */
+/** A see-through design's whole story, made `density` times finer: what Copy hands a story. */
 export interface StorySticker { view: View | null; density: number }
 
 /**
@@ -143,7 +144,7 @@ export interface StorySticker { view: View | null; density: number }
  * the link as the share's text with the file, where the browser shares both.
  * Stories and Save are the picture alone.
  *
- * Copy of a see-through design is its art alone, finer (`sticker`, Oct 16):
+ * Copy of a see-through design is its whole story, finer (`sticker`, Oct 16):
  * what a story pastes as its sticker, sharp when pinched bigger (and the
  * file Copy falls back to where a browser cannot copy pictures). Save, More
  * and Stories are the whole story as ever.

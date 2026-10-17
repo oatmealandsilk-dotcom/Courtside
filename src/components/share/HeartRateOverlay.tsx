@@ -1,4 +1,4 @@
-import React, { type Ref } from 'react';
+import React from 'react';
 import { StyleSheet, Text, View, type StyleProp, type TextStyle } from 'react-native';
 
 import { ShadedMark } from '@/components/share/ShadedMark';
@@ -155,13 +155,7 @@ function Rings({ w, h, u }: { w: number; h: number; u: number }) {
 
 /* ------------------------------------------------------------------ the design */
 
-/**
- * `artRef`: the block alone, with a little room round it for its shadows,
- * which the share screen photographs as Instagram's sticker (Oct 16, owner:
- * "make it super high quality"; SessionStoryArt's artRef). The room is the
- * same on each side, so the block stays centred where it was.
- */
-export function HeartRateOverlay({ hr, width, artRef }: { hr: HeartNumbers; width: number; artRef?: Ref<View> }) {
+export function HeartRateOverlay({ hr, width }: { hr: HeartNumbers; width: number }) {
   const u = width / 360;
   const height = (width * 16) / 9;
   const fills = zoneColors('story');
@@ -192,62 +186,57 @@ export function HeartRateOverlay({ hr, width, artRef }: { hr: HeartNumbers; widt
   return (
     <View collapsable={false} accessible accessibilityRole="image" accessibilityLabel={spoken} style={{ width, height }}>
       <View style={[styles.centre, { position: 'absolute', left: 0, right: 0, top: CLEAR.top * u, bottom: (640 - CLEAR.bottom) * u, paddingTop: LOWER * 2 * u }]}>
-        <View ref={artRef} collapsable={false} style={[styles.centre, { paddingVertical: ROOM.v * u, paddingHorizontal: ROOM.h * u }]}>
-          {/* The headline pair: the time and the calories, each labelled above, as the Overlay has them. */}
-          <View style={[styles.pair, { gap: HEAD.gap * u }]}>
-            {stat(time, 'Time')}
-            {kcal ? stat(kcal, 'Calories') : null}
-          </View>
+        {/* The headline pair: the time and the calories, each labelled above, as the Overlay has them. */}
+        <View style={[styles.pair, { gap: HEAD.gap * u }]}>
+          {stat(time, 'Time')}
+          {kcal ? stat(kcal, 'Calories') : null}
+        </View>
 
-          {/* One row per zone, Peak at the top: its name, its bar on a faint track, its minutes. None without zones. */}
-          {zones ? (
-          <View style={{ width: ROWS.width * u, marginTop: GAPS.bars * u }}>
-            {ZONE_NAMES.map((z) => {
-              const m = zones[z.n - 1];
-              const fillW = m > 0 ? Math.max(bar, (m / top) * trackW) : 0;
-              return (
-                <View key={z.n} style={[styles.row, { height: ROWS.row * u, gap: ROWS.gap * u }]}>
-                  <View style={[styles.end, { minWidth: ROWS.name * u }]}>
-                    <Words style={[small, { textAlign: 'right' }]} shadow={SMALL} u={u}>{z.name}</Words>
-                  </View>
-                  <View style={{ width: trackW, height: bar }}>
-                    {fillW ? <Rings w={fillW} h={bar} u={u} /> : null}
-                    <View style={[styles.bar, { width: trackW, height: bar, borderRadius: bar / 2, backgroundColor: TRACK }]} />
-                    {fillW ? <View style={[styles.bar, { width: fillW, height: bar, borderRadius: bar / 2, backgroundColor: fills[z.n - 1] }]} /> : null}
-                  </View>
-                  <View style={[styles.end, { minWidth: ROWS.minutes * u }]}>
-                    <Words style={num} shadow={SMALL} u={u}>{`${m}m`}</Words>
-                  </View>
+        {/* One row per zone, Peak at the top: its name, its bar on a faint track, its minutes. None without zones. */}
+        {zones ? (
+        <View style={{ width: ROWS.width * u, marginTop: GAPS.bars * u }}>
+          {ZONE_NAMES.map((z) => {
+            const m = zones[z.n - 1];
+            const fillW = m > 0 ? Math.max(bar, (m / top) * trackW) : 0;
+            return (
+              <View key={z.n} style={[styles.row, { height: ROWS.row * u, gap: ROWS.gap * u }]}>
+                <View style={[styles.end, { minWidth: ROWS.name * u }]}>
+                  <Words style={[small, { textAlign: 'right' }]} shadow={SMALL} u={u}>{z.name}</Words>
                 </View>
-              );
-            })}
-          </View>
-          ) : null}
+                <View style={{ width: trackW, height: bar }}>
+                  {fillW ? <Rings w={fillW} h={bar} u={u} /> : null}
+                  <View style={[styles.bar, { width: trackW, height: bar, borderRadius: bar / 2, backgroundColor: TRACK }]} />
+                  {fillW ? <View style={[styles.bar, { width: fillW, height: bar, borderRadius: bar / 2, backgroundColor: fills[z.n - 1] }]} /> : null}
+                </View>
+                <View style={[styles.end, { minWidth: ROWS.minutes * u }]}>
+                  <Words style={num} shadow={SMALL} u={u}>{`${m}m`}</Words>
+                </View>
+              </View>
+            );
+          })}
+        </View>
+        ) : null}
 
-          {/* The average and top heart rate, in the rows' size: under the bars, or straight under the time and calories without them. */}
-          <View style={{ marginTop: (zones ? GAPS.beat : GAPS.bars) * u }}>
-            <Words style={[small, { textAlign: 'center' }]} shadow={SMALL} u={u}>{beat}</Words>
-          </View>
+        {/* The average and top heart rate, in the rows' size: under the bars, or straight under the time and calories without them. */}
+        <View style={{ marginTop: (zones ? GAPS.beat : GAPS.bars) * u }}>
+          <Words style={[small, { textAlign: 'center' }]} shadow={SMALL} u={u}>{beat}</Words>
+        </View>
 
-          {/* The lockup, in the logo's bright colour with today's soft dark shadow, the same size as the
-              Overlay's (Oct 9, owner: "lets just make it bigger more prominent"), so every format carries one logo. */}
-          <View style={[styles.lockup, { gap: 8 * u, marginTop: GAPS.logo * u }]}>
-            <ShadedMark size={LOGO.mark * u} u={u} color={colors.brandBright} halo="dark" weight={1.5} sideWeight={1.05} />
-            <Text
-              allowFontScaling={false}
-              style={[styles.word, { fontSize: LOGO.word * u, lineHeight: LOGO.word * 1.2 * u, letterSpacing: -0.03 * LOGO.word * u, color: colors.brandBright }, textShade({ a: 0.55, dy: 0.8, r: 7 }, u)]}
-            >
-              CourtSide
-            </Text>
-          </View>
+        {/* The lockup, in the logo's bright colour with today's soft dark shadow, the same size as the
+            Overlay's (Oct 9, owner: "lets just make it bigger more prominent"), so every format carries one logo. */}
+        <View style={[styles.lockup, { gap: 8 * u, marginTop: GAPS.logo * u }]}>
+          <ShadedMark size={LOGO.mark * u} u={u} color={colors.brandBright} halo="dark" weight={1.5} sideWeight={1.05} />
+          <Text
+            allowFontScaling={false}
+            style={[styles.word, { fontSize: LOGO.word * u, lineHeight: LOGO.word * 1.2 * u, letterSpacing: -0.03 * LOGO.word * u, color: colors.brandBright }, textShade({ a: 0.55, dy: 0.8, r: 7 }, u)]}
+          >
+            CourtSide
+          </Text>
         </View>
       </View>
     </View>
   );
 }
-
-/** The room round the block (artRef), in `u`: past its shadows, and across no wider than the story (the rows are 316). */
-const ROOM = { v: 28, h: 20 };
 
 const styles = StyleSheet.create({
   centre: { alignItems: 'center', justifyContent: 'center' },
