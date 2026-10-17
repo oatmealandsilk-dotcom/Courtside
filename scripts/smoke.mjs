@@ -731,7 +731,8 @@ const STEPS = [
     title: 'Birthday page: optional, with Skip',
     async run(page) {
       await page.goto('/birthday');
-      await page.waitFor({ text: 'Birthday (optional)' }, 45000);
+      // The date picker (a wheel, or three boxes) is named "Birthday (optional)" (Oct 17 redesign).
+      await page.waitFor({ label: 'Birthday (optional)' }, 45000);
       await page.waitFor({ text: /^Optional\. It helps us keep younger players safe/ });
       await page.tap({ text: 'Skip for now' });
     },

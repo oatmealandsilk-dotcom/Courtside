@@ -1,0 +1,252 @@
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Platform, StyleSheet, Text, View, type AccessibilityActionEvent } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import Animated, {
+  Easing, cancelAnimation, runOnJS, useAnimatedReaction, useAnimatedStyle, useSharedValue, withTiming, type SharedValue,
+} from 'react-native-reanimated';
+import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
+
+import { tick } from '@/lib/haptics';
+import { useThemedStyles } from '@/theme/ThemeProvider';
+import { colors, pageIsDark, radius, spacing, typography, withAlpha } from '@/theme';
+
+/**
+ * A birthday picked on a wheel, like the phone's own date picker (Oct 17,
+ * owner: "Make the UI of the what's your birthday ... a lot better"). Three
+ * columns, month, day and year, each one dragged or flicked and settling on
+ * a row in the band across the middle, with a click per row on a phone.
+ * Built here rather than taken from a package: the app updates over the air,
+ * so it cannot add the phone's own picker. Each column is a slider to
+ * VoiceOver (swipe up or down to change it); on the website a mouse wheel,
+ * a drag, a click on a row and the arrow keys all move it.
+ */
+
+export const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+export const daysIn = (month: number, year: number) => new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+
+/** Month 0–11, day 1–31, full year. */
+export type WheelDate = { month: number; day: number; year: number };
+
+export function DateWheel({ value, onChange, onTouch, rowHeight = 40, label = 'Birthday' }: {
+  value: WheelDate;
+  onChange: (next: WheelDate) => void;
+  /** The first time anyone moves a column: the date shown is now theirs, not the starting one. */
+  onTouch?: () => void;
+  rowHeight?: number;
+  label?: string;
+}) {
+  const styles = useThemedStyles(styleDefinitions);
+  const thisYear = new Date().getFullYear();
+  const years = useMemo(() => {
+    const list: string[] = [];
+    for (let y = Math.max(1900, thisYear - 100); y <= thisYear; y += 1) list.push(String(y));
+    return list;
+  }, [thisYear]);
+  const firstYear = Number(years[0]);
+  const dayCount = daysIn(value.month, value.year);
+  const days = useMemo(() => Array.from({ length: dayCount }, (_, i) => String(i + 1)), [dayCount]);
+  // A month or year with fewer days pulls the day back in (31 March → February: the 28th or 29th).
+  useEffect(() => { if (value.day > dayCount) onChange({ ...value, day: dayCount }); }, [dayCount, value, onChange]);
+
+  const height = rowHeight * 5;
+  const dark = pageIsDark();
+  const band = withAlpha(colors.brand, dark ? 0.2 : 0.09);
+  return (
+    <View style={[styles.wheel, { height }]} accessibilityRole="none" aria-label={label}>
+      <View pointerEvents="none" style={[styles.band, { top: rowHeight * 2, height: rowHeight, backgroundColor: band }]} />
+      <Column flex={1.55} align="left" label="Month" items={MONTHS} index={value.month} rowHeight={rowHeight}
+        onIndex={(i) => onChange({ ...value, month: i })} onTouch={onTouch} />
+      <Column flex={0.75} align="center" label="Day" items={days} index={Math.min(value.day, dayCount) - 1} rowHeight={rowHeight}
+        onIndex={(i) => onChange({ ...value, day: i + 1 })} onTouch={onTouch} />
+      <Column flex={1} align="right" label="Year" items={years} index={value.year - firstYear} rowHeight={rowHeight}
+        onIndex={(i) => onChange({ ...value, year: firstYear + i })} onTouch={onTouch} />
+      {/* The soft fade at the top and bottom, in the card's own colour. */}
+      <Fade height={rowHeight * 1.8} top />
+      <Fade height={rowHeight * 1.8} />
+    </View>
+  );
+}
+
+function Fade({ height, top }: { height: number; top?: boolean }) {
+  const id = top ? 'wheelFadeTop' : 'wheelFadeBottom';
+  return (
+    <View pointerEvents="none" style={[StyleSheet.absoluteFill, top ? { bottom: undefined } : { top: undefined }, { height }]}>
+      <Svg width="100%" height="100%">
+        <Defs>
+          <LinearGradient id={id} x1="0" y1={top ? '0' : '1'} x2="0" y2={top ? '1' : '0'}>
+            <Stop offset="0" stopColor={colors.surface} stopOpacity={0.95} />
+            <Stop offset="1" stopColor={colors.surface} stopOpacity={0} />
+          </LinearGradient>
+        </Defs>
+        <Rect x="0" y="0" width="100%" height="100%" fill={`url(#${id})`} />
+      </Svg>
+    </View>
+  );
+}
+
+/** How many rows either side of the middle are drawn; the rest are off the wheel. */
+const REACH = 5;
+
+function Column({ items, index, onIndex, onTouch, label, rowHeight, flex, align }: {
+  items: string[]; index: number; onIndex: (i: number) => void; onTouch?: () => void;
+  label: string; rowHeight: number; flex: number; align: 'left' | 'center' | 'right';
+}) {
+  const styles = useThemedStyles(styleDefinitions);
+  const last = items.length - 1;
+  const pos = useSharedValue(index * rowHeight);
+  const start = useSharedValue(0);
+  const [near, setNear] = useState(index);
+  const [focused, setFocused] = useState(false);
+  const indexRef = useRef(index);
+  indexRef.current = index;
+  const lastRef = useRef(last);
+  lastRef.current = last;
+
+  // Told from outside (the day pulled in for a shorter month): roll there.
+  useEffect(() => {
+    if (Math.round(pos.value / rowHeight) !== index) pos.value = withTiming(index * rowHeight, { duration: 240, easing: Easing.out(Easing.cubic) });
+    setNear(index);
+  }, [index, rowHeight, pos]);
+
+  const touch = useCallback(() => onTouch?.(), [onTouch]);
+  const commit = useCallback((i: number) => { onTouch?.(); if (i !== indexRef.current) { indexRef.current = i; onIndex(i); } }, [onIndex, onTouch]);
+
+  /** Moves by whole rows (keys, mouse wheel, VoiceOver). */
+  const step = useCallback((by: number, to?: number) => {
+    const target = Math.max(0, Math.min(lastRef.current, to ?? indexRef.current + by));
+    pos.value = withTiming(target * rowHeight, { duration: 200, easing: Easing.out(Easing.cubic) });
+    commit(target);
+  }, [commit, pos, rowHeight]);
+
+  // A click per row passed, and the rows drawn follow the wheel.
+  useAnimatedReaction(() => Math.round(pos.value / rowHeight), (now, before) => {
+    if (before === null || now === before) return;
+    runOnJS(setNear)(now);
+    if (now >= 0 && now <= last) runOnJS(tick)();
+  }, [rowHeight, last]);
+
+  const settle = (target: number) => {
+    'worklet';
+    const distance = Math.abs(target * rowHeight - pos.value) / rowHeight;
+    pos.value = withTiming(target * rowHeight, { duration: Math.min(900, 260 + distance * 28), easing: Easing.out(Easing.cubic) });
+    runOnJS(commit)(target);
+  };
+  const max = last * rowHeight;
+  const pan = Gesture.Pan()
+    .onBegin(() => { cancelAnimation(pos); start.value = pos.value; runOnJS(touch)(); })
+    .onUpdate((e) => {
+      const next = start.value - e.translationY;
+      // Past either end it gives a little, like the phone's own wheel.
+      pos.value = next < 0 ? next / 3 : next > max ? max + (next - max) / 3 : next;
+    })
+    .onEnd((e) => {
+      const projected = pos.value - e.velocityY * 0.2;
+      settle(Math.max(0, Math.min(last, Math.round(projected / rowHeight))));
+    })
+    .onFinalize(() => {
+      // A finger that stopped a spinning wheel and let go without dragging: it still lands on a row.
+      const row = Math.round(pos.value / rowHeight);
+      if (Math.abs(pos.value - row * rowHeight) > 0.5) settle(Math.max(0, Math.min(last, row)));
+    });
+  const tap = Gesture.Tap().maxDuration(400).onEnd((e) => {
+    const rows = Math.round((e.y - rowHeight * 2.5) / rowHeight);
+    settle(Math.max(0, Math.min(last, Math.round(pos.value / rowHeight) + rows)));
+  });
+  const gesture = Gesture.Exclusive(pan, tap);
+
+  // The website: the mouse wheel and the keys.
+  const node = useRef<View>(null);
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const el = node.current as unknown as HTMLElement | null;
+    if (!el || typeof el.addEventListener !== 'function') return;
+    let pending = 0;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      pending += e.deltaMode === 1 ? e.deltaY * rowHeight : e.deltaY;
+      const rows = Math.trunc(pending / (rowHeight * 0.75) + 1e-6);
+      if (rows) { pending -= rows * rowHeight * 0.75; step(rows); }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      const moves: Record<string, () => void> = {
+        ArrowUp: () => step(-1), ArrowDown: () => step(1), PageUp: () => step(-5), PageDown: () => step(5),
+        Home: () => step(0, 0), End: () => step(0, lastRef.current),
+      };
+      const move = moves[e.key];
+      if (move) { e.preventDefault(); move(); }
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    el.addEventListener('keydown', onKey);
+    return () => { el.removeEventListener('wheel', onWheel); el.removeEventListener('keydown', onKey); };
+  }, [rowHeight, step]);
+
+  const onAction = (e: AccessibilityActionEvent) => {
+    if (e.nativeEvent.actionName === 'increment') step(1);
+    if (e.nativeEvent.actionName === 'decrement') step(-1);
+  };
+
+  const from = Math.max(0, near - REACH);
+  const to = Math.min(last, near + REACH);
+  const shown: number[] = [];
+  for (let i = from; i <= to; i += 1) shown.push(i);
+  const rail = useAnimatedStyle(() => ({ transform: [{ translateY: rowHeight * 2 - pos.value }] }));
+
+  return (
+    <GestureDetector gesture={gesture}>
+      <View
+        ref={node}
+        style={[styles.column, { flex }, focused && styles.columnFocused]}
+        accessible
+        focusable
+        accessibilityRole="adjustable"
+        accessibilityLabel={label}
+        accessibilityValue={{ text: items[index] ?? '' }}
+        accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
+        onAccessibilityAction={onAction}
+        aria-valuetext={items[index] ?? ''}
+        aria-valuenow={index}
+        aria-valuemin={0}
+        aria-valuemax={last}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+      >
+        <Animated.View style={[StyleSheet.absoluteFill, rail]}>
+          {shown.map((i) => (
+            <Row key={i} i={i} text={items[i]} pos={pos} rowHeight={rowHeight} align={align} />
+          ))}
+        </Animated.View>
+      </View>
+    </GestureDetector>
+  );
+}
+
+function Row({ i, text, pos, rowHeight, align }: { i: number; text: string; pos: SharedValue<number>; rowHeight: number; align: 'left' | 'center' | 'right' }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const look = useAnimatedStyle(() => {
+    const d = (i * rowHeight - pos.value) / rowHeight;
+    const far = Math.min(Math.abs(d), 3);
+    return {
+      opacity: 1 - far * 0.3,
+      transform: [{ perspective: 600 }, { rotateX: `${Math.max(-60, Math.min(60, -d * 19))}deg` }, { scale: 1 - far * 0.04 }],
+    };
+  });
+  return (
+    <Animated.View style={[styles.row, { top: i * rowHeight, height: rowHeight }, look]}>
+      <Text numberOfLines={1} style={[styles.rowText, { textAlign: align }]}>{text}</Text>
+    </Animated.View>
+  );
+}
+
+const styleDefinitions = StyleSheet.create({
+  wheel: {
+    flexDirection: 'row', overflow: 'hidden', borderRadius: radius.xl,
+    backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border,
+    paddingHorizontal: spacing.md,
+  },
+  band: { position: 'absolute', left: spacing.sm, right: spacing.sm, borderRadius: radius.md },
+  column: { overflow: 'hidden', borderRadius: radius.md, ...(Platform.OS === 'web' ? { cursor: 'grab', outlineStyle: 'none' } : null) } as object,
+  columnFocused: Platform.OS === 'web' ? { outlineWidth: 2, outlineStyle: 'solid', outlineColor: colors.brand, outlineOffset: -2 } as object : {},
+  row: { position: 'absolute', left: spacing.sm, right: spacing.sm, justifyContent: 'center' },
+  rowText: { ...typography.title, fontSize: 21, color: colors.text, fontVariant: ['tabular-nums'] },
+});

@@ -46,6 +46,12 @@ export const tap = () => run(() => Haptics.impactAsync(Haptics.ImpactFeedbackSty
 /** Something was toggled back off. The faintest tick there is. */
 export const untap = () => run(() => Haptics.selectionAsync(), 5, { feel: A.Clock_Tick });
 
+/**
+ * A date wheel passing a row, the click of the phone's own date picker
+ * (Oct 17, the birthday wheel). No buzz in a browser: one per row would rattle.
+ */
+export const tick = () => run(() => Haptics.selectionAsync(), 0, { feel: A.Clock_Tick });
+
 /** Something left the device: a message sent, a post published. A gentle thud. */
 export const commit = () => run(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Soft), 10, { feel: A.Confirm, older: A.Context_Click });
 

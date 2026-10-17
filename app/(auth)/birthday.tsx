@@ -1,11 +1,14 @@
-import React, { useEffect, useState } from 'react';
-import { BackHandler, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { BackHandler, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 
 import { BrandMark } from '@/components/BrandMark';
-import { BirthDateField } from '@/components/BirthDateField';
 import { Button } from '@/components/ui';
+import { AgeReadout, AnswerCard, FooterFade, PrivacyLine, ProtectionsCard, Rise, UnlockCard } from '@/components/age/AgeBits';
+import { BirthdaySegments } from '@/components/age/BirthdaySegments';
+import { DateWheel, type WheelDate } from '@/components/age/DateWheel';
 import { isDeviceBlocked, toBirthDate } from '@/features/age/ageCheck';
+import { birthdayLook } from '@/features/age/birthdayLook';
 import { useLeave } from '@/components/LeaveCurtain';
 import { useApp } from '@/store/AppContext';
 import { useGateSpace } from '@/lib/useGateSpace';
@@ -24,12 +27,21 @@ import { colors, spacing, typography } from '@/theme';
  * Settings, Account center (which opens this same page, ?from=settings).
  * The date stays private. Under 13, by date or by answer, the account is
  * removed and this phone will not ask again.
+ *
+ * Redrawn Oct 17 (owner: "Make the UI of the what's your birthday and are
+ * you 13 years or older ... a lot better"), in two designs to choose from on
+ * the website with ?bdaylook=a (a date wheel) or ?bdaylook=b (three big
+ * boxes); see birthdayLook.ts. Both keep Skip for now as plain to see as
+ * Continue, and the two answers to the 13 question exactly alike.
  */
 export default function Birthday() {
   const { leave, curtain } = useLeave();
   const styles = useThemedStyles(styleDefinitions);
+  const look = birthdayLook();
   // Clear of the status bar and the home bar, the same as every page before the app.
   const space = useGateSpace();
+  // A short phone (an iPhone SE): the mark goes and the wheel is a little lower, so the buttons never leave the screen.
+  const short = useWindowDimensions().height < 720;
   // The date boxes are scrolled clear of the keyboard as they are tapped (a short phone, a big keyboard).
   const keyboard = useKeyboardReveal();
   const { currentUserId, currentUser, actions } = useApp();
@@ -37,14 +49,18 @@ export default function Birthday() {
   const { from } = useLocalSearchParams<{ from?: string }>();
   const fromSettings = from === 'settings';
   const [date, setDate] = useState({ month: '', day: '', year: '' });
-  // 'date': the birthday boxes. 'skip': "Are you 13 or older?" instead.
+  // The wheel starts on a date that is nobody's in particular; Continue waits until it has been moved.
+  const [wheel, setWheel] = useState<WheelDate>(() => ({ month: 0, day: 1, year: new Date().getFullYear() - 20 }));
+  const [wheelTouched, setWheelTouched] = useState(false);
+  // 'date': the birthday. 'skip': "Are you 13 or older?" instead.
   const [step, setStep] = useState<'date' | 'skip'>('date');
+  const [answer, setAnswer] = useState<'over' | 'under' | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [blocked, setBlocked] = useState(false);
   // Android's Back leaves the app, as on any first page (see agree.tsx): this
   // is the age check every new account is shown. From Settings it goes back
-  // there; on the 13-or-older question it goes back to the birthday boxes.
+  // there; on the 13-or-older question it goes back to the birthday.
   useAndroidBack(() => {
     if (step === 'skip') { setStep('date'); setError(''); return true; }
     if (fromSettings) { goBack(); return true; }
@@ -63,9 +79,16 @@ export default function Birthday() {
   useEffect(() => { if (currentUser?.ageGroup && !blocked && !fromSettings) leave(() => router.replace('/')); }, [currentUser?.ageGroup, blocked, fromSettings, leave]);
   const done = () => (fromSettings ? goBack() : leave(() => router.replace('/')));
 
+  // The date as typed or as rolled, in one shape.
+  const parts = look === 'a'
+    ? (wheelTouched ? { month: String(wheel.month + 1), day: String(wheel.day), year: String(wheel.year) } : { month: '', day: '', year: '' })
+    : date;
+  const ready = !!parts.month && !!parts.day && parts.year.length === 4 && !!toBirthDate(parts.month, parts.day, parts.year);
+  const touchWheel = useCallback(() => setWheelTouched(true), []);
+
   const submit = async () => {
     if (busy) return;
-    const birthDate = toBirthDate(date.month, date.day, date.year);
+    const birthDate = toBirthDate(parts.month, parts.day, parts.year);
     if (!birthDate) { setError('Enter a real date, like 04 17 2008.'); return; }
     setBusy(true);
     setError('');
@@ -102,8 +125,8 @@ export default function Birthday() {
     return (
       <View style={[styles.root, styles.centre, { paddingTop: space.top }]}>
         <BrandMark size={56} />
-        <Text style={styles.title}>CourtSide isn't available to you yet</Text>
-        <Text style={styles.lead}>You need to be a bit older to have an account. Nothing you entered has been kept.</Text>
+        <Text style={[styles.title, styles.centred]}>CourtSide isn't available to you yet</Text>
+        <Text style={[styles.lead, styles.centred]}>You need to be a bit older to have an account. Nothing you entered has been kept.</Text>
         {/* Signed in, there was no way off this page: the account signs out here. */}
         {currentUserId
           ? <Button label="Sign out" variant="ghost" onPress={() => leave(() => { actions.signOut(); router.replace('/sign-in'); })} />
@@ -114,26 +137,40 @@ export default function Birthday() {
   }
 
   if (step === 'skip') {
-    // Two answers of the same size: the question does not lean towards either.
+    // Two answers drawn exactly alike: the question does not lean towards either.
     return (
       <View style={styles.root}>
-        <ScrollView contentContainerStyle={[styles.scroll, { paddingTop: space.top, paddingBottom: space.bottom }]}>
-          <BrandMark size={44} />
-          <Text style={styles.title}>Are you 13 or older?</Text>
-          <Text style={styles.lead}>No birthday needed.</Text>
-          <View style={styles.answers}>
-            <Button label="I'm 13 or older" variant="secondary" loading={busy} onPress={() => { void over13(); }} full />
-            <Button label="I'm under 13" variant="secondary" disabled={busy} onPress={() => { void under13(); }} full />
-          </View>
+        <ScrollView style={styles.fill} contentContainerStyle={[styles.scroll, short && styles.scrollShort, { paddingTop: space.top }]}>
+          <Rise style={styles.head}>
+            {short ? null : <BrandMark size={40} />}
+            <Text style={styles.title}>Are you 13 or older?</Text>
+            <Text style={styles.lead}>No birthday needed. Just pick one.</Text>
+          </Rise>
+          <Rise delay={70} style={styles.answers}>
+            <View accessibilityRole="radiogroup" aria-label="Are you 13 or older?" style={styles.answers}>
+              <AnswerCard badge="13+" title="I'm 13 or older" detail="13 or older today" selected={answer === 'over'} disabled={busy} onPress={() => { setAnswer('over'); setError(''); }} />
+              <AnswerCard badge="<13" title="I'm under 13" detail="12 or younger today" selected={answer === 'under'} disabled={busy} onPress={() => { setAnswer('under'); setError(''); }} />
+            </View>
+          </Rise>
           {error ? <Text style={styles.error}>{error}</Text> : null}
-          {/* Said plainly, before they choose: what no birthday means. */}
-          <Text style={styles.small}>
-            Without a birthday you get the same protections as players under 18: your account starts private, only people you follow can message you, and on the map only friends who follow you back see you. You can add your birthday anytime in Settings → Account center.
-          </Text>
-          <Pressable accessibilityRole="button" onPress={() => { setStep('date'); setError(''); }} hitSlop={8} style={styles.linkWrap}>
+          <Rise delay={140}>
+            <ProtectionsCard />
+          </Rise>
+        </ScrollView>
+        <View style={[styles.footer, { paddingBottom: space.footer }]}>
+          <FooterFade />
+          <Button
+            label="Continue"
+            loading={busy}
+            disabled={!answer}
+            onPress={() => { if (answer === 'over') void over13(); else if (answer === 'under') void under13(); }}
+            full
+          />
+          {/* The way back to the birthday stays in sight on the shortest phone, under Continue. */}
+          <Pressable accessibilityRole="button" disabled={busy} onPress={() => { setStep('date'); setError(''); setAnswer(null); }} hitSlop={10} style={styles.linkWrap}>
             <Text style={styles.link}>Add my birthday instead</Text>
           </Pressable>
-        </ScrollView>
+        </View>
         <StatusShade />
         {curtain}
       </View>
@@ -143,21 +180,32 @@ export default function Birthday() {
   return (
     <KeyboardScrollContext.Provider value={Platform.OS === 'web' ? null : keyboard.reveal}>
     <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'web' ? undefined : 'padding'}>
-      <ScrollView ref={keyboard.scroller} onScroll={keyboard.onScroll} scrollEventThrottle={16} contentContainerStyle={[styles.scroll, { paddingTop: space.top, paddingBottom: space.bottom }]} keyboardShouldPersistTaps="handled">
-        <BrandMark size={44} />
-        <Text style={styles.title}>When's your birthday?</Text>
-        {/* Why we ask, honestly, and that it is up to them (Oct 17). */}
-        <Text style={styles.lead}>Optional. It helps us keep younger players safe, and it stays private: it never shows on your profile.</Text>
-        <Text style={styles.small}>At 18 and over it opens up meeting new players: being seen on the map by players nearby and hearing from players you don't follow yet.</Text>
-        <BirthDateField month={date.month} day={date.day} year={date.year} onChange={setDate} onSubmit={submit} label="Birthday (optional)" />
-        {error ? <Text style={styles.error}>{error}</Text> : null}
-        <View style={styles.answers}>
-          <Button label={fromSettings ? 'Save' : 'Continue'} loading={busy} disabled={!date.month || !date.day || date.year.length !== 4} onPress={submit} full />
-          {fromSettings
-            ? <Button label="Not now" variant="ghost" disabled={busy} onPress={() => goBack()} full />
-            : <Button label="Skip for now" variant="ghost" disabled={busy} onPress={() => { setStep('skip'); setError(''); }} full />}
-        </View>
+      <ScrollView ref={keyboard.scroller} onScroll={keyboard.onScroll} scrollEventThrottle={16} style={styles.fill} contentContainerStyle={[styles.scroll, short && styles.scrollShort, { paddingTop: space.top }]} keyboardShouldPersistTaps="handled">
+        <Rise style={styles.head}>
+          {short ? null : <BrandMark size={40} />}
+          <Text style={styles.title}>{fromSettings ? 'Add your birthday' : "When's your birthday?"}</Text>
+          {/* Why we ask, honestly, and that it is up to them (Oct 17). */}
+          <Text style={styles.lead}>Optional. It helps us keep younger players safe.</Text>
+        </Rise>
+        <Rise delay={70} style={styles.picker}>
+          {look === 'a'
+            ? <DateWheel value={wheel} onChange={setWheel} onTouch={touchWheel} rowHeight={short ? 36 : 42} label="Birthday (optional)" />
+            : <BirthdaySegments value={date} onChange={(next) => { setDate(next); setError(''); }} onSubmit={() => { if (ready) void submit(); }} />}
+          <AgeReadout {...parts} error={error} hint={look === 'a' ? 'Roll each wheel to your birthday' : 'Month, day and year'} />
+          <PrivacyLine />
+        </Rise>
+        <Rise delay={140}>
+          <UnlockCard />
+        </Rise>
       </ScrollView>
+      {/* Continue and Skip for now stay on screen, side by side in weight, whatever the page's length. */}
+      <View style={[styles.footer, { paddingBottom: space.footer }]}>
+          <FooterFade />
+        <Button label={fromSettings ? 'Save' : 'Continue'} loading={busy} disabled={!ready} onPress={() => { void submit(); }} full />
+        {fromSettings
+          ? <Button label="Not now" variant="secondary" disabled={busy} onPress={() => goBack()} full />
+          : <Button label="Skip for now" variant="secondary" disabled={busy} onPress={() => { setStep('skip'); setError(''); }} full />}
+      </View>
       {/* With the keyboard up the page can scroll; it stops at the status bar, not under the clock. */}
       <StatusShade />
       {curtain}
@@ -168,13 +216,18 @@ export default function Birthday() {
 
 const styleDefinitions = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
+  fill: { flex: 1 },
   centre: { alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.xl },
-  scroll: { paddingHorizontal: spacing.xl, gap: spacing.lg, maxWidth: 460, width: '100%', alignSelf: 'center' },
-  title: { ...typography.title, color: colors.text, textAlign: 'left' },
-  lead: { ...typography.body, color: colors.textMuted },
-  small: { ...typography.small, color: colors.textMuted },
-  answers: { gap: spacing.sm },
-  linkWrap: { alignSelf: 'flex-start' },
-  link: { ...typography.smallStrong, color: colors.text, textDecorationLine: 'underline' },
+  centred: { textAlign: 'center' },
+  scroll: { paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, gap: spacing.xl, maxWidth: 460, width: '100%', alignSelf: 'center' },
+  scrollShort: { gap: spacing.lg },
+  head: { gap: spacing.sm },
+  title: { ...typography.display, color: colors.text, marginTop: spacing.xs },
+  lead: { ...typography.body, color: colors.textMuted, lineHeight: 21 },
+  picker: { gap: spacing.md },
+  answers: { gap: spacing.md },
+  footer: { paddingHorizontal: spacing.xl, paddingTop: spacing.md, gap: spacing.sm, maxWidth: 460, width: '100%', alignSelf: 'center' },
+  linkWrap: { alignSelf: 'center', paddingVertical: spacing.xs },
+  link: { ...typography.smallStrong, color: colors.textMuted, textDecorationLine: 'underline' },
   error: { ...typography.small, color: colors.danger },
 });
