@@ -16,7 +16,7 @@ import { CAROUSEL_MAX } from '@/features/compose/carousel';
 import { CarouselStrip } from '@/components/CarouselStrip';
 import { MediaEditor, type EditedMedia } from '@/components/MediaEditor';
 import { takePendingShot } from '@/features/compose/pendingShot';
-import { registerCreateClose } from '@/features/compose/createMenu';
+import { markCreateLeaving, registerCreateClose } from '@/features/compose/createMenu';
 import { SheetBackdrop } from '@/components/SheetBackdrop';
 import { HAND_IN_FROM, arrivingHeight, takeHandOver } from '@/components/sheetHandOver';
 import { useReducedMotion } from '@/lib/useReducedMotion';
@@ -352,6 +352,8 @@ function Compose() {
   const closeMenu = () => {
     if (closing.current) return;
     closing.current = true;
+    // The tab bar stays under the box (Oct 17); its dim fades with the box's own.
+    markCreateLeaving();
     // The page's own fade would run after the box has already gone, leaving
     // an invisible layer that swallows taps for a moment; it is switched off
     // now, well before the page leaves.

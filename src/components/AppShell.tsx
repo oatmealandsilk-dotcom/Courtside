@@ -36,7 +36,9 @@ import { TERMS_VERSION } from '@/lib/legal';
 import { colors } from '@/theme';
 import { stageKeyOf, useStageSelect } from '@/features/feed/commentStage';
 import { useStageMotion } from '@/features/feed/useStageMotion';
-import Reanimated, { useAnimatedStyle } from 'react-native-reanimated';
+import Reanimated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import { useCreateMenuState } from '@/features/compose/createMenu';
+import { useReducedMotion } from '@/lib/useReducedMotion';
 
 /**
  * The four tabs in the strip's order, left to right: Community, Home,
@@ -275,8 +277,30 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // layer around it (they set their own); `inert` takes the whole bar out of
   // reach, and out of a screen reader's, while the comments are over it.
   const navLayer = useRef<HTMLElement | null>(null);
-  useEffect(() => { if (Platform.OS === 'web' && navLayer.current) navLayer.current.inert = barOnStage; }, [barOnStage]);
-  const showNav = !!currentUserId && !hideEverywhere && !onSplash && (!(isPhone && phoneOnlyHide) || barOnStage);
+  // While the Create box (the + menu) is up, the phone's bar stays, under the
+  // box's dim, rather than going and coming back (owner, Oct 17: "When I click
+  // the + and then click out of it, the bottom island disappears and comes
+  // back. Either make it not disappear or make the animation significantly
+  // better"). Only the box itself: once it moves on to a full page (the photo
+  // editor, the post form, the Session sheet) the bar leaves as before.
+  const createMenu = useCreateMenuState();
+  const createBoxUp = pathname === '/compose' && createMenu !== 'closed';
+  const barWanted = !!currentUserId && !hideEverywhere && !onSplash;
+  const showNav = barWanted && (!(isPhone && phoneOnlyHide) || barOnStage || createBoxUp);
+  useEffect(() => { if (Platform.OS === 'web' && navLayer.current) navLayer.current.inert = barOnStage || !showNav; }, [barOnStage, showNav]);
+  // And when a page does take the phone's bar away, it no longer pops: it
+  // slips down a little and fades (about a fifth of a second), and comes back
+  // the same way. It stays drawn until it has gone. Sign-in, the splash and
+  // the other pages that never have it still take it at once.
+  const still = useReducedMotion();
+  const [barKept, setBarKept] = useState(showNav);
+  const barAway = useSharedValue(showNav ? 0 : 1);
+  useEffect(() => {
+    if (showNav) { setBarKept(true); barAway.value = withTiming(0, { duration: 200, easing: Easing.out(Easing.cubic) }); return; }
+    if (!barWanted) { setBarKept(false); barAway.value = 1; return; }
+    barAway.value = withTiming(1, { duration: 180, easing: Easing.out(Easing.cubic) }, (done) => { if (done) runOnJS(setBarKept)(false); });
+  }, [showNav, barWanted, barAway]);
+  const barSlide = useAnimatedStyle(() => ({ opacity: 1 - barAway.value, transform: [{ translateY: still ? 0 : barAway.value * 28 }] }));
   const curtainDown = useCurtainDown();
   // A session you started and haven't logged (Oct 6): its bar rides above the tab bar wherever the bar
   // is, never over a sheet, a composer or the live page itself, nor on a clip's comments stage or under the tutorial.
@@ -355,9 +379,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     {showNav && !isPhone && nav}
     {/* While the tour is up, TalkBack reads only the tour, not the page under the dim. */}
     <Reanimated.View importantForAccessibility={tourOpen ? 'no-hide-descendants' : 'auto'} style={[{ flex: 1, minWidth: 0, minHeight: 0 }, settle]}><RouteTransition>{children}</RouteTransition>{liveBarOn && !isPhone ? <LiveBar phone={false} /> : null}<ToastLayer /><UploadLayer /></Reanimated.View>
-    {showNav && isPhone ? (
-      <Reanimated.View ref={((node: unknown) => { navLayer.current = node as HTMLElement | null; navFade.ref?.(node); }) as never} pointerEvents={barOnStage ? 'none' : 'box-none'} style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }, barOnStage && { overflow: 'hidden' }, navFade.style]}>
+    {(showNav || (barKept && barWanted)) && isPhone ? (
+      <Reanimated.View pointerEvents={showNav ? 'box-none' : 'none'} style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }, barSlide]}>
+      <Reanimated.View ref={((node: unknown) => { navLayer.current = node as HTMLElement | null; navFade.ref?.(node); }) as never} pointerEvents={barOnStage || !showNav ? 'none' : 'box-none'} style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }, barOnStage && { overflow: 'hidden' }, navFade.style]}>
         <Reanimated.View ref={navHold.ref as never} pointerEvents="box-none" style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }, navHold.style]}>{nav}</Reanimated.View>
+      </Reanimated.View>
       </Reanimated.View>
     ) : null}
     {liveBarOn && isPhone ? <LiveBar phone /> : null}

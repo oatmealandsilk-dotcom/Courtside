@@ -10,7 +10,7 @@ import { isStartTab } from '@/features/navigation/startTab';
 import { useCallback, useEffect, useRef } from 'react';
 import { Easing, useSharedValue, withTiming } from 'react-native-reanimated';
 import { router, usePathname } from 'expo-router';
-import { closeCreateMenu } from '@/features/compose/createMenu';
+import { closeCreateMenu, markCreateOpening, useCreateMenuState } from '@/features/compose/createMenu';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { BrandWash } from '@/components/ui/BrandWash';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -123,9 +123,23 @@ export function NavBar({ state, navigation }: NavBarProps) {
   // The + is a toggle: a second tap closes the Create box with its own
   // animation. Mid-post (the box already gone) a tap there does nothing.
   const openCreate = () => {
-    if (pathname !== '/compose') { router.push('/compose'); return; }
+    // Said first, so the bar knows the box is coming and stays (owner, Oct 17, see createMenu).
+    if (pathname !== '/compose') { markCreateOpening(); router.push('/compose'); return; }
     closeCreateMenu();
   };
+  // While the Create box is up, the bar stays where it is, under the same dim
+  // as the page: a veil over the pill, in and out on the box's own timing. A
+  // tap on the veil closes the box, as a tap anywhere else outside it does;
+  // only the + stands above it, lit, and closes the box too.
+  const createMenu = useCreateMenuState();
+  const boxUp = pathname === '/compose' && (createMenu === 'opening' || createMenu === 'open');
+  const veil = useSharedValue(boxUp ? 1 : 0);
+  useEffect(() => {
+    veil.value = withTiming(boxUp ? 1 : 0, { duration: boxUp ? 220 : 210, easing: Easing.out(Easing.cubic) });
+  }, [boxUp, veil]);
+  const veilStyle = useAnimatedStyle(() => ({ opacity: veil.value }));
+  // Still in the way of the tabs while the box fades out, so a tap then does not open a tab under the closing box.
+  const veilBlocks = boxUp || (pathname === '/compose' && createMenu === 'leaving');
   const curtainDown = useCurtainDown();
   const behindCurtain = !barUp && !warm && !curtainDown && isStartTab(pathname);
   if (behindCurtain && !waitUntil) waitUntil = Date.now() + BAR_WAIT_MS;
@@ -164,7 +178,7 @@ export function NavBar({ state, navigation }: NavBarProps) {
               const active = item.route === activeRoute;
               return (
                 <React.Fragment key={item.route}>
-                {index === 2 && <View style={styles.createSlot}><Animated.View><Pressable ref={tourCreate} accessibilityRole="button" accessibilityLabel="Create a post" onPress={openCreate} style={[styles.createButton, pageIsDark() && styles.createButtonDark]}><BrandWash /><Ionicons name="add" size={28} color={colors.brandInk} /></Pressable></Animated.View></View>}
+                {index === 2 && <View style={[styles.createSlot, styles.createAbove]}><Animated.View><Pressable ref={tourCreate} accessibilityRole="button" accessibilityLabel="Create a post" onPress={openCreate} style={[styles.createButton, pageIsDark() && styles.createButtonDark]}><BrandWash /><Ionicons name="add" size={28} color={colors.brandInk} /></Pressable></Animated.View></View>}
                 <Pressable
                   ref={tourRef(item.route)}
                   onPress={() => navigation.navigate(item.route)}
@@ -192,6 +206,9 @@ export function NavBar({ state, navigation }: NavBarProps) {
                 </React.Fragment>
               );
             })}
+            <Animated.View pointerEvents={veilBlocks ? 'auto' : 'none'} style={[styles.veil, veilStyle]}>
+              <Pressable accessible={false} importantForAccessibility="no" onPress={() => { closeCreateMenu(); }} style={StyleSheet.absoluteFill} />
+            </Animated.View>
           </Glass>
           </View>
         </Animated.View>
@@ -338,6 +355,10 @@ export function NavBar({ state, navigation }: NavBarProps) {
 
 const styleDefinitions = StyleSheet.create({
   createSlot: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  // The + stands above the veil while the Create box is up (zIndex 2 over the veil's 1).
+  createAbove: { zIndex: 2 },
+  // The Create box's dim, over the pill (its colour is the box's backdrop's, colors.overlay, read where it is drawn).
+  veil: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1, borderRadius: TAB_BAR_H / 2, backgroundColor: colors.overlay },
   createButton: { width: 46, height: 46, borderRadius: 23, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center', shadowColor: colors.brand, shadowOpacity: 0.28, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 3 },
   // On a dark page the button's own colour as a shadow reads as a glow; a plain dark one just lifts it.
   createButtonDark: { shadowColor: '#000000', shadowOpacity: 0.4 },
