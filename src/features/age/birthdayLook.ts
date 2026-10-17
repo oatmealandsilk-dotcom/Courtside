@@ -4,16 +4,16 @@ import { Platform } from 'react-native';
  * Which birthday page to show (Oct 17, owner: "Make the UI of the what's
  * your birthday and are you 13 years or older ... a lot better"). Two
  * designs, to look at side by side on the website before one is kept:
- *   a  "Wheel": the phone's own kind of date wheel (month, day, year)
- *   b  "Refined fields": three big boxes, MM / DD / YYYY (the default, Oct
- *      17 review: it starts empty, typing 1979 beats rolling 47 rows, and it
- *      uses the phone's own number pad, so it is the safer one for Apple)
+ *   a  "Wheel": the phone's own kind of date wheel (month, day, year), the
+ *      default (Oct 17, owner: "Do A for the birthday"). It starts on Month /
+ *      Day / Year with nothing picked, so no age is suggested.
+ *   b  "Refined fields": three big boxes, MM / DD / YYYY
  * Add ?bdaylook=a or ?bdaylook=b to a web address to choose; the choice is
  * kept for the rest of that visit. Phones always get the default.
  */
 export type BirthdayLook = 'a' | 'b';
 
-const DEFAULT_LOOK: BirthdayLook = 'b';
+const DEFAULT_LOOK: BirthdayLook = 'a';
 const KEY = 'courtside-bdaylook';
 
 let chosen: BirthdayLook | null = null;
