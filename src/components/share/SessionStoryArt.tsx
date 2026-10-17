@@ -122,7 +122,9 @@ export function SessionStoryArt({ design, story, width, photo, hidden = [], onPh
       // A workout's distance (migration 107); tennis never has one.
       s.workout && formatDistance(s.distanceM) ? { label: 'Distance', value: formatDistance(s.distanceM)! } : null,
       s.kcal ? { label: 'Calories', value: `${s.kcal}` } : null,
-      s.avgHr ? { label: 'Avg HR', value: `${s.avgHr} bpm` } : null,
+      // Max HR is the number worth showing; Avg HR only when there is no max (an average typed in by hand):
+      // fewer, bigger numbers read better on a story (Oct 17, owner: "Drop avg hr"). It stays on Heart rate and the post.
+      s.avgHr && s.maxHr == null ? { label: 'Avg HR', value: `${s.avgHr} bpm` } : null,
       s.maxHr != null ? { label: 'Max HR', value: `${s.maxHr} bpm` } : null,
     ].filter((x): x is { label: string; value: string } => !!x);
     const u = width / 360;
