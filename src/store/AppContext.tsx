@@ -19,7 +19,7 @@ import { planStreakReminder } from '@/features/practice/reminder';
 import { isMapCourtId } from '@/features/places/courtName';
 import { TERMS_VERSION } from '@/lib/legal';
 
-import { fetchBootstrap, fetchGuestFeedPage, fetchGuestHome, fetchGuestThread, searchPosts as apiSearchPosts, signIn as apiSignIn, type Bootstrap, type GuestData } from '@/data/api';
+import { fetchBootstrap, fetchGuestFeedPage, fetchGuestHome, fetchGuestPost, fetchGuestThread, searchPosts as apiSearchPosts, signIn as apiSignIn, type Bootstrap, type GuestData } from '@/data/api';
 import { openJoinSheet } from '@/features/guest/joinAsk';
 import * as demoApi from '@/data/api';
 import { BLOCKED_WORDS_NOTE, CHAT_PHOTO_UNREADABLE, REVIEW_NOTE_MAX, auth as remoteAuth, fetchRemote, isLocalMedia, onWordsRefused, queueFeedSignal, remote, uploadChatPhoto, uploadMedia, emptyProfile, type GroupRefusal, type AdminReport, type ModerationResult, type ReviewAskResult, type ReportedChat, type ReportedItem, type ReportedItemKind, type ReportEvidence, type FeedSignal, type SiteFeedback, type WaitlistEntry, type BetaInviteStatus, type FirstDayStats, type FirstMove, type HandleStatus, type InviteCodeResult, type MyInviter, type RemoteData, type UserState, standInName } from '@/data/remote';
@@ -9390,9 +9390,48 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const isGuest = Platform.OS === 'web' && state.ready && state.authResolved && !state.currentUserId;
   const [guest, setGuest] = useState<GuestData | null>(null);
   const guestAsked = useRef(false);
+  /**
+   * The guest's first page, and what Refresh asks for again. It lays the
+   * newest posts and threads over what is there rather than replacing it
+   * all (found in review, Oct 17): a thread or post opened from a link can
+   * land before this does, and used to be wiped (its replies, or the whole
+   * thread when it was older than the newest 30). The newest lists are the
+   * truth for their own stretch of time, so a post or thread taken down
+   * since goes; anything older (older feed pages, a thread from a link)
+   * stays, with its replies and comments.
+   */
   const loadGuest = useCallback(async () => {
     const got = await fetchGuestHome().catch(() => null);
-    setGuest(got ?? { users: [], posts: [], comments: [], questions: [], answers: [], coaches: [], more: false });
+    setGuest((prev) => {
+      if (!got) return prev ?? { users: [], posts: [], comments: [], questions: [], answers: [], coaches: [], more: false };
+      if (!prev) return got;
+      const oldest = (xs: { createdAt: string }[]) => xs.reduce<number | null>((o, x) => { const t = Date.parse(x.createdAt); return o === null || t < o ? t : o; }, null);
+      // Kept from before: what is older than the newest lists reach (or everything, when a list came back empty).
+      const keep = <T extends { id: ID; createdAt: string }>(was: T[], now: T[]) => {
+        const edge = oldest(now);
+        const fresh = new Set(now.map((x) => x.id));
+        return [...now, ...was.filter((x) => !fresh.has(x.id) && (edge === null || Date.parse(x.createdAt) < edge))];
+      };
+      const posts = keep(prev.posts, got.posts);
+      const questions = keep(prev.questions, got.questions);
+      const postIds = new Set(posts.map((p) => p.id));
+      const freshPosts = new Set(got.posts.map((p) => p.id));
+      const threadIds = new Set(questions.map((q) => q.id));
+      const freshComments = new Set(got.comments.map((c) => c.id));
+      const freshAnswers = new Set(got.answers.map((a) => a.id));
+      const freshUsers = new Set(got.users.map((u) => u.id));
+      const keptOlder = posts.length > got.posts.length;
+      return {
+        users: [...got.users, ...prev.users.filter((u) => !freshUsers.has(u.id))],
+        posts, questions,
+        // A fresh post's comments are the fresh ones; a kept post keeps its own.
+        comments: [...got.comments, ...prev.comments.filter((c) => !freshComments.has(c.id) && postIds.has(c.postId) && !freshPosts.has(c.postId))],
+        // The home page carries no replies: a kept thread keeps the ones it had.
+        answers: [...got.answers, ...prev.answers.filter((a) => !freshAnswers.has(a.id) && threadIds.has(a.questionId))],
+        coaches: got.coaches,
+        more: keptOlder ? (prev.more ?? got.more) : got.more,
+      };
+    });
   }, []);
   useEffect(() => {
     if (!isGuest) { guestAsked.current = false; setGuest(null); return; }
@@ -9455,7 +9494,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
         return page.posts;
       },
       loadThread: async (id: ID) => { const got = await fetchGuestThread(id).catch(() => null); if (got) addGuest(got); },
-      loadPost: async (id: ID) => !!guestRef.current?.posts.some((p) => p.id === id),
+      // A post from a link (a clip on Reddit, say): the real post, so the clip plays (guest_post).
+      loadPost: async (id: ID) => {
+        if (guestRef.current?.posts.some((p) => p.id === id)) return true;
+        const got = await fetchGuestPost(id).catch(() => null);
+        if (!got) return false;
+        addGuest(got);
+        return true;
+      },
       loadPostsOf: async () => undefined,
       recordView: () => undefined, noteFeedSignal: () => undefined, markStoryViewed: () => undefined,
       watchComments: () => () => undefined, catchUpNotifications: async () => undefined, markNotificationsRead: () => undefined,

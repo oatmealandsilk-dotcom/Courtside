@@ -30,7 +30,7 @@ import { STREAK_FLAME_FROM } from '@/features/practice/streakFlame';
 import { notKnownAdult } from '@/features/players/age';
 import { lastWeekStart, weekRecap } from '@/features/recap/recap';
 import { supabase } from '@/lib/supabase';
-import { emptyProfile, guestCoaches, guestFeed, guestStandIns, guestThreadPage, guestThreads, type GuestPage } from './remote';
+import { emptyProfile, guestCoaches, guestFeed, guestPostPage, guestStandIns, guestThreadPage, guestThreads, type GuestPage } from './remote';
 import { canTagKind, isActive, isClosed, maxTagsFor, mirrorCopy } from '@/features/activity/sessionTags';
 import type {
   Achievement,
@@ -760,16 +760,28 @@ const guestPerson = (u: User): User => ({
   openToHitUntil: undefined, openToHitMiles: undefined, followers: 0, following: 0, profile: { ...emptyProfile, skillSystem: u.profile.skillSystem, rating: u.profile.rating }, joinedAt: '1970-01-01T00:00:00.000Z',
   avatarUrl: u.avatarUrl?.startsWith('https://') ? u.avatarUrl : undefined,
 });
+/**
+ * Someone's words as a guest reads them, as the server's guest_words: an
+ * @handle that is not a shown person's (a teen's, say) reads "@someone"
+ * (found in review, Oct 17: "Reply" starts a reply with their handle).
+ */
+const guestWords = (t: string) => t.replace(/@[A-Za-z0-9_.]+/g, (tok) => {
+  const handle = tok.slice(1).replace(/\.+$/, '').toLowerCase();
+  const u = users.find((x) => x.handle === handle);
+  return u && guestShown(u.id) ? tok : `@someone${tok.match(/\.*$/)?.[0] ?? ''}`;
+});
 const guestPeopleOf = (ids: Iterable<ID>) => [...new Set(ids)].flatMap((id) => { const u = users.find((x) => x.id === id); return u && guestShown(id) ? [guestPerson(u)] : []; });
 
+/** A post a guest may see, as the server's guest_post_ok (never one pushed to the bottom either). */
+const demoGuestOk = (p: Post) => guestShown(p.authorId) && !p.archived && !p.removed && !p.groupId && p.featureOk !== false
+  && (p.taggedUserIds ?? []).every(knownAdult) && (p.session?.with ?? []).every((w) => knownAdult(w.id)) && !demoDemoted.has(p.id);
+/** One for the guest feed: the list stops at 90 days. */
 function demoGuestPost(p: Post): boolean {
-  return guestShown(p.authorId) && !p.archived && !p.removed && !p.groupId && p.featureOk !== false
-    && (p.taggedUserIds ?? []).every(knownAdult) && (p.session?.with ?? []).every((w) => knownAdult(w.id))
-    && Date.now() - Date.parse(p.createdAt) < GUEST_DAYS * 86_400_000;
+  return demoGuestOk(p) && Date.now() - Date.parse(p.createdAt) < GUEST_DAYS * 86_400_000;
 }
 /** A post with only what guest_feed returns: no place, no tags, no tracker numbers, no opponent's name. */
 const guestPostShape = (p: Post, commentIds: ID[]): Post => ({
-  id: p.id, authorId: p.authorId, kind: p.kind, createdAt: p.createdAt, body: p.body.slice(0, 2000), mediaLabel: p.mediaLabel,
+  id: p.id, authorId: p.authorId, kind: p.kind, createdAt: p.createdAt, body: guestWords(p.body).slice(0, 2000), mediaLabel: p.mediaLabel && guestWords(p.mediaLabel),
   imageUrl: p.imageUrl, imageUrls: p.imageUrls, videoUrl: p.videoUrl, thumbnailUrl: p.thumbnailUrl, orientation: p.orientation,
   trimStart: p.trimStart, trimEnd: p.trimEnd, crop: p.crop, muted: p.muted, speed: p.speed, volume: p.volume,
   match: p.match ? { ...p.match, opponentName: '' } : undefined,
@@ -793,14 +805,22 @@ export async function fetchGuestHome(): Promise<GuestData | null> {
   const page = await fetchGuestFeedPage(null);
   const threads = questions.filter((q) => !q.removed && guestShown(q.authorId)).sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)).slice(0, 30);
   const shownAnswers = guestAnswers(threads.map((q) => q.id));
-  const coaching = coaches.filter((c) => c.listed !== false && guestShown(c.userId)).slice(0, 50);
+  const coaching = coaches.filter((c) => c.listed !== false && guestShown(c.userId)).slice(0, 50)
+    .map((c) => ({ ...c, headline: guestWords(c.headline), services: c.services.map((v) => ({ ...v, title: guestWords(v.title), description: guestWords(v.description) })) }));
   return delay(clone({
     users: [...page.users, ...guestPeopleOf([...threads.map((q) => q.authorId), ...coaching.map((c) => c.userId)])].filter((u, i, all) => all.findIndex((x) => x.id === u.id) === i),
     posts: page.posts, comments: page.comments,
-    questions: threads.map((q) => ({ ...q, votedBy: {}, answerIds: shownAnswers.filter((a) => a.questionId === q.id).map((a) => a.id), acceptedAnswerId: shownAnswers.some((a) => a.id === q.acceptedAnswerId) ? q.acceptedAnswerId : undefined, poll: q.poll ? { options: q.poll.options, counts: q.poll.counts } : undefined })),
+    questions: threads.map((q) => guestThreadShape(q, shownAnswers.filter((a) => a.questionId === q.id))),
     answers: [], coaches: coaching, more: page.more,
   }));
 }
+
+/** A thread as a guest sees it (guest_threads / guest_thread): no voters, only the replies they may read, a teen's @handle as @someone. */
+const guestThreadShape = (q: Question, shown: Answer[]): Question => ({
+  ...q, title: guestWords(q.title), body: guestWords(q.body), votedBy: {}, answerIds: shown.map((a) => a.id),
+  acceptedAnswerId: shown.some((a) => a.id === q.acceptedAnswerId) ? q.acceptedAnswerId : undefined,
+  poll: q.poll ? { options: q.poll.options.map(guestWords), counts: q.poll.counts } : undefined,
+});
 
 /** The replies a guest may read on these threads: each by someone shown, and every reply above it too. */
 function guestAnswers(threadIds: ID[]): Answer[] {
@@ -814,7 +834,7 @@ function guestAnswers(threadIds: ID[]): Answer[] {
       if (!a.parentAnswerId || kept.has(a.parentAnswerId)) { kept.set(a.id, a); grew = true; }
     }
   }
-  return [...kept.values()].sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt)).slice(0, 200).map((a) => ({ ...a, votedBy: {} }));
+  return [...kept.values()].sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt)).slice(0, 200).map((a) => ({ ...a, body: guestWords(a.body), votedBy: {} }));
 }
 
 /** The guest feed from `before` on (older posts), newest first. */
@@ -823,17 +843,38 @@ export async function fetchGuestFeedPage(before: string | null): Promise<GuestDa
   const all = posts.filter((p) => demoGuestPost(p) && (!before || Date.parse(p.createdAt) < Date.parse(before)))
     .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
   const page = all.slice(0, GUEST_PAGE);
+  return delay(clone({ ...guestPostsPage(page), more: all.length > GUEST_PAGE }));
+}
+
+/**
+ * These posts as a guest sees them, each with up to 20 comments, by the
+ * server's rule (guest_comment_ok): by someone shown, not taken down or
+ * hidden, under a comment that passes, and answering one that passes.
+ */
+function guestPostsPage(page: Post[]): GuestData {
   const ids = new Set(page.map((p) => p.id));
-  const okComment = (c: Comment) => ids.has(c.postId) && !c.removed && !c.hiddenByWords && guestShown(c.authorId);
-  const top = new Set(comments.filter((c) => okComment(c) && !c.parentId).map((c) => c.id));
-  const shown = comments.filter((c) => okComment(c) && (!c.parentId || top.has(c.parentId)));
+  const fine = (c: Comment | undefined) => !!c && !c.removed && guestShown(c.authorId);
+  const byId = new Map(comments.map((c) => [c.id, c]));
+  const okComment = (c: Comment) => ids.has(c.postId) && fine(c) && !c.hiddenByWords
+    && (!c.parentId || (fine(byId.get(c.parentId)) && !byId.get(c.parentId)?.hiddenByWords))
+    && (!c.replyToId || fine(byId.get(c.replyToId)));
+  const shown = page.flatMap((p) => comments.filter((c) => c.postId === p.id && okComment(c))
+    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)).slice(0, 20).reverse());
   const shownIds = new Set(shown.map((c) => c.id));
-  return delay(clone({
+  return {
     users: guestPeopleOf([...page.map((p) => p.authorId), ...shown.map((c) => c.authorId)]),
     posts: page.map((p) => guestPostShape(p, shown.filter((c) => c.postId === p.id).map((c) => c.id))),
-    comments: shown.map((c) => ({ ...c, likedBy: guestStandIns(c.likedBy.length), replyToId: c.replyToId && shownIds.has(c.replyToId) ? c.replyToId : undefined })),
-    questions: [], answers: [], coaches: [], more: all.length > GUEST_PAGE,
-  }));
+    comments: shown.map((c) => ({ ...c, body: guestWords(c.body), likedBy: guestStandIns(c.likedBy.length), replyToId: c.replyToId && shownIds.has(c.replyToId) ? c.replyToId : undefined })),
+    questions: [], answers: [], coaches: [],
+  };
+}
+
+/** One post a shared link points to, as a guest sees it (guest_post); null when a guest may not see it. */
+export async function fetchGuestPost(id: ID): Promise<GuestData | null> {
+  if (supabase) return guestPostPage(id);
+  const p = posts.find((x) => x.id === id);
+  // The 90 days only limit the list: a post opened from its own link may be older.
+  return delay(p && demoGuestOk(p) ? clone(guestPostsPage([p])) : null);
 }
 
 /** One thread and the replies a guest may read; null when a guest may not see it. */
@@ -844,7 +885,7 @@ export async function fetchGuestThread(id: ID): Promise<GuestData | null> {
   const shown = guestAnswers([q.id]);
   return delay(clone({
     users: guestPeopleOf([q.authorId, ...shown.map((a) => a.authorId)]), posts: [], comments: [],
-    questions: [{ ...q, votedBy: {}, answerIds: shown.map((a) => a.id), acceptedAnswerId: shown.some((a) => a.id === q.acceptedAnswerId) ? q.acceptedAnswerId : undefined, poll: q.poll ? { options: q.poll.options, counts: q.poll.counts } : undefined }],
+    questions: [guestThreadShape(q, shown)],
     answers: shown, coaches: [],
   }));
 }

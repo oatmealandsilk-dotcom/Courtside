@@ -782,6 +782,36 @@ const STEPS = [
   // make you sign up"). Signed out on the web the app opens read-only on the Feed. Only public
   // adults' posts, threads and replies show: never Ella or Leo (teens, private), never Tomás, Mira,
   // June, Dev or Nadia (no age on file).
+  // A thread link opened straight away, signed out (found in review, Oct 17): the guest's first
+  // page lands after the thread and used to wipe its replies. Marcus's reply must still be there
+  // once that page is in (the demo's two delays, with room to spare).
+  {
+    name: 'guest-thread-link',
+    title: 'Guest mode: a thread link, opened straight away',
+    async run(page) {
+      await page.goto('/question/q1');
+      await page.waitFor({ text: /^I made the switch at 4\.0/ }, 45000);
+      await sleep(2500);
+      await page.waitFor({ text: /^I made the switch at 4\.0/ }, 2000);
+      if (await page.find({ text: 'Join CourtSide to see this' })) throw new Error('the thread fell back to the locked card');
+      await guestShowsOnlyAdults(page);
+    },
+    expect: [{ text: /^Full poly at 4\.0/ }, { label: 'Reply to this thread' }],
+  },
+  // A clip from a link (owner, Oct 17: "if someone clicked a Reddit link ... view videos") opens in
+  // the app's own feed page, the clip in place with its like button, not a still card.
+  {
+    name: 'guest-post-link',
+    title: 'Guest mode: a clip link plays in the feed page',
+    async run(page) {
+      await page.goto('/post/p-court-1');
+      await page.waitFor({ text: /^Inside-out forehand drill/ }, 45000);
+      await page.waitFor({ label: /^Like( clip|\. Hold to see who liked it)$/ }, 30000);
+      if (await page.find({ text: 'Join CourtSide to see this' })) throw new Error('a guest got the locked card for a public adult’s clip');
+      await guestShowsOnlyAdults(page);
+    },
+    expect: [{ label: /^Like( clip|\. Hold to see who liked it)$/ }],
+  },
   {
     name: 'guest-feed',
     title: 'Guest mode: the Feed, signed out',

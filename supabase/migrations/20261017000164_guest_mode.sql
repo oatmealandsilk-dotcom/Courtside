@@ -11,19 +11,23 @@
 -- (like, reply, follow, post, message) asks them to make a free account.
 -- The iPhone app is unchanged: signed out, it still opens on sign-in.
 --
--- In plain words, this file adds four things a visitor with no account may
+-- In plain words, this file adds five things a visitor with no account may
 -- ask for, and nothing else:
 --   guest_feed(before, how many): recent posts, newest first, at most 30 at
 --     a time and only from the last 90 days, each with up to 20 comments.
 --   guest_threads(topic, before, how many): Discussions threads, newest
 --     first, at most 30 at a time, with how many replies a visitor may read.
 --   guest_thread(id): one thread and the replies a visitor may read (up to 200).
+--   guest_post(id): one post, the one a shared link (a clip on Reddit, say)
+--     points to, by the same rule as the feed, with up to 20 comments, so
+--     the clip itself plays. No 90-day limit here: it is asked for by its
+--     own id (as share_preview, 68, already is), never listed.
 --   guest_coaches(): the coaches listed on the Coaching tab, with what they offer.
 -- And it closes one old door: signed out, the threads, replies and polls
 -- tables could still be read straight through the app's gateway, voter lists
 -- included (who voted is a list of account ids, teens' too). Nothing in the
 -- app or the website reads them that way; from now on a visitor reads them
--- only through the four functions above.
+-- only through the five functions above.
 --
 -- The safety rules (minors use this app), all checked here on the server,
 -- never left to the website:
@@ -31,7 +35,12 @@
 --     birthday on file saying 18 or over (share_open, migration 68). Never a
 --     teen, never an account with no birthday, never a private account.
 --   * A thread by anyone else is left out whole. A reply or comment by anyone
---     else is left out, and so is everything under it.
+--     else is left out, and so is everything under it, and so is a reply
+--     that answers one of theirs (the app starts it with their @handle).
+--   * No one else's handle in the words either: anywhere a visitor reads
+--     what someone wrote (a post, a comment, a thread's title and words, a
+--     reply, a poll's choices, a coach's offer), an @handle that is not a
+--     public known adult's reads "@someone" (found in review, Oct 17).
 --   * A post is left out whole when it tags anyone, or lists anyone on its
 --     session, who is not a known adult.
 --   * Never a taken-down post, comment, thread or reply (removed_at, 108),
@@ -54,7 +63,8 @@
 --     notifications, or who follows whom. (The peek, migration 163, already
 --     shows open hits at listed courts with no names.)
 --   * Hard limits: 30 posts or threads a call, 20 comments a post, 200
---     replies a thread; posts only from the last 90 days.
+--     replies a thread; the feed lists posts only from the last 90 days
+--     (one post opened from its own link may be older).
 --
 -- Said plainly, as migration 109 does: a visitor's list of threads and
 -- posts leaves out teens and accounts with no birthday, while a free
@@ -130,8 +140,8 @@ begin
   end loop;
   -- Every function this file makes is either absent or this file's own (it says guest_164 inside).
   for r in select n.nspname, p.proname, p.prosrc from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-            where (n.nspname = 'public' and p.proname in ('guest_feed', 'guest_threads', 'guest_thread', 'guest_coaches'))
-               or (n.nspname = 'private' and p.proname in ('guest_post_ok', 'guest_comment_ok', 'guest_answer_ok', 'guest_people')) loop
+            where (n.nspname = 'public' and p.proname in ('guest_feed', 'guest_threads', 'guest_thread', 'guest_post', 'guest_coaches'))
+               or (n.nspname = 'private' and p.proname in ('guest_post_ok', 'guest_comment_ok', 'guest_answer_ok', 'guest_people', 'guest_words', 'guest_post_json')) loop
     if position('guest_164' in r.prosrc) = 0 then
       raise exception 'Migration 164 stopped before changing anything: %.% already exists and is not this file''s. Compare before replacing it.', r.nspname, r.proname;
     end if;
@@ -164,7 +174,9 @@ returns boolean language sql stable security definer set search_path = public as
 $$;
 
 -- A comment a visitor may see: not taken down, by a known adult, not hidden
--- by anyone's Hidden words, and (a reply) under a comment that passes too.
+-- by anyone's Hidden words, (a reply) under a comment that passes too, and
+-- (an answer to someone's reply) answering one that passes too: "Reply"
+-- starts the words with that person's @handle (found in review, Oct 17).
 create or replace function private.guest_comment_ok(c public.comments)
 returns boolean language sql stable security definer set search_path = public as $$
   -- guest_164
@@ -174,6 +186,8 @@ returns boolean language sql stable security definer set search_path = public as
      and not exists (select 1 from public.comment_word_holds w where w.kind = 'comment' and w.item_id in (c.id, c.parent_id))
      and (c.parent_id is null or exists (
        select 1 from public.comments x where x.id = c.parent_id and x.removed_at is null and public.share_open(x.author_id)))
+     and (c.reply_to_id is null or exists (
+       select 1 from public.comments y where y.id = c.reply_to_id and y.removed_at is null and public.share_open(y.author_id)))
 $$;
 
 -- A reply on its own (its place in the thread is checked by guest_thread):
@@ -185,6 +199,25 @@ returns boolean language sql stable security definer set search_path = public as
      and a.removed_at is null
      and public.share_open(a.author_id)
      and not exists (select 1 from public.comment_word_holds w where w.kind = 'answer' and w.item_id in (a.id, a.parent_answer_id))
+$$;
+
+-- Someone's words as a visitor reads them: every @handle that is not a
+-- public known adult's (a teen's, an unknown-age, private or suspended
+-- account's, or no one's) reads "@someone". The words are cut into pieces
+-- (an @handle, a run with no @ in it, or a lone @) and put back together in
+-- order, so nothing else in them changes. Handles are small letters,
+-- numbers and _ (migration 0); a capital or a full stop after one is fine.
+create or replace function private.guest_words(t text)
+returns text language sql stable security definer set search_path = public as $$
+  -- guest_164
+  select case when t is null or position('@' in t) = 0 then t else coalesce((
+    select string_agg(
+      case when w.tok like '@_%' and not exists (
+             select 1 from public.profiles pr
+             where pr.handle = lower(rtrim(substr(w.tok, 2), '.')) and public.share_open(pr.id))
+           then '@someone' || coalesce(substring(w.tok from '[.]*$'), '')
+           else w.tok end, '' order by w.n)
+    from (select m.x[1] as tok, m.n from regexp_matches(t, '@[A-Za-z0-9_.]+|[^@]+|@', 'g') with ordinality as m(x, n)) w), '') end
 $$;
 
 -- The few things a visitor sees about the people on a page: first name,
@@ -209,30 +242,24 @@ revoke all on function private.guest_post_ok(public.posts) from public, anon, au
 revoke all on function private.guest_comment_ok(public.comments) from public, anon, authenticated;
 revoke all on function private.guest_answer_ok(public.answers) from public, anon, authenticated;
 revoke all on function private.guest_people(uuid[]) from public, anon, authenticated;
+revoke all on function private.guest_words(text) from public, anon, authenticated;
 
 -- ------------------------------------------------------------- 2. guest_feed
-drop function if exists public.guest_feed(timestamptz, integer);
-create function public.guest_feed(p_before timestamptz default null, p_limit integer default 20)
+-- One post as a visitor sees it, with up to 20 of its comments (newest 20,
+-- shown oldest first). Only ever asked about a post that passed guest_post_ok.
+-- Used by guest_feed (a page of them) and guest_post (one, from a link).
+create or replace function private.guest_post_json(p public.posts)
 returns jsonb language sql stable security definer set search_path = public as $$
   -- guest_164
-  with page as (
-    select p.* from public.posts p
-    where p.created_at > now() - interval '90 days'
-      and p.created_at < least(coalesce(p_before, now() + interval '1 minute'), now() + interval '1 minute')
-      and private.guest_post_ok(p)
-    order by p.created_at desc, p.id desc
-    limit least(greatest(coalesce(p_limit, 20), 1), 30)
-  ),
-  ranked as (
-    select c.*, row_number() over (partition by c.post_id order by c.created_at desc, c.id desc) as n
-    from public.comments c
-    where c.post_id in (select id from page) and private.guest_comment_ok(c)
-  ),
-  kept as (select * from ranked where n <= 20),
-  shown as (
-    select p.id, p.created_at, jsonb_strip_nulls(jsonb_build_object(
-      'id', p.id, 'author_id', p.author_id, 'kind', p.kind, 'body', left(p.body, 2000), 'created_at', p.created_at,
-      'media_label', left(p.media_label, 80),
+  with kept as (
+    select c.* from public.comments c
+    where c.post_id = p.id and private.guest_comment_ok(c)
+    order by c.created_at desc, c.id desc
+    limit 20
+  )
+  select jsonb_strip_nulls(jsonb_build_object(
+      'id', p.id, 'author_id', p.author_id, 'kind', p.kind, 'body', left(private.guest_words(p.body), 2000), 'created_at', p.created_at,
+      'media_label', left(private.guest_words(p.media_label), 80),
       'image_url', case when p.image_url like 'https://%' then p.image_url end,
       'image_urls', case when p.image_url like 'https://%' and cardinality(p.image_urls) between 2 and 10
                           and not exists (select 1 from unnest(p.image_urls) u where u not like 'https://%') then to_jsonb(p.image_urls) end,
@@ -254,8 +281,8 @@ returns jsonb language sql stable security definer set search_path = public as $
       -- Only the session's shape and score: never a tracker's numbers or who else played.
       'session', case when jsonb_typeof(p.session) = 'object' then jsonb_strip_nulls(jsonb_build_object(
         'minutes', case when jsonb_typeof(p.session->'minutes') = 'number' then p.session->'minutes' else '0'::jsonb end,
-        'focus', coalesce(left(p.session->>'focus', 60), ''),
-        'drills', coalesce((select jsonb_agg(left(d.v #>> '{}', 40)) from jsonb_array_elements(case when jsonb_typeof(p.session->'drills') = 'array' then p.session->'drills' else '[]'::jsonb end) with ordinality d(v, i)
+        'focus', coalesce(left(private.guest_words(p.session->>'focus'), 60), ''),
+        'drills', coalesce((select jsonb_agg(left(private.guest_words(d.v #>> '{}'), 40)) from jsonb_array_elements(case when jsonb_typeof(p.session->'drills') = 'array' then p.session->'drills' else '[]'::jsonb end) with ordinality d(v, i)
                             where jsonb_typeof(d.v) = 'string' and d.i <= 10), '[]'::jsonb),
         'intensity', case when p.session->>'intensity' in ('1', '2', '3', '4', '5') then p.session->'intensity' end,
         'kind', case when p.session->>'kind' in ('practice', 'match', 'drills', 'fitness') then p.session->>'kind' end,
@@ -264,18 +291,51 @@ returns jsonb language sql stable security definer set search_path = public as $
         'tiebreaks', case when jsonb_typeof(p.session->'tiebreaks') = 'array' and jsonb_array_length(p.session->'tiebreaks') <= 5 then p.session->'tiebreaks' end)) end,
       'like_count', (select count(*) from public.post_likes l where l.post_id = p.id),
       'comments', coalesce((select jsonb_agg(jsonb_strip_nulls(jsonb_build_object(
-          'id', k.id, 'post_id', k.post_id, 'author_id', k.author_id, 'body', left(k.body, 2000), 'created_at', k.created_at,
+          'id', k.id, 'post_id', k.post_id, 'author_id', k.author_id, 'body', left(private.guest_words(k.body), 2000), 'created_at', k.created_at,
           'image_url', case when k.image_url like 'https://%' then k.image_url end,
           'parent_id', k.parent_id,
           -- Which comment it answers, only when that one shows too.
           'reply_to_id', case when k.reply_to_id in (select x.id from kept x) then k.reply_to_id end,
           'like_count', (select count(*) from public.comment_likes cl where cl.comment_id = k.id)))
-        order by k.created_at) from kept k where k.post_id = p.id), '[]'::jsonb))) as row
-    from page p
-  )
+        order by k.created_at, k.id) from kept k), '[]'::jsonb)))
+$$;
+revoke all on function private.guest_post_json(public.posts) from public, anon, authenticated;
+
+-- The authors of a page of posts and of the comments shown on them.
+drop function if exists public.guest_feed(timestamptz, integer);
+create function public.guest_feed(p_before timestamptz default null, p_limit integer default 20)
+returns jsonb language sql stable security definer set search_path = public as $$
+  -- guest_164
+  with page as (
+    select p.* from public.posts p
+    where p.created_at > now() - interval '90 days'
+      and p.created_at < least(coalesce(p_before, now() + interval '1 minute'), now() + interval '1 minute')
+      and private.guest_post_ok(p)
+    order by p.created_at desc, p.id desc
+    limit least(greatest(coalesce(p_limit, 20), 1), 30)
+  ),
+  shown as (select p.id, p.created_at, private.guest_post_json(p) as row from page p)
   select jsonb_build_object(
     'posts', coalesce((select jsonb_agg(s.row order by s.created_at desc, s.id desc) from shown s), '[]'::jsonb),
-    'people', private.guest_people(array(select author_id from page union select author_id from kept)))
+    'people', private.guest_people(array(
+      select author_id from page
+      union select (c->>'author_id')::uuid from shown s, jsonb_array_elements(s.row->'comments') c)))
+$$;
+
+-- ------------------------------------------------------------- 2b. guest_post
+-- One post from a shared link (owner, Oct 17: "if someone clicked a Reddit
+-- link ... view videos"): the same rule and shape as the feed, or nothing.
+drop function if exists public.guest_post(uuid);
+create function public.guest_post(p_id uuid)
+returns jsonb language sql stable security definer set search_path = public as $$
+  -- guest_164
+  with one as (select p.* from public.posts p where p.id = p_id and private.guest_post_ok(p)),
+  shown as (select private.guest_post_json(p) as row from one p)
+  select case when not exists (select 1 from one) then null else jsonb_build_object(
+    'post', (select s.row from shown s),
+    'people', private.guest_people(array(
+      select author_id from one
+      union select (c->>'author_id')::uuid from shown s, jsonb_array_elements(s.row->'comments') c))) end
 $$;
 
 -- ----------------------------------------------------------- 3. guest_threads
@@ -304,12 +364,12 @@ returns jsonb language sql stable security definer set search_path = public as $
   )
   select jsonb_build_object(
     'threads', coalesce((select jsonb_agg(jsonb_strip_nulls(jsonb_build_object(
-        'id', q.id, 'author_id', q.author_id, 'title', left(q.title, 300), 'body', left(q.body, 4000),
+        'id', q.id, 'author_id', q.author_id, 'title', left(private.guest_words(q.title), 300), 'body', left(private.guest_words(q.body), 4000),
         'topic', q.topic, 'tags', to_jsonb((coalesce(q.tags, '{}'::text[]))[1:10]), 'votes', q.votes,
         'accepted_answer_id', case when q.accepted_answer_id in (select o.id from open_answers o) then q.accepted_answer_id end,
         'edited_at', q.edited_at, 'created_at', q.created_at,
         'answer_ids', coalesce((select jsonb_agg(o.id) from open_answers o where o.question_id = q.id), '[]'::jsonb),
-        'poll', (select jsonb_build_object('options', to_jsonb(pl.options), 'counts', to_jsonb(coalesce(pl.counts, '{}'::int[])))
+        'poll', (select jsonb_build_object('options', to_jsonb(array(select private.guest_words(o) from unnest(pl.options) with ordinality u(o, i) order by i)), 'counts', to_jsonb(coalesce(pl.counts, '{}'::int[])))
                  from public.polls pl where pl.question_id = q.id)))
       order by q.created_at desc, q.id desc) from page q), '[]'::jsonb),
     'people', private.guest_people(array(select author_id from page)))
@@ -334,17 +394,17 @@ returns jsonb language sql stable security definer set search_path = public as $
   kept as (select * from open_answers order by created_at, id limit 200)
   select case when not exists (select 1 from thread) then null else jsonb_build_object(
     'thread', (select jsonb_strip_nulls(jsonb_build_object(
-        'id', q.id, 'author_id', q.author_id, 'title', left(q.title, 300), 'body', left(q.body, 4000),
+        'id', q.id, 'author_id', q.author_id, 'title', left(private.guest_words(q.title), 300), 'body', left(private.guest_words(q.body), 4000),
         'topic', q.topic, 'tags', to_jsonb((coalesce(q.tags, '{}'::text[]))[1:10]), 'votes', q.votes,
         'accepted_answer_id', case when q.accepted_answer_id in (select k.id from kept k) then q.accepted_answer_id end,
         'edited_at', q.edited_at, 'created_at', q.created_at,
-        'poll', (select jsonb_build_object('options', to_jsonb(pl.options), 'counts', to_jsonb(coalesce(pl.counts, '{}'::int[])))
+        'poll', (select jsonb_build_object('options', to_jsonb(array(select private.guest_words(o) from unnest(pl.options) with ordinality u(o, i) order by i)), 'counts', to_jsonb(coalesce(pl.counts, '{}'::int[])))
                  from public.polls pl where pl.question_id = q.id))) from thread q),
     'answers', coalesce((select jsonb_agg(jsonb_strip_nulls(jsonb_build_object(
         'id', k.id, 'question_id', k.question_id, 'author_id', k.author_id,
         -- A reply whose parent was cut by the 200 limit shows at the top level, never lost under nothing.
         'parent_answer_id', case when k.parent_answer_id in (select x.id from kept x) then k.parent_answer_id end,
-        'body', left(k.body, 4000), 'votes', k.votes, 'from_coach', k.from_coach, 'created_at', k.created_at,
+        'body', left(private.guest_words(k.body), 4000), 'votes', k.votes, 'from_coach', k.from_coach, 'created_at', k.created_at,
         'media_url', case when k.media_url like 'https://%' and k.media_kind in ('photo', 'video') then k.media_url end,
         'media_kind', case when k.media_url like 'https://%' and k.media_kind in ('photo', 'video') then k.media_kind end,
         'media_thumb', case when k.media_thumb like 'https://%' then k.media_thumb end))
@@ -365,12 +425,12 @@ returns jsonb language sql stable security definer set search_path = public as $
   )
   select jsonb_build_object(
     'coaches', coalesce((select jsonb_agg(jsonb_build_object(
-        'id', c.id, 'user_id', c.user_id, 'headline', c.headline, 'credentials', to_jsonb(c.credentials), 'specialties', to_jsonb(c.specialties),
+        'id', c.id, 'user_id', c.user_id, 'headline', private.guest_words(c.headline), 'credentials', to_jsonb(c.credentials), 'specialties', to_jsonb(c.specialties),
         'years_coaching', c.years_coaching, 'response_time_hours', c.response_time_hours, 'verified', c.verified, 'listed', c.listed,
         'payouts_ready', c.payouts_ready, 'payouts_started', c.payouts_started, 'rating_avg', c.rating_avg, 'rating_count', c.rating_count,
         'created_at', c.created_at,
         'services', coalesce((select jsonb_agg(jsonb_build_object(
-            'id', s.id, 'coach_id', s.coach_id, 'title', s.title, 'description', s.description, 'price_cents', s.price_cents,
+            'id', s.id, 'coach_id', s.coach_id, 'title', private.guest_words(s.title), 'description', private.guest_words(s.description), 'price_cents', s.price_cents,
             'turnaround_hours', s.turnaround_hours, 'kind', s.kind, 'active', s.active, 'position', s.position) order by s.position)
           from public.coach_services s where s.coach_id = c.id and s.active), '[]'::jsonb))
       order by c.rating_count desc, c.created_at, c.id) from listed c), '[]'::jsonb),
@@ -381,10 +441,12 @@ $$;
 revoke all on function public.guest_feed(timestamptz, integer) from public, anon, authenticated;
 revoke all on function public.guest_threads(text, timestamptz, integer) from public, anon, authenticated;
 revoke all on function public.guest_thread(uuid) from public, anon, authenticated;
+revoke all on function public.guest_post(uuid) from public, anon, authenticated;
 revoke all on function public.guest_coaches() from public, anon, authenticated;
 grant execute on function public.guest_feed(timestamptz, integer) to anon;
 grant execute on function public.guest_threads(text, timestamptz, integer) to anon;
 grant execute on function public.guest_thread(uuid) to anon;
+grant execute on function public.guest_post(uuid) to anon;
 grant execute on function public.guest_coaches() to anon;
 
 -- ------------------------------------------------ 6. close the old door
@@ -402,12 +464,12 @@ do $$
 declare
   f text;
 begin
-  foreach f in array array['public.guest_feed(timestamptz, integer)', 'public.guest_threads(text, timestamptz, integer)', 'public.guest_thread(uuid)', 'public.guest_coaches()'] loop
+  foreach f in array array['public.guest_feed(timestamptz, integer)', 'public.guest_threads(text, timestamptz, integer)', 'public.guest_thread(uuid)', 'public.guest_post(uuid)', 'public.guest_coaches()'] loop
     if not has_function_privilege('anon', f, 'execute') then raise exception 'migration 164: a visitor cannot ask for %', f; end if;
     if has_function_privilege('authenticated', f, 'execute') then raise exception 'migration 164: % is for visitors only', f; end if;
     if (select p.provolatile from pg_proc p where p.oid = f::regprocedure) <> 's' then raise exception 'migration 164: % must only read', f; end if;
   end loop;
-  foreach f in array array['private.guest_post_ok(public.posts)', 'private.guest_comment_ok(public.comments)', 'private.guest_answer_ok(public.answers)', 'private.guest_people(uuid[])'] loop
+  foreach f in array array['private.guest_post_ok(public.posts)', 'private.guest_comment_ok(public.comments)', 'private.guest_answer_ok(public.answers)', 'private.guest_people(uuid[])', 'private.guest_words(text)', 'private.guest_post_json(public.posts)'] loop
     if has_function_privilege('anon', f, 'execute') or has_function_privilege('authenticated', f, 'execute') then
       raise exception 'migration 164: % must be the server''s alone', f;
     end if;

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { Redirect, useLocalSearchParams } from 'expo-router';
 import { goBack } from '@/lib/goBack';
 
@@ -7,6 +7,8 @@ import { CourtSpinner } from '@/components/CourtSpinner';
 import { EmptyState, Screen } from '@/components/ui';
 import { useApp } from '@/store/AppContext';
 import { publicRoute } from '@/features/share/publicRoute';
+import { colors } from '@/theme';
+import Home from '../(tabs)/index';
 
 /**
  * A post's own address, kept for links, notifications and shares — but there
@@ -17,7 +19,7 @@ import { publicRoute } from '@/features/share/publicRoute';
  */
 function PostDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { posts, ready, actions, currentUserId } = useApp();
+  const { posts, ready, actions, currentUserId, isGuest } = useApp();
   const post = posts.find((p) => p.id === id);
   const [looked, setLooked] = useState(false);
 
@@ -34,6 +36,15 @@ function PostDetail() {
       <Screen title="Post" compactTitle onBack={() => goBack()}>
         {looked || post ? <EmptyState icon="lock-closed-outline" title="This post isn't available" body={post ? 'Whoever posted it has archived it.' : "It was deleted, or it's from a private account you don't follow."} /> : <View style={{ paddingVertical: 60, alignItems: 'center' }}><CourtSpinner size={28} /></View>}
       </Screen>
+    );
+  }
+  // A guest (guest mode, Oct 17) reads it right here, in the same full-screen feed page,
+  // opened on this post: the author's other posts a guest may see follow it.
+  if (isGuest) {
+    return (
+      <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.bg }]}>
+        <Home scope={{ userId: post.authorId, set: 'own', start: post.id }} />
+      </View>
     );
   }
   return <Redirect href={{ pathname: '/posts/[userId]', params: { userId: post.authorId, post: post.id, set: archivedMine ? 'archived' : 'own' } }} />;

@@ -5321,6 +5321,15 @@ export async function guestFeed(before?: string | null, limit = 20): Promise<Gue
   };
 }
 
+/** One post a shared link points to, with the comments a guest may read (guest_post). Null when it is not one they may see. */
+export async function guestPostPage(id: string): Promise<GuestPage | null> {
+  if (!UUID_RE.test(id)) return null;
+  const { data, error } = await need().rpc('guest_post', { p_id: id });
+  if (error || !data || typeof data !== 'object' || !(data as { post?: unknown }).post) return null;
+  const row = (data as { post: GuestPostRow }).post;
+  return { users: guestPeople(listOf(data, 'people')), posts: [guestPost(row)], comments: (row.comments ?? []).map(guestComment), questions: [], answers: [], coaches: [] };
+}
+
 /** Discussions threads for a guest, newest first, each with how many replies they may read. */
 export async function guestThreads(topic?: string | null, before?: string | null, limit = 30): Promise<GuestPage | null> {
   const { data, error } = await need().rpc('guest_threads', { p_topic: topic ?? null, p_before: before ?? null, p_limit: limit });
