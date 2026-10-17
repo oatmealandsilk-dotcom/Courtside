@@ -227,12 +227,27 @@ export default function ShareSession() {
     placed.current = true;
     pager.current?.scrollTo({ x: shownIndex * step, y: 0, animated: false });
   }, [pageW, story, shownIndex, step]);
+  // A tap on a name glides the row there; the designs it passes on the way are not the one picked,
+  // so the dot stays on the tapped name instead of flickering across the ones between (Oct 17, owner:
+  // "the animation is weird ... it flickers between the two options"). A finger on the row takes over.
+  const heading = useRef<number | null>(null);
+  const headingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (headingTimer.current) clearTimeout(headingTimer.current); }, []);
   const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     if (!pageW) return;
-    const i = Math.max(0, Math.min(designs.length - 1, Math.round(e.nativeEvent.contentOffset.x / step)));
+    const x = e.nativeEvent.contentOffset.x;
+    const i = Math.max(0, Math.min(designs.length - 1, Math.round(x / step)));
+    if (heading.current !== null) {
+      if (i === heading.current && Math.abs(x - i * step) < 2) heading.current = null;
+      return;
+    }
     if (i !== shownIndex) setIndex(i);
   };
   const goTo = (i: number) => {
+    heading.current = i;
+    if (headingTimer.current) clearTimeout(headingTimer.current);
+    // In case the row never quite reports arriving: from then on the row's own position decides again.
+    headingTimer.current = setTimeout(() => { heading.current = null; }, 700);
     setIndex(i);
     pager.current?.scrollTo({ x: i * step, y: 0, animated: true });
   };
@@ -394,6 +409,7 @@ export default function ShareSession() {
                   disableIntervalMomentum
                   showsHorizontalScrollIndicator={false}
                   onScroll={Animated.event([{ nativeEvent: { contentOffset: { x: scrollX } } }], { useNativeDriver: true, listener: onScroll })}
+                  onScrollBeginDrag={() => { heading.current = null; }}
                   scrollEventThrottle={16}
                   contentContainerStyle={{ paddingHorizontal: sidePad }}
                   style={{ width: pageW, height: cardH + SHADOW_ROOM * 2, flexGrow: 0 }}
