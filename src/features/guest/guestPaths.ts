@@ -10,7 +10,8 @@ import { isPublicPath } from '@/features/share/publicPaths';
  */
 const OPEN = new Set([
   '/', '/index', '/discuss', '/coaches', '/profile',
-  '/sign-in', '/onboarding', '/birthday', '/account', '/comments',
+  // Not '/account' (found in review, Oct 17): with no account it is an empty Account center, so it asks to join.
+  '/sign-in', '/onboarding', '/birthday', '/comments',
   '/about', '/help', '/guidelines', '/privacy',
 ]);
 

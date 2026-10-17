@@ -5266,6 +5266,8 @@ export interface GuestPage {
   users: User[]; posts: Post[]; comments: Comment[]; questions: Question[]; answers: Answer[]; coaches: Coach[];
   /** The feed has older posts to page to. */
   more?: boolean;
+  /** The Discussions list (in the topic asked for) has older threads to page to. */
+  moreThreads?: boolean;
 }
 
 interface GuestPersonRow { id: string; name: string; handle: string; avatar_url?: string | null; skill_system?: string | null; rating?: number | null }
@@ -5334,7 +5336,8 @@ export async function guestPostPage(id: string): Promise<GuestPage | null> {
 export async function guestThreads(topic?: string | null, before?: string | null, limit = 30): Promise<GuestPage | null> {
   const { data, error } = await need().rpc('guest_threads', { p_topic: topic ?? null, p_before: before ?? null, p_limit: limit });
   if (error || !data || typeof data !== 'object') return null;
-  return { users: guestPeople(listOf(data, 'people')), posts: [], comments: [], questions: listOf<GuestThreadRow>(data, 'threads').map((r) => guestThread(r, [])), answers: [], coaches: [] };
+  const rows = listOf<GuestThreadRow>(data, 'threads');
+  return { users: guestPeople(listOf(data, 'people')), posts: [], comments: [], questions: rows.map((r) => guestThread(r, [])), answers: [], coaches: [], moreThreads: rows.length >= limit };
 }
 
 /** One thread and the replies a guest may read. Null when it is not one they may see (or could not be asked). */

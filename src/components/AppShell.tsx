@@ -371,9 +371,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     const what = guestAskFor(pathname, pathname === landedAt.current);
     if (!what) return;
     const r = router as unknown as { canGoBack?: () => boolean };
+    // A post's or Instant's ••• menu (its Report row) offers the same no-account way to report as a
+    // thread or comment: an email to support naming only that post (found in review, Oct 17).
+    const report = pathname === '/post-menu' && routeId ? `${routeKind === 'hit' ? 'hit' : 'post'}:${routeId}` : undefined;
     if (pathname !== landedAt.current && r.canGoBack?.()) router.back();
     else router.replace(HOME);
-    openJoinSheet(what);
+    openJoinSheet(what, report ? { report } : undefined);
   }, [isGuest, pathname]);
   // A link that carried someone's handle or code (courtsidebase.com/?ref=… forwards here, Oct 17)
   // still credits them when this guest signs up, wherever it landed.

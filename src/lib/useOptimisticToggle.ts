@@ -1,6 +1,6 @@
 import { startTransition, useCallback, useEffect, useRef, useState } from 'react';
 
-import { useApp } from '@/store/AppContext';
+import { useIsGuest } from '@/features/guest/guestStatus';
 
 /**
  * A like or a save that answers on the tap itself.
@@ -19,7 +19,8 @@ import { useApp } from '@/store/AppContext';
  */
 export function useOptimisticToggle(key: string, value: boolean, commit: () => void, onToken = 0) {
   // A guest (guest mode, Oct 17) never sees a heart fill that cannot count: the tap only asks them to join.
-  const { isGuest } = useApp();
+  // Read on its own, so a button redraws only when that flips, not on every change to the app's store.
+  const isGuest = useIsGuest();
   const [on, setOn] = useState(value);
   useEffect(() => {
     setOn(value);

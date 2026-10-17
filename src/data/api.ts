@@ -750,6 +750,8 @@ export async function fetchShareReferrer(handle: string): Promise<SharePerson | 
 export type GuestData = GuestPage;
 const GUEST_DAYS = 90;
 const GUEST_PAGE = 20;
+/** Threads a page of a guest's Discussions brings (guest_threads' most). */
+const GUEST_THREADS = 30;
 
 /** Whether a fixture person passes the guest rule (share_open, migration 68). */
 const guestShown = (id: ID) => { const u = users.find((x) => x.id === id); return !!u && u.ageGroup === 'adult' && !u.isPrivate && !u.suspended; };
@@ -774,10 +776,25 @@ const guestPeopleOf = (ids: Iterable<ID>) => [...new Set(ids)].flatMap((id) => {
 
 /** A post a guest may see, as the server's guest_post_ok (never one pushed to the bottom either). */
 const demoGuestOk = (p: Post) => guestShown(p.authorId) && !p.archived && !p.removed && !p.groupId && p.featureOk !== false
-  && (p.taggedUserIds ?? []).every(knownAdult) && (p.session?.with ?? []).every((w) => knownAdult(w.id)) && !demoDemoted.has(p.id);
+  && (p.taggedUserIds ?? []).every(knownAdult) && (p.session?.with ?? []).every((w) => knownAdult(w.id)) && !demoDemoted.has(p.id)
+  && guestMediaLoads(p);
+/**
+ * Whether every picture and clip on a post will load for a guest, as the
+ * server's guest_post_ok (found in review, Oct 17): a post whose upload never
+ * finished (an address that is not a public https one, a phone's own file
+ * say) is left out whole, never shown as "This clip didn't finish
+ * uploading". The server also leaves out a clip with no picture or clip at
+ * all; the demo's clips carry no file by design (no binary assets ship with
+ * the app), so here they stay, and its built-in pictures (data: addresses)
+ * count as loading.
+ */
+const loads = (url: string | undefined) => !url || url.startsWith('https://') || url.startsWith('data:image/');
+const guestMediaLoads = (p: Post) => loads(p.videoUrl) && loads(p.imageUrl) && (p.imageUrls ?? []).every(loads);
+/** Within the 90 days a guest's lists reach back (guest_feed, guest_threads). */
+const recent = (iso: string) => Date.now() - Date.parse(iso) < GUEST_DAYS * 86_400_000;
 /** One for the guest feed: the list stops at 90 days. */
 function demoGuestPost(p: Post): boolean {
-  return demoGuestOk(p) && Date.now() - Date.parse(p.createdAt) < GUEST_DAYS * 86_400_000;
+  return demoGuestOk(p) && recent(p.createdAt);
 }
 /** A post with only what guest_feed returns: no place, no tags, no tracker numbers, no opponent's name. */
 const guestPostShape = (p: Post, commentIds: ID[]): Post => ({
@@ -792,18 +809,19 @@ const guestPostShape = (p: Post, commentIds: ID[]): Post => ({
 /** The first page of the Feed, the Discussions and the Coaching tab, for a guest. Null when it could not be had. */
 export async function fetchGuestHome(): Promise<GuestData | null> {
   if (supabase) {
-    const [feed, threads, coaching] = await Promise.all([guestFeed(null, GUEST_PAGE), guestThreads(null, null, 30), guestCoaches()]);
+    const [feed, threads, coaching] = await Promise.all([guestFeed(null, GUEST_PAGE), guestThreads(null, null, GUEST_THREADS), guestCoaches()]);
     if (!feed && !threads) return null;
     const pages = [feed, threads, coaching].filter((x): x is GuestData => !!x);
     const seen = new Set<ID>();
     return {
       users: pages.flatMap((x) => x.users).filter((u) => (seen.has(u.id) ? false : (seen.add(u.id), true))),
       posts: feed?.posts ?? [], comments: feed?.comments ?? [], questions: threads?.questions ?? [], answers: [], coaches: coaching?.coaches ?? [],
-      more: feed?.more ?? false,
+      more: feed?.more ?? false, moreThreads: threads?.moreThreads ?? false,
     };
   }
   const page = await fetchGuestFeedPage(null);
-  const threads = questions.filter((q) => !q.removed && guestShown(q.authorId)).sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)).slice(0, 30);
+  const all = demoGuestThreads(null, null);
+  const threads = all.slice(0, GUEST_THREADS);
   const shownAnswers = guestAnswers(threads.map((q) => q.id));
   const coaching = coaches.filter((c) => c.listed !== false && guestShown(c.userId)).slice(0, 50)
     .map((c) => ({ ...c, headline: guestWords(c.headline), services: c.services.map((v) => ({ ...v, title: guestWords(v.title), description: guestWords(v.description) })) }));
@@ -811,7 +829,32 @@ export async function fetchGuestHome(): Promise<GuestData | null> {
     users: [...page.users, ...guestPeopleOf([...threads.map((q) => q.authorId), ...coaching.map((c) => c.userId)])].filter((u, i, all) => all.findIndex((x) => x.id === u.id) === i),
     posts: page.posts, comments: page.comments,
     questions: threads.map((q) => guestThreadShape(q, shownAnswers.filter((a) => a.questionId === q.id))),
-    answers: [], coaches: coaching, more: page.more,
+    answers: [], coaches: coaching, more: page.more, moreThreads: all.length > GUEST_THREADS,
+  }));
+}
+
+/** The Discussions list a guest sees: the threads guest_threads lists (by public adults, from the last 90 days), newest first. */
+function demoGuestThreads(topic: string | null, before: string | null): Question[] {
+  return questions.filter((q) => !q.removed && guestShown(q.authorId) && recent(q.createdAt)
+    && (!topic || q.topic === topic) && (!before || Date.parse(q.createdAt) < Date.parse(before)))
+    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+}
+
+/**
+ * Discussions for a guest (guest_threads): the newest threads in a topic
+ * (all of them when `topic` is null), from `before` on when paging back,
+ * each with the replies they may read counted (the replies themselves come
+ * when the thread is opened).
+ */
+export async function fetchGuestThreads(topic: string | null, before: string | null): Promise<GuestData | null> {
+  if (supabase) return guestThreads(topic, before, GUEST_THREADS);
+  const all = demoGuestThreads(topic, before);
+  const threads = all.slice(0, GUEST_THREADS);
+  const shown = guestAnswers(threads.map((q) => q.id));
+  return delay(clone({
+    users: guestPeopleOf(threads.map((q) => q.authorId)), posts: [], comments: [],
+    questions: threads.map((q) => guestThreadShape(q, shown.filter((a) => a.questionId === q.id))),
+    answers: [], coaches: [], moreThreads: all.length > GUEST_THREADS,
   }));
 }
 
@@ -849,7 +892,8 @@ export async function fetchGuestFeedPage(before: string | null): Promise<GuestDa
 /**
  * These posts as a guest sees them, each with up to 20 comments, by the
  * server's rule (guest_comment_ok): by someone shown, not taken down or
- * hidden, under a comment that passes, and answering one that passes.
+ * hidden, under a comment that passes (and is among those shown), and
+ * answering one that passes.
  */
 function guestPostsPage(page: Post[]): GuestData {
   const ids = new Set(page.map((p) => p.id));
@@ -858,8 +902,13 @@ function guestPostsPage(page: Post[]): GuestData {
   const okComment = (c: Comment) => ids.has(c.postId) && fine(c) && !c.hiddenByWords
     && (!c.parentId || (fine(byId.get(c.parentId)) && !byId.get(c.parentId)?.hiddenByWords))
     && (!c.replyToId || fine(byId.get(c.replyToId)));
-  const shown = page.flatMap((p) => comments.filter((c) => c.postId === p.id && okComment(c))
-    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)).slice(0, 20).reverse());
+  const shown = page.flatMap((p) => {
+    const newest = comments.filter((c) => c.postId === p.id && okComment(c))
+      .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)).slice(0, 20).reverse();
+    // A reply shows only with the comment it sits under (as guest_post_json): never under nothing.
+    const tops = new Set(newest.filter((c) => !c.parentId).map((c) => c.id));
+    return newest.filter((c) => !c.parentId || tops.has(c.parentId));
+  });
   const shownIds = new Set(shown.map((c) => c.id));
   return {
     users: guestPeopleOf([...page.map((p) => p.authorId), ...shown.map((c) => c.authorId)]),

@@ -836,6 +836,12 @@ const STEPS = [
       await page.gone({ text: 'Join CourtSide to like posts' });
       // The heart never fills for a guest: the like did not count.
       if (await page.find({ label: /^Unlike/ })) throw new Error('a guest’s like filled the heart');
+      // A post's ••• menu asks to join too, and (found in review, Oct 17) still offers the no-account report.
+      await page.tap({ label: 'More options' });
+      await page.waitFor({ text: 'Join CourtSide to save or report this' });
+      await page.waitFor({ text: 'Email us about it' });
+      await page.tap({ text: 'Not now' });
+      await page.gone({ text: 'Join CourtSide to save or report this' });
     },
   },
   {

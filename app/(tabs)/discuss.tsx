@@ -1,11 +1,11 @@
 import { asTabRoute } from '@/features/navigation/tabFocus';
 import { SectionPager } from '@/components/SectionPager';
 import { PULL_GAP } from '@/lib/pullRefresh';
-import Reanimated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
+import Reanimated, { runOnJS, useAnimatedReaction, useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 import { useTabUnderline } from '@/features/navigation/useTabUnderline';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Easing, Platform, ScrollView, TextInput, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, Easing, Platform, ScrollView, TextInput, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { router } from 'expo-router';
 
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -100,7 +100,7 @@ const joinedLabel = (iso: string) => {
 
 function Discuss({ previewSection }: { previewSection?: string } = {}) {
   const styles = useThemedStyles(styleDefinitions);
-  const { questions, users, currentUserId, currentUser, blockedIds, mutedIds, followingIds, saved, actions, detectedCoords, locationEnabled, hitRequests, lastSeen, lastSeenLoaded, onboardingComplete, mapLive, newOnCourtside, mapVisibility, teenMap, seeing, ageSaysAdult, isGuest } = useApp();
+  const { questions, users, currentUserId, currentUser, blockedIds, mutedIds, followingIds, saved, actions, detectedCoords, locationEnabled, hitRequests, lastSeen, lastSeenLoaded, onboardingComplete, mapLive, newOnCourtside, mapVisibility, teenMap, seeing, ageSaysAdult, isGuest, guestLoaded } = useApp();
   // The section lives here, not in the address: listening to the address made
   // this whole tab re-render on every route change anywhere in the app.
   // Other pages ask for a section through requestSection before navigating;
@@ -476,6 +476,41 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   }, [questions, topic, blockedIds, mutedIds, sort]);
   // A long list is drawn in slices: the first screenfuls at once, the rest on request.
   const slice = visible.slice(0, shownCount);
+  // A guest's Discussions (guest mode, Oct 17; found in review: one page of 30, and the topics only
+  // filtered those) come a page at a time from the server: a topic's own newest threads when it is
+  // picked, and older ones as they scroll to the end. Signed in, every thread is already here.
+  const [guestMore, setGuestMore] = useState<Partial<Record<QuestionTopic | 'all', boolean>>>({});
+  useEffect(() => {
+    if (!isGuest || !guestLoaded) return;
+    let on = true;
+    void actions.loadThreads(topic, false).then((more) => { if (on) setGuestMore((m) => ({ ...m, [topic]: more })); });
+    return () => { on = false; };
+  }, [isGuest, guestLoaded, topic, actions]);
+  const serverHasMore = isGuest && !!guestMore[topic];
+  const showMore = () => {
+    if (visible.length > slice.length) { setShownCount((n) => n + 25); return; }
+    if (!serverHasMore) return;
+    const asked = topic;
+    void actions.loadThreads(asked, true).then((more) => {
+      setGuestMore((m) => ({ ...m, [asked]: more }));
+      setShownCount((n) => n + 25);
+    });
+  };
+  // Near the end of the list (within a screen of it), the next page comes on its own.
+  const { height: screenHeight } = useWindowDimensions();
+  const listEnd = useRef<View>(null);
+  const nearEndRef = useRef(() => {});
+  nearEndRef.current = () => {
+    if (section !== 'discussions' || !serverHasMore) return;
+    listEnd.current?.measureInWindow((_x, y) => { if (y > 0 && y < screenHeight * 2) showMore(); });
+  };
+  const watchEnd = useSharedValue(false);
+  useEffect(() => { watchEnd.value = isGuest; }, [isGuest, watchEnd]);
+  const onNearEnd = () => nearEndRef.current();
+  useAnimatedReaction(
+    () => (watchEnd.value ? Math.floor(offsetY.value / 240) : -1),
+    (now, before) => { if (now >= 0 && now !== before) runOnJS(onNearEnd)(); },
+  );
   // The sort row goes with an empty topic: so does its menu, if it was open.
   useEffect(() => { if (!anyInTopic) setSortOpen(false); }, [anyInTopic]);
 
@@ -756,8 +791,8 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
             />
           ))}
           {/* The count sits once, above the list; the end of the list is just its end. */}
-          {visible.length > slice.length ? (
-            <Pressable accessibilityRole="button" onPress={() => setShownCount((n) => n + 25)} style={styles.more}>
+          {visible.length > slice.length || serverHasMore ? (
+            <Pressable ref={listEnd} accessibilityRole="button" onPress={showMore} style={styles.more}>
               <Text style={styles.moreText}>Show more threads</Text>
             </Pressable>
           ) : null}

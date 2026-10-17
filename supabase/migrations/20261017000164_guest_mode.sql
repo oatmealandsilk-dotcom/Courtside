@@ -14,20 +14,31 @@
 -- In plain words, this file adds five things a visitor with no account may
 -- ask for, and nothing else:
 --   guest_feed(before, how many): recent posts, newest first, at most 30 at
---     a time and only from the last 90 days, each with up to 20 comments.
+--     a time and only from the last 90 days, each with up to 20 comments
+--     (a reply only beside the comment it answers), and only posts whose
+--     pictures and clips will load (public https addresses).
 --   guest_threads(topic, before, how many): Discussions threads, newest
---     first, at most 30 at a time, with how many replies a visitor may read.
---   guest_thread(id): one thread and the replies a visitor may read (up to 200).
+--     first, at most 30 at a time and only from the last 90 days, with how
+--     many replies a visitor may read.
+--   guest_thread(id): one thread and the replies a visitor may read (up to
+--     200). No 90-day limit: asked for by its own id (a shared link), never listed.
 --   guest_post(id): one post, the one a shared link (a clip on Reddit, say)
 --     points to, by the same rule as the feed, with up to 20 comments, so
 --     the clip itself plays. No 90-day limit here: it is asked for by its
 --     own id (as share_preview, 68, already is), never listed.
 --   guest_coaches(): the coaches listed on the Coaching tab, with what they offer.
--- And it closes one old door: signed out, the threads, replies and polls
--- tables could still be read straight through the app's gateway, voter lists
--- included (who voted is a list of account ids, teens' too). Nothing in the
--- app or the website reads them that way; from now on a visitor reads them
--- only through the five functions above.
+-- And it closes old doors: signed out, these tables could still be read
+-- straight through the app's gateway, each row carrying someone's account id
+-- (teens' too): threads, replies, polls (voter lists included), comments,
+-- likes on posts and on comments, Instants (hits) with their comments and
+-- likes, coach listings, their reviews and results, Ask-a-coach questions
+-- and replies, and court notes. Nothing in the app, the website, the share
+-- worker or the server functions reads them signed out (checked Oct 17:
+-- signed out, the app is sign-in or guest mode, and the website and share
+-- worker only call functions); from now on a visitor reads what they may
+-- only through the five functions above (and share_preview, 68, and
+-- peek_hits, 163). Left readable signed out, holding no account ids: the
+-- courts list (map data) and coaches' services (titles and prices).
 --
 -- The safety rules (minors use this app), all checked here on the server,
 -- never left to the website:
@@ -63,8 +74,8 @@
 --     notifications, or who follows whom. (The peek, migration 163, already
 --     shows open hits at listed courts with no names.)
 --   * Hard limits: 30 posts or threads a call, 20 comments a post, 200
---     replies a thread; the feed lists posts only from the last 90 days
---     (one post opened from its own link may be older).
+--     replies a thread; the feed and the Discussions list only the last 90
+--     days (one post or thread opened from its own link may be older).
 --
 -- Said plainly, as migration 109 does: a visitor's list of threads and
 -- posts leaves out teens and accounts with no birthday, while a free
@@ -171,6 +182,14 @@ returns boolean language sql stable security definer set search_path = public as
                   and public.known_adult((w.e->>'id')::uuid)))
      -- Never one an admin pushed to the bottom.
      and not exists (select 1 from public.post_demotions d where d.post_id = p.id)
+     -- Every picture and clip on it will load (found in review, Oct 17): an address
+     -- that is not a public https one (an upload that never finished, a phone's own
+     -- file) leaves the post out whole, never "This clip didn't finish uploading".
+     and (nullif(p.video_url, '') is null or p.video_url like 'https://%')
+     and (nullif(p.image_url, '') is null or p.image_url like 'https://%')
+     and not exists (select 1 from unnest(coalesce(p.image_urls, '{}'::text[])) u(x) where coalesce(u.x, '') not like 'https://%')
+     -- A clip has something to show: the clip itself, or at least its picture.
+     and (p.kind <> 'clip' or p.video_url like 'https://%' or p.thumbnail_url like 'https://%' or p.image_url like 'https://%')
 $$;
 
 -- A comment a visitor may see: not taken down, by a known adult, not hidden
@@ -251,11 +270,17 @@ revoke all on function private.guest_words(text) from public, anon, authenticate
 create or replace function private.guest_post_json(p public.posts)
 returns jsonb language sql stable security definer set search_path = public as $$
   -- guest_164
-  with kept as (
+  with newest as (
     select c.* from public.comments c
     where c.post_id = p.id and private.guest_comment_ok(c)
     order by c.created_at desc, c.id desc
     limit 20
+  ),
+  -- A reply shows only with the comment it sits under (found in review, Oct 17): one
+  -- whose top comment is older than the newest 20 is left out, not shown under nothing.
+  kept as (
+    select n.* from newest n
+    where n.parent_id is null or n.parent_id in (select x.id from newest x where x.parent_id is null)
   )
   select jsonb_strip_nulls(jsonb_build_object(
       'id', p.id, 'author_id', p.author_id, 'kind', p.kind, 'body', left(private.guest_words(p.body), 2000), 'created_at', p.created_at,
@@ -351,6 +376,8 @@ returns jsonb language sql stable security definer set search_path = public as $
     where q.removed_at is null
       and public.share_open(q.author_id)
       and (p_topic is null or q.topic = p_topic)
+      -- The list reaches back 90 days, as the feed's does (one thread opened by its own id may be older).
+      and q.created_at > now() - interval '90 days'
       and q.created_at < least(coalesce(p_before, now() + interval '1 minute'), now() + interval '1 minute')
     order by q.created_at desc, q.id desc
     limit least(greatest(coalesce(p_limit, 20), 1), 30)
@@ -449,7 +476,7 @@ grant execute on function public.guest_thread(uuid) to anon;
 grant execute on function public.guest_post(uuid) to anon;
 grant execute on function public.guest_coaches() to anon;
 
--- ------------------------------------------------ 6. close the old door
+-- ------------------------------------------------ 6. close the old doors
 -- Signed out, the threads, replies and polls tables are read only through
 -- the functions above (and share_preview, 68, for a shared link's card).
 drop policy if exists "signed out read threads through guest mode" on public.questions;
@@ -458,6 +485,23 @@ drop policy if exists "signed out read replies through guest mode" on public.ans
 create policy "signed out read replies through guest mode" on public.answers as restrictive for select to anon using (false);
 drop policy if exists "signed out read polls through guest mode" on public.polls;
 create policy "signed out read polls through guest mode" on public.polls as restrictive for select to anon using (false);
+-- The other tables whose rows carry people's account ids and were still open
+-- signed out ("comments are public", "likes are public", ...; found in review,
+-- Oct 17). Signed in, nothing changes: these rules are for visitors only.
+-- A table that is not there yet is skipped.
+do $$
+declare
+  t text;
+begin
+  foreach t in array array['comments', 'post_likes', 'comment_likes', 'stories', 'story_comments', 'story_likes',
+                           'story_comment_likes', 'coaches', 'coach_reviews', 'coach_results', 'coach_questions',
+                           'coach_replies', 'court_notes'] loop
+    if to_regclass('public.' || t) is not null then
+      execute format('drop policy if exists %I on public.%I', 'signed out read through guest mode', t);
+      execute format('create policy %I on public.%I as restrictive for select to anon using (false)', 'signed out read through guest mode', t);
+    end if;
+  end loop;
+end $$;
 
 -- ------------------------------------------------- 7. it did what it says
 do $$
@@ -508,7 +552,7 @@ commit;
 -- (b) Every author a visitor sees is a known adult (expect 0):
 -- select count(*) from jsonb_array_elements(public.guest_feed(null, 30)->'people') x where not public.known_adult((x->>'id')::uuid);
 --
--- (c) Only visitors may ask, and the tables are closed to them (expect true, false, 3):
+-- (c) Only visitors may ask, and the tables are closed to them (expect true, false, 16):
 -- select has_function_privilege('anon', 'public.guest_feed(timestamptz, integer)', 'execute'),
 --        has_function_privilege('authenticated', 'public.guest_feed(timestamptz, integer)', 'execute'),
---        (select count(*) from pg_policies where policyname like 'signed out read % through guest mode');
+--        (select count(*) from pg_policies where policyname like 'signed out read %through guest mode');

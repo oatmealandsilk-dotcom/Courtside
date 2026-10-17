@@ -19,8 +19,9 @@ import { planStreakReminder } from '@/features/practice/reminder';
 import { isMapCourtId } from '@/features/places/courtName';
 import { TERMS_VERSION } from '@/lib/legal';
 
-import { fetchBootstrap, fetchGuestFeedPage, fetchGuestHome, fetchGuestPost, fetchGuestThread, searchPosts as apiSearchPosts, signIn as apiSignIn, type Bootstrap, type GuestData } from '@/data/api';
+import { fetchBootstrap, fetchGuestFeedPage, fetchGuestHome, fetchGuestPost, fetchGuestThread, fetchGuestThreads, searchPosts as apiSearchPosts, signIn as apiSignIn, type Bootstrap, type GuestData } from '@/data/api';
 import { openJoinSheet } from '@/features/guest/joinAsk';
+import { setGuestStatus } from '@/features/guest/guestStatus';
 import * as demoApi from '@/data/api';
 import { BLOCKED_WORDS_NOTE, CHAT_PHOTO_UNREADABLE, REVIEW_NOTE_MAX, auth as remoteAuth, fetchRemote, isLocalMedia, onWordsRefused, queueFeedSignal, remote, uploadChatPhoto, uploadMedia, emptyProfile, type GroupRefusal, type AdminReport, type ModerationResult, type ReviewAskResult, type ReportedChat, type ReportedItem, type ReportedItemKind, type ReportEvidence, type FeedSignal, type SiteFeedback, type WaitlistEntry, type BetaInviteStatus, type FirstDayStats, type FirstMove, type HandleStatus, type InviteCodeResult, type MyInviter, type RemoteData, type UserState, standInName } from '@/data/remote';
 import { clearSnapshot, markSnapshotOpened, markSnapshotOpening, readSnapshot, saveSnapshot, snapshotFailedBefore } from '@/data/snapshot';
@@ -1086,6 +1087,12 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions, LiveSessionAct
   watchInboxTyping: (onTyping: (conversationId: ID, userId: ID, stopped?: boolean) => void) => () => void;
   /** Every reply in a thread, loaded when it is opened. */
   loadThread: (questionId: ID) => Promise<void>;
+  /**
+   * Guest mode's Discussions (Oct 17): the newest threads in a topic when it
+   * is first picked, or (`older`) the next page back. Resolves with whether
+   * there are more to come. Signed in, every thread came with the app: false.
+   */
+  loadThreads: (topic: QuestionTopic | 'all', older: boolean) => Promise<boolean>;
   /** The next page of older feed posts. Resolves with the ones that were added. */
   loadMorePosts: () => Promise<Post[]>;
   /** One player's own posts, loaded when their profile is opened. */
@@ -2188,6 +2195,9 @@ function activityToast(count: number, newestFirst: DetectedActivity[], holdMs?: 
     ...(holdMs ? { holdMs } : {}),
   });
 }
+
+/** The oldest of these threads' times (guest mode's Discussions page back from it), or null for none. */
+const oldestAt = (xs: { createdAt: string }[]) => xs.reduce<string | null>((o, x) => (!o || Date.parse(x.createdAt) < Date.parse(o) ? x.createdAt : o), null);
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AppState>({
@@ -6037,6 +6047,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return { ...next, saved: { ...next.saved, postIds: ids } };
     });
   }, []);
+  // Signed in, the first load already brought the threads (the newest 300): nothing more to page in.
+  const loadThreads = useCallback(async () => false, []);
   // Opening a thread: all of its replies, not only the newest that came with the app.
   const loadThread = useCallback(async (questionId: ID) => {
     if (!live(stateRef.current.currentUserId, questionId)) return;
@@ -9028,6 +9040,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       watchTyping,
       watchInboxTyping,
       loadThread,
+      loadThreads,
       loadMorePosts,
       loadPostsOf,
       searchPosts,
@@ -9261,6 +9274,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       watchTyping,
       watchInboxTyping,
       loadThread,
+      loadThreads,
       loadMorePosts,
       loadPostsOf,
       searchPosts,
@@ -9388,8 +9402,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // want to actually do something that requires profile it will make you
   // sign up"). The phone app is unchanged: there, signed out is sign-in.
   const isGuest = Platform.OS === 'web' && state.ready && state.authResolved && !state.currentUserId;
+  // Told on its own to what only needs this yes or no (the like and save buttons: guestStatus).
+  useEffect(() => { setGuestStatus(isGuest); }, [isGuest]);
   const [guest, setGuest] = useState<GuestData | null>(null);
   const guestAsked = useRef(false);
+  /**
+   * How far back a guest's Discussions reach in each topic ('all' too): the
+   * oldest thread guest_threads gave for it, and whether there is more past
+   * it. Kept apart from the threads themselves, since a thread opened from a
+   * link can be far older than the list reaches (and must not skip the gap).
+   */
+  const guestThreadPages = useRef<Record<string, { at: string | null; more: boolean; busy: boolean }>>({});
   /**
    * The guest's first page, and what Refresh asks for again. It lays the
    * newest posts and threads over what is there rather than replacing it
@@ -9402,6 +9425,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
    */
   const loadGuest = useCallback(async () => {
     const got = await fetchGuestHome().catch(() => null);
+    // The Discussions list pages back from the oldest of these; a topic starts over when picked again.
+    if (got) guestThreadPages.current = { all: { at: oldestAt(got.questions), more: got.moreThreads ?? false, busy: false } };
     setGuest((prev) => {
       if (!got) return prev ?? { users: [], posts: [], comments: [], questions: [], answers: [], coaches: [], more: false };
       if (!prev) return got;
@@ -9494,6 +9519,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
         return page.posts;
       },
       loadThread: async (id: ID) => { const got = await fetchGuestThread(id).catch(() => null); if (got) addGuest(got); },
+      // Discussions (found in review, Oct 17: one page of 30, and the topics only filtered those):
+      // a topic's own newest threads when it is first picked, then a page further back on each ask.
+      loadThreads: async (topic: QuestionTopic | 'all', older: boolean) => {
+        const pages = guestThreadPages.current;
+        const was = pages[topic];
+        if (was && (was.busy || !older || !was.more)) return was?.more ?? false;
+        if (!was && older && topic === 'all') return false;
+        const page = { at: was?.at ?? null, more: was?.more ?? true, busy: true };
+        pages[topic] = page;
+        const got = await fetchGuestThreads(topic === 'all' ? null : topic, was ? page.at : null).catch(() => null);
+        page.busy = false;
+        if (!got) { if (!was) delete pages[topic]; return page.more; }
+        page.more = got.moreThreads ?? false;
+        page.at = oldestAt(got.questions) ?? page.at;
+        addGuest({ ...got, more: undefined });
+        return page.more;
+      },
       // A post from a link (a clip on Reddit, say): the real post, so the clip plays (guest_post).
       loadPost: async (id: ID) => {
         if (guestRef.current?.posts.some((p) => p.id === id)) return true;
