@@ -363,7 +363,8 @@ function Compose() {
   // While the box is up, the + in the tab bar can close it the same way.
   const closeRef = useRef(closeMenu);
   closeRef.current = closeMenu;
-  useEffect(() => (stage === 'choose' ? registerCreateClose(() => closeRef.current()) : undefined), [stage]);
+  // Before the first paint, so the bar never starts to leave when the box is opened from somewhere other than the +.
+  useLayoutEffect(() => (stage === 'choose' ? registerCreateClose(() => closeRef.current()) : undefined), [stage]);
   // Android's Back does what each stage's own back does (set just before each
   // stage draws, below): the Create box closes the way its ✕ does, the editor
   // goes back to your photos, the caption back to the editor, a session's post

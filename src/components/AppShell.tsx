@@ -295,11 +295,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const still = useReducedMotion();
   const [barKept, setBarKept] = useState(showNav);
   const barAway = useSharedValue(showNav ? 0 : 1);
+  const wantedBefore = useRef(barWanted);
   useEffect(() => {
+    const arriving = barWanted && !wantedBefore.current;
+    wantedBefore.current = barWanted;
+    // First arrival after the splash or sign-in: NavBar's own rise does it, nothing on top.
+    if (showNav && arriving) { setBarKept(true); barAway.value = 0; return; }
     if (showNav) { setBarKept(true); barAway.value = withTiming(0, { duration: 200, easing: Easing.out(Easing.cubic) }); return; }
     if (!barWanted) { setBarKept(false); barAway.value = 1; return; }
+    // A sheet rising from the bottom covers the bar's place itself: the bar goes at once, never fading over it.
+    if (SHEETS.has(pathname)) { setBarKept(false); barAway.value = 1; return; }
     barAway.value = withTiming(1, { duration: 180, easing: Easing.out(Easing.cubic) }, (done) => { if (done) runOnJS(setBarKept)(false); });
-  }, [showNav, barWanted, barAway]);
+  }, [showNav, barWanted, barAway, pathname]);
   const barSlide = useAnimatedStyle(() => ({ opacity: 1 - barAway.value, transform: [{ translateY: still ? 0 : barAway.value * 28 }] }));
   const curtainDown = useCurtainDown();
   // A session you started and haven't logged (Oct 6): its bar rides above the tab bar wherever the bar
