@@ -317,7 +317,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     if (SHEETS.has(pathname)) { setBarKept(false); barAway.value = 1; return; }
     barAway.value = withTiming(1, { duration: 180, easing: Easing.out(Easing.cubic) }, (done) => { if (done) runOnJS(setBarKept)(false); });
   }, [showNav, barWanted, barAway, pathname]);
-  const barSlide = useAnimatedStyle(() => ({ opacity: 1 - barAway.value, transform: [{ translateY: still ? 0 : barAway.value * 28 }] }));
+  // Slides only, never fades: the bar is glass, and on an iPhone glass under a fading parent
+  // drew see-through and stayed that way (Oct 17, owner: "Why did this bottom thing turn
+  // transparent? ... change it back"). It slides all the way below the screen's edge instead.
+  const barSlide = useAnimatedStyle(() => ({ transform: [{ translateY: still ? 0 : barAway.value * 160 }] }));
   const curtainDown = useCurtainDown();
   // A session you started and haven't logged (Oct 6): its bar rides above the tab bar wherever the bar
   // is, never over a sheet, a composer or the live page itself, nor on a clip's comments stage or under the tutorial.
