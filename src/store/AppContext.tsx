@@ -9425,8 +9425,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
    */
   const loadGuest = useCallback(async () => {
     const got = await fetchGuestHome().catch(() => null);
-    // The Discussions list pages back from the oldest of these; a topic starts over when picked again.
-    if (got) guestThreadPages.current = { all: { at: oldestAt(got.questions), more: got.moreThreads ?? false, busy: false } };
+    // The Discussions list pages back from the oldest of these. A topic keeps its own place, so
+    // "Show more threads" after a Refresh carries on further back (found in review, Oct 17).
+    if (got) guestThreadPages.current = { ...guestThreadPages.current, all: { at: oldestAt(got.questions), more: got.moreThreads ?? false, busy: false } };
     setGuest((prev) => {
       if (!got) return prev ?? { users: [], posts: [], comments: [], questions: [], answers: [], coaches: [], more: false };
       if (!prev) return got;

@@ -38,7 +38,9 @@
 -- worker only call functions); from now on a visitor reads what they may
 -- only through the five functions above (and share_preview, 68, and
 -- peek_hits, 163). Left readable signed out, holding no account ids: the
--- courts list (map data) and coaches' services (titles and prices).
+-- courts list (map data). Coaches' services (titles and prices) look open,
+-- but their rule goes through coaches, closed here, so a visitor gets them
+-- only through guest_coaches.
 --
 -- The safety rules (minors use this app), all checked here on the server,
 -- never left to the website:
@@ -188,8 +190,10 @@ returns boolean language sql stable security definer set search_path = public as
      and (nullif(p.video_url, '') is null or p.video_url like 'https://%')
      and (nullif(p.image_url, '') is null or p.image_url like 'https://%')
      and not exists (select 1 from unnest(coalesce(p.image_urls, '{}'::text[])) u(x) where coalesce(u.x, '') not like 'https://%')
-     -- A clip has something to show: the clip itself, or at least its picture.
-     and (p.kind <> 'clip' or p.video_url like 'https://%' or p.thumbnail_url like 'https://%' or p.image_url like 'https://%')
+     -- A clip has something to show: the clip itself, or at least its still. The
+     -- Feed's player reads only those two (a picture alone still reads "This
+     -- clip didn't finish uploading", found in review, Oct 17).
+     and (p.kind <> 'clip' or p.video_url like 'https://%' or p.thumbnail_url like 'https://%')
 $$;
 
 -- A comment a visitor may see: not taken down, by a known adult, not hidden
