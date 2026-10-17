@@ -738,6 +738,38 @@ const STEPS = [
     },
     expect: [{ text: 'Are you 13 or older?' }, { label: 'I\'m 13 or older' }, { label: 'I\'m under 13' }, { text: 'Add my birthday instead' }],
   },
+  // The peek (Oct 17, owner: "Build the peek"): open hits before an account.
+  // Only public adults' hits: never Ella's (a teen) or Tomás's (no age on file).
+  {
+    name: 'peek',
+    title: 'The peek: open hits, signed out',
+    async run(page) {
+      await page.goto('/peek');
+      await page.waitFor({ text: 'Open hits near you' }, 45000);
+      await page.waitFor({ text: 'Sam' });
+      if (await page.find({ text: /Ella/ })) throw new Error('the peek shows a teen’s hit (Ella)');
+      if (await page.find({ text: /Tomás|Harbor View/ })) throw new Error('the peek shows a hit by someone with no age on file (Tomás)');
+    },
+    expect: [{ text: 'Use my location' }, { text: 'Marcus' }, { label: 'I\'m in' }, { text: 'Create a free account' }],
+  },
+  {
+    name: 'peek-join',
+    title: 'The peek: I\'m in asks for an account',
+    async run(page) {
+      await page.tap({ label: 'I\'m in' });
+      await page.waitFor({ text: /^Make a free account to join Sam’s hit/ });
+    },
+    expect: [{ label: 'Create a free account' }, { label: 'I already have an account' }, { label: 'Not now' }],
+  },
+  {
+    name: 'peek-empty',
+    title: 'The peek: nothing near yet',
+    async run(page) {
+      await page.goto('/peek?peek=empty');
+      await page.waitFor({ text: 'No open hits near you yet' }, 45000);
+    },
+    expect: [{ text: /^Be the first to post one/ }, { label: 'Post the first hit' }, { text: 'Create a free account' }],
+  },
   {
     name: 'sign-in',
     title: 'Sign in to the demo',

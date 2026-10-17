@@ -113,7 +113,18 @@ export async function takeInviteCourt(): Promise<InviteCourt | null> {
  * joins the hit) the first time it reaches its start page (see AppShell).
  * Kept a week at most: a link opened long ago does not hijack a later visit.
  */
-export interface ShareTarget { href: string; joinHit?: string; at: number }
+export interface ShareTarget {
+  href: string;
+  joinHit?: string;
+  /**
+   * What sign-up says it is for, from the peek (Oct 17): "Make a free
+   * account to join Sam's hit at 6pm". Words only, shown on the sign-up form.
+   */
+  label?: string;
+  /** The host's first name, for the landing's words when the join can't go through. */
+  host?: string;
+  at: number;
+}
 
 const TARGET_KEY = 'courtside-share-target';
 const WEEK = 7 * 86_400_000;
@@ -126,7 +137,12 @@ const fresh = (raw: string | null): ShareTarget | null => {
     // Only a page inside the app, never somewhere else.
     if (typeof t.href !== 'string' || !/^\/[a-z]/.test(t.href) || t.href.startsWith('//')) return null;
     if (typeof t.at !== 'number' || Date.now() - t.at > WEEK) return null;
-    return { href: t.href, joinHit: typeof t.joinHit === 'string' ? t.joinHit : undefined, at: t.at };
+    return {
+      href: t.href, joinHit: typeof t.joinHit === 'string' ? t.joinHit : undefined,
+      label: typeof t.label === 'string' ? t.label.slice(0, 120) : undefined,
+      host: typeof t.host === 'string' ? t.host.slice(0, 30) : undefined,
+      at: t.at,
+    };
   } catch { return null; }
 };
 
@@ -135,8 +151,8 @@ if (Platform.OS !== 'web') {
   AsyncStorage.getItem(TARGET_KEY).then((raw) => { if (pendingTarget === undefined) pendingTarget = fresh(raw); }).catch(() => { pendingTarget = null; });
 }
 
-export async function rememberShareTarget(href: string, joinHit?: string) {
-  const target: ShareTarget = { href, joinHit, at: Date.now() };
+export async function rememberShareTarget(href: string, joinHit?: string, words?: { label?: string; host?: string }) {
+  const target: ShareTarget = { href, joinHit, label: words?.label, host: words?.host, at: Date.now() };
   pendingTarget = target;
   await put(TARGET_KEY, JSON.stringify(target));
 }

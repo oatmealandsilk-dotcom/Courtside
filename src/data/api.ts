@@ -20,6 +20,7 @@ import { CURRENT_USER_ID, users } from './mock/users';
 import { DEMO_AFFILIATES, demoAffiliateStats, demoInvitees } from './mock/invites';
 import { DEMO_HITS_OF_YOURS, demoHitChat, demoHitNotifications, demoHits } from './mock/hits';
 import { isMapCourtId } from '@/features/places/courtName';
+import { milesBetween } from '@/features/players/geo';
 import { demoLastSeen } from './mock/presence';
 import { DEMO_FOLLOWERS, DEMO_FOLLOWING, DEMO_MAP_ALERTS } from './mock/courtLife';
 import { demoSessionTagNotifications, demoSessionTags, demoSessions } from './mock/sessions';
@@ -64,6 +65,7 @@ import type {
   SessionTagRefusal,
   SessionTagRole,
   ShareKind,
+  PeekHit,
   SharePerson,
   SharePreview,
   ShareTile,
@@ -651,6 +653,64 @@ export async function fetchSharePreview(kind: ShareKind, id: string): Promise<Sh
     } });
   }
   return answer(locked);
+}
+
+/**
+ * The open hits someone with no account may see, for the peek (owner, Oct
+ * 17: "Build the peek"; peek_hits, migration 163): soonest first, or nearest
+ * first when `near` is given (the visitor tapped "Use my location"; the spot
+ * goes only into this one question, and the server keeps nothing). Null
+ * when it could not be asked (offline, or the server is a version behind):
+ * the page then says so and still offers an account.
+ *
+ * The demo answers from its fixtures with the server's rules (a public host
+ * known to be an adult, nobody but adults in it, in the next 7 days, a spot
+ * left, not the demo's own player's). The demo's `?peek=empty` shows the
+ * page with nothing near, for the smoke test's picture. Never on the live site.
+ */
+export async function fetchPeekHits(near?: { lat: number; lng: number } | null, limit = 20): Promise<PeekHit[] | null> {
+  const point = near && Number.isFinite(near.lat) && Number.isFinite(near.lng) ? near : null;
+  const text = (v: unknown) => (typeof v === 'string' && v ? v : undefined);
+  if (supabase) {
+    const { data, error } = await supabase.rpc('peek_hits', { p_lat: point?.lat ?? null, p_lng: point?.lng ?? null, p_limit: limit });
+    if (error || !Array.isArray(data)) return null;
+    const num = (v: unknown) => (v === null || v === undefined || v === '' || !Number.isFinite(Number(v)) ? undefined : Number(v));
+    return (data as Record<string, unknown>[]).flatMap((r): PeekHit[] => {
+      const id = text(r.id);
+      const startsAt = text(r.starts_at);
+      const format = (['singles', 'doubles', 'hit'] as const).find((f) => f === r.format);
+      if (!id || !startsAt || !format) return [];
+      const system = (['NTRP', 'UTR', 'ITF'] as const).find((s) => s === r.skill_system);
+      return [{
+        id, startsAt, format, spotsLeft: num(r.spots_left) ?? 0, levelMin: num(r.level_min), levelMax: num(r.level_max), skillSystem: system,
+        court: { id: text(r.court_id), name: text(r.court_name) || 'A court', area: text(r.area) },
+        km: num(r.km), hostFirst: text(r.host_first) || 'A player',
+      }];
+    });
+  }
+  try {
+    if (typeof window !== 'undefined' && window.location && new URLSearchParams(window.location.search).get('peek') === 'empty') return delay([]);
+  } catch { /* not a browser */ }
+  const now = Date.now();
+  const known = (userId: ID) => users.find((x) => x.id === userId)?.ageGroup === 'adult';
+  const shareable = (userId: ID) => { const u = users.find((x) => x.id === userId); return !!u && !u.isPrivate && !u.suspended && u.ageGroup === 'adult'; };
+  const found = demoHits
+    .filter((h) => !h.cancelled && h.authorId !== CURRENT_USER_ID && shareable(h.authorId)
+      && Date.parse(h.startsAt) > now && Date.parse(h.startsAt) < now + 7 * 86_400_000
+      && h.spots - h.joinedIds.length > 0 && h.joinedIds.every(known))
+    .map((h): PeekHit => {
+      const host = users.find((x) => x.id === h.authorId)!;
+      const spot = h.place.lat !== undefined && h.place.lng !== undefined ? { lat: h.place.lat, lng: h.place.lng } : null;
+      return {
+        id: h.id, startsAt: h.startsAt, format: h.format, spotsLeft: h.spots - h.joinedIds.length,
+        levelMin: h.levelMin, levelMax: h.levelMax, skillSystem: host.profile?.skillSystem,
+        court: { id: isMapCourtId(h.place.id ?? '') ? h.place.id : undefined, name: h.place.name, area: spot ? host.location.split(',')[0]?.trim() || undefined : undefined },
+        km: point && spot ? Math.round(milesBetween(point, spot) * 1.609 * 10) / 10 : undefined,
+        hostFirst: host.name.trim().split(/\s+/)[0] || 'A player',
+      };
+    })
+    .sort((a, b) => (point ? (a.km ?? Infinity) - (b.km ?? Infinity) : 0) || Date.parse(a.startsAt) - Date.parse(b.startsAt));
+  return delay(clone(found.slice(0, Math.min(Math.max(limit, 1), 30))));
 }
 
 /**

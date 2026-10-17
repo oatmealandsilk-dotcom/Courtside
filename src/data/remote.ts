@@ -4131,10 +4131,13 @@ export const remote = {
     if (error) { fail('open hit')(error); throw new Error('That didn’t go through. Try again.'); }
   },
   /** "I'm in": the hit's group chat comes back, or a plain sentence saying why not. */
-  async joinHit(hitId: ID): Promise<{ conversationId?: ID; error?: string }> {
+  async joinHit(hitId: ID): Promise<{ conversationId?: ID; error?: string; reason?: 'age' | 'limit' }> {
     const { data, error } = await need().rpc('join_hit', { hit: hitId });
     if (error) {
-      if (/teen_closed/.test(error.message)) return { error: 'You can join once you follow each other.' };
+      // `reason` lets a page say more than the sentence (the peek's landing, Oct 17: a new account with no birthday).
+      if (/teen_closed/.test(error.message)) return { error: 'You can join once you follow each other.', reason: 'age' };
+      // Past the day's limit of hits with new people (migration 109), said plainly rather than "Try again".
+      if (/age_rule_limit/.test(error.message)) return { error: 'You’ve joined a lot of hits with new people today. Try again tomorrow.', reason: 'limit' };
       if (/blocked/.test(error.message)) return { error: 'You can’t join this one.' };
       // An admin took you out of this hit's chat (migration 54): only someone in it can add you back. Never says who.
       if (/\bremoved\b/.test(error.message)) return { error: 'You were removed from this hit’s chat, so you can’t rejoin it.' };

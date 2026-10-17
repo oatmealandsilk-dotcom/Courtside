@@ -291,6 +291,11 @@
   .app-cta { display: grid; gap: 12px; justify-items: start; }
   .btn-app { padding: 19px 30px; font-size: 18px; text-decoration: none; }
   .btn-app svg { width: 18px; height: 18px; }
+  /* The peek (Oct 17): the green button, and the iPhone one under it is the quiet one. */
+  .btn-peek { padding: 19px 30px; font-size: 18px; text-decoration: none; }
+  .btn-peek svg { width: 18px; height: 18px; }
+  .peek-note { margin: -4px 0 6px; font-size: 14px; color: var(--muted); }
+  .app-cta .btn-app.btn-quiet { padding: 15px 26px; font-size: 16px; }
   .app-note { margin: 0; font-size: 15px; color: var(--muted); max-width: 30em; text-wrap: pretty; }
   .app-note a { color: var(--text); font-weight: 600; }
   /* Someone a player invited (?ref=their handle), once the server says the handle is a real account:
@@ -538,7 +543,8 @@
     .quick .btn { width: 100%; }
     .app-cta { justify-items: stretch; }
     .invited { justify-self: start; }
-    .btn-app { width: 100%; }
+    .btn-app, .btn-peek { width: 100%; }
+    .peek-note { text-align: center; }
     .features { grid-template-columns: 1fr; }
     .feature, .feature:nth-child(2n) { padding: 24px 0; border-left: 0; }
     .rail { grid-auto-columns: 68%; gap: 20px; margin-inline: -20px; padding-inline: 20px; scroll-padding-inline: 20px; }
@@ -659,7 +665,10 @@
         <div class="cta">
           <div class="app-cta">
             <p class="invited" data-invited hidden><svg aria-hidden="true"><use href="#mark"/></svg><span data-lead></span></p>
-            <a class="btn btn-primary btn-app" href="https://testflight.apple.com/join/21UJPuny" target="_blank" rel="noopener">Get the iPhone app <svg aria-hidden="true"><use href="#out"/></svg></a>
+            <!-- The peek first (Oct 17, owner: "Build the peek"): open hits near them, no account needed to look. -->
+            <a class="btn btn-primary btn-peek" href="https://app.courtsidebase.com/peek" data-peek>See open hits near you <svg aria-hidden="true" viewBox="0 0 16 16"><path d="M3 8h9.5M8.5 3.5 13 8l-4.5 4.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
+            <p class="peek-note">No account needed to look. Free to join.</p>
+            <a class="btn btn-quiet btn-app" href="https://testflight.apple.com/join/21UJPuny" target="_blank" rel="noopener">Get the iPhone app <svg aria-hidden="true"><use href="#out"/></svg></a>
             <p class="type-hint" data-type-hint hidden>In the app, type <b class="code" data-code></b> under <span class="nowrap">“Invited by?”</span></p>
             <p class="app-note">Free. Opens Apple’s TestFlight: install it, then CourtSide. On Android? <a href="https://app.courtsidebase.com">Use CourtSide on the web</a>.</p>
           </div>
@@ -1193,6 +1202,13 @@
     if (!handle) return;
     root.querySelectorAll('a[href="https://app.courtsidebase.com"], a[href="https://app.courtsidebase.com/"], a[href^="https://app.courtsidebase.com/join?ref="]').forEach((a) => {
       a.setAttribute('href', `https://app.courtsidebase.com/join?ref=${encodeURIComponent(handle)}`);
+    });
+    // The peek ("See open hits near you", Oct 17) keeps the same handle or
+    // code, so whoever joins from it still counts as theirs. A campaign label
+    // (fb, fbdm…) is never carried: it is not a person, and the tap is
+    // already counted here as 'web'.
+    root.querySelectorAll('a[data-peek]').forEach((a) => {
+      a.setAttribute('href', `https://app.courtsidebase.com/peek?ref=${encodeURIComponent(handle)}`);
     });
   }
   carryRef(document);

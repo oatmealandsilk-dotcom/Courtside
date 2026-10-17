@@ -20,7 +20,7 @@ import { auth as remoteAuth, remote, type HandleStatus } from '@/data/remote';
 import { BLOCKED_WORDS_NOTE } from '@/features/hiddenWords/hiddenWords';
 import { SigningInAs, SigningInWith } from '@/components/SigningInAs';
 import { useLeave } from '@/components/LeaveCurtain';
-import { peekReferrer } from '@/features/invite/referral';
+import { peekReferrer, peekShareTarget } from '@/features/invite/referral';
 import { useApp } from '@/store/AppContext';
 import { useGateSpace } from '@/lib/useGateSpace';
 import { KeyboardScrollContext, useKeyboardReveal } from '@/lib/keyboardScroll';
@@ -370,7 +370,9 @@ export default function SignIn() {
   const fill = (hint: NonNullable<React.ComponentProps<typeof Field>['autoComplete']>) => (Platform.OS === 'android' ? hint : undefined);
   const begin = (next: Mode) => { setMode(next); setStarted(true); setError(null); setProviderError(null); };
   const title = chooser ? 'Welcome back' : mode === 'sign-up' ? 'Create your account' : 'Sign in';
-  const line = chooser ? 'Pick an account to carry on.' : mode === 'sign-up' ? 'Free, and it takes a minute.' : 'Tennis clips, people to hit with, and real coaches.';
+  // Came from "I'm in" on the peek (Oct 17): the form says what it is for, "Make a free account to join Sam's hit at 6pm".
+  const [joining] = useState(() => { const t = peekShareTarget(); return t?.joinHit && t.label ? t.label : null; });
+  const line = chooser ? 'Pick an account to carry on.' : mode === 'sign-up' ? (joining ?? 'Free, and it takes a minute.') : 'Tennis clips, people to hit with, and real coaches.';
 
   // The first visit: one big court with the name on it, one line, two ways in (src/features/welcome).
   if (welcome) {
@@ -553,6 +555,8 @@ export default function SignIn() {
                   <BirthDateField month={birth.month} day={birth.day} year={birth.year} onChange={setBirth} label="Birthday (optional)" />
                   {/* Why we ask, said plainly; leaving it empty is fine (Oct 17). */}
                   <Text style={styles.birthNote}>Keeps younger players safe. Private, never on your profile.</Text>
+                  {/* Honest before they sign up (Oct 17): without one, the hit they tapped can't be joined yet. */}
+                  {joining && birthBlank ? <Text style={styles.birthNote}>To join the hit you picked, add your birthday: hits with players you don’t follow yet are for players 18 and over.</Text> : null}
                   {birthBlank ? <OldEnoughCheck checked={over13} onChange={setOver13} /> : null}
                   {ageBlocked ? <Text style={styles.ageNote}>Sorry, you can't create a CourtSide account.</Text> : null}
                 </>

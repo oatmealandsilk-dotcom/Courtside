@@ -779,7 +779,7 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions, LiveSessionAct
   /** "Open to everyone now" on your own invite-first hit. */
   openHitNow: (hitId: ID) => Promise<void>;
   /** "I'm in": joins, and resolves the group chat to open (or a sentence saying why not). */
-  joinHit: (hitId: ID) => Promise<{ conversationId?: ID; error?: string }>;
+  joinHit: (hitId: ID) => Promise<{ conversationId?: ID; error?: string; reason?: 'age' | 'limit' }>;
   /**
    * "Can't make it" on a hit you joined: your spot goes back, you leave the
    * hit's chat (as leaving it from the chat does), and the poster gets a

@@ -3,6 +3,7 @@ import { router } from 'expo-router';
 
 import { isStartTab } from '@/features/navigation/startTab';
 import { peekShareTarget, takeShareTarget } from '@/features/invite/referral';
+import { ageUnknown } from '@/features/players/age';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
@@ -12,12 +13,21 @@ import { useApp } from '@/store/AppContext';
  * that same thing once they are in: the first time the app reaches its start
  * page after sign-up and setup (or after signing in), the page they were
  * looking at opens over it. "I'm in" tapped on an open hit before signing up
- * joins the hit here too, so they arrive already in it.
+ * (on a shared hit, or on the peek) joins the hit here too, so they arrive
+ * already in it.
+ *
+ * When the join can't go through, it says why, honestly (owner, Oct 17:
+ * "Build the peek"): the hit's page is open underneath either way, so they
+ * see it and what they can do. A new account with no birthday has the
+ * under-18 protections, which only play with people who follow each other
+ * (join_hit, migration 124), so it is not asked for and fails: the words say
+ * that adding a birthday opens it up, with a button straight to it.
  */
 export function useShareLanding({ pathname, held }: { pathname: string; held: boolean }) {
-  const { currentUserId, onboardingComplete, remoteLoaded, actions } = useApp();
+  const { currentUserId, currentUser, onboardingComplete, remoteLoaded, actions } = useApp();
   const busy = useRef(false);
   const ready = !!currentUserId && onboardingComplete && (remoteLoaded || !isSupabaseConfigured) && !held && isStartTab(pathname);
+  const noBirthday = ageUnknown(currentUser);
   useEffect(() => {
     if (!ready || busy.current || !peekShareTarget()) return;
     busy.current = true;
@@ -27,12 +37,25 @@ export function useShareLanding({ pathname, held }: { pathname: string; held: bo
         if (!target) return;
         router.push(target.href as never);
         if (!target.joinHit) return;
+        const host = target.host || 'the host';
+        const needBirthday = () => showToast({
+          title: 'Add your birthday to join',
+          body: `Hits with players you don’t follow yet are for players 18 and over. Add your birthday, then tap I’m in on ${host}’s hit.`,
+          icon: 'gift-outline',
+          action: { label: 'Add birthday', onPress: () => router.push('/birthday?from=settings') },
+        });
+        if (noBirthday) { needBirthday(); return; }
         const result = await actions.joinHit(target.joinHit);
-        if (result.error) showToast({ title: "Couldn't join the hit", body: 'It may be full or over. Find another one nearby.', icon: 'alert-circle-outline' });
-        else showToast({ title: "You're in", body: 'Say hi in the hit’s chat.', icon: 'hit' });
+        if (!result.error) { showToast({ title: "You're in", body: 'Say hi in the hit’s chat.', icon: 'hit' }); return; }
+        if (result.reason === 'age') {
+          if (ageUnknown(currentUser)) needBirthday();
+          else showToast({ title: 'This hit is for players who follow each other', body: `Follow ${host} and ask them to follow you back, or find another hit nearby.`, icon: 'alert-circle-outline' });
+          return;
+        }
+        showToast({ title: "Couldn't join the hit", body: `${result.error} Find another one nearby.`, icon: 'alert-circle-outline' });
       } finally {
         busy.current = false;
       }
     })();
-  }, [ready, actions]);
+  }, [ready, actions, noBirthday, currentUser]);
 }

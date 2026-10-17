@@ -1745,6 +1745,36 @@ export interface SharePreview {
   court?: { name?: string; openHits: number; posts: number; players: number; recent: ShareTile[] };
 }
 
+/**
+ * One open hit on the peek (owner, Oct 17: "Build the peek"): what someone
+ * with no account sees before they sign up (peek_hits, migration 163). Only
+ * hits a stranger may see (a public host known to be an adult, open to
+ * everyone, nobody but adults in it, in the next 7 days, a spot left), and
+ * only this much about them: never a handle, a photo, a last name, the note,
+ * who else is in, or any coordinates.
+ */
+export interface PeekHit {
+  id: ID;
+  startsAt: string;
+  format: HitRequest['format'];
+  spotsLeft: number;
+  levelMin?: number;
+  levelMax?: number;
+  /** The host's own scale for the level (NTRP, UTR or ITF). */
+  skillSystem?: SkillSystem;
+  court: {
+    /** A court on the map's list (an OSM id), when the hit was posted at one. */
+    id?: string;
+    name: string;
+    /** The court's town ("Raleigh"), when the server can tell it. */
+    area?: string;
+  };
+  /** How far, in km, when the visitor tapped "Use my location" (to about a kilometre). */
+  km?: number;
+  /** The host's first name, nothing more. */
+  hostFirst: string;
+}
+
 export interface Notification {
   id: ID;
   /** Who should see this. */

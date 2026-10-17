@@ -7,5 +7,7 @@ export function isPublicPath(pathname: string): boolean {
   return /^\/(post|user|question|court|g)\/[^/]+\/?$/.test(pathname)
     || (/^\/hit-request\/[^/]+\/?$/.test(pathname) && pathname !== '/hit-request/new')
     || pathname === '/join'
+    // The peek (owner, Oct 17: "Build the peek"): open hits near you, before an account.
+    || pathname === '/peek'
     || pathname === '/guidelines';
 }
