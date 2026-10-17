@@ -19,7 +19,8 @@ import { planStreakReminder } from '@/features/practice/reminder';
 import { isMapCourtId } from '@/features/places/courtName';
 import { TERMS_VERSION } from '@/lib/legal';
 
-import { fetchBootstrap, searchPosts as apiSearchPosts, signIn as apiSignIn, type Bootstrap } from '@/data/api';
+import { fetchBootstrap, fetchGuestFeedPage, fetchGuestHome, fetchGuestThread, searchPosts as apiSearchPosts, signIn as apiSignIn, type Bootstrap, type GuestData } from '@/data/api';
+import { openJoinSheet } from '@/features/guest/joinAsk';
 import * as demoApi from '@/data/api';
 import { BLOCKED_WORDS_NOTE, CHAT_PHOTO_UNREADABLE, REVIEW_NOTE_MAX, auth as remoteAuth, fetchRemote, isLocalMedia, onWordsRefused, queueFeedSignal, remote, uploadChatPhoto, uploadMedia, emptyProfile, type GroupRefusal, type AdminReport, type ModerationResult, type ReviewAskResult, type ReportedChat, type ReportedItem, type ReportedItemKind, type ReportEvidence, type FeedSignal, type SiteFeedback, type WaitlistEntry, type BetaInviteStatus, type FirstDayStats, type FirstMove, type HandleStatus, type InviteCodeResult, type MyInviter, type RemoteData, type UserState, standInName } from '@/data/remote';
 import { clearSnapshot, markSnapshotOpened, markSnapshotOpening, readSnapshot, saveSnapshot, snapshotFailedBefore } from '@/data/snapshot';
@@ -1399,6 +1400,15 @@ interface AppContextValue extends AppState {
    * if the server's list cannot be had).
    */
   ageSaysAdult: (u: Pick<User, 'id' | 'ageGroup'>) => boolean;
+  /**
+   * Guest mode (Oct 17): signed out on the website, the app is read-only.
+   * Every list holds only what a guest may see (fetchGuestHome), and an
+   * action that needs a profile asks to sign up instead (see guestActions).
+   * Always false in the phone app, which opens on sign-in when signed out.
+   */
+  isGuest: boolean;
+  /** Guest mode's first page is in (false while loading, and always when signed in). */
+  guestLoaded: boolean;
 }
 
 
@@ -9372,9 +9382,102 @@ export function AppProvider({ children }: { children: ReactNode }) {
     patch.questions = questions.length === state.questions.length && questions.every((q, i) => q === state.questions[i]) ? state.questions : questions;
     return patch;
   }, [state.reportedIds, state.blockedIds, state.posts, state.stories, state.hitRequests, state.questions, state.answers, state.comments, state.coachQuestions, state.coachReplies, state.tips, state.currentUserId, amAdminNow]);
+  // ------------------------------------------------------------ guest mode
+  // Signed out on the website (Oct 17, owner: "we still want people to be
+  // able to read discussions etc, or even view videos ... it's just when you
+  // want to actually do something that requires profile it will make you
+  // sign up"). The phone app is unchanged: there, signed out is sign-in.
+  const isGuest = Platform.OS === 'web' && state.ready && state.authResolved && !state.currentUserId;
+  const [guest, setGuest] = useState<GuestData | null>(null);
+  const guestAsked = useRef(false);
+  const loadGuest = useCallback(async () => {
+    const got = await fetchGuestHome().catch(() => null);
+    setGuest(got ?? { users: [], posts: [], comments: [], questions: [], answers: [], coaches: [], more: false });
+  }, []);
+  useEffect(() => {
+    if (!isGuest) { guestAsked.current = false; setGuest(null); return; }
+    if (guestAsked.current) return;
+    guestAsked.current = true;
+    void loadGuest();
+  }, [isGuest, loadGuest]);
+  /** Lays more of what a guest may see over what is there (a page of older posts, one thread's replies). */
+  const addGuest = useCallback((more: GuestData) => setGuest((prev) => {
+    const base = prev ?? { users: [], posts: [], comments: [], questions: [], answers: [], coaches: [], more: false };
+    const merged = <T extends { id: ID }>(a: T[], b: T[]) => { const fresh = new Map(b.map((x) => [x.id, x])); return [...a.map((x) => fresh.get(x.id) ?? x), ...b.filter((x) => !a.some((y) => y.id === x.id))]; };
+    return {
+      users: merged(base.users, more.users), posts: merged(base.posts, more.posts), comments: merged(base.comments, more.comments),
+      questions: merged(base.questions, more.questions), answers: merged(base.answers, more.answers), coaches: merged(base.coaches, more.coaches),
+      more: more.more ?? base.more,
+    };
+  }), []);
+  const guestRef = useRef(guest);
+  guestRef.current = guest;
+  /**
+   * The app's actions for a guest. Anything that needs a profile opens the
+   * one "Join CourtSide to …" sheet and changes nothing (each gives back a
+   * harmless answer of its usual shape); the few reads a guest's screens make
+   * come from guest mode's own data. Everything else is the app's own action.
+   */
+  const guestActions = useMemo<AppActions>(() => {
+    const ask = (what: string, report?: string) => openJoinSheet(what, report ? { report } : undefined);
+    const gate = <A extends unknown[], R>(what: string, answer: R) => (..._args: A) => { ask(what); return answer; };
+    const later = <T,>(v: T) => Promise.resolve(v);
+    const gated: Partial<AppActions> = {
+      toggleLike: gate('like posts', undefined), toggleLikeComment: gate('like comments', undefined), toggleLikeStory: gate('like posts', undefined),
+      addComment: (() => { ask('comment'); return later(undefined); }), addStoryComment: (() => { ask('comment'); return later(undefined); }),
+      addAnswer: (() => { ask('reply'); return later(undefined); }),
+      voteQuestion: gate('vote', undefined), voteAnswer: gate('vote', undefined), votePoll: gate('vote', undefined), voteTip: gate('vote', undefined),
+      toggleFollow: gate('follow players', undefined), toggleSavePost: gate('save posts', undefined), toggleSaveQuestion: gate('save threads', undefined),
+      shareToChats: gate('send this to friends', undefined), openConversationWith: gate('message players', ''),
+      sendMessage: (() => { ask('message players'); return later(undefined); }),
+      joinHit: (() => { ask('join this hit'); return later({ error: 'Make a free account to join.' }); }),
+      postHit: (() => { ask('post a hit'); return later(''); }),
+      addPost: gate('post', ''), addStory: gate('post', ''), addQuestion: gate('ask a question', ''),
+      askCoach: gate('ask a coach', ''), submitCoachingRequest: gate('ask a coach', ''),
+      bookCoach: (() => { ask('book a coach'); return later({ outcome: 'cancelled' as const }); }),
+      addCoachReview: gate('review coaches', undefined), toggleReplyHelpful: gate('vote', undefined),
+      replyToCoachQuestion: (() => { ask('reply'); return later(undefined); }),
+      submitTip: (() => { ask('share a tip'); return later(undefined); }),
+      // Report: signing in, or (for someone who won't) an email to support naming only what it was about.
+      reportUser: ((_who: ID | null | undefined, target: string) => { ask('report this', target); return later(false); }),
+      reportChat: (() => { ask('report this'); return later(false); }),
+      toggleMute: gate('mute players', undefined), toggleBlock: gate('block players', undefined), toggleAlerts: gate('turn on alerts', undefined),
+      isBlocked: () => false, canMessage: () => false, canAddToGroup: () => false,
+      // A guest's reads, from guest mode's own data.
+      refresh: async () => { await loadGuest(); return true; },
+      loadMorePosts: async () => {
+        const now = guestRef.current;
+        if (!now || now.more === false) return [];
+        const oldest = now.posts.reduce<string | null>((o, p) => (!o || p.createdAt < o ? p.createdAt : o), null);
+        const page = await fetchGuestFeedPage(oldest).catch(() => null);
+        if (!page) return [];
+        addGuest(page);
+        return page.posts;
+      },
+      loadThread: async (id: ID) => { const got = await fetchGuestThread(id).catch(() => null); if (got) addGuest(got); },
+      loadPost: async (id: ID) => !!guestRef.current?.posts.some((p) => p.id === id),
+      loadPostsOf: async () => undefined,
+      recordView: () => undefined, noteFeedSignal: () => undefined, markStoryViewed: () => undefined,
+      watchComments: () => () => undefined, catchUpNotifications: async () => undefined, markNotificationsRead: () => undefined,
+      loadRecentSessionPosts: async () => false, loadMySessionPosts: async () => false,
+    };
+    return { ...actions, ...gated } as AppActions;
+  }, [actions, loadGuest, addGuest]);
+  // What every screen reads while a guest: guest mode's own lists, and every
+  // other list empty, so nothing of the demo's or anyone's own ever shows.
+  const guestValue = useMemo(() => (!isGuest ? null : {
+    ...emptyBootstrap, ...emptyCourtLife, ...emptyFeedGroups, ...emptyLiveSession,
+    users: guest?.users ?? [], posts: guest?.posts ?? [], comments: guest?.comments ?? [],
+    questions: guest?.questions ?? [], answers: guest?.answers ?? [], coaches: guest?.coaches ?? [],
+    hitRequests: [], lastSeen: {}, followingIds: [], followEdges: [], followRequests: [], tips: [], sessions: [], sessionTags: [],
+    saved: { postIds: [], questionIds: [] }, mutedIds: [], reportedIds: [], blockedIds: [], blockedMeIds: [], alertIds: [],
+    newOnCourtside: null, openness: {}, courtShown: {}, feed: { cursor: null, more: guest?.more ?? false },
+  } satisfies Partial<AppState>), [isGuest, guest]);
   const value = useMemo<AppContextValue>(
-    () => ({ ...state, ...unreported, ready: state.ready && state.authResolved, currentUser, actions, seeing, shownAtCourt, ageSaysAdult }),
-    [state, unreported, currentUser, actions, seeing, shownAtCourt, ageSaysAdult],
+    () => (guestValue
+      ? { ...state, ...guestValue, ready: state.ready && state.authResolved, currentUser: null, actions: guestActions, seeing, shownAtCourt, ageSaysAdult, isGuest: true, guestLoaded: !!guest }
+      : { ...state, ...unreported, ready: state.ready && state.authResolved, currentUser, actions, seeing, shownAtCourt, ageSaysAdult, isGuest: false, guestLoaded: false }),
+    [state, unreported, currentUser, actions, seeing, shownAtCourt, ageSaysAdult, guestValue, guestActions, guest],
   );
 
   return <AppContext.Provider value={value}><UsersContext.Provider value={value.users}>{children}</UsersContext.Provider></AppContext.Provider>;

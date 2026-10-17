@@ -5,6 +5,7 @@ import { StatusBar } from 'expo-status-bar';
 import { Redirect, useNavigation } from 'expo-router';
 import { isSupabaseConfigured, storedLoginNow } from '@/lib/supabase';
 import { START_HREF, goToStart } from '@/features/navigation/startTab';
+import { HOME } from '@/lib/goBack';
 import { raiseCurtain } from '@/features/feed/warmup';
 import { preloadNearbyMap } from '@/components/NearbyMap';
 import { useLaunchUpdate } from '@/lib/instantUpdates';
@@ -29,7 +30,7 @@ const FADE_MS = 260;
  */
 export default function Index() {
   const styles = useThemedStyles(styleDefinitions);
-  const { ready, currentUserId, onboardingComplete, remoteLoaded, snapshotShown, error, actions } = useApp();
+  const { ready, currentUserId, onboardingComplete, remoteLoaded, snapshotShown, error, actions, isGuest } = useApp();
   const [retrying, setRetrying] = useState(false);
   // Signed in but the profile has not come down yet: the answer to "has this
   // person done the quiz" is not known, so hold the splash rather than guess.
@@ -181,6 +182,9 @@ export default function Index() {
     // A ?code= from Google is still being exchanged for a session; give it a
     // beat rather than bouncing a successful sign-in to the sign-in form.
     if (!currentUserId && Platform.OS === 'web' && /[?&]code=/.test(window.location.search) && !settledCode) return null;
+    // Signed out on the website: guest mode, on the Feed (Oct 17, owner: "we still want people to be
+    // able to read discussions etc, or even view videos"). The phone app still opens on sign-in.
+    if (!currentUserId && isGuest) return <Redirect href={HOME} />;
     if (!currentUserId) return <Redirect href="/sign-in" />;
     if (!onboardingComplete) return <Redirect href="/onboarding" />;
     // Into the app on its start page. Nothing is built under a real launch, so

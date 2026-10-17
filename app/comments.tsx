@@ -2,6 +2,7 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { AccessibilityInfo, BackHandler, Keyboard, Platform, Pressable, StyleSheet, Text, View, type TextInput } from 'react-native';
 import { router, useFocusEffect, useIsFocused, useLocalSearchParams, useNavigation, useRoute } from 'expo-router';
+import { openJoinSheet } from '@/features/guest/joinAsk';
 import { StatusBar } from 'expo-status-bar';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image as ExpoImage } from 'expo-image';
@@ -129,7 +130,7 @@ export default function CommentsSheet() {
     const t = setTimeout(() => input.current?.focus(), 380);
     return () => clearTimeout(t);
   }, [focus]);
-  const { comments, posts, stories, users, currentUserId, actions } = useApp();
+  const { comments, posts, stories, users, currentUserId, actions, isGuest } = useApp();
   const me = users.find((u) => u.id === currentUserId);
   const [draft, setDraft] = useState(() => drafts.get(key) ?? '');
   const [photo, setPhoto] = useState<string | null>(null);
@@ -404,6 +405,8 @@ export default function CommentsSheet() {
             </HiddenComments>
           </CommentList>
           <View ref={composer} style={styles.composer}>
+            {/* A guest (guest mode, Oct 17) reads the comments; the box asks them to join instead of typing. */}
+            {isGuest ? <Pressable accessibilityRole="button" accessibilityLabel="Add a comment" onPress={() => openJoinSheet('comment')} style={[StyleSheet.absoluteFill, { zIndex: 5 }]} /> : null}
             {replyingTo ? (
               <Animated.View entering={FadeInDown.duration(160)} style={styles.replying}>
                 <Text style={styles.replyingText} numberOfLines={1}>

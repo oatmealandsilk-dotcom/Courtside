@@ -11,6 +11,7 @@ import { PlayerName } from '@/components/PlayerName';
 import React, { useEffect, useRef, useState } from 'react';
 import { Linking, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
+import { openJoinSheet } from '@/features/guest/joinAsk';
 import { goBack } from '@/lib/goBack';
 import { confirmReport } from '@/lib/confirm';
 import { afterReport } from '@/features/moderation/reportThanks';
@@ -43,7 +44,7 @@ function QuestionDetail() {
   const styles = useThemedStyles(styleDefinitions);
   // `at`: a reply to open the thread at (a reported one, from Reports): scrolled to once the thread is in, and lit up.
   const { id, at } = useLocalSearchParams<{ id: string; at?: string }>();
-  const { questions, answers, users, currentUserId, currentUser, actions } = useApp();
+  const { questions, answers, users, currentUserId, currentUser, actions, isGuest } = useApp();
   const view = actions.recordView;
   useEffect(() => { view('question', String(id)); }, [view, id]);
   // The app arrives with each thread's newest replies; opening one brings them all.
@@ -100,8 +101,9 @@ function QuestionDetail() {
   } : undefined;
   // Someone else's thread can be reported from the flag at the top (App Review 1.2, Oct 5).
   // It leaves your screens at once, so the page goes back.
-  const theirs = !!currentUserId && question.authorId !== currentUserId;
-  const report = () => confirmReport('thread', () => {
+  // A guest can report too (guest mode, Oct 17): by signing in, or by email to support.
+  const theirs = (!!currentUserId || isGuest) && question.authorId !== currentUserId;
+  const report = isGuest ? () => openJoinSheet('report this', { report: `question:${question.id}` }) : () => confirmReport('thread', () => {
     const asker = users.find((u) => u.id === question.authorId);
     afterReport(actions.reportUser(question.authorId, `question:${question.id}`), asker, actions);
     goBack('/discuss');
@@ -166,7 +168,7 @@ function QuestionDetail() {
         <View style={styles.voteRow}>
           <VoteControls item={question} userId={currentUserId} onVote={direction => actions.voteQuestion(question.id, direction)} />
           {/* The same Reply button a reply has; it opens the line to type on right here. None on a removed thread. */}
-          {removed ? null : <Pressable accessibilityRole="button" accessibilityLabel="Reply to this thread" onPress={() => { setReplying(true); setTimeout(() => replyInput.current?.focus(), 50); }} style={styles.replyButton}>
+          {removed ? null : <Pressable accessibilityRole="button" accessibilityLabel="Reply to this thread" onPress={() => { if (isGuest) { openJoinSheet('reply'); return; } setReplying(true); setTimeout(() => replyInput.current?.focus(), 50); }} style={styles.replyButton}>
             <Ionicons name="chatbubble-outline" size={16} color={colors.textMuted}/>
             <Text style={styles.replyLabel}>Reply</Text>
           </Pressable>}

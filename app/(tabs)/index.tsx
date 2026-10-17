@@ -383,7 +383,9 @@ function Home({ scope, topRow, paused, onChrome }: {
   // The US Open ground is navy; the green wordmark sinks into it, white does not.
   const { theme } = useTheme();
   const app = useApp();
-  const { posts, questions, comments, stories, users, currentUserId, saved, actions, ready, followingIds, mutedIds, blockedIds, conversations } = app;
+  const { posts, questions, comments, stories, users, currentUserId, saved, actions, ready: appReady, followingIds, mutedIds, blockedIds, conversations } = app;
+  // A guest's Feed (guest mode, Oct 17) is dealt once guest mode's posts are in, not from the empty list before them.
+  const ready = appReady && (!app.isGuest || app.guestLoaded);
   // Instants are held back (features/stories/instantsSwitch, owner Oct 8): none dealt in and none
   // shown until the server's switch says so. Read by the deals through a ref, as `latest` is.
   const instantsOn = useInstantsOn() === true;

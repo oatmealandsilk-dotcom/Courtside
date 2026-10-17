@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { router } from 'expo-router';
 
 import { goToStart, isStartTab } from '@/features/navigation/startTab';
+import { goHome } from '@/lib/goBack';
 import { peekShareTarget, takeShareTarget } from '@/features/invite/referral';
 import { ageUnknown } from '@/features/players/age';
 import { isSupabaseConfigured } from '@/lib/supabase';
@@ -37,7 +38,12 @@ export function useShareLanding({ pathname, held }: { pathname: string; held: bo
       try {
         const target = await takeShareTarget();
         if (!target) return;
-        router.push(target.href as never);
+        // A guest who signed up from one of the tabs (guest mode, Oct 17) goes back to that tab;
+        // anything else opens over the start page.
+        const tab = target.href.split('?')[0];
+        if (tab === '/' || tab === '/index') goHome();
+        else if (['/discuss', '/coaches', '/profile'].includes(tab)) router.navigate(tab as never);
+        else router.push(target.href as never);
         if (!target.joinHit) return;
         const host = target.host || 'the host';
         const needBirthday = () => showToast({

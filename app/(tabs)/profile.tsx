@@ -6,6 +6,8 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { onSkippedSaved, readSkipped, type SetupStep } from '@/features/onboarding/setupProgress';
 import { Image, Modal, Pressable, Share, StyleSheet, Text, View, useWindowDimensions, type StyleProp, type ViewStyle } from 'react-native';
 import { router } from 'expo-router';
+import { GuestJoinCard } from '@/features/guest/GuestFindPlayers';
+import { GuestSignIn } from '@/features/guest/GuestSignIn';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Avatar, Button, EmptyState, Screen } from '@/components/ui';
 import { SectionPager } from '@/components/SectionPager';
@@ -49,7 +51,7 @@ const INBOX_POINTER = 38 + 14 + 17 - 6;
 
 function Profile({ previewSection }: { previewSection?: string } = {}) {
   const styles = useThemedStyles(styleDefinitions);
- const { currentUser: user, posts, questions, answers, saved, notifications, detectedActivities, currentUserId, savedAccounts, coaches, coachingRequests, coachQuestions, actions, feedGroups, blockedIds } = useApp();
+ const { currentUser: user, posts, questions, answers, saved, notifications, detectedActivities, currentUserId, savedAccounts, coaches, coachingRequests, coachQuestions, actions, feedGroups, blockedIds, isGuest } = useApp();
  // A coach's studio, first of your links: what is waiting there, or how far setup has got.
  const myCoach = coaches.find((c) => c.userId === currentUserId);
  const studio = myCoach ? studioLine(myCoach, coachingRequests, coachQuestions, currentUserId) : null;
@@ -155,6 +157,10 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
  // section (which re-renders this page) does not rebuild every tile.
  // eslint-disable-next-line react-hooks/exhaustive-deps
  const grids = useMemo(() => TABS.map((t) => content(t)), [posts, user?.id, styles, tileW, hasMoved]);
+ // A guest (guest mode, Oct 17): your profile is what an account is for.
+ if (!user && isGuest) {
+   return <Screen memoryKey="profile" title="Profile" wash right={<GuestSignIn />}><View style={{ paddingTop: spacing.lg }}><GuestJoinCard title="Your tennis, in one place" body="Make a free account to post your clips, log your sessions and find people to hit with." /></View></Screen>;
+ }
  if (!user) {
    const remembered = savedAccounts.find((a) => a.id === currentUserId);
    return <Screen memoryKey="profile" title="Profile" wash subtitle={remembered?.handle ? `@${remembered.handle}` : ' '}><ProfileSkeleton name={remembered?.name} avatarUrl={remembered?.avatarUrl} seed={currentUserId ?? 'you'}/></Screen>;

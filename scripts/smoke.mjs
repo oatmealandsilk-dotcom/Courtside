@@ -721,6 +721,13 @@ const themeFadeDone = (page) => page.waitUntil(() => page.call(() => !document.g
 /** A day's bar in the This week chart, named by its weekday ("Thursday, 1 hour 20 minutes"); today's says "Today". */
 const WEEKDAY_BAR = /^(Sun|Mon|Tues|Wednes|Thurs|Fri|Satur)day, /;
 
+/** Guest mode shows nobody but public adults: none of the demo's teens, private or no-age players appear anywhere on the page. */
+async function guestShowsOnlyAdults(page) {
+  const words = await page.eval('document.body.innerText');
+  const seen = ['Ella', 'Leo Tanaka', 'Tomás', 'Mira', 'June Park', 'Dev Sharma', 'Nadia', '@junevolley'].filter((n) => String(words).includes(n));
+  if (seen.length) throw new Error(`a guest sees ${seen.join(', ')} (only public adults may show)`);
+}
+
 const STEPS = [
   {
     // Oct 17: Apple turned down build 17 under 5.1.1(v) for requiring a date of birth. The birthday
@@ -770,11 +777,83 @@ const STEPS = [
     },
     expect: [{ text: /^Be the first to post one/ }, { label: 'Post the first hit' }, { text: 'Create a free account' }],
   },
+  // Guest mode (Oct 17, owner: "we still want people to be able to read discussions etc, or even
+  // view videos ... it's just when you want to actually do something that requires profile it will
+  // make you sign up"). Signed out on the web the app opens read-only on the Feed. Only public
+  // adults' posts, threads and replies show: never Ella or Leo (teens, private), never Tomás, Mira,
+  // June, Dev or Nadia (no age on file).
+  {
+    name: 'guest-feed',
+    title: 'Guest mode: the Feed, signed out',
+    async run(page) {
+      await page.goto('/');
+      await page.waitFor({ label: 'CourtSide for iPhone' }, 45000);
+      await page.waitFor({ label: /^Like( clip|\. Hold to see who liked it)$/ }, 45000);
+      await guestShowsOnlyAdults(page);
+    },
+    expect: [{ label: 'Get the iPhone app' }, { label: 'Create a post' }, { label: 'Feed' }],
+  },
+  {
+    name: 'guest-like',
+    title: 'Guest mode: a like asks to join',
+    async run(page) {
+      await page.tap({ label: /^Like( clip|\. Hold to see who liked it)$/ });
+      await page.waitFor({ text: 'Join CourtSide to like posts' });
+    },
+    expect: [{ label: 'Create a free account' }, { label: 'I already have an account' }, { label: 'Get the iPhone app' }, { text: 'Not now' }],
+    after: async (page) => {
+      await page.tap({ text: 'Not now' });
+      await page.gone({ text: 'Join CourtSide to like posts' });
+      // The heart never fills for a guest: the like did not count.
+      if (await page.find({ label: /^Unlike/ })) throw new Error('a guest’s like filled the heart');
+    },
+  },
+  {
+    name: 'guest-thread',
+    title: 'Guest mode: Discussions and a thread',
+    async run(page) {
+      await page.tap({ label: 'Community' });
+      await page.tap({ text: 'Discussions' });
+      await page.tap({ text: /^Full poly at 4\.0/ });
+      await page.waitFor({ text: /^I made the switch at 4\.0/ }, 30000);
+      await guestShowsOnlyAdults(page);
+      await page.tap({ label: 'Reply to this thread' });
+      await page.waitFor({ text: 'Join CourtSide to reply' });
+      await page.tap({ text: 'Not now' });
+    },
+    expect: [{ text: 'Replies' }, { label: 'Report this thread' }],
+  },
+  {
+    name: 'guest-community',
+    title: 'Guest mode: Find Players is open hits, no map, no people',
+    async run(page) {
+      await page.tap({ label: 'Go back' });
+      await page.tap({ text: 'Find Players' });
+      await page.waitFor({ text: 'Open hits' });
+      await page.waitFor({ text: 'Use my location' });
+      if (await page.find({ label: 'Map of players, courts and hits near you', any: true })) throw new Error('a guest sees the players map');
+      if (await page.find({ text: 'Open to hit', any: true })) throw new Error('a guest sees who is open to hit');
+      await guestShowsOnlyAdults(page);
+    },
+    expect: [{ label: 'I\'m in' }, { label: 'Sign in' }],
+  },
+  {
+    name: 'guest-profile',
+    title: 'Guest mode: Profile asks to join; the app bar closes',
+    async run(page) {
+      await page.tap({ label: 'Profile' });
+      await page.waitFor({ text: 'Your tennis, in one place' });
+      await page.tap({ label: 'Close the app banner' });
+      await page.gone({ label: 'CourtSide for iPhone' });
+    },
+    expect: [{ text: 'Create a free account' }],
+  },
   {
     name: 'sign-in',
     title: 'Sign in to the demo',
     async run(page) {
-      await page.goto('/');
+      // Signed out on the web is guest mode now (Oct 17): sign-in is its own page.
+      await page.goto('/sign-in');
       await page.tap({ label: 'Log in' }, 45000);
       // The demo form, not the real one: proof this build has no database behind it.
       await page.waitFor({ text: /^Demo build — no accounts, no database/ });

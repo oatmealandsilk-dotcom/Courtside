@@ -1,5 +1,7 @@
 import { startTransition, useCallback, useEffect, useRef, useState } from 'react';
 
+import { useApp } from '@/store/AppContext';
+
 /**
  * A like or a save that answers on the tap itself.
  *
@@ -16,6 +18,8 @@ import { startTransition, useCallback, useEffect, useRef, useState } from 'react
  * thought", so the heart fills together with the burst.
  */
 export function useOptimisticToggle(key: string, value: boolean, commit: () => void, onToken = 0) {
+  // A guest (guest mode, Oct 17) never sees a heart fill that cannot count: the tap only asks them to join.
+  const { isGuest } = useApp();
   const [on, setOn] = useState(value);
   useEffect(() => {
     setOn(value);
@@ -23,13 +27,14 @@ export function useOptimisticToggle(key: string, value: boolean, commit: () => v
   }, [key, value]);
   const seen = useRef(onToken);
   useEffect(() => {
-    if (onToken && onToken !== seen.current) setOn(true);
+    if (onToken && onToken !== seen.current && !isGuest) setOn(true);
     seen.current = onToken;
-  }, [onToken]);
+  }, [onToken, isGuest]);
   const toggle = useCallback(() => {
+    if (isGuest) { commit(); return; }
     setOn((v) => { pending.set(key, !v); return !v; });
     startTransition(commit);
-  }, [key, commit]);
+  }, [key, commit, isGuest]);
   return { on, toggle, delta: on === value ? 0 : on ? 1 : -1 };
 }
 

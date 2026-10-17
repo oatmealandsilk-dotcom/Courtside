@@ -5250,3 +5250,98 @@ export const auth = {
     await need().auth.signOut();
   },
 };
+
+/* ------------------------------------------------------------ guest mode */
+
+/**
+ * What the web app shows a visitor with no account (guest mode, Oct 17,
+ * owner: "we still want people to be able to read discussions etc, or even
+ * view videos ... it's just when you want to actually do something that
+ * requires profile it will make you sign up"). Only ever what the four
+ * guest functions hand back (migration 164): posts, comments, threads and
+ * replies by public accounts known to be adults, and about each person only
+ * their first name, handle and photo. Nothing is read from any table.
+ */
+export interface GuestPage {
+  users: User[]; posts: Post[]; comments: Comment[]; questions: Question[]; answers: Answer[]; coaches: Coach[];
+  /** The feed has older posts to page to. */
+  more?: boolean;
+}
+
+interface GuestPersonRow { id: string; name: string; handle: string; avatar_url?: string | null; skill_system?: string | null; rating?: number | null }
+type GuestCommentRow = CommentRow & { like_count?: number };
+type GuestPostRow = PostRow & { like_count?: number; comments?: GuestCommentRow[] };
+type GuestThreadRow = QuestionRow & { answer_ids?: string[]; poll?: { options: string[]; counts: number[] } | null };
+
+/**
+ * Likes come as a number, never who: the count is drawn from how many ids
+ * there are, so each is a stand-in no account can ever have (never a UUID),
+ * and "liked by you" is never true.
+ */
+export const guestStandIns = (n: unknown) => Array.from({ length: Math.min(Math.max(Number(n) || 0, 0), 9999) }, (_, i) => `guest-like-${i}`);
+
+function guestUser(row: GuestPersonRow, coachIds: Set<string>): User | null {
+  if (!row || typeof row.id !== 'string' || !UUID_RE.test(row.id) || typeof row.handle !== 'string') return null;
+  return toUser({
+    id: row.id, handle: row.handle, name: typeof row.name === 'string' && row.name ? row.name : row.handle, bio: '', location: '',
+    avatar_url: typeof row.avatar_url === 'string' && row.avatar_url.startsWith('https://') ? row.avatar_url : null,
+    is_coach: coachIds.has(row.id), created_at: '1970-01-01T00:00:00.000Z',
+    profile: {
+      ...(row.skill_system === 'NTRP' || row.skill_system === 'UTR' || row.skill_system === 'ITF' ? { skillSystem: row.skill_system } : {}),
+      ...(typeof row.rating === 'number' ? { rating: row.rating } : {}),
+    },
+  }, 0, 0);
+}
+const guestPeople = (raw: unknown, coachIds = new Set<string>()): User[] =>
+  (Array.isArray(raw) ? raw : []).flatMap((r) => { const u = guestUser(r as GuestPersonRow, coachIds); return u ? [u] : []; });
+
+const guestPost = (row: GuestPostRow): Post => ({ ...toPost({ ...row, tagged_user_ids: [], post_likes: [], post_saves: [], comments: row.comments ?? [] }), likedBy: guestStandIns(row.like_count) });
+const guestComment = (row: GuestCommentRow): Comment => ({ ...toComment({ ...row, comment_likes: [] }), likedBy: guestStandIns(row.like_count) });
+const guestThread = (row: GuestThreadRow, answers: AnswerRow[]): Question => {
+  const q = toQuestion({ ...row, voted_by: {} }, answers);
+  const counted = Array.isArray(row.answer_ids) ? { ...q, answerIds: row.answer_ids.filter((id) => typeof id === 'string') } : q;
+  return row.poll && Array.isArray(row.poll.options)
+    ? { ...counted, poll: { options: row.poll.options, counts: (row.poll.counts ?? []).slice(0, row.poll.options.length) } }
+    : counted;
+};
+const listOf = <T,>(data: unknown, key: string): T[] => {
+  const v = data && typeof data === 'object' ? (data as Record<string, unknown>)[key] : undefined;
+  return Array.isArray(v) ? (v as T[]) : [];
+};
+
+/** One page of the guest feed, newest first: before `before` when paging on. Null when it could not be asked. */
+export async function guestFeed(before?: string | null, limit = 20): Promise<GuestPage | null> {
+  const { data, error } = await need().rpc('guest_feed', { p_before: before ?? null, p_limit: limit });
+  if (error || !data || typeof data !== 'object') return null;
+  const rows = listOf<GuestPostRow>(data, 'posts');
+  return {
+    users: guestPeople(listOf(data, 'people')), posts: rows.map(guestPost),
+    comments: rows.flatMap((r) => (r.comments ?? []).map(guestComment)),
+    questions: [], answers: [], coaches: [], more: rows.length >= limit,
+  };
+}
+
+/** Discussions threads for a guest, newest first, each with how many replies they may read. */
+export async function guestThreads(topic?: string | null, before?: string | null, limit = 30): Promise<GuestPage | null> {
+  const { data, error } = await need().rpc('guest_threads', { p_topic: topic ?? null, p_before: before ?? null, p_limit: limit });
+  if (error || !data || typeof data !== 'object') return null;
+  return { users: guestPeople(listOf(data, 'people')), posts: [], comments: [], questions: listOf<GuestThreadRow>(data, 'threads').map((r) => guestThread(r, [])), answers: [], coaches: [] };
+}
+
+/** One thread and the replies a guest may read. Null when it is not one they may see (or could not be asked). */
+export async function guestThreadPage(id: string): Promise<GuestPage | null> {
+  if (!UUID_RE.test(id)) return null;
+  const { data, error } = await need().rpc('guest_thread', { p_id: id });
+  if (error || !data || typeof data !== 'object' || !(data as { thread?: unknown }).thread) return null;
+  const answers = listOf<AnswerRow>(data, 'answers');
+  const thread = guestThread((data as { thread: GuestThreadRow }).thread, answers);
+  return { users: guestPeople(listOf(data, 'people')), posts: [], comments: [], questions: [{ ...thread, answerIds: answers.map((a) => a.id) }], answers: answers.map((a) => toAnswer({ ...a, voted_by: {} })), coaches: [] };
+}
+
+/** The coaches listed on the Coaching tab whom a guest may see. */
+export async function guestCoaches(): Promise<GuestPage | null> {
+  const { data, error } = await need().rpc('guest_coaches');
+  if (error || !data || typeof data !== 'object') return null;
+  const rows = listOf<CoachRow & { services?: CoachServiceRow[] }>(data, 'coaches');
+  return { users: guestPeople(listOf(data, 'people'), new Set(rows.map((r) => r.user_id))), posts: [], comments: [], questions: [], answers: [], coaches: rows.map((r) => toCoach(r, r.services ?? [], '')) };
+}

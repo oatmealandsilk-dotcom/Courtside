@@ -13,6 +13,8 @@ import { InboxButton, NotificationButton } from '@/components/InboxButton';
 
 import { LevelPill } from '@/components/LevelPill';
 import { NearbyMap } from '@/components/NearbyMap';
+import { GuestFindPlayers } from '@/features/guest/GuestFindPlayers';
+import { GuestSignIn } from '@/features/guest/GuestSignIn';
 import { UpToday, useUpToday } from '@/components/UpToday';
 import { PostHitField } from '@/components/PostHitField';
 import { useLocationToggle, useOpenToHitToggle } from '@/features/players/useLocationToggle';
@@ -98,7 +100,7 @@ const joinedLabel = (iso: string) => {
 
 function Discuss({ previewSection }: { previewSection?: string } = {}) {
   const styles = useThemedStyles(styleDefinitions);
-  const { questions, users, currentUserId, currentUser, blockedIds, mutedIds, followingIds, saved, actions, detectedCoords, locationEnabled, hitRequests, lastSeen, lastSeenLoaded, onboardingComplete, mapLive, newOnCourtside, mapVisibility, teenMap, seeing, ageSaysAdult } = useApp();
+  const { questions, users, currentUserId, currentUser, blockedIds, mutedIds, followingIds, saved, actions, detectedCoords, locationEnabled, hitRequests, lastSeen, lastSeenLoaded, onboardingComplete, mapLive, newOnCourtside, mapVisibility, teenMap, seeing, ageSaysAdult, isGuest } = useApp();
   // The section lives here, not in the address: listening to the address made
   // this whole tab re-render on every route change anywhere in the app.
   // Other pages ask for a section through requestSection before navigating;
@@ -480,7 +482,8 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   // Where to play: the courts you follow, with what is new at each, then the others in town, each a tap from its page.
   const yourCourts = <YourCourts from={youAt} />;
   const courtsBlock = <CourtsNear center={youAt} />;
-  const content = (section:string) => (section === 'players' ? <View style={{ gap: 16 }}>
+  // A guest (guest mode, Oct 17): open hits and courts near them, never the players map or people.
+  const content = (section:string) => (section === 'players' && isGuest ? <GuestFindPlayers /> : section === 'players' ? <View style={{ gap: 16 }}>
         {/* Cancel beside the box while you search, the way iPhone search boxes do: one tap clears it, puts the keyboard away and brings the map back (Oct 5, owner: "there should be an easier way to exit here"). */}
         <View style={styles.searchRow}>
           <View style={styles.searchWrap}>
@@ -765,7 +768,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   return (
     <Screen memoryKey="discuss" scrollRef={pageRef} offsetY={offsetY} wash onRefresh={previewSection === undefined && !isDesktopBrowser() ? actions.refresh : undefined}
       title="Community"
-      right={
+      right={isGuest ? <GuestSignIn /> :
         // Bell, chats, search: the same order as Profile (bell, chats, then the page's own button), so both pages match.
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 18 }}>
           {/* What's new for you (likes, follows, replies), on the page the app opens on. */}

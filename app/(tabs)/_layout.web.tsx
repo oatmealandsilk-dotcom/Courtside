@@ -77,7 +77,7 @@ export default function TabsLayout() {
     const done = asked.current;
     if (done) setTimeout(() => { if (asked.current === done) asked.current = null; }, 1000);
   };
-  const { ready, currentUserId, remoteLoaded, snapshotShown } = useApp();
+  const { ready, currentUserId, remoteLoaded, snapshotShown, isGuest } = useApp();
   const { isPhone } = useResponsive();
   // The Feed is built out of sight a moment after the app has opened, while
   // you look at the start page, so its first clip has loaded by the time you
@@ -117,7 +117,8 @@ export default function TabsLayout() {
     if (pathname === '/discuss' && TAB_PATHS.includes(lastTab.current) && lastTab.current !== '/discuss') requestScrollToTop('/discuss', true);
     lastTab.current = pathname;
   }, [pathname]);
-  if (ready && !currentUserId) return <Redirect href="/sign-in" />;
+  // A guest reads the tabs (guest mode, Oct 17); only the phone app sends signed-out to sign-in.
+  if (ready && !currentUserId && !isGuest) return <Redirect href="/sign-in" />;
   return (
     <SwipeSurface slideRef={slide} onSwipe={swipe} onCommit={direction => {
       const next = destination(direction);

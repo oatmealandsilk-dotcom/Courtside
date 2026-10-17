@@ -19,6 +19,7 @@ import { LAYOUT, useResponsive } from '@/lib/useResponsive';
 import { Glass } from '@/components/ui/Glass';
 import { TAB_BAR_H } from '@/features/navigation/barInset';
 import { useApp } from '@/store/AppContext';
+import { openJoinSheet } from '@/features/guest/joinAsk';
 import { useWelcomeNote } from '@/features/welcome/welcomeNote';
 import { unreadChatCount } from '@/features/messages/groupRules';
 import { unseenCount } from '@/features/activity/found';
@@ -76,7 +77,7 @@ const ITEMS: NavItem[] = [
 export function NavBar({ state, navigation }: NavBarProps) {
   const styles = useThemedStyles(styleDefinitions);
   const { isPhone, isCompactSidebar } = useResponsive();
-  const { conversations, notifications, detectedActivities, currentUserId, currentUser, blockedIds } = useApp();
+  const { conversations, notifications, detectedActivities, currentUserId, currentUser, blockedIds, isGuest } = useApp();
   // Chats with something new, not messages (Instagram's count); a muted chat never counts.
   const unread = unreadChatCount(conversations, currentUserId, blockedIds);
   // Never anything from someone you blocked (the Notifications page leaves those out too).
@@ -123,6 +124,8 @@ export function NavBar({ state, navigation }: NavBarProps) {
   // The + is a toggle: a second tap closes the Create box with its own
   // animation. Mid-post (the box already gone) a tap there does nothing.
   const openCreate = () => {
+    // A guest (guest mode, Oct 17): posting needs a profile, so the + asks them to join.
+    if (isGuest) { openJoinSheet('post'); return; }
     // Said first, so the bar knows the box is coming and stays (owner, Oct 17, see createMenu).
     if (pathname !== '/compose') { markCreateOpening(); router.push('/compose'); return; }
     closeCreateMenu();

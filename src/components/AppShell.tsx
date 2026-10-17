@@ -22,6 +22,12 @@ import { askForCommunityMap, isStartTab, isTabPage } from '@/features/navigation
 import { launchSettle, useCurtainDown } from '@/features/feed/warmup';
 import { useApp } from '@/store/AppContext';
 import { isPublicPath } from '@/features/share/publicPaths';
+import { guestAskFor } from '@/features/guest/guestPaths';
+import { openJoinSheet } from '@/features/guest/joinAsk';
+import { JoinSheet } from '@/features/guest/JoinSheet';
+import { GetAppBar } from '@/features/guest/GetAppBar';
+import { rememberReferrer } from '@/features/invite/referral';
+import { HOME } from '@/lib/goBack';
 import { useShareLanding } from '@/features/share/useShareLanding';
 import { useWorkoutWatch } from '@/features/activity/useWorkoutWatch';
 import { useRatePrompt } from '@/features/rating/useRatePrompt';
@@ -75,6 +81,18 @@ if (Platform.OS === 'web' && typeof window !== 'undefined') {
     if (message) sessionStorage.setItem('courtside-auth-error', message);
   } catch { /* Nothing to carry forward. */ }
 }
+// The person a link to the app's front door carried (courtsidebase.com/?ref=handle, or a friend's
+// ?r=code, forwarded by public/waitlist.html, Oct 17), read once as the page loads, before the
+// splash's hand-over drops the address: a guest who signs up is still credited to them.
+let landingRef: string | null = null;
+if (Platform.OS === 'web' && typeof window !== 'undefined') {
+  try {
+    const q = new URLSearchParams(window.location.search);
+    const ref = q.get('ref');
+    const code = (q.get('r') ?? '').toLowerCase();
+    landingRef = ref ? ref : /^[0-9a-f]{8}$/.test(code) ? `r=${code}` : null;
+  } catch { /* nothing carried */ }
+}
 export function AppShell({ children }: { children: React.ReactNode }) {
   useTheme();
   const pathname = usePathname();
@@ -117,7 +135,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // The going-home helpers look at which page is on show (see tabsOnShow in goBack).
   const rootNavigation = useNavigationContainerRef();
   useEffect(() => { setRootNavigation(rootNavigation); return () => setRootNavigation(null); }, [rootNavigation]);
-  const { currentUserId, currentUser, ready, authResolved, remoteLoaded, onboardingComplete, termsVersion, healthIsReal, actions, liveSession } = useApp();
+  const { currentUserId, currentUser, ready, authResolved, remoteLoaded, onboardingComplete, termsVersion, healthIsReal, actions, liveSession, isGuest } = useApp();
   // Crash reports say which screen they happened on.
   useEffect(() => { setCrashScreen(pathname); }, [pathname]);
   // Alerts: a tap on one opens what it is about. Once someone is signed in
@@ -295,7 +313,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // editor, the post form, the Session sheet) the bar leaves as before.
   const createMenu = useCreateMenuState();
   const createBoxUp = pathname === '/compose' && createMenu !== 'closed';
-  const barWanted = !!currentUserId && !hideEverywhere && !onSplash;
+  // A guest on the website (guest mode, Oct 17) has the same bar: every tab reads, the + asks to join.
+  // The peek and the join page are their own pages with their own sign-up bar: no tab bar there.
+  const guestOwnPage = isGuest && (pathname === '/peek' || pathname === '/join');
+  const barWanted = (!!currentUserId || isGuest) && !hideEverywhere && !onSplash && !guestOwnPage;
   const showNav = barWanted && (!(isPhone && phoneOnlyHide) || barOnStage || createBoxUp);
   useEffect(() => { if (Platform.OS === 'web' && navLayer.current) navLayer.current.inert = barOnStage || !showNav; }, [barOnStage, showNav]);
   // And when a page does take the phone's bar away, it no longer pops: it
@@ -337,7 +358,30 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // A page opened while signed out goes to sign-in, not to an empty page. A
   // shared link (a post, a profile, an open hit, a thread, a court, an
   // invite) is the exception: it shows its public look (see publicRoute).
-  const mustSignIn = ready && authResolved && !currentUserId && !['/', '/index', '/sign-in', '/onboarding', '/birthday'].includes(pathname) && !isPublicPath(pathname);
+  // On the website a signed-out visitor is a guest instead (guest mode, Oct 17): see below.
+  const mustSignIn = ready && authResolved && !currentUserId && !isGuest && !['/', '/index', '/sign-in', '/onboarding', '/birthday'].includes(pathname) && !isPublicPath(pathname);
+  // Guest mode (Oct 17, owner: "we still want people to be able to read discussions etc, or even
+  // view videos ... it's just when you want to actually do something that requires profile it will
+  // make you sign up"): a guest reads anywhere guestAskFor allows; a page that needs a profile
+  // (a chat, the map, someone's profile, posting) goes back where they were and asks them to join.
+  const landedAt = useRef<string | null>(null);
+  if (landedAt.current === null && ready && authResolved) landedAt.current = pathname;
+  useEffect(() => {
+    if (!isGuest) return;
+    const what = guestAskFor(pathname, pathname === landedAt.current);
+    if (!what) return;
+    const r = router as unknown as { canGoBack?: () => boolean };
+    if (pathname !== landedAt.current && r.canGoBack?.()) router.back();
+    else router.replace(HOME);
+    openJoinSheet(what);
+  }, [isGuest, pathname]);
+  // A link that carried someone's handle or code (courtsidebase.com/?ref=… forwards here, Oct 17)
+  // still credits them when this guest signs up, wherever it landed.
+  useEffect(() => {
+    if (!isGuest || !landingRef) return;
+    void rememberReferrer(landingRef);
+    landingRef = null;
+  }, [isGuest]);
   // The gates — sign in, birthday, terms — are reached by one replace each,
   // with the app left mounted underneath. Swapping the whole app for a
   // redirect unmounted the navigator; when it came back on the page it had
@@ -398,7 +442,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return <View style={{ flex: 1, minHeight: 0, backgroundColor: colors.bg, flexDirection: isPhone ? 'column' : 'row' }}>
     {showNav && !isPhone && nav}
     {/* While the tour is up, TalkBack reads only the tour, not the page under the dim. */}
-    <Reanimated.View importantForAccessibility={tourOpen ? 'no-hide-descendants' : 'auto'} style={[{ flex: 1, minWidth: 0, minHeight: 0 }, settle]}><RouteTransition>{children}</RouteTransition>{liveBarOn && !isPhone ? <LiveBar phone={false} /> : null}<ToastLayer /><UploadLayer /></Reanimated.View>
+    <Reanimated.View importantForAccessibility={tourOpen ? 'no-hide-descendants' : 'auto'} style={[{ flex: 1, minWidth: 0, minHeight: 0 }, settle]}>{isGuest && Platform.OS === 'web' && !hideEverywhere && !onSplash && !guestOwnPage ? <GetAppBar /> : null}<RouteTransition>{children}</RouteTransition>{liveBarOn && !isPhone ? <LiveBar phone={false} /> : null}<ToastLayer /><UploadLayer /></Reanimated.View>
     {(showNav || (barKept && barWanted)) && isPhone ? (
       <Reanimated.View pointerEvents={showNav ? 'box-none' : 'none'} style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }, barSlide]}>
       <Reanimated.View ref={((node: unknown) => { navLayer.current = node as HTMLElement | null; navFade.ref?.(node); }) as never} pointerEvents={barOnStage || !showNav ? 'none' : 'box-none'} style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }, barOnStage && { overflow: 'hidden' }, navFade.style]}>
@@ -419,5 +463,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     {currentUserId ? <TourOverlay eligible={showNav && !detour && !onSplash} /> : null}
     {/* On its way to a gate (sign-in, birthday, terms): the page underneath is covered for the moment it takes. */}
     {detour ? <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: colors.bg }} /> : null}
+    {/* Guest mode's one "Join CourtSide to …" ask, over everything, the bar too. */}
+    {isGuest ? <JoinSheet /> : null}
   </View>;
 }

@@ -4,6 +4,9 @@ import { PlayerName } from '@/components/PlayerName';
 import React, { useRef } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { router } from 'expo-router';
+import { openJoinSheet } from '@/features/guest/joinAsk';
+import { GuestJoinCard } from '@/features/guest/GuestFindPlayers';
+import { GuestSignIn } from '@/features/guest/GuestSignIn';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { Avatar, Button, Screen } from '@/components/ui';
@@ -24,7 +27,7 @@ import { useShownAt } from '@/features/navigation/shownAt';
 
 function Coaching() {
   const styles = useThemedStyles(styleDefinitions);
-  const { coaches, users, coachingRequests, coachQuestions, currentUserId, currentUser, actions } = useApp();
+  const { coaches, users, coachingRequests, coachQuestions, currentUserId, currentUser, actions, isGuest } = useApp();
   const aiCoachOn = useAiCoachOn();
   const paidBooking = usePaidBooking();
   // Where the box sits on screen, so the question page can grow out of it.
@@ -36,6 +39,8 @@ function Coaching() {
   const tourOpen = useTourOpen();
   const askTipEligible = !tourOpen && forNewPlayer(currentUser?.joinedAt);
   const openAsk = () => {
+    // A guest (guest mode, Oct 17): asking needs a profile.
+    if (isGuest) { openJoinSheet('ask a coach'); return; }
     learned('ask-coach');
     const pill = askPill.current;
     if (!pill) { router.push('/ask-coach'); return; }
@@ -57,7 +62,7 @@ function Coaching() {
   const shown = coaches.filter((c) => c.listed !== false);
 
   return (
-    <Screen memoryKey="coaches" title="Coaching" wash onRefresh={isDesktopBrowser() ? undefined : actions.refresh} right={
+    <Screen memoryKey="coaches" title="Coaching" wash onRefresh={isDesktopBrowser() ? undefined : actions.refresh} right={isGuest ? <GuestSignIn /> :
         // Bell, chats, search: the same three, sizes and spacing as Community's header, so the chats
         // button sits in exactly the same spot on every tab (Oct 5, owner). Search opens on people (coaches).
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 18 }}>
@@ -117,6 +122,8 @@ function Coaching() {
           This is the one place the tab says asking is public (and, once coaches are on, that
           they are verified), so the header and the Coaches section don't repeat it. */}
       <Text style={styles.askNote}>{shown.length ? 'Public. A verified coach answers, usually within a day.' : 'Public. Your question stays up until a coach answers.'}</Text>
+      {/* A guest with no coach to show yet (only public adults' listings show signed out): the way in, in the page. */}
+      {isGuest && !shown.length ? <GuestJoinCard title="Ask real coaches" body="Make a free account to ask a coach about your game and see coaches near you." /> : null}
       {/* The AI coach shows up here once it is switched on (its key added on the server). */}
       {aiCoachOn ? (
         <Pressable accessibilityRole="link" accessibilityLabel="AI coach" onPress={() => router.push('/ai-coach')} style={({ pressed }) => [styles.ai, pressed && styles.pressed]}>

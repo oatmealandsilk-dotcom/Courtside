@@ -1,6 +1,7 @@
 import { fetchDemotedPosts, fetchFeedScores } from '@/data/api';
 import type { FeedScore, ID } from '@/data/types';
 import { clearDemoted, demotedAsked, takeDemoted } from '@/features/feed/demoted';
+import { isSupabaseConfigured } from '@/lib/supabase';
 
 /**
  * How each post has done in feeds (migration 143), and whether and when you
@@ -35,6 +36,9 @@ export function loadFeedScores({ force = false, userId }: { force?: boolean; use
     loading = null;
     clearDemoted();
   }
+  // Signed out (guest mode on the website, Oct 17): both answers are for an account, and the
+  // guest feed never holds a pushed-down post anyway (guest_feed, migration 164).
+  if (owner === null && isSupabaseConfigured) return Promise.resolve();
   if (loading) return loading;
   if (!force && Date.now() - loadedAt < 60_000) return Promise.resolve();
   const asker = owner;

@@ -13,7 +13,7 @@ export const questions: Question[] = [
     tags: ['strings', 'poly', 'arm-health'],
     votes: 34,
     votedBy: { 'u-dev': 1, 'u-june': 1 },
-    answerIds: ['a1', 'a2', 'a3'],
+    answerIds: ['a1', 'a2', 'a3', 'a-marcus'],
     acceptedAnswerId: 'a1',
   },
   {
@@ -109,6 +109,18 @@ export const answers: Answer[] = [
     votes: 15,
     votedBy: {},
     fromCoach: true,
+  },
+  // A reply by a public adult (Marcus), so guest mode's demo (Oct 17) has a
+  // reply to show on this thread: guests see only public adults' replies.
+  {
+    id: 'a-marcus',
+    questionId: 'q1',
+    authorId: 'u-marcus',
+    body: 'I made the switch at 4.0 and went back within a month. A soft co-poly cross at 50 lbs kept most of the spin and none of the elbow. Try that before going full poly.',
+    createdAt: isoDaysAgo(0, 12),
+    votes: 9,
+    votedBy: {},
+    fromCoach: false,
   },
   {
     id: 'a4',

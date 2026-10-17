@@ -1,6 +1,6 @@
 /* The terms, privacy and support pages: the same face, palettes and edges as
-   the home page (waitlist.html), so they read as one site. The palettes are
-   CourtSide's own (src/theme/ThemeProvider.tsx) and match waitlist.html's;
+   the home page (welcome.html), so they read as one site. The palettes are
+   CourtSide's own (src/theme/ThemeProvider.tsx) and match welcome.html's;
    keep the three in step. Nothing chosen is CourtSide's cream; a court picked
    on the home page carries over here. */
 @font-face {
