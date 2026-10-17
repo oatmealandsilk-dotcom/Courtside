@@ -6,6 +6,7 @@ import Svg, { Line } from 'react-native-svg';
 
 import { BrandMark } from '@/components/BrandMark';
 import { ShadedMark } from '@/components/share/ShadedMark';
+import { useShareDensity } from '@/components/share/density';
 import { Avatar, BrandWash, ShirtWash } from '@/components/ui';
 import type { ID, SessionDetail } from '@/data/types';
 import { onCourtWord, resultWord, scoreLine, sessionEyebrow, sourceLabel, spokenDuration } from '@/features/activity/format';
@@ -182,6 +183,13 @@ export function clearLook(): CardLook {
  */
 export const CLEAR_SHADE: TextStyle = { textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 8 };
 
+/**
+ * CLEAR_SHADE for a picture drawn `d` times finer (share/density.ts): its
+ * shadow is in fixed points, so it grows with the picture (Oct 16, owner:
+ * "make it super high quality") and the sharper copy looks the same.
+ */
+export const clearShade = (d: number): TextStyle => (d === 1 ? CLEAR_SHADE : { ...CLEAR_SHADE, textShadowOffset: { width: 0, height: d }, textShadowRadius: 8 * d });
+
 /** The shadow under Clear's wordmark, as the Overlay's (SessionStoryArt's wordHalo, dark); `u` a unit of a 360-wide story. */
 export const clearWordShade = (u: number): TextStyle => ({ textShadowColor: 'rgba(0,0,0,0.55)', textShadowOffset: { width: 0, height: 0.8 * u }, textShadowRadius: 7 * u });
 
@@ -256,7 +264,8 @@ export function SessionCard({ session, width, height, play = false, people, hidd
   const { theme } = useTheme();
   const look = clear ? clearLook() : cardLook(theme);
   // Clear's soft shadow under every word and number; nothing on a filled card.
-  const shade: TextStyle | undefined = clear ? CLEAR_SHADE : undefined;
+  const density = useShareDensity();
+  const shade: TextStyle | undefined = clear ? clearShade(density) : undefined;
   const k = (width / 358) * scale;
   const pad = Math.round(22 * k);
   const round = radius ?? Math.round(20 * k);

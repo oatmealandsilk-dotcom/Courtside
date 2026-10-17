@@ -7,6 +7,7 @@ import Svg, { Defs, Pattern, Rect } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CourtSpinner } from '@/components/CourtSpinner';
+import { ShareDensity } from '@/components/share/density';
 import { SessionStoryArt, seeThrough, storyDesigns, themed, type StoryDesign } from '@/components/share/SessionStoryArt';
 import { ShareActions } from '@/components/share/ShareActions';
 import { EmptyState, Screen } from '@/components/ui';
@@ -15,7 +16,7 @@ import { useTennisFlags } from '@/features/activity/useTennisFlags';
 import { storyFromLog, storyFromPost, type SessionStory } from '@/features/share/sessionStory';
 import { canScore } from '@/features/activity/score';
 import { AddScore } from '@/components/session/ScoreField';
-import { INSTAGRAM_NOTE, exportStory, stageSize, storyNoteOk, warmStory, type StoryAction, type StoryLook } from '@/features/share/storyImage';
+import { INSTAGRAM_NOTE, STICKER_COPY, exportStory, stageSize, stickerDensity, storyNoteOk, warmStory, type StoryAction, type StoryLook, type StorySticker } from '@/features/share/storyImage';
 import { closedWithoutSharing, sharedFromScreen } from '@/features/share/afterPost';
 import { mixHex } from '@/features/activity/zones';
 import { HOME, goBack } from '@/lib/goBack';
@@ -245,6 +246,30 @@ export default function ShareSession() {
   waitFor.current = photoState;
   useEffect(() => { warmStory(); }, []);
 
+  // A see-through design's sticker, sharper (Oct 16, owner: "the courtside overlays are kinda blurry, pixelated,
+  // make it super high quality"; storyImage.ts). It is still the whole story, framed exactly as today's, so
+  // Instagram drops it in at today's size and spot (Oct 17); only it has `density` times the pixels, so it stays
+  // sharp when pinched bigger. On a phone the story is drawn once more, out of sight and `density` times bigger,
+  // only while it is photographed, then let go, so an older iPhone never keeps a big picture about; a browser
+  // draws the hidden copy above at a finer scale.
+  const bigStage = useRef<View>(null);
+  const density = stickerDensity(design === 'card');
+  const big = { width: size.width * density, height: size.height * density };
+  const [bigCopy, setBigCopy] = useState(false);
+  const bigLaidOut = useRef<(() => void) | null>(null);
+  const drawBigCopy = async (): Promise<View | null> => {
+    if (!STICKER_COPY) return stage.current;
+    await new Promise<void>((resolve) => {
+      const timer = setTimeout(resolve, 2000);
+      bigLaidOut.current = () => { clearTimeout(timer); resolve(); };
+      setBigCopy(true);
+    });
+    bigLaidOut.current = null;
+    // Laid out, then drawn: two frames.
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    return bigStage.current;
+  };
+
   // Straight after posting, the post's upload is said in the line under the title, not on the strip across
   // the top, which would sit over the title and Done (a failure still shows there). Back on it once closed.
   useEffect(() => {
@@ -280,8 +305,11 @@ export default function ShareSession() {
       if (design === 'photo') {
         for (let t = 0; t < 50 && waitFor.current === 'loading'; t += 1) await new Promise((r) => setTimeout(r, 100));
       }
+      // A see-through design goes into a story as a sticker: the whole story, sharper (Oct 16, see drawBigCopy).
+      const look = storyLook(design, paint, theme);
+      const sticker: StorySticker | undefined = look.sticker && (action === 'copy' || action === 'instagram') ? { view: await drawBigCopy(), density } : undefined;
       // Your invite link goes along as words (Copy, More), never on the picture: Strava's way (Oct 5).
-      const said = await exportStory(stage.current, action, 'My session on CourtSide', storyLook(design, paint, theme), story?.invite);
+      const said = await exportStory(stage.current, action, 'My session on CourtSide', look, story?.invite, sticker);
       if (!said) haptics.commit();
       else if (said === INSTAGRAM_NOTE) { haptics.commit(); setSteps(said); }
       else if (storyNoteOk(said)) { haptics.commit(); showToast({ title: said, icon: 'checkmark-circle-outline', long: said.length > 40 }); }
@@ -289,6 +317,7 @@ export default function ShareSession() {
     } catch (error) {
       showToast({ title: 'That didn’t work', body: error instanceof Error && error.message ? error.message : 'The picture could not be made. Try again.', icon: 'alert-circle-outline', long: true });
     } finally {
+      setBigCopy(false);
       setBusy(null);
     }
   };
@@ -339,6 +368,18 @@ export default function ShareSession() {
           </ThemeScope>
         </View>
       </View>
+      {/* A phone's sticker: the same story, `density` times bigger, drawn only while it is photographed (drawBigCopy). */}
+      {bigCopy ? (
+        <View pointerEvents="none" aria-hidden accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={[styles.stage, big]} onLayout={() => bigLaidOut.current?.()}>
+          <View ref={bigStage} collapsable={false} style={big}>
+            <ShareDensity.Provider value={density}>
+              <ThemeScope theme={courtOf(design)}>
+                <SessionStoryArt design={design} story={story} width={big.width} hidden={blockedIds} clear={clearOf(design)} />
+              </ThemeScope>
+            </ShareDensity.Provider>
+          </View>
+        </View>
+      ) : null}
       <View style={styles.page}>
         <Screen {...header} subtitle={postedLine} compactTitle bar={false} padded={false} scroll={false}>
           <View style={styles.body}>

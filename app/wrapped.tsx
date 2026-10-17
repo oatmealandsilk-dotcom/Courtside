@@ -9,6 +9,7 @@ import Animated, { Easing, FadeInDown, cancelAnimation, useAnimatedStyle, useSha
 import { Avatar } from '@/components/ui';
 import { WrappedCard } from '@/components/WrappedCard';
 import { shareCard, warmShareCard } from '@/features/share/shareCard';
+import { stageSize } from '@/features/share/storyImage';
 import { wrappedYear, yearInTennis } from '@/features/wrapped/yearInTennis';
 import { compactNumber } from '@/lib/format';
 import { goBack } from '@/lib/goBack';
@@ -137,8 +138,19 @@ export default function Wrapped() {
   if (!data || !slide) return <View style={[styles.root, { backgroundColor: brand.brand }]} />;
   const cardW = Math.floor(Math.min(320, width - 64, ((height - insets.top - insets.bottom - 200) * 9) / 16));
 
+  // The card photographed for Share: drawn once more out of sight at exactly 1080 × 1920 pixels, with the
+  // corners rounded as on screen, so it is drawn at the story's size rather than the small card stretched
+  // (Oct 16, owner: "make it super high quality"; shareCard.ts).
+  const stage = stageSize();
   return (
     <View style={styles.root}>
+      {last ? (
+        <View pointerEvents="none" aria-hidden accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={[styles.stage, stage]}>
+          <View ref={card} collapsable={false} style={[stage, { borderRadius: (18 * stage.width) / cardW, overflow: 'hidden' }]}>
+            <WrappedCard year={data} me={currentUser ?? undefined} width={stage.width} />
+          </View>
+        </View>
+      ) : null}
       <LinearGradient colors={[slide.tint, '#0B120E']} start={{ x: 0.1, y: 0 }} end={{ x: 0.6, y: 1 }} style={StyleSheet.absoluteFill} />
       {last ? null : <CourtLines index={index} width={width} height={height} />}
       {last ? null : (
@@ -163,7 +175,7 @@ export default function Wrapped() {
 
       {last ? (
         <View style={[styles.finale, { paddingBottom: insets.bottom + 24 }]}>
-          <View ref={card} collapsable={false} style={styles.cardFrame}>
+          <View style={styles.cardFrame}>
             <WrappedCard year={data} me={currentUser ?? undefined} width={cardW} />
           </View>
           <Pressable accessibilityRole="button" accessibilityLabel="Share your year" disabled={sharing} onPress={() => { void share(); }} style={({ pressed }) => [styles.shareButton, (pressed || sharing) && { opacity: 0.8 }]}>
@@ -194,6 +206,8 @@ export default function Wrapped() {
 const styles = StyleSheet.create({
   // Clipped: the court behind the slides is bigger than the screen on purpose, and must not widen the page.
   root: { flex: 1, backgroundColor: '#0B120E', overflow: 'hidden' },
+  // The copy that is photographed, under everything (the court's colours are drawn over it).
+  stage: { position: 'absolute', left: 0, top: 0 },
   top: { position: 'absolute', left: 0, right: 0, top: 0, paddingHorizontal: 14, gap: 12 },
   bars: { flexDirection: 'row', gap: 4 },
   bar: { flex: 1, height: 3, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.3)', overflow: 'hidden' },

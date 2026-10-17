@@ -6,6 +6,7 @@ import { SessionCard } from '@/components/session/SessionCard';
 import { SessionStamp } from '@/components/share/SessionStamp';
 import { HeartRateOverlay, heartRateOf } from '@/components/share/HeartRateOverlay';
 import { ShadedMark, type Halo } from '@/components/share/ShadedMark';
+import { useShareDensity } from '@/components/share/density';
 import { duration } from '@/lib/format';
 import { scoreLine } from '@/features/activity/format';
 import { scoreScale } from '@/features/activity/score';
@@ -87,6 +88,8 @@ export function SessionStoryArt({ design, story, width, photo, hidden = [], onPh
   clear?: boolean;
 }) {
   useTheme();
+  // Fixed-point shadows grow with a sharper copy (density.ts), so it looks the same.
+  const d = useShareDensity();
   // One source object per photo: a new one each draw makes a browser load it again.
   const source = useMemo(() => (photo ? { uri: photo } : undefined), [photo]);
   const height = Math.round((width * 16) / 9);
@@ -135,8 +138,8 @@ export function SessionStoryArt({ design, story, width, photo, hidden = [], onPh
           const k = st.label === 'Score' ? scoreScale(st.value, 15) : 1;
           return (
             <View key={st.label} style={styles.centre}>
-              <Text style={[styles.overLabel, { fontSize: 15 * u, lineHeight: 20 * u }]}>{st.label}</Text>
-              <Text style={[styles.overValue, { fontSize: 36 * u * k, lineHeight: 42 * u * k, maxWidth: 320 * u, textAlign: 'center' }]}>{st.value}</Text>
+              <Text style={[styles.overLabel, { fontSize: 15 * u, lineHeight: 20 * u, textShadowRadius: 6 * d }]}>{st.label}</Text>
+              <Text style={[styles.overValue, { textShadowRadius: 8 * d, fontSize: 36 * u * k, lineHeight: 42 * u * k, maxWidth: 320 * u, textAlign: 'center' }]}>{st.value}</Text>
             </View>
           );
         })}
@@ -169,7 +172,7 @@ export function SessionStoryArt({ design, story, width, photo, hidden = [], onPh
     const cardW = Math.round(width * 0.62);
     return (
       <View collapsable={false} style={[styles.centre, { width, height }]}>
-        <View style={[styles.sticker, { borderRadius: Math.round(20 * (cardW / 300)) }]}>
+        <View style={[styles.sticker, { borderRadius: Math.round(20 * (cardW / 300)) }, d !== 1 && dropShadow(d)]}>
           <SessionStamp session={story.session} eyebrow={story.eyebrow} place={story.place} hidden={hidden} width={cardW} />
         </View>
       </View>
@@ -200,6 +203,9 @@ export function SessionStoryArt({ design, story, width, photo, hidden = [], onPh
     </View>
   );
 }
+
+/** The stamp's drop shadow (styles.sticker) for a copy drawn `d` times finer: its points grow with it. */
+const dropShadow = (d: number) => ({ boxShadow: `0px ${6 * d}px ${22 * d}px rgba(0, 0, 0, 0.32)` });
 
 /** The wordmark's halo, matching the mark's (ShadedMark): a glow all round, or a shadow a touch below. */
 function wordHalo(halo: Halo, u: number): TextStyle {
