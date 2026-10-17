@@ -5,7 +5,7 @@ import { colors } from '@/theme';
 import { Wash } from '@/components/Wash';
 import { isDesktopBrowser } from '@/lib/browserDevice';
 import { setSidePanel } from '@/features/feed/sidePanel';
-import { HAND_IN_MS, HAND_OUT_MS, arrivingHeight, handOverSheet, takeHandOver } from '@/components/sheetHandOver';
+import { HAND_IN_FROM, HAND_IN_MS, HAND_LEAVE_MS, HAND_OUT_MS, arrivingHeight, handOverSheet, takeHandOver } from '@/components/sheetHandOver';
 import { CLOSE_MS, OPEN_MS_WEB, SIDE_MIN_WINDOW, SNAP_MS_WEB, currentY, getStage, glideSamples, onFrame, place as stagePlace, setFull, subscribe as onStageChange, type StageGeo } from '@/features/feed/commentStage';
 
 const EASE = 'cubic-bezier(.22,.61,.36,1)';
@@ -211,7 +211,7 @@ function DialogBox({ header, children, onDismissed, closeSignal, fitContent, onS
   useLayoutEffect(() => {
     takeHandOver();
     if (arriving.current) {
-      box.current?.animate([{ opacity: 0 }, { opacity: 1 }], { duration: HAND_IN_MS, easing: EASE });
+      box.current?.animate([{ opacity: HAND_IN_FROM }, { opacity: 1 }], { duration: HAND_IN_MS, easing: EASE });
     } else {
       backdrop.current?.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 180, easing: 'ease-out' });
       box.current?.animate([{ opacity: 0, transform: 'translate(-50%, calc(-50% + 10px)) scale(0.97)' }, { opacity: 1, transform: 'translate(-50%, -50%)' }], { duration: 240, easing: EASE });
@@ -229,8 +229,9 @@ function DialogBox({ header, children, onDismissed, closeSignal, fitContent, onS
     done.current = true;
     const height = box.current?.offsetHeight ?? 1;
     const leave = () => { handOverSheet(height); onDismissed(); };
-    const out = box.current?.animate([{ opacity: 1 }, { opacity: 0 }], { duration: HAND_OUT_MS, easing: 'ease-in', fill: 'forwards' });
-    if (out) out.onfinish = leave; else leave();
+    box.current?.animate([{ opacity: 1 }, { opacity: 0 }], { duration: HAND_OUT_MS, easing: 'ease-in', fill: 'forwards' });
+    // Part way through the fade, so the next page is there before this box shows empty (HAND_LEAVE_MS).
+    window.setTimeout(leave, HAND_LEAVE_MS);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [handOverSignal]);
   useEscape(() => { if (mayClose()) close(); }, { enabled: active });
@@ -365,7 +366,7 @@ function Sheet({
     if (from) {
       // The browser settles that height (and the dim) now, so the glide below starts from it rather than from nothing.
       void sheet.current?.getBoundingClientRect();
-      for (const el of [headWords.current, body.current]) el?.animate([{ opacity: 0 }, { opacity: 1 }], { duration: HAND_IN_MS, easing: EASE, fill: 'backwards' });
+      for (const el of [headWords.current, body.current]) el?.animate([{ opacity: HAND_IN_FROM }, { opacity: 1 }], { duration: HAND_IN_MS, easing: EASE, fill: 'backwards' });
     }
     // One frame so the opening slide is seen rather than starting already open.
     // Handed over, it waits for its contents' height instead (the effect below), so it settles once, never up and back down.
@@ -424,7 +425,7 @@ function Sheet({
     drag.current = null;
     const height = geometry.current.fullHeight - current.current;
     for (const el of [headWords.current, body.current]) el?.animate([{ opacity: 1 }, { opacity: 0 }], { duration: HAND_OUT_MS, easing: EASE, fill: 'forwards' });
-    window.setTimeout(() => { if (dismissed.current) return; handOverSheet(height); finish(); }, HAND_OUT_MS);
+    window.setTimeout(() => { if (dismissed.current) return; handOverSheet(height); finish(); }, HAND_LEAVE_MS);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [handOverSignal]);
 

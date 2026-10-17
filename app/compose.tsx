@@ -1,5 +1,5 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Image, Keyboard, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -18,7 +18,7 @@ import { MediaEditor, type EditedMedia } from '@/components/MediaEditor';
 import { takePendingShot } from '@/features/compose/pendingShot';
 import { registerCreateClose } from '@/features/compose/createMenu';
 import { SheetBackdrop } from '@/components/SheetBackdrop';
-import { arrivingHeight, takeHandOver } from '@/components/sheetHandOver';
+import { HAND_IN_FROM, arrivingHeight, takeHandOver } from '@/components/sheetHandOver';
 import { useReducedMotion } from '@/lib/useReducedMotion';
 import { Button, Chip, Field, Screen, Toggle } from '@/components/ui';
 import { alsoShowsIn } from '@/features/groups/groupFeed';
@@ -494,14 +494,17 @@ function Compose() {
   const calm = useReducedMotion();
   const riseY = useSharedValue(calm ? 0 : handed ? Math.max(0, windowH - handed) : windowH);
   const sheetIn = useSharedValue(calm ? 0 : 1);
-  const contentIn = useSharedValue(handed && !calm ? 0 : 1);
+  // Its contents start half there, never an empty card (review, Oct 16: the
+  // arriving surface showed blank for a moment), and finish fading in the
+  // same frame it first draws (useLayoutEffect, before the screen paints).
+  const contentIn = useSharedValue(handed && !calm ? HAND_IN_FROM : 1);
   const risen = useRef(false);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!logMode || risen.current) return;
     risen.current = true;
     if (calm) { sheetIn.value = withTiming(1, { duration: 200, easing: Easing.out(Easing.cubic) }); return; }
     riseY.value = withSpring(0, RISE_SPRING);
-    if (handed) contentIn.value = withTiming(1, { duration: 180, easing: Easing.out(Easing.cubic) });
+    if (handed) contentIn.value = withTiming(1, { duration: 160, easing: Easing.out(Easing.cubic) });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [logMode]);
   // It leaves the way the Create box does once saved (Save privately): fading, sinking a little, a touch smaller.

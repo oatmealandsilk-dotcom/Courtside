@@ -10,7 +10,7 @@ import { colors, radius } from '@/theme';
 import { Wash } from '@/components/Wash';
 import { CLOSE_MS, OPEN_SPRING, STAGE_EASING, getStage, setFull, stageDip, stageTop, subscribe as onStageChange, type StageGeo } from '@/features/feed/commentStage';
 import { useAndroidBack } from '@/lib/androidBack';
-import { HAND_IN_MS, HAND_OUT_MS, arrivingHeight, handOverSheet, takeHandOver } from '@/components/sheetHandOver';
+import { HAND_IN_FROM, HAND_IN_MS, HAND_LEAVE_MS, HAND_OUT_MS, arrivingHeight, handOverSheet, takeHandOver } from '@/components/sheetHandOver';
 
 const EASE = Easing.bezier(0.22, 0.61, 0.36, 1);
 /** Out of the way fast: a quick ease-in, the way a card is tossed down. */
@@ -147,7 +147,7 @@ function PlainSheet({
   const [arriving] = useState(arrivingHeight);
   const translateY = useSharedValue(arriving ? Math.max(0, fullHeight - arriving) : fullHeight);
   const backdropOpacity = useSharedValue(arriving ? 1 : 0);
-  const contentOpacity = useSharedValue(arriving ? 0 : 1);
+  const contentOpacity = useSharedValue(arriving ? HAND_IN_FROM : 1);
   const dismissedRef = useRef(false);
   // On its way out (×, a tap outside, a drag down, Back): from then on nothing
   // may move it back up. A fitted sheet re-measures its contents as it slides
@@ -280,10 +280,9 @@ function PlainSheet({
       handOverSheet(fullHeight - translateY.value);
       finish();
     };
-    fallback.current = setTimeout(leave, HAND_OUT_MS + 200);
-    contentOpacity.value = withTiming(0, { duration: HAND_OUT_MS, easing: EASE }, (done) => {
-      if (done) runOnJS(leave)();
-    });
+    // The next page is asked for part way through the fade (HAND_LEAVE_MS), so it is ready before this sheet shows empty.
+    fallback.current = setTimeout(leave, HAND_LEAVE_MS);
+    contentOpacity.value = withTiming(0, { duration: HAND_OUT_MS, easing: EASE });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [handOverSignal]);
 

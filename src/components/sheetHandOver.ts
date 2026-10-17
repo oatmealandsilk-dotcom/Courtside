@@ -31,3 +31,11 @@ export function takeHandOver() {
 /** How long the leaving sheet's contents take to fade, and the arriving one's to come in. */
 export const HAND_OUT_MS = 140;
 export const HAND_IN_MS = 220;
+/**
+ * The next page is asked for this far into the fade, not at its end, and the
+ * arriving contents start this much there: so the sheet is never seen empty
+ * while the next page loads (review, Oct 16: an empty card for a moment was
+ * the new "flash" the owner asked to be rid of).
+ */
+export const HAND_LEAVE_MS = 80;
+export const HAND_IN_FROM = 0.4;
