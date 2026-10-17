@@ -557,6 +557,8 @@ export default function SignIn() {
                   <Text style={styles.birthNote}>Keeps younger players safe. Private, never on your profile.</Text>
                   {/* Honest before they sign up (Oct 17): without one, the hit they tapped can't be joined yet. */}
                   {joining && birthBlank ? <Text style={styles.birthNote}>To join the hit you picked, add your birthday: hits with players you don’t follow yet are for players 18 and over.</Text> : null}
+                  {/* Under 18 on the birthday they typed (review, Oct 17): said plainly before sign-up, never "ask them to follow you back". */}
+                  {joining && birthDate && yearsOld(birthDate) >= 13 && yearsOld(birthDate) < 18 ? <Text style={styles.birthNote}>The hit you picked is with a player you don’t know yet, so it’s for players 18 and over. Once you’re in, you can join hits with friends who follow you back.</Text> : null}
                   {birthBlank ? <OldEnoughCheck checked={over13} onChange={setOver13} /> : null}
                   {ageBlocked ? <Text style={styles.ageNote}>Sorry, you can't create a CourtSide account.</Text> : null}
                 </>

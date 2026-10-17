@@ -157,6 +157,18 @@ export async function rememberShareTarget(href: string, joinHit?: string, words?
   await put(TARGET_KEY, JSON.stringify(target));
 }
 
+/**
+ * Drops the waiting shared thing, unused. The peek calls it when the visitor
+ * says "Not now" to joining a hit, or signs up some other way (the sticky bar,
+ * "Sign in", "Post the first hit"): only an "I'm in" that leads straight to
+ * sign-up carries a join, so a hit they called off is never joined for them
+ * later (review, Oct 17).
+ */
+export async function forgetShareTarget(): Promise<void> {
+  pendingTarget = null;
+  await take(TARGET_KEY);
+}
+
 /** Whether a shared thing is waiting, without using it up. */
 export function peekShareTarget(): ShareTarget | null {
   if (pendingTarget === undefined && Platform.OS === 'web') {

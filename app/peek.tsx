@@ -13,7 +13,7 @@ import { Button } from '@/components/ui';
 import { fetchPeekHits } from '@/data/api';
 import type { PeekHit } from '@/data/types';
 import { FORMAT_LABEL, hitShort, levelText } from '@/features/hits/format';
-import { rememberReferrer, rememberShareTarget } from '@/features/invite/referral';
+import { forgetShareTarget, rememberReferrer, rememberShareTarget } from '@/features/invite/referral';
 import { formatSpotMiles } from '@/features/players/geo';
 import { getPosition } from '@/lib/geo';
 import { useGateSpace } from '@/lib/useGateSpace';
@@ -102,6 +102,10 @@ export default function Peek() {
         label: `Make a free account to join ${hit.hostFirst}’s hit ${whenInWords(hit.startsAt)}`,
         host: hit.hostFirst,
       });
+    } else {
+      // Signing up without "I'm in" joins nothing: an earlier "I'm in" they
+      // walked away from is dropped here (review, Oct 17).
+      await forgetShareTarget();
     }
     router.push({ pathname: '/sign-in', params: { mode: create ? 'create' : 'sign-in' } });
   };
@@ -204,7 +208,7 @@ export default function Peek() {
         </View>
       </View>
 
-      {asking ? <JoinPrompt hit={asking} onClose={() => setAsking(null)} onGo={(create) => { void signUp(asking, create); }} /> : null}
+      {asking ? <JoinPrompt hit={asking} onClose={() => { setAsking(null); void forgetShareTarget(); }} onGo={(create) => { void signUp(asking, create); }} /> : null}
     </View>
   );
 }

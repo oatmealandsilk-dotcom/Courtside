@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { router } from 'expo-router';
 
-import { isStartTab } from '@/features/navigation/startTab';
+import { goToStart, isStartTab } from '@/features/navigation/startTab';
 import { peekShareTarget, takeShareTarget } from '@/features/invite/referral';
 import { ageUnknown } from '@/features/players/age';
 import { isSupabaseConfigured } from '@/lib/supabase';
@@ -21,7 +21,9 @@ import { useApp } from '@/store/AppContext';
  * see it and what they can do. A new account with no birthday has the
  * under-18 protections, which only play with people who follow each other
  * (join_hit, migration 124), so it is not asked for and fails: the words say
- * that adding a birthday opens it up, with a button straight to it.
+ * that adding a birthday opens it up, with a button straight to it. A
+ * known teen is told plainly that hits with players they don't know are for
+ * 18 and over, and pointed at hits with friends, never at asking the host.
  */
 export function useShareLanding({ pathname, held }: { pathname: string; held: boolean }) {
   const { currentUserId, currentUser, onboardingComplete, remoteLoaded, actions } = useApp();
@@ -49,7 +51,15 @@ export function useShareLanding({ pathname, held }: { pathname: string; held: bo
         if (!result.error) { showToast({ title: "You're in", body: 'Say hi in the hit’s chat.', icon: 'hit' }); return; }
         if (result.reason === 'age') {
           if (ageUnknown(currentUser)) needBirthday();
-          else showToast({ title: 'This hit is for players who follow each other', body: `Follow ${host} and ask them to follow you back, or find another hit nearby.`, icon: 'alert-circle-outline' });
+          // A known teen (review, Oct 17): never told to get a stranger to
+          // follow them back, the one step the under-18 protection rests on.
+          // Friends who already follow each other is the honest way in.
+          else showToast({
+            title: 'This hit is for players 18 and over',
+            body: 'Hits with players you don’t know yet are for players 18 and over. You can join hits with friends who follow you back.',
+            icon: 'alert-circle-outline',
+            action: { label: 'Find hits', onPress: goToStart },
+          });
           return;
         }
         showToast({ title: "Couldn't join the hit", body: `${result.error} Find another one nearby.`, icon: 'alert-circle-outline' });
