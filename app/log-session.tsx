@@ -159,6 +159,9 @@ function LogSession() {
   });
   const [closeSignal, setCloseSignal] = useState(0);
   const close = () => setCloseSignal((n) => n + 1);
+  // On to a session's "Log it" page: this sheet hands over and grows into it, never sliding away first (Oct 16, sheetHandOver).
+  const [handOver, setHandOver] = useState(0);
+  const toPost = (id: string) => { next.current = id; setHandOver((n) => n + 1); };
   // The session to post once the sheet has slid away, when the player chose to post it.
   const next = useRef<string | null>(null);
   // Posting is offered only while the server has tennis sessions switched on for its source.
@@ -272,7 +275,7 @@ function LogSession() {
   const [byHand, setByHand] = useState(hand === '1');
   const deciding = plain && !byHand && offered === null;
   const choosing = !!offered && !byHand && unlogged.length > 0;
-  const logThis = (x: DetectedActivity) => { next.current = x.id; close(); };
+  const logThis = (x: DetectedActivity) => toPost(x.id);
 
   // Opened on a session already logged (?edit=): its score and who you played (and, logged by hand, its length and day).
   const editing = edit ? sessions.find((x) => x.id === edit && x.userId === currentUserId) : undefined;
@@ -476,7 +479,7 @@ function LogSession() {
   const dismissed = () => (next.current ? router.replace({ pathname: '/compose', params: { activity: next.current } }) : router.back());
 
   return (
-    <DragSheet fitContent closeSignal={closeSignal} onDismissed={dismissed} peekFraction={edit && !timeEditable ? 0.46 : 0.7} header={header}>
+    <DragSheet fitContent closeSignal={closeSignal} handOverSignal={handOver} onDismissed={dismissed} peekFraction={edit && !timeEditable ? 0.46 : 0.7} header={header}>
       <KeyboardScrollContext.Provider value={reveal}>
       {edit ? (
         <ScrollView ref={scroller} onScroll={onScroll} scrollEventThrottle={32} contentContainerStyle={formBody} keyboardShouldPersistTaps="handled">
@@ -573,7 +576,7 @@ function LogSession() {
         <ScrollView contentContainerStyle={formBody}>
           {done.status === 'logged' && postable(done) && !alreadyPosted ? (
             <>
-              <Submit label="Post it" onPress={() => { next.current = done.id; close(); }} />
+              <Submit label="Post it" onPress={() => toPost(done.id)} />
               <Pressable accessibilityRole="button" onPress={close} style={({ pressed }) => [styles.second, pressed && styles.pressed]}>
                 <Text style={styles.secondText}>Close</Text>
               </Pressable>

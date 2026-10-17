@@ -85,7 +85,10 @@ export interface CalendarDay extends WeekDay { later: boolean }
  * through /log-session?activity= as the log list does; Log one yourself →
  * the by-hand form straight away (?hand=1), never the list first. Each takes
  * the Session sheet's place, so closing it goes back where + was pressed.
+ * A tracker's session goes straight to its "Log it" page (/compose?activity=),
+ * where /log-session?activity= only passed it on: a page fewer in between, so
+ * the Session sheet's hand-over lands on it at once (Oct 16).
  */
 export const goStart = () => router.replace('/start-session');
-export const goLogTracker = (id: string) => router.replace({ pathname: '/log-session', params: { activity: id } });
+export const goLogTracker = (id: string) => router.replace({ pathname: '/compose', params: { activity: id } });
 export const goLogByHand = () => router.replace({ pathname: '/log-session', params: { hand: '1' } });

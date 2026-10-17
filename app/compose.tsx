@@ -18,6 +18,8 @@ import { MediaEditor, type EditedMedia } from '@/components/MediaEditor';
 import { takePendingShot } from '@/features/compose/pendingShot';
 import { registerCreateClose } from '@/features/compose/createMenu';
 import { SheetBackdrop } from '@/components/SheetBackdrop';
+import { arrivingHeight, takeHandOver } from '@/components/sheetHandOver';
+import { useReducedMotion } from '@/lib/useReducedMotion';
 import { Button, Chip, Field, Screen, Toggle } from '@/components/ui';
 import { alsoShowsIn } from '@/features/groups/groupFeed';
 import { openGroupFeed } from '@/features/groups/openGroupFeed';
@@ -105,6 +107,10 @@ const landOnFeed = () => { if (router.canDismiss()) goHome(); else router.replac
  * first page open (a lock-screen alert, a link, a reload), to the tabs; a
  * plain back has nowhere to go then and leaves a blank screen.
  */
+/** The "Log it" page's rise: the sheets' spring, never past the top (its foot would lift off the screen's edge). */
+const RISE_SPRING = { damping: 26, stiffness: 280, mass: 0.9, overshootClamping: true } as const;
+/** How long it takes to slide back down when closed with nothing added (a sheet's own close). */
+const AWAY_MS = 230;
 const goBackNow = () => { if (router.canGoBack()) router.back(); else landOnFeed(); };
 /** Each choice in the Create box arrives a moment after the one above it. */
 const arrive = (index: number) => FadeInDown.delay(90 + index * 55).duration(260).easing(Easing.out(Easing.cubic));
@@ -325,8 +331,6 @@ function Compose() {
     ],
   }));
   const dimStyle = useAnimatedStyle(() => ({ opacity: 1 - leave.value }));
-  // The form leaves the same way (Save privately): fading, sinking a little, a touch smaller.
-  const formLeave = useAnimatedStyle(() => ({ opacity: 1 - leave.value, transform: [{ translateY: leave.value * 16 }, { scale: 1 - 0.05 * leave.value }] }));
   // The Create box never runs off a short screen: it is held to the screen's
   // height (inside the notch and home bar), its title and × stay put, and
   // the choices under them scroll if they still don't fit. On a short
@@ -473,6 +477,51 @@ function Compose() {
   const wasLog = useRef(false);
   if (logNow && opened) wasLog.current = true;
   const logMode = logNow || wasLog.current;
+  /*
+   * A session's "Log it" page arrives as a sheet, never all at once (Oct 16,
+   * owner: "The animation when you click log a session, it should be better
+   * than a flash to new screen that pops up"). From the Session sheet (+ →
+   * Session) or the Log a session list it is that same sheet growing: it
+   * opens where that one stood, the dim already there, and glides up to the
+   * top as its contents fade in (sheetHandOver). From anywhere else (Your
+   * sessions, a notification's Log it) it rises from the bottom on the
+   * sheets' spring. × with nothing added slides it back down before the page
+   * goes, rather than it vanishing in one frame. With Reduce Motion honoured
+   * (useReducedMotion) it only cross-fades.
+   */
+  const [handed] = useState(arrivingHeight);
+  useEffect(() => { takeHandOver(); }, []);
+  const calm = useReducedMotion();
+  const riseY = useSharedValue(calm ? 0 : handed ? Math.max(0, windowH - handed) : windowH);
+  const sheetIn = useSharedValue(calm ? 0 : 1);
+  const contentIn = useSharedValue(handed && !calm ? 0 : 1);
+  const risen = useRef(false);
+  useEffect(() => {
+    if (!logMode || risen.current) return;
+    risen.current = true;
+    if (calm) { sheetIn.value = withTiming(1, { duration: 200, easing: Easing.out(Easing.cubic) }); return; }
+    riseY.value = withSpring(0, RISE_SPRING);
+    if (handed) contentIn.value = withTiming(1, { duration: 180, easing: Easing.out(Easing.cubic) });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [logMode]);
+  // It leaves the way the Create box does once saved (Save privately): fading, sinking a little, a touch smaller.
+  const riseStyle = useAnimatedStyle(() => ({ opacity: sheetIn.value * (1 - leave.value), transform: [{ translateY: riseY.value + leave.value * 16 }, { scale: 1 - 0.05 * leave.value }] }));
+  const riseBody = useAnimatedStyle(() => ({ opacity: contentIn.value }));
+  const [away, setAway] = useState(false);
+  const slidAway = useRef(false);
+  const slideAway = () => {
+    if (slidAway.current) return;
+    slidAway.current = true;
+    // Its own slide is the whole exit: the page's fade would only follow it.
+    navigation.setOptions({ animation: 'none' });
+    setAway(true);
+    let left = false;
+    const done = () => { if (left) return; left = true; goBackNow(); };
+    // Whatever happens to the animation, the page is not left open behind it.
+    setTimeout(done, AWAY_MS + 200);
+    if (calm) sheetIn.value = withTiming(0, { duration: 180 }, (ok) => { if (ok) runOnJS(done)(); });
+    else riseY.value = withTiming(windowH, { duration: AWAY_MS, easing: Easing.bezier(0.4, 0, 1, 1) }, (ok) => { if (ok) runOnJS(done)(); });
+  };
   // Logged before this page opened: what it was is already said.
   const openedLog = opened?.type === 'tracker' ? opened.session : undefined;
   // A workout other than tennis (a run, a lift: Oct 5) logs as fitness, with
@@ -853,8 +902,8 @@ function Compose() {
   const leaveLog = () => {
     // Saved, and on its way out: now rather than in a moment (and only once).
     if (ticked) { leaveNow(); return; }
-    if (!added) { goBackNow(); return; }
-    confirm({ title: 'Discard post?', confirmLabel: 'Discard', destructive: true, onConfirm: goBackNow });
+    if (!added) { slideAway(); return; }
+    confirm({ title: 'Discard post?', confirmLabel: 'Discard', destructive: true, onConfirm: slideAway });
   };
   const hideIt = () => {
     // From Finish: the live session thrown away, asked first (a tracker's copy of it stays waiting, as it was).
@@ -1393,8 +1442,9 @@ function Compose() {
     stageBack.current = () => { leaveLog(); return true; };
     return (
       <View style={styles.backdrop}>
-        <SheetBackdrop />
-        <Reanimated.View style={[styles.sheet, formLeave]}>
+        <SheetBackdrop shown={!!handed} leaving={away} />
+        <Reanimated.View style={[styles.sheet, riseStyle]}>
+          <Reanimated.View style={[styles.riseBody, riseBody]}>
           <Screen
             // Still "New post" with a clip on it (owner, Oct 3): the page stays the same page.
             title="New post"
@@ -1532,6 +1582,7 @@ function Compose() {
               streak={savedStreak ?? streakPreview}
             />
           )}
+          </Reanimated.View>
         </Reanimated.View>
       </View>
     );
@@ -1762,6 +1813,8 @@ const styleDefinitions = StyleSheet.create({
   choiceChallenge: { borderWidth: 1, borderColor: colors.brand },
   choiceLabel: { fontSize: 16, ...font('600'), color: colors.text },
   backdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'transparent' },
+  // What fades in as a handed-over sheet grows into the "Log it" page: everything on it, the sheet's own surface staying put.
+  riseBody: { flex: 1 },
   sheet: {
     height: '100%',
     maxWidth: 700,

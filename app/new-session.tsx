@@ -53,9 +53,16 @@ export default function NewSession() {
   const today = localDay(new Date());
   const tickWaiting = !week.some((d) => d.today && d.minutes > 0) && waiting.some((x) => isTennisActivity(x) && activityDay(x) === today);
   const hint = tickWaiting ? 'Log your tennis and today gets its tick.' : 'Your tracker picked these up. One tap to log.';
-  // Where to go once the sheet has slid away; nothing means back where it opened.
+  // Where to go once the sheet has gone; nothing means back where it opened.
   const next = useRef<(() => void) | null>(null);
-  const go = (to: () => void) => { next.current = to; setCloseSignal((n) => n + 1); };
+  // A choice hands the sheet over to the next page rather than sliding it away
+  // first (Oct 16, owner: "The animation when you click log a session, it should
+  // be better than a flash to new screen that pops up"): this sheet stays up, its
+  // contents fade, and Start a session, the by-hand form or a session's "Log it"
+  // page opens in its place from right where it stands, then settles at its own
+  // height (sheetHandOver). One sheet whose contents change, no dip in between.
+  const [handOver, setHandOver] = useState(0);
+  const go = (to: () => void) => { next.current = to; setHandOver((n) => n + 1); };
   const dismissed = () => (next.current ? next.current() : router.back());
 
   return (
@@ -64,6 +71,7 @@ export default function NewSession() {
       peekFraction={0.92}
       contentHeight={contentH || undefined}
       closeSignal={closeSignal}
+      handOverSignal={handOver}
       onDismissed={dismissed}
       header={<SheetTitle title="Session" onClose={() => setCloseSignal((n) => n + 1)} />}
     >

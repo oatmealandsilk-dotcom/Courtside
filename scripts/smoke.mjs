@@ -1011,8 +1011,22 @@ const STEPS = [
       await page.tap({ label: /^Session\. Start one now/ });
     },
     expect: [{ label: /^This week: / }, { label: /^Start a session/ }, { label: /^Log it: / }, { label: 'Log one yourself' }],
-    // Back on Community where + was pressed (still scrolled down, so its tab rather than "Find Players").
-    after: async (page) => { await page.tap({ label: 'Close' }); await page.gone({ label: 'Log one yourself' }); await page.waitFor({ label: 'Community' }); },
+    // Back on Community where + was pressed (still scrolled down, so its tab rather than "Find Players"). Then
+    // once more, through a session's Log it (Oct 16: the sheet hands over and grows into its "Log it" page), and
+    // that page's back slides it away again, nothing logged.
+    after: async (page) => {
+      await page.tap({ label: 'Close' });
+      await page.gone({ label: 'Log one yourself' });
+      await page.waitFor({ label: 'Community' });
+      await page.tap({ label: 'Create a post' });
+      await page.tap({ label: /^Session\. Start one now/ });
+      await page.tap({ label: /^Log it: / });
+      await page.waitFor({ text: 'Post session' });
+      await page.gone({ label: 'Log one yourself' });
+      await page.tap({ label: 'Go back' });
+      await page.gone({ text: 'Post session' });
+      await page.waitFor({ label: 'Community' });
+    },
   },
   {
     // Strava's share after posting (Oct 15): a session posted from Your sessions ("Post it") opens the Share

@@ -31,6 +31,7 @@ import { installCrashReporting, reportError } from '@/lib/crashReporting';
 import { isDesktopBrowser } from '@/lib/browserDevice';
 import { SignOutCurtainHost } from '@/components/SignOutCurtain';
 import { ConfirmHost } from '@/components/ConfirmHost';
+import { arrivingHeight } from '@/components/sheetHandOver';
 import { useInstantUpdates } from '@/lib/instantUpdates';
 
 // Any error the app does not catch itself is filed as a crash report.
@@ -111,8 +112,10 @@ function RootStack() {
       {/* Edit Profile always slides away to the right, however you leave it (Oct 5, owner: it sometimes just vanished
           when a tab was tapped, and slid when Back or Save was used). */}
       <Stack.Screen name="edit-profile" options={{ animation: 'slide_from_right' }} />
-      {/* The Create box brings its own entrance (see compose.tsx); the page itself just fades. */}
-      <Stack.Screen name="compose" options={{ presentation: 'transparentModal', animation: 'fade', contentStyle: { backgroundColor: 'transparent' } }} />
+      {/* The Create box brings its own entrance (see compose.tsx); the page itself just fades. A sheet handing over to a
+          session's "Log it" page (the Session sheet, Oct 16) has its dim and surface up already, so then the page shows at
+          once and the sheet growing into it is the whole motion (sheetHandOver); a fade there would dip it. */}
+      <Stack.Screen name="compose" options={() => ({ presentation: 'transparentModal', animation: arrivingHeight() ? 'none' : 'fade', contentStyle: { backgroundColor: 'transparent' } })} />
       <Stack.Screen name="ask" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
       <Stack.Screen name="comments" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
       {/* A session's stats: the comments' stage from a clip's pill, the plain sheet from a post (session-stats.tsx). */}

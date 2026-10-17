@@ -9,10 +9,13 @@ import { colors } from '@/theme';
  * sliding up with the sheet, so the sheet reads as sitting on top of the page
  * instead of slicing across it. `leaving` fades it back out with the sheet's
  * exit, so the page brightens the moment you tap away, not after.
+ * `shown` starts it already dim: a sheet handed over from the one before
+ * (the Session sheet growing into a session's "Log it" page, Oct 16), whose
+ * dim was there all along, so the page behind never brightens in between.
  */
-export function SheetBackdrop({ leaving = false }: { leaving?: boolean }) {
+export function SheetBackdrop({ leaving = false, shown = false }: { leaving?: boolean; shown?: boolean }) {
   useTheme();
-  const opacity = useRef(new Animated.Value(0)).current;
+  const opacity = useRef(new Animated.Value(shown ? 1 : 0)).current;
   useEffect(() => {
     Animated.timing(opacity, { toValue: leaving ? 0 : 1, duration: leaving ? 180 : 220, useNativeDriver: true }).start();
   }, [opacity, leaving]);
