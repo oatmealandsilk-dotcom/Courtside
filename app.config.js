@@ -63,10 +63,11 @@ module.exports = {
         ITSAppUsesNonExemptEncryption: false,
         // Instagram Stories straight from Share (build 13, Facebook App ID in storyImage.ts).
         LSApplicationQueriesSchemes: ['instagram-stories', 'instagram'],
-        // The camera is used for photos and videos you post (Take photo / Record video), instants and
-        // photos sent in chats; all are named (Oct 6, App Review 5.1.1).
+        // The camera is used for photos and videos you post (Take photo / Record video) and
+        // photos sent in chats; all are named (Oct 6, App Review 5.1.1). Instants are hidden at
+        // launch, so they are no longer named (Oct 17, owner's pre-flight list for the next build).
         // Purpose-string changes like these reach phones only with the next App Store build.
-        NSCameraUsageDescription: 'CourtSide uses the camera to take photos and videos you post, an instant after you play, and photos you send in chats.',
+        NSCameraUsageDescription: 'CourtSide uses the camera to take photos and videos you post and photos you send in chats.',
         NSPhotoLibraryUsageDescription: 'CourtSide uses your photo library to choose clips and photos to post or send in chats.',
         NSLocationWhenInUseUsageDescription: 'CourtSide uses your location while the app is open to show courts and players near you. You choose who can see you.',
         // Saving a chat photo to your camera roll from the share sheet (from build 11).
@@ -124,9 +125,9 @@ module.exports = {
       'expo-router',
       // The microphone is for voice notes in chats (expo-audio, below) and the sound of a video
       // recorded with Record video (expo-image-picker); the Instant camera itself never records sound.
-      ['expo-camera', { cameraPermission: 'CourtSide uses the camera to take photos and videos you post, an instant after you play, and photos you send in chats.', microphonePermission: 'CourtSide uses the microphone to record the sound of videos you post, and for voice notes you send in chats.', recordAudioAndroid: false }],
+      ['expo-camera', { cameraPermission: 'CourtSide uses the camera to take photos and videos you post and photos you send in chats.', microphonePermission: 'CourtSide uses the microphone to record the sound of videos you post, and for voice notes you send in chats.', recordAudioAndroid: false }],
       // The same camera words as above, so the build never falls back to Apple's generic text.
-      ['expo-image-picker', { photosPermission: 'CourtSide uses your photo library to choose clips and photos to post or send in chats.', cameraPermission: 'CourtSide uses the camera to take photos and videos you post, an instant after you play, and photos you send in chats.', microphonePermission: 'CourtSide uses the microphone to record the sound of videos you post, and for voice notes you send in chats.' }],
+      ['expo-image-picker', { photosPermission: 'CourtSide uses your photo library to choose clips and photos to post or send in chats.', cameraPermission: 'CourtSide uses the camera to take photos and videos you post and photos you send in chats.', microphonePermission: 'CourtSide uses the microphone to record the sound of videos you post, and for voice notes you send in chats.' }],
       'expo-video',
       // Build 14 (Oct 4): find friends from your contacts. Only phone numbers and emails are checked, and nothing is kept.
       ['expo-contacts', { contactsPermission: 'CourtSide checks your contacts’ phone numbers and emails to show which friends are already on CourtSide. Nothing from your contacts is saved.' }],

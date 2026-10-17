@@ -270,7 +270,7 @@ Never tick **Third-Party Advertising** or **Other Purposes**.
 | **Product Interaction** | Yes | No | App Functionality, Product Personalization, **Analytics** | Likes, saves, votes, follows, views; how long each post stayed on screen and when you last saw it (orders the feed, so posts you've already seen come after new ones; kept about two months); when a chat was last read; which days someone opens the app (only ever counted as daily totals) |
 | **Crash Data** | Yes | No | App Functionality | Error reports saved to CourtSide's own database (`app_errors`) with the account ID |
 | **Other Diagnostic Data** | Yes | No | App Functionality | The same reports: the screen, app version, phone type and system version |
-| **Other Data Types** | Yes | No | App Functionality | Date of birth, for the age check. Never shown to anyone. |
+| **Other Data Types** | Yes | No | App Functionality | Date of birth (optional), for the age check. Never shown to anyone. |
 
 **Checked Oct 7 against build 16: no box changes.** Start a session's check-in is the same court check-in as "I'm playing here" (Precise Location, already ticked). The feed's "seen" record is Product Interaction (already ticked). Hit alerts use the push address (Device ID). Follow on the map card is the follow list (Contacts). "Push to bottom" is a tool for admins and collects nothing from members. The words in the last column are for you; Apple only sees the boxes.
 
@@ -489,7 +489,7 @@ While still signed in as yourself: **Profile** → **☰** (top right) → **Set
    - **Username:** `reviewdemo1` (if taken, add a number)
    - **Email:** your Gmail address with `+review1` before the @, for example `yourname+review1@gmail.com`. Gmail delivers it to your normal inbox.
    - **Password:** a new one, 12+ characters, that you use nowhere else. Write it down; you'll paste it into App Store Connect.
-   - **Birthday:** an adult date, for example **January 1, 1990**.
+   - **Birthday (optional):** an adult date, for example **January 1, 1990**, so the review account sees the map and meeting players as an adult would.
    - Tick the Terms box, then tap **Create account**.
 3. Go through setup:
    - On **About you**, **leave the Location box empty**, **leave "Invited by?" empty**, and pick a rating (Continue stays dimmed until you do).
@@ -571,7 +571,7 @@ TO TRY
 - Hits: the top box under Open hits posts one; others tap I'm in and a chat opens. Call off and Can't make it alert the others.
 
 AGE AND TEENS
-A birthday is asked once; under 13 cannot join. Ages 13-17: accounts start private, only people they follow can start a chat with them, they are never shown to strangers on the map or suggested to adult strangers, and they can share only a rough area with friends who follow each other, off until they turn it on.
+The birthday is optional (Guideline 5.1.1(v), fixed Oct 17 after the build 17 rejection): the sign-up form labels it "Birthday (optional)", and the one-time birthday screen has "Skip for now", which asks only "Are you 13 or older?" (a yes or no, no personal information). It can be added later in Settings > Account center > Birthday. Under 13 cannot join. With no birthday, or at 13-17: accounts start private, only people they follow can start a chat with them, they are never shown to strangers on the map or suggested to adult strangers, and they can share only a rough area with friends who follow each other, off until they turn it on.
 
 PERMISSIONS (each asked when its feature is first used; notifications once after setup)
 - Location, while using the app only: courts and players near you. Optional. Each person chooses who sees them (Settings > Privacy center > Who can see you on the map): Players nearby (rough area), Only people you follow back, or Only me, which the demo account uses. Turning Location off deletes your spot from our servers. Start a session checks you in at its court for the same people.

@@ -10,6 +10,7 @@ import { Avatar } from '@/components/ui';
 import { SheetTitle, Submit } from '@/components/sheet/SheetForm';
 import type { MapVisibility } from '@/data/types';
 import { TEEN_NOTICE, choicesFor, onTeenMap, settleWhoSeesYou } from '@/features/players/mapPrivacy';
+import { BIRTHDAY_OPENS_IT, ageUnknown } from '@/features/players/age';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, lift, radius, spacing, typography, withAlpha } from '@/theme';
@@ -96,6 +97,8 @@ export default function MapVisibilitySheet() {
             <View style={styles.noticeWords}>
               <Text style={styles.noticeText}>{TEEN_NOTICE}</Text>
               <Text style={styles.noticeSmall}>Under 18, only people you follow who follow you back can see you, and you only see them. Strangers never see you.</Text>
+              {/* No birthday given (it is optional since Oct 17): say what adding one opens up. */}
+              {ageUnknown(currentUser) ? <Text style={styles.noticeSmall}>{BIRTHDAY_OPENS_IT}</Text> : null}
             </View>
           </View>
         ) : null}

@@ -39,13 +39,18 @@ export async function isDeviceBlocked(): Promise<boolean> {
 export async function blockDevice() {
   try { await AsyncStorage.setItem(BLOCK_KEY, 'yes'); } catch { /* nothing to keep it in */ }
 }
-export async function rememberAnswered(userId: string, group: AgeGroup) {
+/**
+ * 'skipped': no birthday, after "I'm 13 or older" (Oct 17: Apple asks that
+ * the birthday be optional). The server remembers that too (migration 162);
+ * this phone's copy covers a database without it.
+ */
+export async function rememberAnswered(userId: string, group: AgeGroup | 'skipped') {
   try { await AsyncStorage.setItem(answeredKey(userId), group); } catch { /* nothing to keep it in */ }
 }
-export async function recallAnswered(userId: string): Promise<AgeGroup | null> {
+export async function recallAnswered(userId: string): Promise<AgeGroup | 'skipped' | null> {
   try {
     const value = await AsyncStorage.getItem(answeredKey(userId));
-    return value === 'teen' || value === 'adult' ? value : null;
+    return value === 'teen' || value === 'adult' || value === 'skipped' ? value : null;
   } catch { return null; }
 }
 

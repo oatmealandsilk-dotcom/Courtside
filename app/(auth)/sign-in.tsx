@@ -2,6 +2,7 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import { Wash } from '@/components/Wash';
 import React, { useEffect, useState } from 'react';
 import { BirthDateField } from '@/components/BirthDateField';
+import { OldEnoughCheck } from '@/components/OldEnoughCheck';
 import { blockDevice, carryBirthDate, dropCarriedBirthDate, isDeviceBlocked, toBirthDate, yearsOld } from '@/features/age/ageCheck';
 import { readableInk } from '@/lib/badges';
 import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -94,8 +95,12 @@ export default function SignIn() {
   const [name, setName] = useState('');
   const [handle, setHandle] = useState('');
   const [demoHandle, setDemoHandle] = useState('you');
-  // New accounts give a date of birth before the account exists, so a child's details are never taken in.
+  // A date of birth, if they give one, before the account exists, so a
+  // child's details are never taken in. Optional since Oct 17 (Apple 5.1.1(v)):
+  // left empty, "I'm 13 or older" is ticked instead.
   const [birth, setBirth] = useState({ month: '', day: '', year: '' });
+  const [over13, setOver13] = useState(false);
+  const birthBlank = !birth.month && !birth.day && !birth.year;
   // Starts unticked, every time: agreeing has to be something you did.
   const [agreed, setAgreed] = useState(false);
   const [ageBlocked, setAgeBlocked] = useState(false);
@@ -190,7 +195,7 @@ export default function SignIn() {
   // 'words': CourtSide refuses words in it (migration 117); said here, so a new account is never quietly given another handle.
   const handleFits = /^[a-z0-9_]{3,20}$/.test(cleanHandle) && handleStatus !== 'invalid' && handleStatus !== 'words';
   const ready = isSupabaseConfigured
-    ? email.includes('@') && password.length >= 6 && (mode === 'sign-in' || (name.trim().length > 0 && handleFits && !handleGone && !!birthDate && !ageBlocked && agreed))
+    ? email.includes('@') && password.length >= 6 && (mode === 'sign-in' || (name.trim().length > 0 && handleFits && !handleGone && (!!birthDate || (birthBlank && over13)) && !ageBlocked && agreed))
     : demoHandle.trim().length > 0;
 
   // Apple's own button, iPhone only, above Google: App Review asks for it wherever another company's sign-in is offered.
@@ -287,13 +292,15 @@ export default function SignIn() {
       } else if (mode === 'sign-in') {
         await actions.signIn(email, password);
       } else {
-        if (!birthDate) return;
+        // A birthday, or none with "I'm 13 or older" ticked (it rides on the
+        // account, and the age check notes it as a skip: see AppShell).
+        if (!birthDate && !(birthBlank && over13)) return;
         // Too young: no account is made, and this phone will not offer one again.
-        if (yearsOld(birthDate) < 13) { await blockDevice(); setAgeBlocked(true); return; }
+        if (birthDate && yearsOld(birthDate) < 13) { await blockDevice(); setAgeBlocked(true); return; }
         // The birthday rides on the new account itself (see auth.signUp), so
         // nothing carried for Apple or Google earlier applies to this one.
         dropCarriedBirthDate();
-        const result = await actions.signUp(email, password, name, cleanHandle, birthDate);
+        const result = await actions.signUp(email, password, name, cleanHandle, birthDate ?? undefined);
         if (result === 'confirm') {
           setSent({ kind: 'confirm', to: email.trim() });
           setMode('sign-in');
@@ -543,7 +550,10 @@ export default function SignIn() {
                       : handleStatus === 'ok' ? `@${cleanHandle} is free`
                       : cleanHandle && cleanHandle !== handle ? `Will be @${cleanHandle}` : 'Letters, numbers and underscores.'}
                   />
-                  <BirthDateField month={birth.month} day={birth.day} year={birth.year} onChange={setBirth} />
+                  <BirthDateField month={birth.month} day={birth.day} year={birth.year} onChange={setBirth} label="Birthday (optional)" />
+                  {/* Why we ask, said plainly; leaving it empty is fine (Oct 17). */}
+                  <Text style={styles.birthNote}>Keeps younger players safe. Private, never on your profile.</Text>
+                  {birthBlank ? <OldEnoughCheck checked={over13} onChange={setOver13} /> : null}
                   {ageBlocked ? <Text style={styles.ageNote}>Sorry, you can't create a CourtSide account.</Text> : null}
                 </>
               ) : null}
@@ -603,6 +613,7 @@ export default function SignIn() {
 
 const styleDefinitions = StyleSheet.create({
   ageNote: { ...typography.small, color: colors.danger },
+  birthNote: { ...typography.small, fontSize: 12, lineHeight: 17, color: colors.textFaint, marginTop: -spacing.xs },
   root: { flex: 1, backgroundColor: colors.bg },
   // The top and bottom padding come from useGateSpace, so they clear the status bar and the home bar.
   scroll: { flexGrow: 1, paddingHorizontal: spacing.xl, justifyContent: 'center' },

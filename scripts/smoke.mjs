@@ -723,6 +723,21 @@ const WEEKDAY_BAR = /^(Sun|Mon|Tues|Wednes|Thurs|Fri|Satur)day, /;
 
 const STEPS = [
   {
+    // Oct 17: Apple turned down build 17 under 5.1.1(v) for requiring a date of birth. The birthday
+    // page (opened here before signing in, as the demo never sends anyone to it) must say the
+    // birthday is optional and offer Skip for now, which asks only "Are you 13 or older?" with two
+    // answers. Nothing is answered here: the sign-in step below starts the app afresh.
+    name: 'birthday-optional',
+    title: 'Birthday page: optional, with Skip',
+    async run(page) {
+      await page.goto('/birthday');
+      await page.waitFor({ text: 'Birthday (optional)' }, 45000);
+      await page.waitFor({ text: /^Optional\. It helps us keep younger players safe/ });
+      await page.tap({ text: 'Skip for now' });
+    },
+    expect: [{ text: 'Are you 13 or older?' }, { label: 'I\'m 13 or older' }, { label: 'I\'m under 13' }, { text: 'Add my birthday instead' }],
+  },
+  {
     name: 'sign-in',
     title: 'Sign in to the demo',
     async run(page) {

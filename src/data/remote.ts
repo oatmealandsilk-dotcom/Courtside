@@ -757,6 +757,8 @@ interface UserStateRow { muted_ids: string[]; blocked_ids: string[]; saved_quest
   age_group?: string | null;
   /** Your birthday, readable only by you (migration 13). */
   birth_date?: string | null;
+  /** When you skipped the birthday ("I'm 13 or older", migration 162). Absent before it. */
+  age_skipped_at?: string | null;
   /** When you (not a known adult) answered who can see you on the map, and your private ring (migration 78). Absent before it. */
   map_answered_at?: string | null; open_to_hit_until?: string | null;
   /** How far you'd like to go for a hit (migration 120): 5, 10 or 25; null for any. Absent before it. */
@@ -1391,7 +1393,9 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
     // Nobody else's town position is read (PROFILE_COLUMNS); yours comes on its own (cityLoad).
     users: profileRows.map(withPlans).map((row) => withStreak(toUser(row.id === me
       ? { ...row, ...(ownCity ?? {}), age_group: ownAge, open_to_hit_until: row.open_to_hit_until ?? ownState?.open_to_hit_until ?? null, open_to_hit_miles: ownState?.open_to_hit_miles ?? null }
-      : { ...row, city_lat: null, city_lng: null }, followers.get(row.id) ?? 0, following.get(row.id) ?? 0), streaks)),
+      : { ...row, city_lat: null, city_lng: null }, followers.get(row.id) ?? 0, following.get(row.id) ?? 0), streaks))
+      // Skipped the birthday (migration 162): the app does not ask again, on any phone.
+      .map((u) => (u.id === me && ownState?.age_skipped_at ? { ...u, birthdaySkipped: true } : u)),
     posts: postRows.map(toPost),
     comments: [
       ...postRows.flatMap((row) => (row.comments ?? []).map(toComment)),
@@ -2167,6 +2171,24 @@ export const remote = {
       return null;
     }
     return data === 'teen' ? 'teen' : 'adult';
+  },
+
+  /**
+   * No birthday for now, after "I'm 13 or older" (Oct 17, Apple 5.1.1(v): the
+   * birthday must be optional). The server notes the skip so no phone asks
+   * again, and the account gets the teen rules, private to start with
+   * (migration 162). Returns 'skipped', or the age already on file; null on
+   * a database without migration 162 (then only this phone remembers).
+   */
+  async skipBirthday(): Promise<'skipped' | 'teen' | 'adult' | null> {
+    const { data, error } = await need().rpc('skip_birthday');
+    if (error) {
+      // Not there yet (migration 162 not run): this phone remembers instead.
+      if (/skip_birthday|schema cache/i.test(error.message)) return null;
+      // Anything else (no connection, say): the page says to try again.
+      throw new Error(error.message);
+    }
+    return data === 'teen' || data === 'adult' ? data : 'skipped';
   },
 
   /**
@@ -4962,12 +4984,14 @@ export const auth = {
       // typed on the form rides along too: the account can open before it is
       // saved, or only from the email link (on any phone or browser), and the
       // age check saves it from here instead of asking again. It still goes
-      // through set_birth_date, and comes off once the age is on file.
+      // through set_birth_date, and comes off once the age is on file. With
+      // no birthday (it is optional since Oct 17), the form's "I'm 13 or
+      // older" rides along instead, so the birthday page does not ask again.
       // The invite link this person came through rides along as well, and the
       // server credits it the moment the account is made (migration 116), so
       // it is not lost when the confirmation email opens in another browser.
       options: {
-        data: { name: name.trim(), handle: handle.trim().toLowerCase(), terms_version: TERMS_VERSION, terms_accepted_at: new Date().toISOString(), ...(birthDate ? { birth_date: birthDate } : {}), ...(invitedBy ? { invited_by: invitedBy } : {}) },
+        data: { name: name.trim(), handle: handle.trim().toLowerCase(), terms_version: TERMS_VERSION, terms_accepted_at: new Date().toISOString(), ...(birthDate ? { birth_date: birthDate } : { age_13_plus: true }), ...(invitedBy ? { invited_by: invitedBy } : {}) },
         // The confirmation link comes back to this same site, where the invite link was kept.
         ...(Platform.OS === 'web' ? { emailRedirectTo: `${window.location.origin}${base}/` } : {}),
       },
@@ -5170,11 +5194,15 @@ export const auth = {
    * when it was made, and the birthday its sign-up form carried, if any. No
    * trip to the server.
    */
-  async signedInUser(): Promise<{ id: string; createdAt: string; birthDate: string | null } | null> {
+  async signedInUser(): Promise<{ id: string; createdAt: string; birthDate: string | null; said13Plus: boolean } | null> {
     const user = (await need().auth.getSession()).data.session?.user;
     if (!user) return null;
     const dob: unknown = user.user_metadata?.birth_date;
-    return { id: user.id, createdAt: user.created_at, birthDate: typeof dob === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dob) ? dob : null };
+    return {
+      id: user.id, createdAt: user.created_at, birthDate: typeof dob === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dob) ? dob : null,
+      // The sign-up form's "I'm 13 or older", ticked instead of giving a birthday.
+      said13Plus: user.user_metadata?.age_13_plus === true,
+    };
   },
   /** Takes the sign-up form's birthday off the account once the age check has it (set_birth_date keeps its own private copy). */
   async forgetSignUpBirthDate() {

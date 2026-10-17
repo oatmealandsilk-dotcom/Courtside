@@ -170,6 +170,9 @@ export default function AccountCentre() {
         {row('person-outline', 'Name, bio and city', undefined, () => router.push('/edit-profile'), false, 0)}
         {row('at-outline', 'Handle', `@${currentUser?.handle ?? ''}`, () => router.push('/change-handle'), false, 1)}
         {row('mail-outline', 'Email', info?.email ? (info.emailConfirmed ? info.email : 'Not confirmed') : undefined, isSupabaseConfigured ? () => { setEmail(info?.email ?? ''); setSheet('email'); } : undefined, false, 2)}
+        {/* The birthday is optional (Oct 17, Apple 5.1.1(v)): skipped, it can be added here later.
+            Once given it is kept and cannot be changed (set_birth_date keeps the first date). */}
+        {row('gift-outline', 'Birthday', currentUser?.ageGroup ? 'Added, private' : 'Optional · Add', !currentUser?.ageGroup ? () => router.push('/birthday?from=settings') : undefined, false, 3)}
       </View>
 
       <Text style={styles.sectionTitle}>Sign-in</Text>

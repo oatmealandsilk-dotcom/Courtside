@@ -1284,6 +1284,15 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions, LiveSessionAct
    */
   confirmBirthDate: (birthDate: string) => Promise<AgeGroup | 'under13'>;
   /**
+   * The birthday is optional (Oct 17, Apple 5.1.1(v)): "I'm 13 or older" and
+   * no birthday for now. Remembered on the server (migration 162) so it is
+   * not asked again; the account gets the teen rules, private to start with.
+   * Throws when it could not be saved.
+   */
+  skipBirthday: () => Promise<void>;
+  /** "I'm under 13" on the birthday page: the account is removed, as an under-13 birthday removes it. */
+  declareUnder13: () => Promise<'under13'>;
+  /**
    * The birthday page on a phone that has had an under-13 answer, with an
    * account signed in that has no age on file: one made in the last half
    * hour (Apple or Google, which take no birthday first) is removed, the
@@ -1803,6 +1812,8 @@ function mergeRemote(prev: AppState, data: RemoteData, me: ID, email: string | n
     // check would ask again.
     const ownAge = prev.users.find((u) => u.id === me)?.ageGroup;
     if (ownAge) users = users.map((u) => (u.id === me && !u.ageGroup ? { ...u, ageGroup: ownAge } : u));
+    // A skipped birthday the same way (migration 162): a load from just before the skip does not ask again.
+    if (prev.users.find((u) => u.id === me)?.birthdaySkipped) users = users.map((u) => (u.id === me ? { ...u, birthdaySkipped: true } : u));
     // The profile row is created by a trigger; if it has not landed yet,
     // stand in for it so the screens have someone to show.
     if (!remoteUsers.has(me) && !fromSnapshot) {
@@ -7053,6 +7064,31 @@ export function AppProvider({ children }: { children: ReactNode }) {
     void followInviter();
     return label;
   }, [requireUser, removeForAge]);
+  // No birthday for now, after "I'm 13 or older" (Oct 17: Apple turned down
+  // build 17 under 5.1.1(v), "not require users to provide ... Date of
+  // birth"). The server notes the skip and makes the account private to
+  // start with, the same as a teen's (migration 162): with no age on file it
+  // gets the teen rules everywhere until a birthday is added in Settings.
+  const skipBirthday = useCallback(async (): Promise<void> => {
+    const me = requireUser();
+    const answer = live(me) ? await remote.skipBirthday() : 'skipped';
+    // The age was on file after all (another phone): nothing was skipped.
+    if (answer === 'teen' || answer === 'adult') {
+      setState((prev) => ({ ...prev, users: prev.users.map((u) => (u.id === me ? { ...u, ageGroup: answer } : u)) }));
+      await rememberAnswered(me, answer);
+      return;
+    }
+    setState((prev) => ({
+      ...prev,
+      users: prev.users.map((u) => (u.id === me ? { ...u, birthdaySkipped: true, isPrivate: answer === 'skipped' && !u.birthdaySkipped ? true : u.isPrivate } : u)),
+    }));
+    await rememberAnswered(me, 'skipped');
+  }, [requireUser]);
+  // "I'm under 13" instead of a birthday: the same as an under-13 birthday.
+  const declareUnder13 = useCallback(async (): Promise<'under13'> => {
+    await removeForAge(requireUser());
+    return 'under13';
+  }, [requireUser, removeForAge]);
   const removeNewAccountOnBlockedPhone = useCallback(async () => {
     const me = stateRef.current.currentUserId;
     if (!me || !isSupabaseConfigured) return false;
@@ -9039,6 +9075,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       loadMessage,
       reportChat,
       confirmBirthDate,
+      skipBirthday,
+      declareUnder13,
       removeNewAccountOnBlockedPhone,
       canMessage,
       canAddToGroup,
@@ -9270,6 +9308,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       loadMessage,
       reportChat,
       confirmBirthDate,
+      skipBirthday,
+      declareUnder13,
       removeNewAccountOnBlockedPhone,
       canMessage,
       canAddToGroup,

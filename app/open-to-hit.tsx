@@ -6,6 +6,7 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import { DragSheet } from '@/components/DragSheet';
 import { ChipStrip, Chips, Section, SheetTitle, Submit, formBody } from '@/components/sheet/SheetForm';
 import { onTeenMap } from '@/features/players/mapPrivacy';
+import { ageUnknown } from '@/features/players/age';
 import { HIT_MILES, asHitMiles, clockWords, endOfToday, isOpenToHit, onTheMinute, tillLabel, todayAt } from '@/features/players/openToHit';
 import { useLocationToggle, useOpenToHitToggle } from '@/features/players/useLocationToggle';
 import * as haptics from '@/lib/haptics';
@@ -186,7 +187,10 @@ export default function OpenToHitSheet() {
           ) : null}
         </Section>
 
-        <Section title="How far you’ll go" hint={teen ? 'Friends who follow you back see it on your card.' : 'Players farther away still see you.'}>
+        <Section title="How far you’ll go" hint={teen
+          // No birthday given (optional since Oct 17): what adding one opens up, said once, here.
+          ? (ageUnknown(currentUser) ? 'Friends who follow you back see it on your card. 18 or over? Add your birthday in Settings → Account center so players nearby can see it too.' : 'Friends who follow you back see it on your card.')
+          : 'Players farther away still see you.'}>
           <Chips value={distance} onChange={(v) => { if (v) setDistance(v); }} options={[...HIT_MILES.map((m) => ({ value: String(m) as Distance, label: `${m} mi` })), { value: 'any' as const, label: 'Any' }]} />
         </Section>
 

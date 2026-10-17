@@ -10,6 +10,7 @@ import type { HiddenWords } from '@/data/types';
 import { HIDDEN_WORDS_MAX, HIDDEN_WORD_LENGTH, cleanWords } from '@/features/hiddenWords/hiddenWords';
 import * as haptics from '@/lib/haptics';
 import { show as showToast } from '@/lib/toast';
+import { ageUnknown } from '@/features/players/age';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing, typography } from '@/theme';
 
@@ -32,7 +33,7 @@ import { colors, radius, spacing, typography } from '@/theme';
  */
 export default function HiddenWordsPage() {
   const styles = useThemedStyles(styleDefinitions);
-  const { hiddenWords, currentUserId, actions } = useApp();
+  const { hiddenWords, currentUserId, currentUser, actions } = useApp();
   const [status, setStatus] = useState<'loading' | 'ok' | 'not_ready' | 'failed'>(hiddenWords ? 'ok' : 'loading');
   const load = () => { void actions.loadHiddenWords().then(setStatus); };
   // Asked once you are signed in: opened straight from its address (a browser
@@ -147,7 +148,8 @@ export default function HiddenWordsPage() {
         {switchRow('paper-plane-outline', 'Hide offensive messages', 'From people you don’t follow', settings.hideOffensiveRequests, (v) => save({ hideOffensiveRequests: v }), false, locked)}
       </View>
       <Text style={styles.note}>
-        {locked ? 'Always on for accounts under 18.' : 'CourtSide keeps this list up to date.'}
+        {/* The server locks it for anyone not known to be an adult, a missing birthday included (Oct 17). */}
+        {locked ? (ageUnknown(currentUser) ? 'Always on for accounts under 18 or with no birthday on file (add one in Settings → Account center).' : 'Always on for accounts under 18.') : 'CourtSide keeps this list up to date.'}
       </Text>
 
       <Text style={styles.sectionTitle}>Your words and phrases</Text>

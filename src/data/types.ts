@@ -120,6 +120,12 @@ export interface User {
   handleChangedAt?: string;
   /** From the age check: a teen account (13 to 17) or an adult one. The date of birth itself is never shown. */
   ageGroup?: 'teen' | 'adult';
+  /**
+   * Your own account only: you skipped the birthday ("I'm 13 or older",
+   * migration 162), so the app does not ask again. With no age on file you
+   * get the teen rules until you add one in Settings, Account center.
+   */
+  birthdaySkipped?: boolean;
   isCoach: boolean;
   /** Reviews reports. Set only from Supabase. */
   isAdmin?: boolean;

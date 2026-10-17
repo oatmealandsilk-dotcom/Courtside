@@ -131,11 +131,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     // Logging out takes this phone's push address off the account, so the
     // next sign-in (the same account too) puts it back.
     if (!currentUserId) { pushAskedFor.current = null; return; }
-    if (!isSupabaseConfigured || !remoteLoaded || !onboardingComplete || !currentUser?.ageGroup) return;
+    // After the age check: a birthday on file, or skipped with "I'm 13 or older" (Oct 17).
+    if (!isSupabaseConfigured || !remoteLoaded || !onboardingComplete || !(currentUser?.ageGroup || currentUser?.birthdaySkipped)) return;
     if (pushAskedFor.current === currentUserId) return;
     pushAskedFor.current = currentUserId;
     void registerForPush();
-  }, [currentUserId, remoteLoaded, onboardingComplete, currentUser?.ageGroup]);
+  }, [currentUserId, remoteLoaded, onboardingComplete, currentUser?.ageGroup, currentUser?.birthdaySkipped]);
   // Android: a chat photo taken or chosen just before the phone closed the app
   // (short of memory) is collected, and the app goes back to that chat with it
   // in the tray, once the app has settled on its first page (see pendingPick).
@@ -204,6 +205,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             const saved = await actions.confirmBirthDate(typed).catch(() => null);
             if (saved === 'teen' || saved === 'adult') answer = saved;
           }
+          // No birthday on the form, "I'm 13 or older" ticked instead (the
+          // birthday is optional since Oct 17): noted as a skip, the same as
+          // Skip for now on the birthday page, so it is not asked again.
+          else if (!typed && who.said13Plus && !currentUser?.ageGroup && !currentUser?.birthdaySkipped && !blocked) {
+            const skipped = await actions.skipBirthday().then(() => true, () => false);
+            if (skipped) answer = 'skipped';
+          }
           // The form's birthday rode on the account only to get here; with the age on file it comes off.
           if (who.birthDate && currentUser?.ageGroup) void remoteAuth.forgetSignUpBirthDate().catch(() => undefined);
         }
@@ -212,8 +220,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     })();
     return () => { stale = true; };
   }, [currentUserId, currentUser?.ageGroup, accountIn]);
+  // Asked once: a skip ("I'm 13 or older", Oct 17) is remembered on the server
+  // (migration 162) and on this phone, and the app goes on without asking again.
   const needsBirthday = isSupabaseConfigured && !!currentUserId && remoteLoaded && !!currentUser && !currentUser.ageGroup
-    && answered === null && !['/birthday', '/sign-in'].includes(pathname);
+    && !currentUser.birthdaySkipped && answered === null && !['/birthday', '/sign-in'].includes(pathname);
   // The terms: an account that has not agreed to the current ones — a Google
   // sign-up, one made before sign-up asked, or anyone after the terms change —
   // agrees once before going further. It comes after the age check, so

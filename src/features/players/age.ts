@@ -14,6 +14,16 @@ import { isSupabaseConfigured } from '@/lib/supabase';
 export const notKnownAdult = (u: Pick<User, 'ageGroup'>) => (isSupabaseConfigured ? u.ageGroup !== 'adult' : u.ageGroup === 'teen');
 
 /**
+ * Your own account has no birthday on file (skipped, Oct 17: the birthday
+ * is optional since Apple's 5.1.1(v) review), so it has the teen rules only
+ * for want of one. Where a feature is limited by that, the page says that
+ * adding a birthday opens it up (BIRTHDAY_OPENS_IT). Never in the demo.
+ */
+export const ageUnknown = (u: Pick<User, 'ageGroup'> | null | undefined) => isSupabaseConfigured && !!u && !u.ageGroup;
+/** Said where a limit comes only from a missing birthday. Plain, once, no banner. */
+export const BIRTHDAY_OPENS_IT = 'No birthday on file, so you have the under-18 protections. 18 or over? Add your birthday in Settings → Account center to open this up.';
+
+/**
  * Where the app learns how the teen rules apply to someone else:
  *   'fixtures': one of the demo's made-up people, by their own age;
  *   'ages':     a database from before migration 64, where every profile
