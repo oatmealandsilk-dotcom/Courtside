@@ -14,6 +14,18 @@ export function stageSize(): { width: number; height: number } {
   return { width: 360, height: 640 };
 }
 
+/** As storyImage.ts: how many times finer than the story a see-through sticker is made. */
+export function stickerDensity(fillsStory: boolean): number {
+  return fillsStory ? 1.5 : 2;
+}
+
+/**
+ * A browser draws no second copy for the sticker: the drawing kit draws the
+ * one hidden copy's art at any scale, every word and the mark as sharp as
+ * the scale asks (storyBlob's `density`).
+ */
+export const STICKER_COPY = false;
+
 let drawing: Promise<typeof import('html2canvas')> | null = null;
 const loadDrawing = () => (drawing ??= import('html2canvas').catch((error) => { drawing = null; throw error; }));
 /** The drawing kit comes down as the page opens, so the first tap is quick. */
@@ -55,29 +67,45 @@ export function storyNoteOk(said: string): boolean {
  * copy it draws from is scaled up to match. All read first, then all
  * written, since a written shadow would pass on, already scaled, to the
  * words inside.
+ *
+ * A box's shadow (the Sticker's drop shadow) the drawing kit draws at the
+ * page's size, offset and blur alike. Today's pictures are drawn three times
+ * over, and that is the look kept (Oct 16, owner chose it: "Keep today's"):
+ * a sticker drawn finer (`density`) has its box shadows grown by the same,
+ * so it is today's picture, only sharper.
  */
-function scaleTextShadows(root: HTMLElement, scale: number) {
+function scaleShadows(root: HTMLElement, scale: number, density: number) {
   const view = root.ownerDocument.defaultView;
   if (!view || scale === 1) return;
-  const found: [HTMLElement, string][] = [];
+  const found: [HTMLElement, string | null, string | null][] = [];
   for (const el of [root, ...Array.from(root.querySelectorAll<HTMLElement>('*'))]) {
-    const shadow = view.getComputedStyle(el).textShadow;
-    if (shadow && shadow !== 'none') found.push([el, shadow]);
+    const style = view.getComputedStyle(el);
+    const text = style.textShadow && style.textShadow !== 'none' ? style.textShadow : null;
+    const box = density !== 1 && style.boxShadow && style.boxShadow !== 'none' ? style.boxShadow : null;
+    if (text || box) found.push([el, text, box]);
   }
-  for (const [el, shadow] of found) {
-    // "rgba(0, 0, 0, 0.35) 0px 1px 8px": the third length of each shadow is its blur.
-    el.style.textShadow = shadow.replace(/(-?[\d.]+)px\s+(-?[\d.]+)px\s+([\d.]+)px/g, (_, x: string, y: string, blur: string) => `${x}px ${y}px ${Number(blur) * scale}px`);
+  // "rgba(0, 0, 0, 0.35) 0px 1px 8px": the third length of each shadow is its blur.
+  const lengths = /(-?[\d.]+)px\s+(-?[\d.]+)px\s+([\d.]+)px/g;
+  for (const [el, text, box] of found) {
+    if (text) el.style.textShadow = text.replace(lengths, (_, x: string, y: string, blur: string) => `${x}px ${y}px ${Number(blur) * scale}px`);
+    if (box) el.style.boxShadow = box.replace(lengths, (_, x: string, y: string, blur: string) => `${Number(x) * density}px ${Number(y) * density}px ${Number(blur) * density}px`);
   }
 }
 
-/** The picture as a PNG file, ready to share or save. Exported for the demo's own check. */
-export async function storyBlob(view: View | null): Promise<Blob | string> {
+/**
+ * The picture as a PNG file, ready to share or save. Exported for the demo's
+ * own check. The whole hidden copy comes out at 1080 × 1920 (three times its
+ * 360 on the page, whatever the screen's own pixels). A see-through
+ * design's art alone (`density` above 1, Oct 16) comes out that many times
+ * finer again: the sticker Copy hands a story (see storyImage.ts).
+ */
+export async function storyBlob(view: View | null, density = 1): Promise<Blob | string> {
   const node = view as unknown as HTMLElement | null;
   if (!node || !node.offsetWidth) return 'The picture is not ready yet. Try again in a moment.';
   if (document.fonts?.ready) await document.fonts.ready;
   let html2canvas: (typeof import('html2canvas'))['default'];
   try { ({ default: html2canvas } = await loadDrawing()); } catch { return 'The picture could not be made. Refresh the page, then try again.'; }
-  const scale = STORY_PX.width / node.offsetWidth;
+  const scale = density === 1 ? STORY_PX.width / node.offsetWidth : (STORY_PX.width / stageSize().width) * density;
   const canvas = await html2canvas(node, {
     useCORS: true,
     backgroundColor: null,
@@ -85,7 +113,7 @@ export async function storyBlob(view: View | null): Promise<Blob | string> {
     scale,
     width: node.offsetWidth,
     height: node.offsetHeight,
-    onclone: (_doc, copy) => scaleTextShadows(copy, scale),
+    onclone: (_doc, copy) => scaleShadows(copy, scale, density),
   });
   const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
   return blob ?? 'The picture could not be made. Try again.';
@@ -104,6 +132,9 @@ function download(blob: Blob, name: string) {
 /** How the picture goes into a story (phones only; the browser shares a file). */
 export interface StoryLook { sticker: boolean; top: string; bottom: string }
 
+/** A see-through design's art alone (SessionStoryArt's artRef), made `density` times finer: what Copy hands a story. */
+export interface StorySticker { view: View | null; density: number }
+
 /**
  * `link` is the sharer's invite link, as words beside the picture and never
  * on it (Oct 5, Strava's way). Copy puts the picture and the link on the
@@ -111,9 +142,15 @@ export interface StoryLook { sticker: boolean; top: string; bottom: string }
  * the picture, into a message the link), else the picture alone. More sends
  * the link as the share's text with the file, where the browser shares both.
  * Stories and Save are the picture alone.
+ *
+ * Copy of a see-through design is its art alone, finer (`sticker`, Oct 16):
+ * what a story pastes as its sticker, sharp when pinched bigger (and the
+ * file Copy falls back to where a browser cannot copy pictures). Save, More
+ * and Stories are the whole story as ever.
  */
-export async function exportStory(view: View | null, action: StoryAction, title: string, look?: StoryLook, link?: string): Promise<string | null> {
-  const made = await storyBlob(view);
+export async function exportStory(view: View | null, action: StoryAction, title: string, look?: StoryLook, link?: string, sticker?: StorySticker): Promise<string | null> {
+  const asSticker = action === 'copy' && look?.sticker && sticker?.view ? sticker : null;
+  const made = await storyBlob(asSticker ? asSticker.view : view, asSticker ? asSticker.density : 1);
   if (typeof made === 'string') return made;
   if (action === 'copy') {
     const picture = { 'image/png': made };

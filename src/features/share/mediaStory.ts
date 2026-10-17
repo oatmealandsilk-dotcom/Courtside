@@ -3,7 +3,7 @@ import { Directory, File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { captureRef } from 'react-native-view-shot';
 
-import { FACEBOOK_APP_ID, STORIES_URL, STORY_PX, stageSize } from './storyImage';
+import { FACEBOOK_APP_ID, STORIES_URL, stageSize } from './storyImage';
 import { storyFill } from './storyOverlay';
 
 /*
@@ -96,13 +96,19 @@ type StoryAssets = { backgroundVideo?: string; backgroundImage?: string; sticker
  * snapshot could leave the part the menu cuts off blank. The sticker keeps
  * the on-screen snapshot the session Share page uses: its overlay sits in
  * the part on screen, and the rest is see-through either way.
+ *
+ * Sharper (Oct 16, owner: "make it super high quality"): the photo's JPEG
+ * at 0.97 rather than 0.92, which had left a faint ring round the white
+ * @handle and the mark; and Android takes the copy at its own size (already
+ * 1080 × 1920 pixels) rather than being asked for it, which made it resize
+ * the whole picture whenever the screen's rounding left it a pixel out.
  */
 async function photograph(view: View | null, format: 'png' | 'jpg'): Promise<string | undefined> {
   if (!view) return undefined;
   try {
-    const size = Platform.OS === 'android' ? STORY_PX : stageSize();
+    const size = Platform.OS === 'android' ? {} : stageSize();
     const whole = Platform.OS === 'ios' && format === 'jpg' ? { useRenderInContext: true } : {};
-    return await captureRef(view, { format, quality: format === 'jpg' ? 0.92 : 1, result: 'base64', ...size, ...whole });
+    return await captureRef(view, { format, quality: format === 'jpg' ? 0.97 : 1, result: 'base64', ...size, ...whole });
   } catch {
     return undefined;
   }

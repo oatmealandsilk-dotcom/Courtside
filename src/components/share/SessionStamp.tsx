@@ -4,8 +4,9 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { BrandMark } from '@/components/BrandMark';
 import { Avatar } from '@/components/ui';
-import { CLEAR_SHADE, CardWash, cardLook, clearLook, clearWordShade as wordShade } from '@/components/session/SessionCard';
+import { CardWash, cardLook, clearLook, clearShade, clearWordShade as wordShade } from '@/components/session/SessionCard';
 import { ShadedMark } from '@/components/share/ShadedMark';
+import { useShareDensity } from '@/components/share/density';
 import { Duration, Figure } from '@/components/session/Duration';
 import type { ID, SessionDetail } from '@/data/types';
 import { resultWord, scoreLine } from '@/features/activity/format';
@@ -42,7 +43,9 @@ export function SessionStamp({ session, width, eyebrow, place, hidden = [], clea
   const look = clear ? clearLook() : cardLook(theme);
   const u = width / 300;
   // The Overlay's own soft shadow under white words (SessionStoryArt), so they read on a bright photo; none on a card.
-  const shade: TextStyle | undefined = clear ? CLEAR_SHADE : undefined;
+  // Fixed-point sizes grow with a sharper copy (share/density.ts), so it is the same picture.
+  const density = useShareDensity();
+  const shade: TextStyle | undefined = clear ? clearShade(density) : undefined;
   const brandInk = clear ? colors.brandBright : look.figure;
   const result = resultWord(session);
   // The session's saved score (a match's, or a practice's since Oct 6), under the time.
@@ -60,7 +63,7 @@ export function SessionStamp({ session, width, eyebrow, place, hidden = [], clea
   const lead = [...opponents, ...partners][0];
   const others = opponents.length + partners.length - 1;
   // Clear's rules a real line, not a hairline: with no card behind them they are what holds it together (Oct 15).
-  const rule = { height: clear ? Math.max(1, 1.5 * u) : StyleSheet.hairlineWidth * 2, backgroundColor: look.lines, marginVertical: 14 * u };
+  const rule = { height: clear ? Math.max(1, 1.5 * u) : StyleSheet.hairlineWidth * 2 * density, backgroundColor: look.lines, marginVertical: 14 * u };
   return (
     <View style={[styles.card, { width, borderRadius: 20 * u, padding: 18 * u, backgroundColor: look.fill }]}>
       {clear ? null : <CardWash look={look} radius={20 * u} />}

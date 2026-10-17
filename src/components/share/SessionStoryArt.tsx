@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, type Ref } from 'react';
 import { Image, StyleSheet, Text, View, type TextStyle } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -6,6 +6,7 @@ import { SessionCard } from '@/components/session/SessionCard';
 import { SessionStamp } from '@/components/share/SessionStamp';
 import { HeartRateOverlay, heartRateOf } from '@/components/share/HeartRateOverlay';
 import { ShadedMark, type Halo } from '@/components/share/ShadedMark';
+import { useShareDensity } from '@/components/share/density';
 import { duration } from '@/lib/format';
 import { scoreLine } from '@/features/activity/format';
 import { scoreScale } from '@/features/activity/score';
@@ -73,8 +74,16 @@ export function storyDesigns(story: SessionStory | null): { key: StoryDesign; la
  *
  * Only what `story` carries is drawn: its maker (sessionStory.ts) has
  * already left out health numbers that were not shared and a teen's court.
+ *
+ * `artRef` (Oct 16, owner: "the courtside overlays are kinda blurry,
+ * pixelated, make it super high quality"): on a see-through design, the
+ * view holding just the art (the numbers and the mark, the stamp, the heart
+ * rate block) with a little room round it for its shadows, so the share
+ * screen can photograph that alone for Instagram's sticker instead of the
+ * whole story, most of it empty. Wrapping it moves nothing: the room is the
+ * same on every side and it stays centred where it was.
  */
-export function SessionStoryArt({ design, story, width, photo, hidden = [], onPhotoLoad, clear = false }: {
+export function SessionStoryArt({ design, story, width, photo, hidden = [], onPhotoLoad, clear = false, artRef }: {
   design: StoryDesign;
   story: SessionStory;
   width: number;
@@ -85,8 +94,12 @@ export function SessionStoryArt({ design, story, width, photo, hidden = [], onPh
   onPhotoLoad?: (ok: boolean) => void;
   /** The Clear colour dot: Photo, Card and Sticker with nothing filled. */
   clear?: boolean;
+  /** Given the view of a see-through design's art alone (see above). */
+  artRef?: Ref<View>;
 }) {
   useTheme();
+  // Fixed-point shadows grow with a sharper copy (density.ts), so it looks the same.
+  const d = useShareDensity();
   // One source object per photo: a new one each draw makes a browser load it again.
   const source = useMemo(() => (photo ? { uri: photo } : undefined), [photo]);
   const height = Math.round((width * 16) / 9);
@@ -94,7 +107,8 @@ export function SessionStoryArt({ design, story, width, photo, hidden = [], onPh
 
   if (design === 'card') {
     return (
-      <View collapsable={false} style={{ width, height }}>
+      // Under the Clear dot the whole card is the sticker (artRef): it fills most of the story anyway.
+      <View ref={clear ? artRef : undefined} collapsable={false} style={{ width, height }}>
         {/* Instagram's own buttons cover roughly the top 13% and the bottom 17%: the numbers keep clear of both. */}
         {/* The session's saved score is on it by itself (Oct 6): added or changed in the session's edit, never here. */}
         <SessionCard {...common} width={width} aspect={9 / 16} radius={0} scale={1.14} inset={{ top: Math.round(height * 0.12), bottom: Math.round(height * 0.11) }} clear={clear} />
@@ -106,7 +120,7 @@ export function SessionStoryArt({ design, story, width, photo, hidden = [], onPh
     // The zones as bars under the time and calories (Oct 10, owner): only when the post shares them;
     // else (never offered then, but asked for anyway) the Overlay below.
     const hr = heartRateOf(story.session);
-    if (hr) return <HeartRateOverlay hr={hr} width={width} />;
+    if (hr) return <HeartRateOverlay hr={hr} width={width} artRef={artRef} />;
   }
 
   if (design === 'overlay' || design === 'heart') {
@@ -128,26 +142,28 @@ export function SessionStoryArt({ design, story, width, photo, hidden = [], onPh
     return (
       // Centred on what Instagram leaves clear (its buttons cover about 13% at the top and 17% at the
       // foot), so the bigger logo under the numbers stays clear of the reply bar.
-      <View collapsable={false} style={[styles.centre, { width, height, gap: 14 * u, paddingBottom: 26 * u }]}>
-        {stats.map((st) => {
-          // A long score (tiebreak points since Oct 10, like 7–6(5) 6–7(3) (10–7)) a little smaller, so it stays on
-          // one line across the story; a longer one still (five sets with tiebreaks) goes onto a second line, centred.
-          const k = st.label === 'Score' ? scoreScale(st.value, 15) : 1;
-          return (
-            <View key={st.label} style={styles.centre}>
-              <Text style={[styles.overLabel, { fontSize: 15 * u, lineHeight: 20 * u }]}>{st.label}</Text>
-              <Text style={[styles.overValue, { fontSize: 36 * u * k, lineHeight: 42 * u * k, maxWidth: 320 * u, textAlign: 'center' }]}>{st.value}</Text>
-            </View>
-          );
-        })}
-        {/* The logo in CourtSide's own colour (Oct 4, owner), half as big again (Oct 9, owner: "our logo rn
-            is good. lets just make it bigger more prominent"): the wordmark as the sign-in page sets it, a
-            little under the numbers' size. Its soft light edge is wider and brighter, so the deep green
-            stands off a green, blue or night court; the bright green, the same on
-            every court (Oct 10, owner), gets a soft dark shadow instead, as the white numbers have. */}
-        <View style={[styles.overBrand, { gap: 8 * u, marginTop: 12 * u }]}>
-          <ShadedMark size={33 * u} u={u} color={colors.brandBright} halo={halo} weight={1.5} sideWeight={1.05} />
-          <Text style={[styles.overWord, { fontSize: 30 * u, lineHeight: 36 * u, letterSpacing: -0.9 * u, color: colors.brandBright }, wordHalo(halo, u)]}>CourtSide</Text>
+      <View collapsable={false} style={[styles.centre, { width, height, paddingBottom: 26 * u }]}>
+        <View ref={artRef} collapsable={false} style={[styles.centre, { gap: 14 * u, paddingVertical: ART_ROOM * u, paddingHorizontal: ART_SIDE * u }]}>
+          {stats.map((st) => {
+            // A long score (tiebreak points since Oct 10, like 7–6(5) 6–7(3) (10–7)) a little smaller, so it stays on
+            // one line across the story; a longer one still (five sets with tiebreaks) goes onto a second line, centred.
+            const k = st.label === 'Score' ? scoreScale(st.value, 15) : 1;
+            return (
+              <View key={st.label} style={styles.centre}>
+                <Text style={[styles.overLabel, { fontSize: 15 * u, lineHeight: 20 * u, textShadowRadius: 6 * d }]}>{st.label}</Text>
+                <Text style={[styles.overValue, { textShadowRadius: 8 * d, fontSize: 36 * u * k, lineHeight: 42 * u * k, maxWidth: 320 * u, textAlign: 'center' }]}>{st.value}</Text>
+              </View>
+            );
+          })}
+          {/* The logo in CourtSide's own colour (Oct 4, owner), half as big again (Oct 9, owner: "our logo rn
+              is good. lets just make it bigger more prominent"): the wordmark as the sign-in page sets it, a
+              little under the numbers' size. Its soft light edge is wider and brighter, so the deep green
+              stands off a green, blue or night court; the bright green, the same on
+              every court (Oct 10, owner), gets a soft dark shadow instead, as the white numbers have. */}
+          <View style={[styles.overBrand, { gap: 8 * u, marginTop: 12 * u }]}>
+            <ShadedMark size={33 * u} u={u} color={colors.brandBright} halo={halo} weight={1.5} sideWeight={1.05} />
+            <Text style={[styles.overWord, { fontSize: 30 * u, lineHeight: 36 * u, letterSpacing: -0.9 * u, color: colors.brandBright }, wordHalo(halo, u)]}>CourtSide</Text>
+        </View>
         </View>
       </View>
     );
@@ -157,9 +173,12 @@ export function SessionStoryArt({ design, story, width, photo, hidden = [], onPh
     // The Sticker without its card: white on nothing, no shadow round a box that is not there. Bigger than the
     // filled Sticker (Oct 15, owner: "make the clear one more visable"): with no box to frame it, its words need the room.
     const cardW = Math.round(width * 0.84);
+    const u = width / 360;
     return (
       <View collapsable={false} style={[styles.centre, { width, height }]}>
-        <SessionStamp session={story.session} eyebrow={story.eyebrow} place={story.place} hidden={hidden} width={cardW} clear />
+        <View ref={artRef} collapsable={false} style={{ padding: CLEAR_STAMP_ROOM * u }}>
+          <SessionStamp session={story.session} eyebrow={story.eyebrow} place={story.place} hidden={hidden} width={cardW} clear />
+        </View>
       </View>
     );
   }
@@ -167,10 +186,14 @@ export function SessionStoryArt({ design, story, width, photo, hidden = [], onPh
   if (design === 'sticker') {
     // The stamp alone, so it sits on someone's own story without taking it over (Oct 3, Oct 4).
     const cardW = Math.round(width * 0.62);
+    const u = width / 360;
     return (
       <View collapsable={false} style={[styles.centre, { width, height }]}>
-        <View style={[styles.sticker, { borderRadius: Math.round(20 * (cardW / 300)) }]}>
-          <SessionStamp session={story.session} eyebrow={story.eyebrow} place={story.place} hidden={hidden} width={cardW} />
+        {/* The stamp in the middle of its room (artRef), where it sat on its own before: centred either way. */}
+        <View ref={artRef} collapsable={false} style={{ padding: ART_ROOM * u }}>
+          <View style={[styles.sticker, styles.inRoom, { borderRadius: Math.round(20 * (cardW / 300)) }, d !== 1 && dropShadow(d)]}>
+            <SessionStamp session={story.session} eyebrow={story.eyebrow} place={story.place} hidden={hidden} width={cardW} />
+          </View>
         </View>
       </View>
     );
@@ -201,6 +224,20 @@ export function SessionStoryArt({ design, story, width, photo, hidden = [], onPh
   );
 }
 
+/**
+ * The room round a see-through design's art (artRef), in units of a
+ * 360-wide story: as far as its widest shadow reaches (the stamp's drop
+ * shadow, 22 blur 6 down), so nothing is cut off at the sticker's edge.
+ */
+const ART_ROOM = 28;
+/** The Overlay's room at its sides: its numbers may be 320 wide (a long score), so no more than 20 either side, or a score would wrap sooner. */
+const ART_SIDE = 20;
+/** The Clear stamp's room: it has an empty edge of its own already (its padding, 18), so a little more covers its words' shadows. */
+const CLEAR_STAMP_ROOM = 10;
+
+/** The stamp's drop shadow (styles.sticker) for a copy drawn `d` times finer: its points grow with it. */
+const dropShadow = (d: number) => ({ boxShadow: `0px ${6 * d}px ${22 * d}px rgba(0, 0, 0, 0.32)` });
+
 /** The wordmark's halo, matching the mark's (ShadedMark): a glow all round, or a shadow a touch below. */
 function wordHalo(halo: Halo, u: number): TextStyle {
   return halo === 'light'
@@ -218,4 +255,6 @@ const styles = StyleSheet.create({
   shade: { position: 'absolute', left: 0, right: 0, bottom: 0 },
   sticker: { position: 'absolute', boxShadow: '0px 6px 22px rgba(0, 0, 0, 0.32)' },
   corner: { position: 'absolute' },
+  // Inside its room (artRef) the stamp takes up room of its own, so the room is round it.
+  inRoom: { position: 'relative' },
 });
