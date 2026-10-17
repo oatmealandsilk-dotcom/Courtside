@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { BackHandler, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 
@@ -6,7 +6,7 @@ import { BrandMark } from '@/components/BrandMark';
 import { Button } from '@/components/ui';
 import { AgeReadout, AnswerCard, FooterFade, PrivacyLine, ProtectionsCard, Rise, UnlockCard } from '@/components/age/AgeBits';
 import { BirthdaySegments } from '@/components/age/BirthdaySegments';
-import { DateWheel, type WheelDate } from '@/components/age/DateWheel';
+import { DateWheel, EMPTY_WHEEL, type WheelDate } from '@/components/age/DateWheel';
 import { isDeviceBlocked, toBirthDate } from '@/features/age/ageCheck';
 import { birthdayLook } from '@/features/age/birthdayLook';
 import { useLeave } from '@/components/LeaveCurtain';
@@ -31,7 +31,7 @@ import { colors, spacing, typography } from '@/theme';
  * Redrawn Oct 17 (owner: "Make the UI of the what's your birthday and are
  * you 13 years or older ... a lot better"), in two designs to choose from on
  * the website with ?bdaylook=a (a date wheel) or ?bdaylook=b (three big
- * boxes); see birthdayLook.ts. Both keep Skip for now as plain to see as
+ * boxes, the one phones get); see birthdayLook.ts. Both keep Skip for now as plain to see as
  * Continue, and the two answers to the 13 question exactly alike.
  */
 export default function Birthday() {
@@ -40,7 +40,8 @@ export default function Birthday() {
   const look = birthdayLook();
   // Clear of the status bar and the home bar, the same as every page before the app.
   const space = useGateSpace();
-  // A short phone (an iPhone SE): the mark goes and the wheel is a little lower, so the buttons never leave the screen.
+  // A short phone (an iPhone SE): the mark goes, the wheel is a little lower and the 18+ card is
+  // tighter, so the buttons never leave the screen and "works without it" is never hidden under them.
   const short = useWindowDimensions().height < 720;
   // The date boxes are scrolled clear of the keyboard as they are tapped (a short phone, a big keyboard).
   const keyboard = useKeyboardReveal();
@@ -49,9 +50,8 @@ export default function Birthday() {
   const { from } = useLocalSearchParams<{ from?: string }>();
   const fromSettings = from === 'settings';
   const [date, setDate] = useState({ month: '', day: '', year: '' });
-  // The wheel starts on a date that is nobody's in particular; Continue waits until it has been moved.
-  const [wheel, setWheel] = useState<WheelDate>(() => ({ month: 0, day: 1, year: new Date().getFullYear() - 20 }));
-  const [wheelTouched, setWheelTouched] = useState(false);
+  // The wheel starts on "Month / Day / Year", no date at all; Continue waits until all three are picked.
+  const [wheel, setWheel] = useState<WheelDate>(EMPTY_WHEEL);
   // 'date': the birthday. 'skip': "Are you 13 or older?" instead.
   const [step, setStep] = useState<'date' | 'skip'>('date');
   const [answer, setAnswer] = useState<'over' | 'under' | null>(null);
@@ -81,10 +81,11 @@ export default function Birthday() {
 
   // The date as typed or as rolled, in one shape.
   const parts = look === 'a'
-    ? (wheelTouched ? { month: String(wheel.month + 1), day: String(wheel.day), year: String(wheel.year) } : { month: '', day: '', year: '' })
+    ? (wheel.month !== null && wheel.day !== null && wheel.year !== null
+      ? { month: String(wheel.month + 1), day: String(wheel.day), year: String(wheel.year) }
+      : { month: '', day: '', year: '' })
     : date;
   const ready = !!parts.month && !!parts.day && parts.year.length === 4 && !!toBirthDate(parts.month, parts.day, parts.year);
-  const touchWheel = useCallback(() => setWheelTouched(true), []);
 
   const submit = async () => {
     if (busy) return;
@@ -185,22 +186,23 @@ export default function Birthday() {
           {short ? null : <BrandMark size={40} />}
           <Text style={styles.title}>{fromSettings ? 'Add your birthday' : "When's your birthday?"}</Text>
           {/* Why we ask, honestly, and that it is up to them (Oct 17). */}
-          <Text style={styles.lead}>Optional. It helps us keep younger players safe.</Text>
+          {/* On a short phone the 18+ card drops its last line, so it is said here instead. */}
+          <Text style={styles.lead}>{short ? 'Optional. It helps us keep younger players safe. Everything works without it.' : 'Optional. It helps us keep younger players safe.'}</Text>
         </Rise>
         <Rise delay={70} style={styles.picker}>
           {look === 'a'
-            ? <DateWheel value={wheel} onChange={setWheel} onTouch={touchWheel} rowHeight={short ? 36 : 42} label="Birthday (optional)" />
+            ? <DateWheel value={wheel} onChange={(next) => { setWheel(next); setError(''); }} rowHeight={short ? 34 : 42} label="Birthday (optional)" />
             : <BirthdaySegments value={date} onChange={(next) => { setDate(next); setError(''); }} onSubmit={() => { if (ready) void submit(); }} />}
           <AgeReadout {...parts} error={error} hint={look === 'a' ? 'Roll each wheel to your birthday' : 'Month, day and year'} />
           <PrivacyLine />
         </Rise>
         <Rise delay={140}>
-          <UnlockCard />
+          <UnlockCard compact={short} />
         </Rise>
       </ScrollView>
       {/* Continue and Skip for now stay on screen, side by side in weight, whatever the page's length. */}
       <View style={[styles.footer, { paddingBottom: space.footer }]}>
-          <FooterFade />
+        <FooterFade />
         <Button label={fromSettings ? 'Save' : 'Continue'} loading={busy} disabled={!ready} onPress={() => { void submit(); }} full />
         {fromSettings
           ? <Button label="Not now" variant="secondary" disabled={busy} onPress={() => goBack()} full />

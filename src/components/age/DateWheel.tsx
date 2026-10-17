@@ -19,35 +19,43 @@ import { colors, pageIsDark, radius, spacing, typography, withAlpha } from '@/th
  * so it cannot add the phone's own picker. Each column is a slider to
  * VoiceOver (swipe up or down to change it); on the website a mouse wheel,
  * a drag, a click on a row and the arrow keys all move it.
+ *
+ * Each column starts on a faint "Month", "Day" or "Year" row, so no date is
+ * shown until the person picks one, and Continue waits for all three (Oct 17
+ * review: a wheel that opened on a date 20 years ago, ready after one flick,
+ * was a grown-up's birthday filled in for them).
  */
 
 export const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
 export const daysIn = (month: number, year: number) => new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
 
-/** Month 0–11, day 1–31, full year. */
-export type WheelDate = { month: number; day: number; year: number };
+/** Month 0–11, day 1–31, full year; null until that column has been picked. */
+export type WheelDate = { month: number | null; day: number | null; year: number | null };
 
-export function DateWheel({ value, onChange, onTouch, rowHeight = 40, label = 'Birthday' }: {
+export const EMPTY_WHEEL: WheelDate = { month: null, day: null, year: null };
+
+export function DateWheel({ value, onChange, rowHeight = 40, label = 'Birthday' }: {
   value: WheelDate;
   onChange: (next: WheelDate) => void;
-  /** The first time anyone moves a column: the date shown is now theirs, not the starting one. */
-  onTouch?: () => void;
   rowHeight?: number;
   label?: string;
 }) {
   const styles = useThemedStyles(styleDefinitions);
   const thisYear = new Date().getFullYear();
+  // Row 0 of each column is its name, faint: nothing picked yet.
+  const months = useMemo(() => ['Month', ...MONTHS], []);
+  // Newest year first, under "Year".
   const years = useMemo(() => {
-    const list: string[] = [];
-    for (let y = Math.max(1900, thisYear - 100); y <= thisYear; y += 1) list.push(String(y));
+    const list: string[] = ['Year'];
+    for (let y = thisYear; y >= Math.max(1900, thisYear - 100); y -= 1) list.push(String(y));
     return list;
   }, [thisYear]);
-  const firstYear = Number(years[0]);
-  const dayCount = daysIn(value.month, value.year);
-  const days = useMemo(() => Array.from({ length: dayCount }, (_, i) => String(i + 1)), [dayCount]);
+  // No month yet: 31 days. No year yet: a leap year, so 29 February can be picked first.
+  const dayCount = value.month === null ? 31 : daysIn(value.month, value.year ?? 2000);
+  const days = useMemo(() => ['Day', ...Array.from({ length: dayCount }, (_, i) => String(i + 1))], [dayCount]);
   // A month or year with fewer days pulls the day back in (31 March → February: the 28th or 29th).
-  useEffect(() => { if (value.day > dayCount) onChange({ ...value, day: dayCount }); }, [dayCount, value, onChange]);
+  useEffect(() => { if (value.day !== null && value.day > dayCount) onChange({ ...value, day: dayCount }); }, [dayCount, value, onChange]);
 
   const height = rowHeight * 5;
   const dark = pageIsDark();
@@ -55,12 +63,12 @@ export function DateWheel({ value, onChange, onTouch, rowHeight = 40, label = 'B
   return (
     <View style={[styles.wheel, { height }]} accessibilityRole="none" aria-label={label}>
       <View pointerEvents="none" style={[styles.band, { top: rowHeight * 2, height: rowHeight, backgroundColor: band }]} />
-      <Column flex={1.55} align="left" label="Month" items={MONTHS} index={value.month} rowHeight={rowHeight}
-        onIndex={(i) => onChange({ ...value, month: i })} onTouch={onTouch} />
-      <Column flex={0.75} align="center" label="Day" items={days} index={Math.min(value.day, dayCount) - 1} rowHeight={rowHeight}
-        onIndex={(i) => onChange({ ...value, day: i + 1 })} onTouch={onTouch} />
-      <Column flex={1} align="right" label="Year" items={years} index={value.year - firstYear} rowHeight={rowHeight}
-        onIndex={(i) => onChange({ ...value, year: firstYear + i })} onTouch={onTouch} />
+      <Column flex={1.55} align="left" label="Month" items={months} index={value.month === null ? 0 : value.month + 1} rowHeight={rowHeight}
+        onIndex={(i) => onChange({ ...value, month: i === 0 ? null : i - 1 })} />
+      <Column flex={0.75} align="center" label="Day" items={days} index={value.day === null ? 0 : Math.min(value.day, dayCount)} rowHeight={rowHeight}
+        onIndex={(i) => onChange({ ...value, day: i === 0 ? null : i })} />
+      <Column flex={1} align="right" label="Year" items={years} index={value.year === null ? 0 : thisYear - value.year + 1} rowHeight={rowHeight}
+        onIndex={(i) => onChange({ ...value, year: i === 0 ? null : thisYear - i + 1 })} />
       {/* The soft fade at the top and bottom, in the card's own colour. */}
       <Fade height={rowHeight * 1.8} top />
       <Fade height={rowHeight * 1.8} />
@@ -88,8 +96,8 @@ function Fade({ height, top }: { height: number; top?: boolean }) {
 /** How many rows either side of the middle are drawn; the rest are off the wheel. */
 const REACH = 5;
 
-function Column({ items, index, onIndex, onTouch, label, rowHeight, flex, align }: {
-  items: string[]; index: number; onIndex: (i: number) => void; onTouch?: () => void;
+function Column({ items, index, onIndex, label, rowHeight, flex, align }: {
+  items: string[]; index: number; onIndex: (i: number) => void;
   label: string; rowHeight: number; flex: number; align: 'left' | 'center' | 'right';
 }) {
   const styles = useThemedStyles(styleDefinitions);
@@ -109,8 +117,8 @@ function Column({ items, index, onIndex, onTouch, label, rowHeight, flex, align 
     setNear(index);
   }, [index, rowHeight, pos]);
 
-  const touch = useCallback(() => onTouch?.(), [onTouch]);
-  const commit = useCallback((i: number) => { onTouch?.(); if (i !== indexRef.current) { indexRef.current = i; onIndex(i); } }, [onIndex, onTouch]);
+  // Only a row that really changed counts: a touch that moves nothing picks nothing.
+  const commit = useCallback((i: number) => { if (i !== indexRef.current) { indexRef.current = i; onIndex(i); } }, [onIndex]);
 
   /** Moves by whole rows (keys, mouse wheel, VoiceOver). */
   const step = useCallback((by: number, to?: number) => {
@@ -134,7 +142,7 @@ function Column({ items, index, onIndex, onTouch, label, rowHeight, flex, align 
   };
   const max = last * rowHeight;
   const pan = Gesture.Pan()
-    .onBegin(() => { cancelAnimation(pos); start.value = pos.value; runOnJS(touch)(); })
+    .onBegin(() => { cancelAnimation(pos); start.value = pos.value; })
     .onUpdate((e) => {
       const next = start.value - e.translationY;
       // Past either end it gives a little, like the phone's own wheel.
@@ -201,10 +209,10 @@ function Column({ items, index, onIndex, onTouch, label, rowHeight, flex, align 
         focusable
         accessibilityRole="adjustable"
         accessibilityLabel={label}
-        accessibilityValue={{ text: items[index] ?? '' }}
+        accessibilityValue={{ text: index === 0 ? 'Not picked' : items[index] ?? '' }}
         accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
         onAccessibilityAction={onAction}
-        aria-valuetext={items[index] ?? ''}
+        aria-valuetext={index === 0 ? 'Not picked' : items[index] ?? ''}
         aria-valuenow={index}
         aria-valuemin={0}
         aria-valuemax={last}
@@ -233,7 +241,7 @@ function Row({ i, text, pos, rowHeight, align }: { i: number; text: string; pos:
   });
   return (
     <Animated.View style={[styles.row, { top: i * rowHeight, height: rowHeight }, look]}>
-      <Text numberOfLines={1} style={[styles.rowText, { textAlign: align }]}>{text}</Text>
+      <Text numberOfLines={1} style={[styles.rowText, i === 0 && styles.rowPlaceholder, { textAlign: align }]}>{text}</Text>
     </Animated.View>
   );
 }
@@ -249,4 +257,5 @@ const styleDefinitions = StyleSheet.create({
   columnFocused: Platform.OS === 'web' ? { outlineWidth: 2, outlineStyle: 'solid', outlineColor: colors.brand, outlineOffset: -2 } as object : {},
   row: { position: 'absolute', left: spacing.sm, right: spacing.sm, justifyContent: 'center' },
   rowText: { ...typography.title, fontSize: 21, color: colors.text, fontVariant: ['tabular-nums'] },
+  rowPlaceholder: { color: colors.textFaint },
 });

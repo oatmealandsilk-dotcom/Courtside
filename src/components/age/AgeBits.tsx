@@ -55,25 +55,29 @@ export function PrivacyLine() {
   );
 }
 
-/** What a birthday opens up at 18, and that skipping changes nothing else. */
-export function UnlockCard() {
+/**
+ * What a birthday opens up at 18, and that skipping changes nothing else.
+ * Compact on a short phone: one line a row, smaller dots, and "Everything
+ * works without it" moves up into the page's first line.
+ */
+export function UnlockCard({ compact }: { compact?: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
   const rows: { icon: React.ComponentProps<typeof Ionicons>['name']; text: string }[] = [
-    { icon: 'location-outline', text: 'Players nearby can find you on the map' },
-    { icon: 'chatbubble-ellipses-outline', text: "Players you don't follow yet can message you" },
+    { icon: 'location-outline', text: compact ? 'Nearby players see you on the map' : 'Players nearby can find you on the map' },
+    { icon: 'chatbubble-ellipses-outline', text: compact ? 'Messages from any player' : "Players you don't follow yet can message you" },
   ];
   return (
-    <View style={styles.card}>
+    <View style={[styles.card, compact && styles.cardCompact]}>
       <Text style={styles.cardEyebrow}>AT 18 AND OVER, A BIRTHDAY OPENS UP</Text>
       {rows.map((row) => (
-        <View key={row.icon} style={styles.row}>
-          <View style={[styles.rowIcon, { backgroundColor: withAlpha(colors.brand, pageIsDark() ? 0.22 : 0.1) }]}>
-            <Ionicons name={row.icon} size={16} color={colors.brand} />
+        <View key={row.icon} style={[styles.row, compact && styles.rowCompact]}>
+          <View style={[styles.rowIcon, compact && styles.rowIconCompact, { backgroundColor: withAlpha(colors.brand, pageIsDark() ? 0.22 : 0.1) }]}>
+            <Ionicons name={row.icon} size={compact ? 14 : 16} color={colors.brand} />
           </View>
-          <Text style={styles.rowText}>{row.text}</Text>
+          <Text style={styles.rowText} numberOfLines={compact ? 1 : undefined}>{row.text}</Text>
         </View>
       ))}
-      <Text style={styles.cardFoot}>Everything else works the same without it.</Text>
+      {compact ? null : <Text style={styles.cardFoot}>Everything else works the same without it.</Text>}
     </View>
   );
 }
@@ -171,8 +175,11 @@ const styleDefinitions = StyleSheet.create({
   privacyText: { ...typography.small, color: colors.textMuted },
   card: { backgroundColor: colors.surface, borderRadius: radius.lg, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, padding: spacing.lg, gap: spacing.md },
   cardEyebrow: { ...typography.caption, color: colors.textMuted },
+  cardCompact: { paddingVertical: spacing.md, gap: spacing.sm },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  rowCompact: { gap: spacing.sm },
   rowIcon: { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
+  rowIconCompact: { width: 24, height: 24, borderRadius: 12 },
   rowText: { ...typography.small, fontSize: 14, lineHeight: 19, color: colors.text, flex: 1 },
   checkRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
   check: { marginTop: 1 },
