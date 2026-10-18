@@ -11,6 +11,7 @@ import { Button } from '@/components/ui';
 import { rememberShareTarget } from '@/features/invite/referral';
 import { colors, lift, radius, spacing, typography } from '@/theme';
 import { IPHONE_APP_URL, closeJoinSheet, useJoinSheet } from './joinAsk';
+import { noteAppTap } from './campaign';
 
 /**
  * The one sign-up ask in guest mode (Oct 17, owner: "it's just when you
@@ -70,7 +71,7 @@ export function JoinSheet() {
             </Pressable>
           ) : null}
           <View style={styles.foot}>
-            <Pressable accessibilityRole="link" accessibilityLabel="Get the iPhone app" hitSlop={8} onPress={() => { void Linking.openURL(IPHONE_APP_URL); }} style={styles.quiet}>
+            <Pressable accessibilityRole="link" accessibilityLabel="Get the iPhone app" hitSlop={8} onPress={() => { noteAppTap(); void Linking.openURL(IPHONE_APP_URL); }} style={styles.quiet}>
               <Ionicons name="logo-apple" size={15} color={colors.textMuted} />
               <Text style={styles.quietText}>Get the iPhone app</Text>
             </Pressable>

@@ -39,5 +39,9 @@ export function useJoinSheet(): JoinAsk | null {
   return useSyncExternalStore(subscribe, () => current, () => current);
 }
 
-/** The iPhone app while it is in TestFlight (owner, Oct 17); the App Store link once it is approved. */
+/**
+ * The iPhone app while it is in TestFlight (owner, Oct 17); the App Store link once it is approved.
+ * public/waitlist.html has its own copy (APP_URL, for courtsidebase.com/?ref=fb&go=app links): change
+ * both together (the auto-tester checks they match).
+ */
 export const IPHONE_APP_URL = 'https://testflight.apple.com/join/21UJPuny';

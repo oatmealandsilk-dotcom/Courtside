@@ -27,6 +27,7 @@ import { openJoinSheet } from '@/features/guest/joinAsk';
 import { JoinSheet } from '@/features/guest/JoinSheet';
 import { GetAppBar } from '@/features/guest/GetAppBar';
 import { rememberReferrer } from '@/features/invite/referral';
+import { rememberCampaign } from '@/features/guest/campaign';
 import { HOME } from '@/lib/goBack';
 import { useShareLanding } from '@/features/share/useShareLanding';
 import { useWorkoutWatch } from '@/features/activity/useWorkoutWatch';
@@ -91,6 +92,9 @@ if (Platform.OS === 'web' && typeof window !== 'undefined') {
     const ref = q.get('ref');
     const code = (q.get('r') ?? '').toLowerCase();
     landingRef = ref ? ref : /^[0-9a-f]{8}$/.test(code) ? `r=${code}` : null;
+    // The campaign a link came from (?src=fb, from courtsidebase.com/?ref=fb, Oct 18): kept so a
+    // sign-up or a "Get the app" tap here is counted for that link (campaign.ts).
+    rememberCampaign(q.get('src'));
   } catch { /* nothing carried */ }
 }
 export function AppShell({ children }: { children: React.ReactNode }) {

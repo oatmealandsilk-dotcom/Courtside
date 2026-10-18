@@ -728,6 +728,50 @@ async function guestShowsOnlyAdults(page) {
   if (seen.length) throw new Error(`a guest sees ${seen.join(', ')} (only public adults may show)`);
 }
 
+/**
+ * The website's "straight to the app" link (Oct 18, owner: "so how will we tell if courtside is
+ * coming from Facebook"): public/waitlist.html?ref=fb&go=app notes an app tap for fb, then goes on
+ * to the iPhone app, the same address as the app's own IPHONE_APP_URL. Tried in a tab of its own,
+ * so the app's tab is left as it was. Nothing leaves this machine: the note to the database is
+ * blocked (and only looked at), and the iPhone app's page is answered here, never loaded.
+ */
+async function checkAppHop(page) {
+  const joinAsk = fs.readFileSync(path.join(ROOT, 'src/features/guest/joinAsk.ts'), 'utf8');
+  const appUrl = /IPHONE_APP_URL = '([^']+)'/.exec(joinAsk)?.[1];
+  if (!appUrl) throw new Error('could not find IPHONE_APP_URL in src/features/guest/joinAsk.ts');
+  const { cdp } = page;
+  const { targetId } = await cdp.send('Target.createTarget', { url: 'about:blank' });
+  const { sessionId } = await cdp.send('Target.attachToTarget', { targetId, flatten: true });
+  const send = (method, params) => cdp.send(method, params, sessionId);
+  const seen = { hop: null, notes: [], errors: [] };
+  const stop = cdp.on(({ sessionId: from, method, params }) => {
+    if (from !== sessionId) return;
+    if (method === 'Fetch.requestPaused') {
+      if (!seen.hop) seen.hop = params.request.url;
+      const body = Buffer.from('<!doctype html><title>iPhone app</title><p>(the iPhone app’s page, answered by the auto-tester)</p>').toString('base64');
+      send('Fetch.fulfillRequest', { requestId: params.requestId, responseCode: 200, responseHeaders: [{ name: 'Content-Type', value: 'text/html' }], body }).catch(() => {});
+    } else if (method === 'Network.requestWillBeSent' && LIVE_BACKEND.test(params.request.url)) {
+      seen.notes.push(params.request.postData ?? '');
+    } else if (method === 'Runtime.exceptionThrown') {
+      seen.errors.push(params.exceptionDetails.exception?.description ?? params.exceptionDetails.text);
+    }
+  });
+  try {
+    await Promise.all([send('Page.enable'), send('Runtime.enable'), send('Network.enable')]);
+    await send('Network.setBlockedURLs', { urls: LIVE_BACKEND_PATTERNS });
+    await send('Fetch.enable', { patterns: [{ urlPattern: `${new URL(appUrl).origin}/*` }] });
+    await send('Page.navigate', { url: `${page.origin}/waitlist.html?ref=fb&go=app` });
+    await page.waitUntil(async () => seen.hop, TIMEOUT, 'the link to go on to the iPhone app');
+    if (seen.hop !== appUrl) throw new Error(`the link went to ${seen.hop}, not the app's IPHONE_APP_URL (${appUrl}); keep public/waitlist.html's APP_URL the same`);
+    const kinds = seen.notes.map((n) => { try { const b = JSON.parse(n); return `${b.p_label}:${b.p_kind}`; } catch { return '?'; } });
+    if (!kinds.includes('fb:app') || !kinds.includes('fb:visit')) throw new Error(`the link did not note a visit and an app tap for fb (noted: ${kinds.join(', ') || 'nothing'})`);
+    if (seen.errors.length) throw new Error(`the link's page threw: ${seen.errors[0]}`);
+  } finally {
+    stop();
+    await cdp.send('Target.closeTarget', { targetId }).catch(() => {});
+  }
+}
+
 const STEPS = [
   {
     // Oct 17: Apple turned down build 17 under 5.1.1(v) for requiring a date of birth. The birthday
@@ -1209,6 +1253,13 @@ const STEPS = [
     expect: [{ text: 'Share your session' }, { text: 'Posted. Add it to your story?' }, { label: 'Done' }, { label: 'Share to Instagram Stories' }],
     // Back on the feed (looked for even under a note along the top, such as "How was the hit at …?").
     after: async (page) => { await page.tap({ label: 'Done' }); await page.gone({ text: 'Share your session' }); await page.waitFor({ label: 'For you', any: true }); },
+  },
+  {
+    // Oct 18 ("build tracking"): courtsidebase.com/?ref=fb&go=app, in a tab of its own (see checkAppHop).
+    name: 'app-link',
+    title: 'Website link straight to the iPhone app',
+    async run(page) { await checkAppHop(page); },
+    expect: [],
   },
 ];
 

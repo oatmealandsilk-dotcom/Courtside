@@ -6,6 +6,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { BrandMark } from '@/components/BrandMark';
 import { colors, radius, spacing, typography } from '@/theme';
 import { IPHONE_APP_URL } from './joinAsk';
+import { noteAppTap } from './campaign';
 
 const KEY = 'courtside-app-bar-closed';
 const closedThisVisit = () => { try { return sessionStorage.getItem(KEY) === '1'; } catch { return false; } };
@@ -36,7 +37,7 @@ export function GetAppBar() {
         <Text style={styles.title} numberOfLines={1}>CourtSide for iPhone</Text>
         <Text style={styles.sub} numberOfLines={1}>Clips, hits and coaches, in your pocket</Text>
       </View>
-      <Pressable accessibilityRole="link" accessibilityLabel="Get the iPhone app" onPress={() => { void Linking.openURL(IPHONE_APP_URL); }} style={({ pressed }) => [styles.get, pressed && styles.pressed]}>
+      <Pressable accessibilityRole="link" accessibilityLabel="Get the iPhone app" onPress={() => { noteAppTap(); void Linking.openURL(IPHONE_APP_URL); }} style={({ pressed }) => [styles.get, pressed && styles.pressed]}>
         <Text style={styles.getText}>Get the app</Text>
       </Pressable>
     </View>

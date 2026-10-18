@@ -18,7 +18,12 @@
   name or an email), and carries the person who shared the link (a player's
   handle, an affiliate's code, or a friend's waitlist code r=…) into the app,
   so whoever signs up is still credited to them. A campaign label (fb,
-  reddit…) is counted here and not carried: it is not a person.
+  reddit…) is counted here and carried on separately as ?src= (Oct 18): it
+  is not a person, so it never credits anyone, but a sign-up in the web app
+  is then counted for that link (migration 165).
+
+  ?go=app (Oct 18): courtsidebase.com/?ref=fb&go=app counts the visit and an
+  app tap, then goes straight on to the iPhone app (APP_URL below).
 
   The old information page is kept at welcome.html.
 -->
@@ -61,7 +66,19 @@
     var code = (params.get('r') || '').trim().toLowerCase();
     var label = /^[a-z0-9_]{2,24}$/.test(ref) ? ref : null;
 
-    // 1. Count the visit, once a day per label from this browser (the server holds to that too).
+    // "Straight to the app" links (Oct 18, owner: "so how will we tell if courtside is coming from
+    // Facebook"): courtsidebase.com/?ref=fb&go=app counts the visit and an app tap for fb, then goes
+    // right on to the iPhone app, so a post can link to the app and still be counted.
+    var goApp = (params.get('go') || '').trim().toLowerCase() === 'app';
+    // The iPhone app, in this one place for this page. Keep it the same as IPHONE_APP_URL in
+    // src/features/guest/joinAsk.ts (the auto-tester checks they match). Once Apple approves the
+    // app, switch both to the App Store link, and here add &ct=<label> to it (ct=fb for this
+    // link) so App Store Connect counts installs per link too.
+    var APP_URL = 'https://testflight.apple.com/join/21UJPuny';
+    var notes = [];
+
+    // 1. Count the visit (and, for go=app, the app tap), each once a day per label from this
+    //    browser (the server holds to that too).
     if (label) {
       var newId = function () {
         try { if (crypto.randomUUID) return crypto.randomUUID(); } catch (e) {}
@@ -78,28 +95,46 @@
       } catch (e) {}
       if (!visitor) visitor = newId();
       var today = new Date().toDateString();
-      var seen = null;
-      try { seen = localStorage.getItem('courtside-seen-' + label); } catch (e) {}
-      if (seen !== today) {
+      // The web app's own "Get the app" taps use the same once-a-day marks (src/features/guest/campaign.ts).
+      var note = function (kind, mark) {
+        var seen = null;
+        try { seen = localStorage.getItem(mark); } catch (e) {}
+        if (seen === today) return;
         try {
-          // keepalive: the note still lands while the page moves on to the app.
-          fetch(SUPABASE_URL + '/rest/v1/rpc/log_link_event', {
+          // keepalive: the note still lands while the page moves on.
+          notes.push(fetch(SUPABASE_URL + '/rest/v1/rpc/log_link_event', {
             method: 'POST', keepalive: true,
             headers: { apikey: SUPABASE_KEY, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ p_label: label, p_kind: 'visit', p_visitor: visitor }),
-          }).catch(function () {});
-          localStorage.setItem('courtside-seen-' + label, today);
+            body: JSON.stringify({ p_label: label, p_kind: kind, p_visitor: visitor }),
+          }).catch(function () {}));
+          localStorage.setItem(mark, today);
         } catch (e) {}
-      }
+      };
+      note('visit', 'courtside-seen-' + label);
+      if (goApp) note('app', 'courtside-seen-app-' + label);
     }
 
-    // 2. On into the app, carrying the person who shared it (never a campaign label).
+    // 2. On into the app, carrying the person who shared it (?ref=: a handle or a code) or the
+    //    campaign it came from (?src=fb: never as ?ref, a campaign is not a person), so a sign-up
+    //    there is counted for that link (migration 165). For go=app, on to the iPhone app instead.
     var to = 'https://app.courtsidebase.com/';
-    if (label && CAMPAIGNS.indexOf(label) < 0) to += '?ref=' + encodeURIComponent(label);
+    if (goApp) to = APP_URL;
+    else if (label && CAMPAIGNS.indexOf(label) < 0) to += '?ref=' + encodeURIComponent(label);
+    else if (label) to += '?src=' + encodeURIComponent(label);
     else if (/^[0-9a-f]{8}$/.test(code)) to += '?r=' + code;
     document.getElementById('go').setAttribute('href', to);
-    // A moment for the visit's note to leave (it is sent with keepalive either way).
-    setTimeout(function () { location.replace(to); }, 60);
+    var left = false;
+    var leave = function () { if (left) return; left = true; location.replace(to); };
+    // The notes go with keepalive either way. Going to the app, wait for them a little (the
+    // Facebook and Instagram in-app browsers can drop a request once the page is left), but
+    // never long: a slow note never holds anyone up.
+    if (goApp && notes.length && typeof Promise !== 'undefined' && Promise.all) {
+      Promise.all(notes).then(leave, leave);
+      setTimeout(leave, 700);
+    } else {
+      // A moment for the visit's note to leave.
+      setTimeout(leave, 60);
+    }
   })();
 </script>
 </body>

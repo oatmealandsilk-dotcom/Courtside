@@ -22,6 +22,7 @@ import { TERMS_VERSION } from '@/lib/legal';
 import { fetchBootstrap, fetchGuestFeedPage, fetchGuestHome, fetchGuestPost, fetchGuestThread, fetchGuestThreads, searchPosts as apiSearchPosts, signIn as apiSignIn, type Bootstrap, type GuestData } from '@/data/api';
 import { openJoinSheet } from '@/features/guest/joinAsk';
 import { setGuestStatus } from '@/features/guest/guestStatus';
+import { noteCampaignSignup } from '@/features/guest/campaign';
 import * as demoApi from '@/data/api';
 import { BLOCKED_WORDS_NOTE, CHAT_PHOTO_UNREADABLE, REVIEW_NOTE_MAX, auth as remoteAuth, fetchRemote, isLocalMedia, onWordsRefused, queueFeedSignal, remote, uploadChatPhoto, uploadMedia, emptyProfile, type GroupRefusal, type AdminReport, type ModerationResult, type ReviewAskResult, type ReportedChat, type ReportedItem, type ReportedItemKind, type ReportEvidence, type FeedSignal, type SiteFeedback, type WaitlistEntry, type BetaInviteStatus, type FirstDayStats, type FirstMove, type HandleStatus, type InviteCodeResult, type MyInviter, type RemoteData, type UserState, standInName } from '@/data/remote';
 import { clearSnapshot, markSnapshotOpened, markSnapshotOpening, readSnapshot, saveSnapshot, snapshotFailedBefore } from '@/data/snapshot';
@@ -8421,6 +8422,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     showInviterFollow(who, mine?.id === who ? mine.handle : undefined);
   };
   useEffect(() => { if (live(state.currentUserId)) void claimPendingReferral(); }, [state.currentUserId, claimPendingReferral]);
+  // Signed in on the website after coming through a link (courtsidebase.com/?ref=fb, Oct 18): one
+  // sign-up for that link, if this account is brand new (the server decides: migration 165).
+  useEffect(() => { if (live(state.currentUserId)) void noteCampaignSignup(); }, [state.currentUserId]);
   // The demo player is an affiliate with people of their own (src/data/mock/invites.ts); anyone else in the demo has none.
   // Only a build with no database plays the demo's part: a real build never shows made-up money.
   const countReferrals = useCallback(async () => { const me = stateRef.current.currentUserId; return live(me) ? remote.countReferrals(me!) : !isSupabaseConfigured && me ? demoApi.countReferrals(me) : 0; }, []);

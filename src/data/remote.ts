@@ -91,8 +91,11 @@ export interface LinkStatRow {
   label: string;
   /** In the window asked for (7 or 30 days). */
   visitors: number; appTaps: number; webTaps: number; emails: number;
+  /** New accounts made on the website after coming through the link (migration 165; 0 before it). */
+  signups: number;
   /** Since counting began. */
   visitorsAll: number; appTapsAll: number; webTapsAll: number; emailsAll: number;
+  signupsAll: number;
 }
 /** Someone one person brought: only their name, @handle and dates. */
 export interface InviteeRow { id: ID; name: string; handle: string; avatarUrl?: string; joinedAt: string; setUp: boolean; qualifiedAt?: string }
@@ -2828,7 +2831,30 @@ export const remote = {
       label: String(r.label ?? ''),
       visitors: n(r.visitors), appTaps: n(r.app_taps), webTaps: n(r.web_taps), emails: n(r.emails),
       visitorsAll: n(r.visitors_all), appTapsAll: n(r.app_taps_all), webTapsAll: n(r.web_taps_all), emailsAll: n(r.emails_all),
+      signups: n(r.signups), signupsAll: n(r.signups_all),
     }));
+  },
+  /**
+   * A tap on "Get the app" in the web app, for the link a guest came through (migration 161's
+   * log_link_event: the label, the kind and the browser's own random id; never who they are).
+   * The server ignores labels that are not ours, a handle or a code, and says nothing back.
+   */
+  async logLinkEvent(label: string, kind: 'app' | 'web', visitor: string): Promise<void> {
+    await need().rpc('log_link_event', { p_label: label, p_kind: kind, p_visitor: visitor });
+  },
+  /**
+   * A new account made on the website after coming through a link (migration 165): counted once
+   * per account, only for accounts made in the last two days. 'ok' once the server has answered
+   * (counted or not: it never says which), so the label can be let go.
+   */
+  async noteSignupSource(label: string): Promise<'ok' | 'missing' | 'failed'> {
+    try {
+      const { error } = await need().rpc('note_signup_source', { p_label: label });
+      if (!error) return 'ok';
+      return missingFunction(error) ? 'missing' : 'failed';
+    } catch {
+      return 'failed';
+    }
   },
   /** Admin: the people one person brought. */
   async fetchInvitees(referrer: ID): Promise<InviteeRow[]> {

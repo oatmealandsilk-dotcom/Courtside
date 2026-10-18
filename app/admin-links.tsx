@@ -27,18 +27,28 @@ type Range = '7' | '30' | 'all';
 const MY_LINKS: { label: string; title: string }[] = [
   { label: 'fb', title: 'Facebook' },
 ];
-const linkFor = (label: string) => `https://courtsidebase.com/?ref=${label}`;
+/**
+ * The links to copy: the usual one (opens CourtSide on the web, where a guest
+ * can read and sign up), and one that goes straight to the iPhone app (Oct 18,
+ * owner: "so how will we tell if courtside is coming from Facebook"). Both
+ * count for fb: the second counts the visit and an app tap, then opens the app.
+ */
+const COPY_LINKS: { label: string; title: string; path: string }[] = [
+  { label: 'fb', title: 'Facebook', path: 'courtsidebase.com/?ref=fb' },
+  { label: 'fb', title: 'Facebook, straight to the app', path: 'courtsidebase.com/?ref=fb&go=app' },
+];
 
-/** The four numbers for the range picked. */
+/** The five numbers for the range picked. */
 const numbersOf = (row: LinkStatRow, range: Range) => (range === 'all'
-  ? { visitors: row.visitorsAll, app: row.appTapsAll, web: row.webTapsAll, emails: row.emailsAll }
-  : { visitors: row.visitors, app: row.appTaps, web: row.webTaps, emails: row.emails });
+  ? { visitors: row.visitorsAll, app: row.appTapsAll, web: row.webTapsAll, emails: row.emailsAll, signups: row.signupsAll }
+  : { visitors: row.visitors, app: row.appTaps, web: row.webTaps, emails: row.emails, signups: row.signups });
 
 /**
  * Admin: what each website link brought (migration 161). One row per ?ref=
  * label (our own like fb, fbdm, instagram, or a player's handle): people who
  * opened the page through it, taps on "Get the app" and "Use CourtSide on the
- * web", and emails left. Counted by the website without knowing who anyone
+ * web", emails left, and (Oct 18, migration 165) new accounts made on the
+ * website after coming through it. Counted by the website without knowing who anyone
  * is: a visitor is one browser, counted once a day. The demo shows made-up
  * numbers and never asks the database.
  */
@@ -74,9 +84,9 @@ export default function AdminLinks() {
   // His Facebook links first, even before anyone came; then whatever brought someone, busiest first.
   const rows = useMemo(() => {
     if (!source) return null;
-    const total = (r: LinkStatRow) => { const n = numbersOf(r, range); return n.visitors + n.emails; };
+    const total = (r: LinkStatRow) => { const n = numbersOf(r, range); return n.visitors + n.emails + n.signups; };
     const mine = MY_LINKS.map((l) => source.find((r) => r.label === l.label)
-      ?? { label: l.label, visitors: 0, appTaps: 0, webTaps: 0, emails: 0, visitorsAll: 0, appTapsAll: 0, webTapsAll: 0, emailsAll: 0 });
+      ?? { label: l.label, visitors: 0, appTaps: 0, webTaps: 0, emails: 0, signups: 0, visitorsAll: 0, appTapsAll: 0, webTapsAll: 0, emailsAll: 0, signupsAll: 0 });
     const rest = source
       .filter((r) => !MY_LINKS.some((l) => l.label === r.label) && total(r) + numbersOf(r, range).app + numbersOf(r, range).web > 0)
       .sort((a, b) => total(b) - total(a));
@@ -87,9 +97,9 @@ export default function AdminLinks() {
     return <Screen title="Links" compactTitle onBack={() => goBack()}><EmptyState icon="lock-closed-outline" title="Admins only" /></Screen>;
   }
 
-  const copy = async (label: string, title: string) => {
+  const copy = async (path: string, title: string) => {
     try {
-      await Clipboard.setStringAsync(linkFor(label));
+      await Clipboard.setStringAsync(`https://${path}`);
       haptics.tap();
       showToast({ title: `Copied the ${title} link`, icon: 'link-outline' });
     } catch {
@@ -101,22 +111,22 @@ export default function AdminLinks() {
   return (
     <Screen title="Links" compactTitle onBack={() => goBack()} onRefresh={load}>
       <Text style={styles.lead}>
-        Who came through each link. Visitors: phones or computers that opened the page through it (each counted once). App: tapped Get the app. Web: tapped Use CourtSide on the web. Emails: left their email.
+        Who came through each link. Visitors: phones or computers that opened it (each counted once). App: tapped Get the app. Web: tapped Use CourtSide on the web. Emails: left their email. Sign-ups: made a new account on the website.
       </Text>
 
-      <Text style={styles.section}>Your Facebook link</Text>
+      <Text style={styles.section}>Your Facebook links</Text>
       <View style={styles.list}>
-        {MY_LINKS.map((l, index) => (
-          <View key={l.label} style={[styles.linkRow, index > 0 && styles.rowLine]}>
+        {COPY_LINKS.map((l, index) => (
+          <View key={l.path} style={[styles.linkRow, index > 0 && styles.rowLine]}>
             <View style={styles.words}>
               <Text style={styles.name} numberOfLines={1}>{l.title}</Text>
-              <Text style={styles.meta} numberOfLines={1} selectable>courtsidebase.com/?ref={l.label}</Text>
+              <Text style={styles.meta} numberOfLines={1} selectable>{l.path}</Text>
             </View>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={`Copy the ${l.title} link`}
               hitSlop={8}
-              onPress={() => void copy(l.label, l.title)}
+              onPress={() => void copy(l.path, l.title)}
               style={({ pressed }) => [styles.copy, pressed && { backgroundColor: colors.border }]}
             >
               <Ionicons name="copy-outline" size={14} color={colors.text} />
@@ -146,7 +156,7 @@ export default function AdminLinks() {
         <View style={styles.list}>
           <View style={[styles.statRow, styles.headRow]} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
             <Text style={[styles.headText, styles.labelCol]}>Link</Text>
-            {['Visitors', 'App', 'Web', 'Emails'].map((h) => <Text key={h} style={[styles.headText, styles.numCol]}>{h}</Text>)}
+            {['Visitors', 'App', 'Web', 'Emails', 'Sign-ups'].map((h) => <Text key={h} numberOfLines={1} style={[styles.headText, styles.numCol]}>{h}</Text>)}
           </View>
           {rows.map((row) => {
             const n = numbersOf(row, range);
@@ -156,7 +166,7 @@ export default function AdminLinks() {
                 key={row.label}
                 style={[styles.statRow, styles.rowLine]}
                 accessible
-                accessibilityLabel={`${row.label}${mine ? `, ${mine.title}` : ''}: ${n.visitors} visitors, ${n.app} app taps, ${n.web} web taps, ${n.emails} emails`}
+                accessibilityLabel={`${row.label}${mine ? `, ${mine.title}` : ''}: ${n.visitors} visitors, ${n.app} app taps, ${n.web} web taps, ${n.emails} emails, ${n.signups} sign-ups`}
               >
                 <View style={styles.labelCol}>
                   <Text style={styles.name} numberOfLines={1}>{row.label}</Text>
@@ -166,13 +176,14 @@ export default function AdminLinks() {
                 <Text style={[styles.num, styles.numCol]}>{n.app}</Text>
                 <Text style={[styles.num, styles.numCol]}>{n.web}</Text>
                 <Text style={[styles.num, styles.numCol]}>{n.emails}</Text>
+                <Text style={[styles.num, styles.numCol, n.signups > 0 && styles.numStrong]}>{n.signups}</Text>
               </View>
             );
           })}
         </View>
       )}
       <Text style={styles.foot}>
-        Counting started when this page came out (Oct 16); emails go back further. Nothing here says who anyone is.
+        Counting started when this page came out (Oct 16), sign-ups on Oct 18; emails go back further. The straight-to-the-app link counts its taps under App. Nothing here says who anyone is.
       </Text>
     </Screen>
   );
@@ -192,11 +203,11 @@ const styleDefinitions = StyleSheet.create({
   copy: { flexDirection: 'row', alignItems: 'center', gap: 4, height: 32, paddingHorizontal: 12, borderRadius: radius.pill, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, backgroundColor: colors.surfaceAlt },
   copyText: { ...typography.smallStrong, color: colors.text },
   range: { paddingTop: spacing.xl, paddingBottom: spacing.md },
-  statRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingVertical: spacing.md, paddingHorizontal: spacing.lg },
+  statRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingVertical: spacing.md, paddingHorizontal: spacing.md },
   headRow: { paddingVertical: spacing.sm, backgroundColor: colors.surfaceAlt },
   headText: { ...typography.caption, letterSpacing: 0, color: colors.textMuted },
   labelCol: { flex: 1, minWidth: 0 },
-  numCol: { width: 52, textAlign: 'right' },
+  numCol: { width: 46, textAlign: 'right' },
   num: { ...typography.bodyStrong, color: colors.textMuted, fontVariant: ['tabular-nums'] },
   numStrong: { color: colors.text },
   foot: { ...typography.small, color: colors.textFaint, lineHeight: 18, paddingTop: spacing.md },
