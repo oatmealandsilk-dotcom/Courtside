@@ -117,11 +117,14 @@
     // 2. On into the app, carrying the person who shared it (?ref=: a handle or a code) or the
     //    campaign it came from (?src=fb: never as ?ref, a campaign is not a person), so a sign-up
     //    there is counted for that link (migration 165). For go=app, on to the iPhone app instead.
+    //    Both can ride along (found in review, Oct 18): ?ref=fb&r=<code> keeps the friend's code too.
     var to = 'https://app.courtsidebase.com/';
+    var carry = [];
+    if (label && CAMPAIGNS.indexOf(label) < 0) carry.push('ref=' + encodeURIComponent(label));
+    else if (/^[0-9a-f]{8}$/.test(code)) carry.push('r=' + code);
+    if (label && CAMPAIGNS.indexOf(label) >= 0) carry.push('src=' + encodeURIComponent(label));
     if (goApp) to = APP_URL;
-    else if (label && CAMPAIGNS.indexOf(label) < 0) to += '?ref=' + encodeURIComponent(label);
-    else if (label) to += '?src=' + encodeURIComponent(label);
-    else if (/^[0-9a-f]{8}$/.test(code)) to += '?r=' + code;
+    else if (carry.length) to += '?' + carry.join('&');
     document.getElementById('go').setAttribute('href', to);
     var left = false;
     var leave = function () { if (left) return; left = true; location.replace(to); };

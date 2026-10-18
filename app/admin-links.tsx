@@ -111,7 +111,7 @@ export default function AdminLinks() {
   return (
     <Screen title="Links" compactTitle onBack={() => goBack()} onRefresh={load}>
       <Text style={styles.lead}>
-        Who came through each link. Visitors: phones or computers that opened it (each counted once). App: tapped Get the app. Web: tapped Use CourtSide on the web. Emails: left their email. Sign-ups: made a new account on the website.
+        Who came through each link. Visitors: phones or computers that opened it (each counted once). App: tapped Get the app. Web: tapped Use CourtSide on the web. Emails: left their email. Sign-ups: new accounts (made in the last 2 days) that signed in on the website after coming through the link.
       </Text>
 
       <Text style={styles.section}>Your Facebook links</Text>
