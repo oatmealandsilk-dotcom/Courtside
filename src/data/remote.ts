@@ -37,6 +37,7 @@ import { lookFrom } from '@/features/groups/look';
 import { asKind, asReason } from '@/features/moderation/reasons';
 import { BLOCKED_WORDS_NOTE } from '@/features/hiddenWords/hiddenWords';
 import { STREAK_FLAME_FROM } from '@/features/practice/streakFlame';
+import { savedCampaign } from '@/features/guest/campaignLabel';
 
 /** What a new player did first, after setup. */
 /** What the live handle check says about a handle. */
@@ -1666,6 +1667,19 @@ async function markHeld(me: ID, messages: Message[]): Promise<Message[]> {
   if (!theirs.length) return messages;
   const held = new Set(await heldMessageIdsOf(theirs).catch(() => [] as ID[]));
   return held.size ? messages.map((m) => (held.has(m.id) ? { ...m, hiddenByWords: true } : m)) : messages;
+}
+
+/**
+ * Where the sign-up confirmation email sends the person back to, on the website.
+ * It carries the link they came through (?src=fb, Oct 18, owner: "so how will
+ * we tell if courtside is coming from Facebook"): on an iPhone that email
+ * usually opens in Safari or Mail, not in the Facebook or Instagram browser
+ * where the label was kept, so without it the sign-up would never be counted
+ * for the link. Only the label rides along, nothing about the person.
+ */
+function confirmLinkHome(base: string): string {
+  const label = savedCampaign();
+  return `${window.location.origin}${base}/${label ? `?src=${encodeURIComponent(label)}` : ''}`;
 }
 
 export const remote = {
@@ -5022,7 +5036,7 @@ export const auth = {
       options: {
         data: { name: name.trim(), handle: handle.trim().toLowerCase(), terms_version: TERMS_VERSION, terms_accepted_at: new Date().toISOString(), ...(birthDate ? { birth_date: birthDate } : { age_13_plus: true }), ...(invitedBy ? { invited_by: invitedBy } : {}) },
         // The confirmation link comes back to this same site, where the invite link was kept.
-        ...(Platform.OS === 'web' ? { emailRedirectTo: `${window.location.origin}${base}/` } : {}),
+        ...(Platform.OS === 'web' ? { emailRedirectTo: confirmLinkHome(base) } : {}),
       },
     });
     if (error) throw new Error(error.message);
@@ -5214,7 +5228,7 @@ export const auth = {
     const { error } = await need().auth.resend({
       type: 'signup',
       email: email.trim(),
-      ...(Platform.OS === 'web' ? { options: { emailRedirectTo: `${window.location.origin}${base}/` } } : {}),
+      ...(Platform.OS === 'web' ? { options: { emailRedirectTo: confirmLinkHome(base) } } : {}),
     });
     if (error) throw new Error(error.message);
   },
