@@ -222,6 +222,9 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
       barDir.value = 0;
       dragging.value = true;
       swiping.value = true;
+      // A second swipe within the last one's 140ms settle wait: drop that wait, or it would land
+      // the old page mid-gesture (found in review, Oct 19).
+      runOnJS(cancelSettle)();
       // The tutorial waits for this finger to lift before it starts.
       runOnJS(setPageScrolling)(true);
       settling.value = false;
