@@ -9372,15 +9372,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const shut = (x: { authorId: ID; removed?: Removed }) => !!x.removed && x.authorId !== me && !amAdminNow;
     const strays = state.posts.some(shut) || state.stories.some(shut);
     if (!out.size && !blocked.size && !strays) return null;
+    // A filter only takes items away, so the same length means nothing went: hand back the list itself,
+    // and everything keyed on it (Tips, Ask a coach, the feed) is not worked out again for nothing.
+    const keep = <T,>(src: T[], next: T[]) => (next.length === src.length ? src : next);
     const patch: Partial<Pick<AppState, 'posts' | 'stories' | 'hitRequests' | 'questions' | 'answers' | 'comments' | 'coachQuestions' | 'coachReplies' | 'tips'>> = {
-      coachQuestions: state.coachQuestions.filter((q) => !out.has(q.id) && !blocked.has(q.authorId)),
-      coachReplies: state.coachReplies.filter((r) => !out.has(r.id) && !blocked.has(r.coachUserId)),
-      tips: state.tips.filter((t) => !out.has(t.id) && !blocked.has(t.authorId)),
+      coachQuestions: keep(state.coachQuestions, state.coachQuestions.filter((q) => !out.has(q.id) && !blocked.has(q.authorId))),
+      coachReplies: keep(state.coachReplies, state.coachReplies.filter((r) => !out.has(r.id) && !blocked.has(r.coachUserId))),
+      tips: keep(state.tips, state.tips.filter((t) => !out.has(t.id) && !blocked.has(t.authorId))),
     };
     if (out.size || strays) {
-      patch.posts = state.posts.filter((p) => !out.has(p.id) && !shut(p));
-      patch.stories = state.stories.filter((s) => !out.has(s.id) && !shut(s));
-      patch.hitRequests = out.size ? state.hitRequests.filter((h) => !out.has(h.id)) : state.hitRequests;
+      patch.posts = keep(state.posts, state.posts.filter((p) => !out.has(p.id) && !shut(p)));
+      patch.stories = keep(state.stories, state.stories.filter((s) => !out.has(s.id) && !shut(s)));
+      patch.hitRequests = out.size ? keep(state.hitRequests, state.hitRequests.filter((h) => !out.has(h.id))) : state.hitRequests;
     }
     // Comments leave out anyone you blocked too, at once: theirs no longer stayed in a post's
     // comments (and its count) until the next full load. A reply under a comment left out here is
