@@ -24,7 +24,7 @@ import { blankVideoLocation } from '@/lib/videoLocation';
 import { noteStep } from '@/lib/crashReporting';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
-import type { Answer, FriendStreak, ChatEvent, ChatPhoto, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, DetectedActivity, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, HiddenWords, HiddenWordsKind, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, CourtNote, LastSeen, MapPlace, MapVisibility, TaggedCourt, Question, Removed, RemovedItem, ReviewRequest, ReviewStatus, Story, SurfacePreference, TakedownKind, TakedownReason, Tip, TournamentEntry, User, PublicStreak, CoachApplication, CourtAccess, CourtAccessSource, CourtDayPart, CourtFacts, CourtFollowCount, CourtNow, CourtKings, CourtRegulars, CourtReview, CourtRightNow, CourtRing, FlybyPerson, FollowedCourt, SessionTag, SessionTagRefusal, SessionTagRole, FeedGroup, FeedGroupCard, DiscoverGroup, GroupLook, Invitee, AffiliateStats, ContactMatch, HeadToHead, MatchSet, SessionWith } from './types';
+import type { Answer, FriendStreak, ChatEvent, ChatPhoto, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, DetectedActivity, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, HiddenWords, HiddenWordsKind, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, CourtNote, LastSeen, MapPlace, MapVisibility, TaggedCourt, Question, Removed, RemovedItem, ReviewRequest, ReviewStatus, Story, SurfacePreference, TakedownKind, TakedownReason, Tip, TournamentEntry, User, PublicStreak, CoachApplication, CourtAccess, CourtAccessSource, CourtDayPart, CourtFacts, CourtFollowCount, CourtNow, CourtKings, CourtRegulars, CourtReview, CourtRightNow, CourtRing, FlybyPerson, FollowedCourt, SessionTag, SessionTagRefusal, SessionTagRole, FeedGroup, FeedGroupCard, DiscoverGroup, GroupLook, Invitee, AffiliateStats, ContactMatch, HeadToHead, MatchSet, SessionWith, FoundVia } from './types';
 import { canScore, splitTiebreaks, validSets, withTiebreaks } from '@/features/activity/score';
 import { keptAvgHr, keptKcal } from '@/features/activity/manualStats';
 import { TERMS_VERSION } from '@/lib/legal';
@@ -98,6 +98,8 @@ export interface LinkStatRow {
   visitorsAll: number; appTapsAll: number; webTapsAll: number; emailsAll: number;
   signupsAll: number;
 }
+/** Admin: how many of the accounts made in a window picked each "How did you find CourtSide?" answer (migration 166). */
+export interface FoundViaRow { choice: FoundVia | 'not_answered'; people: number }
 /** Someone one person brought: only their name, @handle and dates. */
 export interface InviteeRow { id: ID; name: string; handle: string; avatarUrl?: string; joinedAt: string; setUp: boolean; qualifiedAt?: string }
 export interface FirstDayStats { new30: number; moved30: number; cohort: number; movers: number; moversBack: number; othersBack: number; picked: Record<FirstMove, number> }
@@ -2869,6 +2871,26 @@ export const remote = {
     } catch {
       return 'failed';
     }
+  },
+  /**
+   * "How did you find CourtSide?" at setup (migration 166): saves your own answer, or takes it
+   * back (null). 'ok' once saved; 'refused' when the server would not take it (an answer not on
+   * the list, or more than 7 days after the account was made); 'missing' before migration 166.
+   */
+  async setFoundVia(choice: FoundVia | null): Promise<'ok' | 'refused' | 'missing' | 'failed'> {
+    try {
+      const { data, error } = await need().rpc('set_found_via', { p_choice: choice });
+      if (error) return missingFunction(error) ? 'missing' : 'failed';
+      return data === false ? 'refused' : 'ok';
+    } catch {
+      return 'failed';
+    }
+  },
+  /** Admin: for the accounts made in the last `days` days, how many picked each answer, and how many did not (migration 166). */
+  async fetchFoundVia(days: number): Promise<FoundViaRow[]> {
+    const { data, error } = await need().rpc('admin_found_via', { p_days: days });
+    if (error) throw new Error(missingFunction(error) ? '“How people found us” needs migration 166 in Supabase.' : error.message);
+    return ((data ?? []) as { choice: string; people: unknown }[]).map((r) => ({ choice: r.choice as FoundViaRow['choice'], people: Number(r.people) || 0 }));
   },
   /** Admin: the people one person brought. */
   async fetchInvitees(referrer: ID): Promise<InviteeRow[]> {

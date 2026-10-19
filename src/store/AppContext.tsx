@@ -131,7 +131,7 @@ import type {
   Story,
   User,
   PlayerProfile,
-  MediaCrop, Tip, TaggedCourt, TrackerId, Invitee, AffiliateStats, ContactMatch, HealthShareKey, HeadToHead, CourtKings, FlybyPerson, FriendStreak, MatchSet, Removed, RemovedItem, DemotedPost, DemoteResult, ReviewRequest, ReviewStatus, TakedownKind, TakedownReason, TournamentEntry, HiddenWords, HiddenWordsKind } from '@/data/types';
+  MediaCrop, Tip, TaggedCourt, TrackerId, Invitee, AffiliateStats, ContactMatch, HealthShareKey, HeadToHead, CourtKings, FlybyPerson, FriendStreak, MatchSet, Removed, RemovedItem, DemotedPost, DemoteResult, ReviewRequest, ReviewStatus, TakedownKind, TakedownReason, TournamentEntry, HiddenWords, HiddenWordsKind, FoundVia } from '@/data/types';
 import { HIDDEN_WORDS_MAX, HIDDEN_WORD_LENGTH, cleanWords, defaultHiddenWords } from '@/features/hiddenWords/hiddenWords';
 import { canScore, scoreNotKept, setsWinner } from '@/features/activity/score';
 
@@ -1009,6 +1009,11 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions, LiveSessionAct
   myInviter: () => Promise<MyInviter | null>;
   /** "Invited by?" at setup: the inviter's @handle. Set once, never changed. */
   claimInviteCode: (code: string) => Promise<InviteCodeResult>;
+  /**
+   * "How did you find CourtSide?" at setup (Oct 18, migration 166): your own answer, or null to
+   * take it back. Sent and forgotten: setup never waits for it, and a failure costs nothing.
+   */
+  setFoundVia: (choice: FoundVia | null) => void;
 
   /* Ask a coach */
   askCoach: (input: NewCoachQuestionInput) => ID;
@@ -8397,6 +8402,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (r.ok && r.followed) showInviterFollow(r.id, r.handle);
     return r;
   }, []);
+  // "How did you find CourtSide?" (Oct 18, owner: "Add the question, as long as it's for the
+  // benefit of the app and does not take away"): the server keeps it privately (migration 166);
+  // the demo keeps it in memory. Nothing on screen depends on it, so nothing waits for it.
+  const setFoundVia = useCallback((choice: FoundVia | null) => {
+    const me = stateRef.current.currentUserId;
+    if (!me) return;
+    if (live(me)) void remote.setFoundVia(choice);
+    else void demoApi.setFoundVia(choice);
+  }, []);
   // You follow whoever invited you (or, if their account is private, ask
   // to); they are never made to follow you back without saying so.
   const showInviterFollow = (who: ID, handle?: string) => {
@@ -9023,6 +9037,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       unlinkPhone,
       myInviter,
       claimInviteCode,
+      setFoundVia,
       askCoach,
       replyToCoachQuestion,
       toggleReplyHelpful,
@@ -9257,6 +9272,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       unlinkPhone,
       myInviter,
       claimInviteCode,
+      setFoundVia,
       askCoach,
       replyToCoachQuestion,
       toggleReplyHelpful,

@@ -1,4 +1,4 @@
-import type { LinkStatRow } from '../remote';
+import type { FoundViaRow, LinkStatRow } from '../remote';
 
 /**
  * Sample numbers for the admin Links page in the demo (Oct 16), so the page
@@ -23,4 +23,17 @@ export function demoLinkStats(days: number): LinkStatRow[] {
       visitorsAll: all[0], appTapsAll: all[1], webTapsAll: all[2], emailsAll: all[3], signupsAll: all[4],
     };
   });
+}
+
+/**
+ * Sample answers to "How did you find CourtSide?" for the demo's Links page
+ * (Oct 18, migration 166): [answer, last 7 days, last 30 days]. Made up.
+ * The demo account's own answer this visit, if it gave one, is added on top.
+ */
+const FOUND_SAMPLE: [FoundViaRow['choice'], number, number][] = [
+  ['instagram', 9, 31], ['tiktok', 4, 12], ['facebook', 6, 14], ['friend', 7, 22],
+  ['app_store', 3, 9], ['other', 1, 4], ['not_answered', 5, 19],
+];
+export function demoFoundVia(days: number, mine: FoundViaRow['choice'] | null): FoundViaRow[] {
+  return FOUND_SAMPLE.map(([choice, week, month]) => ({ choice, people: (days <= 7 ? week : month) + (mine === choice ? 1 : 0) }));
 }

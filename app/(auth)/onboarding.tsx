@@ -16,6 +16,8 @@ import { experienceLabel } from '@/lib/format';
 import { writeSkipped, type SetupStep } from '@/features/onboarding/setupProgress';
 import { replaceWithStart } from '@/features/navigation/startTab';
 import { handleFromText, isWaitlistCode, peekReferrer, peekShareTarget } from '@/features/invite/referral';
+import { FOUND_VIA, guessFoundVia } from '@/features/onboarding/foundVia';
+import { campaignThisVisit } from '@/features/guest/campaignLabel';
 import type { InviteCodeResult, MyInviter } from '@/data/remote';
 import * as haptics from '@/lib/haptics';
 import { useApp } from '@/store/AppContext';
@@ -25,6 +27,7 @@ import { KeyboardScrollContext, useKeyboardReveal } from '@/lib/keyboardScroll';
 import { KEYBOARD_ROOM, useKeyboardRoom } from '@/lib/keyboardRoom';
 import type {
   Backhand,
+  FoundVia,
   FitnessLevel,
   Handedness,
   PlayStyle,
@@ -89,6 +92,13 @@ const EDIT_STEPS = [0, 1, 3, 4];
  */
 const JOIN_STEPS = [0, 1];
 const COACH_STEPS = [3, 4];
+
+/**
+ * Where "How did you find CourtSide?" sits (Oct 18, owner: "Add the question,
+ * as long as it's for the benefit of the app and does not take away"): the
+ * step it is asked on, joining only. Never a step of its own, never required.
+ */
+const FOUND_VIA_STEP: number = 1;
 
 const round = (n: number, decimals: number) => Number(n.toFixed(decimals));
 
@@ -212,6 +222,38 @@ function OnboardingSteps() {
     })();
     return () => { live = false; };
   }, [asksInviter, actions]);
+  // "How did you find CourtSide?" (Oct 18): asked once, while joining, and never required:
+  // Continue and Finish work with no answer. A link they came through picks its chip for them
+  // (our Facebook link picks Facebook, a friend's invite picks A friend); theirs to change or clear.
+  const asksFoundVia = joining;
+  const [foundVia, setFoundVia] = useState<FoundVia | null>(null);
+  const [foundGuess, setFoundGuess] = useState<FoundVia | null>(null);
+  const [foundTouched, setFoundTouched] = useState(false);
+  const foundSent = useRef<FoundVia | null>(null);
+  useEffect(() => {
+    if (!asksFoundVia || foundTouched) return;
+    let live = true;
+    void (async () => {
+      const referrer = await peekReferrer().catch(() => null);
+      const guess = guessFoundVia({ campaign: campaignThisVisit(), referrer, invited: !!inviter?.handle });
+      if (!live || !guess) return;
+      setFoundGuess(guess);
+      setFoundVia(guess);
+    })();
+    return () => { live = false; };
+  }, [asksFoundVia, inviter?.handle, foundTouched]);
+  const pickFoundVia = (value: FoundVia) => {
+    haptics.tap();
+    setFoundTouched(true);
+    setFoundVia((was) => (was === value ? null : value));
+  };
+  /** Sends the answer as its step is left, only when it changed since last sent (no answer sends nothing). */
+  const sendFoundVia = () => {
+    if (!asksFoundVia || foundVia === foundSent.current) return;
+    foundSent.current = foundVia;
+    actions.setFoundVia(foundVia);
+  };
+
   const INVITE_ERRORS: Record<Exclude<InviteCodeResult['error'], undefined>, string> = {
     'not-found': 'No player with that handle. Check the spelling.',
     self: "That's you. Enter the handle of whoever invited you.",
@@ -371,6 +413,7 @@ function OnboardingSteps() {
       goBack('/ai-coach');
       return;
     }
+    if (step === FOUND_VIA_STEP) sendFoundVia();
     actions.completeOnboarding(profile);
     if (currentUserId) void writeSkipped(currentUserId, [...skipped.current]);
     // Came here from the profile's "finish setting up"? Back down to the profile underneath (never a second copy of the tabs on top), not to where the app opens.
@@ -396,6 +439,7 @@ function OnboardingSteps() {
   };
   const next = async () => {
     if (step === 0 && asksInviter && !(await claimCode())) return;
+    if (step === FOUND_VIA_STEP) sendFoundVia();
     const key = STEPS[step].skip;
     if (key) skipped.current.delete(key);
     setStep(order[position + 1] ?? step + 1);
@@ -411,6 +455,29 @@ function OnboardingSteps() {
   // on it opens "Not sure?" (the levels in plain words) rather than doing nothing.
   const ratingMissing = step === 0 && !canContinue && !ratingText.trim() && (ratingOnly || (name.trim().length > 0 && !claiming));
   const askLevel = () => { haptics.tap(); setLevelsOpen(true); };
+
+  // One quiet row of chips under a hairline, marked optional; one tap picks, a second tap clears.
+  const foundViaBlock = (
+    <View style={styles.found} accessibilityRole="radiogroup" accessibilityLabel="How did you find CourtSide? Optional">
+      <View style={styles.foundHead}>
+        <Text style={styles.groupLabel}>How did you find CourtSide?</Text>
+        <Text style={styles.optional}>Optional</Text>
+      </View>
+      <View style={styles.chips}>
+        {FOUND_VIA.map((o) => {
+          const on = foundVia === o.value;
+          return (
+            <Pressable key={o.value} accessibilityRole="radio" accessibilityState={{ selected: on, checked: on }} accessibilityLabel={o.label} onPress={() => pickFoundVia(o.value)} style={[styles.chip, on && styles.chipOn]}>
+              <Text style={[styles.chipText, on && { color: colors.brandInk }]}>{o.label}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+      {foundGuess && foundVia === foundGuess && !foundTouched ? (
+        <Text style={styles.note}>Picked from your link. Tap to change it.</Text>
+      ) : null}
+    </View>
+  );
 
   return (
     <KeyboardScrollContext.Provider value={Platform.OS === 'web' ? null : keyboard.reveal}>
@@ -535,6 +602,7 @@ function OnboardingSteps() {
                 />
               ) : null}
               </>}
+              {FOUND_VIA_STEP === 0 && asksFoundVia && !ratingOnly ? foundViaBlock : null}
             </>
           ) : null}
 
@@ -572,6 +640,7 @@ function OnboardingSteps() {
               <Group label="Preferred surface">
                 <SegmentedControl<SurfacePreference> value={surface} onChange={pick(setSurface)} segments={SURFACES} />
               </Group>
+              {FOUND_VIA_STEP === 1 && asksFoundVia ? foundViaBlock : null}
             </>
           ) : null}
 
@@ -763,6 +832,10 @@ const styleDefinitions = StyleSheet.create({
   dropdownValue: { ...typography.bodyStrong, color: colors.text },
   chevron: { fontSize: 16, color: colors.textMuted },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  // "How did you find CourtSide?": set apart from the questions above it by a hairline.
+  found: { gap: spacing.sm, paddingTop: spacing.lg, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  foundHead: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: spacing.md },
+  optional: { ...typography.small, color: colors.textFaint },
   chip: { paddingHorizontal: spacing.md, paddingVertical: 9, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
   chipOn: { backgroundColor: colors.brand, borderColor: colors.brand },
   chipText: { ...typography.smallStrong, color: colors.textMuted },
