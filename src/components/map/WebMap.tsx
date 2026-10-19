@@ -310,7 +310,12 @@ export function NearbyMap(props: NearbyMapProps) {
     }, 60);
     // A zero size means a screen was pushed over the map (or its tab is hidden): skip it, or the map
     // shrinks to its 400x300 stand-in and redraws while no one can see it, then again on Back.
-    const watcher = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => { if (el.clientWidth > 0 && el.clientHeight > 0) instance.resize(); }) : null;
+    // Back at the size it had (Find Players shown again after Discussions, which hides it at no size), there is nothing to redo either.
+    let sizedW = 0, sizedH = 0;
+    const watcher = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => {
+      const w = el.clientWidth, h = el.clientHeight;
+      if (w > 0 && h > 0 && (w !== sizedW || h !== sizedH)) { sizedW = w; sizedH = h; instance.resize(); }
+    }) : null;
     watcher?.observe(el);
     return () => {
       clearTimeout(settle);

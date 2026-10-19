@@ -15,7 +15,7 @@ import { useReducedMotion } from '@/lib/useReducedMotion';
  * the page's side margin (`bleed`), and a slow drag turns the page once it
  * is more than half way.
  */
-export function SectionPager({ index, panes, onIndex, progress, delegateLeft = false, delegateRight = false, slideChannel, fill = false, slideOnTap = false, bleed = 0 }: {
+export function SectionPager({ index, panes, onIndex, progress, delegateLeft = false, delegateRight = false, slideChannel, fill = false, slideOnTap = false, bleed = 0, keepMounted = false }: {
   index: number;
   panes: React.ReactNode[];
   onIndex: (next: number) => void;
@@ -38,6 +38,15 @@ export function SectionPager({ index, panes, onIndex, progress, delegateLeft = f
   slideOnTap?: boolean;
   /** The page's side margin: the row reaches out over it and each pane puts it back inside. */
   bleed?: number;
+  /**
+   * Panes stay built once they have been on show, hidden while another is,
+   * the way the phone's pager keeps them all. A swipe slides the built pane
+   * in beside the page instead of building a copy for the swipe and another
+   * on landing. Community uses it so Find Players' map is not torn down and
+   * made again ("Loading map…") on every trip to Discussions and back
+   * (owner, Oct 19: "push 2").
+   */
+  keepMounted?: boolean;
 }) {
   const last = panes.length - 1;
   const reduced = useReducedMotion();
@@ -86,6 +95,40 @@ export function SectionPager({ index, panes, onIndex, progress, delegateLeft = f
   useLayoutEffect(() => { seek.current(); }, [slideOnTap, index, reduced]);
   // Each pane a page of its own, clipped to itself, with the margin inside.
   const page = (pane: React.ReactNode) => <View style={{ flex: fill ? 1 : undefined, paddingHorizontal: bleed, overflow: 'hidden' }}>{pane}</View>;
+  // keepMounted: the panes built so far. One not built yet is built for its
+  // first swipe the old way (as the swipe's preview), and kept from landing on.
+  const built = useRef(new Set<number>());
+  if (keepMounted) built.current.add(drawn);
+  // The kept pane a swipe is showing beside the page, from its first move
+  // until the surface is still again (null: none, every other pane hidden).
+  const [beside, setBeside] = useState<number | null>(null);
+  const besideFor = (direction: 1 | -1 | null) => {
+    if (!keepMounted || direction === null) return;
+    const next = drawnRef.current + direction;
+    if (next >= 0 && next <= last && built.current.has(next)) setBeside(next);
+  };
+  // In the page's row, every built pane under its own key, so it is never
+  // rebuilt: the one on show in its place, the others just off either side,
+  // riding along with the page as it is dragged (where the swipe's preview
+  // would be) and hidden, at no size, while nothing is moving.
+  const keptPanes = () => (
+    <View>
+      {panes.map((pane, i) => {
+        if (!built.current.has(i)) return null;
+        if (i === drawn) return <View key={i} style={{ flex: fill ? 1 : undefined, paddingHorizontal: bleed, overflow: 'hidden' }}>{pane}</View>;
+        return (
+          <View
+            key={i}
+            aria-hidden
+            pointerEvents="none"
+            style={{ position: 'absolute', top: 0, width: '100%', left: `calc(${i > drawn ? 100 : -100}% + ${i > drawn ? PAGE_GUTTER : -PAGE_GUTTER}px)` as unknown as number, paddingHorizontal: bleed, overflow: 'hidden', display: beside === i ? 'flex' : 'none' }}
+          >
+            {pane}
+          </View>
+        );
+      })}
+    </View>
+  );
   return (
     <View style={{ alignSelf: 'stretch', marginHorizontal: -bleed, flex: fill ? 1 : undefined }}>
     <SwipeSurface
@@ -100,8 +143,11 @@ export function SectionPager({ index, panes, onIndex, progress, delegateLeft = f
       delegateLeft={delegateLeft && drawn >= last}
       delegateRight={delegateRight && drawn <= 0}
       onProgress={() => { moving.current = true; }}
+      onDragTo={besideFor}
+      onCommit={besideFor}
       onRest={() => {
         moving.current = false;
+        if (keepMounted) setBeside(null);
         // A slide the surface gave up part way (the layout lost its swipe) never landed.
         if (tapTarget.current !== null) { tapTarget.current = null; setTapSliding(false); }
         // A tab tapped while it moved is gone to now. A frame on, so the
@@ -131,10 +177,12 @@ export function SectionPager({ index, panes, onIndex, progress, delegateLeft = f
       }}
       renderPreview={(direction) => {
         const next = tapTarget.current ?? drawnRef.current + direction;
-        return next >= 0 && next <= last && next !== drawnRef.current ? page(panes[next]) : null;
+        if (!(next >= 0 && next <= last && next !== drawnRef.current)) return null;
+        // A kept pane is already there beside the page: the preview is left empty.
+        return keepMounted && built.current.has(next) ? <View /> : page(panes[next]);
       }}
     >
-      {page(panes[drawn])}
+      {keepMounted ? keptPanes() : page(panes[drawn])}
     </SwipeSurface>
     </View>
   );

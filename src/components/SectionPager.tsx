@@ -83,6 +83,11 @@ export function SectionPager({ index, panes, onIndex, progress, depth = 1, deleg
    * it to the screen's edges, and each pane puts it back inside itself.
    */
   bleed?: number;
+  /**
+   * Only the browser's pager reads this (see SectionPager.web). This one
+   * already keeps every pane built.
+   */
+  keepMounted?: boolean;
 }) {
   const { isPhone } = useResponsive();
   const count = panes.length;

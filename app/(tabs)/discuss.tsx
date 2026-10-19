@@ -840,6 +840,9 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
         delegateRight
         // Out to the screen's edges, so a pane slides off the edge of the screen.
         bleed={spacing.lg}
+        // In a browser too, Find Players stays built while Discussions is on show, so its map is
+        // there at once on the way back instead of loading again (owner, Oct 19: "push 2").
+        keepMounted
         // The tutorial's slide from the map to the threads plays here, as this pager's own swipe.
         slideChannel={previewSection ? undefined : '/discuss'}
         onIndex={(i) => setSection(i === 0 ? 'players' : 'discussions')}
