@@ -79,7 +79,15 @@ interface Report {
 }
 
 function reportFor(error: unknown, options: { fatal?: boolean; where?: string }): Report | null {
-  const err = error instanceof Error ? error : new Error(typeof error === 'string' ? error : safeText(error));
+  // An error from another frame or script world (Safari, an in-app browser's own script) fails
+  // instanceof Error: keep its message and stack, or at least where it came from, not only Safari's
+  // line and column turned into text.
+  const o = error && typeof error === 'object' ? error as { message?: unknown; stack?: unknown; sourceURL?: unknown; line?: unknown; column?: unknown } : null;
+  const err = error instanceof Error
+    ? error
+    : o && typeof o.message === 'string'
+      ? Object.assign(new Error(o.message), { stack: typeof o.stack === 'string' ? o.stack : o.sourceURL ? `at ${String(o.sourceURL)}:${String(o.line)}:${String(o.column)}` : undefined })
+      : new Error(typeof error === 'string' ? error : safeText(error));
   const message = `${options.where ? `[${options.where}] ` : ''}${err.message || 'Unknown error'}`.slice(0, 2000);
   if (/ResizeObserver loop/.test(message)) return null; // a harmless browser notice, not a fault
   return { message, stack: (err.stack ?? '').slice(0, 8000), screen, app_version: appVersion(), fatal: !!options.fatal };
