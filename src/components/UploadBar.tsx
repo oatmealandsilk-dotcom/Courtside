@@ -35,7 +35,8 @@ export function UploadBar() {
   // Hidden above the screen it is clear of the banner anyway, so that move fades out as it slides away.
   const slideStyle = useAnimatedStyle(() => ({ transform: [{ translateY: slide.value + underBanner.value * Math.max(0, 1 + slide.value / 110) }] }));
   const fill = useSharedValue(0);
-  const fillStyle = useAnimatedStyle(() => ({ width: `${fill.value * 100}%` }));
+  // Scaled, not resized: a transform each frame, never a layout.
+  const fillStyle = useAnimatedStyle(() => ({ transform: [{ scaleX: fill.value }] }));
   const pop = useRef(new Animated.Value(0)).current;
 
   // Swiped away: hidden for this job in this state; it returns once the post
@@ -59,12 +60,14 @@ export function UploadBar() {
 
   const hide = () => setShown(null);
   const [displayed, setDisplayed] = useState(0);
+  // The line's exact place; the number (displayed) is only redrawn when its whole percent changes.
+  const shownFrac = useRef(0);
   const target = useRef(0);
   useEffect(() => {
     if (job && awayKey === away) return;
     if (job) {
       if (!shown || away) { setAway(null); }
-      if (!shown || away) { fill.value = 0; pop.setValue(0); setDisplayed(0); slide.value = withTiming(0, { duration: 340, easing: REasing.out(REasing.cubic) }); }
+      if (!shown || away) { fill.value = 0; shownFrac.current = 0; pop.setValue(0); setDisplayed(0); slide.value = withTiming(0, { duration: 340, easing: REasing.out(REasing.cubic) }); }
       setShown(job);
       target.current = job.state === 'uploading' ? job.fraction : 1;
       if (job.state !== 'uploading') Animated.spring(pop, { toValue: 1, useNativeDriver: true, speed: 16, bounciness: 3 }).start();
@@ -80,20 +83,20 @@ export function UploadBar() {
     // Thirty times a second: a slow approach toward the latest report plus a
     // creep that shrinks the higher it gets — quick out of the gate, patient
     // near the end, never standing still, never past 98% until it truly lands.
+    // The line moves every tick on the animation thread; React redraws only when the percent shown changes.
     const tick = setInterval(() => {
-      setDisplayed((d) => {
-        const goal = target.current;
-        const cap = uploading ? Math.min(0.985, goal + 0.08) : 1;
-        const creep = uploading ? 0.0035 * Math.pow(1 - d, 2.2) + 0.00015 : 0.03;
-        const next = Math.min(cap, d + Math.max(0, goal - d) * 0.06 + creep);
-        return next < d ? d : next;
-      });
+      const d = shownFrac.current;
+      const goal = target.current;
+      const cap = uploading ? Math.min(0.985, goal + 0.08) : 1;
+      const creep = uploading ? 0.0035 * Math.pow(1 - d, 2.2) + 0.00015 : 0.03;
+      const next = Math.min(cap, d + Math.max(0, goal - d) * 0.06 + creep);
+      if (next <= d) return;
+      shownFrac.current = next;
+      fill.value = withTiming(next, { duration: 60, easing: REasing.linear });
+      if (next === 1 || Math.round(next * 100) !== Math.round(d * 100)) setDisplayed(next);
     }, 33);
     return () => clearInterval(tick);
-  }, [shown]);
-  // The line follows the number. Set here rather than inside the number's own
-  // update, which React may run in the middle of drawing (and twice).
-  useEffect(() => { fill.value = withTiming(displayed, { duration: 60, easing: REasing.linear }); }, [displayed, fill]);
+  }, [shown, fill]);
 
   if (!shown || (job && awayKey === away)) return null;
   const pct = Math.round(displayed * 100);
@@ -140,7 +143,7 @@ const styleDefinitions = StyleSheet.create({
   body: { ...typography.caption, color: colors.textMuted, letterSpacing: 0, marginTop: 1 },
   pct: { ...typography.smallStrong, color: colors.brand, fontVariant: ['tabular-nums'] },
   track: { height: 3, backgroundColor: colors.surfaceAlt },
-  fill: { height: 3, backgroundColor: colors.brand },
+  fill: { height: 3, width: '100%', transformOrigin: 'left', backgroundColor: colors.brand },
   trim: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginTop: spacing.xs, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.pill, backgroundColor: colors.brand, shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 4 },
   trimLabel: { ...typography.smallStrong, color: colors.brandInk },
 });
