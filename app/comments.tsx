@@ -145,8 +145,9 @@ export default function CommentsSheet() {
   // Every comment and reply here (the count), and the same laid out as threads.
   // One hidden by the owner's Hidden words (migration 117), or a reply under it, is neither shown nor
   // counted for the owner, who finds it under "Hidden comments" at the end.
-  const all = listedComments(comments, id, currentUserId);
-  const threads = threadsOf(comments, id, 'oldest', currentUserId);
+  // Worked out again only when the comments change, not on each keystroke in the box.
+  const all = useMemo(() => listedComments(comments, id, currentUserId), [comments, id, currentUserId]);
+  const threads = useMemo(() => threadsOf(comments, id, 'oldest', currentUserId), [comments, id, currentUserId]);
   const ownerId = kind === 'hit' ? stories.find((st) => st.id === id)?.authorId : post?.authorId;
   const hidden = hiddenCommentsOn(comments, id, currentUserId, ownerId);
   // Comments made while the sheet is open slide in; the ones already there just appear.
@@ -350,6 +351,26 @@ export default function CommentsSheet() {
   );
 
   const shownThreads = allThreads ? threads : threads.slice(0, FIRST_THREADS);
+  // The threads, made again only when they, which are open, or whether you can reply change: typing a
+  // comment (the draft lives here) leaves every thread, row and caption under it as it was. The
+  // callbacks go through refs so they always run the latest toggle and reply.
+  const toggleRef = useRef(toggleThread);
+  toggleRef.current = toggleThread;
+  const replyRef = useRef(replyTo);
+  replyRef.current = replyTo;
+  const canReply = exists && !takenDown;
+  const threadEls = useMemo(() => shownThreads.map((t) => (
+    <CommentThread
+      key={t.top.id}
+      thread={t}
+      big
+      open={openThreads.has(t.top.id)}
+      onToggle={() => toggleRef.current(t.top.id)}
+      onReply={canReply ? (c: Comment) => replyRef.current(c) : undefined}
+      onRowLayout={(commentId, y, height) => { rowY.current[commentId] = y; rowH.current[commentId] = height; }}
+      isFresh={(c) => Date.parse(c.createdAt) > openedAt.current}
+    />
+  )), [threads, allThreads, openThreads, canReply]); // eslint-disable-line react-hooks/exhaustive-deps
   const count = all.length;
   return (
     <>
@@ -384,18 +405,7 @@ export default function CommentsSheet() {
             {/* The post itself first: who, the whole caption, its small line. */}
             <CommentsCaption kind={kind} id={id} />
             <JumpProvider value={jumpCtx}>
-              {shownThreads.map((t) => (
-                <CommentThread
-                  key={t.top.id}
-                  thread={t}
-                  big
-                  open={openThreads.has(t.top.id)}
-                  onToggle={() => toggleThread(t.top.id)}
-                  onReply={exists && !takenDown ? replyTo : undefined}
-                  onRowLayout={(commentId, y, height) => { rowY.current[commentId] = y; rowH.current[commentId] = height; }}
-                  isFresh={(c) => Date.parse(c.createdAt) > openedAt.current}
-                />
-              ))}
+              {threadEls}
             </JumpProvider>
             {/* Only hidden ones so far: "Hidden comments" below says so, not "No comments yet" above it. */}
             {!threads.length && !(exists && hidden.length) ? <Text style={styles.empty}>{exists ? 'No comments yet. Start the conversation.' : looked ? 'This is no longer available.' : ''}</Text> : null}
