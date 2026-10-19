@@ -88,7 +88,7 @@ function StoryViewer() {
     progress.stopAnimation((value) => {
       if (stopped) return;
       const total = current.videoUrl ? VIDEO_MS : PHOTO_MS;
-      run = Animated.timing(progress, { toValue: 1, duration: Math.max(0, (1 - value) * total), useNativeDriver: false });
+      run = Animated.timing(progress, { toValue: 1, duration: Math.max(0, (1 - value) * total), useNativeDriver: true });
       run.start(({ finished }) => {
         if (!finished || !focusedRef.current) return;
         if (index < list.length - 1) setIndex(index + 1);
@@ -161,8 +161,9 @@ function StoryViewer() {
           {list.map((s, i) => (
             <View key={s.id} style={styles.barTrack}>
               <Animated.View
+                // Scaled, not resized, on the native driver: the bar keeps moving while JavaScript is busy.
                 style={[styles.barFill, {
-                  width: i < index ? '100%' : i === index ? progress.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }) : '0%',
+                  transform: [{ scaleX: i < index ? 1 : i === index ? progress : 0 }],
                 }]}
               />
             </View>
@@ -221,7 +222,7 @@ const styleDefinitions = StyleSheet.create({
   top: { position: 'absolute', left: 0, right: 0, top: 0, paddingHorizontal: spacing.md, gap: spacing.sm },
   bars: { flexDirection: 'row', gap: 4 },
   barTrack: { flex: 1, height: 3, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.35)', overflow: 'hidden' },
-  barFill: { height: '100%', backgroundColor: '#FFFFFF' },
+  barFill: { height: '100%', width: '100%', transformOrigin: 'left', backgroundColor: '#FFFFFF' },
   head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   who: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 44, flexShrink: 1 },
   name: { ...typography.smallStrong, color: '#FFFFFF', textShadowColor: '#0009', textShadowRadius: 4 },
