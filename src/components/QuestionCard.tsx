@@ -7,7 +7,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { VoteControls } from './VoteControls';
 import { RichText } from '@/components/RichText';
 import { PollView } from '@/components/PollView';
-import { useApp } from '@/store/AppContext';
+import { useActions, useMyId } from '@/store/AppContext';
 import { LevelPill } from '@/components/LevelPill';
 import { Avatar, Card, Chip } from '@/components/ui';
 import { relativeTime } from '@/lib/format';
@@ -67,7 +67,8 @@ function QuestionCardInner({
 }: Props) {
   const styles = useThemedStyles(styleDefinitions);
   const meta = topicMeta(question.topic);
-  const { currentUserId, actions } = useApp();
+  const currentUserId = useMyId();
+  const actions = useActions();
 
   return (
     <Card onPress={onPress} style={styles.card}>

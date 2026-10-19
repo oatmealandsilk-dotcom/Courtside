@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { Text, type TextProps } from 'react-native';
-import { useApp } from '@/store/AppContext';
+import { useMyId } from '@/store/AppContext';
 import { openPlayer } from '@/features/navigation/openPlayer';
 export function PlayerName({ userId, children, ...props }: TextProps & { userId?: string }) {
-  const { currentUserId } = useApp();
+  const currentUserId = useMyId();
   // With no userId there is nothing to open, so the tap must fall through to
   // whatever row this sits in rather than being swallowed.
   // A tap dims the name for a beat, a small sign it took, in place of the phone's grey box.

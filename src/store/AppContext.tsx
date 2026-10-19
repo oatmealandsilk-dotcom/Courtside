@@ -1611,6 +1611,14 @@ const NO_USERS: User[] = [];
  * app does not redraw it. The very same list as the app state's `users`.
  */
 const UsersContext = createContext<User[]>(NO_USERS);
+/**
+ * The actions, and who you are, on their own, the same way: a part that only
+ * needs those (QuestionCard, a name, a caption's @mentions) is not redrawn by
+ * every change elsewhere in the app. The very same `actions` and
+ * `currentUserId` as the app state's (a guest's included).
+ */
+const ActionsContext = createContext<AppActions | null>(null);
+const MyIdContext = createContext<ID | null>(null);
 
 const emptyBootstrap: Bootstrap = {
   users: [],
@@ -9576,7 +9584,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [state, unreported, currentUser, actions, seeing, shownAtCourt, ageSaysAdult, guestValue, guestActions, guest],
   );
 
-  return <AppContext.Provider value={value}><UsersContext.Provider value={value.users}>{children}</UsersContext.Provider></AppContext.Provider>;
+  return <AppContext.Provider value={value}><UsersContext.Provider value={value.users}><ActionsContext.Provider value={value.actions}><MyIdContext.Provider value={value.currentUserId}>{children}</MyIdContext.Provider></ActionsContext.Provider></UsersContext.Provider></AppContext.Provider>;
 }
 
 function applyVote<T extends { votes: number; votedBy: Record<ID, 1 | -1> }>(
@@ -9614,12 +9622,24 @@ export function AppStateLater({ hidden, children }: { hidden: boolean; children:
   const live = useContext(AppContext);
   const later = useDeferredValue(live);
   const shown = hidden ? later : live;
-  return <AppContext.Provider value={shown}><UsersContext.Provider value={shown?.users ?? NO_USERS}>{children}</UsersContext.Provider></AppContext.Provider>;
+  return <AppContext.Provider value={shown}><UsersContext.Provider value={shown?.users ?? NO_USERS}><ActionsContext.Provider value={shown?.actions ?? null}><MyIdContext.Provider value={shown?.currentUserId ?? null}>{children}</MyIdContext.Provider></ActionsContext.Provider></UsersContext.Provider></AppContext.Provider>;
 }
 
 /** Everyone the app knows about (the app state's `users`), for a part that needs nothing else. */
 export function useUsers(): User[] {
   return useContext(UsersContext);
+}
+
+/** The app's actions (the app state's `actions`), for a part that needs nothing else. */
+export function useActions(): AppActions {
+  const ctx = useContext(ActionsContext);
+  if (!ctx) throw new Error('useActions must be used inside <AppProvider>');
+  return ctx;
+}
+
+/** Who you are (the app state's `currentUserId`), for a part that needs nothing else. */
+export function useMyId(): ID | null {
+  return useContext(MyIdContext);
 }
 
 export function useApp(): AppContextValue {

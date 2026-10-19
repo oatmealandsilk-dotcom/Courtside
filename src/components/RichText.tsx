@@ -3,7 +3,7 @@ import React, { useMemo, useState } from 'react';
 import { Text, type StyleProp, type TextProps, type TextStyle } from 'react-native';
 import { router } from 'expo-router';
 
-import { useApp } from '@/store/AppContext';
+import { useMyId, useUsers } from '@/store/AppContext';
 import { domainOf, openLink, splitLinks } from '@/lib/links';
 import { colors, font } from '@/theme';
 import { openPlayer } from '@/features/navigation/openPlayer';
@@ -36,7 +36,8 @@ export function RichText({ children, mentionStyle, hashtagStyle, links, after, .
   /** Something set right after the words, on the same line: a caption's "more". */
   after?: React.ReactNode;
 }) {
-  const { users, currentUserId } = useApp();
+  const users = useUsers();
+  const currentUserId = useMyId();
   // Found once per message, not on every draw (a chat redraws its bubbles on each key typed in the box).
   const runs = useMemo(() => (links ? splitLinks(children) : null), [links ? 1 : 0, children]); // eslint-disable-line react-hooks/exhaustive-deps
   const pattern = hashtagStyle ? MENTION_OR_TAG : MENTION;
