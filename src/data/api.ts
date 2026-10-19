@@ -78,6 +78,7 @@ import type {
   TrainingPlan,
   User,
   ID,
+  FoundVia,
 } from './types';
 
 // The stand-in delay that makes loading states real in the demo. With a real
@@ -1067,3 +1068,21 @@ export async function fetchAiPlan(context: string, profileHash: string): Promise
     })),
   };
 }
+
+/* ------------------------------- How you found us (migration 166, Oct 18) */
+
+/**
+ * The demo's stand-in for set_found_via: the answer is kept in memory for
+ * this visit only (nothing is sent anywhere), with the server's own rule
+ * that only the six answers are taken.
+ */
+let demoFoundVia: FoundVia | null = null;
+const FOUND_VIA_IDS: FoundVia[] = ['instagram', 'tiktok', 'facebook', 'friend', 'app_store', 'other'];
+export async function setFoundVia(choice: FoundVia | null): Promise<boolean> {
+  await delay(null, 120);
+  if (choice !== null && !FOUND_VIA_IDS.includes(choice)) return false;
+  demoFoundVia = choice;
+  return true;
+}
+/** What the demo account answered this visit, if anything (the demo Links page adds it to its sample). */
+export const demoFoundViaAnswer = () => demoFoundVia;

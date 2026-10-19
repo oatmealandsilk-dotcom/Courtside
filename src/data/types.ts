@@ -1852,3 +1852,9 @@ export interface ContactMatch {
   phone?: string;
   email?: string;
 }
+
+/**
+ * "How did you find CourtSide?" (Oct 18, migration 166): the one optional
+ * answer at setup. Kept privately on the server; only counts are shown.
+ */
+export type FoundVia = 'instagram' | 'tiktok' | 'facebook' | 'friend' | 'app_store' | 'other';

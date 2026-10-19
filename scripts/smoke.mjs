@@ -1255,6 +1255,28 @@ const STEPS = [
     after: async (page) => { await page.tap({ label: 'Done' }); await page.gone({ text: 'Share your session' }); await page.waitFor({ label: 'For you', any: true }); },
   },
   {
+    // Oct 18 (owner: "Add the question, as long as it's for the benefit of the app and does not
+    // take away"): setup's second page asks "How did you find CourtSide?" as one optional row of
+    // chips, and Finish works without an answer. Opened as the demo account straight from its
+    // address (?as=you), so this step starts the app afresh.
+    name: 'found-via',
+    title: 'Setup: "How did you find CourtSide?" is optional',
+    async run(page) {
+      await page.goto('/onboarding?as=you');
+      await page.waitFor({ text: 'About you' }, 45000);
+      await sleep(600);
+      // The name box is filled from the account once it loads; typed only if it is still empty.
+      if (!(await page.eval("[...document.querySelectorAll('input')].some((i) => i.value.trim().length > 1)"))) { await page.tap({ label: 'Name' }); await page.type('Alex Rivera'); }
+      await page.tap({ label: 'Rating' });
+      await page.type('3.5');
+      await page.tap({ text: 'Continue' });
+      await page.waitFor({ text: 'Your game' });
+    },
+    expect: [{ text: 'How did you find CourtSide?' }, { text: 'Optional' }, { label: 'Instagram' }, { label: 'A friend' }, { label: 'App Store' }, { text: 'Finish' }],
+    // Finish with whatever is picked (or nothing): setup closes and the app opens.
+    after: async (page) => { await page.tap({ text: 'Finish' }); await page.gone({ text: 'How did you find CourtSide?' }); },
+  },
+  {
     // Oct 18 ("build tracking"): courtsidebase.com/?ref=fb&go=app, in a tab of its own (see checkAppHop).
     name: 'app-link',
     title: 'Website link straight to the iPhone app',

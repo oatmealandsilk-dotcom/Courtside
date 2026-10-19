@@ -38,6 +38,18 @@ export function savedCampaign(): string | null {
   } catch { return null; }
 }
 
+/*
+ * The label let go once its sign-up was counted, kept in memory for the rest
+ * of this visit: setup's "How did you find CourtSide?" (Oct 18) starts on the
+ * Facebook chip for someone who came through the Facebook link, and the
+ * sign-up is usually counted a moment before setup opens.
+ */
+let letGo: string | null = null;
+
 export function forgetCampaign() {
+  letGo = savedCampaign() ?? letGo;
   try { localStorage.removeItem(KEY); } catch { /* nothing kept */ }
 }
+
+/** The link's label this visit: the one kept, or the one just counted and let go. */
+export const campaignThisVisit = (): string | null => savedCampaign() ?? letGo;

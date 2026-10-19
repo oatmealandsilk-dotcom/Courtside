@@ -5,8 +5,10 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { EmptyState, Screen, SegmentedControl } from '@/components/ui';
-import { demoLinkStats } from '@/data/mock/linkStats';
-import { remote, type LinkStatRow } from '@/data/remote';
+import { demoFoundViaAnswer } from '@/data/api';
+import { demoFoundVia, demoLinkStats } from '@/data/mock/linkStats';
+import { remote, type FoundViaRow, type LinkStatRow } from '@/data/remote';
+import { FOUND_VIA_WORDS } from '@/features/onboarding/foundVia';
 import { goBack } from '@/lib/goBack';
 import * as haptics from '@/lib/haptics';
 import { isSupabaseConfigured } from '@/lib/supabase';
@@ -60,14 +62,23 @@ export default function AdminLinks() {
   const [week, setWeek] = useState<LinkStatRow[] | null>(null);
   const [month, setMonth] = useState<LinkStatRow[] | null>(null);
   const [error, setError] = useState('');
+  // "How did you find CourtSide?" (Oct 18, migration 166): the answers for accounts made in the
+  // last 7 and 30 days. Its own error, so the links still show before migration 166 is in.
+  const [found, setFound] = useState<{ week: FoundViaRow[]; month: FoundViaRow[] } | null>(null);
+  const [foundError, setFoundError] = useState('');
 
   const load = useCallback(async () => {
     setError('');
+    setFoundError('');
     if (!isSupabaseConfigured) {
       setWeek(demoLinkStats(7));
       setMonth(demoLinkStats(30));
+      setFound({ week: demoFoundVia(7, demoFoundViaAnswer()), month: demoFoundVia(30, demoFoundViaAnswer()) });
       return;
     }
+    void Promise.all([remote.fetchFoundVia(7), remote.fetchFoundVia(30)])
+      .then(([w, m]) => setFound({ week: w, month: m }))
+      .catch((e: unknown) => { setFound({ week: [], month: [] }); setFoundError(e instanceof Error ? e.message : 'Could not load the answers.'); });
     try {
       const [w, m] = await Promise.all([remote.fetchLinkStats(7), remote.fetchLinkStats(30)]);
       setWeek(w);
@@ -185,6 +196,38 @@ export default function AdminLinks() {
       <Text style={styles.foot}>
         Counting started when this page came out (Oct 16), sign-ups on Oct 18; emails go back further. The straight-to-the-app link counts its taps under App. Nothing here says who anyone is.
       </Text>
+
+      {/* Oct 18, owner: "Can we see where the sign up users are coming from". Every new account,
+          wherever it was made (the app or the website), by its answer at setup. */}
+      <Text style={[styles.section, styles.sectionGap]}>How people found us</Text>
+      <Text style={styles.lead}>
+        New accounts, by their answer to “How did you find CourtSide?” when they set up. Answering is optional.
+      </Text>
+      {foundError ? <Text style={styles.error} accessibilityLiveRegion="polite">{foundError}</Text> : null}
+      {found === null ? (
+        <View style={styles.loading}><CourtSpinner size={28} /></View>
+      ) : found.week.length || found.month.length ? (
+        <View style={styles.list}>
+          <View style={[styles.statRow, styles.headRow]} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+            <Text style={[styles.headText, styles.labelCol]}>Answer</Text>
+            <Text style={[styles.headText, styles.dayCol]}>7 days</Text>
+            <Text style={[styles.headText, styles.dayCol]}>30 days</Text>
+          </View>
+          {(found.month.length ? found.month : found.week).map((row) => {
+            const week = found.week.find((r) => r.choice === row.choice)?.people ?? 0;
+            const month = found.month.find((r) => r.choice === row.choice)?.people ?? 0;
+            const quiet = row.choice === 'not_answered';
+            return (
+              <View key={row.choice} style={[styles.statRow, styles.rowLine]} accessible accessibilityLabel={`${FOUND_VIA_WORDS[row.choice]}: ${week} in the last 7 days, ${month} in the last 30 days`}>
+                <Text style={[styles.name, styles.labelCol, quiet && styles.quietName]} numberOfLines={1}>{FOUND_VIA_WORDS[row.choice]}</Text>
+                <Text style={[styles.num, styles.dayCol, week > 0 && !quiet && styles.numStrong]}>{week}</Text>
+                <Text style={[styles.num, styles.dayCol, month > 0 && !quiet && styles.numStrong]}>{month}</Text>
+              </View>
+            );
+          })}
+        </View>
+      ) : null}
+      <Text style={styles.foot}>Asked from Oct 18. Someone can change their answer in their first week.</Text>
     </Screen>
   );
 }
@@ -210,5 +253,8 @@ const styleDefinitions = StyleSheet.create({
   numCol: { width: 46, textAlign: 'right' },
   num: { ...typography.bodyStrong, color: colors.textMuted, fontVariant: ['tabular-nums'] },
   numStrong: { color: colors.text },
+  sectionGap: { paddingTop: spacing.xxl },
+  dayCol: { width: 64, textAlign: 'right' },
+  quietName: { ...typography.body, color: colors.textMuted },
   foot: { ...typography.small, color: colors.textFaint, lineHeight: 18, paddingTop: spacing.md },
 });
