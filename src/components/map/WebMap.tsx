@@ -32,6 +32,7 @@ import { livePin } from '@/features/activity/liveSession';
 import { PAINT_WATCH_JS } from '@/components/map/engineLoader';
 import { MapCardFailed, MapCardLoading, MapLoadPill } from '@/components/map/MapLoadState';
 import { useMapLoad } from '@/components/map/useMapLoad';
+import { useIsFocused } from '@/lib/useIsFocused';
 import { useStartMapHold } from '@/features/feed/warmup';
 
 // The court pictures in chats (CourtMapThumb) fetch their drawing through
@@ -116,8 +117,10 @@ export function NearbyMap(props: NearbyMapProps) {
   // The loading look underneath goes once the map's fade-in has finished.
   const [loaderGone, setLoaderGone] = useState(false);
   useEffect(() => { if (!cardShown) return undefined; const t = setTimeout(() => setLoaderGone(true), 450); return () => clearTimeout(t); }, [cardShown]);
+  // Off screen, the map's load clocks wait (useMapLoad).
+  const onScreen = useIsFocused();
   // Getting the map going, and again if its style never arrives (useMapLoad): each try is a new map.
-  const load = useMapLoad(expanded ? 'full map' : 'map card');
+  const load = useMapLoad(expanded ? 'full map' : 'map card', onScreen && props.visible !== false);
   // Anything else picked (a search result, a pin) takes the place of your own card.
   useEffect(() => { if (model.selected || model.selectedCourt || model.selectedHit) setMeOpen(false); }, [model.selected, model.selectedCourt, model.selectedHit]);
   const { home, start } = model;

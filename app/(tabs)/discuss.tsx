@@ -518,7 +518,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   const yourCourts = <YourCourts from={youAt} />;
   const courtsBlock = <CourtsNear center={youAt} />;
   // A guest (guest mode, Oct 17): open hits and courts near them, never the players map or people.
-  const content = (section:string) => (section === 'players' && isGuest ? <GuestFindPlayers /> : section === 'players' ? <View style={{ gap: 16 }}>
+  const content = (pane:string) => (pane === 'players' && isGuest ? <GuestFindPlayers /> : pane === 'players' ? <View style={{ gap: 16 }}>
         {/* Cancel beside the box while you search, the way iPhone search boxes do: one tap clears it, puts the keyboard away and brings the map back (Oct 5, owner: "there should be an easier way to exit here"). */}
         <View style={styles.searchRow}>
           <View style={styles.searchWrap}>
@@ -536,8 +536,8 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
             </Pressable>
           ) : null}
         </View>
-        {currentUser && !search ? (section === 'players'
-          ? <NearbyMap me={currentUser} players={players} at={detectedCoords} locationOn={location.locationOn} locating={location.locating} onToggleLocation={location.toggle} onOpen={id => router.push(`/user/${id}`)} onExpand={() => router.push('/map')} hitCount={openHits.length} inviting={early} />
+        {currentUser && !search ? (pane === 'players'
+          ? <NearbyMap visible={section === 'players'} me={currentUser} players={players} at={detectedCoords} locationOn={location.locationOn} locating={location.locating} onToggleLocation={location.toggle} onOpen={id => router.push(`/user/${id}`)} onExpand={() => router.push('/map')} hitCount={openHits.length} inviting={early} />
           // The same footprint, empty: keeps the list from jumping when the map mounts on arrival.
           : <View style={styles.mapStandIn} />) : null}
         {/* Nobody sharing a spot within 30 miles: the way to fill the map,

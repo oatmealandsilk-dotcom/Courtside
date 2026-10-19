@@ -29,6 +29,7 @@ import { confirmUnfollow } from '@/lib/confirm';
 import { useApp } from '@/store/AppContext';
 import { useStartMapHold } from '@/features/feed/warmup';
 import { useAndroidBack } from '@/lib/androidBack';
+import { useIsFocused } from '@/lib/useIsFocused';
 import { colors, radius, spacing } from '@/theme';
 
 const HEIGHT = CARD_HEIGHT;
@@ -145,6 +146,8 @@ export function NearbyMap(props: NearbyMapProps) {
   const weather = useWeather(home);
   const cityName = model.cityName;
   const canvas = useRef<MapCanvasHandle | null>(null);
+  // Off screen, the map's load clocks wait (useMapLoad).
+  const onScreen = useIsFocused();
   // A fix arriving after the map is up moves the map to it.
   const lastHome = useRef(home);
   useEffect(() => {
@@ -187,6 +190,7 @@ export function NearbyMap(props: NearbyMapProps) {
   const mapView = (
     <MapCanvas
       ref={canvas}
+      active={onScreen && props.visible !== false}
       center={view.center}
       zoom={view.zoom}
       look={look}

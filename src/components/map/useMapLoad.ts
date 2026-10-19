@@ -28,7 +28,11 @@ export type MapLoadStatus = 'loading' | 'painted' | 'failed';
  *   or the connection comes back, and whenever `restart` is called (a tap).
  *   A try that was still going and comes good later still counts.
  */
-export function useMapLoad(where: string) {
+export function useMapLoad(where: string, active = true) {
+  // Off screen (a hidden pager page, a screen pushed over it, another tab): its clocks stop, since the
+  // phone pauses an unseen web view and its silence there is not a failure (Oct 18 crash reports).
+  const act = useRef(active);
+  act.current = active;
   const [attempt, setAttempt] = useState(0);
   const [status, setStatus] = useState<MapLoadStatus>('loading');
   // since: when this round of tries began; began: when the current try did.
@@ -90,6 +94,7 @@ export function useMapLoad(where: string) {
   useEffect(() => {
     if (status !== 'loading') return undefined;
     const t = setInterval(() => {
+      if (!act.current) return;
       if (s.painted || s.gaveUp || s.retry) return;
       const now = Date.now();
       if (s.up) { if (now - s.heard > LOAD_STUCK_MS) failed('stuck'); return; }
@@ -112,6 +117,16 @@ export function useMapLoad(where: string) {
     });
     return () => sub.remove();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Back on screen: the same as the app coming back to the front.
+  const firstActive = useRef(true);
+  useEffect(() => {
+    if (firstActive.current) { firstActive.current = false; return; }
+    if (!active || s.painted) return;
+    if (s.gaveUp) { latest.current.restart(); return; }
+    s.heard = Date.now();
+    if (!s.up) { s.since = s.began = s.progress = Date.now(); }
+  }, [active]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /** The connection is back: a map that has not come up starts again at once. */
   const online = () => { if (!s.painted && (s.gaveUp || !s.up)) latest.current.restart(); };

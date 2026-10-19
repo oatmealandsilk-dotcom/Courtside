@@ -46,4 +46,6 @@ export interface NearbyMapProps {
    * "N players around" counts the faces on a card this tall.
    */
   cardHeight?: number;
+  /** Shown in its own screen (a pager page that can be swiped away): false while that page is hidden, so its load clocks wait. */
+  visible?: boolean;
 }

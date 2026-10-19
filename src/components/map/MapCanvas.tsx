@@ -53,6 +53,8 @@ interface Props {
   /** The map crossed `farBelow`, either way (and once as it starts): told the moment it happens, not only when it comes to rest. */
   onFar?: (far: boolean) => void;
   style?: StyleProp<ViewStyle>;
+  /** On screen: off (a page over it, a hidden pager page, another tab), its load clocks wait (useMapLoad). */
+  active?: boolean;
 }
 
 /**
@@ -70,12 +72,12 @@ interface Props {
  * Tap to try again (retry). If iOS or Android stops the web view to free
  * memory, it is started again by itself (Oct 5).
  */
-export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas({ center, zoom, look, interactive, markers, tpl, popIn = false, holdPins = false, pad, onTap, onMapTap, onMove, onPainted, onStatus, farBelow, onFar, style }, ref) {
+export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas({ center, zoom, look, interactive, markers, tpl, popIn = false, holdPins = false, pad, onTap, onMapTap, onMove, onPainted, onStatus, farBelow, onFar, style, active = true }, ref) {
   const styles = useThemedStyles(styleDefinitions);
   const web = useRef<WebView | null>(null);
   const ready = useRef(false);
   // Getting the page going, and again if it fails (useMapLoad): each try is a new web view.
-  const load = useMapLoad(interactive ? 'full map' : 'map card');
+  const load = useMapLoad(interactive ? 'full map' : 'map card', active);
   useEffect(() => { ready.current = false; }, [load.attempt]);
   const latest = useRef({ onTap, onMapTap, onMove, onPainted, onFar, onStatus });
   latest.current = { onTap, onMapTap, onMove, onPainted, onFar, onStatus };
