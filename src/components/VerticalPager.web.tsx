@@ -78,14 +78,29 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, {
   const drag = useRef<{y:number;x:number;top:number;active:boolean;target:HTMLElement;scroll?:HTMLElement;scrollTop?:number;lastY:number;lastTime:number;velocity:number} | null>(null);
   const suppressClick = useRef(false);
   const animation = useRef(0);
+  // A landing glide is under way (settle): the page it heads for is not on yet.
+  const gliding = useRef(false);
   const stop = () => {
     cancelAnimationFrame(animation.current);
+    gliding.current = false;
   };
+  // The page in view becomes the active one only once the feed has landed on
+  // it, the way Instagram Reels and TikTok do: while you drag, the clip you
+  // are leaving keeps playing and the next one shows its first frame (owner,
+  // Oct 19: "push 3 only if it's what Instagram does").
+  const commit = (el: HTMLDivElement) => {
+    if (!el.clientHeight) return;
+    const index = Math.round(el.scrollTop / el.clientHeight);
+    if (index === reported.current) return;
+    reported.current = index;
+    onIndexRef.current(index);
+  };
+  const onIndexRef = useRef(onIndex); onIndexRef.current = onIndex;
   const settle = (el: HTMLDivElement, target = Math.round(el.scrollTop / el.clientHeight) * el.clientHeight) => {
     stop();
     const from = el.scrollTop;
     const to = Math.max(0, Math.min(el.scrollHeight - el.clientHeight, target));
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) { el.scrollTop = to; el.style.scrollSnapType = 'y mandatory'; return; }
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) { el.scrollTop = to; el.style.scrollSnapType = 'y mandatory'; commit(el); return; }
     const started = performance.now();
     const desktop = isDesktopBrowser();
     const duration = desktop ? 350 : 290;
@@ -97,8 +112,10 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, {
         : 1 - Math.pow(1 - t, 2.5);
       el.scrollTop = from + (to - from) * eased;
       if (t < 1) animation.current = requestAnimationFrame(frame);
-      else el.style.scrollSnapType = 'y mandatory';
+      // Landed: now the page it came to is the active one.
+      else { gliding.current = false; el.style.scrollSnapType = 'y mandatory'; commit(el); }
     };
+    gliding.current = true;
     animation.current = requestAnimationFrame(frame);
   };
   useEffect(() => () => stop(), []);
@@ -106,8 +123,7 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, {
   // Restore the caller's position once the children have laid out. Runs on
   // mount only: later index changes are the user scrolling, not a restore.
   const restored = useRef(false);
-  // Scroll fires continuously; without this every frame of a swipe would set
-  // state upstream and rebuild the feed mid-gesture.
+  // The page last reported as active (see commit).
   const reported = useRef(initialIndex);
   useEffect(() => {
     const el = pager.current;
@@ -243,7 +259,6 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, {
     onScroll={e => {
       const el = e.currentTarget;
       if (!el.clientHeight) return;
-      const index = Math.round(el.scrollTop / el.clientHeight);
       // The bar follows the scroll: down tucks it, up lifts it — as on the other tabs.
       const frac = el.scrollTop / el.clientHeight;
       const resized = lastHeight.current !== 0 && lastHeight.current !== el.clientHeight;
@@ -255,12 +270,17 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, {
         if (dir !== 0 && dir !== barDir.current) { barDir.current = dir; glideBar(dir > 0); }
       }
       lastFrac.current = frac;
-      // Quiet for a beat after the last movement means the page has landed.
+      // Quiet for a beat after the last movement means the page has landed
+      // (a wheel, a trackpad or the keys, where the browser does the snap).
+      // A finger held still part way, or a glide still going, has not.
       if (settleTimer.current) clearTimeout(settleTimer.current);
-      settleTimer.current = setTimeout(() => { settleTimer.current = null; barDir.current = 0; onSettled?.(Math.round(el.scrollTop / Math.max(1, el.clientHeight))); }, 160);
-      if (index === reported.current) return;
-      reported.current = index;
-      onIndex(index);
+      settleTimer.current = setTimeout(() => {
+        settleTimer.current = null;
+        if (drag.current?.active || gliding.current) return;
+        barDir.current = 0;
+        commit(el);
+        onSettled?.(Math.round(el.scrollTop / Math.max(1, el.clientHeight)));
+      }, 160);
     }}
     style={{ height: '100%', width: '100%', overflowY: 'auto', scrollSnapType: 'y mandatory', touchAction:'none', userSelect:'none',
       overscrollBehaviorY: 'contain', scrollbarWidth: 'thin', scrollbarColor: `${colors.borderStrong} ${colors.bgElevated}` }}>

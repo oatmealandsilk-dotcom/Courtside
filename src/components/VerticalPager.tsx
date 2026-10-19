@@ -11,9 +11,13 @@ import { PULL_DISARM, PULL_DISC, PULL_GAP, PULL_LAND_SLACK, PULL_LINE, PULL_MIN_
 import { colors } from '@/theme';
 
 /**
- * Full-height pages that snap one at a time. The active page changes the
- * moment a swipe crosses the midpoint — not when the scroll settles — so a
- * clip stops the instant it is on its way out and the next one starts early.
+ * Full-height pages that snap one at a time. The active page changes once a
+ * swipe has landed (let go and snapped), the way Instagram Reels and TikTok
+ * do: while you drag, the clip you are leaving keeps playing and the next one
+ * shows its first frame (owner, Oct 19: "push 3 only if it's what Instagram
+ * does"). It used to change at the midpoint, under the finger, starting and
+ * stopping players mid-swipe. A move made by code (back to the top, a resize)
+ * still follows the page as it passes.
  */
 export interface VerticalPagerHandle { scrollToTop: () => void }
 
@@ -161,6 +165,7 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
   const [around, setAround] = useState(initialIndex);
   setAroundRef.current = setAround;
   const settled = useCallback((y: number) => {
+    swiping.value = false;
     changed(pageOf(y));
     setAround(pageOf(y));
     onSettled?.(last.current);
@@ -180,6 +185,9 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
   // Which way the bar was last sent this swipe (1 tucked, -1 up, 0 not yet); cleared as each swipe begins.
   const barDir = useSharedValue(0);
   const lastIndex = useSharedValue(initialIndex);
+  // From a finger going down until the feed comes to rest (settled): the page
+  // under it is not the active one yet.
+  const swiping = useSharedValue(false);
   const onScroll = useAnimatedScrollHandler({
     onScroll: (e) => {
       const y = e.contentOffset.y;
@@ -207,12 +215,13 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
       }
       lastY.value = y;
       const index = Math.max(0, Math.min(count - 1, Math.round((y - top) / h)));
-      if (index !== lastIndex.value) { lastIndex.value = index; runOnJS(changed)(index); }
+      if (index !== lastIndex.value) { lastIndex.value = index; if (!swiping.value) runOnJS(changed)(index); }
     },
     onBeginDrag: (e) => {
       if (IOS) runOnJS(dragFrom)(e.contentOffset.y);
       barDir.value = 0;
       dragging.value = true;
+      swiping.value = true;
       // The tutorial waits for this finger to lift before it starts.
       runOnJS(setPageScrolling)(true);
       settling.value = false;
