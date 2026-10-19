@@ -302,7 +302,9 @@ export function NearbyMap(props: NearbyMapProps) {
       if (liftOpening) instance.easeTo({ center: opening.center, duration: 0, offset: [0, -courtLift(el.clientHeight || 800)] });
       else instance.jumpTo({ center: opening.center });
     }, 60);
-    const watcher = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => instance.resize()) : null;
+    // A zero size means a screen was pushed over the map (or its tab is hidden): skip it, or the map
+    // shrinks to its 400x300 stand-in and redraws while no one can see it, then again on Back.
+    const watcher = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => { if (el.clientWidth > 0 && el.clientHeight > 0) instance.resize(); }) : null;
     watcher?.observe(el);
     return () => {
       clearTimeout(settle);
