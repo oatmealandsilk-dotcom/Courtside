@@ -91,7 +91,7 @@ export default function CoachApply() {
   const progress = useRef(new Animated.Value(1 / STEPS.length)).current;
   const fade = useRef(new Animated.Value(1)).current;
   useEffect(() => {
-    Animated.timing(progress, { toValue: (step + 1) / STEPS.length, duration: 320, easing: Easing.out(Easing.cubic), useNativeDriver: false }).start();
+    Animated.timing(progress, { toValue: (step + 1) / STEPS.length, duration: 320, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
     fade.setValue(0);
     Animated.timing(fade, { toValue: 1, duration: 220, useNativeDriver: true }).start();
     scrollRef.current?.scrollTo({ y: 0, animated: false });
@@ -203,7 +203,7 @@ export default function CoachApply() {
           <Text style={styles.count}>{step + 1} / {STEPS.length}</Text>
         </View>
         <View style={styles.track}>
-          <Animated.View style={[styles.fill, { width: progress.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }) }]} />
+          <Animated.View style={[styles.fill, { transform: [{ scaleX: progress }] }]} />
         </View>
         <Text style={styles.title}>{STEPS[step].title}</Text>
         {STEPS[step].lead ? <Text style={styles.lead}>{STEPS[step].lead}</Text> : null}
@@ -391,7 +391,8 @@ const styleDefinitions = StyleSheet.create({
   kicker: { ...typography.smallStrong, color: colors.textMuted },
   count: { ...typography.small, color: colors.textFaint, fontVariant: ['tabular-nums'], minWidth: 24, textAlign: 'right' },
   track: { height: 3, borderRadius: 2, backgroundColor: colors.surfaceAlt, marginBottom: spacing.md, overflow: 'hidden' },
-  fill: { height: '100%', backgroundColor: colors.brand },
+  // Scaled on the native driver (not its width on the JS thread), so it never hitches with the page fade.
+  fill: { height: '100%', width: '100%', transformOrigin: 'left', backgroundColor: colors.brand },
   title: { ...typography.display, color: colors.text },
   lead: { ...typography.small, color: colors.textMuted },
   body: { paddingHorizontal: spacing.xl, paddingTop: spacing.sm, paddingBottom: spacing.xl, maxWidth: 560, width: '100%', alignSelf: 'center' },

@@ -277,7 +277,7 @@ function OnboardingSteps() {
   const fade = useRef(new Animated.Value(1)).current;
   const scrollRef = keyboard.scroller;
   useEffect(() => {
-    Animated.timing(progress, { toValue: (position + 1) / order.length, duration: 360, easing: Easing.out(Easing.cubic), useNativeDriver: false }).start();
+    Animated.timing(progress, { toValue: (position + 1) / order.length, duration: 360, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
     fade.setValue(0);
     scrollRef.current?.scrollTo({ y: 0, animated: false });
     Animated.timing(fade, { toValue: 1, duration: 220, easing: Easing.out(Easing.quad), useNativeDriver: true }).start();
@@ -418,7 +418,7 @@ function OnboardingSteps() {
       <View style={styles.head}>
         {ratingOnly ? null : (
           <View style={styles.track}>
-            <Animated.View style={[styles.fill, { width: progress.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }) }]} />
+            <Animated.View style={[styles.fill, { transform: [{ scaleX: progress }] }]} />
           </View>
         )}
         <View style={styles.headRow}>
@@ -729,7 +729,8 @@ const styleDefinitions = StyleSheet.create({
   waiting: { alignItems: 'center', justifyContent: 'center' },
   head: { paddingHorizontal: spacing.xl, gap: spacing.xs, paddingBottom: spacing.sm, maxWidth: 560, width: '100%', alignSelf: 'center' },
   track: { height: 2, backgroundColor: colors.surfaceAlt, marginBottom: spacing.md },
-  fill: { height: '100%', backgroundColor: colors.brand },
+  // Scaled on the native driver (not its width on the JS thread), so it never hitches with the page fade.
+  fill: { height: '100%', width: '100%', transformOrigin: 'left', backgroundColor: colors.brand },
   headRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
   title: { ...typography.display, color: colors.text },
   stepLabel: { ...typography.small, color: colors.textFaint, fontVariant: ['tabular-nums'] },
