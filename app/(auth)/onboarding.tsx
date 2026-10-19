@@ -474,7 +474,7 @@ function OnboardingSteps() {
         })}
       </View>
       {foundGuess && foundVia === foundGuess && !foundTouched ? (
-        <Text style={styles.note}>Picked from your link. Tap to change it.</Text>
+        <Text style={styles.note}>Picked for you from how you joined. Tap to change it.</Text>
       ) : null}
     </View>
   );
