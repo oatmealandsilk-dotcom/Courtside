@@ -61,8 +61,10 @@ export function SwipeSurface({ children, onSwipe, onCommit, onDragTo, onProgress
   // What this render allows, readable from the UI thread.
   const canNext = !renderPreview || !!renderPreview(1);
   const canPrev = !renderPreview || !!renderPreview(-1);
-  const config = useSharedValue({ enabled, delegateLeft, delegateRight, canNext, canPrev, depth, gap, commitAt });
-  useEffect(() => { config.value = { enabled, delegateLeft, delegateRight, canNext, canPrev, depth, gap, commitAt }; }, [enabled, delegateLeft, delegateRight, canNext, canPrev, depth, gap, commitAt, config]);
+  // hasProgress: someone listens to the drag's progress on the JS side (onProgress); without, no hop to JS each frame.
+  const hasProgress = !!onProgress;
+  const config = useSharedValue({ enabled, delegateLeft, delegateRight, canNext, canPrev, depth, gap, commitAt, hasProgress });
+  useEffect(() => { config.value = { enabled, delegateLeft, delegateRight, canNext, canPrev, depth, gap, commitAt, hasProgress }; }, [enabled, delegateLeft, delegateRight, canNext, canPrev, depth, gap, commitAt, hasProgress, config]);
   useEffect(() => {
     locked.value = isPageSwipeLocked();
     return subscribePageSwipeLock(() => { locked.value = isPageSwipeLocked(); });
@@ -158,7 +160,7 @@ export function SwipeSurface({ children, onSwipe, onCommit, onDragTo, onProgress
         offset.value = dx;
         const span = width.value + c.gap;
         if (progressValue) progressValue.value = -dx / span;
-        else runOnJS(progress)(-dx / span);
+        else if (c.hasProgress) runOnJS(progress)(-dx / span);
       })
       .onEnd((e) => {
         'worklet';
