@@ -1,4 +1,4 @@
-import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
+import React, { memo, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Animated, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
@@ -142,6 +142,35 @@ function Checker({ check = CHECK, light = false }: { check?: number; light?: boo
   );
 }
 
+/**
+ * One design's card in the row: the picture, its checkerboard when see-through, and Photo's
+ * "Choose a photo". On its own and memoised, so the row crossing halfway to the next design
+ * (which changes the one showing) does not redraw every card while the swipe is still moving.
+ */
+const DesignCard = memo(function DesignCard({ design, label, court, story, cardW, cardH, photo, blockedIds, clear, see, onChoosePhoto }: {
+  design: StoryDesign; label: string; court: ThemeName; story: SessionStory; cardW: number; cardH: number;
+  photo: React.ComponentProps<typeof SessionStoryArt>['photo']; blockedIds: string[]; clear: boolean; see: boolean; onChoosePhoto: () => void;
+}) {
+  const styles = useThemedStyles(styleDefinitions);
+  return (
+    <View style={[styles.frame, { width: cardW, height: cardH }]} accessible accessibilityLabel={`${label} design`}>
+      {/* A see-through design is shown on the see-through checkerboard, never your photo: only Photo has the photo. */}
+      {see ? <Checker /> : null}
+      <ThemeScope theme={court}>
+        <SessionStoryArt design={design} story={story} width={cardW} photo={photo} hidden={blockedIds} clear={clear} />
+      </ThemeScope>
+      {design === 'photo' ? (
+        <Pressable accessibilityRole="button" accessibilityLabel={photo ? 'Change photo' : 'Choose a photo'} onPress={onChoosePhoto} style={({ pressed }) => [styles.photoButton, pressed && styles.pressed]}>
+          <View style={styles.photoChip}>
+            <Ionicons name="image-outline" size={14} color={colors.onMedia} />
+            <Text style={styles.photoButtonText}>{photo ? 'Change photo' : 'Choose a photo'}</Text>
+          </View>
+        </Pressable>
+      ) : null}
+    </View>
+  );
+});
+
 export default function ShareSession() {
   const styles = useThemedStyles(styleDefinitions);
   const insets = useSafeAreaInsets();
@@ -216,6 +245,17 @@ export default function ShareSession() {
   const photo = picked ?? heldPhoto.current ?? story?.photo;
   // The four designs, and Heart rate after them when the post shares its zones and heart rate (storyDesigns).
   const designs = useMemo(() => storyDesigns(story), [story]);
+  // Each card's ease as you swipe (full size in the middle, its neighbours a touch smaller and quieter), made once per row.
+  const looks = useMemo(() => designs.map((_, i) => {
+    const range = [(i - 1) * step, i * step, (i + 1) * step];
+    return {
+      opacity: scrollX.interpolate({ inputRange: range, outputRange: [0.55, 1, 0.55], extrapolate: 'clamp' }),
+      transform: [{ scale: scrollX.interpolate({ inputRange: range, outputRange: [0.92, 1, 0.92], extrapolate: 'clamp' }) }],
+    };
+  }), [step, designs.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Photo's "Choose a photo", the same function every render (the cards are memoised), always running the latest.
+  const choosePhotoRef = useRef<() => Promise<void>>(async () => {});
+  const onChoosePhoto = useCallback(() => { void choosePhotoRef.current(); }, []);
   const [index, setIndex] = useState<number | null>(null);
   const shownIndex = Math.min(index ?? (story?.photo ? 0 : 1), designs.length - 1);
   const design: StoryDesign = designs[shownIndex].key;
@@ -347,6 +387,7 @@ export default function ShareSession() {
       showToast({ title: 'Your photos could not be opened', icon: 'alert-circle-outline' });
     }
   };
+  choosePhotoRef.current = choosePhoto;
 
   // Straight after posting: Done, in place of the back arrow, back to the feed the post landed on (the feed
   // itself when this was the first page opened, a browser reloaded on it). Otherwise the way back, as ever.
@@ -414,35 +455,14 @@ export default function ShareSession() {
                   contentContainerStyle={{ paddingHorizontal: sidePad }}
                   style={{ width: pageW, height: cardH + SHADOW_ROOM * 2, flexGrow: 0 }}
                 >
-                  {designs.map((d, i) => {
+                  {designs.map((d, i) => (
                     // The one in the middle full size; its neighbours a touch smaller and quieter, easing as you swipe.
-                    const range = [(i - 1) * step, i * step, (i + 1) * step];
-                    const look = {
-                      opacity: scrollX.interpolate({ inputRange: range, outputRange: [0.55, 1, 0.55], extrapolate: 'clamp' }),
-                      transform: [{ scale: scrollX.interpolate({ inputRange: range, outputRange: [0.92, 1, 0.92], extrapolate: 'clamp' }) }],
-                    };
-                    return (
-                      <Animated.View key={d.key} style={[styles.pageSlot, { width: step, height: cardH + SHADOW_ROOM * 2 }, look]}>
-                        <Pressable disabled={i === shownIndex} onPress={() => goTo(i)} accessible={false}>
-                          <View style={[styles.frame, { width: cardW, height: cardH }]} accessible accessibilityLabel={`${d.label} design`}>
-                            {/* A see-through design is shown on the see-through checkerboard, never your photo: only Photo has the photo. */}
-                            {seeThrough(d.key, clearOf(d.key)) ? <Checker /> : null}
-                            <ThemeScope theme={courtOf(d.key)}>
-                              <SessionStoryArt design={d.key} story={story} width={cardW} photo={photo} hidden={blockedIds} clear={clearOf(d.key)} />
-                            </ThemeScope>
-                            {d.key === 'photo' ? (
-                              <Pressable accessibilityRole="button" accessibilityLabel={photo ? 'Change photo' : 'Choose a photo'} onPress={() => { void choosePhoto(); }} style={({ pressed }) => [styles.photoButton, pressed && styles.pressed]}>
-                                <View style={styles.photoChip}>
-                                  <Ionicons name="image-outline" size={14} color={colors.onMedia} />
-                                  <Text style={styles.photoButtonText}>{photo ? 'Change photo' : 'Choose a photo'}</Text>
-                                </View>
-                              </Pressable>
-                            ) : null}
-                          </View>
-                        </Pressable>
-                      </Animated.View>
-                    );
-                  })}
+                    <Animated.View key={d.key} style={[styles.pageSlot, { width: step, height: cardH + SHADOW_ROOM * 2 }, looks[i]]}>
+                      <Pressable disabled={i === shownIndex} onPress={() => goTo(i)} accessible={false}>
+                        <DesignCard design={d.key} label={d.label} court={courtOf(d.key)} story={story} cardW={cardW} cardH={cardH} photo={photo} blockedIds={blockedIds} clear={clearOf(d.key)} see={seeThrough(d.key, clearOf(d.key))} onChoosePhoto={onChoosePhoto} />
+                      </Pressable>
+                    </Animated.View>
+                  ))}
                 </Animated.ScrollView>
               ) : <View style={{ height: cardH + SHADOW_ROOM * 2 }} />}
 
