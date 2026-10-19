@@ -7,7 +7,7 @@ import { StatusBar } from 'expo-status-bar';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image as ExpoImage } from 'expo-image';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Animated, { FadeInDown, FadeOut, LayoutAnimationConfig, ZoomIn, ZoomOut, runOnJS, scrollTo, useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming, type AnimatedRef } from 'react-native-reanimated';
+import Animated, { FadeInDown, FadeOut, LayoutAnimationConfig, ZoomIn, ZoomOut, scrollTo, useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming, type AnimatedRef, type SharedValue } from 'react-native-reanimated';
 
 import { CommentThread, threadOf, threadsOf, useReplyDraft } from '@/components/CommentThread';
 import { JumpProvider } from '@/components/JumpTo';
@@ -108,7 +108,8 @@ export default function CommentsSheet() {
   const rowH = useRef<Record<string, number>>({});
   // How far the list is scrolled, and the two edges of what can be seen of it:
   // its top, and the top of the box under it (which rides on the keyboard).
-  const scrollY = useRef(0);
+  // How far the list is scrolled, kept on the UI thread (read only on taps): no hop to JS on each scroll frame.
+  const scrollY = useSharedValue(0);
   const frame = useRef<View>(null);
   const composer = useRef<View>(null);
   const heading = useRef<Text>(null);
@@ -209,7 +210,7 @@ export default function CommentsSheet() {
     // "Hide replies" from far down a long thread: the replies fold away above
     // you, so the list goes back to the comment they hang from.
     const y = rowY.current[topId];
-    if (closing && y !== undefined && y < scrollY.current) requestAnimationFrame(() => list.current?.scrollTo({ y: Math.max(0, y - 12), animated: false }));
+    if (closing && y !== undefined && y < scrollY.value) requestAnimationFrame(() => list.current?.scrollTo({ y: Math.max(0, y - 12), animated: false }));
     // Typing when the toggle was pressed: keep typing (only a browser needs it given back).
     if (Date.now() - blurredAt.current < 400) input.current?.focus();
   };
@@ -244,8 +245,8 @@ export default function CommentsSheet() {
     frame.current?.measureInWindow((_x, top) => composer.current?.measureInWindow((_x2, boxTop) => {
       const seen = boxTop - top;
       if (!(seen > 0)) return;
-      if (bottom > scrollY.current + seen) list.current?.scrollTo({ y: Math.max(0, bottom - seen), animated: true });
-      else if (y < scrollY.current) list.current?.scrollTo({ y: Math.max(0, y - 12), animated: true });
+      if (bottom > scrollY.value + seen) list.current?.scrollTo({ y: Math.max(0, bottom - seen), animated: true });
+      else if (y < scrollY.value) list.current?.scrollTo({ y: Math.max(0, y - 12), animated: true });
     }));
   };
   const replyTo = (comment: Comment) => {
@@ -377,7 +378,7 @@ export default function CommentsSheet() {
           <CommentList
             listRef={list}
             pull={staged && LIST_PULL && Platform.OS !== 'web'}
-            onScrollY={(y) => { scrollY.current = y; }}
+            scrollYValue={scrollY}
             contentContainerStyle={styles.list}
           >
             {/* The post itself first: who, the whole caption, its small line. */}
@@ -477,10 +478,11 @@ export default function CommentsSheet() {
  * pulled down and away from anywhere, as on Instagram; anywhere else it is
  * the list's own scroll. The list is held at its top while the sheet moves.
  */
-function CommentList({ listRef, pull, onScrollY, contentContainerStyle, children }: {
+function CommentList({ listRef, pull, scrollYValue, contentContainerStyle, children }: {
   listRef: AnimatedRef<Animated.ScrollView>;
   pull: boolean;
-  onScrollY: (y: number) => void;
+  /** Where the list is scrolled, for the sheet's taps to read. */
+  scrollYValue: SharedValue<number>;
   contentContainerStyle: object;
   children: React.ReactNode;
 }) {
@@ -491,7 +493,7 @@ function CommentList({ listRef, pull, onScrollY, contentContainerStyle, children
   const onScroll = useAnimatedScrollHandler({
     onScroll: (e) => {
       listY.value = e.contentOffset.y;
-      runOnJS(onScrollY)(e.contentOffset.y);
+      scrollYValue.value = e.contentOffset.y;
     },
   });
   // Made once: the sheet re-draws as you type, and the pull must not be re-made under a finger.
