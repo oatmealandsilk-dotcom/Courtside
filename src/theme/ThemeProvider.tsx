@@ -381,6 +381,12 @@ for (const key of slotKeys) {
   for (const palette of Object.values(themes)) if (!slotOf.has(palette[key])) slotOf.set(palette[key], key);
 }
 
+/**
+ * Each style sheet remapped once per theme, shared by every component that uses it: a feed of
+ * PostCards walks its sheet once, not once per card, and a theme switch once per sheet.
+ */
+const remapCache = new Map<ThemeName, WeakMap<object, object>>();
+
 export function useThemedStyles<T extends object>(definitions: T): T {
   const { theme, scoped } = useTheme();
   // The live colour object is brought in line with the theme every time a
@@ -390,6 +396,10 @@ export function useThemedStyles<T extends object>(definitions: T): T {
   // otherwise leave its court in the colours the rest of the app reads.
   if (!scoped && (colors.bg !== themes[theme].bg || colors.brand !== themes[theme].brand)) Object.assign(colors, themes[theme]);
   return useMemo(() => {
+    let cache = remapCache.get(theme);
+    if (!cache) { cache = new WeakMap(); remapCache.set(theme, cache); }
+    const hit = cache.get(definitions);
+    if (hit) return hit as T;
     const target = themes[theme];
     const remap = (value: unknown): unknown => {
       if (typeof value === 'string') {
@@ -409,6 +419,8 @@ export function useThemedStyles<T extends object>(definitions: T): T {
       return value;
     };
 
-    return remap(definitions) as T;
+    const out = remap(definitions) as T;
+    cache.set(definitions, out);
+    return out;
   }, [definitions, theme]);
 }
