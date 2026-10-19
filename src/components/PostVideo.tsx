@@ -128,8 +128,10 @@ export function PostVideo({ uri, poster, active, preload = false, trimStart, tri
   timeRef.current = time;
   // The line and knob follow a shared value, so a playing video does not redraw its buttons five times a second.
   const progress = useSharedValue(0);
-  const fillStyle = useAnimatedStyle(() => ({ width: `${progress.value * 100}%` }));
-  const knobStyle = useAnimatedStyle(() => ({ left: `${progress.value * 100}%` }));
+  // The track's width (its onLayout), so the knob can move by transform: scaled and moved, never laid out again each frame.
+  const trackW = useSharedValue(0);
+  const fillStyle = useAnimatedStyle(() => ({ transform: [{ scaleX: progress.value }] }));
+  const knobStyle = useAnimatedStyle(() => ({ transform: [{ translateX: progress.value * trackW.value }] }));
   const shownRef = useRef(false);
   // The player reports its time only a few times a second (a browser about
   // four), which on a one-second clip is a few big hops. Each report instead
@@ -240,7 +242,7 @@ export function PostVideo({ uri, poster, active, preload = false, trimStart, tri
             <Ionicons name={full ? 'contract' : 'expand'} size={18} color="white" />
           </Pressable>
         </View>
-        <View {...scrub.panHandlers} onLayout={(e) => { trackWidth.current = Math.max(1, e.nativeEvent.layout.width); }} style={styles.trackHit}>
+        <View {...scrub.panHandlers} onLayout={(e) => { trackWidth.current = Math.max(1, e.nativeEvent.layout.width); trackW.value = e.nativeEvent.layout.width; }} style={styles.trackHit}>
           <View style={styles.track}>
             <Reanimated.View style={[styles.fill, fillStyle]} />
           </View>
@@ -335,8 +337,8 @@ const styles = StyleSheet.create({
   small: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
   trackHit: { height: 24, justifyContent: 'center' },
   track: { height: 3, borderRadius: 1.5, backgroundColor: 'rgba(255,255,255,0.3)', overflow: 'hidden' },
-  fill: { height: 3, backgroundColor: 'white' },
-  knob: { position: 'absolute', top: 5, marginLeft: -7, width: 14, height: 14, borderRadius: 7, backgroundColor: 'white' },
+  fill: { height: 3, width: '100%', transformOrigin: 'left', backgroundColor: 'white' },
+  knob: { position: 'absolute', left: 0, top: 5, marginLeft: -7, width: 14, height: 14, borderRadius: 7, backgroundColor: 'white' },
   fullRoot: { flex: 1, backgroundColor: 'transparent' },
   skip: { position: 'absolute', top: '50%', marginTop: -22, width: 64, height: 44, borderRadius: 22, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center' },
   skipText: { color: 'white', fontSize: 11, ...font('700'), marginTop: 1 },

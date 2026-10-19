@@ -94,7 +94,8 @@ function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, 
     const step = Math.min(1, fraction + 0.2 / Math.max(0.2, length));
     progress.value = fraction < progress.value - 0.05 ? fraction : withTiming(step, { duration: 200, easing: Easing.linear });
   };
-  const barStyle = useAnimatedStyle(() => ({ width: `${progress.value * 100}%` }));
+  // Scaled, not resized: a transform each frame, never a layout.
+  const barStyle = useAnimatedStyle(() => ({ transform: [{ scaleX: progress.value }] }));
 
   // The sound disc is not furniture: it eases in for a moment when the clip
   // starts, fades out quickly, and comes back the same way whenever the sound
@@ -215,7 +216,7 @@ const styleDefinitions = StyleSheet.create({
   soundLiquid: { backgroundColor: 'transparent', boxShadow: 'none' },
   topShade: { position: 'absolute', left: 0, right: 0, top: 0 },
   track: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 2, backgroundColor: 'rgba(255,255,255,0.25)' },
-  bar: { height: 2, backgroundColor: 'rgba(255,255,255,0.9)' },
+  bar: { height: 2, width: '100%', transformOrigin: 'left', backgroundColor: 'rgba(255,255,255,0.9)' },
 });
 
 /** Re-renders only when a shown value changes; the handlers passed in read fresh values through their own props, so a new function alone is no reason to rebuild. */
