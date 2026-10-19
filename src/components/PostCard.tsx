@@ -1,7 +1,7 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { PlaceLine } from '@/components/PlaceLine';
 import { TaggedLine } from '@/components/TaggedLine';
-import React, { useEffect, useState, memo } from 'react';
+import React, { useEffect, useMemo, useState, memo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import { router } from 'expo-router';
@@ -129,7 +129,7 @@ function PostCardInner({
   const { blockedIds, currentUserId, currentUser, comments } = useApp();
   // Its comments under it, newest first, filling what is left of the page, then "Add a comment…": the same
   // as under a photo post, so a written post is not half a page of nothing (Oct 5 audit).
-  const thread = threadsOf(comments, post.id, 'newest', currentUserId);
+  const thread = useMemo(() => threadsOf(comments, post.id, 'newest', currentUserId), [comments, post.id, currentUserId]);
   const streak = shownStreak(author, currentUserId);
   // A session with no photo or video: the session's card is the post's picture (Oct 2).
   const sessionCard = !!post.session && hasSessionStats(post.session) && !post.imageUrl && !post.videoUrl && post.kind !== 'clip';
