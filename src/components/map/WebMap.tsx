@@ -193,6 +193,9 @@ export function NearbyMap(props: NearbyMapProps) {
         dragRotate: false,
         pitchWithRotate: false,
         touchPitch: false,
+        // Its own size watcher shrinks and redraws the map whenever a page covers it (a zero size):
+        // the one below does the same job and skips that (sweep, Oct 18).
+        trackResize: false,
       });
     } catch (error) {
       load.failed(`start: ${error instanceof Error ? error.message : String(error)}`);
