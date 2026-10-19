@@ -4741,6 +4741,17 @@ async function uploadWithProgress(path: string, uri: string, contentType: string
   });
 }
 
+/**
+ * Storage already has this file: a send that seemed to fail had in fact arrived (uploads never
+ * replace, x-upsert false, and each name is new), so a second send of it is turned away with a
+ * 409 "Duplicate". The file is there, which is all the post needs.
+ */
+function alreadyStored(error: unknown): boolean {
+  const e = error as { message?: unknown; statusCode?: unknown; error?: unknown } | null;
+  const text = `${String(e?.message ?? '')} ${String(e?.error ?? '')} ${String(e?.statusCode ?? '')}`;
+  return /\b409\b|Duplicate|already exists/i.test(text);
+}
+
 /** The bucket's limit, which is also the most Supabase's free plan accepts per file. */
 export const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 /** A size for the crash note: "24 MB", or "unknown-size". */
@@ -4873,15 +4884,36 @@ export async function uploadMedia(me: ID, original: string, kind: 'photo' | 'vid
       await uploadWithProgress(path, file, contentType, upload);
     } catch (direct) {
       console.warn('[remote] direct upload fell back', direct);
-      // The plain upload needs the whole file in memory. On a phone that is
-      // only done for a file known to be under the limit; one whose size
-      // could not be read is never loaded blind (see sizeOf above).
-      if (Platform.OS !== 'web' && !size) throw direct;
-      await noteStep(`sending a ${megabytes(size)} ${kind} from memory (the direct send failed)`);
-      const response = await fetch(file);
-      const bytes = await response.arrayBuffer();
-      const { error } = await db.storage.from('media').upload(path, bytes, { contentType, upsert: false, cacheControl: String(YEAR_SECONDS) });
-      if (error) throw error;
+      // Sent after all, by a try below (or the first send had reached storage before it failed).
+      let sentLater = false;
+      // The phone put the app in the background mid-send (that is what broke it): sending again from
+      // memory while it is still away fails too, or gets the app closed. Wait for it to come back to
+      // the front (up to 10 minutes), then send the same way again; only if that fails as well does
+      // the plain upload below run. A post lost this way was reported on Oct 18.
+      if (Platform.OS !== 'web' && AppState.currentState !== 'active') {
+        await noteStep('waiting for the app to come back');
+        await new Promise<void>((res, rej) => {
+          const t = setTimeout(() => { sub.remove(); rej(direct); }, 10 * 60_000);
+          const sub = AppState.addEventListener('change', (st) => { if (st === 'active') { clearTimeout(t); sub.remove(); res(); } });
+        });
+        try {
+          await uploadWithProgress(path, file, contentType, upload);
+          sentLater = true;
+        } catch (again) {
+          if (alreadyStored(again)) sentLater = true;
+        }
+      }
+      if (!sentLater) {
+        // The plain upload needs the whole file in memory. On a phone that is
+        // only done for a file known to be under the limit; one whose size
+        // could not be read is never loaded blind (see sizeOf above).
+        if (Platform.OS !== 'web' && !size) throw direct;
+        await noteStep(`sending a ${megabytes(size)} ${kind} from memory (the direct send failed)`);
+        const response = await fetch(file);
+        const bytes = await response.arrayBuffer();
+        const { error } = await db.storage.from('media').upload(path, bytes, { contentType, upsert: false, cacheControl: String(YEAR_SECONDS) });
+        if (error && !alreadyStored(error)) throw error;
+      }
     } finally {
       // The blanked copy, if one was made, is not needed once the upload is over, sent or not.
       blanked?.release();
