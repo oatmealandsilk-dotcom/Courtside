@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import type { MapVisibility } from '@/data/types';
 import { useApp } from '@/store/AppContext';
 import { show as showToast } from '@/lib/toast';
@@ -40,7 +40,7 @@ export function useLocationToggle(where: TipSpot = 'card') {
     }
   };
 
-  const toggle = async () => {
+  const toggleNow = async () => {
     if (locating) return;
     dismissHideTip();
     if (locationEnabled) {
@@ -69,6 +69,12 @@ export function useLocationToggle(where: TipSpot = 'card') {
     return chose;
   };
 
+  // One function for the life of the screen that always runs the latest toggle, so a row handed it
+  // (UpToday, memoised) is not redrawn on every render of its page.
+  const toggleRef = useRef(toggleNow);
+  toggleRef.current = toggleNow;
+  const toggle = useCallback(() => toggleRef.current(), []);
+
   return { locationOn: locationEnabled, locating, toggle, mustChoose, chooseFirst };
 }
 
@@ -84,7 +90,7 @@ export function useLocationToggle(where: TipSpot = 'card') {
  */
 export function useOpenToHitToggle() {
   const { actions, mapLive, mapVisibility, currentUser, teenMap } = useApp();
-  return async (on: boolean, edit?: { until: string; miles: number | null }): Promise<boolean> => {
+  const now = async (on: boolean, edit?: { until: string; miles: number | null }): Promise<boolean> => {
     if (on && mapLive === true && mapVisibility === null && onTeenMap(currentUser, teenMap)) {
       const chose = await askWhoSeesYou('first');
       if (!chose) return false;
@@ -93,4 +99,8 @@ export function useOpenToHitToggle() {
     else actions.setOpenToHit(on);
     return true;
   };
+  // The same function every render, always running the latest closure (see toggle above).
+  const ref = useRef(now);
+  ref.current = now;
+  return useCallback((on: boolean, edit?: { until: string; miles: number | null }) => ref.current(on, edit), []);
 }

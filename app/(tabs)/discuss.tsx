@@ -4,7 +4,7 @@ import { PULL_GAP } from '@/lib/pullRefresh';
 import Reanimated, { runOnJS, useAnimatedReaction, useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 import { useTabUnderline } from '@/features/navigation/useTabUnderline';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Easing, Platform, ScrollView, TextInput, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { router } from 'expo-router';
 
@@ -173,6 +173,8 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
     pageRef.current?.scrollTo({ y: 0, animated: true });
   };
   const location = useLocationToggle();
+  // One function for the row's "Turn on" (location.toggle is itself stable), so UpToday is not redrawn with every render here.
+  const turnOnLocation = useCallback(() => { void location.toggle(); }, [location.toggle]);
   // Already sharing your location but never asked who can see you on the
   // map (migration 63; from before it, or an older version of the app): the
   // question comes here, where the app opens, a moment after the page has
@@ -551,7 +553,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
           // Never folded away by the phone's renderer: with players around, the tutorial's first tip lights this row.
           <View ref={early || friendsEarly ? undefined : leadRef} collapsable={false}>
             {/* "Turn on Location" only while it is off: with it on and no spot yet, the row waits for one (the switch would have turned it off). */}
-            <UpToday me={currentUser} people={upToday} teen={teen} locationOn={location.locationOn} finding={location.locationOn && !ownSpot} onLocation={ownSpot || location.locationOn ? undefined : location.toggle} onTurnOnLocation={location.locationOn ? undefined : () => { void location.toggle(); }} onToggle={toggleOpen} />
+            <UpToday me={currentUser} people={upToday} teen={teen} locationOn={location.locationOn} finding={location.locationOn && !ownSpot} onLocation={ownSpot || location.locationOn ? undefined : location.toggle} onTurnOnLocation={location.locationOn ? undefined : turnOnLocation} onToggle={toggleOpen} />
           </View>
         ) : null}
         {/* A quiet area leads with where to play (your courts, then the others

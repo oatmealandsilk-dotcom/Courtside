@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { memo, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -105,7 +105,7 @@ export function useUpToday({ users, lastSeen, me, from, blockedIds }: { users: U
  * faces are friends who follow each other with them, and their own ring is
  * seen only by those friends; the words say so.
  */
-export function UpToday({ me, people, teen = false, locationOn, finding = false, onLocation, onTurnOnLocation, onToggle }: { me: User; people: Up[]; /** Not known to be an adult, with the map's teen rule on: friends only. */ teen?: boolean; locationOn: boolean; /** Location is on, but this phone has no spot yet: the row says it is looking. */ finding?: boolean; /** Location off and no spot of yours: the way to give one. */ onLocation?: () => void; /** Location off: the "Turn on" on the note that says your ring is not on the map yet. */ onTurnOnLocation?: () => void; /** Resolves false when the ring did not go on (a teen who closed "Who can see you?" without an answer). */ onToggle: (on: boolean) => Promise<boolean> }) {
+export const UpToday = memo(function UpToday({ me, people, teen = false, locationOn, finding = false, onLocation, onTurnOnLocation, onToggle }: { me: User; people: Up[]; /** Not known to be an adult, with the map's teen rule on: friends only. */ teen?: boolean; locationOn: boolean; /** Location is on, but this phone has no spot yet: the row says it is looking. */ finding?: boolean; /** Location off and no spot of yours: the way to give one. */ onLocation?: () => void; /** Location off: the "Turn on" on the note that says your ring is not on the map yet. */ onTurnOnLocation?: () => void; /** Resolves false when the ring did not go on (a teen who closed "Who can see you?" without an answer). */ onToggle: (on: boolean) => Promise<boolean> }) {
   const styles = useThemedStyles(styleDefinitions);
   // Your ring goes out by itself at the time you picked.
   useOpenClock([me.openToHitUntil]);
@@ -214,7 +214,7 @@ export function UpToday({ me, people, teen = false, locationOn, finding = false,
       </View>
     </View>
   );
-}
+});
 
 const styleDefinitions = StyleSheet.create({
   wrap: { gap: spacing.sm },
