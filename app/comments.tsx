@@ -288,7 +288,8 @@ export default function CommentsSheet() {
     setPhoto(null);
     doneReplying();
     justSent.current = new Set(all.map((c) => c.id));
-    sendPop.value = withSequence(withTiming(0.8, { duration: 80 }), withSpring(1, { damping: 10, stiffness: 320 }));
+    // A slight dip and a settle with no wobble, as the Follow button answers (Oct 20 sweep: the deeper pop read as a bounce).
+    sendPop.value = withSequence(withTiming(0.96, { duration: 60 }), withSpring(1, { damping: 20, stiffness: 320 }));
     if (answering) openThread(threadOf(comments, answering));
     const saving = kind === 'hit' ? actions.addStoryComment(id, text, answering) : actions.addComment(id, text, picked ?? undefined, answering);
     // Refused for its words (migration 117), or it didn't save at all: the

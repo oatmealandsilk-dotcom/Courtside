@@ -471,7 +471,8 @@ const ScreenBody = React.memo(function ScreenBody({
     updated.setValue(0);
     Animated.sequence([
       Animated.delay(180),
-      Animated.spring(updated, { toValue: 1, useNativeDriver: true, damping: 14, stiffness: 220 }),
+      // Settles in without a wobble (Oct 20 sweep: calm, like the rest of the app since Oct 4's "smoother").
+      Animated.spring(updated, { toValue: 1, useNativeDriver: true, damping: 20, stiffness: 320, overshootClamping: true }),
       Animated.delay(900),
       Animated.timing(updated, { toValue: 0, duration: 220, useNativeDriver: true }),
     ]).start();

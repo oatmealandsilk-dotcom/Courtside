@@ -15,7 +15,8 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 /**
  * The little count in the corner of a header icon: a green pill, "9+" past
  * nine, gone at nought. When the number goes up it gives one small pop, so a
- * new message is noticed without anything flashing.
+ * new message is noticed without anything flashing: a slight swell and a
+ * settle with no wobble (Oct 20 sweep; the bounce is kept for rewards).
  */
 export function UnreadBadge({ count, style }: { count: number; style?: StyleProp<ViewStyle> }) {
   const styles = useThemedStyles(styleDefinitions);
@@ -24,8 +25,8 @@ export function UnreadBadge({ count, style }: { count: number; style?: StyleProp
   useEffect(() => {
     if (count > last.current && count > 0) {
       scale.value = withSequence(
-        withTiming(1.28, { duration: 130, easing: Easing.out(Easing.quad) }),
-        withSpring(1, { damping: 9, stiffness: 260 }),
+        withTiming(1.12, { duration: 120, easing: Easing.out(Easing.quad) }),
+        withSpring(1, { damping: 20, stiffness: 320 }),
       );
     }
     last.current = count;
