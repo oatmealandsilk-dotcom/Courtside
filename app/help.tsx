@@ -29,7 +29,7 @@ function topicsFor({ aiCoachOn, paidBooking, instantsOn }: { aiCoachOn: boolean;
   },
   {
     title: 'What is my NTRP or UTR badge?',
-    body: 'It is the rating you chose when you joined. To change it: Profile → Edit Profile → Rating. NTRP runs 1.0–7.0, UTR 1–16. It only changes when you change it; nothing here rates you automatically.',
+    body: 'It is the rating you chose when you joined. To change it: Profile → Edit profile → Rating. NTRP runs 1.0–7.0, UTR 1–16. It only changes when you change it; nothing here rates you automatically.',
   },
   {
     title: 'How do I ask a coach?',

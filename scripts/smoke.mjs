@@ -1003,7 +1003,7 @@ const STEPS = [
     async run(page) {
       await page.tap({ label: 'Profile' });
     },
-    expect: [{ text: 'Edit Profile' }, { text: '@you' }],
+    expect: [{ text: 'Edit profile' }, { text: '@you' }],
   },
   {
     // Carousel posts (Oct 15): the demo's three-photo post, opened from your grid, moves to its second photo.
@@ -1021,7 +1021,7 @@ const STEPS = [
     expect: [{ label: 'Photos, 2 of 3' }, { text: '2/3', any: true }],
     // Back on Profile, still scrolled down to the grid: up again to Edit Profile (brought to the middle of
     // the screen, clear of a note such as "How was the hit at …?" along the top), as the next step expects.
-    after: async (page) => { await page.tap({ label: 'Go back' }); await page.reveal({ text: 'Edit Profile' }); await page.waitFor({ text: 'Edit Profile' }); },
+    after: async (page) => { await page.tap({ label: 'Go back' }); await page.reveal({ text: 'Edit profile' }); await page.waitFor({ text: 'Edit profile' }); },
   },
   {
     name: 'settings',
@@ -1061,7 +1061,7 @@ const STEPS = [
       await page.tap({ label: 'Go back' });
       await page.waitFor({ label: 'Account center' });
       await page.tap({ label: 'Go back' });
-      await page.waitFor({ text: 'Edit Profile' });
+      await page.waitFor({ text: 'Edit profile' });
     },
   },
   {
@@ -1089,7 +1089,7 @@ const STEPS = [
       await page.tap({ label: WEEKDAY_BAR, index: 5 });
       await page.waitFor({ text: 'on court in the last 7 days' });
       await page.tap({ label: 'Go back' });
-      await page.waitFor({ text: 'Edit Profile' });
+      await page.waitFor({ text: 'Edit profile' });
     },
   },
   {
@@ -1134,7 +1134,7 @@ const STEPS = [
       await page.tap({ label: 'Close' });
       await page.gone({ label: 'Add a photo' });
       await page.tap({ label: 'Profile' });
-      await page.waitFor({ text: 'Edit Profile' });
+      await page.waitFor({ text: 'Edit profile' });
     },
   },
   {
@@ -1160,7 +1160,7 @@ const STEPS = [
     after: async (page) => {
       await page.tap({ label: 'Back' });
       await page.tap({ label: 'Go back' });
-      await page.waitFor({ text: 'Edit Profile' });
+      await page.waitFor({ text: 'Edit profile' });
     },
   },
   {

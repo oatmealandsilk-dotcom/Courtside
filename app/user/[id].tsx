@@ -207,7 +207,7 @@ function UserProfile() {
             </View>
           </View>
         ) : (
-          <View style={styles.buttons}><View style={{ flex: 1 }}><Button label="Edit Profile" variant="secondary" onPress={() => router.push('/edit-profile')} full /></View></View>
+          <View style={styles.buttons}><View style={{ flex: 1 }}><Button label="Edit profile" variant="secondary" onPress={() => router.push('/edit-profile')} full /></View></View>
         )}
         {coach && !blocked && !locked ? (
           <Button label="See coaching services" onPress={() => router.push(`/coach/${coach.id}`)} full />

@@ -47,7 +47,7 @@ export default function Saved() {
   return (
     <Screen title="Saved" compactTitle onBack={() => goBack()}>
       <View style={styles.tabs} onLayout={(e) => setTabWidth(e.nativeEvent.layout.width / 2)}>
-        {([['videos', 'Videos', savedPosts.length], ['discussions', 'Discussions', savedQuestions.length]] as const).map(([value, label, n]) => (
+        {([['videos', 'Posts', savedPosts.length], ['discussions', 'Discussions', savedQuestions.length]] as const).map(([value, label, n]) => (
           <Pressable key={value} accessibilityRole="tab" accessibilityState={{ selected: tab === value }} accessibilityLabel={`${label}, ${n}`} onPress={() => setTab(value)} style={styles.tab}>
             <Text style={[typography.body, tab === value ? { ...font('600'), color: colors.text } : { color: colors.textMuted }]}>{label}<Text style={[styles.tabCount, tab === value && { color: colors.brand }]}>  {n}</Text></Text>
           </Pressable>

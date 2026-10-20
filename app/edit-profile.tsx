@@ -95,7 +95,7 @@ export default function EditProfile() {
   };
 
   return (
-    <Screen title="Edit Profile" onBack={() => goBack('/profile')}>
+    <Screen title="Edit profile" onBack={() => goBack('/profile')}>
       {!currentUser ? (
         <View style={{ paddingVertical: 60, alignItems: 'center' }}><CourtSpinner size={28} /></View>
       ) : (
