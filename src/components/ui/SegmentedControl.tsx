@@ -1,6 +1,7 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 
 import { colors, radius, spacing, typography } from '@/theme';
 
@@ -29,7 +30,17 @@ interface Props<T extends string> {
   radio?: boolean;
   /** What the choice is, for a screen reader ("Type of session"). */
   accessibilityLabel?: string;
+  /**
+   * The chosen pill slides to the one tapped instead of jumping, for a switch
+   * between a page's sections (Followers / Following, Likes / Upvotes / Saved,
+   * Ask / This week), as Profile's and Community's do (Oct 20 sweep). Choices
+   * inside a form stay as they are.
+   */
+  slide?: boolean;
 }
+
+/** The pill's glide: quick, on the app's own ease-out, no bounce. */
+const GLIDE = { duration: 220, easing: Easing.bezier(0.22, 0.61, 0.36, 1) };
 
 export function SegmentedControl<T extends string>({
   segments,
@@ -42,9 +53,23 @@ export function SegmentedControl<T extends string>({
   large = false,
   radio = false,
   accessibilityLabel,
+  slide = false,
 }: Props<T>) {
   const styles = useThemedStyles(styleDefinitions);
-  const items = segments.map((segment) => {
+  // Sliding: one pill drawn behind the words, moved to the chosen one's place (all the segments are the same width).
+  const gliding = slide && !scrollable && !wrap;
+  const [box, setBox] = useState<{ x: number; w: number; h: number; step: number } | null>(null);
+  const at = Math.max(0, segments.findIndex((s) => s.value === value));
+  const x = useSharedValue(0);
+  const placed = useRef(false);
+  useEffect(() => {
+    if (!box) return;
+    const to = box.x + at * box.step;
+    if (!placed.current) { placed.current = true; x.value = to; return; }
+    x.value = withTiming(to, GLIDE);
+  }, [at, box, x]);
+  const pill = useAnimatedStyle(() => ({ transform: [{ translateX: x.value }] }));
+  const items = segments.map((segment, i) => {
     const active = segment.value === value;
     return (
       <Pressable
@@ -52,7 +77,15 @@ export function SegmentedControl<T extends string>({
         onPress={() => onChange(segment.value)}
         accessibilityRole={radio ? 'radio' : 'tab'}
         accessibilityState={radio ? { checked: active } : { selected: active }}
-        style={({ pressed }) => [styles.segment, large && styles.segmentLarge, wrap && styles.segmentWrapped, scrollable && styles.segmentLoose, active && styles.segmentActive, active && tint ? { backgroundColor: tint, borderColor: tint } : null, pressed && !active && styles.segmentPressed]}
+        onLayout={gliding && i < 2 ? (e) => {
+          const { x: left, width, height } = e.nativeEvent.layout;
+          // The first segment gives the place and size; the second, the step from one to the next.
+          setBox((was) => {
+            const next = i === 0 ? { x: left, w: width, h: height, step: was?.step ?? width + 4 } : { x: was?.x ?? 4, w: was?.w ?? width, h: was?.h ?? height, step: left - (was?.x ?? 4) };
+            return was && was.x === next.x && was.w === next.w && was.h === next.h && was.step === next.step ? was : next;
+          });
+        } : undefined}
+        style={({ pressed }) => [styles.segment, large && styles.segmentLarge, wrap && styles.segmentWrapped, scrollable && styles.segmentLoose, active && !(gliding && box) && styles.segmentActive, active && tint && !(gliding && box) ? { backgroundColor: tint, borderColor: tint } : null, pressed && !active && styles.segmentPressed]}
       >
         <Text style={[styles.label, large && styles.labelLarge, scrollable && { flexShrink: 0 }, active && styles.labelActive, active && ink ? { color: ink } : null]} numberOfLines={1}>
           {segment.label}
@@ -73,7 +106,12 @@ export function SegmentedControl<T extends string>({
     );
   }
 
-  return <View accessibilityRole={radio ? 'radiogroup' : undefined} accessibilityLabel={accessibilityLabel} style={[styles.track, wrap && styles.trackWrapped]}>{items}</View>;
+  return (
+    <View accessibilityRole={radio ? 'radiogroup' : undefined} accessibilityLabel={accessibilityLabel} style={[styles.track, wrap && styles.trackWrapped]}>
+      {gliding && box ? <Animated.View pointerEvents="none" style={[styles.glider, { width: box.w, height: box.h, top: 4 }, tint ? { backgroundColor: tint } : null, pill]} /> : null}
+      {items}
+    </View>
+  );
 }
 
 const styleDefinitions = StyleSheet.create({
@@ -103,6 +141,7 @@ const styleDefinitions = StyleSheet.create({
   // Explicitly not allowed to shrink: in a sideways scroller the browser would otherwise squeeze the words to nothing.
   segmentLoose: { flexGrow: 0, flexShrink: 0, flexBasis: 'auto', minWidth: 64, paddingHorizontal: spacing.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
   segmentActive: { backgroundColor: colors.brand, borderColor: colors.brand },
+  glider: { position: 'absolute', left: 0, borderRadius: radius.pill, backgroundColor: colors.brand },
   label: { ...typography.smallStrong, color: colors.textMuted },
   labelActive: { color: colors.brandInk },
   labelLarge: { ...typography.bodyStrong },

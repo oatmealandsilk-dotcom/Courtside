@@ -7,6 +7,9 @@ import { goBack } from '@/lib/goBack';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { Avatar, Chip, EmptyState, Screen, SegmentedControl, Toggle } from '@/components/ui';
+import { SectionPager } from '@/components/SectionPager';
+
+const AI_SECTIONS: ('ask' | 'plan')[] = ['ask', 'plan'];
 import { TipComposer } from '@/components/TipComposer';
 import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { askAiCoach, fetchAiPlan, type AiCoachReply, type CoachOption } from '@/data/api';
@@ -308,9 +311,10 @@ function Train() {
 
   return (
     <Screen title="AI Coach" compactTitle onBack={() => goBack()}>
-      <SegmentedControl segments={[{ value: 'ask', label: 'Ask' }, { value: 'plan', label: 'This week' }]} value={section} onChange={setSection} />
+      <SegmentedControl slide segments={[{ value: 'ask', label: 'Ask' }, { value: 'plan', label: 'This week' }]} value={section} onChange={setSection} />
 
-      {section === 'ask' ? (
+      {/* Ask and This week side by side, slid between (Oct 20 sweep, as Profile's sections do). */}
+      <SectionPager index={AI_SECTIONS.indexOf(section)} depth={1} edgeBack slideOnTap bleed={spacing.lg} onIndex={(i) => setSection(AI_SECTIONS[i])} panes={[(
         <View style={styles.section}>
           {!lines.length ? (
             <View style={styles.intro}>
@@ -366,7 +370,7 @@ function Train() {
             ) : null}
           </View>
         </View>
-      ) : written === undefined ? (
+      ), <View key="plan">{written === undefined ? (
         <View style={styles.writing}>
           <CourtSpinner size={28} />
           <Text style={styles.writingTitle}>Writing your week</Text>
@@ -481,7 +485,7 @@ function Train() {
             </View>
           ) : null}
         </>
-      )}
+      )}</View>]} />
     </Screen>
   );
 }

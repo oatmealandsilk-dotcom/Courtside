@@ -7,6 +7,7 @@ import { goToTab } from '@/features/navigation/startTab';
 import { goBack } from '@/lib/goBack';
 
 import { FollowPill } from '@/components/FollowPill';
+import { SectionPager } from '@/components/SectionPager';
 import { LevelPill } from '@/components/LevelPill';
 import { StreakFlame } from '@/components/StreakFlame';
 import { shownStreak } from '@/features/practice/streakFlame';
@@ -17,6 +18,7 @@ import { compactNumber } from '@/lib/format';
 import { colors, spacing, typography } from '@/theme';
 
 type Tab = 'followers' | 'following';
+const TABS: Tab[] = ['followers', 'following'];
 
 /** Who follows a player and who they follow, the way Instagram lays it out. */
 export default function Follows() {
@@ -39,14 +41,16 @@ export default function Follows() {
     return () => { current = false; };
   }, [loadFollowsOf, userId]);
 
-  const ids = useMemo(() => {
+  // Both lists at once: the two sit side by side and slide between (Oct 20 sweep, as Profile's sections do).
+  const idsOf = useMemo(() => {
     const edges = followEdges.filter((e) => !blockedIds.includes(e.followerId) && !blockedIds.includes(e.followingId));
-    if (tab === 'followers') return edges.filter((e) => e.followingId === userId).map((e) => e.followerId);
-    if (userId === currentUserId) return followingIds;
-    return edges.filter((e) => e.followerId === userId).map((e) => e.followingId);
-  }, [followEdges, tab, userId, currentUserId, followingIds, blockedIds]);
+    return {
+      followers: edges.filter((e) => e.followingId === userId).map((e) => e.followerId),
+      following: userId === currentUserId ? followingIds : edges.filter((e) => e.followerId === userId).map((e) => e.followingId),
+    };
+  }, [followEdges, userId, currentUserId, followingIds, blockedIds]);
 
-  const list = ids
+  const listOf = (which: Tab) => idsOf[which]
     .map((id) => users.find((u) => u.id === id))
     .filter((u): u is NonNullable<typeof u> => Boolean(u))
     .filter((u) => `${u.name} ${u.handle}`.toLowerCase().includes(search.trim().toLowerCase()));
@@ -56,10 +60,58 @@ export default function Follows() {
     following: subject?.following ?? 0,
   };
 
+  const pane = (tab: Tab) => {
+    const list = listOf(tab);
+    return (
+      <View>
+        {list.length === 0 && !loaded ? (
+          <View style={styles.loading}><ActivityIndicator color={colors.textMuted} /></View>
+        ) : list.length === 0 ? (
+          // Your own empty list says how to change that; someone else's simply says it is empty.
+          userId === currentUserId ? (
+            <EmptyState
+              icon="people-outline"
+              title={tab === 'followers' ? 'No followers yet' : 'Not following anyone yet'}
+              body={tab === 'followers' ? 'Post a clip or answer a thread. That is how players find you.' : 'Follow players from Community or their profile.'}
+              action={tab === 'followers' ? { label: 'Post a clip', onPress: () => router.push('/compose') } : { label: 'Find players', onPress: () => { requestSection('/discuss', 'players'); goToTab('/discuss'); } }}
+            />
+          ) : (
+            <EmptyState icon="people-outline" title={tab === 'followers' ? 'No followers yet' : 'Not following anyone yet'} />
+          )
+        ) : (
+          list.map((user) => {
+            const isMe = user.id === currentUserId;
+            const following = followingIds.includes(user.id);
+            return (
+              <Pressable key={user.id} accessibilityRole="link" onPress={() => router.push(`/user/${user.id}`)} style={styles.row}>
+                <Avatar name={user.name} seed={user.avatarSeed} size={48} ring={user.isCoach} />
+                <View style={{ flex: 1, gap: 3 }}>
+                  <View style={styles.nameLine}>
+                    <Text style={styles.name} numberOfLines={1}>{user.name}</Text>
+                    <StreakFlame days={shownStreak(user, currentUserId)} />
+                  </View>
+                  <View style={styles.meta}>
+                    <Text style={styles.handle} numberOfLines={1}>@{user.handle}</Text>
+                    <LevelPill profile={user.profile} small />
+                  </View>
+                </View>
+                {isMe ? null : (
+                  // The pill knows about a request sent to a private account: it says Requested, not Follow.
+                  <FollowPill following={following} userId={user.id} name={user.name} small onPress={following ? () => confirmUnfollow(user, () => actions.toggleFollow(user.id)) : () => actions.toggleFollow(user.id)} />
+                )}
+              </Pressable>
+            );
+          })
+        )}
+      </View>
+    );
+  };
+
   return (
     <Screen title={subject ? `@${subject.handle}` : 'Players'} compactTitle onBack={() => goBack()}>
       <View style={styles.tabs}>
         <SegmentedControl<Tab>
+          slide
           value={tab}
           onChange={setTab}
           segments={[
@@ -72,45 +124,7 @@ export default function Follows() {
       <View style={styles.searchWrap}>
         <Field value={search} onChangeText={setSearch} placeholder="Search" autoCapitalize="none" />
       </View>
-      {list.length === 0 && !loaded ? (
-        <View style={styles.loading}><ActivityIndicator color={colors.textMuted} /></View>
-      ) : list.length === 0 ? (
-        // Your own empty list says how to change that; someone else's simply says it is empty.
-        userId === currentUserId ? (
-          <EmptyState
-            icon="people-outline"
-            title={tab === 'followers' ? 'No followers yet' : 'Not following anyone yet'}
-            body={tab === 'followers' ? 'Post a clip or answer a thread. That is how players find you.' : 'Follow players from Community or their profile.'}
-            action={tab === 'followers' ? { label: 'Post a clip', onPress: () => router.push('/compose') } : { label: 'Find players', onPress: () => { requestSection('/discuss', 'players'); goToTab('/discuss'); } }}
-          />
-        ) : (
-          <EmptyState icon="people-outline" title={tab === 'followers' ? 'No followers yet' : 'Not following anyone yet'} />
-        )
-      ) : (
-        list.map((user) => {
-          const isMe = user.id === currentUserId;
-          const following = followingIds.includes(user.id);
-          return (
-            <Pressable key={user.id} accessibilityRole="link" onPress={() => router.push(`/user/${user.id}`)} style={styles.row}>
-              <Avatar name={user.name} seed={user.avatarSeed} size={48} ring={user.isCoach} />
-              <View style={{ flex: 1, gap: 3 }}>
-                <View style={styles.nameLine}>
-                  <Text style={styles.name} numberOfLines={1}>{user.name}</Text>
-                  <StreakFlame days={shownStreak(user, currentUserId)} />
-                </View>
-                <View style={styles.meta}>
-                  <Text style={styles.handle} numberOfLines={1}>@{user.handle}</Text>
-                  <LevelPill profile={user.profile} small />
-                </View>
-              </View>
-              {isMe ? null : (
-                // The pill knows about a request sent to a private account: it says Requested, not Follow.
-                <FollowPill following={following} userId={user.id} name={user.name} small onPress={following ? () => confirmUnfollow(user, () => actions.toggleFollow(user.id)) : () => actions.toggleFollow(user.id)} />
-              )}
-            </Pressable>
-          );
-        })
-      )}
+      <SectionPager index={TABS.indexOf(tab)} panes={TABS.map(pane)} depth={1} edgeBack slideOnTap bleed={spacing.lg} onIndex={(i) => setTab(TABS[i])} />
     </Screen>
   );
 }

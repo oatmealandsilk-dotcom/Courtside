@@ -6,11 +6,13 @@ import { goBack } from '@/lib/goBack';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { Avatar, EmptyState, Screen, SegmentedControl } from '@/components/ui';
+import { SectionPager } from '@/components/SectionPager';
 import { relativeTime } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
 import { colors, spacing, typography } from '@/theme';
 
 type Section = 'likes' | 'upvotes' | 'saved';
+const SECTIONS: Section[] = ['likes', 'upvotes', 'saved'];
 
 /** Everything you have done, newest first — the way Instagram's activity log works. */
 export default function Activity() {
@@ -57,21 +59,27 @@ export default function Activity() {
     );
   };
 
-  const empty = {
+  const empties = {
     likes: { title: 'No likes yet', body: 'Posts you like show up here.' },
     upvotes: { title: 'No upvotes yet', body: 'Discussions you upvote show up here.' },
     saved: { title: 'Nothing saved', body: 'Tap the bookmark on a post or thread to keep it.' },
-  }[section];
+  };
 
-  const rows =
-    section === 'likes' ? likedPosts.map((p) => postRow(p, 'heart'))
-    : section === 'upvotes' ? upvoted.map((q) => questionRow(q, 'arrow-up'))
-    : [...savedPosts.map((p) => postRow(p, 'bookmark')), ...savedQuestions.map((q) => questionRow(q, 'bookmark'))];
+  // Each section is its own pane, side by side, slid between (Oct 20 sweep, as Profile's sections do).
+  const pane = (which: Section) => {
+    const rows =
+      which === 'likes' ? likedPosts.map((p) => postRow(p, 'heart'))
+      : which === 'upvotes' ? upvoted.map((q) => questionRow(q, 'arrow-up'))
+      : [...savedPosts.map((p) => postRow(p, 'bookmark')), ...savedQuestions.map((q) => questionRow(q, 'bookmark'))];
+    const empty = empties[which];
+    return <View>{rows.length ? rows : <EmptyState icon="time-outline" title={empty.title} body={empty.body} />}</View>;
+  };
 
   return (
     <Screen title="Your activity" compactTitle onBack={() => goBack()}>
       <View style={{ paddingBottom: spacing.lg }}>
         <SegmentedControl<Section>
+          slide
           value={section}
           onChange={setSection}
           segments={[
@@ -81,7 +89,7 @@ export default function Activity() {
           ]}
         />
       </View>
-      {rows.length ? rows : <EmptyState icon="time-outline" title={empty.title} body={empty.body} />}
+      <SectionPager index={SECTIONS.indexOf(section)} panes={SECTIONS.map(pane)} depth={1} edgeBack slideOnTap bleed={spacing.lg} onIndex={(i) => setSection(SECTIONS[i])} />
     </Screen>
   );
 }
