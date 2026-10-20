@@ -5,8 +5,9 @@
  *
  * Where the phone gets MapLibre, the code that draws the map: MapCanvas and
  * the court pictures run it inside a web view, which fetches it, with its
- * stylesheet, from the first of three hosts that gives it whole: unpkg, then
- * jsDelivr, then our own site (a copy in public/maplibre/4.7.1). A host that
+ * stylesheet, from the first of three hosts that gives it whole: jsDelivr
+ * (the quickest of the three), then our own site (a copy in
+ * public/maplibre/4.7.1), then unpkg (often the slowest). A host that
  * has not started answering in 12 seconds, or goes quiet for 10 mid-download,
  * is dropped for the next one; a slow download that keeps arriving is never
  * cut off. Nothing here holds up the page itself: the stylesheet used to be
@@ -22,10 +23,10 @@
  */
 const VERSION = '4.7.1';
 const HOSTS = [
-  `https://unpkg.com/maplibre-gl@${VERSION}/dist/maplibre-gl`,
   `https://cdn.jsdelivr.net/npm/maplibre-gl@${VERSION}/dist/maplibre-gl`,
   // The same files, byte for byte, on our own site (the web build serves public/).
   `https://app.courtsidebase.com/maplibre/${VERSION}/maplibre-gl`,
+  `https://unpkg.com/maplibre-gl@${VERSION}/dist/maplibre-gl`,
 ];
 
 /**
