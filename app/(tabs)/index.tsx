@@ -221,6 +221,13 @@ export interface FeedChrome { picture: boolean; hidden: boolean }
  * 108) is in no feed: its author and admins see it only on its author's
  * own pages, marked.
  */
+/**
+ * A clip whose video never finished uploading (no video, no picture): to
+ * anyone but its author it would only be a grey box, so only its author sees
+ * it. The demo's stand-in clips are drawn as court cards on purpose and stay.
+ */
+const unfinishedClip = (p: Post, me: string | null | undefined) =>
+  isSupabaseConfigured && p.kind === 'clip' && !p.videoUrl && !p.imageUrl && !p.imageUrls?.length && p.authorId !== me;
 const forYou = (p: { imageUrl?: string; videoUrl?: string; imageUrls?: string[]; groupId?: string; removed?: unknown; session?: unknown; kind?: string; mediaLabel?: string }) => reachable(p) && !p.groupId && !p.removed && !sessionOnly(p);
 /**
  * A session posted with no photo or clip (its numbers only) is dealt into
@@ -1104,6 +1111,8 @@ function Home({ scope, topRow, paused, onChrome }: {
         if (post && post.groupId && post.groupId !== scope?.groupId && !scope?.userId && !scope?.ids) return [];
         // Taken down by an admin (migration 108): only on its author's own pages (which its author and admins alone can open), marked.
         if (post?.removed && !scope?.userId) return [];
+        // A clip still without its video: only its author sees it (or the one tapped open, so a link never lands on nothing).
+        if (post && unfinishedClip(post, currentUserId) && post.id !== scope?.start) return [];
         return post && !away(post.authorId, post) && (!post.archived || scope?.set === 'archived') ? [{ type: 'post' as const, post }] : [];
       }
       if (key.startsWith('h:')) {
