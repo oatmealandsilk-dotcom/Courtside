@@ -45,8 +45,10 @@ SHEETS.add('/review-request');
 export function RouteTransition({ children }: { children: React.ReactNode }) {
   const content = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
-  const { section } = useGlobalSearchParams<{ section?: string }>();
-  const key = `${pathname}:${section ?? ''}`;
+  const { section, from } = useGlobalSearchParams<{ section?: string; from?: string }>();
+  // A setup page opened from inside the app (?from=profile, ?from=settings) is an ordinary page,
+  // not setup: it slides in like one (found in review, Oct 20).
+  const key = `${pathname}:${section ?? ''}:${from ? 'in' : ''}`;
   const trail = useRef<string[]>([key]);
   useLayoutEffect(() => {
     const trailing = trail.current;
@@ -57,10 +59,10 @@ export function RouteTransition({ children }: { children: React.ReactNode }) {
     else trailing.push(key);
     if (trailing.length > 30) trailing.shift();
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    const beforePath = before.split(':')[0];
+    const [beforePath, , beforeFrom] = before.split(':');
     if (SHEETS.has(pathname) || SHEETS.has(beforePath)) return;
     const tabToTab = TABS.has(pathname) && TABS.has(beforePath);
-    const auth = AUTH.has(pathname) || AUTH.has(beforePath);
+    const auth = (AUTH.has(pathname) && !from) || (AUTH.has(beforePath) && !beforeFrom);
     const slide = tabToTab || auth ? 0 : wentBack ? -24 : 36;
     // Like the phone (Oct 20 sweep: "pages fade in from blank and sign-in fades more slowly than
     // on the phone"): a page slides in from a light fade (0.65, as tab to tab), never from blank,
