@@ -128,6 +128,8 @@ export function StatsPill({ session, hidden = [], onPress, scale = 1, active = f
   return measure(
     <Tappable
       onPress={() => { haptics.tap(); onPress(); }}
+      // The clip handle keeps its own press (owner, Oct 5: "The handle that pops up on clips and you click it is perfect, don't change that").
+      scaleTo={0.96}
       hitSlop={8}
       accessibilityLabel={`${spoken}. Opens the stats.`}
       style={styles.self}
