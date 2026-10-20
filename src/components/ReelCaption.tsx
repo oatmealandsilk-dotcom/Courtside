@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
@@ -520,5 +521,5 @@ const styles = StyleSheet.create({
   railShade: { position: 'absolute', top: -115, right: -12, width: 112, height: 340 },
   // The words as a button: only as wide as they are.
   wordsButton: { alignSelf: 'flex-start', maxWidth: '100%' },
-  pressed: { opacity: 0.6 },
+  pressed: { opacity: PRESS_DIM },
 });

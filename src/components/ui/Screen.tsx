@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { Animated, Dimensions, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View, type ViewStyle } from 'react-native';
@@ -532,7 +533,7 @@ const ScreenBody = React.memo(function ScreenBody({
               onPress={onBack}
               // Dims the moment it is touched (Oct 11, owner: "the back button in top left corner" felt slow):
               // the answer comes before the page under it is ready, the way iPhone's own back button does.
-              style={({ pressed }) => [styles.back, pressed && { opacity: 0.45 }]}
+              style={({ pressed }) => [styles.back, pressed && { opacity: PRESS_DIM }]}
               accessibilityRole="button"
               accessibilityLabel="Go back"
             >

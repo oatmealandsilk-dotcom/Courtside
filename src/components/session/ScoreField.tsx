@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import React, { useEffect, useRef } from 'react';
 import { Pressable, StyleSheet, Text, View, type StyleProp, type TextInput, type ViewStyle } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -108,7 +109,7 @@ const styleDefinitions = StyleSheet.create({
   wrap: { gap: 6 },
   addScore: { flexDirection: 'row', alignItems: 'center', alignSelf: 'center', gap: 3, paddingVertical: 2 },
   addScoreText: { ...typography.smallStrong, color: colors.textMuted },
-  pressed: { opacity: 0.7 },
+  pressed: { opacity: PRESS_DIM },
   line: { ...typography.small, color: colors.textFaint },
   problem: { color: colors.danger },
 });

@@ -1,3 +1,4 @@
+import { PRESS_DIM, PRESS_SHRINK } from '@/theme/press';
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -245,13 +246,13 @@ export function SaysSection({ courtId, name }: { courtId: string; name: string }
 const sectionGap = { gap: spacing.md } as const;
 
 const styleDefinitions = StyleSheet.create({
-  pressed: { opacity: 0.6 },
+  pressed: { opacity: PRESS_DIM },
   section: sectionGap,
   // The grid: tiles on a 3pt seam, the block's outer corners rounded as one.
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: GAP, borderRadius: radius.lg, overflow: 'hidden' },
   blank: { backgroundColor: colors.surfaceAlt },
   tile: { overflow: 'hidden', backgroundColor: colors.surfaceAlt },
-  tilePressed: { opacity: 0.86 },
+  tilePressed: { transform: [{ scale: PRESS_SHRINK }] },
   tileShade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 64 },
   tileWords: { flex: 1, padding: 9, paddingTop: 10 },
   tileText: { ...font('500'), fontSize: 12, lineHeight: 16, color: colors.text },

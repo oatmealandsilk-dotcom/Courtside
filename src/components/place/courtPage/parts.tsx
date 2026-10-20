@@ -1,3 +1,4 @@
+import { PRESS_DIM, PRESS_SHRINK } from '@/theme/press';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -80,7 +81,7 @@ export function PrimaryBar({ session, height = 50 }: { session: CourtView['sessi
   const styles = useThemedStyles(styleDefinitions);
   const look = sessionLook(session.state);
   return (
-    <Tappable accessibilityLabel={look.a11y} onPress={session.onPress} scaleTo={0.98} hoverTo={1.02} style={[styles.primary, { height, borderRadius: height / 2 }, pageIsDark() ? styles.liftDark : styles.lift]}>
+    <Tappable accessibilityLabel={look.a11y} onPress={session.onPress} hoverTo={1.02} style={[styles.primary, { height, borderRadius: height / 2 }, pageIsDark() ? styles.liftDark : styles.lift]}>
       <BrandWash radius={height / 2} />
       <View style={styles.primaryInner}>
         {look.icon === 'live' ? <LiveDot size={9} color={colors.brandInk} /> : <Ionicons name={look.icon} size={19} color={colors.brandInk} />}
@@ -249,7 +250,7 @@ export function PlayersSayRows({ courtId, name, inset = spacing.lg }: { courtId:
 export const ASK_ABOUT = 'Lights, nets, busy times, the surface, house rules';
 
 const styleDefinitions = StyleSheet.create({
-  pressed: { opacity: 0.6 },
+  pressed: { opacity: PRESS_DIM },
   // The one head every section opens with.
   head: { gap: 3 },
   headRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 26 },
@@ -273,7 +274,7 @@ const styleDefinitions = StyleSheet.create({
   act: { flex: 1, minWidth: 0, alignItems: 'center', gap: 7 },
   // Fully round, so it reads as pressable (DESIGN.md, the Pill Rule); the raised surface and a hairline keep it off the page on every court.
   disc: { width: 52, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.borderStrong },
-  discPressed: { backgroundColor: colors.bgElevated, transform: [{ scale: 0.95 }] },
+  discPressed: { transform: [{ scale: PRESS_SHRINK }] },
   actLabel: { ...font('500'), fontSize: 12, lineHeight: 15, letterSpacing: -0.1, color: colors.text },
   // Right now.
   nowMark: { backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },

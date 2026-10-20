@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -187,7 +188,7 @@ export function InvitePeople({ groupId, groupName, picked, onPicked }: {
 
 const styleDefinitions = StyleSheet.create({
   wrap: { gap: spacing.md },
-  pressed: { opacity: 0.7 },
+  pressed: { opacity: PRESS_DIM },
   card: { ...lift, borderRadius: 20, backgroundColor: colors.surface, overflow: 'hidden' },
   linkCard: { ...lift, borderRadius: 20, backgroundColor: colors.surface, padding: spacing.md, gap: spacing.md },
   linkRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },

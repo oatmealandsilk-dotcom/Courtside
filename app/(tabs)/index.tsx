@@ -1900,11 +1900,11 @@ function Home({ scope, topRow, paused, onChrome, onSwipe }: {
                     <Reanimated.View style={[styles.actions, { bottom: wordsBottom + RAIL_DROP }, tuckStyle]}>
                       <RailShade />
                       <LikeButton ledgerKey={`h:${story.id}`} liked={hitLiked} count={story.likedBy.length} onToggle={() => actions.toggleLikeStory(story.id)} likesRoute={{ pathname: '/likes', params: { id: story.id, kind: 'hit' } }} pop={burst.id === story.id ? burst.n : 0} what="Instant" size={RAIL_ICONS[0][1]} style={styles.action} glyphStyle={styles.actionGlyph} labelStyle={styles.actionLabel} />
-                      <Tappable accessibilityLabel={story.commentIds.length ? `Instant comments, ${story.commentIds.length}` : "Instant comments"} onPress={() => openHitComments()} scaleTo={0.78} style={styles.action}>
+                      <Tappable accessibilityLabel={story.commentIds.length ? `Instant comments, ${story.commentIds.length}` : "Instant comments"} onPress={() => openHitComments()} dim style={styles.action}>
                         <Ionicons name="chatbubble-outline" size={RAIL_ICONS[1][1]} color="white" style={styles.actionGlyph} />
                         {(story.commentIds.length) > 0 ? <Text style={styles.actionLabel} maxFontSizeMultiplier={MAX_GROW}>{railCount(story.commentIds.length)}</Text> : null}
                       </Tappable>
-                      <Tappable accessibilityLabel="More options" onPress={() => router.push({ pathname: '/post-menu', params: { id: story.id, kind: 'hit' } })} scaleTo={0.78} style={styles.action}>
+                      <Tappable accessibilityLabel="More options" onPress={() => router.push({ pathname: '/post-menu', params: { id: story.id, kind: 'hit' } })} dim style={styles.action}>
                         <Ionicons name="ellipsis-horizontal" size={RAIL_ICONS[4][1]} color="white" style={styles.actionGlyph} />
                       </Tappable>
                     </Reanimated.View>
@@ -2106,7 +2106,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe }: {
                     <Tappable
                       accessibilityLabel="Clip comments"
                       onPress={() => openClipComments()}
-                      scaleTo={0.78}
+                      dim
                       style={styles.action}
                     >
                       <Ionicons name="chatbubble-outline" size={RAIL_ICONS[1][1]} color="white" style={styles.actionGlyph} />
@@ -2117,7 +2117,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe }: {
                       <Tappable
                         accessibilityLabel={shareLabel(post, currentUserId, 'clip')}
                         onPress={() => share('post', post.id)}
-                        scaleTo={0.78}
+                        dim
                         style={styles.action}
                       >
                         <Ionicons name="arrow-redo-outline" size={RAIL_ICONS[2][1]} color="white" style={styles.actionGlyph} />
@@ -2127,7 +2127,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe }: {
                     <Tappable
                       accessibilityLabel={isSaved ? 'Remove from saved' : 'Save this clip'}
                       onPress={() => actions.toggleSavePost(post.id)}
-                      scaleTo={0.78}
+                      dim
                       style={styles.action}
                     >
                       <Ionicons name={isSaved ? 'bookmark' : 'bookmark-outline'} size={RAIL_ICONS[3][1]} color="white" style={styles.actionGlyph} />
@@ -2136,7 +2136,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe }: {
                     <Tappable
                       accessibilityLabel="More options"
                       onPress={() => router.push({ pathname: '/post-menu', params: { id: post.id } })}
-                      scaleTo={0.78}
+                      dim
                       style={styles.action}
                     >
                       <Ionicons name="ellipsis-horizontal" size={RAIL_ICONS[4][1]} color="white" style={styles.actionGlyph} />

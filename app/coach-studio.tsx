@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View, type LayoutChangeEvent, type ScrollView } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
@@ -515,7 +516,7 @@ const styleDefinitions = StyleSheet.create({
   card: { ...lift, borderRadius: 20, backgroundColor: colors.surface, overflow: 'hidden' },
   cardTitle: { ...typography.heading, color: colors.text },
   line: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
-  pressed: { opacity: 0.7 },
+  pressed: { opacity: PRESS_DIM },
   // The checklist
   checkHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingTop: spacing.lg },
   preview: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderStrong },

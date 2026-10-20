@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -23,7 +24,7 @@ export function ChallengeEntries({ entries, from = 1 }: { entries: Post[]; from?
       {tileW ? entries.map((p, i) => {
         const place = from + i;
         return (
-          <Pressable key={p.id} accessibilityRole="link" accessibilityLabel={`Number ${place}, ${p.likedBy.length} likes: ${p.body}`} onPress={() => router.push(`/post/${p.id}`)} style={({ pressed }) => [styles.tile, { width: tileW, height: Math.round((tileW * 4) / 3) }, pressed && { opacity: 0.85 }]}>
+          <Pressable key={p.id} accessibilityRole="link" accessibilityLabel={`Number ${place}, ${p.likedBy.length} likes: ${p.body}`} onPress={() => router.push(`/post/${p.id}`)} style={({ pressed }) => [styles.tile, { width: tileW, height: Math.round((tileW * 4) / 3) }, pressed && { opacity: PRESS_DIM }]}>
             <View style={[StyleSheet.absoluteFill, styles.blank]}><Text numberOfLines={4} style={styles.blankText}>{p.body}</Text></View>
             {p.thumbnailUrl || p.imageUrl ? <TileCover accessibilityIgnoresInvertColors uri={p.thumbnailUrl || p.imageUrl} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" recyclingKey={p.id} transition={120} /> : null}
             <View style={[styles.place, place === 1 && styles.placeFirst]}><Text style={[styles.placeText, place === 1 && styles.placeTextFirst]}>{place}</Text></View>

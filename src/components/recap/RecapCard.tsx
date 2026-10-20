@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -271,7 +272,7 @@ export function WeekSummary({ recap, label, look, onOpen, onClose, extra, childr
 }
 
 const styleDefinitions = StyleSheet.create({
-  pressed: { opacity: 0.7 },
+  pressed: { opacity: PRESS_DIM },
   card: { ...lift, borderRadius: 24, backgroundColor: colors.surface, padding: spacing.xl, paddingBottom: spacing.lg },
   // The Instagram picture's card: a little tighter, so what stood out and the lockup fit above Instagram's own buttons.
   cardStory: { paddingTop: 18, paddingBottom: 12 },

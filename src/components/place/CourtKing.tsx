@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import React, { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
@@ -262,7 +263,7 @@ const styleDefinitions = StyleSheet.create({
   card: { ...lift, borderRadius: 20, backgroundColor: colors.surface, overflow: 'hidden' },
   // Your line alone, under "No King yet."
   cardSolo: { borderRadius: radius.lg },
-  pressed: { opacity: 0.7 },
+  pressed: { opacity: PRESS_DIM },
   line: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   mine: { backgroundColor: colors.brandDim },
   // The King.

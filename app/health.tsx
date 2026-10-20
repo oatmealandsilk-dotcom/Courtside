@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -288,7 +289,7 @@ export default function Health() {
                   // Every other workout too: their own yes, after the same explanation anyone new gets.
                   <Reanimated.View key="workouts-offer" entering={FadeIn.duration(220)} exiting={FadeOut.duration(140)} style={styles.offer}>
                     <Text style={styles.offerText}>Also pick up runs, rides and the gym?</Text>
-                    <Tappable accessibilityRole="button" accessibilityLabel={`Turn on every workout from ${i.label}: runs, rides, the gym and more`} disabled={loading} scaleTo={0.96} onPress={() => { haptics.tap(); if (i.provider === 'whoop') askWhoop(); else askApple('workouts'); }} style={styles.turnOn}>
+                    <Tappable accessibilityRole="button" accessibilityLabel={`Turn on every workout from ${i.label}: runs, rides, the gym and more`} disabled={loading} onPress={() => { haptics.tap(); if (i.provider === 'whoop') askWhoop(); else askApple('workouts'); }} style={styles.turnOn}>
                       <BrandWash />
                       {offerBusy ? <ActivityIndicator size="small" color={colors.brandInk} /> : null}
                       <Text style={styles.turnOnText}>{offerBusy ? 'Turning on…' : 'Turn on'}</Text>
@@ -302,7 +303,7 @@ export default function Health() {
                 {/* WHOOP's (and each tracker's) own sign-in says what it shares; Apple Health is explained here first.
                     The app's own filled pill (with its soft wash) dips under the finger; while it
                     works, the pill itself says so rather than the row going quiet. */}
-                <Tappable accessibilityRole="button" accessibilityLabel={`Turn on ${what(i)} from ${i.label}`} disabled={loading} scaleTo={0.96} onPress={() => { haptics.tap(); if (i.provider === 'apple-health') askApple('tennis'); else run(i.provider, 'tennis'); }} style={styles.turnOn}>
+                <Tappable accessibilityRole="button" accessibilityLabel={`Turn on ${what(i)} from ${i.label}`} disabled={loading} onPress={() => { haptics.tap(); if (i.provider === 'apple-health') askApple('tennis'); else run(i.provider, 'tennis'); }} style={styles.turnOn}>
                   <BrandWash />
                   {loading ? <ActivityIndicator size="small" color={colors.brandInk} /> : null}
                   <Text style={styles.turnOnText}>{loading ? 'Turning on…' : `Turn on ${what(i)}`}</Text>
@@ -423,7 +424,7 @@ const styleDefinitions = StyleSheet.create({
   // The offer of every workout, under "Tennis sessions on": its question, then the same filled pill.
   offer: { gap: spacing.sm, marginTop: spacing.sm, alignItems: 'flex-start' },
   offerText: { ...typography.small, color: colors.textMuted },
-  pressedDim: { opacity: 0.55 },
+  pressedDim: { opacity: PRESS_DIM },
   sectionTitle: { ...typography.smallStrong, color: colors.textMuted, paddingHorizontal: spacing.sm, paddingBottom: spacing.sm },
   sectionGap: { paddingTop: spacing.xl },
   foodRows: { marginTop: spacing.md },

@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -69,7 +70,7 @@ export function PollView({ question, compact = false }: { question: Question; co
             accessibilityLabel={voted ? `${option}, ${share} percent${mine ? ', your vote' : ''}` : `Vote for ${option}`}
             disabled={!currentUserId}
             onPress={(e) => { e.stopPropagation?.(); actions.votePoll(question.id, i); }}
-            style={({ pressed }) => [styles.option, compact && styles.optionCompact, pressed && { opacity: 0.8 }]}
+            style={({ pressed }) => [styles.option, compact && styles.optionCompact, pressed && { opacity: PRESS_DIM }]}
           >
             <Bar share={voted ? share : 0} mine={mine} index={i} />
             <Text style={[styles.label, mine && styles.labelMine]} numberOfLines={2}>{option}</Text>

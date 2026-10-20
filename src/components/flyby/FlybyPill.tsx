@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import React, { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -46,7 +47,7 @@ export function FlybyPill({ courtId, courtName, day, skip = [] }: { courtId: str
 
 const styleDefinitions = StyleSheet.create({
   pill: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: spacing.sm, marginTop: 6, paddingLeft: 5, paddingRight: 10, paddingVertical: 5, borderRadius: radius.pill, backgroundColor: colors.brandDim, maxWidth: '100%' },
-  pressed: { opacity: 0.7 },
+  pressed: { opacity: PRESS_DIM },
   faces: { flexDirection: 'row', alignItems: 'center' },
   face: { borderWidth: 1.5, borderColor: colors.brandDim, borderRadius: 13 },
   faceOver: { marginLeft: -7 },

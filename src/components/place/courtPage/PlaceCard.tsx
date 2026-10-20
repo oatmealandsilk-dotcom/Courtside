@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import React, { useEffect, useState } from 'react';
 import { Linking, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { router } from 'expo-router';
@@ -343,7 +344,7 @@ function FactStrip({ view, short }: { view: CourtView; short: boolean }) {
 
 const styleDefinitions = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
-  pressed: { opacity: 0.6 },
+  pressed: { opacity: PRESS_DIM },
   gutter: { paddingHorizontal: spacing.lg },
   // The map.
   hero: { width: '100%', backgroundColor: colors.bgElevated },
@@ -378,7 +379,7 @@ const styleDefinitions = StyleSheet.create({
   // Right now.
   nowWrap: { marginTop: spacing.lg, gap: spacing.sm, alignItems: 'flex-start' },
   now: { alignSelf: 'stretch', flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: 60, paddingLeft: 11, paddingRight: 14, paddingVertical: 11, borderRadius: radius.lg, backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
-  nowPressed: { backgroundColor: colors.bgElevated },
+  nowPressed: { backgroundColor: colors.surfaceAlt },
   nowWords: { flex: 1, minWidth: 0, gap: 2 },
   nowLead: { ...typography.bodyStrong, color: colors.text },
   nowSubRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },

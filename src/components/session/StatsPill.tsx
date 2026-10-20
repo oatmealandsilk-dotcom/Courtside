@@ -128,7 +128,6 @@ export function StatsPill({ session, hidden = [], onPress, scale = 1, active = f
   return measure(
     <Tappable
       onPress={() => { haptics.tap(); onPress(); }}
-      scaleTo={0.96}
       hitSlop={8}
       accessibilityLabel={`${spoken}. Opens the stats.`}
       style={styles.self}

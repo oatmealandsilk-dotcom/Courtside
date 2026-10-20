@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import React, { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -68,13 +69,13 @@ export function ChallengePage({ challenge }: { challenge: Challenge }) {
               accessibilityState={{ disabled: posting }}
               disabled={posting}
               onPress={() => enterChallenge(challenge)}
-              style={({ pressed }) => [styles.primary, posting && styles.primaryBusy, pressed && { opacity: 0.85 }]}
+              style={({ pressed }) => [styles.primary, posting && styles.primaryBusy, pressed && { opacity: PRESS_DIM }]}
             >
               <Ionicons name={posting ? 'cloud-upload-outline' : 'add'} size={18} color={colors.brandInk} />
               <Text style={styles.primaryText} numberOfLines={1}>{posting ? 'Your entry is posting…' : 'Enter with a clip'}</Text>
             </Pressable>
             {entries.length ? (
-              <Pressable accessibilityRole="link" accessibilityLabel={`See all ${entries.length} entries`} onPress={() => router.push('/challenge')} style={({ pressed }) => [styles.secondary, pressed && { opacity: 0.7 }]}>
+              <Pressable accessibilityRole="link" accessibilityLabel={`See all ${entries.length} entries`} onPress={() => router.push('/challenge')} style={({ pressed }) => [styles.secondary, pressed && { opacity: PRESS_DIM }]}>
                 <Text style={styles.secondaryText}>{entries.length > 3 ? `All ${entries.length}` : 'See all'}</Text>
               </Pressable>
             ) : null}

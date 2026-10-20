@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import React, { useCallback, useEffect, useRef } from 'react';
 import { Linking, Platform, Pressable, StyleSheet, Text, View, type LayoutChangeEvent, type ScrollView } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
@@ -292,7 +293,7 @@ const styleDefinitions = StyleSheet.create({
   chipOn: { borderColor: colors.text, backgroundColor: colors.text },
   chipText: { ...typography.small, ...font('500'), color: colors.text },
   chipTextOn: { color: colors.bg },
-  pressed: { opacity: 0.6 },
+  pressed: { opacity: PRESS_DIM },
   callout: { gap: 6, padding: spacing.lg, borderRadius: radius.lg, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, marginBottom: spacing.xs },
   calloutFine: { ...typography.small, color: colors.textMuted, lineHeight: 19 },
   inlineLink: { ...font('600'), color: colors.brand, textDecorationLine: 'underline' },

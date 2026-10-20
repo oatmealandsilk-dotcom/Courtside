@@ -1,6 +1,8 @@
 import React, { useRef } from 'react';
 import { Animated, Platform, Pressable, type StyleProp, type ViewStyle } from 'react-native';
 
+import { PRESS_DIM, PRESS_SHRINK } from '@/theme/press';
+
 interface Props {
   children: React.ReactNode;
   onPress?: () => void;
@@ -46,7 +48,8 @@ export function Tappable({
   onLongPress,
   delayLongPress,
   disabled = false,
-  scaleTo = 0.94,
+  // One press feel (Oct 20 sweep, theme/press): a button shrinks slightly, an icon (dim) dims a little.
+  scaleTo = PRESS_SHRINK,
   immediate = false,
   hoverTo = 1.04,
   dim = false,
@@ -64,7 +67,7 @@ export function Tappable({
   const spring = (to: number) => {
     // A dimming control: down at once on the press, back up over a beat on release (and any hover lift undone).
     if (dim && to <= 1) {
-      Animated.timing(fade, { toValue: to < 1 ? 0.45 : 1, duration: to < 1 ? 0 : 160, useNativeDriver: true }).start();
+      Animated.timing(fade, { toValue: to < 1 ? PRESS_DIM : 1, duration: to < 1 ? 0 : 160, useNativeDriver: true }).start();
       if (to === 1) Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 160, bounciness: 4 }).start();
       return;
     }

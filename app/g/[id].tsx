@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import React, { useCallback, useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -251,7 +252,7 @@ const styleDefinitions = StyleSheet.create({
   chipText: { ...typography.caption, letterSpacing: 0.2, color: colors.brand },
   // Remove, Decline: plain words in a soft pill. Approve is the one green one.
   pill: { paddingHorizontal: 12, height: 30, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
-  pillPressed: { opacity: 0.6 },
+  pillPressed: { opacity: PRESS_DIM },
   pillText: { ...typography.smallStrong, color: colors.text },
   pillYes: { backgroundColor: colors.brand },
   pillYesText: { color: colors.brandInk },

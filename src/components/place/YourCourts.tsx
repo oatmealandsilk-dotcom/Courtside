@@ -1,3 +1,4 @@
+import { PRESS_SHRINK } from '@/theme/press';
 import React, { useEffect } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -100,7 +101,7 @@ const styleDefinitions = StyleSheet.create({
   scroller: { flexGrow: 0 },
   row: { gap: spacing.sm, paddingTop: spacing.xs, paddingBottom: spacing.lg },
   card: { ...lift, width: CARD, padding: spacing.md, gap: 4, borderRadius: radius.lg, backgroundColor: colors.surface },
-  cardPressed: { opacity: 0.9 },
+  cardPressed: { transform: [{ scale: PRESS_SHRINK }] },
   top: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 },
   tile: { width: 36, height: 36, borderRadius: 11, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
   name: { ...typography.bodyStrong, color: colors.text, lineHeight: 20 },

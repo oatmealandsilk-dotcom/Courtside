@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
@@ -105,7 +106,7 @@ export function ApplicationStatus({ application, me, onApplyAgain }: { applicati
 
         {status !== 'approved' ? (
           <Reanimated.View entering={enter(2)}>
-            <Pressable accessibilityRole="link" onPress={() => router.push('/(tabs)/coaches')} style={({ pressed }) => [styles.meanwhile, pressed && { opacity: 0.8 }]}>
+            <Pressable accessibilityRole="link" onPress={() => router.push('/(tabs)/coaches')} style={({ pressed }) => [styles.meanwhile, pressed && { opacity: PRESS_DIM }]}>
               <View style={styles.meanwhileMark}><Ionicons name="chatbubbles-outline" size={18} color={colors.brand} /></View>
               <View style={styles.whoWords}>
                 <Text style={styles.meanwhileTitle}>While you wait</Text>

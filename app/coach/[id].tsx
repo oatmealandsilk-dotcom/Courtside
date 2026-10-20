@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { PlayerName } from '@/components/PlayerName';
 import React, { useState } from 'react';
@@ -179,7 +180,7 @@ export default function CoachDetail() {
         </View>
       </View>
       {isOwner ? (
-        <Pressable accessibilityRole="link" onPress={() => router.push('/coach-studio')} style={({ pressed }) => [styles.ownerNote, pressed && { opacity: 0.7 }]}>
+        <Pressable accessibilityRole="link" onPress={() => router.push('/coach-studio')} style={({ pressed }) => [styles.ownerNote, pressed && { opacity: PRESS_DIM }]}>
           <Ionicons name="eye-outline" size={16} color={colors.textMuted} />
           <Text style={styles.ownerText}>{coach.listed ? 'This is your page, as players see it.' : 'Only you can see this until you list it.'} Edit it in your studio.</Text>
           <Ionicons name="chevron-forward" size={15} color={colors.textFaint} />
@@ -259,7 +260,7 @@ export default function CoachDetail() {
                 </Pressable>
               </View>
             ) : (
-              <Pressable accessibilityRole="button" onPress={attach} style={({ pressed }) => [styles.attach, pressed && { opacity: 0.7 }]}>
+              <Pressable accessibilityRole="button" onPress={attach} style={({ pressed }) => [styles.attach, pressed && { opacity: PRESS_DIM }]}>
                 <Ionicons name="videocam-outline" size={18} color={colors.text} />
                 <Text style={styles.attachText}>{service.kind === 'video-review' ? 'Add your video' : 'Add a video (optional)'}</Text>
               </Pressable>

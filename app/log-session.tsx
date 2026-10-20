@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -693,7 +694,7 @@ function LogSession() {
             </Pressable>
           ) : null}
           {fresh ? (
-            <Pressable accessibilityRole="button" accessibilityLabel={isTennisActivity(fresh) ? 'Not tennis? Hide this session' : 'Hide this workout'} hitSlop={8} onPress={() => hide(fresh)} style={({ pressed }) => [styles.hide, pressed && { opacity: 0.6 }]}>
+            <Pressable accessibilityRole="button" accessibilityLabel={isTennisActivity(fresh) ? 'Not tennis? Hide this session' : 'Hide this workout'} hitSlop={8} onPress={() => hide(fresh)} style={({ pressed }) => [styles.hide, pressed && { opacity: PRESS_DIM }]}>
               <Text style={styles.hideText}>{isTennisActivity(fresh) ? 'Not tennis? Hide it' : 'Hide this workout'}</Text>
             </Pressable>
           ) : null}
@@ -723,7 +724,7 @@ const styleDefinitions = StyleSheet.create({
   second: { flexDirection: 'row', gap: 10, height: 54, marginTop: -spacing.sm, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.borderStrong, backgroundColor: colors.surface },
   secondOff: { opacity: 0.5 },
   secondText: { ...typography.bodyStrong, fontSize: 16, color: colors.text },
-  pressed: { opacity: 0.7 },
+  pressed: { opacity: PRESS_DIM },
   // The tracker's sessions waiting to be logged, as Your sessions lists them: how long, big, with the tracker's tag; what; the day and times.
   group: { ...lift, borderRadius: 20, backgroundColor: colors.surface, overflow: 'hidden', paddingHorizontal: spacing.lg },
   pickRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md, paddingVertical: 14 },

@@ -66,7 +66,6 @@ export function CourtCard({ place, width = COURT_CARD_W, mine, tail, joinTop = f
     <Tappable
       accessibilityRole="link"
       accessibilityLabel={`Court: ${place.name}${line ? `, ${line}` : ''}${sentAt ? `, sent ${sentAt}` : ''}. See the court`}
-      scaleTo={0.98}
       hoverTo={1.01}
       onPress={onPress}
       onLongPress={onLongPress}

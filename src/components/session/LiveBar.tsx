@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import React, { useEffect } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -114,5 +115,5 @@ const styleDefinitions = StyleSheet.create({
   round: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center', backgroundColor: `${colors.brandInk}29`, marginRight: 8 },
   finish: { height: 38, paddingHorizontal: 16, borderRadius: 19, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.brandInk },
   finishText: { ...font('700'), fontSize: 14, color: colors.brand },
-  pressed: { opacity: 0.75 },
+  pressed: { opacity: PRESS_DIM },
 });

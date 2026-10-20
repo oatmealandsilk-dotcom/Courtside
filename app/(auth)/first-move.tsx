@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -279,7 +280,7 @@ export default function FirstMove() {
           </View>
           {picks ? (
             // Teen search (migration 118): by name or @handle, never by town.
-            <Pressable accessibilityRole="link" accessibilityLabel="Find a friend by their @handle" hitSlop={8} onPress={() => done('find', () => router.push({ pathname: '/search', params: { scope: 'players', find: 'friend' } }))} style={({ pressed }) => [styles.quiet, pressed && { opacity: 0.6 }]}>
+            <Pressable accessibilityRole="link" accessibilityLabel="Find a friend by their @handle" hitSlop={8} onPress={() => done('find', () => router.push({ pathname: '/search', params: { scope: 'players', find: 'friend' } }))} style={({ pressed }) => [styles.quiet, pressed && { opacity: PRESS_DIM }]}>
               <Ionicons name="search" size={15} color={colors.textMuted} />
               <Text style={styles.quietText}>Find a friend by @handle</Text>
             </Pressable>

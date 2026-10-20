@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -24,7 +25,7 @@ export function SheetTitle({ title, line, lineTone = 'muted', lines = 1, onClose
         <Text style={[styles.title, titleSize ? { fontSize: titleSize, letterSpacing: -0.03 * titleSize } : null]}>{title}</Text>
         {line ? <Text style={[styles.line, lineTone === 'brand' && styles.lineBrand]} numberOfLines={lines}>{line}</Text> : null}
       </View>
-      <Pressable accessibilityRole="button" accessibilityLabel="Close" hitSlop={8} onPress={onClose} style={({ pressed }) => [styles.close, pressed && { opacity: 0.7 }]}>
+      <Pressable accessibilityRole="button" accessibilityLabel="Close" hitSlop={8} onPress={onClose} style={({ pressed }) => [styles.close, pressed && { opacity: PRESS_DIM }]}>
         <Ionicons name="close" size={18} color={colors.textMuted} />
       </Pressable>
     </View>
@@ -266,7 +267,7 @@ const styleDefinitions = StyleSheet.create({
   pillText: { ...typography.smallStrong, fontSize: 14, color: colors.textMuted, fontVariant: ['tabular-nums'] },
   pillTextSmall: { fontSize: 13 },
   pillTextOn: { color: colors.text },
-  pressed: { opacity: 0.7 },
+  pressed: { opacity: PRESS_DIM },
   // Room above and below a soft strip for the pills' shadow, which a sideways scroller would otherwise clip.
   stripSoft: { paddingVertical: 6 },
   // A soft sideways row hands that room back to the form, so its pills and tiles sit the same distance

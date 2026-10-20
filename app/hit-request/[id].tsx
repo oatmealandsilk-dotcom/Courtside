@@ -109,7 +109,7 @@ const styleDefinitions = StyleSheet.create({
   title: { ...typography.heading, color: colors.text, marginBottom: spacing.xs },
   // Rows on hairlines, the line starting at the words.
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  rowPressed: { opacity: 0.6 },
+  rowPressed: { backgroundColor: colors.surfaceAlt },
   rowBody: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: 14 },
   rowLine: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   rowWords: { flex: 1, minWidth: 0, gap: 2 },

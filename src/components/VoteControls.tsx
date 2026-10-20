@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -25,7 +26,7 @@ export function VoteControls({ item, userId, onVote }: {
     const count = direction === 1 ? counts.up : counts.down;
     return <Pressable key={direction} accessibilityRole="button" accessibilityLabel={`${label}, ${count}`}
       accessibilityState={{ selected: active }} onPress={event => { event.stopPropagation(); onVote(direction); }}
-      style={({ pressed }) => [styles.button, active && styles.active, pressed && { opacity: 0.65 }]}>
+      style={({ pressed }) => [styles.button, active && styles.active, pressed && { opacity: PRESS_DIM }]}>
       <Ionicons name={direction === 1 ? 'arrow-up-outline' : 'arrow-down-outline'} size={18} color={active ? colors.brand : colors.textMuted}/>
       <Text style={[styles.count, active && { color: colors.brand }]}>{count}</Text>
     </Pressable>;

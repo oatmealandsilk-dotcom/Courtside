@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -87,7 +88,7 @@ const styleDefinitions = StyleSheet.create({
     backgroundColor: colors.surface, borderWidth: 1.5, borderColor: colors.surface,
   },
   cardOn: { borderColor: colors.brand },
-  pressed: { opacity: 0.8 },
+  pressed: { opacity: PRESS_DIM },
   icon: { width: 40, height: 40, borderRadius: 13, backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
   iconOn: { backgroundColor: colors.brand },
   words: { flex: 1, minWidth: 0, gap: 2 },

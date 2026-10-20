@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
@@ -72,7 +73,7 @@ export default function Saved() {
                   accessibilityRole="link"
                   accessibilityLabel={`Open ${video ? 'video' : 'post'} by ${author?.name ?? 'a player'}: ${post.body}`}
                   onPress={() => router.push(`/post/${post.id}`)}
-                  style={({ pressed }) => [styles.tile, { width: tileW, height: tileH }, pressed && { opacity: 0.85 }]}
+                  style={({ pressed }) => [styles.tile, { width: tileW, height: tileH }, pressed && { opacity: PRESS_DIM }]}
                 >
                   <View style={[StyleSheet.absoluteFill, styles.tileBlank]}>
                     <Text numberOfLines={6} style={styles.tileText}>{post.body}</Text>

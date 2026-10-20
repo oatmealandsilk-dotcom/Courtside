@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import React, { useEffect, useMemo, useState } from 'react';
 import { AppState, Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -116,7 +117,7 @@ export default function FindContacts() {
         <View style={styles.results}>
           {/* Not when "Let people find me from their contacts" is off (migration 89): a number would find no one to you. */}
           {PHONE_LINKING && !hasPhone && prefs.contactsFindable ? (
-            <Pressable accessibilityRole="link" onPress={() => router.push('/link-phone')} style={({ pressed }) => [styles.nudge, pressed && { opacity: 0.8 }]}>
+            <Pressable accessibilityRole="link" onPress={() => router.push('/link-phone')} style={({ pressed }) => [styles.nudge, pressed && { opacity: PRESS_DIM }]}>
               <Ionicons name="call-outline" size={18} color={colors.brand} />
               <Text style={styles.nudgeText}>Link your phone number so friends can find you too</Text>
               <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />

@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
@@ -68,20 +69,20 @@ export function EarlyInvite({ city, court, friends = false, leadRef }: { city: s
       </View>
       {/* The people you already know who are here (owner, Oct 6). A phone app with contacts only; the Find friends page keeps its own rules. */}
       {canReadContacts() ? (
-        <Pressable accessibilityRole="link" accessibilityLabel={CONTACTS_LABEL} hitSlop={8} onPress={() => router.push('/find-contacts')} style={({ pressed }) => [styles.link, pressed && { opacity: 0.6 }]}>
+        <Pressable accessibilityRole="link" accessibilityLabel={CONTACTS_LABEL} hitSlop={8} onPress={() => router.push('/find-contacts')} style={({ pressed }) => [styles.link, pressed && { opacity: PRESS_DIM }]}>
           <Ionicons name="people-outline" size={15} color={colors.textMuted} />
           <Text style={styles.linkText}>{CONTACTS_LABEL}</Text>
         </Pressable>
       ) : null}
       {friends ? (
         // Teen search (migration 118): by name or @handle, never by town.
-        <Pressable accessibilityRole="link" accessibilityLabel="Find a friend by their @handle" hitSlop={8} onPress={() => router.push({ pathname: '/search', params: { scope: 'players', find: 'friend' } })} style={({ pressed }) => [styles.link, pressed && { opacity: 0.6 }]}>
+        <Pressable accessibilityRole="link" accessibilityLabel="Find a friend by their @handle" hitSlop={8} onPress={() => router.push({ pathname: '/search', params: { scope: 'players', find: 'friend' } })} style={({ pressed }) => [styles.link, pressed && { opacity: PRESS_DIM }]}>
           <Ionicons name="search" size={15} color={colors.textMuted} />
           <Text style={styles.linkText}>Find a friend by @handle</Text>
         </Pressable>
       ) : (
         <>
-          <Pressable accessibilityRole="link" accessibilityLabel={court ? `Print a poster for ${court.name}` : 'Print a poster'} hitSlop={8} onPress={poster} style={({ pressed }) => [styles.link, pressed && { opacity: 0.6 }]}>
+          <Pressable accessibilityRole="link" accessibilityLabel={court ? `Print a poster for ${court.name}` : 'Print a poster'} hitSlop={8} onPress={poster} style={({ pressed }) => [styles.link, pressed && { opacity: PRESS_DIM }]}>
             <Ionicons name="print-outline" size={15} color={colors.textMuted} />
             <Text style={styles.linkText}>{court ? 'Print a poster for my court' : 'Print a poster'}</Text>
           </Pressable>

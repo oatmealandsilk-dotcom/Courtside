@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import React, { useEffect, useRef, useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions, type TextStyle } from 'react-native';
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
@@ -383,7 +384,7 @@ const styleDefinitions = StyleSheet.create({
   close: { ...lift, width: 34, height: 34, borderRadius: 17, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' },
   body: { gap: spacing.xl },
   choices: { gap: spacing.md },
-  pressed: { opacity: 0.75 },
+  pressed: { opacity: PRESS_DIM },
   // The court's card: its map across the top, its name under it, who will see you at its foot.
   // The feature card's 20 corners, on the app's own scale.
   card: { ...lift, borderRadius: 20, backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, overflow: 'hidden' },

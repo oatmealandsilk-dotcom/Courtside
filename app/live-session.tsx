@@ -1,3 +1,4 @@
+import { PRESS_DIM, PRESS_SHRINK } from '@/theme/press';
 import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
@@ -240,8 +241,8 @@ const styleDefinitions = StyleSheet.create({
   primary: { flex: 1, height: 58, borderRadius: radius.pill, backgroundColor: colors.brand, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, overflow: 'hidden', boxShadow: '0px 8px 20px rgba(0, 0, 0, 0.16)' },
   primaryDark: { boxShadow: '0px 8px 20px rgba(0, 0, 0, 0.4)' },
   primaryText: { ...typography.bodyStrong, fontSize: 16, color: colors.brandInk },
-  pressed: { opacity: 0.7 },
-  pressedScale: { transform: [{ scale: 0.98 }] },
+  pressed: { opacity: PRESS_DIM },
+  pressedScale: { transform: [{ scale: PRESS_SHRINK }] },
   discard: { alignSelf: 'center', paddingVertical: spacing.xs },
   discardText: { ...typography.smallStrong, color: colors.textMuted },
 });

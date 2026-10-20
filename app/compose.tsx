@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Image, Keyboard, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
@@ -1565,11 +1566,11 @@ function Compose() {
             </Reanimated.View>
             {fromLive ? (
               // From Finish: thrown away, asked first (the log sheet's own "Discard session").
-              <Pressable accessibilityRole="button" accessibilityLabel="Discard session" hitSlop={8} onPress={hideIt} style={({ pressed }) => [styles.hideIt, pressed && { opacity: 0.6 }]}>
+              <Pressable accessibilityRole="button" accessibilityLabel="Discard session" hitSlop={8} onPress={hideIt} style={({ pressed }) => [styles.hideIt, pressed && { opacity: PRESS_DIM }]}>
                 <Text style={styles.hideItText}>Discard session</Text>
               </Pressable>
             ) : opened?.type === 'tracker' && !openedLog && opened.activity.status === 'new' ? (
-              <Pressable accessibilityRole="button" accessibilityLabel={workoutLog ? 'Hide this workout' : 'Not tennis? Hide this session'} hitSlop={8} onPress={hideIt} style={({ pressed }) => [styles.hideIt, pressed && { opacity: 0.6 }]}>
+              <Pressable accessibilityRole="button" accessibilityLabel={workoutLog ? 'Hide this workout' : 'Not tennis? Hide this session'} hitSlop={8} onPress={hideIt} style={({ pressed }) => [styles.hideIt, pressed && { opacity: PRESS_DIM }]}>
                 <Text style={styles.hideItText}>{workoutLog ? 'Hide this workout' : 'Not tennis? Hide it'}</Text>
               </Pressable>
             ) : null}
@@ -1656,7 +1657,7 @@ function Compose() {
                     accessibilityRole="button"
                     accessibilityLabel={withStats ? 'Add a photo or video (optional)' : 'Add a photo or video'}
                     onPress={() => { void openDevice('all'); }}
-                    style={({ pressed }) => [styles.addMedia, pressed && { opacity: 0.6 }]}
+                    style={({ pressed }) => [styles.addMedia, pressed && { opacity: PRESS_DIM }]}
                   >
                     {preparing ? <PreparingRing size={22} done={prepDone} /> : <Ionicons name="images-outline" size={22} color={colors.textMuted} />}
                     <Text style={styles.addMediaText}>{preparing ? 'Getting it ready…' : withStats ? 'Add a photo or video (optional)' : 'Add a photo or video'}</Text>

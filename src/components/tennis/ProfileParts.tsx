@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -357,7 +358,7 @@ const styleDefinitions = StyleSheet.create({
   rowTitle: { ...typography.body, ...font('500'), lineHeight: 20, color: colors.text },
   rowSub: { ...typography.small, lineHeight: 18, color: colors.textMuted },
   addTitle: { ...typography.bodyStrong, color: colors.brand },
-  pressed: { opacity: 0.6 },
+  pressed: { opacity: PRESS_DIM },
   tile: { width: 40, height: 40, borderRadius: 12, backgroundColor: colors.bgElevated, alignItems: 'center', justifyContent: 'center' },
   tileBrand: { backgroundColor: colors.brandDim },
   chip: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },

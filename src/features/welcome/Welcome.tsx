@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { PanResponder, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
 import Animated, { FadeIn, FadeInLeft, FadeInRight, FadeOut, ReduceMotion } from 'react-native-reanimated';
@@ -211,5 +212,5 @@ const styleDefinitions = StyleSheet.create({
   // A text link, not a second button: tall enough to tap, quieter than the green one.
   logIn: { minHeight: 48, alignSelf: 'center', justifyContent: 'center', paddingHorizontal: spacing.lg },
   logInText: { ...font('600'), fontSize: 16, lineHeight: 22, color: colors.brand, textAlign: 'center' },
-  pressed: { opacity: 0.6 },
+  pressed: { opacity: PRESS_DIM },
 });

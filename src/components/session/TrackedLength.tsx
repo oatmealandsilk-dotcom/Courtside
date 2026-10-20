@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -140,5 +141,5 @@ const styleDefinitions = StyleSheet.create({
   hint: { ...typography.small, color: colors.textFaint, flex: 1 },
   reset: { ...typography.smallStrong, color: colors.brand },
   off: { opacity: 0.35 },
-  pressed: { opacity: 0.6 },
+  pressed: { opacity: PRESS_DIM },
 });

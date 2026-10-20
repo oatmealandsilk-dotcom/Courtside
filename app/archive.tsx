@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions, type ViewStyle } from 'react-native';
@@ -255,7 +256,7 @@ const styleDefinitions = StyleSheet.create({
   note: { ...typography.small, color: colors.textFaint, lineHeight: 19, paddingVertical: spacing.md },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: GAP },
   storyTile: { borderRadius: radius.sm, overflow: 'hidden', backgroundColor: colors.surfaceAlt, justifyContent: 'flex-end', padding: 8 },
-  pressed: { opacity: 0.85 },
+  pressed: { opacity: PRESS_DIM },
   // One grouped list, a shade off the page, hairlines between.
   list: { ...lift, borderRadius: 20, backgroundColor: colors.surface, overflow: 'hidden' },
   line: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },

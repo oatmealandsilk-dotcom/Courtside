@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import React, { useEffect, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { useModalOpenWhile } from '@/lib/modalOpen';
@@ -70,7 +71,7 @@ export function ReplyQuote({ original, who, mine, onPress, standalone = false, b
       disabled={!original || !onPress}
       onPress={onPress}
       hitSlop={4}
-      style={({ pressed }) => [styles.quote, ink ? styles.quoteMine : styles.quoteTheirs, standalone && styles.quoteAlone, pressed && { opacity: 0.7 }]}
+      style={({ pressed }) => [styles.quote, ink ? styles.quoteMine : styles.quoteTheirs, standalone && styles.quoteAlone, pressed && { opacity: PRESS_DIM }]}
     >
       <View style={[styles.quoteBar, ink ? styles.quoteBarMine : null]} />
       <View style={styles.quoteWords}>
@@ -96,7 +97,7 @@ export function ReplyBar({ to, who, onClose }: { to: Message; who: string; onClo
         <Text style={styles.replyBarTitle} numberOfLines={1}>Replying to <Text style={styles.replyBarName}>{who}</Text></Text>
         <Text style={styles.replyBarText} numberOfLines={1}>{quoteWords(to)}</Text>
       </View>
-      <Pressable accessibilityRole="button" accessibilityLabel="Cancel reply" hitSlop={10} onPress={onClose} style={({ pressed }) => [styles.replyBarClose, pressed && { opacity: 0.5 }]}>
+      <Pressable accessibilityRole="button" accessibilityLabel="Cancel reply" hitSlop={10} onPress={onClose} style={({ pressed }) => [styles.replyBarClose, pressed && { opacity: PRESS_DIM }]}>
         <Ionicons name="close" size={18} color={colors.textMuted} />
       </Pressable>
     </Reanimated.View>

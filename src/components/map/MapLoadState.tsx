@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import React, { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { Easing, cancelAnimation, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
@@ -95,7 +96,7 @@ export function MapLoadPill({ status, onRetry }: { status: MapLoadStatus; onRetr
   return (
     <View style={styles.pillSpot}>
       {status === 'failed' ? (
-        <Pressable accessibilityRole="button" accessibilityLabel="The map didn't load. Tap to try again" onPress={onRetry} style={({ pressed }) => [styles.pill, pressed && { opacity: 0.8 }]}>
+        <Pressable accessibilityRole="button" accessibilityLabel="The map didn't load. Tap to try again" onPress={onRetry} style={({ pressed }) => [styles.pill, pressed && { opacity: PRESS_DIM }]}>
           <Text style={styles.pillText}>Map didn’t load · <Text style={styles.pillAgain}>Tap to try again</Text></Text>
         </Pressable>
       ) : (

@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import React from 'react';
 import { Linking, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { router } from 'expo-router';
@@ -99,7 +100,7 @@ export function FollowHeart({ court, style, size = 18 }: { court: CourtToFollow;
   const { courtFollows, actions } = useApp();
   const on = !!courtFollows[court.id]?.following;
   return (
-    <Pressable accessibilityRole="button" accessibilityState={{ selected: on }} accessibilityLabel={on ? `Following ${court.name}. Unfollow` : `Follow ${court.name}`} hitSlop={8} onPress={() => actions.toggleCourtFollow(court)} style={({ pressed }) => [style, pressed && { opacity: 0.6 }]}>
+    <Pressable accessibilityRole="button" accessibilityState={{ selected: on }} accessibilityLabel={on ? `Following ${court.name}. Unfollow` : `Follow ${court.name}`} hitSlop={8} onPress={() => actions.toggleCourtFollow(court)} style={({ pressed }) => [style, pressed && { opacity: PRESS_DIM }]}>
       <Ionicons name={on ? 'heart' : 'heart-outline'} size={size} color={on ? colors.brand : colors.textMuted} />
     </Pressable>
   );
@@ -206,7 +207,7 @@ export function RegularsRow({ court, closed = false }: { court: { id: string; na
 }
 
 const styleDefinitions = StyleSheet.create({
-  pressed: { opacity: 0.7 },
+  pressed: { opacity: PRESS_DIM },
   // One small pill per fact, on the card's half-step of warmth: who may play, right now, who's playing.
   tag: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, height: 28, borderRadius: radius.pill, backgroundColor: colors.bgElevated },
   tagText: { ...typography.smallStrong, color: colors.text },
@@ -226,7 +227,7 @@ const styleDefinitions = StyleSheet.create({
   noteRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
   noteText: { flex: 1, minWidth: 0 },
   noteFlag: { paddingTop: 3 },
-  noteFlagPressed: { opacity: 0.5 },
+  noteFlagPressed: { opacity: PRESS_DIM },
   link: { ...typography.smallStrong, color: colors.brand },
   regulars: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   faces: { flexDirection: 'row', alignItems: 'center' },

@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { TipBubble } from '@/components/TipBubble';
 import { learned, useTip } from '@/features/tips/tips';
@@ -963,16 +964,16 @@ export default function Thread() {
             ) : null}
             {canWrite ? (
               <View style={styles.helloActions}>
-                <Tappable accessibilityLabel="Say hi" onPress={sayHi} scaleTo={0.95} style={styles.helloChip}>
+                <Tappable accessibilityLabel="Say hi" onPress={sayHi} style={styles.helloChip}>
                   <Text style={styles.helloWave}>👋</Text>
                   <Text style={styles.helloChipText}>Say hi</Text>
                 </Tappable>
-                <Tappable accessibilityLabel="Send a court" onPress={openCourtPicker} scaleTo={0.95} style={styles.helloChip}>
+                <Tappable accessibilityLabel="Send a court" onPress={openCourtPicker} style={styles.helloChip}>
                   <Ionicons name="location-outline" size={16} color={colors.text} />
                   <Text style={styles.helloChipText}>Send a court</Text>
                 </Tappable>
                 {group && !removed && members < GROUP_CAP ? (
-                  <Tappable accessibilityLabel="Add people" onPress={openAddPeople} scaleTo={0.95} style={styles.helloChip}>
+                  <Tappable accessibilityLabel="Add people" onPress={openAddPeople} style={styles.helloChip}>
                     <Ionicons name="person-add-outline" size={15} color={colors.text} />
                     <Text style={styles.helloChipText}>Add people</Text>
                   </Tappable>
@@ -1280,12 +1281,12 @@ const Composer = memo(function Composer({ ref, styles, pickedCount, editingBody,
         // The "+": what else can go in the chat, one tap away (iMessage's apps row).
         <Reanimated.View entering={FadeInDown.duration(160).easing(Easing.out(Easing.cubic))} exiting={FadeOut.duration(100)} style={styles.plusRow}>
           {cameraOn ? (
-            <Tappable accessibilityLabel="Send photos" onPress={call.photos} scaleTo={0.95} style={styles.plusChip}>
+            <Tappable accessibilityLabel="Send photos" onPress={call.photos} style={styles.plusChip}>
               <Ionicons name="images-outline" size={17} color={colors.brand} />
               <Text style={styles.plusChipText}>Photos</Text>
             </Tappable>
           ) : null}
-          <Tappable accessibilityLabel="Send a court" onPress={call.court} scaleTo={0.95} style={styles.plusChip}>
+          <Tappable accessibilityLabel="Send a court" onPress={call.court} style={styles.plusChip}>
             <Ionicons name="location-outline" size={17} color={colors.brand} />
             <Text style={styles.plusChipText}>Court</Text>
           </Tappable>
@@ -1298,7 +1299,7 @@ const Composer = memo(function Composer({ ref, styles, pickedCount, editingBody,
           ) : (
             <>
               {cameraOn ? (
-                <Tappable immediate accessibilityLabel="Take a photo" onPress={call.camera} scaleTo={0.92} style={[styles.camera, pageIsDark() && styles.sendCircleDark]}>
+                <Tappable immediate accessibilityLabel="Take a photo" onPress={call.camera} style={[styles.camera, pageIsDark() && styles.sendCircleDark]}>
                   <BrandWash />
                   <Ionicons name="camera" size={18} color={colors.brandInk} />
                 </Tappable>
@@ -1483,7 +1484,7 @@ const MessageRow = memo(function MessageRow({ item, ctx, original, originalBlock
             accessibilityLabel={`${run.length === 1 ? 'A message' : `${run.length} messages`} from someone you blocked. Show`}
             onPress={() => call.showFolded(run)}
             hitSlop={{ top: 4, bottom: 4 }}
-            style={({ pressed }) => [styles.folded, pressed && { opacity: 0.7 }]}
+            style={({ pressed }) => [styles.folded, pressed && { opacity: PRESS_DIM }]}
           >
             <Ionicons name="eye-off-outline" size={14} color={colors.textFaint} />
             <Text style={styles.foldedText}>
@@ -1508,7 +1509,7 @@ const MessageRow = memo(function MessageRow({ item, ctx, original, originalBlock
             accessibilityLabel="Hidden message. Show"
             onPress={() => call.showFolded([message.id])}
             hitSlop={{ top: 4, bottom: 4 }}
-            style={({ pressed }) => [styles.folded, pressed && { opacity: 0.7 }]}
+            style={({ pressed }) => [styles.folded, pressed && { opacity: PRESS_DIM }]}
           >
             <Ionicons name="eye-off-outline" size={14} color={colors.textFaint} />
             <Text style={styles.foldedText}>
@@ -2641,7 +2642,7 @@ const styleDefinitions = StyleSheet.create({
     borderBottomColor: `${colors.border}99`,
   },
   back: { width: 34, height: 40, alignItems: 'center', justifyContent: 'center' },
-  pressedDim: { opacity: 0.55 },
+  pressedDim: { opacity: PRESS_DIM },
   headerUser: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 },
   headerWords: { flex: 1, minWidth: 0, gap: 0 },
   headerNameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, minWidth: 0 },
@@ -2747,7 +2748,7 @@ const styleDefinitions = StyleSheet.create({
   // The tools in the box: a fixed square each, so nothing around them ever shifts.
   tool: { width: 36, height: 44, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
   toolHover: { backgroundColor: colors.surfaceAlt },
-  toolPressed: { opacity: 0.4 },
+  toolPressed: { opacity: PRESS_DIM },
   toolOff: { opacity: 0.35 },
   // The camera at the start of the box: Instagram's filled circle, in the brand's colour.
   camera: { width: 34, height: 34, borderRadius: 17, marginLeft: 3, marginBottom: 5, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', backgroundColor: colors.brand },

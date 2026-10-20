@@ -1,3 +1,4 @@
+import { PRESS_DIM, PRESS_SHRINK } from '@/theme/press';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -223,8 +224,8 @@ export function WeekStrip({ minutes, streak, days }: { minutes: number; streak: 
 }
 
 const styleDefinitions = StyleSheet.create({
-  pressed: { opacity: 0.7 },
-  pressedCard: { opacity: 0.85, transform: [{ scale: 0.985 }] },
+  pressed: { opacity: PRESS_DIM },
+  pressedCard: { transform: [{ scale: PRESS_SHRINK }] },
   hero: { ...lift, borderRadius: 24, borderWidth: 1, padding: spacing.lg, paddingBottom: 14, gap: 10, overflow: 'hidden' },
   heroTop: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   eyebrow: { ...font('600'), fontSize: 11, letterSpacing: 0.9 },

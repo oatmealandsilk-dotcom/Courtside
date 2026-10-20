@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -87,7 +88,7 @@ const styleDefinitions = StyleSheet.create({
   box: { borderRadius: radius.md, overflow: 'hidden', backgroundColor: colors.surfaceAlt },
   fill: { width: '100%', height: '100%' },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  pressed: { opacity: 0.75 },
+  pressed: { opacity: PRESS_DIM },
   markWrap: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' },
   mark: { width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
   // The triangle's weight sits left of its box: nudged right so it looks centred.

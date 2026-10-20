@@ -1,3 +1,4 @@
+import { PRESS_SHRINK } from '@/theme/press';
 import React, { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -190,7 +191,7 @@ const styles = StyleSheet.create({
   // The session box's edge: a 1-point line on a dark page, none on a light one.
   bordered: { borderWidth: 1 },
   banner: { borderRadius: 16, paddingVertical: 14, paddingHorizontal: 16, overflow: 'hidden' },
-  pressed: { transform: [{ scale: 0.98 }] },
+  pressed: { transform: [{ scale: PRESS_SHRINK }] },
   headRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   bannerTitle: { ...font('600'), fontSize: 17, letterSpacing: -0.3 },
   identity: { flexDirection: 'row', alignItems: 'center', gap: 12 },

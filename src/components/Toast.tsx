@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -402,7 +403,7 @@ const styleDefinitions = StyleSheet.create({
   infoBeforeAction: { paddingRight: spacing.xs },
   // As tall as the capsule, so the whole right end is the button.
   action: { alignSelf: 'stretch', justifyContent: 'center', paddingLeft: spacing.md, paddingRight: 16 },
-  actionPressed: { opacity: 0.55 },
+  actionPressed: { opacity: PRESS_DIM },
   actionLabel: { ...typography.smallStrong, color: colors.brand, letterSpacing: -0.1 },
   // The quieter of two answers, in the words' own grey, a little apart from the brand one after it.
   secondary: { alignSelf: 'stretch', justifyContent: 'center', paddingLeft: spacing.md, paddingRight: spacing.xs },

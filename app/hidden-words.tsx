@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View, type TextInput } from 'react-native';
@@ -169,7 +170,7 @@ export default function HiddenWordsPage() {
               well
             />
           </View>
-          <Pressable accessibilityRole="button" accessibilityLabel="Add" accessibilityState={{ disabled: !canAdd }} disabled={!canAdd} onPress={add} hitSlop={6} style={({ pressed }) => [styles.addButton, !canAdd && styles.addButtonOff, pressed && { opacity: 0.7 }]}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Add" accessibilityState={{ disabled: !canAdd }} disabled={!canAdd} onPress={add} hitSlop={6} style={({ pressed }) => [styles.addButton, !canAdd && styles.addButtonOff, pressed && { opacity: PRESS_DIM }]}>
             <Text style={styles.addText}>Add</Text>
           </Pressable>
         </View>
@@ -180,7 +181,7 @@ export default function HiddenWordsPage() {
               // Only the × takes a word off: a tap on the word itself does nothing, so scrolling past never loses one.
               <View key={word} style={styles.word}>
                 <Text style={styles.wordText} numberOfLines={1}>{word}</Text>
-                <Pressable accessibilityRole="button" accessibilityLabel={`Remove ${word}`} onPress={() => remove(word)} hitSlop={{ top: 12, bottom: 12, left: 8, right: 10 }} style={({ pressed }) => [styles.wordX, pressed && { opacity: 0.5 }]}>
+                <Pressable accessibilityRole="button" accessibilityLabel={`Remove ${word}`} onPress={() => remove(word)} hitSlop={{ top: 12, bottom: 12, left: 8, right: 10 }} style={({ pressed }) => [styles.wordX, pressed && { opacity: PRESS_DIM }]}>
                   <Ionicons name="close" size={14} color={colors.textMuted} />
                 </Pressable>
               </View>

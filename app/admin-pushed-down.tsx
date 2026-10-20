@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useCallback, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -129,7 +130,7 @@ const styleDefinitions = StyleSheet.create({
   kind: { paddingHorizontal: 9, paddingVertical: 3, borderRadius: radius.pill, backgroundColor: colors.brandDim },
   kindText: { ...typography.caption, fontSize: 12, letterSpacing: 0.2, color: colors.textMuted },
   target: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.sm, borderRadius: radius.md, backgroundColor: colors.surfaceAlt },
-  targetPressed: { opacity: 0.75 },
+  targetPressed: { opacity: PRESS_DIM },
   thumb: { width: 44, height: 55, borderRadius: radius.sm, backgroundColor: colors.border },
   noThumb: { alignItems: 'center', justifyContent: 'center' },
   byRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },

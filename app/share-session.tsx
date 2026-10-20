@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import React, { memo, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Animated, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -560,7 +561,7 @@ const styleDefinitions = StyleSheet.create({
   photoButton: { position: 'absolute', top: 2, right: 2, minHeight: 44, paddingHorizontal: 10, justifyContent: 'center' },
   photoChip: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: colors.overlay },
   photoButtonText: { ...font('600'), fontSize: 12, color: colors.onMedia },
-  pressed: { opacity: 0.7 },
+  pressed: { opacity: PRESS_DIM },
   // Done, straight after posting: the way out, in the brand's colour, level with the title (its line is
   // about 27 points tall) rather than halfway down to the line under it; its hitSlop makes the 44-point target.
   done: { alignSelf: 'flex-start', minHeight: 27, minWidth: 44, alignItems: 'flex-end', justifyContent: 'center' },

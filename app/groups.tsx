@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import React, { useEffect } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
@@ -140,7 +141,7 @@ const styleDefinitions = StyleSheet.create({
   emptyBody: { ...typography.small, color: colors.textMuted, textAlign: 'center' },
   // Cancel, beside a request: plain words in a soft pill, the way Remove is on a chat group.
   pill: { paddingHorizontal: 12, height: 30, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
-  pillPressed: { opacity: 0.6 },
+  pillPressed: { opacity: PRESS_DIM },
   pillText: { ...typography.smallStrong, color: colors.text },
   start: { marginTop: spacing.xl, gap: spacing.sm },
   startWhy: { ...typography.small, color: colors.textMuted, textAlign: 'center', lineHeight: 19, paddingHorizontal: spacing.lg },

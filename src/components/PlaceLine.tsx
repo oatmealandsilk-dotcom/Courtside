@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React from 'react';
 import { Pressable, StyleSheet, Text, type StyleProp, type ViewStyle } from 'react-native';
@@ -38,5 +39,5 @@ const styleDefinitions = StyleSheet.create({
   text: { ...typography.small, color: colors.textMuted, flexShrink: 1 },
   // A court is a place to go: the page's own ink, a step bolder, beside the brand's pin.
   court: { ...font('500'), color: colors.text },
-  pressed: { opacity: 0.6 },
+  pressed: { opacity: PRESS_DIM },
 });

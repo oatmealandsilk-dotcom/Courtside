@@ -149,7 +149,6 @@ export function LinkCard({ url, mine, width = LINK_CARD_W, joinTop = false, join
     <Tappable
       accessibilityRole="link"
       accessibilityLabel={label}
-      scaleTo={0.98}
       hoverTo={1.01}
       onPress={onReact ? tap : () => openLink(url)}
       onLongPress={onLongPress}

@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import { useTheme } from '@/theme/ThemeProvider';
 import React, { useRef, useState } from 'react';
 import { Image, Modal, Platform, Pressable, Text, View, useWindowDimensions } from 'react-native';
@@ -426,7 +427,7 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
         {withCover ? (
           <View pointerEvents="box-none" style={{ position: 'absolute', left: 0, right: 0, bottom: 12, alignItems: 'center' }}>
             <Pressable accessibilityRole="button" accessibilityLabel="Edit cover" onPress={openCover} hitSlop={6}
-              style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 7, minHeight: 36, paddingLeft: value.thumbnailUrl ? 5 : 11, paddingRight: 13, paddingVertical: value.thumbnailUrl ? 4 : 8, borderRadius: 999, borderWidth: 1, borderColor: 'rgba(255,255,255,0.28)', backgroundColor: 'rgba(10,14,20,0.52)', opacity: pressed ? 0.8 : 1, boxShadow: '0px 4px 14px rgba(0, 0, 0, 0.28)' })}>
+              style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 7, minHeight: 36, paddingLeft: value.thumbnailUrl ? 5 : 11, paddingRight: 13, paddingVertical: value.thumbnailUrl ? 4 : 8, borderRadius: 999, borderWidth: 1, borderColor: 'rgba(255,255,255,0.28)', backgroundColor: 'rgba(10,14,20,0.52)', opacity: pressed ? PRESS_DIM : 1, boxShadow: '0px 4px 14px rgba(0, 0, 0, 0.28)' })}>
               {value.thumbnailUrl
                 ? <Image source={{ uri: value.thumbnailUrl }} resizeMode="cover" style={{ width: 20, height: 26, borderRadius: 4, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.9)' }} />
                 : <Ionicons name="image-outline" size={15} color="white" />}

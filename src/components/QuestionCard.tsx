@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { PlayerName } from '@/components/PlayerName';
 import React, { memo } from 'react';
@@ -95,7 +96,7 @@ function QuestionCardInner({
       <View style={styles.metaRow}>
         {/* The topic is a tag ringed in its own colour: a tap shows every thread under it.
             Its words are the page's quiet ink: the topic colours alone fell short of 4.5:1 on several courts. */}
-        <Pressable accessibilityRole="button" accessibilityLabel={`${meta.label} threads`} onPress={() => openTopic(question.topic)} hitSlop={6} style={({ pressed }) => [styles.tag, { borderColor: topicTint(question.topic) }, pressed && { opacity: 0.7 }]}>
+        <Pressable accessibilityRole="button" accessibilityLabel={`${meta.label} threads`} onPress={() => openTopic(question.topic)} hitSlop={6} style={({ pressed }) => [styles.tag, { borderColor: topicTint(question.topic) }, pressed && { opacity: PRESS_DIM }]}>
           <Text style={styles.tagText}>{meta.label}</Text>
         </Pressable>
       </View>

@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -119,7 +120,7 @@ const styleDefinitions = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: 10 },
   rule: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   who: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  pressed: { opacity: 0.7 },
+  pressed: { opacity: PRESS_DIM },
   words: { flex: 1, minWidth: 0, gap: 2 },
   name: { ...font('500'), fontSize: 16, color: colors.text },
   meta: { ...typography.small, color: colors.textMuted },

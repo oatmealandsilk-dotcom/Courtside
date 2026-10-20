@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -134,7 +135,7 @@ export default function Invite() {
   const tools = Platform.OS !== 'web' || !friendsOnly ? (
     <>
       {Platform.OS !== 'web' ? (
-        <Pressable accessibilityRole="link" accessibilityLabel="Find friends from your contacts" onPress={() => router.replace('/find-contacts')} style={({ pressed }) => [styles.poster, pressed && { opacity: 0.7 }]}>
+        <Pressable accessibilityRole="link" accessibilityLabel="Find friends from your contacts" onPress={() => router.replace('/find-contacts')} style={({ pressed }) => [styles.poster, pressed && { opacity: PRESS_DIM }]}>
           <Ionicons name="people-outline" size={18} color={colors.text} />
           <Text style={styles.posterText}>Find friends from your contacts</Text>
           <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
@@ -143,7 +144,7 @@ export default function Invite() {
       {/* Never for a teen (or anyone not known to be an adult): a poster naming where they
           play would put them in front of strangers (the same rule as EarlyInvite's card). */}
       {friendsOnly ? null : (
-        <Pressable accessibilityRole="link" accessibilityLabel="Print a poster for your club" onPress={() => router.replace('/club-poster')} style={({ pressed }) => [styles.poster, pressed && { opacity: 0.7 }]}>
+        <Pressable accessibilityRole="link" accessibilityLabel="Print a poster for your club" onPress={() => router.replace('/club-poster')} style={({ pressed }) => [styles.poster, pressed && { opacity: PRESS_DIM }]}>
           <Ionicons name="print-outline" size={18} color={colors.text} />
           <Text style={styles.posterText}>Print a poster for your club</Text>
           <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
@@ -186,11 +187,11 @@ export default function Invite() {
             <Text style={styles.link} numberOfLines={1}>{link.replace('https://', '')}</Text>
           </View>
           <View style={styles.actions}>
-            <Pressable accessibilityRole="button" accessibilityLabel="Share your invite link" onPress={share} style={({ pressed }) => [styles.primary, pressed && { opacity: 0.85 }]}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Share your invite link" onPress={share} style={({ pressed }) => [styles.primary, pressed && { opacity: PRESS_DIM }]}>
               <Ionicons name="paper-plane-outline" size={16} color={colors.brandInk} />
               <Text style={styles.primaryText}>Share link</Text>
             </Pressable>
-            <Pressable accessibilityRole="button" accessibilityLabel="Copy your invite link" onPress={copy} style={({ pressed }) => [styles.secondary, pressed && { opacity: 0.7 }]}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Copy your invite link" onPress={copy} style={({ pressed }) => [styles.secondary, pressed && { opacity: PRESS_DIM }]}>
               <Text style={styles.secondaryText}>{copied ? 'Copied' : 'Copy'}</Text>
             </Pressable>
           </View>
@@ -207,7 +208,7 @@ export default function Invite() {
               {list.map((p) => {
                 const name = p.name || `@${p.handle}`;
                 return (
-                  <Pressable key={p.id} accessibilityRole="link" accessibilityLabel={`${name}, ${p.countedAt ? 'counted' : 'not counted yet'}. Open profile`} onPress={() => open(p.id)} style={({ pressed }) => [styles.person, pressed && { opacity: 0.7 }]}>
+                  <Pressable key={p.id} accessibilityRole="link" accessibilityLabel={`${name}, ${p.countedAt ? 'counted' : 'not counted yet'}. Open profile`} onPress={() => open(p.id)} style={({ pressed }) => [styles.person, pressed && { opacity: PRESS_DIM }]}>
                     <Avatar name={p.name || p.handle} seed={p.id} uri={p.avatarUrl} size={36} />
                     <View style={styles.personText}>
                       <Text style={styles.personName} numberOfLines={1}>{name}</Text>
@@ -230,7 +231,7 @@ export default function Invite() {
             <Text style={styles.count}>{!loaded ? ' ' : count === 0 ? 'No one has joined through you yet.' : `${count} ${count === 1 ? 'player has' : 'players have'} joined through you.`}</Text>
           )}
           {onboarding ? (
-            <Pressable accessibilityRole="button" accessibilityLabel="Later" onPress={() => setCloseSignal((n) => n + 1)} style={({ pressed }) => [styles.later, pressed && { opacity: 0.6 }]}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Later" onPress={() => setCloseSignal((n) => n + 1)} style={({ pressed }) => [styles.later, pressed && { opacity: PRESS_DIM }]}>
               <Text style={styles.laterText}>Later</Text>
             </Pressable>
           ) : null}

@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Image, Modal, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -234,6 +235,6 @@ const styles = StyleSheet.create({
   bottomBar: { position: 'absolute', left: 0, right: 0, bottom: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl },
   button: { ...typography.body, color: 'white', fontSize: 17 },
   choose: { ...font('600') },
-  pressed: { opacity: 0.5 },
+  pressed: { opacity: PRESS_DIM },
   error: { ...typography.small, color: 'rgba(255,255,255,0.75)', flex: 1, textAlign: 'center' },
 });

@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -47,7 +48,7 @@ const styleDefinitions = StyleSheet.create({
   topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   round: { ...lift, width: 34, height: 34, borderRadius: 17, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' },
   roundSpace: { width: 34, height: 34 },
-  pressed: { opacity: 0.6 },
+  pressed: { opacity: PRESS_DIM },
   titles: { gap: 3 },
   // The same title as SheetTitle's, so the group sheets match every other sheet.
   title: { ...typography.title, fontSize: 24, letterSpacing: -0.8, color: colors.text },

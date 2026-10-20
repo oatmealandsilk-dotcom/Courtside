@@ -1,3 +1,4 @@
+import { PRESS_SHRINK } from '@/theme/press';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { type ReactNode } from 'react';
 import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
@@ -34,5 +35,6 @@ const styleDefinitions = StyleSheet.create({
     borderColor: colors.border,
   },
   padded: { padding: spacing.lg },
-  pressed: { opacity: 0.72 },
+  // A card shrinks slightly while held, like a button (Oct 20 sweep: one press feel).
+  pressed: { transform: [{ scale: PRESS_SHRINK }] },
 });

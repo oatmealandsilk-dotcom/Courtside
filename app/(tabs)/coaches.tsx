@@ -1,3 +1,4 @@
+import { PRESS_DIM, PRESS_SHRINK } from '@/theme/press';
 import { asTabRoute } from '@/features/navigation/tabFocus';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { PlayerName } from '@/components/PlayerName';
@@ -279,7 +280,7 @@ function Coaching() {
 }
 
 const styleDefinitions = StyleSheet.create({
-  pressed: { opacity: 0.72 },
+  pressed: { opacity: PRESS_DIM },
   askNote: { ...typography.small, color: colors.textMuted, lineHeight: 18, paddingTop: spacing.sm, paddingLeft: 2 },
   // The tip above the box, a little air between its pointer and the box's top edge.
   askTip: { paddingBottom: spacing.sm },
@@ -289,7 +290,7 @@ const styleDefinitions = StyleSheet.create({
     paddingLeft: spacing.lg, paddingRight: 6, paddingVertical: 6, minHeight: 52,
     ...lift, borderRadius: radius.pill, backgroundColor: colors.surface,
   },
-  askFieldPressed: { transform: [{ scale: 0.99 }] },
+  askFieldPressed: { transform: [{ scale: PRESS_SHRINK }] },
   askPlaceholder: { ...typography.body, fontSize: 16, color: colors.textFaint, flex: 1 },
   askGo: { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center', shadowColor: colors.brand, shadowOpacity: 0.28, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 3 },
   // Everything else is rows on hairlines, not boxes.

@@ -1,3 +1,4 @@
+import { PRESS_SHRINK } from '@/theme/press';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Animated as RNAnimated, PanResponder, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
@@ -1281,7 +1282,7 @@ const styleDefinitions = StyleSheet.create({
   barTitleText: { ...typography.smallStrong, color: 'white' },
   next: { paddingHorizontal: spacing.lg, paddingVertical: 8, borderRadius: radius.pill, backgroundColor: colors.brand },
   nextText: { ...typography.smallStrong, color: colors.brandInk },
-  pressed: { transform: [{ scale: 0.97 }] },
+  pressed: { transform: [{ scale: PRESS_SHRINK }] },
   stage: { flex: 1, backgroundColor: '#000', overflow: 'hidden' },
   wideFrame: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center' },
   wideBox: { width: '100%', aspectRatio: 16 / 9, overflow: 'hidden' },

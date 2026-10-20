@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import React, { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -68,5 +69,5 @@ const styleDefinitions = StyleSheet.create({
   last: { ...typography.small, color: colors.textMuted, fontVariant: ['tabular-nums'] },
   rematch: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 36, paddingHorizontal: 14, borderRadius: radius.pill, backgroundColor: colors.brand },
   rematchText: { ...font('700'), fontSize: 14, color: colors.brandInk },
-  pressed: { opacity: 0.7 },
+  pressed: { opacity: PRESS_DIM },
 });

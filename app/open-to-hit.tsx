@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text } from 'react-native';
 import { router } from 'expo-router';
@@ -196,7 +197,7 @@ export default function OpenToHitSheet() {
 
         <Submit label={wasOn ? 'Save' : `I’m free ${tillWords}`} onPress={() => { void save(); }} disabled={past || !currentUser} waiting="Pick a later time" busy={saving} busyLabel="Saving…" />
         {wasOn ? (
-          <Pressable accessibilityRole="button" accessibilityLabel="Turn off open to hit" hitSlop={8} onPress={() => { void turnOff(); }} style={({ pressed }) => [styles.off, pressed && { opacity: 0.6 }]}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Turn off open to hit" hitSlop={8} onPress={() => { void turnOff(); }} style={({ pressed }) => [styles.off, pressed && { opacity: PRESS_DIM }]}>
             <Text style={styles.offText}>Turn off</Text>
           </Pressable>
         ) : null}

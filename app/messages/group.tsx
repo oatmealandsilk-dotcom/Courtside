@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import React, { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router, useLocalSearchParams, useNavigation } from 'expo-router';
@@ -384,7 +385,7 @@ export default function ChatDetails() {
             disabled={!canAdd}
             hitSlop={8}
             onPress={() => { void addPicked(); }}
-            style={({ pressed }) => [styles.headAdd, !canAdd && styles.headAddOff, pressed && { opacity: 0.85 }]}
+            style={({ pressed }) => [styles.headAdd, !canAdd && styles.headAddOff, pressed && { opacity: PRESS_DIM }]}
           >
             <Text style={styles.headAddText}>{busy ? 'Adding…' : picks.length ? `Add (${picks.length})` : 'Add'}</Text>
           </Pressable>
@@ -576,7 +577,7 @@ export default function ChatDetails() {
         </Pressable>
       </View>
 
-      <Pressable accessibilityRole="button" onPress={leave} style={({ pressed }) => [styles.leave, pressed && { opacity: 0.8 }]}>
+      <Pressable accessibilityRole="button" onPress={leave} style={({ pressed }) => [styles.leave, pressed && { opacity: PRESS_DIM }]}>
         <Text style={styles.leaveText}>Leave group</Text>
       </Pressable>
 
@@ -617,7 +618,7 @@ const styleDefinitions = StyleSheet.create({
   // a full group reads as a list of people, not a list of things to delete
   // (and the words stay easy to read on every court theme's grey).
   remove: { paddingHorizontal: 12, height: 30, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
-  removePressed: { opacity: 0.6 },
+  removePressed: { opacity: PRESS_DIM },
   removeText: { ...typography.smallStrong, color: colors.text },
   lead: { width: 26, alignItems: 'center' },
   words: { flex: 1, minWidth: 0, gap: 1 },

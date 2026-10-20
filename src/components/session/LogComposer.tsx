@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
@@ -230,7 +231,7 @@ const styleDefinitions = StyleSheet.create({
   tile: { ...lift, borderRadius: 16, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', gap: 8 },
   tileLabel: { ...font('600'), fontSize: 13, color: colors.text },
   off: { opacity: 0.45 },
-  pressed: { opacity: 0.7 },
+  pressed: { opacity: PRESS_DIM },
   error: { ...font('500'), fontSize: 13, color: colors.danger, marginTop: spacing.sm },
   dock: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingTop: 26, paddingHorizontal: 16 },
   dockError: { ...font('500'), fontSize: 13, color: colors.danger, textAlign: 'center', marginBottom: 8 },

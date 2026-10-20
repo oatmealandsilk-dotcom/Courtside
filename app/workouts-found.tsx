@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -147,5 +148,5 @@ const styleDefinitions = StyleSheet.create({
   wait: { paddingVertical: spacing.xxl, alignItems: 'center' },
   more: { alignSelf: 'center', paddingVertical: spacing.md, paddingHorizontal: spacing.lg, marginTop: spacing.sm },
   moreText: { ...typography.smallStrong, color: colors.brand },
-  pressed: { opacity: 0.6 },
+  pressed: { opacity: PRESS_DIM },
 });

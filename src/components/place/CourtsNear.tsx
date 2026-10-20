@@ -1,3 +1,4 @@
+import { PRESS_DIM, PRESS_SHRINK } from '@/theme/press';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
@@ -132,12 +133,12 @@ const styleDefinitions = StyleSheet.create({
   head: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', paddingTop: spacing.sm },
   title: { ...typography.title, color: colors.text },
   headLink: { ...typography.smallStrong, color: colors.brand },
-  pressed: { opacity: 0.6 },
+  pressed: { opacity: PRESS_DIM },
   scroller: { flexGrow: 0 },
   // Room above and below for the cards' lift, which the strip would otherwise cut into a box.
   row: { gap: spacing.sm, paddingTop: spacing.xs, paddingBottom: spacing.lg },
   card: { ...lift, width: CARD, padding: spacing.md, gap: 4, borderRadius: radius.lg, backgroundColor: colors.surface },
-  cardPressed: { opacity: 0.9 },
+  cardPressed: { transform: [{ scale: PRESS_SHRINK }] },
   // The quiet court tile of the search rows and the map's results: solid brand stays for buttons.
   top: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 },
   tile: { width: 36, height: 36, borderRadius: 11, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },

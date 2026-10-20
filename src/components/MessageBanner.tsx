@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { AccessibilityInfo, AppState, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -467,7 +468,7 @@ const styleDefinitions = StyleSheet.create({
   card: { borderWidth: StyleSheet.hairlineWidth, borderColor: `${colors.borderStrong}55` },
   row: { flexDirection: 'row', alignItems: 'center' },
   info: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md, paddingLeft: spacing.md, paddingRight: spacing.lg, minHeight: 64 },
-  pressed: { opacity: 0.7 },
+  pressed: { opacity: PRESS_DIM },
   words: { flex: 1, minWidth: 0 },
   top: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.sm },
   title: { ...typography.bodyStrong, color: colors.text, flexShrink: 1 },

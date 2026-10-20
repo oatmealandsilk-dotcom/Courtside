@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React from 'react';
 import { Pressable, StyleSheet, Text } from 'react-native';
@@ -38,7 +39,7 @@ export function TaggedLine({ post, onMedia = false }: { post: Post; onMedia?: bo
       accessibilityLabel={`Tagged: ${people.map((p) => p.name).join(', ')}`}
       hitSlop={6}
       onPress={(e) => { e?.stopPropagation?.(); open(); }}
-      style={({ pressed }) => [styles.row, onMedia && styles.chip, pressed && { opacity: 0.7 }]}
+      style={({ pressed }) => [styles.row, onMedia && styles.chip, pressed && { opacity: PRESS_DIM }]}
     >
       <Ionicons name={onMedia ? 'person' : 'person-outline'} size={12} color={onMedia ? '#fff' : colors.textMuted} />
       <Text style={[styles.text, onMedia && styles.onMedia]} numberOfLines={1}>

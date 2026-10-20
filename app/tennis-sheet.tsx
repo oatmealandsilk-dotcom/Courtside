@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import React, { useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -219,5 +220,5 @@ const styleDefinitions = StyleSheet.create({
   option: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg, paddingHorizontal: spacing.lg, minHeight: 54 },
   optionLine: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   optionText: { ...typography.body, ...font('500'), color: colors.text },
-  pressed: { opacity: 0.6 },
+  pressed: { opacity: PRESS_DIM },
 });

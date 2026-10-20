@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -136,7 +137,7 @@ export default function AiCoachRoute() {
           <View style={introStyles.mark}><Ionicons name="sparkles" size={20} color={colors.brand} /></View>
           <Text style={introStyles.title}>Two quick questions first</Text>
           <Text style={introStyles.body}>How fit you are, how often you can play, and what you’re working toward. The coach plans your week around them.</Text>
-          <Pressable accessibilityRole="button" onPress={() => { setLater(true); router.push({ pathname: '/onboarding', params: { from: 'coach', step: '3' } }); }} style={({ pressed }) => [introStyles.go, pressed && { opacity: 0.85 }]}>
+          <Pressable accessibilityRole="button" onPress={() => { setLater(true); router.push({ pathname: '/onboarding', params: { from: 'coach', step: '3' } }); }} style={({ pressed }) => [introStyles.go, pressed && { opacity: PRESS_DIM }]}>
             <Text style={introStyles.goText}>Start</Text>
           </Pressable>
           <Pressable accessibilityRole="button" onPress={() => setLater(true)} hitSlop={8}><Text style={introStyles.later}>Skip for now</Text></Pressable>
@@ -510,7 +511,7 @@ function Handoff({ coachId, line }: { coachId: string; line: string }) {
   const user = users.find((u) => u.id === coach?.userId);
   if (!coach) return null;
   return (
-    <Pressable accessibilityRole="link" onPress={() => router.push(`/coach/${coach.id}`)} style={({ pressed }) => [styles.handoff, pressed && { opacity: 0.8 }]}>
+    <Pressable accessibilityRole="link" onPress={() => router.push(`/coach/${coach.id}`)} style={({ pressed }) => [styles.handoff, pressed && { opacity: PRESS_DIM }]}>
       <Avatar name={user?.name ?? 'Coach'} seed={user?.avatarSeed ?? coach.id} uri={user?.avatarUrl} size={36} />
       <View style={{ flex: 1, gap: 2 }}>
         <Text style={styles.handoffName}>{user?.name ?? 'A coach'}</Text>

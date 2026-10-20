@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Image, Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -114,7 +115,7 @@ export function CoverPage({ visible, uri, from, to, start, photo, ratio, fit, cr
         <View style={styles.column}>
           <View style={[styles.bar, { paddingTop: isPhone ? insets.top + spacing.xl : Platform.OS !== 'web' ? Math.max(insets.top + spacing.xl, spacing.sm + spacing.xxl) : spacing.sm + spacing.xxl }]}>
             <View style={styles.barLeft}>
-              <Pressable accessibilityRole="button" accessibilityLabel="Cancel" onPress={onCancel} hitSlop={10} style={({ pressed }) => [styles.close, pressed && { opacity: 0.6 }]}>
+              <Pressable accessibilityRole="button" accessibilityLabel="Cancel" onPress={onCancel} hitSlop={10} style={({ pressed }) => [styles.close, pressed && { opacity: PRESS_DIM }]}>
                 <Ionicons name="close" size={26} color={colors.text} />
               </Pressable>
               <Text accessibilityRole="header" style={styles.title}>Cover</Text>
@@ -135,7 +136,7 @@ export function CoverPage({ visible, uri, from, to, start, photo, ratio, fit, cr
             {end > from
               ? <CoverScrubber uri={uri} from={from} to={end} at={at} onScrub={scrub} onSettle={settle} onStep={step} hideWindow={showPhoto && !!photo} />
               : <View style={styles.stripWaiting} />}
-            <Pressable accessibilityRole="button" accessibilityLabel={photo ? 'Choose another photo' : 'Use a photo instead'} onPress={onUpload} style={({ pressed }) => [styles.link, pressed && { opacity: 0.6 }]}>
+            <Pressable accessibilityRole="button" accessibilityLabel={photo ? 'Choose another photo' : 'Use a photo instead'} onPress={onUpload} style={({ pressed }) => [styles.link, pressed && { opacity: PRESS_DIM }]}>
               <Ionicons name="image-outline" size={16} color={colors.textMuted} />
               <Text style={styles.linkText}>{photo ? 'Choose another photo' : 'Use a photo instead'}</Text>
             </Pressable>

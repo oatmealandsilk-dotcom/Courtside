@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useFocusEffect } from 'expo-router';
@@ -252,7 +253,7 @@ const styleDefinitions = StyleSheet.create({
   primaryText: { ...typography.smallStrong, color: colors.brandInk },
   small: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 5, height: 32, paddingHorizontal: 12, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderStrong },
   smallText: { ...typography.smallStrong, color: colors.text },
-  pressedDim: { opacity: 0.55 },
+  pressedDim: { opacity: PRESS_DIM },
   loading: { height: 120, alignItems: 'center', justifyContent: 'center' },
   todayRow: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.md },
   kicker: { ...typography.caption, color: colors.textMuted, textTransform: 'uppercase' },

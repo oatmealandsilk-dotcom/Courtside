@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Image, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -123,7 +124,7 @@ export function UploadBar() {
         </View>
       </Pressable>
       {trimOffer ? (
-        <Pressable accessibilityRole="button" accessibilityLabel="Trim to under a minute" onPress={trim} hitSlop={6} style={({ pressed }) => [styles.trim, pressed && { opacity: 0.7 }]}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Trim to under a minute" onPress={trim} hitSlop={6} style={({ pressed }) => [styles.trim, pressed && { opacity: PRESS_DIM }]}>
           <Ionicons name="cut-outline" size={16} color={colors.brandInk} />
           <Text style={styles.trimLabel}>Trim to under a minute</Text>
         </Pressable>

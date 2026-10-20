@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -677,5 +678,5 @@ const styleDefinitions = StyleSheet.create({
   offerLater: { paddingHorizontal: 12, paddingVertical: 7 },
   offerLaterText: { ...typography.smallStrong, color: colors.textMuted },
   offerOn: { minWidth: 84, alignItems: 'center' },
-  pressed: { opacity: 0.6 },
+  pressed: { opacity: PRESS_DIM },
 });

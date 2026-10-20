@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import React from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -88,7 +89,7 @@ const styleDefinitions = StyleSheet.create({
   circle: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
   lead: { backgroundColor: colors.brand, borderColor: colors.brand },
   label: { ...font('500'), fontSize: 12.5, color: colors.text },
-  pressed: { opacity: 0.7 },
+  pressed: { opacity: PRESS_DIM },
   dimmed: { opacity: 0.45 },
   // The steps: two quiet lines at most, centred under the buttons and no wider than their row.
   steps: { ...font('500'), fontSize: 13, lineHeight: 18, color: colors.textMuted, textAlign: 'center', alignSelf: 'center', maxWidth: 320, paddingHorizontal: spacing.lg },

@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -71,7 +72,7 @@ export function TipComposer({ onSubmit, onSent, initial = '', placeholder = 'You
             disabled={!ready}
             onPress={send}
             hitSlop={6}
-            style={({ pressed }) => [styles.send, !ready && styles.sendOff, pressed && { opacity: 0.8 }]}
+            style={({ pressed }) => [styles.send, !ready && styles.sendOff, pressed && { opacity: PRESS_DIM }]}
           >
             {busy ? <ActivityIndicator size="small" color={colors.brandInk} /> : <Text style={[styles.sendText, !ready && styles.sendTextOff]}>Send</Text>}
           </Pressable>

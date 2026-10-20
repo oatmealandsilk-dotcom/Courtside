@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View, type AccessibilityRole, type AccessibilityState } from 'react-native';
@@ -68,7 +69,7 @@ export const FormRow = React.forwardRef<View, {
 const styleDefinitions = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'stretch' },
   main: { flex: 1, flexDirection: 'row', alignItems: 'stretch' },
-  pressed: { opacity: 0.6 },
+  pressed: { opacity: PRESS_DIM },
   lead: { width: 26, alignItems: 'center', justifyContent: 'center', marginRight: spacing.md },
   body: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 50, paddingVertical: 11 },
   control: { flexDirection: 'row', alignItems: 'center', paddingLeft: spacing.sm },

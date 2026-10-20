@@ -1,3 +1,4 @@
+import { PRESS_DIM, PRESS_SHRINK } from '@/theme/press';
 import React, { useRef, useState, type RefObject } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
@@ -131,7 +132,7 @@ export function HitCard({ hit, miles, linked = true, tip, tipReady = false, tipA
     },
   });
   return (
-    <Pressable ref={cardRef} accessible={linked} accessibilityRole={linked ? 'link' : undefined} disabled={!linked} onPress={linked ? () => router.push(`/hit-request/${hit.id}`) : undefined} style={({ pressed }) => [styles.card, pressed && { opacity: 0.92 }]}>
+    <Pressable ref={cardRef} accessible={linked} accessibilityRole={linked ? 'link' : undefined} disabled={!linked} onPress={linked ? () => router.push(`/hit-request/${hit.id}`) : undefined} style={({ pressed }) => [styles.card, pressed && { opacity: PRESS_DIM }]}>
       {/* Who, with the paper plane and the flag beside the name; when, under it, across the
           card's full width, so "Tomorrow 9:00 AM" stays on one line on a small phone and the
           name is never cut to "Sam Ortiz is lookin…" (Oct 5). The section says it is a hit.
@@ -190,7 +191,7 @@ export function HitCard({ hit, miles, linked = true, tip, tipReady = false, tipA
             </View>
           ) : null}
           {mine && hit.audience === 'invite_first' && left > 0 ? (
-            <Pressable accessibilityRole="button" accessibilityLabel="Open to everyone now" onPress={(e) => { e.stopPropagation?.(); confirm({ title: 'Open to everyone now?', message: 'It goes on Find Players and the map for players nearby, not just the people you invited.', confirmLabel: 'Open it', onConfirm: () => { void actions.openHitNow(hit.id); } }); }} style={({ pressed }) => [styles.openNow, pressed && { opacity: 0.7 }]}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Open to everyone now" onPress={(e) => { e.stopPropagation?.(); confirm({ title: 'Open to everyone now?', message: 'It goes on Find Players and the map for players nearby, not just the people you invited.', confirmLabel: 'Open it', onConfirm: () => { void actions.openHitNow(hit.id); } }); }} style={({ pressed }) => [styles.openNow, pressed && { opacity: PRESS_DIM }]}>
               <Ionicons name="earth-outline" size={15} color={colors.text} />
               <Text style={styles.openNowText}>Open to everyone now</Text>
             </Pressable>
@@ -307,7 +308,7 @@ const styleDefinitions = StyleSheet.create({
   whoRow: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   // 32 drawn, 44 to the finger; bare until pressed.
   icon: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
-  iconPressed: { backgroundColor: colors.bgElevated },
+  iconPressed: { backgroundColor: colors.surfaceAlt },
   whoPress: { flexShrink: 1, minWidth: 0 },
   spacer: { flex: 1 },
   who: { ...typography.bodyStrong, color: colors.text },
@@ -353,7 +354,7 @@ const styleDefinitions = StyleSheet.create({
   buttonWide: { flex: 1, maxWidth: 180 },
   // One button, three looks: the same height, border and label weight.
   button: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 38, paddingHorizontal: 16, borderRadius: 19, borderWidth: 1 },
-  buttonPressed: { transform: [{ scale: 0.97 }] },
+  buttonPressed: { transform: [{ scale: PRESS_SHRINK }] },
   primary: { paddingHorizontal: 22, backgroundColor: colors.brand, borderColor: colors.brand },
   primaryText: { ...typography.bodyStrong, color: colors.brandInk },
   secondary: { backgroundColor: colors.surfaceAlt, borderColor: colors.border },

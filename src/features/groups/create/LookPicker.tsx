@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -115,7 +116,7 @@ const PER_ROW = 6;
 
 const styleDefinitions = StyleSheet.create({
   wrap: { gap: spacing.md },
-  pressed: { opacity: 0.7 },
+  pressed: { opacity: PRESS_DIM },
   swatches: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, justifyContent: 'space-between' },
   swatchRing: { width: 44, height: 44, borderRadius: 22, borderWidth: 2, borderColor: 'transparent', alignItems: 'center', justifyContent: 'center' },
   swatchRingOn: { borderColor: colors.text },

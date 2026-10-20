@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
@@ -157,7 +158,7 @@ const styleDefinitions = StyleSheet.create({
   restTitle: { ...font('600'), fontSize: 22, letterSpacing: -0.5, color: colors.text, marginTop: spacing.xs },
   restLine: { ...typography.body, color: colors.textMuted, textAlign: 'center' },
   restButton: { marginTop: spacing.md, alignSelf: 'stretch' },
-  pressed: { opacity: 0.7 },
+  pressed: { opacity: PRESS_DIM },
   actions: { flexDirection: 'row', justifyContent: 'center', gap: spacing.lg, paddingHorizontal: spacing.lg, marginTop: spacing.sm },
   action: { alignItems: 'center', gap: 6, width: 64 },
   actionCircle: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },

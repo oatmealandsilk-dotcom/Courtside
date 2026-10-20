@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useCallback, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -506,7 +507,7 @@ const styleDefinitions = StyleSheet.create({
   kindText: { ...typography.caption, fontSize: 12, letterSpacing: 0.2, color: colors.textMuted },
   status: { ...typography.smallStrong, color: colors.textMuted, marginLeft: 'auto' },
   target: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.sm, borderRadius: radius.md, backgroundColor: colors.surfaceAlt },
-  targetPressed: { opacity: 0.75 },
+  targetPressed: { opacity: PRESS_DIM },
   // What the AI coach wrote: the words alone, nothing to open.
   quote: { padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.surfaceAlt },
   thumb: { width: 44, height: 55, borderRadius: radius.sm, backgroundColor: colors.border },

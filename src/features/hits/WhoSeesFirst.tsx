@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import React, { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -145,8 +146,8 @@ const styleDefinitions = StyleSheet.create({
   // A small tile, quiet until its row is chosen, then the brand's pale tint.
   optionIcon: { width: 32, height: 32, borderRadius: 10, backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
   optionIconOn: { backgroundColor: colors.brandDim },
-  pressed: { opacity: 0.8 },
-  pressedRow: { backgroundColor: colors.bgElevated },
+  pressed: { opacity: PRESS_DIM },
+  pressedRow: { backgroundColor: colors.surfaceAlt },
   words: { flex: 1, minWidth: 0, gap: 2 },
   title: { ...typography.body, ...font('600'), color: colors.text },
   line: { ...typography.small, color: colors.textMuted, lineHeight: 18 },

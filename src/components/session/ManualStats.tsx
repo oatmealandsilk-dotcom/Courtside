@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import React, { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View, type StyleProp, type TextInput, type ViewStyle } from 'react-native';
 import Reanimated, { Easing, FadeInDown } from 'react-native-reanimated';
@@ -136,7 +137,7 @@ const styleDefinitions = StyleSheet.create({
   // The link: AddScore's look, so the two quiet extras on a session read as one family.
   add: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 3, paddingVertical: 2 },
   addText: { ...typography.smallStrong, color: colors.textMuted },
-  pressed: { opacity: 0.7 },
+  pressed: { opacity: PRESS_DIM },
   box: { gap: spacing.sm },
   row: { flexDirection: 'row', gap: spacing.md },
   cell: { flex: 1, minWidth: 0 },

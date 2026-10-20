@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Image, KeyboardAvoidingView, Linking, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -151,7 +152,7 @@ function Hit() {
             accessibilityRole="button"
             accessibilityLabel={permission.canAskAgain ? 'Allow camera' : 'Open Settings'}
             onPress={() => (permission.canAskAgain ? requestPermission() : Linking.openSettings())}
-            style={({ pressed }) => [styles.gateAllow, pressed && { opacity: 0.8 }]}
+            style={({ pressed }) => [styles.gateAllow, pressed && { opacity: PRESS_DIM }]}
           >
             <Text style={styles.gateAllowText}>{permission.canAskAgain ? 'Allow camera' : 'Open Settings'}</Text>
           </Pressable>
@@ -191,7 +192,7 @@ function Hit() {
           />
           <View style={styles.actions}>
             <View style={styles.hours}><Ionicons name="time-outline" size={13} color="rgba(255,255,255,0.85)" /><Text style={styles.hoursText}>On the feed for 24 hours</Text></View>
-            <Pressable accessibilityRole="button" accessibilityLabel="Post Instant" accessibilityState={{ disabled: posting }} disabled={posting} onPress={post} style={({ pressed }) => [styles.post, pressed && { opacity: 0.85 }, posting && { opacity: 0.6 }]}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Post Instant" accessibilityState={{ disabled: posting }} disabled={posting} onPress={post} style={({ pressed }) => [styles.post, pressed && { opacity: PRESS_DIM }, posting && { opacity: 0.6 }]}>
               <Text style={styles.postText}>Post</Text>
               <Ionicons name="arrow-forward" size={17} color={colors.brandInk} />
             </Pressable>

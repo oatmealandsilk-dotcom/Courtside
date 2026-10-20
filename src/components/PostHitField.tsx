@@ -1,3 +1,4 @@
+import { PRESS_SHRINK } from '@/theme/press';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -35,7 +36,7 @@ const styleDefinitions = StyleSheet.create({
     paddingLeft: spacing.lg, paddingRight: 6, paddingVertical: 6, minHeight: 52,
     ...lift, borderRadius: radius.pill, backgroundColor: colors.surface,
   },
-  fieldPressed: { transform: [{ scale: 0.99 }] },
+  fieldPressed: { transform: [{ scale: PRESS_SHRINK }] },
   text: { ...typography.body, fontSize: 16, color: colors.textMuted, flex: 1 },
   // The small lift, in the arrow's own colour (DESIGN.md: round brand buttons).
   go: { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center', shadowColor: colors.brand, shadowOpacity: 0.28, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 3 },

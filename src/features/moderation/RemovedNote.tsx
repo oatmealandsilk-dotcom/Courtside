@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import React, { useEffect } from 'react';
 import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { router } from 'expo-router';
@@ -217,7 +218,7 @@ const styleDefinitions = StyleSheet.create({
   dot: { ...typography.small, fontSize: 12.5, color: colors.textFaint, paddingHorizontal: 6 },
   statusIcon: { marginRight: 4 },
   waiting: { opacity: 0.5 },
-  pressed: { opacity: 0.6 },
+  pressed: { opacity: PRESS_DIM },
   tile: { alignItems: 'center', justifyContent: 'center', gap: 4, backgroundColor: colors.overlay },
   tileText: { ...typography.smallStrong },
 });

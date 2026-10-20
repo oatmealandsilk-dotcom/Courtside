@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -71,7 +72,7 @@ export function HealthShareRow({ activity, choice, onChoice, line = false }: {
 const styleDefinitions = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'stretch' },
   main: { flex: 1, flexDirection: 'row', alignItems: 'stretch' },
-  pressed: { opacity: 0.6 },
+  pressed: { opacity: PRESS_DIM },
   // FormRow's measures, so it lines up with the rows either side.
   lead: { width: 26, alignItems: 'center', justifyContent: 'center', marginRight: spacing.md },
   body: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 50, paddingVertical: 11 },

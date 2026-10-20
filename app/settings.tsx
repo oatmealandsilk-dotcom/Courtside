@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import { PlayerName } from '@/components/PlayerName';
 import { resetTips, turnOffTips, useTipsOn } from '@/features/tips/tips';
 import * as haptics from '@/lib/haptics';
@@ -255,7 +256,7 @@ export default function Settings() {
             <PlayerName userId={currentUser.id} style={styles.meName}>{currentUser.name}</PlayerName>
             <Text style={styles.meHandle}>@{currentUser.handle}</Text>
           </View>
-          <Pressable accessibilityRole="button" accessibilityLabel="Edit profile" onPress={() => router.push('/edit-profile')} style={({ pressed }) => [styles.edit, pressed && { opacity: 0.7 }]}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Edit profile" onPress={() => router.push('/edit-profile')} style={({ pressed }) => [styles.edit, pressed && { opacity: PRESS_DIM }]}>
             <Text style={styles.editText}>Edit</Text>
           </Pressable>
         </View>

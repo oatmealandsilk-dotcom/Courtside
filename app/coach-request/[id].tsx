@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import React, { useEffect, useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -102,7 +103,7 @@ export default function Booking() {
       <View style={styles.card}>
         <Text style={styles.body}>{request.question}</Text>
         {request.videoUrl ? (
-          <Pressable accessibilityRole="button" onPress={watch} style={({ pressed }) => [styles.video, pressed && { opacity: 0.7 }]}>
+          <Pressable accessibilityRole="button" onPress={watch} style={({ pressed }) => [styles.video, pressed && { opacity: PRESS_DIM }]}>
             <Ionicons name="play-circle" size={22} color={colors.brand} />
             <Text style={styles.videoText}>Watch the video</Text>
           </Pressable>

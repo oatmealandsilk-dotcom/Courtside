@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import React, { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -39,7 +40,7 @@ export default function ChallengeScreen() {
             accessibilityState={{ disabled: posting }}
             disabled={posting}
             onPress={() => enterChallenge(challenge)}
-            style={({ pressed }) => [styles.primary, posting && styles.primaryBusy, pressed && { opacity: 0.85 }]}
+            style={({ pressed }) => [styles.primary, posting && styles.primaryBusy, pressed && { opacity: PRESS_DIM }]}
           >
             <Ionicons name={posting ? 'cloud-upload-outline' : 'add'} size={18} color={colors.brandInk} />
             <Text style={styles.primaryText}>{posting ? 'Your entry is posting…' : 'Enter with a clip'}</Text>

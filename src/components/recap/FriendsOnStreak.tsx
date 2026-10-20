@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -106,7 +107,7 @@ const styleDefinitions = StyleSheet.create({
   headNote: { ...typography.small, color: colors.textMuted, flexShrink: 1 },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   mine: { backgroundColor: colors.brandDim },
-  pressed: { opacity: 0.7 },
+  pressed: { opacity: PRESS_DIM },
   words: { flex: 1, minWidth: 0, gap: 1 },
   name: { ...font('600'), fontSize: 15, color: colors.text },
   sub: { ...typography.small, color: colors.textMuted },

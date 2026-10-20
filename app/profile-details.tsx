@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View, type ScrollView } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -675,7 +676,7 @@ function Achievements({ user, mine = false }: { user: User; mine?: boolean }) {
 
 const styleDefinitions = StyleSheet.create({
   wait: { paddingVertical: 60, alignItems: 'center' },
-  pressed: { opacity: 0.6 },
+  pressed: { opacity: PRESS_DIM },
   shrink: { flexShrink: 1 },
   cardSpot: { marginTop: 6 },
   buttons: { flexDirection: 'row', gap: 10, marginTop: spacing.lg },

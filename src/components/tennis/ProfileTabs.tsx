@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import React, { useCallback, useContext, useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 import Reanimated, { type SharedValue, runOnJS, useAnimatedReaction, useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
@@ -119,7 +120,7 @@ const styleDefinitions = StyleSheet.create({
   tabOn: { ...lift, backgroundColor: colors.surface },
   // Raised on a dark page by being lighter, with a faint lit edge (set where it is drawn); a shadow cannot show there.
   tabOnDark: { backgroundColor: colors.surfaceAlt },
-  pressed: { opacity: 0.6 },
+  pressed: { opacity: PRESS_DIM },
   label: { ...typography.body, ...font('500'), color: colors.textMuted },
   labelOn: { ...font('600'), color: colors.text },
 });

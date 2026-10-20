@@ -1,3 +1,4 @@
+import { PRESS_SHRINK } from '@/theme/press';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React from 'react';
 import {
@@ -54,7 +55,7 @@ export function Button({
       disabled={inactive}
       onPress={onPress}
       // A wide button travelling as far as a small icon looks wobbly.
-      scaleTo={0.97}
+      scaleTo={PRESS_SHRINK}
       hoverTo={1.04}
       accessibilityLabel={label}
       hitSlop={size === 'sm' ? 4 : undefined}

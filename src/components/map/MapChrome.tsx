@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
@@ -939,7 +940,7 @@ export function PlayerSheet({ placed, following, onClose, onProfile, onMessage, 
           )}
         </View>
         <FollowShrink following={following} userId={user.id} onPress={onFollow} name={first} followsYou={followsYou} size={CARD_ROUND} room={followRoom} />
-        <Tappable accessibilityLabel={`More for ${user.name}`} onPress={() => setMenuOpen(true)} scaleTo={0.94} style={styles.cardRound}>
+        <Tappable accessibilityLabel={`More for ${user.name}`} onPress={() => setMenuOpen(true)} style={styles.cardRound}>
           <Ionicons name="ellipsis-horizontal" size={19} color={colors.text} />
         </Tappable>
         {/* The pills' words at their natural width, never seen or read out (see followRoom). */}
@@ -1461,7 +1462,7 @@ const styleDefinitions = StyleSheet.create({
   barRound: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: `${colors.borderStrong}55` },
   barRoundOn: { borderRadius: 22, backgroundColor: colors.brand, borderColor: colors.brand },
   // Pressed, a button dims rather than shrinks (a shrunk icon goes soft on an iPhone, Oct 11).
-  barPressed: { opacity: 0.7 },
+  barPressed: { opacity: PRESS_DIM },
   searchLift: { flex: 1, minWidth: 0, borderRadius: 22, shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } },
   search: { height: 44, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: 14, borderWidth: StyleSheet.hairlineWidth, borderColor: `${colors.borderStrong}55` },
   // The words' room: the field fills it, the bar's own words ("Search Los Angeles") under it while nothing is typed.
@@ -1528,7 +1529,7 @@ const styleDefinitions = StyleSheet.create({
   // The hairline between rows, from the names across (the face's 47 and the gap before the words).
   listRowRule: { position: 'absolute', top: 0, left: 47 + spacing.md, right: 0, height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
   listRule: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
-  listPressed: { opacity: 0.7 },
+  listPressed: { opacity: PRESS_DIM },
   listWords: { flex: 1, gap: 2 },
   listName: { ...typography.bodyStrong, color: colors.text, flexShrink: 1 },
   sheetTitle: { ...typography.heading, color: colors.text, flexShrink: 1 },
@@ -1557,7 +1558,7 @@ const styleDefinitions = StyleSheet.create({
   close: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
   // The player card's close: level with the name (half its height above the name's middle).
   closeTop: { alignSelf: 'flex-start', marginTop: -5 },
-  closePressed: { opacity: 0.6 },
+  closePressed: { opacity: PRESS_DIM },
   // The player card's one row of actions: two pills, Follow, then ⋯.
   // Capped, so on a computer (where the card spans the whole map) the pills stay pill-sized
   // rather than stretching into bars; a phone never reaches the cap.
@@ -1620,7 +1621,7 @@ const styleDefinitions = StyleSheet.create({
   postedRow: { gap: spacing.sm, paddingHorizontal: spacing.lg },
   // Upright, like the clips themselves, and a touch taller than the players' court photos above.
   postedThumb: { width: 66, height: 88, borderRadius: 12, overflow: 'hidden', backgroundColor: colors.surfaceAlt },
-  postedPressed: { opacity: 0.85 },
+  postedPressed: { opacity: PRESS_DIM },
   postedPlay: { position: 'absolute', right: 5, bottom: 5, width: 20, height: 20, borderRadius: 10, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center' },
   // The still card's overlay: the city named the way a map names it, with a soft halo of the page colour so it reads over roads.
   // In the middle of the card, where it always sat (Oct 6, owner: the Oct 5 move to the top was unasked).

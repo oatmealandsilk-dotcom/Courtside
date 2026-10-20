@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -129,7 +130,7 @@ export function SessionStrip({ session, hidden = [], play = false, scale = 1, on
 }
 
 const styleDefinitions = StyleSheet.create({
-  pressed: { opacity: 0.7 },
+  pressed: { opacity: PRESS_DIM },
   panel: { overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, boxShadow: '0px 6px 18px rgba(20, 30, 24, 0.14)' },
   flat: { boxShadow: 'none' },
   badge: { alignItems: 'center', justifyContent: 'center', backgroundColor: withAlpha(colors.brand, 0.12) },

@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -288,7 +289,7 @@ const styleDefinitions = StyleSheet.create({
   pillOnText: { color: colors.brand },
   locate: { backgroundColor: colors.brand, borderColor: colors.brand, paddingHorizontal: 16 },
   locateText: { color: colors.brandInk },
-  pressed: { opacity: 0.85 },
+  pressed: { opacity: PRESS_DIM },
   note: { ...typography.small, color: colors.textMuted, marginTop: -spacing.sm },
   loading: { paddingVertical: spacing.xxxl, alignItems: 'center' },
   list: { gap: spacing.md },

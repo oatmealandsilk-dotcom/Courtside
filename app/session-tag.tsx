@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -280,5 +281,5 @@ const styleDefinitions = StyleSheet.create({
   secondText: { ...typography.bodyStrong, fontSize: 16, color: colors.text },
   danger: { color: colors.danger },
   off: { opacity: 0.5 },
-  pressed: { opacity: 0.7 },
+  pressed: { opacity: PRESS_DIM },
 });

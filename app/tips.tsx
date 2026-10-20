@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { PlayerName } from '@/components/PlayerName';
 import React, { useMemo, useRef } from 'react';
@@ -115,7 +116,7 @@ function VoteArrow({ direction, on, onPress }: { direction: 1 | -1; on: boolean;
       accessibilityState={{ selected: on }}
       onPress={onPress}
       hitSlop={{ left: 10, right: 10, top: 2, bottom: 2 }}
-      style={({ pressed }) => [styles.arrow, on && (up ? styles.arrowUp : styles.arrowDown), pressed && { opacity: 0.6 }]}
+      style={({ pressed }) => [styles.arrow, on && (up ? styles.arrowUp : styles.arrowDown), pressed && { opacity: PRESS_DIM }]}
     >
       <Ionicons name={up ? 'chevron-up' : 'chevron-down'} size={18} color={on ? (up ? colors.brand : colors.text) : colors.textFaint} />
     </Pressable>

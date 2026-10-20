@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import React, { useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -121,7 +122,7 @@ export default function MapVisibilitySheet() {
         {first ? (
           <Submit label="Continue" busy={busy} busyLabel="Saving…" onPress={() => { void proceed(); }} />
         ) : locationEnabled ? (
-          <Pressable accessibilityRole="button" onPress={locationOff} style={({ pressed }) => [styles.off, pressed && { opacity: 0.7 }]}>
+          <Pressable accessibilityRole="button" onPress={locationOff} style={({ pressed }) => [styles.off, pressed && { opacity: PRESS_DIM }]}>
             <Ionicons name="navigate-outline" size={16} color={colors.textMuted} />
             <Text style={styles.offText}>Turn off location</Text>
           </Pressable>

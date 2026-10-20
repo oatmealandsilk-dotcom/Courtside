@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { PlaceLine } from '@/components/PlaceLine';
 import { TaggedLine } from '@/components/TaggedLine';
@@ -418,23 +419,23 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
                 </Pressable>
               ) : null}
             </View>
-            <Tappable onPress={onComment} scaleTo={0.78} style={styles.action} accessibilityLabel={post.commentIds.length ? `Comments, ${post.commentIds.length}` : 'Comments'}>
+            <Tappable onPress={onComment} dim style={styles.action} accessibilityLabel={post.commentIds.length ? `Comments, ${post.commentIds.length}` : 'Comments'}>
               <Ionicons name="chatbubble-outline" size={ICON - 1} color={colors.text} />
               {post.commentIds.length ? <Text style={styles.actionText}>{compactNumber(post.commentIds.length)}</Text> : null}
             </Tappable>
             {/* Nobody else can open something taken down, so there is nothing to send. */}
             {closed ? null : (
-              <Tappable onPress={onShare} scaleTo={0.78} style={styles.action} accessibilityLabel={shareLabel(post, currentUserId)}>
+              <Tappable onPress={onShare} dim style={styles.action} accessibilityLabel={shareLabel(post, currentUserId)}>
                 <Ionicons name="arrow-redo-outline" size={ICON} color={colors.text} />
                 {post.shares ? <Text style={styles.actionText}>{compactNumber(post.shares)}</Text> : null}
               </Tappable>
             )}
             <View style={styles.flex} />
-            <Tappable onPress={onToggleSave} scaleTo={0.78} style={styles.action} accessibilityLabel={saved ? 'Remove from saved' : 'Save this post'}>
+            <Tappable onPress={onToggleSave} dim style={styles.action} accessibilityLabel={saved ? 'Remove from saved' : 'Save this post'}>
               <Ionicons name={saved ? 'bookmark' : 'bookmark-outline'} size={ICON - 1} color={colors.text} />
               {post.savedBy?.length ? <Text style={styles.actionText}>{compactNumber(post.savedBy.length)}</Text> : null}
             </Tappable>
-            <Tappable onPress={onMore} scaleTo={0.78} style={styles.action} accessibilityLabel="More options">
+            <Tappable onPress={onMore} dim style={styles.action} accessibilityLabel="More options">
               <Ionicons name="ellipsis-horizontal" size={ICON - 2} color={colors.text} />
             </Tappable>
           </View>
@@ -508,7 +509,7 @@ const styleDefinitions = StyleSheet.create({
   foot: { position: 'absolute', left: 0, right: 0, bottom: 0 },
   // Pinned to the page's bottom edge, as under a written post (PostCard): marginTop auto takes the room left above it.
   addComment: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 44, marginTop: 'auto', paddingTop: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
-  addCommentPressed: { opacity: 0.7 },
+  addCommentPressed: { opacity: PRESS_DIM },
   addCommentText: { ...typography.body, color: colors.textFaint, flex: 1 },
   caption: { ...typography.body, color: colors.text, lineHeight: 21 },
   captionName: { ...typography.bodyStrong, color: colors.text },

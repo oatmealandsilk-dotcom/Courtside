@@ -1,3 +1,4 @@
+import { PRESS_DIM, PRESS_SHRINK } from '@/theme/press';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Constants from 'expo-constants';
 import { Modal, Platform, Pressable, ScrollView, Share, StyleSheet, Text, View, useWindowDimensions, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
@@ -390,13 +391,13 @@ export function PhotoTray({ photos, max, onRemove, onAdd }: { photos: TrayPhoto[
       {photos.map((p, i) => (
         <Reanimated.View key={p.uri} entering={FadeIn.duration(160)} style={styles.trayTile}>
           <ExpoImage accessibilityIgnoresInvertColors source={{ uri: p.uri }} style={styles.trayImage} contentFit="cover" />
-          <Pressable accessibilityRole="button" accessibilityLabel={`Remove photo ${i + 1}`} hitSlop={8} onPress={() => onRemove(i)} style={({ pressed }) => [styles.trayRemove, pressed && { opacity: 0.7 }]}>
+          <Pressable accessibilityRole="button" accessibilityLabel={`Remove photo ${i + 1}`} hitSlop={8} onPress={() => onRemove(i)} style={({ pressed }) => [styles.trayRemove, pressed && { opacity: PRESS_DIM }]}>
             <Ionicons name="close" size={13} color={colors.text} />
           </Pressable>
         </Reanimated.View>
       ))}
       {photos.length < max ? (
-        <Pressable accessibilityRole="button" accessibilityLabel="Add more photos" onPress={onAdd} style={({ pressed }) => [styles.trayAdd, pressed && { opacity: 0.6 }]}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Add more photos" onPress={onAdd} style={({ pressed }) => [styles.trayAdd, pressed && { opacity: PRESS_DIM }]}>
           <Ionicons name="add" size={24} color={colors.textMuted} />
         </Pressable>
       ) : null}
@@ -413,7 +414,7 @@ const styleDefinitions = StyleSheet.create({
   joinMine: { borderTopRightRadius: 6 },
   joinTheirs: { borderTopLeftRadius: 6 },
   tile: { position: 'absolute', overflow: 'hidden', backgroundColor: colors.surfaceAlt },
-  tilePressed: { opacity: 0.88 },
+  tilePressed: { transform: [{ scale: PRESS_SHRINK }] },
   more: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.42)', alignItems: 'center', justifyContent: 'center' },
   moreText: { ...font('600'), fontSize: 22, color: 'white', letterSpacing: -0.4 },
   veil: { backgroundColor: 'rgba(0,0,0,0.32)', alignItems: 'center', justifyContent: 'center' },

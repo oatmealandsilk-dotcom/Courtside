@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -293,7 +294,7 @@ const styleDefinitions = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingBottom: 4 },
   eyebrow: { ...font('600'), fontSize: 11, letterSpacing: 0.88, color: colors.textMuted, flex: 1 },
   close: { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
-  pressed: { opacity: 0.6 },
+  pressed: { opacity: PRESS_DIM },
   body: { paddingHorizontal: 20, paddingBottom: 28, gap: 14 },
   hero: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   result: { flexDirection: 'row', alignItems: 'center', gap: 4, height: 30, paddingHorizontal: 12, borderRadius: 15 },

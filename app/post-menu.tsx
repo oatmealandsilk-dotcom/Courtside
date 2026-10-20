@@ -1,3 +1,4 @@
+import { PRESS_SHRINK } from '@/theme/press';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Dimensions, Easing, PanResponder, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
@@ -591,7 +592,7 @@ const styleDefinitions = StyleSheet.create({
   primaryText: { ...typography.bodyStrong, color: colors.brandInk },
   secondary: { minHeight: 44, minWidth: 112, paddingHorizontal: spacing.xl, borderRadius: radius.pill, backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center' },
   secondaryText: { ...typography.bodyStrong, color: colors.text },
-  pressedButton: { opacity: 0.8 },
+  pressedButton: { transform: [{ scale: PRESS_SHRINK }] },
   blockButton: { maxWidth: 220, borderColor: colors.danger },
   blockText: { color: colors.danger },
 });

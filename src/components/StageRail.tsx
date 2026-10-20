@@ -40,11 +40,11 @@ export function StageRail({ kind, id }: { kind: 'post' | 'hit'; id: string }) {
         <>
           <LikeButton ledgerKey={`p:${post.id}`} liked={liked} count={post.likedBy.length} onToggle={() => actions.toggleLike(post.id)} likesRoute={{ pathname: '/likes', params: { id: post.id } }} what="clip" size={26} style={styles.action} glyphStyle={GLYPH_EDGE} labelStyle={styles.count} />
           {/* Your own session opens Share session (sharePost.ts); anything else sends, as before. */}
-          <Tappable accessibilityLabel={shareLabel(post, currentUserId, 'clip')} onPress={() => sharePost(post, currentUserId)} scaleTo={0.78} style={styles.action}>
+          <Tappable accessibilityLabel={shareLabel(post, currentUserId, 'clip')} onPress={() => sharePost(post, currentUserId)} dim style={styles.action}>
             <Ionicons name="arrow-redo-outline" size={26} color="white" style={GLYPH_EDGE} />
             <Text style={styles.count} maxFontSizeMultiplier={MAX_GROW}>{railCount(post.shares ?? 0)}</Text>
           </Tappable>
-          <Tappable accessibilityLabel={isSaved ? 'Remove from saved' : 'Save this clip'} onPress={() => actions.toggleSavePost(post.id)} scaleTo={0.78} style={styles.action}>
+          <Tappable accessibilityLabel={isSaved ? 'Remove from saved' : 'Save this clip'} onPress={() => actions.toggleSavePost(post.id)} dim style={styles.action}>
             <Ionicons name={isSaved ? 'bookmark' : 'bookmark-outline'} size={25} color="white" style={GLYPH_EDGE} />
             <Text style={styles.count} maxFontSizeMultiplier={MAX_GROW}>{railCount(post.savedBy?.length ?? 0)}</Text>
           </Tappable>

@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -147,7 +148,7 @@ const styleDefinitions = StyleSheet.create({
     alignItems: 'center',
   },
   segmentLarge: { paddingVertical: 12 },
-  segmentPressed: { opacity: 0.7 },
+  segmentPressed: { opacity: PRESS_DIM },
   // Half the row each, so two fit per line and none of the words get clipped.
   segmentWrapped: { flexBasis: '48%', flexGrow: 1 },
   // Loose in a scrolling row, each chip carries its own edge so it never looks like bare words.

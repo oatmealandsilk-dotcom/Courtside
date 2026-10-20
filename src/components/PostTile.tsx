@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -72,7 +73,7 @@ export function PostTile({ post, width, height, onPress, label, words }: {
 
 const styleDefinitions = StyleSheet.create({
   tile: { borderWidth: 1, borderColor: colors.bg, backgroundColor: colors.surfaceAlt, overflow: 'hidden' },
-  pressed: { opacity: 0.85 },
+  pressed: { opacity: PRESS_DIM },
   blank: { padding: 10, justifyContent: 'center' },
   text: { fontSize: 11, lineHeight: 15, color: colors.textMuted },
   found: { padding: 10, justifyContent: 'flex-start' },

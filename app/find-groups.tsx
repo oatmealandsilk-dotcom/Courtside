@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
@@ -280,7 +281,7 @@ const styleDefinitions = StyleSheet.create({
   loading: { paddingVertical: spacing.xl },
   // The grouped list of Settings and the Groups page: a shade off the sheet, rows on hairlines.
   card: { ...lift, borderRadius: 20, backgroundColor: colors.surface, overflow: 'hidden' },
-  pressed: { opacity: 0.7 },
+  pressed: { opacity: PRESS_DIM },
   dim: { opacity: 0.55 },
   create: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md, paddingHorizontal: spacing.lg, minHeight: 72 },
   createIcon: { width: 44, height: 44, borderRadius: 13, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
@@ -310,7 +311,7 @@ const styleDefinitions = StyleSheet.create({
   btnRequest: { backgroundColor: colors.brandDim },
   btnQuiet: { backgroundColor: colors.surfaceAlt },
   btnFaded: { opacity: 0.45 },
-  btnPressed: { opacity: 0.7 },
+  btnPressed: { opacity: PRESS_DIM },
   btnText: { ...typography.smallStrong },
   btnTextJoin: { color: colors.brandInk },
   btnTextRequest: { color: colors.brand },

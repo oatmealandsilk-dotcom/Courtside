@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
@@ -106,7 +107,7 @@ export function ActivitiesStart({ topInset, bottomInset, nearCount, sessions = 0
               <Text style={styles.rowText} numberOfLines={2}>{busy ? 'Connecting…' : `Connect ${source === 'whoop' ? 'WHOOP' : 'Apple Health'} to log automatically`}</Text>
             </Pressable>
             {/* Closed here, it stays closed on this phone; Settings → Health and nutrition still connects. */}
-            <Pressable accessibilityRole="button" accessibilityLabel="Hide connect row" disabled={busy} hitSlop={6} onPress={() => { haptics.tap(); close(); }} style={({ pressed }) => [styles.close, pressed && { opacity: 0.5 }]}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Hide connect row" disabled={busy} hitSlop={6} onPress={() => { haptics.tap(); close(); }} style={({ pressed }) => [styles.close, pressed && { opacity: PRESS_DIM }]}>
               <Ionicons name="close" size={18} color={colors.textFaint} />
             </Pressable>
           </View>

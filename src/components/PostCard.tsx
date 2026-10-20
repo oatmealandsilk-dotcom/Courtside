@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { PlaceLine } from '@/components/PlaceLine';
 import { TaggedLine } from '@/components/TaggedLine';
@@ -313,12 +314,12 @@ function PostCardInner({
             </Pressable>
           ) : null}
         </View>
-        <Tappable onPress={onComment ?? onPress} scaleTo={0.8} style={styles.action} accessibilityLabel={post.commentIds.length ? `Comments, ${post.commentIds.length}` : 'Comments'}>
+        <Tappable onPress={onComment ?? onPress} dim style={styles.action} accessibilityLabel={post.commentIds.length ? `Comments, ${post.commentIds.length}` : 'Comments'}>
           <Ionicons name="chatbubble-outline" size={ICON - 1} color={colors.text} />
           {post.commentIds.length ? <Text style={styles.actionText}>{compactNumber(post.commentIds.length)}</Text> : null}
         </Tappable>
         {onShare ? (
-          <Tappable onPress={onShare} scaleTo={0.8} style={styles.action} accessibilityLabel={shareLabel(post, currentUserId)}>
+          <Tappable onPress={onShare} dim style={styles.action} accessibilityLabel={shareLabel(post, currentUserId)}>
             <Ionicons name="arrow-redo-outline" size={ICON} color={colors.text} />
             {post.shares ? <Text style={styles.actionText}>{compactNumber(post.shares)}</Text> : null}
           </Tappable>
@@ -328,7 +329,7 @@ function PostCardInner({
             {onToggleSave ? (
               <Tappable
                 onPress={onToggleSave}
-                scaleTo={0.8}
+                dim
                 style={styles.action}
                 accessibilityLabel={saved ? 'Remove from saved' : 'Save this post'}
               >
@@ -336,7 +337,7 @@ function PostCardInner({
               </Tappable>
             ) : null}
             {onMore ? (
-              <Tappable onPress={onMore} scaleTo={0.8} style={styles.action} accessibilityLabel="More options">
+              <Tappable onPress={onMore} dim style={styles.action} accessibilityLabel="More options">
                 <Ionicons name="ellipsis-horizontal" size={ICON - 2} color={colors.text} />
               </Tappable>
             ) : null}
@@ -444,7 +445,7 @@ const styleDefinitions = StyleSheet.create({
   addComment: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 44, paddingTop: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   // Until the room is measured, so it never shows at the bottom and then jumps up under a short post.
   addCommentWait: { opacity: 0 },
-  addCommentPressed: { opacity: 0.7 },
+  addCommentPressed: { opacity: PRESS_DIM },
   // Whatever the page leaves empty, and no more: its size never comes from what it holds (a find-players
   // card that no longer fits is cut off, never pushing the post up). Its negative margin takes back the card's gap.
   room: { flexGrow: 1, flexShrink: 1, flexBasis: 0, minHeight: 0, marginTop: -spacing.md, overflow: 'hidden' },

@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import React from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -34,7 +35,7 @@ export function CarouselStrip({ photos, max, onRemove, onAdd }: {
           </View>
         ))}
         {full ? null : (
-          <Pressable accessibilityRole="button" accessibilityLabel="Add more photos" onPress={onAdd} style={({ pressed }) => [styles.tile, styles.add, pressed && { opacity: 0.6 }]}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Add more photos" onPress={onAdd} style={({ pressed }) => [styles.tile, styles.add, pressed && { opacity: PRESS_DIM }]}>
             <Ionicons name="add" size={22} color={colors.textMuted} />
           </Pressable>
         )}

@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import { asTabRoute } from '@/features/navigation/tabFocus';
 import { SectionPager } from '@/components/SectionPager';
 import { PULL_GAP } from '@/lib/pullRefresh';
@@ -608,14 +609,14 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
             })()}
             {shownHits.map(({ hit, miles }) => <HitCard key={hit.id} hit={hit} miles={miles} {...(hitTip?.hitId === hit.id ? { tip: hitTip.tip, tipReady: hitTipReady, tipAt: '/discuss' } : {})} />)}
             {moreHits ? (
-              <Pressable accessibilityRole="button" accessibilityState={{ expanded: moreHitsOpen }} onPress={() => setMoreHitsOpen((o) => !o)} hitSlop={6} style={({ pressed }) => [styles.further, pressed && { opacity: 0.6 }]}>
+              <Pressable accessibilityRole="button" accessibilityState={{ expanded: moreHitsOpen }} onPress={() => setMoreHitsOpen((o) => !o)} hitSlop={6} style={({ pressed }) => [styles.further, pressed && { opacity: PRESS_DIM }]}>
                 <Text style={styles.furtherText}>{moreHitsOpen ? 'Fewer open hits' : `More open hits (${moreHits})`}</Text>
                 <Ionicons name={moreHitsOpen ? 'chevron-up' : 'chevron-down'} size={14} color={colors.textMuted} />
               </Pressable>
             ) : null}
             {listedFurther.length ? (
               <>
-                <Pressable accessibilityRole="button" accessibilityState={{ expanded: furtherOpen }} onPress={() => setFurtherOpen((o) => !o)} hitSlop={6} style={({ pressed }) => [styles.further, pressed && { opacity: 0.6 }]}>
+                <Pressable accessibilityRole="button" accessibilityState={{ expanded: furtherOpen }} onPress={() => setFurtherOpen((o) => !o)} hitSlop={6} style={({ pressed }) => [styles.further, pressed && { opacity: PRESS_DIM }]}>
                   <Text style={styles.furtherText}>Further away ({listedFurther.length})</Text>
                   <Ionicons name={furtherOpen ? 'chevron-up' : 'chevron-down'} size={14} color={colors.textMuted} />
                 </Pressable>
@@ -704,7 +705,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
         ) : null}
         {/* New on CourtSide: who joined in the last two weeks (adults, and people you already follow), with Follow in one tap. */}
         {!search && newPlayers.length && newTucked ? (
-          <Pressable accessibilityRole="button" accessibilityState={{ expanded: false }} onPress={() => setElsewhereOpen(true)} hitSlop={6} style={({ pressed }) => [styles.further, pressed && { opacity: 0.6 }]}>
+          <Pressable accessibilityRole="button" accessibilityState={{ expanded: false }} onPress={() => setElsewhereOpen(true)} hitSlop={6} style={({ pressed }) => [styles.further, pressed && { opacity: PRESS_DIM }]}>
             <Text style={styles.furtherText}>New players in other cities</Text>
             <Ionicons name="chevron-down" size={14} color={colors.textMuted} />
           </Pressable>
@@ -727,7 +728,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
               </Pressable>
             ))}
             {newPlayers.length > NEW_SHOWN ? (
-              <Pressable accessibilityRole="button" accessibilityState={{ expanded: newOpen }} onPress={() => setNewOpen((o) => !o)} hitSlop={6} style={({ pressed }) => [styles.further, pressed && { opacity: 0.6 }]}>
+              <Pressable accessibilityRole="button" accessibilityState={{ expanded: newOpen }} onPress={() => setNewOpen((o) => !o)} hitSlop={6} style={({ pressed }) => [styles.further, pressed && { opacity: PRESS_DIM }]}>
                 <Text style={styles.furtherText}>{newOpen ? 'Fewer' : `Show all (${newPlayers.length})`}</Text>
                 <Ionicons name={newOpen ? 'chevron-up' : 'chevron-down'} size={14} color={colors.textMuted} />
               </Pressable>
@@ -759,7 +760,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
           {/* Nothing here: the empty state below says so, not "0 threads" over it. */}
           <Text style={styles.sortCount}>{visible.length === 0 ? '' : visible.length === 1 ? '1 thread' : `${visible.length} threads`}</Text>
           <View>
-            <Pressable accessibilityRole="button" accessibilityLabel={`Sort: ${SORT_LABEL[sort]}`} accessibilityState={{ expanded: sortOpen }} onPress={() => setSortOpen((o) => !o)} hitSlop={8} style={({ pressed }) => [styles.sortButton, pressed && { opacity: 0.7 }]}>
+            <Pressable accessibilityRole="button" accessibilityLabel={`Sort: ${SORT_LABEL[sort]}`} accessibilityState={{ expanded: sortOpen }} onPress={() => setSortOpen((o) => !o)} hitSlop={8} style={({ pressed }) => [styles.sortButton, pressed && { opacity: PRESS_DIM }]}>
               <Ionicons name="swap-vertical" size={14} color={colors.textMuted} />
               <Text style={styles.sortButtonText}>{SORT_LABEL[sort]}</Text>
               <Ionicons name={sortOpen ? 'chevron-up' : 'chevron-down'} size={13} color={colors.textMuted} />
@@ -926,7 +927,7 @@ const styleDefinitions = StyleSheet.create({
   playersTitle: { ...typography.title, color: colors.text },
   playersBody: { ...typography.small, color: colors.textMuted },
   player: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginHorizontal: -spacing.lg, paddingLeft: spacing.lg },
-  playerPressed: { backgroundColor: colors.bgElevated },
+  playerPressed: { backgroundColor: colors.surfaceAlt },
   playerBody: { flex: 1, gap: 4, minWidth: 0, paddingVertical: 14 },
   playerLine: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   playerTop: { flexDirection: 'row', alignItems: 'center', gap: 8 },

@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -87,7 +88,7 @@ const styleDefinitions = StyleSheet.create({
   // A quiet line at the end of the list, the way "View 2 replies" sits under a comment.
   // 44pt tall, the line itself still quiet.
   toggle: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, alignSelf: 'flex-start', minHeight: 44 },
-  pressed: { opacity: 0.6 },
+  pressed: { opacity: PRESS_DIM },
   toggleText: { ...typography.smallStrong, color: colors.textMuted },
   list: { gap: spacing.lg },
   note: { ...typography.small, color: colors.textFaint, lineHeight: 19 },

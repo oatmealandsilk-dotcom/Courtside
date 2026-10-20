@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AccessibilityInfo, FlatList, Platform, Pressable, ScrollView, StyleSheet, Text, View,
@@ -494,7 +495,7 @@ export default function Search() {
                 keyboard. A computer has the room (and no keyboard), and wraps them where a mouse reaches. */}
             {(() => {
               const chips = tags.map((t) => (
-                <Pressable key={t} accessibilityRole="button" accessibilityLabel={`Search #${t}`} onPress={() => pickTag(t)} style={({ pressed }) => [styles.chip, pressed && { opacity: 0.7 }]}>
+                <Pressable key={t} accessibilityRole="button" accessibilityLabel={`Search #${t}`} onPress={() => pickTag(t)} style={({ pressed }) => [styles.chip, pressed && { opacity: PRESS_DIM }]}>
                   <Text style={styles.chipHash}>#</Text>
                   <Text style={styles.chipText}>{t}</Text>
                 </Pressable>
@@ -685,7 +686,7 @@ const styleDefinitions = StyleSheet.create({
   spinner: { paddingTop: spacing.xxl, alignItems: 'center' },
   // One row frame for threads and courts, the same as a person's.
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingLeft: spacing.lg },
-  pressed: { backgroundColor: colors.bgElevated },
+  pressed: { backgroundColor: colors.surfaceAlt },
   rowBody: { flex: 1, minWidth: 0, minHeight: 60, paddingVertical: spacing.sm, paddingRight: spacing.lg, justifyContent: 'center', gap: 2 },
   threadBody: { minHeight: 64 },
   rowRule: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },

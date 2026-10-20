@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import React, { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -74,7 +75,7 @@ const styleDefinitions = StyleSheet.create({
   list: { marginTop: -spacing.xs },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: 52 },
   line: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
-  pressed: { opacity: 0.6 },
+  pressed: { opacity: PRESS_DIM },
   label: { ...typography.body, color: colors.text, flex: 1 },
   value: { ...font('500'), fontSize: 14, color: colors.textMuted, fontVariant: ['tabular-nums'], flexShrink: 0 },
 });

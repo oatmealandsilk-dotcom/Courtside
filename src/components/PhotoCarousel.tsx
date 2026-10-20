@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import React, { useEffect, useRef, useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View, type NativeScrollEvent, type NativeSyntheticEvent, type StyleProp, type ViewStyle } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -176,5 +177,5 @@ const styleDefinitions = StyleSheet.create({
   arrow: { position: 'absolute', top: '50%', marginTop: -16, width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: `${colors.surface}E6` },
   arrowLeft: { left: spacing.sm },
   arrowRight: { right: spacing.sm },
-  arrowPressed: { opacity: 0.7 },
+  arrowPressed: { opacity: PRESS_DIM },
 });

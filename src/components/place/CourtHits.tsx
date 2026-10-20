@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import React, { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -56,7 +57,7 @@ const HITS_SHOWN = 3;
 
 const styleDefinitions = StyleSheet.create({
   wrap: { gap: spacing.md },
-  pressed: { opacity: 0.6 },
+  pressed: { opacity: PRESS_DIM },
   // The same "More open hits" row as Find Players.
   more: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start', paddingVertical: 4 },
   moreText: { ...typography.smallStrong, color: colors.textMuted },

@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import React, { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -110,7 +111,7 @@ export default function EditProfile() {
           {/* The handle has its own page: it has rules (once a month) and a live check. */}
           <View style={styles.wrap}>
             <Text style={styles.label}>Handle</Text>
-            <Pressable accessibilityRole="button" accessibilityLabel={`Handle, @${currentUser.handle}. Change it`} onPress={() => router.push('/change-handle')} style={({ pressed }) => [styles.box, pressed && { opacity: 0.7 }]}>
+            <Pressable accessibilityRole="button" accessibilityLabel={`Handle, @${currentUser.handle}. Change it`} onPress={() => router.push('/change-handle')} style={({ pressed }) => [styles.box, pressed && { opacity: PRESS_DIM }]}>
               <Text style={styles.value} numberOfLines={1}>@{currentUser.handle}</Text>
               <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
             </Pressable>

@@ -90,7 +90,7 @@ export function PersonRow({ user, reason, via, words = [], first = false, onPres
 
 const styleDefinitions = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingLeft: spacing.lg },
-  pressed: { backgroundColor: colors.bgElevated },
+  pressed: { backgroundColor: colors.surfaceAlt },
   body: { flex: 1, minWidth: 0, minHeight: 60, paddingVertical: spacing.sm, paddingRight: spacing.lg, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   rule: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   words: { flex: 1, minWidth: 0, gap: 2 },

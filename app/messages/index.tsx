@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -262,7 +263,7 @@ export default function Inbox() {
           <Text style={styles.upTodayTitle}>Up to hit today</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.upTodayRow} style={styles.upTodayScroll}>
             {upToday.map((u) => (
-              <Pressable key={u.id} accessibilityRole="button" accessibilityLabel={`${u.name} is up to hit today. Message them`} onPress={() => openWith(u)} style={({ pressed }) => [styles.face, pressed && { opacity: 0.6 }]}>
+              <Pressable key={u.id} accessibilityRole="button" accessibilityLabel={`${u.name} is up to hit today. Message them`} onPress={() => openWith(u)} style={({ pressed }) => [styles.face, pressed && { opacity: PRESS_DIM }]}>
                 <View style={styles.faceRing}>
                   <Avatar name={u.name} seed={u.avatarSeed} uri={u.avatarUrl} size={54} />
                 </View>
@@ -445,7 +446,7 @@ const styleDefinitions = StyleSheet.create({
   sections: { flexDirection: 'row', gap: spacing.sm, paddingBottom: spacing.sm },
   list: { marginHorizontal: -spacing.lg },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingLeft: spacing.lg, backgroundColor: colors.bg },
-  rowPressed: { backgroundColor: colors.bgElevated },
+  rowPressed: { backgroundColor: colors.surfaceAlt },
   // The hairline runs from the words, not the picture — the way a phone's own inbox draws it.
   rowBody: { flex: 1, gap: 3, minWidth: 0, paddingVertical: 13, paddingRight: spacing.lg },
   rowLine: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },

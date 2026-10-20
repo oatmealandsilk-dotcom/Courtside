@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { requestScrollToTop } from '@/features/navigation/scrollToTop';
@@ -566,7 +567,7 @@ export default function Notifications() {
             <Text style={styles.preview} numberOfLines={2}>{welcomeStep.line}</Text>
           </View>
           {/* 32 drawn, 44 to the finger. */}
-          <Pressable accessibilityRole="button" accessibilityLabel={welcomeStep.label} hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }} onPress={welcomeStep.go} style={({ pressed }) => [styles.accept, pressed && { opacity: 0.8 }]}>
+          <Pressable accessibilityRole="button" accessibilityLabel={welcomeStep.label} hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }} onPress={welcomeStep.go} style={({ pressed }) => [styles.accept, pressed && { opacity: PRESS_DIM }]}>
             <Text style={styles.acceptText}>{welcomeStep.label}</Text>
           </Pressable>
         </View>
@@ -678,7 +679,7 @@ export default function Notifications() {
                       {reasonOf(group) ? <Text style={styles.preview} numberOfLines={2}>Reason: {reasonOf(group)}</Text> : null}
                       <View style={styles.whyRow}>
                         <Text style={styles.preview}>Why? </Text>
-                        <Pressable accessibilityRole="link" accessibilityLabel="Why? See the rules" hitSlop={{ top: 8, bottom: 8, left: 4, right: 8 }} onPress={() => openRules(reasonFromLabel(reasonOf(group)), thingOf(group))} style={({ pressed }) => pressed && { opacity: 0.6 }}>
+                        <Pressable accessibilityRole="link" accessibilityLabel="Why? See the rules" hitSlop={{ top: 8, bottom: 8, left: 4, right: 8 }} onPress={() => openRules(reasonFromLabel(reasonOf(group)), thingOf(group))} style={({ pressed }) => pressed && { opacity: PRESS_DIM }}>
                           <Text style={styles.whyLink}>See the rules</Text>
                         </Pressable>
                       </View>

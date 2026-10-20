@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import React, { useEffect, useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
@@ -127,7 +128,7 @@ const styleDefinitions = StyleSheet.create({
   // The editor and the ×, together in the top corner, clear of the clip's own controls along the bottom.
   tools: { position: 'absolute', top: 8, right: 8, flexDirection: 'row', gap: 8 },
   tool: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0, 0, 0, 0.55)' },
-  pressed: { opacity: 0.7 },
+  pressed: { opacity: PRESS_DIM },
   caption: { ...typography.body, fontSize: 14, lineHeight: 19, color: colors.text },
   captionName: { ...font('600'), color: colors.text },
   captionDefault: { color: colors.textMuted },

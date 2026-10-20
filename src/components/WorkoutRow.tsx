@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import React from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -86,5 +87,5 @@ const styleDefinitions = StyleSheet.create({
   actionText: { ...typography.smallStrong, color: colors.brandInk },
   done: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 4, paddingVertical: 6 },
   doneText: { ...typography.smallStrong, color: colors.textMuted },
-  pressed: { opacity: 0.6 },
+  pressed: { opacity: PRESS_DIM },
 });

@@ -352,7 +352,7 @@ const styleDefinitions = StyleSheet.create({
   input: { flex: 1, ...typography.body, fontSize: 16, color: colors.text, minHeight: 44, paddingVertical: 10 },
   list: { paddingBottom: spacing.xxl },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: 11, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
-  rowPressed: { opacity: 0.6 },
+  rowPressed: { backgroundColor: colors.surfaceAlt },
   disc: { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
   discOn: { backgroundColor: colors.brand },
   discCourt: { backgroundColor: colors.brandDim },

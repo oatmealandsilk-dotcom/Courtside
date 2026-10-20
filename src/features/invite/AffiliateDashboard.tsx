@@ -1,3 +1,4 @@
+import { PRESS_DIM } from '@/theme/press';
 import React, { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -75,7 +76,7 @@ export function AffiliateDashboard({ stats, people, peopleAsked, userId, code, l
       <View style={styles.card}>
         <View style={styles.cardHead}>
           <Text style={styles.cardTitle}>Your link</Text>
-          <Pressable accessibilityRole="button" accessibilityLabel={`Copy your code, ${code}`} hitSlop={6} onPress={onCopyCode} style={({ pressed }) => [styles.code, pressed && { opacity: 0.7 }]}>
+          <Pressable accessibilityRole="button" accessibilityLabel={`Copy your code, ${code}`} hitSlop={6} onPress={onCopyCode} style={({ pressed }) => [styles.code, pressed && { opacity: PRESS_DIM }]}>
             <Text style={styles.codeText} numberOfLines={1}>{copiedCode ? 'Copied' : `code: ${code}`}</Text>
           </Pressable>
         </View>
@@ -87,11 +88,11 @@ export function AffiliateDashboard({ stats, people, peopleAsked, userId, code, l
           <Text style={styles.link} numberOfLines={1}>{link.replace('https://', '')}</Text>
         </View>
         <View style={styles.actions}>
-          <Pressable accessibilityRole="button" accessibilityLabel="Share your invite link" onPress={onShare} style={({ pressed }) => [styles.primary, pressed && { opacity: 0.85 }]}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Share your invite link" onPress={onShare} style={({ pressed }) => [styles.primary, pressed && { opacity: PRESS_DIM }]}>
             <Ionicons name="paper-plane-outline" size={16} color={colors.brandInk} />
             <Text style={styles.primaryText}>Share link</Text>
           </Pressable>
-          <Pressable accessibilityRole="button" accessibilityLabel="Copy your invite link" onPress={onCopy} style={({ pressed }) => [styles.secondary, pressed && { opacity: 0.7 }]}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Copy your invite link" onPress={onCopy} style={({ pressed }) => [styles.secondary, pressed && { opacity: PRESS_DIM }]}>
             <Text style={styles.secondaryText}>{copied ? 'Copied' : 'Copy'}</Text>
           </Pressable>
         </View>
@@ -368,7 +369,7 @@ const styleDefinitions = StyleSheet.create({
   sectionHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, paddingHorizontal: spacing.xs },
   list: { ...lift, borderRadius: 20, backgroundColor: colors.surface, overflow: 'hidden' },
   person: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md, paddingLeft: spacing.lg },
-  personPressed: { backgroundColor: colors.bgElevated },
+  personPressed: { backgroundColor: colors.surfaceAlt },
   // Level with the name's line (the words carry the row's padding, so their hairline runs from the name).
   personAvatar: { marginTop: 12 },
   // The words own the hairline, so it runs from the name's left edge, not the picture's.
