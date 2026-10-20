@@ -33,8 +33,8 @@ const HOLD_MS = 6000;
 const RETRY_MS = 6000;
 /** Put away because a page where you write or post opened: up this long, it was seen (as long as any note with a button stays); less, it comes back after. */
 const SEEN_MS = 5000;
-/** How the question is drawn (Toast's HitNote): 'pill', a card under the page's title row. */
-const LOOK: HitNoteLook = 'pill';
+/** How the question is drawn (Toast's HitNote): 'pill', a card under the page's title row; 'banner', a card just above the tab bar with two answers. */
+const LOOK: HitNoteLook = 'banner';
 
 /**
  * "How was the hit at Alder Park? · Log it": once a hit you posted or joined
@@ -150,6 +150,8 @@ export function HitFollowUp({ enabled }: { enabled: boolean }) {
           : { icon: 'hit' as const, ...(prefill.who ? { body: place } : {}) }),
         href: tracked ? `/compose?activity=${tracked.id}&hit=${first.id}` : `/log-session?hit=${first.id}`,
         action: { label: 'Log it', onPress: open },
+        // The card above the tab bar offers the other answer too: no game to log, so it is not asked again.
+        ...(LOOK === 'banner' ? { secondary: { label: 'Skip', onPress: () => undefined } } : {}),
         holdMs: HOLD_MS,
         // Under the title row, not over it: titles, the bell and the Feed's group tabs stay in sight and tappable.
         belowTop: true,

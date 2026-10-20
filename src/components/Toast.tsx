@@ -17,6 +17,7 @@ import { ZoneGlyph } from '@/components/session/ZoneGlyph';
 import { DrawnTick } from '@/components/session/DrawnTick';
 import { RECORD_ICON } from '@/features/records/records';
 import { useBelowBanner } from '@/features/messages/bannerSpace';
+import { useBarInset } from '@/features/navigation/barInset';
 import { requestScrollToTop } from '@/features/navigation/scrollToTop';
 import { goHome } from '@/lib/goBack';
 import { closed, onWithdraw, useToast, type ToastClosed, type ToastMessage } from '@/lib/toast';
@@ -39,6 +40,8 @@ const LONG_SCREEN_READER_MS = 15000;
 const BELOW_TOP = 72;
 /** On Community, under its Find Players / Discussions switch too, so a tap meant for the switch is never caught. */
 const BELOW_SWITCH = 140;
+/** The four tabs, where the floating tab bar is on show. */
+const TABS = new Set(['/', '/index', '/discuss', '/coaches', '/profile']);
 const IN = Easing.out(Easing.cubic);
 const OUT = Easing.in(Easing.cubic);
 
@@ -55,6 +58,7 @@ export function Toast() {
   const styles = useThemedStyles(styleDefinitions);
   const insets = useSafeAreaInsets();
   const pathname = usePathname();
+  const barInset = useBarInset();
   const incoming = useToast();
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const y = useSharedValue(-24);
@@ -98,6 +102,7 @@ export function Toast() {
     live.current = incoming;
     shownAt.current = Date.now();
     setToast(incoming);
+    fromBottom.value = incoming.look === 'banner' && incoming.person ? 1 : 0;
     if (timer.current) clearTimeout(timer.current);
     y.value = -24;
     shown.value = 0;
@@ -117,25 +122,36 @@ export function Toast() {
   useEffect(() => onWithdraw((id) => { if (live.current?.id === id) hideRef.current('withdrawn'); }), []);
 
   // A flick up sends it away early; a drag down just resists.
+  // A card at the foot of the screen (HitNote's 'banner') comes up from below and is flicked down;
+  // everything else comes down from the top and is flicked up. `y` counts towards its own edge.
+  const fromBottom = useSharedValue(0);
   const flick = Gesture.Pan()
     .activeOffsetY([-6, 6])
-    .onUpdate((e) => { y.value = e.translationY < 0 ? e.translationY : e.translationY * 0.15; })
+    .onUpdate((e) => {
+      const t = fromBottom.value ? -e.translationY : e.translationY;
+      y.value = t < 0 ? t : t * 0.15;
+    })
     .onEnd((e) => {
-      if (e.translationY < -16 || e.velocityY < -400) runOnJS(hide)('flick');
+      const t = fromBottom.value ? -e.translationY : e.translationY;
+      const v = fromBottom.value ? -e.velocityY : e.velocityY;
+      if (t < -16 || v < -400) runOnJS(hide)('flick');
       else y.value = withTiming(0, { duration: 200, easing: IN });
     });
 
   const style = useAnimatedStyle(() => ({
     opacity: shown.value,
-    transform: [{ translateY: y.value + underBanner.value }, { scale: 0.96 + shown.value * 0.04 }],
+    transform: [{ translateY: fromBottom.value ? -y.value : y.value + underBanner.value }, { scale: 0.96 + shown.value * 0.04 }],
   }));
 
   if (!toast) return null;
   if (toast.look && toast.person) {
-    const top = insets.top + (pathname === '/discuss' ? BELOW_SWITCH : BELOW_TOP);
+    // 'banner' stands just above the tab bar on the four tabs (the screen's foot elsewhere); 'pill' just under the title row.
+    const place = toast.look === 'banner'
+      ? { bottom: (TABS.has(pathname) ? barInset : insets.bottom) + spacing.sm }
+      : { top: insets.top + (pathname === '/discuss' ? BELOW_SWITCH : BELOW_TOP) };
     const note = (
       <GestureDetector gesture={flick}>
-        <Animated.View pointerEvents="box-none" style={[styles.wrap, { top }, style]}>
+        <Animated.View pointerEvents="box-none" style={[styles.wrap, place, style]}>
           <HitNote toast={toast} hide={hide} />
         </Animated.View>
       </GestureDetector>
@@ -272,11 +288,14 @@ function HoldLine({ ms, token }: { ms: number; token: number }) {
  *
  * 'pill' (option A): a glass card just under the page's title row, as wide
  * as the page allows, so it reads as placed there, not dropped in the middle.
+ * 'banner' (option B): the same card standing just above the tab bar, as the
+ * phone's own banners do, with its two answers side by side under the words.
  */
 function HitNote({ toast, hide }: { toast: ToastMessage; hide: (how?: ToastClosed) => void }) {
   const styles = useThemedStyles(styleDefinitions);
   const person = toast.person!;
   const action = toast.action;
+  const banner = toast.look === 'banner';
   const open = () => {
     hide('tap');
     if (toast.href) router.push(toast.href as never);
@@ -293,7 +312,7 @@ function HitNote({ toast, hide }: { toast: ToastMessage; hide: (how?: ToastClose
             style={styles.noteInfo}
           >
             <View>
-              <Avatar name={person.name} seed={person.seed} uri={person.uri} size={36} />
+              <Avatar name={person.name} seed={person.seed} uri={person.uri} size={banner ? 40 : 36} />
               <HitBadge />
             </View>
             <View style={styles.words}>
@@ -301,7 +320,7 @@ function HitNote({ toast, hide }: { toast: ToastMessage; hide: (how?: ToastClose
               {toast.body ? <Text style={styles.noteBody} numberOfLines={1}>{toast.body}</Text> : null}
             </View>
           </Pressable>
-          {action ? (
+          {action && !banner ? (
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={`${action.label}: ${toast.title}`}
@@ -313,6 +332,28 @@ function HitNote({ toast, hide }: { toast: ToastMessage; hide: (how?: ToastClose
             </Pressable>
           ) : null}
         </View>
+        {banner && action ? (
+          <View style={styles.answers}>
+            {toast.secondary ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`${toast.secondary.label}: ${toast.title}`}
+                onPress={() => { hide('action'); toast.secondary?.onPress(); }}
+                style={({ pressed }) => [styles.answer, styles.quiet, pressed && styles.fillPressed]}
+              >
+                <Text style={styles.quietLabel}>{toast.secondary.label}</Text>
+              </Pressable>
+            ) : null}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`${action.label}: ${toast.title}`}
+              onPress={() => { hide('action'); action.onPress(); }}
+              style={({ pressed }) => [styles.answer, styles.fill, pressed && styles.fillPressed]}
+            >
+              <Text style={styles.fillLabel}>{action.label}</Text>
+            </Pressable>
+          </View>
+        ) : null}
         {toast.holdMs ? <HoldLine ms={toast.holdMs} token={toast.id} /> : null}
       </Glass>
     </View>
@@ -401,6 +442,10 @@ const styleDefinitions = StyleSheet.create({
   fill: { minHeight: 34, paddingHorizontal: 14, borderRadius: 17, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
   fillPressed: { opacity: 0.75 },
   fillLabel: { ...typography.smallStrong, color: colors.brandInk, letterSpacing: -0.1 },
+  answers: { flexDirection: 'row', gap: 8, paddingHorizontal: 10, paddingBottom: 12 },
+  answer: { flex: 1, minHeight: 38, borderRadius: 19 },
+  quiet: { backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
+  quietLabel: { ...typography.smallStrong, color: colors.text, letterSpacing: -0.1 },
   holdTrack: { position: 'absolute', left: 14, right: 14, bottom: 0, height: 2, borderRadius: 1, overflow: 'hidden' },
   holdRun: { flex: 1, backgroundColor: colors.brand, opacity: 0.55 },
   title: { ...typography.smallStrong, color: colors.text, letterSpacing: -0.1 },

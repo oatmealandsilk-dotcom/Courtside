@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 
 /** How a question about someone is drawn (ToastMessage.look). */
-export type HitNoteLook = 'pill';
+export type HitNoteLook = 'pill' | 'banner';
 
 export interface ToastMessage {
   id: number;
