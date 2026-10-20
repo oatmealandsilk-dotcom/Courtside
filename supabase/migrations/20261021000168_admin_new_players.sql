@@ -1,4 +1,4 @@
--- CourtSide · migration 20261021000167: Admin -> Welcome new players lists
+-- CourtSide · migration 20261021000168: Admin -> Welcome new players lists
 -- every new player, not only the ones who posted (Oct 20 sweep, item R4:
 -- "Welcome every new player, not just posters").
 --
@@ -46,16 +46,16 @@ declare
 begin
   if to_regclass('public.profiles') is null or to_regclass('public.posts') is null or to_regclass('public.blocks') is null
      or to_regprocedure('public.is_admin()') is null or to_regprocedure('public.known_adult(uuid)') is null then
-    raise exception 'Migration 167 stopped before changing anything: the profiles, posts and blocks tables and migrations 23 (is_admin) and 109 (known_adult) have to be there first.';
+    raise exception 'Migration 168 stopped before changing anything: the profiles, posts and blocks tables and migrations 23 (is_admin) and 109 (known_adult) have to be there first.';
   end if;
   if (select count(*) from information_schema.columns where table_schema = 'public' and table_name = 'profiles'
        and column_name in ('created_at', 'suspended_at')) <> 2
      or not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'posts' and column_name = 'removed_at') then
-    raise exception 'Migration 167 stopped before changing anything: profiles.created_at, profiles.suspended_at (23) or posts.removed_at (108) is missing.';
+    raise exception 'Migration 168 stopped before changing anything: profiles.created_at, profiles.suspended_at (23) or posts.removed_at (108) is missing.';
   end if;
   for r in select p.prosrc as src from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname = 'admin_new_players' loop
-    if position('new_players_167' in r.src) = 0 then
-      raise exception 'Migration 167 stopped before changing anything: public.admin_new_players already exists and is not this file''s.';
+    if position('new_players_168' in r.src) = 0 then
+      raise exception 'Migration 168 stopped before changing anything: public.admin_new_players already exists and is not this file''s.';
     end if;
   end loop;
 end $$;
@@ -67,7 +67,7 @@ returns table (id uuid, joined_at timestamptz, adult boolean, posted boolean)
 language plpgsql stable security definer set search_path = public as $$
 #variable_conflict use_column
 begin
-  -- new_players_167
+  -- new_players_168
   if not public.is_admin() then raise exception 'admins only'; end if;
   return query
     select p.id, p.created_at, public.known_adult(p.id),
@@ -89,7 +89,7 @@ grant execute on function public.admin_new_players(integer) to authenticated;
 do $$
 begin
   if has_function_privilege('anon', 'public.admin_new_players(integer)', 'execute') then
-    raise exception 'migration 167: admin_new_players must not be open to signed-out visitors';
+    raise exception 'migration 168: admin_new_players must not be open to signed-out visitors';
   end if;
 end $$;
 

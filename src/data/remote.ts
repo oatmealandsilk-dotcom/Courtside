@@ -105,13 +105,13 @@ export interface InviteeRow { id: ID; name: string; handle: string; avatarUrl?: 
 /** One sign-up week's comeback numbers (fetchComebackWeeks). `week` is its Sunday, YYYY-MM-DD. */
 export interface ComebackWeek { week: string; joined: number; day1Of: number; day1Back: number; day7Of: number; day7Back: number }
 /**
- * Admin: one player who joined lately (admin_new_players, migration 167).
+ * Admin: one player who joined lately (admin_new_players, migration 168).
  * `adult` is true only when their birthday on file says 18 or over: then
  * an admin may say hi in a message; anyone else (a teen, or no birthday)
  * gets only a follow, per the teen rules. Their age itself never comes.
  */
 export interface NewPlayer { id: ID; joinedAt: string; adult: boolean; posted: boolean }
-/** The thread an admin pinned as Question of the week (migration 168), and when. */
+/** The thread an admin pinned as Question of the week (migration 169), and when. */
 export interface PinnedQuestion { id: ID; pinnedAt: string }
 
 export interface FirstDayStats { new30: number; moved30: number; cohort: number; movers: number; moversBack: number; othersBack: number; picked: Record<FirstMove, number> }
@@ -668,9 +668,9 @@ export interface UserState {
   pushRecap?: boolean;
   /** "Players joining near you" and "Streak reminders" (migration 146). Undefined on a database without them: the phone's own choice stands. */
   pushJoined?: boolean; pushStreak?: boolean;
-  /** "Hit invite reminders" (migration 169). Undefined on a database without it: the switch is not shown. */
+  /** "Hit invite reminders" (migration 171). Undefined on a database without it: the switch is not shown. */
   pushHitNudges?: boolean;
-  /** "Questions you could answer" (migration 168). Undefined on a database without it: the switch is not shown. */
+  /** "Questions you could answer" (migration 170). Undefined on a database without it: the switch is not shown. */
   pushQuestions?: boolean;
   /** What the coach works around (injuries, schedule, gear): kept in this private row, never on the public profile. Undefined on a database without migration 19. */
   constraints?: PlayerProfile['constraints'];
@@ -1684,9 +1684,9 @@ let sessionsLackTiebreaks = false;
 let userStateLacksPushRecap = false;
 /** Set once a settings save finds no push_joined / push_streak columns (a database before migration 146). */
 let userStateLacksAlertSwitches = false;
-/** Set once a settings save finds no push_hit_nudges column (a database before migration 169). */
+/** Set once a settings save finds no push_hit_nudges column (a database before migration 171). */
 let userStateLacksPushHitNudges = false;
-/** Set once a settings save finds no push_questions column (a database before migration 168). */
+/** Set once a settings save finds no push_questions column (a database before migration 170). */
 let userStateLacksPushQuestions = false;
 
 /** A note for whoever reads the logs: this needs the group chat update in Supabase first. */
@@ -2028,9 +2028,9 @@ export const remote = {
         ...(s.pushJoined !== undefined ? { push_joined: s.pushJoined } : {}),
         ...(s.pushStreak !== undefined ? { push_streak: s.pushStreak } : {}),
       } : {}),
-      // "Hit invite reminders" (migration 169).
+      // "Hit invite reminders" (migration 171).
       ...(s.pushHitNudges !== undefined && !userStateLacksPushHitNudges ? { push_hit_nudges: s.pushHitNudges } : {}),
-      // "Questions you could answer" (migration 168).
+      // "Questions you could answer" (migration 170).
       ...(s.pushQuestions !== undefined && !userStateLacksPushQuestions ? { push_questions: s.pushQuestions } : {}),
     });
     let { error } = await send();
@@ -2983,7 +2983,7 @@ export const remote = {
   /**
    * Admin: everyone who made an account in the last `days` days (at most
    * 30), newest first, with whether they are a known adult and have posted
-   * (admin_new_players, migration 167). Null when it could not be had (or
+   * (admin_new_players, migration 168). Null when it could not be had (or
    * the function is not on the database yet).
    */
   async fetchNewPlayers(days = 7): Promise<NewPlayer[] | null> {
@@ -2995,7 +2995,7 @@ export const remote = {
   },
 
   /**
-   * The Question of the week (migration 168): the pinned thread's id and
+   * The Question of the week (migration 169): the pinned thread's id and
    * when it was pinned, or null when none is pinned (or the pin is older
    * than 7 days, or the thread was taken down). Undefined when it could not
    * be asked (or the function is not on the database yet).
@@ -5554,7 +5554,7 @@ export interface GuestPage {
   moreThreads?: boolean;
   /**
    * The Question of the week, when its author passes the guest rule
-   * (guest_threads' "pinned", migration 168): only on the first page of the
+   * (guest_threads' "pinned", migration 169): only on the first page of the
    * whole list. Null: none a guest may see. Undefined: not part of this page.
    */
   pinned?: { question: Question; pinnedAt: string } | null;
@@ -5627,7 +5627,7 @@ export async function guestThreads(topic?: string | null, before?: string | null
   const { data, error } = await need().rpc('guest_threads', { p_topic: topic ?? null, p_before: before ?? null, p_limit: limit });
   if (error || !data || typeof data !== 'object') return null;
   const rows = listOf<GuestThreadRow>(data, 'threads');
-  // Only the first page of the whole list carries the pin; a database before 168 has no "pinned" at all.
+  // Only the first page of the whole list carries the pin; a database before 169 has no "pinned" at all.
   const pin = (data as { pinned?: { pinned_at?: unknown; thread?: GuestThreadRow } | null }).pinned;
   const pinned = pin && typeof pin.pinned_at === 'string' && pin.thread && typeof pin.thread.id === 'string' && UUID_RE.test(pin.thread.id)
     ? { question: guestThread(pin.thread, []), pinnedAt: pin.pinned_at } : null;

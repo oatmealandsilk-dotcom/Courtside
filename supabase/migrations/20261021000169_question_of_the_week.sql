@@ -1,4 +1,4 @@
--- CourtSide · migration 20261021000168: a pinned "Question of the week" at
+-- CourtSide · migration 20261021000169: a pinned "Question of the week" at
 -- the top of Discussions (Oct 20 sweep, item R5: "Pinned 'Question of the
 -- week' in Discussions").
 --
@@ -68,26 +68,26 @@ begin
      or to_regprocedure('private.guest_answer_ok(public.answers)') is null or to_regprocedure('private.guest_words(text)') is null
      or to_regprocedure('private.guest_people(uuid[])') is null
      or to_regprocedure('public.guest_threads(text, timestamptz, integer)') is null then
-    raise exception 'Migration 168 stopped before changing anything: the threads tables and migrations 23 (is_admin), 68 (share_open), 109 (known_adult) and 164 (guest mode) have to be there first.';
+    raise exception 'Migration 169 stopped before changing anything: the threads tables and migrations 23 (is_admin), 68 (share_open), 109 (known_adult) and 164 (guest mode) have to be there first.';
   end if;
   if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'questions' and column_name = 'removed_at') then
-    raise exception 'Migration 168 stopped before changing anything: run migration 108 (take down) first.';
+    raise exception 'Migration 169 stopped before changing anything: run migration 108 (take down) first.';
   end if;
   -- guest_threads is either migration 164's (md5 of its body as 164 wrote it) or already this file's.
   for r in select p.prosrc as src from pg_proc p where p.oid = 'public.guest_threads(text, timestamptz, integer)'::regprocedure loop
-    if position('qotw_168' in r.src) = 0 and md5(r.src) <> '107fab5ab6dc524ee2665c2e12ff2d11' then
-      raise exception 'Migration 168 stopped before changing anything: public.guest_threads has changed since migration 164 wrote it (md5 %). Compare before replacing it.', md5(r.src);
+    if position('qotw_169' in r.src) = 0 and md5(r.src) <> '107fab5ab6dc524ee2665c2e12ff2d11' then
+      raise exception 'Migration 169 stopped before changing anything: public.guest_threads has changed since migration 164 wrote it (md5 %). Compare before replacing it.', md5(r.src);
     end if;
   end loop;
   if to_regclass('public.question_pins') is not null and (
        select array_agg(column_name::text order by column_name) from information_schema.columns
         where table_schema = 'public' and table_name = 'question_pins') is distinct from array['pinned_at', 'pinned_by', 'question_id'] then
-    raise exception 'Migration 168 stopped before changing anything: public.question_pins already exists and is not this file''s.';
+    raise exception 'Migration 169 stopped before changing anything: public.question_pins already exists and is not this file''s.';
   end if;
   for r in select p.proname, p.prosrc as src from pg_proc p
             where p.pronamespace = 'public'::regnamespace and p.proname in ('pin_question_of_week', 'question_of_week', 'question_pinnable') loop
-    if position('qotw_168' in r.src) = 0 then
-      raise exception 'Migration 168 stopped before changing anything: public.% already exists and is not this file''s.', r.proname;
+    if position('qotw_169' in r.src) = 0 then
+      raise exception 'Migration 169 stopped before changing anything: public.% already exists and is not this file''s.', r.proname;
     end if;
   end loop;
 end $$;
@@ -108,7 +108,7 @@ revoke all on table public.question_pins from public, anon, authenticated;
 create or replace function public.pin_question_of_week(p_question uuid)
 returns boolean language plpgsql volatile security definer set search_path = public as $$
 begin
-  -- qotw_168
+  -- qotw_169
   if not public.is_admin() then
     raise exception 'Only admins can pin a thread.' using errcode = '42501';
   end if;
@@ -134,7 +134,7 @@ grant execute on function public.pin_question_of_week(uuid) to authenticated;
 -- only then). False for anyone but an admin, so it tells nobody else anything.
 create or replace function public.question_pinnable(p_question uuid)
 returns boolean language sql stable security definer set search_path = public as $$
-  -- qotw_168
+  -- qotw_169
   select public.is_admin() and exists (select 1 from public.questions q
     where q.id = p_question and q.removed_at is null and public.known_adult(q.author_id))
 $$;
@@ -145,7 +145,7 @@ grant execute on function public.question_pinnable(uuid) to authenticated;
 create or replace function public.question_of_week()
 returns table (question_id uuid, pinned_at timestamptz)
 language sql stable security definer set search_path = public as $$
-  -- qotw_168
+  -- qotw_169
   select p.question_id, p.pinned_at
   from public.question_pins p join public.questions q on q.id = p.question_id
   where q.removed_at is null and p.pinned_at > now() - interval '7 days'
@@ -161,7 +161,7 @@ grant execute on function public.question_of_week() to authenticated;
 -- The pinned thread's replies are counted by the same rule as the rest.
 create or replace function public.guest_threads(p_topic text default null, p_before timestamptz default null, p_limit integer default 20)
 returns jsonb language sql stable security definer set search_path = public as $$
-  -- guest_164 qotw_168
+  -- guest_164 qotw_169
   with recursive page as (
     select q.* from public.questions q
     where q.removed_at is null
@@ -173,7 +173,7 @@ returns jsonb language sql stable security definer set search_path = public as $
     order by q.created_at desc, q.id desc
     limit least(greatest(coalesce(p_limit, 20), 1), 30)
   ),
-  -- The Question of the week (168): only on the first page of the whole list, and only one a visitor may see.
+  -- The Question of the week (169): only on the first page of the whole list, and only one a visitor may see.
   pin as (
     select q.*, qp.pinned_at from public.question_pins qp join public.questions q on q.id = qp.question_id
     where p_topic is null and p_before is null
@@ -220,14 +220,14 @@ begin
   if has_function_privilege('anon', 'public.pin_question_of_week(uuid)', 'execute')
      or has_function_privilege('anon', 'public.question_of_week()', 'execute')
      or has_function_privilege('anon', 'public.question_pinnable(uuid)', 'execute') then
-    raise exception 'migration 168: the pin must not be open to signed-out visitors (they read it through guest_threads)';
+    raise exception 'migration 169: the pin must not be open to signed-out visitors (they read it through guest_threads)';
   end if;
   if not has_function_privilege('anon', 'public.guest_threads(text, timestamptz, integer)', 'execute')
      or has_function_privilege('authenticated', 'public.guest_threads(text, timestamptz, integer)', 'execute') then
-    raise exception 'migration 168: guest_threads must stay for visitors only';
+    raise exception 'migration 169: guest_threads must stay for visitors only';
   end if;
   if has_table_privilege('authenticated', 'public.question_pins', 'select') or has_table_privilege('anon', 'public.question_pins', 'select') then
-    raise exception 'migration 168: question_pins must stay private';
+    raise exception 'migration 169: question_pins must stay private';
   end if;
 end $$;
 

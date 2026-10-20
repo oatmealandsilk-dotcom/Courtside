@@ -500,7 +500,7 @@ export function demoAdmin(): boolean {
 // Read as the app opens, while the address still says ?admin=1 (signing in moves to another page).
 demoAdmin();
 
-/** A pin lasts 7 days (migration 168): an older one is no longer this week's. */
+/** A pin lasts 7 days (migration 169): an older one is no longer this week's. */
 export const QUESTION_OF_WEEK_MS = 7 * 86_400_000;
 /**
  * The demo's Question of the week (Oct 20 sweep, R5), kept for the tab so a
@@ -850,7 +850,7 @@ export async function fetchGuestHome(): Promise<GuestData | null> {
       users: pages.flatMap((x) => x.users).filter((u) => (seen.has(u.id) ? false : (seen.add(u.id), true))),
       posts: feed?.posts ?? [], comments: feed?.comments ?? [], questions: threads?.questions ?? [], answers: [], coaches: coaching?.coaches ?? [],
       more: feed?.more ?? false, moreThreads: threads?.moreThreads ?? false,
-      // The Question of the week (168), when its author passes the guest rule; left as it was when the threads could not be had.
+      // The Question of the week (169), when its author passes the guest rule; left as it was when the threads could not be had.
       ...(threads ? { pinned: threads.pinned ?? null } : {}),
     };
   }
@@ -860,7 +860,7 @@ export async function fetchGuestHome(): Promise<GuestData | null> {
   const shownAnswers = guestAnswers(threads.map((q) => q.id));
   const coaching = coaches.filter((c) => c.listed !== false && guestShown(c.userId)).slice(0, 50)
     .map((c) => ({ ...c, headline: guestWords(c.headline), services: c.services.map((v) => ({ ...v, title: guestWords(v.title), description: guestWords(v.description) })) }));
-  // The Question of the week, by guest_threads' rule (168): by someone a guest may see, not taken down. No 90-day limit.
+  // The Question of the week, by guest_threads' rule (169): by someone a guest may see, not taken down. No 90-day limit.
   const pin = demoQuestionOfWeek();
   const pinThread = pin ? questions.find((q) => q.id === pin.id && !q.removed && guestShown(q.authorId)) : undefined;
   const pinAnswers = pinThread ? guestAnswers([pinThread.id]) : [];

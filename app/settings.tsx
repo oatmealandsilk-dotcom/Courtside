@@ -178,9 +178,9 @@ export default function Settings() {
         // "Sam just joined CourtSide near you" (migration 146): only adults hear it (the server's rule), and
         // the switch shows once the database has it. Off, it still lands in Notifications.
         ...(mapAdult && joinAlertsLive ? [{ icon: 'person-add-outline' as const, label: 'Players joining near you', detail: 'Someone new in your town', toggle: { value: prefs.pushJoined, onChange: (v: boolean) => actions.setPref('pushJoined', v) } }] : []),
-        // Sweep R6 (Oct 20): when a Discussions question has waited with no answer, up to 3 people who answered that topic before (or coaches, for technique and gear) are told, at most one a day (migration 168). Shown once the database has it.
+        // Sweep R6 (Oct 20): when a Discussions question has waited with no answer, up to 3 people who answered that topic before (or coaches, for technique and gear) are told, at most one a day (migration 170). Shown once the database has it.
         ...(questionAlertsLive ? [{ icon: 'help-circle-outline' as const, label: 'Questions you could answer', detail: 'Unanswered threads on topics you know', toggle: { value: prefs.pushQuestions, onChange: (v: boolean) => actions.setPref('pushQuestions', v) } }] : []),
-        // Sweep R10 (Oct 20): one reminder about 20 hours after a hit invite you have not answered, while the hit still has a spot (migration 169). Shown once the database has it.
+        // Sweep R10 (Oct 20): one reminder about 20 hours after a hit invite you have not answered, while the hit still has a spot (migration 171). Shown once the database has it.
         ...(hitNudgeAlertsLive ? [{ icon: 'time-outline' as const, label: 'Hit invite reminders', detail: 'One reminder if an invite waits a day', toggle: { value: prefs.pushHitNudges, onChange: (v: boolean) => actions.setPref('pushHitNudges', v) } }] : []),
         // The 7pm reminder, set on this phone (features/practice/reminder).
         { icon: 'flame-outline' as const, label: 'Streak reminders', detail: 'At 7pm, when today has nothing yet', toggle: { value: prefs.pushStreak, onChange: (v: boolean) => actions.setPref('pushStreak', v) } },

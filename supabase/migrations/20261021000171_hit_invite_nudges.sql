@@ -1,7 +1,7 @@
--- CourtSide · migration 20261021000169: one "your turn" reminder for a hit
+-- CourtSide · migration 20261021000171: one "your turn" reminder for a hit
 -- invite left unanswered (sweep item R10, Oct 20).
 --
--- NOT APPLIED. Needs the owner's OK first.
+-- The owner said yes on Oct 20; not yet run on the live database.
 --
 -- Why: when Sam invites a friend to hit, the friend gets one alert. If it
 -- arrives at a bad moment it is forgotten, Sam hears nothing back, and the
@@ -23,7 +23,7 @@
 --     never told a teen's name unless they are friends (an adult who
 --     stopped following a teen back hears nothing, and could not open
 --     that hit anyway).
---   * At most one of the new come-back alerts (this, 167's and 168's) a day
+--   * At most one of the new come-back alerts (this and 170's) a day
 --     per person, only between 9am and 9pm in their own time zone (someone
 --     whose phone has not told us its time zone gets none). This one runs
 --     first each hour, as it is the most time-sensitive.
@@ -36,7 +36,7 @@
 -- on, this file says so and nothing is sent (see OWNER STEPS).
 --
 -- Touches no existing function, rule or trigger. Adds: the nudges table
--- (shared with 167 and 168), user_state.push_hit_nudges, and the functions
+-- (shared with 170), user_state.push_hit_nudges, and the functions
 -- private.nudge_ok, private.send_nudge, public.send_hit_invite_nudges. Needs
 -- (all live): user_state.tz (130), push_tokens and send_push (14, 106),
 -- known_adult (109), is_blocked_between (21), follow_each_other (60),
@@ -65,24 +65,24 @@ begin
      or to_regprocedure('public.is_blocked_between(uuid, uuid)') is null
      or to_regprocedure('public.follow_each_other(uuid, uuid)') is null
      or to_regprocedure('public.hit_when(timestamp with time zone, jsonb)') is null then
-    raise exception 'Migration 169 stopped before changing anything: a table or function it needs is missing (see "Needs" at the top).';
+    raise exception 'Migration 171 stopped before changing anything: a table or function it needs is missing (see "Needs" at the top).';
   end if;
   if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'user_state' and column_name = 'tz')
      or not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'hit_requests' and column_name = 'joined_count') then
-    raise exception 'Migration 169 stopped before changing anything: a column it needs is missing (user_state.tz or hit_requests.joined_count).';
+    raise exception 'Migration 171 stopped before changing anything: a column it needs is missing (user_state.tz or hit_requests.joined_count).';
   end if;
   if exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'user_state' and column_name = 'push_hit_nudges' and data_type <> 'boolean') then
-    raise exception 'Migration 169 stopped before changing anything: user_state already has a push_hit_nudges column that is not a yes/no.';
+    raise exception 'Migration 171 stopped before changing anything: user_state already has a push_hit_nudges column that is not a yes/no.';
   end if;
   if to_regclass('public.nudges') is not null and not exists (
        select 1 from information_schema.columns where table_schema = 'public' and table_name = 'nudges' and column_name = 'ref') then
-    raise exception 'Migration 169 stopped before changing anything: a nudges table is already there and is not this file''s.';
+    raise exception 'Migration 171 stopped before changing anything: a nudges table is already there and is not this file''s.';
   end if;
 end $$;
 
 -- ------------------------------------------- 1. the come-back alerts' notebook
--- (Word for word the same in migrations 167, 168 and 169, so any one of them
--- can run without the others, in any order, and running it again changes
+-- (Word for word the same in migrations 170 and 171, so either of them
+-- can run without the other, in any order, and running it again changes
 -- nothing.)
 --
 -- One line per come-back alert sent: who got it, which kind, what it was
@@ -227,7 +227,7 @@ end $$;
 revoke all on function public.send_hit_invite_nudges(timestamptz, boolean) from public, anon, authenticated;
 
 -- ------------------------------------------------------------- 4. the scheduler
--- At 10 past every hour (before 168's and 167's, so this time-sensitive one
+-- At 10 past every hour (before 170's, so this time-sensitive one
 -- goes first). Scheduling the same job name again replaces it. Where pg_cron
 -- is not turned on this says so and carries on (nothing sent).
 do $$
@@ -253,7 +253,7 @@ begin
      or has_function_privilege('authenticated', 'public.send_hit_invite_nudges(timestamp with time zone, boolean)', 'execute')
      or has_function_privilege('authenticated', 'private.nudge_ok(uuid, timestamp with time zone)', 'execute')
      or has_function_privilege('authenticated', 'private.send_nudge(uuid, text, text, text, text, timestamp with time zone)', 'execute') then
-    raise exception 'Migration 169 stopped: the result was not as planned; nothing was changed.';
+    raise exception 'Migration 171 stopped: the result was not as planned; nothing was changed.';
   end if;
 end $$;
 

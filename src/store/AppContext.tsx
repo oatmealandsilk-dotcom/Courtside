@@ -372,9 +372,9 @@ export interface Prefs {
   pushJoined: boolean;
   /** The 7pm "Keep your streak" reminder, set on the phone itself (kept with the account by migration 146). */
   pushStreak: boolean;
-  /** Sweep R6 (Oct 20): when a Discussions question has waited with no answer, up to 3 people who answered that topic before (or coaches, for technique and gear) are told, at most one a day (migration 168). */
+  /** Sweep R6 (Oct 20): when a Discussions question has waited with no answer, up to 3 people who answered that topic before (or coaches, for technique and gear) are told, at most one a day (migration 170). */
   pushQuestions: boolean;
-  /** Sweep R10 (Oct 20): one reminder about 20 hours after a hit invite you have not answered, while the hit still has a spot (migration 169). */
+  /** Sweep R10 (Oct 20): one reminder about 20 hours after a hit invite you have not answered, while the hit still has a spot (migration 171). */
   pushHitNudges: boolean;
 }
 export type PrefKey = keyof Prefs;
@@ -499,7 +499,7 @@ interface AppState extends Bootstrap, CourtLifeState, FeedGroupsState, LiveSessi
   /** New on CourtSide as the server lists it for you (migration 63), newest first; null until asked, or before 63. */
   newOnCourtside: { userId: ID; joinedAt: string }[] | null;
   /**
-   * The Question of the week (Oct 20 sweep, R5; migration 168): the thread an
+   * The Question of the week (Oct 20 sweep, R5; migration 169): the thread an
    * admin pinned to the top of Discussions, and when. Null when none is
    * pinned (a pin lasts 7 days). A guest's comes with guest mode's own data.
    */
@@ -517,9 +517,9 @@ interface AppState extends Bootstrap, CourtLifeState, FeedGroupsState, LiveSessi
   contactsFindableLive: boolean;
   /** The database has the "Players joining near you" switch (migration 146); before that it would do nothing, so it is not shown. */
   joinAlertsLive: boolean;
-  /** The database has the "Questions you could answer" switch (migration 168); before that it would do nothing, so it is not shown. */
+  /** The database has the "Questions you could answer" switch (migration 170); before that it would do nothing, so it is not shown. */
   questionAlertsLive: boolean;
-  /** The database has the "Hit invite reminders" switch (migration 169); before that it would do nothing, so it is not shown. */
+  /** The database has the "Hit invite reminders" switch (migration 171); before that it would do nothing, so it is not shown. */
   hitNudgeAlertsLive: boolean;
   /**
    * Your Hidden words (Settings → Hidden words, migration 117): null until
@@ -6206,7 +6206,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return;
     }
     const pin = await remote.fetchQuestionOfWeek().catch(() => undefined);
-    // Not asked (offline, or before migration 168): what was there stays.
+    // Not asked (offline, or before migration 169): what was there stays.
     if (pin === undefined || stateRef.current.currentUserId !== me) return;
     // A pinned thread older than the first load's 300 is fetched on its own.
     if (pin && !stateRef.current.questions.some((q) => q.id === pin.id)) {
@@ -9634,7 +9634,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setGuest((prev) => {
       if (!got) return prev ?? { users: [], posts: [], comments: [], questions: [], answers: [], coaches: [], more: false };
       if (!prev) return got;
-      // The Question of the week (168) as the home page says now; kept as it was when the threads could not be had.
+      // The Question of the week (169) as the home page says now; kept as it was when the threads could not be had.
       const pinned = got.pinned !== undefined ? got.pinned : prev.pinned;
       const oldest = (xs: { createdAt: string }[]) => xs.reduce<number | null>((o, x) => { const t = Date.parse(x.createdAt); return o === null || t < o ? t : o; }, null);
       // Kept from before: what is older than the newest lists reach (or everything, when a list came back empty).

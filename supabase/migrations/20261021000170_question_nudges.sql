@@ -1,8 +1,8 @@
--- CourtSide · migration 20261021000168: when a Discussions question is
+-- CourtSide · migration 20261021000170: when a Discussions question is
 -- waiting with no answers, tell a few people likely to answer it (sweep item
 -- R6, Oct 20).
 --
--- NOT APPLIED. Needs the owner's OK first.
+-- The owner said yes on Oct 20; not yet run on the live database.
 --
 -- Why: a question nobody answers is the fastest way to lose the person who
 -- asked it, and the people who could answer have no way of knowing it is
@@ -22,7 +22,7 @@
 --     asked by known adults, so a teen's question is never pushed to adult
 --     strangers and a teen is never pushed toward one (someone whose age we
 --     do not know counts as a teen).
---   * At most one of the new come-back alerts (this, 167's and 169's) a day
+--   * At most one of the new come-back alerts (this and 171's) a day
 --     per person, only between 9am and 9pm in their own time zone (someone
 --     whose phone has not told us its time zone gets none).
 --   * Its own switch: Settings → Notifications → "Questions you could
@@ -34,7 +34,7 @@
 -- on, this file says so and nothing is sent (see OWNER STEPS).
 --
 -- Touches no existing function, rule or trigger. Adds: the nudges table
--- (shared with 167 and 169), user_state.push_questions, and the functions
+-- (shared with 171), user_state.push_questions, and the functions
 -- private.nudge_ok, private.send_nudge, public.send_question_nudges. Needs
 -- (all live): user_state.tz (130), push_tokens and send_push (14, 106),
 -- known_adult (109), is_blocked_between (21), questions and answers with
@@ -59,25 +59,25 @@ begin
      or to_regprocedure('public.send_push(uuid, text, text, text)') is null
      or to_regprocedure('public.known_adult(uuid)') is null
      or to_regprocedure('public.is_blocked_between(uuid, uuid)') is null then
-    raise exception 'Migration 168 stopped before changing anything: a table or function it needs is missing (see "Needs" at the top).';
+    raise exception 'Migration 170 stopped before changing anything: a table or function it needs is missing (see "Needs" at the top).';
   end if;
   if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'user_state' and column_name = 'tz')
      or not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'questions' and column_name = 'removed_at')
      or not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'answers' and column_name = 'removed_at') then
-    raise exception 'Migration 168 stopped before changing anything: a column it needs is missing (user_state.tz, questions.removed_at or answers.removed_at).';
+    raise exception 'Migration 170 stopped before changing anything: a column it needs is missing (user_state.tz, questions.removed_at or answers.removed_at).';
   end if;
   if exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'user_state' and column_name = 'push_questions' and data_type <> 'boolean') then
-    raise exception 'Migration 168 stopped before changing anything: user_state already has a push_questions column that is not a yes/no.';
+    raise exception 'Migration 170 stopped before changing anything: user_state already has a push_questions column that is not a yes/no.';
   end if;
   if to_regclass('public.nudges') is not null and not exists (
        select 1 from information_schema.columns where table_schema = 'public' and table_name = 'nudges' and column_name = 'ref') then
-    raise exception 'Migration 168 stopped before changing anything: a nudges table is already there and is not this file''s.';
+    raise exception 'Migration 170 stopped before changing anything: a nudges table is already there and is not this file''s.';
   end if;
 end $$;
 
 -- ------------------------------------------- 1. the come-back alerts' notebook
--- (Word for word the same in migrations 167, 168 and 169, so any one of them
--- can run without the others, in any order, and running it again changes
+-- (Word for word the same in migrations 170 and 171, so either of them
+-- can run without the other, in any order, and running it again changes
 -- nothing.)
 --
 -- One line per come-back alert sent: who got it, which kind, what it was
@@ -256,7 +256,7 @@ begin
      or has_function_privilege('authenticated', 'public.send_question_nudges(timestamp with time zone, boolean)', 'execute')
      or has_function_privilege('authenticated', 'private.nudge_ok(uuid, timestamp with time zone)', 'execute')
      or has_function_privilege('authenticated', 'private.send_nudge(uuid, text, text, text, text, timestamp with time zone)', 'execute') then
-    raise exception 'Migration 168 stopped: the result was not as planned; nothing was changed.';
+    raise exception 'Migration 170 stopped: the result was not as planned; nothing was changed.';
   end if;
 end $$;
 

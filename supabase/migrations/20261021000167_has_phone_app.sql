@@ -1,4 +1,4 @@
--- CourtSide · migration 167: "have I ever used the phone app?" (Oct 20 sweep, R3).
+-- CourtSide · migration 20261021000167: "have I ever used the phone app?" (Oct 20 sweep, R3).
 --
 -- What it is for: the website shows a calm "Get CourtSide on your iPhone"
 -- card to people who signed up there, because the website cannot send
