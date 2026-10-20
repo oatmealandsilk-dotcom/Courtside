@@ -17,9 +17,12 @@
 --     Tapping it opens the hit. Never a second one for the same invite.
 --   * Never names a place (only the day and time). Never from someone
 --     blocked either way, muted, or suspended, nor to a suspended account.
---   * Teen rules: a teen (or someone whose age we do not know) is reminded
---     only about an invite from a friend they follow each other with, the
---     same rule as the invite itself.
+--   * Teen rules: whenever EITHER side is a teen (or someone whose age we
+--     do not know), the reminder goes only when the two follow each other.
+--     So a teen is reminded only about a friend's invite, and an adult is
+--     never told a teen's name unless they are friends (an adult who
+--     stopped following a teen back hears nothing, and could not open
+--     that hit anyway).
 --   * At most one of the new come-back alerts (this, 167's and 168's) a day
 --     per person, only between 9am and 9pm in their own time zone (someone
 --     whose phone has not told us its time zone gets none). This one runs
@@ -194,8 +197,11 @@ begin
       continue when r.user_id = any (planned);
       continue when r.author_id::text = any (r.quiet);
       continue when public.is_blocked_between(r.user_id, r.author_id);
-      -- Teen rules: a teen, or someone whose age we do not know, only about a friend's invite.
-      continue when not public.known_adult(r.user_id) and not public.follow_each_other(r.user_id, r.author_id);
+      -- Teen rules: when either side is a teen, or someone whose age we do
+      -- not know, only between two people who follow each other (a teen's
+      -- name never goes to an adult stranger; Oct 20 review fix).
+      continue when (not public.known_adult(r.user_id) or not public.known_adult(r.author_id))
+                and not public.follow_each_other(r.user_id, r.author_id);
       -- Answered in a chat with the person who invited them since the invite: not "unanswered".
       continue when exists (
         select 1 from public.messages m
