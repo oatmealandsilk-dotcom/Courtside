@@ -34,7 +34,10 @@ const RETRY_MS = 6000;
 /** Put away because a page where you write or post opened: up this long, it was seen (as long as any note with a button stays); less, it comes back after. */
 const SEEN_MS = 5000;
 /** How the question is drawn (Toast's HitNote): 'pill', a card under the page's title row; 'banner', a card just above the tab bar with two answers; 'strip', one slim line docked under the title row. */
-const LOOK: HitNoteLook = 'strip';
+// 'pill' by default (Oct 20): it reads as placed, keeps titles, the bell and the Feed's tabs in
+// sight, never covers a clip's name, words or buttons (the banner did), and its button is a clear
+// target (the strip made its whole width one, easy to tap by mistake on the way to the page).
+const LOOK: HitNoteLook = 'pill';
 
 /**
  * "How was the hit at Alder Park? · Log it": once a hit you posted or joined
