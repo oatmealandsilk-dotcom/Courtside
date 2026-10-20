@@ -88,10 +88,14 @@ function useCelebration(p: PartnerStreak | undefined, ref: RefObject<View | null
     if (!userId || !milestone || !key || !onScreen || told === key) return;
     setTold(key);
     setShowing(milestone);
-    const t = setTimeout(() => haptics.reward(), 380);
     actions.seenPartnerStreak(userId, milestone);
-    return () => clearTimeout(t);
   }, [userId, milestone, key, onScreen, told, actions]);
+  // The buzz on its own clock, so the redraw from setTold above can't cancel it (found in review).
+  useEffect(() => {
+    if (showing == null) return undefined;
+    const t = setTimeout(() => haptics.reward(), 380);
+    return () => clearTimeout(t);
+  }, [showing]);
   return showing;
 }
 
