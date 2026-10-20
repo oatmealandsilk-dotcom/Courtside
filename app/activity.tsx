@@ -1,5 +1,5 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { goBack } from '@/lib/goBack';
@@ -13,12 +13,18 @@ import { colors, spacing, typography } from '@/theme';
 
 type Section = 'likes' | 'upvotes' | 'saved';
 const SECTIONS: Section[] = ['likes', 'upvotes', 'saved'];
+/** A section not yet on show is built only to a screenful, for the part that slides in mid-swipe (D10 review). */
+const PEEK = 12;
 
 /** Everything you have done, newest first — the way Instagram's activity log works. */
 export default function Activity() {
   const styles = useThemedStyles(styleDefinitions);
   const { posts, questions, users, currentUserId, saved } = useApp();
   const [section, setSection] = useState<Section>('likes');
+  const [opened, setOpened] = useState<ReadonlySet<Section>>(() => new Set(['likes']));
+  useEffect(() => {
+    setOpened((was) => (was.has(section) ? was : new Set([...was, section])));
+  }, [section]);
 
   const me = currentUserId ?? '';
   const byDate = <T extends { createdAt: string }>(items: T[]) =>
@@ -67,10 +73,11 @@ export default function Activity() {
 
   // Each section is its own pane, side by side, slid between (Oct 20 sweep, as Profile's sections do).
   const pane = (which: Section) => {
-    const rows =
+    const all =
       which === 'likes' ? likedPosts.map((p) => postRow(p, 'heart'))
       : which === 'upvotes' ? upvoted.map((q) => questionRow(q, 'arrow-up'))
       : [...savedPosts.map((p) => postRow(p, 'bookmark')), ...savedQuestions.map((q) => questionRow(q, 'bookmark'))];
+    const rows = opened.has(which) ? all : all.slice(0, PEEK);
     const empty = empties[which];
     return <View>{rows.length ? rows : <EmptyState icon="time-outline" title={empty.title} body={empty.body} />}</View>;
   };

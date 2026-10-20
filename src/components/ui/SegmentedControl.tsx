@@ -39,6 +39,9 @@ interface Props<T extends string> {
   slide?: boolean;
 }
 
+/** The track's inner padding and the gap between segments (the gliding pill is placed by it). */
+const TRACK_PAD = 4;
+
 /** The pill's glide: quick, on the app's own ease-out, no bounce. */
 const GLIDE = { duration: 220, easing: Easing.bezier(0.22, 0.61, 0.36, 1) };
 
@@ -58,13 +61,13 @@ export function SegmentedControl<T extends string>({
   const styles = useThemedStyles(styleDefinitions);
   // Sliding: one pill drawn behind the words, moved to the chosen one's place (all the segments are the same width).
   const gliding = slide && !scrollable && !wrap;
-  const [box, setBox] = useState<{ x: number; w: number; h: number; step: number } | null>(null);
+  const [box, setBox] = useState<{ first: number | null; second: number | null; w: number; h: number; step: number } | null>(null);
   const at = Math.max(0, segments.findIndex((s) => s.value === value));
   const x = useSharedValue(0);
   const placed = useRef(false);
   useEffect(() => {
     if (!box) return;
-    const to = box.x + at * box.step;
+    const to = at * box.step;
     if (!placed.current) { placed.current = true; x.value = to; return; }
     x.value = withTiming(to, GLIDE);
   }, [at, box, x]);
@@ -79,10 +82,20 @@ export function SegmentedControl<T extends string>({
         accessibilityState={radio ? { checked: active } : { selected: active }}
         onLayout={gliding && i < 2 ? (e) => {
           const { x: left, width, height } = e.nativeEvent.layout;
-          // The first segment gives the place and size; the second, the step from one to the next.
+          // The first segment gives the size; the second, the step from one to the next. Only the
+          // difference between the two is used, so the track's 1px border (counted in a phone's
+          // layout x, not in a browser's) never shifts the pill (D10 review).
           setBox((was) => {
-            const next = i === 0 ? { x: left, w: width, h: height, step: was?.step ?? width + 4 } : { x: was?.x ?? 4, w: was?.w ?? width, h: was?.h ?? height, step: left - (was?.x ?? 4) };
-            return was && was.x === next.x && was.w === next.w && was.h === next.h && was.step === next.step ? was : next;
+            const first = i === 0 ? left : was?.first ?? null;
+            const second = i === 1 ? left : was?.second ?? null;
+            const next = {
+              first,
+              second,
+              w: i === 0 ? width : was?.w ?? width,
+              h: i === 0 ? height : was?.h ?? height,
+              step: first != null && second != null ? second - first : (i === 0 ? width : was?.w ?? width) + TRACK_PAD,
+            };
+            return was && was.first === next.first && was.second === next.second && was.w === next.w && was.h === next.h && was.step === next.step ? was : next;
           });
         } : undefined}
         style={({ pressed }) => [styles.segment, large && styles.segmentLarge, wrap && styles.segmentWrapped, scrollable && styles.segmentLoose, active && !(gliding && box) && styles.segmentActive, active && tint && !(gliding && box) ? { backgroundColor: tint, borderColor: tint } : null, pressed && !active && styles.segmentPressed]}
@@ -108,7 +121,7 @@ export function SegmentedControl<T extends string>({
 
   return (
     <View accessibilityRole={radio ? 'radiogroup' : undefined} accessibilityLabel={accessibilityLabel} style={[styles.track, wrap && styles.trackWrapped]}>
-      {gliding && box ? <Animated.View pointerEvents="none" style={[styles.glider, { width: box.w, height: box.h, top: 4 }, tint ? { backgroundColor: tint } : null, pill]} /> : null}
+      {gliding && box ? <Animated.View pointerEvents="none" style={[styles.glider, { width: box.w, height: box.h }, tint ? { backgroundColor: tint } : null, pill]} /> : null}
       {items}
     </View>
   );
@@ -121,8 +134,8 @@ const styleDefinitions = StyleSheet.create({
     borderRadius: radius.pill,
     borderWidth: 1,
     borderColor: colors.border,
-    padding: 4,
-    gap: 4,
+    padding: TRACK_PAD,
+    gap: TRACK_PAD,
   },
   scrollTrack: { flexDirection: 'row', gap: spacing.sm, paddingRight: spacing.lg },
   trackWrapped: { flexWrap: 'wrap', borderRadius: radius.lg },
@@ -141,7 +154,8 @@ const styleDefinitions = StyleSheet.create({
   // Explicitly not allowed to shrink: in a sideways scroller the browser would otherwise squeeze the words to nothing.
   segmentLoose: { flexGrow: 0, flexShrink: 0, flexBasis: 'auto', minWidth: 64, paddingHorizontal: spacing.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
   segmentActive: { backgroundColor: colors.brand, borderColor: colors.brand },
-  glider: { position: 'absolute', left: 0, borderRadius: radius.pill, backgroundColor: colors.brand },
+  // Sits where the first segment sits, the track's padding in from its inner edge, on a phone and in a browser alike.
+  glider: { position: 'absolute', left: TRACK_PAD, top: TRACK_PAD, borderRadius: radius.pill, backgroundColor: colors.brand },
   label: { ...typography.smallStrong, color: colors.textMuted },
   labelActive: { color: colors.brandInk },
   labelLarge: { ...typography.bodyStrong },

@@ -19,6 +19,13 @@ import { colors, spacing, typography } from '@/theme';
 
 type Tab = 'followers' | 'following';
 const TABS: Tab[] = ['followers', 'following'];
+/**
+ * The list not on show is built only as far as one screenful (enough for the
+ * part that slides into view mid-swipe); the rest comes once it has been
+ * opened, so a player with thousands of followers never builds both whole
+ * lists at once (D10 review).
+ */
+const PEEK = 14;
 
 /** Who follows a player and who they follow, the way Instagram lays it out. */
 export default function Follows() {
@@ -28,6 +35,11 @@ export default function Follows() {
   const userId = params.userId ?? currentUserId ?? '';
   const [tab, setTab] = useState<Tab>(params.tab === 'following' ? 'following' : 'followers');
   const [search, setSearch] = useState('');
+  // Which lists have been on show: those are built in full, the other only to a screenful.
+  const [opened, setOpened] = useState<ReadonlySet<Tab>>(() => new Set([tab]));
+  useEffect(() => {
+    setOpened((was) => (was.has(tab) ? was : new Set([...was, tab])));
+  }, [tab]);
   const subject = users.find((u) => u.id === userId);
   // Their followers and following come in when the list opens.
   const loadFollowsOf = actions.loadFollowsOf;
@@ -61,7 +73,8 @@ export default function Follows() {
   };
 
   const pane = (tab: Tab) => {
-    const list = listOf(tab);
+    const whole = listOf(tab);
+    const list = opened.has(tab) ? whole : whole.slice(0, PEEK);
     return (
       <View>
         {list.length === 0 && !loaded ? (
