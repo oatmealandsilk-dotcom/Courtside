@@ -43,11 +43,15 @@ export function TagPlayers({ tagged, onChange, variant = 'button', line = false,
   // Tagged people stay in the list, checked, so a second tap can untag them.
   const matches = open ? candidates(query, 8) : [];
   const close = () => { setOpen(false); setQuery(''); };
+  const search = useRef<TextInput>(null);
   const tag = (id: string) => {
     haptics.tap();
-    onChange(tagged.includes(id) ? tagged.filter((t) => t !== id) : [...tagged, id]);
+    const adding = !tagged.includes(id);
+    onChange(adding ? [...tagged, id] : tagged.filter((t) => t !== id));
+    // The box empties for the next name, and keeps the keyboard (owner, Oct 20: "after you @ someone,
+    // the search thing should clear ... That way multi searching for tag is easier"). Untagging keeps it.
+    if (adding) { setQuery(''); search.current?.focus(); }
   };
-  const search = useRef<TextInput>(null);
   const block = useRef<View>(null);
   const reveal = useRevealOnFocus();
   // As a row, the search takes the keyboard as it opens, and once names are
