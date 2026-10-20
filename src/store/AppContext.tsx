@@ -5176,23 +5176,35 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Tapping your own pick again takes your vote back: one fewer on that option, and the poll
   // goes back to its unvoted rows so you can pick again (owner, Oct 20: "On poll, clicking your
   // selected deselects it"). The server already lets you delete your own vote and recounts.
+  // The vote each poll was last left with by a tap here, and the poll as it stood when that tap
+  // was read: two taps faster than the screen redraws both see the same poll, so the second
+  // goes by what the first decided, not by the poll the first is still replacing. Once the
+  // first has landed (or the poll was loaded again), the poll on screen is the answer again.
+  const lastPollTap = useRef(new Map<ID, { vote: number | undefined; seen: Question['poll'] }>());
   const votePoll = useCallback((questionId: ID, option: number) => {
     const me = requireUser();
-    const current = stateRef.current.questions.find((q) => q.id === questionId)?.poll;
-    const takeBack = current?.myVote === option;
+    const onScreen = stateRef.current.questions.find((q) => q.id === questionId)?.poll;
+    if (!onScreen) return;
+    const tapped = lastPollTap.current.get(questionId);
+    const before = tapped && tapped.seen === onScreen ? tapped.vote : onScreen.myVote;
+    const takeBack = before === option;
+    const after = takeBack ? undefined : option;
+    lastPollTap.current.set(questionId, { vote: after, seen: onScreen });
     if (takeBack) haptics.untap(); else haptics.tap();
+    // The screen follows the same decision the server is sent, whatever the poll held a moment before.
     setState((prev) => ({
       ...prev,
       questions: prev.questions.map((q) => {
         if (q.id !== questionId || !q.poll) return q;
+        if (q.poll.myVote === after) return q;
         const counts = [...q.poll.counts];
         if (q.poll.myVote !== undefined) counts[q.poll.myVote] = Math.max(0, (counts[q.poll.myVote] ?? 0) - 1);
-        if (q.poll.myVote === option) {
+        if (after === undefined) {
           const { myVote: _gone, ...rest } = q.poll;
           return { ...q, poll: { ...rest, counts } };
         }
-        counts[option] = (counts[option] ?? 0) + 1;
-        return { ...q, poll: { ...q.poll, counts, myVote: option } };
+        counts[after] = (counts[after] ?? 0) + 1;
+        return { ...q, poll: { ...q.poll, counts, myVote: after } };
       }),
     }));
     if (live(me, questionId)) void (takeBack ? remote.unvotePoll(questionId) : remote.votePoll(questionId, option));
