@@ -185,6 +185,18 @@ export default function FirstMove() {
     else actions.toggleFollow(who.id);
   };
   const move: FirstMove = followed ? 'follow' : shared ? 'invite' : looked ? 'find' : 'later';
+  // "Follow all" (R9, Oct 20 sweep: "The more people a new player follows, the fuller their Feed and
+  // map. Today it's one tap per person. Adults only."). Only for someone known to be an adult, and only
+  // over the list already shown, which keeps the suggestions' own rules (a teen is never offered to an
+  // adult stranger: see the note at the top). Each person gets the same one follow a tap on their own
+  // pill sends: a private account gets one request, never a second, and anyone already followed or
+  // asked is left alone.
+  const notYet = (picks ?? []).filter((p) => !followingIds.includes(p.user.id) && !followRequests.some((r) => r.fromId === currentUserId && r.toId === p.user.id));
+  const canFollowAll = adult && (picks?.length ?? 0) >= 2 && notYet.length >= 2;
+  const followAll = () => {
+    haptics.commit();
+    notYet.forEach((p) => actions.toggleFollow(p.user.id, true));
+  };
 
   // Context only: the list under it says what to do.
   const line = !adult ? 'Your map shows only your friends.'
@@ -228,6 +240,14 @@ export default function FirstMove() {
         ) : null}
 
         <Animated.View entering={enter(2)} style={styles.listWrap}>
+          {canFollowAll ? (
+            <View style={styles.allRow}>
+              <Pressable accessibilityRole="button" accessibilityLabel={`Follow all ${notYet.length}`} hitSlop={8} onPress={followAll} style={({ pressed }) => [styles.all, pressed && { opacity: 0.6 }]}>
+                <Ionicons name="person-add" size={14} color={colors.brand} />
+                <Text style={styles.allText}>Follow all</Text>
+              </Pressable>
+            </View>
+          ) : null}
           <View style={[styles.card, (picks === null || empty) && styles.main]}>
             {picks === null ? (
               <View style={styles.waiting}><ActivityIndicator color={colors.textFaint} /></View>
@@ -324,6 +344,9 @@ const styleDefinitions = StyleSheet.create({
   personName: { ...typography.bodyStrong, color: colors.text, flexShrink: 1 },
   personMeta: { ...typography.small, color: colors.textMuted },
   quiet: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'center', minHeight: 44 },
+  allRow: { flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: spacing.xs },
+  all: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 32 },
+  allText: { ...typography.smallStrong, color: colors.brand },
   quietText: { ...typography.smallStrong, color: colors.textMuted },
   second: { gap: spacing.sm },
   label: { ...typography.smallStrong, color: colors.textMuted, paddingHorizontal: spacing.xs },
