@@ -33,17 +33,17 @@ const HOLD_MS = 6000;
 const RETRY_MS = 6000;
 /** Put away because a page where you write or post opened: up this long, it was seen (as long as any note with a button stays); less, it comes back after. */
 const SEEN_MS = 5000;
-/** How the question is drawn (Toast's HitNote): 'pill', a card under the page's title row; 'banner', a card just above the tab bar with two answers; 'strip', one slim line docked under the title row. */
-// 'pill' by default (Oct 20): it reads as placed, keeps titles, the bell and the Feed's tabs in
-// sight, never covers a clip's name, words or buttons (the banner did), and its button is a clear
+/** How the question is drawn (Toast's HitNote): 'pill', a card laid over the page's title row (never over the page under it); 'banner', a card just above the tab bar with two answers; 'strip', one slim line docked under the title row. */
+// 'pill' by default (Oct 20): it reads as placed, sits in the header's own band so it never covers
+// the page under it (the Community search, the Feed's "Players you might know"), never covers a clip's name, words or buttons (the banner did), and its button is a clear
 // target (the strip made its whole width one, easy to tap by mistake on the way to the page).
 const LOOK: HitNoteLook = 'pill';
 
 /**
  * "How was the hit at Alder Park? · Log it": once a hit you posted or joined
  * is over (90 minutes after it started), the next time the app is open this
- * asks, once, in the app's own note near the top, just under the page's
- * title row (never a phone alert), and
+ * asks, once, in the app's own note at the top, over the page's title row
+ * (never a phone alert), and
  * Log it opens the log sheet filled in from the hit (or, when your tracker
  * picked up the same game, that session, so it is logged once). Not while
  * the tutorial is up, a post is being written or is still going up, or under
@@ -156,8 +156,6 @@ export function HitFollowUp({ enabled }: { enabled: boolean }) {
         // The card above the tab bar offers the other answer too: no game to log, so it is not asked again.
         ...(LOOK === 'banner' ? { secondary: { label: 'Skip', onPress: () => undefined } } : {}),
         holdMs: HOLD_MS,
-        // Under the title row, not over it: titles, the bell and the Feed's group tabs stay in sight and tappable.
-        belowTop: true,
         onClosed: (how, upMs) => {
           showing.current = false;
           toastId.current = null;

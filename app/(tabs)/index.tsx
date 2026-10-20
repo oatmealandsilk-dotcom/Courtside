@@ -381,8 +381,10 @@ let barHolder: string | null = null;
 
 const useRouteFocusedInBrowser: () => boolean = Platform.OS === 'web' ? useRouteFocused : () => true;
 
-function Home({ scope, topRow, paused, onChrome }: {
+function Home({ scope, topRow, paused, onChrome, onSwipe }: {
   previewSection?: string;
+  /** Told when a finger's own swipe lands on a new page: given only on the Feed tab itself (For you and its group feeds), never on a one-person or one-court feed (post/[id] and the like). */
+  onSwipe?: () => void;
   scope?: FeedScope;
   /** The For you / groups row sits over the top: the per-page mark gives it the room. */
   topRow?: boolean;
@@ -425,8 +427,6 @@ function Home({ scope, topRow, paused, onChrome }: {
   // Everyone by id, so each page finds its author in one step rather than scanning every player.
   const usersById = useMemo(() => new Map(users.map((u) => [u.id, u])), [users]);
   const [active, setActive] = useState(0);
-  // A swipe that lands on a new page also lets a waiting note ("How was the hit?") come up: never before, so it never drops over the top row someone is reaching for (Oct 20 sweep).
-  const onPagerIndex = useCallback((i: number) => { setActive(i); markFeedSwiped(); }, []);
   const orderRef = useRef<string[]>([]);
   // The words over a clip end 16pt above the floating tab bar on every phone:
   // the bar stands on the home-indicator inset, which differs phone to phone,
@@ -1795,7 +1795,7 @@ function Home({ scope, topRow, paused, onChrome }: {
           {/* Pull-to-refresh is for phones: the app and a phone's browser (`phone`, above). Asking
               isDesktopBrowser() alone took it off the iPhone app: the app has no browser to read,
               so the check answered "computer" there, and the pull strip was never built. */}
-          <VerticalPager ref={pager} key={visit} initialIndex={active} onIndex={onPagerIndex} onRefresh={scope || !phone ? undefined : refreshFeed} pullTop={topRow ? TOP_BAND_TOP + (TOP_BAND_HEIGHT - 44) / 2 : 0} pullAlign={topRow ? 'left' : 'center'} pullHeader={scope ? undefined : <BrandMark size={topRow ? 22 : 40} />}>
+          <VerticalPager ref={pager} key={visit} initialIndex={active} onIndex={setActive} onSwiped={onSwipe} onRefresh={scope || !phone ? undefined : refreshFeed} pullTop={topRow ? TOP_BAND_TOP + (TOP_BAND_HEIGHT - 44) / 2 : 0} pullAlign={topRow ? 'left' : 'center'} pullHeader={scope ? undefined : <BrandMark size={topRow ? 22 : 40} />}>
             {[...feed.map((item, index) => {
               const distance = Math.abs(index - active);
               const ahead = index - active;
@@ -2432,12 +2432,12 @@ function GroupedFeed() {
   const waiting = feedGroups.some((g) => g.requests.length > 0 && g.members.some((m) => m.id === currentUserId && m.admin));
   return (
     <View style={{ flex: 1, alignSelf: 'stretch' }}>
-      <Home topRow paused={!!groupId} onChrome={forYouChrome} />
+      <Home topRow paused={!!groupId} onChrome={forYouChrome} onSwipe={markFeedSwiped} />
       {/* Feeds already opened stay built (paused, see-through) and cross-fade in, so a switch
           is a fade rather than building a whole feed on the spot (Oct 4, owner: "way smoother"). */}
       {kept.map((key) => (
         <FeedLayer key={key} shown={key === groupId}>
-          <Home scope={key === ACTIVITIES ? { activities: true } : { groupId: key }} paused={key !== groupId} onChrome={key === groupId ? groupChrome : undefined} />
+          <Home scope={key === ACTIVITIES ? { activities: true } : { groupId: key }} paused={key !== groupId} onChrome={key === groupId ? groupChrome : undefined} onSwipe={markFeedSwiped} />
         </FeedLayer>
       ))}
       <TipBubble tip="activities" shown={activitiesTip.shown} onClose={activitiesTip.close} pointer="up" style={{ top: insets.top + TOP_BAND_TOP + TOP_BAND_HEIGHT + 4, left: 16, right: 16 }} />

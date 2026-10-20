@@ -25,6 +25,8 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, {
   onIndex: (index: number) => void;
   /** The page the scroll came to rest on. */
   onSettled?: (index: number) => void;
+  /** A swipe (a finger, the wheel, the keys) landed on a new page; never a jump made in code (back to the top, a restored place). */
+  onSwiped?: (index: number) => void;
   /** Feed item to open on, so returning from a thread keeps your place. */
   initialIndex?: number;
   /** Pulling down past the first page fetches what is new. */
@@ -33,7 +35,7 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, {
   pullHeader?: React.ReactNode;
   pullTop?: number;
   pullAlign?: 'center' | 'left';
-}>(function VerticalPager({ children, onIndex, onSettled, initialIndex = 0, onRefresh, pullHeader, pullTop = 0, pullAlign = 'center' }, ref) {
+}>(function VerticalPager({ children, onIndex, onSettled, onSwiped, initialIndex = 0, onRefresh, pullHeader, pullTop = 0, pullAlign = 'center' }, ref) {
   // The scrollbar is part of the design too: reading the theme here is what
   // redraws it when the palette changes.
   useTheme();
@@ -74,7 +76,9 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, {
   // Which way the bar was last sent (1 tucked, -1 up, 0 not yet); cleared once a page lands.
   const barDir = useRef(0);
   const lastHeight = useRef(0);
-  useImperativeHandle(ref, () => ({ scrollToTop: () => { if (pager.current) settle(pager.current, 0); } }), []);
+  // Someone moved the feed themselves since it last landed (a drag, the wheel, a key): where it lands is a swipe (onSwiped).
+  const userMoved = useRef(false);
+  useImperativeHandle(ref, () => ({ scrollToTop: () => { userMoved.current = false; if (pager.current) settle(pager.current, 0); } }), []);
   const drag = useRef<{y:number;x:number;top:number;active:boolean;target:HTMLElement;scroll?:HTMLElement;scrollTop?:number;lastY:number;lastTime:number;velocity:number} | null>(null);
   const suppressClick = useRef(false);
   const animation = useRef(0);
@@ -91,11 +95,15 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, {
   const commit = (el: HTMLDivElement) => {
     if (!el.clientHeight) return;
     const index = Math.round(el.scrollTop / el.clientHeight);
+    const byUser = userMoved.current;
+    userMoved.current = false;
     if (index === reported.current) return;
     reported.current = index;
     onIndexRef.current(index);
+    if (byUser) onSwipedRef.current?.(index);
   };
   const onIndexRef = useRef(onIndex); onIndexRef.current = onIndex;
+  const onSwipedRef = useRef(onSwiped); onSwipedRef.current = onSwiped;
   const settle = (el: HTMLDivElement, target = Math.round(el.scrollTop / el.clientHeight) * el.clientHeight) => {
     stop();
     const from = el.scrollTop;
@@ -140,11 +148,15 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, {
       if (drag.current?.active) return;
       drag.current = null;
       stop();
+      userMoved.current = true;
       // Let the browser own trackpad movement, momentum and snap selection.
       // No preventDefault, finger-up timer, or synthetic scroll increments.
       el.style.scrollSnapType = 'y mandatory';
     };
     el.addEventListener('wheel', wheel, { passive: true });
+    // The arrow keys, Page Down and Space move it as well (the browser scrolls the focused feed).
+    const key = (event: KeyboardEvent) => { if (['ArrowDown', 'ArrowUp', 'PageDown', 'PageUp', ' ', 'Home', 'End'].includes(event.key)) userMoved.current = true; };
+    el.addEventListener('keydown', key);
     // Pull-to-refresh on the first page, by finger or wheel. The finger's
     // travel goes through the same give the phone has, so the feed moves about
     // half as far at first and less after; the line ticks once on the way
@@ -190,7 +202,7 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, {
     el.addEventListener('touchmove', touchM, { passive: true });
     el.addEventListener('touchend', touchE);
     el.addEventListener('touchcancel', touchE);
-    return () => { stop(); if (idle) clearTimeout(idle); el.removeEventListener('wheel', wheel); el.removeEventListener('wheel', pullWheel); el.removeEventListener('touchstart', touchS); el.removeEventListener('touchmove', touchM); el.removeEventListener('touchend', touchE); el.removeEventListener('touchcancel', touchE); };
+    return () => { stop(); if (idle) clearTimeout(idle); el.removeEventListener('wheel', wheel); el.removeEventListener('keydown', key); el.removeEventListener('wheel', pullWheel); el.removeEventListener('touchstart', touchS); el.removeEventListener('touchmove', touchM); el.removeEventListener('touchend', touchE); el.removeEventListener('touchcancel', touchE); };
   }, [children.length]);
 
   return <div style={{ position: 'relative', height: '100%', width: '100%' }}>
@@ -230,6 +242,7 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, {
           target=target.parentElement;
         }
         point.active=true;
+        if(!point.scroll)userMoved.current=true;
         event.currentTarget.setPointerCapture(event.pointerId);
         event.currentTarget.style.scrollSnapType='none';
       }

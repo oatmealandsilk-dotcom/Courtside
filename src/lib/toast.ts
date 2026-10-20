@@ -48,15 +48,9 @@ export interface ToastMessage {
    */
   holdMs?: number;
   /**
-   * Sits a step lower, under a page's title row instead of over it, so a
-   * question that can wait never hides a title, the bell or the Feed's top
-   * row, and a tap meant for them is never caught by it (Oct 20 sweep).
-   */
-  belowTop?: boolean;
-  /**
    * Drawn as a question about someone, not a quick note: their picture, the
    * words, a filled button, and a thin line that runs down while it waits
-   * ("How was the hit with Mira?"). 'pill' sits under the title row.
+   * ("How was the hit with Mira?"). 'pill' sits over the page's title row.
    */
   look?: HitNoteLook;
   /** Whose picture the `look` card shows. */

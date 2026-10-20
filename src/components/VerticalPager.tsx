@@ -48,7 +48,7 @@ function pageKey(child: React.ReactNode, index: number) {
 /** The ring round the logo in the Feed's corner. */
 export const CORNER_RING = 44;
 
-export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.ReactNode[]; onIndex: (index: number) => void; /** The page the scroll came to rest on. */ onSettled?: (index: number) => void; initialIndex?: number; /** Pulling down past the first page fetches what is new. */ onRefresh?: () => Promise<void>; /** Shown in the gap the pull opens, beside the disc. */ pullHeader?: React.ReactNode; /** How far below the clock the pull row sits (clear of a band laid over the top). */ pullTop?: number; /** 'left': the logo and disc in the top-left corner, beside the Feed's words (Oct 4). */ pullAlign?: 'center' | 'left' }>(function VerticalPager({ children, onIndex, onSettled, initialIndex = 0, onRefresh, pullHeader, pullTop = 0, pullAlign = 'center' }, ref) {
+export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.ReactNode[]; onIndex: (index: number) => void; /** The page the scroll came to rest on. */ onSettled?: (index: number) => void; initialIndex?: number; /** A finger's swipe landed on a new page (never a jump made in code: back to the top, a restored place). */ onSwiped?: (index: number) => void; /** Pulling down past the first page fetches what is new. */ onRefresh?: () => Promise<void>; /** Shown in the gap the pull opens, beside the disc. */ pullHeader?: React.ReactNode; /** How far below the clock the pull row sits (clear of a band laid over the top). */ pullTop?: number; /** 'left': the logo and disc in the top-left corner, beside the Feed's words (Oct 4). */ pullAlign?: 'center' | 'left' }>(function VerticalPager({ children, onIndex, onSettled, onSwiped, initialIndex = 0, onRefresh, pullHeader, pullTop = 0, pullAlign = 'center' }, ref) {
   // Hears a theme change, so its own colours never lag the page's.
   useTheme();
   const [height, setHeight] = useState(0);
@@ -58,6 +58,8 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
   // Where the first page starts: past the pull strip when there is one.
   const top = onRefresh ? insets.top + PULL_GAP : 0;
   const list = useAnimatedRef<Animated.ScrollView>();
+  // A finger is (or was) moving the feed since it last came to rest: set as a drag begins, cleared once it lands or on a jump made in code.
+  const fingerMoved = useRef(false);
   // Scrolling is asked for on the UI thread, where the list lives. `y` is
   // measured from the first page's top.
   const jump = useCallback((y: number, animated: boolean) => {
@@ -66,7 +68,7 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
     if (node?.scrollTo) { node.scrollTo({ x: 0, y: target, animated }); return; }
     runOnUI(() => { 'worklet'; scrollTo(list, 0, target, animated); })();
   }, [list, top]);
-  useImperativeHandle(ref, () => ({ scrollToTop: () => { setAroundRef.current(0); jump(0, true); } }), [jump]);
+  useImperativeHandle(ref, () => ({ scrollToTop: () => { fingerMoved.current = false; setAroundRef.current(0); jump(0, true); } }), [jump]);
   const setAroundRef = useRef<(index: number) => void>(() => undefined);
 
   // How far the strip is pulled into view (the first page's corners round
@@ -166,10 +168,13 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
   setAroundRef.current = setAround;
   const settled = useCallback((y: number) => {
     swiping.value = false;
+    const from = last.current;
     changed(pageOf(y));
     setAround(pageOf(y));
     onSettled?.(last.current);
-  }, [changed, pageOf, onSettled]);
+    // Only a finger's own swipe that ends on another page counts as a swipe (onSwiped).
+    if (fingerMoved.current) { fingerMoved.current = false; if (last.current !== from) onSwiped?.(last.current); }
+  }, [changed, pageOf, onSettled, onSwiped]);
   const dragFrom = useCallback((y: number) => setAround(pageOf(y)), [pageOf]);
   settledRef.current = settled;
   const dragEnded = useCallback((y: number) => {
@@ -177,6 +182,8 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
     settleTimer.current = setTimeout(() => { settleTimer.current = null; settled(y); }, 140);
   }, [settled]);
   const cancelSettle = useCallback(() => { if (settleTimer.current) { clearTimeout(settleTimer.current); settleTimer.current = null; } }, []);
+  // A finger began this move (onBeginDrag), so where it lands is a real swipe.
+  const fingerDown = useCallback(() => { fingerMoved.current = true; }, []);
 
   // Everything per frame stays on the UI thread: the bar follows the swipe
   // (moving on tucks it, coming back lifts it), and only a change of page
@@ -225,6 +232,7 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
       // A second swipe within the last one's 140ms settle wait: drop that wait, or it would land
       // the old page mid-gesture (found in review, Oct 19).
       runOnJS(cancelSettle)();
+      runOnJS(fingerDown)();
       // The tutorial waits for this finger to lift before it starts.
       runOnJS(setPageScrolling)(true);
       settling.value = false;

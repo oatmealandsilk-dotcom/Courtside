@@ -34,12 +34,15 @@ const ACTION_SCREEN_READER_MS = 10000;
 const LONG_MS = 9000;
 const LONG_SCREEN_READER_MS = 15000;
 /**
- * How far under the clock a `belowTop` note sits: past a page's title row
- * (and the Feed's "For you · group · +" row), so it covers neither.
+ * Where the 'pill' (option A) sits: over the page's own title row, in the
+ * band the title, the bell and the Feed's "For you · group" row already use,
+ * never down over what the page shows under it (the Community search field,
+ * the Feed's "Players you might know"). Short enough to fit that band; for
+ * its 6 seconds it is the header, and a flick up puts it away at once.
  */
-const BELOW_TOP = 72;
-/** On Community, under its Find Players / Discussions switch too, so a tap meant for the switch is never caught. */
-const BELOW_SWITCH = 140;
+const PILL_TOP = 2;
+/** Past the screen's edge by at least this much, so the card slides in from out of sight. */
+const OFF_MIN = 120;
 /** Where the 'strip' docks: right under a page's title row (on Community, right under its switch's line). */
 const STRIP_TOP = 54;
 const STRIP_SWITCH = 128;
@@ -64,6 +67,8 @@ export function Toast() {
   const barInset = useBarInset();
   const incoming = useToast();
   const [toast, setToast] = useState<ToastMessage | null>(null);
+  const toastRef = useRef<ToastMessage | null>(null);
+  toastRef.current = toast;
   const y = useSharedValue(-24);
   const shown = useSharedValue(0);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -91,11 +96,15 @@ export function Toast() {
     return () => sub.remove();
   }, []);
 
+  // How far the question card (HitNote) travels to be out of sight: it slides all the way off its
+  // edge rather than fading, as glass must never sit under a fade (Oct 17: the iPhone drew it see-through).
+  const away = useSharedValue(OFF_MIN);
   const hide = (how: ToastClosed = 'timeout') => {
     settle(how);
     if (timer.current) clearTimeout(timer.current);
-    y.value = withTiming(-24, { duration: 200, easing: OUT });
-    shown.value = withTiming(0, { duration: 200, easing: OUT }, (done) => { if (done) runOnJS(setToast)(null); });
+    const note = !!(toastRef.current?.look && toastRef.current.person);
+    y.value = withTiming(note ? -away.value : -24, { duration: note ? 240 : 200, easing: OUT });
+    shown.value = withTiming(0, { duration: note ? 240 : 200, easing: OUT }, (done) => { if (done) runOnJS(setToast)(null); });
   };
 
   useEffect(() => {
@@ -105,11 +114,14 @@ export function Toast() {
     live.current = incoming;
     shownAt.current = Date.now();
     setToast(incoming);
-    fromBottom.value = incoming.look === 'banner' && incoming.person ? 1 : 0;
+    const note = !!(incoming.look && incoming.person);
+    fromBottom.value = incoming.look === 'banner' && note ? 1 : 0;
+    // From below the tab bar's edge, or from above the clock: far enough to start out of sight.
+    away.value = note ? (incoming.look === 'banner' ? barInset + insets.bottom : insets.top) + OFF_MIN : OFF_MIN;
     if (timer.current) clearTimeout(timer.current);
-    y.value = -24;
+    y.value = note ? -away.value : -24;
     shown.value = 0;
-    y.value = withTiming(0, { duration: 320, easing: IN });
+    y.value = withTiming(0, { duration: note ? 380 : 320, easing: IN });
     shown.value = withTiming(1, { duration: 260, easing: IN });
     const reader = screenReader.current;
     // VoiceOver doesn't read a toast that slides in, so one that says why
@@ -145,18 +157,24 @@ export function Toast() {
     opacity: shown.value,
     transform: [{ translateY: fromBottom.value ? -y.value : y.value + underBanner.value }, { scale: 0.96 + shown.value * 0.04 }],
   }));
+  // The question card (HitNote) is glass: it comes and goes by moving only, never by fading
+  // (no opacity on any parent of a Glass, Oct 17). It slides in from its edge and back out.
+  const slide = useAnimatedStyle(() => ({
+    transform: [{ translateY: fromBottom.value ? -y.value : y.value + underBanner.value }, { scale: 0.97 + shown.value * 0.03 }],
+  }));
 
   if (!toast) return null;
   if (toast.look && toast.person) {
-    // 'banner' stands just above the tab bar on the four tabs (the screen's foot elsewhere); 'pill' just under the title row.
+    // 'banner' stands just above the tab bar on the four tabs (the screen's foot elsewhere); 'pill' over the title row itself.
     const place = toast.look === 'banner'
       ? { bottom: (TABS.has(pathname) ? barInset : insets.bottom) + spacing.sm }
       : toast.look === 'strip'
         ? { top: insets.top + (pathname === '/discuss' ? STRIP_SWITCH : STRIP_TOP) }
-        : { top: insets.top + (pathname === '/discuss' ? BELOW_SWITCH : BELOW_TOP) };
+        : { top: insets.top + PILL_TOP };
+    // The strip is a plain fill, no glass, so it may still fade as it docks; the two glass cards only move.
     const note = (
       <GestureDetector gesture={flick}>
-        <Animated.View pointerEvents="box-none" style={[styles.wrap, toast.look === 'strip' && styles.wrapEdge, place, style]}>
+        <Animated.View pointerEvents="box-none" style={[styles.wrap, toast.look === 'strip' && styles.wrapEdge, place, toast.look === 'strip' ? style : slide]}>
           <HitNote toast={toast} hide={hide} />
         </Animated.View>
       </GestureDetector>
@@ -174,7 +192,7 @@ export function Toast() {
   const action = toast.action;
   const card = (
     <GestureDetector gesture={flick}>
-      <Animated.View pointerEvents="box-none" style={[styles.wrap, { top: insets.top + (toast.belowTop ? (pathname === '/discuss' ? BELOW_SWITCH : BELOW_TOP) : spacing.xs) }, style]}>
+      <Animated.View pointerEvents="box-none" style={[styles.wrap, { top: insets.top + spacing.xs }, style]}>
         <View style={styles.shadow}>
           <Glass radius={22} style={styles.card}>
             <View style={styles.row}>
@@ -291,8 +309,9 @@ function HoldLine({ ms, token, edge = false }: { ms: number; token: number; edge
  * card rather than a quick note. Their picture with the hit's mark on its
  * corner, the question and where, and Log it as a filled button.
  *
- * 'pill' (option A): a glass card just under the page's title row, as wide
- * as the page allows, so it reads as placed there, not dropped in the middle.
+ * 'pill' (option A): a glass card laid over the page's own title row, as
+ * wide as the page allows, so it reads as placed there, not dropped in the
+ * middle, and never covers what the page shows under its header.
  * 'banner' (option B): the same card standing just above the tab bar, as the
  * phone's own banners do, with its two answers side by side under the words.
  * 'strip' (option C): one slim line, edge to edge, docked under the title
@@ -335,16 +354,16 @@ function HitNote({ toast, hide }: { toast: ToastMessage; hide: (how?: ToastClose
   return (
     <View style={[styles.shadow, styles.noteShadow]}>
       <Glass radius={20} style={styles.card}>
-        <View style={styles.noteRow}>
+        <View style={[styles.noteRow, !banner && styles.noteRowSlim]}>
           <Pressable
             accessibilityRole={toast.href ? 'link' : 'text'}
             accessibilityLiveRegion="polite"
             accessibilityLabel={toast.body ? `${toast.title}. ${toast.body}` : toast.title}
             onPress={open}
-            style={styles.noteInfo}
+            style={[styles.noteInfo, !banner && styles.noteInfoSlim]}
           >
             <View>
-              <Avatar name={person.name} seed={person.seed} uri={person.uri} size={banner ? 40 : 36} />
+              <Avatar name={person.name} seed={person.seed} uri={person.uri} size={banner ? 40 : 32} />
               <HitBadge />
             </View>
             <View style={styles.words}>
@@ -358,7 +377,7 @@ function HitNote({ toast, hide }: { toast: ToastMessage; hide: (how?: ToastClose
               accessibilityLabel={`${action.label}: ${toast.title}`}
               hitSlop={8}
               onPress={() => { hide('action'); action.onPress(); }}
-              style={({ pressed }) => [styles.fill, pressed && styles.fillPressed]}
+              style={({ pressed }) => [styles.fill, styles.fillSlim, pressed && styles.fillPressed]}
             >
               <Text style={styles.fillLabel}>{action.label}</Text>
             </Pressable>
@@ -468,6 +487,10 @@ const styleDefinitions = StyleSheet.create({
   noteShadow: { width: '100%', maxWidth: 380, borderRadius: 20, shadowOpacity: 0.12, shadowRadius: 18, shadowOffset: { width: 0, height: 8 } },
   noteRow: { flexDirection: 'row', alignItems: 'center', paddingLeft: 10, paddingRight: 10, paddingVertical: 10, gap: 10 },
   noteInfo: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 11, minHeight: 44 },
+  // Option A fits the title row's band (PILL_TOP): a little less padding, the same words and button.
+  noteRowSlim: { paddingVertical: 4 },
+  noteInfoSlim: { minHeight: 40 },
+  fillSlim: { minHeight: 32, borderRadius: 16 },
   noteTitle: { ...typography.bodyStrong, fontSize: 14, color: colors.text, letterSpacing: -0.2 },
   noteBody: { ...typography.small, fontSize: 12, color: colors.textMuted, marginTop: 1 },
   hitBadge: { position: 'absolute', right: -3, bottom: -3, width: 18, height: 18, borderRadius: 9, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.surface },
