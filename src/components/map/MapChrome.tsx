@@ -1,4 +1,4 @@
-import { PRESS_DIM } from '@/theme/press';
+import { PRESS_DIM, PRESS_SHRINK } from '@/theme/press';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
@@ -495,7 +495,7 @@ export function PlayersPill({ items, query = '', filter = 'all', courts = [], lo
   const n = items.length;
   const words = n === 1 ? '1 player' : n ? `All ${n} players` : emptyLine(query, filter, courts, lockOf(lock, query, filter));
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={n ? 'Show the full list' : 'Show players'} onPress={() => { haptics.tap(); onOpen(); }} style={({ pressed }) => [styles.pillLift, pressed && styles.listPressed]}>
+    <Pressable accessibilityRole="button" accessibilityLabel={n ? 'Show the full list' : 'Show players'} onPress={() => { haptics.tap(); onOpen(); }} style={({ pressed }) => [styles.pillLift, pressed && styles.glassPressed]}>
       <Glass radius={21} style={styles.playersPill}>
         <Ionicons name={n ? 'people' : 'people-outline'} size={15} color={colors.brand} />
         <Text style={styles.playersPillText} numberOfLines={1}>{words}</Text>
@@ -1462,7 +1462,9 @@ const styleDefinitions = StyleSheet.create({
   barRound: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: `${colors.borderStrong}55` },
   barRoundOn: { borderRadius: 22, backgroundColor: colors.brand, borderColor: colors.brand },
   // Pressed, a button dims rather than shrinks (a shrunk icon goes soft on an iPhone, Oct 11).
-  barPressed: { opacity: PRESS_DIM },
+  // Glass inside: pressed shrinks, never dims (a dim over glass can turn it see-through on iPhone, Oct 17).
+  barPressed: { transform: [{ scale: 0.94 }] },
+  glassPressed: { transform: [{ scale: PRESS_SHRINK }] },
   searchLift: { flex: 1, minWidth: 0, borderRadius: 22, shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } },
   search: { height: 44, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: 14, borderWidth: StyleSheet.hairlineWidth, borderColor: `${colors.borderStrong}55` },
   // The words' room: the field fills it, the bar's own words ("Search Los Angeles") under it while nothing is typed.
