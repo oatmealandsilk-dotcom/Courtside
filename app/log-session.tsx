@@ -9,6 +9,7 @@ import { Chips, Section, SheetTitle, Submit, formBody } from '@/components/sheet
 import { WhoYouPlayed } from '@/components/WhoYouPlayed';
 import { KIND_LABEL, activityDay, activityTitle, activityWhen, dayWords, fromWho, loggedLabel, privateLine, sessionEyebrow } from '@/features/activity/format';
 import { showLogged } from '@/features/activity/useTrackerSession';
+import { askAfterLogged } from '@/features/activity/askAfterLog';
 import { Duration } from '@/components/session/Duration';
 import { trackerName } from '@/features/activity/lengths';
 import { TrackedLength } from '@/components/session/TrackedLength';
@@ -427,7 +428,9 @@ function LogSession() {
         // A personal record it beat is the moment instead (records.ts).
         const added: PracticeSession = { id, userId: currentUserId ?? '', day, minutes, kind, won, ...(sets ? { sets } : {}), createdAt: new Date().toISOString() };
         const record = currentUserId ? recordToast(beatenBy(currentUserId, sessions, added, posts, stories), [added, ...sessions]) : null;
-        showLogged(minutes, { kind, won, sets, workout: kind === 'fitness' ? workout : undefined }, streak, id, record);
+        // Then, once that note has gone by itself or been put away (never over a record, a hit's "who else
+        // was there", or the Instagram picture): "Something come up today? · Ask" (R11, askAfterLog).
+        showLogged(minutes, { kind, won, sets, workout: kind === 'fitness' ? workout : undefined }, streak, id, record, record || fromHit?.placeId ? undefined : askAfterLogged(kind));
         // Logged from a hit at a court: who else was there that day, a few seconds on.
         if (fromHit?.placeId) {
           const people = users;

@@ -10,7 +10,7 @@ import { computeStats } from '@/features/practice/stats';
 import { duration } from '@/lib/format';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import * as haptics from '@/lib/haptics';
-import { show as showToast } from '@/lib/toast';
+import { show as showToast, type ToastMessage } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
 import { loggedLabel } from './format';
 import { canScore, tookScoreNotKept } from './score';
@@ -151,7 +151,7 @@ export function useTrackerSession(activityId: ID | undefined) {
  * 2h 40m · beat 2h 5m" on a gold rosette, with a reward buzz and the same
  * Instagram button.
  */
-export function showLogged(minutes: number, s: Pick<PracticeSession, 'kind' | 'won' | 'sets'> & { workout?: string }, streak: { now: number; before: number }, sessionId?: string, record?: { title: string; body: string } | null) {
+export function showLogged(minutes: number, s: Pick<PracticeSession, 'kind' | 'won' | 'sets'> & { workout?: string }, streak: { now: number; before: number }, sessionId?: string, record?: { title: string; body: string } | null, onClosed?: ToastMessage['onClosed']) {
   // Logged, but the score didn't save (the server isn't ready for a practice's yet): said plainly, never shown as saved.
   if (tookScoreNotKept(sessionId)) {
     showToast({ title: 'Logged without the score', body: 'Scores aren’t ready yet. Add it later from Your sessions.', icon: 'alert-circle-outline', long: true });
@@ -168,6 +168,8 @@ export function showLogged(minutes: number, s: Pick<PracticeSession, 'kind' | 'w
     glyph: 'logged',
     ...(streak.now >= 2 ? { stat: { value: streak.now, from: streak.before, label: 'day streak' } } : {}),
     ...(sessionId ? { action: shareAction({ session: sessionId }) } : {}),
+    // Told when the note goes, for what follows it (log-session's "Something come up today?", R11).
+    ...(onClosed ? { onClosed } : {}),
   });
 }
 
