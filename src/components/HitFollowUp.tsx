@@ -33,8 +33,8 @@ const HOLD_MS = 6000;
 const RETRY_MS = 6000;
 /** Put away because a page where you write or post opened: up this long, it was seen (as long as any note with a button stays); less, it comes back after. */
 const SEEN_MS = 5000;
-/** How the question is drawn (Toast's HitNote): 'pill', a card under the page's title row; 'banner', a card just above the tab bar with two answers. */
-const LOOK: HitNoteLook = 'banner';
+/** How the question is drawn (Toast's HitNote): 'pill', a card under the page's title row; 'banner', a card just above the tab bar with two answers; 'strip', one slim line docked under the title row. */
+const LOOK: HitNoteLook = 'strip';
 
 /**
  * "How was the hit at Alder Park? · Log it": once a hit you posted or joined

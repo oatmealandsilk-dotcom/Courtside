@@ -40,6 +40,9 @@ const LONG_SCREEN_READER_MS = 15000;
 const BELOW_TOP = 72;
 /** On Community, under its Find Players / Discussions switch too, so a tap meant for the switch is never caught. */
 const BELOW_SWITCH = 140;
+/** Where the 'strip' docks: right under a page's title row (on Community, right under its switch's line). */
+const STRIP_TOP = 54;
+const STRIP_SWITCH = 128;
 /** The four tabs, where the floating tab bar is on show. */
 const TABS = new Set(['/', '/index', '/discuss', '/coaches', '/profile']);
 const IN = Easing.out(Easing.cubic);
@@ -148,10 +151,12 @@ export function Toast() {
     // 'banner' stands just above the tab bar on the four tabs (the screen's foot elsewhere); 'pill' just under the title row.
     const place = toast.look === 'banner'
       ? { bottom: (TABS.has(pathname) ? barInset : insets.bottom) + spacing.sm }
-      : { top: insets.top + (pathname === '/discuss' ? BELOW_SWITCH : BELOW_TOP) };
+      : toast.look === 'strip'
+        ? { top: insets.top + (pathname === '/discuss' ? STRIP_SWITCH : STRIP_TOP) }
+        : { top: insets.top + (pathname === '/discuss' ? BELOW_SWITCH : BELOW_TOP) };
     const note = (
       <GestureDetector gesture={flick}>
-        <Animated.View pointerEvents="box-none" style={[styles.wrap, place, style]}>
+        <Animated.View pointerEvents="box-none" style={[styles.wrap, toast.look === 'strip' && styles.wrapEdge, place, style]}>
           <HitNote toast={toast} hide={hide} />
         </Animated.View>
       </GestureDetector>
@@ -248,11 +253,11 @@ export function Toast() {
 }
 
 /** The hit's mark, small, on the corner of the other player's picture. */
-function HitBadge() {
+function HitBadge({ small = false }: { small?: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
   return (
-    <View style={styles.hitBadge}>
-      <HitGlyph size={10} color={colors.brandInk} />
+    <View style={[styles.hitBadge, small && styles.hitBadgeSmall]}>
+      <HitGlyph size={small ? 8 : 10} color={colors.brandInk} />
     </View>
   );
 }
@@ -262,7 +267,7 @@ function HitBadge() {
  * waits, so its going is expected, not sudden. Moves by sliding, never by
  * fading; still for someone who asked for less motion.
  */
-function HoldLine({ ms, token }: { ms: number; token: number }) {
+function HoldLine({ ms, token, edge = false }: { ms: number; token: number; edge?: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
   const reduced = useReducedMotion();
   const [w, setW] = useState(0);
@@ -275,7 +280,7 @@ function HoldLine({ ms, token }: { ms: number; token: number }) {
   const run = useAnimatedStyle(() => ({ transform: [{ translateX: left.value }] }));
   if (reduced) return null;
   return (
-    <View style={styles.holdTrack} pointerEvents="none" onLayout={(e) => setW(e.nativeEvent.layout.width)}>
+    <View style={[styles.holdTrack, edge && styles.holdEdge]} pointerEvents="none" onLayout={(e) => setW(e.nativeEvent.layout.width)}>
       <Animated.View style={[styles.holdRun, run]} />
     </View>
   );
@@ -290,12 +295,39 @@ function HoldLine({ ms, token }: { ms: number; token: number }) {
  * as the page allows, so it reads as placed there, not dropped in the middle.
  * 'banner' (option B): the same card standing just above the tab bar, as the
  * phone's own banners do, with its two answers side by side under the words.
+ * 'strip' (option C): one slim line, edge to edge, docked under the title
+ * row as if the page's header had grown a row for it.
  */
 function HitNote({ toast, hide }: { toast: ToastMessage; hide: (how?: ToastClosed) => void }) {
   const styles = useThemedStyles(styleDefinitions);
   const person = toast.person!;
   const action = toast.action;
   const banner = toast.look === 'banner';
+  if (toast.look === 'strip') {
+    return (
+      <View style={styles.strip}>
+        <Pressable
+          accessibilityRole={action ? 'button' : 'text'}
+          accessibilityLiveRegion="polite"
+          accessibilityLabel={action ? `${action.label}: ${toast.title}${toast.body ? `, ${toast.body}` : ''}` : toast.title}
+          onPress={() => { hide('action'); if (action) action.onPress(); else if (toast.href) router.push(toast.href as never); }}
+          style={({ pressed }) => [styles.stripRow, pressed && styles.stripPressed]}
+        >
+          <View>
+            <Avatar name={person.name} seed={person.seed} uri={person.uri} size={28} />
+            <HitBadge small />
+          </View>
+          <Text style={styles.stripWords} numberOfLines={1}>
+            <Text style={styles.stripTitle}>{toast.title}</Text>
+            {toast.body ? <Text style={styles.stripBody}>{`  ${toast.body}`}</Text> : null}
+          </Text>
+          {action ? <Text style={styles.stripAction}>{action.label}</Text> : null}
+          <Ionicons name="chevron-forward" size={14} color={colors.brand} />
+        </Pressable>
+        {toast.holdMs ? <HoldLine ms={toast.holdMs} token={toast.id} edge /> : null}
+      </View>
+    );
+  }
   const open = () => {
     hide('tap');
     if (toast.href) router.push(toast.href as never);
@@ -446,6 +478,16 @@ const styleDefinitions = StyleSheet.create({
   answer: { flex: 1, minHeight: 38, borderRadius: 19 },
   quiet: { backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
   quietLabel: { ...typography.smallStrong, color: colors.text, letterSpacing: -0.1 },
+  wrapEdge: { left: 0, right: 0 },
+  strip: { alignSelf: 'stretch', backgroundColor: colors.bgElevated, borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
+  stripRow: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 46, paddingHorizontal: spacing.lg },
+  stripPressed: { backgroundColor: colors.surfaceAlt },
+  stripWords: { flex: 1 },
+  stripTitle: { ...typography.smallStrong, color: colors.text, letterSpacing: -0.1 },
+  stripBody: { ...typography.small, fontSize: 12, color: colors.textMuted },
+  stripAction: { ...typography.smallStrong, color: colors.brand, letterSpacing: -0.1 },
+  hitBadgeSmall: { width: 15, height: 15, borderRadius: 7.5, right: -3, bottom: -3, borderWidth: 1.5, borderColor: colors.bgElevated },
+  holdEdge: { left: 0, right: 0, borderRadius: 0 },
   holdTrack: { position: 'absolute', left: 14, right: 14, bottom: 0, height: 2, borderRadius: 1, overflow: 'hidden' },
   holdRun: { flex: 1, backgroundColor: colors.brand, opacity: 0.55 },
   title: { ...typography.smallStrong, color: colors.text, letterSpacing: -0.1 },
