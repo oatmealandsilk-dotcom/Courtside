@@ -17,7 +17,7 @@ import { TipBubble } from '@/components/TipBubble';
 import { useTip } from '@/features/tips/tips';
 import { useIsFocused } from '@/lib/useIsFocused';
 import { useTourOpen } from '@/features/tour/tourStore';
-import { goBack } from '@/lib/goBack';
+import { goBack, onPageChange, sheetOnTop } from '@/lib/goBack';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
@@ -490,20 +490,37 @@ function Home({ scope, topRow, paused, onChrome }: {
   // The bottom bar's tuck (words hidden) belongs to the Feed: leaving it for
   // another tab or a page on top gives the bar back its words, and coming
   // back puts the Feed's tuck back as it was. Switching between For you and a
-  // group inside the Feed leaves the bar alone.
+  // group inside the Feed leaves the bar alone, and so does a see-through
+  // sheet over the Feed (a clip's comments, Share, the post menu, Likes…):
+  // the Feed is still the page you are on, so the bar stays exactly as it
+  // was. Only if that sheet gives way to a real page does the bar get its words.
   const keptDuck = useRef<number | null>(null);
+  const stopWaiting = useRef<(() => void) | null>(null);
   useEffect(() => {
+    stopWaiting.current?.();
+    stopWaiting.current = null;
     if (!focused || paused) return;
     barHolder = owner;
     if (keptDuck.current !== null) { setBarCompact(keptDuck.current > 0.5); keptDuck.current = null; }
-    return () => {
-      if (focusedNow.current) return;
+    const giveBack = () => {
       keptDuck.current = barCompact.value;
       if (barHolder !== owner) return;
       barHolder = null;
       setBarCompact(false);
     };
+    return () => {
+      if (focusedNow.current) return;
+      if (!sheetOnTop()) { giveBack(); return; }
+      const stop = onPageChange(() => {
+        if (focusedNow.current || sheetOnTop()) return;
+        stop();
+        if (stopWaiting.current === stop) stopWaiting.current = null;
+        giveBack();
+      });
+      stopWaiting.current = stop;
+    };
   }, [focused, paused, owner]);
+  useEffect(() => () => { stopWaiting.current?.(); }, []);
   const navigation = useNavigation();
   // Gone (a scoped feed closed with pages over it, say): a stage it put up goes with it, so no other feed is left faded or unable to open comments.
   useEffect(() => () => { if (getStage()?.owner === owner) clearStage(); }, []); // eslint-disable-line react-hooks/exhaustive-deps

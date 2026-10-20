@@ -11,7 +11,7 @@ export const HOME: Href = '/(tabs)';
 
 /** Just enough of the app's navigation to see which page is on show. */
 interface NavState { index?: number; routes?: { name: string; state?: unknown }[] }
-interface RootNavigation { isReady: () => boolean; getRootState: () => unknown }
+interface RootNavigation { isReady: () => boolean; getRootState: () => unknown; addListener?: (type: 'state', callback: () => void) => () => void }
 let rootNavigation: RootNavigation | null = null;
 
 /** The shell hands over the app's navigation once it is up (see AppShell), so the helpers below can look at it. */
@@ -42,6 +42,40 @@ export function tabsOnShow(): boolean {
     }
   } catch { /* Not up yet: go by the router alone. */ }
   return false;
+}
+
+/**
+ * The see-through sheets: pages that open over the one you were on and leave
+ * it showing underneath (the `transparentModal` screens in app/_layout.tsx,
+ * keep the two lists together), plus Likes, which hides the bottom bar over
+ * the Feed the way those sheets do.
+ */
+const SEE_THROUGH = new Set([
+  'compose', 'ask', 'comments', 'session-stats', 'who-played', 'health-share', 'post-menu', 'invite', 'log-session',
+  'session-tag', 'court-report', 'court-now', 'start-session', 'new-session', 'live-session', 'flyby', 'map-visibility',
+  'open-to-hit', 'tennis-sheet', 'review-request', 'hit-request/new', 'edit-post', 'share', 'pick-group', 'find-groups',
+  'group-form', 'group-invite', 'pick-court', 'pick-session', 'ask-coach', 'messages/new', 'likes',
+]);
+
+/** Whether the page on top is a see-through sheet (see SEE_THROUGH): the page under it is still the one you are on. */
+export function sheetOnTop(): boolean {
+  try {
+    if (!rootNavigation?.isReady()) return false;
+    let state = rootNavigation.getRootState() as NavState | undefined;
+    for (let depth = 0; state?.routes?.length && depth < 8; depth++) {
+      const route = state.routes[state.index ?? state.routes.length - 1];
+      if (!route) return false;
+      if (SEE_THROUGH.has(route.name)) return true;
+      if (route.name === '(tabs)') return false;
+      state = route.state as NavState | undefined;
+    }
+  } catch { /* Not up yet. */ }
+  return false;
+}
+
+/** Calls `onChange` after each change of page, once the screens have redrawn for it; returns the way to stop. */
+export function onPageChange(onChange: () => void): () => void {
+  return rootNavigation?.addListener?.('state', onChange) ?? (() => undefined);
 }
 
 /**

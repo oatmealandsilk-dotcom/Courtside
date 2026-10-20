@@ -112,6 +112,7 @@ function RootStack() {
       {/* Edit Profile always slides away to the right, however you leave it (Oct 5, owner: it sometimes just vanished
           when a tab was tapped, and slid when Back or Save was used). */}
       <Stack.Screen name="edit-profile" options={{ animation: 'slide_from_right' }} />
+      {/* Every see-through sheet below (transparentModal) is also listed in SEE_THROUGH in src/lib/goBack.ts, so the Feed keeps the bottom bar as it was under it. */}
       {/* The Create box brings its own entrance (see compose.tsx); the page itself just fades. A sheet handing over to a
           session's "Log it" page (the Session sheet, Oct 16) has its dim and surface up already, so then the page shows at
           once and the sheet growing into it is the whole motion (sheetHandOver); a fade there would dip it. */}
