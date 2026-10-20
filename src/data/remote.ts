@@ -659,6 +659,8 @@ export interface UserState {
   pushRecap?: boolean;
   /** "Players joining near you" and "Streak reminders" (migration 146). Undefined on a database without them: the phone's own choice stands. */
   pushJoined?: boolean; pushStreak?: boolean;
+  /** "Hit invite reminders" (migration 169). Undefined on a database without it: the switch is not shown. */
+  pushHitNudges?: boolean;
   /** "Questions you could answer" (migration 168). Undefined on a database without it: the switch is not shown. */
   pushQuestions?: boolean;
   /** What the coach works around (injuries, schedule, gear): kept in this private row, never on the public profile. Undefined on a database without migration 19. */
@@ -769,7 +771,7 @@ const toCoach = (r: CoachRow, services: CoachServiceRow[], me: ID): Coach => ({
 /** One pin from map_players (migration 63; `mutual` since 98). */
 interface MapPlayerRow { user_id: ID; lat: number; lng: number; place: MapPlace | string; court_id: string | null; court_name: string | null; city: string | null; seen_at: string | null; open_until: string | null; mutual?: boolean | null }
 interface NotificationRow { id: string; user_id: string; actor_id: string; kind: string; target_id: string; target_kind: string; preview: string | null; read: boolean; created_at: string }
-interface UserStateRow { muted_ids: string[]; blocked_ids: string[]; saved_question_ids: string[]; payment_methods: PaymentMethod[]; default_payment_id: string | null; show_activity: boolean; push_likes: boolean; push_coach: boolean; push_messages?: boolean | null; push_activity?: boolean | null; push_map_friends?: boolean | null; push_map_hits?: boolean | null; push_map_players?: boolean | null; push_courts?: boolean | null; contacts_findable?: boolean | null; push_recap?: boolean | null; push_joined?: boolean | null; push_streak?: boolean | null; push_questions?: boolean | null; private_profile?: { constraints?: PlayerProfile['constraints']; tournaments?: unknown } | null; map_visibility?: string | null;
+interface UserStateRow { muted_ids: string[]; blocked_ids: string[]; saved_question_ids: string[]; payment_methods: PaymentMethod[]; default_payment_id: string | null; show_activity: boolean; push_likes: boolean; push_coach: boolean; push_messages?: boolean | null; push_activity?: boolean | null; push_map_friends?: boolean | null; push_map_hits?: boolean | null; push_map_players?: boolean | null; push_courts?: boolean | null; contacts_findable?: boolean | null; push_recap?: boolean | null; push_joined?: boolean | null; push_streak?: boolean | null; push_hit_nudges?: boolean | null; push_questions?: boolean | null; private_profile?: { constraints?: PlayerProfile['constraints']; tournaments?: unknown } | null; map_visibility?: string | null;
   /** Your own age group, readable only by you (migration 64). Absent before it. */
   age_group?: string | null;
   /** Your birthday, readable only by you (migration 13). */
@@ -834,6 +836,7 @@ const toUserState = (r: UserStateRow): UserState => ({
   pushRecap: typeof r.push_recap === 'boolean' ? r.push_recap : undefined,
   pushJoined: typeof r.push_joined === 'boolean' ? r.push_joined : undefined,
   pushStreak: typeof r.push_streak === 'boolean' ? r.push_streak : undefined,
+  pushHitNudges: typeof r.push_hit_nudges === 'boolean' ? r.push_hit_nudges : undefined,
   pushQuestions: typeof r.push_questions === 'boolean' ? r.push_questions : undefined,
   constraints: Array.isArray(r.private_profile?.constraints) ? r.private_profile!.constraints : undefined,
   // The key is there only once migration 63 has run; null means never chosen.
@@ -1672,6 +1675,8 @@ let sessionsLackTiebreaks = false;
 let userStateLacksPushRecap = false;
 /** Set once a settings save finds no push_joined / push_streak columns (a database before migration 146). */
 let userStateLacksAlertSwitches = false;
+/** Set once a settings save finds no push_hit_nudges column (a database before migration 169). */
+let userStateLacksPushHitNudges = false;
 /** Set once a settings save finds no push_questions column (a database before migration 168). */
 let userStateLacksPushQuestions = false;
 
@@ -2014,12 +2019,15 @@ export const remote = {
         ...(s.pushJoined !== undefined ? { push_joined: s.pushJoined } : {}),
         ...(s.pushStreak !== undefined ? { push_streak: s.pushStreak } : {}),
       } : {}),
+      // "Hit invite reminders" (migration 169).
+      ...(s.pushHitNudges !== undefined && !userStateLacksPushHitNudges ? { push_hit_nudges: s.pushHitNudges } : {}),
       // "Questions you could answer" (migration 168).
       ...(s.pushQuestions !== undefined && !userStateLacksPushQuestions ? { push_questions: s.pushQuestions } : {}),
     });
     let { error } = await send();
     for (let tries = 0; error && tries < 5; tries += 1) {
-      if (/push_questions/.test(error.message) && !userStateLacksPushQuestions) userStateLacksPushQuestions = true;
+      if (/push_hit_nudges/.test(error.message) && !userStateLacksPushHitNudges) userStateLacksPushHitNudges = true;
+      else if (/push_questions/.test(error.message) && !userStateLacksPushQuestions) userStateLacksPushQuestions = true;
       else if (/push_joined|push_streak/.test(error.message) && !userStateLacksAlertSwitches) userStateLacksAlertSwitches = true;
       else if (/push_recap/.test(error.message) && !userStateLacksPushRecap) userStateLacksPushRecap = true;
       else if (/contacts_findable/.test(error.message) && !userStateLacksContactsFindable) userStateLacksContactsFindable = true;
