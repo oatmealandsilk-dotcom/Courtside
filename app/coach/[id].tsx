@@ -192,7 +192,7 @@ export default function CoachDetail() {
             <View key={c} style={styles.fact}><Ionicons name="checkmark" size={14} color={colors.brand} /><Text style={styles.factText}>{c}</Text></View>
           ))}
           {coach.specialties.length ? (
-            <View style={styles.fact}><Ionicons name="clipboard-outline" size={14} color={colors.brand} /><Text style={styles.factText}>{coach.specialties.map((x) => SPECIALTY_LABEL[x] ?? x).join(', ')}{coach.yearsCoaching ? ` · ${coach.yearsCoaching} years coaching` : ''}</Text></View>
+            <View style={styles.fact}><Ionicons name="clipboard-outline" size={14} color={colors.brand} /><Text style={styles.factText}>{coach.specialties.map((x) => SPECIALTY_LABEL[x] ?? x).join(', ')}{coach.yearsCoaching && !coach.credentials.some((c) => /\byears?\b/i.test(c)) ? ` · ${coach.yearsCoaching} years coaching` : ''}</Text></View>
           ) : null}
         </View>
       ) : null}
@@ -205,7 +205,7 @@ export default function CoachDetail() {
           <Text style={styles.sectionTitle}>Ask {first}</Text>
           <View style={styles.freeRow}>
             <View style={{ flex: 1 }}><Button label={`Message ${first}`} variant="secondary" onPress={() => { void message(); }} full /></View>
-            <View style={{ flex: 1 }}><Button label="Ask a free question" variant="secondary" onPress={() => router.push('/ask-coach')} full /></View>
+            <View style={{ flex: 1 }}><Button label="Ask for free" variant="secondary" onPress={() => router.push('/ask-coach')} full /></View>
           </View>
           <Text style={styles.muted}>Questions are public and free: a verified coach answers, usually within a day.</Text>
         </>
