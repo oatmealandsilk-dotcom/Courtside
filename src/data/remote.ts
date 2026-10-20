@@ -111,6 +111,8 @@ export interface ComebackWeek { week: string; joined: number; day1Of: number; da
  * gets only a follow, per the teen rules. Their age itself never comes.
  */
 export interface NewPlayer { id: ID; joinedAt: string; adult: boolean; posted: boolean }
+/** The thread an admin pinned as Question of the week (migration 168), and when. */
+export interface PinnedQuestion { id: ID; pinnedAt: string }
 
 export interface FirstDayStats { new30: number; moved30: number; cohort: number; movers: number; moversBack: number; othersBack: number; picked: Record<FirstMove, number> }
 
@@ -2992,6 +2994,25 @@ export const remote = {
       .map((r) => ({ id: r.id as string, joinedAt: r.joined_at as string, adult: r.adult === true, posted: r.posted === true }));
   },
 
+  /**
+   * The Question of the week (migration 168): the pinned thread's id and
+   * when it was pinned, or null when none is pinned (or the pin is older
+   * than 7 days, or the thread was taken down). Undefined when it could not
+   * be asked (or the function is not on the database yet).
+   */
+  async fetchQuestionOfWeek(): Promise<PinnedQuestion | null | undefined> {
+    const { data, error } = await need().rpc('question_of_week');
+    if (error || !Array.isArray(data)) return undefined;
+    const row = data[0] as { question_id?: unknown; pinned_at?: unknown } | undefined;
+    return row && typeof row.question_id === 'string' && typeof row.pinned_at === 'string' ? { id: row.question_id, pinnedAt: row.pinned_at } : null;
+  },
+  /** Admin: pins a thread as Question of the week (the last one comes off), or with null takes the pin off. False when refused or not done. */
+  async pinQuestionOfWeek(id: ID | null): Promise<boolean> {
+    const { data, error } = await need().rpc('pin_question_of_week', { p_question: id });
+    if (error) { fail('pin question of the week')(error); return false; }
+    return data === true;
+  },
+
   /** Admin: everyone who has invited anyone, with what is owed. Throws (so the page can say so) when refused or missing. */
   async fetchInviteSummary(): Promise<InviteSummaryRow[]> {
     const { data, error } = await need().rpc('admin_invite_summary');
@@ -5522,6 +5543,12 @@ export interface GuestPage {
   more?: boolean;
   /** The Discussions list (in the topic asked for) has older threads to page to. */
   moreThreads?: boolean;
+  /**
+   * The Question of the week, when its author passes the guest rule
+   * (guest_threads' "pinned", migration 168): only on the first page of the
+   * whole list. Null: none a guest may see. Undefined: not part of this page.
+   */
+  pinned?: { question: Question; pinnedAt: string } | null;
 }
 
 interface GuestPersonRow { id: string; name: string; handle: string; avatar_url?: string | null; skill_system?: string | null; rating?: number | null }
@@ -5591,7 +5618,14 @@ export async function guestThreads(topic?: string | null, before?: string | null
   const { data, error } = await need().rpc('guest_threads', { p_topic: topic ?? null, p_before: before ?? null, p_limit: limit });
   if (error || !data || typeof data !== 'object') return null;
   const rows = listOf<GuestThreadRow>(data, 'threads');
-  return { users: guestPeople(listOf(data, 'people')), posts: [], comments: [], questions: rows.map((r) => guestThread(r, [])), answers: [], coaches: [], moreThreads: rows.length >= limit };
+  // Only the first page of the whole list carries the pin; a database before 168 has no "pinned" at all.
+  const pin = (data as { pinned?: { pinned_at?: unknown; thread?: GuestThreadRow } | null }).pinned;
+  const pinned = pin && typeof pin.pinned_at === 'string' && pin.thread && typeof pin.thread.id === 'string' && UUID_RE.test(pin.thread.id)
+    ? { question: guestThread(pin.thread, []), pinnedAt: pin.pinned_at } : null;
+  return {
+    users: guestPeople(listOf(data, 'people')), posts: [], comments: [], questions: rows.map((r) => guestThread(r, [])), answers: [], coaches: [], moreThreads: rows.length >= limit,
+    ...(!topic && !before ? { pinned } : {}),
+  };
 }
 
 /** One thread and the replies a guest may read. Null when it is not one they may see (or could not be asked). */

@@ -19,6 +19,7 @@ import { UpToday, useUpToday } from '@/components/UpToday';
 import { PostHitField } from '@/components/PostHitField';
 import { useLocationToggle, useOpenToHitToggle } from '@/features/players/useLocationToggle';
 import { QuestionCard, TOPIC_META } from '@/components/QuestionCard';
+import { QUESTION_OF_WEEK_MS } from '@/data/api';
 import { HitCard } from '@/components/HitCard';
 import { Avatar, Chip, EmptyState, Screen } from '@/components/ui';
 import { Highlighted } from '@/components/CourtSearch';
@@ -100,7 +101,7 @@ const joinedLabel = (iso: string) => {
 
 function Discuss({ previewSection }: { previewSection?: string } = {}) {
   const styles = useThemedStyles(styleDefinitions);
-  const { questions, users, currentUserId, currentUser, blockedIds, mutedIds, followingIds, saved, actions, detectedCoords, locationEnabled, hitRequests, lastSeen, lastSeenLoaded, onboardingComplete, mapLive, newOnCourtside, mapVisibility, teenMap, seeing, ageSaysAdult, isGuest, guestLoaded } = useApp();
+  const { questions, users, currentUserId, currentUser, blockedIds, mutedIds, followingIds, saved, actions, detectedCoords, locationEnabled, hitRequests, lastSeen, lastSeenLoaded, onboardingComplete, mapLive, newOnCourtside, mapVisibility, teenMap, seeing, ageSaysAdult, isGuest, guestLoaded, pinnedQuestion, remoteLoaded } = useApp();
   // The section lives here, not in the address: listening to the address made
   // this whole tab re-render on every route change anywhere in the app.
   // Other pages ask for a section through requestSection before navigating;
@@ -478,8 +479,23 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
     } else list.sort(newest);
     return { visible: list, anyInTopic: any };
   }, [questions, topic, blockedIds, mutedIds, sort]);
+  // The Question of the week (Oct 20 sweep, R5: "0 new threads in 7 days ... Answering a set question is
+  // far easier than starting a new one"): the thread an admin pinned sits on top, with a small "This week"
+  // label, under All and under its own topic. Only for 7 days from the pin; nobody you blocked or muted.
+  // A guest's comes with guest mode's page (only when its author passes the guest rule).
+  useEffect(() => {
+    if (previewSection || !currentUserId || isGuest) return;
+    void actions.loadPinnedQuestion();
+  }, [previewSection, currentUserId, isGuest, remoteLoaded, actions]);
+  const pinned = useMemo(() => {
+    if (!pinnedQuestion || Date.now() - Date.parse(pinnedQuestion.pinnedAt) >= QUESTION_OF_WEEK_MS) return undefined;
+    const q = questions.find((x) => x.id === pinnedQuestion.id);
+    if (!q || q.removed || blockedIds.includes(q.authorId) || mutedIds.includes(q.authorId)) return undefined;
+    return topic === 'all' || q.topic === topic ? q : undefined;
+  }, [pinnedQuestion, questions, blockedIds, mutedIds, topic]);
   // A long list is drawn in slices: the first screenfuls at once, the rest on request.
-  const slice = visible.slice(0, shownCount);
+  // The pinned thread is drawn once, on top, not again in its place in the list.
+  const slice = visible.slice(0, shownCount).filter((q) => q.id !== pinned?.id);
   // A guest's Discussions (guest mode, Oct 17; found in review: one page of 30, and the topics only
   // filtered those) come a page at a time from the server: a topic's own newest threads when it is
   // picked, and older ones as they scroll to the end. Signed in, every thread is already here.
@@ -772,7 +788,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
           body="Every question here has a reply."
           action={{ label: 'Show all', onPress: () => setSort('new') }}
         />
-      ) : visible.length === 0 ? (
+      ) : visible.length === 0 && !pinned ? (
         <EmptyState
           icon="help-circle-outline"
           title="No questions here"
@@ -782,6 +798,24 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
         />
       ) : (
         <View style={styles.list}>
+          {pinned ? (
+            <View style={styles.pinned}>
+              <View style={styles.pinnedLabel} accessible accessibilityLabel="Question of the week, this week">
+                <Ionicons name="pin" size={13} color={colors.brand} />
+                <Text style={styles.pinnedTitle}>Question of the week</Text>
+                <View style={styles.weekPill}><Text style={styles.weekPillText}>This week</Text></View>
+              </View>
+              <QuestionCard
+                question={pinned}
+                author={users.find((u) => u.id === pinned.authorId)}
+                answered={Boolean(pinned.acceptedAnswerId)}
+                saved={saved.questionIds.includes(pinned.id)}
+                onToggleSave={() => actions.toggleSaveQuestion(pinned.id)}
+                onShare={() => router.push(`/share?kind=question&id=${pinned.id}`)}
+                onPress={() => router.push(`/question/${pinned.id}`)}
+              />
+            </View>
+          ) : null}
           {slice.map((q) => (
             <QuestionCard
               key={q.id}
@@ -805,7 +839,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
       </>);
 
   return (
-    <Screen memoryKey="discuss" scrollRef={pageRef} offsetY={offsetY} wash noteBelow={sectionsHeight} onRefresh={previewSection === undefined && !isDesktopBrowser() ? actions.refresh : undefined}
+    <Screen memoryKey="discuss" scrollRef={pageRef} offsetY={offsetY} wash noteBelow={sectionsHeight} onRefresh={previewSection === undefined && !isDesktopBrowser() ? () => { void actions.loadPinnedQuestion(); return actions.refresh(); } : undefined}
       title="Community"
       right={isGuest ? <GuestSignIn /> :
         // Bell, chats, search: the same order as Profile (bell, chats, then the page's own button), so both pages match.
@@ -905,6 +939,11 @@ const styleDefinitions = StyleSheet.create({
   controls: { gap: spacing.md, paddingBottom: spacing.lg, zIndex: 10, elevation: 10 },
   topicRow: { flexDirection: 'row', gap: spacing.sm, paddingVertical: 8 },
   list: { gap: spacing.md },
+  pinned: { gap: spacing.sm },
+  pinnedLabel: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: spacing.xs },
+  pinnedTitle: { ...typography.smallStrong, color: colors.text },
+  weekPill: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: radius.pill, backgroundColor: colors.brandDim },
+  weekPillText: { ...typography.caption, letterSpacing: 0, color: colors.brand },
 });
 
 export default asTabRoute<{ previewSection?: string }>(Discuss);

@@ -39,12 +39,14 @@ import { confirm } from '@/lib/confirm';
 import * as haptics from '@/lib/haptics';
 import { publicRoute } from '@/features/share/publicRoute';
 import { openPlayer } from '@/features/navigation/openPlayer';
+import { show as showToast } from '@/lib/toast';
+import { QUESTION_OF_WEEK_MS } from '@/data/api';
 
 function QuestionDetail() {
   const styles = useThemedStyles(styleDefinitions);
   // `at`: a reply to open the thread at (a reported one, from Reports): scrolled to once the thread is in, and lit up.
   const { id, at } = useLocalSearchParams<{ id: string; at?: string }>();
-  const { questions, answers, users, currentUserId, currentUser, actions, isGuest } = useApp();
+  const { questions, answers, users, currentUserId, currentUser, actions, isGuest, pinnedQuestion } = useApp();
   const view = actions.recordView;
   useEffect(() => { view('question', String(id)); }, [view, id]);
   // The app arrives with each thread's newest replies; opening one brings them all.
@@ -99,6 +101,21 @@ function QuestionDetail() {
       router.push({ pathname: '/take-down', params: { kind: 'question', id: question.id } });
     }
   } : undefined;
+  // Admins: pin this thread as the Question of the week (Oct 20 sweep, R5), at the top of Discussions
+  // for everyone for 7 days; pinning it takes the last one off. Or take this one's pin off.
+  const pinnedNow = !!pinnedQuestion && pinnedQuestion.id === question.id && Date.now() - Date.parse(pinnedQuestion.pinnedAt) < QUESTION_OF_WEEK_MS;
+  const pin = currentUser?.isAdmin && !removed ? () => {
+    haptics.tap();
+    if (pinnedNow) {
+      confirm({ title: 'Unpin the Question of the week?', message: 'It goes back to being an ordinary thread in Discussions.', confirmLabel: 'Unpin', onConfirm: () => {
+        void actions.pinQuestionOfWeek(null).then((ok) => showToast(ok ? { title: 'Unpinned', icon: 'pin-outline' } : { title: 'Couldn’t unpin it', body: 'Check your connection and try again.', icon: 'cloud-offline-outline' }));
+      } });
+    } else {
+      confirm({ title: 'Pin as Question of the week?', message: 'It shows at the top of Discussions for everyone for 7 days, marked This week. The last one comes off.', confirmLabel: 'Pin', onConfirm: () => {
+        void actions.pinQuestionOfWeek(question.id).then((ok) => showToast(ok ? { title: 'Pinned as Question of the week', icon: 'pin' } : { title: 'Couldn’t pin it', body: 'Check your connection and try again.', icon: 'cloud-offline-outline' }));
+      } });
+    }
+  } : undefined;
   // Someone else's thread can be reported from the flag at the top (App Review 1.2, Oct 5).
   // It leaves your screens at once, so the page goes back.
   // A guest can report too (guest mode, Oct 17): by signing in, or by email to support.
@@ -129,7 +146,7 @@ function QuestionDetail() {
   };
 
   return (
-    <SwipeSurface onSwipe={direction=>{if(direction===-1) { requestSection('/discuss', 'discussions'); goToTab('/discuss', true); }}} renderPreview={direction=>direction===-1 ? <Discuss previewSection="discussions"/> : null}><Screen title="Thread" compactTitle onBack={() => goBack()} scrollRef={jump.scrollRef} onRefresh={isDesktopBrowser() ? undefined : () => loadThread(String(id))} right={<View style={{ flexDirection: 'row', alignItems: 'center', gap: 18 }}>{moderate ? <Pressable accessibilityRole="button" accessibilityLabel={removed ? 'Restore this thread' : 'Take down this thread'} hitSlop={10} onPress={moderate}><Ionicons name={removed ? 'eye-outline' : 'eye-off-outline'} size={23} color={removed ? colors.text : colors.danger} /></Pressable> : null}{question.authorId === currentUserId && !removed ? <Pressable accessibilityRole="button" accessibilityLabel="Edit this thread" hitSlop={10} onPress={() => router.push({ pathname: '/edit-post', params: { id: question.id, kind: 'question' } })}><Ionicons name="create-outline" size={23} color={colors.text} /></Pressable> : null}{removed ? null : <Pressable accessibilityRole="button" accessibilityLabel="Share this thread" hitSlop={10} onPress={() => router.push(`/share?kind=question&id=${question.id}`)}><Ionicons name="arrow-redo-outline" size={23} color={colors.text} /></Pressable>}{theirs && !removed ? <Pressable accessibilityRole="button" accessibilityLabel="Report this thread" hitSlop={10} onPress={report}><Ionicons name="flag-outline" size={22} color={colors.text} /></Pressable> : null}</View>}>
+    <SwipeSurface onSwipe={direction=>{if(direction===-1) { requestSection('/discuss', 'discussions'); goToTab('/discuss', true); }}} renderPreview={direction=>direction===-1 ? <Discuss previewSection="discussions"/> : null}><Screen title="Thread" compactTitle onBack={() => goBack()} scrollRef={jump.scrollRef} onRefresh={isDesktopBrowser() ? undefined : () => loadThread(String(id))} right={<View style={{ flexDirection: 'row', alignItems: 'center', gap: 18 }}>{pin ? <Pressable accessibilityRole="button" accessibilityLabel={pinnedNow ? 'Unpin the Question of the week' : 'Pin as Question of the week'} hitSlop={10} onPress={pin}><Ionicons name={pinnedNow ? 'pin' : 'pin-outline'} size={22} color={pinnedNow ? colors.brand : colors.text} /></Pressable> : null}{moderate ? <Pressable accessibilityRole="button" accessibilityLabel={removed ? 'Restore this thread' : 'Take down this thread'} hitSlop={10} onPress={moderate}><Ionicons name={removed ? 'eye-outline' : 'eye-off-outline'} size={23} color={removed ? colors.text : colors.danger} /></Pressable> : null}{question.authorId === currentUserId && !removed ? <Pressable accessibilityRole="button" accessibilityLabel="Edit this thread" hitSlop={10} onPress={() => router.push({ pathname: '/edit-post', params: { id: question.id, kind: 'question' } })}><Ionicons name="create-outline" size={23} color={colors.text} /></Pressable> : null}{removed ? null : <Pressable accessibilityRole="button" accessibilityLabel="Share this thread" hitSlop={10} onPress={() => router.push(`/share?kind=question&id=${question.id}`)}><Ionicons name="arrow-redo-outline" size={23} color={colors.text} /></Pressable>}{theirs && !removed ? <Pressable accessibilityRole="button" accessibilityLabel="Report this thread" hitSlop={10} onPress={report}><Ionicons name="flag-outline" size={22} color={colors.text} /></Pressable> : null}</View>}>
       <Card style={styles.questionCard}>
         {removed ? <RemovedNote removed={removed} align="start" item={{ kind: 'question', id: question.id, authorId: question.authorId }} /> : null}
         {/* Who asked, up top and at full size — the way a reply shows its author. */}

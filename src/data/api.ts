@@ -500,6 +500,38 @@ export function demoAdmin(): boolean {
 // Read as the app opens, while the address still says ?admin=1 (signing in moves to another page).
 demoAdmin();
 
+/** A pin lasts 7 days (migration 168): an older one is no longer this week's. */
+export const QUESTION_OF_WEEK_MS = 7 * 86_400_000;
+/**
+ * The demo's Question of the week (Oct 20 sweep, R5), kept for the tab so a
+ * pin made signed in still shows signed out (guest mode). Nothing is pinned
+ * unless an admin pins one (?admin=1), or the address says ?qotw=q4 (a thread
+ * id) to start with one pinned. Never with a database: there, the server
+ * keeps the pin.
+ */
+export function demoQuestionOfWeek(): { id: ID; pinnedAt: string } | null {
+  if (supabase) return null;
+  try {
+    if (typeof window === 'undefined' || !window.location || !window.sessionStorage) return null;
+    const asked = new URLSearchParams(window.location.search).get('qotw');
+    if (asked && questions.some((q) => q.id === asked)) window.sessionStorage.setItem('courtside-demo-qotw', JSON.stringify({ id: asked, pinnedAt: new Date().toISOString() }));
+    const kept = JSON.parse(window.sessionStorage.getItem('courtside-demo-qotw') ?? 'null') as { id?: unknown; pinnedAt?: unknown } | null;
+    if (!kept || typeof kept.id !== 'string' || typeof kept.pinnedAt !== 'string' || Date.now() - Date.parse(kept.pinnedAt) >= QUESTION_OF_WEEK_MS) return null;
+    return { id: kept.id, pinnedAt: kept.pinnedAt };
+  } catch {
+    return null;
+  }
+}
+/** The demo admin pins a thread (or, with null, takes the pin off), for the tab. */
+export function setDemoQuestionOfWeek(pin: { id: ID; pinnedAt: string } | null) {
+  try {
+    if (pin) window.sessionStorage.setItem('courtside-demo-qotw', JSON.stringify(pin));
+    else window.sessionStorage.removeItem('courtside-demo-qotw');
+  } catch { /* private window: it lasts until the page reloads */ }
+}
+// Read as the app opens, while the address may still say ?qotw=.
+demoQuestionOfWeek();
+
 const demoPost = (id: ID) => posts.find((p) => p.id === id) ?? demoGroupPosts.find((p) => p.id === id);
 
 /**
@@ -818,6 +850,8 @@ export async function fetchGuestHome(): Promise<GuestData | null> {
       users: pages.flatMap((x) => x.users).filter((u) => (seen.has(u.id) ? false : (seen.add(u.id), true))),
       posts: feed?.posts ?? [], comments: feed?.comments ?? [], questions: threads?.questions ?? [], answers: [], coaches: coaching?.coaches ?? [],
       more: feed?.more ?? false, moreThreads: threads?.moreThreads ?? false,
+      // The Question of the week (168), when its author passes the guest rule; left as it was when the threads could not be had.
+      ...(threads ? { pinned: threads.pinned ?? null } : {}),
     };
   }
   const page = await fetchGuestFeedPage(null);
@@ -826,11 +860,16 @@ export async function fetchGuestHome(): Promise<GuestData | null> {
   const shownAnswers = guestAnswers(threads.map((q) => q.id));
   const coaching = coaches.filter((c) => c.listed !== false && guestShown(c.userId)).slice(0, 50)
     .map((c) => ({ ...c, headline: guestWords(c.headline), services: c.services.map((v) => ({ ...v, title: guestWords(v.title), description: guestWords(v.description) })) }));
+  // The Question of the week, by guest_threads' rule (168): by someone a guest may see, not taken down. No 90-day limit.
+  const pin = demoQuestionOfWeek();
+  const pinThread = pin ? questions.find((q) => q.id === pin.id && !q.removed && guestShown(q.authorId)) : undefined;
+  const pinAnswers = pinThread ? guestAnswers([pinThread.id]) : [];
   return delay(clone({
-    users: [...page.users, ...guestPeopleOf([...threads.map((q) => q.authorId), ...coaching.map((c) => c.userId)])].filter((u, i, all) => all.findIndex((x) => x.id === u.id) === i),
+    users: [...page.users, ...guestPeopleOf([...threads.map((q) => q.authorId), ...coaching.map((c) => c.userId), ...(pinThread ? [pinThread.authorId] : [])])].filter((u, i, all) => all.findIndex((x) => x.id === u.id) === i),
     posts: page.posts, comments: page.comments,
     questions: threads.map((q) => guestThreadShape(q, shownAnswers.filter((a) => a.questionId === q.id))),
     answers: [], coaches: coaching, more: page.more, moreThreads: all.length > GUEST_THREADS,
+    pinned: pin && pinThread ? { question: guestThreadShape(pinThread, pinAnswers), pinnedAt: pin.pinnedAt } : null,
   }));
 }
 

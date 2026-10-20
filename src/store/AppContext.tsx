@@ -24,7 +24,7 @@ import { openJoinSheet } from '@/features/guest/joinAsk';
 import { setGuestStatus } from '@/features/guest/guestStatus';
 import { noteCampaignSignup } from '@/features/guest/campaign';
 import * as demoApi from '@/data/api';
-import { BLOCKED_WORDS_NOTE, CHAT_PHOTO_UNREADABLE, REVIEW_NOTE_MAX, auth as remoteAuth, fetchRemote, isLocalMedia, onWordsRefused, queueFeedSignal, remote, uploadChatPhoto, uploadMedia, emptyProfile, type GroupRefusal, type AdminReport, type ModerationResult, type ReviewAskResult, type ReportedChat, type ReportedItem, type ReportedItemKind, type ReportEvidence, type FeedSignal, type SiteFeedback, type WaitlistEntry, type BetaInviteStatus, type FirstDayStats, type FirstMove, type NewPlayer, type HandleStatus, type InviteCodeResult, type MyInviter, type RemoteData, type UserState, standInName } from '@/data/remote';
+import { BLOCKED_WORDS_NOTE, CHAT_PHOTO_UNREADABLE, REVIEW_NOTE_MAX, auth as remoteAuth, fetchRemote, isLocalMedia, onWordsRefused, queueFeedSignal, remote, uploadChatPhoto, uploadMedia, emptyProfile, type GroupRefusal, type AdminReport, type ModerationResult, type ReviewAskResult, type ReportedChat, type ReportedItem, type ReportedItemKind, type ReportEvidence, type FeedSignal, type SiteFeedback, type WaitlistEntry, type BetaInviteStatus, type FirstDayStats, type FirstMove, type NewPlayer, type PinnedQuestion, type HandleStatus, type InviteCodeResult, type MyInviter, type RemoteData, type UserState, standInName } from '@/data/remote';
 import { clearSnapshot, markSnapshotOpened, markSnapshotOpening, readSnapshot, saveSnapshot, snapshotFailedBefore } from '@/data/snapshot';
 import { forgetAccount, listSavedAccounts, rememberAccount, type SavedAccount } from '@/features/accounts/savedAccounts';
 import { isAuthRetryableFetchError } from '@supabase/supabase-js';
@@ -498,6 +498,12 @@ interface AppState extends Bootstrap, CourtLifeState, FeedGroupsState, LiveSessi
   teenMap: TeenMap;
   /** New on CourtSide as the server lists it for you (migration 63), newest first; null until asked, or before 63. */
   newOnCourtside: { userId: ID; joinedAt: string }[] | null;
+  /**
+   * The Question of the week (Oct 20 sweep, R5; migration 168): the thread an
+   * admin pinned to the top of Discussions, and when. Null when none is
+   * pinned (a pin lasts 7 days). A guest's comes with guest mode's own data.
+   */
+  pinnedQuestion: PinnedQuestion | null;
   /** Open "Looking for a hit" posts. */
   hitRequests: HitRequest[];
   /** Small switches from Settings, kept with the account. */
@@ -1109,6 +1115,14 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions, LiveSessionAct
   watchInboxTyping: (onTyping: (conversationId: ID, userId: ID, stopped?: boolean) => void) => () => void;
   /** Every reply in a thread, loaded when it is opened. */
   loadThread: (questionId: ID) => Promise<void>;
+  /** Asks which thread is the Question of the week (and brings the thread in when the app does not have it). */
+  loadPinnedQuestion: () => Promise<void>;
+  /**
+   * Admins: pins this thread as the Question of the week, at the top of
+   * Discussions for everyone for 7 days (the last one comes off), or with
+   * null takes the pin off. Resolves false when it was not done.
+   */
+  pinQuestionOfWeek: (questionId: ID | null) => Promise<boolean>;
   /**
    * Guest mode's Discussions (Oct 17): the newest threads in a topic when it
    * is first picked, or (`older`) the next page back. Resolves with whether
@@ -2303,6 +2317,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     mapVisibility: isSupabaseConfigured ? undefined : readDemoVisibility(),
     teenMap: isSupabaseConfigured ? 'off' : 'on',
     newOnCourtside: null,
+    pinnedQuestion: null,
     ...emptyCourtLife,
     ...emptyFeedGroups,
     ...emptyLiveSession,
@@ -6176,6 +6191,39 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return { ...prev, answers, questions: prev.questions.map((q) => (q.id === questionId ? { ...q, answerIds: inThread, acceptedAnswerId: q.acceptedAnswerId && !here.some((a) => a.id === q.acceptedAnswerId) ? undefined : q.acceptedAnswerId } : q)) };
     });
   }, []);
+  const loadPinnedQuestion = useCallback(async () => {
+    const me = stateRef.current.currentUserId;
+    if (!me) return;
+    if (!live(me)) {
+      const pin = demoApi.demoQuestionOfWeek();
+      setState((prev) => ({ ...prev, pinnedQuestion: pin }));
+      return;
+    }
+    const pin = await remote.fetchQuestionOfWeek().catch(() => undefined);
+    // Not asked (offline, or before migration 168): what was there stays.
+    if (pin === undefined || stateRef.current.currentUserId !== me) return;
+    // A pinned thread older than the first load's 300 is fetched on its own.
+    if (pin && !stateRef.current.questions.some((q) => q.id === pin.id)) {
+      const found = await remote.fetchQuestion(pin.id).catch(() => null);
+      if (found) setState((prev) => (prev.questions.some((q) => q.id === pin.id) ? prev : { ...prev, questions: [found, ...prev.questions] }));
+    }
+    setState((prev) => ({ ...prev, pinnedQuestion: pin }));
+  }, []);
+  const pinQuestionOfWeek = useCallback(async (questionId: ID | null) => {
+    const s = stateRef.current;
+    const me = s.currentUserId;
+    if (!me || !s.users.find((u) => u.id === me)?.isAdmin) return false;
+    const pin = questionId ? { id: questionId, pinnedAt: new Date().toISOString() } : null;
+    if (live(me)) {
+      if (questionId && !UUID.test(questionId)) return false;
+      if (!(await remote.pinQuestionOfWeek(questionId).catch(() => false))) return false;
+    } else {
+      demoApi.setDemoQuestionOfWeek(pin);
+    }
+    haptics.commit();
+    setState((prev) => ({ ...prev, pinnedQuestion: pin }));
+    return true;
+  }, []);
   // Only real accounts and real posts are recorded; the demo records nothing.
   const noteFeedSignal = useCallback((signal: FeedSignal) => {
     if (!live(stateRef.current.currentUserId, signal.id)) return;
@@ -9163,6 +9211,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       watchInboxTyping,
       loadThread,
       loadThreads,
+      loadPinnedQuestion,
+      pinQuestionOfWeek,
       loadMorePosts,
       loadPostsOf,
       searchPosts,
@@ -9401,6 +9451,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       watchInboxTyping,
       loadThread,
       loadThreads,
+      loadPinnedQuestion,
+      pinQuestionOfWeek,
       loadMorePosts,
       loadPostsOf,
       searchPosts,
@@ -9562,6 +9614,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setGuest((prev) => {
       if (!got) return prev ?? { users: [], posts: [], comments: [], questions: [], answers: [], coaches: [], more: false };
       if (!prev) return got;
+      // The Question of the week (168) as the home page says now; kept as it was when the threads could not be had.
+      const pinned = got.pinned !== undefined ? got.pinned : prev.pinned;
       const oldest = (xs: { createdAt: string }[]) => xs.reduce<number | null>((o, x) => { const t = Date.parse(x.createdAt); return o === null || t < o ? t : o; }, null);
       // Kept from before: what is older than the newest lists reach (or everything, when a list came back empty).
       const keep = <T extends { id: ID; createdAt: string }>(was: T[], now: T[]) => {
@@ -9587,6 +9641,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         answers: [...got.answers, ...prev.answers.filter((a) => !freshAnswers.has(a.id) && threadIds.has(a.questionId))],
         coaches: got.coaches,
         more: keptOlder ? (prev.more ?? got.more) : got.more,
+        pinned,
       };
     });
   }, []);
@@ -9604,6 +9659,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       users: merged(base.users, more.users), posts: merged(base.posts, more.posts), comments: merged(base.comments, more.comments),
       questions: merged(base.questions, more.questions), answers: merged(base.answers, more.answers), coaches: merged(base.coaches, more.coaches),
       more: more.more ?? base.more,
+      pinned: more.pinned !== undefined ? more.pinned : base.pinned,
     };
   }), []);
   const guestRef = useRef(guest);
@@ -9651,6 +9707,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         return page.posts;
       },
       loadThread: async (id: ID) => { const got = await fetchGuestThread(id).catch(() => null); if (got) addGuest(got); },
+      // The Question of the week comes with the guest's home page (guest_threads' first page).
+      loadPinnedQuestion: async () => undefined, pinQuestionOfWeek: async () => false,
       // Discussions (found in review, Oct 17: one page of 30, and the topics only filtered those):
       // a topic's own newest threads when it is first picked, then a page further back on each ask.
       loadThreads: async (topic: QuestionTopic | 'all', older: boolean) => {
@@ -9688,7 +9746,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const guestValue = useMemo(() => (!isGuest ? null : {
     ...emptyBootstrap, ...emptyCourtLife, ...emptyFeedGroups, ...emptyLiveSession,
     users: guest?.users ?? [], posts: guest?.posts ?? [], comments: guest?.comments ?? [],
-    questions: guest?.questions ?? [], answers: guest?.answers ?? [], coaches: guest?.coaches ?? [],
+    // The Question of the week rides beside the list (it can be older than the list reaches): in the threads only once.
+    questions: guest?.pinned && !guest.questions.some((q) => q.id === guest.pinned!.question.id) ? [...guest.questions, guest.pinned.question] : guest?.questions ?? [],
+    pinnedQuestion: guest?.pinned ? { id: guest.pinned.question.id, pinnedAt: guest.pinned.pinnedAt } : null,
+    answers: guest?.answers ?? [], coaches: guest?.coaches ?? [],
     hitRequests: [], lastSeen: {}, followingIds: [], followEdges: [], followRequests: [], tips: [], sessions: [], sessionTags: [],
     saved: { postIds: [], questionIds: [] }, mutedIds: [], reportedIds: [], blockedIds: [], blockedMeIds: [], alertIds: [],
     newOnCourtside: null, openness: {}, courtShown: {}, feed: { cursor: null, more: guest?.more ?? false },
