@@ -10,7 +10,7 @@ import { useFeedSwiped } from '@/features/feed/firstSwipe';
 import { useCurtainDown } from '@/features/feed/warmup';
 import { dueHits, keepHitPrefill, markAsked, nextHitEnd, prefillFor, readAsked, shortPlace, trackerFor } from '@/features/hits/followUp';
 import { useTourBusy } from '@/features/tour/tourStore';
-import { isShowing as toastShowing, show as showToast, withdraw as withdrawToast } from '@/lib/toast';
+import { isShowing as toastShowing, show as showToast, withdraw as withdrawToast, type HitNoteLook } from '@/lib/toast';
 import { useAnyUploading } from '@/lib/uploads';
 import { useApp } from '@/store/AppContext';
 
@@ -33,6 +33,8 @@ const HOLD_MS = 6000;
 const RETRY_MS = 6000;
 /** Put away because a page where you write or post opened: up this long, it was seen (as long as any note with a button stays); less, it comes back after. */
 const SEEN_MS = 5000;
+/** How the question is drawn (Toast's HitNote): 'pill', a card under the page's title row. */
+const LOOK: HitNoteLook = 'pill';
 
 /**
  * "How was the hit at Alder Park? · Log it": once a hit you posted or joined
@@ -133,14 +135,19 @@ export function HitFollowUp({ enabled }: { enabled: boolean }) {
       const params = tracked ? { activity: tracked.id, hit: first.id } : { hit: first.id };
       // With your tracker's copy, the composer (post it, or just log it); without, the log sheet.
       const open = () => router.push({ pathname: tracked ? '/compose' : '/log-session', params });
+      // The one it was with (the hit's host, or the first who joined): their picture leads the card.
+      const withId = prefill.playerIds[0];
+      const other = withId ? users.find((u) => u.id === withId) : undefined;
+      const place = shortPlace(prefill.place);
       toastId.current = showToast({
-        title: `How was the hit at ${shortPlace(prefill.place)}?`,
+        title: prefill.who ? `How was the hit with ${prefill.who}?` : `How was the hit at ${place}?`,
+        ...(other ? { look: LOOK, person: { name: other.name, seed: other.avatarSeed, uri: other.avatarUrl } } : {}),
         // With your tracker's copy it carries what "Tennis detected" would have
         // said (the two arrive together, and this one takes its place): the
         // session's mark and its numbers, yours alone.
         ...(tracked
           ? { glyph: 'session' as const, body: [duration(tracked.minutes), tracked.maxHr ? `${tracked.maxHr} max bpm` : null, pickSource({ type: 'tracker', activity: tracked })].filter(Boolean).join(' · ') }
-          : { icon: 'hit' as const }),
+          : { icon: 'hit' as const, ...(prefill.who ? { body: place } : {}) }),
         href: tracked ? `/compose?activity=${tracked.id}&hit=${first.id}` : `/log-session?hit=${first.id}`,
         action: { label: 'Log it', onPress: open },
         holdMs: HOLD_MS,

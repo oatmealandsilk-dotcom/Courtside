@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react';
 
+/** How a question about someone is drawn (ToastMessage.look). */
+export type HitNoteLook = 'pill';
+
 export interface ToastMessage {
   id: number;
   title: string;
@@ -50,6 +53,14 @@ export interface ToastMessage {
    * row, and a tap meant for them is never caught by it (Oct 20 sweep).
    */
   belowTop?: boolean;
+  /**
+   * Drawn as a question about someone, not a quick note: their picture, the
+   * words, a filled button, and a thin line that runs down while it waits
+   * ("How was the hit with Mira?"). 'pill' sits under the title row.
+   */
+  look?: HitNoteLook;
+  /** Whose picture the `look` card shows. */
+  person?: { name: string; seed: string; uri?: string };
   /**
    * Told once how it went, and how long it was up: it stayed its full time,
    * was tapped, its button was used, it was flicked away, another toast took

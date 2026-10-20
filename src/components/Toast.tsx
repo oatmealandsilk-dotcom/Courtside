@@ -11,6 +11,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FullWindowOverlay } from 'react-native-screens';
 
 import { Glass } from '@/components/ui/Glass';
+import { Avatar } from '@/components/ui/Avatar';
 import { HitGlyph } from '@/components/HitGlyph';
 import { ZoneGlyph } from '@/components/session/ZoneGlyph';
 import { DrawnTick } from '@/components/session/DrawnTick';
@@ -130,6 +131,24 @@ export function Toast() {
   }));
 
   if (!toast) return null;
+  if (toast.look && toast.person) {
+    const top = insets.top + (pathname === '/discuss' ? BELOW_SWITCH : BELOW_TOP);
+    const note = (
+      <GestureDetector gesture={flick}>
+        <Animated.View pointerEvents="box-none" style={[styles.wrap, { top }, style]}>
+          <HitNote toast={toast} hide={hide} />
+        </Animated.View>
+      </GestureDetector>
+    );
+    if (Platform.OS === 'ios') {
+      return (
+        <FullWindowOverlay unstable_accessibilityContainerViewIsModal={false}>
+          <GestureHandlerRootView pointerEvents="box-none" style={StyleSheet.absoluteFill}>{note}</GestureHandlerRootView>
+        </FullWindowOverlay>
+      );
+    }
+    return note;
+  }
   const icon = toast.icon ?? 'checkmark';
   const action = toast.action;
   const card = (
@@ -212,6 +231,94 @@ export function Toast() {
   return card;
 }
 
+/** The hit's mark, small, on the corner of the other player's picture. */
+function HitBadge() {
+  const styles = useThemedStyles(styleDefinitions);
+  return (
+    <View style={styles.hitBadge}>
+      <HitGlyph size={10} color={colors.brandInk} />
+    </View>
+  );
+}
+
+/**
+ * A thin brand line along the card's foot that runs down while the question
+ * waits, so its going is expected, not sudden. Moves by sliding, never by
+ * fading; still for someone who asked for less motion.
+ */
+function HoldLine({ ms, token }: { ms: number; token: number }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const reduced = useReducedMotion();
+  const [w, setW] = useState(0);
+  const left = useSharedValue(0);
+  useEffect(() => {
+    if (!w) return;
+    left.value = 0;
+    if (!reduced) left.value = withTiming(-w, { duration: ms, easing: Easing.linear });
+  }, [token, w, ms, reduced, left]);
+  const run = useAnimatedStyle(() => ({ transform: [{ translateX: left.value }] }));
+  if (reduced) return null;
+  return (
+    <View style={styles.holdTrack} pointerEvents="none" onLayout={(e) => setW(e.nativeEvent.layout.width)}>
+      <Animated.View style={[styles.holdRun, run]} />
+    </View>
+  );
+}
+
+/**
+ * "How was the hit with Mira?": a question about someone, drawn as its own
+ * card rather than a quick note. Their picture with the hit's mark on its
+ * corner, the question and where, and Log it as a filled button.
+ *
+ * 'pill' (option A): a glass card just under the page's title row, as wide
+ * as the page allows, so it reads as placed there, not dropped in the middle.
+ */
+function HitNote({ toast, hide }: { toast: ToastMessage; hide: (how?: ToastClosed) => void }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const person = toast.person!;
+  const action = toast.action;
+  const open = () => {
+    hide('tap');
+    if (toast.href) router.push(toast.href as never);
+  };
+  return (
+    <View style={[styles.shadow, styles.noteShadow]}>
+      <Glass radius={20} style={styles.card}>
+        <View style={styles.noteRow}>
+          <Pressable
+            accessibilityRole={toast.href ? 'link' : 'text'}
+            accessibilityLiveRegion="polite"
+            accessibilityLabel={toast.body ? `${toast.title}. ${toast.body}` : toast.title}
+            onPress={open}
+            style={styles.noteInfo}
+          >
+            <View>
+              <Avatar name={person.name} seed={person.seed} uri={person.uri} size={36} />
+              <HitBadge />
+            </View>
+            <View style={styles.words}>
+              <Text style={styles.noteTitle} numberOfLines={1}>{toast.title}</Text>
+              {toast.body ? <Text style={styles.noteBody} numberOfLines={1}>{toast.body}</Text> : null}
+            </View>
+          </Pressable>
+          {action ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`${action.label}: ${toast.title}`}
+              hitSlop={8}
+              onPress={() => { hide('action'); action.onPress(); }}
+              style={({ pressed }) => [styles.fill, pressed && styles.fillPressed]}
+            >
+              <Text style={styles.fillLabel}>{action.label}</Text>
+            </Pressable>
+          ) : null}
+        </View>
+        {toast.holdMs ? <HoldLine ms={toast.holdMs} token={toast.id} /> : null}
+      </Glass>
+    </View>
+  );
+}
+
 /**
  * A session's mark in a brand disc: the zone bars ("Tennis detected"), a
  * tick that draws itself in from the left a moment after the toast lands
@@ -284,6 +391,18 @@ const styleDefinitions = StyleSheet.create({
   secondaryLabel: { ...typography.smallStrong, color: colors.textMuted, letterSpacing: -0.1 },
   actionAfterSecondary: { paddingLeft: spacing.sm },
   words: { flexShrink: 1, alignItems: 'flex-start' },
+  // "How was the hit with Mira?" (HitNote).
+  noteShadow: { width: '100%', maxWidth: 380, borderRadius: 20, shadowOpacity: 0.12, shadowRadius: 18, shadowOffset: { width: 0, height: 8 } },
+  noteRow: { flexDirection: 'row', alignItems: 'center', paddingLeft: 10, paddingRight: 10, paddingVertical: 10, gap: 10 },
+  noteInfo: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 11, minHeight: 44 },
+  noteTitle: { ...typography.bodyStrong, fontSize: 14, color: colors.text, letterSpacing: -0.2 },
+  noteBody: { ...typography.small, fontSize: 12, color: colors.textMuted, marginTop: 1 },
+  hitBadge: { position: 'absolute', right: -3, bottom: -3, width: 18, height: 18, borderRadius: 9, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.surface },
+  fill: { minHeight: 34, paddingHorizontal: 14, borderRadius: 17, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
+  fillPressed: { opacity: 0.75 },
+  fillLabel: { ...typography.smallStrong, color: colors.brandInk, letterSpacing: -0.1 },
+  holdTrack: { position: 'absolute', left: 14, right: 14, bottom: 0, height: 2, borderRadius: 1, overflow: 'hidden' },
+  holdRun: { flex: 1, backgroundColor: colors.brand, opacity: 0.55 },
   title: { ...typography.smallStrong, color: colors.text, letterSpacing: -0.1 },
   body: { ...typography.caption, fontSize: 12, letterSpacing: 0, color: colors.textMuted, marginTop: 1 },
 });
