@@ -39,6 +39,7 @@ import { TipBubble } from '@/components/TipBubble';
 import { forNewPlayer, useTip } from '@/features/tips/tips';
 import { useWelcomeNote } from '@/features/welcome/welcomeNote';
 import { useFirstMoveDone } from '@/features/onboarding/firstMoveDone';
+import { useFirstWeek } from '@/features/onboarding/FirstWeek';
 import { notKnownAdult } from '@/features/players/age';
 import { useShownAt } from '@/features/navigation/shownAt';
 import { useResponsive } from '@/lib/useResponsive';
@@ -59,6 +60,9 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
  // Nothing posted, asked or answered yet, and no move made on the page after setup (a link shared,
  // players followed: firstMoveDone): the profile offers the first move.
  const movedAfterSetup = useFirstMoveDone(currentUserId);
+ // "Your first week" (R7, Oct 20 sweep): follow 3, Open to hit, a first session, a first post. While it
+ // is up, "Make your first move" waits: the list's first row opens that same page.
+ const firstWeek = useFirstWeek();
  const hasMoved = !currentUserId || movedAfterSetup || posts.some((p) => p.authorId === currentUserId) || questions.some((q) => q.authorId === currentUserId) || answers.some((a) => a.authorId === currentUserId);
  // Your own posts, however far back they go: the grid and the counts are
  // yours entirely, not just whichever of them the feed happens to hold.
@@ -174,7 +178,8 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
    {/* At the top of the page, in its flow, its pointer under the paper plane in the header: it lines up with the cards
        and covers nothing (the first-move card included), and the page eases back up once it is closed. */}
    <InboxTip eligible={inboxTipEligible} live={live} style={styles.inboxTip} />
-   {!hasMoved && <Pressable accessibilityRole="link" accessibilityLabel="Make your first move" onPress={() => router.push({ pathname: '/first-move', params: { from: 'profile' } })} style={styles.setup}>
+   {firstWeek.card}
+   {!hasMoved && !firstWeek.showing && <Pressable accessibilityRole="link" accessibilityLabel="Make your first move" onPress={() => router.push({ pathname: '/first-move', params: { from: 'profile' } })} style={styles.setup}>
      <Ionicons name="videocam-outline" size={20} color={colors.brand}/>
      <View style={{ flex: 1 }}><Text style={styles.setupTitle}>Make your first move</Text><Text style={styles.meta}>{user && notKnownAdult(user) ? 'Add your friends, or post your first clip.' : 'Bring your hitting partners, or post your first clip.'}</Text></View>
      <Ionicons name="chevron-forward" size={16} color={colors.textMuted}/>
