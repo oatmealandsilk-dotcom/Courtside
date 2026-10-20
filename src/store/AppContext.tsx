@@ -372,9 +372,11 @@ export interface Prefs {
   pushJoined: boolean;
   /** The 7pm "Keep your streak" reminder, set on the phone itself (kept with the account by migration 146). */
   pushStreak: boolean;
+  /** Sweep R6 (Oct 20): when a Discussions question has waited with no answer, up to 3 people who answered that topic before (or coaches, for technique and gear) are told, at most one a day (migration 168). */
+  pushQuestions: boolean;
 }
 export type PrefKey = keyof Prefs;
-const DEFAULT_PREFS: Prefs = { showActivity: true, pushLikes: true, pushCoach: true, pushMessages: true, pushActivity: true, pushMapFriends: true, pushMapHits: true, pushMapPlayers: true, pushCourts: true, contactsFindable: true, pushRecap: true, pushJoined: true, pushStreak: true };
+const DEFAULT_PREFS: Prefs = { showActivity: true, pushLikes: true, pushCoach: true, pushMessages: true, pushActivity: true, pushMapFriends: true, pushMapHits: true, pushMapPlayers: true, pushCourts: true, contactsFindable: true, pushRecap: true, pushJoined: true, pushStreak: true, pushQuestions: true };
 
 interface AppState extends Bootstrap, CourtLifeState, FeedGroupsState, LiveSessionState {
   ready: boolean;
@@ -507,6 +509,8 @@ interface AppState extends Bootstrap, CourtLifeState, FeedGroupsState, LiveSessi
   contactsFindableLive: boolean;
   /** The database has the "Players joining near you" switch (migration 146); before that it would do nothing, so it is not shown. */
   joinAlertsLive: boolean;
+  /** The database has the "Questions you could answer" switch (migration 168); before that it would do nothing, so it is not shown. */
+  questionAlertsLive: boolean;
   /**
    * Your Hidden words (Settings → Hidden words, migration 117): null until
    * the page has asked for them. The demo keeps its own on this phone.
@@ -567,6 +571,7 @@ function withServerSettings(s: AppState, base: string, got: UserState | null): P
     pushRecap: got.pushRecap ?? true,
     // Migration 146: a database without them keeps what this phone has.
     pushJoined: got.pushJoined ?? s.prefs.pushJoined, pushStreak: got.pushStreak ?? s.prefs.pushStreak,
+    pushQuestions: got.pushQuestions ?? s.prefs.pushQuestions,
   };
   for (const k of Object.keys(prefs) as PrefKey[]) if (s.prefs[k] !== was.f[k]) prefs[k] = s.prefs[k];
   const cardsChanged = JSON.stringify(s.paymentMethods) !== JSON.stringify(was.p);
@@ -1802,6 +1807,7 @@ function snapshotOf(s: AppState, me: ID): RemoteData {
       pushRecap: s.prefs.pushRecap,
       pushJoined: s.joinAlertsLive ? s.prefs.pushJoined : undefined,
       pushStreak: s.prefs.pushStreak,
+      pushQuestions: s.questionAlertsLive ? s.prefs.pushQuestions : undefined,
       constraints: self?.profile.constraints,
     },
     tips: s.tips, coachApplications: s.coachApplications, coaches: s.coaches, coachReviews: s.coachReviews, coachResults: s.coachResults,
@@ -1932,11 +1938,13 @@ function mergeRemote(prev: AppState, data: RemoteData, me: ID, email: string | n
           // Migration 146: a database without them keeps what this phone has.
           pushJoined: data.userState.pushJoined ?? prev.prefs.pushJoined,
           pushStreak: data.userState.pushStreak ?? prev.prefs.pushStreak,
+          pushQuestions: data.userState.pushQuestions ?? prev.prefs.pushQuestions,
         }
         : prev.prefs,
       // The settings row carries contacts_findable only once migration 89 has run (with no row yet, the load asks on its own).
       contactsFindableLive: data.userState?.contactsFindable !== undefined || data.contactsFindableReady ? true : prev.contactsFindableLive,
       joinAlertsLive: data.userState?.pushJoined !== undefined || data.alertSwitchesReady ? true : prev.joinAlertsLive,
+      questionAlertsLive: data.userState?.pushQuestions !== undefined ? true : prev.questionAlertsLive,
       // The saved copy shows the app; only the server's answer counts as loaded (live updates, settings sync and retries wait for it).
       remoteLoaded: fromSnapshot ? prev.remoteLoaded : true,
       snapshotShown: fromSnapshot ? true : prev.snapshotShown,
@@ -2260,6 +2268,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     contactsFindableLive: false,
     // The demo has no server to ask: its switches all show.
     joinAlertsLive: !isSupabaseConfigured,
+    questionAlertsLive: !isSupabaseConfigured,
     hiddenWords: null,
     reviewRequests: null,
     reviewsOff: false,
@@ -2718,6 +2727,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         // Migration 146's two switches; the same.
         pushJoined: s.joinAlertsLive ? s.prefs.pushJoined : undefined,
         pushStreak: s.prefs.pushStreak,
+        pushQuestions: s.questionAlertsLive ? s.prefs.pushQuestions : undefined,
       }).finally(settled);
     }, 400);
     // Never sent (a newer change took its place, or the account changed): nothing of it is on its way up.

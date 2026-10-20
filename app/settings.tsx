@@ -52,7 +52,7 @@ interface Row {
  */
 export default function Settings() {
   const styles = useThemedStyles(styleDefinitions);
-  const { currentUser, currentUserId, locationEnabled, detectedLocation, actions, prefs, courtExtras, mapLive, mapVisibility, teenMap, contactsFindableLive, joinAlertsLive, integrations } = useApp();
+  const { currentUser, currentUserId, locationEnabled, detectedLocation, actions, prefs, courtExtras, mapLive, mapVisibility, teenMap, contactsFindableLive, joinAlertsLive, questionAlertsLive, integrations } = useApp();
   const [locationNote, setLocationNote] = useState('');
   const toggleLocation = async (next: boolean) => {
     // Never said who can see you on the map (migration 63): that comes first, the same as on the map.
@@ -178,6 +178,8 @@ export default function Settings() {
         // "Sam just joined CourtSide near you" (migration 146): only adults hear it (the server's rule), and
         // the switch shows once the database has it. Off, it still lands in Notifications.
         ...(mapAdult && joinAlertsLive ? [{ icon: 'person-add-outline' as const, label: 'Players joining near you', detail: 'Someone new in your town', toggle: { value: prefs.pushJoined, onChange: (v: boolean) => actions.setPref('pushJoined', v) } }] : []),
+        // Sweep R6 (Oct 20): when a Discussions question has waited with no answer, up to 3 people who answered that topic before (or coaches, for technique and gear) are told, at most one a day (migration 168). Shown once the database has it.
+        ...(questionAlertsLive ? [{ icon: 'help-circle-outline' as const, label: 'Questions you could answer', detail: 'Unanswered threads on topics you know', toggle: { value: prefs.pushQuestions, onChange: (v: boolean) => actions.setPref('pushQuestions', v) } }] : []),
         // The 7pm reminder, set on this phone (features/practice/reminder).
         { icon: 'flame-outline' as const, label: 'Streak reminders', detail: 'At 7pm, when today has nothing yet', toggle: { value: prefs.pushStreak, onChange: (v: boolean) => actions.setPref('pushStreak', v) } },
       ],
