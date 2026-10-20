@@ -1,0 +1,193 @@
+import React, { useEffect, useRef, useState } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
+import { router } from 'expo-router';
+import Animated, { type SharedValue, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming } from 'react-native-reanimated';
+
+import { Avatar } from '@/components/ui/Avatar';
+import { Box, Row, SectionHead } from '@/components/tennis/ProfileParts';
+import type { ID, PartnerStreak } from '@/data/types';
+import * as haptics from '@/lib/haptics';
+import { useApp } from '@/store/AppContext';
+import { useThemedStyles } from '@/theme/ThemeProvider';
+import { colors, font, lift, spacing, typography } from '@/theme';
+
+/*
+ * Weekly streaks with hitting partners (sweep R12, Oct 20, owner: yes).
+ * Like a friend streak, but by the week, because tennis is weekly: two
+ * players on the same logged session (the tag accepted) at least once a
+ * week, Monday to Sunday, keep it going. It shows only to the two of them,
+ * on each other's profile beside Head to head and in their own Tennis
+ * profile, and only while the teen rules let them see each other (the
+ * server decides: my_partner_streaks, migration 180). A small celebration
+ * at 4, 10 and 25 weeks, once.
+ */
+
+const firstOf = (name: string) => name.trim().split(/\s+/)[0] || name;
+
+/** "Played together this week" or what keeps it going, in a few words. */
+const weekWords = (p: PartnerStreak) => (p.thisWeek ? 'You’ve played together this week' : 'Hit together by Sunday to keep it going');
+
+/**
+ * Your streaks, asked for when shown and again whenever your tags change
+ * (one accepted, taken off, a session's day moved).
+ */
+export function usePartnerStreaks(): PartnerStreak[] | null {
+  const { actions, sessionTags, currentUserId, partnerStreaks } = useApp();
+  const { loadPartnerStreaks } = actions;
+  useEffect(() => { void loadPartnerStreaks().catch(() => undefined); }, [loadPartnerStreaks, sessionTags, currentUserId]);
+  return partnerStreaks;
+}
+
+/**
+ * A milestone reached and not yet celebrated: held for as long as this card
+ * is on screen (with a light buzz), and told to the server once seen, so it
+ * is never shown again for that run.
+ */
+function useCelebration(p: PartnerStreak | undefined): number | null {
+  const { actions } = useApp();
+  const [showing, setShowing] = useState<number | null>(null);
+  const told = useRef<string | null>(null);
+  const userId = p?.userId;
+  const milestone = p?.celebrate ?? null;
+  useEffect(() => {
+    if (!userId || !milestone) return;
+    const key = `${userId}:${milestone}`;
+    if (told.current === key) return;
+    told.current = key;
+    setShowing(milestone);
+    const t = setTimeout(() => haptics.reward(), 380);
+    actions.seenPartnerStreak(userId, milestone);
+    return () => clearTimeout(t);
+  }, [userId, milestone, actions]);
+  return showing;
+}
+
+/** The flame (the same 🔥 as the reminder) in its round tile; on a milestone the tile turns green and the flame pops in with a few sparks. */
+function Flame({ size = 40, celebrate = false }: { size?: number; celebrate?: boolean }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const pop = useSharedValue(celebrate ? 0.4 : 1);
+  const burst = useSharedValue(0);
+  useEffect(() => {
+    if (!celebrate) return;
+    pop.value = withSequence(withSpring(1.22, { damping: 7, stiffness: 220 }), withSpring(1, { damping: 12, stiffness: 180 }));
+    burst.value = withDelay(120, withTiming(1, { duration: 700 }));
+  }, [celebrate, pop, burst]);
+  const flameStyle = useAnimatedStyle(() => ({ transform: [{ scale: pop.value }] }));
+  const sparks = [0, 1, 2, 3, 4, 5];
+  return (
+    <View style={[styles.flameTile, { width: size, height: size, borderRadius: size / 2 }, celebrate && styles.flameTileOn]}>
+      {celebrate ? sparks.map((i) => <Spark key={i} index={i} of={sparks.length} burst={burst} radius={size * 0.62} />) : null}
+      <Animated.View style={flameStyle}>
+        <Text style={{ fontSize: Math.round(size * 0.48), lineHeight: Math.round(size * 0.62) }} accessible={false}>🔥</Text>
+      </Animated.View>
+    </View>
+  );
+}
+
+/** One spark of the celebration: out from the flame and gone. */
+function Spark({ index, of, burst, radius }: { index: number; of: number; burst: SharedValue<number>; radius: number }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const angle = (index / of) * Math.PI * 2 - Math.PI / 2;
+  const style = useAnimatedStyle(() => {
+    const t = burst.value;
+    return {
+      opacity: t <= 0 || t >= 1 ? 0 : 1 - t,
+      transform: [{ translateX: Math.cos(angle) * radius * t }, { translateY: Math.sin(angle) * radius * t }, { scale: 1 - t * 0.5 }],
+    };
+  });
+  return <Animated.View pointerEvents="none" style={[styles.spark, style]} />;
+}
+
+/**
+ * On someone's profile, under Head to head: your streak with them, when you
+ * have one. Nothing otherwise, and nothing on your own profile.
+ */
+export function PartnerStreakCard({ userId, name }: { userId: ID; name: string }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const streaks = usePartnerStreaks();
+  const p = streaks?.find((s) => s.userId === userId);
+  const party = useCelebration(p);
+  if (!p) return null;
+  const first = firstOf(name);
+  const title = `${p.weeks}-week streak with ${first}`;
+  const eyebrow = party ? `${party} weeks in a row!` : 'Partner streak';
+  return (
+    <View
+      style={[styles.card, party ? styles.cardOn : null]}
+      accessible
+      accessibilityLabel={`${party ? `New milestone, ${party} weeks in a row. ` : ''}${p.weeks}-week streak with ${first}. ${weekWords(p)}.`}
+    >
+      <Flame celebrate={!!party} />
+      <View style={styles.words}>
+        <Text style={[styles.eyebrow, party ? styles.eyebrowOn : null]} numberOfLines={1}>{eyebrow}</Text>
+        <Text style={styles.title} numberOfLines={1}>{title}</Text>
+        <Text style={styles.sub} numberOfLines={2}>{weekWords(p)}</Text>
+      </View>
+    </View>
+  );
+}
+
+/**
+ * In your Tennis profile (Activity): every streak you have going, longest
+ * first, each opening that player's profile. Nothing while you have none.
+ */
+export function PartnerStreaksBox() {
+  const streaks = usePartnerStreaks();
+  const { users } = useApp();
+  const rows = (streaks ?? []).filter((p) => users.some((u) => u.id === p.userId));
+  if (!rows.length) return null;
+  return (
+    <View>
+      <SectionHead title="Partner streaks" count={rows.length > 1 ? rows.length : undefined} />
+      <Box>
+        {rows.map((p, i) => <StreakRow key={p.userId} p={p} first={i === 0} />)}
+      </Box>
+    </View>
+  );
+}
+
+function StreakRow({ p, first }: { p: PartnerStreak; first: boolean }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const { users } = useApp();
+  const party = useCelebration(p);
+  const u = users.find((x) => x.id === p.userId);
+  if (!u) return null;
+  const name = firstOf(u.name);
+  return (
+    <Row
+      first={first}
+      lead={party ? <Flame size={40} celebrate /> : <Avatar name={u.name} seed={u.avatarSeed} uri={u.avatarUrl} size={40} />}
+      title={
+        <Text style={styles.rowTitle} numberOfLines={1}>
+          <Text style={styles.rowFlame}>🔥 </Text>{`${p.weeks}-week streak with ${name}`}
+        </Text>
+      }
+      sub={
+        <Text style={[styles.rowSub, party ? styles.rowSubOn : null]} numberOfLines={1}>
+          {party ? `${party} weeks in a row! Keep it going` : weekWords(p)}
+        </Text>
+      }
+      chevron
+      accessibilityRole="link"
+      accessibilityLabel={`${party ? `New milestone, ${party} weeks in a row. ` : ''}${p.weeks}-week streak with ${name}. ${weekWords(p)}. Opens ${name}’s profile`}
+      onPress={() => router.push({ pathname: '/user/[id]', params: { id: u.id } })}
+    />
+  );
+}
+
+const styleDefinitions = StyleSheet.create({
+  card: { ...lift, flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: 16, borderRadius: 20, backgroundColor: colors.surface, marginBottom: spacing.md, borderWidth: 1, borderColor: 'transparent' },
+  cardOn: { borderColor: colors.brand },
+  words: { flex: 1, minWidth: 0, gap: 2 },
+  eyebrow: { ...typography.smallStrong, color: colors.textMuted },
+  eyebrowOn: { color: colors.brand },
+  title: { ...font('700'), fontSize: 18, letterSpacing: -0.3, color: colors.text },
+  sub: { ...typography.small, color: colors.textMuted },
+  flameTile: { alignItems: 'center', justifyContent: 'center', backgroundColor: colors.brandDim },
+  flameTileOn: { backgroundColor: colors.brand },
+  spark: { position: 'absolute', width: 6, height: 6, borderRadius: 3, backgroundColor: colors.brand },
+  rowTitle: { ...font('600'), fontSize: 16, color: colors.text, fontVariant: ['tabular-nums'] },
+  rowFlame: { fontSize: 15 },
+  rowSub: { ...typography.small, color: colors.textMuted, marginTop: 2 },
+  rowSubOn: { ...font('600'), color: colors.brand },
+});

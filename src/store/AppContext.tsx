@@ -131,7 +131,7 @@ import type {
   Story,
   User,
   PlayerProfile,
-  MediaCrop, Tip, TaggedCourt, TrackerId, Invitee, AffiliateStats, ContactMatch, HealthShareKey, HeadToHead, CourtKings, FlybyPerson, FriendStreak, MatchSet, Removed, RemovedItem, DemotedPost, DemoteResult, ReviewRequest, ReviewStatus, TakedownKind, TakedownReason, TournamentEntry, HiddenWords, HiddenWordsKind, FoundVia } from '@/data/types';
+  MediaCrop, Tip, TaggedCourt, TrackerId, Invitee, AffiliateStats, ContactMatch, HealthShareKey, HeadToHead, PartnerStreak, CourtKings, FlybyPerson, FriendStreak, MatchSet, Removed, RemovedItem, DemotedPost, DemoteResult, ReviewRequest, ReviewStatus, TakedownKind, TakedownReason, TournamentEntry, HiddenWords, HiddenWordsKind, FoundVia } from '@/data/types';
 import { HIDDEN_WORDS_MAX, HIDDEN_WORD_LENGTH, cleanWords, defaultHiddenWords } from '@/features/hiddenWords/hiddenWords';
 import { canScore, scoreNotKept, setsWinner } from '@/features/activity/score';
 
@@ -376,9 +376,11 @@ export interface Prefs {
   pushQuestions: boolean;
   /** Sweep R10 (Oct 20): one reminder about 20 hours after a hit invite you have not answered, while the hit still has a spot (migration 171). */
   pushHitNudges: boolean;
+  /** Sweep R12 (Oct 20): one weekend reminder when a weekly streak with a hitting partner has nothing yet this week (migration 180). */
+  pushPartnerStreak: boolean;
 }
 export type PrefKey = keyof Prefs;
-const DEFAULT_PREFS: Prefs = { showActivity: true, pushLikes: true, pushCoach: true, pushMessages: true, pushActivity: true, pushMapFriends: true, pushMapHits: true, pushMapPlayers: true, pushCourts: true, contactsFindable: true, pushRecap: true, pushJoined: true, pushStreak: true, pushQuestions: true, pushHitNudges: true };
+const DEFAULT_PREFS: Prefs = { showActivity: true, pushLikes: true, pushCoach: true, pushMessages: true, pushActivity: true, pushMapFriends: true, pushMapHits: true, pushMapPlayers: true, pushCourts: true, contactsFindable: true, pushRecap: true, pushJoined: true, pushStreak: true, pushQuestions: true, pushHitNudges: true, pushPartnerStreak: true };
 
 interface AppState extends Bootstrap, CourtLifeState, FeedGroupsState, LiveSessionState {
   ready: boolean;
@@ -521,6 +523,13 @@ interface AppState extends Bootstrap, CourtLifeState, FeedGroupsState, LiveSessi
   questionAlertsLive: boolean;
   /** The database has the "Hit invite reminders" switch (migration 171); before that it would do nothing, so it is not shown. */
   hitNudgeAlertsLive: boolean;
+  /** The database has the "Partner streak reminders" switch (migration 180); before that it would do nothing, so it is not shown. */
+  partnerStreakAlertsLive: boolean;
+  /**
+   * Your weekly streaks with hitting partners (sweep R12, migration 180):
+   * null until asked (loadPartnerStreaks), or when the database has none yet.
+   */
+  partnerStreaks: PartnerStreak[] | null;
   /**
    * Your Hidden words (Settings → Hidden words, migration 117): null until
    * the page has asked for them. The demo keeps its own on this phone.
@@ -583,6 +592,7 @@ function withServerSettings(s: AppState, base: string, got: UserState | null): P
     pushJoined: got.pushJoined ?? s.prefs.pushJoined, pushStreak: got.pushStreak ?? s.prefs.pushStreak,
     pushQuestions: got.pushQuestions ?? s.prefs.pushQuestions,
     pushHitNudges: got.pushHitNudges ?? s.prefs.pushHitNudges,
+    pushPartnerStreak: got.pushPartnerStreak ?? s.prefs.pushPartnerStreak,
   };
   for (const k of Object.keys(prefs) as PrefKey[]) if (s.prefs[k] !== was.f[k]) prefs[k] = s.prefs[k];
   const cardsChanged = JSON.stringify(s.paymentMethods) !== JSON.stringify(was.p);
@@ -621,7 +631,7 @@ function freshAccountSettings(): Partial<AppState> {
 function signedOut(prev: AppState): AppState {
   return {
     ...prev, currentUserId: null, onboardingComplete: false, healthIsReal: false, healthHistory: [], detectedActivities: [],
-    ...emptyCourtLife, ...emptyFeedGroups, ...emptyLiveSession, lastSeenLoaded: false, sessionTags: [], newOnCourtside: null, reviewRequests: null, reviewsOff: false, reviewsFailed: false,
+    ...emptyCourtLife, ...emptyFeedGroups, ...emptyLiveSession, lastSeenLoaded: false, sessionTags: [], partnerStreaks: null, newOnCourtside: null, reviewRequests: null, reviewsOff: false, reviewsFailed: false,
     mapVisibility: isSupabaseConfigured ? undefined : prev.mapVisibility, teenMap: isSupabaseConfigured ? 'off' : prev.teenMap,
     ...freshAccountSettings(),
   };
@@ -877,6 +887,10 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions, LiveSessionAct
    * not be asked, for yourself, or with someone blocked either way.
    */
   headToHead: (userId: ID) => Promise<HeadToHead | null>;
+  /** Asks again for your weekly streaks with hitting partners (sweep R12, migration 180) into `partnerStreaks`. */
+  loadPartnerStreaks: () => Promise<void>;
+  /** A streak milestone's celebration was shown: it is not shown again for that run. */
+  seenPartnerStreak: (userId: ID, milestone: number) => void;
 
   /** `wantOn` says which way (a double tap only ever likes); without it, the other way from the last tap. */
   toggleLike: (postId: ID, wantOn?: boolean) => void;
@@ -1841,6 +1855,7 @@ function snapshotOf(s: AppState, me: ID): RemoteData {
       pushStreak: s.prefs.pushStreak,
       pushQuestions: s.questionAlertsLive ? s.prefs.pushQuestions : undefined,
       pushHitNudges: s.hitNudgeAlertsLive ? s.prefs.pushHitNudges : undefined,
+      pushPartnerStreak: s.partnerStreakAlertsLive ? s.prefs.pushPartnerStreak : undefined,
       constraints: self?.profile.constraints,
     },
     tips: s.tips, coachApplications: s.coachApplications, coaches: s.coaches, coachReviews: s.coachReviews, coachResults: s.coachResults,
@@ -1973,6 +1988,7 @@ function mergeRemote(prev: AppState, data: RemoteData, me: ID, email: string | n
           pushStreak: data.userState.pushStreak ?? prev.prefs.pushStreak,
           pushQuestions: data.userState.pushQuestions ?? prev.prefs.pushQuestions,
           pushHitNudges: data.userState.pushHitNudges ?? prev.prefs.pushHitNudges,
+          pushPartnerStreak: data.userState.pushPartnerStreak ?? prev.prefs.pushPartnerStreak,
         }
         : prev.prefs,
       // The settings row carries contacts_findable only once migration 89 has run (with no row yet, the load asks on its own).
@@ -1980,6 +1996,7 @@ function mergeRemote(prev: AppState, data: RemoteData, me: ID, email: string | n
       joinAlertsLive: data.userState?.pushJoined !== undefined || data.alertSwitchesReady ? true : prev.joinAlertsLive,
       questionAlertsLive: data.userState?.pushQuestions !== undefined ? true : prev.questionAlertsLive,
       hitNudgeAlertsLive: data.userState?.pushHitNudges !== undefined ? true : prev.hitNudgeAlertsLive,
+      partnerStreakAlertsLive: data.userState?.pushPartnerStreak !== undefined ? true : prev.partnerStreakAlertsLive,
       // The saved copy shows the app; only the server's answer counts as loaded (live updates, settings sync and retries wait for it).
       remoteLoaded: fromSnapshot ? prev.remoteLoaded : true,
       snapshotShown: fromSnapshot ? true : prev.snapshotShown,
@@ -2305,6 +2322,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     joinAlertsLive: !isSupabaseConfigured,
     questionAlertsLive: !isSupabaseConfigured,
     hitNudgeAlertsLive: !isSupabaseConfigured,
+    partnerStreakAlertsLive: !isSupabaseConfigured,
+    partnerStreaks: null,
     hiddenWords: null,
     reviewRequests: null,
     reviewsOff: false,
@@ -2766,6 +2785,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         pushStreak: s.prefs.pushStreak,
         pushQuestions: s.questionAlertsLive ? s.prefs.pushQuestions : undefined,
         pushHitNudges: s.hitNudgeAlertsLive ? s.prefs.pushHitNudges : undefined,
+        pushPartnerStreak: s.partnerStreakAlertsLive ? s.prefs.pushPartnerStreak : undefined,
       }).finally(settled);
     }, 400);
     // Never sent (a newer change took its place, or the account changed): nothing of it is on its way up.
@@ -4339,6 +4359,42 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!me || userId === me || s.blockedIds.includes(userId)) return null;
     if (live(me, userId)) return remote.headToHead(userId);
     return demoApi.headToHead({ me, other: userId, sessions: s.sessions, tags: s.sessionTags });
+  }, []);
+
+  // Sweep R12 (Oct 20): weekly streaks with hitting partners. The milestones
+  // the demo has celebrated, kept for this run of the app only.
+  const demoStreakSeen = useRef<Record<ID, number>>({});
+  const loadPartnerStreaks = useCallback(async () => {
+    const s = stateRef.current;
+    const me = s.currentUserId;
+    if (!me) return;
+    const got = live(me)
+      ? await remote.partnerStreaks().catch(() => null)
+      : await demoApi.partnerStreaks({
+        me, tags: s.sessionTags, today: localDay(Date.now()), seen: demoStreakSeen.current,
+        // The teen rule, as the server has it: following each other, or both known adults.
+        visible: (other) => {
+          const now = stateRef.current;
+          if (now.blockedIds.includes(other) || now.blockedMeIds.includes(other)) return false;
+          const them = now.users.find((u) => u.id === other);
+          if (!them || them.suspended) return false;
+          const mutual = now.followingIds.includes(other) && now.followEdges.some((e) => e.followerId === other && e.followingId === me);
+          return mutual || knownOpen(them, other, ageSource(now, other), now.openness);
+        },
+      });
+    if (stateRef.current.currentUserId !== me) return;
+    setState((prev) => (prev.currentUserId !== me || JSON.stringify(prev.partnerStreaks) === JSON.stringify(got) ? prev : { ...prev, partnerStreaks: got }));
+  }, []);
+
+  const seenPartnerStreak = useCallback((userId: ID, milestone: number) => {
+    const me = stateRef.current.currentUserId;
+    if (!me || userId === me) return;
+    setState((prev) => ({
+      ...prev,
+      partnerStreaks: prev.partnerStreaks?.map((p) => (p.userId === userId && p.celebrate && p.celebrate <= milestone ? { ...p, celebrate: undefined } : p)) ?? null,
+    }));
+    if (live(me, userId)) void remote.seenPartnerStreak(userId, milestone).catch(() => undefined);
+    else demoStreakSeen.current = { ...demoStreakSeen.current, [userId]: Math.max(demoStreakSeen.current[userId] ?? 0, milestone) };
   }, []);
 
   const courtKings = useCallback(async (courtId: string): Promise<CourtKings | null> => {
@@ -9154,6 +9210,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setSessionScore,
       setSessionTime,
       headToHead,
+      loadPartnerStreaks,
+      seenPartnerStreak,
       courtKings,
       flyby,
       friendsOnStreak,
@@ -9395,6 +9453,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setSessionScore,
       setSessionTime,
       headToHead,
+      loadPartnerStreaks,
+      seenPartnerStreak,
       courtKings,
       flyby,
       friendsOnStreak,

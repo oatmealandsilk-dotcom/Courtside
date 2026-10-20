@@ -26,6 +26,7 @@ import { TilePin } from '@/components/TilePin';
 import { TileRemoved } from '@/features/moderation/RemovedNote';
 import { SuggestedPlayers } from '@/components/SuggestedPlayers';
 import { HeadToHeadCard } from '@/components/HeadToHeadCard';
+import { PartnerStreakCard } from '@/components/PartnerStreak';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing, typography, font } from '@/theme';
 import { useStillLoading } from '@/lib/useStillLoading';
@@ -218,6 +219,8 @@ function UserProfile() {
 
       {/* Your record against them, from scored matches you are both confirmed on (migration 91); nothing with none, or with a block. */}
       {!isMe && !blocked ? <HeadToHeadCard userId={user.id} name={user.name} /> : null}
+      {/* Your weekly streak with them (sweep R12, migration 180): only the two of you see it, and only while the teen rules let you see each other. */}
+      {!isMe && !blocked ? <PartnerStreakCard userId={user.id} name={user.name} /> : null}
 
       {blocked ? null : locked ? (
         <>

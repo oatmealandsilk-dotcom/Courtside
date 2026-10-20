@@ -242,6 +242,26 @@ export interface HeadToHead {
   last?: { sessionId: ID; day: string; won: boolean; sets: MatchSet[] };
 }
 
+/**
+ * A weekly streak you share with one hitting partner (sweep R12, Oct 20;
+ * my_partner_streaks, migration 180): the weeks in a row (Monday to Sunday)
+ * you were on the same logged session at least once, the tag accepted.
+ * Only the two of you ever see it, and only while the teen rules let you
+ * see each other (you follow each other, or you are both known adults).
+ * Only live ones of 2+ weeks: played this week, or last week with this week
+ * still open.
+ */
+export interface PartnerStreak {
+  userId: ID;
+  weeks: number;
+  /** The longest run the two of you have had. */
+  best: number;
+  /** Already played together this week; false while the week is still open. */
+  thisWeek: boolean;
+  /** A milestone (4, 10 or 25 weeks) reached and not yet celebrated on this account. */
+  celebrate?: 4 | 10 | 25;
+}
+
 /* ------------------------------ Session tags ----------------------------- */
 
 /** In a match: an opponent or a doubles partner. Everyone tagged on a practice is a 'partner' ("with"). */

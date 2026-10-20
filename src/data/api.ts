@@ -60,6 +60,7 @@ import type {
   DemoteResult,
   PracticeSession,
   HeadToHead,
+  PartnerStreak,
   Invitee,
   MatchSet,
   SessionTag,
@@ -378,6 +379,60 @@ export async function headToHead({ me, other, sessions, tags }: { me: ID; other:
     losses: once.filter((g) => !g.won).length,
     ...(last ? { last: { sessionId: last.sessionId, day: last.day, won: last.won, sets: clone(last.sets) } } : {}),
   };
+}
+
+/** The Monday of a calendar day ("2026-10-21" is in the week of "2026-10-19"). */
+export function mondayOf(day: string): string {
+  const d = new Date(`${day.slice(0, 10)}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+  return d.toISOString().slice(0, 10);
+}
+
+/** The calendar day a number of days before one ("2026-10-19", 7 → "2026-10-12"). */
+function daysBefore(day: string, n: number): string {
+  const d = new Date(`${day.slice(0, 10)}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - n);
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * The demo's my_partner_streaks (migration 180), by the server's rule, from
+ * the tags the demo holds: a week counts for you and one player when one of
+ * you logged a session with the other tagged and accepted (never a copy,
+ * never a tag the tagger dropped). The latest run of weeks in a row, shown
+ * from 2 while it is alive (this week played, or last week with this week
+ * open); `visible` is the teen rule, `seen` the milestones already shown.
+ */
+export async function partnerStreaks({ me, tags, today, visible, seen }: {
+  me: ID; tags: SessionTag[]; today: string; visible: (other: ID) => boolean; seen: Record<ID, number>;
+}): Promise<PartnerStreak[]> {
+  await delay(null, 120);
+  const weeks = new Map<ID, Set<string>>();
+  for (const t of tags) {
+    if (t.status !== 'accepted' || t.dropped) continue;
+    const other = t.taggerId === me ? t.taggedId : t.taggedId === me ? t.taggerId : null;
+    if (!other || other === me) continue;
+    if (!weeks.has(other)) weeks.set(other, new Set());
+    weeks.get(other)!.add(mondayOf(t.day));
+  }
+  const monday = mondayOf(today);
+  const out: PartnerStreak[] = [];
+  for (const [other, set] of weeks) {
+    const sorted = [...set].sort();
+    let run = 0;
+    let best = 0;
+    let prev = '';
+    for (const w of sorted) {
+      run = prev && daysBefore(w, 7) === prev ? run + 1 : 1;
+      best = Math.max(best, run);
+      prev = w;
+    }
+    const last = sorted[sorted.length - 1];
+    if (run < 2 || (last !== monday && last !== daysBefore(monday, 7)) || !visible(other)) continue;
+    const reached = ([25, 10, 4] as const).find((m) => m <= run && m > (seen[other] ?? 0));
+    out.push({ userId: other, weeks: run, best, thisWeek: last === monday, ...(reached ? { celebrate: reached } : {}) });
+  }
+  return out.sort((a, b) => b.weeks - a.weeks || Number(b.thisWeek) - Number(a.thisWeek) || a.userId.localeCompare(b.userId));
 }
 
 /**

@@ -52,7 +52,7 @@ interface Row {
  */
 export default function Settings() {
   const styles = useThemedStyles(styleDefinitions);
-  const { currentUser, currentUserId, locationEnabled, detectedLocation, actions, prefs, courtExtras, mapLive, mapVisibility, teenMap, contactsFindableLive, joinAlertsLive, questionAlertsLive, hitNudgeAlertsLive, integrations } = useApp();
+  const { currentUser, currentUserId, locationEnabled, detectedLocation, actions, prefs, courtExtras, mapLive, mapVisibility, teenMap, contactsFindableLive, joinAlertsLive, questionAlertsLive, hitNudgeAlertsLive, partnerStreakAlertsLive, integrations } = useApp();
   const [locationNote, setLocationNote] = useState('');
   const toggleLocation = async (next: boolean) => {
     // Never said who can see you on the map (migration 63): that comes first, the same as on the map.
@@ -182,6 +182,8 @@ export default function Settings() {
         ...(questionAlertsLive ? [{ icon: 'help-circle-outline' as const, label: 'Questions you could answer', detail: 'Unanswered threads on topics you know', toggle: { value: prefs.pushQuestions, onChange: (v: boolean) => actions.setPref('pushQuestions', v) } }] : []),
         // Sweep R10 (Oct 20): one reminder about 20 hours after a hit invite you have not answered, while the hit still has a spot (migration 171). Shown once the database has it.
         ...(hitNudgeAlertsLive ? [{ icon: 'time-outline' as const, label: 'Hit invite reminders', detail: 'One reminder if an invite waits a day', toggle: { value: prefs.pushHitNudges, onChange: (v: boolean) => actions.setPref('pushHitNudges', v) } }] : []),
+        // Sweep R12 (Oct 20): one weekend reminder when a weekly streak with a hitting partner has nothing yet this week (migration 180). Shown once the database has it.
+        ...(partnerStreakAlertsLive ? [{ icon: 'people-outline' as const, label: 'Partner streak reminders', detail: 'One on the weekend if your week together is open', toggle: { value: prefs.pushPartnerStreak, onChange: (v: boolean) => actions.setPref('pushPartnerStreak', v) } }] : []),
         // The 7pm reminder, set on this phone (features/practice/reminder).
         { icon: 'flame-outline' as const, label: 'Streak reminders', detail: 'At 7pm, when today has nothing yet', toggle: { value: prefs.pushStreak, onChange: (v: boolean) => actions.setPref('pushStreak', v) } },
       ],

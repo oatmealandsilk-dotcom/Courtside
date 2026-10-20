@@ -8,6 +8,7 @@ import { CourtSpinner } from '@/components/CourtSpinner';
 import { FollowPill } from '@/components/FollowPill';
 import { LiveDot } from '@/components/LiveDot';
 import { CourtGlyph } from '@/components/map/CourtGlyph';
+import { PartnerStreaksBox } from '@/components/PartnerStreak';
 import { Duration } from '@/components/session/Duration';
 import { PlayerCard, Swatch, upcoming } from '@/components/tennis/PlayerCard';
 import { AddRow, Box, Chip, DateTile, EmptyRow, MedalGrid, NextMedal, Row, SectionHead, Summary, Tile } from '@/components/tennis/ProfileParts';
@@ -161,6 +162,8 @@ function ActivityTab({ user }: { user: User }) {
         </Box>
       ) : null}
       <ThisWeek user={user} />
+      {/* Your weekly streaks with hitting partners (sweep R12): only when you have one going. */}
+      <PartnerStreaksBox />
       <Waiting user={user} />
       <Recent user={user} />
     </View>

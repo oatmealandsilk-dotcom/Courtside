@@ -17,6 +17,7 @@ import { DEMO_PARK } from './courts';
  * ("vs June · Waiting"); Sam tagged you in a match and is waiting on you
  * (an alert, and the top of Your sessions); and Mira tagged you in a
  * practice you accepted, so it is in your log and on your Tagged tab.
+ * Mira and Dev were also on a few of your practices (partner streaks).
  */
 
 const dayAgo = (n: number) => localDay(Date.now() - n * 86_400_000);
@@ -51,6 +52,12 @@ export const demoSessionTags: SessionTag[] = [
   { id: 'stag-demo-1', sessionId: 'ses-demo-1', taggerId: CURRENT_USER_ID, taggedId: 'u-mira', role: 'opponent', status: 'accepted', createdAt: loggedAt(1, 20), respondedAt: isoDaysAgo(0, 11), kind: 'match', day: dayAgo(1), minutes: 90, won: true, sets: [[7, 6, 5], [3, 6], [10, 7]] },
   { id: 'stag-demo-10', sessionId: 'ses-demo-10', taggerId: CURRENT_USER_ID, taggedId: 'u-mira', role: 'opponent', status: 'accepted', createdAt: loggedAt(3, 19), respondedAt: isoDaysAgo(2, 4), kind: 'match', day: dayAgo(3), minutes: 75, won: true, sets: [[6, 3], [7, 5]] },
   { id: 'stag-demo-13', sessionId: 'ses-demo-13', taggerId: CURRENT_USER_ID, taggedId: 'u-mira', role: 'opponent', status: 'accepted', createdAt: loggedAt(7, 20), respondedAt: isoDaysAgo(6, 4), kind: 'match', day: dayAgo(7), minutes: 96, won: true },
+  // Partner streaks (sweep R12): Mira on two more practices, so the two of you have played together
+  // four weeks running (the 4-week celebration); Dev on two in a row, his week still open.
+  { id: 'stag-demo-7', sessionId: 'ses-demo-7', taggerId: CURRENT_USER_ID, taggedId: 'u-mira', role: 'partner', status: 'accepted', createdAt: loggedAt(12, 18), respondedAt: isoDaysAgo(11, 4), kind: 'practice', day: dayAgo(12), minutes: 60 },
+  { id: 'stag-demo-8', sessionId: 'ses-demo-8', taggerId: CURRENT_USER_ID, taggedId: 'u-mira', role: 'partner', status: 'accepted', createdAt: loggedAt(16, 18), respondedAt: isoDaysAgo(15, 4), kind: 'practice', day: dayAgo(16), minutes: 90 },
+  { id: 'stag-demo-4', sessionId: 'ses-demo-4', taggerId: CURRENT_USER_ID, taggedId: 'u-dev', role: 'partner', status: 'accepted', createdAt: loggedAt(6, 18), respondedAt: isoDaysAgo(5, 4), kind: 'practice', day: dayAgo(6), minutes: 75 },
+  { id: 'stag-demo-7d', sessionId: 'ses-demo-7', taggerId: CURRENT_USER_ID, taggedId: 'u-dev', role: 'partner', status: 'accepted', createdAt: loggedAt(12, 18), respondedAt: isoDaysAgo(11, 3), kind: 'practice', day: dayAgo(12), minutes: 60 },
   { id: 'stag-demo-6', sessionId: 'ses-demo-6', taggerId: CURRENT_USER_ID, taggedId: 'u-june', role: 'opponent', status: 'pending', createdAt: loggedAt(9, 12), kind: 'match', day: dayAgo(9), minutes: 120, won: false, sets: [[4, 6], [6, 7]] },
   // Sam lost to you two days ago: Sam's session, so the result is from your side.
   { id: 'stag-demo-sam', sessionId: 'ses-sam-1', taggerId: 'u-sam', taggedId: CURRENT_USER_ID, role: 'opponent', status: 'pending', createdAt: isoDaysAgo(0, 2), kind: 'match', day: dayAgo(2), minutes: 75, won: true },

@@ -24,7 +24,7 @@ import { blankVideoLocation } from '@/lib/videoLocation';
 import { noteStep } from '@/lib/crashReporting';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
-import type { Answer, FriendStreak, ChatEvent, ChatPhoto, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, DetectedActivity, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, HiddenWords, HiddenWordsKind, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, CourtNote, LastSeen, MapPlace, MapVisibility, TaggedCourt, Question, Removed, RemovedItem, ReviewRequest, ReviewStatus, Story, SurfacePreference, TakedownKind, TakedownReason, Tip, TournamentEntry, User, PublicStreak, CoachApplication, CourtAccess, CourtAccessSource, CourtDayPart, CourtFacts, CourtFollowCount, CourtNow, CourtKings, CourtRegulars, CourtReview, CourtRightNow, CourtRing, FlybyPerson, FollowedCourt, SessionTag, SessionTagRefusal, SessionTagRole, FeedGroup, FeedGroupCard, DiscoverGroup, GroupLook, Invitee, AffiliateStats, ContactMatch, HeadToHead, MatchSet, SessionWith, FoundVia } from './types';
+import type { Answer, FriendStreak, ChatEvent, ChatPhoto, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, DetectedActivity, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, HiddenWords, HiddenWordsKind, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, CourtNote, LastSeen, MapPlace, MapVisibility, TaggedCourt, Question, Removed, RemovedItem, ReviewRequest, ReviewStatus, Story, SurfacePreference, TakedownKind, TakedownReason, Tip, TournamentEntry, User, PublicStreak, CoachApplication, CourtAccess, CourtAccessSource, CourtDayPart, CourtFacts, CourtFollowCount, CourtNow, CourtKings, CourtRegulars, CourtReview, CourtRightNow, CourtRing, FlybyPerson, FollowedCourt, SessionTag, SessionTagRefusal, SessionTagRole, FeedGroup, FeedGroupCard, DiscoverGroup, GroupLook, Invitee, AffiliateStats, ContactMatch, HeadToHead, PartnerStreak, MatchSet, SessionWith, FoundVia } from './types';
 import { canScore, splitTiebreaks, validSets, withTiebreaks } from '@/features/activity/score';
 import { keptAvgHr, keptKcal } from '@/features/activity/manualStats';
 import { TERMS_VERSION } from '@/lib/legal';
@@ -670,6 +670,8 @@ export interface UserState {
   pushJoined?: boolean; pushStreak?: boolean;
   /** "Hit invite reminders" (migration 171). Undefined on a database without it: the switch is not shown. */
   pushHitNudges?: boolean;
+  /** "Partner streak reminders" (migration 180). Undefined on a database without it: the switch is not shown. */
+  pushPartnerStreak?: boolean;
   /** "Questions you could answer" (migration 170). Undefined on a database without it: the switch is not shown. */
   pushQuestions?: boolean;
   /** What the coach works around (injuries, schedule, gear): kept in this private row, never on the public profile. Undefined on a database without migration 19. */
@@ -780,7 +782,7 @@ const toCoach = (r: CoachRow, services: CoachServiceRow[], me: ID): Coach => ({
 /** One pin from map_players (migration 63; `mutual` since 98). */
 interface MapPlayerRow { user_id: ID; lat: number; lng: number; place: MapPlace | string; court_id: string | null; court_name: string | null; city: string | null; seen_at: string | null; open_until: string | null; mutual?: boolean | null }
 interface NotificationRow { id: string; user_id: string; actor_id: string; kind: string; target_id: string; target_kind: string; preview: string | null; read: boolean; created_at: string }
-interface UserStateRow { muted_ids: string[]; blocked_ids: string[]; saved_question_ids: string[]; payment_methods: PaymentMethod[]; default_payment_id: string | null; show_activity: boolean; push_likes: boolean; push_coach: boolean; push_messages?: boolean | null; push_activity?: boolean | null; push_map_friends?: boolean | null; push_map_hits?: boolean | null; push_map_players?: boolean | null; push_courts?: boolean | null; contacts_findable?: boolean | null; push_recap?: boolean | null; push_joined?: boolean | null; push_streak?: boolean | null; push_hit_nudges?: boolean | null; push_questions?: boolean | null; private_profile?: { constraints?: PlayerProfile['constraints']; tournaments?: unknown } | null; map_visibility?: string | null;
+interface UserStateRow { muted_ids: string[]; blocked_ids: string[]; saved_question_ids: string[]; payment_methods: PaymentMethod[]; default_payment_id: string | null; show_activity: boolean; push_likes: boolean; push_coach: boolean; push_messages?: boolean | null; push_activity?: boolean | null; push_map_friends?: boolean | null; push_map_hits?: boolean | null; push_map_players?: boolean | null; push_courts?: boolean | null; contacts_findable?: boolean | null; push_recap?: boolean | null; push_joined?: boolean | null; push_streak?: boolean | null; push_hit_nudges?: boolean | null; push_partner_streak?: boolean | null; push_questions?: boolean | null; private_profile?: { constraints?: PlayerProfile['constraints']; tournaments?: unknown } | null; map_visibility?: string | null;
   /** Your own age group, readable only by you (migration 64). Absent before it. */
   age_group?: string | null;
   /** Your birthday, readable only by you (migration 13). */
@@ -846,6 +848,7 @@ const toUserState = (r: UserStateRow): UserState => ({
   pushJoined: typeof r.push_joined === 'boolean' ? r.push_joined : undefined,
   pushStreak: typeof r.push_streak === 'boolean' ? r.push_streak : undefined,
   pushHitNudges: typeof r.push_hit_nudges === 'boolean' ? r.push_hit_nudges : undefined,
+  pushPartnerStreak: typeof r.push_partner_streak === 'boolean' ? r.push_partner_streak : undefined,
   pushQuestions: typeof r.push_questions === 'boolean' ? r.push_questions : undefined,
   constraints: Array.isArray(r.private_profile?.constraints) ? r.private_profile!.constraints : undefined,
   // The key is there only once migration 63 has run; null means never chosen.
@@ -1686,6 +1689,8 @@ let userStateLacksPushRecap = false;
 let userStateLacksAlertSwitches = false;
 /** Set once a settings save finds no push_hit_nudges column (a database before migration 171). */
 let userStateLacksPushHitNudges = false;
+/** Set once a settings save finds no push_partner_streak column (a database before migration 180). */
+let userStateLacksPushPartnerStreak = false;
 /** Set once a settings save finds no push_questions column (a database before migration 170). */
 let userStateLacksPushQuestions = false;
 
@@ -2030,12 +2035,15 @@ export const remote = {
       } : {}),
       // "Hit invite reminders" (migration 171).
       ...(s.pushHitNudges !== undefined && !userStateLacksPushHitNudges ? { push_hit_nudges: s.pushHitNudges } : {}),
+      // "Partner streak reminders" (migration 180).
+      ...(s.pushPartnerStreak !== undefined && !userStateLacksPushPartnerStreak ? { push_partner_streak: s.pushPartnerStreak } : {}),
       // "Questions you could answer" (migration 170).
       ...(s.pushQuestions !== undefined && !userStateLacksPushQuestions ? { push_questions: s.pushQuestions } : {}),
     });
     let { error } = await send();
     for (let tries = 0; error && tries < 5; tries += 1) {
-      if (/push_hit_nudges/.test(error.message) && !userStateLacksPushHitNudges) userStateLacksPushHitNudges = true;
+      if (/push_partner_streak/.test(error.message) && !userStateLacksPushPartnerStreak) userStateLacksPushPartnerStreak = true;
+      else if (/push_hit_nudges/.test(error.message) && !userStateLacksPushHitNudges) userStateLacksPushHitNudges = true;
       else if (/push_questions/.test(error.message) && !userStateLacksPushQuestions) userStateLacksPushQuestions = true;
       else if (/push_joined|push_streak/.test(error.message) && !userStateLacksAlertSwitches) userStateLacksAlertSwitches = true;
       else if (/push_recap/.test(error.message) && !userStateLacksPushRecap) userStateLacksPushRecap = true;
@@ -3798,6 +3806,31 @@ export const remote = {
       userId: other, wins: Number(r.wins) || 0, losses: Number(r.losses) || 0,
       ...(r.last && sets && typeof r.last.won === 'boolean' && r.last.sessionId ? { last: { sessionId: r.last.sessionId, day: String(r.last.day ?? '').slice(0, 10), won: r.last.won, sets } } : {}),
     };
+  },
+  /**
+   * Your weekly streaks with hitting partners (my_partner_streaks, migration
+   * 180): only live ones of 2+ weeks, with people the teen rules let you see.
+   * Null when it could not be asked, or the database has none yet.
+   */
+  async partnerStreaks(): Promise<PartnerStreak[] | null> {
+    const { data, error } = await need().rpc('my_partner_streaks');
+    if (error) { if (!missingFunction(error)) fail('partner streaks')(error); return null; }
+    if (!Array.isArray(data)) return null;
+    return (data as { user_id?: string; weeks?: number; best?: number; this_week?: boolean; celebrate?: number | null }[])
+      .filter((r) => typeof r.user_id === 'string' && UUID_RE.test(r.user_id) && Number(r.weeks) >= 2)
+      .map((r) => {
+        const c = Number(r.celebrate);
+        return {
+          userId: r.user_id as ID, weeks: Number(r.weeks), best: Math.max(Number(r.best) || 0, Number(r.weeks)), thisWeek: r.this_week === true,
+          ...(c === 4 || c === 10 || c === 25 ? { celebrate: c as 4 | 10 | 25 } : {}),
+        };
+      });
+  },
+  /** A streak milestone's celebration was shown: never again for that run (seen_partner_streak, migration 180). */
+  async seenPartnerStreak(other: ID, milestone: number) {
+    if (!UUID_RE.test(other)) return;
+    const { error } = await need().rpc('seen_partner_streak', { other, milestone });
+    if (error && !missingFunction(error)) fail('partner streak seen')(error);
   },
   /** The private name you typed for who you played, changed on a session already in your log. */
   async updateSessionOpponent(id: ID, opponent: string | null) {
