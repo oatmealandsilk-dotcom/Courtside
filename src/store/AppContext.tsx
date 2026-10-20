@@ -24,7 +24,7 @@ import { openJoinSheet } from '@/features/guest/joinAsk';
 import { setGuestStatus } from '@/features/guest/guestStatus';
 import { noteCampaignSignup } from '@/features/guest/campaign';
 import * as demoApi from '@/data/api';
-import { BLOCKED_WORDS_NOTE, CHAT_PHOTO_UNREADABLE, REVIEW_NOTE_MAX, auth as remoteAuth, fetchRemote, ProfileMissedError, isLocalMedia, onWordsRefused, queueFeedSignal, remote, uploadChatPhoto, uploadMedia, emptyProfile, type GroupRefusal, type AdminReport, type ModerationResult, type ReviewAskResult, type ReportedChat, type ReportedItem, type ReportedItemKind, type ReportEvidence, type FeedSignal, type SiteFeedback, type WaitlistEntry, type BetaInviteStatus, type FirstDayStats, type FirstMove, type HandleStatus, type InviteCodeResult, type MyInviter, type RemoteData, type UserState, standInName } from '@/data/remote';
+import { BLOCKED_WORDS_NOTE, CHAT_PHOTO_UNREADABLE, REVIEW_NOTE_MAX, auth as remoteAuth, fetchRemote, isLocalMedia, onWordsRefused, queueFeedSignal, remote, uploadChatPhoto, uploadMedia, emptyProfile, type GroupRefusal, type AdminReport, type ModerationResult, type ReviewAskResult, type ReportedChat, type ReportedItem, type ReportedItemKind, type ReportEvidence, type FeedSignal, type SiteFeedback, type WaitlistEntry, type BetaInviteStatus, type FirstDayStats, type FirstMove, type HandleStatus, type InviteCodeResult, type MyInviter, type RemoteData, type UserState, standInName } from '@/data/remote';
 import { clearSnapshot, markSnapshotOpened, markSnapshotOpening, readSnapshot, saveSnapshot, snapshotFailedBefore } from '@/data/snapshot';
 import { forgetAccount, listSavedAccounts, rememberAccount, type SavedAccount } from '@/features/accounts/savedAccounts';
 import { isAuthRetryableFetchError } from '@supabase/supabase-js';
@@ -1860,7 +1860,7 @@ function mergeRemote(prev: AppState, data: RemoteData, me: ID, email: string | n
         id: me, handle, name: handle, bio: '', location: '', joinedAt: new Date().toISOString(), avatarSeed: me,
         isCoach: false, followers: 0, following: 0, profile: emptyProfile, achievementIds: [],
         stats: { sessionsLogged: 0, matchesPlayed: 0, matchesWon: 0, hoursOnCourt: 0, currentStreakDays: 0, longestStreakDays: 0 },
-      }, ...users];
+      }, ...users.filter((u) => u.id !== me)];
     }
     const self = users.find((u) => u.id === me);
     return dropFixtures({
@@ -2791,8 +2791,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       for (let attempt = 0; ; attempt += 1) {
         try { data = await fetchRemote(me); break; } catch (e) {
           // Your profile missed this load though it is there (see ownProfileRow): tried again, as for any
-          // failed load, and the last try opens with your profile as read on its own, never as a new account.
-          if (e instanceof ProfileMissedError && attempt >= 3) { data = { ...e.data, users: [e.self, ...e.data.users] }; break; }
+          // failed load. After the last try it is a failed load too ("Could not load your account / Try
+          // again", or the saved copy stays up), never a new account, and never a half-empty load opened as
+          // real: one that ran signed out would read your blocks and mutes as none and could save that back
+          // (found in review, Oct 20). The reload on the next token refresh picks it up.
           if (attempt >= 3) throw e;
           await new Promise((r) => setTimeout(r, 700 * 2 ** attempt));
         }
