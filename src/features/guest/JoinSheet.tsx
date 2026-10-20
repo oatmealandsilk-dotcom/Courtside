@@ -1,7 +1,7 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect } from 'react';
 import { Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
-import Animated, { FadeIn, FadeOut, SlideInDown, SlideOutDown } from 'react-native-reanimated';
+import Animated, { Easing, FadeIn, FadeOut, SlideInDown, SlideOutDown } from 'react-native-reanimated';
 import { router, usePathname } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -28,6 +28,15 @@ import { noteAppTap } from './campaign';
  * It slides up on its own layer, over the tab bar, never fading anything
  * the bar's glass sits in (Oct 17: a fading parent left the glass see-through).
  */
+// The same rise and fall as every other sheet on the website (DragSheet.web): in over 380 ms on its
+// curve, away over 220 ms, with the dim following the sheet on the same timing.
+const RISE = Easing.bezier(0.32, 0.72, 0, 1);
+const FALL = Easing.bezier(0.4, 0, 1, 1);
+const DIM_IN = FadeIn.duration(380).easing(RISE);
+const DIM_OUT = FadeOut.duration(220).easing(FALL);
+const SHEET_IN = SlideInDown.duration(380).easing(RISE);
+const SHEET_OUT = SlideOutDown.duration(220).easing(FALL);
+
 export function JoinSheet() {
   const styles = useThemedStyles(styleDefinitions);
   const insets = useSafeAreaInsets();
@@ -53,12 +62,11 @@ export function JoinSheet() {
   const report = ask.report;
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
-      <Animated.View entering={FadeIn.duration(180)} exiting={FadeOut.duration(150)} style={[StyleSheet.absoluteFill, styles.dim]}>
+      <Animated.View entering={DIM_IN} exiting={DIM_OUT} style={[StyleSheet.absoluteFill, styles.dim]}>
         <Pressable accessibilityRole="button" accessibilityLabel="Not now" style={StyleSheet.absoluteFill} onPress={closeJoinSheet} />
       </Animated.View>
-      <Animated.View entering={SlideInDown.duration(260)} exiting={SlideOutDown.duration(200)} accessibilityViewIsModal style={[styles.sheet, { paddingBottom: insets.bottom + spacing.lg }]}>
+      <Animated.View entering={SHEET_IN} exiting={SHEET_OUT} accessibilityViewIsModal style={[styles.sheet, { paddingBottom: insets.bottom + spacing.lg }]}>
         <View style={styles.inner}>
-          <View style={styles.grab} />
           <View style={styles.mark}><BrandMark size={30} /></View>
           <Text accessibilityRole="header" style={styles.title}>Join CourtSide to {ask.what}</Text>
           <Text style={styles.body}>It’s free. Post your clips, find people to hit with, and ask real coaches about your game.</Text>
@@ -89,7 +97,6 @@ const styleDefinitions = StyleSheet.create({
   dim: { backgroundColor: colors.overlay },
   sheet: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: colors.surface, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, paddingTop: spacing.md, paddingHorizontal: spacing.lg, ...lift },
   inner: { width: '100%', maxWidth: 480, alignSelf: 'center', gap: spacing.md },
-  grab: { alignSelf: 'center', width: 36, height: 4, borderRadius: 2, backgroundColor: colors.border, marginBottom: spacing.xs },
   mark: { width: 52, height: 52, borderRadius: 16, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
   title: { ...typography.title, color: colors.text },
   body: { ...typography.body, color: colors.textMuted, lineHeight: 22, marginTop: -spacing.xs },
