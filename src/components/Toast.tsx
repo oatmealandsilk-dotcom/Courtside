@@ -1,7 +1,7 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
-import { router } from 'expo-router';
+import { router, usePathname } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
@@ -31,6 +31,13 @@ const ACTION_SCREEN_READER_MS = 10000;
 // to read two lines slowly; a tap puts it away sooner.
 const LONG_MS = 9000;
 const LONG_SCREEN_READER_MS = 15000;
+/**
+ * How far under the clock a `belowTop` note sits: past a page's title row
+ * (and the Feed's "For you · group · +" row), so it covers neither.
+ */
+const BELOW_TOP = 72;
+/** On Community, under its Find Players / Discussions switch too, so a tap meant for the switch is never caught. */
+const BELOW_SWITCH = 140;
 const IN = Easing.out(Easing.cubic);
 const OUT = Easing.in(Easing.cubic);
 
@@ -46,6 +53,7 @@ const OUT = Easing.in(Easing.cubic);
 export function Toast() {
   const styles = useThemedStyles(styleDefinitions);
   const insets = useSafeAreaInsets();
+  const pathname = usePathname();
   const incoming = useToast();
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const y = useSharedValue(-24);
@@ -126,7 +134,7 @@ export function Toast() {
   const action = toast.action;
   const card = (
     <GestureDetector gesture={flick}>
-      <Animated.View pointerEvents="box-none" style={[styles.wrap, { top: insets.top + spacing.xs }, style]}>
+      <Animated.View pointerEvents="box-none" style={[styles.wrap, { top: insets.top + (toast.belowTop ? (pathname === '/discuss' ? BELOW_SWITCH : BELOW_TOP) : spacing.xs) }, style]}>
         <View style={styles.shadow}>
           <Glass radius={22} style={styles.card}>
             <View style={styles.row}>

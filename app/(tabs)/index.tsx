@@ -48,6 +48,7 @@ import { setFeedWarm, useCurtainDown } from '@/features/feed/warmup';
 import { connectionIsQuick } from '@/lib/netSpeed';
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { subscribeFeedRefresh } from '@/features/feed/feedBus';
+import { markFeedSwiped } from '@/features/feed/firstSwipe';
 import { BAR_TUCK, barCompact, setBarCompact } from '@/features/navigation/barShrink';
 import { BAR_OVERLAY_PX, useBarInset } from '@/features/navigation/barInset';
 import { hasSessionStats } from '@/features/activity/format';
@@ -424,6 +425,8 @@ function Home({ scope, topRow, paused, onChrome }: {
   // Everyone by id, so each page finds its author in one step rather than scanning every player.
   const usersById = useMemo(() => new Map(users.map((u) => [u.id, u])), [users]);
   const [active, setActive] = useState(0);
+  // A swipe that lands on a new page also lets a waiting note ("How was the hit?") come up: never before, so it never drops over the top row someone is reaching for (Oct 20 sweep).
+  const onPagerIndex = useCallback((i: number) => { setActive(i); markFeedSwiped(); }, []);
   const orderRef = useRef<string[]>([]);
   // The words over a clip end 16pt above the floating tab bar on every phone:
   // the bar stands on the home-indicator inset, which differs phone to phone,
@@ -1792,7 +1795,7 @@ function Home({ scope, topRow, paused, onChrome }: {
           {/* Pull-to-refresh is for phones: the app and a phone's browser (`phone`, above). Asking
               isDesktopBrowser() alone took it off the iPhone app: the app has no browser to read,
               so the check answered "computer" there, and the pull strip was never built. */}
-          <VerticalPager ref={pager} key={visit} initialIndex={active} onIndex={setActive} onRefresh={scope || !phone ? undefined : refreshFeed} pullTop={topRow ? TOP_BAND_TOP + (TOP_BAND_HEIGHT - 44) / 2 : 0} pullAlign={topRow ? 'left' : 'center'} pullHeader={scope ? undefined : <BrandMark size={topRow ? 22 : 40} />}>
+          <VerticalPager ref={pager} key={visit} initialIndex={active} onIndex={onPagerIndex} onRefresh={scope || !phone ? undefined : refreshFeed} pullTop={topRow ? TOP_BAND_TOP + (TOP_BAND_HEIGHT - 44) / 2 : 0} pullAlign={topRow ? 'left' : 'center'} pullHeader={scope ? undefined : <BrandMark size={topRow ? 22 : 40} />}>
             {[...feed.map((item, index) => {
               const distance = Math.abs(index - active);
               const ahead = index - active;

@@ -6,6 +6,7 @@ import type { HitRequest, ID } from '@/data/types';
 import { tennisFlags, type TennisFlags } from '@/features/activity/flags';
 import { pickSource } from '@/features/activity/recent';
 import { duration } from '@/lib/format';
+import { useFeedSwiped } from '@/features/feed/firstSwipe';
 import { useCurtainDown } from '@/features/feed/warmup';
 import { dueHits, keepHitPrefill, markAsked, nextHitEnd, prefillFor, readAsked, shortPlace, trackerFor } from '@/features/hits/followUp';
 import { useTourBusy } from '@/features/tour/tourStore';
@@ -22,8 +23,12 @@ const BUSY = new Set(['/compose', '/edit-post', '/ask', '/ask-coach', '/log-sess
 export const isBusy = (path: string) => BUSY.has(path) || path === '/messages' || path.startsWith('/messages/');
 /** A moment after the way is clear, so it never lands on the app's own opening notes. */
 const SETTLE_MS = 2500;
-/** It stays up this long (a flick or a tap puts it away sooner): long enough to be noticed on a page you are looking at. */
-const HOLD_MS = 15000;
+/**
+ * It stays up this long (a flick or a tap puts it away sooner): long enough
+ * to be noticed, short enough not to sit in the way (was 15 s; Oct 20 sweep,
+ * "For 15 seconds it hides page titles, the bell and the Feed tabs").
+ */
+const HOLD_MS = 6000;
 /** Pushed off by another note before it could be seen: asked again once that one has gone (an Undo note stays 5 seconds). */
 const RETRY_MS = 6000;
 /** Put away because a page where you write or post opened: up this long, it was seen (as long as any note with a button stays); less, it comes back after. */
@@ -32,7 +37,8 @@ const SEEN_MS = 5000;
 /**
  * "How was the hit at Alder Park? · Log it": once a hit you posted or joined
  * is over (90 minutes after it started), the next time the app is open this
- * asks, once, in the app's own note at the top (never a phone alert), and
+ * asks, once, in the app's own note near the top, just under the page's
+ * title row (never a phone alert), and
  * Log it opens the log sheet filled in from the hit (or, when your tracker
  * picked up the same game, that session, so it is logged once). Not while
  * the tutorial is up, a post is being written or is still going up, or under
@@ -50,6 +56,10 @@ export function HitFollowUp({ enabled }: { enabled: boolean }) {
   const touring = useTourBusy();
   const uploading = useAnyUploading();
   const curtainDown = useCurtainDown();
+  // On the Feed it waits for the first swipe to land (then the usual settle), so
+  // it never drops in while someone is reaching for the Feed's top row.
+  const swiped = useFeedSwiped();
+  const waitOnFeed = (pathname === '/' || pathname === '/index') && !swiped;
   // Your hits from the last two days, fresh from the server each time it looks
   // (the open-hits list lets a hit go an hour after it starts, and may not
   // have heard it was called off). Only these are ever asked about.
@@ -100,7 +110,7 @@ export function HitFollowUp({ enabled }: { enabled: boolean }) {
 
   // A hit timed by a live session of yours (Start to Finish) is that session's to log: never asked about as well.
   const due = enabled && currentUserId && asked && flags ? dueHits(recent, { me: currentUserId, sessions, activities: detectedActivities, flags, asked, live: liveSession, now }) : [];
-  const clear = enabled && curtainDown && !touring && !uploading && !isBusy(pathname);
+  const clear = enabled && curtainDown && !touring && !uploading && !isBusy(pathname) && !waitOnFeed;
   const first = due[0];
 
   // A page to write or post opened (or the tutorial) while it is up: it steps aside, never sitting over the Create box.
@@ -134,6 +144,8 @@ export function HitFollowUp({ enabled }: { enabled: boolean }) {
         href: tracked ? `/compose?activity=${tracked.id}&hit=${first.id}` : `/log-session?hit=${first.id}`,
         action: { label: 'Log it', onPress: open },
         holdMs: HOLD_MS,
+        // Under the title row, not over it: titles, the bell and the Feed's group tabs stay in sight and tappable.
+        belowTop: true,
         onClosed: (how, upMs) => {
           showing.current = false;
           toastId.current = null;

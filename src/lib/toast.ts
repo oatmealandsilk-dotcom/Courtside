@@ -45,6 +45,12 @@ export interface ToastMessage {
    */
   holdMs?: number;
   /**
+   * Sits a step lower, under a page's title row instead of over it, so a
+   * question that can wait never hides a title, the bell or the Feed's top
+   * row, and a tap meant for them is never caught by it (Oct 20 sweep).
+   */
+  belowTop?: boolean;
+  /**
    * Told once how it went, and how long it was up: it stayed its full time,
    * was tapped, its button was used, it was flicked away, another toast took
    * its place first ('replaced'), or the caller took it back ('withdrawn').
