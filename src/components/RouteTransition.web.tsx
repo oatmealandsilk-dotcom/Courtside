@@ -28,6 +28,10 @@ SHEETS.add('/map-visibility');
 SHEETS.add('/open-to-hit');
 // The Tennis profile's sheets (an injury or limit, a goal, every achievement) sit over the page the same way.
 SHEETS.add('/tennis-sheet');
+// Invite, Flyby's list of who is at the park and "Ask for a review" are sheets over the page too.
+SHEETS.add('/invite');
+SHEETS.add('/flyby');
+SHEETS.add('/review-request');
 
 /**
  * Animate the content without remounting the router or moving navigation.
