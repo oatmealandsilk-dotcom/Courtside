@@ -193,10 +193,8 @@ export default function FirstMove() {
   // asked is left alone.
   const notYet = (picks ?? []).filter((p) => !followingIds.includes(p.user.id) && !followRequests.some((r) => r.fromId === currentUserId && r.toId === p.user.id));
   const canFollowAll = adult && (picks?.length ?? 0) >= 2 && notYet.length >= 2;
-  const followAll = () => {
-    haptics.commit();
-    notYet.forEach((p) => actions.toggleFollow(p.user.id, true));
-  };
+  // One buzz for the whole tap, not one per person (R9 review).
+  const followAll = () => actions.followAll(notYet.map((p) => p.user.id));
 
   // Context only: the list under it says what to do.
   const line = !adult ? 'Your map shows only your friends.'

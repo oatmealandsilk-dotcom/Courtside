@@ -633,6 +633,12 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions, LiveSessionAct
   /* People */
   /** `quiet`: no Undo toast. An Undo passes it, so taking a change back does not offer to take that back too. */
   toggleFollow: (userId: ID, quiet?: boolean) => void;
+  /**
+   * People you may know's "Follow all" (R9): each person gets the same one
+   * follow (or one request) their own pill sends, with one buzz for the whole
+   * tap, not one per person.
+   */
+  followAll: (userIds: ID[]) => void;
   /** A private account's owner saying yes or no to someone's ask. */
   acceptFollowRequest: (requesterId: ID) => void;
   declineFollowRequest: (requesterId: ID) => void;
@@ -7891,7 +7897,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // Quiet: putting the button back is not an unfollow to offer to undo.
     toggleFollowRef.current(userId, true);
   };
-  const toggleFollow = useCallback((userId: ID, quiet?: boolean) => {
+  const toggleFollow = useCallback((userId: ID, quiet?: boolean, noBuzz?: boolean) => {
     {
       const me = stateRef.current.currentUserId;
       const target = stateRef.current.users.find((u) => u.id === userId);
@@ -7899,7 +7905,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (me && userId !== me && target?.isPrivate && !following) {
         // A private account: this is an ask, not a follow. Asking twice takes it back.
         const asked = stateRef.current.followRequests.some((r) => r.fromId === me && r.toId === userId);
-        asked ? haptics.untap() : haptics.tap();
+        if (!noBuzz) asked ? haptics.untap() : haptics.tap();
         if (live(me, userId)) {
           if (asked) void remote.cancelFollowRequest(me, userId);
           else void remote.sendFollowRequest(me, userId).then((r) => { if (r === 'refused') followRefused(userId); });
@@ -7918,7 +7924,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
       if (live(me, userId) && userId !== me) void remote.setFollow(me!, userId, !following).then((r) => { if (r === 'refused' && !following) followRefused(userId); });
       // The buzz answers the tap itself, not the redraw that follows it.
-      if (me && userId !== me) following ? haptics.untap() : haptics.tap();
+      if (me && userId !== me && !noBuzz) following ? haptics.untap() : haptics.tap();
       // Unfollowing a public account is one tap, so one tap takes it back.
       // (A private one is asked about first: following again would be a new
       // request they have to approve, so there is nothing clean to undo.)
@@ -7950,6 +7956,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
     });
   }, []);
   toggleFollowRef.current = toggleFollow;
+
+  const followAll = useCallback((userIds: ID[]) => {
+    const me = stateRef.current.currentUserId;
+    if (!me) return;
+    // Only those not followed or asked yet, so nobody is unfollowed or has a request taken back.
+    const todo = [...new Set(userIds)].filter((id) => id !== me
+      && !stateRef.current.followingIds.includes(id)
+      && !stateRef.current.followRequests.some((r) => r.fromId === me && r.toId === id));
+    if (!todo.length) return;
+    haptics.commit();
+    todo.forEach((id) => toggleFollow(id, true, true));
+  }, [toggleFollow]);
 
   const acceptFollowRequest = useCallback((requesterId: ID) => {
     const me = requireUser();
@@ -8962,6 +8980,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addPaymentMethod,
       removePaymentMethod,
       toggleFollow,
+      followAll,
       acceptFollowRequest,
       declineFollowRequest,
       setPrivateAccount,
@@ -9203,6 +9222,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       addPaymentMethod,
       removePaymentMethod,
       toggleFollow,
+      followAll,
       acceptFollowRequest,
       declineFollowRequest,
       setPrivateAccount,
