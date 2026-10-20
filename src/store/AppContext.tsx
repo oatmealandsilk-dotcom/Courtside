@@ -1136,6 +1136,12 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions, LiveSessionAct
   /** Everyone's first post from the last month, for the founder to welcome. */
   loadFirstPosts: () => Promise<Post[]>;
   loadFirstDayStats: () => Promise<FirstDayStats | null>;
+  /**
+   * Whether you have ever opened the iPhone or Android app (R3, Oct 20 sweep: "People who sign up on
+   * the website get no alerts and no emails, and nothing tells them to get the app"). Null when the
+   * database cannot say yet (migration 167 not run). The demo: false, so the website shows its card.
+   */
+  loadPhoneAppSeen: () => Promise<boolean | null>;
   /** Which first move a new player chose, for the numbers behind the setup step. Kept once, the first time. */
   noteFirstMove: (move: FirstMove) => void;
   loadSiteFeedback: () => Promise<SiteFeedback[]>;
@@ -5718,6 +5724,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
   const betaInvites = useCallback(async (send: boolean) => (live(stateRef.current.currentUserId) ? remote.betaInvites(send) : null), []);
   const loadFirstDayStats = useCallback(async () => (live(stateRef.current.currentUserId) ? remote.fetchFirstDayStats() : null), []);
+  const loadPhoneAppSeen = useCallback(async () => (live(stateRef.current.currentUserId) ? remote.hasPhoneApp() : stateRef.current.currentUserId && !isSupabaseConfigured ? false : null), []);
   const noteFirstMove = useCallback((move: FirstMove) => {
     const me = stateRef.current.currentUserId;
     // Kept on the phone too, so Profile stops asking for a first move once one is made (firstMoveDone).
@@ -9134,6 +9141,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       betaInvites,
       loadFirstPosts,
       loadFirstDayStats,
+      loadPhoneAppSeen,
       noteFirstMove,
       loadSiteFeedback,
       removeFromWaitlistPage,
@@ -9370,6 +9378,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       betaInvites,
       loadFirstPosts,
       loadFirstDayStats,
+      loadPhoneAppSeen,
       noteFirstMove,
       loadSiteFeedback,
       removeFromWaitlistPage,

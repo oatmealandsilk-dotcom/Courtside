@@ -2902,6 +2902,22 @@ export const remote = {
     }
   },
 
+  /**
+   * Whether you have ever opened the app on an iPhone or Android phone, or
+   * a phone holds your alerts (has_phone_app, migration 167; R3, Oct 20
+   * sweep). Only ever about the caller. Null while the function is missing
+   * or the ask fails, so the website never nags someone it cannot be sure of.
+   */
+  async hasPhoneApp(): Promise<boolean | null> {
+    try {
+      const { data, error } = await need().rpc('has_phone_app');
+      if (error || typeof data !== 'boolean') return null;
+      return data;
+    } catch {
+      return null;
+    }
+  },
+
   /** Whether the first move works: day-one movers, and week-two returns for movers vs everyone else. Null while the function is missing. */
   async fetchFirstDayStats(): Promise<FirstDayStats | null> {
     const { data, error } = await need().rpc('first_day_stats');

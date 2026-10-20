@@ -8,6 +8,7 @@ import { Image, Modal, Pressable, Share, StyleSheet, Text, View, useWindowDimens
 import { router } from 'expo-router';
 import { GuestJoinCard } from '@/features/guest/GuestFindPlayers';
 import { GuestSignIn } from '@/features/guest/GuestSignIn';
+import { PhoneAppRow } from '@/features/phoneApp/PhoneAppCard';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Avatar, Button, EmptyState, Screen } from '@/components/ui';
 import { SectionPager } from '@/components/SectionPager';
@@ -183,6 +184,8 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
      <View style={{ flex: 1 }}><Text style={styles.setupTitle}>Finish setting up</Text><Text style={styles.meta}>{[skipped.includes('permissions') && 'camera and photos', skipped.includes('body') && 'fitness and goals', skipped.includes('calendar') && 'your next tournament'].filter(Boolean).join(', ').replace(/^./, (c) => c.toUpperCase())} — about a minute.</Text></View>
      <Ionicons name="chevron-forward" size={16} color={colors.textMuted}/>
    </Pressable>}
+   {/* The website only: "Get CourtSide on your iPhone", until closed or the phone app is opened (R3, Oct 20 sweep). */}
+   <PhoneAppRow />
    {/* The picture in the middle, the name under it, and who follows whom in
        one quiet line — the post counts moved down to the Posts / Clips / Tagged row. */}
    <View style={styles.identity}>

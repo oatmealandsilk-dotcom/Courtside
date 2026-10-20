@@ -36,6 +36,7 @@ import { claimCarriedBirthDate, isDeviceBlocked, recallAnswered } from '@/featur
 import { auth as remoteAuth } from '@/data/remote';
 import { setCrashScreen } from '@/lib/crashReporting';
 import { listenForPushTaps, registerForPush } from '@/features/push/push';
+import { PhoneAppWelcome } from '@/features/phoneApp/PhoneAppCard';
 import { recoverChatPick } from '@/features/messages/pendingPick';
 import { setUpNotificationChannels } from '@/features/push/channels';
 import { isSupabaseConfigured } from '@/lib/supabase';
@@ -403,7 +404,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // page: past the splash, the gates, the tutorial and the opening curtain, and then only on one of the
   // four tabs or Your sessions. A list of pages it may show on, not of pages it may not: anywhere else
   // (a chat, the AI coach, an answer, edit profile, settings) someone may be mid-message or mid-change.
-  useRatePrompt({ calm: !!currentUserId && !detour && !onSplash && !tourOpen && curtainDown && (isTabPage(pathname) || pathname === '/your-sessions') });
+  const calmPage = !!currentUserId && !detour && !onSplash && !tourOpen && curtainDown && (isTabPage(pathname) || pathname === '/your-sessions');
+  useRatePrompt({ calm: calmPage });
   const sentTo = useRef<string | null>(null);
   useEffect(() => {
     if (!detour) { sentTo.current = null; return; }
@@ -471,6 +473,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     {currentUserId ? <TourOverlay eligible={showNav && !detour && !onSplash} /> : null}
     {/* On its way to a gate (sign-in, birthday, terms): the page underneath is covered for the moment it takes. */}
     {detour ? <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: colors.bg }} /> : null}
+    {/* The website: "Get CourtSide on your iPhone", once, just after signing up here (R3). Nothing in the phone apps. */}
+    {currentUserId && !isGuest ? <PhoneAppWelcome calm={calmPage} /> : null}
     {/* Guest mode's one "Join CourtSide to …" ask, over everything, the bar too. */}
     {isGuest ? <JoinSheet /> : null}
   </View>;
