@@ -8,7 +8,8 @@ import { TileCover } from '@/components/TileCover';
 import { EmptyState, Avatar, Screen } from '@/components/ui';
 import { CourtSpinner } from '@/components/CourtSpinner';
 import type { Post } from '@/data/types';
-import type { FirstDayStats, FirstMove } from '@/data/remote';
+import { remote, type ComebackWeek, type FirstDayStats, type FirstMove } from '@/data/remote';
+import { isSupabaseConfigured } from '@/lib/supabase';
 import { goBack } from '@/lib/goBack';
 import { relativeTime } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
@@ -24,11 +25,18 @@ export default function AdminWelcome() {
   const { users, comments, currentUserId, actions } = useApp();
   const [posts, setPosts] = useState<Post[] | null>(null);
   const [stats, setStats] = useState<FirstDayStats | null>(null);
+  const [weeks, setWeeks] = useState<ComebackWeek[] | null>(null);
   const load = useCallback(async () => {
-    const [got, numbers] = await Promise.all([actions.loadFirstPosts(), actions.loadFirstDayStats()]);
+    const [got, numbers, comeback] = await Promise.all([
+      actions.loadFirstPosts(),
+      actions.loadFirstDayStats(),
+      // The demo has no app opens to count.
+      isSupabaseConfigured ? remote.fetchComebackWeeks().catch(() => null) : Promise.resolve(null),
+    ]);
     // A first post an admin took down (migration 108) needs no welcome.
     setPosts(got.filter((p) => !p.removed));
     setStats(numbers);
+    setWeeks(comeback);
   }, [actions]);
   useEffect(() => { void load(); }, [load]);
 
@@ -41,6 +49,7 @@ export default function AdminWelcome() {
         {posts === null ? ' ' : waiting ? `${waiting} new ${waiting === 1 ? 'player has' : 'players have'} posted for the first time and nobody has replied yet.` : 'Everyone has been welcomed.'} Saying hi on someone's first day is the best way to get them to come back.
       </Text>
       {stats ? <Numbers stats={stats} /> : null}
+      {weeks?.length ? <Comebacks weeks={weeks} /> : null}
       {posts === null ? (
         <View style={styles.loading}><CourtSpinner size={28} /></View>
       ) : !posts.length ? (
@@ -104,7 +113,44 @@ function Numbers({ stats }: { stats: FirstDayStats }) {
   );
 }
 
+/** "Oct 12" for a week's Sunday (YYYY-MM-DD), read as that date wherever the phone is. */
+const weekName = (week: string) => new Date(`${week}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+
+/**
+ * Of the players who joined each week, how many opened the app again the
+ * next day and a week later. Any open counts (the map, Discussions, a chat),
+ * not only the Feed. A week whose next day, or week later, has not come yet
+ * shows a dash.
+ */
+function Comebacks({ weeks }: { weeks: ComebackWeek[] }) {
+  const styles = useThemedStyles(styleDefinitions);
+  return (
+    <View style={[styles.num, styles.weeks]}>
+      <Text style={styles.numLabel}>Came back, by the week they joined (any open of the app)</Text>
+      <View style={styles.weekRow}>
+        <Text style={[styles.weekCell, styles.weekHead, styles.weekFirst]}>Joined</Text>
+        <Text style={[styles.weekCell, styles.weekHead]}>Players</Text>
+        <Text style={[styles.weekCell, styles.weekHead]}>Next day</Text>
+        <Text style={[styles.weekCell, styles.weekHead]}>A week later</Text>
+      </View>
+      {weeks.map((w) => (
+        <View key={w.week} style={styles.weekRow}>
+          <Text style={[styles.weekCell, styles.weekFirst]}>Week of {weekName(w.week)}</Text>
+          <Text style={styles.weekCell}>{w.joined}</Text>
+          <Text style={styles.weekCell}>{w.day1Of ? `${pct(w.day1Back, w.day1Of)} (${w.day1Back})` : '—'}</Text>
+          <Text style={styles.weekCell}>{w.day7Of ? `${pct(w.day7Back, w.day7Of)} (${w.day7Back})` : '—'}</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
 const styleDefinitions = StyleSheet.create({
+  weeks: { flex: 0, gap: spacing.xs, marginBottom: spacing.lg },
+  weekRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  weekCell: { ...typography.small, color: colors.text, flex: 1, textAlign: 'right', fontVariant: ['tabular-nums'] },
+  weekFirst: { flex: 1.6, textAlign: 'left' },
+  weekHead: { ...typography.caption, letterSpacing: 0, color: colors.textFaint },
   lead: { ...typography.small, color: colors.textMuted, lineHeight: 20, paddingBottom: spacing.lg },
   loading: { paddingVertical: spacing.xxl, alignItems: 'center' },
   numbers: { gap: spacing.sm, marginBottom: spacing.lg },

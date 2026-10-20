@@ -102,6 +102,9 @@ export interface LinkStatRow {
 export interface FoundViaRow { choice: FoundVia | 'not_answered'; people: number }
 /** Someone one person brought: only their name, @handle and dates. */
 export interface InviteeRow { id: ID; name: string; handle: string; avatarUrl?: string; joinedAt: string; setUp: boolean; qualifiedAt?: string }
+/** One sign-up week's comeback numbers (fetchComebackWeeks). `week` is its Sunday, YYYY-MM-DD. */
+export interface ComebackWeek { week: string; joined: number; day1Of: number; day1Back: number; day7Of: number; day7Back: number }
+
 export interface FirstDayStats { new30: number; moved30: number; cohort: number; movers: number; moversBack: number; othersBack: number; picked: Record<FirstMove, number> }
 
 const need = () => {
@@ -2880,6 +2883,33 @@ export const remote = {
     const { data, error } = await need().rpc('first_day_stats');
     if (error || !data) return null;
     return data as FirstDayStats;
+  },
+  /**
+   * Admin: of the players who joined each week, how many opened the app
+   * again the next day and a week later (retention_summary, migration 110).
+   * It counts any open of the app, not only Feed views, so a player who
+   * only uses the map or Discussions counts too. Newest week first; null
+   * when it could not be had.
+   */
+  async fetchComebackWeeks(weeks = 8): Promise<ComebackWeek[] | null> {
+    const { data, error } = await need().rpc('retention_summary', { p_days: weeks * 7 });
+    if (error || !Array.isArray(data)) return null;
+    const byWeek = new Map<string, ComebackWeek>();
+    for (const r of data as Record<string, unknown>[]) {
+      const joined = Number(r.new_users) || 0;
+      if (!joined || typeof r.day !== 'string') continue;
+      // Weeks start on Sunday, the way the sign-up numbers are read elsewhere.
+      const day = new Date(`${r.day}T00:00:00Z`);
+      day.setUTCDate(day.getUTCDate() - day.getUTCDay());
+      const week = day.toISOString().slice(0, 10);
+      const w = byWeek.get(week) ?? { week, joined: 0, day1Of: 0, day1Back: 0, day7Of: 0, day7Back: 0 };
+      w.joined += joined;
+      // A day whose next day (or seventh day) has not come yet is left out of that share.
+      if (r.day1_rate !== null && r.day1_rate !== undefined) { w.day1Of += joined; w.day1Back += Number(r.day1_back) || 0; }
+      if (r.day7_rate !== null && r.day7_rate !== undefined) { w.day7Of += joined; w.day7Back += Number(r.day7_back) || 0; }
+      byWeek.set(week, w);
+    }
+    return [...byWeek.values()].sort((a, b) => (a.week < b.week ? 1 : -1));
   },
 
   /** Admin: everyone who has invited anyone, with what is owed. Throws (so the page can say so) when refused or missing. */
