@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Redirect, useLocalSearchParams } from 'expo-router';
-import { goBack } from '@/lib/goBack';
+import { goBack, goHome } from '@/lib/goBack';
 
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { EmptyState, Screen } from '@/components/ui';
@@ -34,7 +34,7 @@ function PostDetail() {
   if (!post || (post.archived && !archivedMine)) {
     return (
       <Screen title="Post" compactTitle onBack={() => goBack()}>
-        {looked || post ? <EmptyState icon="lock-closed-outline" title="This post isn't available" body={post ? 'Whoever posted it has archived it.' : "It was deleted, or it's from a private account you don't follow."} /> : <View style={{ paddingVertical: 60, alignItems: 'center' }}><CourtSpinner size={28} /></View>}
+        {looked || post ? <EmptyState icon="lock-closed-outline" title="This post isn't available" body={post ? 'Whoever posted it has archived it.' : "It was deleted, or it's from a private account you don't follow."} action={{ label: 'Browse the feed', onPress: goHome }} /> : <View style={{ paddingVertical: 60, alignItems: 'center' }}><CourtSpinner size={28} /></View>}
       </Screen>
     );
   }

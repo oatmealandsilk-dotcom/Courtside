@@ -4,6 +4,8 @@ import { show as showToast } from '@/lib/toast';
 import { Image, Modal, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { goBack } from '@/lib/goBack';
+import { requestSection } from '@/features/navigation/swipeOrder';
+import { goToTab } from '@/features/navigation/startTab';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { LevelPill } from '@/components/LevelPill';
@@ -44,6 +46,9 @@ const TABS = ['Posts', 'Clips', 'Tagged'] as const;
  * card, then a grid of what they have posted. A private account shows only
  * the top until they have let you follow.
  */
+/** A player who is gone is not a dead end: on to Find Players. */
+const findPlayers = { label: 'Find players', onPress: () => { requestSection('/discuss', 'players'); goToTab('/discuss'); } };
+
 function UserProfile() {
   const styles = useThemedStyles(styleDefinitions);
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -72,7 +77,7 @@ function UserProfile() {
   if (!user) {
     return (
       <Screen title="Player" compactTitle onBack={() => goBack()}>
-        {loading ? <ProfileSkeleton /> : <EmptyState icon="person-outline" title="No such player" body="They may have deleted their account." />}
+        {loading ? <ProfileSkeleton /> : <EmptyState icon="person-outline" title="No such player" body="They may have deleted their account." action={findPlayers} />}
       </Screen>
     );
   }
@@ -83,7 +88,7 @@ function UserProfile() {
   if (user.suspended && !isMe && !currentUser?.isAdmin) {
     return (
       <Screen title="Player" compactTitle onBack={() => goBack()}>
-        <EmptyState icon="person-outline" title="This account is unavailable" body="You can’t see this account right now." />
+        <EmptyState icon="person-outline" title="This account is unavailable" body="You can’t see this account right now." action={findPlayers} />
       </Screen>
     );
   }

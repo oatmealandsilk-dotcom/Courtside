@@ -68,8 +68,8 @@ function QuestionDetail() {
 
   if (!question) {
     return (
-      <Screen title="Question" compactTitle onBack={() => goBack()}>
-        {looked ? <EmptyState icon="alert-circle-outline" title="This thread is gone" body="Whoever started it may have deleted it." /> : <ThreadSkeleton />}
+      <Screen title="Thread" compactTitle onBack={() => goBack()}>
+        {looked ? <EmptyState icon="alert-circle-outline" title="This thread is gone" body="Whoever started it may have deleted it." action={{ label: 'See Discussions', onPress: () => { requestSection('/discuss', 'discussions'); goToTab('/discuss'); } }} /> : <ThreadSkeleton />}
       </Screen>
     );
   }
