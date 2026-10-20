@@ -104,6 +104,13 @@ export interface FoundViaRow { choice: FoundVia | 'not_answered'; people: number
 export interface InviteeRow { id: ID; name: string; handle: string; avatarUrl?: string; joinedAt: string; setUp: boolean; qualifiedAt?: string }
 /** One sign-up week's comeback numbers (fetchComebackWeeks). `week` is its Sunday, YYYY-MM-DD. */
 export interface ComebackWeek { week: string; joined: number; day1Of: number; day1Back: number; day7Of: number; day7Back: number }
+/**
+ * Admin: one player who joined lately (admin_new_players, migration 167).
+ * `adult` is true only when their birthday on file says 18 or over: then
+ * an admin may say hi in a message; anyone else (a teen, or no birthday)
+ * gets only a follow, per the teen rules. Their age itself never comes.
+ */
+export interface NewPlayer { id: ID; joinedAt: string; adult: boolean; posted: boolean }
 
 export interface FirstDayStats { new30: number; moved30: number; cohort: number; movers: number; moversBack: number; othersBack: number; picked: Record<FirstMove, number> }
 
@@ -2969,6 +2976,20 @@ export const remote = {
       byWeek.set(week, w);
     }
     return [...byWeek.values()].sort((a, b) => (a.week < b.week ? 1 : -1));
+  },
+
+  /**
+   * Admin: everyone who made an account in the last `days` days (at most
+   * 30), newest first, with whether they are a known adult and have posted
+   * (admin_new_players, migration 167). Null when it could not be had (or
+   * the function is not on the database yet).
+   */
+  async fetchNewPlayers(days = 7): Promise<NewPlayer[] | null> {
+    const { data, error } = await need().rpc('admin_new_players', { p_days: days });
+    if (error || !Array.isArray(data)) return null;
+    return (data as { id: unknown; joined_at: unknown; adult: unknown; posted: unknown }[])
+      .filter((r) => typeof r.id === 'string' && typeof r.joined_at === 'string')
+      .map((r) => ({ id: r.id as string, joinedAt: r.joined_at as string, adult: r.adult === true, posted: r.posted === true }));
   },
 
   /** Admin: everyone who has invited anyone, with what is owed. Throws (so the page can say so) when refused or missing. */

@@ -24,7 +24,7 @@ import { openJoinSheet } from '@/features/guest/joinAsk';
 import { setGuestStatus } from '@/features/guest/guestStatus';
 import { noteCampaignSignup } from '@/features/guest/campaign';
 import * as demoApi from '@/data/api';
-import { BLOCKED_WORDS_NOTE, CHAT_PHOTO_UNREADABLE, REVIEW_NOTE_MAX, auth as remoteAuth, fetchRemote, isLocalMedia, onWordsRefused, queueFeedSignal, remote, uploadChatPhoto, uploadMedia, emptyProfile, type GroupRefusal, type AdminReport, type ModerationResult, type ReviewAskResult, type ReportedChat, type ReportedItem, type ReportedItemKind, type ReportEvidence, type FeedSignal, type SiteFeedback, type WaitlistEntry, type BetaInviteStatus, type FirstDayStats, type FirstMove, type HandleStatus, type InviteCodeResult, type MyInviter, type RemoteData, type UserState, standInName } from '@/data/remote';
+import { BLOCKED_WORDS_NOTE, CHAT_PHOTO_UNREADABLE, REVIEW_NOTE_MAX, auth as remoteAuth, fetchRemote, isLocalMedia, onWordsRefused, queueFeedSignal, remote, uploadChatPhoto, uploadMedia, emptyProfile, type GroupRefusal, type AdminReport, type ModerationResult, type ReviewAskResult, type ReportedChat, type ReportedItem, type ReportedItemKind, type ReportEvidence, type FeedSignal, type SiteFeedback, type WaitlistEntry, type BetaInviteStatus, type FirstDayStats, type FirstMove, type NewPlayer, type HandleStatus, type InviteCodeResult, type MyInviter, type RemoteData, type UserState, standInName } from '@/data/remote';
 import { clearSnapshot, markSnapshotOpened, markSnapshotOpening, readSnapshot, saveSnapshot, snapshotFailedBefore } from '@/data/snapshot';
 import { forgetAccount, listSavedAccounts, rememberAccount, type SavedAccount } from '@/features/accounts/savedAccounts';
 import { isAuthRetryableFetchError } from '@supabase/supabase-js';
@@ -1145,6 +1145,13 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions, LiveSessionAct
   betaInvites: (send: boolean) => Promise<BetaInviteStatus | null>;
   /** Everyone's first post from the last month, for the founder to welcome. */
   loadFirstPosts: () => Promise<Post[]>;
+  /**
+   * Admin: everyone who joined in the last `days` days (7 unless asked, at
+   * most 30), newest first, for Welcome new players (Oct 20 sweep, R4: most
+   * new players never post, so the first-posts list missed them). Null when
+   * it could not be had. The demo lists its own recent players.
+   */
+  loadNewPlayers: (days?: number) => Promise<NewPlayer[] | null>;
   loadFirstDayStats: () => Promise<FirstDayStats | null>;
   /**
    * Whether you have ever opened the iPhone or Android app (R3, Oct 20 sweep: "People who sign up on
@@ -5758,6 +5765,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setState((prev) => addPosts(prev, got));
     return got.posts;
   }, []);
+  const loadNewPlayers = useCallback(async (days = 7): Promise<NewPlayer[] | null> => {
+    const s = stateRef.current;
+    const me = s.currentUserId;
+    if (live(me)) return remote.fetchNewPlayers(days).catch(() => null);
+    // The demo, by the server's rule: not you, not suspended, newest first; adult only when the age says so.
+    const since = Date.now() - Math.min(Math.max(days, 1), 30) * 86_400_000;
+    return s.users
+      .filter((u) => u.id !== me && !u.suspended && Date.parse(u.joinedAt) > since && !s.blockedIds.includes(u.id) && !s.blockedMeIds.includes(u.id))
+      .sort((a, b) => b.joinedAt.localeCompare(a.joinedAt))
+      .map((u) => ({ id: u.id, joinedAt: u.joinedAt, adult: u.ageGroup === 'adult', posted: s.posts.some((p) => p.authorId === u.id && !p.removed) }));
+  }, []);
   const loadSiteFeedback = useCallback(async () => (live(stateRef.current.currentUserId) ? remote.fetchSiteFeedback() : []), []);
   const removeFromWaitlistPage = useCallback(async (table: 'waitlist' | 'site_feedback', id: ID) => (live(stateRef.current.currentUserId, id) ? remote.removeFromWaitlistPage(table, id) : false), []);
   const loadReportedItem = useCallback(async (kind: ReportedItemKind, id: ID) => (live(stateRef.current.currentUserId, id) ? remote.fetchReportedItem(kind, id) : null), []);
@@ -9160,6 +9178,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       loadPostThumbs,
       betaInvites,
       loadFirstPosts,
+      loadNewPlayers,
       loadFirstDayStats,
       loadPhoneAppSeen,
       noteFirstMove,
@@ -9397,6 +9416,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       loadPostThumbs,
       betaInvites,
       loadFirstPosts,
+      loadNewPlayers,
       loadFirstDayStats,
       loadPhoneAppSeen,
       noteFirstMove,
