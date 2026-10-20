@@ -256,10 +256,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const tourOpen = useTourOpen();
   // Which tab the page on show belongs to, as its place in TAB_ORDER. A page
   // that is not a tab's own keeps the tab it was opened from. It starts on
-  // Home: a real launch passes through the splash and then Community and
+  // none (-1): a real launch passes through the splash and then Community and
   // sets it on the way, so this only shows on a link opened cold (a shared
-  // post, say), where Home is the tab it belongs with.
-  const selected = useRef(TAB_ORDER.indexOf(paths.index));
+  // post, say), which was opened from no tab, so no tab is lit (it used to
+  // light Feed, which you had never been on).
+  const selected = useRef(-1);
   // Whether any page has said which tab it belongs to yet. Until one has (a
   // link opened cold), a Community page with no tab under it (a court, the
   // map, who else was there, your alerts) lights Community, not Home (Oct 5:

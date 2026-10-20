@@ -91,7 +91,8 @@ export function NavBar({ state, navigation }: NavBarProps) {
   const welcome = useWelcomeNote(currentUser);
   const unseen = alerts + (welcome.unread ? 1 : 0);
   const insets = useSafeAreaInsets();
-  const activeRoute = state.routes[state.index]?.name ?? 'index';
+  // None when the page on show was opened cold from a link and belongs to no tab (index -1).
+  const activeRoute: string | undefined = state.routes[state.index]?.name;
   // Everything waiting for you, in one number. The phone bar has no room for
   // separate bell and inbox entries the way the sidebar does, so Profile
   // carries the lot — it is where both of those live.
