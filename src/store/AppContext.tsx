@@ -5173,20 +5173,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [requireUser],
   );
 
+  // Tapping your own pick again takes your vote back: one fewer on that option, and the poll
+  // goes back to its unvoted rows so you can pick again (owner, Oct 20: "On poll, clicking your
+  // selected deselects it"). The server already lets you delete your own vote and recounts.
   const votePoll = useCallback((questionId: ID, option: number) => {
     const me = requireUser();
-    haptics.tap();
+    const current = stateRef.current.questions.find((q) => q.id === questionId)?.poll;
+    const takeBack = current?.myVote === option;
+    if (takeBack) haptics.untap(); else haptics.tap();
     setState((prev) => ({
       ...prev,
       questions: prev.questions.map((q) => {
-        if (q.id !== questionId || !q.poll || q.poll.myVote === option) return q;
+        if (q.id !== questionId || !q.poll) return q;
         const counts = [...q.poll.counts];
         if (q.poll.myVote !== undefined) counts[q.poll.myVote] = Math.max(0, (counts[q.poll.myVote] ?? 0) - 1);
+        if (q.poll.myVote === option) {
+          const { myVote: _gone, ...rest } = q.poll;
+          return { ...q, poll: { ...rest, counts } };
+        }
         counts[option] = (counts[option] ?? 0) + 1;
         return { ...q, poll: { ...q.poll, counts, myVote: option } };
       }),
     }));
-    if (live(me, questionId)) void remote.votePoll(questionId, option);
+    if (live(me, questionId)) void (takeBack ? remote.unvotePoll(questionId) : remote.votePoll(questionId, option));
   }, [requireUser]);
 
   const voteQuestion = useCallback(

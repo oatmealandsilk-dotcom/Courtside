@@ -77,6 +77,21 @@ export const questions: Question[] = [
     votedBy: {},
     answerIds: [],
   },
+  {
+    // A demo thread with a poll, so the poll's vote, switch and take-back can be tried without
+    // the live server (owner, Oct 20: "On poll, clicking your selected deselects it").
+    id: 'q7',
+    authorId: 'u-dev',
+    title: 'Which surface do you play best on?',
+    body: 'Settling an argument with my doubles partner. Vote, then tell us why.',
+    topic: 'strategy',
+    createdAt: isoDaysAgo(8),
+    tags: ['surfaces'],
+    votes: 12,
+    votedBy: {},
+    answerIds: [],
+    poll: { options: ['Hard court', 'Clay', 'Grass', 'Indoor carpet'], counts: [14, 9, 4, 3] },
+  },
 ];
 
 export const answers: Answer[] = [

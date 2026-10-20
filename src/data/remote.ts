@@ -1737,6 +1737,19 @@ function confirmLinkHome(base: string): string {
   return `${window.location.origin}${base}/${label ? `?src=${encodeURIComponent(label)}` : ''}`;
 }
 
+/**
+ * A poll's vote, switch and take-back go to the server one after another, in
+ * the order they were tapped: a quick vote-then-take-back must not land as a
+ * take-back-then-vote and leave a vote you took back.
+ */
+const pollQueue = new Map<ID, Promise<void>>();
+function inPollOrder(questionId: ID, job: () => Promise<void>): Promise<void> {
+  const next = (pollQueue.get(questionId) ?? Promise.resolve()).then(job).catch(() => {});
+  pollQueue.set(questionId, next);
+  void next.then(() => { if (pollQueue.get(questionId) === next) pollQueue.delete(questionId); });
+  return next;
+}
+
 export const remote = {
   /* --------------------------------- streak --------------------------------- */
 
@@ -1841,9 +1854,20 @@ export const remote = {
     if (error) fail('poll')(error);
     return refusedFor(error);
   },
-  async votePoll(questionId: ID, option: number) {
-    const { error } = await need().from('poll_votes').upsert({ question_id: questionId, option }, { onConflict: 'question_id,user_id' });
-    if (error) fail('poll vote')(error);
+  votePoll(questionId: ID, option: number) {
+    return inPollOrder(questionId, async () => {
+      const { error } = await need().from('poll_votes').upsert({ question_id: questionId, option }, { onConflict: 'question_id,user_id' });
+      if (error) fail('poll vote')(error);
+    });
+  },
+  /** Your vote taken back (tap your pick again): your row goes, and the server recounts (migration 41). */
+  unvotePoll(questionId: ID) {
+    return inPollOrder(questionId, async () => {
+      const me = (await need().auth.getSession()).data.session?.user.id;
+      if (!me) return;
+      const { error } = await need().from('poll_votes').delete().eq('question_id', questionId).eq('user_id', me);
+      if (error) fail('poll vote')(error);
+    });
   },
   async upsertQuestion(q: Question) {
     const { error } = await need().from('questions').upsert({
