@@ -1276,13 +1276,13 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
     // the named columns, never anyone's town position (see PROFILE_COLUMNS).
     // A database older than one of them is read whole, as before.
     (async () => {
-      const named = await allRows<ProfileRow>((from, to) => db.from('profiles').select(PROFILE_COLUMNS).order('created_at', { ascending: true }).range(from, to));
-      return missingColumn(named.error) ? allRows<ProfileRow>((from, to) => db.from('profiles').select('*').order('created_at', { ascending: true }).range(from, to)) : named;
+      const named = await allRows<ProfileRow>((from, to) => db.from('profiles').select(PROFILE_COLUMNS).order('created_at', { ascending: true }).order('id').range(from, to));
+      return missingColumn(named.error) ? allRows<ProfileRow>((from, to) => db.from('profiles').select('*').order('created_at', { ascending: true }).order('id').range(from, to)) : named;
     })(),
     db.from('posts').select(POST_SELECT).order('created_at', { ascending: false }).limit(POST_PAGE),
     storiesFull,
     // Only the follows that involve you: who you follow, and who follows you.
-    allRows<Edge>((from, to) => db.from('follows').select('follower_id, following_id').or(`follower_id.eq.${me},following_id.eq.${me}`).range(from, to)),
+    allRows<Edge>((from, to) => db.from('follows').select('follower_id, following_id').or(`follower_id.eq.${me},following_id.eq.${me}`).order('follower_id').order('following_id').range(from, to)),
     // Only the ones that involve you come back; a database without the table yet just gives none.
     db.from('follow_requests').select('requester_id, target_id, created_at'),
     chatsLoad,
@@ -1350,7 +1350,7 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
   const keepsCounts = profileRows.length > 0 && typeof profileRows[0].followers_count === 'number';
   const edges = keepsCounts
     ? follows.data
-    : (await allRows<Edge>((from, to) => db.from('follows').select('follower_id, following_id').range(from, to))).data;
+    : (await allRows<Edge>((from, to) => db.from('follows').select('follower_id, following_id').order('follower_id').order('following_id').range(from, to))).data;
   const followers = new Map<string, number>();
   const following = new Map<string, number>();
   for (const edge of edges) {
@@ -2454,7 +2454,7 @@ export const remote = {
     const db = need();
     const list = ids.join(',');
     const { data, error } = await allRows<Edge>((from, to) => db.from('follows').select('follower_id, following_id')
-      .or(andFollowers ? `follower_id.in.(${list}),following_id.in.(${list})` : `follower_id.in.(${list})`).range(from, to), 10000);
+      .or(andFollowers ? `follower_id.in.(${list}),following_id.in.(${list})` : `follower_id.in.(${list})`).order('follower_id').order('following_id').range(from, to), 10000);
     if (error) fail('follow lists')(error);
     return data.map((e) => ({ followerId: e.follower_id, followingId: e.following_id }));
   },
