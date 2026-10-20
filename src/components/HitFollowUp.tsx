@@ -10,7 +10,7 @@ import { useFeedSwiped } from '@/features/feed/firstSwipe';
 import { useCurtainDown } from '@/features/feed/warmup';
 import { dueHits, keepHitPrefill, markAsked, nextHitEnd, prefillFor, readAsked, shortPlace, trackerFor } from '@/features/hits/followUp';
 import { useTourBusy } from '@/features/tour/tourStore';
-import { isShowing as toastShowing, show as showToast, withdraw as withdrawToast, type HitNoteLook } from '@/lib/toast';
+import { isShowing as toastShowing, show as showToast, withdraw as withdrawToast } from '@/lib/toast';
 import { useAnyUploading } from '@/lib/uploads';
 import { useApp } from '@/store/AppContext';
 
@@ -33,11 +33,6 @@ const HOLD_MS = 6000;
 const RETRY_MS = 6000;
 /** Put away because a page where you write or post opened: up this long, it was seen (as long as any note with a button stays); less, it comes back after. */
 const SEEN_MS = 5000;
-/** How the question is drawn (Toast's HitNote): 'pill', a card laid over the page's title row (never over the page under it); 'banner', a card just above the tab bar with two answers; 'strip', one slim line docked under the title row. */
-// 'pill' by default (Oct 20): it reads as placed, sits in the header's own band so it never covers
-// the page under it (the Community search, the Feed's "Players you might know"), never covers a clip's name, words or buttons (the banner did), and its button is a clear
-// target (the strip made its whole width one, easy to tap by mistake on the way to the page).
-const LOOK: HitNoteLook = 'pill';
 
 /**
  * "How was the hit at Alder Park? · Log it": once a hit you posted or joined
@@ -144,7 +139,7 @@ export function HitFollowUp({ enabled }: { enabled: boolean }) {
       const place = shortPlace(prefill.place);
       toastId.current = showToast({
         title: prefill.who ? `How was the hit with ${prefill.who}?` : `How was the hit at ${place}?`,
-        ...(other ? { look: LOOK, person: { name: other.name, seed: other.avatarSeed, uri: other.avatarUrl } } : {}),
+        ...(other ? { look: 'pill' as const, person: { name: other.name, seed: other.avatarSeed, uri: other.avatarUrl } } : {}),
         // With your tracker's copy it carries what "Tennis detected" would have
         // said (the two arrive together, and this one takes its place): the
         // session's mark and its numbers, yours alone.
@@ -153,8 +148,6 @@ export function HitFollowUp({ enabled }: { enabled: boolean }) {
           : { icon: 'hit' as const, ...(prefill.who ? { body: place } : {}) }),
         href: tracked ? `/compose?activity=${tracked.id}&hit=${first.id}` : `/log-session?hit=${first.id}`,
         action: { label: 'Log it', onPress: open },
-        // The card above the tab bar offers the other answer too: no game to log, so it is not asked again.
-        ...(LOOK === 'banner' ? { secondary: { label: 'Skip', onPress: () => undefined } } : {}),
         holdMs: HOLD_MS,
         onClosed: (how, upMs) => {
           showing.current = false;

@@ -1,7 +1,7 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
-import { router, usePathname } from 'expo-router';
+import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
@@ -17,7 +17,6 @@ import { ZoneGlyph } from '@/components/session/ZoneGlyph';
 import { DrawnTick } from '@/components/session/DrawnTick';
 import { RECORD_ICON } from '@/features/records/records';
 import { useBelowBanner } from '@/features/messages/bannerSpace';
-import { useBarInset } from '@/features/navigation/barInset';
 import { requestScrollToTop } from '@/features/navigation/scrollToTop';
 import { goHome } from '@/lib/goBack';
 import { closed, onWithdraw, useToast, type ToastClosed, type ToastMessage } from '@/lib/toast';
@@ -43,11 +42,6 @@ const LONG_SCREEN_READER_MS = 15000;
 const PILL_TOP = 2;
 /** Past the screen's edge by at least this much, so the card slides in from out of sight. */
 const OFF_MIN = 120;
-/** Where the 'strip' docks: right under a page's title row (on Community, right under its switch's line). */
-const STRIP_TOP = 54;
-const STRIP_SWITCH = 128;
-/** The four tabs, where the floating tab bar is on show. */
-const TABS = new Set(['/', '/index', '/discuss', '/coaches', '/profile']);
 const IN = Easing.out(Easing.cubic);
 const OUT = Easing.in(Easing.cubic);
 
@@ -63,8 +57,6 @@ const OUT = Easing.in(Easing.cubic);
 export function Toast() {
   const styles = useThemedStyles(styleDefinitions);
   const insets = useSafeAreaInsets();
-  const pathname = usePathname();
-  const barInset = useBarInset();
   const incoming = useToast();
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const toastRef = useRef<ToastMessage | null>(null);
@@ -115,9 +107,8 @@ export function Toast() {
     shownAt.current = Date.now();
     setToast(incoming);
     const note = !!(incoming.look && incoming.person);
-    fromBottom.value = incoming.look === 'banner' && note ? 1 : 0;
-    // From below the tab bar's edge, or from above the clock: far enough to start out of sight.
-    away.value = note ? (incoming.look === 'banner' ? barInset + insets.bottom : insets.top) + OFF_MIN : OFF_MIN;
+    // From above the clock: far enough to start out of sight.
+    away.value = note ? insets.top + OFF_MIN : OFF_MIN;
     if (timer.current) clearTimeout(timer.current);
     y.value = note ? -away.value : -24;
     shown.value = 0;
@@ -137,44 +128,31 @@ export function Toast() {
   useEffect(() => onWithdraw((id) => { if (live.current?.id === id) hideRef.current('withdrawn'); }), []);
 
   // A flick up sends it away early; a drag down just resists.
-  // A card at the foot of the screen (HitNote's 'banner') comes up from below and is flicked down;
-  // everything else comes down from the top and is flicked up. `y` counts towards its own edge.
-  const fromBottom = useSharedValue(0);
   const flick = Gesture.Pan()
     .activeOffsetY([-6, 6])
-    .onUpdate((e) => {
-      const t = fromBottom.value ? -e.translationY : e.translationY;
-      y.value = t < 0 ? t : t * 0.15;
-    })
+    .onUpdate((e) => { y.value = e.translationY < 0 ? e.translationY : e.translationY * 0.15; })
     .onEnd((e) => {
-      const t = fromBottom.value ? -e.translationY : e.translationY;
-      const v = fromBottom.value ? -e.velocityY : e.velocityY;
-      if (t < -16 || v < -400) runOnJS(hide)('flick');
+      if (e.translationY < -16 || e.velocityY < -400) runOnJS(hide)('flick');
       else y.value = withTiming(0, { duration: 200, easing: IN });
     });
 
   const style = useAnimatedStyle(() => ({
     opacity: shown.value,
-    transform: [{ translateY: fromBottom.value ? -y.value : y.value + underBanner.value }, { scale: 0.96 + shown.value * 0.04 }],
+    transform: [{ translateY: y.value + underBanner.value }, { scale: 0.96 + shown.value * 0.04 }],
   }));
   // The question card (HitNote) is glass: it comes and goes by moving only, never by fading
   // (no opacity on any parent of a Glass, Oct 17). It slides in from its edge and back out.
   const slide = useAnimatedStyle(() => ({
-    transform: [{ translateY: fromBottom.value ? -y.value : y.value + underBanner.value }, { scale: 0.97 + shown.value * 0.03 }],
+    transform: [{ translateY: y.value + underBanner.value }, { scale: 0.97 + shown.value * 0.03 }],
   }));
 
   if (!toast) return null;
   if (toast.look && toast.person) {
-    // 'banner' stands just above the tab bar on the four tabs (the screen's foot elsewhere); 'pill' over the title row itself.
-    const place = toast.look === 'banner'
-      ? { bottom: (TABS.has(pathname) ? barInset : insets.bottom) + spacing.sm }
-      : toast.look === 'strip'
-        ? { top: insets.top + (pathname === '/discuss' ? STRIP_SWITCH : STRIP_TOP) }
-        : { top: insets.top + PILL_TOP };
-    // The strip is a plain fill, no glass, so it may still fade as it docks; the two glass cards only move.
+    // Over the page's title row itself.
+    const place = { top: insets.top + PILL_TOP };
     const note = (
       <GestureDetector gesture={flick}>
-        <Animated.View pointerEvents="box-none" style={[styles.wrap, toast.look === 'strip' && styles.wrapEdge, place, toast.look === 'strip' ? style : slide]}>
+        <Animated.View pointerEvents="box-none" style={[styles.wrap, place, slide]}>
           <HitNote toast={toast} hide={hide} />
         </Animated.View>
       </GestureDetector>
@@ -271,11 +249,11 @@ export function Toast() {
 }
 
 /** The hit's mark, small, on the corner of the other player's picture. */
-function HitBadge({ small = false }: { small?: boolean }) {
+function HitBadge() {
   const styles = useThemedStyles(styleDefinitions);
   return (
-    <View style={[styles.hitBadge, small && styles.hitBadgeSmall]}>
-      <HitGlyph size={small ? 8 : 10} color={colors.brandInk} />
+    <View style={styles.hitBadge}>
+      <HitGlyph size={10} color={colors.brandInk} />
     </View>
   );
 }
@@ -285,7 +263,7 @@ function HitBadge({ small = false }: { small?: boolean }) {
  * waits, so its going is expected, not sudden. Moves by sliding, never by
  * fading; still for someone who asked for less motion.
  */
-function HoldLine({ ms, token, edge = false }: { ms: number; token: number; edge?: boolean }) {
+function HoldLine({ ms, token }: { ms: number; token: number }) {
   const styles = useThemedStyles(styleDefinitions);
   const reduced = useReducedMotion();
   const [w, setW] = useState(0);
@@ -298,7 +276,7 @@ function HoldLine({ ms, token, edge = false }: { ms: number; token: number; edge
   const run = useAnimatedStyle(() => ({ transform: [{ translateX: left.value }] }));
   if (reduced) return null;
   return (
-    <View style={[styles.holdTrack, edge && styles.holdEdge]} pointerEvents="none" onLayout={(e) => setW(e.nativeEvent.layout.width)}>
+    <View style={styles.holdTrack} pointerEvents="none" onLayout={(e) => setW(e.nativeEvent.layout.width)}>
       <Animated.View style={[styles.holdRun, run]} />
     </View>
   );
@@ -309,44 +287,14 @@ function HoldLine({ ms, token, edge = false }: { ms: number; token: number; edge
  * card rather than a quick note. Their picture with the hit's mark on its
  * corner, the question and where, and Log it as a filled button.
  *
- * 'pill' (option A): a glass card laid over the page's own title row, as
- * wide as the page allows, so it reads as placed there, not dropped in the
- * middle, and never covers what the page shows under its header.
- * 'banner' (option B): the same card standing just above the tab bar, as the
- * phone's own banners do, with its two answers side by side under the words.
- * 'strip' (option C): one slim line, edge to edge, docked under the title
- * row as if the page's header had grown a row for it.
+ * A glass card laid over the page's own title row, as wide as the page
+ * allows, so it reads as placed there, not dropped in the middle, and never
+ * covers what the page shows under its header.
  */
 function HitNote({ toast, hide }: { toast: ToastMessage; hide: (how?: ToastClosed) => void }) {
   const styles = useThemedStyles(styleDefinitions);
   const person = toast.person!;
   const action = toast.action;
-  const banner = toast.look === 'banner';
-  if (toast.look === 'strip') {
-    return (
-      <View style={styles.strip}>
-        <Pressable
-          accessibilityRole={action ? 'button' : 'text'}
-          accessibilityLiveRegion="polite"
-          accessibilityLabel={action ? `${action.label}: ${toast.title}${toast.body ? `, ${toast.body}` : ''}` : toast.title}
-          onPress={() => { hide('action'); if (action) action.onPress(); else if (toast.href) router.push(toast.href as never); }}
-          style={({ pressed }) => [styles.stripRow, pressed && styles.stripPressed]}
-        >
-          <View>
-            <Avatar name={person.name} seed={person.seed} uri={person.uri} size={28} />
-            <HitBadge small />
-          </View>
-          <Text style={styles.stripWords} numberOfLines={1}>
-            <Text style={styles.stripTitle}>{toast.title}</Text>
-            {toast.body ? <Text style={styles.stripBody}>{`  ${toast.body}`}</Text> : null}
-          </Text>
-          {action ? <Text style={styles.stripAction}>{action.label}</Text> : null}
-          <Ionicons name="chevron-forward" size={14} color={colors.brand} />
-        </Pressable>
-        {toast.holdMs ? <HoldLine ms={toast.holdMs} token={toast.id} edge /> : null}
-      </View>
-    );
-  }
   const open = () => {
     hide('tap');
     if (toast.href) router.push(toast.href as never);
@@ -354,16 +302,16 @@ function HitNote({ toast, hide }: { toast: ToastMessage; hide: (how?: ToastClose
   return (
     <View style={[styles.shadow, styles.noteShadow]}>
       <Glass radius={20} style={styles.card}>
-        <View style={[styles.noteRow, !banner && styles.noteRowSlim]}>
+        <View style={[styles.noteRow, styles.noteRowSlim]}>
           <Pressable
             accessibilityRole={toast.href ? 'link' : 'text'}
             accessibilityLiveRegion="polite"
             accessibilityLabel={toast.body ? `${toast.title}. ${toast.body}` : toast.title}
             onPress={open}
-            style={[styles.noteInfo, !banner && styles.noteInfoSlim]}
+            style={[styles.noteInfo, styles.noteInfoSlim]}
           >
             <View>
-              <Avatar name={person.name} seed={person.seed} uri={person.uri} size={banner ? 40 : 32} />
+              <Avatar name={person.name} seed={person.seed} uri={person.uri} size={32} />
               <HitBadge />
             </View>
             <View style={styles.words}>
@@ -371,7 +319,7 @@ function HitNote({ toast, hide }: { toast: ToastMessage; hide: (how?: ToastClose
               {toast.body ? <Text style={styles.noteBody} numberOfLines={1}>{toast.body}</Text> : null}
             </View>
           </Pressable>
-          {action && !banner ? (
+          {action ? (
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={`${action.label}: ${toast.title}`}
@@ -383,28 +331,6 @@ function HitNote({ toast, hide }: { toast: ToastMessage; hide: (how?: ToastClose
             </Pressable>
           ) : null}
         </View>
-        {banner && action ? (
-          <View style={styles.answers}>
-            {toast.secondary ? (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={`${toast.secondary.label}: ${toast.title}`}
-                onPress={() => { hide('action'); toast.secondary?.onPress(); }}
-                style={({ pressed }) => [styles.answer, styles.quiet, pressed && styles.fillPressed]}
-              >
-                <Text style={styles.quietLabel}>{toast.secondary.label}</Text>
-              </Pressable>
-            ) : null}
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`${action.label}: ${toast.title}`}
-              onPress={() => { hide('action'); action.onPress(); }}
-              style={({ pressed }) => [styles.answer, styles.fill, pressed && styles.fillPressed]}
-            >
-              <Text style={styles.fillLabel}>{action.label}</Text>
-            </Pressable>
-          </View>
-        ) : null}
         {toast.holdMs ? <HoldLine ms={toast.holdMs} token={toast.id} /> : null}
       </Glass>
     </View>
@@ -497,20 +423,6 @@ const styleDefinitions = StyleSheet.create({
   fill: { minHeight: 34, paddingHorizontal: 14, borderRadius: 17, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
   fillPressed: { opacity: 0.75 },
   fillLabel: { ...typography.smallStrong, color: colors.brandInk, letterSpacing: -0.1 },
-  answers: { flexDirection: 'row', gap: 8, paddingHorizontal: 10, paddingBottom: 12 },
-  answer: { flex: 1, minHeight: 38, borderRadius: 19 },
-  quiet: { backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
-  quietLabel: { ...typography.smallStrong, color: colors.text, letterSpacing: -0.1 },
-  wrapEdge: { left: 0, right: 0 },
-  strip: { alignSelf: 'stretch', backgroundColor: colors.bgElevated, borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
-  stripRow: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 46, paddingHorizontal: spacing.lg },
-  stripPressed: { backgroundColor: colors.surfaceAlt },
-  stripWords: { flex: 1 },
-  stripTitle: { ...typography.smallStrong, color: colors.text, letterSpacing: -0.1 },
-  stripBody: { ...typography.small, fontSize: 12, color: colors.textMuted },
-  stripAction: { ...typography.smallStrong, color: colors.brand, letterSpacing: -0.1 },
-  hitBadgeSmall: { width: 15, height: 15, borderRadius: 7.5, right: -3, bottom: -3, borderWidth: 1.5, borderColor: colors.bgElevated },
-  holdEdge: { left: 0, right: 0, borderRadius: 0 },
   holdTrack: { position: 'absolute', left: 14, right: 14, bottom: 0, height: 2, borderRadius: 1, overflow: 'hidden' },
   holdRun: { flex: 1, backgroundColor: colors.brand, opacity: 0.55 },
   title: { ...typography.smallStrong, color: colors.text, letterSpacing: -0.1 },
