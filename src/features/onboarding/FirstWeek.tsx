@@ -46,19 +46,29 @@ const FOLLOWS = 3;
 
 const key = (id: string) => `courtside-first-week:${id}`;
 interface Kept { closed?: boolean; ticked?: Step[]; opened?: boolean }
+/** What this device has already read or written, so Profile opened again knows at once (no wait, nothing swapped in). */
+const known = new Map<string, Kept>();
 async function read(id: string): Promise<Kept> {
-  try { const raw = await AsyncStorage.getItem(key(id)); return raw ? (JSON.parse(raw) as Kept) : {}; } catch { return {}; }
+  let k: Kept = {};
+  try { const raw = await AsyncStorage.getItem(key(id)); k = raw ? (JSON.parse(raw) as Kept) : {}; } catch { /* nothing kept */ }
+  if (!known.has(id)) known.set(id, k);
+  return known.get(id)!;
 }
 async function write(id: string, next: Kept): Promise<void> {
+  known.set(id, next);
   try { await AsyncStorage.setItem(key(id), JSON.stringify(next)); } catch { /* the device keeps nothing: it simply shows again */ }
 }
 
-/** Whether the list is up for this account (Profile hides its "Make your first move" card meanwhile: the list's first row is that page). */
-export function useFirstWeek(): { showing: boolean; card: React.ReactNode } {
+/**
+ * Whether the list is up for this account (Profile hides its "Make your first move" card meanwhile: the list's first row is that page).
+ * `deciding`: in the first week, while this device's note on the list is still being read; Profile shows
+ * neither card then, so the first-move card never flashes up for a moment before the list replaces it (R7 review).
+ */
+export function useFirstWeek(): { showing: boolean; deciding: boolean; card: React.ReactNode } {
   const { currentUser, currentUserId, followingIds, followRequests, sessions, posts, questions, onboardingComplete } = useApp();
-  const [kept, setKept] = useState<Kept | null>(null);
+  const [kept, setKept] = useState<Kept | null>(() => (currentUserId ? known.get(currentUserId) ?? null : null));
   useEffect(() => {
-    setKept(null);
+    setKept(currentUserId ? known.get(currentUserId) ?? null : null);
     if (!currentUserId) return undefined;
     let on = true;
     void read(currentUserId).then((k) => { if (on) setKept(k); });
@@ -98,10 +108,12 @@ export function useFirstWeek(): { showing: boolean; card: React.ReactNode } {
   }, [kept, done, currentUserId, currentUser?.openToHitUntil]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const showing = !!currentUser && onboardingComplete && firstWeek && !!kept && !kept.closed;
-  if (!showing || !currentUserId) return { showing: false, card: null };
+  const deciding = !!currentUser && onboardingComplete && firstWeek && !kept;
+  if (!showing || !currentUserId) return { showing: false, deciding, card: null };
   const close = () => { haptics.untap(); const next = { ...kept, closed: true }; setKept(next); void write(currentUserId, next); };
   return {
     showing,
+    deciding: false,
     card: <FirstWeekCard steps={steps} done={done} fresh={fresh.current} follows={follows} adult={adult} onClose={close} />,
   };
 }

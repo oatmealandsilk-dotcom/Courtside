@@ -179,7 +179,7 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
        and covers nothing (the first-move card included), and the page eases back up once it is closed. */}
    <InboxTip eligible={inboxTipEligible} live={live} style={styles.inboxTip} />
    {firstWeek.card}
-   {!hasMoved && !firstWeek.showing && <Pressable accessibilityRole="link" accessibilityLabel="Make your first move" onPress={() => router.push({ pathname: '/first-move', params: { from: 'profile' } })} style={styles.setup}>
+   {!hasMoved && !firstWeek.showing && !firstWeek.deciding && <Pressable accessibilityRole="link" accessibilityLabel="Make your first move" onPress={() => router.push({ pathname: '/first-move', params: { from: 'profile' } })} style={styles.setup}>
      <Ionicons name="videocam-outline" size={20} color={colors.brand}/>
      <View style={{ flex: 1 }}><Text style={styles.setupTitle}>Make your first move</Text><Text style={styles.meta}>{user && notKnownAdult(user) ? 'Add your friends, or post your first clip.' : 'Bring your hitting partners, or post your first clip.'}</Text></View>
      <Ionicons name="chevron-forward" size={16} color={colors.textMuted}/>
