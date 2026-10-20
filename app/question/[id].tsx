@@ -67,6 +67,17 @@ function QuestionDetail() {
 
   const question = questions.find((q) => q.id === id);
   const asker = users.find((u) => u.id === question?.authorId);
+  // Admins: only a thread by someone known to be an adult can be the Question of the week (teen rules;
+  // the server says, as it alone knows ages). The pin shows only then, or to take off a pin already there.
+  const canPin = actions.canPinQuestion;
+  const isAdmin = !!currentUser?.isAdmin;
+  const [pinnable, setPinnable] = useState(false);
+  useEffect(() => {
+    if (!isAdmin || !question || question.removed) { setPinnable(false); return undefined; }
+    let on = true;
+    void canPin(question.id).then((ok) => { if (on) setPinnable(ok); });
+    return () => { on = false; };
+  }, [isAdmin, question?.id, question?.removed, canPin]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!question) {
     return (
@@ -104,7 +115,7 @@ function QuestionDetail() {
   // Admins: pin this thread as the Question of the week (Oct 20 sweep, R5), at the top of Discussions
   // for everyone for 7 days; pinning it takes the last one off. Or take this one's pin off.
   const pinnedNow = !!pinnedQuestion && pinnedQuestion.id === question.id && Date.now() - Date.parse(pinnedQuestion.pinnedAt) < QUESTION_OF_WEEK_MS;
-  const pin = currentUser?.isAdmin && !removed ? () => {
+  const pin = isAdmin && !removed && (pinnable || pinnedNow) ? () => {
     haptics.tap();
     if (pinnedNow) {
       confirm({ title: 'Unpin the Question of the week?', message: 'It goes back to being an ordinary thread in Discussions.', confirmLabel: 'Unpin', onConfirm: () => {

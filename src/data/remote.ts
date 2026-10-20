@@ -3006,6 +3006,15 @@ export const remote = {
     const row = data[0] as { question_id?: unknown; pinned_at?: unknown } | undefined;
     return row && typeof row.question_id === 'string' && typeof row.pinned_at === 'string' ? { id: row.question_id, pinnedAt: row.pinned_at } : null;
   },
+  /**
+   * Admin: whether this thread may be pinned (its author is known to be an
+   * adult, and it is not taken down). Null when it could not be asked.
+   */
+  async questionPinnable(id: ID): Promise<boolean | null> {
+    const { data, error } = await need().rpc('question_pinnable', { p_question: id });
+    if (error || typeof data !== 'boolean') return null;
+    return data;
+  },
   /** Admin: pins a thread as Question of the week (the last one comes off), or with null takes the pin off. False when refused or not done. */
   async pinQuestionOfWeek(id: ID | null): Promise<boolean> {
     const { data, error } = await need().rpc('pin_question_of_week', { p_question: id });

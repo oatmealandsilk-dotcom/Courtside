@@ -17,10 +17,16 @@
 --      only the functions below touch it. Deleting the thread deletes its pin.
 --   2. pin_question_of_week(thread): admins only. Pins that thread (taking
 --      the last pin off), or, given nothing, takes the pin off. A thread an
---      admin took down (migration 108) cannot be pinned.
+--      admin took down (migration 108) cannot be pinned, and neither can a
+--      thread whose author is not known to be an adult (a teen, or someone
+--      with no birthday on file: known_adult, migration 109), so a teen's
+--      thread is never put in front of everyone (review fix, Oct 20).
+--      question_pinnable(thread), admins only, says whether a thread can be
+--      pinned, so the thread page shows the pin button only when it can.
 --   3. question_of_week(): for anyone signed in, the pinned thread's id and
 --      when it was pinned, or nothing (no pin, the pin is older than 7 days,
---      or the thread was taken down). Only the id: whether someone may see
+--      the thread was taken down, or its author is no longer known to be an
+--      adult). Only the id: whether someone may see
 --      the thread itself is still the threads table's own rules, as for any
 --      thread (a thread they may not see simply does not show).
 --   4. guest_threads (migration 164), the Discussions list a visitor with no
@@ -34,8 +40,8 @@
 --      exactly as migration 164 wrote it.
 --
 -- No alert is sent by anything here. Nothing already saved changes. Needs
--- migrations 23 (is_admin), 68 (share_open), 108 (removed_at) and 164
--- (guest mode), all live. Stops before changing anything if one is missing,
+-- migrations 23 (is_admin), 68 (share_open), 108 (removed_at), 109
+-- (known_adult) and 164 (guest mode), all live. Stops before changing anything if one is missing,
 -- if guest_threads has changed since migration 164 wrote it, or if a name
 -- this file uses already exists and is not this file's. Safe to run more
 -- than once.
@@ -58,10 +64,11 @@ begin
   if to_regclass('public.questions') is null or to_regclass('public.answers') is null or to_regclass('public.polls') is null
      or to_regclass('public.profiles') is null
      or to_regprocedure('public.is_admin()') is null or to_regprocedure('public.share_open(uuid)') is null
+     or to_regprocedure('public.known_adult(uuid)') is null
      or to_regprocedure('private.guest_answer_ok(public.answers)') is null or to_regprocedure('private.guest_words(text)') is null
      or to_regprocedure('private.guest_people(uuid[])') is null
      or to_regprocedure('public.guest_threads(text, timestamptz, integer)') is null then
-    raise exception 'Migration 168 stopped before changing anything: the threads tables and migrations 23 (is_admin), 68 (share_open) and 164 (guest mode) have to be there first.';
+    raise exception 'Migration 168 stopped before changing anything: the threads tables and migrations 23 (is_admin), 68 (share_open), 109 (known_adult) and 164 (guest mode) have to be there first.';
   end if;
   if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'questions' and column_name = 'removed_at') then
     raise exception 'Migration 168 stopped before changing anything: run migration 108 (take down) first.';
@@ -78,7 +85,7 @@ begin
     raise exception 'Migration 168 stopped before changing anything: public.question_pins already exists and is not this file''s.';
   end if;
   for r in select p.proname, p.prosrc as src from pg_proc p
-            where p.pronamespace = 'public'::regnamespace and p.proname in ('pin_question_of_week', 'question_of_week') loop
+            where p.pronamespace = 'public'::regnamespace and p.proname in ('pin_question_of_week', 'question_of_week', 'question_pinnable') loop
     if position('qotw_168' in r.src) = 0 then
       raise exception 'Migration 168 stopped before changing anything: public.% already exists and is not this file''s.', r.proname;
     end if;
@@ -97,7 +104,7 @@ revoke all on table public.question_pins from public, anon, authenticated;
 
 -- -------------------------------------------------------- 2. admins pin one
 -- Returns true when the pin was set (or taken off), false when the thread is
--- not there or was taken down.
+-- not there, was taken down, or its author is not known to be an adult.
 create or replace function public.pin_question_of_week(p_question uuid)
 returns boolean language plpgsql volatile security definer set search_path = public as $$
 begin
@@ -109,7 +116,9 @@ begin
     delete from public.question_pins;
     return true;
   end if;
-  if not exists (select 1 from public.questions q where q.id = p_question and q.removed_at is null) then
+  -- Only a thread by a known adult (teen rules: a teen's thread is never put in front of everyone).
+  if not exists (select 1 from public.questions q where q.id = p_question and q.removed_at is null
+                   and public.known_adult(q.author_id)) then
     return false;
   end if;
   -- One at a time: the last one comes off.
@@ -121,6 +130,17 @@ end $$;
 revoke all on function public.pin_question_of_week(uuid) from public, anon, authenticated;
 grant execute on function public.pin_question_of_week(uuid) to authenticated;
 
+-- Whether an admin may pin this thread (the thread page shows its pin button
+-- only then). False for anyone but an admin, so it tells nobody else anything.
+create or replace function public.question_pinnable(p_question uuid)
+returns boolean language sql stable security definer set search_path = public as $$
+  -- qotw_168
+  select public.is_admin() and exists (select 1 from public.questions q
+    where q.id = p_question and q.removed_at is null and public.known_adult(q.author_id))
+$$;
+revoke all on function public.question_pinnable(uuid) from public, anon, authenticated;
+grant execute on function public.question_pinnable(uuid) to authenticated;
+
 -- ------------------------------------------------ 3. which one, signed in
 create or replace function public.question_of_week()
 returns table (question_id uuid, pinned_at timestamptz)
@@ -129,6 +149,7 @@ language sql stable security definer set search_path = public as $$
   select p.question_id, p.pinned_at
   from public.question_pins p join public.questions q on q.id = p.question_id
   where q.removed_at is null and p.pinned_at > now() - interval '7 days'
+    and public.known_adult(q.author_id)
   order by p.pinned_at desc
   limit 1
 $$;
@@ -197,7 +218,8 @@ grant execute on function public.guest_threads(text, timestamptz, integer) to an
 do $$
 begin
   if has_function_privilege('anon', 'public.pin_question_of_week(uuid)', 'execute')
-     or has_function_privilege('anon', 'public.question_of_week()', 'execute') then
+     or has_function_privilege('anon', 'public.question_of_week()', 'execute')
+     or has_function_privilege('anon', 'public.question_pinnable(uuid)', 'execute') then
     raise exception 'migration 168: the pin must not be open to signed-out visitors (they read it through guest_threads)';
   end if;
   if not has_function_privilege('anon', 'public.guest_threads(text, timestamptz, integer)', 'execute')

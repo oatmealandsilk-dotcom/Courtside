@@ -491,8 +491,10 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
     if (!pinnedQuestion || Date.now() - Date.parse(pinnedQuestion.pinnedAt) >= QUESTION_OF_WEEK_MS) return undefined;
     const q = questions.find((x) => x.id === pinnedQuestion.id);
     if (!q || q.removed || blockedIds.includes(q.authorId) || mutedIds.includes(q.authorId)) return undefined;
+    // It keeps to what the list is showing: under Unanswered, only while it has no replies (review fix).
+    if (sort === 'unanswered' && q.answerIds.length > 0) return undefined;
     return topic === 'all' || q.topic === topic ? q : undefined;
-  }, [pinnedQuestion, questions, blockedIds, mutedIds, topic]);
+  }, [pinnedQuestion, questions, blockedIds, mutedIds, topic, sort]);
   // A long list is drawn in slices: the first screenfuls at once, the rest on request.
   // The pinned thread is drawn once, on top, not again in its place in the list.
   const slice = visible.slice(0, shownCount).filter((q) => q.id !== pinned?.id);

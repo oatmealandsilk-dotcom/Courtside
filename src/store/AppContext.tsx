@@ -1124,6 +1124,12 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions, LiveSessionAct
    */
   pinQuestionOfWeek: (questionId: ID | null) => Promise<boolean>;
   /**
+   * Admins: whether this thread can be the Question of the week. Only a
+   * thread by someone known to be an adult (teen rules), not taken down; the
+   * thread page shows the pin only then. The server decides (it alone knows ages).
+   */
+  canPinQuestion: (questionId: ID) => Promise<boolean>;
+  /**
    * Guest mode's Discussions (Oct 17): the newest threads in a topic when it
    * is first picked, or (`older`) the next page back. Resolves with whether
    * there are more to come. Signed in, every thread came with the app: false.
@@ -6209,10 +6215,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
     setState((prev) => ({ ...prev, pinnedQuestion: pin }));
   }, []);
+  const canPinQuestion = useCallback(async (questionId: ID) => {
+    const s = stateRef.current;
+    const me = s.currentUserId;
+    if (!me || !s.users.find((u) => u.id === me)?.isAdmin) return false;
+    if (live(me)) return UUID.test(questionId) ? (await remote.questionPinnable(questionId).catch(() => null)) === true : false;
+    // The demo's fixtures carry their own ages.
+    const q = s.questions.find((x) => x.id === questionId);
+    const author = q ? s.users.find((u) => u.id === q.authorId) : undefined;
+    return !!q && !q.removed && !!author && !notKnownAdult(author);
+  }, []);
   const pinQuestionOfWeek = useCallback(async (questionId: ID | null) => {
     const s = stateRef.current;
     const me = s.currentUserId;
     if (!me || !s.users.find((u) => u.id === me)?.isAdmin) return false;
+    // Teen rules: only a thread by a known adult goes on top for everyone (the server checks the same).
+    if (questionId && !(await canPinQuestion(questionId))) return false;
     const pin = questionId ? { id: questionId, pinnedAt: new Date().toISOString() } : null;
     if (live(me)) {
       if (questionId && !UUID.test(questionId)) return false;
@@ -6223,7 +6241,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     haptics.commit();
     setState((prev) => ({ ...prev, pinnedQuestion: pin }));
     return true;
-  }, []);
+  }, [canPinQuestion]);
   // Only real accounts and real posts are recorded; the demo records nothing.
   const noteFeedSignal = useCallback((signal: FeedSignal) => {
     if (!live(stateRef.current.currentUserId, signal.id)) return;
@@ -9213,6 +9231,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       loadThreads,
       loadPinnedQuestion,
       pinQuestionOfWeek,
+      canPinQuestion,
       loadMorePosts,
       loadPostsOf,
       searchPosts,
@@ -9453,6 +9472,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       loadThreads,
       loadPinnedQuestion,
       pinQuestionOfWeek,
+      canPinQuestion,
       loadMorePosts,
       loadPostsOf,
       searchPosts,
@@ -9708,7 +9728,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       },
       loadThread: async (id: ID) => { const got = await fetchGuestThread(id).catch(() => null); if (got) addGuest(got); },
       // The Question of the week comes with the guest's home page (guest_threads' first page).
-      loadPinnedQuestion: async () => undefined, pinQuestionOfWeek: async () => false,
+      loadPinnedQuestion: async () => undefined, pinQuestionOfWeek: async () => false, canPinQuestion: async () => false,
       // Discussions (found in review, Oct 17: one page of 30, and the topics only filtered those):
       // a topic's own newest threads when it is first picked, then a page further back on each ask.
       loadThreads: async (topic: QuestionTopic | 'all', older: boolean) => {
