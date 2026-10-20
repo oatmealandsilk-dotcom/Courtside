@@ -31,9 +31,9 @@ import { CrownLead, layerZ, takesOver, useStageLayers, type Crown, type StageKin
 /** Apple's own sheet curve: a quick start that glides to rest, the browser's stand-in for the phone's spring. */
 const RISE = 'cubic-bezier(.32,.72,0,1)';
 const RISE_MS = 380;
-/** Leaving: away promptly, so it reads as sliding down rather than dissolving in place. */
-const SINK = 'cubic-bezier(.4,0,.2,1)';
-const SINK_MS = 260;
+/** Leaving: away promptly on every sheet's ease-in close (Oct 20 sweep, as on the phone), so it reads as sliding down rather than dissolving in place. */
+const SINK = 'cubic-bezier(.4,0,1,1)';
+const SINK_MS = 230;
 
 const still = () => typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 

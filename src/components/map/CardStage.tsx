@@ -6,6 +6,7 @@ import { useReducedMotion } from '@/lib/useReducedMotion';
 import { sheetFling } from '@/components/map/sheetFling';
 import { GlassRenew, useGlassRenewal, useOnPageArrival } from '@/components/ui/Glass';
 import { CrownFade, CrownLead, layerZ, takesOver, useStageLayers, type Crown, type StageKind, type StageLayer } from '@/components/map/stageLayers';
+import { SHEET_CLOSE_CURVE, SHEET_CLOSE_MS, SHEET_SPRING } from '@/theme/motion';
 
 /*
  * The bottom of the full map: the card for whatever was tapped (or the list
@@ -58,9 +59,8 @@ import { CrownFade, CrownLead, layerZ, takesOver, useStageLayers, type Crown, ty
  */
 
 /** A soft spring that comes to rest without overshooting: a sheet flush with the bottom edge must never lift off it. */
-const RISE = { damping: 30, stiffness: 300, mass: 1, overshootClamping: true } as const;
-/** Leaving: away promptly, so it reads as sliding down rather than dissolving in place; gone in about a quarter of a second. */
-const SINK = Easing.bezier(0.4, 0, 0.2, 1);
+// Every sheet's spring (Oct 20 sweep), clamped so the card's foot never lifts off the screen's edge.
+const RISE = { ...SHEET_SPRING, overshootClamping: true } as const;
 /** Below the screen: where a card waits for its first measurement before it rises. */
 const OFFSTAGE = 4000;
 
@@ -217,7 +217,7 @@ function Layer({ layer, out, crown: crownFor, onGone, handoffs, pageIn }: { laye
     // Swiped away: it is already moving, so it keeps going rather than easing off from rest.
     const flung = layer.kind === 'card' && sheetFling.value > 0;
     if (layer.kind === 'card') sheetFling.value = 0;
-    const slide: WithTimingConfig = flung ? { duration: 220, easing: Easing.out(Easing.quad) } : { duration: 260, easing: SINK };
+    const slide: WithTimingConfig = flung ? { duration: 220, easing: Easing.out(Easing.quad) } : { duration: SHEET_CLOSE_MS, easing: Easing.bezier(...SHEET_CLOSE_CURVE) };
     // Where it was and how it goes, before anything moves, for the bare map's buttons to take over from (above).
     exit.current = { y0: y.value, shown: risen.current && crownOpacity.value * (crownFade.current?.() ?? 1) > 0.99, slide };
     crownOpacity.value = withTiming(0, { duration: 120 });

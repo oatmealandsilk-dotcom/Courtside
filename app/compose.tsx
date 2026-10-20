@@ -76,6 +76,7 @@ import { useTennisFlags } from '@/features/activity/useTennisFlags';
 import { knownTennisFlags, tennisFlags } from '@/features/activity/flags';
 import { useRevealOnFocus } from '@/lib/keyboardScroll';
 import { useAndroidBack } from '@/lib/androidBack';
+import { SHEET_CLOSE_MS, SHEET_SPRING } from '@/theme/motion';
 
 type Mode = 'clip' | 'post' | 'story' | 'hit';
 /** What a session was, the log sheet's three. */
@@ -107,10 +108,10 @@ const landOnFeed = () => { if (router.canDismiss()) goHome(); else router.replac
  * first page open (a lock-screen alert, a link, a reload), to the tabs; a
  * plain back has nowhere to go then and leaves a blank screen.
  */
-/** The "Log it" page's rise: the sheets' spring, never past the top (its foot would lift off the screen's edge). */
-const RISE_SPRING = { damping: 26, stiffness: 280, mass: 0.9, overshootClamping: true } as const;
+/** The "Log it" page's rise: every sheet's spring (Oct 20 sweep), never past the top (its foot would lift off the screen's edge). */
+const RISE_SPRING = { ...SHEET_SPRING, overshootClamping: true } as const;
 /** How long it takes to slide back down when closed with nothing added (a sheet's own close). */
-const AWAY_MS = 230;
+const AWAY_MS = SHEET_CLOSE_MS;
 const goBackNow = () => { if (router.canGoBack()) router.back(); else landOnFeed(); };
 /** Each choice in the Create box arrives a moment after the one above it. */
 const arrive = (index: number) => FadeInDown.delay(90 + index * 55).duration(260).easing(Easing.out(Easing.cubic));

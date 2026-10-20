@@ -6,6 +6,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { SheetBackdrop } from '@/components/SheetBackdrop';
+import { SHEET_CLOSE_CURVE, SHEET_CLOSE_MS, SHEET_SPRING } from '@/theme/motion';
 import { useApp } from '@/store/AppContext';
 import { shareOutside } from '@/lib/shareOutside';
 import { downloadMedia } from '@/lib/downloadMedia';
@@ -134,13 +135,12 @@ export default function PostMenu() {
   // rather than running off the top of the screen.
   const { height: windowHeight, width: windowWidth } = useWindowDimensions();
 
-  // The same rise and fall as the comments and Send-to sheets.
-  const EASE = Easing.bezier(0.22, 0.61, 0.36, 1);
+  // The same rise and fall as every other sheet (Oct 20 sweep): the sheet spring up, a quick ease-in down.
   const rise = useRef(new Animated.Value(1)).current;
   // How far a finger has pulled the sheet down from where it sits.
   const drag = useRef(new Animated.Value(0)).current;
   useEffect(() => {
-    Animated.timing(rise, { toValue: 0, duration: 320, easing: EASE, useNativeDriver: true }).start();
+    Animated.spring(rise, { toValue: 0, ...SHEET_SPRING, useNativeDriver: true }).start();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rise]);
   // How far the sheet travels: its own height, so it leaves the screen
@@ -152,15 +152,14 @@ export default function PostMenu() {
   const close = () => {
     if (closing.current) return;
     closing.current = true;
-    // Moves on the tap itself, fastest in its first frames (an easing that
-    // starts slowly reads as a delay), with the dim fading alongside.
+    // Moves on the tap itself with the dim fading alongside, on every sheet's close.
     setLeaving(true);
     // Reported from the author's own feed of posts (a post's page): that feed would
     // only move on to their next post, so it closes too, back to where you came from.
     const routes = navigation.getState()?.routes ?? [];
     const under = routes[routes.length - 2];
     const leaveTheirFeed = reportedNow && !!author && under?.name === 'posts/[userId]' && (under.params as { userId?: string } | undefined)?.userId === author.id && router.canDismiss();
-    Animated.timing(rise, { toValue: 1, duration: 220, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start(() => (leaveTheirFeed ? router.dismiss(2) : goBack('/')));
+    Animated.timing(rise, { toValue: 1, duration: SHEET_CLOSE_MS, easing: Easing.bezier(...SHEET_CLOSE_CURVE), useNativeDriver: true }).start(() => (leaveTheirFeed ? router.dismiss(2) : goBack('/')));
   };
   const closeRef = useRef(close);
   closeRef.current = close;
@@ -174,7 +173,7 @@ export default function PostMenu() {
   const pullDown = (dy: number, dx: number) => dy > 8 && dy > Math.abs(dx) * 1.4;
   const release = (dy: number, vy: number) => {
     if (dy > DRAG_CLOSE_PX || vy > DRAG_CLOSE_SPEED) { closeRef.current(); return; }
-    Animated.spring(drag, { toValue: 0, useNativeDriver: true, bounciness: 0, speed: 18 }).start();
+    Animated.spring(drag, { toValue: 0, ...SHEET_SPRING, overshootClamping: true, useNativeDriver: true }).start();
   };
   const handlers = {
     onPanResponderMove: (_: unknown, g: { dy: number }) => drag.setValue(Math.max(0, g.dy)),

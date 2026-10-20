@@ -3,6 +3,7 @@ import React, { useEffect, useRef } from 'react';
 import { Animated, StyleSheet } from 'react-native';
 
 import { colors } from '@/theme';
+import { SHEET_DIM_IN_MS, SHEET_DIM_OUT_MS } from '@/theme/motion';
 
 /**
  * The dimmed page behind a bottom sheet. Fades in on its own rather than
@@ -17,7 +18,7 @@ export function SheetBackdrop({ leaving = false, shown = false }: { leaving?: bo
   useTheme();
   const opacity = useRef(new Animated.Value(shown ? 1 : 0)).current;
   useEffect(() => {
-    Animated.timing(opacity, { toValue: leaving ? 0 : 1, duration: leaving ? 180 : 220, useNativeDriver: true }).start();
+    Animated.timing(opacity, { toValue: leaving ? 0 : 1, duration: leaving ? SHEET_DIM_OUT_MS : SHEET_DIM_IN_MS, useNativeDriver: true }).start();
   }, [opacity, leaving]);
   return <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: colors.overlay, opacity }]} />;
 }
