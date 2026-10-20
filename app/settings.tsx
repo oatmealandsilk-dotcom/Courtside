@@ -182,8 +182,9 @@ export default function Settings() {
         ...(questionAlertsLive ? [{ icon: 'help-circle-outline' as const, label: 'Questions you could answer', detail: 'Unanswered threads on topics you know', toggle: { value: prefs.pushQuestions, onChange: (v: boolean) => actions.setPref('pushQuestions', v) } }] : []),
         // Sweep R10 (Oct 20): one reminder about 20 hours after a hit invite you have not answered, while the hit still has a spot (migration 171). Shown once the database has it.
         ...(hitNudgeAlertsLive ? [{ icon: 'time-outline' as const, label: 'Hit invite reminders', detail: 'One reminder if an invite waits a day', toggle: { value: prefs.pushHitNudges, onChange: (v: boolean) => actions.setPref('pushHitNudges', v) } }] : []),
-        // Sweep R12 (Oct 20): one weekend reminder when a weekly streak with a hitting partner has nothing yet this week (migration 180). Shown once the database has it.
-        ...(partnerStreakAlertsLive ? [{ icon: 'people-outline' as const, label: 'Partner streak reminders', detail: 'One on the weekend if your week together is open', toggle: { value: prefs.pushPartnerStreak, onChange: (v: boolean) => actions.setPref('pushPartnerStreak', v) } }] : []),
+        // Sweep R12 (Oct 20): one weekend reminder when a weekly streak with a hitting partner has nothing yet this week (migration 180). Shown once the database has it,
+        // and to adults only: teens and players with no birthday never get one (no nudging minors), so there is nothing to switch.
+        ...(partnerStreakAlertsLive && currentUser?.ageGroup === 'adult' ? [{ icon: 'people-outline' as const, label: 'Partner streak reminders', detail: 'One on the weekend if you haven’t hit yet that week', toggle: { value: prefs.pushPartnerStreak, onChange: (v: boolean) => actions.setPref('pushPartnerStreak', v) } }] : []),
         // The 7pm reminder, set on this phone (features/practice/reminder).
         { icon: 'flame-outline' as const, label: 'Streak reminders', detail: 'At 7pm, when today has nothing yet', toggle: { value: prefs.pushStreak, onChange: (v: boolean) => actions.setPref('pushStreak', v) } },
       ],

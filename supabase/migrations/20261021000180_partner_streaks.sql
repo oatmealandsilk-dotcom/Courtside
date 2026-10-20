@@ -37,8 +37,11 @@
 --     which milestone each player has not yet seen; the app shows it once
 --     and calls seen_partner_streak. Nothing is sent for it.
 --   * One gentle weekend reminder when a streak of 2+ weeks has nothing yet
---     this week: "Your 🔥 5-week streak with Sam ends Sunday. Get a hit in
---     this weekend?" On Saturday or Sunday in the player's own time zone,
+--     this week, worded as an invitation, never as something to lose:
+--     "You and Sam are on a 4-week streak. Hit this weekend to make it 5?"
+--     Known adults only: a teen, or anyone with no birthday on file, is
+--     never sent one (no nudging minors); they still see their streaks in
+--     the app. On Saturday or Sunday in the player's own time zone,
 --     at most once a week, naming the longest open streak. It is one of the
 --     come-back alerts of migrations 170/171: at most one of those a day,
 --     only 9am to 9pm their time, only to a phone that can get it. Its own
@@ -455,10 +458,12 @@ begin
       continue when r.last_week <> monday - 7;
       continue when r.other::text = any (r.quiet);
       continue when not private.partner_streak_visible(r.me, r.other);
+      -- Known adults only: never a teen, never anyone whose age is not known.
+      continue when not public.known_adult(r.me);
       -- One a week at most, whichever partner it named.
       continue when exists (select 1 from public.nudges n where n.user_id = r.me and n.kind = 'partner-streak' and n.ref = to_char(monday, 'YYYY-MM-DD'));
       continue when not private.nudge_ok(r.me, p_now);
-      w := 'Your 🔥 ' || r.weeks || '-week streak with ' || r.first_name || ' ends Sunday. Get a hit in this weekend?';
+      w := 'You and ' || r.first_name || ' are on a ' || r.weeks || '-week streak. Hit this weekend to make it ' || (r.weeks + 1) || '?';
       if p_dry_run then
         planned := planned || r.me;
       elsif not private.send_nudge(r.me, 'partner-streak', to_char(monday, 'YYYY-MM-DD'), w, '/user/' || r.other, p_now) then

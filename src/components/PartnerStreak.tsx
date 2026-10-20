@@ -1,5 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import React, { type RefObject, useEffect, useRef, useState } from 'react';
+import { AppState, Dimensions, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import Animated, { type SharedValue, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 
@@ -7,6 +7,7 @@ import { Avatar } from '@/components/ui/Avatar';
 import { Box, Row, SectionHead } from '@/components/tennis/ProfileParts';
 import type { ID, PartnerStreak } from '@/data/types';
 import * as haptics from '@/lib/haptics';
+import { useIsFocused } from '@/lib/useIsFocused';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, lift, spacing, typography } from '@/theme';
@@ -24,8 +25,8 @@ import { colors, font, lift, spacing, typography } from '@/theme';
 
 const firstOf = (name: string) => name.trim().split(/\s+/)[0] || name;
 
-/** "Played together this week" or what keeps it going, in a few words. */
-const weekWords = (p: PartnerStreak) => (p.thisWeek ? 'You’ve played together this week' : 'Hit together by Sunday to keep it going');
+/** "Played together this week" or, while the week is open, the next week to make: an invitation, never a warning. */
+const weekWords = (p: PartnerStreak) => (p.thisWeek ? 'You’ve played together this week' : `Hit together this week to make it ${p.weeks + 1}`);
 
 /**
  * Your streaks, asked for when shown and again whenever your tags change
@@ -39,26 +40,58 @@ export function usePartnerStreaks(): PartnerStreak[] | null {
 }
 
 /**
- * A milestone reached and not yet celebrated: held for as long as this card
- * is on screen (with a light buzz), and told to the server once seen, so it
- * is never shown again for that run.
+ * Whether a view has been on screen: its page on top, the app open, and at
+ * least half of it inside the window. Checked a few times a second while
+ * there is something waiting to be seen (`watch`), and only then; once true
+ * it stays true for that view.
  */
-function useCelebration(p: PartnerStreak | undefined): number | null {
+function useSeenOnScreen(ref: RefObject<View | null>, watch: boolean): boolean {
+  const focused = useIsFocused();
+  const [seen, setSeen] = useState(false);
+  useEffect(() => {
+    if (!watch || seen || !focused) return;
+    let alive = true;
+    const look = () => {
+      const node = ref.current;
+      if (!node || AppState.currentState !== 'active') return;
+      node.measureInWindow((x, y, w, h) => {
+        if (!alive || !(w > 0 && h > 0)) return;
+        const win = Dimensions.get('window');
+        const shownH = Math.min(y + h, win.height) - Math.max(y, 0);
+        const shownW = Math.min(x + w, win.width) - Math.max(x, 0);
+        if (shownH >= h / 2 && shownW >= w / 2) setSeen(true);
+      });
+    };
+    look();
+    const t = setInterval(look, 300);
+    return () => { alive = false; clearInterval(t); };
+  }, [ref, watch, seen, focused]);
+  return seen;
+}
+
+/**
+ * A milestone reached and not yet celebrated: it waits until the streak is
+ * actually on screen (scrolled into view, its page on top), then plays (with
+ * a light buzz), stays for as long as the card is up, and is told to the
+ * server as seen only then, so it is never used up unseen and never shown
+ * again for that run.
+ */
+function useCelebration(p: PartnerStreak | undefined, ref: RefObject<View | null>): number | null {
   const { actions } = useApp();
   const [showing, setShowing] = useState<number | null>(null);
-  const told = useRef<string | null>(null);
+  const [told, setTold] = useState<string | null>(null);
   const userId = p?.userId;
   const milestone = p?.celebrate ?? null;
+  const key = userId && milestone ? `${userId}:${milestone}` : null;
+  const onScreen = useSeenOnScreen(ref, !!key && told !== key);
   useEffect(() => {
-    if (!userId || !milestone) return;
-    const key = `${userId}:${milestone}`;
-    if (told.current === key) return;
-    told.current = key;
+    if (!userId || !milestone || !key || !onScreen || told === key) return;
+    setTold(key);
     setShowing(milestone);
     const t = setTimeout(() => haptics.reward(), 380);
     actions.seenPartnerStreak(userId, milestone);
     return () => clearTimeout(t);
-  }, [userId, milestone, actions]);
+  }, [userId, milestone, key, onScreen, told, actions]);
   return showing;
 }
 
@@ -106,13 +139,16 @@ export function PartnerStreakCard({ userId, name }: { userId: ID; name: string }
   const styles = useThemedStyles(styleDefinitions);
   const streaks = usePartnerStreaks();
   const p = streaks?.find((s) => s.userId === userId);
-  const party = useCelebration(p);
+  const box = useRef<View>(null);
+  const party = useCelebration(p, box);
   if (!p) return null;
   const first = firstOf(name);
   const title = `${p.weeks}-week streak with ${first}`;
   const eyebrow = party ? `${party} weeks in a row!` : 'Partner streak';
   return (
     <View
+      ref={box}
+      collapsable={false}
       style={[styles.card, party ? styles.cardOn : null]}
       accessible
       accessibilityLabel={`${party ? `New milestone, ${party} weeks in a row. ` : ''}${p.weeks}-week streak with ${first}. ${weekWords(p)}.`}
@@ -149,29 +185,32 @@ export function PartnerStreaksBox() {
 function StreakRow({ p, first }: { p: PartnerStreak; first: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
   const { users } = useApp();
-  const party = useCelebration(p);
+  const box = useRef<View>(null);
+  const party = useCelebration(p, box);
   const u = users.find((x) => x.id === p.userId);
   if (!u) return null;
   const name = firstOf(u.name);
   return (
-    <Row
-      first={first}
-      lead={party ? <Flame size={40} celebrate /> : <Avatar name={u.name} seed={u.avatarSeed} uri={u.avatarUrl} size={40} />}
-      title={
-        <Text style={styles.rowTitle} numberOfLines={1}>
-          <Text style={styles.rowFlame}>🔥 </Text>{`${p.weeks}-week streak with ${name}`}
-        </Text>
-      }
-      sub={
-        <Text style={[styles.rowSub, party ? styles.rowSubOn : null]} numberOfLines={1}>
-          {party ? `${party} weeks in a row! Keep it going` : weekWords(p)}
-        </Text>
-      }
-      chevron
-      accessibilityRole="link"
-      accessibilityLabel={`${party ? `New milestone, ${party} weeks in a row. ` : ''}${p.weeks}-week streak with ${name}. ${weekWords(p)}. Opens ${name}’s profile`}
-      onPress={() => router.push({ pathname: '/user/[id]', params: { id: u.id } })}
-    />
+    <View ref={box} collapsable={false}>
+      <Row
+        first={first}
+        lead={party ? <Flame size={40} celebrate /> : <Avatar name={u.name} seed={u.avatarSeed} uri={u.avatarUrl} size={40} />}
+        title={
+          <Text style={styles.rowTitle} numberOfLines={1}>
+            <Text style={styles.rowFlame}>🔥 </Text>{`${p.weeks}-week streak with ${name}`}
+          </Text>
+        }
+        sub={
+          <Text style={[styles.rowSub, party ? styles.rowSubOn : null]} numberOfLines={1}>
+            {party ? `${party} weeks in a row! Keep it going` : weekWords(p)}
+          </Text>
+        }
+        chevron
+        accessibilityRole="link"
+        accessibilityLabel={`${party ? `New milestone, ${party} weeks in a row. ` : ''}${p.weeks}-week streak with ${name}. ${weekWords(p)}. Opens ${name}’s profile`}
+        onPress={() => router.push({ pathname: '/user/[id]', params: { id: u.id } })}
+      />
+    </View>
   );
 }
 
