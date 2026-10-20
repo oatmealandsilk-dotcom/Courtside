@@ -35,7 +35,10 @@ export default function Index() {
   // Signed in but the profile has not come down yet: the answer to "has this
   // person done the quiz" is not known, so hold the splash rather than guess.
   // Last time's saved copy is enough to open on (see data/snapshot); the fresh load lands on top.
-  const settled = ready && (!currentUserId || !isSupabaseConfigured || remoteLoaded || snapshotShown || !!error);
+  // But only into the app: setup is only ever where the server's own answer sends you. A saved copy
+  // (or a stand-in) that does not say you are set up waits for the server, never opens setup on a
+  // guess (owner, Oct 20: "It's making me reinput everything and my account basically got reset").
+  const settled = ready && (!currentUserId || !isSupabaseConfigured || remoteLoaded || (snapshotShown && onboardingComplete) || !!error);
   // A newer version on its way: the loading screen holds a moment and opens it (see useLaunchUpdate).
   const launchUpdate = useLaunchUpdate();
   const [held, setHeld] = useState(false);
@@ -167,7 +170,8 @@ export default function Index() {
   // Signed in, but the account never came down even after retries: the app
   // does not open on a guess (the quiz would overwrite what is saved). It
   // says so and offers another try.
-  if (gone && currentUserId && isSupabaseConfigured && !remoteLoaded && !snapshotShown && error) {
+  // A saved copy that does not say you are set up is no answer either: the same page, not setup.
+  if (gone && currentUserId && isSupabaseConfigured && !remoteLoaded && (!snapshotShown || !onboardingComplete) && error) {
     return (
       <View style={[styles.splash, { padding: spacing.xl, gap: spacing.md }]}>
         <BrandMark size={56} />

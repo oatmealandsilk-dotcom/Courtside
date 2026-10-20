@@ -21,6 +21,7 @@ import { campaignThisVisit } from '@/features/guest/campaignLabel';
 import type { InviteCodeResult, MyInviter } from '@/data/remote';
 import * as haptics from '@/lib/haptics';
 import { useApp } from '@/store/AppContext';
+import { isSupabaseConfigured } from '@/lib/supabase';
 import { useGateSpace } from '@/lib/useGateSpace';
 import Reanimated from 'react-native-reanimated';
 import { KeyboardScrollContext, useKeyboardReveal } from '@/lib/keyboardScroll';
@@ -127,7 +128,7 @@ export default function Onboarding() {
 
 function OnboardingSteps() {
   const styles = useThemedStyles(styleDefinitions);
-  const { currentUser, currentUserId, posts, questions, answers, actions } = useApp();
+  const { currentUser, currentUserId, posts, questions, answers, actions, onboardingComplete, remoteLoaded } = useApp();
   // The progress bar sits a calm step below the status bar; the buttons clear the home bar.
   const space = useGateSpace();
   // The box you tap is scrolled clear of the keyboard, on every step. Android:
@@ -150,6 +151,8 @@ function OnboardingSteps() {
   const [step, setStep] = useState(order.includes(startAt) ? startAt : order[0]);
   const position = Math.max(0, order.indexOf(step));
   const skipped = useRef<Set<SetupStep>>(new Set());
+  // Set as Finish is pressed, so the account becoming set up here is never taken for one that already was (below).
+  const leaving = useRef(false);
 
   const existing = currentUser?.profile;
   const [name, setName] = useState(currentUser?.name ?? '');
@@ -395,6 +398,7 @@ function OnboardingSteps() {
   }, [skillSystem, rating, playStyle, handedness, backhand, fitnessLevel, surface, sessionsPerWeek, yearsPlaying, startedYear, goalOne, tournamentName, tournamentDays, location, existing, savedTournament]);
 
   const finish = () => {
+    leaving.current = true;
     haptics.commit();
     if (currentUser && (name.trim() !== currentUser.name || location.trim() !== currentUser.location)) {
       actions.updateIdentity({ name: name.trim() || currentUser.name, bio: currentUser.bio, location: location.trim(), cityAt: location.trim() ? cityAt : null });
@@ -448,6 +452,13 @@ function OnboardingSteps() {
   // Android's Back goes back a step, as the Back button on the page does. At
   // sign-up this is the only page, so before, it left the app and lost the steps.
   useAndroidBack(() => { if (position <= 0) return false; back(); return true; });
+  // Setup for joining, open for an account the server says is set up already (owner, Oct 20: "It's
+  // making me reinput everything and my account basically got reset"): it leaves for the start page,
+  // in place of this one, and the form is never shown, so its blank boxes can never be saved over
+  // the real profile. Changing your answers (Game details, the coach, the profile's card) is not joining.
+  const joiningHere = !editing && !forCoach && params.from !== 'profile';
+  const setUpAlready = joiningHere && isSupabaseConfigured && remoteLoaded && onboardingComplete && !leaving.current;
+  useEffect(() => { if (setUpAlready) replaceWithStart(); }, [setUpAlready]);
 
   const last = position === order.length - 1;
   const canContinue = step === 0 ? (ratingOnly ? ratingValid : name.trim().length > 0 && ratingValid && yearValid && !claiming) : true;
@@ -479,6 +490,7 @@ function OnboardingSteps() {
     </View>
   );
 
+  if (setUpAlready) return <View style={[styles.root, styles.waiting]}><CourtSpinner size={28} /></View>;
   return (
     <KeyboardScrollContext.Provider value={Platform.OS === 'web' ? null : keyboard.reveal}>
     <View style={[styles.root, { paddingTop: space.header }]}>

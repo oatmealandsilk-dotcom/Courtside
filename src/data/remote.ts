@@ -535,6 +535,12 @@ export interface RemoteData {
   blockedMeIds?: ID[];
   /** Your settings row could not be read this time (not the same as having none): `userState` is null for that reason. */
   userStateFailed?: boolean;
+  /**
+   * The server, asked by this very account, says it has no profile row yet:
+   * a brand-new sign-up whose row is still being made. Only then does the
+   * app stand in a blank profile (and send you to setup). Missing otherwise.
+   */
+  noProfileRow?: true;
 }
 
 interface SessionRow { id: string; user_id: string; day: string; minutes: number; kind: PracticeSession['kind']; won: boolean | null; opponent: string | null; note: string | null; created_at: string; activity_id?: string | null; from_session_id?: string | null; sets?: unknown; set_tiebreaks?: unknown; workout?: string | null; court_id?: string | null; kcal?: number | null; avg_hr?: number | null }
@@ -1390,7 +1396,7 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
     return iFollow.has(row.id) && followMe.has(row.id) ? tournamentsOf(row.profile?.tournaments) : [];
   };
   const withPlans = (row: ProfileRow): ProfileRow => ({ ...row, profile: { ...(row.profile ?? {}), tournaments: plansFor(row) } });
-  return {
+  const loaded: RemoteData = {
     agesOnProfiles,
     ...(contactsFindableReady ? { contactsFindableReady: true } : {}),
     ...(alertSwitchesReady ? { alertSwitchesReady: true } : {}),
@@ -1432,6 +1438,50 @@ export async function fetchRemote(me: ID): Promise<RemoteData> {
     ...(ustate.error ? { userStateFailed: true } : {}),
     ...coaching,
   };
+  // Your own profile missing from the list: asked for on its own before the
+  // app ever takes you for a new account (see ownProfileRow).
+  if (!loaded.users.some((u) => u.id === me)) {
+    const own = await ownProfileRow(db, me);
+    if (own) throw new ProfileMissedError(loaded, toUser(own, 0, 0));
+    loaded.noProfileRow = true;
+  }
+  return loaded;
+}
+
+/**
+ * Your own profile row, asked for on its own, as you, when the opening load
+ * came back without it (owner, Oct 20: "It's making me reinput everything
+ * and my account basically got reset" … "for a second it was not, I had to
+ * close and reopen"). A load can miss it with nothing going wrong that it
+ * can see: while the login is being renewed (an open after an hour or more
+ * away) the asks can go out signed out, and signed out every profile reads
+ * as none at all, yours included. That used to make an account set up long
+ * ago look brand new, and the app sent it to setup.
+ *
+ * Null only when the server, asked by this very account, says there is no
+ * row: a brand-new sign-up whose row is still being made. Throws when it
+ * cannot tell (no login on the phone right now, a different one, or the ask
+ * itself failing), so the load counts as failed and is tried again, never
+ * as a new account.
+ */
+async function ownProfileRow(db: ReturnType<typeof need>, me: ID): Promise<ProfileRow | null> {
+  const { data: { session }, error: sessionError } = await db.auth.getSession();
+  if (sessionError || session?.user.id !== me) throw new Error('Could not check your account just now.');
+  const named = await db.from('profiles').select(PROFILE_COLUMNS).eq('id', me).maybeSingle();
+  const { data, error } = missingColumn(named.error) ? await db.from('profiles').select('*').eq('id', me).maybeSingle() : named;
+  if (error) throw error;
+  return (data as ProfileRow | null) ?? null;
+}
+
+/**
+ * The opening load came back without your profile, yet your row is there
+ * (see ownProfileRow): the load is tried again. It carries what did come,
+ * and your profile read on its own, for the last try to open on.
+ */
+export class ProfileMissedError extends Error {
+  constructor(readonly data: RemoteData, readonly self: User) {
+    super('Your profile did not come down with the rest of your account.');
+  }
 }
 
 /**

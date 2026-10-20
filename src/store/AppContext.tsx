@@ -24,7 +24,7 @@ import { openJoinSheet } from '@/features/guest/joinAsk';
 import { setGuestStatus } from '@/features/guest/guestStatus';
 import { noteCampaignSignup } from '@/features/guest/campaign';
 import * as demoApi from '@/data/api';
-import { BLOCKED_WORDS_NOTE, CHAT_PHOTO_UNREADABLE, REVIEW_NOTE_MAX, auth as remoteAuth, fetchRemote, isLocalMedia, onWordsRefused, queueFeedSignal, remote, uploadChatPhoto, uploadMedia, emptyProfile, type GroupRefusal, type AdminReport, type ModerationResult, type ReviewAskResult, type ReportedChat, type ReportedItem, type ReportedItemKind, type ReportEvidence, type FeedSignal, type SiteFeedback, type WaitlistEntry, type BetaInviteStatus, type FirstDayStats, type FirstMove, type HandleStatus, type InviteCodeResult, type MyInviter, type RemoteData, type UserState, standInName } from '@/data/remote';
+import { BLOCKED_WORDS_NOTE, CHAT_PHOTO_UNREADABLE, REVIEW_NOTE_MAX, auth as remoteAuth, fetchRemote, ProfileMissedError, isLocalMedia, onWordsRefused, queueFeedSignal, remote, uploadChatPhoto, uploadMedia, emptyProfile, type GroupRefusal, type AdminReport, type ModerationResult, type ReviewAskResult, type ReportedChat, type ReportedItem, type ReportedItemKind, type ReportEvidence, type FeedSignal, type SiteFeedback, type WaitlistEntry, type BetaInviteStatus, type FirstDayStats, type FirstMove, type HandleStatus, type InviteCodeResult, type MyInviter, type RemoteData, type UserState, standInName } from '@/data/remote';
 import { clearSnapshot, markSnapshotOpened, markSnapshotOpening, readSnapshot, saveSnapshot, snapshotFailedBefore } from '@/data/snapshot';
 import { forgetAccount, listSavedAccounts, rememberAccount, type SavedAccount } from '@/features/accounts/savedAccounts';
 import { isAuthRetryableFetchError } from '@supabase/supabase-js';
@@ -1825,7 +1825,8 @@ function mergeRemote(prev: AppState, data: RemoteData, me: ID, email: string | n
     const remoteComments = new Set(data.comments.map((c) => c.id));
     // Whatever the saved copy put on screen that the server no longer has (a
     // deleted post, a thread gone) comes off now rather than lingering.
-    const gone = (id: string) => !!snap?.has(id);
+    // Never your own profile: a load without it keeps the one on screen (see noProfileRow, below).
+    const gone = (id: string) => id !== me && !!snap?.has(id);
     // Posts and Instants come a page at a time: one of the copy's older than
     // the fresh page is simply not in this page, not deleted, so it stays
     // (it may be the very one on screen). Only inside the page does missing mean gone.
@@ -1846,8 +1847,12 @@ function mergeRemote(prev: AppState, data: RemoteData, me: ID, email: string | n
     // A skipped birthday the same way (migration 162): a load from just before the skip does not ask again.
     if (prev.users.find((u) => u.id === me)?.birthdaySkipped) users = users.map((u) => (u.id === me ? { ...u, birthdaySkipped: true } : u));
     // The profile row is created by a trigger; if it has not landed yet,
-    // stand in for it so the screens have someone to show.
-    if (!remoteUsers.has(me) && !fromSnapshot) {
+    // stand in for it so the screens have someone to show. Only when the
+    // server has said there is no row (noProfileRow, see ownProfileRow):
+    // a load that merely came back without it used to stand a blank profile
+    // in for an account set up long ago, and send it to setup (owner, Oct 20:
+    // "It's making me reinput everything and my account basically got reset").
+    if (!remoteUsers.has(me) && !fromSnapshot && data.noProfileRow) {
       const handle = (email ?? 'player').split('@')[0].toLowerCase().replace(/[^a-z0-9_]/g, '') || 'player';
       // And create the real row, so what you do next actually saves.
       remote.ensureProfile(me, handle, handle);
@@ -2785,6 +2790,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       void loadFeedScores({ force: true, userId: me });
       for (let attempt = 0; ; attempt += 1) {
         try { data = await fetchRemote(me); break; } catch (e) {
+          // Your profile missed this load though it is there (see ownProfileRow): tried again, as for any
+          // failed load, and the last try opens with your profile as read on its own, never as a new account.
+          if (e instanceof ProfileMissedError && attempt >= 3) { data = { ...e.data, users: [e.self, ...e.data.users] }; break; }
           if (attempt >= 3) throw e;
           await new Promise((r) => setTimeout(r, 700 * 2 ** attempt));
         }
