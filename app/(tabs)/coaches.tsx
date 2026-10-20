@@ -166,7 +166,8 @@ function Coaching() {
             const price = coach.services.length ? Math.min(...coach.services.map((s) => s.priceCents)) : 0;
             return (
               <Pressable key={coach.id} accessibilityRole="link" onPress={() => router.push(`/coach/${coach.id}`)} style={({ pressed }) => [styles.coachCard, pressed && styles.pressed]}>
-                <Avatar name={user?.name ?? 'Coach'} seed={coach.id} uri={user?.avatarUrl} size={64} style={{ backgroundColor: colors.borderStrong }} />
+                {/* The coach's own picture colour, the same as on their page and in Messages (Oct 20 sweep: Tomás was beige here, blue everywhere else). */}
+                <Avatar name={user?.name ?? 'Coach'} seed={user?.avatarSeed ?? coach.id} uri={user?.avatarUrl} size={64} />
                 <View style={styles.coachWords}>
                   {/* The whole card is the coach's page; the name is not a second door. */}
                   <Text style={styles.coachName} numberOfLines={1}>{user?.name}</Text>

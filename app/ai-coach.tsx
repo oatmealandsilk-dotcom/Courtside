@@ -507,7 +507,7 @@ function Handoff({ coachId, line }: { coachId: string; line: string }) {
   if (!coach) return null;
   return (
     <Pressable accessibilityRole="link" onPress={() => router.push(`/coach/${coach.id}`)} style={({ pressed }) => [styles.handoff, pressed && { opacity: 0.8 }]}>
-      <Avatar name={user?.name ?? 'Coach'} seed={coach.id} uri={user?.avatarUrl} size={36} />
+      <Avatar name={user?.name ?? 'Coach'} seed={user?.avatarSeed ?? coach.id} uri={user?.avatarUrl} size={36} />
       <View style={{ flex: 1, gap: 2 }}>
         <Text style={styles.handoffName}>{user?.name ?? 'A coach'}</Text>
         <Text style={styles.handoffLine}>{line}</Text>

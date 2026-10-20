@@ -217,7 +217,7 @@ export default function CoachQuestionDetail() {
               onPress={() => (coach ? router.push(`/coach/${coach.id}`) : undefined)}
               style={styles.authorRow}
             >
-              <Avatar name={coachUser?.name ?? 'Coach'} seed={reply.coachUserId} size={34} />
+              <Avatar name={coachUser?.name ?? 'Coach'} seed={coachUser?.avatarSeed ?? reply.coachUserId} size={34} />
               <View style={{ flex: 1 }}>
                 <View style={styles.nameRow}>
                   <PlayerName userId={coachUser?.id} style={styles.authorName}>{coachUser?.name ?? 'Coach'}</PlayerName>
