@@ -150,7 +150,8 @@ function RootStack() {
         name="share"
         options={{
           presentation: 'transparentModal',
-          animation: 'slide_from_bottom',
+          // The sheet brings its own rise (DragSheet); a screen slide as well made it rise twice.
+          animation: 'none',
           contentStyle: { backgroundColor: 'transparent' },
         }}
       />
