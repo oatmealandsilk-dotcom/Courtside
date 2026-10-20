@@ -2892,7 +2892,10 @@ export const remote = {
    * when it could not be had.
    */
   async fetchComebackWeeks(weeks = 8): Promise<ComebackWeek[] | null> {
-    const { data, error } = await need().rpc('retention_summary', { p_days: weeks * 7 });
+    // The window starts on a Sunday (UTC, as retention_summary counts days), so the oldest week is a whole one:
+    // this week so far, plus `weeks - 1` full weeks before it. A plain weeks × 7 days cut the oldest week short.
+    const sinceSunday = new Date().getUTCDay();
+    const { data, error } = await need().rpc('retention_summary', { p_days: (weeks - 1) * 7 + sinceSunday + 1 });
     if (error || !Array.isArray(data)) return null;
     const byWeek = new Map<string, ComebackWeek>();
     for (const r of data as Record<string, unknown>[]) {
