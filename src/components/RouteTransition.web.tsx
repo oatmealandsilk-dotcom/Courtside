@@ -5,8 +5,8 @@ import { isDesktopBrowser } from '@/lib/browserDevice';
 
 /** The four tab roots. Moving between them is a swipe, so they only fade. */
 const TABS = new Set(['/', '/discuss', '/coaches', '/profile']);
-/** Splash → sign-in → home: a fade in and out, never a slide. */
-const AUTH = new Set(['/sign-in', '/onboarding']);
+/** Splash → sign-in → setup → home: a fade in and out, never a slide (setup's pages fade into one another on the phone too). */
+const AUTH = new Set(['/sign-in', '/onboarding', '/birthday', '/agree', '/auto-log', '/first-move']);
 /**
  * See-through sheets over the current page. The page underneath stays put,
  * so animating the content here would make it flash behind the sheet.
@@ -62,11 +62,15 @@ export function RouteTransition({ children }: { children: React.ReactNode }) {
     const tabToTab = TABS.has(pathname) && TABS.has(beforePath);
     const auth = AUTH.has(pathname) || AUTH.has(beforePath);
     const slide = tabToTab || auth ? 0 : wentBack ? -24 : 36;
+    // Like the phone (Oct 20 sweep: "pages fade in from blank and sign-in fades more slowly than
+    // on the phone"): a page slides in from a light fade (0.65, as tab to tab), never from blank,
+    // over the phone's 280 ms on the app's own ease-out; sign-in fades in 280 ms as the phone's
+    // does. The glass tab bar sits outside this box (AppShell), so it never fades with a page.
     const animation = content.current?.animate(
       slide
-        ? [{ opacity: 0, transform: `translate3d(${slide}px,0,0)` }, { opacity: 1, transform: 'translate3d(0,0,0)' }]
+        ? [{ opacity: 0.65, transform: `translate3d(${slide}px,0,0)` }, { opacity: 1, transform: 'translate3d(0,0,0)' }]
         : [{ opacity: auth ? 0 : 0.65 }, { opacity: 1 }],
-      { duration: slide ? 300 : auth ? 420 : 170, easing: 'cubic-bezier(.2,.7,.2,1)' },
+      { duration: slide || auth ? 280 : 170, easing: 'cubic-bezier(.22,.61,.36,1)' },
     );
     return () => animation?.cancel();
   }, [key, pathname]);
