@@ -368,6 +368,9 @@ const stageStyles = StyleSheet.create({
 // Only a browser builds the Feed out of sight before it is first shown (see `warming`), so only a browser asks the
 // router here. On the phone the answer was never used, yet asking it redrew the whole Feed each time a page opened or
 // closed over the tabs, before that page could slide in (Oct 10, owner: "the buttons like the settings. msg notifications, etc respond too slow").
+/** Which Feed on show last set the bottom bar's tuck, so only it gives the bar back its words on leaving. */
+let barHolder: string | null = null;
+
 const useRouteFocusedInBrowser: () => boolean = Platform.OS === 'web' ? useRouteFocused : () => true;
 
 function Home({ scope, topRow, paused, onChrome }: {
@@ -477,6 +480,23 @@ function Home({ scope, topRow, paused, onChrome }: {
   // Whether this Home is the page on show, for a stage's checks that run later (a timer).
   const focusedNow = useRef(focused);
   focusedNow.current = focused;
+  // The bottom bar's tuck (words hidden) belongs to the Feed: leaving it for
+  // another tab or a page on top gives the bar back its words, and coming
+  // back puts the Feed's tuck back as it was. Switching between For you and a
+  // group inside the Feed leaves the bar alone.
+  const keptDuck = useRef<number | null>(null);
+  useEffect(() => {
+    if (!focused || paused) return;
+    barHolder = owner;
+    if (keptDuck.current !== null) { setBarCompact(keptDuck.current > 0.5); keptDuck.current = null; }
+    return () => {
+      if (focusedNow.current) return;
+      keptDuck.current = barCompact.value;
+      if (barHolder !== owner) return;
+      barHolder = null;
+      setBarCompact(false);
+    };
+  }, [focused, paused, owner]);
   const navigation = useNavigation();
   // Gone (a scoped feed closed with pages over it, say): a stage it put up goes with it, so no other feed is left faded or unable to open comments.
   useEffect(() => () => { if (getStage()?.owner === owner) clearStage(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
