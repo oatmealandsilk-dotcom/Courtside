@@ -9,6 +9,8 @@ import { CourtSpinner } from '@/components/CourtSpinner';
 import { LocationField } from '@/components/LocationField';
 import { PermissionRows } from '@/components/PermissionRows';
 import { Button, Collapse, Field, SegmentedControl, Toggle } from '@/components/ui';
+import { SetupFooter, SetupProgress } from '@/components/setup/SetupBits';
+import { useSetupCount } from '@/features/onboarding/setupCount';
 import { SCALES } from '@/features/players/ratingScales';
 import { perWeekText, playingFor, startedYearBounds, yearsFromStarted, yearsWords } from '@/features/players/tennisProfile';
 import { useTrackerPerWeek } from '@/features/players/usePerWeek';
@@ -150,6 +152,9 @@ function OnboardingSteps() {
   const startAt = Math.min(STEPS.length - 1, Math.max(0, Number(params.step) || 0));
   const [step, setStep] = useState(order.includes(startAt) ? startAt : order[0]);
   const position = Math.max(0, order.indexOf(step));
+  // Joining (not changing saved answers): one step count across all of setup, and setup's shared buttons (Oct 20 sweep).
+  const setupRun = !editing && !forCoach && params.from !== 'profile';
+  const setupCount = useSetupCount(step === 0 ? 'about' : 'game', setupRun);
   const skipped = useRef<Set<SetupStep>>(new Set());
   // Set as Finish is pressed, so the account becoming set up here is never taken for one that already was (below).
   const leaving = useRef(false);
@@ -495,14 +500,14 @@ function OnboardingSteps() {
     <KeyboardScrollContext.Provider value={Platform.OS === 'web' ? null : keyboard.reveal}>
     <View style={[styles.root, { paddingTop: space.header }]}>
       <View style={styles.head}>
-        {ratingOnly ? null : (
+        {setupRun ? <View style={styles.progress}><SetupProgress count={setupCount} /></View> : ratingOnly ? null : (
           <View style={styles.track}>
             <Animated.View style={[styles.fill, { transform: [{ scaleX: progress }] }]} />
           </View>
         )}
         <View style={styles.headRow}>
           <Text style={styles.title}>{ratingOnly ? 'Your rating' : STEPS[step].title}</Text>
-          {ratingOnly ? null : <Text style={styles.stepLabel}>{position + 1} / {order.length}</Text>}
+          {ratingOnly || setupRun ? null : <Text style={styles.stepLabel}>{position + 1} / {order.length}</Text>}
         </View>
         {ratingOnly ? <Text style={styles.lead}>NTRP or UTR, whichever you know. It shows on your profile.</Text>
           : STEPS[step].lead ? <Text style={styles.lead}>{STEPS[step].lead}</Text> : null}
@@ -744,6 +749,13 @@ function OnboardingSteps() {
         {KEYBOARD_ROOM ? <Reanimated.View pointerEvents="none" style={keyboardRoom} /> : null}
       </ScrollView>
 
+      {setupRun ? (
+        // Setup's bottom, the same on every setup page: the main button full width, Back as a word under it.
+        <SetupFooter
+          primary={{ label: last && (!setupCount || setupCount.index === setupCount.total - 1) ? 'Finish' : 'Continue', disabled: !canContinue && !ratingMissing, dim: ratingMissing, onPress: () => (ratingMissing ? askLevel() : last ? finish() : void next()) }}
+          link={position > 0 ? { label: 'Back', onPress: back } : undefined}
+        />
+      ) : (
       <View style={[styles.footer, { paddingBottom: space.footer }]}>
         {position > 0 ? <Button label="Back" variant="ghost" onPress={back} />
           : editing ? <Button label="Cancel" variant="ghost" onPress={() => goBack(ratingOnly ? '/edit-profile' : '/profile-details')} /> : <View />}
@@ -765,6 +777,7 @@ function OnboardingSteps() {
           {editing ? null : <Button label={last ? 'Finish' : 'Continue'} disabled={!canContinue && !ratingMissing} dim={ratingMissing} onPress={() => (ratingMissing ? askLevel() : last ? finish() : void next())} />}
         </View>
       </View>
+      )}
     </View>
     </KeyboardScrollContext.Provider>
   );
@@ -810,6 +823,7 @@ const styleDefinitions = StyleSheet.create({
   waiting: { alignItems: 'center', justifyContent: 'center' },
   head: { paddingHorizontal: spacing.xl, gap: spacing.xs, paddingBottom: spacing.sm, maxWidth: 560, width: '100%', alignSelf: 'center' },
   track: { height: 2, backgroundColor: colors.surfaceAlt, marginBottom: spacing.md },
+  progress: { marginBottom: spacing.md },
   // Scaled on the native driver (not its width on the JS thread), so it never hitches with the page fade.
   fill: { height: '100%', width: '100%', transformOrigin: 'left', backgroundColor: colors.brand },
   headRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },

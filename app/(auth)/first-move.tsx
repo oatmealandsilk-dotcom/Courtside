@@ -11,6 +11,8 @@ import { FollowPill } from '@/components/FollowPill';
 import { LevelPill } from '@/components/LevelPill';
 import { useNearCourts } from '@/components/place/CourtsNear';
 import { Avatar, Button } from '@/components/ui';
+import { SetupFooter, SetupProgress } from '@/components/setup/SetupBits';
+import { useSetupCount } from '@/features/onboarding/setupCount';
 import { Wash } from '@/components/Wash';
 import type { FirstMove } from '@/data/remote';
 import type { User } from '@/data/types';
@@ -149,6 +151,8 @@ export default function FirstMove() {
   // on top), and Continue with nothing done simply goes back to the profile.
   const { from: openedFrom } = useLocalSearchParams<{ from?: string }>();
   const overApp = openedFrom === 'profile';
+  // Setup's last page: setup's one step count (Oct 20 sweep); none when opened again from the profile.
+  const setupCount = useSetupCount('first-move', !overApp);
   const done = (move: FirstMove, then?: () => void) => {
     actions.noteFirstMove(move);
     if (overApp && move === 'later') { goBack('/(tabs)/profile'); return; }
@@ -191,6 +195,7 @@ export default function FirstMove() {
     <View style={styles.root}>
       <Wash height={420} />
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={[styles.scroll, { paddingTop: space.top }]}>
+        {setupCount ? <Animated.View entering={enter(0)}><SetupProgress count={setupCount} /></Animated.View> : null}
         <Animated.View entering={enter(0)} style={styles.head}>
           <Text style={styles.title}>People you may know</Text>
           <Text style={styles.lead}>You’re in{firstName ? `, ${firstName}` : ''}. {line}</Text>
@@ -286,8 +291,9 @@ export default function FirstMove() {
         </Animated.View>
       </ScrollView>
       {/* Continue, always in reach: following anyone is optional. */}
-      <Animated.View entering={enter(4)} style={[styles.footer, { paddingBottom: space.bottom }]}>
-        <Button label="Continue" onPress={() => done(move)} full />
+      {/* Setup's bottom, the same on every setup page (Oct 20 sweep). */}
+      <Animated.View entering={enter(4)}>
+        <SetupFooter primary={{ label: setupCount && setupCount.index === setupCount.total - 1 ? 'Finish' : 'Continue', onPress: () => done(move) }} />
       </Animated.View>
       {/* What scrolls up stops at the status bar instead of running under the clock. */}
       <StatusShade wash={{ height: 420 }} />
@@ -299,7 +305,6 @@ export default function FirstMove() {
 const styleDefinitions = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   scroll: { paddingHorizontal: spacing.xl, paddingBottom: spacing.xl, gap: spacing.xl, maxWidth: 460, width: '100%', alignSelf: 'center' },
-  footer: { paddingHorizontal: spacing.xl, paddingTop: spacing.md, maxWidth: 460, width: '100%', alignSelf: 'center' },
   listWrap: { gap: spacing.xs },
   head: { gap: spacing.sm },
   title: { ...typography.display, color: colors.text },

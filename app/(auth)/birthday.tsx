@@ -4,6 +4,8 @@ import { router, useLocalSearchParams } from 'expo-router';
 
 import { BrandMark } from '@/components/BrandMark';
 import { Button } from '@/components/ui';
+import { SetupProgress } from '@/components/setup/SetupBits';
+import { useSetupCount } from '@/features/onboarding/setupCount';
 import { AgeReadout, AnswerCard, FooterFade, PrivacyLine, ProtectionsCard, Rise, UnlockCard } from '@/components/age/AgeBits';
 import { BirthdaySegments } from '@/components/age/BirthdaySegments';
 import { DateWheel, EMPTY_WHEEL, type WheelDate } from '@/components/age/DateWheel';
@@ -49,6 +51,8 @@ export default function Birthday() {
   // Opened from Settings to add a birthday later: a page on top of the app, with a way back.
   const { from } = useLocalSearchParams<{ from?: string }>();
   const fromSettings = from === 'settings';
+  // Setup's one step count (Oct 20 sweep); none when opened from Settings.
+  const setupCount = useSetupCount('birthday', !fromSettings);
   const [date, setDate] = useState({ month: '', day: '', year: '' });
   // The wheel starts on "Month / Day / Year", no date at all; Continue waits until all three are picked.
   const [wheel, setWheel] = useState<WheelDate>(EMPTY_WHEEL);
@@ -143,6 +147,7 @@ export default function Birthday() {
       <View style={styles.root}>
         <ScrollView style={styles.fill} contentContainerStyle={[styles.scroll, short && styles.scrollShort, { paddingTop: space.top }]}>
           <Rise style={styles.head}>
+            <SetupProgress count={setupCount} />
             {short ? null : <BrandMark size={40} />}
             <Text style={styles.title}>Are you 13 or older?</Text>
             <Text style={styles.lead}>No birthday needed. Just pick one.</Text>
@@ -183,6 +188,7 @@ export default function Birthday() {
     <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'web' ? undefined : 'padding'}>
       <ScrollView ref={keyboard.scroller} onScroll={keyboard.onScroll} scrollEventThrottle={16} style={styles.fill} contentContainerStyle={[styles.scroll, short && styles.scrollShort, { paddingTop: space.top }]} keyboardShouldPersistTaps="handled">
         <Rise style={styles.head}>
+          <SetupProgress count={setupCount} />
           {short ? null : <BrandMark size={40} />}
           <Text style={styles.title}>{fromSettings ? 'Add your birthday' : "When's your birthday?"}</Text>
           {/* Why we ask, honestly, and that it is up to them (Oct 17). */}
@@ -200,7 +206,9 @@ export default function Birthday() {
           <UnlockCard compact={short} />
         </Rise>
       </ScrollView>
-      {/* Continue and Skip for now stay on screen, side by side in weight, whatever the page's length. */}
+      {/* Continue and Skip for now stay on screen, side by side in weight, whatever the page's length.
+          The one setup page whose second way on is a full button, not a word: Apple asked that the
+          birthday never look required (Oct 17), so Skip for now stays as plain to see as Continue. */}
       <View style={[styles.footer, { paddingBottom: space.footer }]}>
         <FooterFade />
         <Button label={fromSettings ? 'Save' : 'Continue'} loading={busy} disabled={!ready} onPress={() => { void submit(); }} full />

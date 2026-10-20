@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Redirect, router } from 'expo-router';
 import Animated, { Easing, FadeInDown } from 'react-native-reanimated';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
-import { Button } from '@/components/ui';
+import { SetupFooter, SetupProgress } from '@/components/setup/SetupBits';
+import { useSetupCount } from '@/features/onboarding/setupCount';
 import { StatusShade } from '@/components/StatusShade';
 import { Wash } from '@/components/Wash';
 import { useAutoLog, type AutoLogSource } from '@/features/activity/autoLog';
@@ -35,6 +36,8 @@ export default function AutoLog() {
   const space = useGateSpace();
   const auto = useAutoLog();
   const [busy, setBusy] = useState<AutoLogSource | null>(null);
+  // Setup's one step count (Oct 20 sweep).
+  const setupCount = useSetupCount('auto-log', true);
   const [gaveUp, setGaveUp] = useState(false);
   useEffect(() => { const t = setTimeout(() => setGaveUp(true), WAIT_MS); return () => clearTimeout(t); }, []);
 
@@ -64,7 +67,8 @@ export default function AutoLog() {
   return (
     <View style={styles.root}>
       <Wash height={420} />
-      <ScrollView contentContainerStyle={[styles.scroll, { paddingTop: space.top, paddingBottom: space.bottom }]}>
+      <ScrollView contentContainerStyle={[styles.scroll, { paddingTop: space.top, paddingBottom: spacing.xl }]}>
+        {setupCount ? <Animated.View entering={enter(0)}><SetupProgress count={setupCount} /></Animated.View> : null}
         <Animated.View entering={enter(0)} style={styles.head}>
           <Text style={styles.title}>Log your tennis automatically</Text>
           <Text style={styles.lead}>Connect once. Every hit, match and workout shows up ready to log.</Text>
@@ -74,7 +78,7 @@ export default function AutoLog() {
           {!shown && !offering ? (
             <View style={styles.waiting}><ActivityIndicator color={colors.textFaint} /></View>
           ) : (
-            <View style={{ gap: spacing.lg }}>
+            <View>
               <View style={styles.cardHead}>
                 <View style={styles.tile}><Ionicons name="pulse" size={20} color={colors.brand} /></View>
                 <View style={{ flex: 1, gap: 2 }}>
@@ -82,25 +86,22 @@ export default function AutoLog() {
                   <Text style={styles.cardBody}>The last 7 days come in first. Only you see them until you post one.{auto.apple ? ' Apple Health also shares their heart rate, plus sleep, steps and food (calories, protein, carbs, fat) for your Health page.' : ''}</Text>
                 </View>
               </View>
-              <View style={{ gap: spacing.sm }}>
-                {auto.apple ? (
-                  <Button label={busy === 'apple-health' ? 'Connecting…' : 'Connect Apple Health'} loading={busy === 'apple-health'} disabled={!!busy} onPress={() => { void connect('apple-health'); }} full />
-                ) : null}
-                {auto.whoop ? (
-                  <Button label={busy === 'whoop' ? 'Connecting…' : 'Connect WHOOP'} variant={auto.apple ? 'secondary' : 'primary'} loading={busy === 'whoop'} disabled={!!busy} onPress={() => { void connect('whoop'); }} full />
-                ) : null}
-              </View>
             </View>
           )}
         </Animated.View>
 
-        <Animated.View entering={enter(2)}>
-          <Pressable accessibilityRole="button" accessibilityLabel="Not now" disabled={!!busy} onPress={onward} hitSlop={8} style={styles.later}>
-            <Text style={styles.laterText}>Not now</Text>
-          </Pressable>
-          <Text style={styles.foot}>You can connect later from Activities or Settings.</Text>
-        </Animated.View>
+        <Animated.Text entering={enter(2)} style={styles.foot}>You can connect later from Activities or Settings.</Animated.Text>
       </ScrollView>
+      {/* Setup's bottom, the same on every setup page (Oct 20 sweep): the connect button full width, Not now as a word under it. */}
+      <Animated.View entering={enter(3)}>
+        <SetupFooter
+          primary={auto.apple || !auto.whoop
+            ? { label: busy === 'apple-health' ? 'Connecting…' : 'Connect Apple Health', loading: busy === 'apple-health' || (!shown && !offering), disabled: !!busy || !auto.apple, onPress: () => { void connect('apple-health'); } }
+            : { label: busy === 'whoop' ? 'Connecting…' : 'Connect WHOOP', loading: busy === 'whoop', disabled: !!busy, onPress: () => { void connect('whoop'); } }}
+          secondary={auto.apple && auto.whoop ? { label: busy === 'whoop' ? 'Connecting…' : 'Connect WHOOP', loading: busy === 'whoop', disabled: !!busy, onPress: () => { void connect('whoop'); } } : undefined}
+          link={{ label: 'Not now', onPress: onward, disabled: !!busy }}
+        />
+      </Animated.View>
       <StatusShade wash={{ height: 420 }} />
     </View>
   );
@@ -119,7 +120,5 @@ const styleDefinitions = StyleSheet.create({
   tile: { width: 44, height: 44, borderRadius: 12, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
   cardTitle: { ...typography.heading, color: colors.text },
   cardBody: { ...typography.small, color: colors.textMuted, lineHeight: 19 },
-  later: { alignSelf: 'center', paddingVertical: spacing.sm, paddingHorizontal: spacing.lg },
-  laterText: { ...typography.smallStrong, color: colors.textFaint },
-  foot: { ...typography.small, color: colors.textFaint, textAlign: 'center', marginTop: spacing.xs },
+  foot: { ...typography.small, color: colors.textFaint, textAlign: 'center' },
 });

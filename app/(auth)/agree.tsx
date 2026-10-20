@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { BackHandler, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { BackHandler, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Redirect, router } from 'expo-router';
 import Animated, { Easing, FadeInDown } from 'react-native-reanimated';
 
 import { BrandMark } from '@/components/BrandMark';
 import { useLeave } from '@/components/LeaveCurtain';
-import { Button } from '@/components/ui';
+import { SetupFooter, SetupProgress } from '@/components/setup/SetupBits';
+import { useSetupCount } from '@/features/onboarding/setupCount';
 import { Wash } from '@/components/Wash';
 import { openLegal, TERMS_VERSION } from '@/lib/legal';
 import { useApp } from '@/store/AppContext';
@@ -45,6 +46,8 @@ export default function Agree() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const { leave, curtain } = useLeave();
+  // Part of setup for a new account: setup's one step count (Oct 20 sweep). An account already set up, agreeing to new terms, sees none.
+  const setupCount = useSetupCount('agree', true);
   // Android's Back leaves the app, as on any first page: popping this gate only
   // showed the page under it for a moment before the gate came back.
   useAndroidBack(() => { BackHandler.exitApp(); return true; });
@@ -69,6 +72,7 @@ export default function Agree() {
     <View style={styles.root}>
       <Wash height={420} />
       <ScrollView contentContainerStyle={[styles.scroll, { paddingTop: space.top }]}>
+        {setupCount ? <Animated.View entering={enter(0)}><SetupProgress count={setupCount} /></Animated.View> : null}
         <Animated.View entering={enter(0)}><BrandMark size={40} /></Animated.View>
         <Animated.View entering={enter(1)} style={styles.head}>
           <Text style={styles.title}>Community guidelines</Text>
@@ -95,12 +99,11 @@ export default function Agree() {
       {/* The guidelines scroll; they stop at the status bar instead of running under the clock. */}
       <StatusShade wash={{ height: 420 }} />
 
-      <Animated.View entering={enter(4)} style={[styles.footer, { paddingBottom: space.footer }]}>
-        {error ? <Text style={styles.error}>{error}</Text> : null}
-        <Button label="I agree" loading={busy} onPress={agree} full />
-        <Pressable accessibilityRole="button" accessibilityLabel="Sign out" hitSlop={8} onPress={() => leave(() => { actions.signOut(); router.replace('/sign-in'); })} style={styles.signOut}>
-          <Text style={styles.signOutText}>Sign out</Text>
-        </Pressable>
+      {/* Setup's bottom, the same on every setup page: the main button, and the quieter way out as a word under it. */}
+      <Animated.View entering={enter(4)}>
+        <SetupFooter primary={{ label: 'I agree', loading: busy, onPress: () => { void agree(); } }} link={{ label: 'Sign out', onPress: () => leave(() => { actions.signOut(); router.replace('/sign-in'); }) }}>
+          {error ? <Text style={styles.error}>{error}</Text> : null}
+        </SetupFooter>
       </Animated.View>
       {curtain}
     </View>
@@ -122,8 +125,4 @@ const styleDefinitions = StyleSheet.create({
   fine: { ...typography.small, color: colors.textMuted, lineHeight: 19 },
   link: { color: colors.text, ...font('600'), textDecorationLine: 'underline' },
   error: { ...typography.small, color: colors.danger, textAlign: 'center' },
-  // The answer stays put at the bottom while the rules scroll.
-  footer: { paddingHorizontal: spacing.xl, paddingTop: spacing.md, gap: spacing.xs, maxWidth: 460, width: '100%', alignSelf: 'center' },
-  signOut: { alignSelf: 'center', paddingVertical: spacing.sm, paddingHorizontal: spacing.md },
-  signOutText: { ...typography.smallStrong, color: colors.textMuted },
 });
