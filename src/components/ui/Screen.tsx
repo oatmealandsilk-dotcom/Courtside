@@ -112,6 +112,12 @@ interface Props {
    * own way back drawn over it. Only for a page with no title here.
    */
   bleedTop?: boolean;
+  /**
+   * How far below its usual spot the "Updated" note sits, for a page whose
+   * top holds a switch of its own (Community's Find Players / Discussions),
+   * so the note never covers it.
+   */
+  noteBelow?: number;
 }
 
 /**
@@ -149,6 +155,7 @@ const ScreenBody = React.memo(function ScreenBody({
   bar = true,
   scrollsInside = false,
   bleedTop = false,
+  noteBelow = 0,
 }: Props & { routeKey: string }) {
   // The floating tab bar covers this much of the bottom; a page's last line stays above it.
   const barInset = useBarInset();
@@ -497,7 +504,7 @@ const ScreenBody = React.memo(function ScreenBody({
 
   // Under the header, over the top of the page: a small note once a pull has fetched.
   const updatedNote = onRefresh ? (
-    <Animated.View pointerEvents="none" style={[styles.updated, underBar, { opacity: updated, transform: [{ translateY: updated.interpolate({ inputRange: [0, 1], outputRange: [-8, 0] }) }, { scale: updated.interpolate({ inputRange: [0, 1], outputRange: [0.92, 1] }) }] }]}>
+    <Animated.View pointerEvents="none" style={[styles.updated, underBar, noteBelow ? { top: 8 + noteBelow } : null, { opacity: updated, transform: [{ translateY: updated.interpolate({ inputRange: [0, 1], outputRange: [-8, 0] }) }, { scale: updated.interpolate({ inputRange: [0, 1], outputRange: [0.92, 1] }) }] }]}>
       <Ionicons name="checkmark-circle" size={14} color={colors.brand} />
       <Text style={styles.updatedText}>Updated</Text>
     </Animated.View>

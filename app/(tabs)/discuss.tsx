@@ -161,6 +161,8 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   // The underline under Find Players / Discussions follows the finger.
   const sectionIndex = section === 'players' ? 0 : 1;
   const [tabWidth, setTabWidth] = useState(0);
+  // How tall the Find Players / Discussions switch is, so the "Updated" note after a pull sits just under it.
+  const [sectionsHeight, setSectionsHeight] = useState(0);
   const underline = useTabUnderline(sectionIndex, 2, tabWidth);
   const [search, setSearch] = useState('');
   const [searching, setSearching] = useState(false);
@@ -803,7 +805,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
       </>);
 
   return (
-    <Screen memoryKey="discuss" scrollRef={pageRef} offsetY={offsetY} wash onRefresh={previewSection === undefined && !isDesktopBrowser() ? actions.refresh : undefined}
+    <Screen memoryKey="discuss" scrollRef={pageRef} offsetY={offsetY} wash noteBelow={sectionsHeight} onRefresh={previewSection === undefined && !isDesktopBrowser() ? actions.refresh : undefined}
       title="Community"
       right={isGuest ? <GuestSignIn /> :
         // Bell, chats, search: the same order as Profile (bell, chats, then the page's own button), so both pages match.
@@ -824,7 +826,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
         </View>
       }
     >
-      <View style={styles.sections} onLayout={e => setTabWidth(e.nativeEvent.layout.width / 2)}>
+      <View style={styles.sections} onLayout={e => { setTabWidth(e.nativeEvent.layout.width / 2); setSectionsHeight(e.nativeEvent.layout.height); }}>
         {(['players', 'discussions'] as const).map(value => <Pressable key={value} accessibilityRole="tab" accessibilityState={{ selected: section === value }} onPress={() => setSection(value)} style={styles.section}><Text style={{ ...typography.bodyStrong, fontSize: 16, color: section === value ? colors.text : colors.textMuted }}>{value === 'discussions' ? 'Discussions' : 'Find Players'}</Text></Pressable>)}
         {tabWidth > 0 && <Reanimated.View pointerEvents="none" style={[styles.sectionUnderline, { width: tabWidth }, underline.style]} />}
       </View>
