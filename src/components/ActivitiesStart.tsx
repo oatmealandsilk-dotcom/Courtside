@@ -137,8 +137,9 @@ export function ActivitiesStart({ topInset, bottomInset, nearCount, sessions = 0
                 <Pressable accessibilityRole="link" accessibilityLabel={`${user.name}'s profile`} onPress={() => router.push(`/user/${user.id}`)} style={styles.personTap}>
                   <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={40} ring={user.isCoach} />
                   <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
-                    <View style={styles.personMeta}><Text style={styles.personName} numberOfLines={1}>{user.name}</Text><LevelPill profile={user.profile} small /></View>
-                    <Text style={styles.reason} numberOfLines={1}>{reason}</Text>
+                    {/* The name has the whole first line; the rating sits with the reason on the second, so names are not cut short. */}
+                    <Text style={styles.personName} numberOfLines={1}>{user.name}</Text>
+                    <View style={styles.personMeta}><LevelPill profile={user.profile} small /><Text style={styles.reason} numberOfLines={1}>{reason}</Text></View>
                   </View>
                 </Pressable>
                 <FollowPill small following={followingIds.includes(user.id)} userId={user.id} onPress={() => follow(user)} name={user.name.split(' ')[0]} />
