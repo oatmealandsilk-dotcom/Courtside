@@ -7,12 +7,18 @@ import type { GestureResponderEvent } from 'react-native';
  *
  * - 'reveal': the new court spreads out in a circle from the card you tapped
  *   until it covers the screen, the way Telegram changes its theme.
+ * - 'crossfade': a still of the old look fades away over the new one.
+ *
+ * Change the one word below to pick; both work on a phone and in a browser.
  */
-export type ThemeSwitchStyle = 'reveal';
-export const THEME_SWITCH: ThemeSwitchStyle = 'reveal';
+export type ThemeSwitchStyle = 'reveal' | 'crossfade';
+// Typed as the whole choice so either word type-checks.
+export const THEME_SWITCH = 'reveal' as ThemeSwitchStyle;
 
 /** How long the circle takes to cover the screen. */
 export const REVEAL_MS = 420;
+/** How long the old look takes to fade away in a crossfade. */
+export const CROSSFADE_MS = 250;
 
 /** Where on the screen a theme change starts from, in window points. */
 export type TapPoint = { x: number; y: number };

@@ -1,8 +1,8 @@
 import React, { forwardRef, useImperativeHandle, useRef, useState } from 'react';
-import { Image, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { StyleSheet, View, useWindowDimensions } from 'react-native';
 import Animated, { Easing, cancelAnimation, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { captureRef, releaseCapture } from 'react-native-view-shot';
-import { REVEAL_MS, coverRadius, middleOf, type ThemeSwitcherHandle } from './themeSwitch';
+import { CROSSFADE_MS, REVEAL_MS, THEME_SWITCH, coverRadius, middleOf, type ThemeSwitcherHandle } from './themeSwitch';
 
 /**
  * A theme change on a phone (Oct 21). The old veil (a see-through tint of the
@@ -15,6 +15,8 @@ import { REVEAL_MS, coverRadius, middleOf, type ThemeSwitcherHandle } from './th
  * 3. The new look, photographed, grows out of the tap point inside a circle
  *    until it covers the screen; then both photographs go and the live app,
  *    already in its new colours, is all that is left.
+ *    (THEME_SWITCH 'crossfade' instead: no second photograph; the first one
+ *    simply fades away over the live new look.)
  *
  * Everything that moves is the photographs, laid over the app as a sibling:
  * the app's own views (and so the glass tab bar's) are never faded or moved.
@@ -33,6 +35,8 @@ export const ThemeSwitcher = forwardRef<ThemeSwitcherHandle, { app: React.RefObj
   const step = useRef<{ run: number; wait: 'old' | 'landed' | 'fresh'; apply?: () => void } | null>(null);
   const files = useRef<string[]>([]);
   const grow = useSharedValue(0);
+  // How much of the old photograph shows (only a crossfade lowers it).
+  const fade = useSharedValue(1);
   const ox = useSharedValue(0);
   const oy = useSharedValue(0);
   const reach = useRef(0);
@@ -56,7 +60,9 @@ export const ThemeSwitcher = forwardRef<ThemeSwitcherHandle, { app: React.RefObj
     start(apply, from) {
       const mine = ++run.current;
       cancelAnimation(grow);
+      cancelAnimation(fade);
       grow.value = 0;
+      fade.value = 1;
       setCover(null);
       release();
       step.current = { run: mine, wait: 'old', apply };
@@ -92,6 +98,14 @@ export const ThemeSwitcher = forwardRef<ThemeSwitcherHandle, { app: React.RefObj
       // Two frames for the phone's own layers (blur, glass, the map) to catch up, then the new look.
       requestAnimationFrame(() => requestAnimationFrame(() => {
         if (mine !== run.current) return;
+        if (THEME_SWITCH === 'crossfade') {
+          // The new look is live beneath: the old photograph fades away over it.
+          step.current = { run: mine, wait: 'fresh' };
+          fade.value = withTiming(0, { duration: CROSSFADE_MS, easing: Easing.inOut(Easing.quad) }, (finished) => {
+            if (finished) runOnJS(done)(mine);
+          });
+          return;
+        }
         photograph()
           .then((uri) => {
             files.current.push(uri);
@@ -132,11 +146,13 @@ export const ThemeSwitcher = forwardRef<ThemeSwitcherHandle, { app: React.RefObj
   }));
   // The new photograph sits still on the screen while the circle around it grows.
   const still = useAnimatedStyle(() => ({ left: grow.value - ox.value, top: grow.value - oy.value }));
+  const oldLook = useAnimatedStyle(() => ({ opacity: fade.value }));
 
   if (!cover) return null;
   return (
     <View pointerEvents="none" accessible={false} importantForAccessibility="no-hide-descendants" style={[StyleSheet.absoluteFill, styles.top]}>
-      <Image source={{ uri: cover.old }} onLoad={oldShown} onError={oldShown} fadeDuration={0} resizeMode="stretch" style={StyleSheet.absoluteFill} />
+      {/* Only this photograph, laid over the app, ever fades: never the app (or its glass tab bar) itself. */}
+      <Animated.Image source={{ uri: cover.old }} onLoad={oldShown} onError={oldShown} fadeDuration={0} resizeMode="stretch" style={[StyleSheet.absoluteFill, oldLook]} />
       {cover.fresh ? (
         <Animated.View style={[styles.circle, circle]}>
           <Animated.Image source={{ uri: cover.fresh }} onLoad={freshShown} onError={() => done(cover.run)} fadeDuration={0} resizeMode="stretch" style={[{ position: 'absolute', width, height }, still]} />
