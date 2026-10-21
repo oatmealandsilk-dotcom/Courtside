@@ -101,6 +101,7 @@ export const ThemeSwitcher = forwardRef<ThemeSwitcherHandle, { app: React.RefObj
         if (THEME_SWITCH === 'crossfade') {
           // The new look is live beneath: the old photograph fades away over it.
           step.current = { run: mine, wait: 'fresh' };
+          if (watchdog.current) clearTimeout(watchdog.current); // moving now: let it finish
           fade.value = withTiming(0, { duration: CROSSFADE_MS, easing: Easing.inOut(Easing.quad) }, (finished) => {
             if (finished) runOnJS(done)(mine);
           });
@@ -131,6 +132,7 @@ export const ThemeSwitcher = forwardRef<ThemeSwitcherHandle, { app: React.RefObj
     const now = step.current;
     if (!now || now.wait !== 'fresh' || now.run !== run.current) return;
     const mine = now.run;
+    if (watchdog.current) clearTimeout(watchdog.current); // moving now: let it finish
     grow.value = 0;
     grow.value = withTiming(reach.current, { duration: REVEAL_MS, easing: Easing.out(Easing.cubic) }, (finished) => {
       if (finished) runOnJS(done)(mine);
