@@ -11,6 +11,7 @@ import { shownInList } from '@/features/hiddenWords/hiddenWords';
 import * as haptics from '@/lib/haptics';
 import { useApp } from '@/store/AppContext';
 import { colors, spacing, typography, withAlpha } from '@/theme';
+import { TextScale } from '@/theme/textScale';
 
 /** A top-level comment and the replies under it. */
 export interface Thread { top: Comment; replies: Comment[] }
@@ -153,7 +154,7 @@ export function CommentThread({ thread, big = false, open, onToggle, onReply, on
           style={[styles.toggle, { marginLeft: replyIndent(big) }]}
         >
           <View style={styles.dash} />
-          <Text style={[styles.toggleText, big && styles.toggleTextBig]}>{open ? 'Hide replies' : `View ${count} ${count === 1 ? 'reply' : 'replies'}`}</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.toggleText, big && styles.toggleTextBig]}>{open ? 'Hide replies' : `View ${count} ${count === 1 ? 'reply' : 'replies'}`}</Text>
         </Pressable>
       ) : null}
     </>

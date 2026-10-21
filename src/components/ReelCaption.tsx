@@ -27,6 +27,7 @@ import { learned, useTip } from '@/features/tips/tips';
 import { useTourBusy } from '@/features/tour/tourStore';
 import { font } from '@/theme';
 import { tagsNotInCaption } from '@/features/feed/tags';
+import { TextScale } from '@/theme/textScale';
 
 /*
  * Every word over a clip or an Instant follows one set of rules, the ones
@@ -277,7 +278,7 @@ export function FoldedWords({ text, onPress, hint = 'Opens the comments, with th
     const space = text.lastIndexOf(' ', at);
     return text.slice(0, space > at - 14 && space > 0 ? space : at).trimEnd().replace(/[\s,;:.–—-]+$/u, '');
   }, [folds, settled, cut, text]);
-  const more = <Text style={styles.more} onPress={onPress && !touring ? press : undefined}>{MORE_TAIL}</Text>;
+  const more = <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.more} onPress={onPress && !touring ? press : undefined}>{MORE_TAIL}</Text>;
   return (
     <View>
       <Pressable
@@ -482,7 +483,7 @@ const styles = StyleSheet.create({
   placeRow: { flexDirection: 'row', alignItems: 'center', gap: 3, alignSelf: 'flex-start', maxWidth: '100%' },
   placeText: { color: META_INK, fontSize: 12.5, lineHeight: 16, ...font('500'), letterSpacing: 0, opacity: 0.9, flexShrink: 1, ...EDGE_SMALL },
   // Instagram's outlined Follow: white hairline, white words, no fill.
-  follow: { height: 24, paddingHorizontal: 11, borderRadius: 8, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.75)', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  follow: { minHeight: 24, paddingHorizontal: 11, borderRadius: 8, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.75)', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   followText: { color: '#fff', fontSize: 13, ...font('600'), letterSpacing: -0.1, ...EDGE_SMALL },
   // The time under an opened caption, 4 below its last line.
   when: { marginTop: 4 },

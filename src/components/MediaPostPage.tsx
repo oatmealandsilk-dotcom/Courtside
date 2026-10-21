@@ -300,14 +300,14 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
           <View style={{ flex: 1, gap: 1 }}>
             <View style={styles.nameRow}>
               {/* The name keeps some room: the badges beside it never squeeze it down to a letter. */}
-              <Text style={styles.name} numberOfLines={1}>{author.name}</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.name} numberOfLines={1}>{author.name}</Text>
               <StreakFlame days={streak} />
               {author.isCoach ? <Ionicons name="shield-checkmark" size={14} color={colors.brand} /> : null}
               <LevelPill profile={author.profile} small />
             </View>
             {/* "New" on the handle's line (or the one under it), out of the name's way, as on a written post (Oct 6 audit, item 9). */}
             <View style={styles.subRow}>
-              <Text style={styles.sub} numberOfLines={1}>@{author.handle} · {relativeTime(post.createdAt)}{post.editedAt ? ' · Edited' : ''}</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.sub} numberOfLines={1}>@{author.handle} · {relativeTime(post.createdAt)}{post.editedAt ? ' · Edited' : ''}</Text>
               {isNewHere(post) ? <NewHereTag short /> : null}
               {/* Admins only: pushed to the bottom of feeds (migration 152). Nothing at all for anyone else. */}
               <PushedDownTag post={post} />
@@ -394,7 +394,7 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
           {post.body ? (
             // A tap on the words opens the comments, the whole caption at their top, as on Instagram (Oct 12, owner).
             <Pressable accessibilityRole="button" accessibilityLabel="Open the comments, with the whole caption" onPress={onComment}>
-              <Text numberOfLines={2} style={styles.caption}><Text style={styles.captionName}>{author.handle} </Text><RichText maxFontSizeMultiplier={TextScale.CARD} style={styles.caption}>{post.body}</RichText></Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={2} style={styles.caption}><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.captionName}>{author.handle} </Text><RichText maxFontSizeMultiplier={TextScale.CARD} style={styles.caption}>{post.body}</RichText></Text>
             </Pressable>
           ) : null}
           {/* Who with, right under the words, out of the name's lines. */}
@@ -416,25 +416,25 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
               </Tappable>
               {likes > 0 ? (
                 <Pressable accessibilityRole="button" accessibilityLabel={`${likes} ${likes === 1 ? 'like' : 'likes'}, see who`} onPress={() => router.push({ pathname: '/likes', params: { id: post.id } })} style={styles.count}>
-                  <Text style={styles.actionText}>{compactNumber(likes)}</Text>
+                  <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.actionText}>{compactNumber(likes)}</Text>
                 </Pressable>
               ) : null}
             </View>
             <Tappable onPress={onComment} dim style={styles.action} accessibilityLabel={post.commentIds.length ? `Comments, ${post.commentIds.length}` : 'Comments'}>
               <Ionicons name="chatbubble-outline" size={ICON - 1} color={colors.text} />
-              {post.commentIds.length ? <Text style={styles.actionText}>{compactNumber(post.commentIds.length)}</Text> : null}
+              {post.commentIds.length ? <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.actionText}>{compactNumber(post.commentIds.length)}</Text> : null}
             </Tappable>
             {/* Nobody else can open something taken down, so there is nothing to send. */}
             {closed ? null : (
               <Tappable onPress={onShare} dim style={styles.action} accessibilityLabel={shareLabel(post, currentUserId)}>
                 <Ionicons name="arrow-redo-outline" size={ICON} color={colors.text} />
-                {post.shares ? <Text style={styles.actionText}>{compactNumber(post.shares)}</Text> : null}
+                {post.shares ? <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.actionText}>{compactNumber(post.shares)}</Text> : null}
               </Tappable>
             )}
             <View style={styles.flex} />
             <Tappable onPress={onToggleSave} dim style={styles.action} accessibilityLabel={saved ? 'Remove from saved' : 'Save this post'}>
               <Ionicons name={saved ? 'bookmark' : 'bookmark-outline'} size={ICON - 1} color={colors.text} />
-              {post.savedBy?.length ? <Text style={styles.actionText}>{compactNumber(post.savedBy.length)}</Text> : null}
+              {post.savedBy?.length ? <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.actionText}>{compactNumber(post.savedBy.length)}</Text> : null}
             </Tappable>
             <Tappable onPress={onMore} dim style={styles.action} accessibilityLabel="More options">
               <Ionicons name="ellipsis-horizontal" size={ICON - 2} color={colors.text} />
@@ -462,7 +462,7 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
         {closed ? null : (
           <Pressable accessibilityRole="button" accessibilityLabel="Add a comment" onPress={() => router.push({ pathname: '/comments', params: { kind: 'post', id: post.id, focus: '1' } })} onLayout={measured(setEntry, entry)} style={({ pressed }) => [styles.addComment, pressed && styles.addCommentPressed]}>
             {currentUser ? <Avatar name={currentUser.name} seed={currentUser.avatarSeed} uri={currentUser.avatarUrl} size={28} /> : null}
-            <Text style={styles.addCommentText}>{thread.length ? 'Add a comment…' : 'Be the first to comment…'}</Text>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.addCommentText}>{thread.length ? 'Add a comment…' : 'Be the first to comment…'}</Text>
           </Pressable>
         )}
       </View>

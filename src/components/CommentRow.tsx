@@ -19,6 +19,7 @@ import { useApp } from '@/store/AppContext';
 import { colors, spacing, typography } from '@/theme';
 import { openPlayer } from '@/features/navigation/openPlayer';
 import { useLightStatusWhile } from '@/lib/statusBarStyle';
+import { TextScale } from '@/theme/textScale';
 
 /**
  * A comment's first few words, in quotes, so a card about it says which one
@@ -147,9 +148,9 @@ export function CommentRow({ comment, big = false, reply = false, onPressBody, o
         <Pressable accessibilityRole={onPressBody || hold ? 'button' : undefined} accessibilityHint={holdHint} onPress={onPressBody} onLongPress={hold} delayLongPress={400} disabled={!onPressBody && !hold} style={({ pressed }) => [styles.bodyPress, pressed && !!hold && styles.bodyHeld]}>
           {/* Who, their streak's flame (3 days or more), when: one line, the name giving way first. */}
           <View style={styles.metaLine}>
-            <Text style={[styles.name, big && styles.nameBig]} numberOfLines={1} onPress={openProfile}>{who?.name ?? 'Unknown'}</Text>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.name, big && styles.nameBig]} numberOfLines={1} onPress={openProfile}>{who?.name ?? 'Unknown'}</Text>
             <StreakFlame days={streak} size="small" style={styles.flame} />
-            <Text style={[styles.meta, big && styles.metaBig]}>{relativeTime(comment.createdAt)}</Text>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.meta, big && styles.metaBig]}>{relativeTime(comment.createdAt)}</Text>
           </View>
           {comment.body.trim() ? <RichText style={[styles.text, big && styles.textBig]}>{comment.body}</RichText> : null}
           {comment.removed ? <RemovedNote removed={comment.removed} quiet item={{ kind, id: comment.id, authorId: comment.authorId }} actions={false} /> : null}
@@ -166,19 +167,19 @@ export function CommentRow({ comment, big = false, reply = false, onPressBody, o
         {/* Beside the words' own button, not inside it: a button may not hold another on the web. */}
         {onReply && !comment.removed ? (
           <Pressable accessibilityRole="button" accessibilityLabel={`Reply to ${who?.name ?? 'this comment'}`} onPress={onReply} style={styles.replyButton}>
-            <Text style={[styles.replyText, big && styles.replyTextBig]}>Reply</Text>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.replyText, big && styles.replyTextBig]}>Reply</Text>
           </Pressable>
         ) : null}
         {onUnhide ? (
           <View style={styles.hiddenActions}>
             <Pressable accessibilityRole="button" accessibilityLabel={`Unhide ${who?.name ?? 'this'}'s comment`} hitSlop={{ top: 16, bottom: 12, left: 8, right: 8 }} onPress={onUnhide}>
-              <Text style={[styles.hiddenText, big && styles.replyTextBig]}>Unhide</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.hiddenText, big && styles.replyTextBig]}>Unhide</Text>
             </Pressable>
             {deleteHidden ? (
               <>
-                <Text style={[styles.hiddenDot, big && styles.replyTextBig]}>·</Text>
+                <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.hiddenDot, big && styles.replyTextBig]}>·</Text>
                 <Pressable accessibilityRole="button" accessibilityLabel={`Delete ${who?.name ?? 'this'}'s comment`} hitSlop={{ top: 16, bottom: 12, left: 8, right: 16 }} onPress={deleteHidden}>
-                  <Text style={[styles.hiddenText, big && styles.replyTextBig]}>Delete</Text>
+                  <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.hiddenText, big && styles.replyTextBig]}>Delete</Text>
                 </Pressable>
               </>
             ) : null}
@@ -195,7 +196,7 @@ export function CommentRow({ comment, big = false, reply = false, onPressBody, o
       {onUnhide ? null : (
         <Pressable accessibilityRole="button" accessibilityLabel={liked ? 'Unlike comment' : 'Like comment'} accessibilityState={{ selected: liked }} hitSlop={8} onPress={() => actions.toggleLikeComment(comment.id)} style={styles.like}>
           <Ionicons name={liked ? 'heart' : 'heart-outline'} size={16} color={liked ? colors.danger : colors.textFaint} />
-          {comment.likedBy.length ? <Text style={[styles.count, liked && { color: colors.danger }]}>{comment.likedBy.length}</Text> : null}
+          {comment.likedBy.length ? <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.count, liked && { color: colors.danger }]}>{comment.likedBy.length}</Text> : null}
         </Pressable>
       )}
     </View>

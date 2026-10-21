@@ -36,6 +36,7 @@ import { requestSection } from '@/features/navigation/swipeOrder';
 import { goToTab } from '@/features/navigation/startTab';
 import { colors, radius, spacing, typography } from '@/theme';
 import { tagsNotInCaption } from '@/features/feed/tags';
+import { TextScale } from '@/theme/textScale';
 
 interface Props {
   /** Opens the comments; without it the comment button behaves like a tap on the card. */
@@ -174,7 +175,7 @@ function PostCardInner({
         <Avatar name={author.name} seed={author.avatarSeed} uri={author.avatarUrl} size={42} />
         <View style={styles.headerText}>
           <View style={styles.nameRow}>
-            <Text style={styles.name} numberOfLines={1}>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.name} numberOfLines={1}>
               {author.name}
             </Text>
             <StreakFlame days={streak} />
@@ -185,7 +186,7 @@ function PostCardInner({
           {/* "New to CourtSide" on the handle's line, or the line under it when the two don't fit:
               beside the name, with the streak and the level, it cut the name down to "June …" (Oct 6 audit, item 9). */}
           <View style={styles.subRow}>
-            <Text style={styles.sub} numberOfLines={1}>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.sub} numberOfLines={1}>
               @{author.handle} · {relativeTime(post.createdAt)}{post.editedAt ? ' · Edited' : ''}
             </Text>
             {isNewHere(post) ? <NewHereTag /> : null}
@@ -233,7 +234,7 @@ function PostCardInner({
           {meta.icon === 'court'
             ? <View style={styles.kindGlyph}><CourtGlyph size={10.4} color={meta.tint} /></View>
             : <Ionicons name={meta.icon} size={13} color={meta.tint} />}
-          <Text style={[styles.kindLabel, { color: meta.tint }]}>{meta.label}</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.kindLabel, { color: meta.tint }]}>{meta.label}</Text>
           <Ionicons name="chevron-forward" size={11} color={meta.tint} />
         </Tappable>}
 
@@ -243,7 +244,7 @@ function PostCardInner({
 
         {post.match ? (
           <View style={styles.detailBox}>
-            <Text style={styles.detailTitle}>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.detailTitle}>
               {post.match.won ? 'def.' : 'lost to'} {post.match.opponentName}
             </Text>
             <View style={styles.setRow}>
@@ -255,10 +256,10 @@ function PostCardInner({
                     { borderColor: post.match?.won ? colors.court : colors.border },
                   ]}
                 >
-                  <Text style={styles.setText}>{set}</Text>
+                  <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.setText}>{set}</Text>
                 </View>
               ))}
-              <Text style={styles.surfaceText}>{post.match.surface}</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.surfaceText}>{post.match.surface}</Text>
             </View>
           </View>
         ) : null}
@@ -307,7 +308,7 @@ function PostCardInner({
           {post.likedBy.length + like.delta > 0 ? (
             <Pressable accessibilityRole="button" accessibilityLabel={`${post.likedBy.length + like.delta} ${post.likedBy.length + like.delta === 1 ? 'like' : 'likes'}, see who`} onPress={() => router.push({ pathname: '/likes', params: { id: post.id } })} style={styles.count}>
               {(state) => (
-                <Text style={[styles.actionText, (state as { hovered?: boolean }).hovered && styles.countHover]}>
+                <Text maxFontSizeMultiplier={TextScale.TITLE} style={[styles.actionText, (state as { hovered?: boolean }).hovered && styles.countHover]}>
                   {compactNumber(post.likedBy.length + like.delta)}
                 </Text>
               )}
@@ -316,12 +317,12 @@ function PostCardInner({
         </View>
         <Tappable onPress={onComment ?? onPress} dim style={styles.action} accessibilityLabel={post.commentIds.length ? `Comments, ${post.commentIds.length}` : 'Comments'}>
           <Ionicons name="chatbubble-outline" size={ICON - 1} color={colors.text} />
-          {post.commentIds.length ? <Text style={styles.actionText}>{compactNumber(post.commentIds.length)}</Text> : null}
+          {post.commentIds.length ? <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.actionText}>{compactNumber(post.commentIds.length)}</Text> : null}
         </Tappable>
         {onShare ? (
           <Tappable onPress={onShare} dim style={styles.action} accessibilityLabel={shareLabel(post, currentUserId)}>
             <Ionicons name="arrow-redo-outline" size={ICON} color={colors.text} />
-            {post.shares ? <Text style={styles.actionText}>{compactNumber(post.shares)}</Text> : null}
+            {post.shares ? <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.actionText}>{compactNumber(post.shares)}</Text> : null}
           </Tappable>
         ) : null}
         {onToggleSave || onMore ? (
@@ -367,7 +368,7 @@ function PostCardInner({
       {short ? null : roomBox}
       <Pressable accessibilityRole="button" accessibilityLabel="Add a comment" onPress={() => router.push({ pathname: '/comments', params: { kind: 'post', id: post.id, focus: '1' } })} style={({ pressed }) => [styles.addComment, room === null && styles.addCommentWait, pressed && styles.addCommentPressed]}>
         {currentUser ? <Avatar name={currentUser.name} seed={currentUser.avatarSeed} uri={currentUser.avatarUrl} size={28} /> : null}
-        <Text style={styles.addCommentText}>{thread.length ? 'Add a comment…' : 'Be the first to comment…'}</Text>
+        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.addCommentText}>{thread.length ? 'Add a comment…' : 'Be the first to comment…'}</Text>
       </Pressable>
       {short ? roomBox : null}
     </Card>

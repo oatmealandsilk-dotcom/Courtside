@@ -80,6 +80,7 @@ import { StageChromeContext, useStageMotion, useStagePageChrome } from '@/featur
 import { colors, radius, typography, spacing, font, lift } from '@/theme';
 import { isTaggedIn } from '@/features/activity/sessionTags';
 import { useAndroidBack } from '@/lib/androidBack';
+import { TextScale } from '@/theme/textScale';
 
 /**
  * The heart that blooms when you double tap a clip.
@@ -1016,7 +1017,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe }: {
           <View key={name} style={styles.action}>
             {/* No shadow here: the shadow lifts white glyphs off a video, and on the plain page it only reads as a smudge. */}
             <Ionicons name={name} size={size} color={colors.textFaint} />
-            <Text style={styles.actionLabel}> </Text>
+            <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.actionLabel}> </Text>
           </View>
         ))}
       </Reanimated.View>
@@ -1404,8 +1405,8 @@ function Home({ scope, topRow, paused, onChrome, onSwipe }: {
   const suggestStrip = suggestions.length ? (
     <View style={styles.strip}>
       <View style={styles.stripHead}>
-        <Text style={styles.stripTitle}>Players you might know</Text>
-        <Text style={styles.stripSub}>Based on who you talk to and where you play.</Text>
+        <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.stripTitle}>Players you might know</Text>
+        <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.stripSub}>Based on who you talk to and where you play.</Text>
       </View>
       {/* Its own sideways bar: nativeID keeps the page swipe off it. */}
       <ScrollView
@@ -1423,7 +1424,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe }: {
             <Pressable accessibilityRole="link" onPress={() => router.push(`/user/${user.id}`)} style={styles.stripBody}>
               <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={44} ring={user.isCoach} />
               <View style={styles.stripWords}>
-                <Text style={styles.stripName} numberOfLines={1}>{user.name}</Text>
+                <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.stripName} numberOfLines={1}>{user.name}</Text>
                 <Text style={styles.stripReason} numberOfLines={1}>{reason}</Text>
               </View>
               <LevelPill profile={user.profile} small />
@@ -1682,8 +1683,8 @@ function Home({ scope, topRow, paused, onChrome, onSwipe }: {
       <View style={styles.endCard}>
         <Wash height={300} strength={0.65} fade={colors.surface} />
         <View style={styles.endTile}><MarkDraw size={30} /></View>
-        <Text style={styles.endTitle}>You're all caught up.</Text>
-        <Text style={styles.endBody}>That's every session from you and the people you follow. Log your next one after you play.</Text>
+        <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.endTitle}>You're all caught up.</Text>
+        <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.endBody}>That's every session from you and the people you follow. Log your next one after you play.</Text>
         {/* And the way to do it, right here (Oct 6, owner: "it should say log an activity … or it could say both"). */}
         <View style={styles.endActions}>
           <Button label="Log an activity" onPress={() => router.push('/log-session')} full />
@@ -1719,8 +1720,8 @@ function Home({ scope, topRow, paused, onChrome, onSwipe }: {
           <Wash height={300} strength={0.65} fade={colors.surface} />
           <View style={styles.endTile}><Ionicons name="checkmark" size={30} color={colors.brand} /></View>
           <View style={styles.caughtWords}>
-            <Text accessibilityRole="header" style={styles.endTitle}>You're all caught up</Text>
-            <Text style={styles.endBody}>{`You've seen all new posts from ${pastDays(caughtUpDays)}.`}</Text>
+            <Text maxFontSizeMultiplier={TextScale.TITLE} accessibilityRole="header" style={styles.endTitle}>You're all caught up</Text>
+            <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.endBody}>{`You've seen all new posts from ${pastDays(caughtUpDays)}.`}</Text>
           </View>
           {last ? (
             <View style={styles.endActions}>
@@ -1732,7 +1733,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe }: {
           ) : (
             <View accessible accessibilityLabel={`${label}: swipe up to see them`} style={styles.earlierRow}>
               <View style={styles.earlierRule} />
-              <Text style={styles.earlierLabel}>{label}</Text>
+              <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.earlierLabel}>{label}</Text>
               <Ionicons name="chevron-down" size={16} color={colors.textMuted} />
               <View style={styles.earlierRule} />
             </View>
@@ -1748,8 +1749,8 @@ function Home({ scope, topRow, paused, onChrome, onSwipe }: {
       <View style={styles.endCard}>
         <Wash height={300} strength={0.65} fade={colors.surface} />
         <View style={styles.endTile}><MarkDraw size={30} /></View>
-        <Text style={styles.endTitle}>You found the bottom of CourtSide.</Text>
-        <Text style={styles.endBody}>Almost nobody scrolls this far. You are one of the first people ever on here — remember this page, it will mean something later.</Text>
+        <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.endTitle}>You found the bottom of CourtSide.</Text>
+        <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.endBody}>Almost nobody scrolls this far. You are one of the first people ever on here — remember this page, it will mean something later.</Text>
         <View style={styles.endActions}>
           <Button label="Leave something here" onPress={() => router.push('/compose')} full />
           <Pressable accessibilityRole="button" onPress={() => pager.current?.scrollToTop()} hitSlop={8} style={styles.endBackWrap}>
@@ -1773,8 +1774,8 @@ function Home({ scope, topRow, paused, onChrome, onSwipe }: {
             // Its feed is everything its members post, so more people is the way to fill it.
             <View style={styles.groupEmpty}>
               <GroupTile name={groupName ?? 'Group'} look={app.feedGroups.find((g) => g.id === scope.groupId)?.look} size={72} />
-              <Text style={styles.groupEmptyTitle}>When members post, it shows up here</Text>
-              <Text style={styles.groupEmptyBody}>{`${groupName ?? 'A group'}’s feed shows everything its members post.`}</Text>
+              <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.groupEmptyTitle}>When members post, it shows up here</Text>
+              <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.groupEmptyBody}>{`${groupName ?? 'A group'}’s feed shows everything its members post.`}</Text>
               <View style={styles.groupEmptyActions}>
                 <Button label="Invite people" onPress={() => router.push({ pathname: '/group-invite', params: { id: scope.groupId } })} full />
                 <Button label="Post something" variant="secondary" onPress={() => router.push('/compose')} full />
@@ -2080,8 +2081,8 @@ function Home({ scope, topRow, paused, onChrome, onSwipe }: {
                         <View style={styles.service} />
                       </View>
                       <Ionicons name="cloud-offline-outline" size={54} color={colors.court} />
-                      <Text style={styles.previewTitle}>{post.mediaLabel}</Text>
-                      <Text style={styles.previewNote}>
+                      <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.previewTitle}>{post.mediaLabel}</Text>
+                      <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.previewNote}>
                         This clip didn’t finish uploading
                       </Text>
                     </Pressable>
@@ -2173,7 +2174,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe }: {
                 </TapAway>
               ) : (
                 <TapAway label="Hide the CourtSide wordmark" onHidden={() => hideMark(key)}>
-                  <Text style={[styles.wordmark, theme === 'us-open' && { color: '#FFFFFF' }]}>CourtSide</Text>
+                  <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.wordmark, theme === 'us-open' && { color: '#FFFFFF' }]}>CourtSide</Text>
                 </TapAway>
               );
               // Over a picture the wordmark sits in a small pill of the theme's own

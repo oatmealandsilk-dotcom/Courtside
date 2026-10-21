@@ -6,6 +6,7 @@ import type { GroupLook } from '@/data/types';
 import { tileColors } from '@/features/groups/look';
 import { colors, font } from '@/theme';
 import { useThemedStyles } from '@/theme/ThemeProvider';
+import { TextScale } from '@/theme/textScale';
 
 /*
  * A group's face: a soft tile in the group's colour with its emoji or its
@@ -42,7 +43,7 @@ export function GroupTile({ name, size = 48, look }: { name: string; size?: numb
   if (look?.emoji) {
     return (
       <View accessible={false} importantForAccessibility="no-hide-descendants" style={[styles.tile, box, { backgroundColor: ground }]}>
-        <Text style={{ fontSize: Math.round(size * 0.5), lineHeight: Math.round(size * 0.62), textAlign: 'center' }} numberOfLines={1}>{look.emoji}</Text>
+        <Text maxFontSizeMultiplier={TextScale.CHROME} style={{ fontSize: Math.round(size * 0.5), lineHeight: Math.round(size * 0.62), textAlign: 'center' }} numberOfLines={1}>{look.emoji}</Text>
       </View>
     );
   }
@@ -51,7 +52,7 @@ export function GroupTile({ name, size = 48, look }: { name: string; size?: numb
   const fontSize = Math.round(size * (letters.length > 2 ? 0.3 : 0.36));
   return (
     <View accessible={false} importantForAccessibility="no-hide-descendants" style={[styles.tile, box, { backgroundColor: ground }]}>
-      <Text style={[styles.letters, { fontSize, letterSpacing: fontSize * -0.02, color: ink }]} numberOfLines={1}>{letters}</Text>
+      <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.letters, { fontSize, letterSpacing: fontSize * -0.02, color: ink }]} numberOfLines={1}>{letters}</Text>
     </View>
   );
 }

@@ -20,6 +20,7 @@ import { relativeTime, timeLeft } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
 import { colors, font, spacing, typography } from '@/theme';
 import { openPlayer } from '@/features/navigation/openPlayer';
+import { TextScale } from '@/theme/textScale';
 
 /**
  * The post itself, at the top of its comments: who, the whole caption (never
@@ -65,7 +66,7 @@ export function CommentsCaption({ kind, id }: { kind: 'post' | 'hit'; id: string
     if (post.editedAt) parts.push('Edited');
     if (post.court) {
       const court = post.court;
-      parts.push(<Text key="court" accessibilityRole="link" accessibilityLabel={`${court.name}, see posts from here`} suppressHighlighting onPress={() => openCourt(court)} style={styles.link}>{court.name}</Text>);
+      parts.push(<Text maxFontSizeMultiplier={TextScale.CARD} key="court" accessibilityRole="link" accessibilityLabel={`${court.name}, see posts from here`} suppressHighlighting onPress={() => openCourt(court)} style={styles.link}>{court.name}</Text>);
     } else if (post.location) parts.push(post.location);
     if (withWho) {
       parts.push(
@@ -75,7 +76,7 @@ export function CommentsCaption({ kind, id }: { kind: 'post' | 'hit'; id: string
           accessibilityLabel={`With ${tagged.map((u) => u.name).join(', ')}`}
           suppressHighlighting
           onPress={() => { if (tagged.length === 1) router.push(`/user/${tagged[0].id}`); else router.push({ pathname: '/likes', params: { id: post.id, set: 'tagged' } }); }}
-        >with <Text style={styles.withNames}>{withWho}</Text></Text>,
+        >with <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.withNames}>{withWho}</Text></Text>,
       );
     }
   } else if (story) {
@@ -93,7 +94,7 @@ export function CommentsCaption({ kind, id }: { kind: 'post' | 'hit'; id: string
             {/* The name first and whole: its pills follow on the same line while there is room, and drop
                 under it on a narrow phone, rather than squeezing the name down to "J…" (Oct 5 audit). */}
             <View style={styles.badges}>
-              <Text style={styles.name} numberOfLines={1} onPress={openProfile} accessibilityRole="link" suppressHighlighting>{author.name}</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.name} numberOfLines={1} onPress={openProfile} accessibilityRole="link" suppressHighlighting>{author.name}</Text>
               <StreakFlame days={streak} style={styles.flame} />
               <LevelPill profile={author.profile} small />
               {post && isNewHere(post) ? <NewHereTag short /> : null}
@@ -111,7 +112,7 @@ export function CommentsCaption({ kind, id }: { kind: 'post' | 'hit'; id: string
             ) : null}
           </View>
           {words ? <RichText style={styles.words} hashtagStyle={styles.tag} mentionStyle={styles.tag}>{words}</RichText> : null}
-          <Text style={styles.meta}>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta}>
             {parts.map((part, i) => <React.Fragment key={i}>{i ? ' · ' : ''}{part}</React.Fragment>)}
           </Text>
         </View>

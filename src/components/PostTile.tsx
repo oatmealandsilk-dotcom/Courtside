@@ -11,6 +11,7 @@ import { CarouselMark } from '@/components/CarouselMark';
 import type { Post } from '@/data/types';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font } from '@/theme';
+import { TextScale } from '@/theme/textScale';
 
 /**
  * One post as a grid tile, the way a profile shows them: its cover picture
@@ -59,7 +60,7 @@ export function PostTile({ post, width, height, onPress, label, words }: {
         </View>
       ) : (
         <View style={[StyleSheet.absoluteFill, styles.blank]}>
-          <Text numberOfLines={5} style={styles.text}>{post.body}</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={5} style={styles.text}>{post.body}</Text>
         </View>
       )}
       {picture ? <TileCover accessibilityIgnoresInvertColors uri={picture} style={StyleSheet.absoluteFill} contentFit="cover" recyclingKey={post.id} transition={120} /> : null}

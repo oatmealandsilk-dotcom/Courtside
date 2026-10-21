@@ -9,6 +9,7 @@ import * as haptics from '@/lib/haptics';
 import { TOP_BAND_HEIGHT, TOP_BAND_TOP } from '@/features/feed/topBand';
 import { colors, font } from '@/theme';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
+import { TextScale } from '@/theme/textScale';
 
 /*
  * The words across the top of the Feed, the way Reels has them: "Activities", "For you",
@@ -141,6 +142,7 @@ export function FeedTopRow({ groups, selected, onSelect, onPlus, onPicture, hidd
                 <React.Fragment key={key}>
                   {i > 0 ? (
                     <Text
+                      maxFontSizeMultiplier={TextScale.TITLE}
                       style={[styles.dot, { color: ink }, edge]}
                       onLayout={(e) => { const width = e.nativeEvent.layout.width; setDotW((d) => (d === width ? d : width)); }}
                     >·</Text>
@@ -185,7 +187,7 @@ function Word({ name, at, shift, viewW, style }: { name: string; at: { x: number
     const away = Math.abs(shift.value + centre - viewW / 2);
     return { opacity: interpolate(away, [0, 60], [1, 0.5], 'clamp'), transform: [{ scale: interpolate(away, [0, 60], [1, 0.92], 'clamp') }] };
   });
-  return <Animated.Text numberOfLines={1} style={[style, look]}>{name}</Animated.Text>;
+  return <Animated.Text numberOfLines={1} maxFontSizeMultiplier={TextScale.TITLE} style={[style, look]}>{name}</Animated.Text>;
 }
 
 const styleDefinitions = StyleSheet.create({
