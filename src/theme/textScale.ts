@@ -22,10 +22,10 @@ export const TextScale = {
   /** Large screen titles, section switches, buttons, chips, text boxes and their placeholders. */
   TITLE: 1.25,
   /** Card titles and subtitles, list rows, settings rows. */
-  CARD: 1.4,
+  CARD: 1.3,
   /** What people read: posts, captions under posts, comments, threads, messages. */
-  BODY: 1.8,
-  /** Any text that names no cap (between TITLE and CARD). */
+  BODY: 1.5,
+  /** Any text that names no cap (the same as CARD). CARD and BODY start at 1.3 / 1.5 until a phone at large text sizes has been checked (Oct 21). */
   DEFAULT: 1.3,
 } as const;
 
