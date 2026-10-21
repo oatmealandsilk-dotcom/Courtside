@@ -41,6 +41,7 @@ import { publicRoute } from '@/features/share/publicRoute';
 import { openPlayer } from '@/features/navigation/openPlayer';
 import { show as showToast } from '@/lib/toast';
 import { QUESTION_OF_WEEK_MS } from '@/data/api';
+import { TextScale } from '@/theme/textScale';
 
 function QuestionDetail() {
   const styles = useThemedStyles(styleDefinitions);
@@ -165,13 +166,13 @@ function QuestionDetail() {
           <Pressable accessibilityRole="link" accessibilityLabel={asker ? `Open ${asker.name}'s profile` : undefined} onPress={() => asker && openPlayer(asker.id, currentUserId)} style={styles.asker}>
             <Avatar name={asker?.name ?? '?'} seed={asker?.avatarSeed ?? question.authorId} uri={asker?.avatarUrl} size={32} />
             <View style={{ flex: 1 }}>
-              <Text style={styles.askerName} numberOfLines={1}>{asker?.name ?? 'Unknown'}</Text>
-              <Text style={styles.time}>{asker ? `@${asker.handle}` : ''} · {relativeTime(question.createdAt)}{question.editedAt ? ' · Edited' : ''}</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.askerName} numberOfLines={1}>{asker?.name ?? 'Unknown'}</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.time}>{asker ? `@${asker.handle}` : ''} · {relativeTime(question.createdAt)}{question.editedAt ? ' · Edited' : ''}</Text>
             </View>
           </Pressable>
           <Chip label={meta.label} selected tint={tint} ink={inkOn(tint)} small onPress={() => openTopic(question.topic)} />
         </View>
-        <Text style={styles.title}>{question.title}</Text>
+        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.title}>{question.title}</Text>
         <RichText style={styles.body}>{question.body}</RichText>
         {question.poll ? <PollView question={question} /> : null}
         <View style={styles.tagRow}>
@@ -187,7 +188,7 @@ function QuestionDetail() {
             style={styles.sourceRow}
           >
             <Ionicons name={question.source.name === 'reddit' ? 'logo-reddit' : 'globe-outline'} size={16} color={colors.brand} />
-            <Text style={styles.sourceText}>
+            <Text maxFontSizeMultiplier={TextScale.BODY} style={styles.sourceText}>
               From {question.source.label} · by {question.source.author} · {question.source.replies} replies there
             </Text>
             <Ionicons name="open-outline" size={15} color={colors.brand} />
@@ -198,21 +199,21 @@ function QuestionDetail() {
           {/* The same Reply button a reply has; it opens the line to type on right here. None on a removed thread. */}
           {removed ? null : <Pressable accessibilityRole="button" accessibilityLabel="Reply to this thread" onPress={() => { if (isGuest) { openJoinSheet('reply'); return; } setReplying(true); setTimeout(() => replyInput.current?.focus(), 50); }} style={styles.replyButton}>
             <Ionicons name="chatbubble-outline" size={16} color={colors.textMuted}/>
-            <Text style={styles.replyLabel}>Reply</Text>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.replyLabel}>Reply</Text>
           </Pressable>}
         </View>
         {replying && !removed ? (
           <View style={{ gap: 8 }}>
           <MentionSuggestions candidates={tag.rows} onPick={tag.pick} maxHeight={176} />
           <View style={styles.composer}>
-            <TextInput ref={replyInput} autoFocus keyboardType={Platform.OS === 'ios' ? 'twitter' : undefined} onFocus={() => reveal(replyInput.current)} accessibilityLabel="Reply to this thread" placeholder="Add your reply… (@ to tag)" placeholderTextColor={colors.textFaint} multiline maxLength={10000} value={draft} onChangeText={setDraft} onSelectionChange={tag.onSelectionChange} style={styles.replyInput}
+            <TextInput maxFontSizeMultiplier={TextScale.BODY} ref={replyInput} autoFocus keyboardType={Platform.OS === 'ios' ? 'twitter' : undefined} onFocus={() => reveal(replyInput.current)} accessibilityLabel="Reply to this thread" placeholder="Add your reply… (@ to tag)" placeholderTextColor={colors.textFaint} multiline maxLength={10000} value={draft} onChangeText={setDraft} onSelectionChange={tag.onSelectionChange} style={styles.replyInput}
               blurOnSubmit={Platform.OS === 'web' ? true : undefined}
               onSubmitEditing={Platform.OS === 'web' ? submit : undefined} />
             {media ? <AttachedPreview media={media} onRemove={() => setMedia(null)} /> : null}
             <View style={styles.inlineActions}>
               <AttachButton onPick={setMedia} />
               <View style={{ flex: 1 }} />
-              <Pressable accessibilityRole="button" onPress={() => { setReplying(false); setDraft(''); setMedia(null); }} hitSlop={8}><Text style={styles.cancel}>Cancel</Text></Pressable>
+              <Pressable accessibilityRole="button" onPress={() => { setReplying(false); setDraft(''); setMedia(null); }} hitSlop={8}><Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.cancel}>Cancel</Text></Pressable>
               <Pressable accessibilityRole="button" accessibilityLabel="Post reply" disabled={!draft.trim() && !media} onPress={submit} style={[styles.send, !draft.trim() && !media && styles.sendOff]}>
                 <Ionicons name="arrow-up" size={18} color={colors.brandInk} />
               </Pressable>
@@ -224,8 +225,8 @@ function QuestionDetail() {
 
       <View style={styles.section}>
         <View style={styles.sectionHead}>
-          <Text style={styles.sectionTitle}>Replies</Text>
-          {thread.length > 0 ? <Text style={styles.sectionCount}>{thread.length}</Text> : null}
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.sectionTitle}>Replies</Text>
+          {thread.length > 0 ? <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.sectionCount}>{thread.length}</Text> : null}
         </View>
 
         {/* Only hidden replies so far: "Hidden replies" below says so, not "No answers yet". */}

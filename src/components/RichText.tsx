@@ -7,6 +7,7 @@ import { useMyId, useUsers } from '@/store/AppContext';
 import { domainOf, openLink, splitLinks } from '@/lib/links';
 import { colors, font } from '@/theme';
 import { openPlayer } from '@/features/navigation/openPlayer';
+import { TextScale } from '@/theme/textScale';
 
 const MENTION = /(@[a-z0-9_.]{2,30})/gi;
 /** Mentions and, when asked for, #hashtags: what a reel's caption lights up. */
@@ -26,7 +27,7 @@ export interface LinkLook {
  * With `links`, web addresses light up too and open in the in-app browser
  * (a chat's messages ask for this; captions and comments do not yet).
  */
-export function RichText({ children, mentionStyle, hashtagStyle, links, after, ...props }: TextProps & {
+export function RichText({ children, mentionStyle, hashtagStyle, links, after, maxFontSizeMultiplier = TextScale.BODY, ...rest }: TextProps & {
   children: string;
   mentionStyle?: StyleProp<TextStyle>;
   /** Set to light up #hashtags too (bold, opening the search for that tag). */
@@ -36,6 +37,8 @@ export function RichText({ children, mentionStyle, hashtagStyle, links, after, .
   /** Something set right after the words, on the same line: a caption's "more". */
   after?: React.ReactNode;
 }) {
+  // What people read grows furthest with the phone's text size (TextScale.BODY), unless the caller caps it.
+  const props = { ...rest, maxFontSizeMultiplier };
   const users = useUsers();
   const currentUserId = useMyId();
   // Found once per message, not on every draw (a chat redraws its bubbles on each key typed in the box).

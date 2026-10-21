@@ -25,6 +25,7 @@ import { useApp } from '@/store/AppContext';
 import type { Answer } from '@/data/types';
 import { listedAnswers } from '@/features/hiddenWords/hiddenWords';
 import { colors, font, radius, spacing, typography } from '@/theme';
+import { TextScale } from '@/theme/textScale';
 
 export function ThreadReplies({questionId, preview = false}:{questionId:string; preview?:boolean}) {
   const {questions,answers,currentUserId,actions}=useApp();
@@ -107,8 +108,8 @@ export function ThreadReply({ answer, thread, askerId, depth = 0, preview = fals
         <Avatar name={responder?.name ?? '?'} seed={responder?.avatarSeed ?? answer.authorId} uri={responder?.avatarUrl} size={30}/>
         <PlayerName userId={responder?.id} style={styles.answerName}>{responder?.name ?? 'Unknown'}</PlayerName>
         <StreakFlame days={streak} size="small" style={styles.flame} />
-        <Text style={styles.time}>{relativeTime(answer.createdAt)}</Text>
-        {askerId && answer.authorId === askerId ? <View style={styles.op}><Text style={styles.opText}>OP</Text></View> : null}
+        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.time}>{relativeTime(answer.createdAt)}</Text>
+        {askerId && answer.authorId === askerId ? <View style={styles.op}><Text maxFontSizeMultiplier={TextScale.BODY} style={styles.opText}>OP</Text></View> : null}
         {answer.fromCoach && <Ionicons name="shield-checkmark" size={14} color={colors.brand}/>}
       </Pressable>
       {!collapsed && <>
@@ -122,13 +123,13 @@ export function ThreadReply({ answer, thread, askerId, depth = 0, preview = fals
           <Pressable accessibilityRole="button" accessibilityLabel={`Collapse reply by ${responder?.name ?? 'player'}`} onPress={()=>setCollapsed(true)} style={styles.collapse}><Ionicons name="remove-circle-outline" size={20} color={colors.textMuted}/></Pressable>
           <VoteControls item={answer} userId={currentUserId} onVote={direction => actions.voteAnswer(answer.id, direction)}/>
           {answer.removed || closed ? null : <Pressable accessibilityRole="button" accessibilityLabel={`Reply to ${responder?.name ?? 'player'}`} onPress={() => setReplying(true)} style={styles.replyButton}>
-            <Ionicons name="chatbubble-outline" size={16} color={colors.textMuted}/><Text style={styles.time}>Reply</Text>
+            <Ionicons name="chatbubble-outline" size={16} color={colors.textMuted}/><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.time}>Reply</Text>
           </Pressable>}
         </View>}
         {replying && !closed && !answer.removed && <View style={styles.inlineComposer}>
           <MentionSuggestions candidates={tag.rows} onPick={tag.pick} maxHeight={176} />
           <View style={styles.composer}>
-            <TextInput ref={lineRef} autoFocus keyboardType={Platform.OS === 'ios' ? 'twitter' : undefined} onFocus={() => reveal(lineRef.current)} accessibilityLabel={`Reply to ${responder?.name ?? 'player'}`} placeholder={`Reply to ${responder?.name?.split(' ')[0] ?? 'this'}… (@ to tag)`} placeholderTextColor={colors.textFaint} multiline maxLength={10000} value={draft} onChangeText={setDraft} onSelectionChange={tag.onSelectionChange} style={styles.replyInput}
+            <TextInput maxFontSizeMultiplier={TextScale.BODY} ref={lineRef} autoFocus keyboardType={Platform.OS === 'ios' ? 'twitter' : undefined} onFocus={() => reveal(lineRef.current)} accessibilityLabel={`Reply to ${responder?.name ?? 'player'}`} placeholder={`Reply to ${responder?.name?.split(' ')[0] ?? 'this'}… (@ to tag)`} placeholderTextColor={colors.textFaint} multiline maxLength={10000} value={draft} onChangeText={setDraft} onSelectionChange={tag.onSelectionChange} style={styles.replyInput}
               // Enter sends on a computer; the web toolkit needs blurOnSubmit to do that in a multiline box.
               blurOnSubmit={Platform.OS === 'web' ? true : undefined}
               onSubmitEditing={Platform.OS === 'web' ? post : undefined}/>
@@ -136,7 +137,7 @@ export function ThreadReply({ answer, thread, askerId, depth = 0, preview = fals
             <View style={styles.inlineActions}>
               <AttachButton onPick={setMedia} />
               <View style={{ flex: 1 }} />
-              <Pressable accessibilityRole="button" onPress={() => { setReplying(false); setDraft(''); setMedia(null); }} hitSlop={8}><Text style={styles.cancel}>Cancel</Text></Pressable>
+              <Pressable accessibilityRole="button" onPress={() => { setReplying(false); setDraft(''); setMedia(null); }} hitSlop={8}><Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.cancel}>Cancel</Text></Pressable>
               <Pressable accessibilityRole="button" accessibilityLabel="Post reply" disabled={!canSend} onPress={post} style={[styles.send, !canSend && styles.sendOff]}><Ionicons name="arrow-up" size={18} color={colors.brandInk} /></Pressable>
             </View>
           </View>

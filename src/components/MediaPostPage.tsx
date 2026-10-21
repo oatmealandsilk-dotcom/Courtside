@@ -45,6 +45,7 @@ import { tagsNotInCaption } from '@/features/feed/tags';
 import { openPlayer } from '@/features/navigation/openPlayer';
 import { PhotoCarousel } from '@/components/PhotoCarousel';
 import { photosOf } from '@/features/compose/carousel';
+import { TextScale } from '@/theme/textScale';
 
 interface Props {
   post: Post;
@@ -393,7 +394,7 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
           {post.body ? (
             // A tap on the words opens the comments, the whole caption at their top, as on Instagram (Oct 12, owner).
             <Pressable accessibilityRole="button" accessibilityLabel="Open the comments, with the whole caption" onPress={onComment}>
-              <Text numberOfLines={2} style={styles.caption}><Text style={styles.captionName}>{author.handle} </Text><RichText style={styles.caption}>{post.body}</RichText></Text>
+              <Text numberOfLines={2} style={styles.caption}><Text style={styles.captionName}>{author.handle} </Text><RichText maxFontSizeMultiplier={TextScale.CARD} style={styles.caption}>{post.body}</RichText></Text>
             </Pressable>
           ) : null}
           {/* Who with, right under the words, out of the name's lines. */}

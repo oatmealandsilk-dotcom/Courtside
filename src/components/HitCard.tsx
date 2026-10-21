@@ -23,6 +23,7 @@ import { afterReport } from '@/features/moderation/reportThanks';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, lift, radius, spacing, typography } from '@/theme';
+import { TextScale } from '@/theme/textScale';
 
 /**
  * A "Looking for a hit" post: who, when, where, what level and format, and
@@ -155,7 +156,7 @@ export function HitCard({ hit, miles, linked = true, tip, tipReady = false, tipA
               <Ionicons name="flag-outline" size={17} color={colors.textFaint} />
             </Pressable> : null}
           </View>
-          <Text style={[styles.when, quiet && styles.whenQuiet]} numberOfLines={1}>{hitWhen(hit.startsAt)}</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.when, quiet && styles.whenQuiet]} numberOfLines={1}>{hitWhen(hit.startsAt)}</Text>
         </View>
       </View>
       <View style={styles.facts}>
@@ -165,7 +166,7 @@ export function HitCard({ hit, miles, linked = true, tip, tipReady = false, tipA
           {/* The distance is held to the name's last word by no-break spaces, so a long name
               wraps inside itself ("Country Club at Wakefield / Plantation · 2.6 mi") and never
               leaves a dot dangling at a line's end or the distance alone on the second line. */}
-          <Text style={styles.placeText} numberOfLines={2}>{hit.place.name}{miles !== undefined ? <Text style={styles.placeMiles}>{` · ${formatMiles(miles).replace(/ /g, ' ')}`}</Text> : null}</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.placeText} numberOfLines={2}>{hit.place.name}{miles !== undefined ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.placeMiles}>{` · ${formatMiles(miles).replace(/ /g, ' ')}`}</Text> : null}</Text>
         </Pressable>
         {/* What, then whether there is room, as a tag at the line's end: a grey "Full" once there is none. */}
         <View style={styles.metaRow}>
@@ -173,27 +174,27 @@ export function HitCard({ hit, miles, linked = true, tip, tipReady = false, tipA
             <Text style={styles.detailsFormat}>{FORMAT_LABEL[hit.format]}</Text>{` · ${levelText(hit, author?.profile.skillSystem)}`}
           </Text>
           <View style={[styles.tag, full && styles.tagFull]}>
-            <Text style={[styles.tagText, full && styles.tagTextFull]}>{full ? 'Full' : `${left} ${left === 1 ? 'spot' : 'spots'} left`}</Text>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.tagText, full && styles.tagTextFull]}>{full ? 'Full' : `${left} ${left === 1 ? 'spot' : 'spots'} left`}</Text>
           </View>
         </View>
       </View>
-      {hit.note ? <Text style={styles.note} numberOfLines={3}>{hit.note}</Text> : null}
+      {hit.note ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.note} numberOfLines={3}>{hit.note}</Text> : null}
       {line ? (
         <View style={styles.audience}>
           <View style={styles.audienceRow}>
             <Ionicons name={hit.audience === 'invite_only' ? 'lock-closed-outline' : 'time-outline'} size={15} color={colors.brand} />
-            <Text style={styles.audienceText}>{line}</Text>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.audienceText}>{line}</Text>
           </View>
           {invitedText ? (
             <View style={styles.audienceRow}>
               {invited.slice(0, 4).map((u, i) => <Avatar key={u.id} name={u.name} seed={u.avatarSeed} uri={u.avatarUrl} size={20} style={[styles.faceSmall, { marginLeft: i ? -6 : 0 }]} />)}
-              <Text style={styles.invitedText} numberOfLines={1}>{invitedText}</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.invitedText} numberOfLines={1}>{invitedText}</Text>
             </View>
           ) : null}
           {mine && hit.audience === 'invite_first' && left > 0 ? (
             <Pressable accessibilityRole="button" accessibilityLabel="Open to everyone now" onPress={(e) => { e.stopPropagation?.(); confirm({ title: 'Open to everyone now?', message: 'It goes on Find Players and the map for players nearby, not just the people you invited.', confirmLabel: 'Open it', onConfirm: () => { void actions.openHitNow(hit.id); } }); }} style={({ pressed }) => [styles.openNow, pressed && { opacity: PRESS_DIM }]}>
               <Ionicons name="earth-outline" size={15} color={colors.text} />
-              <Text style={styles.openNowText}>Open to everyone now</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.openNowText}>Open to everyone now</Text>
             </Pressable>
           ) : null}
         </View>
@@ -213,18 +214,18 @@ export function HitCard({ hit, miles, linked = true, tip, tipReady = false, tipA
               {joined.slice(0, 3).map((u, i) => <Avatar key={u.id} name={u.name} seed={u.avatarSeed} uri={u.avatarUrl} size={26} style={[styles.face, { marginLeft: i ? -10 : 0, zIndex: 3 - i }]} />)}
             </View>
           ) : null}
-          <Text style={[styles.joinedText, inIt && styles.joinedTextMine]} numberOfLines={2}>{whoIsIn(joined, total, currentUserId, twoLine)}</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.joinedText, inIt && styles.joinedTextMine]} numberOfLines={2}>{whoIsIn(joined, total, currentUserId, twoLine)}</Text>
         </View>
         {mine ? (
           <View style={[styles.actions, twoLine && styles.actionsTwoLine]}>
             {hit.conversationId ? (
               <Pressable accessibilityRole="button" accessibilityLabel="Chat with who’s in" onPress={(e) => { e.stopPropagation?.(); openChat(); }} style={({ pressed }) => [styles.button, styles.secondary, twoLine && styles.buttonWide, pressed && styles.buttonPressed]}>
                 <Ionicons name="chatbubble-ellipses-outline" size={16} color={colors.text} />
-                <Text style={styles.secondaryText}>Chat</Text>
+                <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.secondaryText}>Chat</Text>
               </Pressable>
             ) : null}
             <Pressable accessibilityRole="button" onPress={(e) => { e.stopPropagation?.(); confirm({ title: 'Call off this hit?', message: total ? `It comes off Find Players, and ${total === 1 ? 'the player who’s in gets' : `the ${total} players who are in get`} a note.` : 'It comes off Find Players.', confirmLabel: 'Call it off', destructive: true, onConfirm: () => actions.cancelHit(hit.id) }); }} style={({ pressed }) => [styles.button, styles.quietButton, twoLine && styles.buttonWide, pressed && styles.buttonPressed]}>
-              <Text style={styles.dangerText}>Call off</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.dangerText}>Call off</Text>
             </Pressable>
           </View>
         ) : canLeave ? (
@@ -233,22 +234,22 @@ export function HitCard({ hit, miles, linked = true, tip, tipReady = false, tipA
             {hit.conversationId ? (
               <Pressable accessibilityRole="button" accessibilityLabel="You’re in. Open the hit’s chat" onPress={(e) => { e.stopPropagation?.(); openChat(); }} style={({ pressed }) => [styles.button, styles.secondary, styles.buttonWide, pressed && styles.buttonPressed]}>
                 <Ionicons name="chatbubble-ellipses-outline" size={16} color={colors.text} />
-                <Text style={styles.secondaryText}>Chat</Text>
+                <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.secondaryText}>Chat</Text>
               </Pressable>
             ) : null}
             <Pressable accessibilityRole="button" accessibilityLabel={`Can’t make it. Free your spot in ${posterFirst}’s hit`} onPress={(e) => { e.stopPropagation?.(); cantMakeIt(); }} style={({ pressed }) => [styles.button, styles.quietButton, styles.buttonWide, pressed && styles.buttonPressed]}>
-              <Text style={styles.dangerText}>Can’t make it</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.dangerText}>Can’t make it</Text>
             </Pressable>
           </View>
         ) : inIt ? (
           // In a hit already played: just its chat.
           <Pressable accessibilityRole="button" accessibilityLabel="You’re in. Open the hit’s chat" onPress={(e) => { e.stopPropagation?.(); openChat(); }} style={({ pressed }) => [styles.button, styles.secondary, pressed && styles.buttonPressed]}>
             <Ionicons name="chatbubble-ellipses-outline" size={16} color={colors.text} />
-            <Text style={styles.secondaryText}>Chat</Text>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.secondaryText}>Chat</Text>
           </Pressable>
         ) : full ? null : (
           <Pressable accessibilityRole="button" disabled={busy} onPress={(e) => { e.stopPropagation?.(); void join(); }} style={({ pressed }) => [styles.button, styles.primary, busy && { opacity: 0.6 }, pressed && styles.buttonPressed]}>
-            <Text style={styles.primaryText}>{busy ? 'Joining…' : 'I’m in'}</Text>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.primaryText}>{busy ? 'Joining…' : 'I’m in'}</Text>
           </Pressable>
         )}
       </View>
@@ -336,7 +337,7 @@ const styleDefinitions = StyleSheet.create({
   audienceText: { ...typography.smallStrong, color: colors.brand, flex: 1 },
   invitedText: { ...typography.small, color: colors.textMuted, flex: 1 },
   faceSmall: { borderWidth: 1.5, borderColor: colors.bgElevated, borderRadius: 11 },
-  openNow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 36, borderRadius: 18, backgroundColor: colors.surface, ...lift },
+  openNow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, minHeight: 36, borderRadius: 18, backgroundColor: colors.surface, ...lift },
   openNowText: { ...typography.smallStrong, color: colors.text },
   // The foot: who's in and the one thing to do, under a hairline.
   foot: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm, paddingTop: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
@@ -353,7 +354,7 @@ const styleDefinitions = StyleSheet.create({
   actionsTwoLine: { alignSelf: 'stretch', justifyContent: 'flex-end' },
   buttonWide: { flex: 1, maxWidth: 180 },
   // One button, three looks: the same height, border and label weight.
-  button: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 38, paddingHorizontal: 16, borderRadius: 19, borderWidth: 1 },
+  button: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, minHeight: 38, paddingHorizontal: 16, borderRadius: 19, borderWidth: 1 },
   buttonPressed: { transform: [{ scale: PRESS_SHRINK }] },
   primary: { paddingHorizontal: 22, backgroundColor: colors.brand, borderColor: colors.brand },
   primaryText: { ...typography.bodyStrong, color: colors.brandInk },

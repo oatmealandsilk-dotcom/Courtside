@@ -41,7 +41,7 @@ import { openCourt, openCourtReel, playHere, postFromCourt, sendCourtToChat } fr
 import { Toggle } from '@/components/ui';
 import type { MapFilter, Placed } from '@/features/players/mapModel';
 import type { Weather } from '@/lib/weather';
-import { colors, font, pageIsDark, radius, spacing, typography, withAlpha } from '@/theme';
+import { TextScale, colors, oneLine, font, pageIsDark, radius, spacing, typography, withAlpha } from '@/theme';
 import { levelBadge } from '@/lib/badges';
 import { agoLabel, agoShort } from '@/components/map/markers';
 import { MAP_CREDITS } from '@/components/map/credits';
@@ -173,15 +173,15 @@ export function MapTopBar({ onBack, query, onQuery, locationOn, locating, onTogg
           <View style={styles.searchField} onLayout={(e) => setFieldW(Math.floor(e.nativeEvent.layout.width))}>
             {/* "Search <town>" (or "Search a place or park") laid out unseen at its own width, to know whether it fits. */}
             <View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.searchMeasure}>
-              <Text style={styles.searchHint} onLayout={(e) => setSayW(Math.ceil(e.nativeEvent.layout.width))}>{say}</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.searchHint} onLayout={(e) => setSayW(Math.ceil(e.nativeEvent.layout.width))}>{say}</Text>
             </View>
             {/* The bar's words, drawn here rather than as the field's placeholder, so a long town trails off "…" on every phone. */}
             {!query ? (
               <View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.searchHintBox}>
-                <Text style={styles.searchHint} numberOfLines={1}>{hint}</Text>
+                <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.searchHint} numberOfLines={1}>{hint}</Text>
               </View>
             ) : null}
-            <TextInput
+            <TextInput maxFontSizeMultiplier={TextScale.TITLE}
               ref={input}
               accessibilityLabel="Search players, courts, or a city, address or park"
               accessibilityHint={city ? `Around ${city}` : undefined}
@@ -205,7 +205,7 @@ export function MapTopBar({ onBack, query, onQuery, locationOn, locating, onTogg
             <Animated.View entering={FadeIn.duration(180)} exiting={FadeOut.duration(120)} pointerEvents="none" style={styles.searchWeather}>
               <View style={styles.searchWeatherRule} />
               <Ionicons name={weather.icon as keyof typeof Ionicons.glyphMap} size={15} color={colors.textMuted} />
-              <Text style={styles.searchWeatherText} accessibilityLabel={`${weather.tempF} degrees, ${weather.label}`}>{weather.tempF}°</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.searchWeatherText} accessibilityLabel={`${weather.tempF} degrees, ${weather.label}`}>{weather.tempF}°</Text>
             </Animated.View>
           ) : null}
         </Glass>
@@ -233,8 +233,8 @@ export function MapTopBar({ onBack, query, onQuery, locationOn, locating, onTogg
               <Pressable key={c.id} accessibilityRole="button" accessibilityLabel={`${labelOf(c)}, ${meta}. Show on the map`} onPress={() => { haptics.tap(); done(); onPickCourt?.(c); }} style={({ pressed }) => [styles.resultRow, i > 0 && styles.listRule, pressed && styles.listPressed]}>
                 <View style={styles.resultTile}><CourtGlyph size={13} color={colors.brand} /></View>
                 <View style={styles.listWords}>
-                  <Text style={styles.listName} numberOfLines={1}>{labelOf(c)}</Text>
-                  <Text style={styles.personMeta} numberOfLines={1}>{meta}</Text>
+                  <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.listName} numberOfLines={1}>{labelOf(c)}</Text>
+                  <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.personMeta} numberOfLines={1}>{meta}</Text>
                 </View>
               </Pressable>
             );
@@ -243,17 +243,17 @@ export function MapTopBar({ onBack, query, onQuery, locationOn, locating, onTogg
             <Pressable key={p.id} accessibilityRole="button" accessibilityLabel={`${p.title}${p.sub ? `, ${p.sub}` : ''}. Show its courts on the map`} onPress={() => { haptics.tap(); done(); onPickPlace?.(p); }} style={({ pressed }) => [styles.resultRow, (found.length > 0 || i > 0) && styles.listRule, pressed && styles.listPressed]}>
               <View style={styles.placeTile}><Ionicons name={p.kind === 'area' ? 'map-outline' : 'location-outline'} size={15} color={colors.textMuted} /></View>
               <View style={styles.listWords}>
-                <Text style={styles.listName} numberOfLines={1}>{p.title}</Text>
-                {p.sub ? <Text style={styles.personMeta} numberOfLines={1}>{p.sub}</Text> : null}
+                <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.listName} numberOfLines={1}>{p.title}</Text>
+                {p.sub ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.personMeta} numberOfLines={1}>{p.sub}</Text> : null}
               </View>
             </Pressable>
           ))}
           {searching ? (
-            <View style={styles.placeNote}><ActivityIndicator size="small" color={colors.textFaint} /><Text style={styles.placeNoteText}>Looking for places…</Text></View>
+            <View style={styles.placeNote}><ActivityIndicator size="small" color={colors.textFaint} /><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.placeNoteText}>Looking for places…</Text></View>
           ) : placeNote ? (
             <View style={[styles.placeNote, found.length + placeRows.length > 0 ? styles.listRule : null]}>
               <Ionicons name={places?.failed ? 'cloud-offline-outline' : 'search-outline'} size={15} color={colors.textFaint} />
-              <Text style={styles.placeNoteText}>{placeNote}</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.placeNoteText}>{placeNote}</Text>
             </View>
           ) : null}
         </Glass>
@@ -335,7 +335,7 @@ export function FilterChips({ filter, onFilter, courtsOn, onCourts, courtsLoadin
             }}
             style={[styles.chip, measured ? styles.chipClear : active === f.key && styles.chipOn]}
           >
-            <Text style={[styles.chipText, active === f.key && styles.chipTextOn]}>{f.label}</Text>
+            <Text maxFontSizeMultiplier={TextScale.TITLE} style={[styles.chipText, active === f.key && styles.chipTextOn]}>{f.label}</Text>
           </Pressable>
         ))}
         {/* Courts is an on/off switch, not one of the choices: a hairline sets it apart, and it scrolls with the row so nothing is ever tucked behind it. */}
@@ -343,7 +343,7 @@ export function FilterChips({ filter, onFilter, courtsOn, onCourts, courtsLoadin
         <Pressable accessibilityRole="switch" accessibilityState={{ checked: courtsOn }} accessibilityLabel="Show courts" hitSlop={CHIP_REACH} onPress={() => { haptics.tap(); onCourts(); }} style={[styles.chip, courtsOn && styles.chipOn]}>
           {courtsOn ? <BrandWash /> : null}
           {courtsLoading ? <ActivityIndicator size="small" color={courtsOn ? colors.brandInk : colors.text} /> : <CourtGlyph size={15} color={courtsOn ? colors.brandInk : colors.text} />}
-          <Text style={[styles.chipText, courtsOn && styles.chipTextOn]}>Courts</Text>
+          <Text maxFontSizeMultiplier={TextScale.TITLE} style={[styles.chipText, courtsOn && styles.chipTextOn]}>Courts</Text>
         </Pressable>
       </ScrollView>
     </View>
@@ -361,7 +361,7 @@ export function CourtsZoomNote() {
   return (
     <Animated.View entering={FadeIn.duration(180)} exiting={FadeOut.duration(140)} pointerEvents="none" style={styles.zoomNote}>
       <CourtGlyph size={12} color={colors.textMuted} />
-      <Text style={styles.zoomNoteText}>Zoom in to see courts</Text>
+      <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.zoomNoteText}>Zoom in to see courts</Text>
     </Animated.View>
   );
 }
@@ -372,7 +372,7 @@ export function WeatherChip({ weather }: { weather: Weather | null }) {
   return (
     <View pointerEvents="none" style={styles.weather}>
       <Ionicons name={weather.icon as keyof typeof Ionicons.glyphMap} size={15} color={colors.text} />
-      <Text style={styles.weatherText} accessibilityLabel={`${weather.tempF} degrees, ${weather.label}`}>{weather.tempF}°</Text>
+      <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.weatherText} accessibilityLabel={`${weather.tempF} degrees, ${weather.label}`}>{weather.tempF}°</Text>
     </View>
   );
 }
@@ -422,7 +422,7 @@ export function MapCredit({ style, align = 'left' }: { style?: object; align?: '
         <Animated.View entering={FadeIn.duration(140)} style={[styles.creditCard, align === 'right' ? { right: 0 } : { left: 0 }]}>
           {MAP_CREDITS.map((c) => (
             <Pressable key={c.url} accessibilityRole="link" accessibilityLabel={c.label} hitSlop={4} onPress={() => { setOpen(false); void Linking.openURL(c.url); }}>
-              <Text style={styles.creditText} numberOfLines={1}>{c.label}</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.creditText} numberOfLines={1}>{c.label}</Text>
             </Pressable>
           ))}
         </Animated.View>
@@ -498,7 +498,7 @@ export function PlayersPill({ items, query = '', filter = 'all', courts = [], lo
     <Pressable accessibilityRole="button" accessibilityLabel={n ? 'Show the full list' : 'Show players'} onPress={() => { haptics.tap(); onOpen(); }} style={({ pressed }) => [styles.pillLift, pressed && styles.glassPressed]}>
       <Glass radius={21} style={styles.playersPill}>
         <Ionicons name={n ? 'people' : 'people-outline'} size={15} color={colors.brand} />
-        <Text style={styles.playersPillText} numberOfLines={1}>{words}</Text>
+        <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.playersPillText} numberOfLines={1}>{words}</Text>
         {n ? <Ionicons name="chevron-up" size={14} color={colors.textMuted} /> : null}
       </Glass>
     </Pressable>
@@ -590,10 +590,10 @@ export function PlayersSheet({ items, cityName, onSelect, query = '', filter = '
           <View style={[styles.listRing, isOpenToHit(p.user) && styles.listRingOn]}><Avatar name={p.user.name} seed={p.user.avatarSeed} size={40} ring={p.user.isCoach} /></View>
           <View style={styles.listWords}>
             <View style={styles.personTop}>
-              <Text style={styles.listName} numberOfLines={1}>{p.user.name}</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.listName} numberOfLines={1}>{p.user.name}</Text>
               <LevelPill profile={p.user.profile} small />
             </View>
-            <Text style={styles.personMeta} numberOfLines={1}>{[formatSpotMiles(p.miles, p.rough), p.seenAt ? agoLabel(p.seenAt) : null, isOpenToHit(p.user) ? 'open to hit' : null].filter(Boolean).join(' · ')}</Text>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.personMeta} numberOfLines={1}>{[formatSpotMiles(p.miles, p.rough), p.seenAt ? agoLabel(p.seenAt) : null, isOpenToHit(p.user) ? 'open to hit' : null].filter(Boolean).join(' · ')}</Text>
           </View>
           <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
         </Pressable>
@@ -611,11 +611,11 @@ export function PlayersSheet({ items, cityName, onSelect, query = '', filter = '
             <View style={styles.listGrabberHit}>{grabber}</View>
           )}
           <View style={styles.listTitleRow}>
-            <Text accessibilityRole="header" style={styles.listTitle} numberOfLines={1}>{listTitle(items, query, filter, courts, cityName)}</Text>
+            <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" style={styles.listTitle} numberOfLines={1}>{listTitle(items, query, filter, courts, cityName)}</Text>
             {/* More players than fit across: See all opens them as the full list. */}
             {stops.canTall && !stops.up ? (
               <Pressable accessibilityRole="button" accessibilityLabel="See all players" hitSlop={8} onPress={() => { haptics.tap(); stops.expand(); }} style={({ pressed }) => [styles.seeAll, pressed && styles.closePressed]}>
-                <Text style={styles.seeAllText}>See all</Text>
+                <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.seeAllText}>See all</Text>
               </Pressable>
             ) : null}
             <Pressable accessibilityRole="button" accessibilityLabel="Close" hitSlop={10} onPress={onClose} style={({ pressed }) => [styles.close, pressed && styles.closePressed]}>
@@ -654,7 +654,7 @@ export function PlayersSheet({ items, cityName, onSelect, query = '', filter = '
             </View>
           ) : query.trim() || filter !== 'all' || !courts.length ? (
             // With a name typed, say only that no player has it: a court's name finds the court, and the players are still there.
-            <Text style={styles.sheetEmpty} numberOfLines={2}>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.sheetEmpty} numberOfLines={2}>
               {query.trim() ? `No players named “${query.trim()}”`
                 : filter === 'following' ? 'Nobody you follow is sharing their spot nearby.'
                   : filter !== 'all' ? 'Nobody nearby matches that.'
@@ -664,15 +664,15 @@ export function PlayersSheet({ items, cityName, onSelect, query = '', filter = '
             // Nobody sharing yet: the nearest places to play instead, side by side like the faces, each a tap from its card.
             <View style={styles.emptyCourts}>
               {locked ? <View style={styles.lockBox}><LockNote lock={locked} onUnlock={onUnlock} /></View> : null}
-              <Text style={styles.emptyCourtsTitle} numberOfLines={1}>{locked ? 'The nearest courts:' : 'No one sharing nearby yet. The nearest courts:'}</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.emptyCourtsTitle} numberOfLines={1}>{locked ? 'The nearest courts:' : 'No one sharing nearby yet. The nearest courts:'}</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.courtStrip}>
                 {courts.map(({ c, miles }) => (
                   <Pressable key={c.id} accessibilityRole="button" accessibilityLabel={`${c.name}, ${formatMiles(miles)}. Show on the map`} onPress={() => { haptics.tap(); onPickCourt?.(c.id); }} style={({ pressed }) => [styles.courtChip, pressed && styles.listPressed]}>
                     <View style={styles.resultTile}><CourtGlyph size={13} color={colors.brand} /></View>
                     <View style={styles.courtChipWords}>
                       {/* The court's own name; an unnamed one (only listed when a town has no named court) says just "Tennis courts", never "public". */}
-                      <Text style={styles.courtChipName} numberOfLines={1}>{c.name}</Text>
-                      <Text style={styles.personMeta} numberOfLines={1}>{[formatMiles(miles), c.count > 1 ? `${c.count} courts` : null, c.lit ? 'lights' : null].filter(Boolean).join(' · ')}</Text>
+                      <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.courtChipName} numberOfLines={1}>{c.name}</Text>
+                      <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.personMeta} numberOfLines={1}>{[formatMiles(miles), c.count > 1 ? `${c.count} courts` : null, c.lit ? 'lights' : null].filter(Boolean).join(' · ')}</Text>
                     </View>
                   </Pressable>
                 ))}
@@ -699,9 +699,9 @@ function TrayFace({ placed: p, onPress }: { placed: Placed; onPress: () => void 
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={`${said}. Show on the map`} onPress={onPress} style={({ pressed }) => [styles.trayFace, pressed && styles.listPressed]}>
       <OpenRing open={open} size={TRAY_FACE} halo="small"><Avatar name={p.user.name} seed={p.user.avatarSeed} size={TRAY_FACE} ring={p.user.isCoach} /></OpenRing>
-      <Text style={styles.trayName} numberOfLines={1}>{p.user.name.split(' ')[0]}</Text>
+      <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.trayName} numberOfLines={1}>{p.user.name.split(' ')[0]}</Text>
       <LevelPill profile={p.user.profile} small style={styles.trayLevel} />
-      <Text style={styles.trayMeta} numberOfLines={1}>{[far, ago].filter(Boolean).join(' · ')}</Text>
+      <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.trayMeta} numberOfLines={1}>{[far, ago].filter(Boolean).join(' · ')}</Text>
     </Pressable>
   );
 }
@@ -776,7 +776,7 @@ function LockNote({ lock, onUnlock }: { lock: 'location' | 'hidden'; onUnlock?: 
       {onUnlock ? (
         <Pressable accessibilityRole="button" accessibilityLabel={action} hitSlop={8} onPress={() => { haptics.tap(); onUnlock(); }} style={({ pressed }) => [styles.lockAction, pressed && styles.listPressed]}>
           <Ionicons name={lock === 'location' ? 'navigate' : 'eye-outline'} size={14} color={colors.brand} />
-          <Text style={styles.lockActionText}>{action}</Text>
+          <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.lockActionText}>{action}</Text>
         </Pressable>
       ) : null}
     </View>
@@ -818,17 +818,17 @@ export function WhereCard({ locating, onLocation }: { locating?: boolean; onLoca
   return (
     <View style={[styles.sheet, { paddingTop: spacing.lg }]}>
       <View style={[styles.personWords, { paddingHorizontal: spacing.lg }]}>
-        <Text style={styles.personName}>Where do you play?</Text>
-        <Text style={styles.openNote}>Turn on location or add your city, and the map shows the players and courts near you.</Text>
+        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.personName}>Where do you play?</Text>
+        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.openNote}>Turn on location or add your city, and the map shows the players and courts near you.</Text>
       </View>
       <View style={[styles.personActions, { marginTop: spacing.xs }]}>
         <Pressable accessibilityRole="button" onPress={onLocation} disabled={locating} style={styles.primary}>
           <BrandWash />
           {locating ? <ActivityIndicator size="small" color={colors.brandInk} /> : <Ionicons name="navigate" size={16} color={colors.brandInk} />}
-          <Text style={styles.primaryText}>Use my location</Text>
+          <Text {...oneLine(TextScale.TITLE, 0.8)} style={styles.primaryText}>Use my location</Text>
         </Pressable>
         <Pressable accessibilityRole="button" onPress={() => router.push('/edit-profile')} style={styles.secondary}>
-          <Text style={styles.secondaryText}>Add my city</Text>
+          <Text {...oneLine(TextScale.TITLE, 0.8)} style={styles.secondaryText}>Add my city</Text>
         </Pressable>
       </View>
     </View>
@@ -891,16 +891,16 @@ export function PlayerSheet({ placed, following, onClose, onProfile, onMessage, 
         {/* The name opens the profile too, so a card with Ask to hit still reaches it in one tap. */}
         <Pressable accessibilityRole="link" accessibilityLabel={`${user.name}, open profile`} onPress={onProfile} style={styles.personWords}>
           <View style={styles.personTop}>
-            <Text style={styles.personName} numberOfLines={1}>{user.name}</Text>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.personName} numberOfLines={1}>{user.name}</Text>
             <LevelPill profile={user.profile} small />
           </View>
           {/* At a court right now (migration 63): which one, first; otherwise the town, and how far (never finer than the pin is). */}
           {/* "Follows you" joins whichever line is short: this one at a court (no town on it, and the
               court's name below needs its room), the "Active" line otherwise. */}
-          <Text style={styles.personMeta} numberOfLines={1}>{[`@${user.handle}`, court ? null : seenCity || user.location || null, formatSpotMiles(miles, rough), court && followsYou ? 'Follows you' : null].filter(Boolean).join(' · ')}</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.personMeta} numberOfLines={1}>{[`@${user.handle}`, court ? null : seenCity || user.location || null, formatSpotMiles(miles, rough), court && followsYou ? 'Follows you' : null].filter(Boolean).join(' · ')}</Text>
           {court ? <View style={styles.openRow}><CourtGlyph size={13} color={colors.court} /><Text style={styles.atCourt} numberOfLines={1}>At {court.name}{seenAt ? ` · ${agoLabel(seenAt)}` : ''}</Text></View>
-            : seenAt || followsYou ? <Text style={styles.personMeta} numberOfLines={1}>{[seenAt ? activeLabel(seenAt) : null, followsYou ? 'Follows you' : null].filter(Boolean).join(' · ')}</Text> : null}
-          {isOpenToHit(user) ? <View style={styles.openRow}><View style={styles.openDot} /><Text style={styles.openText}>{till ? `Open to hit ${till}` : 'Open to hit today'}</Text></View> : null}
+            : seenAt || followsYou ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.personMeta} numberOfLines={1}>{[seenAt ? activeLabel(seenAt) : null, followsYou ? 'Follows you' : null].filter(Boolean).join(' · ')}</Text> : null}
+          {isOpenToHit(user) ? <View style={styles.openRow}><View style={styles.openDot} /><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.openText}>{till ? `Open to hit ${till}` : 'Open to hit today'}</Text></View> : null}
         </Pressable>
         {/* Up by the name, where a card's close sits on a phone, rather than floating halfway down the words. */}
         <Pressable accessibilityRole="button" accessibilityLabel="Close" hitSlop={10} onPress={onClose} style={({ pressed }) => [styles.close, styles.closeTop, pressed && styles.closePressed]}>
@@ -918,24 +918,24 @@ export function PlayerSheet({ placed, following, onClose, onProfile, onMessage, 
             <Tappable accessibilityLabel={`Ask ${user.name} to hit`} onPress={onAskToHit} scaleTo={0.97} hoverTo={1.02} style={[styles.cardPill, styles.cardPrimary, pageIsDark() ? styles.cardLiftDark : styles.cardLift]}>
               <BrandWash />
               <HitGlyph size={CARD_PILL_ICON} color={colors.brandInk} />
-              <Text style={styles.cardPrimaryText} numberOfLines={1}>{primaryLabel}</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.cardPrimaryText} numberOfLines={1}>{primaryLabel}</Text>
             </Tappable>
           ) : (
             <Tappable accessibilityLabel={`Message ${user.name}`} onPress={onMessage} scaleTo={0.97} hoverTo={1.02} style={[styles.cardPill, styles.cardPrimary, pageIsDark() ? styles.cardLiftDark : styles.cardLift]}>
               <BrandWash />
               <Ionicons name="paper-plane-outline" size={CARD_PILL_ICON} color={colors.brandInk} />
-              <Text style={styles.cardPrimaryText} numberOfLines={1}>{primaryLabel}</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.cardPrimaryText} numberOfLines={1}>{primaryLabel}</Text>
             </Tappable>
           )}
         </View>
         <View style={styles.cardSlot}>
           {onAskToHit ? (
             <Tappable accessibilityLabel={`Message ${user.name}`} onPress={onMessage} scaleTo={0.97} hoverTo={1.02} style={[styles.cardPill, styles.cardSecondary]}>
-              <Text style={styles.cardSecondaryText} numberOfLines={1}>{secondaryLabel}</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.cardSecondaryText} numberOfLines={1}>{secondaryLabel}</Text>
             </Tappable>
           ) : (
             <Tappable accessibilityRole="link" accessibilityLabel="Open profile" onPress={onProfile} scaleTo={0.97} hoverTo={1.02} style={[styles.cardPill, styles.cardSecondary]}>
-              <Text style={styles.cardSecondaryText} numberOfLines={1}>{secondaryLabel}</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.cardSecondaryText} numberOfLines={1}>{secondaryLabel}</Text>
             </Tappable>
           )}
         </View>
@@ -945,8 +945,8 @@ export function PlayerSheet({ placed, following, onClose, onProfile, onMessage, 
         </Tappable>
         {/* The pills' words at their natural width, never seen or read out (see followRoom). */}
         <View pointerEvents="none" style={styles.cardMeasure} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" aria-hidden>
-          <Text style={styles.cardPrimaryText} numberOfLines={1} onLayout={measured('primary')}>{primaryLabel}</Text>
-          <Text style={styles.cardSecondaryText} numberOfLines={1} onLayout={measured('secondary')}>{secondaryLabel}</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.cardPrimaryText} numberOfLines={1} onLayout={measured('primary')}>{primaryLabel}</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.cardSecondaryText} numberOfLines={1} onLayout={measured('secondary')}>{secondaryLabel}</Text>
         </View>
       </View>
       <MenuSheet visible={menuOpen} onClose={() => setMenuOpen(false)} title={`@${user.handle}`} items={menu} />
@@ -997,10 +997,10 @@ export function YouSheet({ me, open, teen = false, onToggle, onProfile, onClose,
         </View>
         <View style={styles.personWords}>
           <View style={styles.personTop}>
-            <Text style={styles.personName} numberOfLines={1}>You</Text>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.personName} numberOfLines={1}>You</Text>
             <Level profile={me.profile} small />
           </View>
-          <Text style={styles.personMeta} numberOfLines={1}>@{me.handle}{me.location ? ` · ${me.location}` : ''}</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.personMeta} numberOfLines={1}>@{me.handle}{me.location ? ` · ${me.location}` : ''}</Text>
         </View>
         <Pressable accessibilityRole="button" accessibilityLabel="Close" hitSlop={10} onPress={onClose} style={styles.close}>
           <Ionicons name="close" size={18} color={colors.textMuted} />
@@ -1008,11 +1008,11 @@ export function YouSheet({ me, open, teen = false, onToggle, onProfile, onClose,
       </View>
       <Animated.View style={[styles.openCard, box]}>
         <View style={{ flex: 1, gap: 2 }}>
-          <Text style={styles.openTitle}>Open to hit today</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.openTitle}>Open to hit today</Text>
           {/* Both sentences hold the same place (the longer one keeps the room), so the card never changes height as they hand over. */}
           <View>
-            <Animated.Text style={[styles.openNote, noteOn]} aria-hidden={!open} accessibilityElementsHidden={!open} importantForAccessibility={open ? 'auto' : 'no-hide-descendants'}>{ringNote}</Animated.Text>
-            <Animated.Text style={[styles.openNote, styles.noteOver, noteOff]} aria-hidden={open} accessibilityElementsHidden={open} importantForAccessibility={open ? 'no-hide-descendants' : 'auto'}>Wear a green ring on the map until midnight.</Animated.Text>
+            <Animated.Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.openNote, noteOn]} aria-hidden={!open} accessibilityElementsHidden={!open} importantForAccessibility={open ? 'auto' : 'no-hide-descendants'}>{ringNote}</Animated.Text>
+            <Animated.Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.openNote, styles.noteOver, noteOff]} aria-hidden={open} accessibilityElementsHidden={open} importantForAccessibility={open ? 'no-hide-descendants' : 'auto'}>Wear a green ring on the map until midnight.</Animated.Text>
           </View>
         </View>
         {/* Green like the ring it puts on, not the court's colour: the one switch in the app that is (see DESIGN.md, Open Green). */}
@@ -1021,14 +1021,14 @@ export function YouSheet({ me, open, teen = false, onToggle, onProfile, onClose,
       {onSeenBy ? (
         <Pressable accessibilityRole="button" accessibilityLabel={`Who can see you: ${visibilityLabel(seenBy, teen)}. Change`} onPress={onSeenBy} style={({ pressed }) => [styles.seenRow, pressed && styles.listPressed]}>
           <Ionicons name={seenBy === 'none' || (teen && seenBy == null) ? 'eye-off-outline' : 'eye-outline'} size={17} color={colors.textMuted} />
-          <Text style={styles.seenLabel}>Who can see you</Text>
-          <Text style={styles.seenValue} numberOfLines={1}>{visibilityLabel(seenBy, teen)}</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.seenLabel}>Who can see you</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.seenValue} numberOfLines={1}>{visibilityLabel(seenBy, teen)}</Text>
           <Ionicons name="chevron-forward" size={15} color={colors.textFaint} />
         </Pressable>
       ) : null}
       <View style={styles.personActions}>
         <Pressable accessibilityRole="link" accessibilityLabel="Your profile" onPress={onProfile} style={styles.secondary}>
-          <Text style={styles.secondaryText}>Your profile</Text>
+          <Text {...oneLine(TextScale.TITLE, 0.8)} style={styles.secondaryText}>Your profile</Text>
         </Pressable>
       </View>
     </Animated.View>
@@ -1100,8 +1100,8 @@ export function CourtSheet({ court, miles, ringed = false, onClose }: { court: C
         </Pressable>
         <Pressable accessibilityRole="link" accessibilityLabel={`Open ${court.name}'s page`} onPress={() => openCourt(place)} style={({ pressed }) => [styles.personWords, pressed && styles.postedPressed]}>
           {/* Two lines: the court's name is the card's main news, so it is never cut short for want of width. */}
-          <Text style={styles.personName} numberOfLines={2}>{court.name}</Text>
-          <Text style={styles.personMeta} numberOfLines={1}>{meta}</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.personName} numberOfLines={2}>{court.name}</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.personMeta} numberOfLines={1}>{meta}</Text>
         </Pressable>
         {/* The heart and Send sit beside Close, the way a maps app's place card puts Save and Share there. */}
         {extras ? <FollowHeart court={{ id: court.id, name: court.name, lat: court.lat, lng: court.lng, access }} style={styles.close} size={16} /> : null}
@@ -1124,9 +1124,9 @@ export function CourtSheet({ court, miles, ringed = false, onClose }: { court: C
       {here.length ? (
         <View style={styles.posted}>
           <View style={styles.postedHead}>
-            <Text style={styles.postedTitle}>Played here <Text style={styles.postedCount}>· {countLabel(here, more)}</Text></Text>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.postedTitle}>Played here <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.postedCount}>· {countLabel(here, more)}</Text></Text>
             <Pressable accessibilityRole="link" accessibilityLabel={`See all posts from ${court.name}`} hitSlop={8} onPress={() => openCourt(place)} style={({ pressed }) => pressed && styles.postedPressed}>
-              <Text style={styles.postedAll}>See all</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.postedAll}>See all</Text>
             </Pressable>
           </View>
           {strip.length ? <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.postedRow}>
@@ -1144,7 +1144,7 @@ export function CourtSheet({ court, miles, ringed = false, onClose }: { court: C
           {hits.map((h) => (
             <Pressable key={h.id} accessibilityRole="link" accessibilityLabel={`Open hit: ${hitLine(h)}`} onPress={() => router.push(`/hit-request/${h.id}`)} style={({ pressed }) => [styles.hitRow, pressed && styles.postedPressed]}>
               <View style={styles.hitTile}><HitGlyph size={18} color={colors.brand} /></View>
-              <Text style={styles.hitText} numberOfLines={1}>{hitLine(h)}</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.hitText} numberOfLines={1}>{hitLine(h)}</Text>
               <Ionicons name="chevron-forward" size={14} color={colors.textFaint} />
             </Pressable>
           ))}
@@ -1156,17 +1156,17 @@ export function CourtSheet({ court, miles, ringed = false, onClose }: { court: C
         <Pressable accessibilityRole="link" accessibilityLabel="Directions" onPress={() => directionsTo(court)} style={[styles.primary, styles.pillTight]}>
           <BrandWash />
           <Ionicons name="navigate-outline" size={16} color={colors.brandInk} />
-          <Text style={styles.primaryText}>Directions</Text>
+          <Text {...oneLine(TextScale.TITLE, 0.8)} style={styles.primaryText}>Directions</Text>
         </Pressable>
         {closed ? null : (
           <Pressable accessibilityRole="button" accessibilityLabel={`Post a hit at ${court.name}`} onPress={() => playHere(place)} style={[styles.secondary, styles.pillTight]}>
-            <Text style={styles.secondaryText}>Play here</Text>
+            <Text {...oneLine(TextScale.TITLE, 0.8)} style={styles.secondaryText}>Play here</Text>
           </Pressable>
         )}
         {mapCourt ? (
           <Pressable accessibilityRole="button" accessibilityLabel={`Post a photo or clip from ${court.name}`} onPress={() => postFromCourt({ id: court.id, name: court.name, lat: court.lat, lng: court.lng })} style={[styles.secondary, styles.pillTight, styles.pillIcon]}>
             <Ionicons name="videocam-outline" size={15} color={colors.text} />
-            <Text style={styles.secondaryText}>Post</Text>
+            <Text {...oneLine(TextScale.TITLE, 0.8)} style={styles.secondaryText}>Post</Text>
           </Pressable>
         ) : null}
       </View>
@@ -1207,8 +1207,8 @@ export function PlaceSheet({ place, rows, loading, failed, onPickCourt, onRetry,
       <View style={styles.personRow}>
         <View style={styles.placeDisc}><Ionicons name={area ? 'map-outline' : 'location-outline'} size={18} color={colors.brand} /></View>
         <View style={styles.personWords}>
-          <Text accessibilityRole="header" style={styles.personName} numberOfLines={1}>{title}</Text>
-          <Text style={styles.personMeta} numberOfLines={1}>{rows.length ? `${rows.length} ${rows.length === 1 ? 'place' : 'places'} · ${how}` : place.sub || how}</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" style={styles.personName} numberOfLines={1}>{title}</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.personMeta} numberOfLines={1}>{rows.length ? `${rows.length} ${rows.length === 1 ? 'place' : 'places'} · ${how}` : place.sub || how}</Text>
         </View>
         <Pressable accessibilityRole="button" accessibilityLabel="Close" hitSlop={10} onPress={onClose} style={styles.close}>
           <Ionicons name="close" size={18} color={colors.textMuted} />
@@ -1225,8 +1225,8 @@ export function PlaceSheet({ place, rows, loading, failed, onPickCourt, onRetry,
               <Pressable key={c.id} accessibilityRole="button" accessibilityLabel={`${labelOf(c)}, ${meta}. Show on the map`} onPress={() => { haptics.tap(); onPickCourt(c); }} style={({ pressed }) => [styles.resultRow, i > 0 && styles.listRule, pressed && styles.listPressed]}>
                 <View style={styles.resultTile}><CourtGlyph size={13} color={colors.brand} /></View>
                 <View style={styles.listWords}>
-                  <Text style={styles.listName} numberOfLines={1}>{labelOf(c)}</Text>
-                  <Text style={styles.personMeta} numberOfLines={2}>{meta}</Text>
+                  <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.listName} numberOfLines={1}>{labelOf(c)}</Text>
+                  <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.personMeta} numberOfLines={2}>{meta}</Text>
                 </View>
                 <Ionicons name="chevron-forward" size={14} color={colors.textFaint} />
               </Pressable>
@@ -1236,17 +1236,17 @@ export function PlaceSheet({ place, rows, loading, failed, onPickCourt, onRetry,
       ) : (
         <View style={styles.placeEmpty}>
           {loading ? (
-            <View style={styles.placeNote}><ActivityIndicator size="small" color={colors.textFaint} /><Text style={styles.placeNoteText}>Finding courts…</Text></View>
+            <View style={styles.placeNote}><ActivityIndicator size="small" color={colors.textFaint} /><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.placeNoteText}>Finding courts…</Text></View>
           ) : failed ? (
             <>
-              <Text style={styles.openNote}>Couldn’t load the courts here. Check your connection.</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.openNote}>Couldn’t load the courts here. Check your connection.</Text>
               <Pressable accessibilityRole="button" onPress={onRetry} hitSlop={6} style={styles.lockAction}>
                 <Ionicons name="refresh" size={14} color={colors.brand} />
-                <Text style={styles.lockActionText}>Try again</Text>
+                <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.lockActionText}>Try again</Text>
               </Pressable>
             </>
           ) : (
-            <Text style={styles.openNote}>No courts on the map here yet.</Text>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.openNote}>No courts on the map here yet.</Text>
           )}
         </View>
       )}
@@ -1264,7 +1264,7 @@ export function HitSheet({ hit, miles, onClose }: { hit: HitRequest; miles?: num
     <Animated.View style={[styles.sheet, pull.style]}>
       <View style={styles.grabber} />
       <View style={styles.sheetHead}>
-        <Text style={styles.sheetTitle}>Open hit</Text>
+        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.sheetTitle}>Open hit</Text>
         <Pressable accessibilityRole="button" accessibilityLabel="Close" hitSlop={10} onPress={onClose} style={styles.close}>
           <Ionicons name="close" size={18} color={colors.textMuted} />
         </Pressable>
@@ -1306,8 +1306,8 @@ export function PreviewOverlay({ cityName, count, placeCount = 0, hitCount = 0, 
       <View pointerEvents="none" style={styles.cityMark}>
         <View style={styles.cityGlow}>
           <CityHaze />
-          <Text style={styles.cityName} numberOfLines={1}>{cityName}</Text>
-          <Text style={[styles.cityCount, (count > 0 || placeCount > 0) && styles.cityCountOn]}>{line}</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.cityName} numberOfLines={1}>{cityName}</Text>
+          <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.cityCount, (count > 0 || placeCount > 0) && styles.cityCountOn]}>{line}</Text>
           {hitCount ? <Text style={styles.cityHits}>{hitCount === 1 ? '1 open hit nearby' : `${hitCount} open hits nearby`}</Text>
             // Nobody to show, but courts to play on: how to see the players here, or (sharing already) a next step, not an empty town.
             : !count && placeCount && hint ? <Text style={styles.cityHits}>{hint}</Text>
@@ -1328,7 +1328,7 @@ export function PreviewOverlay({ cityName, count, placeCount = 0, hitCount = 0, 
       {weather ? (
         <View pointerEvents="none" style={styles.previewWeather}>
           <Ionicons name={weather.icon as keyof typeof Ionicons.glyphMap} size={13} color={colors.text} />
-          <Text style={styles.weatherText} accessibilityLabel={`${weather.tempF} degrees, ${weather.label}`}>{weather.tempF}°</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.weatherText} accessibilityLabel={`${weather.tempF} degrees, ${weather.label}`}>{weather.tempF}°</Text>
         </View>
       ) : null}
     </>
@@ -1345,16 +1345,16 @@ export function CitylessCard({ onOpenMap }: { onOpenMap?: () => void }) {
   return (
     <View style={styles.cityless}>
       <View style={styles.citylessDisc}><Ionicons name="location-outline" size={20} color={colors.brand} /></View>
-      <Text style={styles.citylessTitle}>Where do you play?</Text>
-      <Text style={styles.citylessBody}>Add your city to see the players near you.</Text>
+      <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.citylessTitle}>Where do you play?</Text>
+      <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.citylessBody}>Add your city to see the players near you.</Text>
       <View style={styles.citylessActions}>
         <Pressable accessibilityRole="button" onPress={() => router.push('/edit-profile')} style={styles.primary}>
           <BrandWash />
-          <Text style={styles.primaryText}>Add my city</Text>
+          <Text {...oneLine(TextScale.TITLE, 0.8)} style={styles.primaryText}>Add my city</Text>
         </Pressable>
         {onOpenMap ? (
           <Pressable accessibilityRole="button" onPress={onOpenMap} style={styles.secondary}>
-            <Text style={styles.secondaryText}>Open the map</Text>
+            <Text {...oneLine(TextScale.TITLE, 0.8)} style={styles.secondaryText}>Open the map</Text>
           </Pressable>
         ) : null}
       </View>
@@ -1383,7 +1383,7 @@ function HideTip({ where, style }: { where: TipSpot; style: object }) {
     <Animated.View entering={FadeIn.duration(260).delay(120)} exiting={FadeOut.duration(180)} style={[styles.tip, style]}>
       <Pressable accessibilityRole="button" accessibilityLabel={`${text} Got it`} onPress={dismissHideTip} style={styles.tipBody}>
         <View style={styles.tipArrow} />
-        <Text style={styles.tipText}>{text}</Text>
+        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.tipText}>{text}</Text>
       </Pressable>
     </Animated.View>
   );
@@ -1434,7 +1434,7 @@ const styleDefinitions = StyleSheet.create({
   chipsWrap: { flexGrow: 0, flexShrink: 1 },
   chips: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: spacing.md, paddingVertical: 6 },
   chipGap: { width: StyleSheet.hairlineWidth, height: 18, marginHorizontal: 4, backgroundColor: colors.borderStrong },
-  chip: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, height: 32, borderRadius: radius.pill, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
+  chip: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, minHeight: 32, borderRadius: radius.pill, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
   chipOn: { backgroundColor: colors.brand, borderColor: colors.brand },
   // Once measured, the chips go clear-backed at their own spots and the sliding pill carries the fill.
   chipClear: { backgroundColor: 'transparent', borderColor: colors.border },
@@ -1443,7 +1443,7 @@ const styleDefinitions = StyleSheet.create({
   chipText: { ...typography.smallStrong, color: colors.text },
   chipTextOn: { color: colors.brandInk },
   // "Zoom in to see courts": a quiet pill under the chips, never in the way, a touch smaller than they are.
-  zoomNote: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, height: 28, borderRadius: radius.pill, backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
+  zoomNote: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, minHeight: 28, borderRadius: radius.pill, backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
   zoomNoteText: { ...typography.small, color: colors.textMuted },
   weather: { marginLeft: 6, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
   weatherText: { ...typography.smallStrong, color: colors.text, fontVariant: ['tabular-nums'] },
@@ -1455,7 +1455,7 @@ const styleDefinitions = StyleSheet.create({
   // A floating pill's shadow lives on a wrapper: the glass inside clips to its own round corners.
   pillLift: { flexShrink: 1, maxWidth: '100%', borderRadius: 21, shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 4 },
   // "All 11 players": as tall as Back to me beside it, in the same glass.
-  playersPill: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, height: 42, borderWidth: StyleSheet.hairlineWidth, borderColor: `${colors.borderStrong}55` },
+  playersPill: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, minHeight: 42, borderWidth: StyleSheet.hairlineWidth, borderColor: `${colors.borderStrong}55` },
   playersPillText: { ...typography.smallStrong, color: colors.text, flexShrink: 1 },
   // The map's top row (Oct 11): Back, the bar and Location, 44 tall, one glass, one soft lift each.
   barRoundHit: { width: 44, height: 44, borderRadius: 22, shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } },
@@ -1466,7 +1466,7 @@ const styleDefinitions = StyleSheet.create({
   barPressed: { transform: [{ scale: 0.94 }] },
   glassPressed: { transform: [{ scale: PRESS_SHRINK }] },
   searchLift: { flex: 1, minWidth: 0, borderRadius: 22, shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } },
-  search: { height: 44, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: 14, borderWidth: StyleSheet.hairlineWidth, borderColor: `${colors.borderStrong}55` },
+  search: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: 14, borderWidth: StyleSheet.hairlineWidth, borderColor: `${colors.borderStrong}55` },
   // The words' room: the field fills it, the bar's own words ("Search Los Angeles") under it while nothing is typed.
   searchField: { flex: 1, minWidth: 0, alignSelf: 'stretch', justifyContent: 'center' },
   searchHintBox: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, justifyContent: 'center' },
@@ -1478,7 +1478,7 @@ const styleDefinitions = StyleSheet.create({
   searchOn: { borderColor: colors.brand },
   searchClear: { paddingLeft: 2 },
   // The weather at the bar's end: a hairline, the sky, the temperature.
-  searchWeather: { flexDirection: 'row', alignItems: 'center', gap: 5, height: 44 },
+  searchWeather: { flexDirection: 'row', alignItems: 'center', gap: 5, minHeight: 44 },
   searchWeatherRule: { width: StyleSheet.hairlineWidth, height: 18, marginRight: 4, backgroundColor: colors.borderStrong },
   searchWeatherText: { ...typography.smallStrong, fontSize: 14, color: colors.textMuted, fontVariant: ['tabular-nums'] },
   // Zoomed out, the line under the chips that holds "Zoom in to see courts".
@@ -1509,7 +1509,7 @@ const styleDefinitions = StyleSheet.create({
   listTitleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 32 },
   listTitle: { ...typography.heading, color: colors.text, flex: 1 },
   // "See all", beside ×: the brand's colour, the way a section's "See all" reads everywhere in the app.
-  seeAll: { height: 32, justifyContent: 'center', paddingHorizontal: 4 },
+  seeAll: { minHeight: 32, justifyContent: 'center', paddingHorizontal: 4 },
   seeAllText: { ...typography.smallStrong, color: colors.brand },
   // The tray's body: its height moves (listStops), the faces at its top and the full list filling it behind them.
   trayBody: { overflow: 'hidden' },
@@ -1580,9 +1580,9 @@ const styleDefinitions = StyleSheet.create({
   // Hidden, for measuring the pills' words: a width of its own, so nothing squeezes them.
   cardMeasure: { position: 'absolute', right: 0, top: 0, width: 240, alignItems: 'flex-end', opacity: 0 },
   personActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
-  primary: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 40, paddingHorizontal: 16, borderRadius: radius.pill, backgroundColor: colors.brand },
+  primary: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 40, paddingHorizontal: 16, borderRadius: radius.pill, backgroundColor: colors.brand },
   primaryText: { ...typography.smallStrong, color: colors.brandInk },
-  secondary: { height: 40, paddingHorizontal: 16, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center' },
+  secondary: { minHeight: 40, paddingHorizontal: 16, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center' },
   secondaryText: { ...typography.smallStrong, color: colors.text },
   pillTight: { paddingHorizontal: 12 },
   pillIcon: { flexDirection: 'row', gap: 5 },
@@ -1610,7 +1610,7 @@ const styleDefinitions = StyleSheet.create({
   courtBlock: { paddingHorizontal: spacing.lg },
   says: { gap: spacing.sm, paddingHorizontal: spacing.lg, paddingBottom: spacing.md },
   saysFacts: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  saysFact: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, height: 28, borderRadius: radius.pill, backgroundColor: colors.bgElevated },
+  saysFact: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, minHeight: 28, borderRadius: radius.pill, backgroundColor: colors.bgElevated },
   saysFactText: { ...typography.smallStrong, color: colors.text },
   saysPhotos: { gap: spacing.sm },
   saysPhoto: { width: 96, height: 72, borderRadius: 12, backgroundColor: colors.surfaceAlt },

@@ -9,6 +9,7 @@ import { asRuleThing, removedLine, reviewFor, thingWord } from '@/features/moder
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, lift, radius, spacing, typography } from '@/theme';
+import { TextScale } from '@/theme/textScale';
 
 /** What a removed thing is, for the author's "Why?" and "Ask for a review". */
 export interface RemovedRef {
@@ -84,7 +85,7 @@ export function RemovedNote({ removed, quiet = false, style, item, actions = tru
       <View style={[styles.quietWrap, style]}>
         <View style={styles.line} accessibilityRole="text" accessibilityLabel={words}>
           <Ionicons name="eye-off-outline" size={13} color={colors.danger} />
-          <Text style={styles.lineText}>{words}</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.lineText}>{words}</Text>
         </View>
         {mine && actions && item ? <RemovedActions removed={removed} item={item} /> : null}
       </View>
@@ -94,7 +95,7 @@ export function RemovedNote({ removed, quiet = false, style, item, actions = tru
   const pillWords = (
     <>
       <Ionicons name="eye-off-outline" size={15} color={colors.onDanger} />
-      <Text style={[styles.pillText, { color: colors.onDanger }]} numberOfLines={2}>{words}</Text>
+      <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.pillText, { color: colors.onDanger }]} numberOfLines={2}>{words}</Text>
     </>
   );
   // Somebody else's (an admin looking): the pill only, which lets taps through.
@@ -152,10 +153,10 @@ export function RemovedActions({ removed, item, card = false, align = 'start', s
       <View style={styles.part}>
         <Text style={styles.muted}>Why? </Text>
         <Pressable accessibilityRole="link" accessibilityLabel={`Why? See the rules your ${thing} broke`} hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }} onPress={() => openRules(removed.reason, thing)} style={({ pressed }) => pressed && styles.pressed}>
-          <Text style={styles.link}>See the rules</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.link}>See the rules</Text>
         </Pressable>
       </View>
-      {status || !ask ? null : <Text style={styles.dot} accessibilityElementsHidden importantForAccessibility="no">·</Text>}
+      {status || !ask ? null : <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.dot} accessibilityElementsHidden importantForAccessibility="no">·</Text>}
       {!ask && !status ? null : status ? (
         <View style={styles.part} accessibilityRole="text" accessibilityLabel={status.words}>
           <Ionicons name={status.icon} size={12} color={colors.textMuted} style={styles.statusIcon} />
@@ -173,7 +174,7 @@ export function RemovedActions({ removed, item, card = false, align = 'start', s
           onPress={() => openReviewAsk(item.kind, item.id)}
           style={({ pressed }) => [!known && styles.waiting, pressed && styles.pressed]}
         >
-          <Text style={styles.link}>Ask for a review</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.link}>Ask for a review</Text>
         </Pressable>
       )}
     </View>
@@ -189,7 +190,7 @@ export function TileRemoved() {
   return (
     <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.tile]} accessibilityRole="image" accessibilityLabel="Removed">
       <Ionicons name="eye-off" size={20} color={colors.onMedia} />
-      <Text style={[styles.tileText, { color: colors.onMedia }]}>Removed</Text>
+      <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.tileText, { color: colors.onMedia }]}>Removed</Text>
     </View>
   );
 }

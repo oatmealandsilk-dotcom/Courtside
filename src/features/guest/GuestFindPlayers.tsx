@@ -17,6 +17,7 @@ import { formatSpotMiles } from '@/features/players/geo';
 import { getPosition } from '@/lib/geo';
 import { colors, lift, radius, spacing, typography } from '@/theme';
 import { openJoinSheet } from './joinAsk';
+import { TextScale } from '@/theme/textScale';
 
 const spotsText = (n: number) => (n === 1 ? '1 spot left' : `${n} spots left`);
 
@@ -62,13 +63,13 @@ export function GuestFindPlayers() {
   return (
     <View style={styles.wrap}>
       <View style={styles.head}>
-        <Text accessibilityRole="header" style={styles.title}>Open hits</Text>
-        <Text style={styles.body}>Players looking for someone to hit with in the next 7 days.</Text>
+        <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" style={styles.title}>Open hits</Text>
+        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.body}>Players looking for someone to hit with in the next 7 days.</Text>
       </View>
       {near ? (
         <View style={[styles.pill, styles.pillOn]}>
           <Ionicons name="navigate" size={14} color={colors.brand} />
-          <Text style={[styles.pillText, styles.pillOnText]}>Nearest first</Text>
+          <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.pillText, styles.pillOnText]}>Nearest first</Text>
           <Pressable accessibilityRole="button" accessibilityLabel="Stop using my location" hitSlop={10} onPress={() => { setNear(null); setCourts(null); }}>
             <Ionicons name="close" size={15} color={colors.brand} />
           </Pressable>
@@ -76,18 +77,18 @@ export function GuestFindPlayers() {
       ) : (
         <Pressable accessibilityRole="button" onPress={() => { void locate(); }} disabled={locating} style={({ pressed }) => [styles.pill, styles.locate, pressed && styles.pressed]}>
           <Ionicons name="navigate-outline" size={15} color={colors.brandInk} />
-          <Text style={[styles.pillText, styles.locateText]}>{locating ? 'Finding you…' : 'Use my location'}</Text>
+          <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.pillText, styles.locateText]}>{locating ? 'Finding you…' : 'Use my location'}</Text>
         </Pressable>
       )}
-      {note ? <Text style={styles.note}>{note}</Text> : null}
+      {note ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.note}>{note}</Text> : null}
 
       {hits === undefined ? (
         <View style={styles.loading}><CourtSpinner size={28} /></View>
       ) : !hits?.length ? (
         <View style={[styles.card, styles.empty]}>
           <View style={styles.emptyIcon}><HitGlyph size={22} color={colors.brand} /></View>
-          <Text style={styles.emptyTitle}>{hits === null ? 'Couldn’t load the hits' : 'No open hits near you yet'}</Text>
-          <Text style={styles.emptyBody}>{hits === null ? 'Check your connection and try again.' : 'Be the first to post one. Players near you see it straight away.'}</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.emptyTitle}>{hits === null ? 'Couldn’t load the hits' : 'No open hits near you yet'}</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.emptyBody}>{hits === null ? 'Check your connection and try again.' : 'Be the first to post one. Players near you see it straight away.'}</Text>
           <Button label={hits === null ? 'Try again' : 'Post the first hit'} size="sm" variant={hits === null ? 'secondary' : 'primary'} onPress={() => (hits === null ? load(near) : openJoinSheet('post a hit'))} />
         </View>
       ) : (
@@ -97,18 +98,18 @@ export function GuestFindPlayers() {
             return (
               <View key={h.id} style={styles.card}>
                 <View style={styles.cardTop}>
-                  <Text style={styles.when}>{hitShort(h.startsAt)}</Text>
-                  <View style={styles.spots}><Text style={styles.spotsText}>{spotsText(h.spotsLeft)}</Text></View>
+                  <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.when}>{hitShort(h.startsAt)}</Text>
+                  <View style={styles.spots}><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.spotsText}>{spotsText(h.spotsLeft)}</Text></View>
                 </View>
                 <View style={styles.placeRow}>
                   <Ionicons name="location-outline" size={16} color={colors.textMuted} />
-                  <Text style={styles.place} numberOfLines={2}>{h.court.name}</Text>
+                  <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.place} numberOfLines={2}>{h.court.name}</Text>
                 </View>
                 {where ? <Text style={styles.where}>{where}</Text> : null}
                 <View style={styles.cardFoot}>
                   <View style={styles.chips}>
-                    <View style={styles.chip}><Text style={styles.chipText}>{FORMAT_LABEL[h.format]}</Text></View>
-                    <View style={styles.chip}><Text style={styles.chipText}>{levelText(h, h.skillSystem)}</Text></View>
+                    <View style={styles.chip}><Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.chipText}>{FORMAT_LABEL[h.format]}</Text></View>
+                    <View style={styles.chip}><Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.chipText}>{levelText(h, h.skillSystem)}</Text></View>
                   </View>
                   <Button label="I'm in" size="sm" onPress={() => join(h)} />
                 </View>
@@ -121,14 +122,14 @@ export function GuestFindPlayers() {
       {courts?.length ? (
         <View style={styles.list}>
           <View style={styles.head}>
-            <Text accessibilityRole="header" style={styles.title}>Courts near you</Text>
+            <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" style={styles.title}>Courts near you</Text>
           </View>
           {courts.map(({ c, miles }) => (
             <Pressable key={c.id} accessibilityRole="link" onPress={() => router.push({ pathname: '/court/[id]', params: { id: c.id, name: c.name, lat: String(c.lat), lng: String(c.lng) } })} style={({ pressed }) => [styles.court, pressed && styles.pressed]}>
               <View style={styles.courtTile}><CourtGlyph size={22} color={colors.brand} /></View>
               <View style={{ flex: 1, minWidth: 0 }}>
-                <Text style={styles.courtName} numberOfLines={1}>{c.name || 'Tennis courts'}</Text>
-                <Text style={styles.courtMeta} numberOfLines={1}>{[c.count > 1 ? `${c.count} courts` : '1 court', formatSpotMiles(miles, false), c.lit ? 'Lights' : null].filter(Boolean).join(' · ')}</Text>
+                <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.courtName} numberOfLines={1}>{c.name || 'Tennis courts'}</Text>
+                <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.courtMeta} numberOfLines={1}>{[c.count > 1 ? `${c.count} courts` : '1 court', formatSpotMiles(miles, false), c.lit ? 'Lights' : null].filter(Boolean).join(' · ')}</Text>
               </View>
               <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
             </Pressable>
@@ -148,8 +149,8 @@ export function GuestJoinCard({ title, body }: { title: string; body: string }) 
   return (
     <View style={[styles.card, styles.empty]}>
       <View style={styles.emptyIcon}><Ionicons name="person-outline" size={22} color={colors.brand} /></View>
-      <Text style={styles.emptyTitle}>{title}</Text>
-      <Text style={styles.emptyBody}>{body}</Text>
+      <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.emptyTitle}>{title}</Text>
+      <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.emptyBody}>{body}</Text>
       <Button label="Create a free account" full onPress={() => router.push({ pathname: '/sign-in', params: { mode: 'create' } })} />
       <Button label="I already have an account" variant="secondary" full onPress={() => router.push({ pathname: '/sign-in', params: { mode: 'sign-in' } })} />
     </View>

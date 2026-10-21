@@ -19,6 +19,7 @@ import type { LatLng } from '@/features/players/positions';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, lift, radius, spacing, typography } from '@/theme';
+import { TextScale } from '@/theme/textScale';
 
 const CARD = 168;
 const MOST = 8;
@@ -93,7 +94,7 @@ export function CourtsNear({ center }: { center: LatLng | null }) {
   return (
     <View style={styles.wrap}>
       <View style={styles.head}>
-        <Text accessibilityRole="header" style={styles.title}>Courts near you</Text>
+        <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" style={styles.title}>Courts near you</Text>
       </View>
       {/* Starts and ends at the page's margins like the topic strip (the pane clips anything wider), so a card cut at the edge says there are more; a drag along it never turns the page. */}
       <ScrollView nativeID="courts-near-strip" horizontal showsHorizontalScrollIndicator={false} style={styles.scroller} contentContainerStyle={styles.row}>
@@ -111,17 +112,17 @@ export function CourtsNear({ center }: { center: LatLng | null }) {
               {/* The court's icon with what's on there beside it (a hit first, else its posts), so the card stays short. */}
               <View style={styles.top}>
                 <View style={styles.tile}><CourtGlyph size={18} color={colors.brand} /></View>
-                {badge?.hit ? <View style={[styles.badge, styles.badgeHit, styles.badgeRow]}><HitGlyph size={11} color={colors.brand} /><Text style={[styles.badgeText, styles.badgeHitText]} numberOfLines={1}>{badge.hit}</Text></View>
-                  : badge?.posts ? <View style={styles.badge}><Text style={styles.badgeText} numberOfLines={1}>{badge.posts}</Text></View> : null}
+                {badge?.hit ? <View style={[styles.badge, styles.badgeHit, styles.badgeRow]}><HitGlyph size={11} color={colors.brand} /><Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.badgeText, styles.badgeHitText]} numberOfLines={1}>{badge.hit}</Text></View>
+                  : badge?.posts ? <View style={styles.badge}><Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.badgeText} numberOfLines={1}>{badge.posts}</Text></View> : null}
               </View>
-              <Text style={styles.name} numberOfLines={2}>{labelOf(c)}</Text>
-              <Text style={styles.meta} numberOfLines={1}>{meta}</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.name} numberOfLines={2}>{labelOf(c)}</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta} numberOfLines={1}>{meta}</Text>
             </Pressable>
           );
         })}
         <Pressable accessibilityRole="link" accessibilityLabel="See all courts on the map" onPress={() => router.push('/map')} style={({ pressed }) => [styles.card, styles.allCard, pressed && styles.cardPressed]}>
           <View style={styles.allDisc}><Ionicons name="map-outline" size={20} color={colors.brand} /></View>
-          <Text style={styles.allText}>See all on the map</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.allText}>See all on the map</Text>
         </Pressable>
       </ScrollView>
     </View>

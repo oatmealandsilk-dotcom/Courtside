@@ -15,6 +15,7 @@ import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, lift, spacing, typography } from '@/theme';
+import { TextScale } from '@/theme/textScale';
 
 /**
  * "You're early in Columbus": Find Players with nobody sharing a spot
@@ -59,8 +60,8 @@ export function EarlyInvite({ city, court, friends = false, leadRef }: { city: s
       <View style={styles.head}>
         <View style={styles.tile}><Ionicons name={friends ? 'people' : 'paper-plane'} size={20} color={colors.brand} /></View>
         <View style={styles.headWords}>
-          <Text style={styles.title}>{friends ? FRIENDS_TITLE : city ? `You’re early in ${city}` : 'You’re early here'}</Text>
-          <Text style={styles.body}>{friends ? FRIENDS_LINE : 'The map fills up with the people you already play with. Send them your link.'}</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.title}>{friends ? FRIENDS_TITLE : city ? `You’re early in ${city}` : 'You’re early here'}</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.body}>{friends ? FRIENDS_LINE : 'The map fills up with the people you already play with. Send them your link.'}</Text>
         </View>
       </View>
       {/* The feature card's shape: one primary pill, one quiet link under it. */}
@@ -71,20 +72,20 @@ export function EarlyInvite({ city, court, friends = false, leadRef }: { city: s
       {canReadContacts() ? (
         <Pressable accessibilityRole="link" accessibilityLabel={CONTACTS_LABEL} hitSlop={8} onPress={() => router.push('/find-contacts')} style={({ pressed }) => [styles.link, pressed && { opacity: PRESS_DIM }]}>
           <Ionicons name="people-outline" size={15} color={colors.textMuted} />
-          <Text style={styles.linkText}>{CONTACTS_LABEL}</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.linkText}>{CONTACTS_LABEL}</Text>
         </Pressable>
       ) : null}
       {friends ? (
         // Teen search (migration 118): by name or @handle, never by town.
         <Pressable accessibilityRole="link" accessibilityLabel="Find a friend by their @handle" hitSlop={8} onPress={() => router.push({ pathname: '/search', params: { scope: 'players', find: 'friend' } })} style={({ pressed }) => [styles.link, pressed && { opacity: PRESS_DIM }]}>
           <Ionicons name="search" size={15} color={colors.textMuted} />
-          <Text style={styles.linkText}>Find a friend by @handle</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.linkText}>Find a friend by @handle</Text>
         </Pressable>
       ) : (
         <>
           <Pressable accessibilityRole="link" accessibilityLabel={court ? `Print a poster for ${court.name}` : 'Print a poster'} hitSlop={8} onPress={poster} style={({ pressed }) => [styles.link, pressed && { opacity: PRESS_DIM }]}>
             <Ionicons name="print-outline" size={15} color={colors.textMuted} />
-            <Text style={styles.linkText}>{court ? 'Print a poster for my court' : 'Print a poster'}</Text>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.linkText}>{court ? 'Print a poster for my court' : 'Print a poster'}</Text>
           </Pressable>
           {court ? <Text style={styles.fine} numberOfLines={2}>Both open on {court.name} for whoever joins.</Text> : null}
         </>

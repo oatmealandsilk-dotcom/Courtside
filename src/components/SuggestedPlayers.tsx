@@ -9,6 +9,7 @@ import { confirmUnfollow } from '@/lib/confirm';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, lift, radius, spacing, typography } from '@/theme';
+import { TextScale } from '@/theme/textScale';
 
 /**
  * "Suggested for you", the way Instagram fills the space under a private
@@ -24,7 +25,7 @@ export function SuggestedPlayers({ near, exclude }: { near?: string; exclude?: s
   if (!list.length) return null;
   return (
     <View style={styles.wrap}>
-      <Text style={styles.title}>Suggested for you</Text>
+      <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.title}>Suggested for you</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.scroller} contentContainerStyle={styles.row}>
         {list.map(({ user, reason }) => {
           const following = followingIds.includes(user.id);
@@ -32,7 +33,7 @@ export function SuggestedPlayers({ near, exclude }: { near?: string; exclude?: s
             <View key={user.id} style={styles.card}>
               <Pressable accessibilityRole="link" accessibilityLabel={`${user.name}, ${reason}`} onPress={() => router.push(`/user/${user.id}`)} style={styles.body}>
                 <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={60} ring={user.isCoach} />
-                <Text style={styles.name} numberOfLines={1}>{user.name}</Text>
+                <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.name} numberOfLines={1}>{user.name}</Text>
                 <Text style={styles.reason} numberOfLines={1}>{reason}</Text>
               </Pressable>
               <FollowPill

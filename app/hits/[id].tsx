@@ -30,6 +30,7 @@ import { RemovedNote } from '@/features/moderation/RemovedNote';
 import { confirm } from '@/lib/confirm';
 import { openPlayer } from '@/features/navigation/openPlayer';
 import { COMMENT_MAX } from '@/features/feed/limits';
+import { TextScale } from '@/theme/textScale';
 
 /** Only while Instants are on (features/stories/instantsSwitch), or for an admin; otherwise to the Feed. */
 export default function HitThreadRoute() {
@@ -147,7 +148,7 @@ function HitThread() {
           <Text style={styles.likeCount}>{story.likedBy.length}</Text>
         </Tappable>
       </View>
-      {story.caption ? <RichText style={styles.caption}>{story.caption}</RichText> : null}
+      {story.caption ? <RichText maxFontSizeMultiplier={TextScale.CARD} style={styles.caption}>{story.caption}</RichText> : null}
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>{count} {count === 1 ? 'comment' : 'comments'}</Text>

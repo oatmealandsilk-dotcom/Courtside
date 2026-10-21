@@ -20,6 +20,7 @@ import { eatClickAfterHold } from '@/lib/eatClick';
 import * as haptics from '@/lib/haptics';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, spacing, typography } from '@/theme';
+import { TextScale } from '@/theme/textScale';
 
 const FACE = 52;
 /** Every face's slot, yours included, so the faces sit on one even rhythm (yours used to be wider). Wide enough for "You’re open" and its dot. */
@@ -146,8 +147,8 @@ export const UpToday = memo(function UpToday({ me, people, teen = false, locatio
   return (
     <View style={styles.wrap}>
       <View style={styles.head}>
-        <Text style={styles.title}>Open to hit</Text>
-        {people.length ? <Text style={styles.count}>{people.length} near you</Text> : null}
+        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.title}>Open to hit</Text>
+        {people.length ? <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.count}>{people.length} near you</Text> : null}
       </View>
       <View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row} style={styles.scroll}>
@@ -161,19 +162,19 @@ export const UpToday = memo(function UpToday({ me, people, teen = false, locatio
             {/* On: ink words after a small green dot, as a player's card says it (green words were too faint to read on the court palettes). */}
             <View style={styles.nameRow}>
               {up ? <Animated.View entering={FadeIn.duration(160)} style={styles.dot} /> : null}
-              <Text style={[styles.name, styles.nameIn]} numberOfLines={1}>{up ? 'You’re open' : 'I’m free'}</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.name, styles.nameIn]} numberOfLines={1}>{up ? 'You’re open' : 'I’m free'}</Text>
             </View>
           </Pressable>
           {/* 44pt tall in its own padding, all of it below the switch, so a near miss never turns your ring off.
               Off, the same box held empty, so turning on never moves the row. */}
           {up && till ? (
             <Pressable accessibilityRole="button" accessibilityLabel={`Open ${till}. Change your time and distance`} hitSlop={{ left: 8, right: 8 }} onPress={edit} style={({ pressed }) => [styles.tillLink, pressed && styles.pressed]}>
-              <Text style={styles.meta} numberOfLines={1}>{till}</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta} numberOfLines={1}>{till}</Text>
               <Ionicons name="chevron-forward" size={10} color={colors.textMuted} />
             </Pressable>
           ) : (
             <View style={styles.tillLink} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-              <Text style={styles.meta}> </Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta}> </Text>
             </View>
           )}
         </View>
@@ -184,10 +185,10 @@ export const UpToday = memo(function UpToday({ me, people, teen = false, locatio
             <Animated.View key={p.user.id} entering={FadeIn.duration(220)} layout={LinearTransition.duration(220)}>
               <Pressable accessibilityRole="link" accessibilityLabel={`${p.user.name}, open to hit${theirs ? ` ${theirs}` : ''}${far ? `, ${far}` : ''}. Show on the map`} onPress={() => router.push({ pathname: '/map', params: { user: p.user.id } })} style={({ pressed }) => [styles.item, styles.face, pressed && styles.pressed]}>
                 <OpenRing open size={FACE} halo="small"><Avatar name={p.user.name} seed={p.user.avatarSeed} uri={p.user.avatarUrl} size={FACE} ring={p.user.isCoach} /></OpenRing>
-                <Text style={styles.name} numberOfLines={1}>{p.user.name.split(' ')[0]}</Text>
+                <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.name} numberOfLines={1}>{p.user.name.split(' ')[0]}</Text>
                 {/* How far, then until when ("till 8pm"): two short lines, so neither is cut off. */}
-                {far ? <Text style={styles.meta} numberOfLines={1}>{far}</Text> : null}
-                {theirs ? <Text style={styles.meta} numberOfLines={1}>{theirs}</Text> : null}
+                {far ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta} numberOfLines={1}>{far}</Text> : null}
+                {theirs ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta} numberOfLines={1}>{theirs}</Text> : null}
               </Pressable>
             </Animated.View>
           );
@@ -196,15 +197,15 @@ export const UpToday = memo(function UpToday({ me, people, teen = false, locatio
           <View style={styles.empty}>
             {onLocation ? (
               <Pressable accessibilityRole="button" accessibilityLabel={`${teen ? 'See which friends are up' : 'See who’s up near you'}. Turn on Location`} onPress={onLocation} hitSlop={6} style={({ pressed }) => pressed && styles.pressed}>
-                <Text style={styles.emptyText}>{teen ? 'See which friends are up.' : 'See who’s up near you.'}</Text>
-                <Text style={styles.emptyLink}>Turn on Location</Text>
+                <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.emptyText}>{teen ? 'See which friends are up.' : 'See who’s up near you.'}</Text>
+                <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.emptyLink}>Turn on Location</Text>
               </Pressable>
-            ) : finding ? <Text style={styles.emptyText}>Finding you…</Text>
+            ) : finding ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.emptyText}>Finding you…</Text>
               // Who is missing, in the section's own words, then (your ring off) what the "+" on your face is for.
               : (
                 <>
-                  <Text style={styles.emptyText}>{teen ? 'No friends open near you yet' : 'No one’s open near you yet'}</Text>
-                  {up ? null : <Text style={styles.emptyHint}>Tap I’m free when you want a hit</Text>}
+                  <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.emptyText}>{teen ? 'No friends open near you yet' : 'No one’s open near you yet'}</Text>
+                  {up ? null : <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.emptyHint}>Tap I’m free when you want a hit</Text>}
                 </>
               )}
           </View>

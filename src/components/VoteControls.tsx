@@ -4,6 +4,7 @@ import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { colors, font } from '@/theme';
+import { TextScale } from '@/theme/textScale';
 
 export function voteCounts(item: { votes: number; votedBy: Record<string, 1 | -1> }) {
   const votes = Object.values(item.votedBy);
@@ -28,7 +29,7 @@ export function VoteControls({ item, userId, onVote }: {
       accessibilityState={{ selected: active }} onPress={event => { event.stopPropagation(); onVote(direction); }}
       style={({ pressed }) => [styles.button, active && styles.active, pressed && { opacity: PRESS_DIM }]}>
       <Ionicons name={direction === 1 ? 'arrow-up-outline' : 'arrow-down-outline'} size={18} color={active ? colors.brand : colors.textMuted}/>
-      <Text style={[styles.count, active && { color: colors.brand }]}>{count}</Text>
+      <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.count, active && { color: colors.brand }]}>{count}</Text>
     </Pressable>;
   })}</View>;
 }

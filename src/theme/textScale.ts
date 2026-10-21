@@ -1,4 +1,4 @@
-import { Platform } from 'react-native';
+import { Platform, useWindowDimensions } from 'react-native';
 
 /**
  * How far each kind of text may grow with the phone's Text Size setting
@@ -48,4 +48,13 @@ export function oneLine(cap: number = TextScale.TITLE, min = 0.7) {
     minimumFontScale: min,
     maxFontSizeMultiplier: cap,
   } as const;
+}
+
+/**
+ * Whether the phone's text is set well above the normal size, for the few
+ * places that swap to shorter words then (a search box's example text, which
+ * cannot shrink to fit). Always false in a browser and at the normal size.
+ */
+export function useLargeText(above = 1.15): boolean {
+  return useWindowDimensions().fontScale > above;
 }

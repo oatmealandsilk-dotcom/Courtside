@@ -14,6 +14,7 @@ import type { LatLng } from '@/features/players/positions';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, lift, radius, spacing, typography } from '@/theme';
+import { TextScale } from '@/theme/textScale';
 
 const CARD = 168;
 
@@ -52,8 +53,8 @@ export function YourCourts({ from = null }: { from?: LatLng | null }) {
   return (
     <View style={styles.wrap}>
       <View style={styles.head}>
-        <Text accessibilityRole="header" style={styles.title}>Your courts</Text>
-        <Text style={styles.count}>{followedCourts.length === 1 ? '1 court' : `${followedCourts.length} courts`}</Text>
+        <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" style={styles.title}>Your courts</Text>
+        <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.count}>{followedCourts.length === 1 ? '1 court' : `${followedCourts.length} courts`}</Text>
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.scroller} contentContainerStyle={styles.row}>
         {followedCourts.map((c) => {
@@ -74,15 +75,15 @@ export function YourCourts({ from = null }: { from?: LatLng | null }) {
                   rest as one quiet line under the name, so the card stays short (Oct 2). */}
               <View style={styles.top}>
                 <View style={styles.tile}><Ionicons name="heart" size={16} color={colors.brand} /></View>
-                {news.hit ? <View style={[styles.badge, styles.badgeNew, styles.badgeRow]}><HitGlyph size={11} color={colors.brand} /><Text style={[styles.badgeText, styles.badgeNewText]} numberOfLines={1}>{news.hit}</Text></View>
-                  : news.posts ? <View style={[styles.badge, styles.badgeNew]}><Text style={[styles.badgeText, styles.badgeNewText]} numberOfLines={1}>{news.posts}</Text></View> : null}
+                {news.hit ? <View style={[styles.badge, styles.badgeNew, styles.badgeRow]}><HitGlyph size={11} color={colors.brand} /><Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.badgeText, styles.badgeNewText]} numberOfLines={1}>{news.hit}</Text></View>
+                  : news.posts ? <View style={[styles.badge, styles.badgeNew]}><Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.badgeText, styles.badgeNewText]} numberOfLines={1}>{news.posts}</Text></View> : null}
               </View>
-              <Text style={styles.name} numberOfLines={2}>{name}</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.name} numberOfLines={2}>{name}</Text>
               {here ? <HereTag small onCheckOut={() => { void actions.checkOutOfCourt(); }} /> : null}
-              {quiet ? <Text style={styles.meta}>Nothing new this week</Text> : (() => {
+              {quiet ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta}>Nothing new this week</Text> : (() => {
                 const rest = [news.now, news.hit ? news.posts : null].filter(Boolean).join(' · ');
                 // Two lines: on a phone one cut off the new-posts count, the news the card is for.
-                return rest ? <Text style={styles.meta} numberOfLines={2}>{rest}</Text> : null;
+                return rest ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta} numberOfLines={2}>{rest}</Text> : null;
               })()}
             </Pressable>
           );

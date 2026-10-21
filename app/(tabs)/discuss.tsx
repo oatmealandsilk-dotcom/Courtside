@@ -59,7 +59,7 @@ import { setStartDrawn } from '@/features/feed/warmup';
 import { useApp } from '@/store/AppContext';
 import { useAndroidBack } from '@/lib/androidBack';
 import type { QuestionTopic } from '@/data/types';
-import { colors, radius, spacing, typography, font, lift } from '@/theme';
+import { TextScale, colors, oneLine, radius, spacing, typography, font, lift, useLargeText } from '@/theme';
 import { isDesktopBrowser } from '@/lib/browserDevice';
 import { isSupabaseConfigured } from '@/lib/supabase';
 
@@ -169,6 +169,8 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   const [search, setSearch] = useState('');
   const [searching, setSearching] = useState(false);
   const searchInput = useRef<TextInput | null>(null);
+  // At a large phone text size the full example would be cut off in the box: a shorter one then.
+  const largeText = useLargeText();
   /** Out of the search: the box cleared, the keyboard away, the page back at the top (the map). */
   const cancelSearch = () => {
     setSearch('');
@@ -546,7 +548,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
         <View style={styles.searchRow}>
           <View style={styles.searchWrap}>
             <Ionicons name="search" size={17} color={colors.textFaint} style={styles.searchIcon} />
-            <TextInput ref={searchInput} accessibilityLabel="Search players, courts or places" placeholder="Search players, courts or places" placeholderTextColor={colors.textFaint} value={search} onChangeText={setSearch} onFocus={() => setSearching(true)} onBlur={() => setSearching(false)} returnKeyType="search" style={[styles.search, search ? styles.searchWithClear : null]} />
+            <TextInput maxFontSizeMultiplier={TextScale.TITLE} ref={searchInput} accessibilityLabel="Search players, courts or places" placeholder={largeText ? 'Search players or courts' : 'Search players, courts or places'} placeholderTextColor={colors.textFaint} value={search} onChangeText={setSearch} onFocus={() => setSearching(true)} onBlur={() => setSearching(false)} returnKeyType="search" style={[styles.search, search ? styles.searchWithClear : null]} />
             {search ? (
               <Pressable accessibilityRole="button" accessibilityLabel="Clear search" hitSlop={10} onPress={() => setSearch('')} style={styles.searchClear}>
                 <Ionicons name="close-circle" size={18} color={colors.textFaint} />
@@ -555,7 +557,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
           </View>
           {searching || search ? (
             <Pressable accessibilityRole="button" accessibilityLabel="Cancel search" hitSlop={8} onPress={cancelSearch}>
-              <Text style={styles.searchCancel}>Cancel</Text>
+              <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.searchCancel}>Cancel</Text>
             </Pressable>
           ) : null}
         </View>
@@ -586,9 +588,9 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
         {!search ? (
           <View style={styles.hits}>
             <View style={styles.hitsHead}>
-              <Text accessibilityRole="header" style={styles.playersTitle}>Open hits</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" style={styles.playersTitle}>Open hits</Text>
               {/* Nothing open: the section says so in one muted line under its title, the way a section opens. */}
-              {listedHits.length ? null : <Text style={styles.playersBody}>{hitsForFriends ? 'None from your friends yet.' : 'None near you yet.'}</Text>}
+              {listedHits.length ? null : <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playersBody}>{hitsForFriends ? 'None from your friends yet.' : 'None near you yet.'}</Text>}
             </View>
             {/* The way to post one (Oct 7): a field at the top of the list, not a small link beside
                 the title. With nothing open and a public court close by, it starts the hit at that
@@ -610,14 +612,14 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
             {shownHits.map(({ hit, miles }) => <HitCard key={hit.id} hit={hit} miles={miles} {...(hitTip?.hitId === hit.id ? { tip: hitTip.tip, tipReady: hitTipReady, tipAt: '/discuss' } : {})} />)}
             {moreHits ? (
               <Pressable accessibilityRole="button" accessibilityState={{ expanded: moreHitsOpen }} onPress={() => setMoreHitsOpen((o) => !o)} hitSlop={6} style={({ pressed }) => [styles.further, pressed && { opacity: PRESS_DIM }]}>
-                <Text style={styles.furtherText}>{moreHitsOpen ? 'Fewer open hits' : `More open hits (${moreHits})`}</Text>
+                <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.furtherText}>{moreHitsOpen ? 'Fewer open hits' : `More open hits (${moreHits})`}</Text>
                 <Ionicons name={moreHitsOpen ? 'chevron-up' : 'chevron-down'} size={14} color={colors.textMuted} />
               </Pressable>
             ) : null}
             {listedFurther.length ? (
               <>
                 <Pressable accessibilityRole="button" accessibilityState={{ expanded: furtherOpen }} onPress={() => setFurtherOpen((o) => !o)} hitSlop={6} style={({ pressed }) => [styles.further, pressed && { opacity: PRESS_DIM }]}>
-                  <Text style={styles.furtherText}>Further away ({listedFurther.length})</Text>
+                  <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.furtherText}>Further away ({listedFurther.length})</Text>
                   <Ionicons name={furtherOpen ? 'chevron-up' : 'chevron-down'} size={14} color={colors.textMuted} />
                 </Pressable>
                 {furtherOpen ? listedFurther.map(({ hit, miles }) => <HitCard key={hit.id} hit={hit} miles={miles} />) : null}
@@ -631,8 +633,8 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
         {search && courtMatches.length ? (
           <View>
             <View style={styles.playersHead}>
-              <Text style={styles.playersTitle}>Courts</Text>
-              <Text style={styles.playersBody}>{`${courtMatches.length} ${courtMatches.length === 1 ? 'match' : 'matches'}`}</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playersTitle}>Courts</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playersBody}>{`${courtMatches.length} ${courtMatches.length === 1 ? 'match' : 'matches'}`}</Text>
             </View>
             {courtMatches.map(({ c, miles }, index) => {
               const meta = [youAt ? formatMiles(miles) : null, c.count > 1 ? `${c.count} courts` : null, c.lit ? 'lights' : null].filter(Boolean).join(' · ');
@@ -641,7 +643,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
                   <View style={styles.courtTile}><CourtGlyph size={20} color={colors.brand} /></View>
                   <View style={[styles.playerBody, index > 0 && styles.playerLine]}>
                     <Highlighted text={labelOf(c)} words={searchWords} style={styles.playerName} strong={styles.courtNameMatch} lines={2} wordStart />
-                    {meta ? <Text style={styles.playerMeta} numberOfLines={1}>{meta}</Text> : null}
+                    {meta ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playerMeta} numberOfLines={1}>{meta}</Text> : null}
                   </View>
                   <Ionicons name="chevron-forward" size={16} color={colors.textFaint} style={styles.playerChevron} />
                 </Pressable>
@@ -653,15 +655,15 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
         {search.trim() && placeMatches.length ? (
           <View>
             <View style={styles.playersHead}>
-              <Text style={styles.playersTitle}>Places</Text>
-              <Text style={styles.playersBody}>{placeSearch.failed ? 'Search isn’t working right now' : 'See the courts there on the map'}</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playersTitle}>Places</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playersBody}>{placeSearch.failed ? 'Search isn’t working right now' : 'See the courts there on the map'}</Text>
             </View>
             {placeMatches.map((p, index) => (
               <Pressable key={p.id} accessibilityRole="link" accessibilityLabel={`${p.title}${p.sub ? `, ${p.sub}` : ''}, see its courts on the map`} onPress={() => openPlace(p)} style={({ pressed }) => [styles.player, pressed && styles.playerPressed]}>
                 <View style={styles.placeTile}><Ionicons name={p.kind === 'area' ? 'map-outline' : 'location-outline'} size={20} color={colors.textMuted} /></View>
                 <View style={[styles.playerBody, index > 0 && styles.playerLine]}>
                   <Highlighted text={p.title} words={searchWords} style={styles.playerName} strong={styles.courtNameMatch} lines={1} wordStart />
-                  {p.sub ? <Text style={styles.playerMeta} numberOfLines={1}>{p.sub}</Text> : null}
+                  {p.sub ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playerMeta} numberOfLines={1}>{p.sub}</Text> : null}
                 </View>
                 <Ionicons name="chevron-forward" size={16} color={colors.textFaint} style={styles.playerChevron} />
               </Pressable>
@@ -669,15 +671,15 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
           </View>
         ) : null}
         {search && (foundPlayers.length || courtMatches.length || placeMatches.length) ? <View style={styles.playersHead}>
-          <Text style={styles.playersTitle}>Players</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playersTitle}>Players</Text>
           {/* A court matched but no one did: one quiet line, not a big empty state under the court that was found. */}
-          <Text style={styles.playersBody}>{foundPlayers.length ? `${foundPlayers.length} ${foundPlayers.length === 1 ? 'match' : 'matches'}` : `No players named “${search.trim()}”`}</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playersBody}>{foundPlayers.length ? `${foundPlayers.length} ${foundPlayers.length === 1 ? 'match' : 'matches'}` : `No players named “${search.trim()}”`}</Text>
         </View> : null}
         {search ? foundPlayers.map((user, index) => <Pressable key={user.id} accessibilityRole="link" onPress={() => router.push(`/user/${user.id}`)} style={({ pressed }) => [styles.player, pressed && styles.playerPressed]}>
           <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={52} ring={user.isCoach} />
           <View style={[styles.playerBody, index > 0 && styles.playerLine]}>
-            <View style={styles.playerTop}><Text style={styles.playerName} numberOfLines={1}>{user.name}</Text><LevelPill profile={user.profile} small /></View>
-            <Text style={styles.playerMeta} numberOfLines={1}>@{user.handle}</Text>
+            <View style={styles.playerTop}><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playerName} numberOfLines={1}>{user.name}</Text><LevelPill profile={user.profile} small /></View>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playerMeta} numberOfLines={1}>@{user.handle}</Text>
           </View>
           <Ionicons name="chevron-forward" size={16} color={colors.textFaint} style={styles.playerChevron} />
         </Pressable>) : null}
@@ -686,16 +688,16 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
         {!search && nearPlayers.length ? (
           <View>
             <View style={styles.playersHead}>
-              <Text style={styles.playersTitle}>Near you</Text>
-              <Text style={styles.playersBody}>Shared their spot within 30 miles</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playersTitle}>Near you</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playersBody}>Shared their spot within 30 miles</Text>
             </View>
             {nearPlayers.map(({ user, miles, seenAt, rough }, index) => (
               <Pressable key={user.id} accessibilityRole="link" accessibilityLabel={`${user.name}, ${formatSpotMiles(miles, rough)}, open profile`} onPress={() => router.push(`/user/${user.id}`)} style={({ pressed }) => [styles.player, pressed && styles.playerPressed]}>
                 <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={52} ring={user.isCoach} />
                 <View style={[styles.playerBody, styles.playerFollowBody, index > 0 && styles.playerLine]}>
                   <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
-                    <View style={styles.playerTop}><Text style={styles.playerName} numberOfLines={1}>{user.name}</Text><LevelPill profile={user.profile} small /></View>
-                    <Text style={styles.playerMeta} numberOfLines={1}>{[formatSpotMiles(miles, rough), seenAt ? agoLabel(seenAt) : null, isOpenToHitNow(user) ? 'open to hit' : null].filter(Boolean).join(' · ')}</Text>
+                    <View style={styles.playerTop}><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playerName} numberOfLines={1}>{user.name}</Text><LevelPill profile={user.profile} small /></View>
+                    <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playerMeta} numberOfLines={1}>{[formatSpotMiles(miles, rough), seenAt ? agoLabel(seenAt) : null, isOpenToHitNow(user) ? 'open to hit' : null].filter(Boolean).join(' · ')}</Text>
                   </View>
                   <FollowPill small following={followingIds.includes(user.id)} userId={user.id} onPress={() => followRow(user.id)} name={user.name.split(' ')[0]} />
                 </View>
@@ -706,22 +708,22 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
         {/* New on CourtSide: who joined in the last two weeks (adults, and people you already follow), with Follow in one tap. */}
         {!search && newPlayers.length && newTucked ? (
           <Pressable accessibilityRole="button" accessibilityState={{ expanded: false }} onPress={() => setElsewhereOpen(true)} hitSlop={6} style={({ pressed }) => [styles.further, pressed && { opacity: PRESS_DIM }]}>
-            <Text style={styles.furtherText}>New players in other cities</Text>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.furtherText}>New players in other cities</Text>
             <Ionicons name="chevron-down" size={14} color={colors.textMuted} />
           </Pressable>
         ) : !search && newPlayers.length ? (
           <View>
             <View style={styles.playersHead}>
-              <Text style={styles.playersTitle}>New on CourtSide</Text>
-              <Text style={styles.playersBody}>{newElsewhere ? 'Joined in the last two weeks, in other cities' : 'Joined in the last two weeks'}</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playersTitle}>New on CourtSide</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playersBody}>{newElsewhere ? 'Joined in the last two weeks, in other cities' : 'Joined in the last two weeks'}</Text>
             </View>
             {(newOpen ? newPlayers : newPlayers.slice(0, NEW_SHOWN)).map((user, index) => (
               <Pressable key={user.id} accessibilityRole="link" accessibilityLabel={`${user.name}, ${joinedLabel(user.joinedAt).toLowerCase()}, open profile`} onPress={() => router.push(`/user/${user.id}`)} style={({ pressed }) => [styles.player, pressed && styles.playerPressed]}>
                 <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={52} ring={user.isCoach} />
                 <View style={[styles.playerBody, styles.playerFollowBody, index > 0 && styles.playerLine]}>
                   <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
-                    <View style={styles.playerTop}><Text style={styles.playerName} numberOfLines={1}>{user.name}</Text><LevelPill profile={user.profile} small /></View>
-                    <Text style={styles.playerMeta} numberOfLines={1}>{[joinedLabel(user.joinedAt), user.location.split(',')[0] || null].filter(Boolean).join(' · ')}</Text>
+                    <View style={styles.playerTop}><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playerName} numberOfLines={1}>{user.name}</Text><LevelPill profile={user.profile} small /></View>
+                    <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playerMeta} numberOfLines={1}>{[joinedLabel(user.joinedAt), user.location.split(',')[0] || null].filter(Boolean).join(' · ')}</Text>
                   </View>
                   <FollowPill small following={followingIds.includes(user.id)} userId={user.id} onPress={() => followRow(user.id)} name={user.name.split(' ')[0]} />
                 </View>
@@ -729,7 +731,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
             ))}
             {newPlayers.length > NEW_SHOWN ? (
               <Pressable accessibilityRole="button" accessibilityState={{ expanded: newOpen }} onPress={() => setNewOpen((o) => !o)} hitSlop={6} style={({ pressed }) => [styles.further, pressed && { opacity: PRESS_DIM }]}>
-                <Text style={styles.furtherText}>{newOpen ? 'Fewer' : `Show all (${newPlayers.length})`}</Text>
+                <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.furtherText}>{newOpen ? 'Fewer' : `Show all (${newPlayers.length})`}</Text>
                 <Ionicons name={newOpen ? 'chevron-up' : 'chevron-down'} size={14} color={colors.textMuted} />
               </Pressable>
             ) : null}
@@ -758,11 +760,11 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
         {anyInTopic ? (
         <View style={styles.sortRow}>
           {/* Nothing here: the empty state below says so, not "0 threads" over it. */}
-          <Text style={styles.sortCount}>{visible.length === 0 ? '' : visible.length === 1 ? '1 thread' : `${visible.length} threads`}</Text>
+          <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.sortCount}>{visible.length === 0 ? '' : visible.length === 1 ? '1 thread' : `${visible.length} threads`}</Text>
           <View>
             <Pressable accessibilityRole="button" accessibilityLabel={`Sort: ${SORT_LABEL[sort]}`} accessibilityState={{ expanded: sortOpen }} onPress={() => setSortOpen((o) => !o)} hitSlop={8} style={({ pressed }) => [styles.sortButton, pressed && { opacity: PRESS_DIM }]}>
               <Ionicons name="swap-vertical" size={14} color={colors.textMuted} />
-              <Text style={styles.sortButtonText}>{SORT_LABEL[sort]}</Text>
+              <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.sortButtonText}>{SORT_LABEL[sort]}</Text>
               <Ionicons name={sortOpen ? 'chevron-up' : 'chevron-down'} size={13} color={colors.textMuted} />
             </Pressable>
             {sortOpen ? (
@@ -770,8 +772,8 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
                 {(['new', 'hot', 'top', 'unanswered'] as const).map((key, i) => (
                   <Pressable key={key} accessibilityRole="menuitem" accessibilityState={{ selected: sort === key }} onPress={() => { setSort(key); setSortOpen(false); }} style={({ pressed }) => [styles.sortItem, i > 0 && styles.sortItemLine, pressed && { backgroundColor: colors.bgElevated }]}>
                     <View style={{ flex: 1, gap: 1 }}>
-                      <Text style={[styles.sortItemTitle, sort === key && { color: colors.brand }]}>{SORT_LABEL[key]}</Text>
-                      <Text style={styles.sortItemBody}>{SORT_HINT[key]}</Text>
+                      <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.sortItemTitle, sort === key && { color: colors.brand }]}>{SORT_LABEL[key]}</Text>
+                      <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.sortItemBody}>{SORT_HINT[key]}</Text>
                     </View>
                     {sort === key ? <Ionicons name="checkmark" size={16} color={colors.brand} /> : null}
                   </Pressable>
@@ -805,8 +807,8 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
             <View style={styles.pinned}>
               <View style={styles.pinnedLabel} accessible accessibilityLabel="Question of the week, this week">
                 <Ionicons name="pin" size={13} color={colors.brand} />
-                <Text style={styles.pinnedTitle}>Question of the week</Text>
-                <View style={styles.weekPill}><Text style={styles.weekPillText}>This week</Text></View>
+                <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.pinnedTitle}>Question of the week</Text>
+                <View style={styles.weekPill}><Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.weekPillText}>This week</Text></View>
               </View>
               <QuestionCard
                 question={pinned}
@@ -834,7 +836,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
           {/* The count sits once, above the list; the end of the list is just its end. */}
           {visible.length > slice.length || serverHasMore ? (
             <Pressable ref={listEnd} accessibilityRole="button" onPress={showMore} style={styles.more}>
-              <Text style={styles.moreText}>Show more threads</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.moreText}>Show more threads</Text>
             </Pressable>
           ) : null}
         </View>
@@ -864,7 +866,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
       }
     >
       <View style={styles.sections} onLayout={e => { setTabWidth(e.nativeEvent.layout.width / 2); setSectionsHeight(e.nativeEvent.layout.height); }}>
-        {(['players', 'discussions'] as const).map(value => <Pressable key={value} accessibilityRole="tab" accessibilityState={{ selected: section === value }} onPress={() => setSection(value)} style={styles.section}><Text style={{ ...typography.bodyStrong, fontSize: 16, color: section === value ? colors.text : colors.textMuted }}>{value === 'discussions' ? 'Discussions' : 'Find Players'}</Text></Pressable>)}
+        {(['players', 'discussions'] as const).map(value => <Pressable key={value} accessibilityRole="tab" accessibilityState={{ selected: section === value }} onPress={() => setSection(value)} style={styles.section}><Text {...oneLine(TextScale.TITLE, 0.75)} style={{ ...typography.bodyStrong, fontSize: 16, color: section === value ? colors.text : colors.textMuted }}>{value === 'discussions' ? 'Discussions' : 'Find Players'}</Text></Pressable>)}
         {tabWidth > 0 && <Reanimated.View pointerEvents="none" style={[styles.sectionUnderline, { width: tabWidth }, underline.style]} />}
       </View>
       {/* Find Players on the left, Discussions on the right. Community is the

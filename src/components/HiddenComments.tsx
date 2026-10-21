@@ -12,6 +12,7 @@ import { relativeTime } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
 import { colors, spacing, typography } from '@/theme';
 import { openPlayer } from '@/features/navigation/openPlayer';
+import { TextScale } from '@/theme/textScale';
 
 /**
  * "Hidden comments (2)" at the end of the comments on something of yours,
@@ -38,12 +39,12 @@ export function HiddenComments({ count, noun = 'comments', children }: {
         style={({ pressed }) => [styles.toggle, pressed && styles.pressed]}
       >
         <Ionicons name="eye-off-outline" size={15} color={colors.textMuted} />
-        <Text style={styles.toggleText}>Hidden {noun} ({count})</Text>
+        <Text maxFontSizeMultiplier={TextScale.BODY} style={styles.toggleText}>Hidden {noun} ({count})</Text>
         <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={14} color={colors.textFaint} />
       </Pressable>
       {open ? (
         <View style={styles.list}>
-          <Text style={styles.note}>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.note}>
             {count === 1
               ? 'Hidden by your Hidden words. Only you and its writer see it. Unhide it to show everyone.'
               : 'Hidden by your Hidden words. Only you and each writer see them. Unhide one to show everyone.'}
@@ -70,13 +71,13 @@ export function HiddenReplyRow({ authorId, body, createdAt, onUnhide }: { author
         <Avatar name={who?.name ?? '?'} seed={who?.avatarSeed ?? authorId} uri={who?.avatarUrl} size={32} />
       </Pressable>
       <View style={styles.body}>
-        <Text style={styles.meta}>
-          <Text style={styles.name} onPress={open}>{who?.name ?? 'Unknown'}</Text>
+        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta}>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.name} onPress={open}>{who?.name ?? 'Unknown'}</Text>
           {'  '}{relativeTime(createdAt)}
         </Text>
         {body.trim() ? <RichText style={styles.text}>{body}</RichText> : null}
         <Pressable accessibilityRole="button" accessibilityLabel={`Unhide ${who?.name ?? 'this'}'s reply`} hitSlop={{ top: 10, bottom: 12, left: 8, right: 16 }} onPress={onUnhide} style={styles.unhide}>
-          <Text style={styles.unhideText}>Unhide</Text>
+          <Text maxFontSizeMultiplier={TextScale.BODY} style={styles.unhideText}>Unhide</Text>
         </Pressable>
       </View>
     </View>
