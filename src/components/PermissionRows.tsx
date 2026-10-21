@@ -17,6 +17,7 @@ import { Toggle } from '@/components/ui';
 import { useInstantsOn } from '@/features/stories/instantsSwitch';
 import * as toast from '@/lib/toast';
 import { colors, radius, spacing, typography } from '@/theme';
+import { TextScale } from '@/theme/textScale';
 
 /** Live read of every permission, refreshed whenever the app comes back to the front. */
 export function usePermissions() {
@@ -96,7 +97,7 @@ export function PermissionRows({ only, footnote }: { only?: DevicePermission[]; 
               {/* The hairline belongs to the words, so it starts past the icon, as in Settings. */}
               <View style={[styles.rowBody, i > 0 && styles.rowLine]}>
                 <View style={[styles.rowText, unavailable && styles.dim]}>
-                  <Text style={styles.label} numberOfLines={1}>
+                  <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.label} numberOfLines={1}>
                     {meta.label}<Text style={styles.status}> · {STATUS[state]}</Text>
                   </Text>
                   <Text style={styles.why}>{why}</Text>
@@ -110,7 +111,7 @@ export function PermissionRows({ only, footnote }: { only?: DevicePermission[]; 
           );
         })}
       </View>
-      {footnote ? <Text style={styles.footnote}>{footnote}</Text> : null}
+      {footnote ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.footnote}>{footnote}</Text> : null}
     </View>
   );
 }

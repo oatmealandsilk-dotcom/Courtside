@@ -7,6 +7,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Chip, BrandWash } from '@/components/ui';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, lift, radius, spacing, typography } from '@/theme';
+import { TextScale } from '@/theme/textScale';
 
 /*
  * The pieces every sheet's form is built from, in the app's own language
@@ -22,7 +23,7 @@ export function SheetTitle({ title, line, lineTone = 'muted', lines = 1, onClose
   return (
     <View style={styles.titleRow}>
       <View style={{ flex: 1, gap: 3 }}>
-        <Text style={[styles.title, titleSize ? { fontSize: titleSize, letterSpacing: -0.03 * titleSize } : null]}>{title}</Text>
+        <Text maxFontSizeMultiplier={TextScale.TITLE} style={[styles.title, titleSize ? { fontSize: titleSize, letterSpacing: -0.03 * titleSize } : null]}>{title}</Text>
         {line ? <Text style={[styles.line, lineTone === 'brand' && styles.lineBrand]} numberOfLines={lines}>{line}</Text> : null}
       </View>
       <Pressable accessibilityRole="button" accessibilityLabel="Close" hitSlop={8} onPress={onClose} style={({ pressed }) => [styles.close, pressed && { opacity: PRESS_DIM }]}>
@@ -43,8 +44,8 @@ export function Section({ title, hint, right, strong = false, children }: { titl
     <View style={[styles.section, strong && styles.sectionStrong]}>
       <View style={[styles.sectionHead, strong && styles.sectionHeadStrong]}>
         <View style={{ flex: 1, gap: 2 }}>
-          <Text style={[styles.sectionTitle, strong && styles.sectionTitleStrong]} accessibilityRole={strong ? 'header' : undefined}>{title}</Text>
-          {hint ? <Text style={[styles.sectionHint, strong && styles.sectionHintStrong]}>{hint}</Text> : null}
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.sectionTitle, strong && styles.sectionTitleStrong]} accessibilityRole={strong ? 'header' : undefined}>{title}</Text>
+          {hint ? <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.sectionHint, strong && styles.sectionHintStrong]}>{hint}</Text> : null}
         </View>
         {right}
       </View>
@@ -69,7 +70,7 @@ function SoftPill({ label, a11y, on, onPress, fill = false, small = false, onLay
   return (
     <Pressable onLayout={onLayout} accessibilityRole="radio" accessibilityState={{ checked: on, selected: on }} accessibilityLabel={a11y ?? label} hitSlop={small ? SMALL_REACH : 4} onPress={onPress}
       style={({ pressed }) => [styles.pill, small && styles.pillSmall, fill && styles.pillFill, on && styles.pillOn, pressed && !on && styles.pressed]}>
-      <Text style={[styles.pillText, small && styles.pillTextSmall, on && styles.pillTextOn]} numberOfLines={1}>{label}</Text>
+      <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.pillText, small && styles.pillTextSmall, on && styles.pillTextOn]} numberOfLines={1}>{label}</Text>
     </Pressable>
   );
 }
@@ -218,12 +219,12 @@ export function Submit({ label, onPress, disabled = false, busy = false, waiting
       {busy ? (
         <View style={styles.submitRow}>
           <ActivityIndicator size="small" color={colors.brandInk} />
-          <Text style={styles.submitText}>{busyLabel ?? label}</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.submitText}>{busyLabel ?? label}</Text>
         </View>
       ) : (
         <>
           {off ? null : <BrandWash />}
-          <Text style={[styles.submitText, off && styles.submitTextOff]}>{disabled && waiting ? waiting : label}</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.submitText, off && styles.submitTextOff]}>{disabled && waiting ? waiting : label}</Text>
         </>
       )}
     </Pressable>
@@ -274,7 +275,7 @@ const styleDefinitions = StyleSheet.create({
   // from their heading, and from the next part, as every other choice on the sheet.
   shadowRoom: { marginVertical: -6 },
   tileRow: { flexDirection: 'row', gap: spacing.sm },
-  tile: { ...lift, height: 64, borderRadius: 18, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', gap: 1 },
+  tile: { ...lift, minHeight: 64, borderRadius: 18, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', gap: 1 },
   // A day's tile: 58 wide, a little wider only for a longer word on top ("Yesterday").
   tileFixed: { minWidth: 58, paddingHorizontal: 8 },
   tileFlex: { flex: 1 },
@@ -287,7 +288,7 @@ const styleDefinitions = StyleSheet.create({
   tileSoftTopOn: { color: colors.text, ...font('600') },
   fadeRight: { position: 'absolute', right: 0, top: 0, bottom: 0, width: FADE },
   fadeGone: { opacity: 0 },
-  submit: { height: 54, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
+  submit: { minHeight: 54, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
   submitOn: { backgroundColor: colors.brand, boxShadow: '0px 8px 20px rgba(0, 0, 0, 0.16)' },
   submitOff: { backgroundColor: colors.surfaceAlt },
   submitBusy: { opacity: 0.92 },

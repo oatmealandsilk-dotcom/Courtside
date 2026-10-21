@@ -27,6 +27,7 @@ import { setUploadAside, useUploadState } from '@/lib/uploads';
 import { useApp } from '@/store/AppContext';
 import { ThemeScope, themes, useTheme, useThemedStyles, type ThemeName } from '@/theme/ThemeProvider';
 import { colors, font, pageIsDark, radius, spacing, typography, withAlpha } from '@/theme';
+import { TextScale } from '@/theme/textScale';
 
 /**
  * Share a session to Instagram, the way Strava does: four pictures to swipe
@@ -164,7 +165,7 @@ const DesignCard = memo(function DesignCard({ design, label, court, story, cardW
         <Pressable accessibilityRole="button" accessibilityLabel={photo ? 'Change photo' : 'Choose a photo'} onPress={onChoosePhoto} style={({ pressed }) => [styles.photoButton, pressed && styles.pressed]}>
           <View style={styles.photoChip}>
             <Ionicons name="image-outline" size={14} color={colors.onMedia} />
-            <Text style={styles.photoButtonText}>{photo ? 'Change photo' : 'Choose a photo'}</Text>
+            <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.photoButtonText}>{photo ? 'Change photo' : 'Choose a photo'}</Text>
           </View>
         </Pressable>
       ) : null}
@@ -394,7 +395,7 @@ export default function ShareSession() {
   // itself when this was the first page opened, a browser reloaded on it). Otherwise the way back, as ever.
   const doneButton = (
     <Pressable accessibilityRole="button" accessibilityLabel="Done" hitSlop={{ top: 9, bottom: 9, left: 10, right: 10 }} onPress={() => goBack(HOME)} style={({ pressed }) => [styles.done, pressed && styles.pressed]}>
-      <Text style={styles.doneText}>Done</Text>
+      <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.doneText}>Done</Text>
     </Pressable>
   );
   const header = posted ? { title: 'Share your session', right: doneButton } : { title: 'Share', onBack: () => goBack('/your-sessions') };
@@ -473,7 +474,7 @@ export default function ShareSession() {
                   const on = i === shownIndex;
                   return (
                     <Pressable key={d.key} accessibilityRole="tab" accessibilityState={{ selected: on }} onPress={() => goTo(i)} style={styles.design}>
-                      <Text style={[styles.designText, on && styles.designTextOn]}>{d.label}</Text>
+                      <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.designText, on && styles.designTextOn]}>{d.label}</Text>
                       <View style={[styles.designDot, on && styles.designDotOn]} />
                     </Pressable>
                   );

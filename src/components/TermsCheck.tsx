@@ -5,6 +5,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { openLegal } from '@/lib/legal';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, spacing, typography, font } from '@/theme';
+import { TextScale } from '@/theme/textScale';
 
 /**
  * The terms, agreed to on purpose, on the sign-up form: a round check that
@@ -32,11 +33,11 @@ export function TermsCheck({ checked, onChange }: { checked: boolean; onChange: 
     >
       <Ionicons name={checked ? 'checkmark-circle' : 'ellipse-outline'} size={22} color={checked ? colors.brand : colors.textFaint} />
       <View style={styles.words}>
-        <Text style={styles.label}>
+        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.label}>
           I agree to the{' '}
-          <Text accessibilityRole="link" onPress={open('terms')} style={styles.link}>Terms of Use</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="link" onPress={open('terms')} style={styles.link}>Terms of Use</Text>
           {' '}and{' '}
-          <Text accessibilityRole="link" onPress={open('privacy')} style={styles.link}>Privacy Policy</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="link" onPress={open('privacy')} style={styles.link}>Privacy Policy</Text>
           .
         </Text>
         <Text style={styles.rule}>CourtSide has no tolerance for objectionable content or abusive users.</Text>

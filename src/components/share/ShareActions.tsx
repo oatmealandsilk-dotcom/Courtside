@@ -7,6 +7,7 @@ import { CourtSpinner } from '@/components/CourtSpinner';
 import { canCopyStory, canSaveStory, type StoryAction } from '@/features/share/storyImage';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, spacing } from '@/theme';
+import { TextScale } from '@/theme/textScale';
 
 const ACTIONS: { key: StoryAction; label: string; spoken: string; icon: React.ComponentProps<typeof Ionicons>['name'] }[] = [
   { key: 'instagram', label: 'Stories', spoken: 'Share to Instagram Stories', icon: 'logo-instagram' },
@@ -53,7 +54,7 @@ export function ShareActions({ busy, onRun, steps, onSend }: { busy: StoryAction
               <View style={[styles.circle, lead && styles.lead]}>
                 {busy === a.key ? <CourtSpinner size={22} ink={lead ? colors.brandInk : colors.text} /> : <Ionicons name={a.icon} size={24} color={lead ? colors.brandInk : colors.text} />}
               </View>
-              <Text style={styles.label} numberOfLines={1}>{a.label}</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.label} numberOfLines={1}>{a.label}</Text>
             </Pressable>
           );
         })}
@@ -69,12 +70,12 @@ export function ShareActions({ busy, onRun, steps, onSend }: { busy: StoryAction
             <View style={styles.circle}>
               <Ionicons name="paper-plane-outline" size={23} color={colors.text} />
             </View>
-            <Text style={styles.label} numberOfLines={1}>Send</Text>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.label} numberOfLines={1}>Send</Text>
           </Pressable>
         ) : null}
       </View>
       {steps ? (
-        <Text style={styles.steps} accessibilityLiveRegion="polite" {...(Platform.OS === 'web' ? { role: 'status' } : {})}>{steps}</Text>
+        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.steps} accessibilityLiveRegion="polite" {...(Platform.OS === 'web' ? { role: 'status' } : {})}>{steps}</Text>
       ) : null}
     </View>
   );

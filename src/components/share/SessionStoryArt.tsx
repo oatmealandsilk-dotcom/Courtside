@@ -15,6 +15,7 @@ import type { ID } from '@/data/types';
 import type { SessionStory } from '@/features/share/sessionStory';
 import { useTheme } from '@/theme/ThemeProvider';
 import { colors, font } from '@/theme';
+import { TextScale } from '@/theme/textScale';
 
 /** The pictures a session can be shared as, in the order they are offered. */
 export type StoryDesign = 'photo' | 'card' | 'sticker' | 'overlay' | 'heart';
@@ -140,8 +141,8 @@ export function SessionStoryArt({ design, story, width, photo, hidden = [], onPh
           const k = st.label === 'Score' ? scoreScale(st.value, 15) : 1;
           return (
             <View key={st.label} style={styles.centre}>
-              <Text style={[styles.overLabel, { fontSize: 15 * u, lineHeight: 20 * u, textShadowRadius: 6 * d }]}>{st.label}</Text>
-              <Text style={[styles.overValue, { textShadowRadius: 8 * d, fontSize: 36 * u * k, lineHeight: 42 * u * k, maxWidth: 320 * u, textAlign: 'center' }]}>{st.value}</Text>
+              <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.overLabel, { fontSize: 15 * u, lineHeight: 20 * u, textShadowRadius: 6 * d }]}>{st.label}</Text>
+              <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.overValue, { textShadowRadius: 8 * d, fontSize: 36 * u * k, lineHeight: 42 * u * k, maxWidth: 320 * u, textAlign: 'center' }]}>{st.value}</Text>
             </View>
           );
         })}
@@ -152,7 +153,7 @@ export function SessionStoryArt({ design, story, width, photo, hidden = [], onPh
             every court (Oct 10, owner), gets a soft dark shadow instead, as the white numbers have. */}
         <View style={[styles.overBrand, { gap: 8 * u, marginTop: 12 * u }]}>
           <ShadedMark size={33 * u} u={u} color={colors.brandBright} halo={halo} weight={1.5} sideWeight={1.05} />
-          <Text style={[styles.overWord, { fontSize: 30 * u, lineHeight: 36 * u, letterSpacing: -0.9 * u, color: colors.brandBright }, wordHalo(halo, u)]}>CourtSide</Text>
+          <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.overWord, { fontSize: 30 * u, lineHeight: 36 * u, letterSpacing: -0.9 * u, color: colors.brandBright }, wordHalo(halo, u)]}>CourtSide</Text>
         </View>
       </View>
     );

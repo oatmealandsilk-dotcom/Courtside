@@ -16,6 +16,7 @@ import type { CalendarDay } from '@/features/sessionChooser/useSessionChoices';
 import { duration } from '@/lib/format';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, lift, radius, spacing, typography, withAlpha } from '@/theme';
+import { TextScale } from '@/theme/textScale';
 
 /*
  * The pieces the Session sheet is built from (+ → Session, app/new-session.tsx),
@@ -65,12 +66,12 @@ export function StartHero({ court, onPress }: { court: { name: string; why: stri
       <CardWash look={look} radius={24} />
       <View style={styles.heroTop}>
         <LiveDot size={8} color={look.figure} />
-        <Text style={[styles.eyebrow, { color: look.eyebrow }]}>START A SESSION</Text>
+        <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.eyebrow, { color: look.eyebrow }]}>START A SESSION</Text>
       </View>
       <View style={styles.heroMiddle}>
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={[styles.clock, { color: look.ink }]} maxFontSizeMultiplier={1.2}>0:00:00</Text>
-          <Text style={[styles.heroNote, { color: look.muted }]} numberOfLines={1}>The clock runs from Start to Finish.</Text>
+          <Text maxFontSizeMultiplier={TextScale.TITLE} style={[styles.heroNote, { color: look.muted }]} numberOfLines={1}>The clock runs from Start to Finish.</Text>
         </View>
         <View style={[styles.go, { boxShadow: `0px 6px 16px ${withAlpha(colors.brand, 0.28)}` }]}>
           <BrandWash radius={30} />
@@ -79,8 +80,8 @@ export function StartHero({ court, onPress }: { court: { name: string; why: stri
       </View>
       <View style={[styles.heroFoot, { borderTopColor: look.lines }]}>
         <CourtGlyph size={15} color={look.figure} />
-        <Text style={[styles.heroCourt, { color: look.ink }]} numberOfLines={1}>{court ? court.name : 'Pick your court as you start'}</Text>
-        {court ? <Text style={[styles.heroWhy, { color: look.muted }]} numberOfLines={1}>{court.why}</Text> : null}
+        <Text maxFontSizeMultiplier={TextScale.TITLE} style={[styles.heroCourt, { color: look.ink }]} numberOfLines={1}>{court ? court.name : 'Pick your court as you start'}</Text>
+        {court ? <Text maxFontSizeMultiplier={TextScale.TITLE} style={[styles.heroWhy, { color: look.muted }]} numberOfLines={1}>{court.why}</Text> : null}
       </View>
     </Pressable>
   );
@@ -105,14 +106,14 @@ export function WaitingRow({ activity: x, onPress, first }: { activity: Detected
       </View>
       <View style={styles.rowWords}>
         <View style={styles.rowHeroLine}>
-          <Text style={styles.rowHero}>{duration(x.minutes)}</Text>
-          <View style={styles.tag}><Text style={styles.tagText} numberOfLines={1}>{pickSource({ type: 'tracker', activity: x })}</Text></View>
+          <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.rowHero}>{duration(x.minutes)}</Text>
+          <View style={styles.tag}><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.tagText} numberOfLines={1}>{pickSource({ type: 'tracker', activity: x })}</Text></View>
         </View>
-        <Text style={styles.rowTitle} numberOfLines={1}>{`${waitingTitle(x)} · ${startedWords(x)}`}</Text>
+        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rowTitle} numberOfLines={1}>{`${waitingTitle(x)} · ${startedWords(x)}`}</Text>
       </View>
       <View style={styles.logIt}>
         <BrandWash radius={radius.pill} />
-        <Text style={styles.logItText}>Log it</Text>
+        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.logItText}>Log it</Text>
       </View>
     </Pressable>
   );
@@ -125,8 +126,8 @@ export function ByHandRow({ onPress, note = 'Practice, a match or a workout.' }:
     <Pressable accessibilityRole="button" accessibilityLabel="Log one yourself" onPress={onPress} style={({ pressed }) => [styles.byHand, pressed && styles.pressed]}>
       <View style={styles.byHandIcon}><Ionicons name="add" size={20} color={colors.text} /></View>
       <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-        <Text style={styles.byHandTitle}>Log one yourself</Text>
-        <Text style={styles.byHandNote} numberOfLines={1}>{note}</Text>
+        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.byHandTitle}>Log one yourself</Text>
+        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.byHandNote} numberOfLines={1}>{note}</Text>
       </View>
       <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
     </Pressable>
@@ -139,10 +140,10 @@ export function PartHead({ title, count, hint }: { title: string; count?: number
   return (
     <View style={styles.partHead}>
       <View style={styles.partTitleRow}>
-        <Text style={styles.partTitle} accessibilityRole="header">{title}</Text>
-        {count ? <View style={styles.count}><Text style={styles.countText}>{count}</Text></View> : null}
+        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.partTitle} accessibilityRole="header">{title}</Text>
+        {count ? <View style={styles.count}><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.countText}>{count}</Text></View> : null}
       </View>
-      {hint ? <Text style={styles.partHint}>{hint}</Text> : null}
+      {hint ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.partHint}>{hint}</Text> : null}
     </View>
   );
 }
@@ -182,23 +183,23 @@ export function WeekStrip({ minutes, streak, days }: { minutes: number; streak: 
     <View style={styles.strip} accessible accessibilityRole="summary" accessibilityLabel={spoken}>
       <View style={styles.stripInner} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
         <View style={styles.stripTop}>
-          <Text style={[styles.eyebrow, { color: eyebrow }]}>THIS WEEK</Text>
+          <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.eyebrow, { color: eyebrow }]}>THIS WEEK</Text>
           {shownStreak ? (
             <View style={[styles.streak, styles.streakStrip]}>
               <Ionicons name="flame" size={14} color={colors.clay} />
-              <Text style={styles.streakText}>{`Day ${shownStreak} streak`}</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.streakText}>{`Day ${shownStreak} streak`}</Text>
             </View>
           ) : null}
         </View>
         {minutes > 0 ? (
           <View style={styles.stripLine}>
             <Duration minutes={minutes} size={36} color={figure} unitColor={muted} play />
-            <Text style={[styles.stripNote, styles.stripWords, { color: muted }]}>on court</Text>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.stripNote, styles.stripWords, { color: muted }]}>on court</Text>
           </View>
         ) : (
           <View style={styles.stripFresh}>
-            <Text style={[styles.stripFreshTitle, { color: figure }]}>{shownStreak ? 'Keep it going today' : 'Your week starts here'}</Text>
-            <Text style={[styles.stripNote, { color: muted }]}>Play or log tennis today and it gets its tick.</Text>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.stripFreshTitle, { color: figure }]}>{shownStreak ? 'Keep it going today' : 'Your week starts here'}</Text>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.stripNote, { color: muted }]}>Play or log tennis today and it gets its tick.</Text>
           </View>
         )}
         <View style={[styles.dots, styles.stripDots]}>
@@ -213,7 +214,7 @@ export function WeekStrip({ minutes, streak, days }: { minutes: number; streak: 
                 <View style={[styles.dot, styles.stripDot, { borderColor: on || invite ? figure : quiet ? 'transparent' : withAlpha(figure, 0.24) }, on && { backgroundColor: figure }, invite && styles.stripInvite]}>
                   {on ? <Ionicons name="checkmark" size={13} color={colors.brandInk} /> : invite ? <LiveDot size={8} color={figure} /> : quiet ? <View style={[styles.stripQuiet, { backgroundColor: withAlpha(figure, 0.22) }]} /> : null}
                 </View>
-                <Text style={[styles.dotLetter, styles.stripLetter, { color: d.today ? ink : muted }, d.today && styles.dotLetterToday]}>{d.today ? 'Today' : DAY_LETTER[new Date(`${d.day}T12:00:00`).getDay()]}</Text>
+                <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.dotLetter, styles.stripLetter, { color: d.today ? ink : muted }, d.today && styles.dotLetterToday]}>{d.today ? 'Today' : DAY_LETTER[new Date(`${d.day}T12:00:00`).getDay()]}</Text>
               </View>
             );
           })}
@@ -247,7 +248,7 @@ const styleDefinitions = StyleSheet.create({
   tag: { flexShrink: 1, paddingHorizontal: 7, paddingVertical: 2, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt },
   tagText: { fontSize: 11, lineHeight: 15, ...font('600'), letterSpacing: 0.2, color: colors.textMuted },
   rowTitle: { fontSize: 14, lineHeight: 19, color: colors.textMuted, fontVariant: ['tabular-nums'] },
-  logIt: { height: 36, paddingHorizontal: 16, borderRadius: radius.pill, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  logIt: { minHeight: 36, paddingHorizontal: 16, borderRadius: radius.pill, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   logItText: { ...font('600'), fontSize: 14, color: colors.brandInk },
 
   byHand: { ...lift, flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: 14, paddingHorizontal: spacing.lg, borderRadius: 20, backgroundColor: colors.surface },
@@ -264,7 +265,7 @@ const styleDefinitions = StyleSheet.create({
 
   stripTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   stripNote: { ...typography.small, marginTop: 2 },
-  streak: { flexDirection: 'row', alignItems: 'center', gap: 4, height: 28, paddingHorizontal: 10, borderRadius: 14, backgroundColor: colors.surface },
+  streak: { flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 28, paddingHorizontal: 10, borderRadius: 14, backgroundColor: colors.surface },
   streakText: { ...font('600'), fontSize: 13, color: colors.text },
   dots: { flexDirection: 'row', justifyContent: 'space-between', paddingTop: 4 },
   dotCol: { alignItems: 'center', gap: 6 },
@@ -274,7 +275,7 @@ const styleDefinitions = StyleSheet.create({
   // The week strip: on the sheet's own ground, sized for a sheet.
   strip: { paddingHorizontal: 2 },
   stripInner: { gap: 10 },
-  streakStrip: { height: 26, paddingHorizontal: 9, ...lift },
+  streakStrip: { minHeight: 26, paddingHorizontal: 9, ...lift },
   stripLine: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm },
   stripWords: { marginBottom: 6 },
   stripFresh: { gap: 2 },

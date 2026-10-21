@@ -11,6 +11,7 @@ import { Screen } from '@/components/ui';
 import { Wash } from '@/components/Wash';
 import { useTheme, themeList, themes, type ThemeName } from '@/theme/ThemeProvider';
 import { colors, radius, spacing, typography } from '@/theme';
+import { TextScale } from '@/theme/textScale';
 
 /** Every court, with a swatch and a line on what it is, on its own page. */
 export default function ThemePage() {
@@ -25,7 +26,7 @@ export default function ThemePage() {
 
   return (
     <Screen title="Theme" compactTitle onBack={() => goBack()}>
-      <Text style={styles.lead}>Applies everywhere straight away. Pick the court you would rather be on.</Text>
+      <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.lead}>Applies everywhere straight away. Pick the court you would rather be on.</Text>
       <View style={styles.list}>
         {themeList.map((option) => (
           <ThemeCard key={option.name} option={option} active={shown === option.name} onPick={() => { haptics.tap(); setPicked(option.name); setTheme(option.name); }} styles={styles} />
@@ -95,8 +96,8 @@ function ThemeCard({ option, active, onPick, styles }: { option: (typeof themeLi
           <Wash theme={option.name} height={48} strength={0.7} fade={palette.bg} />
         </View>
         <View style={{ flex: 1, gap: 2 }}>
-          <Text style={styles.name}>{option.label}</Text>
-          <Text style={styles.blurb}>{option.blurb}</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.name}>{option.label}</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.blurb}>{option.blurb}</Text>
         </View>
         <View style={{ width: 24, height: 24, alignItems: 'center', justifyContent: 'center' }}>
           <Animated.View style={[{ position: 'absolute' }, ringStyle]}><View style={styles.ring} /></Animated.View>

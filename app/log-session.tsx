@@ -38,6 +38,7 @@ import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, lift, radius, spacing, typography } from '@/theme';
+import { TextScale } from '@/theme/textScale';
 
 const KINDS: { value: PracticeSession['kind']; label: string }[] = [
   { value: 'practice', label: 'Practice' },
@@ -496,12 +497,12 @@ function LogSession() {
             </>
           ) : editing.fromSessionId ? (
             <>
-              <Text style={styles.hint}>{fromName ? `This session came from ${fromName}’s tag. It’s theirs to tag.` : 'This session came from someone else’s tag. It’s theirs to tag.'}</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.hint}>{fromName ? `This session came from ${fromName}’s tag. It’s theirs to tag.` : 'This session came from someone else’s tag. It’s theirs to tag.'}</Text>
               <Submit label="Close" onPress={close} />
             </>
           ) : !canScore(editing.kind) ? (
             <>
-              <Text style={styles.hint}>Players can be tagged on a match or a practice.</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.hint}>Players can be tagged on a match or a practice.</Text>
               <Submit label="Close" onPress={close} />
             </>
           ) : (
@@ -538,7 +539,7 @@ function LogSession() {
                   <DayPicker value={editDay} onChange={setPickedDay} />
                 </Section>
               ) : null}
-              {reasked.length ? <Text style={styles.hint}>Changing the day or length asks {andList(reasked)} to confirm again.</Text> : null}
+              {reasked.length ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.hint}>Changing the day or length asks {andList(reasked)} to confirm again.</Text> : null}
               {error ? <Text style={styles.error}>{error}</Text> : null}
               <Submit label="Save" onPress={() => { void saveEdit(); }} busy={saving} />
             </>
@@ -560,12 +561,12 @@ function LogSession() {
                 <View style={styles.pickIcon}><Ionicons name={isTennisActivity(x) ? 'stopwatch-outline' : workoutIcon(x.sport)} size={18} color={colors.court} /></View>
                 <View style={styles.pickWords}>
                   <View style={styles.pickHeroLine}>
-                    <Text style={styles.pickHero}>{duration(x.minutes)}</Text>
-                    <View style={styles.pickTag}><Text style={styles.pickTagText} numberOfLines={1}>{pickSource({ type: 'tracker', activity: x })}</Text></View>
+                    <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.pickHero}>{duration(x.minutes)}</Text>
+                    <View style={styles.pickTag}><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.pickTagText} numberOfLines={1}>{pickSource({ type: 'tracker', activity: x })}</Text></View>
                   </View>
                   {/* "Run · 3.1 mi", as Your sessions and the note say it. */}
-                  <Text style={styles.pickTitle} numberOfLines={1}>{pickTitle(x)}</Text>
-                  <Text style={styles.pickWhen}>{activityWhen(x, new Date(), ' · ')}</Text>
+                  <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.pickTitle} numberOfLines={1}>{pickTitle(x)}</Text>
+                  <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.pickWhen}>{activityWhen(x, new Date(), ' · ')}</Text>
                 </View>
                 <Ionicons name="chevron-forward" size={18} color={colors.textFaint} style={styles.pickChevron} />
               </Pressable>
@@ -573,7 +574,7 @@ function LogSession() {
           </View>
           <Pressable accessibilityRole="button" accessibilityLabel="Log one yourself" onPress={() => setByHand(true)} style={({ pressed }) => [styles.second, styles.byHand, pressed && styles.pressed]}>
             <Ionicons name="add" size={18} color={colors.text} />
-            <Text style={styles.secondText}>Log one yourself</Text>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.secondText}>Log one yourself</Text>
           </Pressable>
         </ScrollView>
       ) : done ? (
@@ -582,7 +583,7 @@ function LogSession() {
             <>
               <Submit label="Post it" onPress={() => toPost(done.id)} />
               <Pressable accessibilityRole="button" onPress={close} style={({ pressed }) => [styles.second, pressed && styles.pressed]}>
-                <Text style={styles.secondText}>Close</Text>
+                <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.secondText}>Close</Text>
               </Pressable>
             </>
           ) : (
@@ -596,12 +597,12 @@ function LogSession() {
           {/* The session as it will go in your log, in the sessions' own look: what and when, then the time, big. */}
           {minutes && !fresh ? (
             <View style={styles.hero} accessible accessibilityLabel={`${sessionEyebrow({ kind, day: heroDay, workout: kind === 'fitness' ? workout : undefined }).toLowerCase()}, ${duration(minutes)}`}>
-              <Text style={styles.heroEyebrow}>{sessionEyebrow({ kind, day: heroDay, workout: kind === 'fitness' ? workout : undefined })}</Text>
+              <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.heroEyebrow}>{sessionEyebrow({ kind, day: heroDay, workout: kind === 'fitness' ? workout : undefined })}</Text>
               <View style={styles.heroRow}>
                 <Duration minutes={minutes} size={56} color={colors.text} unitColor={colors.textMuted} />
                 {kind === 'match' && shownWon ? (
                   <View style={[styles.result, shownWon === 'won' ? styles.resultWon : styles.resultLost]}>
-                    <Text style={[styles.resultText, { color: shownWon === 'won' ? colors.brandInk : colors.textMuted }]}>{shownWon === 'won' ? 'Won' : 'Lost'}</Text>
+                    <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.resultText, { color: shownWon === 'won' ? colors.brandInk : colors.textMuted }]}>{shownWon === 'won' ? 'Won' : 'Lost'}</Text>
                   </View>
                 ) : null}
               </View>
@@ -690,12 +691,12 @@ function LogSession() {
               style={({ pressed }) => [styles.second, (!minutes || (saving && !andPost)) && styles.secondOff, pressed && styles.pressed]}
             >
               {saving && andPost ? <ActivityIndicator size="small" color={colors.text} /> : null}
-              <Text style={styles.secondText}>Save and post</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.secondText}>Save and post</Text>
             </Pressable>
           ) : null}
           {fresh ? (
             <Pressable accessibilityRole="button" accessibilityLabel={isTennisActivity(fresh) ? 'Not tennis? Hide this session' : 'Hide this workout'} hitSlop={8} onPress={() => hide(fresh)} style={({ pressed }) => [styles.hide, pressed && { opacity: PRESS_DIM }]}>
-              <Text style={styles.hideText}>{isTennisActivity(fresh) ? 'Not tennis? Hide it' : 'Hide this workout'}</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.hideText}>{isTennisActivity(fresh) ? 'Not tennis? Hide it' : 'Hide this workout'}</Text>
             </Pressable>
           ) : null}
         </ScrollView>
@@ -710,7 +711,7 @@ const styleDefinitions = StyleSheet.create({
   hero: { gap: 4 },
   heroEyebrow: { ...font('600'), fontSize: 11, letterSpacing: 0.88, color: colors.textMuted },
   heroRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  result: { height: 30, paddingHorizontal: 12, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
+  result: { minHeight: 30, paddingHorizontal: 12, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
   resultWon: { backgroundColor: colors.brand },
   resultLost: { borderWidth: 1, borderColor: colors.borderStrong },
   resultText: { ...font('700'), fontSize: 14 },
@@ -721,7 +722,7 @@ const styleDefinitions = StyleSheet.create({
   hide: { alignSelf: 'center', paddingVertical: spacing.xs },
   hideText: { ...typography.smallStrong, color: colors.textMuted },
   // The quieter of the two buttons: Save's size and shape, outlined rather than filled.
-  second: { flexDirection: 'row', gap: 10, height: 54, marginTop: -spacing.sm, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.borderStrong, backgroundColor: colors.surface },
+  second: { flexDirection: 'row', gap: 10, minHeight: 54, marginTop: -spacing.sm, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.borderStrong, backgroundColor: colors.surface },
   secondOff: { opacity: 0.5 },
   secondText: { ...typography.bodyStrong, fontSize: 16, color: colors.text },
   pressed: { opacity: PRESS_DIM },

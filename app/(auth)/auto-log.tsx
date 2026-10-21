@@ -14,6 +14,7 @@ import { show as showToast } from '@/lib/toast';
 import { useGateSpace } from '@/lib/useGateSpace';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, lift, spacing, typography } from '@/theme';
+import { TextScale } from '@/theme/textScale';
 
 const enter = (i: number) => FadeInDown.delay(80 + i * 80).duration(420).easing(Easing.out(Easing.cubic));
 
@@ -70,8 +71,8 @@ export default function AutoLog() {
       <ScrollView contentContainerStyle={[styles.scroll, { paddingTop: space.top, paddingBottom: spacing.xl }]}>
         {setupCount ? <Animated.View entering={enter(0)}><SetupProgress count={setupCount} /></Animated.View> : null}
         <Animated.View entering={enter(0)} style={styles.head}>
-          <Text style={styles.title}>Log your tennis automatically</Text>
-          <Text style={styles.lead}>Connect once. Every hit, match and workout shows up ready to log.</Text>
+          <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.title}>Log your tennis automatically</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.lead}>Connect once. Every hit, match and workout shows up ready to log.</Text>
         </Animated.View>
 
         <Animated.View entering={enter(1)} style={styles.card}>
@@ -82,8 +83,8 @@ export default function AutoLog() {
               <View style={styles.cardHead}>
                 <View style={styles.tile}><Ionicons name="pulse" size={20} color={colors.brand} /></View>
                 <View style={{ flex: 1, gap: 2 }}>
-                  <Text style={styles.cardTitle}>Your workouts, ready to log</Text>
-                  <Text style={styles.cardBody}>The last 7 days come in first. Only you see them until you post one.{auto.apple ? ' Apple Health also shares their heart rate, plus sleep, steps and food (calories, protein, carbs, fat) for your Health page.' : ''}</Text>
+                  <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.cardTitle}>Your workouts, ready to log</Text>
+                  <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.cardBody}>The last 7 days come in first. Only you see them until you post one.{auto.apple ? ' Apple Health also shares their heart rate, plus sleep, steps and food (calories, protein, carbs, fat) for your Health page.' : ''}</Text>
                 </View>
               </View>
             </View>

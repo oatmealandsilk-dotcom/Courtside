@@ -15,6 +15,7 @@ import { sessionPeople } from '@/features/activity/sessionTags';
 import { distanceFigure } from '@/features/activity/workouts';
 import { colors, font, withAlpha } from '@/theme';
 import { useTheme } from '@/theme/ThemeProvider';
+import { TextScale } from '@/theme/textScale';
 
 /*
  * The session as a stamp for a story (Oct 4, owner: "make it our own"): the
@@ -68,16 +69,16 @@ export function SessionStamp({ session, width, eyebrow, place, hidden = [], clea
     <View style={[styles.card, { width, borderRadius: 20 * u, padding: 18 * u, backgroundColor: look.fill }]}>
       {clear ? null : <CardWash look={look} radius={20 * u} />}
       <View style={styles.row}>
-        <Text numberOfLines={1} style={[styles.eyebrow, { fontSize: 10.5 * u, letterSpacing: 1.2 * u, color: look.eyebrow }, shade]}>{eyebrow}</Text>
+        <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={[styles.eyebrow, { fontSize: 10.5 * u, letterSpacing: 1.2 * u, color: look.eyebrow }, shade]}>{eyebrow}</Text>
         {result ? (
           <View style={[styles.pill, { height: 20 * u, borderRadius: 10 * u, paddingHorizontal: 8 * u, backgroundColor: look.pillFill }, clear && { borderWidth: Math.max(1, 1.6 * u), borderColor: look.ink }]}>
-            <Text style={{ ...font('700'), fontSize: 10.5 * u, color: look.pillInk, ...shade }}>{result}</Text>
+            <Text maxFontSizeMultiplier={TextScale.CHROME} style={{ ...font('700'), fontSize: 10.5 * u, color: look.pillInk, ...shade }}>{result}</Text>
           </View>
         ) : null}
       </View>
       <Duration minutes={session.minutes} size={68 * u} color={look.figure} unitColor={look.muted} style={{ marginTop: 6 * u }} textStyle={shade} />
       {/* A long score (tiebreak points, Oct 10) a little smaller, so it all fits on its line. */}
-      {score ? <Text numberOfLines={1} style={{ ...font('700'), fontSize: 24 * u * scoreScale(score, 18), letterSpacing: -0.4 * u, color: look.figure, fontVariant: ['tabular-nums'], marginTop: 2 * u, ...shade }}>{score}</Text> : null}
+      {score ? <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={{ ...font('700'), fontSize: 24 * u * scoreScale(score, 18), letterSpacing: -0.4 * u, color: look.figure, fontVariant: ['tabular-nums'], marginTop: 2 * u, ...shade }}>{score}</Text> : null}
       {far ? (
         <View style={{ marginTop: 2 * u }}>
           <Figure value={far.value} part={far.value < 10 ? 'dec1' : 'int'} unit={far.unit} baseline size={24 * u} unitScale={0.5} color={look.figure} unitColor={look.muted} textStyle={shade} />
@@ -86,7 +87,7 @@ export function SessionStamp({ session, width, eyebrow, place, hidden = [], clea
       {place ? (
         <View style={[styles.row, { gap: 4 * u, marginTop: 2 * u }]}>
           <Ionicons name="location-outline" size={12 * u} color={look.muted} />
-          <Text numberOfLines={1} style={{ ...font('500'), fontSize: 12.5 * u, color: look.muted, flexShrink: 1, ...shade }}>{place}</Text>
+          <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={{ ...font('500'), fontSize: 12.5 * u, color: look.muted, flexShrink: 1, ...shade }}>{place}</Text>
         </View>
       ) : null}
       {stats.length ? (
@@ -95,7 +96,7 @@ export function SessionStamp({ session, width, eyebrow, place, hidden = [], clea
           <View style={[styles.row, { gap: 18 * u }]}>
             {stats.map((st) => (
               <View key={st.label} style={{ gap: 2 * u }}>
-                <Text style={{ ...font('500'), fontSize: 10.5 * u, color: look.muted, ...shade }}>{st.label}</Text>
+                <Text maxFontSizeMultiplier={TextScale.CHROME} style={{ ...font('500'), fontSize: 10.5 * u, color: look.muted, ...shade }}>{st.label}</Text>
                 <Figure value={st.value} unit={st.unit} baseline size={21 * u} unitScale={0.5} color={look.figure} unitColor={look.muted} textStyle={shade} />
               </View>
             ))}
@@ -106,12 +107,12 @@ export function SessionStamp({ session, width, eyebrow, place, hidden = [], clea
       <View style={[styles.row, { gap: 6 * u }]}>
         {/* Clear: the Overlay's mark and wordmark, bright green with its soft dark shadow. */}
         {clear ? <ShadedMark size={15 * u} u={u * 0.45} color={brandInk} halo="dark" /> : <BrandMark size={15 * u} color={look.figure} />}
-        <Text style={{ ...font('700'), fontSize: 13.5 * u, letterSpacing: -0.3 * u, color: clear ? brandInk : look.ink, ...(clear ? wordShade(u * 0.45) : null) }}>CourtSide</Text>
+        <Text maxFontSizeMultiplier={TextScale.CHROME} style={{ ...font('700'), fontSize: 13.5 * u, letterSpacing: -0.3 * u, color: clear ? brandInk : look.ink, ...(clear ? wordShade(u * 0.45) : null) }}>CourtSide</Text>
         <View style={styles.grow} />
         {lead ? (
           <View style={[styles.row, { gap: 5 * u, flexShrink: 1 }]}>
             <Avatar name={lead.name} seed={lead.id} size={Math.round(18 * u)} style={clear ? { backgroundColor: withAlpha(colors.onMedia, 0.25) } : undefined} />
-            <Text numberOfLines={1} style={{ ...font('600'), fontSize: 12 * u, color: look.ink, flexShrink: 1, ...shade }}>
+            <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={{ ...font('600'), fontSize: 12 * u, color: look.ink, flexShrink: 1, ...shade }}>
               {opponents.length ? 'vs' : 'with'} @{lead.handle}{others > 0 ? ` +${others}` : ''}
             </Text>
           </View>

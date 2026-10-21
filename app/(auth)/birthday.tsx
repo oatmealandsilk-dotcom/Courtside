@@ -20,6 +20,7 @@ import { StatusShade } from '@/components/StatusShade';
 import { KeyboardScrollContext, useKeyboardReveal } from '@/lib/keyboardScroll';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, spacing, typography } from '@/theme';
+import { TextScale } from '@/theme/textScale';
 
 /**
  * The age check. The birthday is optional (Oct 17: Apple turned down build
@@ -130,8 +131,8 @@ export default function Birthday() {
     return (
       <View style={[styles.root, styles.centre, { paddingTop: space.top }]}>
         <BrandMark size={56} />
-        <Text style={[styles.title, styles.centred]}>CourtSide isn't available to you yet</Text>
-        <Text style={[styles.lead, styles.centred]}>You need to be a bit older to have an account. Nothing you entered has been kept.</Text>
+        <Text maxFontSizeMultiplier={TextScale.TITLE} style={[styles.title, styles.centred]}>CourtSide isn't available to you yet</Text>
+        <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.lead, styles.centred]}>You need to be a bit older to have an account. Nothing you entered has been kept.</Text>
         {/* Signed in, there was no way off this page: the account signs out here. */}
         {currentUserId
           ? <Button label="Sign out" variant="ghost" onPress={() => leave(() => { actions.signOut(); router.replace('/sign-in'); })} />
@@ -149,8 +150,8 @@ export default function Birthday() {
           <Rise style={styles.head}>
             <SetupProgress count={setupCount} />
             {short ? null : <BrandMark size={40} />}
-            <Text style={styles.title}>Are you 13 or older?</Text>
-            <Text style={styles.lead}>No birthday needed. Just pick one.</Text>
+            <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.title}>Are you 13 or older?</Text>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.lead}>No birthday needed. Just pick one.</Text>
           </Rise>
           <Rise delay={70} style={styles.answers}>
             <View accessibilityRole="radiogroup" aria-label="Are you 13 or older?" style={styles.answers}>
@@ -174,7 +175,7 @@ export default function Birthday() {
           />
           {/* The way back to the birthday stays in sight on the shortest phone, under Continue. */}
           <Pressable accessibilityRole="button" disabled={busy} onPress={() => { setStep('date'); setError(''); setAnswer(null); }} hitSlop={10} style={styles.linkWrap}>
-            <Text style={styles.link}>Add my birthday instead</Text>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.link}>Add my birthday instead</Text>
           </Pressable>
         </View>
         <StatusShade />
@@ -190,10 +191,10 @@ export default function Birthday() {
         <Rise style={styles.head}>
           <SetupProgress count={setupCount} />
           {short ? null : <BrandMark size={40} />}
-          <Text style={styles.title}>{fromSettings ? 'Add your birthday' : "When's your birthday?"}</Text>
+          <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.title}>{fromSettings ? 'Add your birthday' : "When's your birthday?"}</Text>
           {/* Why we ask, honestly, and that it is up to them (Oct 17). */}
           {/* On a short phone the 18+ card drops its last line, so it is said here instead. */}
-          <Text style={styles.lead}>{short ? 'Optional. It helps us keep younger players safe. Everything works without it.' : 'Optional. It helps us keep younger players safe.'}</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.lead}>{short ? 'Optional. It helps us keep younger players safe. Everything works without it.' : 'Optional. It helps us keep younger players safe.'}</Text>
         </Rise>
         <Rise delay={70} style={styles.picker}>
           {look === 'a'

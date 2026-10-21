@@ -29,6 +29,7 @@ import { useAndroidBack } from '@/lib/androidBack';
 import { StatusShade } from '@/components/StatusShade';
 import { Welcome } from '@/features/welcome/Welcome';
 import { colors, lift, radius, spacing, typography, font } from '@/theme';
+import { TextScale } from '@/theme/textScale';
 
 type Mode = 'sign-in' | 'sign-up';
 
@@ -408,13 +409,13 @@ export default function SignIn() {
             // Where the link went, and what to do with it: a panel, not a line of green text.
             <View style={styles.inbox}>
               <View style={styles.inboxIcon}><Ionicons name="mail-open-outline" size={28} color={colors.brand} /></View>
-              <Text style={styles.title}>Check your inbox</Text>
-              <Text style={styles.inboxBody}>
+              <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.title}>Check your inbox</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.inboxBody}>
                 We sent a {sent.kind === 'reset' ? 'password reset link' : 'confirmation link'} to <Text style={styles.inboxTo}>{sent.to}</Text>.{' '}
                 {sent.kind === 'reset' ? 'Follow the link to create a new password. It expires in one hour.'
                   : canContinue ? 'Tap the link in it, then come back here and tap Continue.' : 'Follow the link to confirm your email, then sign in here.'}
               </Text>
-              <Text style={styles.inboxHint}>Didn’t get it? Check your spam folder, or resend the email.</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.inboxHint}>Didn’t get it? Check your spam folder, or resend the email.</Text>
               {error ? <Text style={styles.error}>{error}</Text> : null}
               {notice ? <Text style={styles.notice}>{notice}</Text> : null}
               <View style={styles.inboxActions}>
@@ -423,23 +424,23 @@ export default function SignIn() {
                   <Button label={busy ? 'Signing in…' : 'Continue'} disabled={busy} onPress={() => { void confirmed(); }} full />
                 ) : (
                   <Pressable accessibilityRole="button" onPress={backToForm} style={({ pressed }) => [styles.secondary, pressed && styles.pressed]}>
-                    <Text style={styles.secondaryText}>Back to sign in</Text>
+                    <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.secondaryText}>Back to sign in</Text>
                   </Pressable>
                 )}
                 {sent.kind === 'reset' ? (
                   <Pressable accessibilityRole="button" disabled={busy} onPress={() => { void forgot(); }} hitSlop={8} style={styles.linkButton}>
-                    <Text style={styles.link}>{busy ? 'Sending…' : 'Resend email'}</Text>
+                    <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.link}>{busy ? 'Sending…' : 'Resend email'}</Text>
                   </Pressable>
                 ) : (
                   <Pressable accessibilityRole="button" disabled={resending} onPress={() => { void resendConfirm(); }} hitSlop={8} style={styles.linkButton}>
-                    <Text style={styles.link}>{resending ? 'Sending…' : 'Resend email'}</Text>
+                    <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.link}>{resending ? 'Sending…' : 'Resend email'}</Text>
                   </Pressable>
                 )}
                 {/* With Continue in its place, still a way back to the form (a mistyped email, another
                     account): an iPhone and a browser have no other back on this page. */}
                 {canContinue ? (
                   <Pressable accessibilityRole="button" accessibilityLabel="Wrong email? Go back" disabled={busy} onPress={backToForm} hitSlop={8} style={styles.linkButton}>
-                    <Text style={styles.quietLink}>Wrong email? Go back</Text>
+                    <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.quietLink}>Wrong email? Go back</Text>
                   </Pressable>
                 ) : null}
               </View>
@@ -454,13 +455,13 @@ export default function SignIn() {
               <View style={styles.hero}>
                 <BrandMark size={42} />
                 <View style={{ gap: 6 }}>
-                  <Text style={styles.title}>{title}</Text>
+                  <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.title}>{title}</Text>
                   <Text style={styles.line}>{line}</Text>
                   {!chooser && mode === 'sign-up' && inviteRoom ? (
                     <View style={styles.invitedRoom}>
                       {invitedBy ? (
                         <Animated.Text entering={FadeIn.duration(280)} numberOfLines={1} style={styles.line}>
-                          Invited by <Text style={styles.invitedHandle}>@{invitedBy}</Text>
+                          Invited by <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.invitedHandle}>@{invitedBy}</Text>
                         </Animated.Text>
                       ) : null}
                     </View>
@@ -481,8 +482,8 @@ export default function SignIn() {
                       >
                         <Avatar name={account.name || account.handle || '?'} seed={account.id} uri={account.avatarUrl} size={48} />
                         <View style={{ flex: 1, gap: 2 }}>
-                          <Text style={styles.accountName} numberOfLines={1}>{account.name || account.handle || account.email || 'Account'}</Text>
-                          <Text style={styles.accountMeta} numberOfLines={1}>{account.handle ? `@${account.handle}` : account.email ?? ''}</Text>
+                          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.accountName} numberOfLines={1}>{account.name || account.handle || account.email || 'Account'}</Text>
+                          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.accountMeta} numberOfLines={1}>{account.handle ? `@${account.handle}` : account.email ?? ''}</Text>
                         </View>
                         {switching === account.id
                           ? <ActivityIndicator size="small" color={colors.brand} />
@@ -493,10 +494,10 @@ export default function SignIn() {
                   {error || providerError ? <Text style={styles.error}>{error ?? providerError}</Text> : null}
                   <Pressable accessibilityRole="button" onPress={() => setUseAnother(true)} style={({ pressed }) => [styles.secondary, { marginTop: spacing.sm }, pressed && styles.pressed]}>
                     <Ionicons name="add" size={18} color={colors.text} />
-                    <Text style={styles.secondaryText}>Use another account</Text>
+                    <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.secondaryText}>Use another account</Text>
                   </Pressable>
                   <Pressable accessibilityRole="button" onPress={() => { setUseAnother(true); setMode('sign-up'); }} style={styles.switch}>
-                    <Text style={styles.switchText}>New here? <Text style={styles.switchLink}>Create an account</Text></Text>
+                    <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.switchText}>New here? <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.switchLink}>Create an account</Text></Text>
                   </Pressable>
                 </View>
               ) : (
@@ -523,17 +524,17 @@ export default function SignIn() {
                         style={({ pressed }) => [styles.secondary, styles.provider, styles.google, pressed && styles.pressed, (busy || !!via) && { opacity: 0.6 }]}
                       >
                         <Ionicons name="logo-google" size={18} color={colors.text} />
-                        <Text style={styles.secondaryText}>{mode === 'sign-up' ? 'Sign up with Google' : 'Continue with Google'}</Text>
+                        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.secondaryText}>{mode === 'sign-up' ? 'Sign up with Google' : 'Continue with Google'}</Text>
                       </Pressable>
                       {providerError ? <Text style={styles.error}>{providerError}</Text> : null}
                       {/* Android has no Sign in with Apple. Someone who made their account with
                           Apple on an iPhone gets in here with the email and a password set there. */}
                       {Platform.OS === 'android' && mode === 'sign-in' ? (
-                        <Text style={styles.appleNote}>Made your account with Apple on an iPhone? On the iPhone, open Settings, then Account center, then Set a password. Then sign in here with that email and password.</Text>
+                        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.appleNote}>Made your account with Apple on an iPhone? On the iPhone, open Settings, then Account center, then Set a password. Then sign in here with that email and password.</Text>
                       ) : null}
                       <View style={styles.divider}>
                         <View style={styles.rule} />
-                        <Text style={styles.dividerText}>or {mode === 'sign-up' ? 'sign up' : 'sign in'} with email</Text>
+                        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.dividerText}>or {mode === 'sign-up' ? 'sign up' : 'sign in'} with email</Text>
                         <View style={styles.rule} />
                       </View>
               {mode === 'sign-up' ? (
@@ -554,20 +555,20 @@ export default function SignIn() {
                   />
                   <BirthDateField month={birth.month} day={birth.day} year={birth.year} onChange={setBirth} label="Birthday (optional)" />
                   {/* Why we ask, said plainly; leaving it empty is fine (Oct 17). */}
-                  <Text style={styles.birthNote}>Keeps younger players safe. Private, never on your profile.</Text>
+                  <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.birthNote}>Keeps younger players safe. Private, never on your profile.</Text>
                   {/* Honest before they sign up (Oct 17): without one, the hit they tapped can't be joined yet. */}
-                  {joining && birthBlank ? <Text style={styles.birthNote}>To join the hit you picked, add your birthday: hits with players you don’t follow yet are for players 18 and over.</Text> : null}
+                  {joining && birthBlank ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.birthNote}>To join the hit you picked, add your birthday: hits with players you don’t follow yet are for players 18 and over.</Text> : null}
                   {/* Under 18 on the birthday they typed (review, Oct 17): said plainly before sign-up, never "ask them to follow you back". */}
-                  {joining && birthDate && yearsOld(birthDate) >= 13 && yearsOld(birthDate) < 18 ? <Text style={styles.birthNote}>The hit you picked is with a player you don’t know yet, so it’s for players 18 and over. Once you’re in, you can join hits with friends who follow you back.</Text> : null}
+                  {joining && birthDate && yearsOld(birthDate) >= 13 && yearsOld(birthDate) < 18 ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.birthNote}>The hit you picked is with a player you don’t know yet, so it’s for players 18 and over. Once you’re in, you can join hits with friends who follow you back.</Text> : null}
                   {birthBlank ? <OldEnoughCheck checked={over13} onChange={setOver13} /> : null}
-                  {ageBlocked ? <Text style={styles.ageNote}>Sorry, you can't create a CourtSide account.</Text> : null}
+                  {ageBlocked ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.ageNote}>Sorry, you can't create a CourtSide account.</Text> : null}
                 </>
               ) : null}
                       <Field soft value={email} onChangeText={setEmail} placeholder="Email" autoCapitalize="none" keyboardType="email-address" autoComplete={fill('email')} />
                       <Field soft value={password} onChangeText={setPassword} placeholder={mode === 'sign-up' ? 'Password, at least 6 characters' : 'Password'} autoCapitalize="none" secureTextEntry onSubmitEditing={submit} autoComplete={fill(mode === 'sign-up' ? 'new-password' : 'password')} />
                       {mode === 'sign-in' ? (
                         <Pressable accessibilityRole="button" accessibilityLabel="Forgot password" onPress={forgot} hitSlop={8} style={styles.forgot}>
-                          <Text style={styles.link}>Forgot password?</Text>
+                          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.link}>Forgot password?</Text>
                         </Pressable>
                       ) : (
                         <TermsCheck checked={agreed} onChange={setAgreed} />
@@ -592,14 +593,14 @@ export default function SignIn() {
                         onPress={() => { setMode(mode === 'sign-in' ? 'sign-up' : 'sign-in'); setError(null); setProviderError(null); setNotice(null); }}
                         style={styles.switch}
                       >
-                        <Text style={styles.switchText}>
+                        <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.switchText}>
                           {mode === 'sign-in' ? 'New here? ' : 'Already have an account? '}
-                          <Text style={styles.switchLink}>{mode === 'sign-in' ? 'Create an account' : 'Sign in'}</Text>
+                          <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.switchLink}>{mode === 'sign-in' ? 'Create an account' : 'Sign in'}</Text>
                         </Text>
                       </Pressable>
                     </>
                   ) : (
-                    <Text style={styles.footnote}>Mock data only. Nothing you do here leaves the device.</Text>
+                    <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.footnote}>Mock data only. Nothing you do here leaves the device.</Text>
                   )}
                 </View>
               )}
@@ -638,7 +639,7 @@ const styleDefinitions = StyleSheet.create({
   accountMeta: { ...typography.small, color: colors.textMuted },
   go: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.bgElevated, alignItems: 'center', justifyContent: 'center' },
   pressed: { transform: [{ scale: 0.99 }], opacity: 0.9 },
-  secondary: { ...lift, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, height: 52, borderRadius: radius.pill, backgroundColor: colors.surface },
+  secondary: { ...lift, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, minHeight: 52, borderRadius: radius.pill, backgroundColor: colors.surface },
   secondaryText: { ...typography.bodyStrong, fontSize: 16, color: colors.text },
   form: { gap: spacing.md },
   forgot: { alignSelf: 'flex-end', paddingVertical: 2 },

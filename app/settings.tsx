@@ -29,6 +29,7 @@ import { workoutWatchAvailable } from '@/features/health/workoutWatch';
 import { notKnownAdult } from '@/features/players/age';
 import { HitGlyph } from '@/components/HitGlyph';
 import { PHONE_LINKING } from '@/lib/phoneLinking';
+import { TextScale } from '@/theme/textScale';
 
 interface Row {
   icon: keyof typeof Ionicons.glyphMap;
@@ -254,10 +255,10 @@ export default function Settings() {
           <Avatar name={currentUser.name} seed={currentUser.avatarSeed} size={64} />
           <View style={styles.meWords}>
             <PlayerName userId={currentUser.id} style={styles.meName}>{currentUser.name}</PlayerName>
-            <Text style={styles.meHandle}>@{currentUser.handle}</Text>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meHandle}>@{currentUser.handle}</Text>
           </View>
           <Pressable accessibilityRole="button" accessibilityLabel="Edit profile" onPress={() => router.push('/edit-profile')} style={({ pressed }) => [styles.edit, pressed && { opacity: PRESS_DIM }]}>
-            <Text style={styles.editText}>Edit</Text>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.editText}>Edit</Text>
           </Pressable>
         </View>
       ) : null}
@@ -265,7 +266,7 @@ export default function Settings() {
 
       {sections.map((section) => (
         <View key={section.title} style={styles.section}>
-          <Text style={styles.sectionTitle}>{section.title}</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.sectionTitle}>{section.title}</Text>
           <View style={styles.card}>
             {section.rows.map((row, index) => (
               <Pressable
@@ -283,10 +284,10 @@ export default function Settings() {
                 <View style={[styles.rowBody, index > 0 && styles.rowLine]}>
                   <View style={styles.rowText}>
                     {/* A switch's label may take a second line rather than be cut off: it says what the switch does. */}
-                    <Text style={styles.rowLabel} numberOfLines={row.toggle ? 2 : 1}>{row.label}</Text>
-                    {row.detail ? <Text style={styles.rowDetail}>{row.detail}</Text> : null}
+                    <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rowLabel} numberOfLines={row.toggle ? 2 : 1}>{row.label}</Text>
+                    {row.detail ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rowDetail}>{row.detail}</Text> : null}
                   </View>
-                  {row.value ? <Text style={[styles.rowValue, row.flip && row.value === 'On' && styles.rowValueOn]} numberOfLines={1}>{row.value}</Text> : null}
+                  {row.value ? <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.rowValue, row.flip && row.value === 'On' && styles.rowValueOn]} numberOfLines={1}>{row.value}</Text> : null}
                   {row.flip ? null : row.toggle ? (
                     // The whole row is the switch (it flips on a press anywhere along it), so this one only shows it: a tap is never counted twice.
                     <View pointerEvents="none" aria-hidden accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
@@ -299,13 +300,13 @@ export default function Settings() {
               </Pressable>
             ))}
           </View>
-          {section.note ? <Text style={styles.sectionNote}>{section.note}</Text> : null}
+          {section.note ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.sectionNote}>{section.note}</Text> : null}
         </View>
       ))}
 
       {/* Signing out leaves this page too: it sits above the tabs, so nothing else would send you to sign in. */}
       <Pressable accessibilityRole="button" accessibilityLabel="Log out" onPress={() => confirm({ title: 'Log out?', message: 'You can log back in any time.', confirmLabel: 'Log out', destructive: true, onConfirm: () => leaveGently(() => { actions.signOut(); router.replace('/sign-in'); }) })} style={({ pressed }) => [styles.card, styles.logout, pressed && styles.rowPressed]}>
-        <Text style={styles.logoutText}>Log out</Text>
+        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.logoutText}>Log out</Text>
       </Pressable>
       <Text style={styles.version}>CourtSide · Version {Constants.expoConfig?.version ?? '1.0.0'}</Text>
     </Screen>
@@ -334,9 +335,9 @@ const styleDefinitions = StyleSheet.create({
   meWords: { flex: 1, gap: 2 },
   meName: { ...typography.heading, color: colors.text },
   meHandle: { ...typography.small, color: colors.textMuted },
-  edit: { height: 34, paddingHorizontal: 16, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center' },
+  edit: { minHeight: 34, paddingHorizontal: 16, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center' },
   editText: { ...typography.smallStrong, color: colors.text },
-  search: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, height: 42, paddingHorizontal: 14, marginBottom: spacing.xl, borderWidth: StyleSheet.hairlineWidth, borderColor: `${colors.borderStrong}55` },
+  search: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 42, paddingHorizontal: 14, marginBottom: spacing.xl, borderWidth: StyleSheet.hairlineWidth, borderColor: `${colors.borderStrong}55` },
   searchInput: { flex: 1, ...typography.body, color: colors.text, paddingVertical: 0 },
   section: { gap: spacing.sm, paddingBottom: spacing.xl },
   sectionTitle: { ...typography.smallStrong, color: colors.textMuted, paddingHorizontal: spacing.sm },

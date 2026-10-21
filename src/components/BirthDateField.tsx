@@ -4,6 +4,7 @@ import { StyleSheet, Text, TextInput, View } from 'react-native';
 import { useRevealOnFocus } from '@/lib/keyboardScroll';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, radius, spacing, typography } from '@/theme';
+import { TextScale } from '@/theme/textScale';
 
 /**
  * A date of birth as three short boxes — month, day, year — the way most
@@ -25,21 +26,21 @@ export function BirthDateField({ month, day, year, onChange, label = 'Date of bi
   const digits = (text: string, max: number) => text.replace(/\D/g, '').slice(0, max);
   return (
     <View style={styles.wrap}>
-      <Text style={styles.label}>{label}</Text>
+      <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.label}>{label}</Text>
       <View ref={rowRef} style={styles.row}>
-        <TextInput
+        <TextInput maxFontSizeMultiplier={TextScale.TITLE}
           accessibilityLabel="Month" placeholder="MM" placeholderTextColor={colors.textFaint} value={month} keyboardType="number-pad" maxLength={2}
           onChangeText={(t) => { const v = digits(t, 2); onChange({ month: v, day, year }); if (v.length === 2) dayRef.current?.focus(); }}
           onFocus={onFocus}
           style={[styles.box, styles.short]}
         />
-        <TextInput
+        <TextInput maxFontSizeMultiplier={TextScale.TITLE}
           ref={dayRef} accessibilityLabel="Day" placeholder="DD" placeholderTextColor={colors.textFaint} value={day} keyboardType="number-pad" maxLength={2}
           onChangeText={(t) => { const v = digits(t, 2); onChange({ month, day: v, year }); if (v.length === 2) yearRef.current?.focus(); }}
           onFocus={onFocus}
           style={[styles.box, styles.short]}
         />
-        <TextInput
+        <TextInput maxFontSizeMultiplier={TextScale.TITLE}
           ref={yearRef} accessibilityLabel="Year" placeholder="YYYY" placeholderTextColor={colors.textFaint} value={year} keyboardType="number-pad" maxLength={4}
           onChangeText={(t) => onChange({ month, day, year: digits(t, 4) })}
           onSubmitEditing={onSubmit}

@@ -15,6 +15,7 @@ import { useAndroidBack } from '@/lib/androidBack';
 import { StatusShade } from '@/components/StatusShade';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, spacing, typography, font, lift } from '@/theme';
+import { TextScale } from '@/theme/textScale';
 
 /**
  * The short version of the terms. Each rule is a plain headline and the
@@ -75,25 +76,25 @@ export default function Agree() {
         {setupCount ? <Animated.View entering={enter(0)}><SetupProgress count={setupCount} /></Animated.View> : null}
         <Animated.View entering={enter(0)}><BrandMark size={40} /></Animated.View>
         <Animated.View entering={enter(1)} style={styles.head}>
-          <Text style={styles.title}>Community guidelines</Text>
-          <Text style={styles.lead}>Please read and agree to these before you continue. You only need to do this once.</Text>
+          <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.title}>Community guidelines</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.lead}>Please read and agree to these before you continue. You only need to do this once.</Text>
         </Animated.View>
 
         <Animated.View entering={enter(2)} style={styles.card}>
           {RULES.map((rule, index) => (
             <View key={rule.head} style={[styles.rule, index > 0 && styles.ruleLine]}>
-              <Text style={styles.ruleHead}>{rule.head}</Text>
-              <Text style={styles.ruleBody}>{rule.body}</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.ruleHead}>{rule.head}</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.ruleBody}>{rule.body}</Text>
             </View>
           ))}
         </Animated.View>
 
         <Animated.Text entering={enter(3)} style={styles.fine}>
           Agreeing means you accept the full{' '}
-          <Text accessibilityRole="link" onPress={() => openLegal('terms')} style={styles.link}>Terms of Use</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="link" onPress={() => openLegal('terms')} style={styles.link}>Terms of Use</Text>
           {' '}and have read the{' '}
-          <Text accessibilityRole="link" onPress={() => openLegal('privacy')} style={styles.link}>Privacy Policy</Text>. Each rule is explained in the{' '}
-          <Text accessibilityRole="link" onPress={() => router.push('/guidelines')} style={styles.link}>Community Guidelines</Text>.
+          <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="link" onPress={() => openLegal('privacy')} style={styles.link}>Privacy Policy</Text>. Each rule is explained in the{' '}
+          <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="link" onPress={() => router.push('/guidelines')} style={styles.link}>Community Guidelines</Text>.
         </Animated.Text>
       </ScrollView>
       {/* The guidelines scroll; they stop at the status bar instead of running under the clock. */}

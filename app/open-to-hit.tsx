@@ -15,6 +15,7 @@ import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, spacing, typography } from '@/theme';
+import { TextScale } from '@/theme/textScale';
 
 /** The quick picks for "Open until", "Pick a time" for any other, and "keep": the time your ring has now, when it is none of the others. */
 type Until = 'keep' | 'two-hours' | 'six' | 'nine' | 'midnight' | 'time';
@@ -198,7 +199,7 @@ export default function OpenToHitSheet() {
         <Submit label={wasOn ? 'Save' : `I’m free ${tillWords}`} onPress={() => { void save(); }} disabled={past || !currentUser} waiting="Pick a later time" busy={saving} busyLabel="Saving…" />
         {wasOn ? (
           <Pressable accessibilityRole="button" accessibilityLabel="Turn off open to hit" hitSlop={8} onPress={() => { void turnOff(); }} style={({ pressed }) => [styles.off, pressed && { opacity: PRESS_DIM }]}>
-            <Text style={styles.offText}>Turn off</Text>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.offText}>Turn off</Text>
           </Pressable>
         ) : null}
       </ScrollView>

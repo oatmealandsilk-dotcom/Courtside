@@ -25,6 +25,7 @@ import { KEYBOARD_ROOM, useKeyboardRoom } from '@/lib/keyboardRoom';
 import { StatusShade } from '@/components/StatusShade';
 import { colors, radius, spacing, typography, lift } from '@/theme';
 import { useModalSheetBottom } from '@/lib/modalSheet';
+import { TextScale } from '@/theme/textScale';
 
 type Sheet = 'password' | 'email' | 'delete' | null;
 
@@ -140,8 +141,8 @@ export default function AccountCentre() {
     >
       <View style={styles.lead}><Ionicons name={icon} size={19} color={danger ? colors.danger : colors.textMuted} /></View>
       <View style={[styles.rowBody, index > 0 && styles.rowBorder]}>
-        <Text style={[styles.rowLabel, danger && { color: colors.danger }]} numberOfLines={1}>{label}</Text>
-        {detail ? <Text style={styles.rowDetail} numberOfLines={1}>{detail}</Text> : null}
+        <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.rowLabel, danger && { color: colors.danger }]} numberOfLines={1}>{label}</Text>
+        {detail ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rowDetail} numberOfLines={1}>{detail}</Text> : null}
         {onPress ? <Ionicons name="chevron-forward" size={15} color={colors.textFaint} /> : null}
       </View>
     </Pressable>
@@ -156,8 +157,8 @@ export default function AccountCentre() {
         <View style={styles.hero}>
           <Avatar name={currentUser.name} seed={currentUser.avatarSeed} uri={currentUser.avatarUrl} size={48} />
           <View style={{ flex: 1 }}>
-            <Text style={styles.heroName}>{currentUser.name}</Text>
-            <Text style={styles.heroMeta}>@{currentUser.handle}</Text>
+            <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.heroName}>{currentUser.name}</Text>
+            <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.heroMeta}>@{currentUser.handle}</Text>
           </View>
         </View>
       ) : null}
@@ -165,7 +166,7 @@ export default function AccountCentre() {
       {!isSupabaseConfigured ? <Text style={styles.demo}>This is the demo build. There is no real account behind this screen, so the sign-in and password options do nothing.</Text> : null}
       {notice ? <Text style={styles.notice}>{notice}</Text> : null}
 
-      <Text style={styles.sectionTitle}>Profile</Text>
+      <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.sectionTitle}>Profile</Text>
       <View style={styles.card}>
         {row('person-outline', 'Name, bio and city', undefined, () => router.push('/edit-profile'), false, 0)}
         {row('at-outline', 'Handle', `@${currentUser?.handle ?? ''}`, () => router.push('/change-handle'), false, 1)}
@@ -175,7 +176,7 @@ export default function AccountCentre() {
         {row('gift-outline', 'Birthday', currentUser?.ageGroup ? 'Added, private' : 'Optional · Add', !currentUser?.ageGroup ? () => router.push('/birthday?from=settings') : undefined, false, 3)}
       </View>
 
-      <Text style={styles.sectionTitle}>Sign-in</Text>
+      <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.sectionTitle}>Sign-in</Text>
       <View style={styles.card}>
         {row('key-outline', hasEmail ? 'Change password' : 'Set a password', undefined, isSupabaseConfigured ? () => { setPassword(''); setPassword2(''); setSheet('password'); } : undefined, false, 0)}
         {/* Android (Oct 5): linking Google there would bring the login back in an address any
@@ -185,7 +186,7 @@ export default function AccountCentre() {
         {row('log-out-outline', 'Log out everywhere', undefined, () => confirm({ title: 'Log out everywhere?', message: "You'll be logged out on every phone and computer, this one included.", confirmLabel: 'Log out', destructive: true, onConfirm: () => run(async () => { await actions.signOutEverywhere(); router.replace('/sign-in'); }, 'Signed out everywhere.') }), false, 3)}
       </View>
 
-      <Text style={styles.sectionTitle}>Your data</Text>
+      <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.sectionTitle}>Your data</Text>
       <View style={styles.card}>
         {/* Payments and Coach memory only show once there is something behind them: paid booking
             open to this person, and the AI coach switched on (confirmed, not just "not off yet").
@@ -235,7 +236,7 @@ export default function AccountCentre() {
               <>
                 <SheetTitle title="Delete your account?" line="This can't be undone." onClose={() => setSheet(null)} />
                 <View style={styles.sheetBody}>
-                  <Text style={styles.sheetNote}>Your profile, posts, clips, Instants, questions and messages are removed for good.{paidBooking ? ' Coaches keep records of paid sessions.' : ''} Type DELETE to confirm.{appleConfirm ? ' Apple then asks you to sign in once more, so CourtSide is also removed from your Apple ID.' : ''}</Text>
+                  <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.sheetNote}>Your profile, posts, clips, Instants, questions and messages are removed for good.{paidBooking ? ' Coaches keep records of paid sessions.' : ''} Type DELETE to confirm.{appleConfirm ? ' Apple then asks you to sign in once more, so CourtSide is also removed from your Apple ID.' : ''}</Text>
                   <Field soft value={confirmWord} onChangeText={setConfirmWord} autoCapitalize="characters" autoCorrect={false} placeholder="DELETE" />
                   {error ? <Text style={styles.error}>{error}</Text> : null}
                   <Button label="Delete my account" variant="danger" loading={busy} disabled={confirmWord.trim().toUpperCase() !== 'DELETE'} onPress={() => run(async () => { await actions.deleteAccount(); router.replace('/'); }, 'Account deleted.')} full />
@@ -258,7 +259,7 @@ function PasswordFields({ password, again, onPassword, onAgain, onSubmit }: { pa
   const tick = (ok: boolean, label: string) => (
     <View style={styles.tick}>
       <Ionicons name={ok ? 'checkmark-circle' : 'ellipse-outline'} size={16} color={ok ? colors.brand : colors.textFaint} />
-      <Text style={[styles.tickText, ok && styles.tickTextOn]}>{label}</Text>
+      <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.tickText, ok && styles.tickTextOn]}>{label}</Text>
     </View>
   );
   return (
@@ -272,7 +273,7 @@ function PasswordFields({ password, again, onPassword, onAgain, onSubmit }: { pa
         </View>
         <Pressable accessibilityRole="button" accessibilityLabel={show ? 'Hide passwords' : 'Show passwords'} hitSlop={8} onPress={() => setShow((v) => !v)} style={styles.show}>
           <Ionicons name={show ? 'eye-off-outline' : 'eye-outline'} size={17} color={colors.textMuted} />
-          <Text style={styles.showText}>{show ? 'Hide' : 'Show'}</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.showText}>{show ? 'Hide' : 'Show'}</Text>
         </Pressable>
       </View>
     </View>
@@ -325,7 +326,7 @@ function ResetPage({ email, onSave }: { email?: string; onSave: (password: strin
             <>
               <View style={styles.doneIcon}><Ionicons name="checkmark" size={30} color={colors.brand} /></View>
               <View style={{ gap: 6 }}>
-                <Text style={styles.pageTitle}>Password updated</Text>
+                <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.pageTitle}>Password updated</Text>
                 <Text style={styles.pageLine}>You’re all set. Use your new password the next time you sign in{email ? ` with ${email}` : ''}.</Text>
               </View>
               <Submit label="Continue to CourtSide" onPress={() => router.replace('/')} />
@@ -335,7 +336,7 @@ function ResetPage({ email, onSave }: { email?: string; onSave: (password: strin
               <View style={{ gap: spacing.lg }}>
                 <BrandMark size={42} />
                 <View style={{ gap: 6 }}>
-                  <Text style={styles.pageTitle}>Reset your password</Text>
+                  <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.pageTitle}>Reset your password</Text>
                   <Text style={styles.pageLine}>{email ? `Create a new password for ${email}.` : 'Create a new password for your CourtSide account.'}</Text>
                 </View>
               </View>

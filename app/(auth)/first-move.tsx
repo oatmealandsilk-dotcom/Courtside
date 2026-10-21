@@ -40,6 +40,7 @@ import { useGateSpace } from '@/lib/useGateSpace';
 import { StatusShade } from '@/components/StatusShade';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, lift, spacing, typography } from '@/theme';
+import { TextScale } from '@/theme/textScale';
 
 const enter = (i: number) => FadeInDown.delay(80 + i * 80).duration(420).easing(Easing.out(Easing.cubic));
 
@@ -208,8 +209,8 @@ export default function FirstMove() {
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={[styles.scroll, { paddingTop: space.top }]}>
         {setupCount ? <Animated.View entering={enter(0)}><SetupProgress count={setupCount} /></Animated.View> : null}
         <Animated.View entering={enter(0)} style={styles.head}>
-          <Text style={styles.title}>People you may know</Text>
-          <Text style={styles.lead}>You’re in{firstName ? `, ${firstName}` : ''}. {line}</Text>
+          <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.title}>People you may know</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.lead}>You’re in{firstName ? `, ${firstName}` : ''}. {line}</Text>
         </Animated.View>
 
         {/* The people you already know who are here (owner, Oct 6). The phone app only; the Find friends page asks and keeps its own rules. */}
@@ -218,8 +219,8 @@ export default function FirstMove() {
             <Pressable accessibilityRole="button" accessibilityLabel={CONTACTS_LABEL} onPress={findContacts} style={({ pressed }) => [styles.post, pressed && styles.pressed]}>
               <View style={styles.tile}><Ionicons name="people" size={20} color={colors.brand} /></View>
               <View style={{ flex: 1, gap: 2 }}>
-                <Text style={styles.postTitle}>{CONTACTS_LABEL}</Text>
-                <Text style={styles.postBody}>{CONTACTS_NOTE}</Text>
+                <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.postTitle}>{CONTACTS_LABEL}</Text>
+                <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.postBody}>{CONTACTS_NOTE}</Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
             </Pressable>
@@ -230,8 +231,8 @@ export default function FirstMove() {
             <Pressable accessibilityRole="button" accessibilityLabel="Share your invite link" onPress={() => { void share(); }} style={({ pressed }) => [styles.post, pressed && styles.pressed]}>
               <View style={styles.tile}><Ionicons name="paper-plane" size={20} color={colors.brand} /></View>
               <View style={{ flex: 1, gap: 2 }}>
-                <Text style={styles.postTitle}>{shared ? 'Link shared' : 'Share your invite link'}</Text>
-                <Text style={styles.postBody}>{adult ? 'Whoever joins follows you.' : FRIENDS_LINE}</Text>
+                <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.postTitle}>{shared ? 'Link shared' : 'Share your invite link'}</Text>
+                <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.postBody}>{adult ? 'Whoever joins follows you.' : FRIENDS_LINE}</Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
             </Pressable>
@@ -243,7 +244,7 @@ export default function FirstMove() {
             <View style={styles.allRow}>
               <Pressable accessibilityRole="button" accessibilityLabel={`Follow all ${notYet.length}`} hitSlop={8} onPress={followAll} style={({ pressed }) => [styles.all, pressed && { opacity: 0.6 }]}>
                 <Ionicons name="person-add" size={14} color={colors.brand} />
-                <Text style={styles.allText}>Follow all</Text>
+                <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.allText}>Follow all</Text>
               </Pressable>
             </View>
           ) : null}
@@ -257,8 +258,8 @@ export default function FirstMove() {
                     <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={44} ring={user.isCoach} />
                     {/* The name gets the room; the level and why they are here sit under it. */}
                     <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
-                      <Text style={styles.personName} numberOfLines={1}>{user.name}</Text>
-                      <View style={styles.personTop}><LevelPill profile={user.profile} small /><Text style={styles.personMeta} numberOfLines={1}>{meta}</Text></View>
+                      <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.personName} numberOfLines={1}>{user.name}</Text>
+                      <View style={styles.personTop}><LevelPill profile={user.profile} small /><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.personMeta} numberOfLines={1}>{meta}</Text></View>
                     </View>
                     <FollowPill small following={followingIds.includes(user.id)} userId={user.id} onPress={() => follow(user)} name={user.name.split(' ')[0]} />
                   </View>
@@ -270,8 +271,8 @@ export default function FirstMove() {
                 <View style={styles.mainHead}>
                   <View style={styles.tile}><Ionicons name={adult ? 'paper-plane' : 'people'} size={20} color={colors.brand} /></View>
                   <View style={{ flex: 1, gap: 2 }}>
-                    <Text style={styles.mainTitle}>{adult ? 'Bring your hitting partners' : FRIENDS_TITLE}</Text>
-                    <Text style={styles.mainBody}>{!adult ? FRIENDS_LINE : court ? `Send your link. It opens on ${court.name}.` : 'Send your link. Whoever joins follows you.'}</Text>
+                    <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.mainTitle}>{adult ? 'Bring your hitting partners' : FRIENDS_TITLE}</Text>
+                    <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.mainBody}>{!adult ? FRIENDS_LINE : court ? `Send your link. It opens on ${court.name}.` : 'Send your link. Whoever joins follows you.'}</Text>
                   </View>
                 </View>
                 <Button label="Share my link" onPress={() => { void share(); }} full />
@@ -282,20 +283,20 @@ export default function FirstMove() {
             // Teen search (migration 118): by name or @handle, never by town.
             <Pressable accessibilityRole="link" accessibilityLabel="Find a friend by their @handle" hitSlop={8} onPress={() => done('find', () => router.push({ pathname: '/search', params: { scope: 'players', find: 'friend' } }))} style={({ pressed }) => [styles.quiet, pressed && { opacity: PRESS_DIM }]}>
               <Ionicons name="search" size={15} color={colors.textMuted} />
-              <Text style={styles.quietText}>Find a friend by @handle</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.quietText}>Find a friend by @handle</Text>
             </Pressable>
           ) : null}
         </Animated.View>
 
         {/* The second option: a clip, with the Instant inside it for anyone without one. */}
         <Animated.View entering={enter(3)} style={styles.second}>
-          <Text style={styles.label}>Or post something</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.label}>Or post something</Text>
           <View style={styles.card}>
             <Pressable accessibilityRole="button" accessibilityLabel="Post a clip or photo" onPress={() => done('post', () => router.push('/compose'))} style={({ pressed }) => [styles.post, pressed && styles.pressed]}>
               <View style={styles.tile}><Ionicons name="videocam" size={20} color={colors.brand} /></View>
               <View style={{ flex: 1, gap: 2 }}>
-                <Text style={styles.postTitle}>Post a clip or photo</Text>
-                <Text style={styles.postBody}>A highlight, a good rally, a funny moment.</Text>
+                <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.postTitle}>Post a clip or photo</Text>
+                <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.postBody}>A highlight, a good rally, a funny moment.</Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
             </Pressable>
@@ -303,7 +304,7 @@ export default function FirstMove() {
             {instantsOn ? (
               <Pressable accessibilityRole="button" accessibilityLabel="Take an Instant" onPress={() => done('instant', () => router.push('/hit'))} style={({ pressed }) => [styles.instant, pressed && styles.pressed]}>
                 <Ionicons name="camera-outline" size={16} color={colors.textMuted} />
-                <Text style={styles.instantText}>Nothing saved? <Text style={styles.instantLink}>Take an Instant</Text></Text>
+                <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.instantText}>Nothing saved? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.instantLink}>Take an Instant</Text></Text>
               </Pressable>
             ) : null}
           </View>

@@ -39,6 +39,7 @@ import type {
   SurfacePreference,
 } from '@/data/types';
 import { colors, radius, spacing, typography } from '@/theme';
+import { TextScale } from '@/theme/textScale';
 
 const PLAY_STYLES: { value: PlayStyle; label: string; detail: string }[] = [
   { value: 'aggressive-baseliner', label: 'Aggressive baseliner', detail: 'Big forehand, dictates' },
@@ -476,21 +477,21 @@ function OnboardingSteps() {
   const foundViaBlock = (
     <View style={styles.found} accessibilityRole="radiogroup" accessibilityLabel="How did you find CourtSide? Optional">
       <View style={styles.foundHead}>
-        <Text style={styles.groupLabel}>How did you find CourtSide?</Text>
-        <Text style={styles.optional}>Optional</Text>
+        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.groupLabel}>How did you find CourtSide?</Text>
+        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.optional}>Optional</Text>
       </View>
       <View style={styles.chips}>
         {FOUND_VIA.map((o) => {
           const on = foundVia === o.value;
           return (
             <Pressable key={o.value} accessibilityRole="radio" accessibilityState={{ selected: on, checked: on }} accessibilityLabel={o.label} onPress={() => pickFoundVia(o.value)} style={[styles.chip, on && styles.chipOn]}>
-              <Text style={[styles.chipText, on && { color: colors.brandInk }]}>{o.label}</Text>
+              <Text maxFontSizeMultiplier={TextScale.TITLE} style={[styles.chipText, on && { color: colors.brandInk }]}>{o.label}</Text>
             </Pressable>
           );
         })}
       </View>
       {foundGuess && foundVia === foundGuess && !foundTouched ? (
-        <Text style={styles.note}>Picked for you from how you joined. Tap to change it.</Text>
+        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.note}>Picked for you from how you joined. Tap to change it.</Text>
       ) : null}
     </View>
   );
@@ -506,11 +507,11 @@ function OnboardingSteps() {
           </View>
         )}
         <View style={styles.headRow}>
-          <Text style={styles.title}>{ratingOnly ? 'Your rating' : STEPS[step].title}</Text>
-          {ratingOnly || setupRun ? null : <Text style={styles.stepLabel}>{position + 1} / {order.length}</Text>}
+          <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.title}>{ratingOnly ? 'Your rating' : STEPS[step].title}</Text>
+          {ratingOnly || setupRun ? null : <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.stepLabel}>{position + 1} / {order.length}</Text>}
         </View>
-        {ratingOnly ? <Text style={styles.lead}>NTRP or UTR, whichever you know. It shows on your profile.</Text>
-          : STEPS[step].lead ? <Text style={styles.lead}>{STEPS[step].lead}</Text> : null}
+        {ratingOnly ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.lead}>NTRP or UTR, whichever you know. It shows on your profile.</Text>
+          : STEPS[step].lead ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.lead}>{STEPS[step].lead}</Text> : null}
       </View>
 
       <ScrollView
@@ -536,8 +537,8 @@ function OnboardingSteps() {
                 // Under 18 starts private; the choice is right here, not buried in Settings.
                 <View style={styles.privacyRow}>
                   <View style={{ flex: 1, gap: 2 }}>
-                    <Text style={styles.privacyTitle}>Private account</Text>
-                    <Text style={styles.privacyNote}>{currentUser.isPrivate ? 'Only people you approve can see your posts. Turn off to let anyone see them.' : 'Anyone can see your posts. You can make your account private any time in Settings.'}</Text>
+                    <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.privacyTitle}>Private account</Text>
+                    <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.privacyNote}>{currentUser.isPrivate ? 'Only people you approve can see your posts. Turn off to let anyone see them.' : 'Anyone can see your posts. You can make your account private any time in Settings.'}</Text>
                   </View>
                   <Toggle value={!!currentUser.isPrivate} onChange={actions.setPrivateAccount} accessibilityLabel="Private account" />
                 </View>
@@ -565,7 +566,7 @@ function OnboardingSteps() {
                 </View>
               </View>
               <View style={styles.noteRow}>
-                <Text style={[styles.note, { flex: 1 }]}>{ratingValid ? band.label : ratingText.trim() ? `Enter ${scale.min.toFixed(1)}–${scale.max.toFixed(1)}` : 'Add your rating to continue.'}</Text>
+                <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.note, { flex: 1 }]}>{ratingValid ? band.label : ratingText.trim() ? `Enter ${scale.min.toFixed(1)}–${scale.max.toFixed(1)}` : 'Add your rating to continue.'}</Text>
                 <Pressable accessibilityRole="button" accessibilityState={{ expanded: levelsOpen }} accessibilityLabel="Not sure of your rating? Pick your level" hitSlop={8} onPress={() => { haptics.tap(); setLevelsOpen((o) => !o); }}>
                   <Text style={styles.notSure}>{levelsOpen ? 'Close' : 'Not sure?'}</Text>
                 </Pressable>
@@ -593,14 +594,14 @@ function OnboardingSteps() {
                     />
                   </View>
                   <Pressable accessibilityRole="button" accessibilityState={{ selected: underOne }} accessibilityLabel="Less than 1 year" onPress={pickUnderOne} style={[styles.chip, underOne && styles.chipOn]}>
-                    <Text style={[styles.chipText, underOne && { color: colors.brandInk }]}>Less than 1</Text>
+                    <Text maxFontSizeMultiplier={TextScale.TITLE} style={[styles.chipText, underOne && { color: colors.brandInk }]}>Less than 1</Text>
                   </Pressable>
                 </View>
               </Group>
-              <Text style={styles.note} accessibilityLiveRegion="polite">{yearNote}</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.note} accessibilityLiveRegion="polite">{yearNote}</Text>
               {asksInviter && inviter?.handle && !inviter.canSet ? (
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                  <Text style={styles.note} accessibilityLabel={`Invited by @${inviter.handle}`}>Invited by @{inviter.handle}</Text>
+                  <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.note} accessibilityLabel={`Invited by @${inviter.handle}`}>Invited by @{inviter.handle}</Text>
                   {followOffer ? (
                     <Button label={`Follow @${followOffer.handle}`} variant="secondary" onPress={() => { actions.toggleFollow(followOffer.id); setFollowOffer(null); }} />
                   ) : null}
@@ -629,8 +630,8 @@ function OnboardingSteps() {
                 <View style={styles.list}>
                   <Pressable accessibilityRole="button" accessibilityState={{ expanded: styleOpen }} accessibilityLabel="Style of play" onPress={() => setStyleOpen((o) => !o)} style={styles.dropdown}>
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.dropdownValue}>{PLAY_STYLES.find((p) => p.value === playStyle)?.label}</Text>
-                      <Text style={styles.rowDetail}>{PLAY_STYLES.find((p) => p.value === playStyle)?.detail}</Text>
+                      <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.dropdownValue}>{PLAY_STYLES.find((p) => p.value === playStyle)?.label}</Text>
+                      <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rowDetail}>{PLAY_STYLES.find((p) => p.value === playStyle)?.detail}</Text>
                     </View>
                     <Animated.Text style={[styles.chevron, { transform: [{ rotate: chevronTurn.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] }) }] }]}>▾</Animated.Text>
                   </Pressable>
@@ -684,7 +685,7 @@ function OnboardingSteps() {
                   const on = goalOne === idea;
                   return (
                     <Pressable key={idea} accessibilityRole="button" accessibilityState={{ selected: on }} onPress={() => { haptics.tap(); setGoalOne(on ? '' : idea); }} style={[styles.chip, on && styles.chipOn]}>
-                      <Text style={[styles.chipText, on && { color: colors.brandInk }]}>{idea}</Text>
+                      <Text maxFontSizeMultiplier={TextScale.TITLE} style={[styles.chipText, on && { color: colors.brandInk }]}>{idea}</Text>
                     </Pressable>
                   );
                 })}
@@ -711,8 +712,8 @@ function OnboardingSteps() {
                   <View key={label} style={[styles.row, i > 0 && styles.rowBorder]}>
                     <Text style={styles.phaseIndex}>{i + 1}</Text>
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.rowLabel}>{label}</Text>
-                      <Text style={styles.rowDetail}>{detail}</Text>
+                      <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rowLabel}>{label}</Text>
+                      <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rowDetail}>{detail}</Text>
                     </View>
                   </View>
                 ))}
@@ -738,8 +739,8 @@ function OnboardingSteps() {
                   tournamentName.trim() ? ['Tournament', `${tournamentName.trim()} · ${tournamentDays} days`] : null,
                 ].filter((r): r is [string, string] => r !== null).map(([label, value], i) => (
                   <View key={label} style={[styles.row, i > 0 && styles.rowBorder]}>
-                    <Text style={styles.summaryLabel}>{label}</Text>
-                    <Text style={styles.summaryValue}>{value}</Text>
+                    <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.summaryLabel}>{label}</Text>
+                    <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.summaryValue}>{value}</Text>
                   </View>
                 ))}
               </View>
@@ -764,14 +765,14 @@ function OnboardingSteps() {
             <>
               {!last ? (
                 <Pressable accessibilityRole="button" accessibilityLabel="Next step" onPress={() => void next()} style={styles.skip}>
-                  <Text style={styles.skipText}>Next</Text>
+                  <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.skipText}>Next</Text>
                 </Pressable>
               ) : null}
               <Button label="Save" disabled={!canContinue && !ratingMissing} dim={ratingMissing} onPress={ratingMissing ? askLevel : finish} />
             </>
           ) : STEPS[step].skip ? (
             <Pressable accessibilityRole="button" accessibilityLabel="Skip this step" onPress={skipStep} style={styles.skip}>
-              <Text style={styles.skipText}>Skip</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.skipText}>Skip</Text>
             </Pressable>
           ) : null}
           {editing ? null : <Button label={last ? 'Finish' : 'Continue'} disabled={!canContinue && !ratingMissing} dim={ratingMissing} onPress={() => (ratingMissing ? askLevel() : last ? finish() : void next())} />}
@@ -789,7 +790,7 @@ function Group({ label, children }: { label: string; children: React.ReactNode }
   const styles = useThemedStyles(styleDefinitions);
   return (
     <View style={styles.group}>
-      <Text style={styles.groupLabel}>{label}</Text>
+      <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.groupLabel}>{label}</Text>
       {children}
     </View>
   );
@@ -805,8 +806,8 @@ function Row({ label, detail, selected, first, onPress }: { label: string; detai
       style={({ pressed }) => [styles.row, !first && styles.rowBorder, pressed && { backgroundColor: colors.surfaceAlt }]}
     >
       <View style={{ flex: 1, gap: 2 }}>
-        <Text style={[styles.rowLabel, selected && { color: colors.text }]}>{label}</Text>
-        {detail ? <Text style={styles.rowDetail}>{detail}</Text> : null}
+        <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.rowLabel, selected && { color: colors.text }]}>{label}</Text>
+        {detail ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rowDetail}>{detail}</Text> : null}
       </View>
       <View style={[styles.radio, selected && styles.radioOn]}>
         {selected ? <View style={styles.radioDot} /> : null}

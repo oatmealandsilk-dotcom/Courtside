@@ -4,6 +4,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, spacing, typography } from '@/theme';
+import { TextScale } from '@/theme/textScale';
 
 /**
  * "I'm 13 or older", on the sign-up form when no birthday is typed (Oct 17:
@@ -25,7 +26,7 @@ export function OldEnoughCheck({ checked, onChange }: { checked: boolean; onChan
     >
       <Ionicons name={checked ? 'checkmark-circle' : 'ellipse-outline'} size={22} color={checked ? colors.brand : colors.textFaint} />
       <View style={styles.words}>
-        <Text style={styles.label}>I'm 13 or older</Text>
+        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.label}>I'm 13 or older</Text>
         <Text style={styles.rule}>Without a birthday your account gets the under-18 protections. Add it anytime in Settings.</Text>
       </View>
     </Pressable>

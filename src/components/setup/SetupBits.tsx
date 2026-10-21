@@ -6,6 +6,7 @@ import type { SetupCount } from '@/features/onboarding/setupCount';
 import { useGateSpace } from '@/lib/useGateSpace';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, spacing, typography } from '@/theme';
+import { TextScale } from '@/theme/textScale';
 
 /*
  * Setup's shared top and bottom (Oct 20 sweep: "Setup says '2 / 2' and a
@@ -30,7 +31,7 @@ export function SetupProgress({ count }: { count: SetupCount | null }) {
       <View style={styles.track}>
         <Animated.View style={[styles.fill, { transform: [{ scaleX: fill }] }]} />
       </View>
-      <Text style={styles.label}>Step {count.index + 1} of {count.total}</Text>
+      <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.label}>Step {count.index + 1} of {count.total}</Text>
     </View>
   );
 }
@@ -58,7 +59,7 @@ export function SetupFooter({ primary, secondary, link, children }: {
       {secondary ? <Button label={secondary.label} variant="secondary" onPress={secondary.onPress} disabled={secondary.disabled} loading={secondary.loading} dim={secondary.dim} full /> : null}
       {link ? (
         <Pressable accessibilityRole="button" accessibilityLabel={link.accessibilityLabel ?? link.label} disabled={link.disabled} hitSlop={8} onPress={link.onPress} style={({ pressed }) => [styles.link, pressed && styles.linkPressed]}>
-          <Text style={styles.linkText}>{link.label}</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.linkText}>{link.label}</Text>
         </Pressable>
       ) : <View style={styles.linkSpace} />}
     </View>
