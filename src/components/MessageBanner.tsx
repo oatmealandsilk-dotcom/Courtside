@@ -25,6 +25,7 @@ import { useApp } from '@/store/AppContext';
 import { anyModalOpen } from '@/lib/modalOpen';
 import type { User } from '@/data/types';
 import { colors, spacing, typography } from '@/theme';
+import { TextScale } from '@/theme/textScale';
 
 /** How long a banner stays, the way Instagram's does. */
 const SHOW_MS = 4000;
@@ -389,10 +390,10 @@ export function MessageBanner({ enabled }: { enabled: boolean }) {
                 <FaceView face={view.face} />
                 <View style={styles.words}>
                   <View style={styles.top}>
-                    <Text style={styles.title} numberOfLines={1}>{view.title}</Text>
-                    {view.count > 1 && visible?.kind === 'chat' ? <Text style={styles.count} numberOfLines={1}>{view.count} new messages</Text> : null}
+                    <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.title} numberOfLines={1}>{view.title}</Text>
+                    {view.count > 1 && visible?.kind === 'chat' ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.count} numberOfLines={1}>{view.count} new messages</Text> : null}
                   </View>
-                  {view.body ? <Text style={styles.body} numberOfLines={1}>{view.body}</Text> : null}
+                  {view.body ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.body} numberOfLines={1}>{view.body}</Text> : null}
                 </View>
               </Pressable>
               {/* A computer has no flick: a small close button, as on the computer's own notifications. */}

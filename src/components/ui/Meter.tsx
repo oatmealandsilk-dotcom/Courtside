@@ -3,6 +3,7 @@ import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { colors, radius, spacing, typography } from '@/theme';
+import { TextScale } from '@/theme/textScale';
 
 interface Props {
   label: string;
@@ -18,8 +19,8 @@ export function Meter({ label, value, caption, tint = colors.brand }: Props) {
   return (
     <View style={styles.wrap}>
       <View style={styles.row}>
-        <Text style={styles.label}>{label}</Text>
-        {caption ? <Text style={styles.caption}>{caption}</Text> : null}
+        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.label}>{label}</Text>
+        {caption ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.caption}>{caption}</Text> : null}
       </View>
       <View
         style={styles.track}

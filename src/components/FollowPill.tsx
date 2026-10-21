@@ -9,6 +9,7 @@ import { BrandWash } from '@/components/ui/BrandWash';
 import { useApp } from '@/store/AppContext';
 import { colors, readsOn, typography } from '@/theme';
 import { reduceMotionEnabled } from '@/lib/useReducedMotion';
+import { TextScale } from '@/theme/textScale';
 
 const EASE = Easing.bezier(0.22, 1, 0.36, 1);
 
@@ -56,7 +57,7 @@ export function FollowPill({ following, onPress, small = false, name, userId, wi
       <Animated.View style={[styles.pill, small && styles.small, wide && styles.wide, pill]}>
         <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, wash]}><BrandWash /></Animated.View>
         {filled ? <Ionicons name="checkmark" size={14} color={colors.text} /> : null}
-        <Animated.Text style={[styles.text, small && styles.textSmall, label]}>{following ? 'Following' : requested ? 'Requested' : 'Follow'}</Animated.Text>
+        <Animated.Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.text, small && styles.textSmall, label]}>{following ? 'Following' : requested ? 'Requested' : 'Follow'}</Animated.Text>
       </Animated.View>
     </Pressable>
   );
@@ -151,7 +152,7 @@ export function FollowShrink({ following, onPress, name, userId, followsYou = fa
   return (
     <Pressable accessibilityRole="button" accessibilityState={{ selected: filled }} accessibilityLabel={`${said}${name ? ` ${name}` : ''}`} onPress={press} hitSlop={4}>
       <Animated.View style={[styles.shrink, { height: size, borderRadius: size / 2 }, box]}>
-        <Animated.Text style={[styles.shrinkWord, { color: wordInk }, wordText ? { width: wordText } : null, word]} numberOfLines={1}>Follow</Animated.Text>
+        <Animated.Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.shrinkWord, { color: wordInk }, wordText ? { width: wordText } : null, word]} numberOfLines={1}>Follow</Animated.Text>
         <Animated.View pointerEvents="none" style={[styles.face, add]}>
           <Ionicons name="person-add-outline" size={19} color={wordInk} />
         </Animated.View>
@@ -166,7 +167,7 @@ export function FollowShrink({ following, onPress, name, userId, followsYou = fa
       </Animated.View>
       {/* The measure: the same word, unsqueezed, never seen or read out. */}
       <View pointerEvents="none" style={styles.measure} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" aria-hidden>
-        <Text style={styles.shrinkWord} numberOfLines={1} onLayout={(e) => {
+        <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.shrinkWord} numberOfLines={1} onLayout={(e) => {
           const w = Math.ceil(e.nativeEvent.layout.width);
           if (w > 0 && w !== wordText) setWordText(w);
         }}>Follow</Text>

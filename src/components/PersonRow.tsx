@@ -14,6 +14,7 @@ import { confirmUnfollow } from '@/lib/confirm';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, spacing, typography } from '@/theme';
+import { TextScale } from '@/theme/textScale';
 
 /**
  * One person in a list, the way Instagram's search shows them: picture
@@ -65,7 +66,7 @@ export function PersonRow({ user, reason, via, words = [], first = false, onPres
               </View>
             ) : <LevelPill profile={user.profile} small />}
           </View>
-          <Text style={styles.meta} numberOfLines={1}>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta} numberOfLines={1}>
             @{bold(highlightParts(user.handle, words, { inside: 2 }))}
             {via ? <> · {bold(highlightParts(snippet(via, words, 12, 60), words))}</> : why ? ` · ${why}` : ''}
           </Text>

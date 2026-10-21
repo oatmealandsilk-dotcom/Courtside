@@ -3,6 +3,7 @@ import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { colors, radius, spacing, typography } from '@/theme';
+import { TextScale } from '@/theme/textScale';
 
 interface Props {
   label: string;
@@ -15,9 +16,9 @@ export function StatTile({ label, value, hint, tint }: Props) {
   const styles = useThemedStyles(styleDefinitions);
   return (
     <View style={styles.tile}>
-      <Text style={styles.label}>{label}</Text>
-      <Text style={[styles.value, tint ? { color: tint } : null]}>{value}</Text>
-      {hint ? <Text style={styles.hint}>{hint}</Text> : null}
+      <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.label}>{label}</Text>
+      <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.value, tint ? { color: tint } : null]}>{value}</Text>
+      {hint ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.hint}>{hint}</Text> : null}
     </View>
   );
 }

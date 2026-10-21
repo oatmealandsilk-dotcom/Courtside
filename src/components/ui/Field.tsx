@@ -7,6 +7,7 @@ import { MentionSuggestions } from '@/components/MentionSuggestions';
 import { useMentionCandidates } from '@/features/mentions/useMentionCandidates';
 import { activeMention, applyMention } from '@/lib/mentions';
 import { useRevealOnFocus } from '@/lib/keyboardScroll';
+import { TextScale } from '@/theme/textScale';
 
 interface Props {
   inputRef?: React.Ref<TextInput>;
@@ -141,12 +142,13 @@ export function Field({
     <View ref={wrap} style={styles.wrap}>
       {label || labelRight ? (
         <View style={styles.labelRow}>
-          {label ? <Text style={styles.label}>{label}</Text> : <View />}
+          {label ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.label}>{label}</Text> : <View />}
           {labelRight}
         </View>
       ) : null}
       <View>
       <TextInput
+        maxFontSizeMultiplier={multiline ? TextScale.BODY : TextScale.TITLE}
         ref={inputRef ?? own}
         accessibilityLabel={accessibilityLabel ?? label ?? placeholder}
         value={value}
@@ -191,12 +193,12 @@ export function Field({
       />
       {drawnExample && !value ? (
         <View pointerEvents="none" style={styles.example} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-          <Text numberOfLines={1} style={styles.exampleText}>{placeholder}</Text>
+          <Text maxFontSizeMultiplier={TextScale.TITLE} numberOfLines={1} style={styles.exampleText}>{placeholder}</Text>
         </View>
       ) : null}
       </View>
       {mention && candidates.length ? <MentionSuggestions candidates={candidates} onPick={pick} maxHeight={listHeight} /> : null}
-      {hint ? <Text style={styles.hint}>{hint}</Text> : null}
+      {hint ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.hint}>{hint}</Text> : null}
     </View>
   );
 }

@@ -7,6 +7,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useUsers } from '@/store/AppContext';
 import { initials } from '@/lib/format';
 import { colors, inkOn, radius, font } from '@/theme';
+import { TextScale } from '@/theme/textScale';
 
 /**
  * A default picture takes one of the theme's own accents, chosen by the
@@ -64,7 +65,7 @@ export const Avatar = React.memo(function Avatar({ uri, name, seed, size = 40, s
       ]}
     >
       {/* White initials where white reads on the fill, else black: white alone fell to 1.5:1 on New York's yellow. */}
-      {plain ? null : <Text style={[styles.label, { fontSize: size * 0.38, color: inkOn(fill) }]}>{initials(name)}</Text>}
+      {plain ? null : <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.label, { fontSize: size * 0.38, color: inkOn(fill) }]}>{initials(name)}</Text>}
       {photo && <ExpoImage source={{uri:photo}} accessibilityLabel={`${name} profile photo`} contentFit="cover" recyclingKey={photo} style={{position:"absolute",width:size,height:size,borderRadius:size/2}}/>}
       {ring ? (
         <View

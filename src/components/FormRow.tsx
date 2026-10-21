@@ -5,6 +5,7 @@ import { Pressable, StyleSheet, Text, View, type AccessibilityRole, type Accessi
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { colors, spacing, typography } from '@/theme';
+import { TextScale } from '@/theme/textScale';
 
 /**
  * One line of a form's settings list, the same size as the rows on the
@@ -55,8 +56,8 @@ export const FormRow = React.forwardRef<View, {
         <View style={styles.lead}>{lead ?? (icon ? <Ionicons name={icon} size={20} color={colors.textMuted} /> : null)}</View>
         <View style={[styles.body, line && styles.line]}>
           {/* Two lines at most: on a narrow phone, or with larger text on, a long label wraps rather than being cut mid-word. */}
-          <Text style={styles.label} numberOfLines={2}>{label}</Text>
-          {value ? <Text style={styles.value} numberOfLines={1}>{value}</Text> : null}
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.label} numberOfLines={2}>{label}</Text>
+          {value ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.value} numberOfLines={1}>{value}</Text> : null}
           {accessory}
           {chevron ? <Ionicons name="chevron-forward" size={16} color={colors.textFaint} /> : null}
         </View>

@@ -14,6 +14,7 @@ import { CourtSpinner } from '@/components/CourtSpinner';
 import { Tappable } from '@/components/Tappable';
 import { BrandWash } from '@/components/ui/BrandWash';
 import { colors, pageIsDark, radius, spacing, typography } from '@/theme';
+import { TextScale, oneLine } from '@/theme/textScale';
 
 type Variant = 'primary' | 'secondary' | 'ghost' | 'danger';
 
@@ -71,7 +72,7 @@ export function Button({
       {variant === 'primary' ? <BrandWash /> : null}
       <View style={styles.inner}>
         {loading ? <CourtSpinner size={size === 'sm' ? 15 : 18} ink={palette.fg} /> : null}
-        <Text style={[styles.label, size === 'sm' && styles.smallLabel, { color: palette.fg }]} numberOfLines={size === 'sm' ? 1 : undefined}>{label}</Text>
+        <Text {...(size === 'sm' ? oneLine(TextScale.TITLE, 0.8) : { maxFontSizeMultiplier: TextScale.TITLE })} style={[styles.label, size === 'sm' && styles.smallLabel, { color: palette.fg }]} numberOfLines={size === 'sm' ? 1 : undefined}>{label}</Text>
       </View>
     </Tappable>
   );

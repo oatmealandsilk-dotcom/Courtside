@@ -19,7 +19,7 @@ import { LAYOUT, useResponsive } from '@/lib/useResponsive';
 import { Wash } from '@/components/Wash';
 import { PAGE_WASH, PageWashContext, type PageWashFrame } from './pageWash';
 import { useBarInset } from '@/features/navigation/barInset';
-import { colors, spacing, typography } from '@/theme';
+import { TextScale, colors, oneLine, spacing, typography } from '@/theme';
 
 /**
  * How far down each tab was left, kept outside React so it survives the
@@ -508,7 +508,7 @@ const ScreenBody = React.memo(function ScreenBody({
   const updatedNote = onRefresh ? (
     <Animated.View pointerEvents="none" style={[styles.updated, underBar, noteBelow ? { top: 8 + noteBelow } : null, { opacity: updated, transform: [{ translateY: updated.interpolate({ inputRange: [0, 1], outputRange: [-8, 0] }) }, { scale: updated.interpolate({ inputRange: [0, 1], outputRange: [0.92, 1] }) }] }]}>
       <Ionicons name="checkmark-circle" size={14} color={colors.brand} />
-      <Text style={styles.updatedText}>Updated</Text>
+      <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.updatedText}>Updated</Text>
     </Animated.View>
   ) : null;
 
@@ -545,7 +545,9 @@ const ScreenBody = React.memo(function ScreenBody({
                 title at this width (stepped down, it is not measured again unless the width changes). */}
             <Text
               style={[compactTitle || !isPhone ? styles.titleCompact : styles.title, titleSmall ? styles.titleCapped : null]}
-              numberOfLines={titleLines}
+              // One line that shrinks a little rather than breaking a word ("Communit / y") at a large
+              // phone text size; a page that asks for more lines (titleLines) keeps them, capped.
+              {...(titleLines ? { numberOfLines: titleLines, maxFontSizeMultiplier: TextScale.TITLE } : oneLine(TextScale.TITLE))}
               onLayout={titleLines ? (e) => {
                 const now = titleNow.current;
                 if (!now.title) return;
@@ -558,7 +560,7 @@ const ScreenBody = React.memo(function ScreenBody({
                 setTitleFit((prev) => (prev && prev.title === t && prev.w === w && prev.wraps === wraps ? prev : { title: t, w, wraps }));
               } : undefined}
             >{title}</Text>
-            {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+            {subtitle ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.subtitle}>{subtitle}</Text> : null}
           </View>
           {right}
         </View>,

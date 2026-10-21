@@ -22,6 +22,7 @@ import { requestScrollToTop } from '@/features/navigation/scrollToTop';
 import { goHome } from '@/lib/goBack';
 import { closed, onWithdraw, useToast, type ToastClosed, type ToastMessage } from '@/lib/toast';
 import { colors, font, spacing, typography } from '@/theme';
+import { TextScale } from '@/theme/textScale';
 
 const SHOW_MS = 2800;
 // A toast with a button ("Undo") waits longer: long enough to read it,
@@ -196,9 +197,9 @@ export function Toast() {
                   : <Ionicons name={icon as keyof typeof Ionicons.glyphMap} size={16} color={colors.text} />}
                 <View style={styles.words}>
                   {/* Cut to one line only when it is a quick note; one that has to be read wraps. */}
-                  <Text style={styles.title} numberOfLines={toast.long ? 3 : 1}>{toast.title}</Text>
+                  <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.title} numberOfLines={toast.long ? 3 : 1}>{toast.title}</Text>
                   {/* Beside a number and a button (the Logged note) the words have little room on a narrow phone: they wrap to a second line rather than being cut. */}
-                  {toast.body ? <Text style={styles.body} numberOfLines={toast.long ? 4 : toast.stat ? 2 : 1}>{toast.body}</Text> : null}
+                  {toast.body ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.body} numberOfLines={toast.long ? 4 : toast.stat ? 2 : 1}>{toast.body}</Text> : null}
                 </View>
               </Pressable>
               {toast.stat ? <Stat value={toast.stat.value} from={toast.stat.from} label={toast.stat.label} token={toast.id} /> : null}
@@ -213,7 +214,7 @@ export function Toast() {
                   onPress={() => { hide('action'); toast.secondary?.onPress(); }}
                   style={({ pressed }) => [styles.secondary, pressed && styles.actionPressed]}
                 >
-                  <Text style={styles.secondaryLabel}>{toast.secondary.label}</Text>
+                  <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.secondaryLabel}>{toast.secondary.label}</Text>
                 </Pressable>
               ) : null}
               {action ? (
@@ -224,7 +225,7 @@ export function Toast() {
                   onPress={() => { hide('action'); action.onPress(); }}
                   style={({ pressed }) => [styles.action, toast.secondary && styles.actionAfterSecondary, pressed && styles.actionPressed]}
                 >
-                  <Text style={styles.actionLabel}>{action.label}</Text>
+                  <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.actionLabel}>{action.label}</Text>
                 </Pressable>
               ) : null}
             </View>
@@ -316,8 +317,8 @@ function HitNote({ toast, hide }: { toast: ToastMessage; hide: (how?: ToastClose
               <HitBadge />
             </View>
             <View style={styles.words}>
-              <Text style={styles.noteTitle} numberOfLines={1}>{toast.title}</Text>
-              {toast.body ? <Text style={styles.noteBody} numberOfLines={1}>{toast.body}</Text> : null}
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.noteTitle} numberOfLines={1}>{toast.title}</Text>
+              {toast.body ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.noteBody} numberOfLines={1}>{toast.body}</Text> : null}
             </View>
           </Pressable>
           {action ? (
@@ -328,7 +329,7 @@ function HitNote({ toast, hide }: { toast: ToastMessage; hide: (how?: ToastClose
               onPress={() => { hide('action'); action.onPress(); }}
               style={({ pressed }) => [styles.fill, styles.fillSlim, pressed && styles.fillPressed]}
             >
-              <Text style={styles.fillLabel}>{action.label}</Text>
+              <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.fillLabel}>{action.label}</Text>
             </Pressable>
           ) : null}
         </View>
@@ -378,11 +379,11 @@ function Stat({ value, from, label, token }: { value: number; from?: number; lab
     <View style={styles.stat} accessible accessibilityLabel={`${value} ${label}`}>
       <View style={styles.statWindow}>
         <Animated.View style={rolling}>
-          <Text style={styles.statValue}>{Math.max(0, grew ? before : value)}</Text>
-          <Text style={styles.statValue}>{value}</Text>
+          <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.statValue}>{Math.max(0, grew ? before : value)}</Text>
+          <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.statValue}>{value}</Text>
         </Animated.View>
       </View>
-      <Text style={styles.statLabel}>{label}</Text>
+      <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.statLabel}>{label}</Text>
     </View>
   );
 }

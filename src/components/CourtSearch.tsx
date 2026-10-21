@@ -12,6 +12,7 @@ import { plain } from '@/features/search/words';
 import { labelOf, score } from '@/features/places/courtName';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, lift, radius, spacing, typography } from '@/theme';
+import { TextScale } from '@/theme/textScale';
 
 /** Where a hit is played: a court from the list carries the map's id for it, so its card opens that court's page. */
 export interface ChosenPlace { id?: string; name: string; lat?: number; lng?: number }
@@ -29,12 +30,12 @@ export function Highlighted({ text, words, style, strong, lines = 2, wordStart =
   // Letter by letter, so every position lines up with the text as written:
   // "é" reads as "e", and a double space in a name still bolds what follows.
   const lower = Array.from(text, (ch) => { const p = ch.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); return p.length === ch.length ? p : ch.toLowerCase(); }).join('');
-  if (lower.length !== text.length || !words.length) return <Text style={style} numberOfLines={lines}>{text}</Text>;
+  if (lower.length !== text.length || !words.length) return <Text maxFontSizeMultiplier={TextScale.CARD} style={style} numberOfLines={lines}>{text}</Text>;
   const marks = new Array(text.length).fill(false);
   for (const w of words) { let i = lower.indexOf(w); while (i >= 0) { if (!wordStart || i === 0 || !/[\p{L}\p{N}]/u.test(lower[i - 1])) for (let k = i; k < i + w.length; k++) marks[k] = true; i = lower.indexOf(w, i + 1); } }
   const parts: { s: string; on: boolean }[] = [];
   for (let i = 0; i < text.length; i++) { const last = parts[parts.length - 1]; if (last && last.on === marks[i]) last.s += text[i]; else parts.push({ s: text[i], on: marks[i] }); }
-  return <Text style={style} numberOfLines={lines}>{parts.map((p, i) => <Text key={i} style={p.on ? strong : undefined}>{p.s}</Text>)}</Text>;
+  return <Text maxFontSizeMultiplier={TextScale.CARD} style={style} numberOfLines={lines}>{parts.map((p, i) => <Text key={i} style={p.on ? strong : undefined}>{p.s}</Text>)}</Text>;
 }
 
 /**

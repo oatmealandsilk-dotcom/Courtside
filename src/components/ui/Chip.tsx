@@ -5,6 +5,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { colors, radius, spacing, typography } from '@/theme';
 import { BrandWash } from './BrandWash';
+import { TextScale } from '@/theme/textScale';
 
 interface Props {
   label: string;
@@ -32,7 +33,7 @@ export function Chip({ label, selected = false, onPress, tint, ink, small = fals
     >
       {selected && !tint ? <BrandWash /> : null}
       {selected && icon ? <Ionicons name={icon} size={small ? 12 : 15} color={color} /> : null}
-      <Text style={[small ? styles.textSmall : styles.text, { color }]} numberOfLines={1}>
+      <Text maxFontSizeMultiplier={TextScale.TITLE} style={[small ? styles.textSmall : styles.text, { color }]} numberOfLines={1}>
         {label}
       </Text>
     </View>

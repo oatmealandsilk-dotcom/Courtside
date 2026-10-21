@@ -6,6 +6,7 @@ import { levelBadge } from '@/lib/badges';
 import { useTheme } from '@/theme/ThemeProvider';
 import type { PlayerProfile } from '@/data/types';
 import { colors, font, pageIsDark, radius } from '@/theme';
+import { TextScale } from '@/theme/textScale';
 
 /**
  * Each rating system keeps one colour wherever it shows: UTR blue, NTRP
@@ -45,8 +46,8 @@ export const LevelPill = React.memo(function LevelPill({ profile, small = false,
       style={[styles.pill, small && styles.small, onMedia ? [styles.frost, liquidGlass && styles.frostLiquid] : { backgroundColor: tintFill(tone) }, style]}
     >
       {onMedia ? <GlassFill radius={10} tint={tone} strength={0.18} /> : null}
-      {system ? <Text style={[styles.system, small && styles.systemSmall, { color: onMedia ? tone : ink }, onMedia && styles.systemOnMedia]}>{system}</Text> : null}
-      <Text style={[styles.value, small && styles.valueSmall, { color: ink }]}>{value}</Text>
+      {system ? <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.system, small && styles.systemSmall, { color: onMedia ? tone : ink }, onMedia && styles.systemOnMedia]}>{system}</Text> : null}
+      <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.value, small && styles.valueSmall, { color: ink }]}>{value}</Text>
     </View>
   );
 });

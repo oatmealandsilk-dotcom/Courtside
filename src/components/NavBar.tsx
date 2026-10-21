@@ -24,7 +24,7 @@ import { useWelcomeNote } from '@/features/welcome/welcomeNote';
 import { unreadChatCount } from '@/features/messages/groupRules';
 import { unseenCount } from '@/features/activity/found';
 import { useInstantsOn, withoutInstantRows } from '@/features/stories/instantsSwitch';
-import { colors, pageIsDark, radius, spacing, typography, font, withAlpha } from '@/theme';
+import { TextScale, colors, pageIsDark, radius, spacing, typography, font, withAlpha } from '@/theme';
 import { useTourOpen, useTourTarget } from '@/features/tour/tourStore';
 
 /** The screen's pixels per point, read once: the bar's moves are rounded to whole pixels. */
@@ -200,11 +200,11 @@ export function NavBar({ state, navigation }: NavBarProps) {
                     />
                     {item.route === 'profile' && profileAlerts > 0 ? (
                       <View style={styles.bottomBadge}>
-                        <Text style={[styles.bottomBadgeText, { color: colors.onDanger }]}>{profileAlerts > 9 ? '9+' : profileAlerts}</Text>
+                        <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.bottomBadgeText, { color: colors.onDanger }]}>{profileAlerts > 9 ? '9+' : profileAlerts}</Text>
                       </View>
                     ) : null}
                   </View>
-                  <Animated.Text style={[styles.bottomLabel, active && { color: item.route === 'coaches' ? colors.info : item.route === 'discuss' ? colors.warning : colors.brand }, labelFade]}>{item.label}</Animated.Text>
+                  <Animated.Text numberOfLines={1} maxFontSizeMultiplier={TextScale.CHROME} style={[styles.bottomLabel, active && { color: item.route === 'coaches' ? colors.info : item.route === 'discuss' ? colors.warning : colors.brand }, labelFade]}>{item.label}</Animated.Text>
                   </Animated.View>
                 </Pressable>
                 </React.Fragment>
@@ -237,7 +237,7 @@ export function NavBar({ state, navigation }: NavBarProps) {
         {compact ? (
           <BrandMark size={34} />
         ) : (
-          <View style={{flexDirection:'row',alignItems:'center',gap:8}}><BrandMark size={30}/><Text style={styles.wordmark}>CourtSide</Text></View>
+          <View style={{flexDirection:'row',alignItems:'center',gap:8}}><BrandMark size={30}/><Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.wordmark}>CourtSide</Text></View>
         )}
       </View>
 
@@ -266,7 +266,7 @@ export function NavBar({ state, navigation }: NavBarProps) {
                 color={active ? colors.text : colors.textMuted}
               />
               {compact ? null : (
-                <Text style={[styles.sidebarLabel, active && styles.sidebarLabelActive]}>
+                <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.sidebarLabel, active && styles.sidebarLabelActive]}>
                   {item.label}
                 </Text>
               )}
@@ -287,7 +287,7 @@ export function NavBar({ state, navigation }: NavBarProps) {
           ]}
         >
           <Ionicons name={extra === 'search' ? 'search' : 'search-outline'} size={23} color={extra === 'search' ? colors.text : colors.textMuted} />
-          {compact ? null : <Text style={[styles.sidebarLabel, extra === 'search' && styles.sidebarLabelActive]}>Search</Text>}
+          {compact ? null : <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.sidebarLabel, extra === 'search' && styles.sidebarLabelActive]}>Search</Text>}
         </Pressable>
 
         <Pressable
@@ -306,11 +306,11 @@ export function NavBar({ state, navigation }: NavBarProps) {
             <Ionicons name={unseen || extra === 'notifications' ? 'notifications' : 'notifications-outline'} size={23} color={extra === 'notifications' ? colors.text : colors.textMuted} />
             {unseen > 0 ? (
               <View style={styles.sidebarBadge}>
-                <Text style={styles.sidebarBadgeText}>{unseen > 9 ? '9+' : unseen}</Text>
+                <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.sidebarBadgeText}>{unseen > 9 ? '9+' : unseen}</Text>
               </View>
             ) : null}
           </View>
-          {compact ? null : <Text style={[styles.sidebarLabel, extra === 'notifications' && styles.sidebarLabelActive]}>Notifications</Text>}
+          {compact ? null : <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.sidebarLabel, extra === 'notifications' && styles.sidebarLabelActive]}>Notifications</Text>}
         </Pressable>
 
         <Pressable
@@ -330,11 +330,11 @@ export function NavBar({ state, navigation }: NavBarProps) {
             <Ionicons name={extra === 'messages' ? 'paper-plane' : 'paper-plane-outline'} size={23} color={extra === 'messages' ? colors.text : colors.textMuted} />
             {unread > 0 ? (
               <View style={styles.sidebarBadge}>
-                <Text style={styles.sidebarBadgeText}>{unread > 9 ? '9+' : unread}</Text>
+                <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.sidebarBadgeText}>{unread > 9 ? '9+' : unread}</Text>
               </View>
             ) : null}
           </View>
-          {compact ? null : <Text style={[styles.sidebarLabel, extra === 'messages' && styles.sidebarLabelActive]}>Messages</Text>}
+          {compact ? null : <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.sidebarLabel, extra === 'messages' && styles.sidebarLabelActive]}>Messages</Text>}
         </Pressable>
 
         <Pressable
@@ -349,12 +349,12 @@ export function NavBar({ state, navigation }: NavBarProps) {
           ]}
         >
           <Ionicons name="add-circle-outline" size={23} color={colors.textMuted} />
-          {compact ? null : <Text style={styles.sidebarLabel}>Create</Text>}
+          {compact ? null : <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.sidebarLabel}>Create</Text>}
         </Pressable>
       </View>
 
       {compact ? null : (
-        <Text style={styles.sidebarFootnote}>Early access</Text>
+        <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.sidebarFootnote}>Early access</Text>
       )}
     </View>
   );

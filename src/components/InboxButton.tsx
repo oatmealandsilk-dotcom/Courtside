@@ -11,6 +11,7 @@ import { unseenCount } from '@/features/activity/found';
 import { useInstantsOn, withoutInstantRows } from '@/features/stories/instantsSwitch';
 import { colors, typography } from '@/theme';
 import { useThemedStyles } from '@/theme/ThemeProvider';
+import { TextScale } from '@/theme/textScale';
 
 /**
  * The little count in the corner of a header icon: a green pill, "9+" past
@@ -35,7 +36,7 @@ export function UnreadBadge({ count, style }: { count: number; style?: StyleProp
   if (count <= 0) return null;
   return (
     <Reanimated.View pointerEvents="none" style={[styles.badge, style, pop]}>
-      <Text style={styles.badgeText}>{count > 9 ? '9+' : count}</Text>
+      <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.badgeText}>{count > 9 ? '9+' : count}</Text>
     </Reanimated.View>
   );
 }

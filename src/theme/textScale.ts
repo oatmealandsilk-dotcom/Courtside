@@ -1,3 +1,5 @@
+import { Platform } from 'react-native';
+
 /**
  * How far each kind of text may grow with the phone's Text Size setting
  * (Settings → Display & Brightness → Text Size, or Accessibility → Larger
@@ -33,8 +35,13 @@ export type TextScaleCap = (typeof TextScale)[keyof typeof TextScale];
  * Props for one line of text that must never wrap mid-word: it stays on one
  * line and shrinks a little (down to `min`) instead. At the normal text size
  * the text already fits, so it is drawn exactly as before.
+ *
+ * In a browser it only passes the cap (which a browser ignores): text size
+ * there is the browser's zoom, and a web one-liner would cut its words with
+ * "…" where it used to wrap.
  */
 export function oneLine(cap: number = TextScale.TITLE, min = 0.7) {
+  if (Platform.OS === 'web') return { maxFontSizeMultiplier: cap } as const;
   return {
     numberOfLines: 1,
     adjustsFontSizeToFit: true,

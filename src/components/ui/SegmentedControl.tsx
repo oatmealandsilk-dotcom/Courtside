@@ -4,7 +4,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 
-import { colors, radius, spacing, typography } from '@/theme';
+import { TextScale, colors, oneLine, radius, spacing, typography } from '@/theme';
 
 export interface Segment<T extends string> {
   value: T;
@@ -101,7 +101,7 @@ export function SegmentedControl<T extends string>({
         } : undefined}
         style={({ pressed }) => [styles.segment, large && styles.segmentLarge, wrap && styles.segmentWrapped, scrollable && styles.segmentLoose, active && !(gliding && box) && styles.segmentActive, active && tint && !(gliding && box) ? { backgroundColor: tint, borderColor: tint } : null, pressed && !active && styles.segmentPressed]}
       >
-        <Text style={[styles.label, large && styles.labelLarge, scrollable && { flexShrink: 0 }, active && styles.labelActive, active && ink ? { color: ink } : null]} numberOfLines={1}>
+        <Text style={[styles.label, large && styles.labelLarge, scrollable && { flexShrink: 0 }, active && styles.labelActive, active && ink ? { color: ink } : null]} {...(scrollable ? { numberOfLines: 1, maxFontSizeMultiplier: TextScale.TITLE } : oneLine(TextScale.TITLE, 0.75))} numberOfLines={1}>
           {segment.label}
         </Text>
       </Pressable>

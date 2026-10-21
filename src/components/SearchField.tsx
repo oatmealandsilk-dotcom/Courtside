@@ -4,6 +4,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, radius, typography } from '@/theme';
+import { TextScale } from '@/theme/textScale';
 
 interface Props {
   value: string;
@@ -45,6 +46,7 @@ export const SearchField = forwardRef<TextInput, Props>(function SearchField(
     <View style={[styles.wrap, style]}>
       <Ionicons name="search" size={17} color={colors.textFaint} style={styles.glass} />
       <TextInput
+        maxFontSizeMultiplier={TextScale.TITLE}
         ref={ref}
         value={value}
         onChangeText={onChangeText}

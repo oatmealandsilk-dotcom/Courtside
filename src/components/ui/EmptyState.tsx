@@ -6,6 +6,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { MarkDraw } from '@/components/MarkDraw';
 import { Button } from './Button';
 import { colors, spacing, typography } from '@/theme';
+import { TextScale } from '@/theme/textScale';
 
 interface Props {
   /** An icon for this particular emptiness; without one, the mark. */
@@ -24,8 +25,8 @@ export function EmptyState({ icon, glyph, title, body, action }: Props) {
   return (
     <View style={styles.wrap}>
       {glyph ?? (icon ? <Ionicons name={icon} size={26} color={colors.textFaint} /> : <MarkDraw size={30} color={colors.borderStrong} play={false} />)}
-      <Text style={styles.title}>{title}</Text>
-      {body ? <Text style={styles.body}>{body}</Text> : null}
+      <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.title}>{title}</Text>
+      {body ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.body}>{body}</Text> : null}
       {action ? <View style={styles.action}><Button label={action.label} variant="secondary" onPress={action.onPress} /></View> : null}
     </View>
   );
