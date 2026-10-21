@@ -7,6 +7,7 @@ import { clock } from '@/features/voice/useVoiceRecorder';
 import { show as showToast } from '@/lib/toast';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, spacing } from '@/theme';
+import { TextScale } from '@/theme/textScale';
 
 /**
  * A voice note in a chat: play and pause, a line that fills as it plays, and
@@ -26,7 +27,7 @@ export function VoiceNote({ url, ms, mine, sentAt }: {
     <Pressable accessibilityRole="button" accessibilityLabel={`Play voice note, ${clock(ms)}${sentAt ? `, sent ${sentAt}` : ''}`} onPress={() => setStarted(true)} style={[styles.note, mine ? styles.mine : styles.theirs]}>
       <Ionicons name="play" size={20} color={ink} />
       <View style={[styles.track, mine && styles.trackMine]} />
-      <Text style={[styles.time, { color: ink }]}>{clock(ms)}</Text>
+      <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.time, { color: ink }]}>{clock(ms)}</Text>
     </Pressable>
   );
 }
@@ -63,7 +64,7 @@ function Playing({ url, ms, mine, onDone }: { url: string; ms: number; mine: boo
       <View style={[styles.track, mine && styles.trackMine]}>
         <View style={[styles.fill, mine && styles.fillMine, { width: `${fraction * 100}%` }]} />
       </View>
-      <Text style={[styles.time, { color: ink }]}>{clock(status.playing || at > 0 ? at : total)}</Text>
+      <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.time, { color: ink }]}>{clock(status.playing || at > 0 ? at : total)}</Text>
     </Pressable>
   );
 }

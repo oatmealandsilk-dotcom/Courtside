@@ -15,6 +15,7 @@ import { useResponsive } from '@/lib/useResponsive';
 import { useApp, type GroupOutcome } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, lift, spacing, typography } from '@/theme';
+import { TextScale } from '@/theme/textScale';
 
 
 /**
@@ -177,7 +178,7 @@ export default function NewMessage() {
           <Pressable key={u.id} accessibilityRole="button" accessibilityLabel={`Remove ${u.name}`} onPress={() => { void toggle(u.id); }} style={[styles.chip, stuck && styles.chipStuck]}>
             <Avatar name={u.name} seed={u.avatarSeed} uri={u.avatarUrl} size={20} />
             {stuck ? <Ionicons name="lock-closed" size={11} color={colors.textMuted} /> : null}
-            <Text style={[styles.chipText, stuck && styles.chipTextStuck]} numberOfLines={1}>{firstName(u)}</Text>
+            <Text maxFontSizeMultiplier={TextScale.TITLE} style={[styles.chipText, stuck && styles.chipTextStuck]} numberOfLines={1}>{firstName(u)}</Text>
             <Ionicons name="close" size={13} color={stuck ? colors.textMuted : colors.brand} />
           </Pressable>
         );
@@ -194,13 +195,13 @@ export default function NewMessage() {
         <LockNote key={text} text={text} tone={note?.alert && text === note.text ? 'alert' : 'lock'} onClose={text === note?.text ? () => setNote(null) : undefined} />
       ))}
       {picked.length > 1 ? (
-        <TextInput value={title} onChangeText={(v) => setTitle(v.slice(0, 60))} placeholder="Group name (optional)" placeholderTextColor={colors.textFaint} style={styles.groupName} accessibilityLabel="Group name" />
+        <TextInput maxFontSizeMultiplier={TextScale.TITLE} value={title} onChangeText={(v) => setTitle(v.slice(0, 60))} placeholder="Group name (optional)" placeholderTextColor={colors.textFaint} style={styles.groupName} accessibilityLabel="Group name" />
       ) : null}
       {picked.length ? (
         <Pressable accessibilityRole="button" accessibilityState={{ disabled: held, busy }} disabled={held} onPress={() => { void start(); }} style={({ pressed }) => [styles.start, picked.length > 1 && styles.startGroup, held && styles.startHeld, pressed && { opacity: 0.85, transform: [{ scale: 0.98 }] }]}>
           {/* Two or more ticked: the group is the point now, so the button says so with its people. */}
           {picked.length > 1 && !sameGroup ? <Ionicons name="people" size={19} color={colors.brandInk} /> : null}
-          <Text style={styles.startText}>{picked.length === 1 ? 'Chat' : sameGroup ? 'Open group' : busy ? 'Creating group…' : `Create group · ${picked.length + 1} people`}</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.startText}>{picked.length === 1 ? 'Chat' : sameGroup ? 'Open group' : busy ? 'Creating group…' : `Create group · ${picked.length + 1} people`}</Text>
         </Pressable>
       ) : null}
     </Reanimated.View>
@@ -210,7 +211,7 @@ export default function NewMessage() {
     <>
       {groups.length ? (
         <>
-          <Text style={styles.label}>Groups</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.label}>Groups</Text>
           {groups.map(({ conversation, name, people }) => (
             <Pressable
               key={conversation.id}
@@ -221,9 +222,9 @@ export default function NewMessage() {
             >
               <GroupAvatar people={people} size={44} photoUrl={conversation.photoUrl} name={name} />
               <View style={styles.words}>
-                <Text style={styles.name} numberOfLines={1}>{name}</Text>
+                <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.name} numberOfLines={1}>{name}</Text>
                 {/* A named group says who is in it; an unnamed one is already called by its people. */}
-                <Text style={styles.handle} numberOfLines={1}>
+                <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.handle} numberOfLines={1}>
                   {conversation.title && people.length ? people.map((p) => p.name.split(' ')[0]).join(', ') : `${conversation.participantIds.length} members`}
                 </Text>
               </View>
@@ -232,7 +233,7 @@ export default function NewMessage() {
           ))}
         </>
       ) : null}
-      {matches.length ? <Text style={styles.label}>{groups.length ? (term ? 'People' : 'Suggested') : term ? 'Results' : 'Suggested'}</Text> : null}
+      {matches.length ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.label}>{groups.length ? (term ? 'People' : 'Suggested') : term ? 'Results' : 'Suggested'}</Text> : null}
       {matches.map((user) => {
         const on = picked.includes(user.id);
         const locked = lockedFor(user.id);
@@ -251,8 +252,8 @@ export default function NewMessage() {
               {locked ? <LockBadge /> : null}
             </View>
             <View style={[styles.words, locked && styles.locked]}>
-              <Text style={styles.name} numberOfLines={1}>{user.name}</Text>
-              <Text style={styles.handle} numberOfLines={1}>@{user.handle}</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.name} numberOfLines={1}>{user.name}</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.handle} numberOfLines={1}>@{user.handle}</Text>
             </View>
             {locked ? null : <View style={[styles.tick, on && styles.tickOn]}>{on ? <Ionicons name="checkmark" size={15} color={colors.brandInk} /> : null}</View>}
           </Pressable>
@@ -276,7 +277,7 @@ export default function NewMessage() {
               <View style={styles.toPinned}>
                 <View style={styles.toRow}>
                   <Text style={styles.to}>To</Text>
-                  <TextInput value={query} onChangeText={setQuery} placeholder="Search" placeholderTextColor={colors.textFaint} autoCapitalize="none" autoCorrect={false} autoFocus style={styles.toInput} accessibilityLabel="To" />
+                  <TextInput maxFontSizeMultiplier={TextScale.TITLE} value={query} onChangeText={setQuery} placeholder="Search" placeholderTextColor={colors.textFaint} autoCapitalize="none" autoCorrect={false} autoFocus style={styles.toInput} accessibilityLabel="To" />
                 </View>
                 {chips}
               </View>
@@ -298,14 +299,14 @@ export default function NewMessage() {
       <View ref={box} style={styles.box} accessibilityViewIsModal>
         <View style={styles.head}>
           <View style={styles.headSide} />
-          <Text style={styles.title}>New message</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.title}>New message</Text>
           <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={close} hitSlop={8} style={styles.headSide}>
             <Ionicons name="close" size={22} color={colors.text} />
           </Pressable>
         </View>
         <View style={styles.toRow}>
           <Text style={styles.to}>To</Text>
-          <TextInput value={query} onChangeText={setQuery} placeholder="Search" placeholderTextColor={colors.textFaint} autoCapitalize="none" autoCorrect={false} autoFocus style={styles.toInput} accessibilityLabel="To" />
+          <TextInput maxFontSizeMultiplier={TextScale.TITLE} value={query} onChangeText={setQuery} placeholder="Search" placeholderTextColor={colors.textFaint} autoCapitalize="none" autoCorrect={false} autoFocus style={styles.toInput} accessibilityLabel="To" />
         </View>
         {chips}
         <ScrollView style={styles.scroll} contentContainerStyle={[styles.scrollBody, picked.length || notes.length ? { paddingBottom: 150 + notes.length * 90 } : null]}>{list}</ScrollView>
@@ -319,7 +320,7 @@ const styleDefinitions = StyleSheet.create({
   // Dark and blurred behind the box, so the inbox recedes instead of reading as a second copy of the list.
   backdrop: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.overlay, padding: spacing.xl, backdropFilter: 'blur(10px) saturate(0.8)', WebkitBackdropFilter: 'blur(10px) saturate(0.8)' } as object,
   box: { ...lift, width: '100%', maxWidth: 480, height: '72%', maxHeight: 640, borderRadius: 20, backgroundColor: colors.bg, overflow: 'hidden' },
-  head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.lg, height: 52, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
+  head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.lg, minHeight: 52, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
   headSide: { width: 32, alignItems: 'flex-end' },
   title: { ...typography.bodyStrong, color: colors.text },
   toRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, minHeight: 50, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
@@ -338,7 +339,7 @@ const styleDefinitions = StyleSheet.create({
   tickOn: { backgroundColor: colors.brand, borderColor: colors.brand },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingHorizontal: spacing.lg, paddingTop: spacing.md },
   // The face sits 5px in from the pill's round end, so the pill hugs it.
-  chip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: 5, paddingRight: 9, height: 30, borderRadius: 15, backgroundColor: colors.brandDim },
+  chip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: 5, paddingRight: 9, minHeight: 30, borderRadius: 15, backgroundColor: colors.brandDim },
   chipText: { ...typography.smallStrong, color: colors.brand, maxWidth: 120 },
   // A ticked person who can't be in the group: greyed, with the lock.
   chipStuck: { backgroundColor: colors.surfaceAlt },
@@ -347,7 +348,7 @@ const styleDefinitions = StyleSheet.create({
   locked: { opacity: 0.45 },
   footer: { position: 'absolute', left: 0, right: 0, bottom: 0, gap: spacing.sm, padding: spacing.lg, paddingBottom: spacing.xl, backgroundColor: colors.bg, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   groupName: { ...typography.body, fontSize: 16, color: colors.text, minHeight: 44, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12, backgroundColor: colors.bgElevated, outlineStyle: 'none' } as object,
-  start: { height: 50, borderRadius: 25, backgroundColor: colors.brand, flexDirection: 'row', gap: spacing.sm, alignItems: 'center', justifyContent: 'center' },
+  start: { minHeight: 50, borderRadius: 25, backgroundColor: colors.brand, flexDirection: 'row', gap: spacing.sm, alignItems: 'center', justifyContent: 'center' },
   startGroup: { boxShadow: '0px 6px 18px rgba(0, 0, 0, 0.16)' },
   toPinned: { paddingBottom: spacing.xs },
   // The list under the pinned "To" runs edge to edge, as the rows draw their own room.

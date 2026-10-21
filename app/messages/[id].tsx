@@ -85,6 +85,7 @@ import type { HitRequest, ID, Message, Post, Question, User } from '@/data/types
 import Reanimated, { Easing, FadeIn, FadeInDown, FadeInUp, FadeOut, ZoomIn, cancelAnimation, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming, type SharedValue } from 'react-native-reanimated';
 import { BlurView } from 'expo-blur';
 import { colors, lift, pageIsDark, radius, spacing, typography, font, withAlpha } from '@/theme';
+import { TextScale } from '@/theme/textScale';
 
 /** One line of words in the typing box, and how many it grows to before it scrolls inside. */
 const INPUT_LINE = 21;
@@ -874,13 +875,13 @@ export default function Thread() {
           {group || !other
             ? <GroupAvatar people={people} size={72} photoUrl={conversation.photoUrl} name={title} />
             : <Avatar name={other.name} seed={other.avatarSeed} uri={other.avatarUrl} size={72} />}
-          <Text style={styles.helloName} numberOfLines={2}>{title}</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.helloName} numberOfLines={2}>{title}</Text>
           <Text style={styles.helloLine} numberOfLines={1}>
             {group || !other ? (members === 1 ? 'Just you so far' : `${members} members`) : `@${other.handle}`}
           </Text>
           {!group && other ? (
             <Pressable accessibilityRole="link" onPress={() => router.push(`/user/${other.id}`)} hitSlop={8} style={({ pressed }) => [styles.helloProfile, pressed && styles.pressedDim]}>
-              <Text style={styles.helloProfileText}>View profile</Text>
+              <Text maxFontSizeMultiplier={TextScale.BODY} style={styles.helloProfileText}>View profile</Text>
             </Pressable>
           ) : null}
         </View>
@@ -908,11 +909,11 @@ export default function Thread() {
             <GroupAvatar people={people} size={32} photoUrl={conversation.photoUrl} name={title} />
             <View style={styles.headerWords}>
               <View style={styles.headerNameRow}>
-                <Text style={[styles.headerName, styles.headerNameShrink]} numberOfLines={1}>{title}</Text>
+                <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.headerName, styles.headerNameShrink]} numberOfLines={1}>{title}</Text>
                 {muted ? <Ionicons name="notifications-off-outline" size={13} color={colors.textFaint} accessibilityLabel="Muted" /> : null}
               </View>
               {/* Taken out of it: the count is no longer yours to see (the note at the bottom says why). */}
-              {statusLine ? <Text style={[styles.headerStatus, typingLine ? styles.headerTyping : null]} numberOfLines={1} accessibilityLiveRegion="polite">{statusLine}</Text> : null}
+              {statusLine ? <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.headerStatus, typingLine ? styles.headerTyping : null]} numberOfLines={1} accessibilityLiveRegion="polite">{statusLine}</Text> : null}
             </View>
           </Pressable>
         ) : (
@@ -926,7 +927,7 @@ export default function Thread() {
               {statusLine ? (
                 <View style={styles.headerStatusRow}>
                   {statusLive ? <View style={styles.liveDot} /> : null}
-                  <Text style={[styles.headerStatus, typingLine ? styles.headerTyping : statusLive ? styles.headerLive : null]} numberOfLines={1} accessibilityLiveRegion="polite">{statusLine}</Text>
+                  <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.headerStatus, typingLine ? styles.headerTyping : statusLive ? styles.headerLive : null]} numberOfLines={1} accessibilityLiveRegion="polite">{statusLine}</Text>
                 </View>
               ) : null}
             </View>
@@ -953,29 +954,29 @@ export default function Thread() {
             {group || !other
               ? <GroupAvatar people={people} size={84} photoUrl={conversation.photoUrl} name={title} />
               : <Avatar name={other.name} seed={other.avatarSeed} uri={other.avatarUrl} size={84} />}
-            <Text style={styles.helloName} numberOfLines={2}>{title}</Text>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.helloName} numberOfLines={2}>{title}</Text>
             <Text style={styles.helloLine} numberOfLines={1}>
               {group || !other ? (members === 1 ? 'Just you so far' : `${members} members`) : `@${other.handle}`}
             </Text>
             {!group && other ? (
               <Pressable accessibilityRole="link" onPress={() => router.push(`/user/${other.id}`)} hitSlop={8} style={({ pressed }) => [styles.helloProfile, pressed && styles.pressedDim]}>
-                <Text style={styles.helloProfileText}>View profile</Text>
+                <Text maxFontSizeMultiplier={TextScale.BODY} style={styles.helloProfileText}>View profile</Text>
               </Pressable>
             ) : null}
             {canWrite ? (
               <View style={styles.helloActions}>
                 <Tappable accessibilityLabel="Say hi" onPress={sayHi} style={styles.helloChip}>
                   <Text style={styles.helloWave}>👋</Text>
-                  <Text style={styles.helloChipText}>Say hi</Text>
+                  <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.helloChipText}>Say hi</Text>
                 </Tappable>
                 <Tappable accessibilityLabel="Send a court" onPress={openCourtPicker} style={styles.helloChip}>
                   <Ionicons name="location-outline" size={16} color={colors.text} />
-                  <Text style={styles.helloChipText}>Send a court</Text>
+                  <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.helloChipText}>Send a court</Text>
                 </Tappable>
                 {group && !removed && members < GROUP_CAP ? (
                   <Tappable accessibilityLabel="Add people" onPress={openAddPeople} style={styles.helloChip}>
                     <Ionicons name="person-add-outline" size={15} color={colors.text} />
-                    <Text style={styles.helloChipText}>Add people</Text>
+                    <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.helloChipText}>Add people</Text>
                   </Tappable>
                 ) : null}
               </View>
@@ -1081,7 +1082,7 @@ export default function Thread() {
         {editing ? (
           <View style={styles.editBar}>
             <Ionicons name="create-outline" size={16} color={colors.brand} />
-            <Text style={styles.editLabel} numberOfLines={1}>Editing message</Text>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.editLabel} numberOfLines={1}>Editing message</Text>
             <Pressable accessibilityRole="button" accessibilityLabel="Stop editing" hitSlop={10} onPress={endEditing}>
               <Ionicons name="close" size={20} color={colors.textMuted} />
             </Pressable>
@@ -1094,11 +1095,11 @@ export default function Thread() {
           // Someone you blocked is in this group: you both stay, their messages fold away, and leaving is one tap.
           <View style={styles.blockedBanner}>
             <Ionicons name="ban-outline" size={15} color={colors.textMuted} />
-            <Text style={styles.blockedBannerText} numberOfLines={2}>
+            <Text maxFontSizeMultiplier={TextScale.BODY} style={styles.blockedBannerText} numberOfLines={2}>
               You blocked {listNames(blockedInGroup.map((u) => firstName(u)))}. They’re still in this group.
             </Text>
             <Pressable accessibilityRole="button" accessibilityLabel="Leave this group" hitSlop={8} onPress={leaveGroup}>
-              <Text style={styles.blockedBannerLink}>Leave</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.blockedBannerLink}>Leave</Text>
             </Pressable>
           </View>
         ) : null}
@@ -1106,12 +1107,12 @@ export default function Thread() {
           // Taken out of this group: what was said stays readable, and nothing more can be sent.
           <View style={styles.blockedNote}>
             <Ionicons name="people-outline" size={15} color={colors.textMuted} />
-            <Text style={styles.blockedNoteText}>You’re no longer in this group</Text>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.blockedNoteText}>You’re no longer in this group</Text>
           </View>
         ) : blockedHere ? (
           <View style={styles.blockedNote}>
             <Ionicons name="lock-closed-outline" size={15} color={colors.textMuted} />
-            <Text style={styles.blockedNoteText}>{group ? 'You can’t send messages in this group.' : "You can't message this account."}</Text>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.blockedNoteText}>{group ? 'You can’t send messages in this group.' : "You can't message this account."}</Text>
           </View>
         ) : (
           <>
@@ -1283,12 +1284,12 @@ const Composer = memo(function Composer({ ref, styles, pickedCount, editingBody,
           {cameraOn ? (
             <Tappable accessibilityLabel="Send photos" onPress={call.photos} style={styles.plusChip}>
               <Ionicons name="images-outline" size={17} color={colors.brand} />
-              <Text style={styles.plusChipText}>Photos</Text>
+              <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.plusChipText}>Photos</Text>
             </Tappable>
           ) : null}
           <Tappable accessibilityLabel="Send a court" onPress={call.court} style={styles.plusChip}>
             <Ionicons name="location-outline" size={17} color={colors.brand} />
-            <Text style={styles.plusChipText}>Court</Text>
+            <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.plusChipText}>Court</Text>
           </Tappable>
         </Reanimated.View>
       ) : null}
@@ -1307,7 +1308,7 @@ const Composer = memo(function Composer({ ref, styles, pickedCount, editingBody,
               {/* The box's room above and below the words stays put while they scroll inside it (iMessage's way);
                   a tap anywhere in it, padding included, puts the cursor in. */}
               <Pressable accessible={false} onPress={() => inputRef.current?.focus()} style={styles.inputWrap}>
-                <TextInput
+                <TextInput maxFontSizeMultiplier={TextScale.BODY}
                   ref={inputRef}
                   value={draft}
                   multiline
@@ -1487,7 +1488,7 @@ const MessageRow = memo(function MessageRow({ item, ctx, original, originalBlock
             style={({ pressed }) => [styles.folded, pressed && { opacity: PRESS_DIM }]}
           >
             <Ionicons name="eye-off-outline" size={14} color={colors.textFaint} />
-            <Text style={styles.foldedText}>
+            <Text maxFontSizeMultiplier={TextScale.BODY} style={styles.foldedText}>
               {run.length === 1 ? 'Message' : `${run.length} messages`} from someone you blocked · <Text style={styles.foldedShow}>Show</Text>
             </Text>
           </Pressable>
@@ -1512,7 +1513,7 @@ const MessageRow = memo(function MessageRow({ item, ctx, original, originalBlock
             style={({ pressed }) => [styles.folded, pressed && { opacity: PRESS_DIM }]}
           >
             <Ionicons name="eye-off-outline" size={14} color={colors.textFaint} />
-            <Text style={styles.foldedText}>
+            <Text maxFontSizeMultiplier={TextScale.BODY} style={styles.foldedText}>
               Hidden message · <Text style={styles.foldedShow}>Show</Text>
             </Text>
           </Pressable>
@@ -1668,14 +1669,14 @@ const MessageRow = memo(function MessageRow({ item, ctx, original, originalBlock
                 </View>
                 {hit ? (
                   <>
-                    <Text numberOfLines={1} style={styles.courtName}>{hitWhen(hit.startsAt)}</Text>
-                    <Text numberOfLines={2} style={styles.sharedBody}>{hit.place.name} · {left ? `${left} ${left === 1 ? 'spot' : 'spots'} left` : 'Full'}</Text>
+                    <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={styles.courtName}>{hitWhen(hit.startsAt)}</Text>
+                    <Text maxFontSizeMultiplier={TextScale.BODY} numberOfLines={2} style={styles.sharedBody}>{hit.place.name} · {left ? `${left} ${left === 1 ? 'spot' : 'spots'} left` : 'Full'}</Text>
                   </>
                 ) : (
                   // Gone (played or called off): a quiet card that says so, not a live-looking one.
                   <>
-                    <Text numberOfLines={1} style={[styles.courtName, styles.overTitle]}>This hit is over</Text>
-                    <Text style={styles.overBody}>It was played or called off.</Text>
+                    <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={[styles.courtName, styles.overTitle]}>This hit is over</Text>
+                    <Text maxFontSizeMultiplier={TextScale.BODY} style={styles.overBody}>It was played or called off.</Text>
                   </>
                 )}
               </Tappable>
@@ -1754,16 +1755,16 @@ const MessageRow = memo(function MessageRow({ item, ctx, original, originalBlock
   const wordsShown = !mine && message.hiddenByWords ? (
     <Slide mine={false}>
       <View style={[styles.wordsShown, gutter && styles.wordsShownBeside]}>
-        <Text style={styles.wordsShownText}>Hidden by your Hidden words</Text>
-        <Text style={styles.wordsShownDot}>·</Text>
+        <Text maxFontSizeMultiplier={TextScale.BODY} style={styles.wordsShownText}>Hidden by your Hidden words</Text>
+        <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.wordsShownDot}>·</Text>
         <Pressable accessibilityRole="button" accessibilityLabel="Report this message" hitSlop={{ top: 12, bottom: 12, left: 6, right: senderBlocked ? 12 : 6 }} onPress={() => call.reportMessage(message)}>
-          <Text style={styles.wordsShownAction}>Report</Text>
+          <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.wordsShownAction}>Report</Text>
         </Pressable>
         {senderBlocked ? null : (
           <>
-            <Text style={styles.wordsShownDot}>·</Text>
+            <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.wordsShownDot}>·</Text>
             <Pressable accessibilityRole="button" accessibilityLabel="Block whoever sent it" hitSlop={{ top: 12, bottom: 12, left: 6, right: 12 }} onPress={() => call.blockSender(message.senderId)}>
-              <Text style={styles.wordsShownAction}>Block</Text>
+              <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.wordsShownAction}>Block</Text>
             </Pressable>
           </>
         )}
@@ -1870,7 +1871,7 @@ function SharedCard({ message, posts, questions, users, sentAt, onLongPress, onM
           <Ionicons name={message.kind === 'profile' ? 'person-outline' : message.kind === 'post' ? 'play-circle-outline' : 'chatbubbles-outline'} size={16} color={colors.brand} />
           <Text style={styles.sharedKind}>{kindWord}</Text>
         </View>
-        <Text numberOfLines={3} style={styles.sharedBody}>{label}</Text>
+        <Text maxFontSizeMultiplier={TextScale.BODY} numberOfLines={3} style={styles.sharedBody}>{label}</Text>
       </View>
     </Tappable>
   );
@@ -2405,19 +2406,19 @@ function MessageMenu({ target, me, styles, canReply, canReact, pending, canDelet
         ) : null}
         {choosing && canReact ? (
           <Reanimated.View entering={FadeIn.duration(140)} pointerEvents="none" style={[styles.menuHint, { top: top - shift - 30 }, side(BAR_W)]}>
-            <Text style={[styles.menuHintText, { color: colors.onMedia }]}>Pick what a double tap leaves</Text>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.menuHintText, { color: colors.onMedia }]}>Pick what a double tap leaves</Text>
           </Reanimated.View>
         ) : null}
         <Reanimated.View style={[styles.menuCard, { top: shown.y + shown.h + GAP - shift, width: CARD_W, transformOrigin: mine ? 'right top' : 'left top' }, side(CARD_W), cardLook]}>
           {actionRows.map((a, i) => (
             <Pressable key={a.key} accessibilityRole="button" onPress={() => pick(a.run)} style={({ pressed }) => [styles.menuRow, i > 0 && styles.menuRowRule, pressed && styles.menuRowPressed]}>
-              <Text style={[styles.menuLabel, a.danger && { color: colors.danger }]}>{a.label}</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.menuLabel, a.danger && { color: colors.danger }]}>{a.label}</Text>
               <Ionicons name={a.icon} size={19} color={a.danger ? colors.danger : colors.text} />
             </Pressable>
           ))}
           {canReact ? (
             <Pressable accessibilityRole="button" accessibilityLabel={`Double tap leaves ${doubleTap}. Change it`} accessibilityState={{ selected: choosing }} onPress={() => { if (!settledMenu()) return; haptics.tap(); setChoosing((c) => !c); }} style={({ pressed }) => [styles.menuRow, styles.menuRowRule, (pressed || choosing) && styles.menuRowPressed]}>
-              <Text style={styles.menuLabel}>Double tap</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.menuLabel}>Double tap</Text>
               <Text style={{ fontSize: 19 }}>{doubleTap}</Text>
             </Pressable>
           ) : null}
@@ -2472,13 +2473,13 @@ function RecordingStrip({ mode, elapsed, slide, onThrow, styles }: { mode: 'hold
         </ComposerTool>
       ) : <View style={styles.recLead} />}
       <Reanimated.View style={[styles.recDot, dot]} />
-      <Text style={styles.recText}>{clock(elapsed)}</Text>
+      <Text maxFontSizeMultiplier={TextScale.BODY} style={styles.recText}>{clock(elapsed)}</Text>
       {mode === 'hold' ? (
         <Reanimated.View style={[styles.recHint, hint]}>
           <Ionicons name="chevron-back" size={15} color={colors.textMuted} />
-          <Text style={styles.recHintText}>Slide to cancel</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.recHintText}>Slide to cancel</Text>
         </Reanimated.View>
-      ) : <Text style={[styles.recHintText, styles.recHintLocked]}>Recording</Text>}
+      ) : <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.recHintText, styles.recHintLocked]}>Recording</Text>}
     </Reanimated.View>
   );
 }
@@ -2563,8 +2564,8 @@ function SendOrMic({ showSend, ready, editing, recording, holding, slide, onSend
 function DayLine({ iso, styles }: { iso: string; styles: any }) {
   const { day, time } = chatStampParts(iso);
   return (
-    <Text style={styles.stamp} accessibilityRole="header">
-      <Text style={styles.stampDay}>{day}</Text>{'  '}{time}
+    <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.stamp} accessibilityRole="header">
+      <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.stampDay}>{day}</Text>{'  '}{time}
     </Text>
   );
 }
@@ -2722,7 +2723,7 @@ const styleDefinitions = StyleSheet.create({
   // A dark pill over the dimmed chat; its words take the over-a-picture white when drawn (see menuHint).
   menuHintText: { ...typography.smallStrong, paddingHorizontal: 10, paddingVertical: 4, borderRadius: radius.pill, backgroundColor: colors.overlay, overflow: 'hidden' },
   menuCard: { position: 'absolute', borderRadius: radius.lg, backgroundColor: colors.bgElevated, overflow: 'hidden', shadowColor: '#000', shadowOpacity: 0.18, shadowRadius: 16, shadowOffset: { width: 0, height: 6 } },
-  menuRow: { height: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.lg },
+  menuRow: { minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.lg },
   menuRowRule: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   menuRowPressed: { backgroundColor: colors.surfaceAlt },
   menuLabel: { ...typography.body, color: colors.text },
@@ -2839,7 +2840,7 @@ const styleDefinitions = StyleSheet.create({
   helloProfile: { marginTop: 2, paddingHorizontal: spacing.sm, paddingVertical: 4 },
   helloProfileText: { ...typography.smallStrong, color: colors.brand },
   helloActions: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: spacing.sm, marginTop: spacing.xl },
-  helloChip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, height: 38, borderRadius: radius.pill, backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.borderStrong },
+  helloChip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, minHeight: 38, borderRadius: radius.pill, backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.borderStrong },
   helloWave: { fontSize: 16 },
   helloChipText: { ...typography.smallStrong, color: colors.text },
   // The bar: on the page's own colour, the messages fading into it above.
@@ -2847,7 +2848,7 @@ const styleDefinitions = StyleSheet.create({
   dockFade: { position: 'absolute', left: 0, right: 0, top: -22, height: 22 },
   // The "+" row: Photos and Court as two soft chips over the box.
   plusRow: { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.md + 4, paddingTop: spacing.xs, maxWidth: 700, width: '100%', alignSelf: 'center' },
-  plusChip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, height: 36, borderRadius: radius.pill, backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, ...lift },
+  plusChip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, minHeight: 36, borderRadius: radius.pill, backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, ...lift },
   plusChipText: { ...typography.smallStrong, color: colors.text },
   composer: {
     flexDirection: 'row',

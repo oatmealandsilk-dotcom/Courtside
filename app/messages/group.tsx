@@ -20,6 +20,7 @@ import { afterReport } from '@/features/moderation/reportThanks';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, lift, radius, spacing, typography } from '@/theme';
+import { TextScale } from '@/theme/textScale';
 
 const first = (u?: User) => u?.name.trim().split(/\s+/)[0] ?? 'They';
 
@@ -141,18 +142,18 @@ export default function ChatDetails() {
       <View style={styles.row}>
         <View style={styles.lead}><Ionicons name={muted ? 'notifications-off-outline' : 'notifications-outline'} size={20} color={colors.text} /></View>
         <View style={styles.words}>
-          <Text style={styles.label}>Mute messages</Text>
-          {muted ? <Text style={styles.meta}>{mutedLabel(conversation.mutedUntil)}</Text> : null}
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.label}>Mute messages</Text>
+          {muted ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta}>{mutedLabel(conversation.mutedUntil)}</Text> : null}
         </View>
         <Toggle value={muted} onChange={(on) => (on ? setAskMute(true) : actions.muteChat(conversation.id, null))} accessibilityLabel="Mute messages" />
       </View>
       <View style={[styles.row, styles.line]}>
         <View style={[styles.lead, !receiptsEverywhere && styles.off]}><Ionicons name="checkmark-done-outline" size={20} color={colors.text} /></View>
         <View style={styles.words}>
-          <Text style={[styles.label, !receiptsEverywhere && styles.off]}>Read receipts</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.label, !receiptsEverywhere && styles.off]}>Read receipts</Text>
           {receiptsEverywhere ? null : (
-            <Text style={styles.meta}>
-              Off for all chats in <Text accessibilityRole="link" onPress={() => router.push('/privacy')} style={styles.link}>Privacy</Text>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta}>
+              Off for all chats in <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="link" onPress={() => router.push('/privacy')} style={styles.link}>Privacy</Text>
             </Text>
           )}
         </View>
@@ -183,8 +184,8 @@ export default function ChatDetails() {
         {other ? (
           <Pressable accessibilityRole="link" accessibilityLabel={`${other.name}'s profile`} onPress={() => router.push(`/user/${other.id}`)} style={styles.top}>
             <Avatar name={other.name} seed={other.avatarSeed} uri={other.avatarUrl} size={88} />
-            <Text style={styles.personName} numberOfLines={1}>{other.name}</Text>
-            <Text style={styles.meta}>@{other.handle}</Text>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.personName} numberOfLines={1}>{other.name}</Text>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta}>@{other.handle}</Text>
           </Pressable>
         ) : null}
         {draft ? null : settingsCard}
@@ -193,7 +194,7 @@ export default function ChatDetails() {
             <View style={[styles.group, styles.gap]}>
               <Pressable accessibilityRole="link" onPress={() => router.push(`/user/${other.id}`)} style={({ pressed }) => [styles.row, pressed && styles.pressed]}>
                 <View style={styles.lead}><Ionicons name="person-outline" size={20} color={colors.text} /></View>
-                <Text style={[styles.label, styles.words]}>View profile</Text>
+                <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.label, styles.words]}>View profile</Text>
                 <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
               </Pressable>
               {!blocked ? (
@@ -209,7 +210,7 @@ export default function ChatDetails() {
                   style={({ pressed }) => [styles.row, styles.line, pressed && styles.pressed]}
                 >
                   <View style={[styles.lead, groupLocked && styles.off]}><Ionicons name="people-outline" size={20} color={colors.text} /></View>
-                  <Text style={[styles.label, styles.words, groupLocked && styles.off]} numberOfLines={1}>Create a group with {first(other)}</Text>
+                  <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.label, styles.words, groupLocked && styles.off]} numberOfLines={1}>Create a group with {first(other)}</Text>
                   <Ionicons name={groupLocked ? 'lock-closed-outline' : 'chevron-forward'} size={16} color={colors.textFaint} />
                 </Pressable>
               ) : null}
@@ -232,7 +233,7 @@ export default function ChatDetails() {
                 style={({ pressed }) => [styles.row, pressed && styles.pressed]}
               >
                 <View style={styles.lead}><Ionicons name="flag-outline" size={20} color={colors.danger} /></View>
-                <Text style={[styles.label, styles.words, { color: colors.danger }]}>Report</Text>
+                <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.label, styles.words, { color: colors.danger }]}>Report</Text>
               </Pressable>
               <Pressable
                 accessibilityRole="button"
@@ -241,7 +242,7 @@ export default function ChatDetails() {
                 style={({ pressed }) => [styles.row, styles.line, pressed && styles.pressed]}
               >
                 <View style={styles.lead}><Ionicons name={blocked ? 'checkmark-circle-outline' : 'ban-outline'} size={20} color={colors.danger} /></View>
-                <Text style={[styles.label, styles.words, { color: colors.danger }]}>{blocked ? 'Unblock' : 'Block'}</Text>
+                <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.label, styles.words, { color: colors.danger }]}>{blocked ? 'Unblock' : 'Block'}</Text>
               </Pressable>
             </View>
           </>
@@ -387,14 +388,14 @@ export default function ChatDetails() {
             onPress={() => { void addPicked(); }}
             style={({ pressed }) => [styles.headAdd, !canAdd && styles.headAddOff, pressed && { opacity: PRESS_DIM }]}
           >
-            <Text style={styles.headAddText}>{busy ? 'Adding…' : picks.length ? `Add (${picks.length})` : 'Add'}</Text>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.headAddText}>{busy ? 'Adding…' : picks.length ? `Add (${picks.length})` : 'Add'}</Text>
           </Pressable>
         ) : undefined}
       >
         <Text style={styles.addTo} numberOfLines={1}>{room > 0 ? `To ${name} · room for ${room} more` : `To ${name}`}</Text>
         {room <= 0 ? <LockNote text={fullText} tone="alert" /> : (
           <View style={styles.adding}>
-            <TextInput value={query} onChangeText={setQuery} placeholder="Search" placeholderTextColor={colors.textFaint} autoCapitalize="none" autoCorrect={false} style={styles.search} accessibilityLabel="Find people to add" />
+            <TextInput maxFontSizeMultiplier={TextScale.TITLE} value={query} onChangeText={setQuery} placeholder="Search" placeholderTextColor={colors.textFaint} autoCapitalize="none" autoCorrect={false} style={styles.search} accessibilityLabel="Find people to add" />
             {pickedUsers.length ? (
               <View style={styles.chips}>
                 {pickedUsers.map((u) => {
@@ -403,7 +404,7 @@ export default function ChatDetails() {
                     <Pressable key={u.id} accessibilityRole="button" accessibilityLabel={`Don’t add ${u.name}`} onPress={() => { void togglePick(u); }} style={[styles.chip, locked && styles.chipStuck]}>
                       <Avatar name={u.name} seed={u.avatarSeed} uri={u.avatarUrl} size={20} />
                       {locked ? <Ionicons name="lock-closed" size={11} color={colors.textMuted} /> : null}
-                      <Text style={[styles.chipText, locked && styles.chipTextStuck]} numberOfLines={1}>{first(u)}</Text>
+                      <Text maxFontSizeMultiplier={TextScale.TITLE} style={[styles.chipText, locked && styles.chipTextStuck]} numberOfLines={1}>{first(u)}</Text>
                       <Ionicons name="close" size={13} color={locked ? colors.textMuted : colors.brand} />
                     </Pressable>
                   );
@@ -433,8 +434,8 @@ export default function ChatDetails() {
                         {!allowed ? <LockBadge size={20} /> : null}
                       </View>
                       <View style={[styles.words, !allowed && styles.off]}>
-                        <Text style={styles.name} numberOfLines={1}>{u.name}</Text>
-                        <Text style={styles.meta} numberOfLines={1}>@{u.handle}</Text>
+                        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.name} numberOfLines={1}>{u.name}</Text>
+                        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta} numberOfLines={1}>@{u.handle}</Text>
                       </View>
                       {allowed ? <View style={[styles.tick, on && styles.tickOn]}>{on ? <Ionicons name="checkmark" size={15} color={colors.brandInk} /> : null}</View> : null}
                     </Pressable>
@@ -442,7 +443,7 @@ export default function ChatDetails() {
                   </View>
                 );
               })}
-              {!candidates.length ? <Text style={[styles.meta, { padding: spacing.lg }]}>{term ? 'Nobody by that name.' : 'No one else to add.'}</Text> : null}
+              {!candidates.length ? <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.meta, { padding: spacing.lg }]}>{term ? 'Nobody by that name.' : 'No one else to add.'}</Text> : null}
             </View>
           </View>
         )}
@@ -467,14 +468,14 @@ export default function ChatDetails() {
         ) : <GroupAvatar people={people} size={88} photoUrl={conversation.photoUrl} name={name} />}
         {controls && conversation.photoUrl ? (
           <Pressable accessibilityRole="button" hitSlop={8} onPress={removePhoto} style={styles.removePhoto}>
-            <Text style={styles.removePhotoText}>Remove photo</Text>
+            <Text maxFontSizeMultiplier={TextScale.BODY} style={styles.removePhotoText}>Remove photo</Text>
           </Pressable>
         ) : null}
         {/* A small pencil says the name can be changed, in place of a sentence saying so.
             An empty spacer on the other side keeps the name centred under the picture. */}
         <View style={styles.nameRow}>
           <View style={styles.pencil} />
-          <TextInput
+          <TextInput maxFontSizeMultiplier={TextScale.TITLE}
             ref={nameBox}
             value={title}
             onChangeText={(v) => setTitle(v.slice(0, 60))}
@@ -499,8 +500,8 @@ export default function ChatDetails() {
           <Pressable accessibilityRole="link" onPress={() => router.push(`/hit-request/${hit.id}`)} style={({ pressed }) => [styles.row, pressed && styles.pressed]}>
             <View style={styles.lead}><HitGlyph size={20} color={colors.text} /></View>
             <View style={styles.words}>
-              <Text style={styles.label}>{hitLabel}</Text>
-              <Text style={styles.meta} numberOfLines={1}>{hitWhen(hit.startsAt)} · {hit.place.name}</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.label}>{hitLabel}</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta} numberOfLines={1}>{hitWhen(hit.startsAt)} · {hit.place.name}</Text>
             </View>
             <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
           </Pressable>
@@ -520,8 +521,8 @@ export default function ChatDetails() {
         >
           <View style={styles.addIcon}><Ionicons name="person-add-outline" size={18} color={colors.brand} /></View>
           <View style={styles.words}>
-            <Text style={styles.addText}>Add people</Text>
-            <Text style={styles.meta}>{room <= 0 ? `Full · ${GROUP_CAP} people` : `Room for ${room} more`}</Text>
+            <Text maxFontSizeMultiplier={TextScale.BODY} style={styles.addText}>Add people</Text>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta}>{room <= 0 ? `Full · ${GROUP_CAP} people` : `Room for ${room} more`}</Text>
           </View>
           {room > 0 ? <Ionicons name="chevron-forward" size={16} color={colors.textFaint} /> : null}
         </Pressable>
@@ -550,15 +551,15 @@ export default function ChatDetails() {
               >
                 <Avatar name={u.name} seed={u.avatarSeed} uri={u.avatarUrl} size={40} />
                 <View style={styles.words}>
-                  <Text style={styles.name} numberOfLines={1}>{u.name}</Text>
-                  <Text style={styles.meta} numberOfLines={1}>{meta}</Text>
+                  <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.name} numberOfLines={1}>{u.name}</Text>
+                  <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta} numberOfLines={1}>{meta}</Text>
                 </View>
                 {!me && !canRemove ? <Ionicons name="ellipsis-horizontal" size={18} color={colors.textFaint} /> : null}
               </Pressable>
               {canRemove ? (
                 <>
                   <Pressable accessibilityRole="button" accessibilityLabel={`Remove ${u.name} from the group`} hitSlop={6} onPress={() => removeMember(u)} style={({ pressed }) => [styles.remove, pressed && styles.removePressed]}>
-                    <Text style={styles.removeText}>Remove</Text>
+                    <Text maxFontSizeMultiplier={TextScale.BODY} style={styles.removeText}>Remove</Text>
                   </Pressable>
                   <Pressable accessibilityRole="button" accessibilityLabel={`More for ${u.name}`} hitSlop={8} onPress={() => setMember(u)} style={({ pressed }) => [styles.more, pressed && styles.removePressed]}>
                     <Ionicons name="ellipsis-horizontal" size={18} color={colors.textFaint} />
@@ -573,12 +574,12 @@ export default function ChatDetails() {
       <View style={[styles.group, styles.gap]}>
         <Pressable accessibilityRole="button" onPress={report} style={({ pressed }) => [styles.row, pressed && styles.pressed]}>
           <View style={styles.lead}><Ionicons name="flag-outline" size={20} color={colors.danger} /></View>
-          <Text style={[styles.label, styles.words, { color: colors.danger }]}>Report group</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.label, styles.words, { color: colors.danger }]}>Report group</Text>
         </Pressable>
       </View>
 
       <Pressable accessibilityRole="button" onPress={leave} style={({ pressed }) => [styles.leave, pressed && { opacity: PRESS_DIM }]}>
-        <Text style={styles.leaveText}>Leave group</Text>
+        <Text maxFontSizeMultiplier={TextScale.BODY} style={styles.leaveText}>Leave group</Text>
       </Pressable>
 
       <ChatSheet visible={!!member} title={member?.name} options={memberOptions} onClose={() => setMember(null)} />
@@ -610,14 +611,14 @@ const styleDefinitions = StyleSheet.create({
   memberRow: { flexDirection: 'row', alignItems: 'center' },
   memberMain: { flex: 1, minWidth: 0 },
   memberMainBeforeRemove: { paddingRight: spacing.sm },
-  more: { paddingLeft: spacing.sm, paddingRight: spacing.lg, height: 50, justifyContent: 'center' },
+  more: { paddingLeft: spacing.sm, paddingRight: spacing.lg, minHeight: 50, justifyContent: 'center' },
   // A note under the row it is about, inset to the row's own edges.
   rowNote: { marginHorizontal: spacing.md, marginBottom: spacing.md },
   // Remove, on each row an admin sees: plain words in a soft pill, in the
   // page's own text colour. Red is kept for the confirm's Remove button, so
   // a full group reads as a list of people, not a list of things to delete
   // (and the words stay easy to read on every court theme's grey).
-  remove: { paddingHorizontal: 12, height: 30, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
+  remove: { paddingHorizontal: 12, minHeight: 30, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
   removePressed: { opacity: PRESS_DIM },
   removeText: { ...typography.smallStrong, color: colors.text },
   lead: { width: 26, alignItems: 'center' },
@@ -631,19 +632,19 @@ const styleDefinitions = StyleSheet.create({
   // Which group the add-people page adds to, and the room left in it.
   addTo: { ...typography.small, color: colors.textMuted, paddingHorizontal: spacing.sm, paddingTop: spacing.xs },
   // Add, in the add-people page's header: a small pill in the brand colour.
-  headAdd: { paddingHorizontal: 14, height: 32, borderRadius: radius.pill, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
+  headAdd: { paddingHorizontal: 14, minHeight: 32, borderRadius: radius.pill, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
   headAddOff: { opacity: 0.4 },
   headAddText: { ...typography.smallStrong, color: colors.brandInk },
   // Sized by its padding, not a fixed height (a fixed one drew "Search" low and cut off on an iPhone).
   search: { ...typography.body, fontSize: 16, color: colors.text, minHeight: 44, paddingHorizontal: 14, paddingVertical: 10, borderRadius: radius.pill, backgroundColor: colors.surface, outlineStyle: 'none' } as object,
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  chip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: 5, paddingRight: 9, height: 30, borderRadius: 15, backgroundColor: colors.brandDim },
+  chip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: 5, paddingRight: 9, minHeight: 30, borderRadius: 15, backgroundColor: colors.brandDim },
   chipText: { ...typography.smallStrong, color: colors.brand, maxWidth: 120 },
   // A ticked person who can't be added after all: greyed, with the lock.
   chipStuck: { backgroundColor: colors.surfaceAlt },
   chipTextStuck: { color: colors.textMuted },
   tick: { width: 24, height: 24, borderRadius: 12, borderWidth: 1.5, borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center' },
   tickOn: { backgroundColor: colors.brand, borderColor: colors.brand },
-  leave: { marginTop: spacing.xl, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface, ...lift },
+  leave: { marginTop: spacing.xl, minHeight: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface, ...lift },
   leaveText: { ...typography.bodyStrong, color: colors.danger },
 });

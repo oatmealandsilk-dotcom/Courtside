@@ -25,6 +25,7 @@ import { colors, spacing, typography, font } from '@/theme';
 import { isDesktopBrowser } from '@/lib/browserDevice';
 import { learned } from '@/features/tips/tips';
 import { useArrived } from '@/lib/useArrived';
+import { TextScale } from '@/theme/textScale';
 
 type Section = 'all' | 'groups' | 'coaches' | 'clients';
 /** Chats drawn with the page, a screenful and a half; the rest once it has slid in (see useArrived). */
@@ -260,14 +261,14 @@ export default function Inbox() {
       {upToday.length && !search.trim() ? (
         // Instagram has notes here; CourtSide has who is up to hit today. A tap opens the chat with them.
         <View style={styles.upToday}>
-          <Text style={styles.upTodayTitle}>Up to hit today</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.upTodayTitle}>Up to hit today</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.upTodayRow} style={styles.upTodayScroll}>
             {upToday.map((u) => (
               <Pressable key={u.id} accessibilityRole="button" accessibilityLabel={`${u.name} is up to hit today. Message them`} onPress={() => openWith(u)} style={({ pressed }) => [styles.face, pressed && { opacity: PRESS_DIM }]}>
                 <View style={styles.faceRing}>
                   <Avatar name={u.name} seed={u.avatarSeed} uri={u.avatarUrl} size={54} />
                 </View>
-                <Text style={styles.faceName} numberOfLines={1}>{u.name.split(' ')[0]}</Text>
+                <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.faceName} numberOfLines={1}>{u.name.split(' ')[0]}</Text>
               </Pressable>
             ))}
           </ScrollView>
@@ -302,7 +303,7 @@ export default function Inbox() {
                     style={[styles.action, styles.actionQuiet]}
                   >
                     <Ionicons name={muted ? 'notifications-outline' : 'notifications-off-outline'} size={21} color={colors.text} />
-                    <Text style={styles.actionText}>{muted ? 'Unmute' : 'Mute'}</Text>
+                    <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.actionText}>{muted ? 'Unmute' : 'Mute'}</Text>
                   </Pressable>
                 ) : null}
                 <Pressable
@@ -313,7 +314,7 @@ export default function Inbox() {
                 >
                   {/* Dark on the two dark courts, where white on their lighter red fell short. */}
                   <Ionicons name="trash-outline" size={21} color={colors.onDanger} />
-                  <Text style={[styles.actionText, { color: colors.onDanger }]}>Delete</Text>
+                  <Text maxFontSizeMultiplier={TextScale.TITLE} style={[styles.actionText, { color: colors.onDanger }]}>Delete</Text>
                 </Pressable>
               </>
             );
@@ -412,12 +413,12 @@ function InboxRow({ thread, first, styles, line, typing, onOpen, onHold, rowActi
       <View style={[styles.rowBody, !first && styles.rowLine]}>
         <View style={styles.rowTop}>
           <View style={styles.nameLine}>
-            <Text style={[styles.name, loud && styles.unreadName]} numberOfLines={1}>{name}</Text>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.name, loud && styles.unreadName]} numberOfLines={1}>{name}</Text>
             <StreakFlame days={streak} />
           </View>
           <View style={styles.when}>
             {pinned ? <Ionicons name="pin" size={12} color={colors.textFaint} accessibilityLabel="Pinned" /> : null}
-            <Text style={[styles.time, loud && styles.unreadTime]}>{relativeTime(at)}</Text>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.time, loud && styles.unreadTime]}>{relativeTime(at)}</Text>
             {muted ? <Ionicons name="notifications-off-outline" size={13} color={colors.textFaint} accessibilityLabel="Muted" /> : null}
           </View>
         </View>
