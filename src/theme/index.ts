@@ -182,3 +182,4 @@ export const surfaceColorFor = (seed: string): string => {
   }
   return palette[hash % palette.length];
 };
+export { TextScale, oneLine, type TextScaleCap } from './textScale';

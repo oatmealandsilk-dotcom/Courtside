@@ -3,6 +3,7 @@ import type React from 'react';
 import { Platform, StyleSheet, type TextStyle } from 'react-native';
 
 import { colors, withAlpha } from '@/theme';
+import { TextScale } from '@/theme/textScale';
 
 /**
  * Text follows the phone's text size setting, up to a point. iPhone's normal
@@ -12,7 +13,7 @@ import { colors, withAlpha } from '@/theme';
  * rather than on each of the thousands in the app. A text that sets its own
  * limit keeps it.
  */
-const MAX = 1.3;
+const MAX = TextScale.DEFAULT;
 
 const ANDROID = Platform.OS === 'android';
 
