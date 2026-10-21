@@ -49,11 +49,11 @@ export function RichText({ children, mentionStyle, hashtagStyle, links, after, m
     return parts.map((part, i) => {
       if (i % 2 === 0) return part;
       if (part.startsWith('#')) {
-        return <Text key={`${key}-${i}-${part}`} accessibilityRole="link" style={hashtagStyle} suppressHighlighting onPress={(event) => { event.stopPropagation(); router.push({ pathname: '/search', params: { q: part } }); }}>{part}</Text>;
+        return <Text key={`${key}-${i}-${part}`} accessibilityRole="link" style={hashtagStyle} maxFontSizeMultiplier={maxFontSizeMultiplier} suppressHighlighting onPress={(event) => { event.stopPropagation(); router.push({ pathname: '/search', params: { q: part } }); }}>{part}</Text>;
       }
       const user = users.find((u) => u.handle.toLowerCase() === part.slice(1).toLowerCase());
       if (!user) return part;
-      return <Mention key={`${key}-${i}-${part}`} label={part} name={user.name} mentionStyle={mentionStyle} onPress={() => openPlayer(user.id, currentUserId)} />;
+      return <Mention key={`${key}-${i}-${part}`} label={part} name={user.name} mentionStyle={mentionStyle} cap={maxFontSizeMultiplier} onPress={() => openPlayer(user.id, currentUserId)} />;
     });
   };
   if (links && runs) {
@@ -61,7 +61,7 @@ export function RichText({ children, mentionStyle, hashtagStyle, links, after, m
       return (
         <Text {...props}>
           {runs.map((run, i) => (run.url
-            ? <LinkSpan key={`l${i}`} label={run.text} url={run.url} look={links} />
+            ? <LinkSpan key={`l${i}`} label={run.text} url={run.url} look={links} cap={maxFontSizeMultiplier} />
             : <React.Fragment key={`t${i}`}>{lit(run.text, `t${i}`)}</React.Fragment>))}
           {after}
         </Text>
@@ -79,7 +79,7 @@ export function RichText({ children, mentionStyle, hashtagStyle, links, after, m
 }
 
 /** One @handle in the text: it dims for a beat when tapped, a small sign the tap took. */
-function Mention({ label, name, mentionStyle, onPress }: { label: string; name: string; mentionStyle?: StyleProp<TextStyle>; onPress: () => void }) {
+function Mention({ label, name, mentionStyle, cap, onPress }: { label: string; name: string; mentionStyle?: StyleProp<TextStyle>; cap: TextProps['maxFontSizeMultiplier']; onPress: () => void }) {
   // Hears a theme change, so its own colours never lag the page's.
   useTheme();
   const [down, setDown] = useState(false);
@@ -87,6 +87,8 @@ function Mention({ label, name, mentionStyle, onPress }: { label: string; name: 
     <Text
       accessibilityRole="link"
       accessibilityLabel={`Open ${name}'s profile`}
+      // An inner piece's own cap wins over its sentence's on iOS: it takes the sentence's, so it never shrinks mid-line.
+      maxFontSizeMultiplier={cap}
       style={[{ color: colors.brand, ...font('600') }, mentionStyle, down && { opacity: 0.5 }]}
       suppressHighlighting
       onPressIn={() => setDown(true)}
@@ -103,7 +105,7 @@ function Mention({ label, name, mentionStyle, onPress }: { label: string; name: 
  * pressed (then it underlines and dims, the sign the tap took). A tap opens
  * it in the in-app browser; a hold does what a hold on the message does.
  */
-function LinkSpan({ label, url, look }: { label: string; url: string; look: LinkLook }) {
+function LinkSpan({ label, url, look, cap }: { label: string; url: string; look: LinkLook; cap: TextProps['maxFontSizeMultiplier'] }) {
   useTheme();
   const [down, setDown] = useState(false);
   return (
@@ -111,6 +113,7 @@ function LinkSpan({ label, url, look }: { label: string; url: string; look: Link
       accessibilityRole="link"
       accessibilityLabel={`Link: ${domainOf(url)}`}
       accessibilityHint="Opens in the browser"
+      maxFontSizeMultiplier={cap}
       style={[{ color: colors.link, ...font('500') }, look.style, down && { textDecorationLine: 'underline', opacity: 0.7 }]}
       suppressHighlighting
       onPressIn={() => setDown(true)}

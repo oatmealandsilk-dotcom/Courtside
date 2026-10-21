@@ -545,9 +545,12 @@ const ScreenBody = React.memo(function ScreenBody({
                 title at this width (stepped down, it is not measured again unless the width changes). */}
             <Text
               style={[compactTitle || !isPhone ? styles.titleCompact : styles.title, titleSmall ? styles.titleCapped : null]}
-              // One line that shrinks a little rather than breaking a word ("Communit / y") at a large
-              // phone text size; a page that asks for more lines (titleLines) keeps them, capped.
-              {...(titleLines ? { numberOfLines: titleLines, maxFontSizeMultiplier: TextScale.TITLE } : oneLine(TextScale.TITLE))}
+              // A tab's short fixed title (no way back): one line that shrinks a little rather than breaking a
+              // word ("Communit / y") at a large phone text size. A pushed page's title (a way back, often from
+              // data) wraps at word boundaries as before, capped; a page that asks for lines (titleLines) keeps them.
+              {...(titleLines
+                ? { numberOfLines: titleLines, maxFontSizeMultiplier: TextScale.TITLE }
+                : onBack ? { maxFontSizeMultiplier: TextScale.TITLE } : oneLine(TextScale.TITLE))}
               onLayout={titleLines ? (e) => {
                 const now = titleNow.current;
                 if (!now.title) return;
