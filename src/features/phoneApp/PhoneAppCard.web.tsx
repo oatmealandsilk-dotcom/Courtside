@@ -12,6 +12,7 @@ import { useTourBusy } from '@/features/tour/tourStore';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, lift, radius, spacing, typography } from '@/theme';
+import { TextScale } from '@/theme/textScale';
 
 /*
  * "Get CourtSide on your iPhone" on the website (Oct 20 sweep, R3: "People
@@ -77,8 +78,8 @@ export function PhoneAppRow({ style }: { style?: object }) {
       <Pressable accessibilityRole="link" accessibilityLabel="Get the iPhone app" onPress={open} style={styles.rowMain}>
         <Ionicons name="logo-apple" size={20} color={colors.brand} />
         <View style={{ flex: 1 }}>
-          <Text style={styles.rowTitle}>Get CourtSide on your iPhone</Text>
-          <Text style={styles.rowMeta}>So you hear when someone wants to hit or replies to you.</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rowTitle}>Get CourtSide on your iPhone</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rowMeta}>So you hear when someone wants to hit or replies to you.</Text>
         </View>
       </Pressable>
       <Pressable accessibilityRole="button" accessibilityLabel="Close the iPhone app card" hitSlop={10} onPress={close} style={styles.rowClose}>
@@ -123,8 +124,8 @@ export function PhoneAppWelcome({ calm }: { calm: boolean }) {
       <Animated.View entering={SlideInDown.duration(380).easing(RISE)} exiting={SlideOutDown.duration(220).easing(FALL)} accessibilityViewIsModal style={[styles.sheet, { paddingBottom: insets.bottom + spacing.lg }]}>
         <View style={styles.inner}>
           <View style={styles.mark}><BrandMark size={30} /></View>
-          <Text accessibilityRole="header" style={styles.title}>Get CourtSide on your iPhone</Text>
-          <Text style={styles.body}>The app tells you when someone near you wants to hit, or replies to you. The website can’t.</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" style={styles.title}>Get CourtSide on your iPhone</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.body}>The app tells you when someone near you wants to hit, or replies to you. The website can’t.</Text>
           <Button label="Get the iPhone app" full onPress={() => { open(); close(); }} />
           <Button label="Not now" variant="secondary" full onPress={close} />
           <Text style={styles.foot}>No iPhone? Everything works here in your browser too.</Text>

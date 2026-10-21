@@ -47,6 +47,7 @@ import { isTaggedIn } from '@/features/activity/sessionTags';
 import { studioLine } from '@/features/coaching/studioSummary';
 import { useModalOpenWhile } from '@/lib/modalOpen';
 import { useInstantsOn, withoutInstantRows } from '@/features/stories/instantsSwitch';
+import { TextScale, oneLine } from '@/theme/textScale';
 
 /** The messages tip's pointer from the right edge of the page's content (the header's own right edge): the menu button (38), the gap (14), then half the paper plane (35), less half the pointer (12). */
 const INBOX_POINTER = 38 + 14 + 17 - 6;
@@ -140,7 +141,7 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
    const items = (selected === 'Tagged' ? posts.filter(p => isTaggedIn(p, user.id) && !p.archived && !p.groupId) : own.filter(p => selected !== 'Clips' || p.kind === 'clip')).sort((a,b) => Number(!!b.pinned) - Number(!!a.pinned) || Date.parse(b.createdAt)-Date.parse(a.createdAt));
    return <View style={{ minHeight: 320, backgroundColor: colors.bg }}>
      <View style={styles.grid} onLayout={(e) => { const w = Math.floor(e.nativeEvent.layout.width); if (w > 0 && w !== gridW) setGridW(w); }}>{items.map(p => <Pressable key={p.id} accessibilityRole="link" accessibilityLabel={`Open ${p.pinned && selected !== 'Tagged' ? 'pinned ' : ''}${p.kind}: ${p.body}`} onPress={() => router.push({ pathname: '/posts/[userId]', params: { userId: user.id, post: p.id, set: selected === 'Clips' ? 'clips' : selected === 'Tagged' ? 'tagged' : 'own' } })} style={[styles.tile, { width: tileW, height: tileH }]}>
-       <View style={[StyleSheet.absoluteFill, styles.tileBlank]}><Text numberOfLines={5} style={styles.tileText}>{p.body}</Text></View>
+       <View style={[StyleSheet.absoluteFill, styles.tileBlank]}><Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={5} style={styles.tileText}>{p.body}</Text></View>
        {p.thumbnailUrl ? <TileCover accessibilityIgnoresInvertColors uri={p.thumbnailUrl} style={StyleSheet.absoluteFill} contentFit="cover" recyclingKey={p.id} transition={120}/> : p.session && hasSessionStats(p.session) && !p.imageUrl && !p.videoUrl ? <SessionTile session={p.session} width={tileW}/> : null}
        {/* Several photos: the stacked mark, where a clip has its play mark. */}
        <CarouselMark post={p}/>
@@ -181,12 +182,12 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
    {firstWeek.card}
    {!hasMoved && !firstWeek.showing && !firstWeek.deciding && <Pressable accessibilityRole="link" accessibilityLabel="Make your first move" onPress={() => router.push({ pathname: '/first-move', params: { from: 'profile' } })} style={styles.setup}>
      <Ionicons name="videocam-outline" size={20} color={colors.brand}/>
-     <View style={{ flex: 1 }}><Text style={styles.setupTitle}>Make your first move</Text><Text style={styles.meta}>{user && notKnownAdult(user) ? 'Add your friends, or post your first clip.' : 'Bring your hitting partners, or post your first clip.'}</Text></View>
+     <View style={{ flex: 1 }}><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.setupTitle}>Make your first move</Text><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta}>{user && notKnownAdult(user) ? 'Add your friends, or post your first clip.' : 'Bring your hitting partners, or post your first clip.'}</Text></View>
      <Ionicons name="chevron-forward" size={16} color={colors.textMuted}/>
    </Pressable>}
    {skipped.length > 0 && <Pressable accessibilityRole="link" accessibilityLabel="Finish setting up your profile" onPress={() => router.push({ pathname: '/onboarding', params: { step: String(SETUP_STEP_INDEX[skipped[0]]), from: 'profile' } })} style={styles.setup}>
      <Ionicons name="sparkles-outline" size={20} color={colors.brand}/>
-     <View style={{ flex: 1 }}><Text style={styles.setupTitle}>Finish setting up</Text><Text style={styles.meta}>{[skipped.includes('permissions') && 'camera and photos', skipped.includes('body') && 'fitness and goals', skipped.includes('calendar') && 'your next tournament'].filter(Boolean).join(', ').replace(/^./, (c) => c.toUpperCase())} — about a minute.</Text></View>
+     <View style={{ flex: 1 }}><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.setupTitle}>Finish setting up</Text><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta}>{[skipped.includes('permissions') && 'camera and photos', skipped.includes('body') && 'fitness and goals', skipped.includes('calendar') && 'your next tournament'].filter(Boolean).join(', ').replace(/^./, (c) => c.toUpperCase())} — about a minute.</Text></View>
      <Ionicons name="chevron-forward" size={16} color={colors.textMuted}/>
    </Pressable>}
    {/* The website only: "Get CourtSide on your iPhone", until closed or the phone app is opened (R3, Oct 20 sweep). */}
@@ -201,29 +202,29 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
          {/* The flame after your name is what everyone else sees there (3 days or more). A screen reader hears it once, from the streak pill under it. */}
          <View style={styles.nameLine}><PlayerName userId={user.id} style={styles.name}>{user.name}</PlayerName><StreakFlame days={shownStreak(user, currentUserId)} size="large" silent/></View>
          {/* The streak opens your sessions (only you see them); Log beside it opens the log sheet, two taps from here to a logged session. */}
-         <View style={styles.nameRow}><LevelPill profile={profile}/>{user.stats.currentStreakDays >= 2 ? <Pressable accessibilityRole="link" accessibilityLabel={`${user.stats.currentStreakDays}-day streak. See your sessions`} hitSlop={6} onPress={() => router.push('/your-sessions')} style={({ pressed }) => [styles.streak, pressed && styles.pillPressed]}><Ionicons name="flame" size={12} color={colors.clay}/><Text style={styles.streakText}>{user.stats.currentStreakDays}-day streak</Text></Pressable> : null}<Pressable accessibilityRole="button" accessibilityLabel="Log a session" hitSlop={6} onPress={() => router.push('/log-session')} style={({ pressed }) => [styles.logPill, pressed && styles.pillPressed]}><Ionicons name="add" size={13} color={colors.textMuted}/><Text style={styles.logPillText}>Log</Text></Pressable></View>
+         <View style={styles.nameRow}><LevelPill profile={profile}/>{user.stats.currentStreakDays >= 2 ? <Pressable accessibilityRole="link" accessibilityLabel={`${user.stats.currentStreakDays}-day streak. See your sessions`} hitSlop={6} onPress={() => router.push('/your-sessions')} style={({ pressed }) => [styles.streak, pressed && styles.pillPressed]}><Ionicons name="flame" size={12} color={colors.clay}/><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.streakText}>{user.stats.currentStreakDays}-day streak</Text></Pressable> : null}<Pressable accessibilityRole="button" accessibilityLabel="Log a session" hitSlop={6} onPress={() => router.push('/log-session')} style={({ pressed }) => [styles.logPill, pressed && styles.pillPressed]}><Ionicons name="add" size={13} color={colors.textMuted}/><Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.logPillText}>Log</Text></Pressable></View>
        </View>
      </View>
-     {!!user.bio && <Text style={styles.bio}>{user.bio}</Text>}
+     {!!user.bio && <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.bio}>{user.bio}</Text>}
      <View style={styles.followRow}>
        {([['followers', user.followers, 'followers'], ['following', user.following, 'following']] as const).map(([tab, n, label], i) => <React.Fragment key={tab}>
-         {i > 0 && <Text style={styles.followDot}>·</Text>}
+         {i > 0 && <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.followDot}>·</Text>}
          <Pressable accessibilityRole="link" accessibilityLabel={`${n} ${label}`} onPress={() => router.push({ pathname: '/follows', params: { userId: user.id, tab } })} style={styles.follow}>
-           <Text style={styles.followCount}>{compactNumber(Number(n))}</Text><Text style={styles.meta}> {label}</Text>
+           <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.followCount}>{compactNumber(Number(n))}</Text><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta}> {label}</Text>
          </Pressable>
        </React.Fragment>)}
      </View>
      <View style={styles.buttons}><View style={{ flex: 1 }}><Button label="Edit profile" variant="secondary" onPress={() => router.push('/edit-profile')} full/></View><View style={{ flex: 1 }}><Button label="Share" variant="secondary" onPress={share} full/></View></View>
-     {!!shareError && <Text style={styles.meta}>{shareError}</Text>}
+     {!!shareError && <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta}>{shareError}</Text>}
    </View>
    {/* Your tennis, as the player card's banner: the whole of it opens the Tennis profile, your tennis hub. */}
    <PlayerCard user={user} variant="banner" onPress={() => router.push('/profile-details')} />
    {/* One grouped list, the way Settings reads, instead of three boxes. */}
    <View style={styles.links}>
-     {studio ? <Pressable accessibilityRole="link" accessibilityLabel={`Coach studio. ${studio.line}`} onPress={() => router.push('/coach-studio')} style={({ pressed }) => [styles.linkRow, pressed && styles.linkPressed]}><Ionicons name="ribbon-outline" size={20} color={colors.brand}/><Text style={styles.linkText}>Coach studio</Text>{studio.waiting ? <Text style={styles.linkValue}>{studio.waiting} waiting</Text> : studio.doneCount < 4 ? <Text style={styles.linkValue}>{studio.doneCount} of 4</Text> : null}<Ionicons name="chevron-forward" size={16} color={colors.textFaint}/></Pressable> : null}
-     <Pressable accessibilityRole="link" accessibilityLabel="Saved videos and discussions" onPress={() => router.push('/saved')} style={({ pressed }) => [styles.linkRow, studio && styles.linkLine, pressed && styles.linkPressed]}><Ionicons name="bookmark-outline" size={20} color={colors.text}/><Text style={styles.linkText}>Saved</Text>{savedCount ? <Text style={styles.linkValue}>{savedCount}</Text> : null}<Ionicons name="chevron-forward" size={16} color={colors.textFaint}/></Pressable>
+     {studio ? <Pressable accessibilityRole="link" accessibilityLabel={`Coach studio. ${studio.line}`} onPress={() => router.push('/coach-studio')} style={({ pressed }) => [styles.linkRow, pressed && styles.linkPressed]}><Ionicons name="ribbon-outline" size={20} color={colors.brand}/><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.linkText}>Coach studio</Text>{studio.waiting ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.linkValue}>{studio.waiting} waiting</Text> : studio.doneCount < 4 ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.linkValue}>{studio.doneCount} of 4</Text> : null}<Ionicons name="chevron-forward" size={16} color={colors.textFaint}/></Pressable> : null}
+     <Pressable accessibilityRole="link" accessibilityLabel="Saved videos and discussions" onPress={() => router.push('/saved')} style={({ pressed }) => [styles.linkRow, studio && styles.linkLine, pressed && styles.linkPressed]}><Ionicons name="bookmark-outline" size={20} color={colors.text}/><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.linkText}>Saved</Text>{savedCount ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.linkValue}>{savedCount}</Text> : null}<Ionicons name="chevron-forward" size={16} color={colors.textFaint}/></Pressable>
    </View>
-   <View style={styles.tabs} onLayout={e => setTabWidth(e.nativeEvent.layout.width / TABS.length)}>{TABS.map(t => <Pressable key={t} accessibilityRole="tab" accessibilityState={{selected:selected===t}} accessibilityLabel={`${LABEL[t]}, ${counts[t]}`} onPress={() => setTab(t)} style={styles.tab}><Text style={[typography.body, selected===t ? { ...font('600'), color: colors.text } : { color: colors.textMuted }]}>{LABEL[t]}<Text style={[styles.tabCount, selected===t && { color: colors.brand }]}>  {compactNumber(counts[t])}</Text></Text></Pressable>)}
+   <View style={styles.tabs} onLayout={e => setTabWidth(e.nativeEvent.layout.width / TABS.length)}>{TABS.map(t => <Pressable key={t} accessibilityRole="tab" accessibilityState={{selected:selected===t}} accessibilityLabel={`${LABEL[t]}, ${counts[t]}`} onPress={() => setTab(t)} style={styles.tab}><Text {...oneLine(TextScale.TITLE)} style={[typography.body, selected===t ? { ...font('600'), color: colors.text } : { color: colors.textMuted }]}>{LABEL[t]}<Text style={[styles.tabCount, selected===t && { color: colors.brand }]}>  {compactNumber(counts[t])}</Text></Text></Pressable>)}
      {tabWidth > 0 && (live
        ? <Reanimated.View pointerEvents="none" style={[styles.tabIndicator, { width: tabWidth }, underline.style]} />
        : <View pointerEvents="none" style={[styles.tabIndicator, { width: tabWidth, left: index * tabWidth }]} />)}
@@ -290,12 +291,12 @@ function ProfileMenu({ groupsAsking, groupCount }: { groupsAsking: number; group
       {at ? <View style={[styles.menu, { top: at.top, right: at.right }]} accessibilityRole="menu">
         <Pressable accessibilityRole="menuitem" accessibilityLabel={groupsAsking ? `Groups, ${groupsAsking} asking to join` : 'Groups'} onPress={() => go('/groups')} style={({ pressed }) => [styles.menuRow, pressed && styles.linkPressed]}>
           <Ionicons name="people-outline" size={20} color={colors.text}/>
-          <Text style={styles.menuText}>Groups</Text>
-          {groupsAsking ? <View style={styles.menuTag}><Text style={styles.menuTagText}>{groupsAsking} asking</Text></View> : groupCount ? <Text style={styles.linkValue}>{groupCount}</Text> : null}
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.menuText}>Groups</Text>
+          {groupsAsking ? <View style={styles.menuTag}><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.menuTagText}>{groupsAsking} asking</Text></View> : groupCount ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.linkValue}>{groupCount}</Text> : null}
         </Pressable>
         <Pressable accessibilityRole="menuitem" accessibilityLabel="Settings" onPress={() => go('/settings')} style={({ pressed }) => [styles.menuRow, styles.linkLine, pressed && styles.linkPressed]}>
           <Ionicons name="settings-outline" size={20} color={colors.text}/>
-          <Text style={styles.menuText}>Settings</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.menuText}>Settings</Text>
         </Pressable>
       </View> : null}
     </Modal>
@@ -324,11 +325,11 @@ function ProfileSkeleton({ name, avatarUrl, seed }: { name?: string; avatarUrl?:
      <View style={styles.identityRow}>
        <Avatar name={name ?? ''} seed={seed} uri={avatarUrl} size={80} style={{ backgroundColor: colors.brand }}/>
        <View style={styles.identityWords}>
-         {name ? <Text style={styles.name}>{name}</Text> : <Blank w={140} h={20} />}
+         {name ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.name}>{name}</Text> : <Blank w={140} h={20} />}
          <Blank w={110} h={16} />
        </View>
      </View>
-     <View style={styles.followRow}><Blank w={64} /><Text style={styles.followDot}>·</Text><Blank w={64} /></View>
+     <View style={styles.followRow}><Blank w={64} /><Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.followDot}>·</Text><Blank w={64} /></View>
      <View style={styles.buttons}><View style={{ flex: 1 }}><Button label="Edit profile" variant="secondary" disabled onPress={() => undefined} full/></View><View style={{ flex: 1 }}><Button label="Share" variant="secondary" disabled onPress={() => undefined} full/></View></View>
    </View>
    {/* The Tennis profile banner's shape: its heading, the rating, the line under it and three numbers. */}
@@ -340,9 +341,9 @@ function ProfileSkeleton({ name, avatarUrl, seed }: { name?: string; avatarUrl?:
      <View style={styles.bannerBlankStrip}>{[0, 1, 2].map((i) => <View key={i} style={{ flex: 1 }}><Blank w={48} h={20} on={ink} /></View>)}</View>
    </View>
    <View style={styles.links}>
-     <View style={styles.linkRow}><Ionicons name="bookmark-outline" size={20} color={colors.text}/><Text style={styles.linkText}>Saved</Text></View>
+     <View style={styles.linkRow}><Ionicons name="bookmark-outline" size={20} color={colors.text}/><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.linkText}>Saved</Text></View>
    </View>
-   <View style={styles.tabs}>{['All', 'Clips', 'Tagged'].map((t, i) => <View key={t} style={styles.tab}><Text style={[typography.body, i === 0 ? { ...font('600'), color: colors.text } : { color: colors.textMuted }]}>{t}</Text></View>)}</View>
+   <View style={styles.tabs}>{['All', 'Clips', 'Tagged'].map((t, i) => <View key={t} style={styles.tab}><Text {...oneLine(TextScale.TITLE)} style={[typography.body, i === 0 ? { ...font('600'), color: colors.text } : { color: colors.textMuted }]}>{t}</Text></View>)}</View>
    <View style={styles.grid}>{[0, 1, 2].map((i) => <Reanimated.View key={i} style={[styles.tile, pulse]} />)}</View>
   </>;
 }

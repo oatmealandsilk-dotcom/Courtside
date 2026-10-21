@@ -5,6 +5,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { compactNumber } from '@/lib/format';
 import { font } from '@/theme';
+import { TextScale } from '@/theme/textScale';
 
 /**
  * A clip's view count on a profile grid tile, bottom left, the way Reels and
@@ -19,7 +20,7 @@ export function TileViews({ views }: { views: number }) {
       <LinearGradient colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.5)']} style={StyleSheet.absoluteFill} />
       <View style={styles.row}>
         <Ionicons name="play" size={10} color="#FFFFFF" />
-        <Text style={styles.text}>{compactNumber(views)}</Text>
+        <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.text}>{compactNumber(views)}</Text>
       </View>
     </View>
   );

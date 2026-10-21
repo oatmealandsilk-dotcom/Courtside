@@ -25,6 +25,7 @@ import { useTourOpen } from '@/features/tour/tourStore';
 import { TipBubble } from '@/components/TipBubble';
 import { forNewPlayer, learned, useTip } from '@/features/tips/tips';
 import { useShownAt } from '@/features/navigation/shownAt';
+import { TextScale } from '@/theme/textScale';
 
 function Coaching() {
   const styles = useThemedStyles(styleDefinitions);
@@ -85,23 +86,23 @@ function Coaching() {
         >
           <View style={styles.studioMark}><Ionicons name="ribbon-outline" size={20} color={colors.brand} /></View>
           <View style={styles.rowWords}>
-            <Text style={styles.footTitle}>Coach studio</Text>
-            <Text style={styles.meta} numberOfLines={1}>{studio.line}</Text>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.footTitle}>Coach studio</Text>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta} numberOfLines={1}>{studio.line}</Text>
             {studio.doneCount < 4 ? (
               <View style={styles.studioProgress}>
                 {[0, 1, 2, 3].map((i) => <View key={i} style={[styles.studioBit, i < studio.doneCount && styles.studioBitOn]} />)}
               </View>
             ) : null}
           </View>
-          {studio.waiting ? <View style={styles.studioCount}><Text style={styles.studioCountText}>{studio.waiting}</Text></View> : null}
+          {studio.waiting ? <View style={styles.studioCount}><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.studioCountText}>{studio.waiting}</Text></View> : null}
           <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
         </Pressable>
       ) : null}
       {/* ------------------------------ Ask a coach ----------------------------- */}
       <View style={[styles.section, myCoach ? null : styles.sectionFirst]}>
         <View style={styles.sectionRow}>
-          <Text style={styles.sectionTitle}>Ask a coach</Text>
-          <Text style={styles.sectionCount}>free</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.sectionTitle}>Ask a coach</Text>
+          <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.sectionCount}>free</Text>
         </View>
       </View>
       {/* The first-visit tip, in the page's flow just above the box and pointing down at it:
@@ -116,13 +117,13 @@ function Coaching() {
         onPress={openAsk}
         style={({ pressed }) => [styles.askField, pressed && styles.askFieldPressed]}
       >
-        <Text style={styles.askPlaceholder}>Your question</Text>
+        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.askPlaceholder}>Your question</Text>
         <View style={styles.askGo}><Ionicons name="arrow-forward" size={16} color={colors.brandInk} /></View>
       </Pressable>
       {/* No promise nobody can keep: until coaches are on, the note says what really happens.
           This is the one place the tab says asking is public (and, once coaches are on, that
           they are verified), so the header and the Coaches section don't repeat it. */}
-      <Text style={styles.askNote}>{shown.length ? 'Public. A verified coach answers, usually within a day.' : 'Public. Your question stays up until a coach answers.'}</Text>
+      <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.askNote}>{shown.length ? 'Public. A verified coach answers, usually within a day.' : 'Public. Your question stays up until a coach answers.'}</Text>
       {/* A guest with no coach to show yet (only public adults' listings show signed out): the way in, in the page. */}
       {isGuest && !shown.length ? <GuestJoinCard title="Ask real coaches" body="Make a free account to ask a coach about your game and see coaches near you." /> : null}
       {/* The AI coach shows up here once it is switched on (its key added on the server). */}
@@ -130,8 +131,8 @@ function Coaching() {
         <Pressable accessibilityRole="link" accessibilityLabel="AI coach" onPress={() => router.push('/ai-coach')} style={({ pressed }) => [styles.ai, pressed && styles.pressed]}>
           <View style={styles.aiMark}><Ionicons name="sparkles" size={16} color={colors.brand} /></View>
           <View style={styles.rowWords}>
-            <Text style={styles.footTitle}>AI coach</Text>
-            <Text style={styles.meta}>A weekly plan, and answers any time.</Text>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.footTitle}>AI coach</Text>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta}>A weekly plan, and answers any time.</Text>
           </View>
           <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
         </Pressable>
@@ -139,14 +140,14 @@ function Coaching() {
       {/* ------------------------------ Coaches ---------------------------------- */}
       <View style={styles.section}>
         <View style={styles.sectionRow}>
-          <Text style={styles.sectionTitle}>Coaches</Text>
-          <Text style={styles.sectionCount}>{shown.length}</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.sectionTitle}>Coaches</Text>
+          <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.sectionCount}>{shown.length}</Text>
         </View>
       </View>
       {shown.length === 0 ? (
         <View style={styles.none}>
-          <Text style={styles.noneTitle}>No coaches yet</Text>
-          <Text style={styles.noneBody}>We’re approving the first ones now.</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.noneTitle}>No coaches yet</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.noneBody}>We’re approving the first ones now.</Text>
           {currentUser?.isCoach ? null : (
             <Button label="Apply to coach" variant="secondary" onPress={() => router.push('/coach-apply')} />
           )}
@@ -171,20 +172,20 @@ function Coaching() {
                 <Avatar name={user?.name ?? 'Coach'} seed={user?.avatarSeed ?? coach.id} uri={user?.avatarUrl} size={64} />
                 <View style={styles.coachWords}>
                   {/* The whole card is the coach's page; the name is not a second door. */}
-                  <Text style={styles.coachName} numberOfLines={1}>{user?.name}</Text>
-                  <Text style={styles.meta} numberOfLines={1}>{coach.credentials[0]}</Text>
-                  <Text style={styles.meta} numberOfLines={1}>{coach.specialties.slice(0, 2).map((x) => x.charAt(0).toUpperCase() + x.slice(1)).join(' & ')}</Text>
+                  <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.coachName} numberOfLines={1}>{user?.name}</Text>
+                  <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta} numberOfLines={1}>{coach.credentials[0]}</Text>
+                  <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta} numberOfLines={1}>{coach.specialties.slice(0, 2).map((x) => x.charAt(0).toUpperCase() + x.slice(1)).join(' & ')}</Text>
                 </View>
                 <View style={styles.coachFoot}>
                   {coach.ratingCount ? (
                     <View style={styles.metaRow}>
                       <Ionicons name="star" size={12} color={colors.text} />
                       <Text style={styles.rating}>{coach.ratingAvg.toFixed(1)}</Text>
-                      <Text style={styles.meta}>· {coach.ratingCount}</Text>
+                      <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta}>· {coach.ratingCount}</Text>
                     </View>
-                  ) : <Text style={styles.meta}>New</Text>}
+                  ) : <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta}>New</Text>}
                   {/* Prices only where paid booking is open (admins, until it is released): no "Booking soon" placeholders. */}
-                  {paidBooking && coach.payoutsReady !== false && price ? <View style={styles.priceTag}><Text style={styles.priceText}>from {money(price)}</Text></View> : null}
+                  {paidBooking && coach.payoutsReady !== false && price ? <View style={styles.priceTag}><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.priceText}>from {money(price)}</Text></View> : null}
                 </View>
               </Pressable>
             );
@@ -197,8 +198,8 @@ function Coaching() {
         <>
           <View style={styles.section}>
             <View style={styles.sectionRow}>
-              <Text style={styles.sectionTitle}>Questions</Text>
-              <Text style={styles.sectionCount}>{unanswered ? `${unanswered} waiting` : 'all answered'}</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.sectionTitle}>Questions</Text>
+              <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.sectionCount}>{unanswered ? `${unanswered} waiting` : 'all answered'}</Text>
             </View>
             {/* No explainer line: a private booking already says "Private, with <coach>" and carries a lock. */}
           </View>
@@ -221,7 +222,7 @@ function Coaching() {
                       style={({ pressed }) => [styles.row, index > 0 && styles.rowLine, pressed && styles.pressed]}
                     >
                       <View style={styles.rowWords}>
-                        <Text style={styles.rowTitle} numberOfLines={2}>{question.title}</Text>
+                        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rowTitle} numberOfLines={2}>{question.title}</Text>
                         <View style={styles.metaRow}>
                           {waiting ? <LiveDot size={7} /> : <Ionicons name="checkmark-circle" size={13} color={colors.success} />}
                           <PlayerName userId={author?.id} style={styles.meta}>
@@ -241,10 +242,10 @@ function Coaching() {
                 return (
                   <Pressable key={entry.key} accessibilityRole="link" onPress={() => router.push(`/coach-request/${r.id}`)} style={({ pressed }) => [styles.row, index > 0 && styles.rowLine, pressed && styles.pressed]}>
                     <View style={styles.rowWords}>
-                      <Text style={styles.rowTitle} numberOfLines={2}>{r.question || service?.title || 'Coaching request'}</Text>
+                      <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rowTitle} numberOfLines={2}>{r.question || service?.title || 'Coaching request'}</Text>
                       <View style={styles.metaRow}>
                         {waiting ? <LiveDot size={7} /> : <Ionicons name="checkmark-circle" size={13} color={colors.success} />}
-                        <Text style={styles.meta} numberOfLines={1}>
+                        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta} numberOfLines={1}>
                           {statusLabel(r)} · Private, with {coachUser?.name ?? 'a coach'} · {relativeTime(r.createdAt)}
                         </Text>
                       </View>
@@ -262,15 +263,15 @@ function Coaching() {
       {myCoach ? null : currentUser?.isCoach ? (
         <Pressable accessibilityRole="link" onPress={() => router.push('/coach-inbox')} style={({ pressed }) => [styles.foot, pressed && styles.pressed]}>
           <View style={styles.rowWords}>
-            <Text style={styles.footTitle}>{unanswered} {unanswered === 1 ? 'question needs' : 'questions need'} an answer</Text>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.footTitle}>{unanswered} {unanswered === 1 ? 'question needs' : 'questions need'} an answer</Text>
           </View>
           <Ionicons name="arrow-forward" size={18} color={colors.text} />
         </Pressable>
       ) : shown.length === 0 ? null : (
         <Pressable accessibilityRole="link" accessibilityLabel="Apply to be a coach" onPress={() => router.push('/coach-apply')} style={({ pressed }) => [styles.foot, pressed && styles.pressed]}>
           <View style={styles.rowWords}>
-            <Text style={styles.footTitle}>Coach on CourtSide</Text>
-            <Text style={styles.meta}>Apply to get listed.</Text>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.footTitle}>Coach on CourtSide</Text>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta}>Apply to get listed.</Text>
           </View>
           <Ionicons name="arrow-forward" size={18} color={colors.text} />
         </Pressable>

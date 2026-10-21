@@ -8,6 +8,7 @@ import { PAGE_WASH, PageWashContext } from '@/components/ui/pageWash';
 import { PROFILE_TABS, type ProfileTab } from '@/features/players/profileTab';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, lift, pageIsDark, radius, spacing, typography, withAlpha } from '@/theme';
+import { TextScale, oneLine } from '@/theme/textScale';
 
 /**
  * How far under the top of the scrolling page the tabs ride once pinned: a
@@ -99,7 +100,7 @@ export function ProfileTabs({ value, onChange, offsetY, onPlaced }: {
               onPress={() => onChange(t.value)}
               style={({ pressed }) => [styles.tab, on && (dark ? [styles.tabOnDark, { borderColor: withAlpha(colors.borderStrong, 0.55) }] : styles.tabOn), pressed && !on && styles.pressed]}
             >
-              <Text style={[styles.label, on && styles.labelOn]} numberOfLines={1}>{t.label}</Text>
+              <Text {...oneLine(TextScale.TITLE)} style={[styles.label, on && styles.labelOn]} numberOfLines={1}>{t.label}</Text>
             </Pressable>
           );
         })}

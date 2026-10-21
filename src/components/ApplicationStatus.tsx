@@ -12,6 +12,7 @@ import { usePaidBooking } from '@/features/coaching/bookings';
 import { goBack } from '@/lib/goBack';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, lift, radius, spacing, typography } from '@/theme';
+import { TextScale } from '@/theme/textScale';
 
 type Status = CoachApplication['status'];
 
@@ -61,19 +62,19 @@ export function ApplicationStatus({ application, me, onApplyAgain }: { applicati
     <Screen title="Coach application" compactTitle onBack={() => goBack('/coaches')}>
       <View style={styles.page}>
         <Reanimated.View entering={enter(0)} style={styles.head}>
-          <Text style={styles.title}>{words.title}</Text>
-          <Text style={styles.lead}>{words.lead(first, paid)}</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.title}>{words.title}</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.lead}>{words.lead(first, paid)}</Text>
         </Reanimated.View>
 
         <Reanimated.View entering={enter(1)} style={styles.card}>
           <View style={styles.who}>
             <Avatar name={me?.name ?? application?.fullName ?? '?'} seed={me?.avatarSeed ?? 'me'} uri={me?.avatarUrl} size={44} />
             <View style={styles.whoWords}>
-              <Text style={styles.whoName} numberOfLines={1}>{application?.fullName ?? me?.name ?? 'Your application'}</Text>
-              <Text style={styles.meta} numberOfLines={1}>Filed {filed}{facts ? ` · ${facts}` : ''}</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.whoName} numberOfLines={1}>{application?.fullName ?? me?.name ?? 'Your application'}</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta} numberOfLines={1}>Filed {filed}{facts ? ` · ${facts}` : ''}</Text>
             </View>
             <View style={[styles.pill, status === 'approved' && styles.pillGood, status === 'rejected' && styles.pillQuiet]}>
-              <Text style={[styles.pillText, status === 'approved' && styles.pillTextGood]}>{words.pill}</Text>
+              <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.pillText, status === 'approved' && styles.pillTextGood]}>{words.pill}</Text>
             </View>
           </View>
 
@@ -93,10 +94,10 @@ export function ApplicationStatus({ application, me, onApplyAgain }: { applicati
                   </View>
                   <View style={styles.stepWords}>
                     <View style={styles.stepTop}>
-                      <Text style={[styles.stepTitle, !done && !now && styles.stepTitleLater]}>{step.title}</Text>
+                      <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.stepTitle, !done && !now && styles.stepTitleLater]}>{step.title}</Text>
                       {now ? <Text style={styles.nowTag}>Now</Text> : null}
                     </View>
-                    <Text style={styles.stepNote}>{index === 0 ? `${step.note} · ${filed}` : step.note}</Text>
+                    <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.stepNote}>{index === 0 ? `${step.note} · ${filed}` : step.note}</Text>
                   </View>
                 </View>
               );
@@ -109,8 +110,8 @@ export function ApplicationStatus({ application, me, onApplyAgain }: { applicati
             <Pressable accessibilityRole="link" onPress={() => router.push('/(tabs)/coaches')} style={({ pressed }) => [styles.meanwhile, pressed && { opacity: PRESS_DIM }]}>
               <View style={styles.meanwhileMark}><Ionicons name="chatbubbles-outline" size={18} color={colors.brand} /></View>
               <View style={styles.whoWords}>
-                <Text style={styles.meanwhileTitle}>While you wait</Text>
-                <Text style={styles.meta}>Players are asking questions on the Coaching tab. Once you’re approved, coaches who answer early are the ones players find first.</Text>
+                <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meanwhileTitle}>While you wait</Text>
+                <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta}>Players are asking questions on the Coaching tab. Once you’re approved, coaches who answer early are the ones players find first.</Text>
               </View>
               <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
             </Pressable>

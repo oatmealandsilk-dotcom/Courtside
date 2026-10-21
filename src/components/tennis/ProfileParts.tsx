@@ -9,6 +9,7 @@ import { show as showToast } from '@/lib/toast';
 import { mixHex } from '@/features/activity/zones';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, lift, spacing, typography, withAlpha } from '@/theme';
+import { TextScale } from '@/theme/textScale';
 
 /*
  * The pieces the Tennis profile page is built from (Oct 5): a section's head,
@@ -40,12 +41,12 @@ export function SectionHead({ title, onlyYou = false, count, line, link }: {
     <View style={styles.head}>
       <View style={styles.headRow}>
         <View style={styles.headTitle} accessible accessibilityRole="header" accessibilityLabel={spoken}>
-          <Text style={styles.title}>{title}</Text>
-          {count ? <View style={styles.count}><Text style={styles.countText}>{count}</Text></View> : null}
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.title}>{title}</Text>
+          {count ? <View style={styles.count}><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.countText}>{count}</Text></View> : null}
         </View>
         {link ? (
           <Pressable accessibilityRole="button" accessibilityLabel={link.accessibilityLabel ?? link.label} onPress={link.onPress} hitSlop={{ left: 12, right: 12 }} style={({ pressed }) => [styles.link, pressed && styles.pressed]}>
-            <Text style={styles.linkText}>{link.label}</Text>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.linkText}>{link.label}</Text>
           </Pressable>
         ) : onlyYou ? <OnlyYou /> : null}
       </View>
@@ -60,7 +61,7 @@ export function OnlyYou() {
   return (
     <View style={styles.onlyYou} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
       <Ionicons name="eye-off-outline" size={10} color={colors.textMuted} />
-      <Text style={styles.onlyYouText}>Only you</Text>
+      <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.onlyYouText}>Only you</Text>
     </View>
   );
 }
@@ -84,7 +85,7 @@ export function NextMedal({ next }: { next: AchievementProgress }) {
   return (
     <View style={styles.next} accessible accessibilityLabel={`Next medal: ${a.name}, ${far}`}>
       <View style={styles.nextRow}>
-        <Text style={styles.nextName} numberOfLines={1}>Next: {a.name}</Text>
+        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.nextName} numberOfLines={1}>Next: {a.name}</Text>
         <Text style={styles.nextFar}>{far}</Text>
       </View>
       <View style={styles.nextTrack}>
@@ -133,8 +134,8 @@ export function Row({ lead, leadWidth, first = false, title, titleStyle, sub, su
       {lead ? <View style={[styles.lead, leadWidth ? { width: leadWidth } : null]}>{lead}</View> : null}
       <View style={[styles.body, { minHeight }, !first && styles.hairline]}>
         <View style={styles.words}>
-          {typeof title === 'string' ? <Text style={[styles.rowTitle, titleStyle]} numberOfLines={2}>{title}</Text> : title}
-          {sub ? (typeof sub === 'string' ? <Text style={styles.rowSub} numberOfLines={subLines}>{sub}</Text> : sub) : null}
+          {typeof title === 'string' ? <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.rowTitle, titleStyle]} numberOfLines={2}>{title}</Text> : title}
+          {sub ? (typeof sub === 'string' ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rowSub} numberOfLines={subLines}>{sub}</Text> : sub) : null}
         </View>
         {right}
         {chevron ? <Ionicons name="chevron-forward" size={16} color={colors.textFaint} /> : null}
@@ -162,7 +163,7 @@ export function Row({ lead, leadWidth, first = false, title, titleStyle, sub, su
 export function AddRow({ icon, title, sub, onPress, first = true }: { icon: IconName; title: string; sub?: string; onPress: () => void; first?: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
   return (
-    <Row first={first} lead={<Tile icon={icon} brand />} title={<Text style={styles.addTitle}>{title}</Text>} sub={sub} subLines={2} onPress={onPress} accessibilityLabel={sub ? `${title}. ${sub}` : title} />
+    <Row first={first} lead={<Tile icon={icon} brand />} title={<Text maxFontSizeMultiplier={TextScale.CARD} style={styles.addTitle}>{title}</Text>} sub={sub} subLines={2} onPress={onPress} accessibilityLabel={sub ? `${title}. ${sub}` : title} />
   );
 }
 
@@ -204,7 +205,7 @@ export function Chip({ label, icon, on = false }: { label: string; icon?: IconNa
   return (
     <View style={[styles.chip, { backgroundColor: on ? colors.brandDim : colors.bgElevated }]}>
       {icon ? <Ionicons name={icon} size={12} color={ink} /> : null}
-      <Text style={[styles.chipText, { color: ink }]}>{label}</Text>
+      <Text maxFontSizeMultiplier={TextScale.TITLE} style={[styles.chipText, { color: ink }]}>{label}</Text>
     </View>
   );
 }
@@ -220,7 +221,7 @@ export function Summary({ label, share }: { label: string; share?: number }) {
   const pct = share === undefined ? undefined : Math.round(Math.max(0, Math.min(1, share)) * 100);
   return (
     <View style={styles.summary} accessible accessibilityLabel={label}>
-      <Text style={styles.eyebrow}>{label}</Text>
+      <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.eyebrow}>{label}</Text>
       {pct !== undefined ? (
         <View style={styles.summaryTrack}>
           {pct > 0 ? <View style={[styles.summaryFill, { width: `${pct}%`, backgroundColor: colors.brand }]} /> : null}
@@ -249,12 +250,12 @@ export function EmptyRow({ icon, title, sub, action = 'Add', accessibilityLabel,
     <Pressable accessibilityRole="button" accessibilityLabel={accessibilityLabel} accessibilityHint={sub} onPress={onPress} style={({ pressed }) => [styles.empty, pressed && styles.pressed]}>
       <View style={styles.emptyIcon}><Ionicons name={icon} size={20} color={colors.brand} /></View>
       <View style={styles.words}>
-        <Text style={styles.emptyTitle}>{title}</Text>
-        {sub ? <Text style={styles.rowSub} numberOfLines={2}>{sub}</Text> : null}
+        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.emptyTitle}>{title}</Text>
+        {sub ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rowSub} numberOfLines={2}>{sub}</Text> : null}
       </View>
       <View style={styles.outline}>
         <Ionicons name="add" size={14} color={colors.text} />
-        <Text style={styles.outlineText}>{action}</Text>
+        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.outlineText}>{action}</Text>
       </View>
     </Pressable>
   );
@@ -320,7 +321,7 @@ export function MedalGrid({ items, locked = false, max = 8 }: { items: Achieveme
                 <View style={styles.lockBadge}><Ionicons name="lock-closed" size={8} color={colors.textFaint} /></View>
               )}
             </View>
-            <Text style={[styles.medalName, !unlocked && styles.medalNameLocked]} numberOfLines={2}>{a.name}</Text>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.medalName, !unlocked && styles.medalNameLocked]} numberOfLines={2}>{a.name}</Text>
           </Pressable>
         );
       })}

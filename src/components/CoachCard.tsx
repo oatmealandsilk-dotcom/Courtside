@@ -8,6 +8,7 @@ import { Avatar, Card, Chip } from '@/components/ui';
 import { money } from '@/lib/format';
 import type { Coach, User } from '@/data/types';
 import { colors, spacing, typography } from '@/theme';
+import { TextScale } from '@/theme/textScale';
 
 interface Props {
   coach: Coach;
@@ -33,7 +34,7 @@ export function CoachCard({ coach, user, onPress }: Props) {
             </PlayerName>
             {coach.verified ? <Ionicons name="shield-checkmark" size={15} color={colors.brand} /> : null}
           </View>
-          <Text style={styles.headline} numberOfLines={2}>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.headline} numberOfLines={2}>
             {coach.headline}
           </Text>
           <View style={styles.ratingRow}>
@@ -41,7 +42,7 @@ export function CoachCard({ coach, user, onPress }: Props) {
             <Text style={styles.rating}>
               {coach.ratingAvg.toFixed(1)} ({coach.ratingCount})
             </Text>
-            <Text style={styles.dot}>·</Text>
+            <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.dot}>·</Text>
             <Text style={styles.rating}>replies in ~{coach.responseTimeHours}h</Text>
           </View>
         </View>
