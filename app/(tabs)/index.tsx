@@ -172,12 +172,18 @@ function TapAway({ onHidden, label, children, style }: { onHidden: () => void; l
 }
 
 
-function LikeBurst({ token }: { token: number }) {
+/**
+ * `played` is the feed's own record of the last burst shown: a page rebuilt
+ * later (scrolled out of the window and back, or the feed re-dealt) mounts
+ * with the same token and stays still instead of hearting again untapped.
+ */
+function LikeBurst({ token, played }: { token: number; played: { current: number } }) {
   const scale = useRef(new Animated.Value(0)).current;
   const opacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    if (!token) return;
+    if (!token || token <= played.current) return;
+    played.current = token;
     scale.setValue(0.5);
     opacity.setValue(1);
     Animated.parallel([
@@ -187,7 +193,7 @@ function LikeBurst({ token }: { token: number }) {
         Animated.timing(opacity, { toValue: 0, duration: 160, useNativeDriver: true }),
       ]),
     ]).start();
-  }, [token, scale, opacity]);
+  }, [token, played, scale, opacity]);
 
   if (!token) return null;
   return (
@@ -1450,6 +1456,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
   ) : null;
 
   const [burst, setBurst] = useState({ id: '', n: 0 });
+  const burstPlayed = useRef(0);
 
   /**
    * Double tap only ever likes, the way every app that does this behaves —
@@ -1895,7 +1902,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
                         )}
                       </View>
                     </View>
-                    {burst.id === story.id ? <LikeBurst token={burst.n} /> : null}
+                    {burst.id === story.id ? <LikeBurst token={burst.n} played={burstPlayed} /> : null}
                     <ChromeLayer immersion={immersion} style={StyleSheet.absoluteFill} pointerEvents={immersive ? 'none' : 'box-none'}>
                     {/* An Instant's words are set exactly like a clip's: the same shade, the same who-line, the same small line. */}
                     <ReelScrim bottom={wordsBottom} />
@@ -1991,7 +1998,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
                       onShare={() => share('post', post.id)}
                       onMore={() => router.push({ pathname: '/post-menu', params: { id: post.id } })}
                       discInk={theme === 'us-open' ? '#FFFFFF' : colors.brand}
-                      burst={burst.id === post.id ? <LikeBurst token={burst.n} /> : null}
+                      burst={burst.id === post.id ? <LikeBurst token={burst.n} played={burstPlayed} /> : null}
                       pop={burst.id === post.id ? burst.n : 0}
                       onReady={(ok) => markReady(post.id, ok)}
                     />
@@ -2102,7 +2109,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
                     </Pressable>
                   )}
 
-                  {burst.id === post.id ? <LikeBurst token={burst.n} /> : null}
+                  {burst.id === post.id ? <LikeBurst token={burst.n} played={burstPlayed} /> : null}
 
                   <ChromeLayer immersion={immersion} style={StyleSheet.absoluteFill} pointerEvents={immersive ? 'none' : 'box-none'}>
 

@@ -5085,20 +5085,26 @@ export function AppProvider({ children }: { children: ReactNode }) {
     (storyId: ID) => {
       const me = requireUser();
       const now = stateRef.current.stories.find((st) => st.id === storyId);
-      if (now) now.likedBy.includes(me) ? haptics.untap() : haptics.reward();
-      if (live(me, storyId) && now) remote.setStoryLike(storyId, me, !now.likedBy.includes(me));
+      // Same as toggleLike: decided from the last tap, not the last redraw,
+      // written in tap order, and set (never flipped) in the update.
+      const key = `hit:${storyId}`;
+      const liking = !intended(key, !!now && now.likedBy.includes(me));
+      asked.current.set(key, { on: liking, at: Date.now() });
+      if (now) liking ? haptics.reward() : haptics.untap();
+      if (live(me, storyId) && now) {
+        inTurn(key, () => remote.setStoryLike(storyId, me, liking), () => {
+          asked.current.delete(key);
+          setState((prev) => ({ ...prev, stories: prev.stories.map((st) => (st.id === storyId ? { ...st, likedBy: withOrWithout(st.likedBy, me, !liking) } : st)) }));
+        });
+      }
       setState((prev) => {
         const story = prev.stories.find((st) => st.id === storyId);
-        const liking = !!story && !story.likedBy.includes(me);
+        if (!story || story.likedBy.includes(me) === liking) return prev;
         const next: AppState = {
           ...prev,
-          stories: prev.stories.map((st) =>
-            st.id === storyId
-              ? { ...st, likedBy: st.likedBy.includes(me) ? st.likedBy.filter((id) => id !== me) : [...st.likedBy, me] }
-              : st,
-          ),
+          stories: prev.stories.map((st) => (st.id === storyId ? { ...st, likedBy: withOrWithout(st.likedBy, me, liking) } : st)),
         };
-        return liking && story && story.authorId !== me
+        return liking && story.authorId !== me
           ? withNotification(next, { userId: story.authorId, actorId: me, kind: 'like', targetId: story.id, targetKind: 'hit', preview: story.caption ? snippet(story.caption) : undefined })
           : next;
       });
@@ -5111,16 +5117,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const me = requireUser();
       const comment = stateRef.current.comments.find((c) => c.id === commentId);
       if (!comment) return;
-      const liking = !comment.likedBy.includes(me);
+      // Two taps before a redraw used to both read "not liked" and add me twice (+2).
+      const key = `clike:${commentId}`;
+      const liking = !intended(key, comment.likedBy.includes(me));
+      asked.current.set(key, { on: liking, at: Date.now() });
       liking ? haptics.reward() : haptics.untap();
       if (live(me, commentId)) {
         const onHit = stateRef.current.stories.some((st) => st.id === comment.postId);
-        remote.setCommentLike(commentId, me, liking, onHit);
+        inTurn(key, async () => { await remote.setCommentLike(commentId, me, liking, onHit); return true; }, () => asked.current.delete(key));
       }
       setState((prev) => {
+        const c0 = prev.comments.find((c) => c.id === commentId);
+        if (!c0 || c0.likedBy.includes(me) === liking) return prev;
         const next: AppState = {
           ...prev,
-          comments: prev.comments.map((c) => (c.id === commentId ? { ...c, likedBy: liking ? [...c.likedBy, me] : c.likedBy.filter((id) => id !== me) } : c)),
+          comments: prev.comments.map((c) => (c.id === commentId ? { ...c, likedBy: withOrWithout(c.likedBy, me, liking) } : c)),
         };
         if (!liking) return next;
         const onHit = prev.stories.some((st) => st.id === comment.postId);
