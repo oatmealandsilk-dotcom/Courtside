@@ -96,7 +96,7 @@ export function Chips<T extends string>({ options, value, onChange, clearable = 
       {options.map((o) => (soft ? (
         <SoftPill key={o.value} label={o.label} a11y={o.a11y} on={value === o.value} fill={fill} small={small} onPress={() => onChange(clearable && value === o.value ? undefined : o.value)} />
       ) : (
-        <Chip key={o.value} label={o.label} selected={value === o.value} tint={brand ? undefined : colors.text} ink={brand ? colors.brandInk : colors.bg} icon={brand ? 'checkmark' : undefined} onPress={() => onChange(clearable && value === o.value ? undefined : o.value)} />
+        <Chip key={o.value} label={o.label} selected={value === o.value} tint={brand ? undefined : CALM_SHEETS ? colors.brand : colors.text} ink={brand || CALM_SHEETS ? colors.brandInk : colors.bg} icon={brand ? 'checkmark' : undefined} onPress={() => onChange(clearable && value === o.value ? undefined : o.value)} />
       )))}
     </View>
   );
@@ -202,9 +202,9 @@ export function ChipStrip<T extends string | number>({ options, value, onChange,
           ? <SoftPill key={String(o.value)} onLayout={measured(o)} label={o.label} a11y={o.a11y} on={value === o.value} onPress={() => onChange(o.value)} />
           : reveal ? (
             <View key={String(o.value)} onLayout={measured(o)}>
-              <Chip label={o.label} selected={value === o.value} tint={colors.text} ink={colors.bg} onPress={() => onChange(o.value)} />
+              <Chip label={o.label} selected={value === o.value} tint={CALM_SHEETS ? colors.brand : colors.text} ink={CALM_SHEETS ? colors.brandInk : colors.bg} onPress={() => onChange(o.value)} />
             </View>
-          ) : <Chip key={String(o.value)} label={o.label} selected={value === o.value} tint={colors.text} ink={colors.bg} onPress={() => onChange(o.value)} />))}
+          ) : <Chip key={String(o.value)} label={o.label} selected={value === o.value} tint={CALM_SHEETS ? colors.brand : colors.text} ink={CALM_SHEETS ? colors.brandInk : colors.bg} onPress={() => onChange(o.value)} />))}
       </ScrollView>
       <LinearGradient pointerEvents="none" colors={inCard ? [`${colors.surface}00`, colors.surface] : [`${colors.bg}00`, colors.bg]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={[styles.fadeRight, reveal && atEnd && styles.fadeGone]} />
     </View>

@@ -1,4 +1,4 @@
-export { Avatar, tintFor } from './Avatar';
+export { Avatar, quietTintFor, tintFor } from './Avatar';
 export { BrandWash, ShirtWash } from './BrandWash';
 export { Button } from './Button';
 export { Card } from './Card';

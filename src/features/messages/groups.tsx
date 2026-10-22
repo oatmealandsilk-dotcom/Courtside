@@ -1,6 +1,6 @@
 import React, { useId } from 'react';
 import { SEND_TO_LOOK } from '@/design/sendToPreview';
-import { Platform, StyleSheet, View } from 'react-native';
+import { Platform, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import Svg, { ClipPath, Defs, Image as SvgImage, Path, Text as SvgText } from 'react-native-svg';
 
@@ -63,6 +63,31 @@ export function GroupAvatar({ people, size, photoUrl, name }: { people: User[]; 
     );
   }
   if (!b) return <Avatar name={a.name} seed={a.avatarSeed} uri={a.avatarUrl} size={size} />;
+  if (SEND_TO_LOOK !== 'now') {
+    // The calm preview (?ss=a|b, web): Instagram's group face. Two equal faces corner to corner inside
+    // the one face's box, the front one ringed in the page colour; the back one keeps its first letter
+    // in the part that shows.
+    const small = Math.round(size * 0.68);
+    const ringW = 2;
+    const type = Math.round(small * 0.36);
+    const at = small / 2 - small * 0.08;
+    const box = type * 1.4;
+    return (
+      <View style={{ width: size, height: size }} accessible={false}>
+        <View style={styles.back}>
+          <Avatar name={b.name} seed={b.avatarSeed} uri={b.avatarUrl} size={small} plain />
+          {b.avatarUrl ? null : (
+            <View style={{ position: 'absolute', left: at - box / 2, top: at - box / 2, width: box, height: box, alignItems: 'center', justifyContent: 'center' }}>
+              <Text style={{ ...font('500'), fontSize: type, color: colors.text }}>{b.name.trim()[0]?.toUpperCase() ?? ''}</Text>
+            </View>
+          )}
+        </View>
+        <View style={[styles.front, { width: small, height: small, borderRadius: small / 2, padding: ringW, backgroundColor: colors.bg }]}>
+          <Avatar name={a.name} seed={a.avatarSeed} uri={a.avatarUrl} size={small - ringW * 2} />
+        </View>
+      </View>
+    );
+  }
   const small = Math.round(size * 0.66);
   const room = Math.max(1.5, size / 22);
   const shape = bitten(small / 2, size - small / 2, small / 2 + room);
@@ -76,12 +101,12 @@ export function GroupAvatar({ people, size, photoUrl, name }: { people: User[]; 
         <Defs>
           <ClipPath id={clipId}><Path d={shape} /></ClipPath>
         </Defs>
-        <Path d={shape} fill={SEND_TO_LOOK === 'a' ? colors.surfaceAlt : SEND_TO_LOOK === 'b' ? colors.brandDim : tintFor(b.avatarSeed)} />
+        <Path d={shape} fill={tintFor(b.avatarSeed)} />
         {b.avatarUrl ? (
           <SvgImage href={{ uri: b.avatarUrl }} x={0} y={0} width={small} height={small} preserveAspectRatio="xMidYMid slice" clipPath={`url(#${clipId})`} />
         ) : (
           // Android takes Inter Bold as its own family with no weight on top (a weight of 700 there falls back to the phone's own font; see textScale).
-          <SvgText x={at} y={at + type * 0.36} fontSize={type} fontWeight={Platform.OS === 'android' ? 'normal' : SEND_TO_LOOK === 'now' ? '700' : '500'} fontFamily={font(SEND_TO_LOOK === 'now' ? '700' : '500').fontFamily} fill={SEND_TO_LOOK === 'a' ? colors.textMuted : SEND_TO_LOOK === 'b' ? colors.brand : colors.onMedia} textAnchor="middle">{letter}</SvgText>
+          <SvgText x={at} y={at + type * 0.36} fontSize={type} fontWeight={Platform.OS === 'android' ? 'normal' : '700'} fontFamily={font('700').fontFamily} fill={colors.onMedia} textAnchor="middle">{letter}</SvgText>
         )}
       </Svg>
       <Avatar name={a.name} seed={a.avatarSeed} uri={a.avatarUrl} size={small} style={styles.front} />

@@ -49,6 +49,9 @@ export const lightColors = {
   // The "see-through" checkerboard a share's sticker is previewed on (Oct 15, owner: "the background is
   // clear"): two dark greys, the same on every court, so the white numbers and the green mark read on it.
   checker: '#26292A', checkerAlt: '#323637',
+  // A face with no photo, in the calm Send-to preview: six quiet tones, one per person by their seed, so a
+  // grid of initials never reads as one colour. Low in colour on purpose; the page's text reads on every one.
+  avatarTint1: '#DCE3D3', avatarTint2: '#E8DFCC', avatarTint3: '#ECD9D0', avatarTint4: '#D6DFE4', avatarTint5: '#E0DAE3', avatarTint6: '#E2E0CF',
 } as const;
 
 export const colors: Record<keyof typeof lightColors, string> = { ...lightColors };

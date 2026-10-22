@@ -8,7 +8,9 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { DragSheet } from '@/components/DragSheet';
 import { HitGlyph } from '@/components/HitGlyph';
 import { shareOutside } from '@/lib/shareOutside';
-import { Avatar, Button, Field } from '@/components/ui';
+import { Avatar, Button, Field, quietTintFor } from '@/components/ui';
+import { initials } from '@/lib/format';
+import { LinearGradient } from 'expo-linear-gradient';
 import type { ShareItem, User } from '@/data/types';
 import { isLocalMedia } from '@/data/remote';
 import { GroupAvatar, groupName, isDirectChat, isGroupChat, othersIn } from '@/features/messages/groups';
@@ -48,9 +50,11 @@ const PEOPLE_SHOWN = 40;
 /** Faces this big, in tiles at least this wide: four across a phone, five in a computer's box. */
 const FACE = 56;
 const TILE_MIN = 84;
-/** The Instagram preview (?ss=a): bigger faces, three across a phone. */
+/** The calm preview (?ss=a|b): bigger faces, always three across. */
 const FACE_A = 64;
-const TILE_MIN_A = 112;
+/** Its message box: one line (40 high) growing to four as you type. */
+const NOTE_MIN = 40;
+const NOTE_MAX = 104;
 
 type Kind = 'post' | 'question' | 'profile' | 'hit-request' | 'court' | 'message';
 const KINDS: Kind[] = ['post', 'question', 'profile', 'hit-request', 'court', 'message'];
@@ -92,6 +96,7 @@ export default function ShareSheet() {
   const [fallbackNote, setFallbackNote] = useState('');
   const { width: windowWidth } = useWindowDimensions();
   const [gridWidth, setGridWidth] = useState(0);
+  const [noteHeight, setNoteHeight] = useState(0);
 
   // The card itself (rise, dim, drag handle) is DragSheet's; this only asks it to close.
   const [closeSignal, setCloseSignal] = useState(0);
@@ -318,41 +323,45 @@ export default function ShareSheet() {
 
   if (SEND_TO_LOOK !== 'now') {
     // ── The calm preview (?ss=a|b, web only; phones never get here) ──
+    // Both looks are Instagram's share sheet: one grid of faces three across, a tick when picked, Send
+    // only once someone is picked, and a row of round ways out of the app when nobody is. A has
+    // Instagram's own top (search and a close); B puts a "Send to" title and what is being sent above it.
     const look = SEND_TO_LOOK;
-    const face = look === 'a' ? FACE_A : FACE;
-    const cols = Math.max(3, Math.min(5, Math.floor(width / (look === 'a' ? TILE_MIN_A : TILE_MIN))));
-    const tileW = Math.floor(width / cols);
-    const tickSize = look === 'a' ? 24 : 22;
+    const tileW = Math.floor(width / 3);
 
-    // What is being sent, small: a face, a picture, or its icon on a quiet well.
-    const visual = (): React.ReactNode => {
-      const well = (icon: React.ReactNode) => <View style={[calm.thing, look === 'b' && calm.thingRound]}>{icon}</View>;
+    // What is being sent, in B's line under the title: a small rounded picture and one plain line.
+    const thumb = (): React.ReactNode => {
+      const well = (icon: React.ReactNode) => <View style={calm.thumb}>{icon}</View>;
       const glyph = (name: keyof typeof Ionicons.glyphMap) => well(<Ionicons name={name} size={20} color={colors.textMuted} />);
       if (!sending) return glyph('alert-circle-outline');
-      if (kind === 'profile') { const u = users.find((x) => x.id === id); return u ? <Avatar name={u.name} seed={u.avatarSeed} uri={u.avatarUrl} size={40} /> : glyph('person-outline'); }
+      if (kind === 'profile') {
+        const u = users.find((x) => x.id === id);
+        if (!u) return glyph('person-outline');
+        return u.avatarUrl
+          ? <Image source={{ uri: u.avatarUrl }} style={calm.thumb} />
+          : <View style={[calm.thumb, { backgroundColor: quietTintFor(u.avatarSeed) }]}><Text style={calm.thumbInk}>{initials(u.name)}</Text></View>;
+      }
       if (kind === 'post') {
         const post = posts.find((x) => x.id === id);
         const pic = post?.thumbnailUrl ?? post?.imageUrl;
-        return pic ? <Image source={{ uri: pic }} style={calm.thing} /> : glyph(post?.kind === 'clip' ? 'play-circle-outline' : 'image-outline');
+        return pic ? <Image source={{ uri: pic }} style={calm.thumb} /> : glyph(post?.kind === 'clip' ? 'play-circle-outline' : 'image-outline');
       }
       if (kind === 'question') return glyph('chatbubbles-outline');
       if (kind === 'court') return glyph('location-outline');
       if (kind === 'hit-request') return well(<HitGlyph size={20} color={colors.textMuted} />);
       return glyph('arrow-redo-outline');
     };
-    // B's row: what it is, and a quiet second line saying whose, or what kind.
-    const lines = (): [string, string] => {
-      if (!sending) return [kind === 'message' ? 'That message can’t be forwarded' : 'This item is no longer available', ''];
-      if (kind === 'profile') { const u = users.find((x) => x.id === id); return [u?.name ?? sending.label, u ? `@${u.handle}` : 'Profile']; }
+    const itemLine = (): string => {
+      if (!sending) return kind === 'message' ? 'That message can’t be forwarded' : 'This item is no longer available';
+      const whose = (name?: string) => (name ? `${name}’s` : 'A');
+      if (kind === 'profile') return `${whose(users.find((x) => x.id === id)?.name)} profile`;
       if (kind === 'post') {
         const post = posts.find((x) => x.id === id);
         const by = users.find((u) => u.id === post?.authorId)?.name.split(' ')[0];
-        return [sending.label, `${post?.kind === 'clip' ? 'Clip' : 'Post'}${by ? ` by ${by}` : ''}`];
+        return `${whose(by)} ${post?.kind === 'clip' ? 'clip' : 'post'}`;
       }
-      if (kind === 'question') return [sending.label, 'Thread'];
-      if (kind === 'court') return [sending.label, 'Court'];
-      if (kind === 'hit-request') { const h = hitRequests.find((x) => x.id === id); return ['Looking for a hit', h ? `${hitWhen(h.startsAt)} · ${h.place.name}` : '']; }
-      return [sending.label, 'Message'];
+      if (kind === 'hit-request') { const h = hitRequests.find((x) => x.id === id); return h ? `A hit at ${h.place.name}, ${hitWhen(h.startsAt)}` : 'A hit'; }
+      return sending.label;
     };
 
     const copyLink = async () => {
@@ -367,12 +376,15 @@ export default function ShareSheet() {
       ...(Platform.OS === 'web' ? [] : [{ key: 'sms', label: 'Messages', icon: 'chatbubble-outline' as const, run: () => { void Linking.openURL(`sms:&body=${text}`).catch(() => undefined); } }]),
       // A web link, so no app scheme to declare and no new build.
       { key: 'wa', label: 'WhatsApp', icon: 'logo-whatsapp', run: () => { void Linking.openURL(`https://wa.me/?text=${text}`).catch(() => undefined); } },
-      { key: 'share', label: 'Share…', icon: 'share-outline', run: () => { void shareOut(); } },
+      // The phone's own share sheet (a browser's, or the link copied, through shareOutside.web).
+      { key: 'more', label: 'More', icon: 'ellipsis-horizontal', run: () => { void shareOut(); } },
     ] : [];
 
     const calmTile = (target: Target) => {
       const on = selected.includes(target.key);
       const group = !!target.people;
+      // A hit's chat is named "Hit · <court>": the tile says just the court, and a small hit mark sits where the tick goes.
+      const hitAt = group ? /^Hit · (.+)$/.exec(target.name)?.[1] : undefined;
       return (
         <Pressable
           key={target.key}
@@ -386,15 +398,17 @@ export default function ShareSheet() {
             <>
               <View style={pressed ? calm.pressed : null}>
                 {group
-                  ? <GroupAvatar people={target.people ?? []} size={face} photoUrl={target.photoUrl} name={target.name} />
-                  : <Avatar name={target.name} seed={target.user?.avatarSeed ?? target.key} uri={target.user?.avatarUrl} size={face} />}
+                  ? <GroupAvatar people={target.people ?? []} size={FACE_A} photoUrl={target.photoUrl} name={target.name} />
+                  : <Avatar name={target.name} seed={target.user?.avatarSeed ?? target.key} uri={target.user?.avatarUrl} size={FACE_A} />}
                 {on ? (
-                  <View style={[calm.tick, { width: tickSize, height: tickSize, borderRadius: tickSize / 2 }]}><Ionicons name="checkmark" size={look === 'a' ? 14 : 13} color={colors.brandInk} /></View>
+                  <View style={calm.tick}><Ionicons name="checkmark" size={13} color={colors.brandInk} /></View>
                 ) : target.locked ? (
-                  <View style={[calm.tick, calm.tickLocked]}><Ionicons name="lock-closed" size={10} color={colors.textMuted} /></View>
+                  <View style={[calm.tick, calm.tickQuiet]}><Ionicons name="lock-closed" size={10} color={colors.textMuted} /></View>
+                ) : hitAt ? (
+                  <View style={[calm.tick, calm.tickQuiet]}><HitGlyph size={12} color={colors.text} /></View>
                 ) : null}
               </View>
-              <Text numberOfLines={2} style={[calm.name, on && calm.nameOn]}>{target.name}</Text>
+              <Text numberOfLines={1} ellipsizeMode="tail" style={calm.name}>{hitAt ?? target.name}</Text>
             </>
           )}
         </Pressable>
@@ -418,34 +432,36 @@ export default function ShareSheet() {
       </View>
     );
 
-    const [main, sub] = lines();
+    // One list, recent chats first and then people, the way Instagram's is. The last row melts into the
+    // page under a short fade (a gradient drawn over the list, nothing faded on a parent), never sliced.
     const grid = (
-      <ScrollView style={styles.list} keyboardShouldPersistTaps="handled" contentContainerStyle={calm.listBody}>
-        <View onLayout={(e) => { const w = Math.floor(e.nativeEvent.layout.width); if (w > 0 && w !== gridWidth) setGridWidth(w); }}>
-          {look === 'a' ? (
+      <View style={styles.list}>
+        <ScrollView style={{ flex: 1 }} keyboardShouldPersistTaps="handled" contentContainerStyle={calm.listBody}>
+          <View onLayout={(e) => { const w = Math.floor(e.nativeEvent.layout.width); if (w > 0 && w !== gridWidth) setGridWidth(w); }}>
             <View style={styles.grid}>{[...recentShown, ...peopleShown].map(calmTile)}</View>
-          ) : (
-            <>
-              {recentShown.length ? (<><Text style={calm.label}>{term ? 'Chats' : 'Recent'}</Text><View style={styles.grid}>{recentShown.map(calmTile)}</View></>) : null}
-              {peopleShown.length ? (<><Text style={calm.label}>People</Text><View style={styles.grid}>{peopleShown.map(calmTile)}</View></>) : null}
-            </>
-          )}
-          {nothingFound ? <Text style={calm.empty}>No one matches “{search.trim()}”</Text> : null}
-        </View>
-      </ScrollView>
+            {nothingFound ? <Text style={calm.empty}>No one matches “{search.trim()}”</Text> : null}
+          </View>
+        </ScrollView>
+        <LinearGradient pointerEvents="none" colors={[`${colors.bg}00`, colors.bg]} style={calm.fade} />
+      </View>
     );
 
     // Nothing picked: ways out of the app. Someone picked: a message and Send (Instagram never shows a dead Send).
     const bottom = selected.length ? (
       <View style={calm.bar}>
-        <View style={calm.noteRow}>
-          {look === 'a' ? visual() : null}
-          <View style={{ flex: 1 }}>
-            <Field value={note} onChangeText={setNote} placeholder={look === 'a' ? 'Write a message…' : 'Add a message…'} well />
-          </View>
-        </View>
+        <TextInput
+          value={note}
+          onChangeText={setNote}
+          placeholder="Write a message…"
+          placeholderTextColor={colors.textFaint}
+          selectionColor={colors.brand}
+          multiline
+          accessibilityLabel="Message"
+          onContentSizeChange={(e) => setNoteHeight(e.nativeEvent.contentSize.height)}
+          style={[calm.note, { height: Math.min(NOTE_MAX, Math.max(NOTE_MIN, Math.ceil(noteHeight))) }]}
+        />
         <Button
-          label={sent ? 'Sent' : many ? (look === 'a' ? 'Send separately' : `Send separately · ${selected.length}`) : 'Send'}
+          label={sent ? 'Sent' : many ? 'Send separately' : 'Send'}
           onPress={() => { void send(); }}
           loading={checking}
           disabled={!sending}
@@ -455,20 +471,20 @@ export default function ShareSheet() {
       </View>
     ) : outsideActions.length ? (
       <View style={calm.bar}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[calm.actions, look === 'b' && calm.actionsCentred]} style={look === 'b' ? { alignSelf: 'center' } : undefined}>
+        <View style={calm.actions}>
           {outsideActions.map((a) => (
-            <Pressable key={a.key} onPress={a.run} accessibilityRole="button" accessibilityLabel={a.label} style={[calm.action, look === 'b' && calm.actionB]}>
+            <Pressable key={a.key} onPress={a.run} accessibilityRole="button" accessibilityLabel={a.label} style={calm.action}>
               {({ pressed }) => (
                 <>
-                  <View style={[calm.actionDisc, look === 'b' && calm.actionDiscB, pressed && calm.pressed]}>
-                    <Ionicons name={a.icon} size={look === 'a' ? 24 : 22} color={colors.text} />
+                  <View style={[calm.actionDisc, pressed && calm.pressed]}>
+                    <Ionicons name={a.icon} size={24} color={colors.text} />
                   </View>
                   <Text numberOfLines={1} style={calm.actionLabel}>{a.label}</Text>
                 </>
               )}
             </Pressable>
           ))}
-        </ScrollView>
+        </View>
         {fallbackNote ? <Text selectable style={calm.empty}>{fallbackNote}</Text> : null}
       </View>
     ) : null;
@@ -481,8 +497,8 @@ export default function ShareSheet() {
         header={look === 'a' ? (
           <View style={calm.searchRow}>
             <View style={{ flex: 1 }}>{searchBox}</View>
-            <Pressable onPress={dismiss} accessibilityRole="button" accessibilityLabel="Close" hitSlop={8} style={calm.closeA}>
-              <Ionicons name="close" size={20} color={colors.textMuted} />
+            <Pressable onPress={dismiss} accessibilityRole="button" accessibilityLabel="Close" hitSlop={10} style={calm.closeA}>
+              <Ionicons name="close" size={22} color={colors.textMuted} />
             </Pressable>
           </View>
         ) : (
@@ -493,11 +509,8 @@ export default function ShareSheet() {
           {look === 'b' ? (
             <>
               <View style={calm.itemRow}>
-                {visual()}
-                <View style={{ flex: 1, gap: 1 }}>
-                  <Text numberOfLines={1} style={calm.itemMain}>{main}</Text>
-                  {sub ? <Text numberOfLines={1} style={calm.itemSub}>{sub}</Text> : null}
-                </View>
+                {thumb()}
+                <Text numberOfLines={1} style={calm.itemLine}>{itemLine()}</Text>
               </View>
               <View style={calm.searchB}>{searchBox}</View>
             </>
@@ -619,36 +632,38 @@ const styleDefinitions = StyleSheet.create({
 /** The calm Send-to preview's own styles (?ss=a|b, web only). */
 const calmDefinitions = StyleSheet.create({
   sheet: { flex: 1, paddingBottom: spacing.xl },
-  searchRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
-  closeA: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+  searchRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingLeft: spacing.lg, paddingRight: spacing.sm, paddingBottom: spacing.sm },
+  closeA: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   search: { flexDirection: 'row', alignItems: 'center', gap: 8, height: 36, borderRadius: 10, backgroundColor: colors.surfaceAlt, paddingHorizontal: 10 },
-  searchB: { marginTop: spacing.md, marginHorizontal: spacing.lg },
+  searchB: { marginTop: spacing.sm, marginHorizontal: spacing.lg, marginBottom: spacing.xs },
   searchInput: { flex: 1, height: 36, color: colors.text, ...typography.body, padding: 0, ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : {}) },
-  itemRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: 56, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
-  itemMain: { ...typography.bodyStrong, color: colors.text },
-  itemSub: { ...typography.small, color: colors.textMuted },
-  thing: { width: 40, height: 40, borderRadius: radius.sm, backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
-  thingRound: { borderRadius: 20 },
-  listBody: { paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
-  label: { ...typography.smallStrong, color: colors.textMuted, paddingTop: spacing.lg, paddingBottom: spacing.sm },
-  tile: { alignItems: 'center', gap: 6, paddingVertical: spacing.md, paddingHorizontal: 4 },
+  itemRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.xs },
+  itemLine: { ...typography.body, fontSize: 15, color: colors.textMuted, flex: 1 },
+  thumb: { width: 40, height: 40, borderRadius: radius.sm, backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  thumbInk: { ...font('500'), fontSize: 14, color: colors.text },
+  listBody: { paddingHorizontal: spacing.lg, paddingTop: spacing.xs, paddingBottom: spacing.lg },
+  fade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 16 },
+  // Face 64, 6 below it, a 16-high name: rows about 94 apart, as Instagram's are.
+  tile: { alignItems: 'center', gap: 6, paddingVertical: spacing.xs, paddingHorizontal: 4 },
   pressed: { transform: [{ scale: 0.96 }] },
+  // The tick sits on the face's lower right, ringed in the sheet's own colour so it reads on a photo too.
   tick: {
     position: 'absolute', right: -2, bottom: -2, width: 22, height: 22, borderRadius: 11,
     backgroundColor: colors.brand, borderWidth: 2, borderColor: colors.bg, alignItems: 'center', justifyContent: 'center',
   },
-  tickLocked: { backgroundColor: colors.surfaceAlt },
-  name: { ...typography.small, fontSize: 13, lineHeight: 16, minHeight: 32, color: colors.text, textAlign: 'center' },
-  nameOn: { ...font('600') },
+  tickQuiet: { backgroundColor: colors.surfaceAlt },
+  name: { ...typography.small, fontSize: 13, lineHeight: 16, color: colors.text, textAlign: 'center', alignSelf: 'stretch' },
   empty: { ...typography.small, color: colors.textFaint, textAlign: 'center', paddingTop: spacing.xl },
-  bar: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, paddingTop: spacing.md, paddingHorizontal: spacing.lg, gap: spacing.md },
-  noteRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  send: { borderRadius: radius.md, paddingVertical: 0, minHeight: 44, justifyContent: 'center' },
-  actions: { gap: spacing.sm },
-  actionsCentred: { gap: spacing.lg },
-  action: { width: 72, alignItems: 'center', gap: 6 },
-  actionB: { width: 64 },
+  bar: { paddingTop: spacing.sm, paddingHorizontal: spacing.lg, gap: spacing.md },
+  note: {
+    ...typography.body, color: colors.text, backgroundColor: colors.surfaceAlt, borderRadius: 20,
+    paddingHorizontal: 16, paddingTop: 10, paddingBottom: 10, textAlignVertical: 'center',
+    ...(Platform.OS === 'web' ? ({ outlineStyle: 'none', resize: 'none' } as object) : {}),
+  },
+  send: { borderRadius: radius.md, paddingVertical: 0, minHeight: 46, justifyContent: 'center' },
+  // Each way out takes an equal share of the row, so three or four fill it edge to edge.
+  actions: { flexDirection: 'row' },
+  action: { flex: 1, alignItems: 'center', gap: 6 },
   actionDisc: { width: 52, height: 52, borderRadius: 26, backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
-  actionDiscB: { width: 48, height: 48, borderRadius: 24 },
   actionLabel: { ...typography.small, fontSize: 12, color: colors.textMuted },
 });

@@ -6,6 +6,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { colors, radius, spacing, typography } from '@/theme';
 import { BrandWash } from './BrandWash';
 import { TextScale } from '@/theme/textScale';
+import { CALM_SHEETS } from '@/design/sendToPreview';
 
 interface Props {
   label: string;
@@ -28,7 +29,8 @@ export function Chip({ label, selected = false, onPress, tint, ink, small = fals
       style={[
         styles.chip,
         small && styles.small,
-        { backgroundColor: background, borderColor: selected ? 'transparent' : colors.border },
+        // The calm preview's sheets (?ss=b, web): no outline on a chip, the grey well is enough.
+        { backgroundColor: background, borderColor: selected || CALM_SHEETS ? 'transparent' : colors.border },
       ]}
     >
       {selected && !tint ? <BrandWash /> : null}

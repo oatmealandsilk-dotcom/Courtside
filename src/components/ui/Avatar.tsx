@@ -22,6 +22,17 @@ export function tintFor(seed: string): string {
   return palette[hash % palette.length];
 }
 
+/**
+ * The calm Send-to preview's face colour (?ss=a|b, web): one of the court's six quiet tones, by the
+ * same seed, so a grid of initials reads as different people without any loud accent.
+ */
+export function quietTintFor(seed: string): string {
+  const palette = [colors.avatarTint1, colors.avatarTint2, colors.avatarTint3, colors.avatarTint4, colors.avatarTint5, colors.avatarTint6];
+  let hash = 0;
+  for (let i = 0; i < seed.length; i += 1) hash = (hash * 31 + seed.charCodeAt(i)) % 100000;
+  return palette[hash % palette.length];
+}
+
 interface Props {
   uri?: string;
   name: string;
@@ -46,11 +57,9 @@ export const Avatar = React.memo(function Avatar({ uri, name, seed, size = 40, s
   // Only the people list, not the whole app: a like or a message elsewhere does not redraw every face on screen.
   const users = useUsers();
   const photo = uri ?? users.find(user => user.avatarSeed === seed || user.id === seed)?.avatarUrl;
-  // The calm preview (?ss=a|b, web): a face with no photo is one quiet tone, not a seed's loud accent.
-  // A: Instagram's grey (the well colour, a hairline, muted letters). B: the brand's own pale tint, letters in the brand.
-  const calm = SEND_TO_LOOK === 'now' ? null : SEND_TO_LOOK === 'a'
-    ? { fill: colors.surfaceAlt, ink: colors.textMuted, scale: 0.34, ring: colors.border }
-    : { fill: colors.brandDim, ink: colors.brand, scale: 0.36, ring: undefined };
+  // The calm preview (?ss=a|b, web): a face with no photo takes one of the court's quiet tones by its seed,
+  // letters in the page's ink at a regular weight, no outline (Instagram's faces have none).
+  const calm = SEND_TO_LOOK === 'now' ? null : { fill: quietTintFor(seed), ink: colors.text, scale: 0.36 };
   const tint = calm ? calm.fill : tintFor(seed);
   // The fill the initials actually sit on: a caller's own background (the profile's brand disc,
   // the player card's deeper shade) wins over the seed's tint, so the ink is chosen against that.
@@ -67,7 +76,6 @@ export const Avatar = React.memo(function Avatar({ uri, name, seed, size = 40, s
           borderRadius: radius.pill,
           backgroundColor: tint,
         },
-        calm?.ring && !photo ? { borderWidth: StyleSheet.hairlineWidth, borderColor: calm.ring } : null,
         style,
       ]}
     >
