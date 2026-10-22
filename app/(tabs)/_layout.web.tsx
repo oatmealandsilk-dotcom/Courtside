@@ -18,6 +18,9 @@ import { useCurtainDown } from '@/features/feed/warmup';
 import { useTourOpen } from '@/features/tour/tourStore';
 import { nearbyMapSettled } from '@/components/NearbyMap';
 import { colors } from '@/theme';
+import { View } from 'react-native';
+import { MapLayer } from '@/components/map/MapLayer';
+import { layerUp, useLayerState } from '@/components/map/mapWindow';
 
 /** The browser has been asked to keep data use down (a phone's data saver). */
 function savingData(): boolean {
@@ -118,6 +121,9 @@ export default function TabsLayout() {
   // there is no swipe in from the Feed, and the browser's Back button should find the section left.
   // (On a phone-width window, Back from the Feed does open Discussions, at its top: the price of
   // never having the section change in plain view on a swipe in.)
+  // The full map as a window over the tabs (mapWindow): made once, opened from the map card.
+  const [mapLayer] = useState(() => <MapLayer />);
+  const mapUp = layerUp(useLayerState());
   const lastTab = useRef(pathname);
   const swipes = useRef(isPhone);
   swipes.current = isPhone;
@@ -138,6 +144,8 @@ export default function TabsLayout() {
   // A guest reads the tabs (guest mode, Oct 17); only the phone app sends signed-out to sign-in.
   if (ready && !currentUserId && !isGuest) return <Redirect href="/sign-in" />;
   return (
+    <View style={{ flex: 1 }}>
+    <View style={{ flex: 1 }} aria-hidden={mapUp || undefined}>
     <SwipeSurface slideRef={slide} onSwipe={swipe} onCommit={direction => {
       const next = destination(direction);
       if (next) setPendingTab(next.pathname);
@@ -176,5 +184,8 @@ export default function TabsLayout() {
       <Tabs.Screen name="profile" options={{ title: 'Profile' }} />
     </Tabs>
     </SwipeSurface>
+    </View>
+    {mapLayer}
+    </View>
   );
 }

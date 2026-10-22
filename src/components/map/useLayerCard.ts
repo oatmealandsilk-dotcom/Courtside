@@ -29,11 +29,12 @@ export function useLayerCard(source: LayerSource | undefined, info: { center: La
 
   // What the card shows, kept current for the window (it parks on exactly this view).
   const { center, markers, overlay, painted } = info;
+  const owner = useRef({}).current;
   useEffect(() => {
     if (!source) return;
-    setCard(source, { center, markers, overlay, painted, measure, release } satisfies CardInfo);
+    setCard(source, owner, { center, markers, overlay, painted, measure, release } satisfies CardInfo);
   }, [source, center.lat, center.lng, markers, overlay, painted, measure, release]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => (source ? () => setCard(source, null) : undefined), [source]);
+  useEffect(() => (source ? () => setCard(source, owner, null) : undefined), [source, owner]);
 
   const onPressIn = useCallback(() => {
     if (!source) return;

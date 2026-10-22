@@ -58,13 +58,22 @@ export const box = { w: makeMutable(0), h: makeMutable(0) };
 /** 1 while a finger is dragging the window (its corners and the scrim follow the finger, not the springs). */
 export const dragging = makeMutable(0);
 
+/**
+ * All of the above in one object. An animated style that reads the window
+ * names this in its own body (openness(LAYER)): in a browser, an animated
+ * style only hears the shared values it can see directly, not those inside
+ * a helper it calls.
+ */
+export const LAYER = { win, cardRect, cardScale, box, dragging };
+export type LayerValues = typeof LAYER;
+
 /** How far open, 0 (the card) to 1 (the whole screen), worked out from the window's height. */
-export function openness(): number {
+export function openness(l: LayerValues): number {
   'worklet';
-  const full = box.h.value;
-  const from = cardRect.h.value;
+  const full = l.box.h.value;
+  const from = l.cardRect.h.value;
   // What of the window is on screen: one sliding away down counts down as it goes.
-  const h = Math.min(win.h.value, full - Math.max(0, win.y.value));
+  const h = Math.min(l.win.h.value, full - Math.max(0, l.win.y.value));
   if (full <= 0 || h <= 0) return 0;
   if (full - from < 1) return h >= full - 1 ? 1 : 0;
   return Math.min(1, Math.max(0, (h - from) / (full - from)));
@@ -88,20 +97,24 @@ export interface CardInfo {
   release: () => void;
 }
 
-const cards = new Map<LayerSource, CardInfo>();
+// Each card on screen, by where it is; a second copy of a page (a browser's swipe preview) adds one that goes again with it.
+const cards = new Map<LayerSource, { owner: object; info: CardInfo }[]>();
 const cardListeners = new Set<() => void>();
 let cardsVersion = 0;
-export function setCard(source: LayerSource, info: CardInfo | null) {
-  if (info) cards.set(source, info); else cards.delete(source);
-  cardsVersion++;
-  cardListeners.forEach((fn) => fn());
+const told = () => { cardsVersion++; cardListeners.forEach((fn) => fn()); };
+/** A card says what it shows (again whenever that changes); `info` null when it goes. */
+export function setCard(source: LayerSource, owner: object, info: CardInfo | null) {
+  const list = (cards.get(source) ?? []).filter((c) => c.owner !== owner);
+  if (info) list.unshift({ owner, info });
+  if (list.length) cards.set(source, list); else cards.delete(source);
+  told();
 }
-export function getCard(source: LayerSource): CardInfo | undefined { return cards.get(source); }
+export function getCard(source: LayerSource): CardInfo | undefined { return cards.get(source)?.[0]?.info; }
 export function anyCard(): [LayerSource, CardInfo] | null {
-  const community = cards.get('community');
+  const community = getCard('community');
   if (community) return ['community', community];
-  const first = cards.entries().next();
-  return first.done ? null : first.value;
+  const feed = getCard('feed');
+  return feed ? ['feed', feed] : null;
 }
 const subscribeCards = (fn: () => void) => { cardListeners.add(fn); return () => { cardListeners.delete(fn); }; };
 /** Changes whenever a card says something new about itself. */

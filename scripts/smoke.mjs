@@ -963,6 +963,65 @@ const STEPS = [
     expect: [{ text: 'Open to hit' }, { text: 'Open hits' }],
   },
   {
+    // Oct 22, owner: "Opening the map should BE FUCKING GOOD ANIMATION". The full map is one window kept
+    // over the tabs (MapLayer): the card's tap opens it from the card, Back closes it into the card again.
+    name: 'community-map-open',
+    title: 'Community: the map card opens the full map, and it closes back into the card',
+    async run(page) {
+      const card = { label: 'Map of players, courts and hits near you' };
+      if (!(await page.find(card))) { page.warnings.push('the map card was not drawn, so opening it was not tried'); return; }
+      // The window is made a moment after the page is up and its map has drawn; until then a tap opens the map page, as before.
+      try { await page.waitFor({ css: '[data-testid="map-layer-ready"]', any: true }, 20000); }
+      catch { page.warnings.push(`the map window was not ready (${await page.eval("document.querySelector('[data-testid^=\"map-layer\"]')?.getAttribute('data-testid') ?? 'not made'")}), so the card opened the map page instead`); }
+      // Every frame of the opening: the window's edges (it must grow out of the card, only ever outwards, with no jump).
+      await page.eval(`(() => {
+        const w = document.querySelector('[data-testid^="map-layer"]')?.children[1];
+        const c = document.querySelector('[aria-label="Map of players, courts and hits near you"]')?.getBoundingClientRect();
+        const log = window.__open = { card: c ? [c.left, c.top, c.width, c.height] : null, frames: [] };
+        const t0 = performance.now();
+        const tick = () => { if (!w) return; const r = w.getBoundingClientRect(); log.frames.push([performance.now() - t0, r.left, r.top, r.width, r.height]); if (performance.now() - t0 < 1500) requestAnimationFrame(tick); };
+        requestAnimationFrame(tick);
+        return true;
+      })()`);
+      await page.tap(card);
+      await sleep(1600);
+      const motion = JSON.parse(await page.eval('JSON.stringify(window.__open)'));
+      const grown = motion.frames.filter((f) => f[3] > 0);
+      if (grown.length) {
+        const first = grown[0];
+        const last = grown[grown.length - 1];
+        let jump = 0; let shrink = 0;
+        for (let i = 1; i < grown.length; i += 1) { jump = Math.max(jump, grown[i][4] - grown[i - 1][4]); shrink = Math.max(shrink, grown[i - 1][3] - grown[i][3], grown[i - 1][4] - grown[i][4]); }
+        const settled = grown.find((f) => Math.abs(f[3] - last[3]) < 1 && Math.abs(f[4] - last[4]) < 1);
+        page.notes.push(`map opening: first frame ${first.slice(1).map(Math.round).join(',')} (card ${motion.card?.map(Math.round).join(',')}), full ${last.slice(1).map(Math.round).join(',')} at ${Math.round(settled?.[0] ?? 0)}ms, ${grown.length} frames, biggest step ${Math.round(jump)}px`);
+        if (shrink > 3) throw new Error(`the map window shrank by ${Math.round(shrink)}px while opening`);
+        if (motion.card && (Math.abs(first[3] - motion.card[2]) > 60 || Math.abs(first[2] - motion.card[1]) > 60)) throw new Error(`the map window did not start at the card (first frame ${first.slice(1).map(Math.round).join(',')}, card ${motion.card.map(Math.round).join(',')})`);
+      }
+      // The first time, the map asks who can see you once it has opened: closed here, unanswered, as a person might.
+      const { index } = await page.waitForAny([{ label: /^Show (the full list|players)$/ }, { text: 'Who can see you on the map?' }]);
+      if (index === 0) { try { await page.waitFor({ text: 'Who can see you on the map?' }, 2500); } catch { return; } }
+      await page.tap({ label: 'Close' });
+      await page.gone({ text: 'Who can see you on the map?' });
+    },
+    expect: [{ label: 'Back' }, { label: /^Show (the full list|players)$/ }],
+    after: async (page) => {
+      await page.tap({ label: 'Back' });
+      await page.waitFor({ label: 'Map of players, courts and hits near you' });
+      await page.gone({ label: /^Show (the full list|players)$/ });
+      // A browser's own Back closes the window too, and it opens again after.
+      if (await page.find({ css: '[data-testid="map-layer-ready"]', any: true })) {
+        await sleep(300);
+        await page.tap({ label: 'Map of players, courts and hits near you' });
+        await page.waitFor({ label: /^Show (the full list|players)$/ });
+        await sleep(600);
+        await page.eval('history.back()');
+        await page.gone({ label: /^Show (the full list|players)$/ });
+        await page.waitFor({ css: '[data-testid="map-layer-ready"]', any: true });
+        await page.waitFor({ text: 'Find Players' });
+      }
+    },
+  },
+  {
     name: 'community-discussions',
     title: 'Community: Discussions',
     async run(page) {

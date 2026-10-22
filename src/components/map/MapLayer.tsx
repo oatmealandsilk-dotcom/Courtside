@@ -11,7 +11,7 @@ import { MapCredit, PreviewOverlay } from '@/components/map/MapChrome';
 import { CARD_ZOOM } from '@/components/map/cardFit';
 import {
   CAMERA_CLOSE_MS, CAMERA_OPEN_MS, CARD_R, CLOSE, CLOSE_BEZIER, COMMIT_FRAC, COMMIT_V, DEVICE_R, EDGE_COMMIT_FRAC, EDGE_W, OPEN, OPEN_BEZIER, SNAPBACK,
-  anyCard, box, cardRect, cardScale, dragging, getCard, layerState, layerUp, openness, setLayerHandle, setLayerState, useCardsVersion, useLayerState, win,
+  LAYER, anyCard, box, cardRect, cardScale, dragging, getCard, layerState, layerUp, openness, setLayerHandle, setLayerState, useCardsVersion, useLayerState, win,
   type LayerSource, type Rect,
 } from '@/components/map/mapWindow';
 import { TipBubble } from '@/components/TipBubble';
@@ -45,17 +45,23 @@ const MEMORY_REST_MS = 30 * 1000;
 export function MapLayer() {
   const { currentUser } = useApp();
   const curtain = useCurtainDown();
-  const cardsVersion = useCardsVersion();
   const [mounted, setMounted] = useState(false);
   const [gen, setGen] = useState(0);
   const restUntil = useRef(0);
-  const cardPainted = !!anyCard()?.[1].painted;
+  const signedIn = !!currentUser;
   useEffect(() => {
-    if (mounted || !curtain || !currentUser) return undefined;
-    const rest = Math.max(0, restUntil.current - Date.now());
-    const t = setTimeout(() => setMounted(true), Math.max(rest, cardPainted ? MOUNT_AFTER_MS : MOUNT_ANYWAY_MS));
-    return () => clearTimeout(t);
-  }, [mounted, curtain, currentUser, cardPainted, cardsVersion]);
+    if (mounted || !curtain || !signedIn) return undefined;
+    // Looked at now and then, not on every change of the card: made once the card has drawn and a moment has passed.
+    const since = Date.now();
+    let paintedAt = 0;
+    const timer = setInterval(() => {
+      const now = Date.now();
+      if (now < restUntil.current) return;
+      if (!paintedAt && anyCard()?.[1].painted) paintedAt = now;
+      if ((paintedAt && now - paintedAt >= MOUNT_AFTER_MS) || now - since >= MOUNT_ANYWAY_MS) { clearInterval(timer); setMounted(true); }
+    }, 200);
+    return () => clearInterval(timer);
+  }, [mounted, curtain, signedIn]);
   useEffect(() => {
     let leftAt = 0;
     const change = AppState.addEventListener('change', (s) => {
@@ -116,6 +122,16 @@ function LayerBody({ me }: { me: User }) {
   const onPainted = useCallback(() => {
     const h = handle.current;
     const at = parkedNow.current;
+    // Drawn again while open (a new theme in a browser, or the phone restarting the map's page): back to the open map, no visit.
+    if (h && layerUp(layerState())) {
+      const t = h.openTarget();
+      h.pinMode(false);
+      h.labels(true, 0, 0);
+      h.setInteractive(true);
+      // A browser's map made again keeps its own view; the phone's restarted page starts on the card's.
+      if (Platform.OS !== 'web') h.jump(t.center, t.zoom);
+      return;
+    }
     if (!h || !at) { onWarm(); return; }
     const t = h.openTarget();
     h.warm(t.center, t.zoom, at.center, CARD_ZOOM);
@@ -138,8 +154,10 @@ function LayerBody({ me }: { me: User }) {
   const root = useRef<View | null>(null);
 
   const closeStarted = useRef(0);
+  const enableTouchNow = useRef<() => void>(() => undefined);
   const opened = useCallback(() => {
     if (layerState() !== 'opening') return;
+    enableTouchNow.current();
     setLayerState('open');
     setTimeout(() => { if (layerState() === 'open') setSettled(true); }, 100);
   }, []);
@@ -175,6 +193,8 @@ function LayerBody({ me }: { me: User }) {
     const t = h.openTarget();
     h.ease(t.center, t.zoom, CAMERA_OPEN_MS, OPEN_BEZIER);
     h.labels(true, 300, 120);
+    // Usable from about 0.3 s in (the window is past nine tenths open by then), whichever comes first.
+    setTimeout(() => enableTouchNow.current(), 300);
     if (Platform.OS === 'web') {
       try { window.history.pushState({ ...(window.history.state ?? {}), csMapLayer: 1 }, '', window.location.href); } catch { /* the window still opens */ }
     }
@@ -248,7 +268,8 @@ function LayerBody({ me }: { me: User }) {
     setTouchable(true);
     handle.current?.setInteractive(true);
   }, []);
-  useAnimatedReaction(() => openness() > 0.9 && dragging.value === 0, (now, was) => { if (now && !was) runOnJS(enableTouch)(); }, [enableTouch]);
+  enableTouchNow.current = enableTouch;
+  useAnimatedReaction(() => openness(LAYER) > 0.9 && dragging.value === 0, (now, was) => { if (now && !was) runOnJS(enableTouch)(); }, [enableTouch]);
 
   // Android's Back: whatever is up on the map first, then the window closes.
   useAndroidBack(() => {
@@ -330,12 +351,12 @@ function LayerBody({ me }: { me: User }) {
 
   // The window: where it is (the spring's last breath kept inside the screen) and its corners.
   const web = Platform.OS === 'web';
-  const frame = () => {
+  const frame = (l: typeof LAYER) => {
     'worklet';
-    const W = box.w.value, H = box.h.value;
-    let x = win.x.value, y = win.y.value, w = win.w.value, h = win.h.value;
+    const W = l.box.w.value, H = l.box.h.value;
+    let x = l.win.x.value, y = l.win.y.value, w = l.win.w.value, h = l.win.h.value;
     if (x < 0) { w += x; x = 0; }
-    if (y < 0 && dragging.value === 0) { h += y; y = 0; }
+    if (y < 0 && l.dragging.value === 0) { h += y; y = 0; }
     w = Math.max(0, Math.min(w, W - x));
     h = Math.max(0, Math.min(h, H - Math.max(0, y)));
     return { x, y, w, h, W, H };
@@ -343,8 +364,8 @@ function LayerBody({ me }: { me: User }) {
   const rest = useSharedValue(0);
   useEffect(() => { rest.value = state === 'open' ? 1 : 0; }, [state, rest]);
   const windowStyle = useAnimatedStyle(() => {
-    const f = frame();
-    const p = openness();
+    const f = frame(LAYER);
+    const p = openness(LAYER);
     const r = rest.value && dragging.value === 0 && p >= 0.999 ? 0 : CARD_R + (deviceR - CARD_R) * p;
     const style: Record<string, unknown> = { left: f.x, top: f.y, width: f.w, height: f.h, borderRadius: Math.max(0, r) };
     // In a browser, a shut window is also out of sight to the page (and to the auto-tester's look for buttons).
@@ -353,12 +374,12 @@ function LayerBody({ me }: { me: User }) {
   });
   // Rule B: the map's middle is always the window's middle, so the ground under the finger never slides.
   const contentStyle = useAnimatedStyle(() => {
-    const f = frame();
+    const f = frame(LAYER);
     return { width: f.W, height: f.H, transform: [{ translateX: f.w / 2 - f.W / 2 }, { translateY: f.h / 2 - f.H / 2 }] };
   });
   // The card's own words, drawn over the window's corner as it leaves the card and fading as it grows.
   const replicaStyle = useAnimatedStyle(() => {
-    const p = openness();
+    const p = openness(LAYER);
     const s = cardScale.value || 1;
     const w = cardRect.w.value / s, h = cardRect.h.value / s;
     return {
@@ -368,11 +389,11 @@ function LayerBody({ me }: { me: User }) {
       transform: [{ translateX: (cardRect.w.value - w) / 2 }, { translateY: (cardRect.h.value - h) / 2 }, { scale: s }],
     };
   });
-  const scrimStyle = useAnimatedStyle(() => ({ opacity: openness() * (dark ? 0.56 : 0.36) }));
+  const scrimStyle = useAnimatedStyle(() => ({ opacity: openness(LAYER) * (dark ? 0.56 : 0.36) }));
   // The controls arrive by moving into place as the window uncovers them; never by a fade.
-  const settleOf = () => { 'worklet'; return Math.min(1, Math.max(0, (openness() - 0.35) / 0.65)); };
-  const topStyle = useAnimatedStyle(() => ({ transform: [{ translateY: -12 * (1 - settleOf()) }] }));
-  const bottomStyle = useAnimatedStyle(() => ({ transform: [{ translateY: 16 * (1 - settleOf()) }] }));
+  const settleOf = (p: number) => { 'worklet'; return Math.min(1, Math.max(0, (p - 0.35) / 0.65)); };
+  const topStyle = useAnimatedStyle(() => ({ transform: [{ translateY: -12 * (1 - settleOf(openness(LAYER))) }] }));
+  const bottomStyle = useAnimatedStyle(() => ({ transform: [{ translateY: 16 * (1 - settleOf(openness(LAYER))) }] }));
 
   const control = useMemo<LayerMapControl>(() => ({
     mode, parked, settled, handle, back, topStyle, bottomStyle, topGesture, onPainted, onWarm,
@@ -381,6 +402,7 @@ function LayerBody({ me }: { me: User }) {
   return (
     <View
       ref={root}
+      testID={`map-layer-${state}`}
       pointerEvents={up ? 'auto' : 'none'}
       style={StyleSheet.absoluteFill}
       onLayout={(e) => {
