@@ -451,6 +451,8 @@ export default function Notifications() {
   // Every row that was new while this page has been open keeps its tint until you leave, however
   // often the rows are put together again (more rows coming in, or your sessions loading after them).
   const newWhileOpen = useRef(new Set<string>());
+  // A hit-match Message waits on a server check; a second tap meanwhile must not open the chat twice.
+  const openingChat = useRef(false);
   for (const n of mine) if (!n.read) newWhileOpen.current.add(n.id);
   const fresh = (n: Notification) => !n.read || newWhileOpen.current.has(n.id);
 
@@ -774,9 +776,13 @@ export default function Notifications() {
                   // Someone after the same game: the message is one tap away.
                   <Pressable accessibilityRole="button" accessibilityLabel={`Message ${nameOf(first)}`} onPress={async () => {
                     // Locked (checked with the server first), it says why in a note that stays to be read.
-                    const lock = await actions.messageLock(first);
-                    if (lock) { showToast({ title: lock, icon: 'lock-closed-outline', long: true }); return; }
-                    router.push(`/messages/${actions.openConversationWith(first)}`);
+                    if (openingChat.current) return;
+                    openingChat.current = true;
+                    try {
+                      const lock = await actions.messageLock(first);
+                      if (lock) { showToast({ title: lock, icon: 'lock-closed-outline', long: true }); return; }
+                      router.push(`/messages/${actions.openConversationWith(first)}`);
+                    } finally { openingChat.current = false; }
                   }} style={styles.accept}><Text style={styles.acceptText}>Message</Text></Pressable>
                 ) : hitChat ? (
                   // In for your hit: straight to the hit's group chat, where the details get sorted.

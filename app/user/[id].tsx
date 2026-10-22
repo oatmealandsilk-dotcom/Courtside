@@ -1,5 +1,5 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { show as showToast } from '@/lib/toast';
 import { Image, Modal, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -64,6 +64,9 @@ function UserProfile() {
   const { loadTournamentPlans } = actions;
   useEffect(() => { if (otherId) void loadTournamentPlans(); }, [otherId, loadTournamentPlans]);
   const [menuOpen, setMenuOpen] = useState(false);
+  // Message waits on a server check; a second tap meanwhile must not open the chat twice.
+  const opening = useRef(false);
+  const [openingChat, setOpeningChat] = useState(false);
   // The menu clears Android's navigation bar, and a message meanwhile shows as the phone's own alert (modalSheet).
   const menuBottom = useModalSheetBottom(menuOpen, spacing.xxl);
   const [notice, setNotice] = useState('');
@@ -204,7 +207,7 @@ function UserProfile() {
             <View style={{ flex: 1 }}>
               {/* Locked, it asks the server again first (they may have followed you
                   since the app opened), then says why in a note that stays to be read. */}
-              <Button label="Message" variant="secondary" onPress={async () => { const lock = await actions.messageLock(user.id); if (lock) { showToast({ title: lock, icon: 'lock-closed-outline', long: true }); return; } router.push(`/messages/${actions.openConversationWith(user.id)}`); }} full />
+              <Button label="Message" variant="secondary" onPress={async () => { if (opening.current) return; opening.current = true; setOpeningChat(true); try { const lock = await actions.messageLock(user.id); if (lock) { showToast({ title: lock, icon: 'lock-closed-outline', long: true }); return; } router.push(`/messages/${actions.openConversationWith(user.id)}`); } finally { opening.current = false; setOpeningChat(false); } }} loading={openingChat} full />
             </View>
           </View>
         ) : (

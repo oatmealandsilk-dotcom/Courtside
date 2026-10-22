@@ -251,7 +251,7 @@ function ThisWeek({ user }: { user: User }) {
   const matchesSpoken = n.matches && n.told ? `${n.matches} ${n.matches === 1 ? 'match' : 'matches'}, ${n.won} won, ${n.lost} lost` : `${n.matches} ${n.matches === 1 ? 'match' : 'matches'}`;
   return (
     <View>
-      <SectionHead title="This week" onlyYou />
+      <SectionHead title="Last 7 days" onlyYou />
       <Box padded>
         {/* A tap anywhere on the card but a bar goes back to the whole week. */}
         <Pressable accessible={false} focusable={false} disabled={!pick} onPress={() => choose(null)} style={styles.weekCard}>
