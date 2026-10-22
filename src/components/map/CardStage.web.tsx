@@ -19,13 +19,9 @@ import { CrownLead, layerZ, takesOver, useStageLayers, type Crown, type StageKin
  * Closing back to the bare map, its buttons take over the card's and ride
  * down with it, as on the phone (takesOver, Oct 10): measured here on the
  * page itself, so they start exactly where the card's were. Only the players
- * pill fades in as they go, and only then (CrownLead); otherwise it comes
- * with the rest of them.
- *
- * The phone's stage also puts its buttons' glass up again once they have
- * arrived (GlassRenew), for an iPhone that draws it white otherwise. Not
- * here: the browser's frosted glass is a live style that is right on any
- * frame (checked Oct 10, the players pill from its first frame on /map).
+ * pill grows in as they go, and only then (CrownLead); otherwise it comes
+ * with the rest of them. Their fill is the map's fixed see-through one
+ * (MapGlass, Oct 22), the same as on the phone, in every frame.
  */
 
 /** Apple's own sheet curve: a quick start that glides to rest, the browser's stand-in for the phone's spring. */
@@ -76,7 +72,7 @@ function shownFoot(crown: HTMLElement | null): number | null {
 /**
  * The bare map taking over a closing card's buttons: its own start exactly
  * where the card's are and ride down on the card's own slide, solid, the
- * card's put away that moment (only the players pill fades in: CrownLead).
+ * card's put away that moment (only the players pill grows in: CrownLead).
  * False when there is nothing to ride (they would have to go up), and the
  * usual entrance plays instead.
  */
@@ -163,7 +159,7 @@ export function CardStage({ cardKey, kind, crown, children }: { cardKey: string;
       const from = takesOver(layer) && layer.replaces && !still() ? handoffs.get(layer.replaces.id) : undefined;
       const lead = leads.current.get(layer.id);
       if (from && takeOver(el, top, from)) {
-        // The pill fades in as they ride down, done before they land.
+        // The pill grows in as they ride down, done before they land.
         if (lead) lead.value = withTiming(1, { duration: 200, easing: Easing.out(Easing.quad) });
         continue;
       }

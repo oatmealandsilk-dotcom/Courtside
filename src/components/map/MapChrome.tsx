@@ -8,7 +8,7 @@ import Animated, { Easing, FadeIn, FadeOut, interpolateColor, runOnJS, useAnimat
 import { useReducedMotion } from '@/lib/useReducedMotion';
 
 import { Avatar, BrandWash } from '@/components/ui';
-import { Glass, GlassRenew, useGlassRenewal, useOnPageArrival } from '@/components/ui/Glass';
+import { MapGlass } from '@/components/map/MapGlass';
 import { FollowShrink } from '@/components/FollowPill';
 import { MenuSheet, type MenuSheetItem } from '@/components/MenuSheet';
 import { afterMenu } from '@/lib/confirm';
@@ -94,14 +94,9 @@ export const PIN_FIT_TOP = 120;
  * bar just tapped) the weather steps aside for the words, and the bar says
  * what it finds; the three across are 44 points tall, a finger's width.
  *
- * Its glass is put up again each time the page has finished coming in, and
- * the list under it once it has faded in: glass an iPhone puts up while
- * anything round it is moving can come out a flat white plate (GlassRenew,
- * Oct 11). The bar's waits while you type in it, or a finger is on it.
- * Only the glass is rebuilt, a layer behind (Glass's `behind`), never what
- * it holds: the field you type in stays the same one, so a tap on the bar
- * just as the map arrives always puts the cursor in, and the weather never
- * fades out over a renewal (Oct 11 review).
+ * Its buttons, the bar and the list under it are the map's one fixed
+ * see-through fill (MapGlass, Oct 22): never Apple's glass, so never put up
+ * again, and the same every time the map opens.
  */
 export function MapTopBar({ onBack, query, onQuery, locationOn, locating, onToggleLocation, results, onPickCourt, places, onPickPlace, players = 0, locationMenu = false, cityName = '', weather = null }: { onBack?: () => void; query: string; onQuery: (next: string) => void; locationOn?: boolean; locating?: boolean; onToggleLocation?: () => void; results?: CourtRow[]; onPickCourt?: (c: Court) => void; /** The place search as you type (usePlaceSearch). */ places?: PlaceSearch; onPickPlace?: (p: FoundPlace) => void; /** Players whose names match what is typed. */ players?: number; /** With Location on, the button opens who can see you (and Location off) rather than switching off. */ locationMenu?: boolean; /** The town the bar names ("Search Los Angeles"); none yet, the bar's own words. */ cityName?: string; /** What it's like to play there today, at the bar's end. */ weather?: Weather | null }) {
   const styles = useThemedStyles(styleDefinitions);
@@ -146,29 +141,18 @@ export function MapTopBar({ onBack, query, onQuery, locationOn, locating, onTogg
   const locationIcon = locating ? <ActivityIndicator size="small" color={locationOn ? colors.brandInk : colors.text} /> : <Ionicons name={locationOn ? 'navigate' : 'navigate-outline'} size={18} color={locationOn ? colors.brandInk : colors.text} />;
   // The list under the bar: courts, then places, or why there are none.
   const listUp = !!(found.length || placeRows.length || placeNote || searching);
-  // Its glass and the bar's, put up again once all round them is still (GlassRenew): the bar's (Back, the search and
-  // Location) never while you type in it, the list's once it has faded in. Only ever the glass, a layer behind, never
-  // the field, the weather, the icons or the rows (Oct 11 review: the field built again under a tap lost the cursor,
-  // and the weather's fade out held the old glass over the new).
-  const barGlass = useGlassRenewal({ blocked: focused });
-  const listGlass = useGlassRenewal();
-  const listShown = useRef(listUp);
-  listShown.current = listUp;
-  useOnPageArrival(() => { barGlass.settle(); if (listShown.current) listGlass.settle(); });
-  const { settle: settleList, cancel: cancelList } = listGlass;
-  useEffect(() => { if (listUp) settleList(LIST_IN_MS + 60); else cancelList(); }, [listUp, settleList, cancelList]);
   return (
     // Above the filter chips under it, so the location tip hangs over them.
     <View style={{ gap: spacing.sm, zIndex: 5 }}>
-    <View style={styles.topRow} {...barGlass.hold}>
+    <View style={styles.topRow}>
       {onBack ? (
         <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={onBack} style={({ pressed }) => [styles.barRoundHit, pressed && styles.barPressed]}>
-          <Glass behind radius={22} renew={barGlass.renew} style={styles.barRound}><Ionicons name="chevron-back" size={22} color={colors.text} /></Glass>
+          <MapGlass radius={22} style={styles.barRound}><Ionicons name="chevron-back" size={22} color={colors.text} /></MapGlass>
         </Pressable>
       ) : null}
       {/* The whole bar is the search: a tap anywhere on it (its weather too) puts the cursor in. */}
       <Pressable accessible={false} focusable={false} onPress={() => input.current?.focus()} style={styles.searchLift}>
-        <Glass behind radius={22} renew={barGlass.renew} style={[styles.search, focused && styles.searchOn]}>
+        <MapGlass radius={22} style={[styles.search, focused && styles.searchOn]}>
           <Ionicons name="search" size={17} color={colors.textMuted} />
           <View style={styles.searchField} onLayout={(e) => setFieldW(Math.floor(e.nativeEvent.layout.width))}>
             {/* "Search <town>" (or "Search a place or park") laid out unseen at its own width, to know whether it fits. */}
@@ -208,7 +192,7 @@ export function MapTopBar({ onBack, query, onQuery, locationOn, locating, onTogg
               <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.searchWeatherText} accessibilityLabel={`${weather.tempF} degrees, ${weather.label}`}>{weather.tempF}°</Text>
             </Animated.View>
           ) : null}
-        </Glass>
+        </MapGlass>
       </Pressable>
       {onToggleLocation ? (
         <View>
@@ -217,7 +201,7 @@ export function MapTopBar({ onBack, query, onQuery, locationOn, locating, onTogg
             {locationOn ? (
               <View style={[styles.barRound, styles.barRoundOn]}><BrandWash radius={22} />{locationIcon}</View>
             ) : (
-              <Glass behind radius={22} renew={barGlass.renew} style={styles.barRound}>{locationIcon}</Glass>
+              <MapGlass radius={22} style={styles.barRound}>{locationIcon}</MapGlass>
             )}
           </Pressable>
           <HideTip where="map" style={{ top: 52, right: 0 }} />
@@ -226,7 +210,7 @@ export function MapTopBar({ onBack, query, onQuery, locationOn, locating, onTogg
     </View>
     {listUp ? (
       <Animated.View entering={FadeIn.duration(LIST_IN_MS)} style={styles.resultsWrap}>
-        <Glass behind renew={listGlass.renew} radius={18} style={styles.results}>
+        <MapGlass dense radius={18} style={styles.results}>
           {found.map(({ c, miles }, i) => {
             const meta = [formatMiles(miles), c.count > 1 ? `${c.count} courts` : null, c.lit ? 'lights' : null].filter(Boolean).join(' · ');
             return (
@@ -256,7 +240,7 @@ export function MapTopBar({ onBack, query, onQuery, locationOn, locating, onTogg
               <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.placeNoteText}>{placeNote}</Text>
             </View>
           ) : null}
-        </Glass>
+        </MapGlass>
       </Animated.View>
     ) : null}
     </View>
@@ -383,12 +367,16 @@ export function WeatherChip({ weather }: { weather: Weather | null }) {
  * map, is the "All N players" pill (PlayersPill), at the row's start, the
  * credits just above it.
  */
+/** How small the players pill starts as it grows in, riding down from a closing card (CrownLead). */
+const LEAD_FROM = 0.85;
+
 export function MapButtons({ onRecentre, onZoomIn, onZoomOut, lead }: { onRecentre: () => void; onZoomIn?: () => void; onZoomOut?: () => void; lead?: React.ReactNode }) {
   const styles = useThemedStyles(styleDefinitions);
-  // The pill and the credits over it: as solid as the stage under them says (CrownLead, Oct 10). Taking over from a
-  // card closing under them they fade in as the buttons ride down to their spot; the rest were already there, on the card.
+  // The pill and the credits over it: grown in by the stage under them (CrownLead, Oct 10). Taking over from a card
+  // closing under them they grow to full size as the buttons ride down to their spot; the rest were already there, on
+  // the card. Never faded (Oct 22): the pill's see-through fill (MapGlass) is the same in every frame.
   const leadIn = useContext(CrownLead);
-  const leadLook = useAnimatedStyle(() => ({ opacity: leadIn ? leadIn.value : 1 }));
+  const leadLook = useAnimatedStyle(() => ({ transform: [{ scale: leadIn ? LEAD_FROM + (1 - LEAD_FROM) * leadIn.value : 1 }] }));
   return (
     <View pointerEvents="box-none" style={styles.buttonsRow}>
     {lead ? <Animated.View pointerEvents="box-none" style={[styles.buttonsLead, leadLook]}><MapCredit />{lead}</Animated.View> : <MapCredit />}
@@ -401,7 +389,7 @@ export function MapButtons({ onRecentre, onZoomIn, onZoomOut, lead }: { onRecent
         </View>
       ) : null}
       <Pressable accessibilityRole="button" accessibilityLabel="Back to me" onPress={onRecentre} style={styles.roundHit}>
-        <Glass radius={21} style={styles.roundGlass}><Ionicons name="locate-outline" size={18} color={colors.brand} /></Glass>
+        <MapGlass radius={21} style={styles.roundGlass}><Ionicons name="locate-outline" size={18} color={colors.brand} /></MapGlass>
       </Pressable>
     </View>
     </View>
@@ -496,11 +484,11 @@ export function PlayersPill({ items, query = '', filter = 'all', courts = [], lo
   const words = n === 1 ? '1 player' : n ? `All ${n} players` : emptyLine(query, filter, courts, lockOf(lock, query, filter));
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={n ? 'Show the full list' : 'Show players'} onPress={() => { haptics.tap(); onOpen(); }} style={({ pressed }) => [styles.pillLift, pressed && styles.glassPressed]}>
-      <Glass radius={21} style={styles.playersPill}>
+      <MapGlass radius={21} style={styles.playersPill}>
         <Ionicons name={n ? 'people' : 'people-outline'} size={15} color={colors.brand} />
         <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.playersPillText} numberOfLines={1}>{words}</Text>
         {n ? <Ionicons name="chevron-up" size={14} color={colors.textMuted} /> : null}
-      </Glass>
+      </MapGlass>
     </Pressable>
   );
 }
@@ -712,9 +700,8 @@ function TrayFace({ placed: p, onPress }: { placed: Placed; onPress: () => void 
  * it runs short (listHeadroom) they fade out, and once they would no longer
  * fit under the filters they are gone, taking no taps, so nothing ever lies
  * over the list or the filters; pulled back down to the tray, they fade back
- * in. A short list that rises only a little keeps them. Back at full
- * strength, their glass is put up afresh: on an iPhone, glass that appeared
- * while they were fading in is a flat white plate until then (GlassRenew).
+ * in. A short list that rises only a little keeps them. Their fill is the
+ * map's fixed see-through one (MapGlass), so a fade never changes how it looks.
  */
 export function ListCrown({ children }: { children: React.ReactNode }) {
   const styles = useThemedStyles(styleDefinitions);
@@ -735,19 +722,11 @@ export function ListCrown({ children }: { children: React.ReactNode }) {
     fade.current = () => listCrownFade(listHeadroom.value, tall.value);
     return () => { fade.current = null; };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  // Faded, then back at full strength: the glass on them put up again (on top of the stage's own renewals).
-  const outer = useContext(GlassRenew) ?? 0;
-  const [renew, setRenew] = useState(0);
-  const solidAgain = useCallback(() => setRenew((n) => n + 1), []);
-  useAnimatedReaction(
-    () => tall.value <= 0 || listHeadroom.value - tall.value >= 60,
-    (full, before) => { if (full && before === false) runOnJS(solidAgain)(); },
-  );
   return (
     <Animated.View style={[styles.crownThrough, look]}>
       {gone ? null : (
         <View style={styles.crownThrough} onLayout={(e) => { const h = e.nativeEvent.layout.height; if (h > 0) tall.value = h; }}>
-          <GlassRenew.Provider value={outer + renew}>{children}</GlassRenew.Provider>
+          {children}
         </View>
       )}
     </Animated.View>

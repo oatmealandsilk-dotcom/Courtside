@@ -1,8 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import * as haptics from '@/lib/haptics';
-import { ACTION_W, FIRE_AT, ROW_EDGE, ROW_SLOP, rowTravel } from './rowSwipe';
+import { ACTION_W, ROW_SLOP, rowTravel } from './rowSwipe';
 
 const SETTLE = 'transform 260ms cubic-bezier(.2,.8,.25,1)';
 const elementOf = (view: View | null) => view as unknown as HTMLElement | null;
@@ -12,20 +11,21 @@ const elementOf = (view: View | null) => view as unknown as HTMLElement | null;
  * SwipeRow.tsx; the shared numbers are in rowSwipe.ts). A finger or a mouse
  * drag moves it, set straight on the page as the pointer moves; a
  * two-finger sideways swipe on a trackpad works too. Scrolling the list up
- * and down is left to the browser until a drag has gone sideways.
+ * and down is left to the browser until a drag has gone sideways. A drag to
+ * the right on a closed row is left alone: the page's own back swipe has it
+ * (PageSwipeBack.web).
  */
-export function SwipeRow({ actions, actionCount, mark, onMark, open, onOpen, children }: {
-  actions: React.ReactNode; actionCount: number; mark: React.ReactNode; onMark: () => void;
+export function SwipeRow({ actions, actionCount, open, onOpen, children }: {
+  actions: React.ReactNode; actionCount: number;
   open: boolean; onOpen: (open: boolean) => void; children: React.ReactNode;
 }) {
   const wrap = useRef<View>(null);
   const body = useRef<View>(null);
-  const markRef = useRef<View>(null);
   const actionsRef = useRef<View>(null);
   const at = useRef(0);
   const width = actionCount * ACTION_W;
-  const latest = useRef({ onMark, onOpen, width });
-  latest.current = { onMark, onOpen, width };
+  const latest = useRef({ onOpen, width });
+  latest.current = { onOpen, width };
   const swallowClick = useRef(false);
   // The row has the pointer: whatever it went down on lets go of its press.
   const taking = useRef(false);
@@ -34,8 +34,6 @@ export function SwipeRow({ actions, actionCount, mark, onMark, open, onOpen, chi
     at.current = x;
     const el = elementOf(body.current);
     if (el) { el.style.transition = settle ? SETTLE : 'none'; el.style.transform = x ? `translate3d(${x}px,0,0)` : ''; }
-    const m = elementOf(markRef.current);
-    if (m) { const show = Math.min(1, Math.max(0, x / FIRE_AT)); m.style.opacity = String(show); m.style.transform = `scale(${x >= FIRE_AT ? 1.08 : 0.85 + 0.15 * show})`; }
     const a = elementOf(actionsRef.current);
     if (a) { a.style.opacity = x < -4 ? '1' : '0'; hideActions(a, x >= -4); }
   };
@@ -46,11 +44,10 @@ export function SwipeRow({ actions, actionCount, mark, onMark, open, onOpen, chi
   useEffect(() => {
     const el = elementOf(wrap.current);
     if (!el) return undefined;
-    let drag: { id: number; x: number; y: number; from: number; taken: boolean; armed: boolean } | null = null;
+    let drag: { id: number; x: number; y: number; from: number; taken: boolean } | null = null;
     let wheel: { travel: number; timer?: ReturnType<typeof setTimeout> } | null = null;
     const finish = (velocityLeft: boolean) => {
       const x = at.current;
-      if (x >= FIRE_AT) { latest.current.onMark(); place(0, true); latest.current.onOpen(false); return; }
       const openIt = x < -latest.current.width / 2 || (velocityLeft && x < -20);
       place(openIt ? -latest.current.width : 0, true);
       latest.current.onOpen(openIt);
@@ -58,7 +55,7 @@ export function SwipeRow({ actions, actionCount, mark, onMark, open, onOpen, chi
     const down = (e: PointerEvent) => {
       swallowClick.current = false;
       if (!e.isPrimary || (e.pointerType === 'mouse' && e.button !== 0)) return;
-      drag = { id: e.pointerId, x: e.clientX, y: e.clientY, from: at.current, taken: false, armed: false };
+      drag = { id: e.pointerId, x: e.clientX, y: e.clientY, from: at.current, taken: false };
     };
     const move = (e: PointerEvent) => {
       if (!drag || drag.id !== e.pointerId) return;
@@ -66,7 +63,8 @@ export function SwipeRow({ actions, actionCount, mark, onMark, open, onOpen, chi
       const dy = e.clientY - drag.y;
       if (!drag.taken) {
         if (Math.abs(dx) > ROW_SLOP && Math.abs(dx) > Math.abs(dy) * 1.4) {
-          if (dx > 0 && drag.x < ROW_EDGE && at.current === 0) { drag = null; return; }
+          // Rightward on a closed row: the page's back swipe.
+          if (dx > 0 && at.current === 0) { drag = null; return; }
           drag.taken = true;
           taking.current = true;
           try { el.setPointerCapture(e.pointerId); } catch { /* gone */ }
@@ -76,10 +74,7 @@ export function SwipeRow({ actions, actionCount, mark, onMark, open, onOpen, chi
         }
       }
       e.preventDefault();
-      const x = rowTravel(drag.from + dx, latest.current.width, FIRE_AT + 30);
-      const armed = x >= FIRE_AT;
-      if (armed !== drag.armed) { drag.armed = armed; if (armed) haptics.tap(); }
-      place(x, false);
+      place(rowTravel(drag.from + dx, latest.current.width), false);
     };
     const up = (e: PointerEvent) => {
       if (!drag || drag.id !== e.pointerId) return;
@@ -99,11 +94,13 @@ export function SwipeRow({ actions, actionCount, mark, onMark, open, onOpen, chi
       const dx = e.deltaX;
       if (!wheel) {
         if (Math.abs(dx) < 2 || Math.abs(dx) <= Math.abs(e.deltaY) * 1.4) return;
+        // Toward the right on a closed row: nothing to uncover.
+        if (dx < 0 && at.current === 0) return;
         wheel = { travel: at.current };
       }
       e.preventDefault();
       wheel.travel -= dx;
-      place(rowTravel(wheel.travel, latest.current.width, FIRE_AT + 30), false);
+      place(rowTravel(wheel.travel, latest.current.width), false);
       clearTimeout(wheel.timer);
       wheel.timer = setTimeout(() => { wheel = null; finish(false); }, 140);
     };
@@ -131,7 +128,6 @@ export function SwipeRow({ actions, actionCount, mark, onMark, open, onOpen, chi
 
   return (
     <View ref={wrap} style={styles.wrap} onMoveShouldSetResponderCapture={() => taking.current}>
-      <View ref={markRef} pointerEvents="none" style={[styles.mark, { opacity: 0 }]}>{mark}</View>
       <View ref={actionsRef} style={[styles.actions, { width, opacity: 0 }]} {...({ dataSet: { rowAction: '1' } } as object)}>{actions}</View>
       <View ref={body}>{children}</View>
     </View>
@@ -147,6 +143,5 @@ function hideActions(el: HTMLElement, hidden: boolean) {
 
 const styles = StyleSheet.create({
   wrap: { overflow: 'hidden' },
-  mark: { position: 'absolute', left: 0, top: 0, bottom: 0, width: FIRE_AT + 30, alignItems: 'center', justifyContent: 'center' },
   actions: { position: 'absolute', right: 0, top: 0, bottom: 0, flexDirection: 'row' },
 });
