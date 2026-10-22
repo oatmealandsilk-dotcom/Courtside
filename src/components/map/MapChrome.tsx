@@ -398,11 +398,11 @@ export function FilterChips({ filter, onFilter, courtsOn, onCourts, courtsLoadin
         ))}
         {/* Courts is an on/off switch, not one of the choices: a hairline sets it apart, and it scrolls with the row so nothing is ever tucked behind it. */}
         <View style={styles.chipGap} />
-        <Pressable accessibilityRole="switch" accessibilityState={{ checked: courtsOn }} accessibilityLabel="Show courts" hitSlop={CHIP_REACH} onPress={() => { haptics.tap(); onCourts(); }} style={[styles.chip, courtsLit.on && styles.chipOnEdge]}>
+        <Pressable accessibilityRole="switch" accessibilityState={{ checked: courtsOn }} accessibilityLabel="Show courts" hitSlop={CHIP_REACH} onPress={() => { haptics.tap(); onCourts(); }} style={styles.chip}>
           {/* The green fades in and out over 180 ms, in step with the filter pill sliding beside it. */}
-          <GreenFill on={courtsOn} radius={999} />
+          <GreenFill on={courtsOn} radius={999} edge={1} />
           {courtsLoading ? <ActivityIndicator size="small" color={courtsOn ? colors.brandInk : colors.text} /> : <TwoTone on={courtsOn} off={<CourtGlyph size={15} color={colors.text} />} lit={<CourtGlyph size={15} color={colors.brandInk} />} />}
-          <Animated.Text maxFontSizeMultiplier={TextScale.TITLE} style={[styles.chipText, courtsLit.text]}>Courts</Animated.Text>
+          <Animated.Text maxFontSizeMultiplier={TextScale.TITLE} style={[styles.chipText, courtsLit]}>Courts</Animated.Text>
         </Pressable>
       </ScrollView>
     </View>
@@ -424,27 +424,19 @@ function useLitText(on: boolean) {
   const v = useLit(on);
   const off = colors.text;
   const lit = colors.brandInk;
-  const text = useAnimatedStyle(() => ({ color: interpolateColor(v.value, [0, 1], [off, lit]) }));
-  // The edge goes green at once while it is on its way in (the fill covers it), and stays until it has gone.
-  const [edge, setEdge] = useState(on);
-  useEffect(() => {
-    if (on) { setEdge(true); return undefined; }
-    const t = setTimeout(() => setEdge(false), FILL_MS);
-    return () => clearTimeout(t);
-  }, [on]);
-  return { text, on: edge };
+  return useAnimatedStyle(() => ({ color: interpolateColor(v.value, [0, 1], [off, lit]) }));
 }
 
 /**
  * A control's green, laid over its see-through fill and faded in and out on its own: only this fill is ever
  * faded, never the see-through one under it (MapGlass) nor anything holding it.
  */
-function GreenFill({ on, radius: r }: { on: boolean; radius: number }) {
+function GreenFill({ on, radius: r, edge = 0 }: { on: boolean; radius: number; /** The control's border, which the green covers too (so its edge never switches on its own). */ edge?: number }) {
   const styles = useThemedStyles(styleDefinitions);
   const v = useLit(on);
   const look = useAnimatedStyle(() => ({ opacity: v.value }));
   return (
-    <Animated.View pointerEvents="none" style={[styles.greenFill, { borderRadius: r }, look]}>
+    <Animated.View pointerEvents="none" style={[styles.greenFill, { borderRadius: r, top: -edge, right: -edge, bottom: -edge, left: -edge }, look]}>
       <BrandWash radius={r} />
     </Animated.View>
   );
@@ -644,9 +636,9 @@ export function PlayersPill({ items, query = '', filter = 'all', courts = [], lo
         </View>
         </LayoutAnimationConfig>
       </MapGlass>
-      {/* The unseen copy, free of the room, to say how wide the pill wants to be. */}
+      {/* The unseen copy, free of the room, to say how wide the pill wants to be (a point to spare, so a fraction never trails the words off). */}
       <View style={styles.pillMeasure} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" aria-hidden>
-        <View style={styles.playersPill} onLayout={(e) => setNatural(Math.ceil(e.nativeEvent.layout.width))}>
+        <View style={styles.playersPill} onLayout={(e) => setNatural(Math.ceil(e.nativeEvent.layout.width) + 1)}>
           {icon}
           <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.playersPillText} numberOfLines={1}>{words}</Text>
           {n ? <Ionicons name="chevron-up" size={14} color={colors.textMuted} /> : null}
@@ -1618,8 +1610,6 @@ const styleDefinitions = StyleSheet.create({
   chip: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, minHeight: 32, borderRadius: radius.pill, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
   chipOn: { backgroundColor: colors.brand, borderColor: colors.brand },
   // Once measured, the chips go clear-backed at their own spots and the sliding pill carries the fill.
-  // The Courts chip's edge while its green is on (the fill itself is GreenFill).
-  chipOnEdge: { borderColor: colors.brand },
   greenFill: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, overflow: 'hidden', backgroundColor: colors.brand, pointerEvents: 'none' },
   twoToneLit: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, alignItems: 'center', justifyContent: 'center' },
   chipClear: { backgroundColor: 'transparent', borderColor: colors.border },
