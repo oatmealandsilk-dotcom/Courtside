@@ -27,6 +27,7 @@ import UIKit
  *    second takes the flag as it opens, so its keyboard comes up as emoji.
  *  - settle(): after the app focuses the box, a second look: if the box is
  *    focused but did not take the flag while opening, give it now and reload.
+ *    No box focused yet: the arm is left on, and the app looks once more.
  *  - The flag comes off when that box stops being edited (blur), and when the
  *    person switches away from emoji themselves (the ABC or globe key), so a
  *    later reload by React Native never snaps them back to emoji.
@@ -82,10 +83,15 @@ enum EmojiKeyboardSwitch {
     return false
   }
 
-  /** After the app focused the box: switch it now if it did not take the flag while opening. */
+  /**
+   * After the app focused the box: switch it now if it did not take the flag
+   * while opening. With no box focused yet (a slow phone or a busy app can take
+   * longer than the app's first look to focus it), the arm stays on for the
+   * rest of its second, so a box that opens late still comes up as emoji.
+   */
   static func settle() -> Bool {
-    armedUntil = 0
     guard installed, emojiMode != nil, let box = focusedBox() else { return false }
+    armedUntil = 0
     if hasFlag(box) { return true }
     setFlag(box, true)
     box.reloadInputViews()

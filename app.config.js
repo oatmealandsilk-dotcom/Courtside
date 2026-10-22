@@ -188,6 +188,10 @@ module.exports = {
     // code never tells the module when sessions are turned off, so its "Workout
     // detected" alerts would carry on (the module drops switches the app has not
     // confirmed for 30 days, as a backstop only).
+    // The exception to "bump `version`": modules/emoji-keyboard (Oct 22) is
+    // looked up as optional, so the same update runs on builds with and without
+    // it. Do not bump `version` for it: that would cut today's builds off from
+    // every later update.
     runtimeVersion: { policy: 'appVersion' },
     // The phone opens at once on the version it already has; a newer one downloads in the
     // background and is used from the next open (Oct 6, owner: the loading screen was too long).

@@ -57,6 +57,7 @@ import { firstLink, isOnlyLink } from '@/lib/links';
 import { LINK_CARD_W, LinkCard, linkCardShows } from '@/features/messages/LinkCard';
 import { useLinkPreview } from '@/features/messages/linkPreview';
 import { useDragDownDismiss, useKeyboardLift } from '@/features/messages/keyboardLift';
+import { openSystemEmojiKeyboard } from '@/features/messages/systemEmojiKeyboard';
 import { useAndroidBack } from '@/lib/androidBack';
 import { phoneSaysCopied } from '@/lib/copied';
 import { useModalOpenWhile } from '@/lib/modalOpen';
@@ -661,16 +662,20 @@ export default function Thread() {
   // Every message of the chat is here (nothing older left to load): its start, with who it is with, can show above the first.
   const wholeHistory = noMoreOlder.current || thread.length < MESSAGE_PAGE;
   /*
-   * The emoji button. On an iPhone or Android phone it brings up the phone's
-   * own keyboard, with its emoji key (owner, Oct 22: "clicking emoji should
-   * open the iPhone's emoji thing", the way Instagram and iMessage do); with
-   * the keyboard already up it changes nothing. In a browser, which has no
+   * The emoji button. On an iPhone build that carries modules/emoji-keyboard
+   * it opens the iPhone's own emoji keyboard straight away (owner, Oct 22:
+   * "clicking emoji should open the iPhone's emoji thing"). On older iPhone
+   * builds and Android it brings up the phone's own keyboard, with its emoji
+   * key one tap away, the way Instagram and iMessage do; with the keyboard
+   * already up that changes nothing (systemEmojiKeyboard.ts). The composer is
+   * this screen's only text box, so the module's "the focused box" is always
+   * it. In a browser, which has no
    * emoji keyboard to call on, it swaps the app's own emoji keyboard in and
    * out.
    */
   const toggleEmoji = () => {
     composer.current?.closePlus();
-    if (PHONE_EMOJI) { composer.current?.focus(); return; }
+    if (PHONE_EMOJI) { openSystemEmojiKeyboard(composer.current); return; }
     if (emojiOpen) { setEmojiOpen(false); composer.current?.focus(); return; }
     Keyboard.dismiss();
     setEmojiOpen(true);

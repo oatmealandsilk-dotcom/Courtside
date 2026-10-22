@@ -19,19 +19,20 @@ Expo finds every folder in `modules/` by itself (the same way
 `app.config.js` is needed. Checked with
 `npx expo-modules-autolinking resolve -p apple`, which lists `EmojiKeyboard`.
 
-## Hooking it to the chat (one line, when this branch is merged)
+## Hooked to the chat
 
-In `app/messages/[id].tsx`, in `toggleEmoji`, on a phone, the emoji button
-calls:
+In `app/messages/[id].tsx`, `toggleEmoji` calls
+`openSystemEmojiKeyboard(composer.current)` on a phone (from
+`src/features/messages/systemEmojiKeyboard.ts`). When the module is missing
+(older builds, Android) that call just focuses the message box, so the same
+instant update works on every build. The website keeps CourtSide's own panel.
 
-```ts
-openSystemEmojiKeyboard(composer.current);
-```
+## Version number: leave it
 
-(imported from `@/features/messages/systemEmojiKeyboard`). That is the same spot
-where the instant-update fix focuses the message box; this call does that
-focus itself when the module is missing, so swapping it in changes nothing on
-older builds, Android or the website.
+`app.config.js` says to bump `version` when something native changes. Not for
+this module: the app treats it as optional, so keeping 1.0.0 is what lets one
+instant update serve both the current store build and the next one. Bumping
+`version` would stop today's builds from getting any later update.
 
 ## On TestFlight (iPhone)
 
@@ -43,7 +44,11 @@ older builds, Android or the website.
 4. **Tap ABC** (bottom left of the emoji keyboard). Letters come back. Type a
    word, then tap the emoji button again: emoji keyboard again.
 5. **Keyboard up with letters, tap the emoji button.** It switches to emoji in
-   place, without the keyboard dropping.
+   place, without the keyboard dropping. Not checked before this build: iOS may
+   only read the keyboard choice when the box is first tapped. If nothing
+   happens here (letters stay), it is harmless, but tell Claude: the follow-up
+   is to drop and re-raise the box with emoji set, which needs care so the
+   chat bar does not jump.
 6. **Leave the chat and come back,** tap into the box (not the emoji button):
    you get whatever keyboard you used last, as iPhones always do. The app no
    longer forces emoji once you have left the box.
