@@ -15,6 +15,7 @@ import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, lift, radius, spacing, typography } from '@/theme';
 import { TextScale } from '@/theme/textScale';
+import { FirstReveal } from '@/features/feed/FirstReveal';
 
 const CARD = 168;
 
@@ -45,12 +46,12 @@ function nameOf(c: FollowedCourt, from: LatLng | null): string {
  * with Check out where you are checked in. A card opens the court's page.
  * Nothing until you follow one. `from` is where distances are measured from.
  */
-export function YourCourts({ from = null }: { from?: LatLng | null }) {
+export function YourCourts({ from = null, revealOrder }: { from?: LatLng | null; /** On the start page: its place in the first showing's stagger (FirstReveal). */ revealOrder?: number }) {
   const styles = useThemedStyles(styleDefinitions);
   const { followedCourts, courtExtras, courtNow, currentUserId, actions } = useApp();
   useEffect(() => { if (currentUserId) void actions.loadFollowedCourts(); }, [currentUserId, actions]);
   if (courtExtras === false || !followedCourts?.length) return null;
-  return (
+  const strip = (
     <View style={styles.wrap}>
       <View style={styles.head}>
         <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" style={styles.title}>Your courts</Text>
@@ -91,6 +92,7 @@ export function YourCourts({ from = null }: { from?: LatLng | null }) {
       </ScrollView>
     </View>
   );
+  return revealOrder === undefined ? strip : <FirstReveal order={revealOrder}>{strip}</FirstReveal>;
 }
 
 const styleDefinitions = StyleSheet.create({

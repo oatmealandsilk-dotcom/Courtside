@@ -30,6 +30,7 @@ import { StatusShade } from '@/components/StatusShade';
 import { Welcome } from '@/features/welcome/Welcome';
 import { colors, lift, radius, spacing, typography, font } from '@/theme';
 import { TextScale } from '@/theme/textScale';
+import { preloadNearbyMap } from '@/components/NearbyMap';
 
 type Mode = 'sign-in' | 'sign-up';
 
@@ -285,6 +286,9 @@ export default function SignIn() {
   const submit = async () => {
     if (!ready || busy) return;
     setBusy(true);
+    // Signing in lands on Find Players: its map engine starts coming now, while the
+    // button says "Signing in…", rather than once the page is already up (Oct 21).
+    preloadNearbyMap();
     setError(null);
     setNotice(null);
     try {

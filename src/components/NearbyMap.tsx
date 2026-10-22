@@ -7,8 +7,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ChipsNoteLine, CitylessCard, CourtSheet, CourtsZoomNote, FilterChips, HitSheet, ListCrown, MapCredit, PIN_FIT_TOP, YouSheet, MapButtons, MapTopBar, PlaceSheet, PlayerSheet, PlayersPill, PlayersSheet, PreviewOverlay, WhereCard } from '@/components/map/MapChrome';
 import { CardStage } from '@/components/map/CardStage';
+import { warmMapEngine } from '@/components/map/engineCopy';
 import { MapCanvas, type CanvasMarker, type MapCanvasHandle, type MapLoadStatus } from '@/components/map/MapCanvas';
-import { MapCardFailed, MapCardLoading, MapLoadPill } from '@/components/map/MapLoadState';
+import { MAP_IN_MS, MapCardFailed, MapCardLoading, MapLoadPill } from '@/components/map/MapLoadState';
 import { CARD_HEIGHT, CARD_ZOOM, onCard } from '@/components/map/cardFit';
 import { cardLook, lookFor } from '@/components/map/look';
 import { clusterTemplates, courtLift, youLift } from '@/components/map/markers';
@@ -42,11 +43,11 @@ export type { NearbyMapProps };
 
 /**
  * The browser fetches its map engine separately and starts it early (see
- * NearbyMap.web). On the phone each map's web view fetches it itself, from a
- * public file host with two more to fall back on (engineLoader), and keeps a
- * copy after the first time; there is nothing to start early here.
+ * NearbyMap.web). On the phone the engine is fetched once, during the splash,
+ * and kept in a file (engineCopy), so each map's web view starts with it
+ * already in place instead of downloading it after the page is on screen.
  */
-export function preloadNearbyMap() {}
+export function preloadNearbyMap() { void warmMapEngine(); }
 /** In the browser: once the map engine asked for is in. On the phone there is nothing to wait for. */
 export function nearbyMapSettled(): Promise<void> { return Promise.resolve(); }
 
@@ -124,9 +125,8 @@ export function NearbyMap(props: NearbyMapProps) {
   const cardIn = useSharedValue(0);
   const showCard = () => {
     setCardUp(true);
-    cardIn.value = withTiming(1, { duration: 420, easing: Easing.out(Easing.cubic) }, (done) => { if (done) runOnJS(setLoaderGone)(true); });
+    cardIn.value = withTiming(1, { duration: MAP_IN_MS, easing: Easing.out(Easing.cubic) }, (done) => { if (done) runOnJS(setLoaderGone)(true); });
   };
-  const cardGrow = useAnimatedStyle(() => ({ transform: [{ scale: 0.985 + 0.015 * cardIn.value }] }));
   const coverFade = useAnimatedStyle(() => ({ opacity: 1 - cardIn.value }));
   // Anything else picked (a search result, a pin) takes the place of your own card.
   useEffect(() => { if (model.selected || model.selectedCourt || model.selectedHit) setMeOpen(false); }, [model.selected, model.selectedCourt, model.selectedHit]);
@@ -252,7 +252,7 @@ export function NearbyMap(props: NearbyMapProps) {
         style={[styles.card, cardHeight ? { height: cardHeight } : null]}
       >
         {/* Not yet drawn: covered, not tappable, and not read out (the city and its players come with the map). */}
-        <Reanimated.View pointerEvents={cardUp ? 'auto' : 'none'} accessibilityElementsHidden={!cardUp} importantForAccessibility={cardUp ? 'auto' : 'no-hide-descendants'} style={[StyleSheet.absoluteFill, cardGrow]}>
+        <Reanimated.View pointerEvents={cardUp ? 'auto' : 'none'} accessibilityElementsHidden={!cardUp} importantForAccessibility={cardUp ? 'auto' : 'no-hide-descendants'} style={StyleSheet.absoluteFill}>
           {mapView}
           <PreviewOverlay cityName={cityName} count={onCardCount} placeCount={model.cardCourts.length} hitCount={hitCount !== undefined && model.cardFromYou ? hitCount : model.cardHits.length} weather={weather} locationOn={locationOn} locating={locating} onToggleLocation={onToggleLocation} lock={lock} inviting={inviting} />
           <MapCredit align="right" style={{ position: 'absolute', right: 10, bottom: 10 }} />

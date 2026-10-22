@@ -10,7 +10,7 @@ import { placeZoom, type FoundPlace } from '@/features/places/geocode';
 import { usePlaceCourts } from '@/features/places/usePlaceCourts';
 import { usePlaceSearch } from '@/features/places/usePlaceSearch';
 import { useCourtSearch } from '@/features/places/useCourtSearch';
-import { courtRows, fetchCourts, isClosedCourt, peekCourts, type Court, type CourtRow } from '@/features/players/courts';
+import { courtRows, fetchCourts, isClosedCourt, peekCourts, peekSavedCourts, type Court, type CourtRow } from '@/features/players/courts';
 import { milesBetween, spotMilesKey } from '@/features/players/geo';
 import { homeFor, homeIsKnown, isRoughSpot, positionFor, wideView, type LatLng, type ViewBounds } from '@/features/players/positions';
 import { useMyCity } from '@/features/players/useMyCity';
@@ -403,9 +403,12 @@ export function useMapModel(me: User, players: User[], fix?: LatLng | null, focu
     if (!card || cityLat === undefined || cityLng === undefined) return undefined;
     const at = { lat: cityLat, lng: cityLng };
     let on = true;
+    let fresh = false;
     const kept = peekCourts(at);
     if (kept) setCardCourtList(kept);
-    fetchCourts(at).then((list) => { if (on) setCardCourtList(list); }).catch(() => undefined);
+    // The courts kept from the last open (courts.ts), until the fresh answer comes.
+    else void peekSavedCourts(at).then((got) => { if (on && !fresh && got) setCardCourtList(got); });
+    fetchCourts(at).then((list) => { fresh = true; if (on) setCardCourtList(list); }).catch(() => undefined);
     return () => { on = false; };
   }, [card, cityLat, cityLng]);
   const cardCourts = useMemo(() => (card && city ? cardCourtList.slice(0, CARD_COURTS) : []), [card, city, cardCourtList]);

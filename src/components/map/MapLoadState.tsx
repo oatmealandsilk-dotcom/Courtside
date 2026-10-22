@@ -1,14 +1,14 @@
 import { PRESS_DIM } from '@/theme/press';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import Animated, { Easing, cancelAnimation, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
-import { LinearGradient } from 'expo-linear-gradient';
+import Svg, { Path, Rect } from 'react-native-svg';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { CourtSpinner } from '@/components/CourtSpinner';
+import { lookFor, mix } from '@/components/map/look';
 import type { MapLoadStatus } from '@/components/map/useMapLoad';
-import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
-import { colors, radius, spacing, typography, withAlpha } from '@/theme';
+import { themes, useTheme, useThemedStyles } from '@/theme/ThemeProvider';
+import { colors, radius, spacing, typography } from '@/theme';
 
 /*
  * What a map shows until it has drawn, on the phone and in the browser alike
@@ -17,50 +17,60 @@ import { colors, radius, spacing, typography, withAlpha } from '@/theme';
  * about the town is drawn until the map is: the card shows only these.
  */
 
-/** How light a palette colour is, 0 to 255. */
-const lightness = (hex: string) => {
-  const h = hex.replace('#', '');
-  if (!/^[0-9a-f]{6}$/i.test(h)) return 0;
-  const [r, g, b] = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16));
-  return (r * 299 + g * 587 + b * 114) / 1000;
-};
+/**
+ * The still card while its map is on its way (Oct 21, owner: "make it
+ * absolute peak"): never a grey box with a spinner, but the map's own
+ * ground in the theme's colours, with a few soft main roads and a park
+ * sketched on it, so the card already reads as a map the moment the page
+ * shows. The real map then fades in over it inside the same frame. It is
+ * still: no shimmer, no spinner. Only if the map is truly slow (SLOW_MS)
+ * does a small quiet "Loading map…" appear in a corner, so a long wait
+ * still says what is happening.
+ */
+const SLOW_MS = 4000;
+/** How long the real map takes to fade in over the sketch, inside the card's frame (the frame itself never moves). */
+export const MAP_IN_MS = 300;
 
-/** A soft band of light sweeping across, in the card's own colours: whichever of the theme's two surface tones is lighter. */
-function Shimmer() {
-  useTheme();
-  const [width, setWidth] = useState(0);
-  const x = useSharedValue(0);
-  useEffect(() => {
-    x.value = withRepeat(withTiming(1, { duration: 1600, easing: Easing.inOut(Easing.quad) }), -1, false);
-    return () => cancelAnimation(x);
-  }, [x]);
-  const band = Math.max(120, width * 0.5);
-  const move = useAnimatedStyle(() => ({ transform: [{ translateX: -band + x.value * (width + band) }] }));
-  const shine = lightness(colors.surface) >= lightness(colors.surfaceAlt) ? colors.surface : colors.surfaceAlt;
+/** The sketch itself: the map's ground, a park, a little water, three main roads and a few streets. Drawn once, never animated. */
+export function MapCardBase() {
+  const { theme } = useTheme();
+  const look = useMemo(() => lookFor(themes[theme]), [theme]);
+  const ground = look.background?.fill ?? colors.bgElevated;
+  const built = look.landuse_residential?.fill ?? ground;
+  const park = look.park?.fill ?? mix(ground, colors.grass, 0.3);
+  const water = look.water?.fill ?? mix(ground, colors.hard, 0.3);
+  const road = look.highway_major_inner?.line ?? colors.surface;
+  const edge = look.highway_major_casing?.line ?? colors.border;
   return (
-    <View style={still.fill} onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
-      {width ? (
-        <Animated.View style={[{ position: 'absolute', top: 0, bottom: 0, left: 0, width: band }, move]}>
-          <LinearGradient
-            colors={[withAlpha(shine, 0), withAlpha(shine, 0.7), withAlpha(shine, 0)]}
-            start={{ x: 0, y: 0.5 }}
-            end={{ x: 1, y: 0.5 }}
-            style={StyleSheet.absoluteFill}
-          />
-        </Animated.View>
-      ) : null}
+    <View style={still.fill}>
+      <Svg width="100%" height="100%" viewBox="0 0 360 330" preserveAspectRatio="xMidYMid slice">
+        <Rect x={0} y={0} width={360} height={330} fill={ground} />
+        <Path d="M40 40 h120 v90 h-120 z M210 190 h110 v100 h-110 z" fill={built} />
+        <Path d="M232 46 q40 -8 70 10 q18 30 2 58 q-36 14 -70 -2 q-14 -32 -2 -66 z" fill={park} />
+        <Path d="M58 214 q30 -10 52 6 q8 24 -10 40 q-30 6 -46 -12 q-6 -18 4 -34 z" fill={park} />
+        <Path d="M-10 300 q110 -40 200 -10 t190 -30 v80 h-390 z" fill={water} opacity={0.85} />
+        <Path d="M-10 168 C90 150 200 186 370 150" stroke={edge} strokeWidth={6} fill="none" strokeLinecap="round" />
+        <Path d="M-10 168 C90 150 200 186 370 150" stroke={road} strokeWidth={4} fill="none" strokeLinecap="round" />
+        <Path d="M178 -10 C170 90 196 200 186 340" stroke={edge} strokeWidth={5} fill="none" strokeLinecap="round" />
+        <Path d="M178 -10 C170 90 196 200 186 340" stroke={road} strokeWidth={3.2} fill="none" strokeLinecap="round" />
+        <Path d="M-10 70 L370 96 M60 -10 L96 340 M290 -10 L262 340" stroke={road} strokeWidth={1.6} fill="none" opacity={0.9} />
+      </Svg>
     </View>
   );
 }
 
-/** The still card while its map is on its way, however long that takes: the shimmer, the app's spinner and "Loading map…". */
+/** The still card while its map is on its way, however long that takes: the sketch above, and only after a long wait a quiet word in the corner. */
 export function MapCardLoading() {
   const styles = useThemedStyles(styleDefinitions);
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setSlow(true), SLOW_MS);
+    return () => clearTimeout(t);
+  }, []);
   return (
-    <View style={styles.fill} accessible accessibilityRole="progressbar" accessibilityLabel="Loading map">
-      <Shimmer />
-      <CourtSpinner size={22} />
-      <Text style={styles.loading}>Loading map…</Text>
+    <View style={still.fill} accessible accessibilityRole="progressbar" accessibilityLabel="Loading map">
+      <MapCardBase />
+      {slow ? <View style={styles.slowSpot}><Text style={styles.slowText}>Loading map…</Text></View> : null}
     </View>
   );
 }
@@ -111,7 +121,9 @@ export function MapLoadPill({ status, onRetry }: { status: MapLoadStatus; onRetr
 
 const styleDefinitions = StyleSheet.create({
   fill: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, alignItems: 'center', justifyContent: 'center', gap: spacing.sm, padding: spacing.xl, overflow: 'hidden' },
-  loading: { ...typography.small, color: colors.textMuted },
+  // A long wait only: a small quiet word in the card's corner, never over the middle.
+  slowSpot: { position: 'absolute', left: 10, bottom: 10, paddingHorizontal: spacing.sm, paddingVertical: 3, borderRadius: radius.pill, backgroundColor: colors.surface },
+  slowText: { ...typography.small, color: colors.textMuted },
   disc: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center', marginBottom: 2 },
   title: { ...typography.bodyStrong, color: colors.text, textAlign: 'center', marginBottom: -4 },
   again: { ...typography.smallStrong, color: colors.brand, textAlign: 'center' },

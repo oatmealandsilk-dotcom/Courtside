@@ -25,7 +25,7 @@ import { setGuestStatus } from '@/features/guest/guestStatus';
 import { noteCampaignSignup } from '@/features/guest/campaign';
 import * as demoApi from '@/data/api';
 import { BLOCKED_WORDS_NOTE, CHAT_PHOTO_UNREADABLE, REVIEW_NOTE_MAX, auth as remoteAuth, fetchRemote, isLocalMedia, onWordsRefused, queueFeedSignal, remote, uploadChatPhoto, uploadMedia, emptyProfile, type GroupRefusal, type AdminReport, type ModerationResult, type ReviewAskResult, type ReportedChat, type ReportedItem, type ReportedItemKind, type ReportEvidence, type FeedSignal, type SiteFeedback, type WaitlistEntry, type BetaInviteStatus, type FirstDayStats, type FirstMove, type NewPlayer, type PinnedQuestion, type HandleStatus, type InviteCodeResult, type MyInviter, type RemoteData, type UserState, standInName } from '@/data/remote';
-import { clearSnapshot, markSnapshotOpened, markSnapshotOpening, readSnapshot, saveSnapshot, snapshotFailedBefore } from '@/data/snapshot';
+import { clearSnapshot, markSnapshotOpened, markSnapshotOpening, readMapCopy, readSnapshot, saveMapCopy, saveSnapshot, snapshotFailedBefore } from '@/data/snapshot';
 import { forgetAccount, listSavedAccounts, rememberAccount, type SavedAccount } from '@/features/accounts/savedAccounts';
 import { isAuthRetryableFetchError } from '@supabase/supabase-js';
 import { isSupabaseConfigured, storedLoginId, supabase } from '@/lib/supabase';
@@ -2858,6 +2858,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const showSnapshot = useCallback((me: ID, data: RemoteData) => {
     snapshotIds.current = idsIn(data);
     setState((prev) => (prev.remoteLoaded || (prev.currentUserId && prev.currentUserId !== me) ? prev : mergeRemote(prev, data, me, null, null, true)));
+    // Find Players' own copy (data/snapshot's MapCopy): the map card's pins, the Open to hit rings and
+    // New on CourtSide, at once, until the map's fresh load replaces them (Oct 21). Never over a fresh one.
+    void readMapCopy(me).then((copy) => {
+      if (!copy) return;
+      setState((prev) => {
+        if (prev.currentUserId !== me || prev.lastSeenLoaded) return prev;
+        const have = new Set(prev.users.map((u) => u.id));
+        const users = [...prev.users, ...copy.users.filter((u) => !have.has(u.id))];
+        const lastSeen = { ...copy.lastSeen, ...prev.lastSeen };
+        return { ...prev, lastSeen, users: withMapRings(users, lastSeen, me), newOnCourtside: prev.newOnCourtside ?? copy.newOnCourtside, mapLive: prev.mapLive ?? copy.mapLive };
+      });
+    });
   }, []);
 
   const fetchAndMerge = useCallback(async (me: ID, email?: string | null) => {
@@ -7947,6 +7959,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const marked = remote.markLastSeen(at.lat, at.lng, state.detectedLocation ?? undefined);
     if (refresh) void marked.then(() => loadLastSeen()).catch(() => undefined);
   }, [state.currentUserId, state.detectedCoords, state.detectedLocation, state.locationEnabled, loadLastSeen]);
+
+  // Find Players' own copy for the next open (data/snapshot's MapCopy): a moment after the map's
+  // load has settled, and again whenever it changes, so the page the app opens on has its pins at once.
+  useEffect(() => {
+    const me = state.currentUserId;
+    if (!me || !UUID.test(me) || !state.remoteLoaded || !state.lastSeenLoaded) return undefined;
+    const t = setTimeout(() => {
+      const s = stateRef.current;
+      if (s.currentUserId === me) void saveMapCopy(me, { lastSeen: s.lastSeen, users: s.users, newOnCourtside: s.newOnCourtside, mapLive: s.mapLive });
+    }, 3000);
+    return () => clearTimeout(t);
+  }, [state.currentUserId, state.remoteLoaded, state.lastSeenLoaded, state.lastSeen, state.newOnCourtside]);
 
   // Back in the app (or signed in) with a Location off still to reach the server: try again.
   useEffect(() => {

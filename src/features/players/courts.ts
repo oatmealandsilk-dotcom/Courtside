@@ -1,3 +1,5 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 import { supabase } from '@/lib/supabase';
 import { demoCourtsNamed, demoCourtsNear } from '@/data/mock/courts';
 import type { CourtAccess } from '@/data/types';
@@ -77,7 +79,50 @@ export function fetchCourts(center: LatLng, radiusMeters = 9000): Promise<Court[
 
 /** The courts around a spot if they are already on the phone, without waiting: a page can open on a full list. */
 export function peekCourts(center: LatLng, radiusMeters = 9000): Court[] | undefined {
-  return cache.get(areaKey(center, radiusMeters));
+  const key = areaKey(center, radiusMeters);
+  return cache.get(key) ?? saved?.[key];
+}
+
+/*
+ * The last few areas' courts, kept on the phone between opens (Oct 21: Find
+ * Players opened with no courts, then they popped in once the network
+ * answered). They show at once on the next open, and the fresh answer
+ * replaces them as soon as it comes; a fetch is always made, so a court
+ * changed meanwhile is never kept for long. Only the area's middle (about a
+ * kilometre, areaKey) is in the key, never where you stood.
+ */
+const SAVED_KEY = 'courtside-courts-v1';
+const SAVED_AREAS = 4;
+let saved: Record<string, Court[]> | null = null;
+let savedRead: Promise<void> | null = null;
+/** Reads the kept courts, once per session. Never throws. */
+export function loadSavedCourts(): Promise<void> {
+  savedRead ??= AsyncStorage.getItem(SAVED_KEY)
+    .then((raw) => { const v: unknown = raw ? JSON.parse(raw) : null; saved = v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, Court[]>) : {}; })
+    .catch(() => { saved = {}; });
+  return savedRead;
+}
+/** The kept courts around a spot, once they are read (peekCourts has them after that too). */
+export async function peekSavedCourts(center: LatLng, radiusMeters = 9000): Promise<Court[] | undefined> {
+  await loadSavedCourts();
+  return peekCourts(center, radiusMeters);
+}
+function keepCourts(key: string, list: Court[]) {
+  if (!list.length) return;
+  void loadSavedCourts().then(() => {
+    const next = { ...(saved ?? {}) };
+    delete next[key];
+    next[key] = list;
+    const keys = Object.keys(next);
+    keys.slice(0, Math.max(0, keys.length - SAVED_AREAS)).forEach((k) => { delete next[k]; });
+    saved = next;
+    return AsyncStorage.setItem(SAVED_KEY, JSON.stringify(next));
+  }).catch(() => undefined);
+}
+/** Signing out: the kept courts go with the rest of what this phone held for the account. */
+export function forgetSavedCourts() {
+  saved = {};
+  void AsyncStorage.removeItem(SAVED_KEY).catch(() => undefined);
 }
 
 async function loadCourts(center: LatLng, radiusMeters: number, key: string): Promise<Court[]> {
@@ -95,6 +140,8 @@ async function loadCourts(center: LatLng, radiusMeters: number, key: string): Pr
   if (!rows || !rows.length) rows = await fromOpenStreetMap(center, radiusMeters);
   const out = fold(rows, center, radiusMeters);
   cache.set(key, out);
+  // The demo's made-up parks are never kept.
+  if (supabase) keepCourts(key, out);
   return out;
 }
 

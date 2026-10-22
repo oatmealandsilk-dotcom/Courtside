@@ -6,6 +6,7 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { MapCardFailed, MapCardLoading } from '@/components/map/MapLoadState';
+import { STYLE } from '@/components/map/look';
 import type { NearbyMapProps } from '@/components/NearbyMap.types';
 import { useStartMapHold } from '@/features/feed/warmup';
 import { Button } from '@/components/ui';
@@ -29,6 +30,25 @@ const loadMap = () => (loading ??= import('@/components/map/WebMap'));
 export function preloadNearbyMap() {
   // A failure here is left for the map to meet and handle (below) when it is drawn.
   loadMap().catch(() => undefined);
+  warmTiles();
+}
+let tilesWarm = false;
+/**
+ * The map's tiles come from OpenFreeMap: the connection to it (DNS, TLS) is
+ * opened now, and its style asked for, while the splash is still up, so the
+ * map's first requests find a warm line instead of starting one (Oct 21).
+ */
+function warmTiles() {
+  if (tilesWarm || typeof document === 'undefined') return;
+  tilesWarm = true;
+  try {
+    const link = document.createElement('link');
+    link.rel = 'preconnect';
+    link.href = new URL(STYLE).origin;
+    link.crossOrigin = 'anonymous';
+    document.head.appendChild(link);
+  } catch { /* only a head start */ }
+  fetch(STYLE, { mode: 'cors', credentials: 'omit' }).catch(() => undefined);
 }
 /**
  * Once the engine that was asked for is in (or failed), so background work

@@ -5,6 +5,7 @@ import { useReducedMotion } from '@/lib/useReducedMotion';
 
 import { STYLE, type Look } from '@/components/map/look';
 import { ENGINE_JS, PAINT_WATCH_JS } from '@/components/map/engineLoader';
+import { engineInjection, warmMapEngine } from '@/components/map/engineCopy';
 import { useMapLoad, type MapLoadStatus } from '@/components/map/useMapLoad';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { CLOSE_ZOOM_NAMES, FAR_ZOOM, MAP_PIN_CSS, SHORT_ZOOM } from '@/components/map/markers';
@@ -154,6 +155,10 @@ window.__cs={
 }
 ${ENGINE_JS}
 </script></body></html>`, [load.attempt]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The engine the app fetched during the splash (engineCopy), in place before the page starts: the
+  // page then goes straight to its streets. Without it yet, the page fetches the engine itself.
+  const engine = useMemo(() => engineInjection(), [load.attempt]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { void warmMapEngine(); }, []);
 
   return (
     <View style={[StyleSheet.absoluteFill, style]} pointerEvents={interactive ? 'auto' : 'none'}>
@@ -161,6 +166,7 @@ ${ENGINE_JS}
         key={load.attempt}
         ref={web}
         source={{ html, baseUrl: 'https://app.courtsidebase.com' }}
+        injectedJavaScriptBeforeContentLoaded={engine}
         originWhitelist={['*']}
         style={styles.web}
         scrollEnabled={false}

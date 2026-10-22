@@ -1,7 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import type { RemoteData } from '@/data/remote';
-import type { ID } from '@/data/types';
+import type { ID, LastSeen, User } from '@/data/types';
+import { forgetSavedCourts } from '@/features/players/courts';
 
 /**
  * A copy of what you last saw, kept on this phone (or in this browser), so
@@ -97,7 +98,52 @@ export async function readSnapshot(me: ID): Promise<RemoteData | null> {
 }
 
 export async function clearSnapshot(me: ID): Promise<void> {
-  try { await AsyncStorage.removeItem(key(me)); } catch { /* nothing kept */ }
+  forgetSavedCourts();
+  try { await AsyncStorage.multiRemove([key(me), mapKey(me)]); } catch { /* nothing kept */ }
+}
+
+/*
+ * Find Players' own small copy, beside the main one (Oct 21, owner: the
+ * community tab should load in "absolute peak"): the pins on the map card,
+ * the Open to hit rings and New on CourtSide, so the page the app opens on
+ * shows them at once instead of after the map's own load. Only what this
+ * account was last shown, only for a day (a pin is someone's last shared
+ * spot: a day-old one is more confusing than helpful), and the fresh load
+ * replaces it as soon as it lands. Deleted with the main copy.
+ */
+export interface MapCopy {
+  lastSeen: Record<ID, LastSeen>;
+  /** The people those pins and rows are, so a pin has a face before the fresh load. */
+  users: User[];
+  newOnCourtside: { userId: ID; joinedAt: string }[] | null;
+  mapLive: boolean | null;
+}
+const MAP_VERSION = 1;
+const mapKey = (me: ID) => `courtside-mapcopy-v${MAP_VERSION}:${me}`;
+const MAP_MAX_AGE_MS = 86_400_000;
+/** Pins kept at most: the nearest-first answer rarely has more round a town. */
+const MAP_MAX_PINS = 150;
+
+export async function saveMapCopy(me: ID, copy: MapCopy): Promise<void> {
+  try {
+    const ids = Object.keys(copy.lastSeen).slice(0, MAP_MAX_PINS);
+    const lastSeen = Object.fromEntries(ids.map((id) => [id, copy.lastSeen[id]]));
+    const people = new Set<ID>([...ids, ...(copy.newOnCourtside ?? []).map((r) => r.userId)]);
+    const users = copy.users.filter((u) => people.has(u.id) && u.id !== me);
+    await AsyncStorage.setItem(mapKey(me), JSON.stringify({ v: MAP_VERSION, savedAt: Date.now(), data: { ...copy, lastSeen, users } }));
+  } catch { /* the page simply waits for the fresh load */ }
+}
+
+export async function readMapCopy(me: ID): Promise<MapCopy | null> {
+  try {
+    const raw = await AsyncStorage.getItem(mapKey(me));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { v?: number; savedAt?: number; data?: MapCopy };
+    if (parsed.v !== MAP_VERSION || !parsed.data?.lastSeen || !parsed.savedAt || Date.now() - parsed.savedAt > MAP_MAX_AGE_MS) return null;
+    return parsed.data;
+  } catch {
+    return null;
+  }
 }
 
 /*

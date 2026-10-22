@@ -56,6 +56,7 @@ import { plain } from '@/features/search/words';
 import { askedSection, reportSection, subscribeSectionRequest, takeAskedSection } from '@/features/navigation/swipeOrder';
 import { START_SECTION, START_TAB } from '@/features/navigation/startTab';
 import { setStartDrawn } from '@/features/feed/warmup';
+import { FirstReveal } from '@/features/feed/FirstReveal';
 import { useApp } from '@/store/AppContext';
 import { useAndroidBack } from '@/lib/androidBack';
 import type { QuestionTopic } from '@/data/types';
@@ -540,8 +541,9 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   useEffect(() => { if (!anyInTopic) setSortOpen(false); }, [anyInTopic]);
 
   // Where to play: the courts you follow, with what is new at each, then the others in town, each a tap from its page.
-  const yourCourts = <YourCourts from={youAt} />;
-  const courtsBlock = <CourtsNear center={youAt} />;
+  // Each with its place in the first showing's stagger (FirstReveal), which depends on what comes first.
+  const yourCourts = (order: number) => <YourCourts from={youAt} revealOrder={order} />;
+  const courtsBlock = (order: number) => <CourtsNear center={youAt} revealOrder={order} />;
   // A guest (guest mode, Oct 17): open hits and courts near them, never the players map or people.
   const content = (pane:string) => (pane === 'players' && isGuest ? <GuestFindPlayers /> : pane === 'players' ? <View style={{ gap: 16 }}>
         {/* Cancel beside the box while you search, the way iPhone search boxes do: one tap clears it, puts the keyboard away and brings the map back (Oct 5, owner: "there should be an easier way to exit here"). */}
@@ -569,24 +571,26 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
             right under it, so its button shows without scrolling (Oct 5: it
             sat under the bar, below Open to hit). For a teen with no friend
             on their map yet, the same card as "Bring your friends". */}
-        {!search && early ? <EarlyInvite city={earlyCity} court={inviteCourt} leadRef={leadRef} /> : null}
-        {!search && friendsEarly ? <EarlyInvite friends city={myCityName} court={null} leadRef={leadRef} /> : null}
+        {/* Under the map (whose frame is there at once), the sections arrive in a short, quiet
+            stagger as the opening curtain lifts, the first time only (FirstReveal, Oct 21). */}
+        {!search && early ? <FirstReveal order={0}><EarlyInvite city={earlyCity} court={inviteCourt} leadRef={leadRef} /></FirstReveal> : null}
+        {!search && friendsEarly ? <FirstReveal order={0}><EarlyInvite friends city={myCityName} court={null} leadRef={leadRef} /></FirstReveal> : null}
         {/* Open to hit: you first (one tap, never Location; hold to pick until when and how far), then who near you is open. */}
         {currentUser && !search && showUpToday ? (
           // Never folded away by the phone's renderer: with players around, the tutorial's first tip lights this row.
-          <View ref={early || friendsEarly ? undefined : leadRef} collapsable={false}>
+          <FirstReveal order={0}><View ref={early || friendsEarly ? undefined : leadRef} collapsable={false}>
             {/* "Turn on Location" only while it is off: with it on and no spot yet, the row waits for one (the switch would have turned it off). */}
             <UpToday me={currentUser} people={upToday} teen={teen} locationOn={location.locationOn} finding={location.locationOn && !ownSpot} onLocation={ownSpot || location.locationOn ? undefined : location.toggle} onTurnOnLocation={location.locationOn ? undefined : turnOnLocation} onToggle={toggleOpen} />
-          </View>
+          </View></FirstReveal>
         ) : null}
         {/* A quiet area leads with where to play (your courts, then the others
             near you); once it has open hits, they come first, and Your courts
             follows them, since its "Hit today" badges repeat those cards. */}
-        {!search && !openHits.length ? yourCourts : null}
-        {!search && !openHits.length ? courtsBlock : null}
+        {!search && !openHits.length ? yourCourts(1) : null}
+        {!search && !openHits.length ? courtsBlock(2) : null}
         {/* Hits: someone wants a game, yours first, then near you. Posting one is right here. */}
         {!search ? (
-          <View style={styles.hits}>
+          <FirstReveal order={openHits.length ? 1 : 3}><View style={styles.hits}>
             <View style={styles.hitsHead}>
               <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" style={styles.playersTitle}>Open hits</Text>
               {/* Nothing open: the section says so in one muted line under its title, the way a section opens. */}
@@ -625,10 +629,10 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
                 {furtherOpen ? listedFurther.map(({ hit, miles }) => <HitCard key={hit.id} hit={hit} miles={miles} />) : null}
               </>
             ) : null}
-          </View>
+          </View></FirstReveal>
         ) : null}
-        {!search && openHits.length ? yourCourts : null}
-        {!search && openHits.length ? courtsBlock : null}
+        {!search && openHits.length ? yourCourts(2) : null}
+        {!search && openHits.length ? courtsBlock(3) : null}
         {/* Courts by name, above the players, once two letters are typed. */}
         {search && courtMatches.length ? (
           <View>

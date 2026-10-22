@@ -20,6 +20,7 @@ import { getPendingTab, setPendingTab, subscribePendingTab } from '@/features/na
 import { requestScrollToTop } from '@/features/navigation/scrollToTop';
 import { askForCommunityMap, isStartTab, isTabPage } from '@/features/navigation/startTab';
 import { launchSettle, useCurtainDown } from '@/features/feed/warmup';
+import { preloadNearbyMap } from '@/components/NearbyMap';
 import { useApp } from '@/store/AppContext';
 import { isPublicPath } from '@/features/share/publicPaths';
 import { guestAskFor } from '@/features/guest/guestPaths';
@@ -149,6 +150,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => listenForPushTaps(), []);
   // Android: the alert channels (Messages, Likes and replies, Reminders) exist from the first launch, before any alert or question.
   useEffect(() => { void setUpNotificationChannels(); }, []);
+  // Anyone signed in opens on Find Players, whose map is the page's one slow piece: its engine
+  // (and, in a browser, a warm connection to the map's tiles) starts the moment the account is
+  // known, whichever way in that was (Oct 21). Fetched once; asking again costs nothing.
+  useEffect(() => { if (currentUserId && !isGuest) preloadNearbyMap(); }, [currentUserId, isGuest]);
   const pushAskedFor = useRef<string | null>(null);
   useEffect(() => {
     // Logging out takes this phone's push address off the account, so the

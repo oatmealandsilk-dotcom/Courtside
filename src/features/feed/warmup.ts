@@ -133,6 +133,8 @@ export function raiseCurtain() {
   liftBy = 0;
   downListeners.forEach((fn) => fn());
 }
+/** Whether the curtain is off the screen right now (useCurtainDown, read once outside of a draw). */
+export const isCurtainDown = () => down;
 const subscribeDown = (fn: () => void) => { downListeners.add(fn); return () => { downListeners.delete(fn); }; };
 export function useCurtainDown() {
   return useSyncExternalStore(subscribeDown, () => down, () => down);

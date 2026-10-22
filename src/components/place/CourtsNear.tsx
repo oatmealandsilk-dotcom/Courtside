@@ -12,7 +12,8 @@ import { countLabel, sameCourt } from '@/features/places/court';
 import { labelOf, looksPublic } from '@/features/places/courtName';
 import { canSeeAtCourt, courtSeeing } from '@/features/places/useCourtPosts';
 import { openCourt } from '@/features/players/courtLink';
-import { biggerFirst, courtRows, fetchCourts, isClosedCourt, peekCourts, type Court, type CourtRow } from '@/features/players/courts';
+import { biggerFirst, courtRows, fetchCourts, isClosedCourt, peekCourts, peekSavedCourts, type Court, type CourtRow } from '@/features/players/courts';
+import { FirstReveal } from '@/features/feed/FirstReveal';
 import { formatMiles } from '@/features/players/geo';
 import { IN_TOWN_MILES } from '@/features/players/mapModel';
 import type { LatLng } from '@/features/players/positions';
@@ -37,27 +38,32 @@ const MOST = 8;
  * distance alone; `all` is every court loaded there, for a search box to
  * look through first.
  */
-export function useNearCourts(center: LatLng | null): { rows: CourtRow[]; nearest: CourtRow | null; all: Court[] } {
+export function useNearCourts(center: LatLng | null): { rows: CourtRow[]; nearest: CourtRow | null; all: Court[]; loading: boolean } {
   const lat = center?.lat;
   const lng = center?.lng;
   const [list, setList] = useState<Court[]>(() => (center ? peekCourts(center) ?? [] : []));
+  // Nothing known yet for here, and the answer still on its way (the strip holds its place meanwhile).
+  const [loading, setLoading] = useState(() => !!center && !peekCourts(center));
   useEffect(() => {
-    if (lat === undefined || lng === undefined) { setList([]); return undefined; }
+    if (lat === undefined || lng === undefined) { setList([]); setLoading(false); return undefined; }
     const at = { lat, lng };
     let on = true;
+    let fresh = false;
     const kept = peekCourts(at);
-    if (kept) setList(kept);
-    fetchCourts(at).then((got) => { if (on) setList(got); }).catch(() => undefined);
+    if (kept) { setList(kept); setLoading(false); }
+    // The courts kept from the last open, the moment they are read, until the fresh ones come.
+    else void peekSavedCourts(at).then((got) => { if (on && !fresh && got) { setList(got); setLoading(false); } });
+    fetchCourts(at).then((got) => { fresh = true; if (on) setList(got); }).catch(() => undefined).finally(() => { if (on) setLoading(false); });
     return () => { on = false; };
   }, [lat, lng]);
   return useMemo(() => {
-    if (lat === undefined || lng === undefined) return { rows: [], nearest: null, all: list };
+    if (lat === undefined || lng === undefined) return { rows: [], nearest: null, all: list, loading: false };
     // Members-only and private courts are never suggested: not listed, and never "the nearest" named for a first hit.
     // Only courts in town: after a move to another city, the last city's list (kept while the new one loads, or if it fails) is never listed as near.
     const named = courtRows(list.filter((c) => !isClosedCourt(c)), { lat, lng }).filter((r) => r.c.name !== 'Tennis courts' && r.miles <= IN_TOWN_MILES);
     const rows = [...biggerFirst(named.filter((r) => looksPublic(r.c.name))), ...biggerFirst(named.filter((r) => !looksPublic(r.c.name)))].slice(0, MOST);
-    return { rows, nearest: named[0] ?? null, all: list };
-  }, [list, lat, lng]);
+    return { rows, nearest: named[0] ?? null, all: list, loading };
+  }, [list, lat, lng, loading]);
 }
 
 /**
@@ -68,7 +74,7 @@ export function useNearCourts(center: LatLng | null): { rows: CourtRow[]; neares
  * court the map or players say is members only or private never shows here,
  * nor one you follow: Your courts already shows it, with the same news.
  */
-export function CourtsNear({ center }: { center: LatLng | null }) {
+export function CourtsNear({ center, revealOrder }: { center: LatLng | null; /** On the start page: its place in the first showing's stagger (FirstReveal). */ revealOrder?: number }) {
   const styles = useThemedStyles(styleDefinitions);
   const near = useNearCourts(center);
   const { hitRequests, posts, users, followingIds, currentUserId, blockedIds, mutedIds, followedCourts, seeing, shownAtCourt } = useApp();
@@ -90,8 +96,29 @@ export function CourtsNear({ center }: { center: LatLng | null }) {
     }));
   }, [rows, hitRequests, posts, users, followingIds, currentUserId, blockedIds, mutedIds, seeing, shownAtCourt]);
 
+  // Nothing known about here yet: the strip's own shape holds its place, quietly, so nothing below
+  // it moves when the courts come (Oct 21). Once the answer is in and there are none, it goes.
+  if (center && !rows.length && near.loading) {
+    const held = (
+      <View style={styles.wrap} accessible accessibilityLabel="Loading courts near you">
+        <View style={styles.head}>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.title}>Courts near you</Text>
+        </View>
+        <View style={[styles.row, styles.heldRow]}>
+          {[0, 1, 2].map((i) => (
+            <View key={i} style={styles.card}>
+              <View style={styles.top}><View style={styles.tile} /></View>
+              <View style={[styles.heldLine, { width: '82%' }]} />
+              <View style={[styles.heldLine, styles.heldMeta]} />
+            </View>
+          ))}
+        </View>
+      </View>
+    );
+    return revealOrder === undefined ? held : <FirstReveal order={revealOrder}>{held}</FirstReveal>;
+  }
   if (!center || !rows.length) return null;
-  return (
+  const strip = (
     <View style={styles.wrap}>
       <View style={styles.head}>
         <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" style={styles.title}>Courts near you</Text>
@@ -127,6 +154,7 @@ export function CourtsNear({ center }: { center: LatLng | null }) {
       </ScrollView>
     </View>
   );
+  return revealOrder === undefined ? strip : <FirstReveal order={revealOrder}>{strip}</FirstReveal>;
 }
 
 const styleDefinitions = StyleSheet.create({
@@ -154,4 +182,8 @@ const styleDefinitions = StyleSheet.create({
   allCard: { alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
   allDisc: { width: 40, height: 40, borderRadius: 12, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
   allText: { ...typography.smallStrong, color: colors.brand, textAlign: 'center' },
+  // The strip holding its place: the cards' own shape, a name's line and a distance's, in the page's quiet tone.
+  heldRow: { flexDirection: 'row', overflow: 'hidden' },
+  heldLine: { height: 14, marginVertical: 3, borderRadius: 7, backgroundColor: colors.bgElevated },
+  heldMeta: { width: '48%', height: 12 },
 });

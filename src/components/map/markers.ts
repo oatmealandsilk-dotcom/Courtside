@@ -58,7 +58,8 @@ export function agoShort(iso?: string): string {
  * zoom 12, where players' names drop their "· 2h" (SHORT_ZOOM: the pin
  * engine leaves them less room there). "cs-hit" on a pin: an open hit
  * folded into it, zoomed out (a small dot, pinEngine). "cs-quiet" on the
- * still card: no pin takes a tap (the card does).
+ * still card: no pin takes a tap (the card does), and its pins settle in
+ * with a 4 px drop as they fade (cs-drop), as the map fades in under them.
  *
  * Open to hit is a class on a pin's own marker element (OPEN_CLASS), not a
  * redraw, so switching it on or off animates: the green ring draws itself
@@ -124,6 +125,10 @@ export const MAP_PIN_CSS = `
 @keyframes cs-fade-out{to{opacity:0;scale:.7}}
 .cs-still .cs-pop{animation-name:cs-fade-in}
 .cs-still .cs-out{animation-name:cs-fade-in;animation-direction:reverse}
+.cs-quiet .cs-in{animation:cs-drop .26s cubic-bezier(.2,.8,.2,1) both}
+@keyframes cs-drop{0%{opacity:0;translate:0 -4px}100%{opacity:1;translate:0 0}}
+.cs-still .cs-quiet .cs-in{animation-name:cs-fade-in}
+@media (prefers-reduced-motion:reduce){.cs-quiet .cs-in{animation-name:cs-fade-in}}
 .cs-short .cs-ago{display:none}
 .cs-hitdot{display:none;position:absolute;left:-1px;top:-1px;width:11px;height:11px;border-radius:999px;border:2px solid;box-sizing:border-box;z-index:2;pointer-events:none}
 .cs-hit .cs-hitdot{display:block}

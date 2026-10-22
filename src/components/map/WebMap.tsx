@@ -30,7 +30,7 @@ import { CARD_BOX, FULL_MAP_BOX, PIN_ENGINE_JS, type PinEngine, type PinEngineFa
 import { mapMarkers } from '@/components/map/pinList';
 import { livePin } from '@/features/activity/liveSession';
 import { PAINT_WATCH_JS } from '@/components/map/engineLoader';
-import { MapCardFailed, MapCardLoading, MapLoadPill } from '@/components/map/MapLoadState';
+import { MAP_IN_MS, MapCardFailed, MapCardLoading, MapLoadPill } from '@/components/map/MapLoadState';
 import { useMapLoad } from '@/components/map/useMapLoad';
 import { useIsFocused } from '@/lib/useIsFocused';
 import { useStartMapHold } from '@/features/feed/warmup';
@@ -116,7 +116,7 @@ export function NearbyMap(props: NearbyMapProps) {
   const [cardShown, setCardShown] = useState(false);
   // The loading look underneath goes once the map's fade-in has finished.
   const [loaderGone, setLoaderGone] = useState(false);
-  useEffect(() => { if (!cardShown) return undefined; const t = setTimeout(() => setLoaderGone(true), 450); return () => clearTimeout(t); }, [cardShown]);
+  useEffect(() => { if (!cardShown) return undefined; const t = setTimeout(() => setLoaderGone(true), MAP_IN_MS + 30); return () => clearTimeout(t); }, [cardShown]);
   // Off screen, the map's load clocks wait (useMapLoad).
   const onScreen = useIsFocused();
   // Getting the map going, and again if its style never arrives (useMapLoad): each try is a new map.
@@ -411,7 +411,7 @@ export function NearbyMap(props: NearbyMapProps) {
             style={StyleSheet.absoluteFill}
           />
         ) : null}
-        <View aria-hidden={!cardShown} style={[StyleSheet.absoluteFill, !cardShown && styles.noTaps, { opacity: cardShown ? 1 : 0, transform: [{ scale: cardShown ? 1 : 0.985 }], transition: 'opacity 420ms cubic-bezier(0.33, 1, 0.68, 1), transform 420ms cubic-bezier(0.33, 1, 0.68, 1)' } as object]}>
+        <View aria-hidden={!cardShown} style={[StyleSheet.absoluteFill, !cardShown && styles.noTaps, { opacity: cardShown ? 1 : 0, transition: `opacity ${MAP_IN_MS}ms cubic-bezier(0.33, 1, 0.68, 1)` } as object]}>
           {canvas}
           {/* A still card: the tap goes to the full map, not to the tiles. */}
           <Pressable accessibilityRole={onExpand ? 'button' : undefined} accessibilityLabel="Map of players, courts and hits near you" onPress={onExpand} disabled={!onExpand} style={StyleSheet.absoluteFill} />

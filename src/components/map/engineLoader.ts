@@ -21,8 +21,9 @@
  * fetching again any streets that failed on the way. useMapLoad decides when
  * a map that never drew is tried again, and when to say it didn't load.
  */
-const VERSION = '4.7.1';
-const HOSTS = [
+export const ENGINE_VERSION = '4.7.1';
+const VERSION = ENGINE_VERSION;
+export const ENGINE_HOSTS = [
   `https://cdn.jsdelivr.net/npm/maplibre-gl@${VERSION}/dist/maplibre-gl`,
   // The same files, byte for byte, on our own site (the web build serves public/).
   `https://app.courtsidebase.com/maplibre/${VERSION}/maplibre-gl`,
@@ -39,7 +40,7 @@ const HOSTS = [
  * the files or start() threw.
  */
 export const ENGINE_JS = `(function(){
-var hosts=${JSON.stringify(HOSTS)},FIRST=12000,QUIET=10000,beatAt=0;
+var hosts=${JSON.stringify(ENGINE_HOSTS)},FIRST=12000,QUIET=10000,beatAt=0;
 post({type:'boot'});
 window.addEventListener('online',function(){post({type:'online'})});
 function beat(n){var t=Date.now();if(t-beatAt<1000)return;beatAt=t;post({type:'progress',got:n})}

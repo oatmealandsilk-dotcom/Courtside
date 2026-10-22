@@ -48,10 +48,17 @@ export function WarmCurtain() {
   // 1 while the curtain covers everything, 0 once it has gone.
   const fade = useSharedValue(1);
   const style = useAnimatedStyle(() => ({ opacity: fade.value }));
-  // The mark and name drift up and grow a touch as they go: away, not just out.
-  const brandStyle = useAnimatedStyle(() => (still ? {} : {
-    transform: [{ translateY: (1 - fade.value) * -14 }, { scale: 1 + (1 - fade.value) * 0.05 }],
-  }));
+  // The mark and name drift up and grow a touch as they go: away, not just out. They are gone
+  // in the first half of the lift, before the page shows through, so no ghost of the name is
+  // left over the map card while the cream clears (Oct 21).
+  const brandStyle = useAnimatedStyle(() => {
+    const away = Math.min(1, Math.max(0, (fade.value - 0.45) / 0.55));
+    return still ? { opacity: away } : {
+      opacity: away,
+      transform: [{ translateY: (1 - fade.value) * -14 }, { scale: 1 + (1 - fade.value) * 0.05 }],
+    };
+  });
+  const taglineStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, Math.max(0, (fade.value - 0.45) / 0.55)) }));
   // Hidden under the curtain, the page waits a touch large, ready to settle.
   useEffect(() => {
     if (shown && !still) launchSettle.value = 1;
@@ -93,7 +100,7 @@ export function WarmCurtain() {
             <BrandMark size={76} />
             <Text style={styles.wordmark}>CourtSide</Text>
           </Animated.View>
-          <Text style={styles.tagline}>Growing the game</Text>
+          <Animated.Text style={[styles.tagline, taglineStyle]}>Growing the game</Animated.Text>
         </>
       )}
     </Animated.View>
