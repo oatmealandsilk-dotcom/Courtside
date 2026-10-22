@@ -3,11 +3,11 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View, type LayoutChangeEvent, type ScrollView } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import Animated, { useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
+import Animated, { Easing, FadeIn, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { useReducedMotion } from '@/lib/useReducedMotion';
 import { useStillLoading } from '@/lib/useStillLoading';
 
-import { Button, Chip, EmptyState, Field, Screen, Toggle, SegmentedControl } from '@/components/ui';
+import { Button, Chip, EmptyState, Field, GlideHeight, Screen, Toggle, SegmentedControl } from '@/components/ui';
 import { BrandWash } from '@/components/ui/BrandWash';
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { BookingsPanel } from './coach-bookings';
@@ -224,8 +224,9 @@ export default function CoachStudio() {
 
   // The service editor: in place of the card being edited, or under the list for a new one.
   const editing = !!draft && coach.services.some((s) => s.id === draft.id);
+  // It fades in where it opens while the card around it eases to its new height (Oct 22 sweep).
   const editor = draft ? (
-    <View style={styles.editor}>
+    <Animated.View entering={FadeIn.duration(220).easing(Easing.out(Easing.cubic))} style={styles.editor}>
       <Text style={styles.editorTitle}>{editing ? 'Edit service' : 'New service'}</Text>
       <Text style={styles.label}>Kind</Text>
       <View style={styles.chips}>{(KINDS.includes(draft.kind) ? KINDS : [...KINDS, draft.kind]).map((k) => <Chip key={k} label={KIND_LABEL[k]} selected={draft.kind === k} onPress={() => setDraft({ ...draft, kind: k })} />)}</View>
@@ -255,7 +256,7 @@ export default function CoachStudio() {
         <Pressable accessibilityRole="button" onPress={() => setDraft(null)} hitSlop={8}><Text style={styles.quiet}>Cancel</Text></Pressable>
         {editing ? <Pressable accessibilityRole="button" onPress={removeDraft} hitSlop={8}><Text style={[styles.quiet, { color: colors.danger }]}>Remove</Text></Pressable> : null}
       </View>
-    </View>
+    </Animated.View>
   ) : null;
 
   return (
@@ -360,6 +361,7 @@ export default function CoachStudio() {
           <SectionHead title="Services" caption={coach.services.length ? 'What players can book. Tap one to change it.' : 'What players can book.'} />
           {/* The services, then "Add a service", as rows of one card; the editor opens in place of the row it changes. */}
           <View style={styles.card}>
+            <GlideHeight>
             {coach.services.map((s, index) => {
               if (draft?.id === s.id) return <View key={s.id} style={index > 0 && styles.line}>{editor}</View>;
               const active = (s as { active?: boolean }).active !== false;
@@ -393,6 +395,7 @@ export default function CoachStudio() {
                 <Text style={styles.addText}>Add a service</Text>
               </Pressable>
             )}
+            </GlideHeight>
           </View>
           {draft ? null : errorFor('service')}
         </View>

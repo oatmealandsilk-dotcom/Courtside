@@ -2,13 +2,13 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef, useState } from 'react';
 import { Keyboard, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import Reanimated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Reanimated, { Easing, FadeIn, interpolateColor, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { goBack } from '@/lib/goBack';
 import { useAndroidBack } from '@/lib/androidBack';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { MediaPicker, type PickedMedia } from '@/components/MediaPicker';
-import { Screen } from '@/components/ui';
+import { GlideHeight, Screen } from '@/components/ui';
 import { BLOCKED_WORDS_NOTE } from '@/features/hiddenWords/hiddenWords';
 import { clearUnsentCoachQuestion, peekUnsentCoachQuestion } from '@/features/coaching/unsentQuestion';
 import * as haptics from '@/lib/haptics';
@@ -162,6 +162,14 @@ export default function AskCoach() {
   // Android's Back closes it the same way, shrinking back into the box it grew from.
   useAndroidBack(() => { close(); return true; });
   const canSubmit = title.trim().length > 10 && body.trim().length > 25;
+  // Post turns from grey to green (and back) over a moment, not in one frame (Oct 22 sweep).
+  const ready = useSharedValue(canSubmit ? 1 : 0);
+  useEffect(() => { ready.value = withTiming(canSubmit ? 1 : 0, { duration: 200, easing: Easing.out(Easing.cubic) }); }, [canSubmit, ready]);
+  const offFill = colors.surfaceAlt, onFill = colors.brand, offInk = colors.textFaint, onInk = colors.brandInk;
+  const postFill = useAnimatedStyle(() => ({ backgroundColor: interpolateColor(ready.value, [0, 1], [offFill, onFill]) }));
+  const postInk = useAnimatedStyle(() => ({ color: interpolateColor(ready.value, [0, 1], [offInk, onInk]) }));
+  const arrowOn = useAnimatedStyle(() => ({ opacity: ready.value }));
+  const arrowOff = useAnimatedStyle(() => ({ opacity: 1 - ready.value }));
   // A quick second tap would post it twice.
   const sent = useRef(false);
   const submit = () => {
@@ -179,6 +187,8 @@ export default function AskCoach() {
       // Only a video goes with the question (coaches see clips, not photos), and its name only with it.
       const clip = media?.kind === 'video' ? media : null;
       const id = actions.askCoach({ title: title.trim(), body: body.trim(), specialty, videoUrl: clip?.uri, mediaLabel: clip?.label });
+      // The success tick a post gives, as the page hands over to the question.
+      haptics.reward();
       router.replace(`/coach-question/${id}`);
     });
   };
@@ -240,10 +250,12 @@ export default function AskCoach() {
             style={styles.detail}
           />
           <View style={styles.rule} />
+          {/* "Add a clip" opens into the picker with a smooth height change, the picker fading in. */}
+          <GlideHeight>
           {footage || media ? (
-            <View style={styles.footage}>
+            <Reanimated.View entering={FadeIn.duration(220)} style={styles.footage}>
               <MediaPicker value={media} onChange={setMedia} noCover selection="video" label="Choose a clip" />
-            </View>
+            </Reanimated.View>
           ) : (
             <Pressable accessibilityRole="button" accessibilityLabel="Add a clip" onPress={() => setFootage(true)} style={styles.addRow}>
               <Ionicons name="videocam-outline" size={20} color={colors.text} />
@@ -251,13 +263,19 @@ export default function AskCoach() {
               <Text style={styles.addNote}>Optional</Text>
             </Pressable>
           )}
+          </GlideHeight>
         </View>
 
         <View style={styles.foot}>
           <Text style={styles.footNote}>{canSubmit ? 'Coaches see your level with it.' : title.trim().length <= 10 ? 'A few more words on what is wrong.' : 'A little more detail, so the answer can be specific.'}</Text>
-          <Pressable accessibilityRole="button" accessibilityLabel="Post to coaches" accessibilityState={{ disabled: !canSubmit }} disabled={!canSubmit} onPress={submit} style={({ pressed }) => [styles.post, !canSubmit && styles.postOff, pressed && canSubmit && { opacity: 0.85 }]}>
-            <Text style={[styles.postText, !canSubmit && styles.postTextOff]}>Post</Text>
-            <Ionicons name="arrow-forward" size={16} color={canSubmit ? colors.brandInk : colors.textFaint} />
+          <Pressable accessibilityRole="button" accessibilityLabel="Post to coaches" accessibilityState={{ disabled: !canSubmit }} disabled={!canSubmit} onPress={submit} style={({ pressed }) => [styles.postPress, pressed && canSubmit && { opacity: 0.85 }]}>
+            <Reanimated.View style={[styles.post, postFill]}>
+              <Reanimated.Text style={[styles.postText, postInk]}>Post</Reanimated.Text>
+              <View style={styles.arrow}>
+                <Reanimated.View style={[StyleSheet.absoluteFill, arrowOff]}><Ionicons name="arrow-forward" size={16} color={colors.textFaint} /></Reanimated.View>
+                <Reanimated.View style={[StyleSheet.absoluteFill, arrowOn]}><Ionicons name="arrow-forward" size={16} color={colors.brandInk} /></Reanimated.View>
+              </View>
+            </Reanimated.View>
           </Pressable>
         </View>
       </ScrollView>
@@ -297,8 +315,8 @@ const styleDefinitions = StyleSheet.create({
   addNote: { ...typography.small, color: colors.textFaint, marginLeft: 'auto' },
   foot: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingTop: spacing.lg },
   footNote: { ...typography.small, color: colors.textFaint, flex: 1, lineHeight: 18 },
-  post: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 44, paddingHorizontal: 20, borderRadius: radius.pill, backgroundColor: colors.brand },
-  postOff: { backgroundColor: colors.surfaceAlt },
-  postText: { ...typography.bodyStrong, color: colors.brandInk },
-  postTextOff: { color: colors.textFaint },
+  postPress: { borderRadius: radius.pill },
+  post: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 44, paddingHorizontal: 20, borderRadius: radius.pill },
+  postText: { ...typography.bodyStrong },
+  arrow: { width: 16, height: 16 },
 });

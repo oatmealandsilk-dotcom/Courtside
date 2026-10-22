@@ -12,4 +12,5 @@ export { SegmentedControl, type Segment } from './SegmentedControl';
 export { StatTile } from './StatTile';
 export { Toggle } from './Toggle';
 export { Collapse } from './Collapse';
+export { GlideHeight } from './GlideHeight';
 export { DottedRule } from './DottedRule';

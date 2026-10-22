@@ -198,7 +198,7 @@ export default function CoachQuestionDetail() {
           </Text>
           </Reanimated.View>
           {question.authorId === currentUserId && replies.length ? (
-            <Pressable accessibilityRole="button" accessibilityLabel={question.resolved ? 'Reopen the question' : 'This answered it'} onPress={() => { if (!question.resolved) haptics.commit(); else haptics.tap(); actions.resolveCoachQuestion(question.id); }} hitSlop={8} style={{ marginLeft: 'auto' }}>
+            <Pressable accessibilityRole="button" accessibilityLabel={question.resolved ? 'Reopen the question' : 'This answered it'} onPress={() => actions.resolveCoachQuestion(question.id)} hitSlop={8} style={{ marginLeft: 'auto' }}>
               <Reanimated.Text key={question.resolved ? 'reopen' : 'resolve'} entering={FADE} style={[styles.meta, { color: colors.brand, ...font('700') }]}>{question.resolved ? 'Reopen' : 'This answered it'}</Reanimated.Text>
             </Pressable>
           ) : null}
