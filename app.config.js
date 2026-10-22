@@ -41,7 +41,9 @@ module.exports = {
     // so the loader fades straight into the in-app splash.
     // The refined icon he picked (Oct 6): the same green court mark, redrawn with even
     // corners, heavier lines and round bar ends. The old icon-glow.png stays in assets/.
-    icon: green ? './assets/icon.png' : './assets/icon-refined.png',
+    // Oct 22: "Do thin large for logo": the same mark with thinner strokes at 68% of the tile,
+    // flat green on cream (no gradient or glow). icon-refined*.png stay in assets/.
+    icon: green ? './assets/icon.png' : './assets/icon-thin.png',
     splash: { image: './assets/splash.png', resizeMode: 'contain', backgroundColor: '#F8F7F2' },
     newArchEnabled: true,
     ios: {
@@ -51,7 +53,7 @@ module.exports = {
       // iOS 18+ lets people pick a light, dark or tinted home screen. Each gets its own
       // drawing of the refined icon (Oct 6) instead of iOS guessing the dark and tinted
       // looks (its guessed tinted icon was a solid amber square). Next App Store build.
-      icon: green ? './assets/icon.png' : { light: './assets/icon-refined.png', dark: './assets/icon-refined-dark.png', tinted: './assets/icon-refined-tinted.png' },
+      icon: green ? './assets/icon.png' : { light: './assets/icon-thin.png', dark: './assets/icon-thin-dark.png', tinted: './assets/icon-thin-tinted.png' },
       // Apple Health may wake the app the moment a workout is saved, so "Workout detected"
       // comes even with CourtSide closed (modules/workout-watch, Oct 5). The react-native-health
       // plugin below adds the HealthKit entitlement itself; this adds background delivery only.
@@ -84,7 +86,8 @@ module.exports = {
       // circle or a squircle, so this copy of the mark is drawn smaller to sit inside Android's
       // safe zone. The Android 13+ "themed icon" gets the same mark without its soft shadow
       // (Android only uses its shape). The old android-icon-foreground.png stays in assets/.
-      adaptiveIcon: { foregroundImage: './assets/icon-refined-android-foreground.png', monochromeImage: './assets/icon-refined-android-monochrome.png', backgroundColor: '#F5EEE4' },
+      // Oct 22: the thin mark at the same safe-zone size, on the new icon's flat cream.
+      adaptiveIcon: { foregroundImage: './assets/icon-thin-android-foreground.png', monochromeImage: './assets/icon-thin-android-monochrome.png', backgroundColor: '#F6EFE4' },
       // Only what the app uses (Oct 4): the camera (instants, hits, Take photo / Record video), the microphone (voice notes, video sound),
       // location while open (courts and players near you), contacts read-only (find friends) and
       // alerts. Photos need nothing on Android 13+: the system photo picker hands over only what
