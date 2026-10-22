@@ -42,6 +42,8 @@ export interface MapCanvasHandle {
   setInteractive: (on: boolean) => void;
   /** Visits `to` and comes back to `back` while nobody is looking, so the streets there are already fetched (onWarm when done). */
   warm: (to: LatLng, zoom: number, back: LatLng, backZoom: number) => void;
+  /** Whether this try's page has its map up (its style loaded), drawn or not. */
+  isUp: () => boolean;
 }
 
 interface Props {
@@ -156,6 +158,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas({
     labels: (on, ms, delay) => send(`window.__cs.labels(${on ? 'true' : 'false'},${Math.round(ms)},${Math.round(delay)})`),
     setInteractive: (on) => send(`window.__cs.inter(${on ? 'true' : 'false'})`),
     warm: (to, z, back, bz) => send(`window.__cs.warm(${to.lat},${to.lng},${z},${back.lat},${back.lng},${bz})`),
+    isUp: () => ready.current,
   }), []); // eslint-disable-line react-hooks/exhaustive-deps
   // Written out only when the pins change, not on every draw of the page around the map (Oct 10,
   // owner: "the buttons like the settings. msg notifications, etc respond too slow").
