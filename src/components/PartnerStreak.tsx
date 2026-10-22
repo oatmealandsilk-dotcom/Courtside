@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import Animated, { type SharedValue, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 
 import { Avatar } from '@/components/ui/Avatar';
+import { Collapse } from '@/components/ui/Collapse';
 import { Box, Row, SectionHead } from '@/components/tennis/ProfileParts';
 import type { ID, PartnerStreak } from '@/data/types';
 import * as haptics from '@/lib/haptics';
@@ -145,11 +146,15 @@ export function PartnerStreakCard({ userId, name }: { userId: ID; name: string }
   const p = streaks?.find((s) => s.userId === userId);
   const box = useRef<View>(null);
   const party = useCelebration(p, box);
-  if (!p) return null;
+  // The streaks load after the page has drawn: the card opens with a smooth height
+  // change rather than dropping in and shoving everything below it (Oct 22).
+  if (!p) return <Collapse open={false} unclip>{null}</Collapse>;
   const first = firstOf(name);
   const title = `${p.weeks}-week streak with ${first}`;
   const eyebrow = party ? `${party} weeks in a row!` : 'Partner streak';
   return (
+    <Collapse open unclip>
+    <View style={styles.cardGap}>
     <View
       ref={box}
       collapsable={false}
@@ -164,6 +169,8 @@ export function PartnerStreakCard({ userId, name }: { userId: ID; name: string }
         <Text style={styles.sub} numberOfLines={2}>{weekWords(p)}</Text>
       </View>
     </View>
+    </View>
+    </Collapse>
   );
 }
 
@@ -171,17 +178,26 @@ export function PartnerStreakCard({ userId, name }: { userId: ID; name: string }
  * In your Tennis profile (Activity): every streak you have going, longest
  * first, each opening that player's profile. Nothing while you have none.
  */
-export function PartnerStreaksBox() {
+export function PartnerStreaksBox({ gap = 0 }: {
+  /** The page's own gap between sections: the box carries it inside its fold, so while closed it takes no room at all. */
+  gap?: number;
+} = {}) {
   const streaks = usePartnerStreaks();
   const { users } = useApp();
   const rows = (streaks ?? []).filter((p) => users.some((u) => u.id === p.userId));
-  if (!rows.length) return null;
+  // Loaded after the Tennis profile has drawn: it opens smoothly instead of dropping in (Oct 22).
   return (
-    <View>
-      <SectionHead title="Partner streaks" count={rows.length > 1 ? rows.length : undefined} />
-      <Box>
-        {rows.map((p, i) => <StreakRow key={p.userId} p={p} first={i === 0} />)}
-      </Box>
+    <View style={{ marginTop: -gap }}>
+    <Collapse open={rows.length > 0} unclip>
+      {rows.length ? (
+        <View style={{ paddingTop: gap }}>
+          <SectionHead title="Partner streaks" count={rows.length > 1 ? rows.length : undefined} />
+          <Box>
+            {rows.map((p, i) => <StreakRow key={p.userId} p={p} first={i === 0} />)}
+          </Box>
+        </View>
+      ) : null}
+    </Collapse>
     </View>
   );
 }
@@ -219,7 +235,9 @@ function StreakRow({ p, first }: { p: PartnerStreak; first: boolean }) {
 }
 
 const styleDefinitions = StyleSheet.create({
-  card: { ...lift, flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: 16, borderRadius: 20, backgroundColor: colors.surface, marginBottom: spacing.md, borderWidth: 1, borderColor: 'transparent' },
+  card: { ...lift, flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: 16, borderRadius: 20, backgroundColor: colors.surface, borderWidth: 1, borderColor: 'transparent' },
+  // The space under the card, inside the fold, so it opens and closes with it.
+  cardGap: { paddingBottom: spacing.md },
   cardOn: { borderColor: colors.brand },
   words: { flex: 1, minWidth: 0, gap: 2 },
   eyebrow: { ...typography.smallStrong, color: colors.textMuted },

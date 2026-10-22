@@ -1,7 +1,8 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { PlayerName } from '@/components/PlayerName';
 import React, { useRef, useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { RisingSheet } from '@/components/RisingSheet';
 import { router, useLocalSearchParams } from 'expo-router';
 import { goBack } from '@/lib/goBack';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -318,45 +319,39 @@ export default function CoachQuestionDetail() {
       )}
 
       {/* The question's menu, the same sheet a profile's "…" opens: Delete for the asker, Report for anyone else. */}
-      <Modal visible={menuOpen} transparent animationType="fade" onRequestClose={() => setMenuOpen(false)}>
-        {/* The backdrop is a plain surface, not a button: a button here would
-            wrap the menu's button, which the web refuses to nest. */}
-        <Pressable accessibilityLabel="Close menu" onPress={() => setMenuOpen(false)} style={styles.backdrop}>
-          <View style={[styles.sheet, { paddingBottom: menuBottom }]}>
-            <View style={styles.grabber} />
-            {mine ? (
-              <Pressable
-                accessibilityRole="button"
-                onPress={() => { setMenuOpen(false); askToDelete(); }}
-                style={({ pressed }) => [styles.menuRow, pressed && { backgroundColor: colors.surfaceAlt }]}
-              >
-                <Ionicons name="trash-outline" size={21} color={colors.danger} />
-                <Text style={[styles.menuLabel, { color: colors.danger }]}>Delete question</Text>
-              </Pressable>
-            ) : (
-              <Pressable
-                accessibilityRole="button"
-                onPress={() => { setMenuOpen(false); reportQuestion(); }}
-                style={({ pressed }) => [styles.menuRow, pressed && { backgroundColor: colors.surfaceAlt }]}
-              >
-                <Ionicons name="flag-outline" size={21} color={colors.danger} />
-                <Text style={[styles.menuLabel, { color: colors.danger }]}>Report question</Text>
-              </Pressable>
-            )}
-            {/* Admins only (the database refuses anyone else). */}
-            {admin ? (
-              <Pressable
-                accessibilityRole="button"
-                onPress={() => { setMenuOpen(false); moderateQuestion(); }}
-                style={({ pressed }) => [styles.menuRow, pressed && { backgroundColor: colors.surfaceAlt }]}
-              >
-                <Ionicons name={removed ? 'eye-outline' : 'eye-off-outline'} size={21} color={removed ? colors.text : colors.danger} />
-                <Text style={[styles.menuLabel, !removed && { color: colors.danger }]}>{removed ? 'Restore question' : 'Take down'}</Text>
-              </Pressable>
-            ) : null}
-          </View>
-        </Pressable>
-      </Modal>
+      <RisingSheet visible={menuOpen} onClose={() => setMenuOpen(false)} closeLabel="Close menu" sheetStyle={[styles.sheet, { paddingBottom: menuBottom }]}>
+          <View style={styles.grabber} />
+          {mine ? (
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => { setMenuOpen(false); askToDelete(); }}
+              style={({ pressed }) => [styles.menuRow, pressed && { backgroundColor: colors.surfaceAlt }]}
+            >
+              <Ionicons name="trash-outline" size={21} color={colors.danger} />
+              <Text style={[styles.menuLabel, { color: colors.danger }]}>Delete question</Text>
+            </Pressable>
+          ) : (
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => { setMenuOpen(false); reportQuestion(); }}
+              style={({ pressed }) => [styles.menuRow, pressed && { backgroundColor: colors.surfaceAlt }]}
+            >
+              <Ionicons name="flag-outline" size={21} color={colors.danger} />
+              <Text style={[styles.menuLabel, { color: colors.danger }]}>Report question</Text>
+            </Pressable>
+          )}
+          {/* Admins only (the database refuses anyone else). */}
+          {admin ? (
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => { setMenuOpen(false); moderateQuestion(); }}
+              style={({ pressed }) => [styles.menuRow, pressed && { backgroundColor: colors.surfaceAlt }]}
+            >
+              <Ionicons name={removed ? 'eye-outline' : 'eye-off-outline'} size={21} color={removed ? colors.text : colors.danger} />
+              <Text style={[styles.menuLabel, !removed && { color: colors.danger }]}>{removed ? 'Restore question' : 'Take down'}</Text>
+            </Pressable>
+          ) : null}
+      </RisingSheet>
     </Screen>
   );
 }
@@ -397,7 +392,6 @@ const styleDefinitions = StyleSheet.create({
   applyText: { ...typography.small, color: colors.text, flex: 1 },
   wait: { paddingVertical: 60, alignItems: 'center' },
   more: { padding: 4 },
-  backdrop: { flex: 1, backgroundColor: colors.overlay, justifyContent: 'flex-end' },
   sheet: {
     backgroundColor: colors.bg,
     borderTopLeftRadius: radius.xl,
