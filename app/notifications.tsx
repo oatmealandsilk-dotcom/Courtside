@@ -22,7 +22,7 @@ import { useApp } from '@/store/AppContext';
 import { confirmUnfollow } from '@/lib/confirm';
 import type { DetectedActivity, Notification, NotificationKind, Post, PostKind, User } from '@/data/types';
 import { isTennisActivity } from '@/features/activity/workouts';
-import { colors, radius, spacing, surfaceColorFor, typography } from '@/theme';
+import { colors, radius, spacing, surfaceColorFor, typography, buttonShape } from '@/theme';
 import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { HitGlyph } from '@/components/HitGlyph';
 import { showCourtOnMap } from '@/features/players/courtLink';
@@ -853,9 +853,9 @@ const styleDefinitions = StyleSheet.create({
   thumb: { width: 44, height: 44, borderRadius: 8, overflow: 'hidden', backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
   thumbPlay: { position: 'absolute', right: 3, bottom: 3, width: 14, height: 14, borderRadius: 7, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center' },
   askRow: { flexDirection: 'row', gap: spacing.sm, paddingTop: spacing.xs },
-  accept: { paddingHorizontal: spacing.lg, paddingVertical: 7, borderRadius: radius.pill, backgroundColor: colors.brand },
+  accept: { paddingHorizontal: spacing.lg, paddingVertical: 7, borderRadius: buttonShape.smallRadius, ...buttonShape.curve, backgroundColor: colors.brand },
   acceptText: { ...typography.smallStrong, color: colors.brandInk },
-  decline: { paddingHorizontal: spacing.lg, paddingVertical: 7, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border },
+  decline: { paddingHorizontal: spacing.lg, paddingVertical: 7, borderRadius: buttonShape.smallRadius, ...buttonShape.curve, borderWidth: 1, borderColor: colors.border },
   // A tag's Accept and Decline keep their width while one spins, and dim while pressed or while the other is going through.
   answerBox: { minWidth: 84, minHeight: 32, alignItems: 'center', justifyContent: 'center' },
   answerDim: { opacity: 0.6 },

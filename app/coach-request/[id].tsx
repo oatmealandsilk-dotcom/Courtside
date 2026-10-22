@@ -14,7 +14,7 @@ import { money, relativeTime } from '@/lib/format';
 import { dueText, isOpen, isOverdue, KIND_LABEL, statusLabel } from '@/features/coaching/bookings';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import { colors, font, radius, spacing, typography } from '@/theme';
+import { colors, font, radius, spacing, typography, buttonShape } from '@/theme';
 
 /**
  * One booking, seen by both sides. The player sees their question, where it
@@ -171,7 +171,7 @@ const styleDefinitions = StyleSheet.create({
   // The answer reads as the answer by a stripe of the court's colour down its edge, not a tinted box (which went olive on dark courts).
   answer: { borderLeftWidth: 3, borderLeftColor: colors.brand, borderTopLeftRadius: 6, borderBottomLeftRadius: 6 },
   body: { ...typography.body, color: colors.text, lineHeight: 23 },
-  video: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, alignSelf: 'flex-start', paddingVertical: 8, paddingHorizontal: 14, borderRadius: radius.pill, backgroundColor: colors.bg },
+  video: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, alignSelf: 'flex-start', paddingVertical: 8, paddingHorizontal: 14, borderRadius: buttonShape.smallRadius, ...buttonShape.curve, backgroundColor: colors.bg },
   videoText: { ...typography.smallStrong, color: colors.text },
   note: { ...typography.body, color: colors.textMuted, lineHeight: 22 },
   quiet: { alignSelf: 'center', paddingVertical: spacing.sm },

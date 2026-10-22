@@ -14,7 +14,7 @@ import { TEEN_NOTICE, choicesFor, onTeenMap, settleWhoSeesYou } from '@/features
 import { BIRTHDAY_OPENS_IT, ageUnknown } from '@/features/players/age';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import { colors, font, lift, radius, spacing, typography, withAlpha } from '@/theme';
+import { colors, font, lift, radius, spacing, typography, withAlpha, buttonShape } from '@/theme';
 
 const ICON: Record<MapVisibility, keyof typeof Ionicons.glyphMap> = { nearby: 'people-outline', mutuals: 'swap-horizontal-outline', none: 'eye-off-outline' };
 
@@ -216,6 +216,6 @@ const styleDefinitions = StyleSheet.create({
   noticeText: { ...typography.bodyStrong, color: colors.text, lineHeight: 21 },
   noticeSmall: { ...typography.small, color: colors.textMuted, lineHeight: 18 },
   error: { ...typography.small, color: colors.danger },
-  off: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 46, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderStrong, marginTop: spacing.xs },
+  off: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: buttonShape.height, borderRadius: buttonShape.radius, ...buttonShape.curve, borderWidth: 1, borderColor: colors.borderStrong, marginTop: spacing.xs },
   offText: { ...typography.smallStrong, ...font('600'), color: colors.text },
 });

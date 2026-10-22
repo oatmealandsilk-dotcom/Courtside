@@ -15,7 +15,7 @@ import { FollowPill } from '@/components/FollowPill';
 import { confirmUnfollow } from '@/lib/confirm';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import { colors, radius, spacing, typography } from '@/theme';
+import { colors, radius, spacing, typography, buttonShape } from '@/theme';
 import { PHONE_LINKING } from '@/lib/phoneLinking';
 
 type Found = { match: ContactMatch; contactName?: string };
@@ -192,7 +192,7 @@ const styleDefinitions = StyleSheet.create({
   who: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   name: { ...typography.bodyStrong, color: colors.text },
   meta: { ...typography.small, color: colors.textMuted },
-  pill: { height: 34, paddingHorizontal: 16, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
+  pill: { height: buttonShape.smallHeight, borderRadius: buttonShape.smallRadius, ...buttonShape.curve, paddingHorizontal: 16, alignItems: 'center', justifyContent: 'center' },
   pillOn: { backgroundColor: colors.brand },
   pillOff: { borderWidth: 1, borderColor: colors.borderStrong },
   pillText: { ...typography.smallStrong },

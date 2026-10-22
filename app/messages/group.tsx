@@ -19,7 +19,7 @@ import { show as showToast } from '@/lib/toast';
 import { afterReport } from '@/features/moderation/reportThanks';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import { colors, font, lift, radius, spacing, typography } from '@/theme';
+import { colors, font, lift, radius, spacing, typography, buttonShape } from '@/theme';
 import { TextScale } from '@/theme/textScale';
 
 const first = (u?: User) => u?.name.trim().split(/\s+/)[0] ?? 'They';
@@ -618,7 +618,7 @@ const styleDefinitions = StyleSheet.create({
   // page's own text colour. Red is kept for the confirm's Remove button, so
   // a full group reads as a list of people, not a list of things to delete
   // (and the words stay easy to read on every court theme's grey).
-  remove: { paddingHorizontal: 12, minHeight: 30, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
+  remove: { paddingHorizontal: 12, minHeight: 30, borderRadius: buttonShape.smallRadius, ...buttonShape.curve, backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
   removePressed: { opacity: PRESS_DIM },
   removeText: { ...typography.smallStrong, color: colors.text },
   lead: { width: 26, alignItems: 'center' },
@@ -632,7 +632,7 @@ const styleDefinitions = StyleSheet.create({
   // Which group the add-people page adds to, and the room left in it.
   addTo: { ...typography.small, color: colors.textMuted, paddingHorizontal: spacing.sm, paddingTop: spacing.xs },
   // Add, in the add-people page's header: a small pill in the brand colour.
-  headAdd: { paddingHorizontal: 14, minHeight: 32, borderRadius: radius.pill, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
+  headAdd: { paddingHorizontal: 14, minHeight: 32, borderRadius: buttonShape.smallRadius, ...buttonShape.curve, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
   headAddOff: { opacity: 0.4 },
   headAddText: { ...typography.smallStrong, color: colors.brandInk },
   // Sized by its padding, not a fixed height (a fixed one drew "Search" low and cut off on an iPhone).

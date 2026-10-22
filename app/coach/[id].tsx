@@ -22,7 +22,7 @@ import { show as showToast } from '@/lib/toast';
 import { BLOCKED_WORDS_NOTE } from '@/features/hiddenWords/hiddenWords';
 import { afterReport } from '@/features/moderation/reportThanks';
 import { confirmBlock, confirmReport } from '@/lib/confirm';
-import { colors, font, radius, spacing, typography, lift } from '@/theme';
+import { colors, font, radius, spacing, typography, lift, buttonShape } from '@/theme';
 
 /**
  * A coach's page: who they are, what they offer, and booking one of their
@@ -440,9 +440,9 @@ const styleDefinitions = StyleSheet.create({
   price: { ...typography.bodyStrong, color: colors.text, fontVariant: ['tabular-nums'] },
   form: { gap: spacing.md, marginTop: spacing.lg },
   formLead: { ...typography.body, color: colors.text },
-  attach: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, height: 46, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderStrong, borderStyle: 'dashed' },
+  attach: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, height: buttonShape.height, borderRadius: buttonShape.radius, ...buttonShape.curve, borderWidth: 1, borderColor: colors.borderStrong, borderStyle: 'dashed' },
   attachText: { ...typography.smallStrong, color: colors.text },
-  attached: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, height: 46, paddingHorizontal: spacing.lg, borderRadius: radius.pill, backgroundColor: colors.brandDim },
+  attached: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, height: buttonShape.height, paddingHorizontal: spacing.lg, borderRadius: buttonShape.radius, ...buttonShape.curve, backgroundColor: colors.brandDim },
   attachedText: { flex: 1, ...typography.smallStrong, color: colors.text },
   error: { ...typography.small, color: colors.danger },
   fine: { ...typography.caption, color: colors.textFaint, lineHeight: 17, letterSpacing: 0 },

@@ -292,7 +292,7 @@ const styleDefinitions = StyleSheet.create({
   chip: { paddingHorizontal: 7, height: 20, borderRadius: radius.pill, backgroundColor: colors.brandDim, justifyContent: 'center' },
   chipText: { ...typography.caption, letterSpacing: 0.2, color: colors.brand },
   // Remove, Decline: plain words in a soft pill. Approve is the one green one.
-  pill: { paddingHorizontal: 12, height: 30, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
+  pill: { paddingHorizontal: 12, height: 30, borderRadius: buttonShape.smallRadius, ...buttonShape.curve, backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
   pillPressed: { opacity: PRESS_DIM },
   pillText: { ...typography.smallStrong, color: colors.text },
   pillYes: { backgroundColor: colors.brand },

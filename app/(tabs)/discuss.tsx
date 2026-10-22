@@ -64,7 +64,7 @@ import { FirstReveal } from '@/features/feed/FirstReveal';
 import { useApp } from '@/store/AppContext';
 import { useAndroidBack } from '@/lib/androidBack';
 import type { QuestionTopic } from '@/data/types';
-import { TextScale, colors, oneLine, radius, spacing, typography, font, lift, useLargeText } from '@/theme';
+import { TextScale, colors, oneLine, radius, spacing, typography, font, lift, useLargeText, buttonShape } from '@/theme';
 import { isDesktopBrowser } from '@/lib/browserDevice';
 import { isSupabaseConfigured } from '@/lib/supabase';
 
@@ -992,7 +992,7 @@ const styleDefinitions = StyleSheet.create({
   sectionsColumn: { alignSelf: 'center', width: '100%', paddingHorizontal: spacing.lg },
   sections: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: colors.border },
   sectionWord: { ...typography.bodyStrong, fontSize: 16 },
-  more: { alignSelf: 'center', paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border, marginTop: spacing.md },
+  more: { alignSelf: 'center', paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderRadius: buttonShape.smallRadius, ...buttonShape.curve, borderWidth: 1, borderColor: colors.border, marginTop: spacing.md },
   moreText: { ...typography.smallStrong, color: colors.text },
   section: { flex: 1, alignItems: 'center', paddingVertical: 18 },
   sectionUnderline: { position: 'absolute', left: 0, bottom: -1, height: 2, backgroundColor: colors.brand, borderRadius: 1 },

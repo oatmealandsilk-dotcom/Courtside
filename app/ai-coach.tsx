@@ -1,3 +1,4 @@
+import { brandShadow } from '@/theme/fillMode';
 import { PRESS_DIM } from '@/theme/press';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { TextScale } from '@/theme/textScale';
@@ -29,7 +30,7 @@ import { playingFor } from '@/features/players/tennisProfile';
 import { healthSignal, withoutSource } from '@/lib/integrations';
 import { useApp } from '@/store/AppContext';
 import type { AiMessage, PlayerProfile, TrainingBlockKind, TrainingPlan } from '@/data/types';
-import { colors, lift, spacing, typography } from '@/theme';
+import { colors, lift, spacing, typography, buttonShape } from '@/theme';
 
 type BlockIconName = keyof typeof Ionicons.glyphMap | 'court';
 // The tint is a palette slot, looked up when the week draws: read once at load,
@@ -208,7 +209,7 @@ const introDefinitions = StyleSheet.create({
   mark: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
   title: { ...typography.heading, color: colors.text, textAlign: 'center' },
   body: { ...typography.body, color: colors.textMuted, textAlign: 'center', lineHeight: 22 },
-  go: { alignSelf: 'stretch', alignItems: 'center', paddingVertical: 14, borderRadius: 999, backgroundColor: colors.brand, marginTop: spacing.sm },
+  go: { alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center', minHeight: buttonShape.height, paddingVertical: 10, borderRadius: buttonShape.radius, ...buttonShape.curve, backgroundColor: colors.brand, ...brandShadow, marginTop: spacing.sm },
   goText: { ...typography.bodyStrong, color: colors.brandInk },
   later: { ...typography.smallStrong, color: colors.textMuted, paddingVertical: spacing.sm },
 });
