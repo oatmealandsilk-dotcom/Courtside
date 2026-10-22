@@ -19,14 +19,18 @@ import { onSpaceBar } from '@/features/feed/keyboard';
 import { STAGE_ON_ANDROID } from '@/features/feed/commentStage';
 import { StageChromeContext } from '@/features/feed/useStageMotion';
 import { TopBandContext } from '@/features/feed/topBand';
+import { usePreloadTurn } from '@/features/feed/preloadQueue';
 
 /**
  * A clip in the feed on a phone: plays itself when it is the page on screen,
  * one tap pauses, two likes, a small disc top-right toggles the sound, and a
  * hairline along the bottom shows how far through it is.
  */
-function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, fit = 'cover', trimStart, trimEnd, speed, volume, silent = false, bare = false, discInk, discPinned = false, letterbox = false, onReady, crop, held = false, onStage = false }: {
-  uri: string; poster?: string; active: boolean; preload?: boolean; onDoubleTap?: () => void; fit?: 'cover' | 'contain';
+function ClipPlaybackInner({ uri, poster, active, preload = false, preloadRank = 1, onDoubleTap, fit = 'cover', trimStart, trimEnd, speed, volume, silent = false, bare = false, discInk, discPinned = false, letterbox = false, onReady, crop, held = false, onStage = false }: {
+  uri: string; poster?: string; active: boolean; preload?: boolean;
+  /** How soon the feed may reach it when preloading (1 = the next page); nearer clips fetch first (features/feed/preloadQueue). */
+  preloadRank?: number;
+  onDoubleTap?: () => void; fit?: 'cover' | 'contain';
   trimStart?: number; trimEnd?: number;
   /** The browser's Feed warming up out of sight (ClipPlayback.web). A phone builds its feed from the start, so it never is. */
   warmOnly?: boolean;
@@ -141,8 +145,10 @@ function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, 
     pending.current = setTimeout(() => { pending.current = null; setPaused((v) => !v); }, onDoubleTap ? 280 : 0);
   };
 
-  // Pages either side stay mounted so their first frame is ready to go.
-  if (!active && !preload) return <View style={StyleSheet.absoluteFill} />;
+  // Pages in the preload window keep a player so their first frame is ready to
+  // go, built in turn, nearest first and two at a time (features/feed/preloadQueue).
+  const turn = usePreloadTurn(preload, preloadRank, active, ready);
+  if (!active && !(preload && turn)) return <View style={StyleSheet.absoluteFill} />;
   return (
     <View style={StyleSheet.absoluteFill}>
       {letterbox ? (
