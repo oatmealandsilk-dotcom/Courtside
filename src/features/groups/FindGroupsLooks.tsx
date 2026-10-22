@@ -231,7 +231,7 @@ function ListBody(p: LookProps) {
             })}
           </View>
           <View style={styles.bFootRow}>
-            <Text style={[styles.bFoot, { flex: 1 }]}>
+            <Text style={[styles.bFoot, styles.bFootIn]}>
               {full ? `You’re in ${MAX_GROUPS} groups. Leave one to join another.` : `You can be in up to ${MAX_GROUPS} groups.`}
             </Text>
             {feedGroups.length ? (
@@ -504,6 +504,7 @@ const styleDefinitions = StyleSheet.create({
   bBadgeText: { ...typography.caption, letterSpacing: 0, color: colors.brandInk, ...tabular },
   bFootRow: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.md, paddingHorizontal: spacing.lg },
   bFoot: { ...typography.small, color: colors.textMuted, paddingHorizontal: spacing.lg },
+  bFootIn: { flex: 1, paddingHorizontal: 0 },
   bFootLink: { ...typography.small, color: colors.brand },
   bListRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, minHeight: 60, paddingVertical: spacing.sm },
   bBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 3, height: 28, paddingHorizontal: 12, borderRadius: radius.pill },
