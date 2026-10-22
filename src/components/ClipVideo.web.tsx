@@ -15,20 +15,11 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
   onSize?: (width: number, height: number) => void;
   /** The clip left the page (or was swapped for another): whatever it had fetched is gone with it. */
   onGone?: () => void;
-  /** More of the file came in (the preload queue keeps this video's turn while it is still fetching). */
-  onBuffered?: () => void;
-  /**
-   * The browser stopped fetching for now (`suspend`): told "metadata", Chrome still pulls the
-   * first ~700 KB, and this is when that is done, so the preload queue hands the turn on.
-   */
-  onFetched?: () => void;
-  /** The phone's "cannot load" signal; a browser's video keeps its own poster up then. */
-  onFailed?: () => void;
   /** On the comments stage: it plays on although the comments page is over it (see the phone's ClipVideo). */
   held?: boolean;
   /** The phone's Android drawing mode; a browser has no such choice. */
   surfaceType?: 'textureView' | 'surfaceView';
-}>(function ClipVideo({ uri, poster, active: wanted = true, muted = true, paused = false, fit = 'cover', trimStart = 0, trimEnd, speed, volume, onProgress, onReady, onSize, onGone, onBuffered, onFetched, held = false }, ref) {
+}>(function ClipVideo({ uri, poster, active: wanted = true, muted = true, paused = false, fit = 'cover', trimStart = 0, trimEnd, speed, volume, onProgress, onReady, onSize, onGone, held = false }, ref) {
   // Plays only on the screen you are looking at, as on a phone: a page pushed
   // over this one, or a tab slid away, holds it until you come back. The
   // comments stage is the exception: its clip plays on above the sheet.
@@ -65,8 +56,8 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
     // meanwhile is not started again then.
     if (active && !paused) { toKeptStart(video); if (pageAway()) holdUntilBack(video); else video.play().catch(() => undefined); } else { forgetHeld(video); video.pause(); }
   }, [active, paused]); // eslint-disable-line react-hooks/exhaustive-deps
-  const latest = useRef({ onProgress, onReady, onSize, onGone, onBuffered, onFetched });
-  latest.current = { onProgress, onReady, onSize, onGone, onBuffered, onFetched };
+  const latest = useRef({ onProgress, onReady, onSize, onGone });
+  latest.current = { onProgress, onReady, onSize, onGone };
   useEffect(() => () => latest.current.onGone?.(), [uri]);
   useEffect(() => {
     const video = el.current;
@@ -99,18 +90,13 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
     video.addEventListener('ended', ended);
     if (!video.paused) startWatch();
     const busy = () => latest.current.onReady?.(false);
-    const more = () => latest.current.onBuffered?.();
-    const fetched = () => latest.current.onFetched?.();
-    video.addEventListener('progress', more);
-    video.addEventListener('suspend', fetched);
-    video.addEventListener('error', fetched);
     video.addEventListener('timeupdate', tick);
     video.addEventListener('loadeddata', ready);
     video.addEventListener('playing', ready);
     video.addEventListener('waiting', busy);
     // A file that fails to load counts as arrived, as it does on a phone: a spinner never waits forever.
     video.addEventListener('error', ready);
-    return () => { video.removeEventListener('progress', more); video.removeEventListener('suspend', fetched); video.removeEventListener('error', fetched); video.removeEventListener('error', ready); stopWatch(); video.removeEventListener('play', startWatch); video.removeEventListener('pause', stopWatch); video.removeEventListener('ended', ended); video.removeEventListener('timeupdate', tick); video.removeEventListener('loadedmetadata', sized); video.removeEventListener('loadeddata', ready); video.removeEventListener('playing', ready); video.removeEventListener('waiting', busy); };
+    return () => { video.removeEventListener('error', ready); stopWatch(); video.removeEventListener('play', startWatch); video.removeEventListener('pause', stopWatch); video.removeEventListener('ended', ended); video.removeEventListener('timeupdate', tick); video.removeEventListener('loadedmetadata', sized); video.removeEventListener('loadeddata', ready); video.removeEventListener('playing', ready); video.removeEventListener('waiting', busy); };
   }, [trimStart, trimEnd]);
   // The file's own loop only when nothing is trimmed off its start; otherwise the loop is done above.
   return <video ref={el} src={uri} poster={poster} loop={trimStart <= 0} muted={muted} playsInline preload="metadata" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: fit, background: '#000' }} />;

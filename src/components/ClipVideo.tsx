@@ -53,12 +53,9 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
   onReady?: (ready: boolean) => void;
   onSize?: (width: number, height: number) => void;
   onGone?: () => void;
-  onBuffered?: () => void;
-  onFailed?: () => void;
-  onFetched?: () => void;
   held?: boolean;
   surfaceType?: SurfaceType;
-}>(function ClipVideo({ uri, active: wanted = true, muted = true, paused = false, fit = 'cover', trimStart = 0, trimEnd, speed, volume, onProgress, onReady, onSize, onGone, onBuffered, onFailed, held = false, surfaceType }: {
+}>(function ClipVideo({ uri, active: wanted = true, muted = true, paused = false, fit = 'cover', trimStart = 0, trimEnd, speed, volume, onProgress, onReady, onSize, onGone, held = false, surfaceType }: {
   uri: string; poster?: string; active?: boolean; muted?: boolean; paused?: boolean; fit?: 'cover' | 'contain';
   trimStart?: number; trimEnd?: number;
   /** The author's playback edits, honoured by the player rather than cut into the file: a rate (1 is normal) and a level (0–1). */
@@ -71,12 +68,6 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
   onSize?: (width: number, height: number) => void;
   /** Its player was freed (the page left, or the clip changed): whatever it had fetched is gone with it. */
   onGone?: () => void;
-  /** More of it came in while it waits to be ready (the preload queue keeps its turn while it is still fetching). */
-  onBuffered?: () => void;
-  /** The file cannot load (it still reports ready, so nothing waits on it): the page keeps its poster up. */
-  onFailed?: () => void;
-  /** A browser's "done fetching for now" (preload queue); a phone's player says onBuffered / onReady instead, so it is never called here. */
-  onFetched?: () => void;
   /**
    * The clip is on the comments stage: it counts as on top although the
    * comments page is over it, so it plays on, shrunk above the sheet.
@@ -135,10 +126,6 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
   latestProgress.current = onProgress;
   const latestReady = useRef(onReady);
   latestReady.current = onReady;
-  const latestBuffered = useRef(onBuffered);
-  latestBuffered.current = onBuffered;
-  const latestFailed = useRef(onFailed);
-  latestFailed.current = onFailed;
   const latestSize = useRef(onSize);
   latestSize.current = onSize;
   useEffect(() => {
@@ -190,7 +177,6 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
     // carry on from instead, so it fetches from there and starts without a
     // second wait. A page built off screen still waits at the start.
     let placed = false;
-    let had = -1;
     // Checked on a short clock until it is in; the player has no event for buffering progress.
     const check = () => {
       if (!placed && !started.current && !playFromHere.current) {
@@ -207,9 +193,7 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
       // instead of holding the reader on a placeholder for good.
       let failed = false;
       try { failed = player.status === 'error'; } catch { /* player already released */ }
-      if (failed && !readyRef.current) latestFailed.current?.();
       const ready = isReady() || failed;
-      if (!ready) safely(() => { const now = player.bufferedPosition; if (now > had) { if (had >= 0) latestBuffered.current?.(); had = now; } });
       if (ready !== readyRef.current) {
         readyRef.current = ready;
         // How long this one took is the phone's best measure of the connection.
