@@ -1,3 +1,5 @@
+import { makeMutable } from 'react-native-reanimated';
+
 /**
  * A finger that lands on a sideways strip (who to follow, the topic filter)
  * belongs to that strip until it lifts. The page swipe checks this before it
@@ -25,6 +27,14 @@ export const setPageDragging = (on: boolean) => {
 };
 export const isPageDragging = () => dragging;
 export const subscribePageDragging = (fn: () => void) => { dragListeners.add(fn); return () => { dragListeners.delete(fn); }; };
+
+/**
+ * The same, on the animation thread, for a section swipe (SectionPager): set
+ * in the very frame the swipe takes the finger, so a section's own scroller
+ * (PaneScroller) can ignore the few points of up-and-down a sideways drag
+ * carries before its scrolling is switched off: no bar tuck, no drift.
+ */
+export const sectionPan = makeMutable(false);
 
 /**
  * Whether a finger is moving the Feed's clips up or down right now (on the

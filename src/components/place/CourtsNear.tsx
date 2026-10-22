@@ -1,5 +1,5 @@
 import { PRESS_DIM, PRESS_SHRINK } from '@/theme/press';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -44,19 +44,28 @@ export function useNearCourts(center: LatLng | null): { rows: CourtRow[]; neares
   const [list, setList] = useState<Court[]>(() => (center ? peekCourts(center) ?? [] : []));
   // Nothing known yet for here, and the answer still on its way (the strip holds its place meanwhile).
   const [loading, setLoading] = useState(() => !!center && !peekCourts(center));
+  // Whether this spot's own answer (kept or fresh) is in yet: until it is, the rows already shown stay (below).
+  const [answered, setAnswered] = useState(() => !center || !!peekCourts(center));
   useEffect(() => {
-    if (lat === undefined || lng === undefined) { setList([]); setLoading(false); return undefined; }
+    if (lat === undefined || lng === undefined) { setList([]); setLoading(false); setAnswered(true); return undefined; }
     const at = { lat, lng };
     let on = true;
     let fresh = false;
     const kept = peekCourts(at);
-    if (kept) { setList(kept); setLoading(false); }
-    // The courts kept from the last open, the moment they are read, until the fresh ones come.
-    else void peekSavedCourts(at).then((got) => { if (on && !fresh && got) { setList(got); setLoading(false); } });
-    fetchCourts(at).then((got) => { fresh = true; if (on) setList(got); }).catch(() => undefined).finally(() => { if (on) setLoading(false); });
+    if (kept) { setList(kept); setLoading(false); setAnswered(true); }
+    else {
+      setAnswered(false);
+      // The courts kept from the last open, the moment they are read, until the fresh ones come.
+      void peekSavedCourts(at).then((got) => { if (on && !fresh && got) { setList(got); setLoading(false); setAnswered(true); } });
+    }
+    fetchCourts(at).then((got) => { fresh = true; if (on) setList(got); }).catch(() => undefined).finally(() => { if (on) { setLoading(false); setAnswered(true); } });
     return () => { on = false; };
   }, [lat, lng]);
-  return useMemo(() => {
+  // The rows last shown. A move of the spot (a fix arriving, a new city) keeps them up until the
+  // new spot's own courts are in, rather than the strip emptying and coming back (Oct 22, owner:
+  // "Nothing framing in or out").
+  const lastRows = useRef<CourtRow[]>([]);
+  const result = useMemo(() => {
     if (lat === undefined || lng === undefined) return { rows: [], nearest: null, all: list, loading: false };
     // Members-only and private courts are never suggested: not listed, and never "the nearest" named for a first hit.
     // Only courts in town: after a move to another city, the last city's list (kept while the new one loads, or if it fails) is never listed as near.
@@ -64,6 +73,9 @@ export function useNearCourts(center: LatLng | null): { rows: CourtRow[]; neares
     const rows = [...biggerFirst(named.filter((r) => looksPublic(r.c.name))), ...biggerFirst(named.filter((r) => !looksPublic(r.c.name)))].slice(0, MOST);
     return { rows, nearest: named[0] ?? null, all: list, loading };
   }, [list, lat, lng, loading]);
+  if (result.rows.length) lastRows.current = result.rows;
+  else if (!answered && lastRows.current.length) return { ...result, rows: lastRows.current, loading: false };
+  return result;
 }
 
 /**
@@ -108,8 +120,15 @@ export function CourtsNear({ center, revealOrder }: { center: LatLng | null; /**
           {[0, 1, 2].map((i) => (
             <View key={i} style={styles.card}>
               <View style={styles.top}><View style={styles.tile} /></View>
-              <View style={[styles.heldLine, { width: '82%' }]} />
-              <View style={[styles.heldLine, styles.heldMeta]} />
+              {/* The real card's own words, unseen, under the quiet bars: the same height at every text size, so nothing moves when the courts come. */}
+              <View>
+                <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.name, styles.unseen]} numberOfLines={2}>{'Courts\nnear you'}</Text>
+                <View style={[styles.heldLine, styles.heldOver, { width: '82%' }]} />
+              </View>
+              <View>
+                <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.meta, styles.unseen]} numberOfLines={1}>1 mi</Text>
+                <View style={[styles.heldLine, styles.heldOver, styles.heldMeta]} />
+              </View>
             </View>
           ))}
         </View>
@@ -186,4 +205,7 @@ const styleDefinitions = StyleSheet.create({
   heldRow: { flexDirection: 'row', overflow: 'hidden' },
   heldLine: { height: 14, marginVertical: 3, borderRadius: 7, backgroundColor: colors.bgElevated },
   heldMeta: { width: '48%', height: 12 },
+  // Over the unseen words, from their top.
+  heldOver: { position: 'absolute', top: 0, left: 0 },
+  unseen: { opacity: 0 },
 });

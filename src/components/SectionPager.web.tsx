@@ -53,6 +53,8 @@ export function SectionPager({ index, panes, onIndex, onLand, progress, delegate
    * (owner, Oct 19: "push 2").
    */
   keepMounted?: boolean;
+  /** Only the phone's pager reads this (a held pull); a browser's pull never moves the page. */
+  blocked?: SharedValue<boolean>;
 }) {
   const last = panes.length - 1;
   const reduced = useReducedMotion();
@@ -127,6 +129,39 @@ export function SectionPager({ index, panes, onIndex, onLand, progress, delegate
   // rebuilt: the one on show in its place, the others just off either side,
   // riding along with the page as it is dragged (where the swipe's preview
   // would be) and hidden, at no size, while nothing is moving.
+  // Full-height kept panes (fill, Community): every pane is laid out the whole
+  // time, side by side, each its own scroller at its own place. The ones not
+  // on show are only hidden from view (never taken out of the layout, which
+  // lost their scroll and remade the map's canvas mid-swipe), and a swipe
+  // only lets the one beside the page be seen: a paint, never a layout.
+  const keptRefs = useRef(new Map<number, HTMLElement | null>());
+  useLayoutEffect(() => {
+    if (!keepMounted || !fill) return;
+    keptRefs.current.forEach((el, i) => {
+      if (!el) return;
+      // Hidden panes take no focus or taps (inert, where the browser has it).
+      (el as HTMLElement & { inert?: boolean }).inert = i !== drawn;
+    });
+  });
+  const filledPanes = () => (
+    <View style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+      {panes.map((pane, i) => {
+        const off = i - drawn;
+        const seen = i === drawn || beside === i;
+        return (
+          <View
+            key={i}
+            ref={(node: unknown) => { keptRefs.current.set(i, node as HTMLElement | null); }}
+            aria-hidden={i === drawn ? undefined : true}
+            pointerEvents={i === drawn ? 'auto' : 'none'}
+            style={{ position: 'absolute', top: 0, bottom: 0, width: '100%', left: (off === 0 ? 0 : `calc(${off * 100}% + ${off * PAGE_GUTTER}px)`) as unknown as number, paddingHorizontal: bleed, overflow: 'hidden', visibility: seen ? 'visible' : 'hidden' } as object}
+          >
+            {pane}
+          </View>
+        );
+      })}
+    </View>
+  );
   const keptPanes = () => (
     <View>
       {panes.map((pane, i) => {
@@ -153,9 +188,10 @@ export function SectionPager({ index, panes, onIndex, onLand, progress, delegate
       gap={PAGE_GUTTER}
       commitAt={0.5}
       progress={tapSliding ? undefined : progress}
-      settledKey={slideOnTap ? `${shown}:${landings}` : String(index)}
-      // Here the landed pane is drawn in the same render as the key changes.
-      landInPlace={slideOnTap}
+      settledKey={slideOnTap || (keepMounted && fill) ? `${drawn}:${landings}` : String(index)}
+      // Here the landed pane is drawn in the same render as the key changes
+      // (full-height kept panes are all there already: only which one is in place changes).
+      landInPlace={slideOnTap || (keepMounted && fill)}
       delegateLeft={delegateLeft && drawn >= last}
       delegateRight={delegateRight && drawn <= 0}
       onProgress={() => { moving.current = true; }}
@@ -198,7 +234,7 @@ export function SectionPager({ index, panes, onIndex, onLand, progress, delegate
         return keepMounted && built.current.has(next) ? <View /> : page(panes[next]);
       }}
     >
-      {keepMounted ? keptPanes() : page(panes[drawn])}
+      {keepMounted && fill ? filledPanes() : keepMounted ? keptPanes() : page(panes[drawn])}
     </SwipeSurface>
     </View>
   );

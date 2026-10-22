@@ -110,11 +110,17 @@ export default function TabsLayout() {
   // Community opens at its top whenever you come to it from another tab (the
   // tabs stay mounted, so it used to sit wherever you last left it). Coming
   // back from a thread is not a tab change, so your place is kept. Same rule
-  // as the phone's TabsPager.
+  // as the phone's TabsPager: put back as it is left, while it is out of
+  // sight, never as you arrive (Oct 22, owner: "Nothing framing in or out"),
+  // on Discussions, where a swipe from the Feed lands; the bar asks for Find
+  // Players itself (askForCommunityMap).
   const lastTab = useRef(pathname);
   useEffect(() => {
     if (!TAB_PATHS.includes(pathname)) return;
-    if (pathname === '/discuss' && TAB_PATHS.includes(lastTab.current) && lastTab.current !== '/discuss') requestScrollToTop('/discuss', true);
+    if (lastTab.current === '/discuss' && pathname !== '/discuss') {
+      requestScrollToTop('/discuss', true);
+      requestSection('/discuss', 'discussions');
+    }
     lastTab.current = pathname;
   }, [pathname]);
   // A guest reads the tabs (guest mode, Oct 17); only the phone app sends signed-out to sign-in.

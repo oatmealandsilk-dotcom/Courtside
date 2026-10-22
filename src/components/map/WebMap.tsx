@@ -116,9 +116,13 @@ export function NearbyMap(props: NearbyMapProps) {
   const [cardShown, setCardShown] = useState(false);
   // The loading look underneath goes once the map's fade-in has finished.
   const [loaderGone, setLoaderGone] = useState(false);
+  // Drawn while out of view (the section beside, the tab off screen): no fade to catch mid-swipe, it is just there.
+  const [cardSnap, setCardSnap] = useState(false);
+  const outOfView = useRef(false);
   useEffect(() => { if (!cardShown) return undefined; const t = setTimeout(() => setLoaderGone(true), MAP_IN_MS + 30); return () => clearTimeout(t); }, [cardShown]);
   // Off screen, the map's load clocks wait (useMapLoad).
   const onScreen = useIsFocused();
+  outOfView.current = !onScreen || props.visible === false || props.inView === false;
   // Getting the map going, and again if its style never arrives (useMapLoad): each try is a new map.
   const load = useMapLoad(expanded ? 'full map' : 'map card', onScreen && props.visible !== false);
   // Anything else picked (a search result, a pin) takes the place of your own card.
@@ -209,7 +213,7 @@ export function NearbyMap(props: NearbyMapProps) {
       if (what === 'up') { load.heard('up'); return; }
       // Streets arriving, or failed ones being fetched again: still alive.
       if (what !== 'painted') { load.heard('other'); return; }
-      requestAnimationFrame(() => { load.heard('painted'); if (!expanded) { painted(); setCardShown(true); } });
+      requestAnimationFrame(() => { load.heard('painted'); if (!expanded) { painted(); if (outOfView.current) { setCardSnap(true); setLoaderGone(true); } setCardShown(true); } });
     });
     instance.touchZoomRotate.disableRotation();
     // The theme's colours go on as soon as the style's layers exist, before
@@ -411,7 +415,7 @@ export function NearbyMap(props: NearbyMapProps) {
             style={StyleSheet.absoluteFill}
           />
         ) : null}
-        <View aria-hidden={!cardShown} style={[StyleSheet.absoluteFill, !cardShown && styles.noTaps, { opacity: cardShown ? 1 : 0, transition: `opacity ${MAP_IN_MS}ms cubic-bezier(0.33, 1, 0.68, 1)` } as object]}>
+        <View aria-hidden={!cardShown} style={[StyleSheet.absoluteFill, !cardShown && styles.noTaps, { opacity: cardShown ? 1 : 0, transition: cardSnap ? 'none' : `opacity ${MAP_IN_MS}ms cubic-bezier(0.33, 1, 0.68, 1)` } as object]}>
           {canvas}
           {/* A still card: the tap goes to the full map, not to the tiles. */}
           <Pressable accessibilityRole={onExpand ? 'button' : undefined} accessibilityLabel="Map of players, courts and hits near you" onPress={onExpand} disabled={!onExpand} style={StyleSheet.absoluteFill} />

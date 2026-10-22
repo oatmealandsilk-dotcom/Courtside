@@ -74,8 +74,12 @@ export function TabsPager({ pathname }: { pathname: string }) {
     const from = activeRef.current;
     activeRef.current = target;
     setActive(target);
-    arrived(target, from);
-    if (Math.abs(target - from) <= 1) { position.value = withTiming(target, { duration: 260, easing: EASE }); return; }
+    // Community left: put back once the row is at rest, with Community fully off screen.
+    const leaving = TAB_PATHS[from] === '/discuss';
+    if (Math.abs(target - from) <= 1) {
+      position.value = withTiming(target, { duration: 260, easing: EASE }, (finished) => { if (finished && leaving) runOnJS(leftCommunity)(); });
+      return;
+    }
     const dir = target > from ? 1 : -1;
     jumpTab.value = target;
     jumpOffset.value = (from + dir - target) * (width || 1);
@@ -86,6 +90,7 @@ export function TabsPager({ pathname }: { pathname: string }) {
       jumpTab.value = -1;
       jumpOffset.value = 0;
       if (!finished) position.value = target;
+      else if (leaving) runOnJS(leftCommunity)();
     });
   }, [target, position, width, jumpTab, jumpOffset]);
 
@@ -97,15 +102,15 @@ export function TabsPager({ pathname }: { pathname: string }) {
     // Discussions.
     const from = activeRef.current;
     if (index === from) return;
-    // The section strips line up with the tab strip. Community is leftmost,
-    // so a swipe only ever reaches it from Home, its right-hand neighbour, and
-    // lands on Discussions, the section next to Home. Profile opens on Posts.
-    if (TAB_PATHS[index] === '/discuss') requestSection('/discuss', 'discussions');
+    // Profile opens on Posts. (Community's section is set when it is left,
+    // not here: asked mid-drag, it changed under the finger while its edge
+    // was already sliding in.)
     if (TAB_PATHS[index] === '/profile') requestSection('/profile', 'Posts');
   };
   const land = (index: number) => {
-    arrived(index, activeRef.current);
+    const from = activeRef.current;
     activeRef.current = index;
+    if (index !== from && TAB_PATHS[from] === '/discuss') leftCommunity();
     setActive(index);
     setPendingTab(TAB_PATHS[index]);
     if (TAB_PATHS[index] !== pathnameRef.current) router.navigate(TAB_PATHS[index]);
@@ -116,9 +121,17 @@ export function TabsPager({ pathname }: { pathname: string }) {
   // (all four tabs stay mounted, so it used to sit wherever you last left it,
   // and the threads were above you). Coming back from a thread you opened
   // does not count: that never changes the tab, so your place is kept.
-  const arrived = (index: number, from: number) => {
-    if (index !== from && TAB_PATHS[index] === '/discuss') requestScrollToTop('/discuss', true);
-  };
+  // It is put back as it is LEFT, once the row is at rest and Community is
+  // off screen, not as you arrive (Oct 22, owner: "Nothing framing in or
+  // out"): arriving, it slid in at its old place and then jumped to the top.
+  // A swipe from the Feed reaches it on Discussions, the section next door,
+  // so that is the section it waits on; the bar asks for Find Players itself
+  // (askForCommunityMap) before it glides there.
+  function leftCommunity() {
+    if (TAB_PATHS[activeRef.current] === '/discuss') return;
+    requestScrollToTop('/discuss', true);
+    requestSection('/discuss', 'discussions');
+  }
 
   // Shared values, not plain variables: the animation thread only ever sees a
   // frozen copy of a plain variable, so nothing set on touch-down would survive.

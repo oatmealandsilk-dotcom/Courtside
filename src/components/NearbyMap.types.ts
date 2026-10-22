@@ -48,4 +48,10 @@ export interface NearbyMapProps {
   cardHeight?: number;
   /** Shown in its own screen (a pager page that can be swiped away): false while that page is hidden, so its load clocks wait. */
   visible?: boolean;
+  /**
+   * Whether the card is in view right now (Community: Find Players on show,
+   * not the section beside it). A still card whose map finishes drawing out
+   * of view is simply there when it slides in: no cover fading off mid-swipe.
+   */
+  inView?: boolean;
 }

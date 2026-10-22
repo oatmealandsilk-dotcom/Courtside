@@ -136,6 +136,12 @@ export function raiseCurtain() {
   liftBy = 0;
   downListeners.forEach((fn) => fn());
 }
+/**
+ * Whether the curtain has come down at least once this launch: from then on
+ * the first showing is over, and nothing built later (a section, a tab) holds
+ * or staggers in, even under a curtain raised again (FirstReveal).
+ */
+export const curtainHasLifted = () => downAt > 0;
 /** Whether the curtain is off the screen right now (useCurtainDown, read once outside of a draw). */
 export const isCurtainDown = () => down;
 const subscribeDown = (fn: () => void) => { downListeners.add(fn); return () => { downListeners.delete(fn); }; };
