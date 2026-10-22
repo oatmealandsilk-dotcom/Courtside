@@ -578,7 +578,7 @@ const styleDefinitions = StyleSheet.create({
   stickerClip: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, overflow: 'hidden', borderTopLeftRadius: 24, borderTopRightRadius: 24 },
   stickerStage: { position: 'absolute', left: 0, bottom: 0 },
   stickerCover: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: colors.bg, borderTopLeftRadius: 24, borderTopRightRadius: 24 },
-  label: { ...font('500'), fontSize: 16, letterSpacing: -0.2, color: colors.text },
+  label: { ...font('500'), fontSize: 16, letterSpacing: -0.1, color: colors.text },
   labelDanger: { color: colors.danger },
   note: { ...typography.small, color: colors.textMuted },
   removedBox: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 12, paddingHorizontal: spacing.md, marginBottom: spacing.sm, borderRadius: radius.md, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },

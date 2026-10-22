@@ -279,7 +279,7 @@ const styleDefinitions = StyleSheet.create({
   hero: { gap: spacing.sm, paddingTop: spacing.sm },
   eyebrowRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   eyebrow: { ...typography.caption, letterSpacing: 0.3, color: colors.brand, textTransform: 'uppercase' },
-  title: { ...typography.display, fontSize: 34, letterSpacing: -1.2, color: colors.text },
+  title: { ...typography.display, fontSize: 34, letterSpacing: -0.7, color: colors.text },
   lede: { ...typography.body, color: colors.textMuted, lineHeight: 22 },
   tools: { gap: spacing.sm },
   areas: { gap: spacing.sm, paddingRight: spacing.lg },

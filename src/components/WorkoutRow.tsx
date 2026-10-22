@@ -76,7 +76,7 @@ const styleDefinitions = StyleSheet.create({
   icon: { width: 22, height: HERO_LINE, alignItems: 'center', justifyContent: 'center' },
   words: { flex: 1, minWidth: 0, gap: 3 },
   heroLine: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: HERO_LINE, paddingRight: 96 },
-  hero: { fontSize: 21, lineHeight: 26, ...font('600'), letterSpacing: -0.5, color: colors.text, fontVariant: ['tabular-nums'] },
+  hero: { fontSize: 21, lineHeight: 26, ...font('600'), letterSpacing: -0.3, color: colors.text, fontVariant: ['tabular-nums'] },
   tag: { flexShrink: 1, paddingHorizontal: 7, paddingVertical: 2, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt },
   tagText: { fontSize: 11, lineHeight: 15, ...font('600'), letterSpacing: 0.2, color: colors.textMuted },
   title: { fontSize: 15, lineHeight: 20, ...font('500'), color: colors.text },

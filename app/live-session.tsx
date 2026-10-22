@@ -212,7 +212,7 @@ const styleDefinitions = StyleSheet.create({
   eyebrowRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   eyebrow: { ...font('700'), fontSize: 11, letterSpacing: 1.1, color: colors.textMuted },
   eyebrowLive: { color: colors.open },
-  title: { ...typography.title, fontSize: 24, letterSpacing: -0.8, color: colors.text },
+  title: { ...typography.title, fontSize: 24, letterSpacing: -0.5, color: colors.text },
   close: { ...lift, width: 34, height: 34, borderRadius: 17, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' },
   body: { gap: spacing.lg },
   wait: { alignItems: 'center', justifyContent: 'center', paddingVertical: spacing.xxl },
@@ -222,7 +222,7 @@ const styleDefinitions = StyleSheet.create({
   boxTop: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 22 },
   boxEyebrow: { ...font('600'), fontSize: 11.5, letterSpacing: 1.1, flex: 1 },
   // A fixed size that fits the box up to '10:00:00' (sessions stop at 10 hours). Shrink-to-fit drew it as a dot on iPhone (Oct 7, owner).
-  clock: { ...font('600'), fontSize: 60, lineHeight: 68, letterSpacing: -2.5, fontVariant: ['tabular-nums'], marginTop: spacing.sm, alignSelf: 'stretch' },
+  clock: { ...font('600'), fontSize: 60, lineHeight: 68, letterSpacing: -1.5, fontVariant: ['tabular-nums'], marginTop: spacing.sm, alignSelf: 'stretch' },
   clockPaused: { opacity: 0.55 },
   // Clear of the faint court along the foot of the box.
   boxUnder: { ...font('500'), fontSize: 14, marginTop: -2, marginBottom: 34 },

@@ -78,7 +78,7 @@ export function SessionStamp({ session, width, eyebrow, place, hidden = [], clea
       </View>
       <Duration minutes={session.minutes} size={68 * u} color={look.figure} unitColor={look.muted} style={{ marginTop: 6 * u }} textStyle={shade} />
       {/* A long score (tiebreak points, Oct 10) a little smaller, so it all fits on its line. */}
-      {score ? <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={{ ...font('700'), fontSize: 24 * u * scoreScale(score, 18), letterSpacing: -0.4 * u, color: look.figure, fontVariant: ['tabular-nums'], marginTop: 2 * u, ...shade }}>{score}</Text> : null}
+      {score ? <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={{ ...font('700'), fontSize: 24 * u * scoreScale(score, 18), letterSpacing: -0.2 * u, color: look.figure, fontVariant: ['tabular-nums'], marginTop: 2 * u, ...shade }}>{score}</Text> : null}
       {far ? (
         <View style={{ marginTop: 2 * u }}>
           <Figure value={far.value} part={far.value < 10 ? 'dec1' : 'int'} unit={far.unit} baseline size={24 * u} unitScale={0.5} color={look.figure} unitColor={look.muted} textStyle={shade} />

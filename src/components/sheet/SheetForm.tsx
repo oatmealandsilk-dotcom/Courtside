@@ -242,7 +242,7 @@ export const formBody = { padding: spacing.lg, paddingTop: spacing.md, gap: 20, 
 
 const styleDefinitions = StyleSheet.create({
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingBottom: spacing.xs },
-  title: { ...typography.title, fontSize: 24, letterSpacing: -0.8, color: colors.text },
+  title: { ...typography.title, fontSize: 24, letterSpacing: -0.5, color: colors.text },
   line: { ...typography.small, color: colors.textMuted },
   lineBrand: { color: colors.brand, ...font('600') },
   close: { ...lift, width: 34, height: 34, borderRadius: 17, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' },
@@ -281,7 +281,7 @@ const styleDefinitions = StyleSheet.create({
   tileFlex: { flex: 1 },
   tileOn: { backgroundColor: colors.text },
   tileTop: { fontSize: 12, ...font('500'), color: colors.textMuted },
-  tileMain: { fontSize: 20, ...font('600'), letterSpacing: -0.4, color: colors.text, fontVariant: ['tabular-nums'] },
+  tileMain: { fontSize: 20, ...font('600'), letterSpacing: -0.2, color: colors.text, fontVariant: ['tabular-nums'] },
   tileInk: { color: colors.bg },
   tileSoft: { borderWidth: 1.5, borderColor: 'transparent' },
   tileSoftOn: { backgroundColor: colors.brandDim, borderColor: colors.brand, boxShadow: 'none' },

@@ -389,7 +389,7 @@ const styleDefinitions = StyleSheet.create({
   disc: { width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
   stat: { alignSelf: 'stretch', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 12, marginLeft: 4, borderLeftWidth: StyleSheet.hairlineWidth, borderLeftColor: colors.borderStrong, minWidth: 64 },
   statWindow: { height: 26, overflow: 'hidden' },
-  statValue: { fontSize: 24, lineHeight: 26, ...font('600'), letterSpacing: -0.8, color: colors.text, textAlign: 'center', fontVariant: ['tabular-nums'] },
+  statValue: { fontSize: 24, lineHeight: 26, ...font('600'), letterSpacing: -0.5, color: colors.text, textAlign: 'center', fontVariant: ['tabular-nums'] },
   statLabel: { fontSize: 10, ...font('600'), color: colors.textMuted, marginTop: 1 },
   wrap: { position: 'absolute', left: spacing.lg, right: spacing.lg, zIndex: 50, alignItems: 'center' },
   // The shadow on a rounded layer of its own, so it follows the capsule's corners.
@@ -419,7 +419,7 @@ const styleDefinitions = StyleSheet.create({
   noteRowSlim: { paddingVertical: 4 },
   noteInfoSlim: { minHeight: 40 },
   fillSlim: { minHeight: 32, borderRadius: buttonShape.smallRadius, ...buttonShape.curve },
-  noteTitle: { ...typography.bodyStrong, fontSize: 14, color: colors.text, letterSpacing: -0.2 },
+  noteTitle: { ...typography.bodyStrong, fontSize: 14, color: colors.text, letterSpacing: -0.1 },
   noteBody: { ...typography.small, fontSize: 12, color: colors.textMuted, marginTop: 1 },
   hitBadge: { position: 'absolute', right: -3, bottom: -3, width: 18, height: 18, borderRadius: 9, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.surface },
   fill: { minHeight: 34, paddingHorizontal: 14, borderRadius: buttonShape.smallRadius, ...buttonShape.curve, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },

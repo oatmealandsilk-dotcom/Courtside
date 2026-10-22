@@ -224,7 +224,7 @@ const styleDefinitions = StyleSheet.create({
   words: { flex: 1, minWidth: 0, gap: 2 },
   eyebrow: { ...typography.smallStrong, color: colors.textMuted },
   eyebrowOn: { color: colors.brand },
-  title: { ...font('700'), fontSize: 18, letterSpacing: -0.3, color: colors.text },
+  title: { ...font('700'), fontSize: 18, letterSpacing: -0.2, color: colors.text },
   sub: { ...typography.small, color: colors.textMuted },
   flameTile: { alignItems: 'center', justifyContent: 'center', backgroundColor: colors.brandDim },
   flameTileOn: { backgroundColor: colors.brand },

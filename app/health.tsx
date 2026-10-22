@@ -394,7 +394,7 @@ const styleDefinitions = StyleSheet.create({
   stats: { flexDirection: 'row', gap: spacing.sm },
   stat: { flex: 1, minWidth: 0, gap: 2, paddingVertical: spacing.md, paddingHorizontal: 10, borderRadius: radius.md, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
   statValue: { ...typography.heading, lineHeight: 22, color: colors.text, fontVariant: ['tabular-nums'] },
-  statValueLong: { fontSize: 15, letterSpacing: -0.3 },
+  statValueLong: { fontSize: 15, letterSpacing: -0.2 },
   statLabel: { ...typography.caption, color: colors.textMuted, letterSpacing: 0.2 },
   list: { borderRadius: radius.xl, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, paddingHorizontal: spacing.lg },
   row: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md, paddingVertical: spacing.lg },

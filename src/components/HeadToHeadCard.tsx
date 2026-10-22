@@ -65,7 +65,7 @@ const styleDefinitions = StyleSheet.create({
   card: { ...lift, flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: 16, borderRadius: 20, backgroundColor: colors.surface, marginBottom: spacing.md },
   words: { flex: 1, minWidth: 0, gap: 2 },
   eyebrow: { ...typography.smallStrong, color: colors.textMuted },
-  record: { ...font('700'), fontSize: 20, letterSpacing: -0.4, color: colors.text, fontVariant: ['tabular-nums'] },
+  record: { ...font('700'), fontSize: 20, letterSpacing: -0.2, color: colors.text, fontVariant: ['tabular-nums'] },
   last: { ...typography.small, color: colors.textMuted, fontVariant: ['tabular-nums'] },
   rematch: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 36, paddingHorizontal: 14, borderRadius: radius.pill, backgroundColor: colors.brand },
   rematchText: { ...font('700'), fontSize: 14, color: colors.brandInk },

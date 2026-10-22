@@ -628,7 +628,7 @@ const styleDefinitions = StyleSheet.create({
   words: { flex: 1, minWidth: 0, gap: 2 },
   heroLine: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: HERO_LINE },
   // The figure in the brand's green, as on the Share card.
-  hero: { fontSize: 19, lineHeight: 24, ...font('600'), letterSpacing: -0.4, color: colors.brand, fontVariant: ['tabular-nums'], flexShrink: 0 },
+  hero: { fontSize: 19, lineHeight: 24, ...font('600'), letterSpacing: -0.2, color: colors.brand, fontVariant: ['tabular-nums'], flexShrink: 0 },
   // Flyby's pill, lined up with the words (past the icon and the gap).
   flybyRow: { paddingLeft: 22 + spacing.md, paddingTop: 6 },
   title: { fontSize: 15, lineHeight: 20, ...font('500'), color: colors.text },

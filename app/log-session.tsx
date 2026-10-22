@@ -733,7 +733,7 @@ const styleDefinitions = StyleSheet.create({
   pickIcon: { width: 22, height: 32, alignItems: 'center', justifyContent: 'center' },
   pickWords: { flex: 1, minWidth: 0, gap: 3 },
   pickHeroLine: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 32 },
-  pickHero: { fontSize: 21, lineHeight: 26, ...font('600'), letterSpacing: -0.5, color: colors.text, fontVariant: ['tabular-nums'] },
+  pickHero: { fontSize: 21, lineHeight: 26, ...font('600'), letterSpacing: -0.3, color: colors.text, fontVariant: ['tabular-nums'] },
   pickTag: { flexShrink: 1, paddingHorizontal: 7, paddingVertical: 2, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt },
   pickTagText: { fontSize: 11, lineHeight: 15, ...font('600'), letterSpacing: 0.2, color: colors.textMuted },
   pickTitle: { fontSize: 15, lineHeight: 20, ...font('500'), color: colors.text },

@@ -631,7 +631,7 @@ const styleDefinitions = StyleSheet.create({
   column: { width: '100%', maxWidth: 420, alignSelf: 'center', gap: spacing.xxl },
   hero: { gap: spacing.lg },
   back: { width: 36, height: 36, borderRadius: 18, marginBottom: -spacing.lg, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface, ...lift },
-  title: { ...typography.display, fontSize: 32, letterSpacing: -1.1, color: colors.text },
+  title: { ...typography.display, fontSize: 32, letterSpacing: -0.7, color: colors.text },
   line: { ...typography.body, fontSize: 16, color: colors.textMuted, lineHeight: 23 },
   // One line's room for "Invited by @handle", kept while the server checks the handle.
   invitedRoom: { height: 23 },

@@ -155,7 +155,7 @@ const styleDefinitions = StyleSheet.create({
   // A rest week's card.
   rest: { ...lift, borderRadius: 24, backgroundColor: colors.surface, padding: spacing.xl, alignItems: 'center', gap: spacing.sm },
   restDisc: { width: 56, height: 56, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.brandDim },
-  restTitle: { ...font('600'), fontSize: 22, letterSpacing: -0.5, color: colors.text, marginTop: spacing.xs },
+  restTitle: { ...font('600'), fontSize: 22, letterSpacing: -0.3, color: colors.text, marginTop: spacing.xs },
   restLine: { ...typography.body, color: colors.textMuted, textAlign: 'center' },
   restButton: { marginTop: spacing.md, alignSelf: 'stretch' },
   pressed: { opacity: PRESS_DIM },

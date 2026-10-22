@@ -272,10 +272,10 @@ const styleDefinitions = StyleSheet.create({
   ring: { borderWidth: 3, borderRadius: 36, padding: 2 },
   crownOn: { position: 'absolute', top: -2, alignSelf: 'center' },
   kingWords: { flex: 1, minWidth: 0, gap: 2 },
-  kingName: { ...font('600'), fontSize: 17, letterSpacing: -0.3, color: colors.text },
+  kingName: { ...font('600'), fontSize: 17, letterSpacing: -0.2, color: colors.text },
   kingWhen: { ...typography.small, color: colors.textMuted },
   kingCount: { alignItems: 'flex-end' },
-  kingNumber: { ...font('600'), fontSize: 34, lineHeight: 38, letterSpacing: -1.2, color: colors.text, fontVariant: ['tabular-nums'] },
+  kingNumber: { ...font('600'), fontSize: 34, lineHeight: 38, letterSpacing: -0.7, color: colors.text, fontVariant: ['tabular-nums'] },
   kingUnit: { ...typography.small, color: colors.textMuted, marginTop: -2 },
   // The regulars' own head, a little apart from "No King yet".
   regularsHead: { marginTop: spacing.sm },
@@ -284,7 +284,7 @@ const styleDefinitions = StyleSheet.create({
   rank: { width: 22, ...font('600'), fontSize: 15, color: colors.textMuted, textAlign: 'center', fontVariant: ['tabular-nums'] },
   rankMine: { color: colors.brand },
   // "10+" in the same column as 2 and 3.
-  rankOver: { fontSize: 12, letterSpacing: -0.3 },
+  rankOver: { fontSize: 12, letterSpacing: -0.2 },
   rankLock: { width: 22, alignItems: 'center' },
   rowWords: { flex: 1, minWidth: 0, gap: 1 },
   rowName: { ...font('500'), fontSize: 15, color: colors.text },

@@ -313,17 +313,17 @@ const styleDefinitions = StyleSheet.create({
   hero: { borderRadius: 20, padding: 20, overflow: 'hidden' },
   bordered: { borderWidth: 1 },
   heroHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  heroTitle: { ...font('600'), fontSize: 17, letterSpacing: -0.3 },
+  heroTitle: { ...font('600'), fontSize: 17, letterSpacing: -0.2 },
   // "$12 earned" as one lockup: the dollar sign small with its top on the figure's, the word on its baseline.
   earnedRow: { flexDirection: 'row', alignItems: 'flex-end', marginTop: 18 },
-  dollar: { ...font('600'), fontSize: 30, lineHeight: 34, letterSpacing: -0.8, alignSelf: 'flex-start', marginTop: 2, marginRight: 2 },
-  figure: { ...font('600'), fontSize: 64, lineHeight: 64, letterSpacing: -3.4, marginVertical: -5, minWidth: 36 },
-  earnedWord: { ...font('500'), fontSize: 19, lineHeight: 24, letterSpacing: -0.4, marginLeft: 8, marginBottom: 2 },
+  dollar: { ...font('600'), fontSize: 30, lineHeight: 34, letterSpacing: -0.5, alignSelf: 'flex-start', marginTop: 2, marginRight: 2 },
+  figure: { ...font('600'), fontSize: 64, lineHeight: 64, letterSpacing: -2, marginVertical: -5, minWidth: 36 },
+  earnedWord: { ...font('500'), fontSize: 19, lineHeight: 24, letterSpacing: -0.2, marginLeft: 8, marginBottom: 2 },
   heroLine: { ...font('400'), fontSize: 13, lineHeight: 19, marginTop: 10 },
   heroNote: { ...font('400'), fontSize: 12, lineHeight: 16, marginTop: 10 },
   strip: { flexDirection: 'row', marginTop: 16, paddingTop: 14, borderTopWidth: StyleSheet.hairlineWidth },
   cell: { flexGrow: 1, flexShrink: 1, flexBasis: 0, minWidth: 0, gap: 2 },
-  cellFigure: { ...font('600'), fontSize: 22, lineHeight: 26, letterSpacing: -1 },
+  cellFigure: { ...font('600'), fontSize: 22, lineHeight: 26, letterSpacing: -0.6 },
   cellLabel: { ...font('400'), fontSize: 12, lineHeight: 16 },
 
   // A card on the sheet: the grouped list's (Archive, Change handle).

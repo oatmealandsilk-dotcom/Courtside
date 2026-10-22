@@ -33,11 +33,11 @@ export function WrappedCard({ year, me, width }: { year: YearInTennis; me?: User
           <Text style={{ fontFamily: fontFamily.bold, fontWeight: '700', fontSize: 20 * u, color: 'rgba(255,255,255,0.7)', fontVariant: ['tabular-nums'] }}>{year.year}</Text>
         </View>
         <View style={{ gap: 26 * u }}>
-          <Text style={{ fontFamily: fontFamily.bold, fontWeight: '700', fontSize: 40 * u, lineHeight: 42 * u, letterSpacing: -1.2 * u, color: 'white' }}>My year{'\n'}in tennis</Text>
+          <Text style={{ fontFamily: fontFamily.bold, fontWeight: '700', fontSize: 40 * u, lineHeight: 42 * u, letterSpacing: -0.7 * u, color: 'white' }}>My year{'\n'}in tennis</Text>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', rowGap: 22 * u }}>
             {figures.slice(0, 4).map(([n, label]) => (
               <View key={label} style={{ width: '50%', gap: 2 * u }}>
-                <Text style={{ fontFamily: fontFamily.bold, fontWeight: '700', fontSize: 44 * u, lineHeight: 50 * u, letterSpacing: -1.2 * u, color: 'white', fontVariant: ['tabular-nums'] }}>{n}</Text>
+                <Text style={{ fontFamily: fontFamily.bold, fontWeight: '700', fontSize: 44 * u, lineHeight: 50 * u, letterSpacing: -0.7 * u, color: 'white', fontVariant: ['tabular-nums'] }}>{n}</Text>
                 <Text style={{ fontFamily: fontFamily.medium, fontWeight: '500', fontSize: 14 * u, color: 'rgba(255,255,255,0.72)' }}>{label}</Text>
               </View>
             ))}

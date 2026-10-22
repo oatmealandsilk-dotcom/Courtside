@@ -508,7 +508,7 @@ const styleDefinitions = StyleSheet.create({
     borderRadius: 20, backgroundColor: colors.surface, borderWidth: 1.5, borderColor: colors.surface,
   },
   nameBoxIssue: { borderColor: colors.danger },
-  nameInput: { flex: 1, minWidth: 0, ...font('600'), fontSize: 21, letterSpacing: -0.5, color: colors.text, paddingVertical: 14, ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : {}) },
+  nameInput: { flex: 1, minWidth: 0, ...font('600'), fontSize: 21, letterSpacing: -0.3, color: colors.text, paddingVertical: 14, ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : {}) },
   counter: { ...typography.small, color: colors.textFaint, fontVariant: ['tabular-nums'] },
   counterNear: { color: colors.warning },
   // Lined up with the section titles and the cards' edges.

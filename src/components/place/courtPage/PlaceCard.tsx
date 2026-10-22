@@ -366,8 +366,8 @@ const styleDefinitions = StyleSheet.create({
     boxShadow: '0px -4px 16px rgba(0, 0, 0, 0.07)',
   },
   sheetWide: { marginTop: spacing.lg, borderRadius: 0, boxShadow: 'none' },
-  name: { ...font('500'), fontSize: 28, lineHeight: 33, letterSpacing: -0.9, color: colors.text },
-  nameLong: { fontSize: 25, lineHeight: 30, letterSpacing: -0.75 },
+  name: { ...font('500'), fontSize: 28, lineHeight: 33, letterSpacing: -0.5, color: colors.text },
+  nameLong: { fontSize: 25, lineHeight: 30, letterSpacing: -0.4 },
   meta: { ...typography.body, color: colors.textMuted, marginTop: 4, lineHeight: 20 },
   // Played here by: the faces, then the words.
   people: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: 10 },
