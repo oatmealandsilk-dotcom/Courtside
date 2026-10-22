@@ -154,6 +154,8 @@ export interface PinEngine {
   set: (payload: { items: CanvasMarker[]; tpl: ClusterTemplates }) => void;
   /** Holds the first wave back (a sheet is over the map), or lets it go. */
   hold: (on: boolean) => void;
+  /** Quiet (the still card's pins: no buttons, no names) or the full map's, switched in place (the map window, mapLayer). */
+  mode: (quiet: boolean, box?: PinEngineOptions['box']) => void;
   destroy: () => void;
 }
 
@@ -608,6 +610,8 @@ return function(map,ml,o){
       if(fan){var n=0;fan.m.forEach(function(id){if(items[id])n++});if(n<(fan.lead?1:2))fan=null}
       if(ready&&lvl<0)lvl=levelNow();render(null)},
     hold:function(on){var was=held;held=!!on;if(was&&!held)render(null)},
+    // The map window (mapWindow): the still card's quiet pins while it is shut, the full map's as it opens; pins that stay keep their place.
+    mode:function(q,bx){if(!!q===!!o.quiet)return;o.quiet=!!q;FULL=!q;if(bx)B=bx;build();if(ready&&lvl<0)lvl=levelNow();render(null)},
     destroy:function(){dead=true;if(raf)cancelAnimationFrame(raf);if(cullT)clearTimeout(cullT);map.off('zoom',onZoom);map.off('click',onClick);map.off('move',onMove);map.off('moveend',onEnd);for(var id in ms){clearTimeout(ms[id].leaving);ms[id].m.remove()}ms={}}
   };
 };

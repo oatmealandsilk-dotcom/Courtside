@@ -1,3 +1,4 @@
+import { openness } from '@/components/map/mapWindow';
 import { useTheme } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { AppState, Platform, View } from 'react-native';
@@ -352,7 +353,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // Slides only, never fades: the bar is glass, and on an iPhone glass under a fading parent
   // drew see-through and stayed that way (Oct 17, owner: "Why did this bottom thing turn
   // transparent? ... change it back"). It slides all the way below the screen's edge instead.
-  const barSlide = useAnimatedStyle(() => ({ transform: [{ translateY: still ? 0 : barAway.value * 160 }] }));
+  // The map window (mapWindow) opening over Community takes the bar down with it, on the window's own spring both ways.
+  const barSlide = useAnimatedStyle(() => ({ transform: [{ translateY: still ? 0 : Math.max(barAway.value, openness()) * 160 }] }));
   const curtainDown = useCurtainDown();
   // A session you started and haven't logged (Oct 6): its bar rides above the tab bar wherever the bar
   // is, never over a sheet, a composer or the live page itself, nor on a clip's comments stage or under the tutorial.

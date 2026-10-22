@@ -90,6 +90,7 @@ export function FeedFindPlayers({ room }: { room: number }) {
         locating={location.locating}
         onToggleLocation={location.toggle}
         onOpen={(id) => router.push(`/user/${id}`)}
+        layerSource="feed"
         onExpand={() => router.push('/map')}
       />
     </View>

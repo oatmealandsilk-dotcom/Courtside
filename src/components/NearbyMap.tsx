@@ -4,6 +4,8 @@ import { Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
 import Reanimated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { GestureDetector } from 'react-native-gesture-handler';
+import { useLayerCard } from '@/components/map/useLayerCard';
 
 import { ChipsNoteLine, CitylessCard, CourtSheet, CourtsZoomNote, FilterChips, HitSheet, ListCrown, MapCredit, PIN_FIT_TOP, YouSheet, MapButtons, MapTopBar, PlaceSheet, PlayerSheet, PlayersPill, PlayersSheet, PreviewOverlay, WhereCard } from '@/components/map/MapChrome';
 import { CardStage } from '@/components/map/CardStage';
@@ -67,7 +69,7 @@ export function nearbyMapSettled(): Promise<void> { return Promise.resolve(); }
  * by side, Snap Map's way (Oct 9), pulled up into the full list.
  */
 export function NearbyMap(props: NearbyMapProps) {
-  const { me, players, onOpen, onExpand, expanded = false, onBack, at, locationOn, locating = false, onToggleLocation, focusCourt, focusHit, focusUser, focusSpot, focusPlace, holdPins = false, hitCount, inviting = false, cardHeight } = props;
+  const { me, players, onOpen, onExpand, expanded = false, onBack, at, locationOn, locating = false, onToggleLocation, focusCourt, focusHit, focusUser, focusSpot, focusPlace, holdPins = false, hitCount, inviting = false, cardHeight, layer, layerSource } = props;
   const styles = useThemedStyles(styleDefinitions);
   const { theme } = useTheme();
   // The still card takes the place names off: it sets your city's name in the middle itself.
@@ -138,7 +140,8 @@ export function NearbyMap(props: NearbyMapProps) {
   useEffect(() => { if (model.selected || model.selectedCourt || model.selectedHit) setMeOpen(false); }, [model.selected, model.selectedCourt, model.selectedHit]);
   const { home, start } = model;
   // The full map opens where you are; the still card on your town (location on) or your profile's city.
-  const view = expanded ? { center: start.center, zoom: start.zoom ?? CITY_ZOOM } : { center: model.city ?? start.center, zoom: CARD_ZOOM };
+  // The map window's map (mapWindow) starts where the still card is looking.
+  const view = layer ? { center: layer.parked?.center ?? model.city ?? start.center, zoom: CARD_ZOOM } : expanded ? { center: start.center, zoom: start.zoom ?? CITY_ZOOM } : { center: model.city ?? start.center, zoom: CARD_ZOOM };
   // The still card's "N players around" counts only the faces on it (onCard), so the number and the map agree.
   const [cardW, setCardW] = useState(0);
   const cardCenter = model.city ?? start.center;
@@ -159,6 +162,8 @@ export function NearbyMap(props: NearbyMapProps) {
   useEffect(() => {
     if (lastHome.current.lat === home.lat && lastHome.current.lng === home.lng) return;
     lastHome.current = home;
+    // The map window: only once it is open and settled (a fix landing mid-open never lurches it); shut, it stays on the card.
+    if (layer && !layer.settled) return;
     // Opened on a tagged court or a hit, or looking at a place searched for, the map stays there; the still card stays on your city.
     if (expanded && model.homeKnown && !focusCourt && !focusHit && !focusSpot && !model.place && !model.selected) canvas.current?.flyTo(home, CITY_ZOOM, 600);
   }, [home]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -186,12 +191,32 @@ export function NearbyMap(props: NearbyMapProps) {
   // pins are no longer rebuilt on every redraw of the tab under them and need telling when time passes.
   const pinClock = useOpenClock(shown.map((p) => p.user.openToHitUntil));
   // Everything drawn on the map, the same list the browser's map draws (pinList).
-  const markers = useMemo<CanvasMarker[]>(
+  const fullMarkers = useMemo<CanvasMarker[]>(
     () => mapMarkers({ model, expanded, me, shown, selectedId, selectedCourtId, selectedHitId, hidden: hiddenMe, playing }),
     [model.courts, model.ringed, model.cardCourts, model.cardRinged, model.hits, shown, selectedId, selectedCourtId, selectedHitId, expanded, me, theme, openToHit, model.mePos, hiddenMe, playing?.courtId, playing?.courtName, pinClock], // eslint-disable-line react-hooks/exhaustive-deps
   );
+  // The map window, shut: exactly the still card's pins.
+  const markers = layer && layer.mode === 'card' && layer.parked ? layer.parked.markers : fullMarkers;
   // What "+N" pins look like, in this theme's colours.
   const tpl = useMemo(() => clusterTemplates(), [theme]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The still card's words over the map, also copied into the map window as it opens from here.
+  const overlay = useMemo(
+    () => ({ cityName, count: onCardCount, placeCount: model.cardCourts.length, hitCount: hitCount !== undefined && model.cardFromYou ? hitCount : model.cardHits.length, weather, locationOn, locating, lock, inviting }),
+    [cityName, onCardCount, model.cardCourts.length, hitCount, model.cardFromYou, model.cardHits.length, weather, locationOn, locating, lock, inviting],
+  );
+  const layerCard = useLayerCard(expanded ? undefined : layerSource, { center: cardCenter, markers, overlay, painted: cardUp });
+  // The map window: what it may tell this map to do.
+  if (layer) {
+    layer.handle.current = {
+      ease: (to, z, ms, b) => canvas.current?.ease(to, z, ms, b),
+      jump: (to, z) => canvas.current?.jump(to, z),
+      labels: (on, ms, delay) => canvas.current?.labels(on, ms, delay),
+      pinMode: (quiet) => canvas.current?.pinMode(quiet),
+      setInteractive: (on) => canvas.current?.setInteractive(on),
+      warm: (to, z, back, bz) => canvas.current?.warm(to, z, back, bz),
+      openTarget: () => ({ center: start.center, zoom: start.zoom ?? CITY_ZOOM }),
+    };
+  }
 
   const mapView = (
     <MapCanvas
@@ -201,14 +226,17 @@ export function NearbyMap(props: NearbyMapProps) {
       zoom={view.zoom}
       look={look}
       interactive={expanded}
+      layer={!!layer}
+      onWarm={layer?.onWarm}
       markers={markers}
       tpl={tpl}
       // The full map's first pins come in as one wave (once any sheet over it has gone); a tap on "+N" zooms in clear of the bars and the cards.
-      popIn={expanded}
-      onPainted={expanded ? undefined : () => { painted?.(); showCard(); }}
+      // Not in the map window: its pins are already there as it opens.
+      popIn={expanded && !layer}
+      onPainted={layer ? layer.onPainted : expanded ? undefined : () => { painted?.(); showCard(); }}
       // Given up on: the opening curtain stops waiting for it, and the card (or the full map's pill) says so.
       onStatus={(status) => { setMapStatus(status); if (!expanded && status === 'failed') painted?.(); }}
-      holdPins={expanded && holdPins}
+      holdPins={expanded && !layer && holdPins}
       // Zooming to fit a "+N": the top's two rows (and a face's reach) kept clear, as in a browser (PIN_FIT_TOP).
       pad={{ top: insets.top + PIN_FIT_TOP, bottom: 250, left: 50, right: 50 }}
       onTap={(id) => {
@@ -230,7 +258,7 @@ export function NearbyMap(props: NearbyMapProps) {
 
   // The full map: Android's Back closes the card that is up (yours, a player's,
   // a court's, a hit's, a place's, the list of players), then clears a search, and only then leaves the map.
-  useAndroidBack(() => {
+  const backInside = () => {
     if (meOpen) { setMeOpen(false); return true; }
     if (model.selected) { model.select(null); return true; }
     if (model.selectedCourt) { model.selectCourt(null); return true; }
@@ -239,7 +267,10 @@ export function NearbyMap(props: NearbyMapProps) {
     if (listOpen) { setListOpen(false); return true; }
     if (model.query.trim()) { model.setQuery(''); return true; }
     return false;
-  }, expanded);
+  };
+  // In the map window, its own Back handler asks this first (MapLayer).
+  if (layer) layer.back.current = backInside;
+  useAndroidBack(backInside, expanded && !layer);
 
   if (!expanded && !model.city) {
     // A city still being looked up holds the card's place, looking as the map will while it loads; no city at all asks for one.
@@ -249,10 +280,15 @@ export function NearbyMap(props: NearbyMapProps) {
     // Given up on, the card is one button that tries again; otherwise it opens the full map.
     const failed = mapStatus === 'failed' && !cardUp;
     return (
+      // Sinks a touch under the finger; the tap opens the map window from right here (mapWindow).
+      <View ref={layerCard.outer} collapsable={false}>
+      <Reanimated.View style={layerCard.style}>
       <Pressable
         accessibilityRole={failed || onExpand ? 'button' : undefined}
         accessibilityLabel={failed ? "The map didn't load. Tap to try again" : 'Map of players, courts and hits near you'}
-        onPress={failed ? () => canvas.current?.retry() : onExpand}
+        onPressIn={failed ? undefined : layerCard.onPressIn}
+        onPressOut={layerCard.onPressOut}
+        onPress={failed ? () => canvas.current?.retry() : () => layerCard.open(onExpand)}
         disabled={!failed && !onExpand}
         onLayout={(e) => { const w = Math.round(e.nativeEvent.layout.width); if (w > 0 && w !== cardW) setCardW(w); }}
         style={[styles.card, cardHeight ? { height: cardHeight } : null]}
@@ -260,7 +296,7 @@ export function NearbyMap(props: NearbyMapProps) {
         {/* Not yet drawn: covered, not tappable, and not read out (the city and its players come with the map). */}
         <Reanimated.View pointerEvents={cardUp ? 'auto' : 'none'} accessibilityElementsHidden={!cardUp} importantForAccessibility={cardUp ? 'auto' : 'no-hide-descendants'} style={StyleSheet.absoluteFill}>
           {mapView}
-          <PreviewOverlay cityName={cityName} count={onCardCount} placeCount={model.cardCourts.length} hitCount={hitCount !== undefined && model.cardFromYou ? hitCount : model.cardHits.length} weather={weather} locationOn={locationOn} locating={locating} onToggleLocation={onToggleLocation} lock={lock} inviting={inviting} />
+          <PreviewOverlay {...overlay} onToggleLocation={onToggleLocation} />
           <MapCredit align="right" style={{ position: 'absolute', right: 10, bottom: 10 }} />
         </Reanimated.View>
         {/* Over the map until it has drawn, then fading off it. */}
@@ -270,6 +306,8 @@ export function NearbyMap(props: NearbyMapProps) {
           </Reanimated.View>
         ) : null}
       </Pressable>
+      </Reanimated.View>
+      </View>
     );
   }
 
@@ -301,11 +339,14 @@ export function NearbyMap(props: NearbyMapProps) {
   // players pill (Oct 10: made from what was up now, a closing card's buttons grew the pill as it sank, the ⓘ jumping up over it).
   const buttons = (pill: boolean) => <View pointerEvents="box-none" style={styles.crown}><MapButtons lead={pill ? <PlayersPill items={model.tray} query={model.query} filter={model.filter} courts={model.nearestCourts} lock={lock} onOpen={() => { setListTall(false); trayAt.current = 0; setListOpen(true); }} /> : undefined} onRecentre={() => { model.select(null); model.selectCourt(null); model.selectHit(null); model.clearPlace(); canvas.current?.flyTo(model.homeView.center, model.homeView.zoom ?? CITY_ZOOM, 600); }} /></View>;
   // Zoomed out past about a city with the courts on: "Zoom in to see courts" (not over a court's card, nor a search).
+  // In the map window, a swipe down on the top bar closes it (MapLayer).
+  const topWrap = (node: React.ReactElement) => (layer?.topGesture ? <GestureDetector gesture={layer.topGesture}>{node}</GestureDetector> : node);
   const zoomNote = model.courtsOn && far && !model.selectedCourt && !model.query.trim();
   return (
     <View style={styles.fill} onLayout={(e) => setMapH(Math.round(e.nativeEvent.layout.height))}>
       {mapView}
-      <View pointerEvents="box-none" style={[styles.top, { paddingTop: insets.top + spacing.sm }]}>
+      {topWrap(
+      <Reanimated.View pointerEvents="box-none" style={[styles.top, { paddingTop: insets.top + spacing.sm }, layer?.topStyle]}>
         {/* Two rows (Oct 11, owner: "Two rows weather in search"): Back, the search and Location, the city and its weather in the bar itself; then the filter chips. */}
         <MapTopBar onBack={onBack} query={model.query} onQuery={model.setQuery} locationOn={locationOn} locating={locating} onToggleLocation={onToggleLocation} results={model.courtResults} onPickCourt={model.pickCourt} places={model.placeSearch} onPickPlace={model.pickPlace} players={model.query.trim() ? model.tray.length : 0} locationMenu={choosing} cityName={model.homeKnown ? cityName : ''} weather={model.homeKnown ? weather : null} />
         <View onLayout={(e) => { const { y, height } = e.nativeEvent.layout; setChipsEnd(Math.round(y + height)); }}>
@@ -317,8 +358,8 @@ export function NearbyMap(props: NearbyMapProps) {
         </ChipsNoteLine>
         {/* Slow to come, or didn't: a small pill under the chips, clear of the pins around you. */}
         <MapLoadPill status={mapStatus} onRetry={() => canvas.current?.retry()} />
-      </View>
-      <View pointerEvents="box-none" style={styles.bottom}>
+      </Reanimated.View>)}
+      <Reanimated.View pointerEvents="box-none" style={[styles.bottom, layer?.bottomStyle]}>
         {/* What is up along the bottom (a card, or nothing) glides in and out, the map's buttons riding on top of it: CardStage. */}
         <CardStage
           cardKey={stageKey}
@@ -344,7 +385,7 @@ export function NearbyMap(props: NearbyMapProps) {
             <PlaceSheet place={model.place} rows={model.placeRows} loading={model.placeLoading} failed={model.placeFailed} onPickCourt={model.pickCourt} onRetry={model.retryPlace} onClose={model.clearPlace} played={model.ringFor} />
           ) : null)}
         </CardStage>
-      </View>
+      </Reanimated.View>
     </View>
   );
 }
