@@ -9,7 +9,7 @@ import { GroupTile } from '@/features/groups/GroupTile';
 import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
 import { MAX_GROUPS } from '@/store/feedGroups';
-import { colors, font, lift, radius, spacing, typography } from '@/theme';
+import { buttonShape, colors, font, lift, radius, spacing, typography } from '@/theme';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 
 /*
@@ -147,7 +147,7 @@ const styleDefinitions = StyleSheet.create({
   meta: { ...typography.small, color: colors.textFaint },
   // Join is the one green thing to press; Not now is quiet. They sit under the words, lined up with them.
   buttons: { flexDirection: 'row', gap: spacing.sm, paddingLeft: 44 + spacing.md },
-  btn: { flex: 1, height: 34, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
+  btn: { flex: 1, height: buttonShape.smallHeight, borderRadius: buttonShape.smallRadius, ...buttonShape.curve, alignItems: 'center', justifyContent: 'center' },
   btnJoin: { backgroundColor: colors.brand },
   btnQuiet: { backgroundColor: colors.surfaceAlt },
   btnDim: { opacity: PRESS_DIM },
