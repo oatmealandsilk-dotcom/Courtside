@@ -54,8 +54,8 @@ export function usePlaceSearch(text: string, near: LatLng | null, max = 5, { hol
     return () => { clearTimeout(wait); control.abort(); };
   }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // The places last listed with the world's answer in, for `hold`.
-  const lastAnswered = useRef<FoundPlace[] | null>(null);
+  // The places last on screen, for `hold`.
+  const lastShown = useRef<FoundPlace[] | null>(null);
   const result = useMemo(() => {
     if (!key) return NOTHING;
     const kept = keptPlaces(typed, rough);
@@ -65,7 +65,9 @@ export function usePlaceSearch(text: string, near: LatLng | null, max = 5, { hol
     return { places, searching: !now, failed: !!now?.failed, done: !!now };
   }, [key, answer, typed, rough, max]);
   if (!hold) return result;
-  if (!key) { lastAnswered.current = null; return result; }
-  if (result.done) { lastAnswered.current = result.places; return result; }
-  return lastAnswered.current ? { ...result, places: lastAnswered.current } : result;
+  if (!key) { lastShown.current = null; return result; }
+  // Keep whatever was last listed (the world's answer, or the built-in cities) while the next
+  // letter's answer is on its way, so the list never empties and fills again mid-word.
+  if (result.done || result.places.length) { lastShown.current = result.places; return result; }
+  return result.searching && lastShown.current?.length ? { ...result, places: lastShown.current } : result;
 }

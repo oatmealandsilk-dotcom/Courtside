@@ -280,12 +280,20 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   const [listView, setListView] = useState({ topic, sort });
   const still = useReducedMotion();
   const listShown = useSharedValue(1);
+  // The latest pick: the dip lands on whatever is picked when it ends, not what was picked when it began,
+  // so a quick B-then-back-to-A never leaves B's threads under the A chip.
+  const pick = useRef({ topic, sort });
+  pick.current = { topic, sort };
+  const applyPick = useCallback(() => setListView({ ...pick.current }), []);
   useEffect(() => {
-    if (listView.topic === topic && listView.sort === sort) return;
-    const next = { topic, sort };
+    if (listView.topic === topic && listView.sort === sort) {
+      // Back to what is drawn while the list dips: call the dip off and bring the list back up.
+      listShown.value = withTiming(1, { duration: 200, easing: SETTLE });
+      return;
+    }
     // Not on show (a picture of this tab, or Find Players in front): simply the new list.
-    if (previewSection || section !== 'discussions') { setListView(next); return; }
-    listShown.value = withTiming(0, { duration: 90, easing: Easing.in(Easing.quad) }, (done) => { if (done) runOnJS(setListView)(next); });
+    if (previewSection || section !== 'discussions') { applyPick(); return; }
+    listShown.value = withTiming(0, { duration: 90, easing: Easing.in(Easing.quad) }, (done) => { if (done) runOnJS(applyPick)(); });
   }, [topic, sort]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { listShown.value = withTiming(1, { duration: 200, easing: SETTLE }); }, [listView, listShown]);
   const listStyle = useAnimatedStyle(() => ({
