@@ -78,6 +78,12 @@ function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, 
   const [fast, setFast] = useState(false);
   const width = useRef(1);
   const pressX = useRef(0);
+  // A press held past the long-press delay that did not start 2× (left side,
+  // or paused) is still a tap: RN drops onPress after any long press, so a
+  // slightly slow tap used to neither pause nor play. Where it started, so a
+  // hold that turned into a swipe is not taken for one.
+  const slowTap = useRef<{ x: number; y: number } | null>(null);
+  const pressAt = useRef({ x: 0, y: 0 });
   const [ready, setReadyState] = useState(false);
   // Once a clip has been ready it counts as ready: a moment of re-buffering mid-play is not a loading disc.
   const setReady = (ok: boolean) => { setReadyState((was) => was || ok); if (ok) onReady?.(true); };
@@ -176,10 +182,15 @@ function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, 
         accessibilityHint="Hold the right side to play at double speed"
         onPress={tap}
         onLayout={(e) => { width.current = e.nativeEvent.layout.width || 1; }}
-        onPressIn={(e) => { pressX.current = e.nativeEvent.locationX; }}
+        onPressIn={(e) => { pressX.current = e.nativeEvent.locationX; pressAt.current = { x: e.nativeEvent.pageX, y: e.nativeEvent.pageY }; slowTap.current = null; }}
         delayLongPress={250}
-        onLongPress={() => { if (!paused && pressX.current > width.current * 0.66) { haptics.tap(); setFast(true); } }}
-        onPressOut={() => { if (fast) setFast(false); }}
+        onLongPress={() => { if (!paused && pressX.current > width.current * 0.66) { haptics.tap(); setFast(true); } else slowTap.current = pressAt.current; }}
+        onPressOut={(e) => {
+          if (fast) setFast(false);
+          const from = slowTap.current;
+          slowTap.current = null;
+          if (from && active && Math.abs(e.nativeEvent.pageX - from.x) < 12 && Math.abs(e.nativeEvent.pageY - from.y) < 12) tap();
+        }}
         style={StyleSheet.absoluteFill}
       >
         {paused ? (

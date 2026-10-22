@@ -4812,12 +4812,13 @@ export const remote = {
     return !!data?.length || !(await rowThere(table, commentId));
   },
 
-  async setStoryLike(storyId: ID, me: ID, liked: boolean) {
+  async setStoryLike(storyId: ID, me: ID, liked: boolean): Promise<boolean> {
     const db = need();
     const { error } = liked
       ? await db.from('story_likes').upsert({ story_id: storyId, user_id: me }, { ignoreDuplicates: true })
       : await db.from('story_likes').delete().match({ story_id: storyId, user_id: me });
     if (error) fail('hit like')(error);
+    return !error;
   },
 
   /** A heart on a comment; `onHit` picks the table, since hit comments live apart. */
