@@ -122,12 +122,15 @@ export function SigSessionPanel({ session, author, people, onPress, spoken }: {
     sets.some((s, i) => isMatchTiebreak(s, i, sets)) ? 'Match tiebreak' : null,
     ...(session.drills ?? []).slice(0, 2),
   ].filter(Boolean).join(' · ');
+  // With nothing but the time to say (no score, no court, nobody else), the time joins the top line rather than sitting alone under it.
+  const lone = !sets.length && !zones.length && !others.length && !facts.includes(' · ');
+  const top = lone ? `${meta} · ${facts}` : meta;
   const whoWords = others.length === 1 ? others[0].name : others.length === 2 ? `${firstOf(others[0].name)} and ${firstOf(others[1].name)}` : others.length ? `${firstOf(others[0].name)} and ${others.length - 1} others` : '';
 
   const body = (
     <View style={styles.box}>
       <View style={styles.meta}>
-        <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={[typography.small, { color: colors.textMuted, flex: 1 }]}>{meta}</Text>
+        <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={[typography.small, { color: colors.textMuted, flex: 1 }]}>{top}</Text>
         {isMatch && session.won !== undefined ? (
           <Text maxFontSizeMultiplier={TextScale.CARD} style={[typography.smallStrong, { color: session.won ? colors.text : colors.textMuted }]}>{session.won ? 'Won' : 'Lost'}</Text>
         ) : null}
@@ -135,7 +138,7 @@ export function SigSessionPanel({ session, author, people, onPress, spoken }: {
       {sets.length ? (
         <ScoreBoard sets={sets} you={author} them={them} youWon={isMatch ? session.won : undefined} />
       ) : zones.length ? <CourtPlate zones={zones} /> : null}
-      <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={[typography.small, { color: colors.textMuted }]}>{facts}</Text>
+      {lone ? null : <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={[typography.small, { color: colors.textMuted }]}>{facts}</Text>}
       {others.length ? (
         <View style={styles.who}>
           <Faces people={others} />
