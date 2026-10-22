@@ -31,6 +31,8 @@ export interface MapCanvasHandle {
   jump: (to: LatLng, zoom: number) => void;
   /** The still card: asks the page for a picture of its map alone (onShot), for the card's picture cover (cardShot). */
   shoot: () => void;
+  /** Whether this try's page has its map up (its style loaded), drawn or not. */
+  isUp: () => boolean;
 }
 
 interface Props {
@@ -123,6 +125,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas({
       send(`window.__cs.fly(${to.lat},${to.lng},${z},0,0,true);window.__cs.rearm()`);
     },
     shoot: () => send('window.__cs.shot()'),
+    isUp: () => ready.current,
   }), []); // eslint-disable-line react-hooks/exhaustive-deps
   // Written out only when the pins change, not on every draw of the page around the map (Oct 10,
   // owner: "the buttons like the settings. msg notifications, etc respond too slow").

@@ -32,7 +32,7 @@ import { useWeather } from '@/features/players/useWeather';
 import { show as showToast } from '@/lib/toast';
 import { confirmUnfollow } from '@/lib/confirm';
 import { useApp } from '@/store/AppContext';
-import { curtainState, useStartMapHold, whenCurtainDown } from '@/features/feed/warmup';
+import { curtainState, useStartMapHold } from '@/features/feed/warmup';
 import { useReducedMotion } from '@/lib/useReducedMotion';
 import { useAndroidBack } from '@/lib/androidBack';
 import { useIsFocused } from '@/lib/useIsFocused';
@@ -88,6 +88,8 @@ export function NearbyMap(props: NearbyMapProps) {
   // A teen (migration 78) is shared only with friends who follow them back, and with nobody until they say so.
   const teen = onTeenMap(me, teenMap);
   const hiddenMe = choosing && (mapVisibility === 'none' || (teen && mapVisibility == null));
+  // Only me (or a teen who has not chosen): nothing of where the card is gets kept on this device, its town or its pictures (cardShot).
+  const keepNone = mapVisibility === 'none' || hiddenMe;
   // Playing a live session, checked in at its court (Oct 6): your pin says "Playing now", the court glows. Not on Only me, which nobody sees.
   const playing = livePin(liveSession, courtNow, locationEnabled && !hiddenMe);
   // Since migration 98 you share to see: what keeps "Players nearby" from you
@@ -234,6 +236,8 @@ export function NearbyMap(props: NearbyMapProps) {
   const key = !expanded && model.city && !model.cityExact ? shotKey({ user: me.id, theme, look: lookSig, lat: model.city.lat, lng: model.city.lng, zoom: CARD_ZOOM, w: cardWidth, h: cardHeight ?? HEIGHT, scale, lock: lock ?? 'open', still }) : '';
   const markerHash = useMemo(() => (expanded ? '' : hashText(JSON.stringify({ items: markers, tpl }))), [expanded, markers, tpl]);
   const keyNow = useRef(key);
+  const keepNoneNow = useRef(keepNone);
+  keepNoneNow.current = keepNone;
   keyNow.current = key;
   const hashNow = useRef(markerHash);
   hashNow.current = markerHash;
@@ -259,8 +263,22 @@ export function NearbyMap(props: NearbyMapProps) {
    */
   const [lostCover, setLostCover] = useState(false);
   const lostNow = useRef(false);
+  // A lost page is never left covered: one that has not drawn within 8 s is shown as it is (its map is up,
+  // the streets on their way) or, with no map at all yet, says "Map didn't load · Tap to try again".
+  const [lostFailed, setLostFailed] = useState(false);
+  const lostGuard = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (lostGuard.current) clearTimeout(lostGuard.current); }, []);
   coverAgainRef.current = (lost = false) => {
     stopWait.current();
+    if (lostGuard.current) { clearTimeout(lostGuard.current); lostGuard.current = null; }
+    setLostFailed(false);
+    if (lost) {
+      lostGuard.current = setTimeout(() => {
+        lostGuard.current = null;
+        if (canvas.current?.isUp()) showCardRef.current();
+        else setLostFailed(true);
+      }, 8000);
+    }
     lostNow.current = lost;
     setLostCover(lost);
     setCardUp(false);
@@ -274,6 +292,8 @@ export function NearbyMap(props: NearbyMapProps) {
   /** The map has drawn: the cover goes, as quietly as it can. */
   const showCard = () => {
     if (jumpGuard.current) { clearTimeout(jumpGuard.current); jumpGuard.current = null; }
+    if (lostGuard.current) { clearTimeout(lostGuard.current); lostGuard.current = null; }
+    setLostFailed(false);
     lostNow.current = false;
     setLostCover(false);
     setCardUp(true);
@@ -290,13 +310,13 @@ export function NearbyMap(props: NearbyMapProps) {
     }
     painted?.();
     const fade = () => { coverIn.value = withTiming(0, { duration: MAP_REVEAL_MS, easing: Easing.inOut(Easing.quad) }, (done) => { if (done) runOnJS(setCoverGone)(true); }); };
-    // The curtain fading: the cover waits until it has gone, then fades once, never both at once.
-    if (curtain === 'lifting') stopWait.current = whenCurtainDown(fade);
-    else fade();
+    // The curtain still fading (a slow open): the cover's fade starts at once under it rather than waiting
+    // for the curtain to end, so the sketch never lingers behind it; both are soft, nothing pops.
+    fade();
   };
   showCardRef.current = showCard;
   // Given up on: "Map didn't load" fades in over the cover (and back off for a retry), at once out of sight.
-  const failed = !expanded && mapStatus === 'failed' && !cardUp;
+  const failed = !expanded && (mapStatus === 'failed' || lostFailed) && !cardUp;
   const failIn = useSharedValue(0);
   const failFade = useAnimatedStyle(() => ({ opacity: failIn.value }));
   // After "Tap to try again" its words stay until it has faded off, so nothing goes in one frame.
@@ -314,7 +334,7 @@ export function NearbyMap(props: NearbyMapProps) {
   const mapBox = useRef<View | null>(null);
   const shotFor = useRef<string | null>(null);
   useEffect(() => {
-    if (expanded || !cardUp || !coverGone || !key) return undefined;
+    if (expanded || keepNone || !cardUp || !coverGone || !key) return undefined;
     let tries = 0;
     const t = setInterval(() => {
       tries += 1;
@@ -325,15 +345,15 @@ export function NearbyMap(props: NearbyMapProps) {
       if (cardCaptureBroken() || hasCardShot(key, 'card', markerHash) || !mapBox.current) return;
       const k = key, h = markerHash;
       captureRef(mapBox.current, { format: 'jpg', quality: 0.92, result: 'base64' })
-        .then((b64) => { if (k === keyNow.current && h === hashNow.current) saveCardShot(k, h, b64); })
+        .then((b64) => { if (k === keyNow.current && h === hashNow.current && !keepNoneNow.current) saveCardShot(k, h, b64); })
         .catch(() => undefined);
     }, 1200);
     return () => clearInterval(t);
-  }, [expanded, cardUp, coverGone, key, markerHash]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [expanded, keepNone, cardUp, coverGone, key, markerHash]); // eslint-disable-line react-hooks/exhaustive-deps
   // Where the card was, for next time (mapModel's hint): only a centre from a real fix.
   useEffect(() => {
-    if (!expanded && cardUp && place.locationOn && place.at && model.city && !model.cityExact) setCardHint(me.id, { lat: model.city.lat, lng: model.city.lng, name: cityName });
-  }, [expanded, cardUp, cityKey, cityName]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (!expanded && !keepNone && cardUp && place.locationOn && place.at && model.city && !model.cityExact) setCardHint(me.id, { lat: model.city.lat, lng: model.city.lng, name: cityName });
+  }, [expanded, keepNone, cardUp, cityKey, cityName]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const mapView = (
     <MapCanvas
@@ -348,7 +368,7 @@ export function NearbyMap(props: NearbyMapProps) {
       // The full map's first pins come in as one wave (once any sheet over it has gone); a tap on "+N" zooms in clear of the bars and the cards.
       popIn={expanded}
       onPainted={expanded ? undefined : showCard}
-      onShot={expanded ? undefined : (data) => { const k = shotFor.current; shotFor.current = null; if (k && k === keyNow.current) saveStreetsShot(k, data); }}
+      onShot={expanded ? undefined : (data) => { const k = shotFor.current; shotFor.current = null; if (k && k === keyNow.current && !keepNoneNow.current) saveStreetsShot(k, data); }}
       // The phone stopped the page (or took back its drawing) while the app was away: covered again before anyone looks.
       onLost={expanded ? undefined : () => { if (cardUp) coverAgainRef.current(true); }}
       // Given up on: the opening curtain stops waiting for it, and the card (or the full map's pill) says so.
@@ -396,7 +416,7 @@ export function NearbyMap(props: NearbyMapProps) {
       <Pressable
         accessibilityRole={failed || onExpand ? 'button' : undefined}
         accessibilityLabel={failed ? "The map didn't load. Tap to try again" : 'Map of players, courts and hits near you'}
-        onPress={failed ? () => canvas.current?.retry() : onExpand}
+        onPress={failed ? () => { setLostFailed(false); canvas.current?.retry(); } : onExpand}
         disabled={!failed && !onExpand}
         onLayout={(e) => { const w = Math.round(e.nativeEvent.layout.width); if (w > 0 && w !== cardW) setCardW(w); }}
         ref={spot.ref}

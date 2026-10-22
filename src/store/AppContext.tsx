@@ -3075,6 +3075,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // Opened on the copy, and the login turned out not to be that account's after all: signed out, as before.
       if (shownEarly && data.session?.user.id !== shownEarly) {
         snapshotIds.current = null;
+        clearCardShots();
         setState((prev) => ({ ...signedOut(prev), snapshotShown: false }));
         shownEarly = null;
       }
@@ -3494,6 +3495,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // Everywhere includes this device: the remembered login is gone too.
     const savedAccounts = me ? await forgetAccount(me) : stateRef.current.savedAccounts;
     // Nothing of the account stays on the device (see signOut), its saved copy included.
+    // Nor the pictures of its map card, or where that card was (cardShot), as Log out.
+    clearCardShots();
     setState((prev) => ({ ...signedOut(prev), savedAccounts }));
     if (me) void clearSnapshot(me);
   }, []);
@@ -3535,6 +3538,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // A deleted account has no business in the remembered-logins list.
     const savedAccounts = me ? await forgetAccount(me) : stateRef.current.savedAccounts;
     // Nor anything of it on the device (see signOut), its saved copy included.
+    // Nor the pictures of its map card, or where that card was (cardShot), as Log out.
+    clearCardShots();
     setState((prev) => ({ ...signedOut(prev), savedAccounts }));
     if (me) void clearSnapshot(me);
   }, []);
@@ -7331,6 +7336,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } catch { /* the sign-out below still takes it off this phone */ }
     void stopWorkoutWatch();
     const savedAccounts = await forgetAccount(me).catch(() => stateRef.current.savedAccounts);
+    clearCardShots();
     setState((prev) => ({ ...signedOut(prev), savedAccounts }));
     void clearSnapshot(me);
   }, []);

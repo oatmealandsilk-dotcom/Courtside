@@ -33,7 +33,7 @@ import { PAINT_WATCH_JS } from '@/components/map/engineLoader';
 import { MAP_REVEAL_CSS, MAP_REVEAL_MS, MapCardFailed, MapCardLoading, MapLoadPill } from '@/components/map/MapLoadState';
 import { useMapLoad } from '@/components/map/useMapLoad';
 import { useIsFocused } from '@/lib/useIsFocused';
-import { curtainState, useStartMapHold, whenCurtainDown } from '@/features/feed/warmup';
+import { curtainState, useStartMapHold } from '@/features/feed/warmup';
 import { useReducedMotion } from '@/lib/useReducedMotion';
 import { cardHint, hasCardShot, hashText, peekCardShot, saveStreetsShot, setCardHint, shotKey, useCardShots, type CardHint } from '@/components/map/cardShot';
 import { useCardOnScreen, useHeldCardPlace } from '@/components/map/cardHold';
@@ -126,6 +126,8 @@ export function NearbyMap(props: NearbyMapProps) {
   // A teen (migration 78) is shared only with friends who follow them back, and with nobody until they say so.
   const teen = onTeenMap(me, teenMap);
   const hiddenMe = choosing && (mapVisibility === 'none' || (teen && mapVisibility == null));
+  // Only me (or a teen who has not chosen): nothing of where the card is gets kept on this device, its town or its pictures (cardShot).
+  const keepNone = mapVisibility === 'none' || hiddenMe;
   // Playing a live session, checked in at its court (Oct 6): your pin says "Playing now", the court glows. Not on Only me, which nobody sees.
   const playing = livePin(liveSession, courtNow, locationEnabled && !hiddenMe);
   // Since migration 98 you share to see: what keeps "Players nearby" from you
@@ -520,8 +522,9 @@ export function NearbyMap(props: NearbyMapProps) {
     }
     painted();
     const fade = () => { setPhotoGone(true); setCardSnap(false); setCardShown(true); };
-    if (curtain === 'lifting') stopWait.current = whenCurtainDown(fade);
-    else fade();
+    // The curtain still fading (a slow open): the card's own fade starts at once under it rather than
+    // waiting for the curtain to end, so the sketch never lingers behind it; both are soft, nothing pops.
+    fade();
   };
   const revealRef = useRef(reveal);
   revealRef.current = reveal;
@@ -546,7 +549,7 @@ export function NearbyMap(props: NearbyMapProps) {
   }, [expanded, photoIn, photoInMap, photoGone, cardShown]); // eslint-disable-line react-hooks/exhaustive-deps
   // Keeping the picture fresh: once the card has drawn and been still a moment in view, the map alone (no pins: they are page elements).
   useEffect(() => {
-    if (expanded || !cardShown || !loaderGone || !shotKeyNow || hasCardShot(shotKeyNow, 'streets')) return undefined;
+    if (expanded || keepNone || !cardShown || !loaderGone || !shotKeyNow || hasCardShot(shotKeyNow, 'streets')) return undefined;
     let tries = 0;
     const t = setInterval(() => {
       tries += 1;
@@ -557,11 +560,11 @@ export function NearbyMap(props: NearbyMapProps) {
       try { const c = m.getCanvas(); if (!isBlank(c) && keyNow.current === shotKeyNow) saveStreetsShot(shotKeyNow, c.toDataURL('image/jpeg', 0.92)); } catch { /* not readable */ }
     }, 1200);
     return () => clearInterval(t);
-  }, [expanded, cardShown, loaderGone, shotKeyNow, mapGen]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [expanded, keepNone, cardShown, loaderGone, shotKeyNow, mapGen]); // eslint-disable-line react-hooks/exhaustive-deps
   // Where the card was, for next time (mapModel's hint): only a centre from a real fix.
   useEffect(() => {
-    if (!expanded && cardShown && place.locationOn && place.at && model.city && !model.cityExact) setCardHint(me.id, { lat: model.city.lat, lng: model.city.lng, name: model.cityName });
-  }, [expanded, cardShown, cityKey, model.cityName]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (!expanded && !keepNone && cardShown && place.locationOn && place.at && model.city && !model.cityExact) setCardHint(me.id, { lat: model.city.lat, lng: model.city.lng, name: model.cityName });
+  }, [expanded, keepNone, cardShown, cityKey, model.cityName]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Pins: the same list the phone's map draws (pinList), handed to the engine, which keeps
   // each pin between changes and gathers, splits and fades them (pinEngine).
