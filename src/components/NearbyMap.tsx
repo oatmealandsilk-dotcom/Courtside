@@ -135,7 +135,7 @@ export function NearbyMap(props: NearbyMapProps) {
   };
   const coverFade = useAnimatedStyle(() => ({ opacity: 1 - cardIn.value }));
   // Anything else picked (a search result, a pin) takes the place of your own card.
-  useEffect(() => { if (model.selected || model.selectedCourt || model.selectedHit) setMeOpen(false); }, [model.selected, model.selectedCourt, model.selectedHit]);
+  useEffect(() => { if (model.selected || model.selectedCourt || model.selectedHit || model.place) setMeOpen(false); }, [model.selected, model.selectedCourt, model.selectedHit, model.place]);
   const { home, start } = model;
   // The full map opens where you are; the still card on your town (location on) or your profile's city.
   const view = expanded ? { center: start.center, zoom: start.zoom ?? CITY_ZOOM } : { center: model.city ?? start.center, zoom: CARD_ZOOM };

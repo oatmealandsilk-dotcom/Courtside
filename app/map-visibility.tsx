@@ -90,7 +90,7 @@ export default function MapVisibilitySheet() {
       // A touch smaller than other sheets' titles, so the question stays on one line on a phone.
       header={<SheetTitle title="Who can see you on the map?" titleSize={21} line={first ? 'You can change this any time.' : undefined} onClose={close} />}
     >
-      <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
         <WhoSeesArt choice={picked} name={currentUser?.name ?? 'You'} seed={currentUser?.avatarSeed ?? 'you'} uri={currentUser?.avatarUrl} />
         {teen ? (
           <View style={styles.notice} accessibilityRole="text">
@@ -118,6 +118,9 @@ export default function MapVisibilitySheet() {
             );
           })}
         </View>
+      </ScrollView>
+      {/* The way forward sits under the list, never scrolled off a short phone (iPhone SE: Continue was below the edge). */}
+      <View style={styles.footer}>
         {error ? <Text style={styles.error}>{error}</Text> : null}
         {first ? (
           <Submit label="Continue" busy={busy} busyLabel="Saving…" onPress={() => { void proceed(); }} />
@@ -127,7 +130,7 @@ export default function MapVisibilitySheet() {
             <Text style={styles.offText}>Turn off location</Text>
           </Pressable>
         ) : null}
-      </ScrollView>
+      </View>
     </DragSheet>
   );
 }
@@ -186,7 +189,9 @@ function Fade({ on, dim = 0, style, children }: { on: boolean; dim?: number; sty
 }
 
 const styleDefinitions = StyleSheet.create({
-  body: { paddingHorizontal: spacing.lg, paddingTop: spacing.xs, paddingBottom: spacing.xl, gap: spacing.md },
+  scroll: { flexShrink: 1 },
+  body: { paddingHorizontal: spacing.lg, paddingTop: spacing.xs, paddingBottom: spacing.sm, gap: spacing.md },
+  footer: { paddingHorizontal: spacing.lg, paddingTop: spacing.xs, paddingBottom: spacing.xl, gap: spacing.md },
   art: { height: ART, alignItems: 'center', justifyContent: 'center' },
   // Your patch of map: a soft round of the brand's dim, edged like a map's area.
   patch: { position: 'absolute', width: ART + 40, height: ART - 8, borderRadius: (ART + 40) / 2, backgroundColor: withAlpha(colors.brand, 0.07), borderWidth: 1, borderColor: withAlpha(colors.brand, 0.18), borderStyle: 'dashed' },
