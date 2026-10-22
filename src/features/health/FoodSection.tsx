@@ -11,7 +11,7 @@ import { appleHealthAvailable, connectAppleFood, inExpoGo, readAppleNutritionFro
 import * as haptics from '@/lib/haptics';
 import { show as showToast } from '@/lib/toast';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import { colors, radius, spacing, typography } from '@/theme';
+import { buttonShape, colors, radius, spacing, typography } from '@/theme';
 
 /*
  * Food, from Cronometer or MyFitnessPal, by way of Apple Health: neither app
@@ -145,7 +145,7 @@ export function FoodSection({ userId }: { userId: string | null }) {
             </View>
           </View>
           <Tappable accessibilityRole="button" accessibilityLabel="Connect food through Apple Health" disabled={busy} scaleTo={0.97} onPress={() => { haptics.tap(); void connect(); }} style={styles.primary}>
-            <BrandWash />
+            <BrandWash radius={buttonShape.radius} />
             {busy ? <ActivityIndicator size="small" color={colors.brandInk} /> : <Ionicons name="heart-outline" size={16} color={colors.brandInk} />}
             <Text style={styles.primaryText}>{busy ? 'Opening Apple Health…' : 'Allow in Apple Health'}</Text>
           </Tappable>
@@ -249,7 +249,7 @@ const styleDefinitions = StyleSheet.create({
   name: { ...typography.bodyStrong, color: colors.text },
   line: { ...typography.small, color: colors.textMuted, lineHeight: 18 },
   how: { ...typography.small, color: colors.textFaint, lineHeight: 18 },
-  primary: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, height: 42, borderRadius: radius.pill, backgroundColor: colors.brand, overflow: 'hidden' },
+  primary: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, height: buttonShape.height, borderRadius: buttonShape.radius, ...buttonShape.curve, backgroundColor: colors.brand, overflow: 'hidden' },
   primaryText: { ...typography.smallStrong, color: colors.brandInk },
   small: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 5, height: 32, paddingHorizontal: 12, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderStrong },
   smallText: { ...typography.smallStrong, color: colors.text },

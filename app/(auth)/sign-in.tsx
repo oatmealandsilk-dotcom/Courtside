@@ -28,7 +28,7 @@ import { KEYBOARD_ROOM, useKeyboardRoom } from '@/lib/keyboardRoom';
 import { useAndroidBack } from '@/lib/androidBack';
 import { StatusShade } from '@/components/StatusShade';
 import { Welcome } from '@/features/welcome/Welcome';
-import { colors, lift, radius, spacing, typography, font } from '@/theme';
+import { buttonShape, colors, lift, radius, spacing, typography, font } from '@/theme';
 import { TextScale } from '@/theme/textScale';
 import { preloadNearbyMap } from '@/components/NearbyMap';
 
@@ -515,7 +515,7 @@ export default function SignIn() {
                 <AppleAuthentication.AppleAuthenticationButton
                   buttonType={mode === 'sign-up' ? AppleAuthentication.AppleAuthenticationButtonType.SIGN_UP : AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
                   buttonStyle={appleLook}
-                  cornerRadius={26}
+                  cornerRadius={buttonShape.radius}
                   style={styles.provider}
                   onPress={apple}
                 />
@@ -643,7 +643,7 @@ const styleDefinitions = StyleSheet.create({
   accountMeta: { ...typography.small, color: colors.textMuted },
   go: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.bgElevated, alignItems: 'center', justifyContent: 'center' },
   pressed: { transform: [{ scale: 0.99 }], opacity: 0.9 },
-  secondary: { ...lift, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, minHeight: 52, borderRadius: radius.pill, backgroundColor: colors.surface },
+  secondary: { ...lift, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, minHeight: 48, borderRadius: buttonShape.radius, ...buttonShape.curve, backgroundColor: colors.surface },
   secondaryText: { ...typography.bodyStrong, fontSize: 16, color: colors.text },
   form: { gap: spacing.md },
   forgot: { alignSelf: 'flex-end', paddingVertical: 2 },
@@ -653,7 +653,7 @@ const styleDefinitions = StyleSheet.create({
   error: { ...typography.small, color: colors.danger },
   notice: { ...typography.small, color: colors.success },
   // Apple's and Google's buttons: the same full width and height, so neither is the smaller way in.
-  provider: { height: 52, width: '100%' },
+  provider: { height: 48, width: '100%' },
   // Google's is outlined, so it reads as a button and not as one more white box to type in.
   google: { borderWidth: 1, borderColor: colors.borderStrong },
   // "or sign up with email", between two hairlines.

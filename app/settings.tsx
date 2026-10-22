@@ -18,7 +18,7 @@ import { useApp } from '@/store/AppContext';
 import { askWhoSeesYou, canChooseVisibility, onTeenMap } from '@/features/players/mapPrivacy';
 import { useTheme, themeList, themes, type ThemeName } from '@/theme/ThemeProvider';
 import { Wash } from '@/components/Wash';
-import { colors, font, radius, spacing, typography } from '@/theme';
+import { buttonShape, colors, font, radius, spacing, typography } from '@/theme';
 import { leaveGently } from '@/components/SignOutCurtain';
 import { confirm } from '@/lib/confirm';
 import { replayTour } from '@/features/tour/tourStore';
@@ -335,7 +335,7 @@ const styleDefinitions = StyleSheet.create({
   meWords: { flex: 1, gap: 2 },
   meName: { ...typography.heading, color: colors.text },
   meHandle: { ...typography.small, color: colors.textMuted },
-  edit: { minHeight: 34, paddingHorizontal: 16, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center' },
+  edit: { minHeight: buttonShape.smallHeight, paddingHorizontal: 16, borderRadius: buttonShape.smallRadius, ...buttonShape.curve, borderWidth: 1, borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center' },
   editText: { ...typography.smallStrong, color: colors.text },
   search: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 42, paddingHorizontal: 14, marginBottom: spacing.xl, borderWidth: StyleSheet.hairlineWidth, borderColor: `${colors.borderStrong}55` },
   searchInput: { flex: 1, ...typography.body, color: colors.text, paddingVertical: 0 },

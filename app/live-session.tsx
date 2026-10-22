@@ -18,7 +18,7 @@ import { confirm } from '@/lib/confirm';
 import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
-import { colors, font, lift, pageIsDark, radius, spacing, typography } from '@/theme';
+import { buttonShape, colors, font, lift, pageIsDark, radius, spacing, typography } from '@/theme';
 
 // Why it didn't go through is said when it is tried, in the app's own note, so the row stays one line.
 const refusedNote = (why: string) => showToast({ title: 'Only you can see this session', body: why, icon: 'lock-closed-outline', long: true });
@@ -238,7 +238,7 @@ const styleDefinitions = StyleSheet.create({
   controls: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.xs },
   second: { ...lift, flex: 1, height: 58, borderRadius: radius.pill, backgroundColor: colors.surface, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   secondText: { ...typography.bodyStrong, fontSize: 16, color: colors.text },
-  primary: { flex: 1, height: 58, borderRadius: radius.pill, backgroundColor: colors.brand, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, overflow: 'hidden', boxShadow: '0px 8px 20px rgba(0, 0, 0, 0.16)' },
+  primary: { flex: 1, height: 58, borderRadius: 14, ...buttonShape.curve, backgroundColor: colors.brand, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, overflow: 'hidden', boxShadow: '0px 8px 20px rgba(0, 0, 0, 0.16)' },
   primaryDark: { boxShadow: '0px 8px 20px rgba(0, 0, 0, 0.4)' },
   primaryText: { ...typography.bodyStrong, fontSize: 16, color: colors.brandInk },
   pressed: { opacity: PRESS_DIM },

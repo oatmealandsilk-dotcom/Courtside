@@ -6,7 +6,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 
 import { Chip, BrandWash } from '@/components/ui';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import { colors, font, lift, radius, spacing, typography } from '@/theme';
+import { buttonShape, colors, font, lift, radius, spacing, typography } from '@/theme';
 import { TextScale } from '@/theme/textScale';
 
 /*
@@ -223,7 +223,7 @@ export function Submit({ label, onPress, disabled = false, busy = false, waiting
         </View>
       ) : (
         <>
-          {off ? null : <BrandWash />}
+          {off ? null : <BrandWash radius={buttonShape.radius} />}
           <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.submitText, off && styles.submitTextOff]}>{disabled && waiting ? waiting : label}</Text>
         </>
       )}
@@ -288,12 +288,14 @@ const styleDefinitions = StyleSheet.create({
   tileSoftTopOn: { color: colors.text, ...font('600') },
   fadeRight: { position: 'absolute', right: 0, top: 0, bottom: 0, width: FADE },
   fadeGone: { opacity: 0 },
-  submit: { minHeight: 54, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
+  // Instagram's shape (Oct 22): a rounded rectangle with Apple's smooth corner; a touch taller than a
+  // page's button, as the one thing a sheet or sign-in asks you to tap.
+  submit: { minHeight: 48, borderRadius: buttonShape.radius, ...buttonShape.curve, alignItems: 'center', justifyContent: 'center' },
   submitOn: { backgroundColor: colors.brand, boxShadow: '0px 8px 20px rgba(0, 0, 0, 0.16)' },
   submitOff: { backgroundColor: colors.surfaceAlt },
   submitBusy: { opacity: 0.92 },
   submitRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  submitText: { ...typography.bodyStrong, fontSize: 16, color: colors.brandInk },
+  submitText: { ...typography.bodyStrong, fontSize: buttonShape.label, color: colors.brandInk },
   submitTextOff: { color: colors.textMuted },
   fine: { ...typography.small, color: colors.textFaint, textAlign: 'center', marginTop: -spacing.md },
   tileInCard: { backgroundColor: colors.bg, boxShadow: 'none' },

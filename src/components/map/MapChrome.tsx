@@ -41,7 +41,7 @@ import { openCourt, openCourtReel, playHere, postFromCourt, sendCourtToChat } fr
 import { Toggle } from '@/components/ui';
 import type { MapFilter, Placed } from '@/features/players/mapModel';
 import type { Weather } from '@/lib/weather';
-import { TextScale, colors, oneLine, font, pageIsDark, radius, spacing, typography, withAlpha } from '@/theme';
+import { buttonShape, TextScale, colors, oneLine, font, pageIsDark, radius, spacing, typography, withAlpha } from '@/theme';
 import { levelBadge } from '@/lib/badges';
 import { agoLabel, agoShort } from '@/components/map/markers';
 import { MAP_CREDITS } from '@/components/map/credits';
@@ -823,7 +823,7 @@ export function WhereCard({ locating, onLocation }: { locating?: boolean; onLoca
       </View>
       <View style={[styles.personActions, { marginTop: spacing.xs }]}>
         <Pressable accessibilityRole="button" onPress={onLocation} disabled={locating} style={styles.primary}>
-          <BrandWash />
+          <BrandWash radius={buttonShape.smallRadius} />
           {locating ? <ActivityIndicator size="small" color={colors.brandInk} /> : <Ionicons name="navigate" size={16} color={colors.brandInk} />}
           <Text {...oneLine(TextScale.TITLE, 0.8)} style={styles.primaryText}>Use my location</Text>
         </Pressable>
@@ -916,13 +916,13 @@ export function PlayerSheet({ placed, following, onClose, onProfile, onMessage, 
         <View style={styles.cardSlot}>
           {onAskToHit ? (
             <Tappable accessibilityLabel={`Ask ${user.name} to hit`} onPress={onAskToHit} scaleTo={0.97} hoverTo={1.02} style={[styles.cardPill, styles.cardPrimary, pageIsDark() ? styles.cardLiftDark : styles.cardLift]}>
-              <BrandWash />
+              <BrandWash radius={buttonShape.radius} />
               <HitGlyph size={CARD_PILL_ICON} color={colors.brandInk} />
               <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.cardPrimaryText} numberOfLines={1}>{primaryLabel}</Text>
             </Tappable>
           ) : (
             <Tappable accessibilityLabel={`Message ${user.name}`} onPress={onMessage} scaleTo={0.97} hoverTo={1.02} style={[styles.cardPill, styles.cardPrimary, pageIsDark() ? styles.cardLiftDark : styles.cardLift]}>
-              <BrandWash />
+              <BrandWash radius={buttonShape.radius} />
               <Ionicons name="paper-plane-outline" size={CARD_PILL_ICON} color={colors.brandInk} />
               <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.cardPrimaryText} numberOfLines={1}>{primaryLabel}</Text>
             </Tappable>
@@ -1154,7 +1154,7 @@ export function CourtSheet({ court, miles, ringed = false, onClose }: { court: C
       <View style={styles.personActions}>
         {/* Three pills, a little tighter than the player card's, so they fit a 320pt phone. */}
         <Pressable accessibilityRole="link" accessibilityLabel="Directions" onPress={() => directionsTo(court)} style={[styles.primary, styles.pillTight]}>
-          <BrandWash />
+          <BrandWash radius={buttonShape.smallRadius} />
           <Ionicons name="navigate-outline" size={16} color={colors.brandInk} />
           <Text {...oneLine(TextScale.TITLE, 0.8)} style={styles.primaryText}>Directions</Text>
         </Pressable>
@@ -1349,7 +1349,7 @@ export function CitylessCard({ onOpenMap }: { onOpenMap?: () => void }) {
       <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.citylessBody}>Add your city to see the players near you.</Text>
       <View style={styles.citylessActions}>
         <Pressable accessibilityRole="button" onPress={() => router.push('/edit-profile')} style={styles.primary}>
-          <BrandWash />
+          <BrandWash radius={buttonShape.smallRadius} />
           <Text {...oneLine(TextScale.TITLE, 0.8)} style={styles.primaryText}>Add my city</Text>
         </Pressable>
         {onOpenMap ? (
@@ -1568,7 +1568,7 @@ const styleDefinitions = StyleSheet.create({
   // Each pill starts at its own words' width and the two share what is left equally, so Ask to hit
   // never squeezes to "Ask to h…" beside a shorter Message. Follow drawing in hands its room to them.
   cardSlot: { flexGrow: 1, flexShrink: 1, flexBasis: 'auto', minWidth: 0 },
-  cardPill: { height: CARD_ROUND, borderRadius: radius.pill, borderWidth: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: CARD_PILL_GAP, paddingHorizontal: CARD_PILL_PAD },
+  cardPill: { height: CARD_ROUND, borderRadius: buttonShape.radius, ...buttonShape.curve, borderWidth: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: CARD_PILL_GAP, paddingHorizontal: CARD_PILL_PAD },
   cardPrimary: { backgroundColor: colors.brand, borderColor: colors.brand },
   // The page's one shadow (DESIGN.md, Lift): the primary in its own colour; plain dark on a dark page.
   cardLift: { shadowColor: colors.brand, shadowOpacity: 0.28, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 3 },
@@ -1580,9 +1580,9 @@ const styleDefinitions = StyleSheet.create({
   // Hidden, for measuring the pills' words: a width of its own, so nothing squeezes them.
   cardMeasure: { position: 'absolute', right: 0, top: 0, width: 240, alignItems: 'flex-end', opacity: 0 },
   personActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
-  primary: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 40, paddingHorizontal: 16, borderRadius: radius.pill, backgroundColor: colors.brand },
+  primary: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: buttonShape.smallHeight, paddingHorizontal: 16, borderRadius: buttonShape.smallRadius, ...buttonShape.curve, backgroundColor: colors.brand },
   primaryText: { ...typography.smallStrong, color: colors.brandInk },
-  secondary: { minHeight: 40, paddingHorizontal: 16, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center' },
+  secondary: { minHeight: buttonShape.smallHeight, paddingHorizontal: 16, borderRadius: buttonShape.smallRadius, ...buttonShape.curve, borderWidth: 1, borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center' },
   secondaryText: { ...typography.smallStrong, color: colors.text },
   pillTight: { paddingHorizontal: 12 },
   pillIcon: { flexDirection: 'row', gap: 5 },

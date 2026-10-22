@@ -36,7 +36,7 @@ import * as haptics from '@/lib/haptics';
 import { useStillLoading } from '@/lib/useStillLoading';
 import { useApp } from '@/store/AppContext';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
-import { colors, font, pageIsDark, spacing, typography } from '@/theme';
+import { buttonShape, colors, font, pageIsDark, spacing, typography } from '@/theme';
 
 /**
  * The Tennis profile (Oct 5): a player's tennis in one place, yours or
@@ -131,7 +131,7 @@ function Mine({ user, offsetY, scrollRef }: { user: User; offsetY: SharedValue<n
       <View style={styles.buttons}>
         <View style={styles.primarySpot}>
           <Tappable accessibilityRole="button" accessibilityLabel="Log a session" onPress={() => router.push('/log-session')} scaleTo={0.97} hoverTo={1.02} style={[styles.primary, pageIsDark() ? styles.liftDark : styles.lift]}>
-            <BrandWash />
+            <BrandWash radius={buttonShape.radius} />
             <View style={styles.pillInner}>
               <Ionicons name="add" size={20} color={colors.brandInk} />
               <Text style={styles.primaryText}>Log a session</Text>
@@ -682,12 +682,12 @@ const styleDefinitions = StyleSheet.create({
   buttons: { flexDirection: 'row', gap: 10, marginTop: spacing.lg },
   pillInner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
   primarySpot: { flex: 1 },
-  primary: { height: 50, borderRadius: 999, backgroundColor: colors.brand, justifyContent: 'center', overflow: 'visible' },
+  primary: { height: buttonShape.height, borderRadius: buttonShape.radius, ...buttonShape.curve, backgroundColor: colors.brand, justifyContent: 'center', overflow: 'visible' },
   // The one shadow on the page: the primary action's, in its own colour (plain dark on a dark page).
   lift: { shadowColor: colors.brand, shadowOpacity: 0.28, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 3 },
   liftDark: { shadowColor: '#000000', shadowOpacity: 0.35, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 3 },
   primaryText: { ...typography.bodyStrong, color: colors.brandInk },
-  secondary: { height: 50, paddingHorizontal: 20, borderRadius: 999, backgroundColor: colors.surfaceAlt, borderWidth: 1, borderColor: colors.borderStrong, justifyContent: 'center' },
+  secondary: { height: buttonShape.height, paddingHorizontal: 20, borderRadius: buttonShape.radius, ...buttonShape.curve, backgroundColor: colors.surfaceAlt, borderWidth: 1, borderColor: colors.borderStrong, justifyContent: 'center' },
   secondaryText: { ...typography.bodyStrong, color: colors.text },
   // A tab's sections, each in its box, with room between them.
   tabBody: { gap: spacing.xxl, paddingTop: spacing.xl },
