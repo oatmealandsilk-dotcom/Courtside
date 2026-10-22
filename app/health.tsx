@@ -1,7 +1,7 @@
 import { PRESS_DIM } from '@/theme/press';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import Reanimated, { FadeIn, FadeOut, LayoutAnimationConfig, LinearTransition, ZoomIn } from 'react-native-reanimated';
 import { goBack } from '@/lib/goBack';
 import { router } from 'expo-router';
@@ -10,6 +10,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { Tappable } from '@/components/Tappable';
 import { BrandWash } from '@/components/ui/BrandWash';
+import { GlideHeight } from '@/components/ui/GlideHeight';
 import * as haptics from '@/lib/haptics';
 import { Screen } from '@/components/ui';
 import { appleHealthAvailable, inExpoGo } from '@/features/health/appleHealth';
@@ -230,11 +231,11 @@ export default function Health() {
     const offerBusy = loading && step === 'workouts';
     return (
       // A row eases to its new height when its buttons or cards come and go (Oct 22 sweep).
-      <Reanimated.View key={i.provider} layout={GLIDE} style={[styles.row, index > 0 && styles.rowLine]}>
+      <Reanimated.View key={i.provider} layout={ROW_GLIDE} style={[styles.row, index > 0 && styles.rowLine]}>
         <View style={[styles.disc, linked && styles.discOn]}>
           <Ionicons name={about.icon} size={20} color={linked ? colors.brandInk : colors.text} />
         </View>
-        <View style={styles.words}>
+        <Words style={styles.wordsBox} contentStyle={styles.wordsInner}>
           <View style={styles.nameRow}>
             <Text style={styles.name}>{NAME[i.provider] ?? i.label}</Text>
             {linked ? <View style={styles.dot} /> : null}
@@ -312,7 +313,7 @@ export default function Health() {
               </Reanimated.View>
             )
           ) : null}
-        </View>
+        </Words>
         {/* The tennis pill shows its own "Turning on…"; a second spinner beside it would be one too many. */}
         {loading && !(tennisCard && !i.readsWorkouts) && !offerBusy ? (
           <CourtSpinner size={26} />
@@ -394,7 +395,17 @@ export default function Health() {
   );
 }
 
-const GLIDE = LinearTransition.duration(220);
+/*
+ * A row eases to its new height when its buttons or cards come and go. On a phone the
+ * row itself glides (a layout transition). In a browser Reanimated does that by
+ * scaling the row, which stretches its words, so there the words column changes its
+ * real height instead (GlideHeight) and the row follows.
+ */
+const ROW_GLIDE = Platform.OS === 'web' ? undefined : LinearTransition.duration(220);
+function Words({ style, contentStyle, children }: { style: StyleProp<ViewStyle>; contentStyle: StyleProp<ViewStyle>; children: React.ReactNode }) {
+  if (Platform.OS === 'web') return <GlideHeight style={style} contentStyle={contentStyle} duration={220}>{children}</GlideHeight>;
+  return <View style={[style, contentStyle]}>{children}</View>;
+}
 
 const styleDefinitions = StyleSheet.create({
   lead: { ...typography.small, color: colors.textMuted, lineHeight: 20, paddingBottom: spacing.lg },
@@ -411,7 +422,8 @@ const styleDefinitions = StyleSheet.create({
   rowLine: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   disc: { width: 42, height: 42, borderRadius: 21, backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
   discOn: { backgroundColor: colors.brand },
-  words: { flex: 1, gap: 3 },
+  wordsBox: { flex: 1 },
+  wordsInner: { gap: 3 },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   name: { ...typography.bodyStrong, color: colors.text },
   dot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.brand },

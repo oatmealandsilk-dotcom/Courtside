@@ -63,8 +63,6 @@ export default function CoachDetail() {
   const [posting, setPosting] = useState(false);
   // The booking form folds shut around the service it was for, not an empty box (Oct 22 sweep).
   const lastService = useRef<string | null>(null);
-  // Once the review form has shown, it stays mounted so posting can fold it shut.
-  const hadReviewForm = useRef(false);
   // Opened cold (a link, a notification, a reload): wait for the data before saying "not found".
   const loading = useStillLoading() && !loadError;
 
@@ -83,7 +81,8 @@ export default function CoachDetail() {
   const services = coach.services.filter((s) => isOwner || (s as { active?: boolean }).active !== false);
   const service = services.find((s) => s.id === selected);
   if (service) lastService.current = service.id;
-  const formService = service ?? services.find((s) => s.id === lastService.current);
+  // Mounted closed from the start, so it is measured before the first pick and glides open.
+  const formService = service ?? services.find((s) => s.id === lastService.current) ?? services[0];
   const mine = coachingRequests
     .filter((r) => r.coachId === coach.id && r.userId === currentUserId && r.status !== 'awaiting-payment')
     .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
@@ -94,7 +93,6 @@ export default function CoachDetail() {
   const myReview = reviews.find((r) => r.authorId === currentUserId);
   const canReview = !isOwner && !!currentUserId && !myReview && mine.some((r) => r.status === 'answered');
   const bookable = !isOwner && coach.listed !== false && paidBooking && coach.payoutsReady !== false;
-  if (canReview) hadReviewForm.current = true;
   const message = async () => {
     const lock = await actions.messageLock(user.id);
     if (lock) { showToast({ title: lock, icon: 'lock-closed-outline', long: true }); return; }
@@ -259,7 +257,7 @@ export default function CoachDetail() {
       )}
       {!isOwner && paidBooking && coach.payoutsReady === false ? <Text style={styles.muted}>{first} can’t take bookings yet. Message them, or ask a free question on the Coaching tab.</Text> : null}
 
-      {formService && bookable ? (
+      {formService && bookable && services.length ? (
         <Collapse open={!!service}>
         <View style={styles.form}>
           <Field
@@ -365,7 +363,8 @@ export default function CoachDetail() {
 
       {/* ------------------------------------------------------------ reviews */}
       <Text style={styles.sectionTitle}>Reviews</Text>
-      {hadReviewForm.current ? (
+      {/* Mounted closed for anyone signed in, so it glides open when they become able to review and folds shut on posting. */}
+      {!isOwner && currentUserId ? (
         <Collapse open={canReview}>
         <View style={styles.form}>
           <Text style={styles.formLead}>{first} answered you. How did it go?</Text>
@@ -426,7 +425,7 @@ export default function CoachDetail() {
 }
 
 /** A new review or result fades in where it lands (Oct 22 sweep); the ones there on arrival just show. */
-const ARRIVE = FadeIn.duration(240).easing(Easing.out(Easing.cubic));
+const ARRIVE = FadeIn.duration(240).easing(Easing.bezier(0.33, 1, 0.68, 1));
 
 const styleDefinitions = StyleSheet.create({
   wait: { paddingVertical: 60, alignItems: 'center' },

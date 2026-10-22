@@ -21,7 +21,7 @@ interface Props {
 }
 
 /** One soft arrival for every empty card, instead of popping in from a spinner or a list. */
-const ARRIVE = FadeIn.duration(240).easing(Easing.out(Easing.cubic));
+const ARRIVE = FadeIn.duration(240).easing(Easing.bezier(0.33, 1, 0.68, 1));
 
 /** Nothing here yet: a quiet mark, a line on why, and air around it. */
 export function EmptyState({ icon, glyph, title, body, action }: Props) {

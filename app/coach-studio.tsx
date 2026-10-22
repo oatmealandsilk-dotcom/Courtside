@@ -226,7 +226,7 @@ export default function CoachStudio() {
   const editing = !!draft && coach.services.some((s) => s.id === draft.id);
   // It fades in where it opens while the card around it eases to its new height (Oct 22 sweep).
   const editor = draft ? (
-    <Animated.View entering={FadeIn.duration(220).easing(Easing.out(Easing.cubic))} style={styles.editor}>
+    <Animated.View entering={FadeIn.duration(220).easing(Easing.bezier(0.33, 1, 0.68, 1))} style={styles.editor}>
       <Text style={styles.editorTitle}>{editing ? 'Edit service' : 'New service'}</Text>
       <Text style={styles.label}>Kind</Text>
       <View style={styles.chips}>{(KINDS.includes(draft.kind) ? KINDS : [...KINDS, draft.kind]).map((k) => <Chip key={k} label={KIND_LABEL[k]} selected={draft.kind === k} onPress={() => setDraft({ ...draft, kind: k })} />)}</View>

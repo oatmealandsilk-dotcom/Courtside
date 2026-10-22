@@ -499,7 +499,7 @@ function Train() {
 }
 
 /** A new chat line, the thinking bubble or an opened day fades in rather than popping. */
-const ARRIVE = FadeIn.duration(220).easing(Easing.out(Easing.cubic));
+const ARRIVE = FadeIn.duration(220).easing(Easing.bezier(0.33, 1, 0.68, 1));
 
 /** One figure in the week's summary: no box, just the number and what it is. */
 function Stat({ label, value, hint, tint }: { label: string; value: string; hint: string; tint?: string }) {

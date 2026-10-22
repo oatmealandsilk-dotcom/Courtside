@@ -2,7 +2,7 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef, useState } from 'react';
 import { Keyboard, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import Reanimated, { Easing, FadeIn, interpolateColor, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Reanimated, { Easing, FadeIn, ReduceMotion, interpolateColor, runOnJS, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated';
 import { goBack } from '@/lib/goBack';
 import { useAndroidBack } from '@/lib/androidBack';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -75,10 +75,18 @@ export default function AskCoach() {
   // animation (see the root layout), so without this it cut in and out.
   const slide = !hero && !web;
   const { height: screenH } = useWindowDimensions();
-  const rise = useSharedValue(slide ? 0 : 1);
+  // Reduce Motion: no slide. The page stays put and a plain fill of the page colour
+  // fades off it (and back over it on close). Only that fill's opacity moves, never
+  // the card's or a parent's, so the glass header inside is never faded.
+  const still = useReducedMotion();
+  const rise = useSharedValue(slide && !still ? 0 : 1);
+  const cover = useSharedValue(slide && still ? 1 : 0);
   useEffect(() => {
-    if (slide) rise.value = withTiming(1, { duration: 320, easing: Easing.bezier(0.2, 0.8, 0.2, 1) });
-  }, [slide, rise]);
+    if (!slide) return;
+    if (still) cover.value = withTiming(0, { duration: 200, easing: Easing.bezier(0.33, 1, 0.68, 1), reduceMotion: ReduceMotion.Never });
+    else rise.value = withTiming(1, { duration: 320, easing: Easing.bezier(0.2, 0.8, 0.2, 1) });
+  }, [slide, still, rise, cover]);
+  const coverStyle = useAnimatedStyle(() => ({ opacity: cover.value }));
   const home = useSharedValue({ x: 0, y: 0, w: 1, h: 1 });
   const start = useSharedValue({ x: 0, y: 0, w: 1, h: 1 });
   const [startRect, setStartRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
@@ -147,7 +155,9 @@ export default function AskCoach() {
       if (closing.current) return;
       closing.current = true;
       Keyboard.dismiss();
-      rise.value = withTiming(0, { duration: 260, easing: Easing.bezier(0.4, 0, 0.6, 1) }, (done) => { if (done) runOnJS(goBack)(); });
+      const back = (done?: boolean) => { 'worklet'; if (done) runOnJS(goBack)(); };
+      if (still) cover.value = withTiming(1, { duration: 160, easing: Easing.bezier(0.4, 0, 1, 1), reduceMotion: ReduceMotion.Never }, back);
+      else rise.value = withTiming(0, { duration: 260, easing: Easing.bezier(0.4, 0, 0.6, 1) }, back);
       return;
     }
     if (!hero) { goBack(); return; }
@@ -281,6 +291,7 @@ export default function AskCoach() {
       </ScrollView>
     </Screen>
     </Reanimated.View>
+    {slide && still ? <Reanimated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: colors.bg }, coverStyle]} /> : null}
     </Reanimated.View>
     {/* The box it grew from, fading as the page opens out of it. */}
     {hero && startRect ? (

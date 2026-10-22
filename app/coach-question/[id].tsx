@@ -5,7 +5,8 @@ import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { goBack } from '@/lib/goBack';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import Reanimated, { Easing, FadeIn, FadeOut, LayoutAnimationConfig, LinearTransition } from 'react-native-reanimated';
+import Reanimated, { Easing, FadeIn, FadeOut, LayoutAnimationConfig } from 'react-native-reanimated';
+import { GlideHeight } from '@/components/ui/GlideHeight';
 
 import { MediaPlaceholder } from '@/components/MediaPlaceholder';
 import { ClipVideo } from '@/components/ClipVideo';
@@ -209,13 +210,16 @@ export default function CoachQuestionDetail() {
         {replies.length || hiddenReplies.length ? 'Coach replies' : 'No replies yet'}
       </Reanimated.Text>
 
+      {/* The replies change their real height (never a scale), so the answer box below glides
+          when one arrives, and the box itself never trails behind a growing answer field. */}
+      <GlideHeight>
       {replies.map((reply) => {
         const coachUser = users.find((u) => u.id === reply.coachUserId);
         const coach = coaches.find((c) => c.userId === reply.coachUserId);
         const helpful = Boolean(currentUserId && reply.helpfulBy.includes(currentUserId));
         const mark = jump.target(reply.id);
         return (
-          <Reanimated.View key={reply.id} entering={FADE} layout={GLIDE} style={styles.reply} ref={mark?.ref} onLayout={mark?.onLayout} collapsable={mark ? false : undefined}>
+          <Reanimated.View key={reply.id} entering={FADE} style={styles.reply} ref={mark?.ref} onLayout={mark?.onLayout} collapsable={mark ? false : undefined}>
             {mark ? <JumpFlash lit={mark.lit} inset={8} /> : null}
             <Pressable
               accessibilityRole="link"
@@ -286,16 +290,17 @@ export default function CoachQuestionDetail() {
       ) : null}
 
       {hiddenReplies.length ? (
-        <Reanimated.View layout={GLIDE} style={styles.hiddenReplies}>
+        <View style={styles.hiddenReplies}>
           <HiddenComments count={hiddenReplies.length} noun="replies">
             {hiddenReplies.map((r) => <HiddenReplyRow key={r.id} authorId={r.coachUserId} body={r.body} createdAt={r.createdAt} onUnhide={() => actions.unhideByWords('coach-reply', r.id)} />)}
           </HiddenComments>
-        </Reanimated.View>
+        </View>
       ) : null}
+      </GlideHeight>
 
       {/* A coach does not answer their own question (nor is pitched to apply on it). */}
       {removed || (iAmCoach && mine) ? null : iAmCoach ? (
-        <Reanimated.View layout={GLIDE} style={styles.composer}>
+        <View style={styles.composer}>
           <Field
             label="Your answer"
             value={draft}
@@ -309,7 +314,7 @@ export default function CoachQuestionDetail() {
             disabled={draft.trim().length < 20}
             full
           />
-        </Reanimated.View>
+        </View>
       ) : (
         <Pressable
           accessibilityRole="link"
@@ -368,9 +373,8 @@ export default function CoachQuestionDetail() {
   );
 }
 
-/** A new answer or a changed line fades in; what sits below it glides to its new place. */
-const FADE = FadeIn.duration(240).easing(Easing.out(Easing.cubic));
-const GLIDE = LinearTransition.duration(240).easing(Easing.bezier(0.22, 0.61, 0.36, 1));
+/** A new answer or a changed line fades in; what sits below it glides to its new place (GlideHeight). */
+const FADE = FadeIn.duration(240).easing(Easing.bezier(0.33, 1, 0.68, 1));
 
 const styleDefinitions = StyleSheet.create({
   head: { gap: spacing.md, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
