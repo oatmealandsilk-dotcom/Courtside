@@ -57,4 +57,9 @@ export interface NearbyMapProps {
    * in view, even part way, fades its cover off as usual.
    */
   inView?: () => boolean;
+  /**
+   * The still card holds the opening curtain until it shows its map (useStartMapHold). Off for a copy
+   * of the card that is not what the app opens on (the feed's FeedFindPlayers), so it never slows it.
+   */
+  holdCurtain?: boolean;
 }

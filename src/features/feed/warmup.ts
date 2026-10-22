@@ -145,6 +145,23 @@ export const curtainHasLifted = () => downAt > 0;
 /** Whether the curtain is off the screen right now (useCurtainDown, read once outside of a draw). */
 export const isCurtainDown = () => down;
 const subscribeDown = (fn: () => void) => { downListeners.add(fn); return () => { downListeners.delete(fn); }; };
+/**
+ * Where the opening curtain is right now, for a map card deciding how to
+ * reveal itself (NearbyMap): 'up' while it still covers everything (a change
+ * under it is never seen, so it is made at once), 'lifting' while it fades
+ * (a change then would show through it, so it waits), 'down' once it has gone.
+ */
+export function curtainState(): 'up' | 'lifting' | 'down' {
+  if (down) return 'down';
+  return ready() ? 'lifting' : 'up';
+}
+/** Told once, the next time the curtain is off the screen (at once if it already is). Returns a way to stop waiting. */
+export function whenCurtainDown(fn: () => void): () => void {
+  if (down) { fn(); return () => undefined; }
+  const once = () => { downListeners.delete(once); fn(); };
+  downListeners.add(once);
+  return () => { downListeners.delete(once); };
+}
 export function useCurtainDown() {
   return useSyncExternalStore(subscribeDown, () => down, () => down);
 }

@@ -92,7 +92,7 @@ const ringCourt = (r: CourtRing): Court => ({ id: r.courtId, name: r.name ?? 'Te
  * `focusHit` opens the map with that hit's card up; `focusPlace` (a place
  * picked in Find Players' search) opens it on that place with its courts listed.
  */
-export function useMapModel(me: User, players: User[], fix?: LatLng | null, focus?: TaggedCourt | null, card = false, focusHit?: string | null, focusUser?: string | null, focusSpot?: LatLng | null, locationOn = false, focusPlace?: FoundPlace | null) {
+export function useMapModel(me: User, players: User[], fix?: LatLng | null, focus?: TaggedCourt | null, card = false, focusHit?: string | null, focusUser?: string | null, focusSpot?: LatLng | null, locationOn = false, focusPlace?: FoundPlace | null, cardHint?: { lat: number; lng: number; name: string } | null) {
   const { lastSeen, actions, hitRequests, users, followingIds, currentUserId, blockedIds, mutedIds, courtRings, seeing } = useApp();
   // One stable function (it never changes), so asking for rings never repeats because something else did.
   const { loadCourtRings } = actions;
@@ -129,9 +129,16 @@ export function useMapModel(me: User, players: User[], fix?: LatLng | null, focu
     if (centre !== at) return { at: centre, name: nearestPlace(fixLat, fixLng).name.split(',')[0] };
     return { at, name: looked ?? 'you' };
   }, [fixLat, fixLng, looked]);
-  const city = live ? live.at : profileCity;
-  const cityPending = live ? false : profilePending;
-  const cityName = live ? live.name : me.location.trim() ? me.location.split(',')[0] : 'you';
+  // The still card only: with Location on and no fix yet this time, the town it showed last time
+  // (cardShot's hint, kept on this phone), so it opens where it will most likely stay instead of on
+  // your profile's city and then moving. Only the card's centre and name: never your pin or your spot.
+  const hinted = card && !live && locationOn && cardHint ? cardHint : null;
+  const hintLat = hinted?.lat;
+  const hintLng = hinted?.lng;
+  const hintAt = useMemo(() => (hintLat !== undefined && hintLng !== undefined ? { lat: hintLat, lng: hintLng } : null), [hintLat, hintLng]);
+  const city = live ? live.at : hintAt ?? profileCity;
+  const cityPending = live || hinted ? false : profilePending;
+  const cityName = live ? live.name : hinted ? hinted.name : me.location.trim() ? me.location.split(',')[0] : 'you';
   // Without a fix here (a computer that was never asked), your own last spot
   // from the phone is the next best thing to where you are.
   const mine = lastSeen[me.id];
