@@ -90,15 +90,16 @@ export function Toast() {
     return () => sub.remove();
   }, []);
 
-  // How far the question card (HitNote) travels to be out of sight: it slides all the way off its
-  // edge rather than fading, as glass must never sit under a fade (Oct 17: the iPhone drew it see-through).
+  // How far a toast travels to be out of sight: it slides all the way off the top edge rather than
+  // fading, as glass must never sit under a fade (Oct 17: the iPhone drew it see-through; Oct 21: the
+  // plain toast too, "Your hit is up" with the Community title showing through it).
   const away = useSharedValue(OFF_MIN);
   const hide = (how: ToastClosed = 'timeout') => {
     settle(how);
     if (timer.current) clearTimeout(timer.current);
     const note = !!(toastRef.current?.look && toastRef.current.person);
-    y.value = withTiming(note ? -away.value : -24, { duration: note ? 240 : 200, easing: OUT });
-    shown.value = withTiming(0, { duration: note ? 240 : 200, easing: OUT }, (done) => { if (done) runOnJS(setToast)(null); });
+    y.value = withTiming(-away.value, { duration: note ? 240 : 220, easing: OUT });
+    shown.value = withTiming(0, { duration: note ? 240 : 220, easing: OUT }, (done) => { if (done) runOnJS(setToast)(null); });
   };
 
   useEffect(() => {
@@ -109,10 +110,10 @@ export function Toast() {
     shownAt.current = Date.now();
     setToast(incoming);
     const note = !!(incoming.look && incoming.person);
-    // From above the clock: far enough to start out of sight.
-    away.value = note ? insets.top + OFF_MIN : OFF_MIN;
+    // From above the clock: far enough to start out of sight (and clear of a message banner it sits under).
+    away.value = insets.top + OFF_MIN + below;
     if (timer.current) clearTimeout(timer.current);
-    y.value = note ? -away.value : -24;
+    y.value = -away.value;
     shown.value = 0;
     y.value = withTiming(0, { duration: note ? 380 : 320, easing: IN });
     shown.value = withTiming(1, { duration: 260, easing: IN });
@@ -138,12 +139,8 @@ export function Toast() {
       else y.value = withTiming(0, { duration: 200, easing: IN });
     });
 
-  const style = useAnimatedStyle(() => ({
-    opacity: shown.value,
-    transform: [{ translateY: y.value + underBanner.value }, { scale: 0.96 + shown.value * 0.04 }],
-  }));
-  // The question card (HitNote) is glass: it comes and goes by moving only, never by fading
-  // (no opacity on any parent of a Glass, Oct 17). It slides in from its edge and back out.
+  // Every toast is glass: it comes and goes by moving only, never by fading (no opacity on any
+  // parent of a Glass, Oct 17). It slides in from the top edge and back out.
   const slide = useAnimatedStyle(() => ({
     transform: [{ translateY: y.value + underBanner.value }, { scale: 0.97 + shown.value * 0.03 }],
   }));
@@ -172,9 +169,9 @@ export function Toast() {
   const action = toast.action;
   const card = (
     <GestureDetector gesture={flick}>
-      <Animated.View pointerEvents="box-none" style={[styles.wrap, { top: insets.top + spacing.xs }, style]}>
+      <Animated.View pointerEvents="box-none" style={[styles.wrap, { top: insets.top + spacing.xs }, slide]}>
         <View style={styles.shadow}>
-          <Glass radius={22} style={styles.card}>
+          <Glass behind radius={22} style={[styles.card, styles.solid]}>
             <View style={styles.row}>
               <Pressable
                 accessibilityRole={toast.href ? 'link' : 'text'}
@@ -303,7 +300,7 @@ function HitNote({ toast, hide }: { toast: ToastMessage; hide: (how?: ToastClose
   };
   return (
     <View style={[styles.shadow, styles.noteShadow]}>
-      <Glass radius={20} style={styles.card}>
+      <Glass behind radius={20} style={[styles.card, styles.solid]}>
         <View style={[styles.noteRow, styles.noteRowSlim]}>
           <Pressable
             accessibilityRole={toast.href ? 'link' : 'text'}
@@ -397,6 +394,9 @@ const styleDefinitions = StyleSheet.create({
   wrap: { position: 'absolute', left: spacing.lg, right: spacing.lg, zIndex: 50, alignItems: 'center' },
   // The shadow on a rounded layer of its own, so it follows the capsule's corners.
   shadow: { maxWidth: 340, borderRadius: 22, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 16, shadowOffset: { width: 0, height: 6 }, elevation: 6 },
+  // A solid ground under the glass (Oct 21, owner: "This top shouldn't be clear"): it sits over the page's
+  // big title and its bell, which showed right through it. The glass's sheen stays; the words always read.
+  solid: { backgroundColor: colors.surface },
   card: { borderWidth: StyleSheet.hairlineWidth, borderColor: `${colors.borderStrong}55` },
   row: { flexDirection: 'row', alignItems: 'center', minHeight: 44 },
   info: { flexShrink: 1, flexDirection: 'row', alignItems: 'center', gap: 9, paddingVertical: 10, paddingHorizontal: 16, minHeight: 44 },

@@ -163,6 +163,14 @@ export function Glass({ children, style, radius = 999, interactive = false, tint
   // Read at draw time, so the veil is the court you are on, not the one the file loaded with.
   const veil = { backgroundColor: `${(tint ?? colors.surface).slice(0, 7)}${clear ? 'B3' : 'CC'}` };
   if (Platform.OS === 'ios' && isLiquidGlassAvailable()) {
+    // Glass that will be put up again once all round it is still (inside GlassRenew) is not put up
+    // at all until then: put up while the map's buttons fade in, it is the flat white plate that only
+    // later turns clear (Oct 21, owner: the players pill "starts out as colored filled then goes to
+    // clear after. Make it always clear"). Until its first renewal it is a light, see-through veil of
+    // the same colour, which fades like any view, so it is clear from the first frame.
+    if (outer === 0 && !renew) {
+      return <View pointerEvents={through} style={[rounded, { backgroundColor: `${(tint ?? colors.surface).slice(0, 7)}${dark ? '8C' : '80'}` }, style]}>{children}</View>;
+    }
     const look = { glassEffectStyle: 'regular' as const, isInteractive: interactive || clear, tintColor: clear && tint ? `${tint.slice(0, 7)}BF` : tint, colorScheme: dark ? 'dark' as const : 'light' as const };
     if (behind) {
       // Out under the hairline edge too, as when it held what it shows: no ring of bare page inside the edge.
