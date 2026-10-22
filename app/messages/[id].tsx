@@ -670,7 +670,18 @@ export default function Thread() {
    */
   const toggleEmoji = () => {
     composer.current?.closePlus();
-    if (PHONE_EMOJI) { composer.current?.focus(); return; }
+    if (PHONE_EMOJI) {
+      // Android can close the keyboard (Back, or the gesture) while the box
+      // keeps focus, and focusing an already focused box does nothing. So let
+      // go first, then take it again, and the keyboard comes back.
+      if (Platform.OS === 'android' && !Keyboard.isVisible()) {
+        composer.current?.blur();
+        setTimeout(() => composer.current?.focus(), 50);
+        return;
+      }
+      composer.current?.focus();
+      return;
+    }
     if (emojiOpen) { setEmojiOpen(false); composer.current?.focus(); return; }
     Keyboard.dismiss();
     setEmojiOpen(true);
@@ -681,7 +692,7 @@ export default function Thread() {
    * the keyboard goes down behind the sheet or picker as it rises, and stays
    * down when it closes. (Left focused, the phone put the keyboard back on
    * the way out, and the whole bar dropped and rose again.) The emoji
-   * keyboard, being part of the page, simply stays open underneath: taking
+   * keyboard (browser only), being part of the page, simply stays open underneath: taking
    * it away would drop the bar in one jump.
    */
   const letGo = () => { composer.current?.blur(); Keyboard.dismiss(); };
@@ -824,7 +835,7 @@ export default function Thread() {
     lastKey.current = now;
     if (now - lastPing.current > 2000) { lastPing.current = now; typingLink.current?.ping(); }
   };
-  // Tapping into the words brings the phone keyboard back in the emoji keyboard's place.
+  // Tapping into the words brings the phone keyboard back in the emoji keyboard's place (browser only).
   const boxFocused = (on: boolean) => {
     setTypingFocus(on);
     if (on && emojiOpen && !desktopWeb) setEmojiOpen(false);
