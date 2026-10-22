@@ -35,6 +35,7 @@ import { reasonFromLabel } from '@/features/moderation/reasons';
 import { openRules } from '@/features/moderation/RemovedNote';
 import { useInstantsOn, withoutInstantRows } from '@/features/stories/instantsSwitch';
 import { useArrived } from '@/lib/useArrived';
+import { toastForJoin } from '@/features/groups/GroupInvitesSection';
 
 /**
  * One row per thing that happened to you, the way Instagram does it.
@@ -90,6 +91,8 @@ const ICON: Record<NotificationKind, { name: keyof typeof Ionicons.glyphMap | 'h
   'session-tag': { name: 'pricetag', tint: 'court' },
   // Your week on court (migration 130): the recap's bars.
   'weekly-recap': { name: 'stats-chart', tint: 'brand' },
+  // Invited to a group (migration 181): the groups mark.
+  'group-invite': { name: 'people', tint: 'brand' },
 };
 // The hit mark fills the badge's inside (19 less its 2pt rim on each side), drawn bold for that size.
 const HIT_BADGE = 14;
@@ -139,6 +142,8 @@ const VERB: Record<NotificationKind, string> = {
   'session-tag': 'tagged you in a session',
   // The whole line comes from the row's preview (migration 130); see verbFor.
   'weekly-recap': 'is ready',
+  // The group's name comes from the row's preview; see verbFor.
+  'group-invite': 'invited you to a group',
 };
 
 interface Group {
@@ -171,6 +176,8 @@ function routeFor(group: Group): string {
   if (group.kind === 'weekly-recap') return `/weekly-recap?week=${encodeURIComponent(group.targetId)}`;
   // Tagged in someone's session: the tag's sheet (its target is their session).
   if (group.kind === 'session-tag') return `/session-tag?session=${group.targetId}`;
+  // Invited to a group: its page, where Join waits too.
+  if (group.kind === 'group-invite') return `/g/${group.targetId}`;
   // A coach application update opens the application, which shows where it stands.
   if (group.kind === 'coach-application') return '/coach-apply';
   // Anything about a booking opens the booking.
@@ -293,7 +300,7 @@ function activityNow(a: DetectedActivity | undefined): { who: string; verb: stri
 
 export default function Notifications() {
   const styles = useThemedStyles(styleDefinitions);
-  const { notifications, users, posts, stories, comments, hitRequests, conversations, messages, questions, currentUserId, currentUser, followRequests, followingIds, followedCourts, sessionTags, detectedActivities, actions, blockedIds } = useApp();
+  const { notifications, users, posts, stories, comments, hitRequests, conversations, messages, questions, currentUserId, currentUser, followRequests, followingIds, followedCourts, sessionTags, detectedActivities, feedGroupInvites, actions, blockedIds } = useApp();
   // Each person and post by id, once: every row looks its people and its post up several times, and
   // searching the whole list each time was slow to open (Oct 10, owner: "the buttons like the settings.
   // msg notifications, etc respond too slow"). The first of any id wins, as searching found it.
@@ -345,6 +352,17 @@ export default function Notifications() {
     }
     setAnswering(null);
   };
+  // Join / Not now on an invite to a group, while it is still open (migration 181).
+  const inviteFor = (group: Group) => (group.kind === 'group-invite' ? feedGroupInvites.find((i) => i.groupId === group.targetId) : undefined);
+  const [answeringInvite, setAnsweringInvite] = useState<{ id: string; accept: boolean } | null>(null);
+  const answerInvite = async (groupId: string, name: string, accept: boolean) => {
+    if (answeringInvite) return;
+    setAnsweringInvite({ id: groupId, accept });
+    const out = await actions.answerFeedGroupInvite(groupId, accept);
+    setAnsweringInvite(null);
+    if (out.ok) toastForJoin(out.outcome, name);
+    else showToast({ title: out.error, icon: out.word === 'group_limit' ? 'people-outline' : 'alert-circle-outline', long: out.word === 'group_limit' });
+  };
   // "Replied to your comment" opens the comments at that reply, its thread
   // unfolded. The reply is the one by that person on that post with the same
   // words (the notification keeps them), else the nearest in time. A post or
@@ -393,6 +411,8 @@ export default function Notifications() {
     }
     if (group.kind === 'review-request') return `asked for a review of their ${reviewAsk(group.preview).thing}`;
     if (group.kind === 'session-tag') return `tagged you in a ${group.preview === 'match' ? 'match' : 'practice'}`;
+    // "Mira invited you to Silver Lake sunrise" (the name is the row's preview).
+    if (group.kind === 'group-invite') return group.preview ? `invited you to ${group.preview}` : VERB['group-invite'];
     // A workout you have since logged (the tap opens the post for it), hidden or gone: no longer "Tap to log it".
     if (group.kind === 'activity') {
       const now = activityNow(detectedActivities.find((a) => a.id === group.targetId));
@@ -608,6 +628,7 @@ export default function Notifications() {
             const thumb = thumbFor(group);
             const hitChat = hitChatFor(group);
             const tag = tagFor(group);
+            const groupInvite = inviteFor(group);
             const verb = verbFor(group);
 
             return (
@@ -686,7 +707,7 @@ export default function Notifications() {
                     </>
                   ) : group.kind === 'review' ? (
                     <Text style={styles.preview} numberOfLines={2}>Thanks for asking. It’s back where it was.</Text>
-                  ) : group.kind === 'review-request' ? null : group.preview && group.kind !== 'milestone' && group.kind !== 'weekly-recap' && group.preview !== INVITE_LINE ? (
+                  ) : group.kind === 'review-request' || group.kind === 'group-invite' ? null : group.preview && group.kind !== 'milestone' && group.kind !== 'weekly-recap' && group.preview !== INVITE_LINE ? (
                     <Text style={styles.preview} numberOfLines={1}>
                       {group.preview}
                     </Text>
@@ -713,6 +734,30 @@ export default function Notifications() {
                         style={({ pressed }) => [styles.decline, styles.answerBox, (pressed || (!!answering && !(answering.id === tag.id && !answering.accept))) && styles.answerDim]}
                       >
                         {answering?.id === tag.id && !answering.accept ? <ActivityIndicator size="small" color={colors.textMuted} /> : <Text style={styles.declineText}>Decline</Text>}
+                      </Pressable>
+                    </View>
+                  ) : null}
+                  {groupInvite ? (
+                    <View style={styles.askRow}>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`Join ${groupInvite.name}`}
+                        accessibilityState={{ busy: answeringInvite?.id === groupInvite.groupId && answeringInvite.accept, disabled: !!answeringInvite }}
+                        disabled={!!answeringInvite}
+                        onPress={() => { void answerInvite(groupInvite.groupId, groupInvite.name, true); }}
+                        style={({ pressed }) => [styles.accept, styles.answerBox, (pressed || (!!answeringInvite && !(answeringInvite.id === groupInvite.groupId && answeringInvite.accept))) && styles.answerDim]}
+                      >
+                        {answeringInvite?.id === groupInvite.groupId && answeringInvite.accept ? <ActivityIndicator size="small" color={colors.brandInk} /> : <Text style={styles.acceptText}>Join</Text>}
+                      </Pressable>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`Not now, ${groupInvite.name}`}
+                        accessibilityState={{ busy: answeringInvite?.id === groupInvite.groupId && !answeringInvite.accept, disabled: !!answeringInvite }}
+                        disabled={!!answeringInvite}
+                        onPress={() => { void answerInvite(groupInvite.groupId, groupInvite.name, false); }}
+                        style={({ pressed }) => [styles.decline, styles.answerBox, (pressed || (!!answeringInvite && !(answeringInvite.id === groupInvite.groupId && !answeringInvite.accept))) && styles.answerDim]}
+                      >
+                        {answeringInvite?.id === groupInvite.groupId && !answeringInvite.accept ? <ActivityIndicator size="small" color={colors.textMuted} /> : <Text style={styles.declineText}>Not now</Text>}
                       </Pressable>
                     </View>
                   ) : null}

@@ -5,6 +5,7 @@ import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { Button, Screen } from '@/components/ui';
+import { GroupInvitesSection } from '@/features/groups/GroupInvitesSection';
 import { GroupTile } from '@/features/groups/GroupTile';
 import { goBack } from '@/lib/goBack';
 import { useApp } from '@/store/AppContext';
@@ -21,7 +22,7 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 
 export default function Groups() {
   const styles = useThemedStyles(styleDefinitions);
-  const { feedGroups, feedGroupsAsked, feedGroupsOn, currentUserId, actions } = useApp();
+  const { feedGroups, feedGroupsAsked, feedGroupsOn, feedGroupInvites, currentUserId, actions } = useApp();
   useEffect(() => { if (currentUserId) void actions.loadFeedGroups(); }, [currentUserId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const count = feedGroups.length;
@@ -33,6 +34,8 @@ export default function Groups() {
       <Text style={styles.intro}>A group’s feed shows everything its members post.</Text>
 
       {off ? <Text style={styles.notice}>Groups aren’t switched on yet. Check back soon.</Text> : null}
+
+      {feedGroupInvites.length ? <View style={styles.invites}><GroupInvitesSection /></View> : null}
 
       <View style={styles.sectionRow}>
         <Text style={styles.section}>Your groups</Text>
@@ -118,6 +121,7 @@ export default function Groups() {
 
 const styleDefinitions = StyleSheet.create({
   intro: { ...typography.body, color: colors.textMuted, paddingHorizontal: spacing.xs },
+  invites: { paddingTop: spacing.xl },
   notice: { ...typography.small, color: colors.textMuted, lineHeight: 19, paddingHorizontal: spacing.xs, paddingTop: spacing.md },
   sectionRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', paddingHorizontal: spacing.xs, paddingTop: spacing.xl, paddingBottom: spacing.sm },
   section: { ...typography.smallStrong, color: colors.textMuted },

@@ -6,7 +6,7 @@ import { DragSheet } from '@/components/DragSheet';
 import { Submit } from '@/components/sheet/SheetForm';
 import type { ID } from '@/data/types';
 import { FlowHeader } from '@/features/groups/create/FlowHeader';
-import { InvitePeople } from '@/features/groups/create/InvitePeople';
+import { InvitePeople, useSendGroupInvites } from '@/features/groups/create/InvitePeople';
 import { confirm } from '@/lib/confirm';
 import * as haptics from '@/lib/haptics';
 import { show as showToast } from '@/lib/toast';
@@ -17,8 +17,9 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 /*
  * "Invite" on a group's page and on its empty feed: the same last step as
  * Start a group, any time after, under the same header. The group's link to
- * copy or share, and the people you follow to tick; each one picked gets
- * the invite in your chat with them. Any member can invite; how people get
+ * copy or share, and people to tick; each one picked gets an invite with
+ * Join / Not now (migration 181; before it, the invite in your chat with
+ * them). Any member can invite; how people get
  * in (Open or Ask to join) is still the group's own. Opened from a link
  * before your groups have loaded, it waits for them rather than saying
  * you're not in it; closing with people ticked asks whether to send.
@@ -26,7 +27,8 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 export default function GroupInvite() {
   const styles = useThemedStyles(styleDefinitions);
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { feedGroups, feedGroupsOn, currentUserId, actions } = useApp();
+  const { feedGroups, feedGroupsOn, feedGroupInvitesLive, users, currentUserId, actions } = useApp();
+  const sendInvites = useSendGroupInvites();
   const group = feedGroups.find((g) => g.id === id);
   const [picked, setPicked] = useState<ID[]>([]);
   const [retrying, setRetrying] = useState(false);
@@ -39,9 +41,14 @@ export default function GroupInvite() {
 
   const sendNow = () => {
     if (!group || !picked.length) return;
-    actions.shareToChats({ userIds: picked }, { kind: 'group', id: group.id, name: group.name });
+    sendInvites(group, picked);
     haptics.reward();
-    showToast({ title: `${picked.length === 1 ? 'Invite' : `${picked.length} invites`} sent`, body: `To join ${group.name}.`, icon: 'paper-plane-outline' });
+    if (feedGroupInvitesLive) {
+      const one = picked.length === 1 ? users.find((u) => u.id === picked[0])?.name.split(' ')[0] : undefined;
+      showToast({ title: one ? `Invited ${one}` : `Invited ${picked.length} ${picked.length === 1 ? 'person' : 'people'}`, body: `To ${group.name}. They’ll get a notification.`, icon: 'paper-plane-outline' });
+    } else {
+      showToast({ title: `${picked.length === 1 ? 'Invite' : `${picked.length} invites`} sent`, body: `To join ${group.name}.`, icon: 'paper-plane-outline' });
+    }
   };
   const send = () => { sendNow(); dismiss(); };
 
@@ -84,7 +91,7 @@ export default function GroupInvite() {
           <View style={styles.footer}>
             {group ? (
               <Submit
-                label={`Send ${picked.length} ${picked.length === 1 ? 'invite' : 'invites'}`}
+                label={feedGroupInvitesLive ? `Invite ${picked.length}` : `Send ${picked.length} ${picked.length === 1 ? 'invite' : 'invites'}`}
                 waiting="Pick people to invite"
                 disabled={!picked.length}
                 onPress={send}

@@ -8,6 +8,7 @@ import { DragSheet } from '@/components/DragSheet';
 import { SearchField } from '@/components/SearchField';
 import { SheetTitle } from '@/components/sheet/SheetForm';
 import type { DiscoverGroup, ID } from '@/data/types';
+import { GroupInvitesSection } from '@/features/groups/GroupInvitesSection';
 import { GroupTile } from '@/features/groups/GroupTile';
 import { reportGroup } from '@/features/groups/reportGroup';
 import { confirm } from '@/lib/confirm';
@@ -28,7 +29,8 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
  * the buttons fade and say why when tapped. Groups are for everyone, teens
  * included (migration 149). The Groups page (from Profile, or "Manage" here) stays as it was.
  * Holding a group's row reports it (App Review 1.2), as holding a comment
- * does; a group you reported leaves the list.
+ * does; a group you reported leaves the list. Invites waiting for your
+ * answer (migration 181) come first of all, with Join / Not now.
  */
 
 const FULL_LINE = `You’re in ${MAX_GROUPS} groups, the most anyone can be in. Leave one to join another.`;
@@ -192,6 +194,8 @@ export default function FindGroups() {
           <Text style={styles.note}>Groups aren’t switched on yet. Check back soon.</Text>
         ) : (
           <>
+            {!searching ? <GroupInvitesSection onOpen={go} /> : null}
+
             <SearchField value={search} onChangeText={setSearch} placeholder="Search groups" accessibilityLabel="Search groups" />
 
             {!searching ? (

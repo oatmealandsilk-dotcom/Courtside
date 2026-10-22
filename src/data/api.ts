@@ -19,6 +19,7 @@ import { activityNotifications, demoFoundWorkouts, detectedActivities, foundWeek
 import { CURRENT_USER_ID, users } from './mock/users';
 import { DEMO_AFFILIATES, demoAffiliateStats, demoInvitees } from './mock/invites';
 import { DEMO_HITS_OF_YOURS, demoHitChat, demoHitNotifications, demoHits } from './mock/hits';
+import { demoGroupInviteNotifications } from './mock/groupInvites';
 import { isMapCourtId } from '@/features/places/courtName';
 import { milesBetween } from '@/features/players/geo';
 import { demoLastSeen } from './mock/presence';
@@ -193,7 +194,7 @@ export async function fetchBootstrap(): Promise<Bootstrap> {
       // The demo's tracker session and its "Tennis detected" row, two of the
       // map's alerts and a tag of you. Only without a database: a real
       // account's come from the server.
-      notifications: supabase ? [] : [...demoRecapNotification(), ...(fresh ? [] : activityNotifications), ...(found?.notifications ?? []), ...DEMO_MAP_ALERTS, ...demoSessionTagNotifications, ...(fresh ? [] : demoHitNotifications)],
+      notifications: supabase ? [] : [...demoRecapNotification(), ...(fresh ? [] : activityNotifications), ...(found?.notifications ?? []), ...DEMO_MAP_ALERTS, ...demoSessionTagNotifications, ...(fresh ? [] : demoHitNotifications), ...(fresh ? [] : demoGroupInviteNotifications())],
       detectedActivities: supabase ? [] : [...(fresh ? [] : detectedActivities), ...(found?.activities ?? [])],
       coachingRequests,
       integrations: sources,

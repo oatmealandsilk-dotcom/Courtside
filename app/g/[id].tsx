@@ -9,6 +9,7 @@ import { CourtSpinner } from '@/components/CourtSpinner';
 import { MenuSheet } from '@/components/MenuSheet';
 import { Tappable } from '@/components/Tappable';
 import type { FeedGroupCard } from '@/data/types';
+import { inviterName, toastForJoin } from '@/features/groups/GroupInvitesSection';
 import { GroupTile } from '@/features/groups/GroupTile';
 import { openGroupFeed } from '@/features/groups/openGroupFeed';
 import { reportGroup } from '@/features/groups/reportGroup';
@@ -28,13 +29,17 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
  * to send it to in a chat. Its admin also answers requests, removes people and
  * edits it (in a sheet, group-form, opened from Edit in the header).
  * Anyone else can report it from the "…" in the header (App Review 1.2).
+ * Someone invited to it (migration 181; a notification or a phone alert
+ * opens here) sees who invited them, with Join / Not now in place of Join.
  */
 
 function GroupPage() {
   const styles = useThemedStyles(styleDefinitions);
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { feedGroups, feedGroupsAsked, users, currentUserId, actions } = useApp();
+  const { feedGroups, feedGroupsAsked, feedGroupInvites, users, currentUserId, actions } = useApp();
   const group = feedGroups.find((g) => g.id === id);
+  const invite = group ? undefined : feedGroupInvites.find((i) => i.groupId === id);
+  const inviter = invite ? users.find((u) => u.id === invite.inviterId) : undefined;
   const [card, setCard] = useState<FeedGroupCard | null | undefined>(undefined);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
@@ -62,6 +67,14 @@ function GroupPage() {
   const join = () => act(async () => {
     const out = await actions.joinFeedGroup(id);
     if (out === 'requested') { setNote('Asked. The admin will say yes or no.'); await readCard(); }
+  });
+  // Join or Not now on an invite: the same answer as in Groups and Notifications.
+  const answerInvite = (accept: boolean) => act(async () => {
+    const out = await actions.answerFeedGroupInvite(id, accept);
+    if (!out.ok) throw new Error(out.error);
+    if (out.outcome === 'requested') setNote('Sent to the admins. You’ll be in once one says yes.');
+    toastForJoin(out.outcome, invite?.name ?? card?.name ?? 'the group');
+    await readCard();
   });
   const leave = () => confirm({
     title: `Leave ${group?.name ?? 'this group'}?`,
@@ -129,6 +142,18 @@ function GroupPage() {
               <Text style={styles.actionText}>{a.label}</Text>
             </Pressable>
           ))}
+        </View>
+      ) : invite && !asked ? (
+        <View style={styles.joinBox}>
+          <View style={styles.invitedRow}>
+            <Avatar name={inviter?.name ?? inviterName(invite, users)} seed={inviter?.avatarSeed ?? invite.inviterId} uri={inviter?.avatarUrl} size={28} />
+            <Text style={styles.invitedText}>{inviterName(invite, users)} invited you</Text>
+          </View>
+          <View style={styles.inviteButtons}>
+            <View style={styles.fill}><Button label="Not now" variant="secondary" onPress={() => answerInvite(false)} disabled={busy} full /></View>
+            <View style={styles.fill}><Button label="Join" onPress={() => answerInvite(true)} loading={busy} disabled={busy} full /></View>
+          </View>
+          <Text style={styles.joinNote}>A group’s feed shows everything its members post. You can be in up to {MAX_GROUPS} groups.</Text>
         </View>
       ) : (
         <View style={styles.joinBox}>
@@ -235,6 +260,10 @@ const styleDefinitions = StyleSheet.create({
   action: { ...lift, flex: 1, height: 68, borderRadius: radius.lg, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', gap: 4 },
   actionText: { ...typography.smallStrong, color: colors.text },
   joinBox: { gap: spacing.sm },
+  invitedRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, paddingBottom: spacing.xs },
+  invitedText: { ...typography.bodyStrong, color: colors.text },
+  inviteButtons: { flexDirection: 'row', gap: spacing.sm },
+  fill: { flex: 1 },
   joinNote: { ...typography.small, color: colors.textMuted, textAlign: 'center', lineHeight: 19, paddingHorizontal: spacing.lg },
   note: { ...typography.small, color: colors.textMuted, textAlign: 'center', marginTop: spacing.md },
   section: { ...typography.smallStrong, color: colors.textMuted, paddingHorizontal: spacing.xs, paddingTop: spacing.xl, paddingBottom: spacing.sm },

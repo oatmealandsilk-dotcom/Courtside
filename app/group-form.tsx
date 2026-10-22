@@ -11,7 +11,7 @@ import type { FeedGroup, GroupLook, ID } from '@/data/types';
 import { Celebrate } from '@/features/groups/create/Celebrate';
 import { FlowHeader } from '@/features/groups/create/FlowHeader';
 import { GroupPreview } from '@/features/groups/create/GroupPreview';
-import { InvitePeople } from '@/features/groups/create/InvitePeople';
+import { InvitePeople, useSendGroupInvites } from '@/features/groups/create/InvitePeople';
 import { JoinChoice, ListedCard } from '@/features/groups/create/JoinChoice';
 import { LookPicker } from '@/features/groups/create/LookPicker';
 import { plainLook } from '@/features/groups/look';
@@ -113,6 +113,7 @@ export default function GroupForm() {
   const [look, setLook] = useState<GroupLook>(editing?.look ?? {});
   const [createdId, setCreatedId] = useState<ID | null>(null);
   const [picked, setPicked] = useState<ID[]>([]);
+  const sendGroupInvites = useSendGroupInvites();
   const [invited, setInvited] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -258,8 +259,7 @@ export default function GroupForm() {
 
   const sendNow = () => {
     if (!createdId || !picked.length) return 0;
-    actions.shareToChats({ userIds: picked }, { kind: 'group', id: createdId, name: clean });
-    return picked.length;
+    return sendGroupInvites({ id: createdId, name: clean }, picked);
   };
   const sendInvites = () => {
     setInvited(sendNow());

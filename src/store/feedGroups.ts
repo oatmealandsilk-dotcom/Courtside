@@ -3,7 +3,8 @@ import { useCallback, useMemo } from 'react';
 
 import { isLocalMedia, remote, uploadMedia } from '@/data/remote';
 import { demoDiscoverGroups, demoGroups } from '@/data/mock/groups';
-import type { Comment, DiscoverGroup, FeedGroup, FeedGroupCard, GroupLook, ID, Post } from '@/data/types';
+import { demoGroupInvites } from '@/data/mock/groupInvites';
+import type { Comment, DiscoverGroup, FeedGroup, FeedGroupCard, FeedGroupInvite, GroupInviteAnswer, GroupLook, ID, Notification, Post } from '@/data/types';
 import { plainLook, sameLook } from '@/features/groups/look';
 import * as haptics from '@/lib/haptics';
 import { show as showToast } from '@/lib/toast';
@@ -46,11 +47,23 @@ export interface FeedGroupsState {
    * part out rather than show a face that would not stick. Always on in the demo.
    */
   feedGroupsLooks: boolean;
+  /** Invites to groups waiting for your answer, newest first (migration 181). */
+  feedGroupInvites: FeedGroupInvite[];
+  /**
+   * Whether invites go to the server (migration 181 has run; always in the
+   * demo). Until then Invite sends the group's link in a chat, as before.
+   */
+  feedGroupInvitesLive: boolean;
+  /** People you invited who haven't answered yet, by group: "Invited" in the picker. */
+  feedGroupSentInvites: Record<ID, ID[]>;
 }
 
-export const emptyFeedGroups: FeedGroupsState = { feedGroups: [], feedGroupsAsked: [], feedGroupsOn: null, feedGroupsLooks: false };
+export const emptyFeedGroups: FeedGroupsState = { feedGroups: [], feedGroupsAsked: [], feedGroupsOn: null, feedGroupsLooks: false, feedGroupInvites: [], feedGroupInvitesLive: false, feedGroupSentInvites: {} };
 
-interface Reads { currentUserId: ID | null; posts: Post[]; comments: Comment[] }
+/** How Join or Not now on an invite went: what happened, or the server's word and its sentence. */
+export type InviteAnswerResult = { ok: true; outcome: GroupInviteAnswer } | { ok: false; word: string; error: string };
+
+interface Reads { currentUserId: ID | null; posts: Post[]; comments: Comment[]; notifications: Notification[] }
 
 export interface FeedGroupsActions {
   /** Your groups, their members and (for an admin) their requests. */
@@ -86,6 +99,21 @@ export interface FeedGroupsActions {
    * it could not be read, or in the demo, whose posts are all loaded).
    */
   loadFeedGroupPosts: (id: ID, before?: string) => Promise<string | null>;
+  /** Your invites to groups, and who you invited (migration 181). Also read with loadFeedGroups. */
+  loadFeedGroupInvites: () => Promise<void>;
+  /**
+   * Invites people to a group you are in. Each one invited is told ("Mira
+   * invited you to Silver Lake sunrise") and gets a phone alert if they
+   * allow them; the server quietly leaves out anyone it may not reach (and
+   * never says who or why). Never throws: `error` is a plain sentence.
+   */
+  inviteToFeedGroup: (id: ID, people: ID[]) => Promise<{ ok: boolean; invited: ID[]; error?: string }>;
+  /**
+   * Join or Not now on an invite. Join gets you in (or asks the admins for
+   * you, when the inviter's say isn't enough there); Not now just clears it,
+   * telling nobody. Never throws.
+   */
+  answerFeedGroupInvite: (id: ID, accept: boolean) => Promise<InviteAnswerResult>;
 }
 
 /** The server's word, as a sentence for the person who tapped. */
@@ -105,9 +133,15 @@ export function groupSentence(word: string): string {
     case 'bad_look': return 'That look couldn’t be saved. Try another emoji.';
     // A name or description refused for its words (migration 117).
     case 'blocked_words': return BLOCKED_WORDS_NOTE;
+    // Invites (migration 181).
+    case 'invite_limit': return 'You’ve sent a lot of invites today. Try again tomorrow.';
+    case 'not_member': return 'Only people in the group can invite.';
     default: return 'That didn’t go through. Check your connection and try again.';
   }
 }
+
+/** An invite that lapsed: the inviter left, say, or it was a month ago. */
+export const INVITE_GONE = 'This invite isn’t open anymore.';
 
 const demoId = () => `g-${Date.now().toString(36)}`;
 /** A demo group by id: one of the demo's own, or one Find groups lists. */
@@ -122,15 +156,34 @@ export function useFeedGroups<S extends FeedGroupsState & Reads>(
     const me = stateRef.current.currentUserId;
     if (!me) return;
     if (!live(me)) {
-      if (stateRef.current.feedGroupsOn === null) setState((prev) => ({ ...prev, feedGroups: demoGroups.map((g) => ({ ...g, members: [...g.members], requests: [...g.requests] })), feedGroupsOn: true, feedGroupsLooks: true }));
+      if (stateRef.current.feedGroupsOn === null) {
+        setState((prev) => ({
+          ...prev,
+          feedGroups: demoGroups.map((g) => ({ ...g, members: [...g.members], requests: [...g.requests] })),
+          feedGroupsOn: true,
+          feedGroupsLooks: true,
+          // The demo's invites, each only while its notification is there (a brand-new player has none).
+          feedGroupInvites: demoGroupInvites().filter((i) => prev.notifications.some((n) => n.kind === 'group-invite' && n.targetId === i.groupId)),
+          feedGroupInvitesLive: true,
+        }));
+      }
       return;
     }
-    const got = await remote.myFeedGroups().catch(() => null);
+    const [got] = await Promise.all([remote.myFeedGroups().catch(() => null), readInvites()]);
     if (stateRef.current.currentUserId !== me) return;
     setState((prev) => (got
       ? { ...prev, feedGroups: got.groups, feedGroupsAsked: got.asked, feedGroupsOn: true, feedGroupsLooks: got.looks }
       : { ...prev, feedGroupsOn: prev.feedGroupsOn ?? false }));
   }, [stateRef, setState, live]);
+
+  /** Read alongside your groups; a database without invites yet keeps the chat-link invites. */
+  async function readInvites() {
+    const me = stateRef.current.currentUserId;
+    if (!me || !live(me)) return;
+    const got = await remote.myFeedGroupInvites().catch(() => null);
+    if (!got || stateRef.current.currentUserId !== me) return;
+    setState((prev) => ({ ...prev, feedGroupInvites: got.invites, feedGroupSentInvites: got.sent, feedGroupInvitesLive: got.live }));
+  }
 
   /** Runs a server call, turning its word into a sentence, then reads the groups again. */
   const run = useCallback(async <T,>(call: () => Promise<T>): Promise<T> => {
@@ -332,8 +385,91 @@ export function useFeedGroups<S extends FeedGroupsState & Reads>(
     return got.next;
   }, [stateRef, setState, live]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const loadFeedGroupInvites = useCallback(async () => {
+    const me = stateRef.current.currentUserId;
+    if (!me) return;
+    // The demo's are read with its groups.
+    if (!live(me)) { if (stateRef.current.feedGroupsOn === null) await reload(); return; }
+    await readInvites();
+  }, [stateRef, live, reload]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const inviteToFeedGroup = useCallback(async (id: ID, people: ID[]) => {
+    const you = me();
+    const wanted = [...new Set(people)].filter((p) => p !== you).slice(0, 20);
+    if (!you || !wanted.length) return { ok: false, invited: [] as ID[] };
+    // Everyone picked reads "Invited" from here: the server never says who it left out.
+    const markSent = () => setState((prev) => ({
+      ...prev,
+      feedGroupSentInvites: { ...prev.feedGroupSentInvites, [id]: [...new Set([...(prev.feedGroupSentInvites[id] ?? []), ...wanted])] },
+    }));
+    if (!live(you)) {
+      if (!stateRef.current.feedGroups.some((g) => g.id === id)) return { ok: false, invited: [] as ID[], error: groupSentence('not_member') };
+      markSent();
+      haptics.reward();
+      return { ok: true, invited: wanted };
+    }
+    try {
+      const invited = await remote.inviteToFeedGroup(id, wanted);
+      markSent();
+      haptics.reward();
+      return { ok: true, invited };
+    } catch (e) {
+      haptics.reject();
+      return { ok: false, invited: [] as ID[], error: groupSentence(e instanceof Error ? e.message : '') };
+    }
+  }, [stateRef, setState, live]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const answerFeedGroupInvite = useCallback(async (id: ID, accept: boolean): Promise<InviteAnswerResult> => {
+    const you = me();
+    if (!you) return { ok: false, word: 'failed', error: groupSentence('failed') };
+    const inv = stateRef.current.feedGroupInvites.find((i) => i.groupId === id);
+    // The invite gone from the list and its notification read, in one go.
+    const settle = (prev: S): S => ({
+      ...prev,
+      feedGroupInvites: prev.feedGroupInvites.filter((i) => i.groupId !== id),
+      notifications: prev.notifications.map((n) => (n.kind === 'group-invite' && n.targetId === id && !n.read ? { ...n, read: true } : n)),
+    });
+    if (!live(you)) {
+      // The demo says what the server says.
+      if (!inv) return { ok: false, word: 'not_found', error: INVITE_GONE };
+      if (!accept) { setState(settle); return { ok: true, outcome: 'declined' }; }
+      if (stateRef.current.feedGroups.some((g) => g.id === id)) { setState(settle); return { ok: true, outcome: 'already' }; }
+      if (stateRef.current.feedGroups.length >= MAX_GROUPS) { haptics.reject(); return { ok: false, word: 'group_limit', error: groupSentence('group_limit') }; }
+      const g = demoGroup(id);
+      const inviterAdmin = !!g?.members.some((m) => m.id === inv.inviterId && m.admin);
+      if (inv.ask && !inviterAdmin) {
+        setState((prev) => ({ ...settle(prev), feedGroupsAsked: [...prev.feedGroupsAsked.filter((a) => a.id !== id), { id, name: inv.name, look: inv.look }] }));
+        haptics.commit();
+        return { ok: true, outcome: 'requested' };
+      }
+      const base: FeedGroup = g ?? { id, name: inv.name, description: inv.description, ask: inv.ask, look: inv.look, createdAt: inv.createdAt, members: [], requests: [] };
+      // The one who invited you is in it (the server only lets members invite).
+      const members = [
+        ...base.members.filter((m) => m.id !== you),
+        ...(base.members.some((m) => m.id === inv.inviterId) ? [] : [{ id: inv.inviterId, admin: false }]),
+        { id: you, admin: false },
+      ];
+      setState((prev) => ({ ...settle(prev), feedGroups: [...prev.feedGroups, { ...base, members, requests: [] }], feedGroupsAsked: prev.feedGroupsAsked.filter((a) => a.id !== id) }));
+      haptics.commit();
+      return { ok: true, outcome: 'joined' };
+    }
+    try {
+      const outcome = await remote.answerFeedGroupInvite(id, accept);
+      setState(settle);
+      if (accept) haptics.commit();
+      await reload().catch(() => undefined);
+      return { ok: true, outcome };
+    } catch (e) {
+      const word = e instanceof Error ? e.message : 'failed';
+      // An invite that lapsed (the inviter left, say) leaves the list.
+      if (word === 'not_found') { setState(settle); return { ok: false, word, error: INVITE_GONE }; }
+      haptics.reject();
+      return { ok: false, word, error: groupSentence(word) };
+    }
+  }, [stateRef, setState, live, reload]); // eslint-disable-line react-hooks/exhaustive-deps
+
   return useMemo(
-    () => ({ loadFeedGroups: reload, createFeedGroup, discoverFeedGroups, feedGroupCard, joinFeedGroup, leaveFeedGroup, answerFeedGroupRequest, removeFeedGroupMember, updateFeedGroup, loadFeedGroupPosts }),
-    [reload, createFeedGroup, discoverFeedGroups, feedGroupCard, joinFeedGroup, leaveFeedGroup, answerFeedGroupRequest, removeFeedGroupMember, updateFeedGroup, loadFeedGroupPosts],
+    () => ({ loadFeedGroups: reload, createFeedGroup, discoverFeedGroups, feedGroupCard, joinFeedGroup, leaveFeedGroup, answerFeedGroupRequest, removeFeedGroupMember, updateFeedGroup, loadFeedGroupPosts, loadFeedGroupInvites, inviteToFeedGroup, answerFeedGroupInvite }),
+    [reload, createFeedGroup, discoverFeedGroups, feedGroupCard, joinFeedGroup, leaveFeedGroup, answerFeedGroupRequest, removeFeedGroupMember, updateFeedGroup, loadFeedGroupPosts, loadFeedGroupInvites, inviteToFeedGroup, answerFeedGroupInvite],
   );
 }

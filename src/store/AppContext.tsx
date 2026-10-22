@@ -2834,6 +2834,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // follow, "Tennis detected" from WHOOP's own alert), in one small ask:
   // every one newer than the newest the server has given. Asked whenever the
   // app comes back to the front, and when Notifications opens.
+  /** Groups' invites, read again when a new one is heard (set once the groups' actions exist, below). */
+  const loadInvitesRef = useRef<(() => Promise<void>) | null>(null);
   const catchUpNotifications = useCallback(async () => {
     const me = stateRef.current.currentUserId;
     if (!live(me) || !stateRef.current.remoteLoaded) return;
@@ -2850,6 +2852,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const answered = add.some((n) => n.kind === 'review');
       return { ...prev, notifications: [...add, ...prev.notifications], ...(answered ? { reviewRequests: null } : {}) };
     });
+    // A new invite to a group (migration 181): read the invites, so Join on it (and in Groups) works at once.
+    if (fresh.some((n) => n.kind === 'group-invite')) void loadInvitesRef.current?.();
   }, []);
   useEffect(() => {
     if (!liveEpoch || !isSupabaseConfigured || !remoteLoaded || !currentUserForLive || !UUID.test(currentUserForLive)) return;
@@ -9186,6 +9190,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const courtLife = useCourtLife(stateRef, setState, live);
   // Groups with a feed of their own (migration 67): its actions are written in store/feedGroups.
   const feedGroups = useFeedGroups(stateRef, setState, live);
+  loadInvitesRef.current = feedGroups.loadFeedGroupInvites;
   // A session played live, Start to Finish (Oct 6): its actions are written in store/liveSession.
   const liveSessionActions = useLiveSession(stateRef, setState, live, courtLife, state.currentUserId, state.liveSession);
 

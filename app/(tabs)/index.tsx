@@ -2422,7 +2422,7 @@ const ACTIVITIES = 'activities';
 
 function GroupedFeed() {
   const app = useApp();
-  const { feedGroups, currentUserId, actions } = app;
+  const { feedGroups, feedGroupInvites, currentUserId, actions } = app;
   const [groupId, setGroupId] = useState<string | null>(null);
   const [chrome, setChrome] = useState<FeedChrome>({ picture: false, hidden: false });
   useEffect(() => { if (currentUserId) void actions.loadFeedGroups(); }, [currentUserId]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -2463,6 +2463,7 @@ function GroupedFeed() {
           hidden={chrome.hidden}
           tucked={!!chrome.tucked}
           waiting={waiting}
+          invites={feedGroupInvites.length}
         />
       ) : null}
     </View>
