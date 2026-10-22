@@ -11,7 +11,7 @@ import type { FeedGroup, GroupLook, ID } from '@/data/types';
 import { Celebrate } from '@/features/groups/create/Celebrate';
 import { FlowHeader } from '@/features/groups/create/FlowHeader';
 import { GroupPreview } from '@/features/groups/create/GroupPreview';
-import { InvitePeople } from '@/features/groups/create/InvitePeople';
+import { InvitePeople, useSendGroupInvites } from '@/features/groups/create/InvitePeople';
 import { JoinChoice, ListedCard } from '@/features/groups/create/JoinChoice';
 import { LookPicker } from '@/features/groups/create/LookPicker';
 import { plainLook } from '@/features/groups/look';
@@ -113,6 +113,7 @@ export default function GroupForm() {
   const [look, setLook] = useState<GroupLook>(editing?.look ?? {});
   const [createdId, setCreatedId] = useState<ID | null>(null);
   const [picked, setPicked] = useState<ID[]>([]);
+  const sendGroupInvites = useSendGroupInvites();
   const [invited, setInvited] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -256,16 +257,26 @@ export default function GroupForm() {
     }
   };
 
-  const sendNow = () => {
+  /** Sends, waiting for the server: a refusal says only why (never "sent" as well). */
+  const sendNow = async () => {
     if (!createdId || !picked.length) return 0;
-    actions.shareToChats({ userIds: picked }, { kind: 'group', id: createdId, name: clean });
-    return picked.length;
+    const out = await sendGroupInvites({ id: createdId, name: clean }, picked);
+    if (!out.ok) showToast({ title: out.error ?? 'That didn’t go through.', icon: 'alert-circle-outline', long: true });
+    return out.count;
   };
-  const sendInvites = () => {
-    setInvited(sendNow());
-    setPicked([]);
-    haptics.reward();
-    go(3);
+  const sendInvites = async () => {
+    if (inFlight.current) return;
+    if (!picked.length) { go(3); return; }
+    inFlight.current = true;
+    setBusy(true);
+    try {
+      setInvited(await sendNow());
+      setPicked([]);
+      go(3);
+    } finally {
+      inFlight.current = false;
+      setBusy(false);
+    }
   };
 
   // The ready moment lasts long enough to read, then the sheet goes to the group (not with a screen reader on: it waits for the button).
@@ -294,8 +305,7 @@ export default function GroupForm() {
       message: `You picked ${n === 1 ? 'someone' : `${n} people`} to invite to ${clean} but haven’t sent ${n === 1 ? 'it' : 'them'} yet.`,
       confirmLabel: 'Send',
       onConfirm: () => {
-        const sent = sendNow();
-        if (sent) showToast({ title: `${sent === 1 ? 'Invite' : `${sent} invites`} sent`, body: `To join ${clean}.`, icon: 'paper-plane-outline' });
+        void sendNow().then((sent) => { if (sent) showToast({ title: `${sent === 1 ? 'Invite' : `${sent} invites`} sent`, body: `To join ${clean}.`, icon: 'paper-plane-outline' }); });
         dismiss();
       },
       also: { label: 'Don’t send', onPress: dismiss },
@@ -323,7 +333,7 @@ export default function GroupForm() {
   else if (isEdit) primary = { label: 'Save', busyLabel: 'Saving…', waiting: nameWaiting ?? 'Save', disabled: !nameOk || !dirty, onPress: () => { void commit().then((ok) => { if (ok) { haptics.commit(); dismiss(); } }); } };
   else if (step === 0) primary = { label: 'Next', waiting: nameWaiting, disabled: !nameOk, onPress: () => { setNameTouched(true); if (nameOk) go(1); } };
   else if (step === 1) primary = { label: createdId ? 'Next' : 'Create group', busyLabel: createdId ? 'Saving…' : 'Creating…', disabled: !nameOk, waiting: nameWaiting, onPress: () => { void commit().then((ok) => { if (ok) go(2); }); } };
-  else if (step === 2) primary = { label: picked.length ? `Send ${picked.length} ${picked.length === 1 ? 'invite' : 'invites'}` : 'Done', disabled: false, onPress: sendInvites };
+  else if (step === 2) primary = { label: picked.length ? `Send ${picked.length} ${picked.length === 1 ? 'invite' : 'invites'}` : 'Done', busyLabel: 'Sending…', disabled: false, onPress: () => { void sendInvites(); } };
   else primary = { label: `Go to ${clean}`, disabled: false, onPress: dismiss };
 
   const canBack = !isEdit && !gate && (step === 1 || step === 2) && !busy;

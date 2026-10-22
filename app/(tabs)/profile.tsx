@@ -54,7 +54,7 @@ const INBOX_POINTER = 38 + 14 + 17 - 6;
 
 function Profile({ previewSection }: { previewSection?: string } = {}) {
   const styles = useThemedStyles(styleDefinitions);
- const { currentUser: user, posts, questions, answers, saved, notifications, detectedActivities, currentUserId, savedAccounts, coaches, coachingRequests, coachQuestions, actions, feedGroups, blockedIds, isGuest } = useApp();
+ const { currentUser: user, posts, questions, answers, saved, notifications, detectedActivities, currentUserId, savedAccounts, coaches, coachingRequests, coachQuestions, actions, feedGroups, feedGroupInvites, blockedIds, isGuest } = useApp();
  // A coach's studio, first of your links: what is waiting there, or how far setup has got.
  const myCoach = coaches.find((c) => c.userId === currentUserId);
  const studio = myCoach ? studioLine(myCoach, coachingRequests, coachQuestions, currentUserId) : null;
@@ -247,7 +247,7 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
      </Tappable>
      <InboxButton size={27} />
    </View>
-   <ProfileMenu groupsAsking={groupsAsking} groupCount={feedGroups.length} />
+   <ProfileMenu groupsAsking={groupsAsking} groupCount={feedGroups.length} invites={feedGroupInvites.length} />
  </View>}>
    {page(tab, previewSection === undefined)}
  </Screen>;
@@ -268,7 +268,9 @@ function InboxTip({ eligible, live, style }: { eligible: boolean; live: boolean;
  * the button, so it opens the same on a phone and in a browser; a tap outside
  * (or Escape, or the phone's Back) closes it.
  */
-function ProfileMenu({ groupsAsking, groupCount }: { groupsAsking: number; groupCount: number }) {
+function ProfileMenu({ groupsAsking, groupCount, invites }: { groupsAsking: number; groupCount: number; invites: number }) {
+  // Invites to groups waiting for your answer (migration 181) light the same dot.
+  const invitesWords = invites ? `${invites} ${invites === 1 ? 'invite' : 'invites'}` : '';
   const styles = useThemedStyles(styleDefinitions);
   const anchor = useRef<View>(null);
   const { width } = useWindowDimensions();
@@ -280,19 +282,19 @@ function ProfileMenu({ groupsAsking, groupCount }: { groupsAsking: number; group
   useModalOpenWhile(!!at);
   return <>
     <View ref={anchor} collapsable={false}>
-      <Tappable accessibilityRole="button" accessibilityLabel={groupsAsking ? `Menu: groups and settings. ${groupsAsking} asking to join your groups` : 'Menu: groups and settings'} onPress={open} hitSlop={10} dim style={styles.headerButton}>
+      <Tappable accessibilityRole="button" accessibilityLabel={`Menu: groups and settings${groupsAsking ? `. ${groupsAsking} asking to join your groups` : ''}${invitesWords ? `. ${invitesWords} to a group` : ''}`} onPress={open} hitSlop={10} dim style={styles.headerButton}>
         <Ionicons name="menu-outline" size={30} color={colors.text}/>
-        {groupsAsking ? <View style={styles.menuDot} /> : null}
+        {groupsAsking || invites ? <View style={styles.menuDot} /> : null}
       </Tappable>
     </View>
     <Modal visible={!!at} transparent animationType="fade" statusBarTranslucent onRequestClose={close}>
       {/* The backdrop beside the menu, not around it: a button may not hold buttons in a browser. */}
       <Pressable accessibilityRole="button" accessibilityLabel="Close menu" onPress={close} style={StyleSheet.absoluteFill} />
       {at ? <View style={[styles.menu, { top: at.top, right: at.right }]} accessibilityRole="menu">
-        <Pressable accessibilityRole="menuitem" accessibilityLabel={groupsAsking ? `Groups, ${groupsAsking} asking to join` : 'Groups'} onPress={() => go('/groups')} style={({ pressed }) => [styles.menuRow, pressed && styles.linkPressed]}>
+        <Pressable accessibilityRole="menuitem" accessibilityLabel={`Groups${groupsAsking ? `, ${groupsAsking} asking to join` : ''}${invitesWords ? `, ${invitesWords}` : ''}`} onPress={() => go('/groups')} style={({ pressed }) => [styles.menuRow, pressed && styles.linkPressed]}>
           <Ionicons name="people-outline" size={20} color={colors.text}/>
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.menuText}>Groups</Text>
-          {groupsAsking ? <View style={styles.menuTag}><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.menuTagText}>{groupsAsking} asking</Text></View> : groupCount ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.linkValue}>{groupCount}</Text> : null}
+          {groupsAsking || invites ? <View style={styles.menuTag}><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.menuTagText}>{groupsAsking ? `${groupsAsking} asking` : invitesWords}</Text></View> : groupCount ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.linkValue}>{groupCount}</Text> : null}
         </Pressable>
         <Pressable accessibilityRole="menuitem" accessibilityLabel="Settings" onPress={() => go('/settings')} style={({ pressed }) => [styles.menuRow, styles.linkLine, pressed && styles.linkPressed]}>
           <Ionicons name="settings-outline" size={20} color={colors.text}/>

@@ -11,7 +11,7 @@ import { CourtSpinner } from '@/components/CourtSpinner';
 import { PreparingRing } from '@/components/PreparingRing';
 import type { ID, SessionDetail } from '@/data/types';
 import { useReducedMotion } from '@/lib/useReducedMotion';
-import { colors, font, lift, spacing, withAlpha } from '@/theme';
+import { buttonShape, colors, font, lift, spacing, withAlpha } from '@/theme';
 import { SessionCard, type CardPerson } from './SessionCard';
 import { CountUp } from './CountUp';
 import { DrawnTick } from './DrawnTick';
@@ -236,7 +236,7 @@ const styleDefinitions = StyleSheet.create({
   dock: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingTop: 26, paddingHorizontal: 16 },
   dockError: { ...font('500'), fontSize: 13, color: colors.danger, textAlign: 'center', marginBottom: 8 },
   dockRow: { flexDirection: 'row', gap: 10 },
-  pill: { height: 54, borderRadius: 27, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8 },
+  pill: { height: 54, borderRadius: buttonShape.radius, ...buttonShape.curve, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8 },
   quiet: { flex: 1, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.borderStrong },
   quietText: { ...font('600'), fontSize: 16, color: colors.text },
   share: { backgroundColor: colors.brand },

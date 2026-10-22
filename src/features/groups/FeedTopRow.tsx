@@ -62,6 +62,8 @@ interface Props {
   hidden: boolean;
   /** A dot on the "+": someone is asking to join a group you run. */
   waiting?: boolean;
+  /** Invites to groups waiting for your answer (migration 181): the same dot. */
+  invites?: number;
   /**
    * Swiped on to the next clip: the row slips up and out of the way so the
    * clip plays full screen, the way Reels' top row does (Oct 22, owner). It
@@ -92,7 +94,7 @@ function useScreenReader() {
   return on;
 }
 
-export function FeedTopRow({ groups, selected, onSelect, onPlus, onPicture, hidden, waiting, tucked = false }: Props) {
+export function FeedTopRow({ groups, selected, onSelect, onPlus, onPicture, hidden, waiting, invites = 0, tucked = false }: Props) {
   const styles = useThemedStyles(styleDefinitions);
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
@@ -207,9 +209,9 @@ export function FeedTopRow({ groups, selected, onSelect, onPlus, onPicture, hidd
           </Animated.View>
         </View>
         <Animated.View style={[styles.plusSpot, plusSlide, { opacity: ready }]}>
-          <Pressable accessibilityRole="button" accessibilityLabel={waiting ? 'Find or start a group, someone is asking to join yours' : 'Find or start a group'} hitSlop={10} onFocus={() => setFocusIn(true)} onBlur={() => setFocusIn(false)} onPress={onPlus} style={styles.plusHit}>
+          <Pressable accessibilityRole="button" accessibilityLabel={`Find or start a group${invites ? `, ${invites} ${invites === 1 ? 'invite' : 'invites'}` : ''}${waiting ? ', someone is asking to join yours' : ''}`} hitSlop={10} onFocus={() => setFocusIn(true)} onBlur={() => setFocusIn(false)} onPress={onPlus} style={styles.plusHit}>
             <Ionicons name="add" size={22} color={ink} style={[{ opacity: 0.85 }, edge]} />
-            {waiting ? <View style={styles.waiting} /> : null}
+            {waiting || invites ? <View style={styles.waiting} /> : null}
           </Pressable>
         </Animated.View>
         {/* The camera's marker: a short bar that stays in the middle while the words pass over it. */}

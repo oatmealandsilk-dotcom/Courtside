@@ -638,6 +638,29 @@ export interface DiscoverGroup extends FeedGroupCard {
   near: boolean;
 }
 
+/**
+ * An invite to a group waiting for your answer (migration 181,
+ * my_feed_group_invites): the group's face and who asked you. Join gets you
+ * straight in when the inviter's say is enough (an admin's, or anyone's for
+ * an open group); otherwise it asks the admins for you. Never says anything
+ * about anyone's age.
+ */
+export interface FeedGroupInvite {
+  groupId: ID;
+  name: string;
+  description?: string;
+  ask: boolean;
+  look?: GroupLook;
+  memberCount: number;
+  inviterId: ID;
+  /** The inviter's name as the server has it, for when this phone doesn't hold them yet. */
+  inviterName?: string;
+  createdAt: string;
+}
+
+/** What Join or Not now on an invite did. */
+export type GroupInviteAnswer = 'joined' | 'requested' | 'already' | 'declined';
+
 /* ------------------------------- Moderation ------------------------------ */
 
 /**
@@ -1387,10 +1410,16 @@ export type NotificationKind =
    * 'recap'); the preview is the whole line ("6h 15m, 4 sessions — up 2h.
    * Best streak yet.").
    */
-  | 'weekly-recap';
+  | 'weekly-recap'
+  /**
+   * Someone in a group invited you to it (migration 181): "Mira invited you
+   * to Silver Lake sunrise". Target is the group (target kind 'group'); the
+   * preview is its name. Join / Not now on the row while the invite is open.
+   */
+  | 'group-invite';
 
 /** 'court': a court you follow, by the map's id for it (migration 60). 'recap': a week, by its Monday (migration 130). */
-export type NotificationTarget = 'post' | 'hit' | 'question' | 'coach-question' | 'coach-reply' | 'coach-application' | 'report' | 'coaching-request' | 'profile' | 'hit-request' | 'activity' | 'court' | 'session-tag' | 'recap';
+export type NotificationTarget = 'post' | 'hit' | 'question' | 'coach-question' | 'coach-reply' | 'coach-application' | 'report' | 'coaching-request' | 'profile' | 'hit-request' | 'activity' | 'court' | 'session-tag' | 'recap' | 'group';
 
 /** A court a post is tagged with: the map's id for it, its name, and where it is. */
 export interface TaggedCourt { id: string; name: string; lat: number; lng: number }

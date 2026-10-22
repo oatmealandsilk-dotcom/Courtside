@@ -1,4 +1,5 @@
 import { PRESS_DIM, PRESS_SHRINK } from '@/theme/press';
+import { brandBoxShadow } from '@/theme/fillMode';
 import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
@@ -239,8 +240,8 @@ const styleDefinitions = StyleSheet.create({
   second: { ...lift, flex: 1, height: 58, borderRadius: buttonShape.radius, ...buttonShape.curve, backgroundColor: colors.surface, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   secondText: { ...typography.bodyStrong, fontSize: 16, color: colors.text },
   // 58pt rather than 48 on purpose: tapped mid-match, on court, often with a sweaty hand.
-  primary: { flex: 1, height: 58, borderRadius: buttonShape.radius, ...buttonShape.curve, backgroundColor: colors.brand, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, overflow: 'hidden', boxShadow: '0px 8px 20px rgba(0, 0, 0, 0.16)' },
-  primaryDark: { boxShadow: '0px 8px 20px rgba(0, 0, 0, 0.4)' },
+  primary: { flex: 1, height: 58, borderRadius: buttonShape.radius, ...buttonShape.curve, backgroundColor: colors.brand, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, overflow: 'hidden', boxShadow: brandBoxShadow },
+  primaryDark: { boxShadow: brandBoxShadow },
   primaryText: { ...typography.bodyStrong, fontSize: 16, color: colors.brandInk },
   pressed: { opacity: PRESS_DIM },
   pressedScale: { transform: [{ scale: PRESS_SHRINK }] },

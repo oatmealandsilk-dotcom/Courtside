@@ -1,5 +1,5 @@
 import { PRESS_DIM } from '@/theme/press';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as Clipboard from 'expo-clipboard';
@@ -10,6 +10,7 @@ import type { ID, User } from '@/data/types';
 import { chatLockNote, named } from '@/features/messages/groups';
 import * as haptics from '@/lib/haptics';
 import { shareLink } from '@/lib/shareLink';
+import { show as showToast } from '@/lib/toast';
 import { shareOutside } from '@/lib/shareOutside';
 import { useApp } from '@/store/AppContext';
 import { colors, font, lift, radius, spacing, typography, buttonShape } from '@/theme';
@@ -18,11 +19,15 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 /*
  * Start a group's last step: bring your people in. At the top, the group's
  * invite link (/g/<id>, carrying your handle, so whoever joins through it
- * counts as yours) with Copy and Share. Under it, the people you follow, to
- * tick: each one picked gets the invite in your chat with them, a card with
- * the group's face that opens its page (a plain message the app already
- * sends, nothing new on the server). The picked show as chips above the
- * list, a tap takes one out.
+ * counts as yours) with Copy and Share. Under it, people to tick: Suggested
+ * (people you follow who follow you back, then people who follow you), then
+ * the rest you follow. Never anyone "near you": where people are is never
+ * shown. Each one picked gets an invite (migration 181): a notification
+ * "Mira invited you to Silver Lake sunrise" with Join / Not now, and a
+ * phone alert if they allow them. On a database before 181, each gets the
+ * invite in your chat with them instead, a card with the group's face that
+ * opens its page. The picked show as chips above the list, a tap takes one
+ * out; anyone invited and not answered yet says "Invited".
  *
  * The same people New message offers, under the same rules: nobody you are
  * blocked with; someone the chat rules lock (a teen who doesn't follow you,
@@ -35,26 +40,65 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 
 export const INVITE_MAX = 20;
 
+/**
+ * Sends the invites for a group: real ones once the server has them
+ * (migration 181), otherwise the group's card in a chat with each, as
+ * before (never both, so nobody is told twice). Waits for the server, so
+ * the caller says "Invited" only once it really went: `ok` false comes
+ * with the server's sentence (too many today, say) and nobody was invited.
+ * Shows no toast itself; the haptic is the action's own.
+ */
+export type SentInvites = { ok: boolean; count: number; error?: string };
+export function useSendGroupInvites() {
+  const { feedGroupInvitesLive, actions } = useApp();
+  return useCallback(async (group: { id: ID; name: string }, people: ID[]): Promise<SentInvites> => {
+    if (!people.length) return { ok: true, count: 0 };
+    if (!feedGroupInvitesLive) {
+      actions.shareToChats({ userIds: people }, { kind: 'group', id: group.id, name: group.name });
+      haptics.reward();
+      return { ok: true, count: people.length };
+    }
+    const out = await actions.inviteToFeedGroup(group.id, people);
+    return out.ok ? { ok: true, count: people.length } : { ok: false, count: 0, error: out.error ?? 'That didn’t go through. Check your connection and try again.' };
+  }, [feedGroupInvitesLive, actions]);
+}
+
+/** "Only people Dev follows can invite Dev to a group." The rule only, never why. */
+const inviteLockNote = (who: { first: string; label: string }) => `Only people ${who.label} follows can invite ${who.first} to a group.`;
+
+type Why = 'member' | 'asking' | 'invited' | 'locked' | null;
+
 export function InvitePeople({ groupId, groupName, picked, onPicked }: {
   groupId: ID; groupName: string; picked: ID[]; onPicked: React.Dispatch<React.SetStateAction<ID[]>>;
 }) {
   const styles = useThemedStyles(styleDefinitions);
-  const { users, followingIds, blockedIds, conversations, currentUserId, currentUser, feedGroups, actions } = useApp();
+  const { users, followingIds, followEdges, blockedIds, conversations, currentUserId, currentUser, feedGroups, feedGroupInvitesLive, feedGroupSentInvites, actions } = useApp();
   const [query, setQuery] = useState('');
   const [note, setNote] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const link = shareLink('group', groupId, currentUser?.handle);
-  const inGroup = new Set(feedGroups.find((g) => g.id === groupId)?.members.map((m) => m.id) ?? []);
+  const here = feedGroups.find((g) => g.id === groupId);
+  const inGroup = new Set(here?.members.map((m) => m.id) ?? []);
+  // Already asking to join (an admin sees the requests): Approve on the group's page lets them in, so not invited too.
+  const asking = new Set(here?.requests ?? []);
+  const sentHere = new Set(feedGroupInvitesLive ? feedGroupSentInvites[groupId] ?? [] : []);
 
-  // Who you follow, the people you talk to most first, then by name.
-  const people = useMemo(() => {
+  // Suggested: people you follow who follow you back, then people who follow you; then the rest
+  // you follow. In each, the people you talk to most first, then by name.
+  const { suggested, following } = useMemo(() => {
     const recent = [...conversations].sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt)).flatMap((c) => c.participantIds.filter((p) => p !== currentUserId));
     const rank = (u: User) => { const i = recent.indexOf(u.id); return i < 0 ? 9999 : i; };
-    return followingIds
-      .map((fid) => users.find((u) => u.id === fid))
-      .filter((u): u is User => !!u && u.id !== currentUserId && !blockedIds.includes(u.id))
-      .sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
-  }, [users, followingIds, blockedIds, conversations, currentUserId]);
+    const byId = new Map(users.map((u) => [u.id, u]));
+    const ok = (u: User | undefined): u is User => !!u && u.id !== currentUserId && !blockedIds.includes(u.id);
+    const order = (a: User, b: User) => rank(a) - rank(b) || a.name.localeCompare(b.name);
+    const iFollow = new Set(followingIds);
+    const followMe = new Set(followEdges.filter((e) => e.followingId === currentUserId).map((e) => e.followerId));
+    const mutual = followingIds.filter((id) => followMe.has(id)).map((id) => byId.get(id)).filter(ok).sort(order);
+    const fans = [...followMe].filter((id) => !iFollow.has(id)).map((id) => byId.get(id)).filter(ok).sort(order);
+    const rest = followingIds.filter((id) => !followMe.has(id)).map((id) => byId.get(id)).filter(ok).sort(order);
+    return { suggested: [...mutual, ...fans], following: rest };
+  }, [users, followingIds, followEdges, blockedIds, conversations, currentUserId]);
+  const people = useMemo(() => [...suggested, ...following], [suggested, following]);
   // The chat locks the app already knows about are asked about again as the step opens.
   useEffect(() => {
     const locked = actions.lockedNow(people.map((u) => u.id));
@@ -65,17 +109,25 @@ export function InvitePeople({ groupId, groupName, picked, onPicked }: {
   pickedNow.current = picked;
 
   const term = query.trim().replace(/^@/, '').toLowerCase();
-  const shown = term ? people.filter((u) => `${u.name} ${u.handle}`.toLowerCase().includes(term)) : people;
+  const matches = (u: User) => !term || `${u.name} ${u.handle}`.toLowerCase().includes(term);
+  const shownSuggested = suggested.filter(matches);
+  const shownFollowing = following.filter(matches);
+  const shown = [...shownSuggested, ...shownFollowing];
   const pickedUsers = picked.map((pid) => users.find((u) => u.id === pid)).filter((u): u is User => !!u);
 
-  const why = (u: User): 'member' | 'locked' | null => (inGroup.has(u.id) ? 'member' : !actions.canMessage(u.id) ? 'locked' : null);
+  // With real invites the group rule decides (a teen must follow you), as for adding to a chat group;
+  // before them, the chat rule (the invite was a chat message).
+  const why = (u: User): Why => (inGroup.has(u.id) ? 'member'
+    : asking.has(u.id) ? 'asking'
+    : sentHere.has(u.id) ? 'invited'
+    : !(feedGroupInvitesLive ? actions.canAddToGroup(u.id) : actions.canMessage(u.id)) ? 'locked' : null);
 
   const toggle = async (u: User) => {
     if (pickedNow.current.includes(u.id)) { haptics.untap(); onPicked((now) => now.filter((x) => x !== u.id)); setNote(null); return; }
     const w = why(u);
-    if (w === 'member') return;
+    if (w === 'member' || w === 'asking' || w === 'invited') return;
     // Locked, unless they have followed you since the app opened: ask before saying no.
-    if (w === 'locked' && !(await actions.reachNow(u.id))) { setNote(chatLockNote(named(u, users))); return; }
+    if (w === 'locked' && !(await actions.reachNow(u.id))) { setNote(feedGroupInvitesLive ? inviteLockNote(named(u, users)) : chatLockNote(named(u, users))); return; }
     // The picks as they are now, not as they were before the wait: two quick taps both count.
     if (pickedNow.current.includes(u.id)) return;
     if (pickedNow.current.length >= INVITE_MAX) { setNote(`You can invite up to ${INVITE_MAX} people at once. Share the link for more.`); return; }
@@ -114,11 +166,7 @@ export function InvitePeople({ groupId, groupName, picked, onPicked }: {
         </View>
       </View>
 
-      <View style={styles.headRow}>
-        <Text style={styles.section}>People you follow</Text>
-        {picked.length ? <Text style={styles.count}>{picked.length} picked</Text> : null}
-      </View>
-      {people.length > 6 || term ? <SearchField value={query} onChangeText={setQuery} placeholder="Search people you follow" accessibilityLabel="Search people you follow" /> : null}
+      {people.length > 6 || term ? <SearchField value={query} onChangeText={setQuery} placeholder="Search people" accessibilityLabel="Search people to invite" /> : null}
 
       {pickedUsers.length ? (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.chips}>
@@ -149,38 +197,48 @@ export function InvitePeople({ groupId, groupName, picked, onPicked }: {
           <Text style={styles.emptyBody}>Follow people to invite them here, or send the link above to anyone.</Text>
         </View>
       ) : !shown.length ? (
-        <Text style={styles.none}>{`Nobody you follow matches “${query.trim()}”.`}</Text>
+        <Text style={styles.none}>{`Nobody matches “${query.trim()}”.`}</Text>
       ) : (
-        <View style={styles.card}>
-          {shown.map((u, i) => {
-            const on = picked.includes(u.id);
-            const w = on ? null : why(u);
-            const status = w === 'member' ? 'In the group' : w === 'locked' ? 'Can’t message yet' : `@${u.handle}`;
-            return (
-              <Pressable
-                key={u.id}
-                accessibilityRole="checkbox"
-                accessibilityState={{ checked: on, disabled: w === 'member' }}
-                accessibilityLabel={`${u.name}, ${w === 'member' ? 'already in the group' : w === 'locked' ? 'can’t be messaged yet' : `@${u.handle}`}`}
-                disabled={w === 'member'}
-                onPress={() => { void toggle(u); }}
-                style={({ pressed }) => [styles.row, i > 0 && styles.line, pressed && styles.rowPressed]}
-              >
-                <View style={w === 'member' && styles.dim}>
-                  <Avatar name={u.name} seed={u.avatarSeed} uri={u.avatarUrl} size={42} />
-                </View>
-                <View style={[styles.words, w === 'member' && styles.dim]}>
-                  <Text style={styles.name} numberOfLines={1}>{u.name}</Text>
-                  <Text style={styles.handle} numberOfLines={1}>{status}</Text>
-                </View>
-                {w === 'locked' ? <Ionicons name="lock-closed" size={14} color={colors.textFaint} /> : null}
-                {w === 'member' ? <Ionicons name="checkmark-circle" size={24} color={colors.textFaint} /> : (
-                  <View style={[styles.tick, on && styles.tickOn]}>{on ? <Ionicons name="checkmark" size={15} color={colors.brandInk} /> : null}</View>
-                )}
-              </Pressable>
-            );
-          })}
-        </View>
+        ([['Suggested', shownSuggested], ['Following', shownFollowing]] as const).map(([title, list], part) => (list.length ? (
+          <View key={title} style={styles.part}>
+            <View style={styles.headRow}>
+              <Text style={styles.section}>{title}</Text>
+              {part === 0 || !shownSuggested.length ? (picked.length ? <Text style={styles.count}>{picked.length} picked</Text> : null) : null}
+            </View>
+            <View style={styles.card}>
+              {list.map((u, i) => {
+                const on = picked.includes(u.id);
+                const w = on ? null : why(u);
+                const done = w === 'member' || w === 'asking' || w === 'invited';
+                const status = w === 'member' ? 'In the group' : w === 'asking' ? 'Asking to join' : w === 'invited' ? 'Invited' : w === 'locked' ? (feedGroupInvitesLive ? 'Can’t invite yet' : 'Can’t message yet') : `@${u.handle}`;
+                const said = w === 'member' ? 'already in the group' : w === 'asking' ? 'asking to join, approve them on the group’s page' : w === 'invited' ? 'invited' : w === 'locked' ? (feedGroupInvitesLive ? 'can’t be invited yet' : 'can’t be messaged yet') : `@${u.handle}`;
+                return (
+                  <Pressable
+                    key={u.id}
+                    accessibilityRole="checkbox"
+                    accessibilityState={{ checked: on, disabled: done }}
+                    accessibilityLabel={`${u.name}, ${said}`}
+                    disabled={done}
+                    onPress={() => { void toggle(u); }}
+                    style={({ pressed }) => [styles.row, i > 0 && styles.line, pressed && styles.rowPressed]}
+                  >
+                    <View style={done && styles.dim}>
+                      <Avatar name={u.name} seed={u.avatarSeed} uri={u.avatarUrl} size={42} />
+                    </View>
+                    <View style={[styles.words, done && styles.dim]}>
+                      <Text style={styles.name} numberOfLines={1}>{u.name}</Text>
+                      <Text style={[styles.handle, w === 'invited' && styles.invited]} numberOfLines={1}>{status}</Text>
+                    </View>
+                    {w === 'locked' ? <Ionicons name="lock-closed" size={14} color={colors.textFaint} /> : null}
+                    {w === 'member' ? <Ionicons name="checkmark-circle" size={24} color={colors.textFaint} />
+                      : w === 'invited' ? <Ionicons name="paper-plane" size={18} color={colors.brand} />
+                      : <View style={[styles.tick, on && styles.tickOn]}>{on ? <Ionicons name="checkmark" size={15} color={colors.brandInk} /> : null}</View>}
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        ) : null))
       )}
     </View>
   );
@@ -188,6 +246,8 @@ export function InvitePeople({ groupId, groupName, picked, onPicked }: {
 
 const styleDefinitions = StyleSheet.create({
   wrap: { gap: spacing.md },
+  part: { gap: spacing.sm },
+  invited: { color: colors.brand },
   pressed: { opacity: PRESS_DIM },
   card: { ...lift, borderRadius: 20, backgroundColor: colors.surface, overflow: 'hidden' },
   linkCard: { ...lift, borderRadius: 20, backgroundColor: colors.surface, padding: spacing.md, gap: spacing.md },

@@ -5,7 +5,8 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
-import { Avatar } from '@/components/ui';
+import { Avatar, BrandWash } from '@/components/ui';
+import { brandShadow } from '@/theme/fillMode';
 import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { TipBubble } from '@/components/TipBubble';
 import type { HitRequest } from '@/data/types';
@@ -23,7 +24,7 @@ import { show as showToast } from '@/lib/toast';
 import { afterReport } from '@/features/moderation/reportThanks';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import { colors, font, lift, radius, spacing, typography } from '@/theme';
+import { buttonShape, colors, font, lift, radius, spacing, typography } from '@/theme';
 import { TextScale } from '@/theme/textScale';
 
 /**
@@ -224,12 +225,12 @@ export function HitCard({ hit, miles, linked = true, tip, tipReady: listReady = 
         {mine ? (
           <View style={[styles.actions, twoLine && styles.actionsTwoLine]}>
             {hit.conversationId ? (
-              <Pressable accessibilityRole="button" accessibilityLabel="Chat with who’s in" onPress={(e) => { e.stopPropagation?.(); openChat(); }} style={({ pressed }) => [styles.button, styles.secondary, twoLine && styles.buttonWide, pressed && styles.buttonPressed]}>
+              <Pressable accessibilityRole="button" hitSlop={buttonShape.smallSlop} accessibilityLabel="Chat with who’s in" onPress={(e) => { e.stopPropagation?.(); openChat(); }} style={({ pressed }) => [styles.button, styles.secondary, twoLine && styles.buttonWide, pressed && styles.buttonPressed]}>
                 <Ionicons name="chatbubble-ellipses-outline" size={16} color={colors.text} />
                 <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.secondaryText}>Chat</Text>
               </Pressable>
             ) : null}
-            <Pressable accessibilityRole="button" onPress={(e) => { e.stopPropagation?.(); confirm({ title: 'Call off this hit?', message: total ? `It comes off Find Players, and ${total === 1 ? 'the player who’s in gets' : `the ${total} players who are in get`} a note.` : 'It comes off Find Players.', confirmLabel: 'Call it off', destructive: true, onConfirm: () => actions.cancelHit(hit.id) }); }} style={({ pressed }) => [styles.button, styles.quietButton, twoLine && styles.buttonWide, pressed && styles.buttonPressed]}>
+            <Pressable accessibilityRole="button" hitSlop={buttonShape.smallSlop} onPress={(e) => { e.stopPropagation?.(); confirm({ title: 'Call off this hit?', message: total ? `It comes off Find Players, and ${total === 1 ? 'the player who’s in gets' : `the ${total} players who are in get`} a note.` : 'It comes off Find Players.', confirmLabel: 'Call it off', destructive: true, onConfirm: () => actions.cancelHit(hit.id) }); }} style={({ pressed }) => [styles.button, styles.quietButton, twoLine && styles.buttonWide, pressed && styles.buttonPressed]}>
               <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.dangerText}>Call off</Text>
             </Pressable>
           </View>
@@ -237,23 +238,24 @@ export function HitCard({ hit, miles, linked = true, tip, tipReady: listReady = 
           // In it: the chat, and the way out of it, sharing the line under who's in (the poster's own pair).
           <View style={[styles.actions, styles.actionsTwoLine]}>
             {hit.conversationId ? (
-              <Pressable accessibilityRole="button" accessibilityLabel="You’re in. Open the hit’s chat" onPress={(e) => { e.stopPropagation?.(); openChat(); }} style={({ pressed }) => [styles.button, styles.secondary, styles.buttonWide, pressed && styles.buttonPressed]}>
+              <Pressable accessibilityRole="button" hitSlop={buttonShape.smallSlop} accessibilityLabel="You’re in. Open the hit’s chat" onPress={(e) => { e.stopPropagation?.(); openChat(); }} style={({ pressed }) => [styles.button, styles.secondary, styles.buttonWide, pressed && styles.buttonPressed]}>
                 <Ionicons name="chatbubble-ellipses-outline" size={16} color={colors.text} />
                 <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.secondaryText}>Chat</Text>
               </Pressable>
             ) : null}
-            <Pressable accessibilityRole="button" accessibilityLabel={`Can’t make it. Free your spot in ${posterFirst}’s hit`} onPress={(e) => { e.stopPropagation?.(); cantMakeIt(); }} style={({ pressed }) => [styles.button, styles.quietButton, styles.buttonWide, pressed && styles.buttonPressed]}>
+            <Pressable accessibilityRole="button" hitSlop={buttonShape.smallSlop} accessibilityLabel={`Can’t make it. Free your spot in ${posterFirst}’s hit`} onPress={(e) => { e.stopPropagation?.(); cantMakeIt(); }} style={({ pressed }) => [styles.button, styles.quietButton, styles.buttonWide, pressed && styles.buttonPressed]}>
               <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.dangerText}>Can’t make it</Text>
             </Pressable>
           </View>
         ) : inIt ? (
           // In a hit already played: just its chat.
-          <Pressable accessibilityRole="button" accessibilityLabel="You’re in. Open the hit’s chat" onPress={(e) => { e.stopPropagation?.(); openChat(); }} style={({ pressed }) => [styles.button, styles.secondary, pressed && styles.buttonPressed]}>
+          <Pressable accessibilityRole="button" hitSlop={buttonShape.smallSlop} accessibilityLabel="You’re in. Open the hit’s chat" onPress={(e) => { e.stopPropagation?.(); openChat(); }} style={({ pressed }) => [styles.button, styles.secondary, pressed && styles.buttonPressed]}>
             <Ionicons name="chatbubble-ellipses-outline" size={16} color={colors.text} />
             <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.secondaryText}>Chat</Text>
           </Pressable>
         ) : full ? null : (
-          <Pressable accessibilityRole="button" disabled={busy} onPress={(e) => { e.stopPropagation?.(); void join(); }} style={({ pressed }) => [styles.button, styles.primary, busy && { opacity: 0.6 }, pressed && styles.buttonPressed]}>
+          <Pressable accessibilityRole="button" hitSlop={buttonShape.smallSlop} disabled={busy} onPress={(e) => { e.stopPropagation?.(); void join(); }} style={({ pressed }) => [styles.button, styles.primary, busy && { opacity: 0.6 }, pressed && styles.buttonPressed]}>
+            <BrandWash radius={buttonShape.smallRadius} curve />
             <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.primaryText}>{busy ? 'Joining…' : 'I’m in'}</Text>
           </Pressable>
         )}
@@ -342,7 +344,7 @@ const styleDefinitions = StyleSheet.create({
   audienceText: { ...typography.smallStrong, color: colors.brand, flex: 1 },
   invitedText: { ...typography.small, color: colors.textMuted, flex: 1 },
   faceSmall: { borderWidth: 1.5, borderColor: colors.bgElevated, borderRadius: 11 },
-  openNow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, minHeight: 36, borderRadius: 18, backgroundColor: colors.surface, ...lift },
+  openNow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, minHeight: 36, borderRadius: buttonShape.smallRadius, ...buttonShape.curve, backgroundColor: colors.surface, ...lift },
   openNowText: { ...typography.smallStrong, color: colors.text },
   // The foot: who's in and the one thing to do, under a hairline.
   foot: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm, paddingTop: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
@@ -359,9 +361,9 @@ const styleDefinitions = StyleSheet.create({
   actionsTwoLine: { alignSelf: 'stretch', justifyContent: 'flex-end' },
   buttonWide: { flex: 1, maxWidth: 180 },
   // One button, three looks: the same height, border and label weight.
-  button: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, minHeight: 38, paddingHorizontal: 16, borderRadius: 19, borderWidth: 1 },
+  button: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, minHeight: buttonShape.smallHeight, paddingHorizontal: 16, borderRadius: buttonShape.smallRadius, ...buttonShape.curve, borderWidth: 1 },
   buttonPressed: { transform: [{ scale: PRESS_SHRINK }] },
-  primary: { paddingHorizontal: 22, backgroundColor: colors.brand, borderColor: colors.brand },
+  primary: { paddingHorizontal: 22, backgroundColor: colors.brand, borderColor: colors.brand, ...brandShadow },
   primaryText: { ...typography.bodyStrong, color: colors.brandInk },
   secondary: { backgroundColor: colors.surfaceAlt, borderColor: colors.border },
   secondaryText: { ...typography.bodyStrong, color: colors.text },
