@@ -146,7 +146,7 @@ export function MapTopBar({ onBack, query, onQuery, locationOn, locating, onTogg
   const listUp = !!(found.length || placeRows.length || placeNote || searching);
   return (
     // Above the filter chips under it, so the location tip hangs over them.
-    <View style={{ gap: spacing.sm, zIndex: 5 }}>
+    <View style={{ zIndex: 5 }}>
     <View style={styles.topRow}>
       {onBack ? (
         <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={onBack} style={({ pressed }) => [styles.barRoundHit, pressed && styles.barPressed]}>
@@ -214,10 +214,8 @@ export function MapTopBar({ onBack, query, onQuery, locationOn, locating, onTogg
         </View>
       ) : null}
     </View>
-    {listUp ? (
-      // Fades in and out (a pick, the box cleared or emptied), and glides to its new height as what is typed narrows it.
-      <Animated.View entering={FadeIn.duration(LIST_IN_MS)} exiting={FadeOut.duration(LIST_OUT_MS)} style={styles.resultsWrap}>
-        <GlideGlass style={styles.results}>
+    {/* Fades in and out (a pick, the box cleared or emptied) as it grows and shrinks, the chips under it gliding with it, and glides to its new height as what is typed narrows it. */}
+    <SearchList up={listUp}>
           {found.map(({ c, miles }, i) => {
             const meta = [formatMiles(miles), c.count > 1 ? `${c.count} courts` : null, c.lit ? 'lights' : null].filter(Boolean).join(' · ');
             return (
@@ -247,22 +245,66 @@ export function MapTopBar({ onBack, query, onQuery, locationOn, locating, onTogg
               <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.placeNoteText}>{placeNote}</Text>
             </View>
           ) : null}
-        </GlideGlass>
-      </Animated.View>
-    ) : null}
+    </SearchList>
     </View>
   );
 }
 
-/** The search list's see-through box, gliding to the height of what it lists (its own, so each time it opens it starts fresh). */
-function GlideGlass({ style, children }: { style: object; children: React.ReactNode }) {
-  const glide = useGlideHeight({ pad: 2 * StyleSheet.hairlineWidth });
+/**
+ * The search's list under the bar (Oct 22 sweep: it vanished in one frame). It grows open and fades in,
+ * glides to each new height as what is typed narrows it, and on a pick, or the box cleared or emptied,
+ * fades out as it shrinks away (still showing what it last listed, taking no taps), the filter chips
+ * under it riding up with it. Reduce Motion: it only fades.
+ */
+function SearchList({ up, children }: { up: boolean; children: React.ReactNode }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const reduce = useReducedMotion();
+  const [shown, setShown] = useState(up);
+  // While it closes, what it last listed.
+  const kept = useRef<React.ReactNode>(children);
+  if (up) kept.current = children;
+  const h = useSharedValue(0);
+  const open = useSharedValue(0);
+  const natural = useRef(0);
+  const edges = 2 * StyleSheet.hairlineWidth;
+  useEffect(() => {
+    if (up) {
+      setShown(true);
+      open.value = withTiming(1, { duration: LIST_IN_MS });
+      if (natural.current) h.value = reduce ? natural.current : withTiming(natural.current, LIST_EASE);
+      return;
+    }
+    const gone = (done?: boolean) => { 'worklet'; if (done) runOnJS(setShown)(false); };
+    if (reduce) { open.value = withTiming(0, { duration: LIST_OUT_MS }, gone); return; }
+    open.value = withTiming(0, { duration: LIST_OUT_MS });
+    h.value = withTiming(0, LIST_EASE, gone);
+  }, [up]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Unmounted, it starts from nothing the next time.
+  useEffect(() => { if (!shown) { natural.current = 0; h.value = 0; } }, [shown]); // eslint-disable-line react-hooks/exhaustive-deps
+  const wrap = useAnimatedStyle(() => ({ opacity: open.value, marginTop: spacing.sm * open.value }));
+  const glass = useAnimatedStyle(() => ({ height: h.value }));
+  if (!shown) return null;
   return (
-    <MapGlass dense radius={18} style={[style, glide.style]}>
-      <View onLayout={glide.onLayout}>{children}</View>
-    </MapGlass>
+    <Animated.View style={[styles.resultsWrap, wrap, !up && styles.noTouch]}>
+      <MapGlass dense radius={18} style={[styles.results, glass]}>
+        <View
+          onLayout={(e) => {
+            const next = Math.round((e.nativeEvent.layout.height + edges) * 2) / 2;
+            if (next <= edges || next === natural.current) return;
+            natural.current = next;
+            if (!up) return;
+            h.value = reduce ? next : withTiming(next, LIST_EASE);
+          }}
+        >
+          {up ? children : kept.current}
+        </View>
+      </MapGlass>
+    </Animated.View>
   );
 }
+
+/** How the search's list grows, shrinks and glides between heights. */
+const LIST_EASE = { duration: 220, easing: Easing.bezier(0.2, 0.8, 0.2, 1) };
 
 /** The search's list fading in under the bar, and out again. */
 const LIST_IN_MS = 140;
