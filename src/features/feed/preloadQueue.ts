@@ -34,7 +34,11 @@ const SCREEN_FIRST_MS = 4000;
 /** And once its first frame is in, this long more, so it starts playing before anything else asks. */
 const SCREEN_START_MS = 300;
 let screenInAt = 0;
-/** A preload holds its fetching turn this long at most, then the next may start (it keeps its player). */
+/**
+ * A preload that has gone this long without fetching anything more hands its turn on (it keeps its player).
+ * A phone's player says when its buffer grows (`moving`), so there this is a stall, not a clock: a heavy clip
+ * on a slow link that is still coming in keeps its turn, and the next does not start alongside it.
+ */
 const TURN_MS = 4000;
 
 type Entry = { rank: number; ready: boolean; since: number };
@@ -43,6 +47,9 @@ const waiting = new Map<number, Entry>();
 const fetching = new Set<number>();
 /** When each clip in `fetching` got its turn. */
 const turnAt = new Map<number, number>();
+/** When each clip in `fetching` last said more of it had come in. */
+const movedAt = new Map<number, number>();
+const lastHeard = (id: number, now: number) => Math.max(turnAt.get(id) ?? now, movedAt.get(id) ?? 0);
 let turnTimer: ReturnType<typeof setTimeout> | null = null;
 /** Ever given a turn (or played on screen): keeps its player while it stays in the window. */
 const given = new Set<number>();
@@ -65,7 +72,7 @@ function settle() {
   const now = Date.now();
   for (const id of [...fetching]) {
     const e = waiting.get(id);
-    if (!e || e.ready || now - (turnAt.get(id) ?? now) >= TURN_MS) { fetching.delete(id); turnAt.delete(id); }
+    if (!e || e.ready || now - lastHeard(id, now) >= TURN_MS) { fetching.delete(id); turnAt.delete(id); movedAt.delete(id); }
   }
   const starting = now - screenInAt < SCREEN_START_MS;
   const screenBusy = starting || [...onScreen.values()].some((at) => now - at < SCREEN_FIRST_MS);
@@ -91,7 +98,7 @@ function settle() {
   // Look again when the oldest turn runs out, in case that clip never reports ready.
   if (turnTimer) { clearTimeout(turnTimer); turnTimer = null; }
   if (fetching.size) {
-    const left = Math.min(...[...fetching].map((id) => TURN_MS - (now - (turnAt.get(id) ?? now))));
+    const left = Math.min(...[...fetching].map((id) => TURN_MS - (now - lastHeard(id, now))));
     turnTimer = setTimeout(settle, Math.max(0, left) + 10);
   }
   // Only a new turn changes what any clip may do (a turn handed back changes nothing on screen).
@@ -110,14 +117,17 @@ AppState.addEventListener('change', (state) => {
  * - `rank`: how soon you may reach it (1 = the next page); lower goes first.
  * - `playing`: it is the clip on screen (always loads, and counts as having had its turn); rank 0 counts the same.
  * - `ready`: its opening is in (first frame / first seconds).
+ * - `moving`, if given, is filled with a call the clip makes whenever more of it has come
+ *   in: its turn then lasts while it is still fetching, not a fixed TURN_MS.
  * Returns whether its player may exist and fetch.
  */
-export function usePreloadTurn(want: boolean, rank: number, playing: boolean, ready: boolean): boolean {
+export function usePreloadTurn(want: boolean, rank: number, playing: boolean, ready: boolean, moving?: { current: (() => void) | null }): boolean {
   // The clip on screen, or the page on screen of the feed on show (rank 0) whose clip
   // is about to start (the feed warming up, the splash lifting): first in line.
   const active = playing || (want && rank <= 0);
   const id = useRef(0);
   if (!id.current) id.current = nextId++;
+  if (moving) moving.current = () => { if (fetching.has(id.current)) movedAt.set(id.current, Date.now()); };
   const [, bump] = useState(0);
   useEffect(() => {
     const fn = () => bump((n) => n + 1);
@@ -140,7 +150,7 @@ export function usePreloadTurn(want: boolean, rank: number, playing: boolean, re
   }, [want, rank, active, ready]);
   useEffect(() => () => {
     const me = id.current;
-    waiting.delete(me); given.delete(me); fetching.delete(me); turnAt.delete(me); onScreen.delete(me);
+    waiting.delete(me); given.delete(me); fetching.delete(me); turnAt.delete(me); movedAt.delete(me); onScreen.delete(me);
     schedule();
   }, []);
   return active || given.has(id.current);

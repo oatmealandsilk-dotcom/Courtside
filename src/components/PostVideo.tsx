@@ -11,6 +11,8 @@ import { ClipVideo, type ClipVideoHandle } from './ClipVideo';
 import { CourtSpinner } from './CourtSpinner';
 import { ZoomableMedia, type HomeRect, type ZoomableMediaHandle } from './ZoomableMedia';
 import { VideoView } from 'expo-video';
+import { Image as ExpoImage } from 'expo-image';
+import { usePreloadTurn } from '@/features/feed/preloadQueue';
 import { isDesktopBrowser } from '@/lib/browserDevice';
 import { cropLayer } from '@/lib/crop';
 import type { MediaCrop } from '@/data/types';
@@ -38,8 +40,11 @@ function clock(seconds: number) {
  * middle, a time line with the time along the bottom, sound, and a corner
  * button for full screen. They fade away on their own. Two taps like it.
  */
-export function PostVideo({ uri, poster, active, preload = false, trimStart, trimEnd, speed, volume, silent = false, onDoubleTap, discInk, onReady, onSize, crop }: {
-  uri: string; poster?: string; active: boolean; preload?: boolean; trimStart?: number; trimEnd?: number; silent?: boolean;
+export function PostVideo({ uri, poster, active, preload = false, preloadRank = 1, trimStart, trimEnd, speed, volume, silent = false, onDoubleTap, discInk, onReady, onSize, crop }: {
+  uri: string; poster?: string; active: boolean; preload?: boolean;
+  /** How soon the feed may reach it (1 = the next page): off screen its player is built in turn (features/feed/preloadQueue). */
+  preloadRank?: number;
+  trimStart?: number; trimEnd?: number; silent?: boolean;
   /** The author's rate (1 is normal) and level (0–1), honoured at playback. */
   speed?: number; volume?: number;
   onDoubleTap?: () => void; discInk?: string;
@@ -56,6 +61,14 @@ export function PostVideo({ uri, poster, active, preload = false, trimStart, tri
   const [muted, setMuted] = useSoundMuted();
   const [ready, setReady] = useState(false);
   const [full, setFull] = useState(false);
+  // In a feed, a video post off screen waits its turn for a player like a clip
+  // does (ClipPlayback): nearest first, a few at a time, after the one on screen,
+  // and a feed tab not on show builds none ahead. Until then just its poster.
+  // A browser's player here only ever fetches the metadata, so it needs no turn.
+  const moving = useRef<(() => void) | null>(null);
+  const turn = usePreloadTurn(preload && Platform.OS !== 'web', preloadRank, active, ready, moving);
+  const built = active || full || (preload && (Platform.OS === 'web' || turn));
+  useEffect(() => { if (!built) setReady(false); }, [built]);
   // The tutorial never starts under a video opened full screen.
   useHoldTour(full);
   // Full screen is black: light status-bar icons over it (on Android the Modal opens a frame later for that).
@@ -278,9 +291,11 @@ export function PostVideo({ uri, poster, active, preload = false, trimStart, tri
     <View ref={rootRef} style={[StyleSheet.absoluteFill, !full && idleCursor]} onPointerMove={desktopWeb ? nudge : undefined} onPointerLeave={desktopWeb ? hoverOut : undefined}>
       <View style={cropLayer(crop)}>
         {/* The page is told only "in" and, when the player is freed, "gone"; a stall mid-play is this player's own spinner. */}
+        {!built ? (poster ? <ExpoImage source={{ uri: poster }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" /> : null) : (
         <ClipVideo ref={player} uri={uri} poster={poster} active={active && !ownCopy} muted={silent || muted || !active || ownCopy} paused={paused} fit="cover" trimStart={trimStart} trimEnd={trimEnd} speed={speed} volume={volume}
           onProgress={onProgress}
-          onReady={(ok) => { setReady(ok); if (ok) onReady?.(true); }} onGone={() => onReady?.(false)} onSize={onSize} />
+          onReady={(ok) => { setReady(ok); if (ok) onReady?.(true); }} onGone={() => onReady?.(false)} onSize={onSize} onBuffered={() => moving.current?.()} />
+        )}
       </View>
       <Pressable accessibilityRole="button" accessibilityLabel="Show video controls" onPress={(e) => tap(e.nativeEvent.locationX)} onLayout={(e) => { width.current = Math.max(1, e.nativeEvent.layout.width); }} style={[StyleSheet.absoluteFill, idleCursor]} />
       {!ready && active && !paused ? <View pointerEvents="none" style={styles.centre}><CourtSpinner ink={discInk ?? 'white'} /></View> : null}

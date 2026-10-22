@@ -15,6 +15,8 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
   onSize?: (width: number, height: number) => void;
   /** The clip left the page (or was swapped for another): whatever it had fetched is gone with it. */
   onGone?: () => void;
+  /** The phone's preload-queue signal; a browser's player here fetches only the metadata, so it never needs one. */
+  onBuffered?: () => void;
   /** On the comments stage: it plays on although the comments page is over it (see the phone's ClipVideo). */
   held?: boolean;
   /** The phone's Android drawing mode; a browser has no such choice. */

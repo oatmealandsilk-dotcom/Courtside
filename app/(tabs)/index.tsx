@@ -544,6 +544,10 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, onSettled }: {
   // Whether Home has been the tab on screen at all yet this time round.
   const shownOnce = useRef(false);
   if (focused) shownOnce.current = true;
+  // Ever the feed on show (a tab you opened, not only one warmed behind For you): covered by
+  // another tab, it keeps the clips it had buffered, so coming back and flicking on never waits.
+  const onShowOnce = useRef(false);
+  if (focused && !paused) onShowOnce.current = true;
   // In a browser the Feed is built out of sight shortly after the app opens
   // (see the tabs' web layout). Until you first come to it, only the first
   // clip fetches, and only its opening: enough to start at once, without
@@ -1630,6 +1634,8 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, onSettled }: {
   // clip covers for the next six pages, photos (every photo of a carousel) for the next four.
   // Into the same cache the pages draw from (expo-image, memory and disk), once each. A
   // photo page reports itself ready when its picture lands, so its cover lifts at once.
+  // A feed tab not on show (warmed behind For you, or covered) fetches only its page on
+  // screen: no data spent on tabs never opened; the rest comes the moment it is opened.
   const prefetched = useRef(new Set<string>());
   useEffect(() => {
     const fresh = (uri: string | undefined): uri is string => !!uri && !prefetched.current.has(uri) && !!prefetched.current.add(uri);
@@ -1637,7 +1643,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, onSettled }: {
       if (!fresh(uri)) return;
       ExpoImage.prefetch(uri, 'memory-disk').catch(() => false).finally(() => then?.());
     };
-    for (let ahead = 0; ahead <= 6; ahead++) {
+    for (let ahead = 0; ahead <= (paused ? 0 : 6); ahead++) {
       const item = feed[active + ahead];
       if (!item) break;
       const photos = ahead <= 4;
@@ -1656,9 +1662,9 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, onSettled }: {
       }
     }
     // The page behind too: a swipe back lands on its cover.
-    const behind = feed[active - 1];
+    const behind = paused ? undefined : feed[active - 1];
     if (behind?.type === 'post') fetchAhead(behind.post.thumbnailUrl ?? behind.post.imageUrl);
-  }, [feed, active, markReady]);
+  }, [feed, active, markReady, paused]);
 
   // Whether someone else's post may leave CourtSide as a picture is asked as it
   // comes on screen, so its ••• menu opens already knowing (openOutside.ts).
@@ -1857,10 +1863,13 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, onSettled }: {
               // silent, at its start), phone and browser alike; their downloads
               // take turns, nearest first (preloadRank, features/feed/preloadQueue).
               // A browser's Feed still warming up out of sight fetches only the first
-              // clip's opening. A feed tab not on show (kept, or warmed in the
-              // background, see GroupedFeed) keeps only its page on screen, after
-              // everything the feed on show wants, and in a browser only its opening.
-              const near = warming || paused ? ahead === 0 : distance <= WINDOW || (ahead > 0 && ahead <= AHEAD);
+              // clip's opening. A feed tab warmed in the background and never opened
+              // (see GroupedFeed) keeps only its page on screen, after everything the
+              // feed on show wants, and in a browser only its opening. One you have
+              // had on show and left for another tab keeps its window (as on main), so
+              // coming back and flicking on lands on clips already in; any still
+              // to fetch wait behind everything the feed on show wants.
+              const near = warming || (paused && !onShowOnce.current) ? ahead === 0 : distance <= WINDOW || (ahead > 0 && ahead <= AHEAD);
               const warmOnly = warming || !!paused;
               const preloadRank = (ahead < 0 ? 2.5 : ahead) + (paused ? 10 : 0);
               const strip = index === suggestHost ? suggestStrip : null;
@@ -2002,6 +2011,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, onSettled }: {
                       saved={isSaved}
                       active={playing && active === index && warmed && playable}
                       preload={near}
+                      preloadRank={preloadRank}
                       topInset={clearOfRemoved(post, insets.top + 66)}
                       // The same bottom edge as a written post's page (below), so every post's "Add a comment…" sits on one line.
                       bottomInset={barInset > 0 ? barInset + 8 : POST_BOTTOM}

@@ -155,17 +155,20 @@ function ClipPlaybackInner({ uri, poster, active, preload = false, preloadRank =
 
   // Pages in the preload window keep a player so their first frame is ready to
   // go, built in turn, nearest first and two at a time (features/feed/preloadQueue).
-  const turn = usePreloadTurn(preload, preloadRank, active, ready);
+  // Its turn lasts while more of it is still coming in (a heavy clip on a slow link), not a fixed few seconds.
+  const moving = useRef<(() => void) | null>(null);
+  const turn = usePreloadTurn(preload, preloadRank, active, ready, moving);
+  const buffered = () => moving.current?.();
   if (!active && !(preload && turn)) return <View style={StyleSheet.absoluteFill} />;
   return (
     <View style={StyleSheet.absoluteFill}>
       {letterbox ? (
         <View style={styles.wideFrame}><View style={cropLayer(crop)}>
-          <ClipVideo uri={uri} poster={poster} active={active} muted={muted || silent || !active} paused={paused} fit="contain" trimStart={trimStart} trimEnd={trimEnd} speed={(speed ?? 1) * (fast ? 2 : 1)} volume={volume} onProgress={onProgress} onReady={setReady} onGone={gone} held={held} surfaceType={surfaceType} />
+          <ClipVideo uri={uri} poster={poster} active={active} muted={muted || silent || !active} paused={paused} fit="contain" trimStart={trimStart} trimEnd={trimEnd} speed={(speed ?? 1) * (fast ? 2 : 1)} volume={volume} onProgress={onProgress} onReady={setReady} onGone={gone} onBuffered={buffered} held={held} surfaceType={surfaceType} />
         </View></View>
       ) : (
         <View style={cropLayer(crop)}>
-          <ClipVideo uri={uri} poster={poster} active={active} muted={muted || silent || !active} paused={paused} fit={fit} trimStart={trimStart} trimEnd={trimEnd} speed={(speed ?? 1) * (fast ? 2 : 1)} volume={volume} onProgress={onProgress} onReady={setReady} onGone={gone} held={held} surfaceType={surfaceType} />
+          <ClipVideo uri={uri} poster={poster} active={active} muted={muted || silent || !active} paused={paused} fit={fit} trimStart={trimStart} trimEnd={trimEnd} speed={(speed ?? 1) * (fast ? 2 : 1)} volume={volume} onProgress={onProgress} onReady={setReady} onGone={gone} onBuffered={buffered} held={held} surfaceType={surfaceType} />
         </View>
       )}
       {/* Over the picture, under the disc: the top shade darkens the video, never the disc. */}

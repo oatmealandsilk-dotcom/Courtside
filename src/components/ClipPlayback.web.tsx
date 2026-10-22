@@ -105,7 +105,11 @@ function ClipPlaybackInner({ uri, poster, active: wanted, preload = false, prelo
   latestReady.current = onReady;
   // In the preload window, its video fetches in turn: nearest first, two at a
   // time, after the clip on screen (features/feed/preloadQueue, as on a phone).
-  const turn = usePreloadTurn(preload, preloadRank, active, ready || failed);
+  // Or once the browser has stopped fetching it of its own accord ('suspend'): Safari stops a
+  // 'metadata' clip there without ever reaching its first frame (and on an iPhone treats 'auto'
+  // the same), so waiting for the frame would hold a download turn for nothing.
+  const [idle, setIdle] = useState(false);
+  const turn = usePreloadTurn(preload, preloadRank, active, ready || failed || idle);
   // How long its opening took, from the first byte asked for: the connection's speed (lib/netSpeed), as on a phone.
   const loadAt = useRef(0);
   const fetches = active || (preload && turn);
@@ -118,8 +122,13 @@ function ClipPlaybackInner({ uri, poster, active: wanted, preload = false, prelo
     const t = setTimeout(() => setSpin(true), 300);
     return () => clearTimeout(t);
   }, [ready, active]);
-  // A clip waiting off screen with its first frame in steps back to 'metadata': the browser
-  // stops there, rather than pulling the whole file while the next ones wait their turn.
+  // A clip waiting off screen with its first frame in steps back to 'metadata': Chrome
+  // stops there, rather than pulling the whole file while the next ones wait their turn
+  // (Safari only ever fetches more, never less, so there it is just a hint).
+  const fetchHint = active ? 'auto' : preload && turn ? (warmOnly || ready ? 'metadata' : 'auto') : 'none';
+  // A new hint is a new fetch: it holds its turn again until it stops or has its frame.
+  useEffect(() => { setIdle(false); }, [fetchHint]);
+  const stopped = (el: HTMLVideoElement) => { if (!active && fetchHint !== 'none' && el.readyState >= 1) setIdle(true); };
   // Gone from the page (or given another clip): what it had fetched goes with it.
   useEffect(() => () => latestReady.current?.(false), [uri]);
   // The sound disc eases in when the clip starts and fades out quickly; a
@@ -226,7 +235,7 @@ function ClipPlaybackInner({ uri, poster, active: wanted, preload = false, prelo
 
   return <div style={{ position: 'absolute', inset: 0, background: letterbox ? '#000' : undefined, display: 'flex', alignItems: 'center' }}>
     <div style={{ ...cropCss(crop), display: 'flex', alignItems: 'center' }}>
-      <video ref={video} src={uri} poster={poster} loop muted={muted || silent} playsInline preload={active ? 'auto' : preload && turn ? (warmOnly || ready ? 'metadata' : 'auto') : 'none'} onError={fail} onLoadedData={() => { if (loadAt.current > 0) { noteClipLoad(Date.now() - loadAt.current); loadAt.current = -1; } setReady(true); }} onCanPlay={() => setReady(true)} onWaiting={() => setReady(false)} onPlaying={() => setReady(true)} style={{ width: '100%', height: '100%', objectFit: letterbox ? 'contain' : fit, pointerEvents: 'none' }} />
+      <video ref={video} src={uri} poster={poster} loop muted={muted || silent} playsInline preload={fetchHint} onSuspend={(e) => stopped(e.currentTarget)} onLoadedMetadata={(e) => { if (fetchHint === 'metadata') stopped(e.currentTarget); }} onError={fail} onLoadedData={() => { if (loadAt.current > 0) { noteClipLoad(Date.now() - loadAt.current); loadAt.current = -1; } setReady(true); }} onCanPlay={() => setReady(true)} onWaiting={() => setReady(false)} onPlaying={() => setReady(true)} style={{ width: '100%', height: '100%', objectFit: letterbox ? 'contain' : fit, pointerEvents: 'none' }} />
       {failed ? <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}><span style={{ padding: '8px 14px', borderRadius: 999, background: 'rgba(0,0,0,0.55)', color: 'white', font: '600 13px Inter_600SemiBold, system-ui, sans-serif' }}>This video didn’t load</span></div> : null}
     </div>
     {/* Over the picture, under the disc: the top shade darkens the video, never the disc. */}
