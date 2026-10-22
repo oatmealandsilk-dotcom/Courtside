@@ -3,6 +3,7 @@ import { StyleSheet, View } from 'react-native';
 import { Easing, makeMutable, withTiming, type SharedValue } from 'react-native-reanimated';
 
 import { sheetFling } from '@/components/map/sheetFling';
+import { CardGlide, glides } from '@/components/map/glide';
 import { CrownLead, layerZ, takesOver, useStageLayers, type Crown, type StageKind, type StageLayer } from '@/components/map/stageLayers';
 
 /*
@@ -184,7 +185,8 @@ export function CardStage({ cardKey, kind, crown, children }: { cardKey: string;
               <CrownLead.Provider value={leadOf(layer)}>{typeof crown === 'function' ? crown(layer.key) : crown}</CrownLead.Provider>
             </View>
           ) : null}
-          {layer.node}
+          {/* A card growing as what it shows loads glides to its new height, its buttons riding with it (CardGlide); the players list moves its own. */}
+          <CardGlide on={glides(layer)}>{layer.node}</CardGlide>
         </View>
       ))}
     </View>

@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, type StyleProp, type ViewStyle } from 'react-native';
+import { type StyleProp, type ViewStyle } from 'react-native';
+import Animated, { type AnimatedStyle } from 'react-native-reanimated';
 
 import { colors } from '@/theme';
 import { useTheme } from '@/theme/ThemeProvider';
@@ -18,12 +19,15 @@ import { useTheme } from '@/theme/ThemeProvider';
  * the same every frame, in every theme. The hairline edge and the soft
  * shadow stay where they were (the caller's style and its wrapper).
  *
+ * An animated view, so a control can glide to a new size (the players pill's
+ * width, the search list's height: Oct 22 sweep). Its fill is never faded.
+ *
  * `dense` is for what holds rows of words to read (the search list), so the
  * map under it never muddles them; still a touch see-through.
  */
-export function MapGlass({ children, style, radius, dense = false }: { children?: React.ReactNode; style?: StyleProp<ViewStyle>; radius: number; dense?: boolean }) {
+export function MapGlass({ children, style, radius, dense = false }: { children?: React.ReactNode; style?: StyleProp<AnimatedStyle<StyleProp<ViewStyle>>>; radius: number; dense?: boolean }) {
   // Read on every draw (with the theme), so the fill is always the court you are on.
   const { dark } = useTheme();
   const alpha = dense ? 'E6' : dark ? '8C' : '80';
-  return <View style={[{ borderRadius: radius, overflow: 'hidden', backgroundColor: `${colors.surface.slice(0, 7)}${alpha}` }, style]}>{children}</View>;
+  return <Animated.View style={[{ borderRadius: radius, overflow: 'hidden', backgroundColor: `${colors.surface.slice(0, 7)}${alpha}` }, style]}>{children}</Animated.View>;
 }
