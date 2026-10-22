@@ -297,13 +297,17 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
       <View style={[styles.whoRow, lane]} onLayout={measured(setHead, head)}>
         <Pressable accessibilityRole="link" accessibilityLabel={`View ${author.name}'s profile${streakWords(streak)}`} onPress={() => { actions.noteFeedSignal({ kind: 'post', id: post.id, profileTap: true }); openPlayer(author.id, currentUserId); }} style={styles.who}>
           <Avatar name={author.name} seed={author.avatarSeed} uri={author.avatarUrl} size={40} />
-          <View style={{ flex: 1, gap: 1 }}>
+          <View style={styles.whoWords}>
+            {/* The name and its badges sit together, the badges right after the name however short it is
+                (Oct 22, owner: "awkward spacing" after a short name). The badges never shrink, so a long
+                name gives way at its end; they are small enough that it always keeps most of the line. */}
             <View style={styles.nameRow}>
-              {/* The name keeps some room: the badges beside it never squeeze it down to a letter. */}
               <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.name} numberOfLines={1}>{author.name}</Text>
-              <StreakFlame days={streak} />
-              {author.isCoach ? <Ionicons name="shield-checkmark" size={14} color={colors.brand} /> : null}
-              <LevelPill profile={author.profile} small />
+              <View style={styles.badges}>
+                <StreakFlame days={streak} />
+                {author.isCoach ? <Ionicons name="shield-checkmark" size={14} color={colors.brand} /> : null}
+                <LevelPill profile={author.profile} small />
+              </View>
             </View>
             {/* "New" on the handle's line (or the one under it), out of the name's way, as on a written post (Oct 6 audit, item 9). */}
             <View style={styles.subRow}>
@@ -491,12 +495,15 @@ const styleDefinitions = StyleSheet.create({
   fullRoot: { flex: 1, backgroundColor: 'transparent' },
   fullClose: { position: 'absolute', right: 16, width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center' },
   whoRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  who: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  nameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  name: { ...typography.bodyStrong, color: colors.text, flexShrink: 1, minWidth: 56 },
+  // The avatar 10 points from the words, the words' three lines (name, handle, place) on one even step.
+  who: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  whoWords: { flex: 1, minWidth: 0, gap: 1 },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 20 },
+  name: { ...typography.bodyStrong, lineHeight: 20, color: colors.text, flexShrink: 1 },
+  badges: { flexDirection: 'row', alignItems: 'center', gap: 5, flexShrink: 0 },
   // The handle's line: "New" goes on to the next line when it doesn't fit beside it.
   subRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: spacing.sm, rowGap: spacing.xs },
-  sub: { ...typography.small, color: colors.textFaint, flexShrink: 1 },
+  sub: { ...typography.small, lineHeight: 17, color: colors.textFaint, flexShrink: 1 },
   // 18 points between glyphs, each button a full 44-point square (a browser has no hitSlop); the row
   // is pulled out by the padding at its ends, and up and down, so it takes the room it always did.
   actions: { flexDirection: 'row', alignItems: 'center', marginHorizontal: -9, marginVertical: -6 },
