@@ -38,7 +38,7 @@ const FULL_START_LINE = `You’re in ${MAX_GROUPS} groups, the most anyone can b
 
 export default function FindGroups() {
   const styles = useThemedStyles(styleDefinitions);
-  const { feedGroups, feedGroupsAsked, feedGroupsOn, currentUserId, reportedIds, actions } = useApp();
+  const { feedGroups, feedGroupsAsked, feedGroupsOn, feedGroupInvites, currentUserId, reportedIds, actions } = useApp();
   const [closeSignal, setCloseSignal] = useState(0);
   const dismiss = () => setCloseSignal((n) => n + 1);
   // Where to go once the sheet has gone (a group's page, or the Groups page).
@@ -76,6 +76,8 @@ export default function FindGroups() {
   // Where you stand with each group: the app's own copy of your groups and requests wins over the list's.
   const listed = useMemo(() => (rows ?? [])
     .filter((r) => !minedAtOpen.current.has(r.id) && !reportedIds.includes(r.id))
+    // A group you are invited to is in Invites, at the top (not twice); a search lists it like any other.
+    .filter((r) => !!search.trim() || !feedGroupInvites.some((i) => i.groupId === r.id))
     .map((r) => {
       const mine = feedGroups.find((g) => g.id === r.id);
       return {
@@ -84,7 +86,7 @@ export default function FindGroups() {
         requested: feedGroupsOn ? feedGroupsAsked.some((a) => a.id === r.id) : r.requested,
         memberCount: mine ? Math.max(mine.members.length, r.memberCount) : r.memberCount,
       };
-    }), [rows, feedGroups, feedGroupsAsked, feedGroupsOn, reportedIds]);
+    }), [rows, feedGroups, feedGroupsAsked, feedGroupsOn, feedGroupInvites, reportedIds, search]);
   const searching = !!search.trim();
   // While you search it may grow (more found) but never shrinks under you letter by letter:
   // it keeps the height it had before the first letter (on a phone the keyboard has opened it all the way anyway).
