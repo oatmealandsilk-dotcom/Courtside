@@ -12,7 +12,7 @@ const isoHoursAgo = (hours: number) => new Date(Date.now() - hours * 3_600_000).
  * Design preview only (Oct 22, the Groups sheet): a demo web build opened with
  * ?gdemo=a|b|c shows one of three set-ups, kept for the tab's session.
  *   a: in no groups, nothing to join
- *   b: in one group (you run it, someone is asking), three open groups near you
+ *   b: in one group (you run it, someone is asking), groups near you and in Raleigh
  *   c: in three groups (the most), groups near you to join
  * Without it (and always on a phone) the demo is as it was. Never live data.
  */
@@ -30,97 +30,91 @@ const demoSetup: 'a' | 'b' | 'c' | null = (() => {
   }
 })();
 
-const allDemoGroups: FeedGroup[] = [
-  {
-    id: 'g-wakefield',
-    name: 'Wakefield crew',
-    description: 'Saturday mornings at Wakefield. Doubles, then coffee.',
-    ask: false,
-    look: { emoji: '🎾' },
-    createdAt: isoHoursAgo(24 * 20),
-    members: [
-      { id: CURRENT_USER_ID, admin: true },
-      { id: 'u-mira', admin: false },
-      { id: 'u-dev', admin: false },
-      { id: 'u-june', admin: false },
-    ],
-    requests: ['u-kai'],
-  },
-  {
-    id: 'g-jv',
-    name: 'JV team',
-    description: 'Practice notes and match days.',
-    ask: true,
-    look: { color: 'hard' },
-    createdAt: isoHoursAgo(24 * 9),
-    members: [
-      { id: 'u-sam', admin: true },
-      { id: CURRENT_USER_ID, admin: false },
-      { id: 'u-tomas', admin: false },
-    ],
-    requests: [],
-  },
-  {
-    id: 'g-ladder',
-    name: 'Sunday ladder',
-    description: 'A singles ladder at Griffith Park. Challenge anyone two rungs up.',
-    ask: false,
-    look: { color: 'grass' },
-    createdAt: isoHoursAgo(24 * 4),
-    members: [
-      { id: 'u-leo', admin: true },
-      { id: CURRENT_USER_ID, admin: false },
-      { id: 'u-priya', admin: false },
-      { id: 'u-marcus', admin: false },
-      { id: 'u-rosa', admin: false },
-      { id: 'u-ella', admin: false },
-      { id: 'u-noor', admin: false },
-    ],
-    requests: [],
-  },
-];
+/*
+ * The demo's player lives in Wakefield (north Raleigh), so its groups are
+ * Raleigh ones: the courts, the usual times and the levels a player would
+ * say out loud live in src/features/groups/previewFacts.ts (preview only).
+ * Photos of the courts are only used in a design preview (?gdemo): the files
+ * are never in the app, so a build without them shows each group's initials.
+ */
+const photo = (key: string) => (demoSetup ? { photoUrl: `/preview-covers/${key}-square.jpg` } : {});
+const m = (id: string, admin = false) => ({ id, admin });
+const crewIds = ['u-mira', 'u-dev', 'u-june', 'u-tomas', 'u-nadia', 'u-leo', 'u-sam', 'u-priya', 'u-marcus', 'u-rosa', 'u-kai', 'u-ella', 'u-noor', 'u-theo', 'u-lena', 'u-omar', 'u-bea', 'u-jonah', 'u-ivy', 'u-diego'];
+/** `n` people, `admin` first, then the demo's players from `from` on (a big group repeats a few, as only its count shows). */
+const crew = (admin: string, from: number, n: number) => [m(admin, true), ...Array.from({ length: n - 1 }, (_, i) => m(crewIds[(from + i) % crewIds.length]))];
+
+const rrc: FeedGroup = {
+  id: 'g-rrc',
+  name: 'RRC',
+  description: 'Raleigh Racquet Club regulars. Inside the bubble when it rains.',
+  ask: true,
+  look: { color: 'hard', ...photo('rrc') },
+  createdAt: isoHoursAgo(24 * 40),
+  members: [m(CURRENT_USER_ID, true), ...['u-mira', 'u-dev', 'u-june', 'u-tomas', 'u-sam', 'u-priya', 'u-marcus', 'u-rosa', 'u-ella', 'u-noor', 'u-theo', 'u-lena', 'u-omar'].map((id) => m(id))],
+  requests: ['u-kai'],
+};
+const wakeWed: FeedGroup = {
+  id: 'g-wakewed',
+  name: 'Wakefield Wednesday doubles',
+  description: 'Doubles after work. Bring a can if you have one.',
+  ask: false,
+  look: { color: 'grass', ...photo('wakefield') },
+  createdAt: isoHoursAgo(24 * 22),
+  members: [m('u-dev', true), m(CURRENT_USER_ID), ...['u-june', 'u-sam', 'u-priya', 'u-kai', 'u-ella', 'u-noor', 'u-bea', 'u-jonah', 'u-ivy'].map((id) => m(id))],
+  requests: [],
+};
+const millbrook: FeedGroup = {
+  id: 'g-millbrook',
+  name: 'Millbrook 4.0 ladder',
+  description: 'Challenge anyone two spots above you. Post the score here.',
+  ask: true,
+  look: { color: 'clay', ...photo('millbrook') },
+  createdAt: isoHoursAgo(24 * 60),
+  members: [...crew('u-leo', 2, 22), m(CURRENT_USER_ID)],
+  requests: [],
+};
+
+const allDemoGroups: FeedGroup[] = [rrc, wakeWed, millbrook];
 
 export const demoGroups: FeedGroup[] =
   demoSetup === 'a' ? [] : demoSetup === 'b' ? allDemoGroups.slice(0, 1) : demoSetup === 'c' ? allDemoGroups : allDemoGroups.slice(0, 2);
 
 /*
  * Groups the demo's Find groups window lists (the "+" on the Feed): ones you
- * are not in yet, some near you (the demo's player is in Los Angeles), some
- * open, some asking first. Joining one makes it yours, as on a real account.
+ * are not in yet, some near you (Wakefield), the rest elsewhere in Raleigh,
+ * some open, some asking first. Joining one makes it yours, as on a real account.
  */
-const crewIds = ['u-mira', 'u-dev', 'u-june', 'u-tomas', 'u-nadia', 'u-leo', 'u-sam', 'u-priya', 'u-marcus', 'u-rosa', 'u-kai', 'u-ella', 'u-noor', 'u-theo', 'u-lena', 'u-omar', 'u-bea', 'u-jonah', 'u-ivy', 'u-diego'];
-const crew = (from: number, n: number) => Array.from({ length: n }, (_, i) => ({ id: crewIds[(from + i) % crewIds.length], admin: i === 0 }));
-
-const allDiscoverGroups: (FeedGroup & { near: boolean })[] = [
-  { id: 'g-silverlake', name: 'Silver Lake sunrise', look: { color: 'gold', emoji: '☀️' }, description: '6:30am hitting before work. All levels welcome.', ask: false, near: true, createdAt: isoHoursAgo(24 * 30), members: crew(3, 9), requests: [] },
-  { id: 'g-pasadena', name: 'Pasadena 4.0 doubles', look: { color: 'hard' }, description: 'Competitive doubles on Sundays. Say your level when you ask.', ask: true, near: true, createdAt: isoHoursAgo(24 * 50), members: crew(7, 14), requests: [] },
-  { id: 'g-venice', name: 'Venice rallies', look: { color: 'clay', emoji: '🌴' }, description: 'Casual hitting by the boardwalk, then tacos.', ask: false, near: true, createdAt: isoHoursAgo(24 * 6), members: crew(12, 6), requests: [] },
-  { id: 'g-over40', name: 'Over-40 comeback club', look: { color: 'grass', emoji: '💪' }, description: 'Back on court after a break. Fitness, drills, no egos.', ask: true, near: false, createdAt: isoHoursAgo(24 * 80), members: crew(1, 17), requests: [] },
-  { id: 'g-lefties', name: 'Lefties', look: { color: 'red' }, description: 'Left-handed players swapping tips and match videos.', ask: false, near: false, createdAt: isoHoursAgo(24 * 40), members: crew(5, 12), requests: [] },
-  { id: 'g-serve-lab', name: 'Serve lab', look: { color: 'ink', emoji: '🎯' }, description: 'Post your serve, get notes from the group.', ask: false, near: false, createdAt: isoHoursAgo(24 * 12), members: crew(9, 8), requests: [] },
-  { id: 'g-echo-park', name: 'Echo Park evenings', look: { color: 'accent' }, description: 'Lights on at 7. Singles or doubles, whoever turns up.', ask: false, near: true, createdAt: isoHoursAgo(24 * 3), members: crew(14, 5), requests: [] },
+type Near = FeedGroup & { near: boolean };
+const allDiscoverGroups: Near[] = [
+  { ...wakeWed, near: true },
+  { ...millbrook, near: true },
+  { id: 'g-satmixed', name: 'Sat mixed · Wake Forest', look: { color: 'hard' }, description: 'Mixed doubles, new partner every set.', ask: false, near: true, createdAt: isoHoursAgo(24 * 18), members: crew('u-priya', 3, 9), requests: [] },
+  { id: 'g-pullen', name: 'Pullen early hitters', look: { color: 'gold', ...photo('pullen') }, description: 'Rallies before work, some sets on Fridays.', ask: false, near: false, createdAt: isoHoursAgo(24 * 35), members: crew('u-marcus', 9, 8), requests: [] },
+  { id: 'g-ncsu', name: 'NC State club tennis alumni', look: { color: 'red', ...photo('ncsu') }, description: 'Played club at State? Sunday singles and doubles.', ask: true, near: false, createdAt: isoHoursAgo(24 * 90), members: crew('u-theo', 0, 31), requests: [] },
+  { id: 'g-lakelynn', name: 'Lake Lynn singles', look: { color: 'grass' }, description: 'Looking for a regular singles partner? Say when you can play.', ask: false, near: false, createdAt: isoHoursAgo(24 * 5), members: crew('u-omar', 14, 6), requests: [] },
 ];
 
-const pick = (ids: string[]) => ids.map((id) => allDiscoverGroups.find((g) => g.id === id)).filter((g): g is (FeedGroup & { near: boolean }) => !!g);
-export const demoDiscoverGroups: (FeedGroup & { near: boolean })[] =
+const pick = (ids: string[]) => ids.map((id) => allDiscoverGroups.find((g) => g.id === id)).filter((g): g is Near => !!g);
+export const demoDiscoverGroups: Near[] =
   demoSetup === 'a' ? []
-  : demoSetup === 'b' ? pick(['g-silverlake', 'g-venice', 'g-echo-park', 'g-over40', 'g-lefties'])
-  : allDiscoverGroups.filter((g) => g.id !== 'g-echo-park');
+  : demoSetup === 'b' ? pick(['g-wakewed', 'g-millbrook', 'g-satmixed', 'g-pullen', 'g-ncsu'])
+  : demoSetup === 'c' ? pick(['g-satmixed', 'g-pullen', 'g-ncsu', 'g-lakelynn'])
+  : allDiscoverGroups;
 
 export const demoGroupPosts: Post[] = [
   {
-    id: 'p-group-wake-1',
+    id: 'p-group-rrc-1',
     authorId: 'u-mira',
     kind: 'note',
     createdAt: isoHoursAgo(3),
-    body: 'Courts 3 and 4 are ours from 8. Bring balls, I forgot mine last week.',
+    body: 'Courts 3 and 4 are ours from 7. The bubble is up if it rains.',
     likedBy: ['u-dev'],
     commentIds: [],
     tags: [],
-    groupId: 'g-wakefield',
+    groupId: 'g-rrc',
   },
   {
-    id: 'p-group-wake-2',
+    id: 'p-group-rrc-2',
     authorId: 'u-dev',
     kind: 'note',
     createdAt: isoHoursAgo(30),
@@ -128,17 +122,17 @@ export const demoGroupPosts: Post[] = [
     likedBy: [CURRENT_USER_ID, 'u-june'],
     commentIds: [],
     tags: [],
-    groupId: 'g-wakefield',
+    groupId: 'g-rrc',
   },
   {
-    id: 'p-group-jv-1',
-    authorId: 'u-sam',
+    id: 'p-group-wakewed-1',
+    authorId: 'u-dev',
     kind: 'note',
     createdAt: isoHoursAgo(6),
-    body: 'Match on Thursday moved to 4pm. Warm-up at 3:30, serves first.',
+    body: 'Wakefield High courts are free from 6:30. Four of us so far, who else?',
     likedBy: [],
     commentIds: [],
     tags: [],
-    groupId: 'g-jv',
+    groupId: 'g-wakewed',
   },
 ];

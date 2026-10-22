@@ -10,6 +10,7 @@ import { SheetTitle } from '@/components/sheet/SheetForm';
 import type { DiscoverGroup, ID } from '@/data/types';
 import { GroupTile } from '@/features/groups/GroupTile';
 import { LookBody, LookHeader, type Listed, type RowAct } from '@/features/groups/FindGroupsLooks';
+import { DEBody, DEHeader } from '@/features/groups/FindGroupsDE';
 import { SHEET_LOOK } from '@/features/groups/sheetLook';
 import { reportGroup } from '@/features/groups/reportGroup';
 import { confirm } from '@/lib/confirm';
@@ -171,7 +172,7 @@ export default function FindGroups() {
     );
   };
 
-  // Design preview (web only, ?gs=a|b|c): the same sheet and the same actions in another look.
+  // Design preview (web only, ?gs=a|b|c|d|e): the same sheet and the same actions in another look.
   if (SHEET_LOOK !== 'now') {
     const look = SHEET_LOOK;
     const act = (g: Listed): RowAct => {
@@ -189,6 +190,30 @@ export default function FindGroups() {
         report: () => reportGroup(actions.reportUser, { id: g.id, name: g.name, description: g.description }),
       };
     };
+    const plain = look === 'd' || look === 'e';
+    const props = { look, feedGroups, currentUserId, full, search, setSearch, searching, rows, near, rest, act, go, create, off };
+    if (plain) {
+      // D and E: one plain page colour (no glow), rows full width.
+      return (
+        <DragSheet
+          closeSignal={closeSignal}
+          onDismissed={done}
+          peekFraction={0.86}
+          plainGround
+          contentHeight={(rows !== undefined || off) && fitH ? fitH : undefined}
+          header={<DEHeader onClose={dismiss} />}
+        >
+          <ScrollView
+            contentContainerStyle={styles.bodyDE}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+            onContentSizeChange={(_, h) => { const r = Math.ceil(h); if (r !== contentH) setContentH(r); }}
+          >
+            <DEBody {...props} />
+          </ScrollView>
+        </DragSheet>
+      );
+    }
     return (
       <DragSheet
         closeSignal={closeSignal}
@@ -335,6 +360,7 @@ const styleDefinitions = StyleSheet.create({
   // Design preview looks (see FindGroupsLooks): B's sections sit a little further apart; C's courts and list breathe.
   bodyB: { gap: spacing.lg + spacing.xs },
   bodyC: { gap: spacing.xl, paddingTop: spacing.md },
+  bodyDE: { paddingBottom: spacing.xxl },
   note: { ...typography.small, color: colors.textMuted, lineHeight: 19, paddingVertical: spacing.md, paddingHorizontal: spacing.xs },
   loading: { paddingVertical: spacing.xl },
   // The grouped list of Settings and the Groups page: a shade off the sheet, rows on hairlines.
