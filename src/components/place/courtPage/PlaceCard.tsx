@@ -23,7 +23,7 @@ import { useReducedMotion } from '@/lib/useReducedMotion';
 import { useResponsive } from '@/lib/useResponsive';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import { colors, font, inkOn, pageIsDark, radius, spacing, typography, withAlpha } from '@/theme';
+import { buttonShape, colors, font, inkOn, pageIsDark, radius, spacing, typography, withAlpha } from '@/theme';
 
 import { CourtActions, NowMark, PrimaryBar, useCourtNow } from './parts';
 import { ClipsSection, HitsSection, SaysSection } from './PlaceSections';
@@ -385,7 +385,7 @@ const styleDefinitions = StyleSheet.create({
   nowSubRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   liveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.brand },
   nowQuiet: { ...typography.small, color: colors.textMuted, flexShrink: 1 },
-  nowUpdate: { height: 30, paddingHorizontal: 13, borderRadius: radius.pill, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
+  nowUpdate: { height: 30, paddingHorizontal: 13, borderRadius: buttonShape.smallRadius, ...buttonShape.curve, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
   nowUpdateText: { ...typography.smallStrong, color: colors.brand },
   // The one primary, then the round actions.
   primary: { marginTop: spacing.lg },

@@ -82,7 +82,11 @@ export const BrandWash = React.memo(function BrandWash({ radius = 999, strength 
   const light = mix(base ?? colors.brand, look.toward, look.t);
   if (!glow) {
     return (
-      <View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderRadius: radius, borderTopWidth: 1, borderColor: 'rgba(255, 255, 255, 0.22)' }, curve && CURVE]} />
+      // The top edge is a line inside a clip, not a one-sided border: iOS draws an
+      // uneven border without the smooth corner, which left a white arc outside the fill.
+      <View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderRadius: radius, overflow: 'hidden' }, curve && CURVE]}>
+        <View style={styles.edge} />
+      </View>
     );
   }
   return (
@@ -148,4 +152,8 @@ export const ShirtWash = React.memo(function ShirtWash({ radius = 999, rim, lift
       {rim ? <View style={[StyleSheet.absoluteFill, { borderRadius: radius, borderWidth: StyleSheet.hairlineWidth, borderColor: rim }, curve && CURVE]} /> : null}
     </View>
   );
+});
+
+const styles = StyleSheet.create({
+  edge: { position: 'absolute', top: 0, left: 0, right: 0, height: 1, backgroundColor: 'rgba(255, 255, 255, 0.22)' },
 });

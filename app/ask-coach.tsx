@@ -15,7 +15,7 @@ import * as haptics from '@/lib/haptics';
 import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
 import type { CoachSpecialty } from '@/data/types';
-import { colors, radius, spacing, typography } from '@/theme';
+import { buttonShape, colors, radius, spacing, typography } from '@/theme';
 
 const SPECIALTIES: { value: CoachSpecialty; label: string }[] = [
   { value: 'serve', label: 'Serve' },
@@ -278,7 +278,7 @@ const styleDefinitions = StyleSheet.create({
   addNote: { ...typography.small, color: colors.textFaint, marginLeft: 'auto' },
   foot: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingTop: spacing.lg },
   footNote: { ...typography.small, color: colors.textFaint, flex: 1, lineHeight: 18 },
-  post: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 44, paddingHorizontal: 20, borderRadius: radius.pill, backgroundColor: colors.brand },
+  post: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 44, paddingHorizontal: 20, borderRadius: buttonShape.radius, ...buttonShape.curve, backgroundColor: colors.brand },
   postOff: { backgroundColor: colors.surfaceAlt },
   postText: { ...typography.bodyStrong, color: colors.brandInk },
   postTextOff: { color: colors.textFaint },

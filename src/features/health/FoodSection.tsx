@@ -251,7 +251,7 @@ const styleDefinitions = StyleSheet.create({
   how: { ...typography.small, color: colors.textFaint, lineHeight: 18 },
   primary: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, height: buttonShape.height, borderRadius: buttonShape.radius, ...buttonShape.curve, backgroundColor: colors.brand, overflow: 'hidden' },
   primaryText: { ...typography.smallStrong, color: colors.brandInk },
-  small: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 5, height: 32, paddingHorizontal: 12, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderStrong },
+  small: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 5, height: 32, paddingHorizontal: 12, borderRadius: buttonShape.smallRadius, ...buttonShape.curve, borderWidth: 1, borderColor: colors.borderStrong },
   smallText: { ...typography.smallStrong, color: colors.text },
   pressedDim: { opacity: PRESS_DIM },
   loading: { height: 120, alignItems: 'center', justifyContent: 'center' },

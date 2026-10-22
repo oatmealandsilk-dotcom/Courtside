@@ -5,7 +5,7 @@ import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { BrandMark } from '@/components/BrandMark';
-import { colors, radius, spacing, typography } from '@/theme';
+import { buttonShape, colors, radius, spacing, typography } from '@/theme';
 import { IPHONE_APP_URL } from './joinAsk';
 import { noteAppTap } from './campaign';
 
@@ -52,7 +52,7 @@ const styleDefinitions = StyleSheet.create({
   words: { flex: 1, minWidth: 0 },
   title: { ...typography.smallStrong, color: colors.text },
   sub: { ...typography.caption, letterSpacing: 0, textTransform: 'none', color: colors.textMuted },
-  get: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: radius.pill, backgroundColor: colors.brand },
+  get: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: buttonShape.smallRadius, ...buttonShape.curve, backgroundColor: colors.brand },
   getText: { ...typography.smallStrong, color: colors.brandInk },
   pressed: { opacity: PRESS_DIM },
 });

@@ -408,7 +408,7 @@ const styleDefinitions = StyleSheet.create({
   line: { ...typography.small, color: colors.textMuted },
   how: { ...typography.small, color: colors.textFaint, lineHeight: 18 },
   actions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.sm },
-  small: { flexDirection: 'row', alignItems: 'center', gap: 5, height: 32, paddingHorizontal: 12, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderStrong },
+  small: { flexDirection: 'row', alignItems: 'center', gap: 5, height: 32, paddingHorizontal: 12, borderRadius: buttonShape.smallRadius, ...buttonShape.curve, borderWidth: 1, borderColor: colors.borderStrong },
   smallText: { ...typography.smallStrong, color: colors.text },
   smallGhost: { height: 32, paddingHorizontal: 8, justifyContent: 'center' },
   smallGhostText: { ...typography.smallStrong, color: colors.textMuted },

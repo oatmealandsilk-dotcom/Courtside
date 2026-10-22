@@ -270,6 +270,6 @@ const styleDefinitions = StyleSheet.create({
   actions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   discard: { paddingVertical: spacing.md, paddingHorizontal: spacing.sm },
   discardText: { ...typography.bodyStrong, color: 'white' },
-  post: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 14, paddingHorizontal: 22, borderRadius: radius.pill, backgroundColor: colors.brand },
+  post: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 14, paddingHorizontal: 22, borderRadius: buttonShape.radius, ...buttonShape.curve, backgroundColor: colors.brand },
   postText: { ...typography.bodyStrong, color: colors.brandInk },
 });

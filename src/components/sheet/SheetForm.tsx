@@ -8,6 +8,7 @@ import { Chip, BrandWash } from '@/components/ui';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { buttonShape, colors, font, lift, radius, spacing, typography } from '@/theme';
 import { TextScale } from '@/theme/textScale';
+import { brandBoxShadow } from '@/theme/fillMode';
 
 /*
  * The pieces every sheet's form is built from, in the app's own language
@@ -291,7 +292,7 @@ const styleDefinitions = StyleSheet.create({
   // Instagram's shape (Oct 22): a rounded rectangle with Apple's smooth corner; a touch taller than a
   // page's button, as the one thing a sheet or sign-in asks you to tap.
   submit: { minHeight: 48, borderRadius: buttonShape.radius, ...buttonShape.curve, alignItems: 'center', justifyContent: 'center' },
-  submitOn: { backgroundColor: colors.brand, boxShadow: '0px 8px 20px rgba(0, 0, 0, 0.16)' },
+  submitOn: { backgroundColor: colors.brand, boxShadow: brandBoxShadow },
   submitOff: { backgroundColor: colors.surfaceAlt },
   submitBusy: { opacity: 0.92 },
   submitRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },

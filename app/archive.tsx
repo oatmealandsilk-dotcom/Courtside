@@ -19,7 +19,7 @@ import { useTabUnderline } from '@/features/navigation/useTabUnderline';
 import { archivedStories } from '@/features/stories/stories';
 import { useInstantsOn } from '@/features/stories/instantsSwitch';
 import { useApp } from '@/store/AppContext';
-import { colors, font, radius, spacing, typography, lift } from '@/theme';
+import { buttonShape, colors, font, radius, spacing, typography, lift } from '@/theme';
 
 type Tab = 'stories' | 'posts';
 /** Left to right. Instants first: they land here on their own, so that is where most things are. */
@@ -266,7 +266,7 @@ const styleDefinitions = StyleSheet.create({
   postKind: { ...typography.small, color: colors.textMuted },
   postText: { ...typography.small, color: colors.text, lineHeight: 19 },
   // A full 44-point pill, the same height as the app's other small buttons.
-  restore: { minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing.lg, borderRadius: radius.pill, backgroundColor: colors.bgElevated },
+  restore: { minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing.lg, borderRadius: buttonShape.radius, ...buttonShape.curve, backgroundColor: colors.bgElevated },
   restoreText: { ...typography.smallStrong, color: colors.text },
 });
 

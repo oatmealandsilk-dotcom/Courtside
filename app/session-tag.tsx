@@ -19,6 +19,7 @@ import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, lift, radius, spacing, typography } from '@/theme';
+import { brandBoxShadow } from '@/theme/fillMode';
 
 /** How long an alert opened on a slow connection waits for your tags before saying they couldn't be loaded. */
 const GIVE_UP_MS = 10_000;
@@ -274,7 +275,7 @@ const styleDefinitions = StyleSheet.create({
   answer: { flex: 1, flexDirection: 'row', gap: 8, height: 54, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   decline: { borderWidth: 1, borderColor: colors.borderStrong, backgroundColor: colors.surface },
   // Accept: the sheet's Save button, filled with the court's colour.
-  accept: { backgroundColor: colors.brand, boxShadow: '0px 8px 20px rgba(0, 0, 0, 0.16)' },
+  accept: { backgroundColor: colors.brand, boxShadow: brandBoxShadow },
   acceptText: { color: colors.brandInk },
   // The quieter button: Save's size and shape, outlined rather than filled (the log sheet's "Save and post").
   second: { flexDirection: 'row', gap: 10, height: 54, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.borderStrong, backgroundColor: colors.surface },

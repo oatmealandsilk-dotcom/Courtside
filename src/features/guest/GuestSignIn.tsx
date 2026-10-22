@@ -4,7 +4,7 @@ import React from 'react';
 import { Pressable, StyleSheet, Text } from 'react-native';
 import { router } from 'expo-router';
 
-import { colors, radius, typography } from '@/theme';
+import { buttonShape, colors, radius, typography } from '@/theme';
 
 /**
  * Where a tab's bell, chats and search sit for someone signed in, a guest
@@ -20,7 +20,7 @@ export function GuestSignIn({ onMedia = false }: { onMedia?: boolean }) {
 }
 
 const styleDefinitions = StyleSheet.create({
-  pill: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: radius.pill, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, backgroundColor: colors.surface },
+  pill: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: buttonShape.smallRadius, ...buttonShape.curve, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, backgroundColor: colors.surface },
   onMedia: { backgroundColor: colors.overlay, borderColor: colors.overlay },
   text: { ...typography.smallStrong, color: colors.brand },
   onMediaText: { color: colors.onMedia },

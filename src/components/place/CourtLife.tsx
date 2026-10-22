@@ -14,7 +14,7 @@ import { confirmReport } from '@/lib/confirm';
 import type { CourtToFollow } from '@/store/courtLife';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import { colors, radius, spacing, typography } from '@/theme';
+import { buttonShape, colors, radius, spacing, typography } from '@/theme';
 
 /*
  * The small pieces of a court's own life (migration 60) that its card on
@@ -234,6 +234,6 @@ const styleDefinitions = StyleSheet.create({
   faceOver: { marginLeft: -8 },
   face: { borderWidth: 2, borderColor: colors.surface, borderRadius: 14 },
   regularsText: { ...typography.small, color: colors.textMuted, flex: 1, minWidth: 0 },
-  ask: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, height: 30, borderRadius: radius.pill, backgroundColor: colors.brandDim },
+  ask: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, height: 30, borderRadius: buttonShape.smallRadius, ...buttonShape.curve, backgroundColor: colors.brandDim },
   askText: { ...typography.smallStrong, color: colors.brand },
 });

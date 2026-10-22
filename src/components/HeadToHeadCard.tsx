@@ -9,7 +9,7 @@ import { recordLine, scoreText, spokenScore } from '@/features/activity/score';
 import { startRematch } from '@/features/hits/rematch';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import { colors, font, lift, radius, spacing, typography } from '@/theme';
+import { buttonShape, colors, font, lift, radius, spacing, typography } from '@/theme';
 
 /**
  * Your record against this player, on their profile (Oct 4, owner;
@@ -67,7 +67,7 @@ const styleDefinitions = StyleSheet.create({
   eyebrow: { ...typography.smallStrong, color: colors.textMuted },
   record: { ...font('700'), fontSize: 20, letterSpacing: -0.2, color: colors.text, fontVariant: ['tabular-nums'] },
   last: { ...typography.small, color: colors.textMuted, fontVariant: ['tabular-nums'] },
-  rematch: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 36, paddingHorizontal: 14, borderRadius: radius.pill, backgroundColor: colors.brand },
+  rematch: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 36, paddingHorizontal: 14, borderRadius: buttonShape.smallRadius, ...buttonShape.curve, backgroundColor: colors.brand },
   rematchText: { ...font('700'), fontSize: 14, color: colors.brandInk },
   pressed: { opacity: PRESS_DIM },
 });

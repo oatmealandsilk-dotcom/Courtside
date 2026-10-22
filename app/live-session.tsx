@@ -234,7 +234,7 @@ const styleDefinitions = StyleSheet.create({
   seenIconOn: { backgroundColor: colors.brandDim },
   seenLine: { ...typography.smallStrong, fontSize: 14, lineHeight: 19, color: colors.textMuted, flex: 1, minWidth: 0 },
   seenShared: { color: colors.text },
-  tryPill: { flexShrink: 0, minWidth: 64, height: 32, paddingHorizontal: 14, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
+  tryPill: { flexShrink: 0, minWidth: 64, height: 32, paddingHorizontal: 14, borderRadius: buttonShape.smallRadius, ...buttonShape.curve, backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
   tryText: { ...typography.smallStrong, color: colors.text },
   controls: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.xs },
   second: { ...lift, flex: 1, height: 58, borderRadius: buttonShape.radius, ...buttonShape.curve, backgroundColor: colors.surface, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
