@@ -1,6 +1,7 @@
 import { PRESS_DIM } from '@/theme/press';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View, type ScrollView } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View, useWindowDimensions, type ScrollView } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { type SharedValue, useSharedValue } from 'react-native-reanimated';
@@ -120,18 +121,6 @@ export default function TennisProfile() {
 function Mine({ user, offsetY, scrollRef }: { user: User; offsetY: SharedValue<number>; scrollRef: React.MutableRefObject<ScrollView | null> }) {
   const styles = useThemedStyles(styleDefinitions);
   const { tab, choose, ready } = useProfileTab(user.id);
-  const tabIndex = Math.max(0, PROFILE_TABS.findIndex((t) => t.value === tab));
-  const [stride, setStride] = useState(0);
-  const line = useTabUnderline(tabIndex, PROFILE_TABS.length, stride);
-  // Where the tabs sit on the page, once laid out.
-  const tabsAt = useRef<number | null>(null);
-  const pick = (next: ProfileTab) => {
-    if (next === tab) return;
-    // Switched while the tabs ride pinned at the top: the new tab starts just under them, not part way down it.
-    const at = tabsAt.current;
-    if (at !== null && offsetY.value > at - PIN_GAP) scrollRef.current?.scrollTo({ y: Math.max(0, at - PIN_GAP), animated: false });
-    choose(next);
-  };
   return (
     <>
       <View style={styles.cardSpot}><PlayerCard user={user} variant="full" /></View>
@@ -152,20 +141,57 @@ function Mine({ user, offsetY, scrollRef }: { user: User; offsetY: SharedValue<n
           </View>
         </Tappable>
       </View>
-      <ProfileTabs value={ready ? tab : null} onChange={pick} offsetY={offsetY} onPlaced={(y) => { tabsAt.current = y; }} pillStyle={line.style} onStride={setStride} />
+      {/* Until the remembered tab is read, the bar shows no tab chosen. The tabs and their sections are
+          built once it is known, so the raised pill starts on that tab instead of sliding over from Activity. */}
+      {ready
+        ? <MineTabs user={user} tab={tab} choose={choose} offsetY={offsetY} scrollRef={scrollRef} />
+        : <ProfileTabs value={null} onChange={choose} offsetY={offsetY} />}
+    </>
+  );
+}
+
+/** The tabs and the open tab's sections, built once the remembered tab is known. */
+function MineTabs({ user, tab, choose, offsetY, scrollRef }: { user: User; tab: ProfileTab; choose: (next: ProfileTab) => void; offsetY: SharedValue<number>; scrollRef: React.MutableRefObject<ScrollView | null> }) {
+  const tabIndex = Math.max(0, PROFILE_TABS.findIndex((t) => t.value === tab));
+  const [stride, setStride] = useState(0);
+  // Starts at the remembered tab, so nothing glides on opening.
+  const line = useTabUnderline(tabIndex, PROFILE_TABS.length, stride);
+  // Where the tabs sit on the page, and how tall they are, once laid out.
+  const tabsAt = useRef<number | null>(null);
+  const [tabsH, setTabsH] = useState(0);
+  // Switched while the tabs ride pinned at the top: the new tab starts just under them, not part way down it.
+  const toTabs = () => {
+    const at = tabsAt.current;
+    if (at !== null && offsetY.value > at - PIN_GAP) scrollRef.current?.scrollTo({ y: Math.max(0, at - PIN_GAP), animated: false });
+  };
+  const pick = (next: ProfileTab) => {
+    if (next === tab) return;
+    toTabs();
+    choose(next);
+  };
+  // Each tab is at least a screen tall under the pinned tabs (as Instagram keeps its profile tabs), so a
+  // short one (Health) never shrinks the page under a pinned position and makes it jump on landing.
+  const { height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const minHeight = Math.max(0, height - insets.top - insets.bottom - PIN_GAP - tabsH - spacing.xxxl);
+  const pane = (key: string, body: React.ReactNode) => <View key={key} style={{ minHeight }}>{body}</View>;
+  return (
+    <>
+      <ProfileTabs value={tab} onChange={pick} offsetY={offsetY} onPlaced={(y, h) => { tabsAt.current = y; setTabsH(h); }} pillStyle={line.style} onStride={setStride} />
       {/* Activity, Health and Game side by side, as Profile's sections: a swipe slides between
-          them and a tap glides, the raised pill riding along (Oct 22), instead of the page swapping in one frame. */}
-      {!ready ? null : (
-        <SectionPager
-          index={tabIndex}
-          panes={[<ActivityTab key="activity" user={user} />, <HealthTab key="health" user={user} />, <GameTab key="game" user={user} />]}
-          progress={line.progress}
-          onIndex={(i) => choose(PROFILE_TABS[i].value)}
-          edgeBack
-          slideOnTap
-          bleed={spacing.lg}
-        />
-      )}
+          them and a tap glides, the raised pill riding along (Oct 22), instead of the page swapping in one frame.
+          A swipe lands like a tap: the new tab starts right under the pinned tabs (in a browser before the
+          landed pane is painted; on a phone as it lands). */}
+      <SectionPager
+        index={tabIndex}
+        panes={[pane('activity', <ActivityTab user={user} />), pane('health', <HealthTab user={user} />), pane('game', <GameTab user={user} />)]}
+        progress={line.progress}
+        onIndex={(i) => { if (Platform.OS !== 'web') toTabs(); choose(PROFILE_TABS[i].value); }}
+        onLand={Platform.OS === 'web' ? toTabs : undefined}
+        edgeBack
+        slideOnTap
+        bleed={spacing.lg}
+      />
     </>
   );
 }

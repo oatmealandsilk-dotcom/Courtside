@@ -124,7 +124,12 @@ export default function YourSessions() {
   const [leaving, setLeaving] = useState<Set<string>>(() => new Set());
   const removeSession = (id: string) => {
     setLeaving((was) => new Set(was).add(id));
-    setTimeout(() => { actions.deleteSession(id); }, FOLD_AWAY_MS);
+    setTimeout(() => {
+      actions.deleteSession(id);
+      // Then let go of it: gone from the list, or (a remove that failed and came back) shown again,
+      // instead of kept folded shut at no height until the page is left.
+      setLeaving((was) => { if (!was.has(id)) return was; const next = new Set(was); next.delete(id); return next; });
+    }, FOLD_AWAY_MS);
   };
   // "Post it" waits until your posts with a session have been asked for
   // fresh (the app may hold only the newest few), so a session already on a

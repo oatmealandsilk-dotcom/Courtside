@@ -50,7 +50,8 @@ export function ProfileTabs({ value, onChange, offsetY, onPlaced, pillStyle, onS
   value: ProfileTab | null;
   onChange: (next: ProfileTab) => void;
   offsetY: SharedValue<number>;
-  onPlaced?: (y: number) => void;
+  /** Where the bar sits in the page, and its height. */
+  onPlaced?: (y: number, height: number) => void;
   /**
    * The raised pill's place (useTabUnderline's style), for a page whose
    * sections slide (Oct 22): the pill then rides with a swipe and glides on a
@@ -90,7 +91,7 @@ export function ProfileTabs({ value, onChange, offsetY, onPlaced, pillStyle, onS
 
   return (
     <Reanimated.View
-      onLayout={(e) => { const y = e.nativeEvent.layout.y; top.value = y; onPlaced?.(y); }}
+      onLayout={(e) => { const { y, height } = e.nativeEvent.layout; top.value = y; onPlaced?.(y, height); }}
       style={[styles.spot, webSticky, pin]}
     >
       {WEB ? (
