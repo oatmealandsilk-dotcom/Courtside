@@ -1,3 +1,4 @@
+import { LAYER, layerUp, openness, useLayerState } from '@/components/map/mapWindow';
 import { useTheme } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { AppState, Platform, View } from 'react-native';
@@ -288,6 +289,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // The full map (owner, Oct 8: "without the feed community profile etc.") runs without it too:
   // the map fills the screen and its own Back (or the edge swipe) leaves it.
   const phoneOnlyHide = ['/map', '/compose', '/edit-post', '/ask', '/ask-coach', '/coach-apply', '/pick-location', '/pick-court', '/invite', '/comments', '/session-stats', '/who-played', '/share', '/pick-group', '/find-groups', '/group-form', '/group-invite', '/likes', '/post-menu', '/log-session', '/pick-session', '/session-tag', '/hit-request/new', '/court-report', '/court-now', '/map-visibility', '/open-to-hit', '/wrapped', '/health-share', '/share-session', '/share-card', '/tennis-sheet', '/flyby', '/weekly-recap', '/review-request', '/start-session', '/live-session', '/new-session'].includes(pathname) || pathname === '/messages' || pathname.startsWith('/messages/');
+  // The map window (mapWindow) open over a tab is the full map, as the map page was: the same things stay off it (the
+  // tab bar, the live bar, the banners, the tutorial). A page pushed over the open map keeps its own rules.
+  const underLayer = pathname === '/' || pathname === '/discuss' || pathname === '/coaches' || pathname === '/profile';
+  const mapOpen = layerUp(useLayerState());
+  const mapInFront = mapOpen && underLayer;
   // Arriving from the password-reset email is its own calm page, with no app around it yet.
   // (The comments' own address says which clip they are about, for the stage below.)
   const { reset, kind: routeKind, id: routeId, stage: routeStage } = useGlobalSearchParams<{ reset?: string; kind?: string; id?: string; stage?: string }>();
@@ -329,7 +335,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const guestOwnPage = isGuest && (pathname === '/peek' || pathname === '/join');
   const barWanted = (!!currentUserId || isGuest) && !hideEverywhere && !onSplash && !guestOwnPage;
   const showNav = barWanted && (!(isPhone && phoneOnlyHide) || barOnStage || createBoxUp);
-  useEffect(() => { if (Platform.OS === 'web' && navLayer.current) navLayer.current.inert = barOnStage || !showNav; }, [barOnStage, showNav]);
+  useEffect(() => { if (Platform.OS === 'web' && navLayer.current) navLayer.current.inert = barOnStage || !showNav || mapInFront; }, [barOnStage, showNav, mapInFront]);
   // And when a page does take the phone's bar away, it no longer pops: it
   // slips down a little and fades (about a fifth of a second), and comes back
   // the same way. It stays drawn until it has gone. Sign-in, the splash and
@@ -352,11 +358,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // Slides only, never fades: the bar is glass, and on an iPhone glass under a fading parent
   // drew see-through and stayed that way (Oct 17, owner: "Why did this bottom thing turn
   // transparent? ... change it back"). It slides all the way below the screen's edge instead.
-  const barSlide = useAnimatedStyle(() => ({ transform: [{ translateY: still ? 0 : barAway.value * 160 }] }));
+  // The map window (mapWindow) opening over Community takes the bar down with it, on the window's own spring both ways.
+  // A page pushed over the open map (a player's profile) brings the bar up over 200 ms, as leaving the map page did, and
+  // going back takes it down the same way: never a jump. Reduce Motion: the bar is simply off the open map.
+  const layerCover = useSharedValue(underLayer ? 1 : 0);
+  useEffect(() => {
+    const to = underLayer ? 1 : 0;
+    if (mapOpen) layerCover.value = withTiming(to, { duration: 200, easing: Easing.out(Easing.cubic) });
+    else layerCover.value = to;
+  }, [underLayer, mapOpen, layerCover]);
+  const barSlide = useAnimatedStyle(() => ({ transform: [{ translateY: still ? (mapInFront ? 160 : 0) : Math.max(barAway.value, layerCover.value * openness(LAYER)) * 160 }] }));
   const curtainDown = useCurtainDown();
   // A session you started and haven't logged (Oct 6): its bar rides above the tab bar wherever the bar
   // is, never over a sheet, a composer or the live page itself, nor on a clip's comments stage or under the tutorial.
-  const liveBarOn = !!liveSession && liveSession.userId === currentUserId && showNav && !barOnStage && !phoneOnlyHide && !SHEETS.has(pathname) && !tourOpen && curtainDown;
+  const liveBarOn = !!liveSession && liveSession.userId === currentUserId && showNav && !barOnStage && !phoneOnlyHide && !mapInFront && !SHEETS.has(pathname) && !tourOpen && curtainDown;
   // As the opening curtain lifts, the page under it settles from a touch large
   // and low into place, on the curtain's own curve (see WarmCurtain), so the
   // logo leaving and the app arriving are one motion. On the phone only: in a
@@ -459,7 +474,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     {/* While the tour is up, TalkBack reads only the tour, not the page under the dim. */}
     <Reanimated.View importantForAccessibility={tourOpen ? 'no-hide-descendants' : 'auto'} style={[{ flex: 1, minWidth: 0, minHeight: 0 }, settle]}>{isGuest && Platform.OS === 'web' && !hideEverywhere && !onSplash && !guestOwnPage ? <GetAppBar /> : null}<RouteTransition>{children}</RouteTransition>{liveBarOn && !isPhone ? <LiveBar phone={false} /> : null}<ToastLayer /><UploadLayer /></Reanimated.View>
     {(showNav || (barKept && barWanted)) && isPhone ? (
-      <Reanimated.View pointerEvents={showNav ? 'box-none' : 'none'} style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }, barSlide]}>
+      <Reanimated.View pointerEvents={showNav && !mapInFront ? 'box-none' : 'none'} style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }, barSlide]}>
       <Reanimated.View ref={((node: unknown) => { navLayer.current = node as HTMLElement | null; navFade.ref?.(node); }) as never} pointerEvents={barOnStage || !showNav ? 'none' : 'box-none'} style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }, barOnStage && { overflow: 'hidden' }, navFade.style]}>
         <Reanimated.View ref={navHold.ref as never} pointerEvents="box-none" style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }, navHold.style]}>{nav}</Reanimated.View>
       </Reanimated.View>
@@ -467,15 +482,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     ) : null}
     {liveBarOn && isPhone ? <LiveBar phone /> : null}
     {/* A new message drops in at the top, over the bar too; never on the pages the app keeps to themselves. */}
-    <MessageBanner enabled={!!currentUserId && !hideEverywhere && !onSplash && !detour} />
+    <MessageBanner enabled={!!currentUserId && !hideEverywhere && !onSplash && !detour && !mapInFront} />
     {/* "How was the hit?", once, after a hit you played; only for a set-up account, never on the pages the app keeps to themselves. */}
-    <HitFollowUp enabled={!!currentUserId && onboardingComplete && (remoteLoaded || !isSupabaseConfigured) && !hideEverywhere && !onSplash && !detour} />
+    <HitFollowUp enabled={!!currentUserId && onboardingComplete && (remoteLoaded || !isSupabaseConfigured) && !hideEverywhere && !onSplash && !detour && !mapInFront} />
     {/* "Still playing?", when a live session's clock reaches three hours: the same note, on the same terms. */}
-    <StillPlaying enabled={!!currentUserId && onboardingComplete && !hideEverywhere && !onSplash && !detour} />
+    <StillPlaying enabled={!!currentUserId && onboardingComplete && !hideEverywhere && !onSplash && !detour && !mapInFront} />
     {/* The splash curtain, from the splash's hand-over until the page the app opens on has drawn (see warmup). */}
     {!curtainDown && !!currentUserId && !hideEverywhere && (onSplash || isStartTab(pathname)) ? <WarmCurtain /> : null}
     {/* The first-run tour: over the bar, so it can light the bar's own buttons. */}
-    {currentUserId ? <TourOverlay eligible={showNav && !detour && !onSplash} /> : null}
+    {currentUserId ? <TourOverlay eligible={showNav && !detour && !onSplash && !mapInFront} /> : null}
     {/* On its way to a gate (sign-in, birthday, terms): the page underneath is covered for the moment it takes. */}
     {detour ? <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: colors.bg }} /> : null}
     {/* The website: "Get CourtSide on your iPhone", once, just after signing up here (R3). Nothing in the phone apps. */}

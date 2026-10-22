@@ -151,7 +151,8 @@ export interface ClusterTemplates {
 }
 
 export interface PinEngine {
-  set: (payload: { items: CanvasMarker[]; tpl: ClusterTemplates }) => void;
+  /** `quiet` (with its `box`): the map window's pins switching between the still card's and the full map's, in the same build. */
+  set: (payload: { items: CanvasMarker[]; tpl: ClusterTemplates; quiet?: boolean; box?: PinEngineOptions['box'] }) => void;
   /** Holds the first wave back (a sheet is over the map), or lets it go. */
   hold: (on: boolean) => void;
   /** The still card: while calm (from the start), new pins appear with no fade; off once the card has been shown. */
@@ -611,7 +612,10 @@ return function(map,ml,o){
   // The still card's pins go on at once, before the streets have drawn (they are placed from the camera alone), so they are on it before anyone sees it.
   if(o.quiet)start();else if(map.loaded&&map.loaded())soon();else{map.once('idle',soon);setTimeout(start,2500)}
   return {
-    set:function(p){var list=(p&&p.items)||[];if(p&&p.tpl)tpl=p.tpl;items={};list.forEach(function(it){items[it.id]=it});build();
+    set:function(p){var list=(p&&p.items)||[];if(p&&p.tpl)tpl=p.tpl;items={};list.forEach(function(it){items[it.id]=it});
+      // The map window: the quiet (card) or full pins come with their own list, so the change is one build, and a pin in both keeps its place.
+      if(p&&p.quiet!=null&&!!p.quiet!==!!o.quiet){o.quiet=!!p.quiet;FULL=!o.quiet;calm=false;if(p.box)B=p.box;try{map.getContainer().classList.toggle('cs-quiet',o.quiet)}catch(e){}}
+      build();
       if(fan){var n=0;fan.m.forEach(function(id){if(items[id])n++});if(n<(fan.lead?1:2))fan=null}
       if(ready&&lvl<0)lvl=levelNow();render(null)},
     hold:function(on){var was=held;held=!!on;if(was&&!held)render(null)},

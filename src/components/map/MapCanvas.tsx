@@ -12,6 +12,7 @@ import { CLOSE_ZOOM_NAMES, FAR_ZOOM, MAP_PIN_CSS, SHORT_ZOOM } from '@/component
 import { CARD_BOX, FULL_MAP_BOX, PIN_ENGINE_JS, type CanvasMarker, type ClusterTemplates } from '@/components/map/pinEngine';
 import type { LatLng, ViewBounds } from '@/features/players/positions';
 import * as haptics from '@/lib/haptics';
+import { BEZIER_JS, INTERACT_JS, LABELS_JS } from '@/components/map/cameraJs';
 
 export type { CanvasMarker, MapLoadStatus };
 
@@ -31,6 +32,16 @@ export interface MapCanvasHandle {
   jump: (to: LatLng, zoom: number) => void;
   /** The still card: asks the page for a picture of its map alone (onShot), for the card's picture cover (cardShot). */
   shoot: () => void;
+  /** The map window (mapWindow): an eased move to a spot and zoom, on a cubic-bezier curve. */
+  ease: (to: LatLng, zoom: number, ms: number, bezier: [number, number, number, number]) => void;
+  /** The map window: straight there, no motion, nothing re-armed (unlike `jump`, which tells onPainted again). */
+  snap: (to: LatLng, zoom: number) => void;
+  /** The place names the card leaves off: faded on or off. */
+  labels: (on: boolean, ms: number, delay: number) => void;
+  /** Drag and pinch on or off. */
+  setInteractive: (on: boolean) => void;
+  /** Visits `to` and comes back to `back` while nobody is looking, so the streets there are already fetched (onWarm when done). */
+  warm: (to: LatLng, zoom: number, back: LatLng, backZoom: number) => void;
   /** Whether this try's page has its map up (its style loaded), drawn or not. */
   isUp: () => boolean;
   /** How long since this try's page last said anything (ms). */
@@ -76,6 +87,18 @@ interface Props {
   style?: StyleProp<ViewStyle>;
   /** On screen: off (a page over it, a hidden pager page, another tab), its load clocks wait (useMapLoad). */
   active?: boolean;
+  /**
+   * The map window's map (mapWindow): a whole-screen page that starts as the
+   * still card (its place names off, its drag and pinch off) and is told
+   * from then on what to do (MapCanvasHandle's ease, labels, setInteractive).
+   */
+  layer?: boolean;
+  /** `warm` is done. */
+  onWarm?: () => void;
+  /** The map window's pins: the still card's quiet ones (true) or the full map's (false), switched with `markers`. */
+  pinsQuiet?: boolean;
+  /** The phone stopped the web view (it starts again by itself): the map window is not ready until it has drawn again. */
+  onReboot?: () => void;
 }
 
 /**
@@ -93,22 +116,24 @@ interface Props {
  * Tap to try again (retry). If iOS or Android stops the web view to free
  * memory, it is started again by itself (Oct 5).
  */
-export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas({ center, zoom, look, interactive, markers, tpl, popIn = false, holdPins = false, pad, onTap, onMapTap, onMove, onPainted, onShot, onLost, onStatus, farBelow, onFar, style, active = true }, ref) {
+export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas({ center, zoom, look, interactive, markers, tpl, popIn = false, holdPins = false, pad, onTap, onMapTap, onMove, onPainted, onShot, onLost, onStatus, farBelow, onFar, style, active = true, layer = false, onWarm, pinsQuiet, onReboot }, ref) {
   const styles = useThemedStyles(styleDefinitions);
   const web = useRef<WebView | null>(null);
   const ready = useRef(false);
   // Getting the page going, and again if it fails (useMapLoad): each try is a new web view.
   const load = useMapLoad(interactive ? 'full map' : 'map card', active);
-  useEffect(() => { ready.current = false; }, [load.attempt]);
-  const latest = useRef({ onTap, onMapTap, onMove, onPainted, onShot, onLost, onFar, onStatus });
-  latest.current = { onTap, onMapTap, onMove, onPainted, onShot, onLost, onFar, onStatus };
+  // Each new try is a new page: the map window is not ready again until it has drawn (onReboot).
+  const firstAttempt = useRef(load.attempt);
+  useEffect(() => { ready.current = false; if (load.attempt !== firstAttempt.current) latest.current.onReboot?.(); }, [load.attempt]); // eslint-disable-line react-hooks/exhaustive-deps
+  const latest = useRef({ onTap, onMapTap, onMove, onPainted, onShot, onLost, onFar, onStatus, onWarm, onReboot });
+  latest.current = { onTap, onMapTap, onMove, onPainted, onShot, onLost, onFar, onStatus, onWarm, onReboot };
   // A fresh page (a retry, or one the phone stopped) starts where the map is meant to be now, not where it first was.
   const centerNow = useRef(center);
   centerNow.current = center;
   const zoomNow = useRef(zoom);
   zoomNow.current = zoom;
   /** The page has gone (the phone stopped it, or lost its drawing): a fresh one, and the screen told. */
-  const lost = () => { ready.current = false; load.reboot(); latest.current.onLost?.(); };
+  const lost = () => { ready.current = false; load.reboot(); latest.current.onLost?.(); latest.current.onReboot?.(); };
   useEffect(() => { latest.current.onStatus?.(load.status); }, [load.status]);
   const send = (js: string) => { if (ready.current) web.current?.injectJavaScript(`${js};true;`); };
   // The page takes a moment to start. A move asked for before then (your
@@ -127,12 +152,24 @@ export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas({
       send(`window.__cs.fly(${to.lat},${to.lng},${z},0,0,true);window.__cs.rearm()`);
     },
     shoot: () => send('window.__cs.shot()'),
+    ease: (to, z, ms, b) => send(`window.__cs.ease(${to.lat},${to.lng},${z},${Math.round(ms)},${b.join(',')})`),
+    snap: (to, z) => {
+      if (!ready.current) { pendingMove.current = { to, zoom: z }; return; }
+      send(`window.__cs.snap(${to.lat},${to.lng},${z})`);
+    },
+    labels: (on, ms, delay) => send(`window.__cs.labels(${on ? 'true' : 'false'},${Math.round(ms)},${Math.round(delay)})`),
+    setInteractive: (on) => send(`window.__cs.inter(${on ? 'true' : 'false'})`),
+    warm: (to, z, back, bz) => send(`window.__cs.warm(${to.lat},${to.lng},${z},${back.lat},${back.lng},${bz})`),
     isUp: () => ready.current,
     quiet: () => load.quiet(),
   }), []); // eslint-disable-line react-hooks/exhaustive-deps
   // Written out only when the pins change, not on every draw of the page around the map (Oct 10,
   // owner: "the buttons like the settings. msg notifications, etc respond too slow").
-  const markerJson = useMemo(() => JSON.stringify({ items: markers, tpl }), [markers, tpl]);
+  // The map window's pins say whether they are the card's quiet ones (pinsQuiet), so the switch is one build with the new list.
+  const markerJson = useMemo(
+    () => JSON.stringify(pinsQuiet === undefined ? { items: markers, tpl } : { items: markers, tpl, quiet: pinsQuiet, box: pinsQuiet ? CARD_BOX : FULL_MAP_BOX }),
+    [markers, tpl, pinsQuiet],
+  );
   const markersNow = useRef(markerJson);
   markersNow.current = markerJson;
   useEffect(() => { send(`window.__cs.set(${markerJson})`); }, [markerJson]);
@@ -184,21 +221,27 @@ function blank(c){try{var k=document.createElement('canvas');k.width=8;k.height=
 map.touchZoomRotate.disableRotation();
 function P(id,k,v){map.setPaintProperty(id,k+'-transition',{duration:0,delay:0});map.setPaintProperty(id,k,v)}
 function look(l){for(var id in l){if(!map.getLayer(id))continue;var r=l[id];try{if(r.hide){map.setLayoutProperty(id,'visibility','none');continue}if(r.minZoom!=null)map.setLayerZoomRange(id,r.minZoom,24);if(r.fill)P(id,id==='background'?'background-color':'fill-color',r.fill);if(r.fill&&id!=='background')P(id,'fill-outline-color',r.fill);if(r.line)P(id,'line-color',r.line);if(r.opacity!=null)P(id,'line-opacity',r.opacity);if(r.text)P(id,'text-color',r.text);if(r.halo)P(id,'text-halo-color',r.halo)}catch(e){}}}
-map.on('style.load',function(){look(LOOK)});
+var LABELS=(${LABELS_JS}),INTER=(${INTERACT_JS}),BEZ=(${BEZIER_JS}),LBL_ON=${layer ? 'false' : 'true'};
+map.on('style.load',function(){look(LOOK);if(!LBL_ON)LABELS(map,false,0,0)});${layer ? 'INTER(map,false,true);' : ''}
 // A theme change that lands while tiles are still coming in is applied once they settle too
 // (map.loaded() is false whenever tiles are loading, which used to skip the new colours and
 // left, say, Night's dark map under the light Paris page; Oct 2).
 map.on('idle',function(){if(LOOK!==APPLIED){APPLIED=LOOK;look(LOOK)}});
 map.on('load',function(){look(LOOK);try{engine.set(INIT)}catch(e){}post({type:'ready'})});
-var box=document.getElementById('m');${interactive ? '' : "box.classList.add('cs-quiet');"}var FAR=null;function zoomClass(){var z=map.getZoom();box.classList.toggle('cs-close',z>=${CLOSE_ZOOM_NAMES});box.classList.toggle('cs-far',z<${FAR_ZOOM});box.classList.toggle('cs-short',z<${SHORT_ZOOM});${farBelow === undefined ? '' : `var f=z<${farBelow};if(f!==FAR){FAR=f;post({type:'far',far:f})}`}}zoomClass();map.on('zoom',zoomClass);
+var box=document.getElementById('m');${interactive && !layer ? '' : "box.classList.add('cs-quiet');"}var FAR=null;function zoomClass(){var z=map.getZoom();box.classList.toggle('cs-close',z>=${CLOSE_ZOOM_NAMES});box.classList.toggle('cs-far',z<${FAR_ZOOM});box.classList.toggle('cs-short',z<${SHORT_ZOOM});${farBelow === undefined ? '' : `var f=z<${farBelow};if(f!==FAR){FAR=f;post({type:'far',far:f})}`}}zoomClass();map.on('zoom',zoomClass);
 map.on('click',function(){post({type:'maptap'})});
 map.on('moveend',function(){var c=map.getCenter(),b=map.getBounds();post({type:'move',lat:c.lat,lng:c.lng,zoom:map.getZoom(),s:b.getSouth(),w:b.getWest(),n:b.getNorth(),e:b.getEast()})});
 // The pins: one engine with the browser's map (pinEngine), so both gather, split and cascade alike.
-var engine=(${PIN_ENGINE_JS})(map,maplibregl,{tap:function(id){post({type:'tap',id:id})},gathered:function(){post({type:'gathered'})},popIn:${popIn ? 'true' : 'false'},hold:${holdNow.current ? 'true' : 'false'},quiet:${interactive ? 'false' : 'true'},box:${JSON.stringify(interactive ? FULL_MAP_BOX : CARD_BOX)},pad:${JSON.stringify(pad ?? null)}});
+var engine=(${PIN_ENGINE_JS})(map,maplibregl,{tap:function(id){post({type:'tap',id:id})},gathered:function(){post({type:'gathered'})},popIn:${popIn ? 'true' : 'false'},hold:${holdNow.current ? 'true' : 'false'},quiet:${interactive && !layer ? 'false' : 'true'},box:${JSON.stringify(interactive && !layer ? FULL_MAP_BOX : CARD_BOX)},pad:${JSON.stringify(pad ?? null)}});
 window.__cs={
   set:function(p){engine.set(p)},
   hold:function(on){engine.hold(on)},
   fly:function(lat,lng,z,ms,oy,exact){MOVES++;map.flyTo({center:[lng,lat],zoom:z==null?map.getZoom():exact?z:Math.max(map.getZoom(),z),duration:ms,offset:[0,oy||0]})},
+  ease:function(lat,lng,z,ms,a,b,c,d){map.easeTo({center:[lng,lat],zoom:z,duration:ms,easing:BEZ(a,b,c,d),essential:true})},
+  snap:function(lat,lng,z){map.stop();map.jumpTo({center:[lng,lat],zoom:z})},
+  labels:function(on,ms,dl){LBL_ON=on;LABELS(map,on,ms,dl)},
+  inter:function(on){INTER(map,on,true)},
+  warm:function(lat,lng,z,blat,blng,bz){map.jumpTo({center:[lng,lat],zoom:z});map.once('idle',function(){map.jumpTo({center:[blng,blat],zoom:bz});map.once('idle',function(){post({type:'warm'})})})},
   look:function(l){LOOK=l;document.body.style.background=(l.background&&l.background.fill)||'#F4EFE6';if(map.isStyleLoaded())look(l)},
   synced:function(){if(SYNCED)return;SYNCED=true;W.kick()},
   rearm:function(){try{engine.calm(true)}catch(e){}map.once('idle',settle)},
@@ -256,6 +299,7 @@ ${ENGINE_JS}
           else if (msg.type === 'painted') requestAnimationFrame(() => latest.current.onPainted?.());
           else if (msg.type === 'tap' && msg.id) latest.current.onTap?.(msg.id);
           else if (msg.type === 'gathered') haptics.tap();
+          else if (msg.type === 'warm') latest.current.onWarm?.();
           else if (msg.type === 'maptap') latest.current.onMapTap?.();
           else if (msg.type === 'far') latest.current.onFar?.(!!msg.far);
           else if (msg.type === 'move' && msg.lat !== undefined && msg.lng !== undefined && msg.zoom !== undefined) {
