@@ -10,6 +10,8 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Avatar, Button, EmptyState, Field, Screen } from '@/components/ui';
 import { MenuSheet, type MenuSheetItem } from '@/components/MenuSheet';
 import { Tappable } from '@/components/Tappable';
+import { CourtSpinner } from '@/components/CourtSpinner';
+import { useStillLoading } from '@/lib/useStillLoading';
 import { pickFromDevice, type PickedMedia } from '@/components/MediaPicker';
 import type { CoachReview, User } from '@/data/types';
 import { KIND_LABEL, SPECIALTY_LABEL, statusLabel, turnaround, usePaidBooking } from '@/features/coaching/bookings';
@@ -36,7 +38,7 @@ import { colors, font, radius, spacing, typography, lift } from '@/theme';
 export default function CoachDetail() {
   const styles = useThemedStyles(styleDefinitions);
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { coaches, users, coachingRequests, coachResults, coachReviews, currentUserId, reportedIds, blockedIds, actions } = useApp();
+  const { coaches, users, coachingRequests, coachResults, coachReviews, currentUserId, reportedIds, blockedIds, actions, error: loadError } = useApp();
   // Paid booking is not part of this release (owner's call, Oct 3): until it is, only admins see
   // prices and booking (to test them); everyone else gets the free ways in, a message or a question.
   const paidBooking = usePaidBooking();
@@ -57,11 +59,16 @@ export default function CoachDetail() {
   const [reviewStars, setReviewStars] = useState(0);
   const [reviewBody, setReviewBody] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
+  const [posting, setPosting] = useState(false);
+  // Opened cold (a link, a notification, a reload): wait for the data before saying "not found".
+  const loading = useStillLoading() && !loadError;
 
   if (!coach || !user) {
     return (
       <Screen title="Coach" compactTitle onBack={() => goBack()}>
-        <EmptyState icon="alert-circle-outline" title="Coach not found" body="They may have paused their listing." />
+        {loading
+          ? <View style={styles.wait}><CourtSpinner size={28} /></View>
+          : <EmptyState icon="alert-circle-outline" title="Coach not found" body="They may have paused their listing." />}
       </Screen>
     );
   }
@@ -128,14 +135,15 @@ export default function CoachDetail() {
     setAddingResult(false);
   };
   const postReview = () => {
-    if (!reviewStars || !reviewBody.trim()) return;
+    if (!reviewStars || !reviewBody.trim() || posting) return;
     const words = reviewBody;
+    setPosting(true);
     // Words CourtSide refuses (migration 117) are said here, and your review stays to change.
     void actions.wordsRefused([words]).then((refused) => {
       if (refused) { showToast({ title: BLOCKED_WORDS_NOTE, body: 'Change them and post again.', icon: 'alert-circle-outline', long: true }); return; }
       actions.addCoachReview(coach.id, reviewStars, words);
       setReviewBody((now) => (now === words ? '' : now));
-    });
+    }).finally(() => setPosting(false));
   };
 
   // The "…" menu: report the page (it names the coach), or block them; Unblock once blocked.
@@ -354,7 +362,7 @@ export default function CoachDetail() {
             ))}
           </View>
           <Field value={reviewBody} onChangeText={setReviewBody} placeholder="Your review" multiline minHeight={70} />
-          <Button label="Post review" disabled={!reviewStars || !reviewBody.trim()} onPress={postReview} full />
+          <Button label="Post review" disabled={!reviewStars || !reviewBody.trim()} loading={posting} onPress={postReview} full />
         </View>
       ) : null}
       {reviews.length === 0 ? (
@@ -401,6 +409,7 @@ export default function CoachDetail() {
 }
 
 const styleDefinitions = StyleSheet.create({
+  wait: { paddingVertical: 60, alignItems: 'center' },
   freeRow: { flexDirection: 'row', gap: spacing.sm },
   hero: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg, paddingTop: spacing.sm },
   heroWords: { flex: 1, gap: 4, minWidth: 0 },

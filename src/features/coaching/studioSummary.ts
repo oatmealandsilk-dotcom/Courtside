@@ -20,9 +20,9 @@ export function openBookingCount(coach: Coach, requests: CoachingRequest[], curr
   return requests.filter((r) => (r.paidAt || !r.priceCents) && (r.coachId === coach.id || r.coachUserId === currentUserId) && isOpen(r)).length;
 }
 
-/** Free questions from players that nobody has answered yet (not counting one an admin took down). */
-export function waitingQuestionCount(questions: CoachQuestion[]) {
-  return questions.filter((q) => !q.resolved && !q.removed && q.replyIds.length === 0).length;
+/** Free questions from players that nobody has answered yet (not counting one an admin took down, or the coach's own). */
+export function waitingQuestionCount(questions: CoachQuestion[], currentUserId: ID | null) {
+  return questions.filter((q) => q.authorId !== currentUserId && !q.resolved && !q.removed && q.replyIds.length === 0).length;
 }
 
 /**
@@ -31,7 +31,7 @@ export function waitingQuestionCount(questions: CoachQuestion[]) {
  */
 export function studioLine(coach: Coach, requests: CoachingRequest[], questions: CoachQuestion[], currentUserId: ID | null) {
   const bookings = openBookingCount(coach, requests, currentUserId);
-  const asked = waitingQuestionCount(questions);
+  const asked = waitingQuestionCount(questions, currentUserId);
   const { doneCount } = studioSetup(coach);
   const parts: string[] = [];
   if (bookings) parts.push(`${bookings} ${bookings === 1 ? 'booking' : 'bookings'} waiting`);
