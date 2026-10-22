@@ -1,4 +1,5 @@
 import { PRESS_DIM } from '@/theme/press';
+import { SIG } from '@/features/signature/look';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -234,9 +235,9 @@ export default function YourSessions() {
       {!waiting.length && !groups.length && !taggedYou.length ? (
         <EmptyState
           icon="stopwatch-outline"
-          title="No sessions yet"
+          title={SIG ? 'Nothing on the scoresheet yet' : 'No sessions yet'}
           // The page's subtitle already says only you see it. One sentence a line: no word left on its own under the rest.
-          body={'Log one after you play.\nIt keeps your streak going.'}
+          body={SIG ? 'Log a hit and your season starts here.' : 'Log one after you play.\nIt keeps your streak going.'}
           action={{ label: 'Log a session', onPress: () => router.push('/log-session') }}
         />
       ) : null}

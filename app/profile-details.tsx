@@ -35,6 +35,8 @@ import { goBack } from '@/lib/goBack';
 import * as haptics from '@/lib/haptics';
 import { useStillLoading } from '@/lib/useStillLoading';
 import { useApp } from '@/store/AppContext';
+import { SIG } from '@/features/signature/look';
+import { ScoreBoard } from '@/components/session/ScoreBoard';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, pageIsDark, spacing, typography } from '@/theme';
 
@@ -386,7 +388,15 @@ function SessionRow({ session: s, first, me, sessionTags, users, onRemove }: { s
     : s.kind === 'practice' ? <CourtGlyph size={15} color={colors.textMuted} />
     : <Ionicons name={s.kind === 'fitness' && s.workout ? workoutIcon(s.workout) : 'barbell-outline'} size={18} color={colors.textMuted} />;
   return (
-    <Row first={first} minHeight={60} lead={<Tile>{icon}</Tile>} title={loggedLabel(s)} sub={sub}
+    <Row first={first} minHeight={60} lead={<Tile>{icon}</Tile>}
+      // Design preview (?sig=1, web only): the score as a ScoreBoard line under the kind, so it never wraps.
+      title={SIG && s.sets?.length ? KIND_LABEL[s.kind] : loggedLabel(s)}
+      sub={SIG && s.sets?.length ? (
+        <View style={{ gap: 2 }}>
+          <ScoreBoard size="row" sets={s.sets} you="" them="" youWon={s.kind === 'match' ? s.won : undefined} />
+          {sub ? <Text maxFontSizeMultiplier={1.3} numberOfLines={1} style={[typography.small, { color: colors.textMuted }]}>{sub}</Text> : null}
+        </View>
+      ) : sub}
       right={<Duration minutes={s.minutes} size={15} color={colors.text} unitColor={colors.textMuted} unitScale={0.8} />}
       onPress={onOpen}
       onLongPress={{ label: 'Remove', run: onRemove }}

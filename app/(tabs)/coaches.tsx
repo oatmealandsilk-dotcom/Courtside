@@ -1,4 +1,6 @@
 import { PRESS_DIM, PRESS_SHRINK } from '@/theme/press';
+import { SIG } from '@/features/signature/look';
+import { CoachGlyph } from '@/components/CourtDraw';
 import { asTabRoute } from '@/features/navigation/tabFocus';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { PlayerName } from '@/components/PlayerName';
@@ -129,7 +131,7 @@ function Coaching() {
       {/* The AI coach shows up here once it is switched on (its key added on the server). */}
       {aiCoachOn ? (
         <Pressable accessibilityRole="link" accessibilityLabel="AI coach" onPress={() => router.push('/ai-coach')} style={({ pressed }) => [styles.ai, pressed && styles.pressed]}>
-          <View style={styles.aiMark}><Ionicons name="sparkles" size={16} color={colors.brand} /></View>
+          {SIG ? <View style={{ width: 36, alignItems: 'center' }}><CoachGlyph size={20} /></View> : <View style={styles.aiMark}><Ionicons name="sparkles" size={16} color={colors.brand} /></View>}
           <View style={styles.rowWords}>
             <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.footTitle}>AI coach</Text>
             <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta}>A weekly plan, and answers any time.</Text>

@@ -4,6 +4,7 @@ import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
 
 import { useTheme } from '@/theme/ThemeProvider';
 import { colors } from '@/theme';
+import { SIG } from '@/features/signature/look';
 
 /** `t` of the way from one #RRGGBB colour to another. */
 function mix(a: string, b: string, t: number): string {
@@ -61,9 +62,12 @@ export const BrandWash = React.memo(function BrandWash({ radius = 999, strength 
   base?: string;
 }) {
   const { theme } = useTheme();
+  const reactId = useId();
+  // Design preview (?sig=1, web only): a flat brand fill, no glow.
+  if (SIG) return null;
   // The court's name is in the ids: iOS keeps a gradient by id and would not
   // repaint one whose colours changed under the same name.
-  const id = `${useId().replace(/[^a-zA-Z0-9]/g, '')}${theme.replace(/-/g, '')}`;
+  const id = `${reactId.replace(/[^a-zA-Z0-9]/g, '')}${theme.replace(/-/g, '')}`;
   const base0 = LOOKS[theme] ?? LOOKS.default;
   const look = strength === 1 ? base0 : { ...base0, glow: base0.glow * strength, sheenAt: base0.sheenAt * strength };
   const light = mix(base ?? colors.brand, look.toward, look.t);

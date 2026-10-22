@@ -1,4 +1,6 @@
 import { PRESS_DIM } from '@/theme/press';
+import { SIG } from '@/features/signature/look';
+import { CoachGlyph } from '@/components/CourtDraw';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -134,7 +136,7 @@ export default function AiCoachRoute() {
     return (
       <Screen title="AI Coach" compactTitle onBack={() => goBack()}>
         <View style={introStyles.card}>
-          <View style={introStyles.mark}><Ionicons name="sparkles" size={20} color={colors.brand} /></View>
+          {SIG ? <CoachGlyph size={24} /> : <View style={introStyles.mark}><Ionicons name="sparkles" size={20} color={colors.brand} /></View>}
           <Text style={introStyles.title}>Two quick questions first</Text>
           <Text style={introStyles.body}>How fit you are, how often you can play, and what you’re working toward. The coach plans your week around them.</Text>
           <Pressable accessibilityRole="button" onPress={() => { setLater(true); router.push({ pathname: '/onboarding', params: { from: 'coach', step: '3' } }); }} style={({ pressed }) => [introStyles.go, pressed && { opacity: PRESS_DIM }]}>
@@ -172,7 +174,7 @@ function AiCoachConsent({ onAgree }: { onAgree: () => Promise<boolean> }) {
   return (
     <Screen title="AI Coach" compactTitle onBack={() => goBack()}>
       <View style={introStyles.card}>
-        <View style={introStyles.mark}><Ionicons name="sparkles" size={20} color={colors.brand} /></View>
+        {SIG ? <CoachGlyph size={24} /> : <View style={introStyles.mark}><Ionicons name="sparkles" size={20} color={colors.brand} /></View>}
         <Text style={introStyles.title}>Before you use the AI coach</Text>
         <Text style={introStyles.body}>The AI coach is powered by Claude, an AI made by Anthropic. To answer you and plan your week, CourtSide sends Anthropic:</Text>
         <View style={introStyles.list}>

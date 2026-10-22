@@ -19,6 +19,8 @@ import { colors, font, pageIsDark, withAlpha } from '@/theme';
 import { Duration, Figure } from './Duration';
 import { Pop } from './Pop';
 import { ZoneBar } from './ZoneBar';
+import { SIG } from '@/features/signature/look';
+import { SigSessionPanel } from './SigSessionPanel';
 
 /** Someone on the session as the card shows them; `pending` only ever on the author's own preview. */
 export type CardPerson = { id: ID; handle: string; name: string; role: 'opponent' | 'partner'; pending?: boolean };
@@ -212,8 +214,10 @@ export function CardWash({ look, radius, edge = true }: { look: CardLook; radius
  * from. `width` sets the scale: 358 is the full size, the composer's is
  * about two thirds of it. The feed's post draws it sideways (`height`).
  */
-export function SessionCard({ session, width, height, play = false, people, hidden = [], onPress, showSource = true, accessibilityHint, aspect = 4 / 5, radius, eyebrow, place, brand = false, scale = 1, inset, picture = false, clear = false }: {
+export function SessionCard({ session, width, height, play = false, people, hidden = [], onPress, showSource = true, accessibilityHint, aspect = 4 / 5, radius, eyebrow, place, brand = false, scale = 1, inset, picture = false, clear = false, author }: {
   session: SessionDetail;
+  /** The post's author, for the ScoreBoard's top row (design preview ?sig=1 only). */
+  author?: string;
   width: number;
   /**
    * Drawn sideways at this height, as wide as `width` (the feed's post,
@@ -314,6 +318,9 @@ export function SessionCard({ session, width, height, play = false, people, hidd
     strain != null ? { key: 'strain', value: strain, part: 'dec1', label: 'Strain' } : null,
     kcal ? { key: 'kcal', value: kcal, label: 'cal' } : null,
   ].filter((s): s is SidewaysStat => !!s);
+
+  // Design preview (?sig=1, web only): the feed's box in its fixed order (SigSessionPanel).
+  if (SIG && height != null && author) return <SigSessionPanel session={session} author={author} people={list} onPress={onPress} spoken={spoken} />;
 
   const body = height != null ? (
     <Sideways

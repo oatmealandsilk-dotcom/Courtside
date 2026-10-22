@@ -1,8 +1,10 @@
 import { createContext } from 'react';
 import type { View } from 'react-native';
+import { SIG } from '@/features/signature/look';
 
 /** The colour wash behind the top of every page (Screen): how far down it runs and how strong it is. */
-export const PAGE_WASH = { height: 360, strength: 0.85 } as const;
+// Design preview (?sig=1, web only): the wash at half its strength.
+export const PAGE_WASH = { height: 360, strength: SIG ? 0.425 : 0.85 } as const;
 
 /**
  * Where a page's scrolling part sits under its wash, for a bar pinned at the

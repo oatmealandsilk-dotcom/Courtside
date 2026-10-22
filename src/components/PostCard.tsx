@@ -37,6 +37,7 @@ import { goToTab } from '@/features/navigation/startTab';
 import { colors, radius, spacing, typography } from '@/theme';
 import { tagsNotInCaption } from '@/features/feed/tags';
 import { TextScale } from '@/theme/textScale';
+import { SIG } from '@/features/signature/look';
 
 interface Props {
   /** Opens the comments; without it the comment button behaves like a tap on the card. */
@@ -206,7 +207,12 @@ function PostCardInner({
           <View style={cropLayer(post.crop)}><ClipVideo uri={post.videoUrl} poster={post.thumbnailUrl} active={playing} trimStart={post.trimStart} trimEnd={post.trimEnd} speed={post.speed} volume={post.volume} /></View>
         </View>
       ) : post.kind === 'clip' ? <MediaPlaceholder label={post.mediaLabel ?? 'Clip'} seed={post.id} portrait /> : null}
-      {sessionCard ? (
+      {sessionCard && SIG ? (
+        // Design preview (?sig=1, web only): the session box in its fixed order, at its own height.
+        <View style={styles.sigSlot}>
+          <SessionCard session={post.session!} width={0} height={0} author={author.name} hidden={blockedIds} onPress={openStats} />
+        </View>
+      ) : sessionCard ? (
         <View
           // Sideways, as wide as the post's words (Oct 6, owner: a tall card
           // squeezed onto a short page "looks a bit funky ... It will be
@@ -393,6 +399,7 @@ const styleDefinitions = StyleSheet.create({
   video: { width: '100%', borderRadius: radius.lg, overflow: 'hidden', backgroundColor: '#000' },
   cardSlot: { width: '100%', alignItems: 'center', justifyContent: 'center', flexShrink: 6, minHeight: 0, overflow: 'hidden' },
   cardWait: { aspectRatio: 1 / SIDEWAYS },
+  sigSlot: { width: '100%', flexShrink: 0 },
   kindRow: {
     flexDirection: 'row',
     alignItems: 'center',

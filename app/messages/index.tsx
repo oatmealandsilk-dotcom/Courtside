@@ -13,6 +13,7 @@ import { MUTE_CHOICES, muteUntil } from '@/features/messages/mute';
 import { useLinkPreview } from '@/features/messages/linkPreview';
 import { isOpenToHit } from '@/features/players/openToHit';
 import { Avatar, Chip, EmptyState, Screen } from '@/components/ui';
+import { SIG } from '@/features/signature/look';
 import { confirm, confirmAfterMenu } from '@/lib/confirm';
 import { relativeTime } from '@/lib/format';
 import { isOnlyLink } from '@/lib/links';
@@ -177,6 +178,7 @@ export default function Inbox() {
     section === 'groups' ? { title: 'No group chats yet', body: 'Start one from New message: pick two or more people.' }
     : section === 'coaches' ? { title: 'No coach conversations', body: 'Message a coach from their page and it will show up here.' }
     : section === 'clients' ? { title: 'No clients yet', body: 'Players who message you about coaching land here.' }
+    : SIG ? { title: 'Quiet court', body: "Message a player you'd like to hit with." }
     : { title: 'No messages yet', body: 'Find a player in Community and start a conversation.' };
 
   /**

@@ -81,6 +81,8 @@ import { colors, radius, typography, spacing, font, lift } from '@/theme';
 import { isTaggedIn } from '@/features/activity/sessionTags';
 import { useAndroidBack } from '@/lib/androidBack';
 import { TextScale } from '@/theme/textScale';
+import { SIG } from '@/features/signature/look';
+import { CourtDraw } from '@/components/CourtDraw';
 
 /**
  * The heart that blooms when you double tap a clip.
@@ -1722,9 +1724,9 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, onSettled }: {
   const caughtUp = (
     <View key="caught-up" style={styles.endPage}>
       <View style={styles.endCard}>
-        <Wash height={300} strength={0.65} fade={colors.surface} />
-        <View style={styles.endTile}><MarkDraw size={30} /></View>
-        <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.endTitle}>You're all caught up.</Text>
+        {SIG ? null : <Wash height={300} strength={0.65} fade={colors.surface} />}
+        {SIG ? <CourtDraw /> : <View style={styles.endTile}><MarkDraw size={30} /></View>}
+        <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.endTitle}>{SIG ? "That's the last ball. You're all caught up." : "You're all caught up."}</Text>
         <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.endBody}>That's every session from you and the people you follow. Log your next one after you play.</Text>
         {/* And the way to do it, right here (Oct 6, owner: "it should say log an activity … or it could say both"). */}
         <View style={styles.endActions}>
@@ -1758,8 +1760,8 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, onSettled }: {
     return (
       <View key={CAUGHT_UP} style={styles.endPage}>
         <View style={styles.endCard}>
-          <Wash height={300} strength={0.65} fade={colors.surface} />
-          <View style={styles.endTile}><Ionicons name="checkmark" size={30} color={colors.brand} /></View>
+          {SIG ? null : <Wash height={300} strength={0.65} fade={colors.surface} />}
+          {SIG ? <CourtDraw /> : <View style={styles.endTile}><Ionicons name="checkmark" size={30} color={colors.brand} /></View>}
           <View style={styles.caughtWords}>
             <Text maxFontSizeMultiplier={TextScale.TITLE} accessibilityRole="header" style={styles.endTitle}>You're all caught up</Text>
             <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.endBody}>{`You've seen all new posts from ${pastDays(caughtUpDays)}.`}</Text>
