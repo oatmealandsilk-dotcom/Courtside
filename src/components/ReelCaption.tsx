@@ -71,6 +71,8 @@ const META_INK = 'rgba(255, 255, 255, 0.94)';
 const LINK_SLOP = { top: 8, bottom: 12, left: 6, right: 6 } as const;
 /** The handle's tap area: a little above it, and only a little below, where the place starts. */
 const NAME_SLOP = { top: 8, bottom: 2, left: 4, right: 4 } as const;
+/** Follow beside the handle, leaving once tapped. */
+const FOLLOW_OUT = FadeOut.duration(180);
 /** The place line under the handle: a little more room, never so much it reaches the handle or the caption's first line. */
 const PLACE_SLOP = { top: 2, bottom: 4, left: 6, right: 10 } as const;
 /** The words' own tap area: a little above them, nothing below (the small line has its own buttons there). */
@@ -208,9 +210,12 @@ function Who({ author, onAuthor, newHere = false, place = '', court }: { author:
             <LevelPill profile={author.profile} small onMedia style={styles.badge} />
             {newHere && tagFits ? <View style={styles.badge}><NewHereTag onMedia short /></View> : null}
             {canFollow ? (
-              <Pressable accessibilityRole="button" accessibilityLabel={`Follow ${author.handle}`} hitSlop={8} onPress={(e) => { e?.stopPropagation?.(); actions.toggleFollow(author.id); }} style={({ pressed }) => [styles.follow, pressed && styles.pressed]}>
-                <Text style={styles.followText} maxFontSizeMultiplier={MAX_GROW}>Follow</Text>
-              </Pressable>
+              // Tapped, it fades out (180 ms) rather than vanishing under the finger (Oct 22 sweep, item 26).
+              <Animated.View exiting={FOLLOW_OUT} style={styles.followWrap}>
+                <Pressable accessibilityRole="button" accessibilityLabel={`Follow ${author.handle}`} hitSlop={8} onPress={(e) => { e?.stopPropagation?.(); actions.toggleFollow(author.id); }} style={({ pressed }) => [styles.follow, pressed && styles.pressed]}>
+                  <Text style={styles.followText} maxFontSizeMultiplier={MAX_GROW}>Follow</Text>
+                </Pressable>
+              </Animated.View>
             ) : null}
           </Pressable>
           {place ? (
@@ -483,6 +488,7 @@ const styles = StyleSheet.create({
   placeRow: { flexDirection: 'row', alignItems: 'center', gap: 3, alignSelf: 'flex-start', maxWidth: '100%' },
   placeText: { color: META_INK, fontSize: 12.5, lineHeight: 16, ...font('500'), letterSpacing: 0, opacity: 0.9, flexShrink: 1, ...EDGE_SMALL },
   // Instagram's outlined Follow: white hairline, white words, no fill.
+  followWrap: { flexShrink: 0 },
   follow: { minHeight: 24, paddingHorizontal: 11, borderRadius: 8, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.75)', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   followText: { color: '#fff', fontSize: 13, ...font('600'), letterSpacing: -0.1, ...EDGE_SMALL },
   // The time under an opened caption, 4 below its last line.

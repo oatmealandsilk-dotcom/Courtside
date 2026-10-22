@@ -186,6 +186,11 @@ export function useStagePageChrome(_owner: string, _stageKey: string): SharedVal
   return null;
 }
 
+/** The phone's fade of a Home's own chrome, as a value (see the phone's twin); a browser has no glass to guard. */
+export function useStageOwnerChrome(_owner: string): SharedValue<number> | null {
+  return null;
+}
+
 /** Whether the small rail is showing enough to be touched (see the phone's twin), read from where the sheet is going. */
 export function useRailLive(): boolean {
   const showing = (y: number) => {

@@ -7,7 +7,7 @@ import { StatusBar } from 'expo-status-bar';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image as ExpoImage } from 'expo-image';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Animated, { FadeInDown, FadeOut, LayoutAnimationConfig, ZoomIn, ZoomOut, scrollTo, useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming, type AnimatedRef, type SharedValue } from 'react-native-reanimated';
+import Animated, { FadeInDown, FadeOut, LayoutAnimationConfig, LinearTransition, ZoomIn, ZoomOut, scrollTo, useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming, type AnimatedRef, type SharedValue } from 'react-native-reanimated';
 
 import { CommentThread, threadOf, threadsOf, useReplyDraft } from '@/components/CommentThread';
 import { JumpProvider } from '@/components/JumpTo';
@@ -26,6 +26,8 @@ import * as haptics from '@/lib/haptics';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing, typography } from '@/theme';
 
+/** The box's extras (Replying to, the emoji row) glide to their new place as the others come and go (Oct 22 sweep, item 17). */
+const COMPOSER_GLIDE = LinearTransition.duration(200);
 /** One tap drops these into the box, the way Instagram's row above the keyboard does. Tennis first. */
 const QUICK = ['🎾', '🔥', '👏', '😂', '😮', '🙌', '💯', '❤️'];
 /**
@@ -370,6 +372,7 @@ export default function CommentsSheet() {
       onReply={canReply ? (c: Comment) => replyRef.current(c) : undefined}
       onRowLayout={(commentId, y, height) => { rowY.current[commentId] = y; rowH.current[commentId] = height; }}
       isFresh={(c) => Date.parse(c.createdAt) > openedAt.current}
+      glide
     />
   )), [threads, allThreads, openThreads, canReply]); // eslint-disable-line react-hooks/exhaustive-deps
   const count = all.length;
@@ -420,7 +423,7 @@ export default function CommentsSheet() {
             {/* A guest (guest mode, Oct 17) reads the comments; the box asks them to join instead of typing. */}
             {isGuest ? <Pressable accessibilityRole="button" accessibilityLabel="Add a comment" onPress={() => openJoinSheet('comment')} style={[StyleSheet.absoluteFill, { zIndex: 5 }]} /> : null}
             {replyingTo ? (
-              <Animated.View entering={FadeInDown.duration(160)} style={styles.replying}>
+              <Animated.View entering={FadeInDown.duration(160)} exiting={FadeOut.duration(140)} layout={COMPOSER_GLIDE} style={styles.replying}>
                 <Text style={styles.replyingText} numberOfLines={1}>
                   Replying to {replyingTo.self ? 'your comment' : <Text style={styles.replyingHandle}>@{replyingTo.handle}</Text>}
                 </Text>
@@ -429,11 +432,11 @@ export default function CommentsSheet() {
                 </Pressable>
               </Animated.View>
             ) : null}
-            {!staged ? <View style={styles.quick}>{quickRow}</View> : typing ? (
-              <Animated.View entering={FadeInDown.duration(160)} exiting={FadeOut.duration(120)} style={styles.quick}>{quickRow}</Animated.View>
+            {!staged ? <Animated.View layout={COMPOSER_GLIDE} style={styles.quick}>{quickRow}</Animated.View> : typing ? (
+              <Animated.View entering={FadeInDown.duration(160)} exiting={FadeOut.duration(120)} layout={COMPOSER_GLIDE} style={styles.quick}>{quickRow}</Animated.View>
             ) : null}
             {photo ? (
-              <Animated.View entering={FadeInDown.duration(180)} style={styles.attached}>
+              <Animated.View entering={FadeInDown.duration(180)} exiting={FadeOut.duration(160)} style={styles.attached}>
                 <ExpoImage source={{ uri: photo }} style={StyleSheet.absoluteFill} contentFit="cover" />
                 <Pressable accessibilityRole="button" accessibilityLabel="Remove the photo" onPress={() => setPhoto(null)} style={styles.attachedRemoveTarget}>
                   <View style={styles.attachedRemove}>

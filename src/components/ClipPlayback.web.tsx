@@ -232,7 +232,8 @@ function ClipPlaybackInner({ uri, poster, active: wanted, preload = false, warmO
       if (pending.current) clearTimeout(pending.current);
       pending.current = setTimeout(() => { pending.current = null; togglePause(); }, onDoubleTap ? 280 : 0);
     }} style={{ position: 'absolute', inset: 0, width: '100%', background: 'transparent', border: 0, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      {paused && ready ? <span style={{ width: 64, height: 64, borderRadius: 32, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', paddingLeft: 4 }}><Ionicons name="play" size={30} color="white" /></span> : null}
+      {/* A quick zoom and fade in and out, the same as the phone's (Oct 22 sweep, item 24). */}
+      <span aria-hidden="true" style={{ width: 64, height: 64, borderRadius: 32, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', paddingLeft: 4, boxSizing: 'border-box', pointerEvents: 'none', ...pop(paused && ready) }}><Ionicons name="play" size={30} color="white" /></span>
     </button>
     {/* A feed disc fades with the words as its page goes onto the comments stage (data-stage-chrome, see useStageMotion.web). */}
     {silent || bare ? null : <div data-stage-chrome={discInk ? '' : undefined}><button aria-label={muted ? 'Unmute clip' : 'Mute clip'} onClick={() => { setMuted((v) => !v); if (!discPinned) showDisc(); }} style={{
@@ -248,10 +249,21 @@ function ClipPlaybackInner({ uri, poster, active: wanted, preload = false, warmO
       <div ref={bar} style={{ height: 2, width: '0%', background: 'rgba(255,255,255,0.9)' }} />
     </div>}
     {!ready && active ? <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}><CourtSpinner ink={discInk ?? 'white'} /></div> : null}
-    {fast ? <div aria-live="polite" style={{ position: 'absolute', left: 0, right: 0, top: insets.top + drop + 24, display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>
-      <span style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 999, background: 'rgba(0,0,0,0.55)', color: 'white', font: '700 14px Inter_700Bold, system-ui, sans-serif' }}><Ionicons name="play-forward" size={13} color="white" />2×</span>
-    </div> : null}
+    <div aria-live="polite" style={{ position: 'absolute', left: 0, right: 0, top: insets.top + drop + 24, display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>
+      <span aria-hidden="true" style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 999, background: 'rgba(0,0,0,0.55)', color: 'white', font: '700 14px Inter_700Bold, system-ui, sans-serif', ...pop(fast) }}><Ionicons name="play-forward" size={13} color="white" />2×</span>
+      {/* What a screen reader hears, only while it holds at double speed. */}
+      <span style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clipPath: 'inset(50%)', whiteSpace: 'nowrap' }}>{fast ? '2×' : ''}</span>
+    </div>
   </div>;
+}
+
+/** The play badge's and the 2× pill's look, shown or not: a quick zoom and fade (160 ms in, 120 ms out). */
+function pop(on: boolean): React.CSSProperties {
+  return {
+    opacity: on ? 1 : 0,
+    transform: on ? 'scale(1)' : 'scale(0.8)',
+    transition: on ? 'opacity 160ms ease-out, transform 160ms ease-out' : 'opacity 120ms ease-in, transform 120ms ease-in',
+  };
 }
 
 /** Re-renders only when a shown value changes; the handlers passed in read fresh values through their own props, so a new function alone is no reason to rebuild. */

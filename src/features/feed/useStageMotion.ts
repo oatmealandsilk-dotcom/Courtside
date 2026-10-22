@@ -63,6 +63,14 @@ export function useStagePageChrome(owner: string, stageKey: string): SharedValue
   }, [owner, stageKey]);
 }
 
+/** How faded a Home's own chrome is (its back tile), as a value: 1 unless that Home's page is on the stage. A browser hands back null. */
+export function useStageOwnerChrome(owner: string): SharedValue<number> | null {
+  return useDerivedValue(() => {
+    const G = stageGeo.value;
+    return G !== null && G.owner === owner ? stageFrame(stageTop.value, G).chrome : 1;
+  }, [owner]);
+}
+
 /**
  * Whether the small rail is showing enough to be touched: it is faded out at
  * full, where it would sit over the top of the sheet, and must not catch a
