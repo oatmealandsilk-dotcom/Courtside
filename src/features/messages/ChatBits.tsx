@@ -104,6 +104,70 @@ export function ReplyBar({ to, who, onClose }: { to: Message; who: string; onClo
   );
 }
 
+/* ------------------------------------------------------------ room moves */
+
+/** How long a message takes to leave (unsend, delete for you), and the curve its neighbours close up on. */
+export const LEAVE_MS = 230;
+const GLIDE = Easing.bezier(0.25, 0.8, 0.25, 1);
+
+/**
+ * Room that grows and shrinks with what is in it instead of jumping (Oct 22
+ * sweep: "the whole chat jumps when the typing dots appear and when they
+ * go"). Its contents keep their own size, sat on its bottom edge (or its
+ * top, `from="top"`, for something that opens downward); the room
+ * around them eases to it, so the messages above glide up and back down.
+ * The first size it is given is simply taken.
+ */
+export function GrowRoom({ children, from = 'bottom' }: { children: React.ReactNode; from?: 'top' | 'bottom' }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const still = useReducedMotion();
+  const h = useSharedValue(-1);
+  const look = useAnimatedStyle(() => ({ height: Math.max(0, h.value) }));
+  return (
+    <Reanimated.View style={[styles.growRoom, look]}>
+      <View
+        style={[styles.growInner, from === 'top' ? styles.growTop : styles.growBottom]}
+        onLayout={(e) => {
+          const next = e.nativeEvent.layout.height;
+          h.value = h.value < 0 || still ? next : withTiming(next, { duration: 240, easing: GLIDE });
+        }}
+      >
+        {children}
+      </View>
+    </Reanimated.View>
+  );
+}
+
+/**
+ * A message on its way out: it fades and folds shut over LEAVE_MS, so the
+ * bubbles around it close up smoothly rather than in one frame. Its height
+ * is read the moment it starts to leave; until then it is a plain box.
+ */
+export function LeaveRow({ leaving, children }: { leaving: boolean; children: React.ReactNode }) {
+  const still = useReducedMotion();
+  const box = useRef<View>(null);
+  const h = useSharedValue(-1);
+  const p = useSharedValue(1);
+  useEffect(() => {
+    if (!leaving) { h.value = -1; p.value = 1; return; }
+    box.current?.measure((_x, _y, _w, height) => {
+      if (!height) return;
+      h.value = height;
+      p.value = withTiming(0, { duration: still ? 120 : LEAVE_MS, easing: Easing.bezier(0.4, 0, 0.2, 1) });
+    });
+  }, [leaving, still, h, p]);
+  const look = useAnimatedStyle(() => (h.value < 0 ? {} : {
+    height: h.value * p.value,
+    opacity: p.value,
+    transform: [{ scale: still ? 1 : 0.92 + 0.08 * p.value }],
+  }));
+  return (
+    <Reanimated.View pointerEvents={leaving ? 'none' : 'auto'} style={[leaving && { overflow: 'hidden' }, look]}>
+      <View ref={box} collapsable={false}>{children}</View>
+    </Reanimated.View>
+  );
+}
+
 /* ----------------------------------------------------------- new messages */
 
 /**
@@ -379,6 +443,10 @@ function InfoLine({ styles, icon, label, value }: { styles: ReturnType<typeof us
 }
 
 const styleDefinitions = StyleSheet.create({
+  growRoom: { overflow: 'hidden' },
+  growInner: { position: 'absolute', left: 0, right: 0 },
+  growTop: { top: 0 },
+  growBottom: { bottom: 0 },
   // A reply's quote: inside the bubble, a soft block. In yours, the bubble's colour a step toward the
   // page's text (darker on a light court, lighter on a dark one), so the ink on it stays solid and
   // clear (it was see-through ink on see-through ink, under 3:1 on Melbourne's blue); in theirs, the page's text, faint.

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type ViewStyle } from 'react-native';
-import Reanimated, { useAnimatedKeyboard, useAnimatedStyle } from 'react-native-reanimated';
+import Reanimated, { Easing, FadeIn, FadeOut, LinearTransition, SlideInDown, SlideOutDown, ZoomIn, ZoomOut, useAnimatedKeyboard, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { BLOCKED_WORDS_NOTE } from '@/features/hiddenWords/hiddenWords';
@@ -9,6 +9,8 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Avatar, EmptyState, Screen } from '@/components/ui';
 import { GROUP_CAP, GroupAvatar, chatLockNote, groupLockNote, groupName, isGroupChat, named, othersIn } from '@/features/messages/groups';
 import { LockBadge, LockNote } from '@/features/messages/LockNote';
+import { GrowRoom } from '@/features/messages/ChatBits';
+import { PRESS_DIM, PRESS_SHRINK } from '@/theme/press';
 import type { User } from '@/data/types';
 import { goBack } from '@/lib/goBack';
 import { useResponsive } from '@/lib/useResponsive';
@@ -33,6 +35,34 @@ const useFooterLift: (less: number) => ViewStyle = Platform.OS === 'web'
     const keyboard = useAnimatedKeyboard();
     return useAnimatedStyle(() => ({ bottom: Math.max(0, keyboard.height.value - less) })) as ViewStyle;
   };
+
+/*
+ * How the picks move (Oct 22 sweep: "picking the first person makes the
+ * Chat/Create group footer pop up; chips and ticks pop too"): the footer
+ * slides up from the bottom edge and back down, a chip grows in softly and
+ * the others make room, and a tick fills from its middle.
+ */
+const FOOTER_IN = SlideInDown.duration(300).easing(Easing.out(Easing.cubic));
+const FOOTER_OUT = SlideOutDown.duration(220).easing(Easing.in(Easing.quad));
+const CHIP_IN = ZoomIn.duration(180).easing(Easing.out(Easing.cubic));
+const CHIP_OUT = ZoomOut.duration(130);
+const CHIP_GLIDE = LinearTransition.duration(200).easing(Easing.bezier(0.25, 0.8, 0.25, 1));
+
+/** The round tick at the end of a row: its fill grows from the middle when ticked, and shrinks away when not. */
+function Tick({ on, styles }: { on: boolean; styles: { tick: object; tickFill: object } }) {
+  const p = useSharedValue(on ? 1 : 0);
+  React.useEffect(() => {
+    p.value = on ? withSpring(1, { damping: 16, stiffness: 320, mass: 0.7 }) : withTiming(0, { duration: 140 });
+  }, [on, p]);
+  const fill = useAnimatedStyle(() => ({ transform: [{ scale: p.value }] }));
+  return (
+    <View style={styles.tick}>
+      <Reanimated.View style={[styles.tickFill, fill]}>
+        <Ionicons name="checkmark" size={15} color={colors.brandInk} />
+      </Reanimated.View>
+    </View>
+  );
+}
 
 /**
  * Starting a chat. On a computer it is a small box over your inbox, the way
@@ -170,35 +200,39 @@ export default function NewMessage() {
   };
   const pickedUsers = picked.map((id) => users.find((u) => u.id === id)).filter((u): u is NonNullable<typeof u> => !!u);
   const chips = pickedUsers.length ? (
-    <View style={styles.chips}>
+    <Reanimated.View layout={CHIP_GLIDE} exiting={FadeOut.duration(130)} style={styles.chips}>
       {pickedUsers.map((u) => {
         // Someone ticked who can't be in the group shows the lock here too, beside the way to take them out.
         const stuck = blockers.includes(u.id);
         return (
-          <Pressable key={u.id} accessibilityRole="button" accessibilityLabel={`Remove ${u.name}`} onPress={() => { void toggle(u.id); }} style={[styles.chip, stuck && styles.chipStuck]}>
+          <Reanimated.View key={u.id} entering={CHIP_IN} exiting={CHIP_OUT} layout={CHIP_GLIDE}>
+          <Pressable accessibilityRole="button" accessibilityLabel={`Remove ${u.name}`} onPress={() => { void toggle(u.id); }} style={({ pressed }) => [styles.chip, stuck && styles.chipStuck, pressed && { opacity: PRESS_DIM }]}>
             <Avatar name={u.name} seed={u.avatarSeed} uri={u.avatarUrl} size={20} />
             {stuck ? <Ionicons name="lock-closed" size={11} color={colors.textMuted} /> : null}
             <Text maxFontSizeMultiplier={TextScale.TITLE} style={[styles.chipText, stuck && styles.chipTextStuck]} numberOfLines={1}>{firstName(u)}</Text>
             <Ionicons name="close" size={13} color={stuck ? colors.textMuted : colors.brand} />
           </Pressable>
+          </Reanimated.View>
         );
       })}
-    </View>
+    </Reanimated.View>
   ) : null;
   // The notes sit above the button, pinned with it, so they are on screen wherever the list is scrolled.
   const blockersText = blockers.length ? groupLockNote(namesOf(blockers), true) : null;
   const notes = [blockersText, note && note.text !== blockersText ? note.text : null].filter((t): t is string => !!t);
   const held = !!blockers.length || busy;
   const footer = (phone: boolean) => (picked.length || notes.length ? (
-    <Reanimated.View style={[styles.footer, phone && { paddingBottom: footerBottom }, phone && footerLift]}>
+    <Reanimated.View entering={FOOTER_IN} exiting={FOOTER_OUT} style={[styles.footer, phone && { paddingBottom: footerBottom }, phone && footerLift]}>
       {notes.map((text) => (
         <LockNote key={text} text={text} tone={note?.alert && text === note.text ? 'alert' : 'lock'} onClose={text === note?.text ? () => setNote(null) : undefined} />
       ))}
       {picked.length > 1 ? (
-        <TextInput maxFontSizeMultiplier={TextScale.TITLE} value={title} onChangeText={(v) => setTitle(v.slice(0, 60))} placeholder="Group name (optional)" placeholderTextColor={colors.textFaint} style={styles.groupName} accessibilityLabel="Group name" />
+        <Reanimated.View entering={FadeIn.duration(180)} exiting={FadeOut.duration(120)}>
+          <TextInput maxFontSizeMultiplier={TextScale.TITLE} value={title} onChangeText={(v) => setTitle(v.slice(0, 60))} placeholder="Group name (optional)" placeholderTextColor={colors.textFaint} style={styles.groupName} accessibilityLabel="Group name" />
+        </Reanimated.View>
       ) : null}
       {picked.length ? (
-        <Pressable accessibilityRole="button" accessibilityState={{ disabled: held, busy }} disabled={held} onPress={() => { void start(); }} style={({ pressed }) => [styles.start, picked.length > 1 && styles.startGroup, held && styles.startHeld, pressed && { opacity: 0.85, transform: [{ scale: 0.98 }] }]}>
+        <Pressable accessibilityRole="button" accessibilityState={{ disabled: held, busy }} disabled={held} onPress={() => { void start(); }} style={({ pressed }) => [styles.start, picked.length > 1 && styles.startGroup, held && styles.startHeld, pressed && { transform: [{ scale: PRESS_SHRINK }] }]}>
           {/* Two or more ticked: the group is the point now, so the button says so with its people. */}
           {picked.length > 1 && !sameGroup ? <Ionicons name="people" size={19} color={colors.brandInk} /> : null}
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.startText}>{picked.length === 1 ? 'Chat' : sameGroup ? 'Open group' : busy ? 'Creating group…' : `Create group · ${picked.length + 1} people`}</Text>
@@ -255,7 +289,7 @@ export default function NewMessage() {
               <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.name} numberOfLines={1}>{user.name}</Text>
               <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.handle} numberOfLines={1}>@{user.handle}</Text>
             </View>
-            {locked ? null : <View style={[styles.tick, on && styles.tickOn]}>{on ? <Ionicons name="checkmark" size={15} color={colors.brandInk} /> : null}</View>}
+            {locked ? null : <Tick on={on} styles={styles} />}
           </Pressable>
         );
       })}
@@ -279,7 +313,8 @@ export default function NewMessage() {
                   <Text style={styles.to}>To</Text>
                   <TextInput maxFontSizeMultiplier={TextScale.TITLE} value={query} onChangeText={setQuery} placeholder="Search" placeholderTextColor={colors.textFaint} autoCapitalize="none" autoCorrect={false} autoFocus style={styles.toInput} accessibilityLabel="To" />
                 </View>
-                {chips}
+                {/* The chips' row opens and closes smoothly, the list gliding down and back up under it. */}
+                <GrowRoom from="top">{chips}</GrowRoom>
               </View>
             </>
           )}
@@ -308,7 +343,7 @@ export default function NewMessage() {
           <Text style={styles.to}>To</Text>
           <TextInput maxFontSizeMultiplier={TextScale.TITLE} value={query} onChangeText={setQuery} placeholder="Search" placeholderTextColor={colors.textFaint} autoCapitalize="none" autoCorrect={false} autoFocus style={styles.toInput} accessibilityLabel="To" />
         </View>
-        {chips}
+        <GrowRoom from="top">{chips}</GrowRoom>
         <ScrollView style={styles.scroll} contentContainerStyle={[styles.scrollBody, picked.length || notes.length ? { paddingBottom: 150 + notes.length * 90 } : null]}>{list}</ScrollView>
         {footer(false)}
       </View>
@@ -336,7 +371,8 @@ const styleDefinitions = StyleSheet.create({
   name: { ...typography.body, ...font('600'), color: colors.text },
   handle: { ...typography.small, color: colors.textMuted },
   tick: { width: 24, height: 24, borderRadius: 12, borderWidth: 1.5, borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center' },
-  tickOn: { backgroundColor: colors.brand, borderColor: colors.brand },
+  // The tick's fill, grown from the middle over the ring (Tick).
+  tickFill: { position: 'absolute', top: -1.5, left: -1.5, right: -1.5, bottom: -1.5, borderRadius: 12, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingHorizontal: spacing.lg, paddingTop: spacing.md },
   // The face sits 5px in from the pill's round end, so the pill hugs it.
   chip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: 5, paddingRight: 9, minHeight: 30, borderRadius: 15, backgroundColor: colors.brandDim },

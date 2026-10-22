@@ -1,3 +1,4 @@
+import { PRESS_DIM, PRESS_SHRINK } from '@/theme/press';
 import { ThreadReply } from '@/components/ThreadReplies';
 import { MentionSuggestions } from '@/components/MentionSuggestions';
 import { useMentionDraft } from '@/features/mentions/useMentionDraft';
@@ -197,7 +198,7 @@ function QuestionDetail() {
         <View style={styles.voteRow}>
           <VoteControls item={question} userId={currentUserId} onVote={direction => actions.voteQuestion(question.id, direction)} />
           {/* The same Reply button a reply has; it opens the line to type on right here. None on a removed thread. */}
-          {removed ? null : <Pressable accessibilityRole="button" accessibilityLabel="Reply to this thread" onPress={() => { if (isGuest) { openJoinSheet('reply'); return; } setReplying(true); setTimeout(() => replyInput.current?.focus(), 50); }} style={styles.replyButton}>
+          {removed ? null : <Pressable accessibilityRole="button" accessibilityLabel="Reply to this thread" onPress={() => { if (isGuest) { openJoinSheet('reply'); return; } setReplying(true); setTimeout(() => replyInput.current?.focus(), 50); }} style={({ pressed }) => [styles.replyButton, pressed && { opacity: PRESS_DIM }]}>
             <Ionicons name="chatbubble-outline" size={16} color={colors.textMuted}/>
             <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.replyLabel}>Reply</Text>
           </Pressable>}
@@ -213,8 +214,8 @@ function QuestionDetail() {
             <View style={styles.inlineActions}>
               <AttachButton onPick={setMedia} />
               <View style={{ flex: 1 }} />
-              <Pressable accessibilityRole="button" onPress={() => { setReplying(false); setDraft(''); setMedia(null); }} hitSlop={8}><Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.cancel}>Cancel</Text></Pressable>
-              <Pressable accessibilityRole="button" accessibilityLabel="Post reply" disabled={!draft.trim() && !media} onPress={submit} style={[styles.send, !draft.trim() && !media && styles.sendOff]}>
+              <Pressable accessibilityRole="button" onPress={() => { setReplying(false); setDraft(''); setMedia(null); }} hitSlop={8} style={({ pressed }) => pressed && { opacity: PRESS_DIM }}><Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.cancel}>Cancel</Text></Pressable>
+              <Pressable accessibilityRole="button" accessibilityLabel="Post reply" disabled={!draft.trim() && !media} onPress={submit} style={({ pressed }) => [styles.send, !draft.trim() && !media && styles.sendOff, pressed && { transform: [{ scale: PRESS_SHRINK }] }]}>
                 <Ionicons name="arrow-up" size={18} color={colors.brandInk} />
               </Pressable>
             </View>

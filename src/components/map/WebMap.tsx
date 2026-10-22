@@ -1,3 +1,4 @@
+import * as haptics from '@/lib/haptics';
 import { themes, useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
@@ -454,6 +455,8 @@ export function NearbyMap(props: NearbyMapProps) {
         const now = latest.current;
         // The still card is one button: any tap on it opens the full map.
         if (!expanded) { now.expand?.(); return; }
+        // The same light tick as the map's other taps (Oct 22 sweep).
+        haptics.tap();
         if (id === 'me') now.openMe();
         else if (id.startsWith('c:')) now.selectCourt(id.slice(2));
         else if (id.startsWith('h:')) now.selectHit(id.slice(2));

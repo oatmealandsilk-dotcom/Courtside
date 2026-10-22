@@ -21,6 +21,13 @@ export interface KeyboardLift {
   /** The room's style: an empty box under the bar this tall (worked out on the animation thread on an iPhone). */
   spacer: ViewStyle | ReturnType<typeof useAnimatedStyle<ViewStyle>>;
   /**
+   * The emoji keyboard's style: with the phone keyboard down it slides up and
+   * back down together with the bar (Oct 22 sweep: "the emoji panel and the
+   * typing bar leap about 300 pt in one frame"), instead of appearing at full
+   * height in one frame.
+   */
+  panel: ReturnType<typeof useAnimatedStyle<ViewStyle>>;
+  /**
    * Switching from the emoji keyboard back to typing: the bar stays this high
    * until the phone keyboard has come up to it, so it does not drop and rise.
    */

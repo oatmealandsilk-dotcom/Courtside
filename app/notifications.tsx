@@ -1,4 +1,5 @@
-import { PRESS_DIM } from '@/theme/press';
+import { PRESS_DIM, PRESS_SHRINK } from '@/theme/press';
+import Animated, { Easing, FadeOut, LayoutAnimationConfig, LinearTransition } from 'react-native-reanimated';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { requestScrollToTop } from '@/features/navigation/scrollToTop';
@@ -603,6 +604,9 @@ export default function Notifications() {
           action={welcome.shown ? undefined : { label: 'Find players near you', onPress: () => { requestSection('/discuss', 'players'); goToTab('/discuss'); } }}
         />
       ) : (
+        // The rows there on opening are simply there; one that goes (a request declined) fades out
+        // and the rest close up smoothly (Oct 22 sweep).
+        <LayoutAnimationConfig skipEntering>
         <View style={styles.list}>
           {shownGroups.map((group, index) => {
             const icon = ICON[group.kind] ?? { name: 'notifications', tint: 'brand' };
@@ -634,7 +638,7 @@ export default function Notifications() {
             const verb = verbFor(group);
 
             return (
-              <React.Fragment key={group.key}>
+              <Animated.View key={group.key} layout={ROW_GLIDE} exiting={ROW_OUT}>
               {heading ? <Text style={[styles.heading, index > 0 && { marginTop: spacing.lg }]}>{heading}</Text> : null}
               <Pressable
                 accessibilityRole={dead ? 'text' : 'link'}
@@ -651,7 +655,7 @@ export default function Notifications() {
                   // tabs. Never '/', the splash screen's address too, which opened a second app on top.
                   if (to === '/') { goHome(); requestScrollToTop('/'); } else router.push(to);
                 }}
-                style={[styles.row, group.unread && styles.rowUnread]}
+                style={({ pressed }) => [styles.row, group.unread && styles.rowUnread, pressed && !dead && styles.rowPressed]}
               >
                 <View>
                   {/* Two faces, overlapped, when more than one person did it. */}
@@ -764,10 +768,10 @@ export default function Notifications() {
                     </View>
                   ) : null}
                   {group.kind === 'follow-request' && followRequests.some((r) => r.fromId === first && r.toId === currentUserId) ? (
-                    <View style={styles.askRow}>
-                      <Pressable accessibilityRole="button" accessibilityLabel={`Accept ${nameOf(first)}`} onPress={() => actions.acceptFollowRequest(first)} style={styles.accept}><Text style={styles.acceptText}>Accept</Text></Pressable>
-                      <Pressable accessibilityRole="button" accessibilityLabel={`Decline ${nameOf(first)}`} onPress={() => actions.declineFollowRequest(first)} style={styles.decline}><Text style={styles.declineText}>Decline</Text></Pressable>
-                    </View>
+                    <Animated.View exiting={ROW_OUT} style={styles.askRow}>
+                      <Pressable accessibilityRole="button" accessibilityLabel={`Accept ${nameOf(first)}`} onPress={() => actions.acceptFollowRequest(first)} style={({ pressed }) => [styles.accept, pressed && styles.buttonPressed]}><Text style={styles.acceptText}>Accept</Text></Pressable>
+                      <Pressable accessibilityRole="button" accessibilityLabel={`Decline ${nameOf(first)}`} onPress={() => actions.declineFollowRequest(first)} style={({ pressed }) => [styles.decline, pressed && styles.buttonPressed]}><Text style={styles.declineText}>Decline</Text></Pressable>
+                    </Animated.View>
                   ) : null}
                 </View>
 
@@ -783,10 +787,10 @@ export default function Notifications() {
                       if (lock) { showToast({ title: lock, icon: 'lock-closed-outline', long: true }); return; }
                       router.push(`/messages/${actions.openConversationWith(first)}`);
                     } finally { openingChat.current = false; }
-                  }} style={styles.accept}><Text style={styles.acceptText}>Message</Text></Pressable>
+                  }} style={({ pressed }) => [styles.accept, pressed && styles.buttonPressed]}><Text style={styles.acceptText}>Message</Text></Pressable>
                 ) : hitChat ? (
                   // In for your hit: straight to the hit's group chat, where the details get sorted.
-                  <Pressable accessibilityRole="button" accessibilityLabel="Open the hit's chat" onPress={() => router.push(`/messages/${hitChat}`)} style={styles.accept}><Text style={styles.acceptText}>Chat</Text></Pressable>
+                  <Pressable accessibilityRole="button" accessibilityLabel="Open the hit's chat" onPress={() => router.push(`/messages/${hitChat}`)} style={({ pressed }) => [styles.accept, pressed && styles.buttonPressed]}><Text style={styles.acceptText}>Chat</Text></Pressable>
                 ) : (group.kind === 'follow' || group.kind === 'joined' || group.kind === 'map-new-player') && first && first !== currentUserId ? (
                   <FollowPill small following={followingIds.includes(first)} userId={first} onPress={() => { const who = users.find((u) => u.id === first); if (who && followingIds.includes(first)) confirmUnfollow(who, () => actions.toggleFollow(first)); else actions.toggleFollow(first); }} name={nameOf(first).split(' ')[0]} />
                 ) : thumb ? (
@@ -800,14 +804,19 @@ export default function Notifications() {
                   </View>
                 ) : group.unread ? <View style={styles.dot} /> : null}
               </Pressable>
-              </React.Fragment>
+              </Animated.View>
             );
           })}
         </View>
+        </LayoutAnimationConfig>
       )}
     </Screen>
   );
 }
+
+/** A row changing place glides there; one that goes fades out. */
+const ROW_GLIDE = LinearTransition.duration(240).easing(Easing.bezier(0.25, 0.8, 0.25, 1));
+const ROW_OUT = FadeOut.duration(180);
 
 const styleDefinitions = StyleSheet.create({
   list: { gap: 2 },
@@ -827,6 +836,10 @@ const styleDefinitions = StyleSheet.create({
     borderRadius: radius.md,
   },
   rowUnread: { backgroundColor: colors.brandDim },
+  // Held: the list rows' tint (theme/press).
+  rowPressed: { backgroundColor: colors.surfaceAlt },
+  // A pill button held: it shrinks slightly (theme/press).
+  buttonPressed: { transform: [{ scale: PRESS_SHRINK }] },
   // The welcome sits above the sections, with a little air before the first heading.
   welcomeGap: { marginBottom: spacing.md },
   badge: {

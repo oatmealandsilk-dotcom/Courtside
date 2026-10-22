@@ -68,7 +68,7 @@ import { Slide, TimeAnchor, TimeSwipeArea } from '@/features/messages/MessageTim
 import { SwipeReply } from '@/features/messages/SwipeReply';
 import { buildRows, keepRows, type Gap, type ThreadRow } from '@/features/messages/threadRows';
 import {
-  Arrive, EmojiReactSheet, Flash, MessageInfoSheet, NewMessagesButton, ReactionsSheet, ReplyBar, ReplyQuote, SeenFaces, type ArriveMode,
+  Arrive, EmojiReactSheet, Flash, GrowRoom, LEAVE_MS, LeaveRow, MessageInfoSheet, NewMessagesButton, ReactionsSheet, ReplyBar, ReplyQuote, SeenFaces, type ArriveMode,
 } from '@/features/messages/ChatBits';
 import { RichText } from '@/components/RichText';
 import { useApp } from '@/store/AppContext';
@@ -229,6 +229,22 @@ export default function Thread() {
   // Going to the message a reply answers: it lights up.
   const [flash, setFlash] = useState<{ id: string; n: number } | null>(null);
   const [emojiOpen, setEmojiOpen] = useState(false);
+  // The emoji keyboard stays drawn a moment after it closes, so it can slide away with the bar rather than vanish.
+  const [emojiDrawn, setEmojiDrawn] = useState(false);
+  useEffect(() => {
+    if (emojiOpen) { setEmojiDrawn(true); return undefined; }
+    const t = setTimeout(() => setEmojiDrawn(false), 320);
+    return () => clearTimeout(t);
+  }, [emojiOpen]);
+  // Messages on their way out (unsent, deleted for you): each folds shut before it is gone (see LeaveRow).
+  const [leaving, setLeaving] = useState<ReadonlySet<string>>(() => new Set());
+  const leaveThen = useCallback((messageId: string, run: () => void) => {
+    setLeaving((now) => new Set(now).add(messageId));
+    setTimeout(() => {
+      run();
+      setLeaving((now) => { if (!now.has(messageId)) return now; const next = new Set(now); next.delete(messageId); return next; });
+    }, LEAVE_MS);
+  }, []);
   // A voice note recording in the box: the emoji keyboard steps aside.
   const [recording, setRecording] = useState(false);
   // The emoji keyboard takes the phone keyboard's place at the phone keyboard's
@@ -553,6 +569,7 @@ export default function Thread() {
     const got = m.replyToId ? byId.get(m.replyToId) : undefined;
     const original = got && (!hiddenAt || got.createdAt > hiddenAt) ? got : undefined;
     return (
+      <LeaveRow leaving={leaving.has(m.id)}>
       <MessageRow
         item={item}
         ctx={rowCtx}
@@ -567,8 +584,9 @@ export default function Thread() {
         seenHidden={!!item.seenBy?.length && typingNow}
         canWrite={canWrite}
       />
+      </LeaveRow>
     );
-  }, [rowCtx, byId, hiddenAt, group, currentUserId, blockedIds, shownIds, menuId, flash, lastRealId, readLine, typingNow, canWrite]);
+  }, [rowCtx, byId, hiddenAt, group, currentUserId, blockedIds, shownIds, menuId, flash, lastRealId, readLine, typingNow, canWrite, leaving]);
 
   // Android's Back closes what is open over the typing bar before it leaves
   // the chat: the emoji keyboard, the "+" tray, then an edit or a reply (as
@@ -853,6 +871,8 @@ export default function Thread() {
   const listHeader = (
     // The list is upside down: its header is the bottom of the chat. Someone typing shows there, under the newest message.
     <View style={styles.listBottom}>
+      {/* The dots' room grows and shrinks smoothly, so the chat glides up for them and back down (Oct 22 sweep). */}
+      <GrowRoom>
       {typers.length ? (
         <TypingBubble
           styles={styles}
@@ -864,6 +884,7 @@ export default function Thread() {
           })() : undefined}
         />
       ) : null}
+      </GrowRoom>
     </View>
   );
   const listFooter = (
@@ -1037,11 +1058,11 @@ export default function Thread() {
           onCopyLink={(url) => { void Clipboard.setStringAsync(url); haptics.tap(); if (!phoneSaysCopied) showToast({ title: 'Link copied', icon: 'link-outline' }); }}
           onEdit={() => startEditing(menuMessage)}
           // Both ask first; the card comes over the closing menu.
-          onUnsend={() => { const messageId = menuMessage.id; confirmAfterMenu({ title: 'Unsend message?', message: "It's removed for everyone in the chat.", confirmLabel: 'Unsend', destructive: true, onConfirm: () => actions.unsendMessage(messageId) }); }}
+          onUnsend={() => { const messageId = menuMessage.id; confirmAfterMenu({ title: 'Unsend message?', message: "It's removed for everyone in the chat.", confirmLabel: 'Unsend', destructive: true, onConfirm: () => leaveThen(messageId, () => actions.unsendMessage(messageId)) }); }}
           // Someone else's message: reported as the chat, naming them and pointing at this one message,
           // so an admin can read it in place and act on it (App Review 1.2, Oct 5).
           onReport={conversation ? () => { const m = menuMessage; const chatId = conversation.id; confirmReport('message', () => { void actions.reportChat(chatId, 'message', m.senderId, m.id).then((filed) => showToast(filed ? { title: REPORT_THANKS, icon: 'flag-outline' } : { title: 'Your report didn’t send', body: 'Check your connection and try again.', icon: 'alert-circle-outline' })); }, true); } : undefined}
-          onDelete={() => { const messageId = menuMessage.id; confirmAfterMenu({ title: 'Delete message?', message: menuPending ? 'It hasn’t been sent, so it’s simply removed.' : menu.mine ? "It's removed for you. Others in the chat still see it." : "It's removed for you only.", confirmLabel: 'Delete', destructive: true, onConfirm: () => actions.deleteMessageForMe(messageId) }); }}
+          onDelete={() => { const messageId = menuMessage.id; confirmAfterMenu({ title: 'Delete message?', message: menuPending ? 'It hasn’t been sent, so it’s simply removed.' : menu.mine ? "It's removed for you. Others in the chat still see it." : "It's removed for you only.", confirmLabel: 'Delete', destructive: true, onConfirm: () => leaveThen(messageId, () => actions.deleteMessageForMe(messageId)) }); }}
           // The Send-to sheet, once the menu has gone: pick chats (groups too) and it goes to each as it is.
           onForward={() => { const messageId = menuMessage.id; afterMenu(() => router.push({ pathname: '/share', params: { kind: 'message', id: messageId } })); }}
           doubleTap={defaultReaction}
@@ -1080,13 +1101,14 @@ export default function Thread() {
       <View style={styles.dock}>
         <LinearGradient pointerEvents="none" colors={[withAlpha(colors.bg, 0), colors.bg]} style={styles.dockFade} />
         {editing ? (
-          <View style={styles.editBar}>
+          // In and out softly, as the Replying bar does (Oct 22 sweep).
+          <Reanimated.View entering={FadeIn.duration(140)} exiting={FadeOut.duration(100)} style={styles.editBar}>
             <Ionicons name="create-outline" size={16} color={colors.brand} />
             <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.editLabel} numberOfLines={1}>Editing message</Text>
-            <Pressable accessibilityRole="button" accessibilityLabel="Stop editing" hitSlop={10} onPress={endEditing}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Stop editing" hitSlop={10} onPress={endEditing} style={({ pressed }) => pressed && styles.pressedDim}>
               <Ionicons name="close" size={20} color={colors.textMuted} />
             </Pressable>
-          </View>
+          </Reanimated.View>
         ) : null}
         {replyTo && !editing && canWrite ? (
           <ReplyBar to={replyTo} who={replyTo.senderId === currentUserId ? 'yourself' : nameOf(replyTo.senderId)} onClose={() => setReplyTo(null)} />
@@ -1117,9 +1139,9 @@ export default function Thread() {
         ) : (
           <>
             {picked.length ? (
-              <View style={styles.trayWrap}>
+              <Reanimated.View entering={FadeIn.duration(160)} exiting={FadeOut.duration(110)} style={styles.trayWrap}>
                 <PhotoTray photos={picked} max={MAX_CHAT_PHOTOS} onRemove={(i) => setPicked((now) => now.filter((_, j) => j !== i))} onAdd={choosePhotos} />
-              </View>
+              </Reanimated.View>
             ) : null}
             <Composer
               ref={composer}
@@ -1137,11 +1159,12 @@ export default function Thread() {
       </View>
       {/* The room under the bar: above the home indicator, or the keyboard's height while it is up. */}
       <Reanimated.View pointerEvents="none" style={room.spacer} />
-      {emojiOpen && canWrite && !recording ? (
+      {(emojiOpen || emojiDrawn) && canWrite && !recording ? (
         // Laid over the room under the bar, at the phone keyboard's height, so swapping keyboards leaves the bar where it was.
-        <View style={styles.emojiLayer}>
+        // With the phone keyboard down it slides up and away together with the bar (room.panel, Oct 22 sweep).
+        <Reanimated.View pointerEvents={emojiOpen ? 'auto' : 'none'} style={[styles.emojiLayer, room.panel]}>
           <EmojiKeyboard height={keyboardHeight.current} bottomInset={insets.bottom} onPick={(emoji) => composer.current?.insert(emoji)} onDelete={() => composer.current?.deleteBack()} />
-        </View>
+        </Reanimated.View>
       ) : null}
     </View>
   );
@@ -1274,9 +1297,9 @@ const Composer = memo(function Composer({ ref, styles, pickedCount, editingBody,
   return (
     <>
       {mention && mentionRows.length ? (
-        <View style={styles.mentionTray}>
+        <Reanimated.View entering={FadeIn.duration(140)} exiting={FadeOut.duration(100)} style={styles.mentionTray}>
           <MentionSuggestions candidates={mentionRows} onPick={pickMention} />
-        </View>
+        </Reanimated.View>
       ) : null}
       {plusOpen && tools && !voice.recording ? (
         // The "+": what else can go in the chat, one tap away (iMessage's apps row).
@@ -2490,7 +2513,7 @@ function RecordingStrip({ mode, elapsed, slide, onThrow, styles }: { mode: 'hold
   const dot = useAnimatedStyle(() => ({ opacity: pulse.value }));
   const hint = useAnimatedStyle(() => ({ opacity: 1 - Math.min(1, -slide.value / CANCEL_AT) * 0.8, transform: [{ translateX: slide.value * 0.7 }] }));
   return (
-    <Reanimated.View entering={FadeIn.duration(140)} style={styles.recording}>
+    <Reanimated.View entering={FadeIn.duration(140)} exiting={FadeOut.duration(100)} style={styles.recording}>
       {mode === 'locked' ? (
         <ComposerTool label="Throw the recording away" onPress={onThrow} styles={styles}>
           <Ionicons name="trash-outline" size={21} color={colors.danger} />

@@ -901,7 +901,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
           ))}
           {/* The count sits once, above the list; the end of the list is just its end. */}
           {visible.length > slice.length || serverHasMore ? (
-            <Pressable ref={listEnd} accessibilityRole="button" onPress={showMore} style={styles.more}>
+            <Pressable ref={listEnd} accessibilityRole="button" onPress={showMore} style={({ pressed }) => [styles.more, pressed && { opacity: PRESS_DIM }]}>
               <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.moreText}>Show more threads</Text>
             </Pressable>
           ) : null}

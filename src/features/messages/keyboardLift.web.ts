@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+
+import { EMOJI_SLIDE } from './emojiSlide';
 import type { DragDismiss, KeyboardLift, KeyboardLiftOptions } from './keyboardLiftTypes';
 
 export type { DragDismiss, KeyboardLift, KeyboardLiftOptions } from './keyboardLiftTypes';
@@ -23,7 +26,20 @@ export function useKeyboardLift({ rest, emojiRoom }: KeyboardLiftOptions): Keybo
     return () => { vv.removeEventListener('resize', update); vv.removeEventListener('scroll', update); };
   }, []);
   const holdUntilKeyboard = useCallback((_height: number) => undefined, []);
-  return { spacer: { height: Math.max(rest, covered, emojiRoom) }, holdUntilKeyboard };
+  // The emoji keyboard slides up with the bar, and back down, rather than appearing in one frame (Oct 22 sweep);
+  // over a phone browser's own keyboard it simply takes its place.
+  const emoji = useSharedValue(emojiRoom);
+  const emojiFull = useSharedValue(emojiRoom);
+  const restAt = useSharedValue(rest);
+  const coveredAt = useSharedValue(covered);
+  useEffect(() => { restAt.value = rest; coveredAt.value = covered; }, [rest, covered, restAt, coveredAt]);
+  useEffect(() => {
+    if (emojiRoom > 0) emojiFull.value = emojiRoom;
+    emoji.value = coveredAt.value > 1 ? emojiRoom : withTiming(emojiRoom, EMOJI_SLIDE);
+  }, [emojiRoom, emoji, emojiFull, coveredAt]);
+  const spacer = useAnimatedStyle(() => ({ height: Math.max(restAt.value, coveredAt.value, emoji.value) }));
+  const panel = useAnimatedStyle(() => ({ transform: [{ translateY: Math.max(0, emojiFull.value - emoji.value) }] }));
+  return { spacer, panel, holdUntilKeyboard };
 }
 
 /**
