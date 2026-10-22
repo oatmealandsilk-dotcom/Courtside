@@ -199,14 +199,15 @@ export const typography = {
 /**
  * Buttons, Instagram's shape in CourtSide's colours (Oct 22): rounded
  * rectangles with Apple's smooth corner, compact, sentence case. The fills,
- * washes and shadows are the app's own and unchanged.
+ * washes and shadows are the app's own and unchanged. Corners softened
+ * a step the same day (owner: "minor soft"): 18 full-size, 12 compact.
  */
 export const buttonShape = {
   /** A full-size button (sign-in, a sheet's Submit, a page's main action). */
-  radius: 12,
+  radius: 18,
   height: 44,
   /** A compact one in a row of actions (Follow, Edit profile, Share, a card's actions). */
-  smallRadius: 9,
+  smallRadius: 12,
   smallHeight: 34,
   /** Added to a compact button's every side, so the finger still gets 44pt. */
   smallSlop: 5,

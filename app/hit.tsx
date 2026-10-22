@@ -13,7 +13,7 @@ import { BLOCKED_WORDS_NOTE } from '@/features/hiddenWords/hiddenWords';
 import { useLightStatusWhileFocused } from '@/lib/statusBarStyle';
 import { InstantsGate } from '@/features/stories/InstantsGate';
 import { useApp } from '@/store/AppContext';
-import { colors, radius, spacing, typography, font } from '@/theme';
+import { buttonShape, colors, radius, spacing, typography, font } from '@/theme';
 
 const COUNTDOWN = 5;
 
@@ -250,7 +250,7 @@ const styleDefinitions = StyleSheet.create({
   gate: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xl, maxWidth: 380, width: '100%', alignSelf: 'center' },
   gateTitle: { fontSize: 17, ...font('600'), color: 'white', textAlign: 'center', marginTop: spacing.md },
   gateBody: { fontSize: 13, lineHeight: 18, color: 'rgba(255,255,255,0.55)', textAlign: 'center', maxWidth: 300, marginTop: 6 },
-  gateAllow: { marginTop: spacing.lg, paddingVertical: 10, paddingHorizontal: 20, borderRadius: 9, backgroundColor: 'white' },
+  gateAllow: { marginTop: spacing.lg, paddingVertical: 10, paddingHorizontal: 20, borderRadius: buttonShape.smallRadius, ...buttonShape.curve, backgroundColor: 'white' },
   gateAllowText: { fontSize: 14, ...font('600'), color: '#000' },
   gateLaterText: { fontSize: 14, ...font('500'), color: 'rgba(255,255,255,0.55)', marginTop: spacing.md },
   note: { ...typography.small, color: colors.textMuted, textAlign: 'center', lineHeight: 20 },
