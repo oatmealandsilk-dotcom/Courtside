@@ -69,7 +69,10 @@ function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, 
   const [paused, setPaused] = useState(false);
   const onPausedRef = useRef(onPaused);
   onPausedRef.current = onPaused;
-  useEffect(() => { if (paused) onPausedRef.current?.(true); }, [paused]);
+  const pausedNow = useRef(paused);
+  pausedNow.current = paused;
+  // A pause the viewer chose (a tap, the space bar), never one the browser forced (autoplay refused).
+  const togglePause = () => { const next = !pausedNow.current; pausedNow.current = next; setPaused(next); onPausedRef.current?.(next); };
   // Hold the right side of a clip and it plays at double speed until you let
   // go, the way Instagram's Reels do. A hold anywhere else does nothing.
   const [fast, setFast] = useState(false);
@@ -89,7 +92,7 @@ function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, 
   // opened over the comments stage, a pause the viewer chose is kept.
   useEffect(() => { if (!active && !onStage) setPaused(false); }, [active, onStage]);
   // Space bar on a computer: play / pause the clip on screen.
-  useEffect(() => { if (!active) return; return onSpaceBar(() => setPaused((p) => !p)); }, [active]);
+  useEffect(() => { if (!active) return; return onSpaceBar(togglePause); }, [active]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => { if (pending.current) clearTimeout(pending.current); }, []);
 
   // The progress line glides between the player's reports rather than
@@ -143,7 +146,7 @@ function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, 
     }
     lastTap.current = now;
     if (pending.current) clearTimeout(pending.current);
-    pending.current = setTimeout(() => { pending.current = null; setPaused((v) => !v); }, onDoubleTap ? 280 : 0);
+    pending.current = setTimeout(() => { pending.current = null; togglePause(); }, onDoubleTap ? 280 : 0);
   };
 
   // Pages either side stay mounted so their first frame is ready to go.

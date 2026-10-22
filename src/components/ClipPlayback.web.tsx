@@ -75,7 +75,10 @@ function ClipPlaybackInner({ uri, poster, active: wanted, preload = false, warmO
   const [paused, setPaused] = useState(false);
   const onPausedRef = useRef(onPaused);
   onPausedRef.current = onPaused;
-  useEffect(() => { if (paused) onPausedRef.current?.(true); }, [paused]);
+  const pausedNow = useRef(paused);
+  pausedNow.current = paused;
+  // A pause the viewer chose (a tap, the space bar), never one the browser forced (autoplay refused).
+  const togglePause = () => { const next = !pausedNow.current; pausedNow.current = next; setPaused(next); onPausedRef.current?.(next); };
   // Hold the right side of a clip and it plays at double speed until you let
   // go, the way Instagram's Reels do. A drag (the feed scrolling) cancels it.
   const [fast, setFast] = useState(false);
@@ -179,7 +182,7 @@ function ClipPlaybackInner({ uri, poster, active: wanted, preload = false, warmO
   // opened over the comments stage, a pause the viewer chose is kept.
   useEffect(() => { if (!active && !onStage) setPaused(false); }, [active, onStage]);
   // Space bar on a computer: play / pause the clip on screen.
-  useEffect(() => { if (!active) return; return onSpaceBar(() => setPaused((p) => !p)); }, [active]);
+  useEffect(() => { if (!active) return; return onSpaceBar(togglePause); }, [active]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // A trimmed clip loops over the part its author kept; the bottom line
   // follows along, eased over each report so it glides rather than steps.
@@ -227,7 +230,7 @@ function ClipPlaybackInner({ uri, poster, active: wanted, preload = false, warmO
       if (onDoubleTap && now - lastTap.current < 280) { lastTap.current = 0; if (pending.current) { clearTimeout(pending.current); pending.current = null; } onDoubleTap(); return; }
       lastTap.current = now;
       if (pending.current) clearTimeout(pending.current);
-      pending.current = setTimeout(() => { pending.current = null; setPaused((v) => !v); }, onDoubleTap ? 280 : 0);
+      pending.current = setTimeout(() => { pending.current = null; togglePause(); }, onDoubleTap ? 280 : 0);
     }} style={{ position: 'absolute', inset: 0, width: '100%', background: 'transparent', border: 0, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       {paused && ready ? <span style={{ width: 64, height: 64, borderRadius: 32, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', paddingLeft: 4 }}><Ionicons name="play" size={30} color="white" /></span> : null}
     </button>

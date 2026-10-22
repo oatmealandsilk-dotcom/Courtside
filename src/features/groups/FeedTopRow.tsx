@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { AccessibilityInfo, Pressable, StyleSheet, Text, View } from 'react-native';
+import { AccessibilityInfo, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { Easing, interpolate, runOnJS, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -75,10 +75,15 @@ const TUCK_LIFT = 14;
 const TUCK_OUT = 180;
 const TUCK_IN = 200;
 
-/** VoiceOver or TalkBack is on: the row then never tucks, so its words can always be reached and tapped. */
+/**
+ * VoiceOver or TalkBack is on: the row then never tucks, so its words can always be reached and tapped.
+ * A browser cannot tell (react-native-web always answers yes), so there the row comes back whenever
+ * one of its words gets the focus instead.
+ */
 function useScreenReader() {
   const [on, setOn] = useState(false);
   useEffect(() => {
+    if (Platform.OS === 'web') return;
     let live = true;
     AccessibilityInfo.isScreenReaderEnabled().then((v) => { if (live) setOn(v); }).catch(() => undefined);
     const sub = AccessibilityInfo.addEventListener('screenReaderChanged', setOn);
@@ -156,7 +161,8 @@ export function FeedTopRow({ groups, selected, onSelect, onPlus, onPicture, hidd
   // (Reels). With Reduce Motion it only fades. Nothing in the row is glass, so fading it is safe.
   const reduceMotion = useReducedMotion();
   const screenReader = useScreenReader();
-  const away = tucked && !screenReader;
+  const [focusIn, setFocusIn] = useState(false);
+  const away = tucked && !screenReader && !focusIn;
   const tuck = useSharedValue(away ? 1 : 0);
   useEffect(() => {
     tuck.value = withTiming(away ? 1 : 0, { duration: away ? TUCK_OUT : TUCK_IN, easing: Easing.out(Easing.quad) });
@@ -188,6 +194,8 @@ export function FeedTopRow({ groups, selected, onSelect, onPlus, onPicture, hidd
                     accessibilityState={{ selected: on }}
                     accessibilityLabel={w.id === 'activities' ? 'Activities' : w.id ? `${w.name}, group feed` : 'For you'}
                     hitSlop={{ top: 10, bottom: 10, left: 4, right: 4 }}
+                    onFocus={() => setFocusIn(true)}
+                    onBlur={() => setFocusIn(false)}
                     onPress={() => { if (on) return; haptics.tap(); const id = w.id; glideTo(key, () => onSelect(id)); }}
                     onLayout={(e) => { const width = e.nativeEvent.layout.width; setWidths((m) => (m[key] === width ? m : { ...m, [key]: width })); }}
                   >
@@ -199,7 +207,7 @@ export function FeedTopRow({ groups, selected, onSelect, onPlus, onPicture, hidd
           </Animated.View>
         </View>
         <Animated.View style={[styles.plusSpot, plusSlide, { opacity: ready }]}>
-          <Pressable accessibilityRole="button" accessibilityLabel={waiting ? 'Find or start a group, someone is asking to join yours' : 'Find or start a group'} hitSlop={10} onPress={onPlus} style={styles.plusHit}>
+          <Pressable accessibilityRole="button" accessibilityLabel={waiting ? 'Find or start a group, someone is asking to join yours' : 'Find or start a group'} hitSlop={10} onFocus={() => setFocusIn(true)} onBlur={() => setFocusIn(false)} onPress={onPlus} style={styles.plusHit}>
             <Ionicons name="add" size={22} color={ink} style={[{ opacity: 0.85 }, edge]} />
             {waiting ? <View style={styles.waiting} /> : null}
           </Pressable>
