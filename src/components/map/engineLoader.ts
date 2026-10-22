@@ -101,12 +101,18 @@ if(window.maplibregl)begin();else post({type:'fail',stage:'engine',detail:'did n
  *   what came. After a 'fail' about the streets the page keeps watching, so
  *   streets that come after all (the connection back) still say 'painted'.
  *
- * Returns {stop} for a map that is being taken down.
+ * - `opts.gate`, optional: a function; 'painted' is held until it says true
+ *   (the phone's card: until the app has sent its pins, look and any move
+ *   asked for before the page was ready, so the first drawing it reports is
+ *   the card as it will stay). Call `kick()` once it would say true: the map
+ *   draws a frame, settles again, and the drawing is reported then.
+ *
+ * Returns {stop, kick} for a map that is being taken down, or a gate opened.
  */
-export const PAINT_WATCH_JS = `function(map,tell){
+export const PAINT_WATCH_JS = `function(map,tell,opts){
 var up=false,painted=false,over=false,told=false,trouble=0,good=0,tries=0,stalls=0,timer=0,seen=Date.now(),tick=seen,beatAt=0,why='',WAITS=[1500,4000,9000],STALL=40000;
 function again(){timer=0;trouble=0;seen=Date.now();try{var g=map.style&&map.style.glyphManager,k;if(g&&g.entries)for(k in g.entries)if(g.entries[k]&&g.entries[k].requests)g.entries[k].requests={}}catch(e){}try{var st=map.getStyle(),id,d,s;for(id in st.sources){d=st.sources[id];s=map.getSource(id);if(d&&d.url&&s&&s.setUrl)s.setUrl(d.url)}}catch(e){}}
-function done(){if(painted||over)return;painted=true;clearInterval(watch);tell('painted')}
+function done(){if(painted||over)return;if(opts&&opts.gate&&!opts.gate())return;painted=true;clearInterval(watch);tell('painted')}
 function end(w){if(good){done();return}if(!told){told=true;tell('fail','tiles: '+w)}}
 function retry(){if(painted||over||timer)return;if(tries<WAITS.length){tell('retry',why);timer=setTimeout(again,WAITS[tries++]);return}end(why)}
 map.on('error',function(e){if(over||painted)return;var er=e&&e.error;if(er&&(er.status===404||er.name==='AbortError'||er.message==='AbortError'))return;if(!up){over=true;tell('fail','style: '+String(er&&er.message||'error'));return}if(e&&e.sourceId){trouble++;why=String(er&&er.message||'error');try{map.triggerRepaint()}catch(x){}if(!e.tile){why='list: '+why;retry()}}});
@@ -116,7 +122,7 @@ map.on('idle',function(){if(painted||over)return;if(trouble){retry();return}done
 var watch=setInterval(function(){var t=Date.now();if(t-tick>6000)seen=t;tick=t;if(!up||painted||over||told||timer||t-seen<STALL)return;seen=t;why='nothing for '+STALL/1000+'s';if(stalls++){end(why);return}tell('retry',why);again()},2000);
 function online(){if(painted||over||!up)return;if(timer){clearTimeout(timer);timer=0}if(trouble||told){told=false;again()}}
 window.addEventListener('online',online);
-return {stop:function(){over=true;clearTimeout(timer);clearInterval(watch);window.removeEventListener('online',online)}};
+return {stop:function(){over=true;clearTimeout(timer);clearInterval(watch);window.removeEventListener('online',online)},kick:function(){try{map.triggerRepaint()}catch(e){}}};
 }`;
 
 /*

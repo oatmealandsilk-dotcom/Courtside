@@ -23,6 +23,14 @@ export interface MapCanvasHandle {
   flyTo: (to: LatLng, zoom?: number, ms?: number, offsetY?: number, exact?: boolean) => void;
   /** From the beginning, with all its tries again ("Tap to try again", on the still card or the full map's pill). */
   retry: () => void;
+  /**
+   * The still card, moved at once while nobody is looking (a new city): once the page is up, the
+   * map jumps there and onPainted is told again when the new place has drawn. Before then it is the
+   * same as flyTo with no time, and the first onPainted already shows the new place.
+   */
+  jump: (to: LatLng, zoom: number) => void;
+  /** The still card: asks the page for a picture of its map alone (onShot), for the card's picture cover (cardShot). */
+  shoot: () => void;
 }
 
 interface Props {
@@ -45,8 +53,16 @@ interface Props {
   onMapTap?: () => void;
   /** Where the map came to rest, how close in, and the part of the world in view. */
   onMove?: (center: LatLng, zoom: number, bounds: ViewBounds) => void;
-  /** Once, the first time everything in view has drawn (streets, names, pins). */
+  /**
+   * Everything in view has drawn (streets, names, pins and their faces), with the app's own pins,
+   * look and any move asked for before the page was ready already on it. Told the first time, and
+   * again after a jump (handle.jump) or a fresh page (the phone stopped the old one).
+   */
   onPainted?: () => void;
+  /** The page's picture of its map alone, as a JPEG data URL (handle.shoot); never told for a blank one. */
+  onShot?: (dataUrl: string) => void;
+  /** The page's drawing was lost (the phone stopped it, or took its graphics back): a fresh page is on its way. */
+  onLost?: () => void;
   /** Whether the map is loading, drawn, or given up on (useMapLoad), told each time it changes: the still card and the full map show it themselves (MapLoadState). */
   onStatus?: (status: MapLoadStatus) => void;
   /** With `onFar`: the zoom below which the map counts as far out (courts hide there: COURTS_MIN_ZOOM). Read once, when the page is made. */
@@ -73,15 +89,22 @@ interface Props {
  * Tap to try again (retry). If iOS or Android stops the web view to free
  * memory, it is started again by itself (Oct 5).
  */
-export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas({ center, zoom, look, interactive, markers, tpl, popIn = false, holdPins = false, pad, onTap, onMapTap, onMove, onPainted, onStatus, farBelow, onFar, style, active = true }, ref) {
+export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas({ center, zoom, look, interactive, markers, tpl, popIn = false, holdPins = false, pad, onTap, onMapTap, onMove, onPainted, onShot, onLost, onStatus, farBelow, onFar, style, active = true }, ref) {
   const styles = useThemedStyles(styleDefinitions);
   const web = useRef<WebView | null>(null);
   const ready = useRef(false);
   // Getting the page going, and again if it fails (useMapLoad): each try is a new web view.
   const load = useMapLoad(interactive ? 'full map' : 'map card', active);
   useEffect(() => { ready.current = false; }, [load.attempt]);
-  const latest = useRef({ onTap, onMapTap, onMove, onPainted, onFar, onStatus });
-  latest.current = { onTap, onMapTap, onMove, onPainted, onFar, onStatus };
+  const latest = useRef({ onTap, onMapTap, onMove, onPainted, onShot, onLost, onFar, onStatus });
+  latest.current = { onTap, onMapTap, onMove, onPainted, onShot, onLost, onFar, onStatus };
+  // A fresh page (a retry, or one the phone stopped) starts where the map is meant to be now, not where it first was.
+  const centerNow = useRef(center);
+  centerNow.current = center;
+  const zoomNow = useRef(zoom);
+  zoomNow.current = zoom;
+  /** The page has gone (the phone stopped it, or lost its drawing): a fresh one, and the screen told. */
+  const lost = () => { ready.current = false; load.reboot(); latest.current.onLost?.(); };
   useEffect(() => { latest.current.onStatus?.(load.status); }, [load.status]);
   const send = (js: string) => { if (ready.current) web.current?.injectJavaScript(`${js};true;`); };
   // The page takes a moment to start. A move asked for before then (your
@@ -95,6 +118,11 @@ export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas({
       send(`window.__cs.fly(${to.lat},${to.lng},${z ?? 'null'},${ms},${Math.round(offsetY)},${exact ? 'true' : 'false'})`);
     },
     retry: () => load.restart(),
+    jump: (to, z) => {
+      if (!ready.current) { pendingMove.current = { to, zoom: z }; return; }
+      send(`window.__cs.fly(${to.lat},${to.lng},${z},0,0,true);window.__cs.rearm()`);
+    },
+    shoot: () => send('window.__cs.shot()'),
   }), []); // eslint-disable-line react-hooks/exhaustive-deps
   // Written out only when the pins change, not on every draw of the page around the map (Oct 10,
   // owner: "the buttons like the settings. msg notifications, etc respond too slow").
@@ -127,11 +155,26 @@ export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas({
   const html = useMemo(() => `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <style>html,body,#m{margin:0;height:100%;background:${look.background?.fill ?? '#F4EFE6'};overflow:hidden}.maplibregl-ctrl{display:none}.maplibregl-canvas{outline:none}${MAP_PIN_CSS.replace(/\n/g, '')}</style></head>
 <body><div id="m"></div><script>
-var LOOK=${lookJson};var APPLIED=null;
+var LOOK=${lookNow.current};var APPLIED=null;var INIT=${markersNow.current};var SYNCED=false,SETTLING=false,MOVES=0;
+document.body.classList.toggle('cs-still',${stillNow.current ? 'true' : 'false'});
 var post=function(o){window.ReactNativeWebView&&window.ReactNativeWebView.postMessage(JSON.stringify(o))};
 function start(){
-var map=new maplibregl.Map({container:'m',style:'${STYLE}',center:[${center.lng},${center.lat}],zoom:${zoom},interactive:${interactive},attributionControl:false,dragRotate:false,pitchWithRotate:false,touchPitch:false});
-(${PAINT_WATCH_JS})(map,function(what,why){post({type:what,why:why})});
+var map=new maplibregl.Map({container:'m',style:'${STYLE}',center:[${centerNow.current.lng},${centerNow.current.lat}],zoom:${zoomNow.current},interactive:${interactive},attributionControl:false,dragRotate:false,pitchWithRotate:false,touchPitch:false${interactive ? '' : ',preserveDrawingBuffer:true,fadeDuration:0'}});
+// 'painted' waits for the app's own pins, look and move (SYNCED, sent on 'ready'), then for every
+// face on the pins to have loaded (at most 0.8 s) and two frames, so what the app is told has drawn
+// is exactly what stays on screen.
+function faces(cb){var urls=[],seen={},els=[],i,bg,u;try{els=document.querySelectorAll('#m .maplibregl-marker, #m .maplibregl-marker *')}catch(e){}
+for(i=0;i<els.length;i++){bg=els[i].style&&els[i].style.backgroundImage;if(!bg||bg.indexOf('url(')<0)continue;u=bg.slice(bg.indexOf('(')+1,bg.lastIndexOf(')')).replace(/["']/g,'');if(u&&!seen[u]){seen[u]=1;urls.push(u)}}
+var left=urls.length,fin=false;function end(){if(fin)return;fin=true;requestAnimationFrame(function(){requestAnimationFrame(cb)})}
+if(!left){end();return}setTimeout(end,800);urls.forEach(function(x){var im=new Image();im.onload=im.onerror=function(){if(--left<=0)end()};im.src=x})}
+// A move while it settles (a new place) means what drew is not what stays: it settles again once the new place has drawn.
+function settle(){if(SETTLING)return;SETTLING=true;var m0=MOVES;faces(function(){SETTLING=false;if(MOVES!==m0){map.once('idle',settle);return}post({type:'painted'});try{engine.calm(false)}catch(e){}})}
+var W=(${PAINT_WATCH_JS})(map,function(what,why){if(what==='painted'){settle();return}post({type:what,why:why})},{gate:function(){return SYNCED}});
+// The phone took the map's drawing back. MapLibre draws again by itself once it is given back, so the full map
+// (your pan, zoom and pick) is started afresh only if it is not back within 3 s; the still card at once, as its picture covers it meanwhile.
+var LOSTT=0;map.on('webglcontextlost',function(){if(LOSTT)return;LOSTT=setTimeout(function(){LOSTT=0;post({type:'lost'})},${interactive ? 3000 : 0})});
+map.on('webglcontextrestored',function(){if(LOSTT){clearTimeout(LOSTT);LOSTT=0}try{map.triggerRepaint()}catch(e){}});
+function blank(c){try{var k=document.createElement('canvas');k.width=8;k.height=8;var g=k.getContext('2d');g.drawImage(c,0,0,8,8);var p=g.getImageData(0,0,8,8).data,lo=999,hi=0;for(var j=0;j<p.length;j+=4){var v=p[j]+p[j+1]+p[j+2];if(v<lo)lo=v;if(v>hi)hi=v}return hi-lo<6}catch(e){return false}}
 map.touchZoomRotate.disableRotation();
 function P(id,k,v){map.setPaintProperty(id,k+'-transition',{duration:0,delay:0});map.setPaintProperty(id,k,v)}
 function look(l){for(var id in l){if(!map.getLayer(id))continue;var r=l[id];try{if(r.hide){map.setLayoutProperty(id,'visibility','none');continue}if(r.minZoom!=null)map.setLayerZoomRange(id,r.minZoom,24);if(r.fill)P(id,id==='background'?'background-color':'fill-color',r.fill);if(r.fill&&id!=='background')P(id,'fill-outline-color',r.fill);if(r.line)P(id,'line-color',r.line);if(r.opacity!=null)P(id,'line-opacity',r.opacity);if(r.text)P(id,'text-color',r.text);if(r.halo)P(id,'text-halo-color',r.halo)}catch(e){}}}
@@ -140,17 +183,20 @@ map.on('style.load',function(){look(LOOK)});
 // (map.loaded() is false whenever tiles are loading, which used to skip the new colours and
 // left, say, Night's dark map under the light Paris page; Oct 2).
 map.on('idle',function(){if(LOOK!==APPLIED){APPLIED=LOOK;look(LOOK)}});
-map.on('load',function(){look(LOOK);post({type:'ready'})});
+map.on('load',function(){look(LOOK);try{engine.set(INIT)}catch(e){}post({type:'ready'})});
 var box=document.getElementById('m');${interactive ? '' : "box.classList.add('cs-quiet');"}var FAR=null;function zoomClass(){var z=map.getZoom();box.classList.toggle('cs-close',z>=${CLOSE_ZOOM_NAMES});box.classList.toggle('cs-far',z<${FAR_ZOOM});box.classList.toggle('cs-short',z<${SHORT_ZOOM});${farBelow === undefined ? '' : `var f=z<${farBelow};if(f!==FAR){FAR=f;post({type:'far',far:f})}`}}zoomClass();map.on('zoom',zoomClass);
 map.on('click',function(){post({type:'maptap'})});
 map.on('moveend',function(){var c=map.getCenter(),b=map.getBounds();post({type:'move',lat:c.lat,lng:c.lng,zoom:map.getZoom(),s:b.getSouth(),w:b.getWest(),n:b.getNorth(),e:b.getEast()})});
 // The pins: one engine with the browser's map (pinEngine), so both gather, split and cascade alike.
-var engine=(${PIN_ENGINE_JS})(map,maplibregl,{tap:function(id){post({type:'tap',id:id})},gathered:function(){post({type:'gathered'})},popIn:${popIn ? 'true' : 'false'},hold:${holdPins ? 'true' : 'false'},quiet:${interactive ? 'false' : 'true'},box:${JSON.stringify(interactive ? FULL_MAP_BOX : CARD_BOX)},pad:${JSON.stringify(pad ?? null)}});
+var engine=(${PIN_ENGINE_JS})(map,maplibregl,{tap:function(id){post({type:'tap',id:id})},gathered:function(){post({type:'gathered'})},popIn:${popIn ? 'true' : 'false'},hold:${holdNow.current ? 'true' : 'false'},quiet:${interactive ? 'false' : 'true'},box:${JSON.stringify(interactive ? FULL_MAP_BOX : CARD_BOX)},pad:${JSON.stringify(pad ?? null)}});
 window.__cs={
   set:function(p){engine.set(p)},
   hold:function(on){engine.hold(on)},
-  fly:function(lat,lng,z,ms,oy,exact){map.flyTo({center:[lng,lat],zoom:z==null?map.getZoom():exact?z:Math.max(map.getZoom(),z),duration:ms,offset:[0,oy||0]})},
-  look:function(l){LOOK=l;document.body.style.background=(l.background&&l.background.fill)||'#F4EFE6';if(map.isStyleLoaded())look(l)}
+  fly:function(lat,lng,z,ms,oy,exact){MOVES++;map.flyTo({center:[lng,lat],zoom:z==null?map.getZoom():exact?z:Math.max(map.getZoom(),z),duration:ms,offset:[0,oy||0]})},
+  look:function(l){LOOK=l;document.body.style.background=(l.background&&l.background.fill)||'#F4EFE6';if(map.isStyleLoaded())look(l)},
+  synced:function(){if(SYNCED)return;SYNCED=true;W.kick()},
+  rearm:function(){try{engine.calm(true)}catch(e){}map.once('idle',settle)},
+  shot:function(){try{var c=map.getCanvas();post({type:'shot',data:c.toDataURL('image/jpeg',0.92),blank:blank(c)})}catch(e){}}
 };
 }
 ${ENGINE_JS}
@@ -177,14 +223,16 @@ ${ENGINE_JS}
         allowsInlineMediaPlayback
         setBuiltInZoomControls={false}
         // The phone stopped the page to free memory (the map and the video feed both use a lot): start it again.
-        onContentProcessDidTerminate={() => { ready.current = false; load.reboot(); }}
-        onRenderProcessGone={() => { ready.current = false; load.reboot(); }}
+        onContentProcessDidTerminate={lost}
+        onRenderProcessGone={lost}
         onMessage={(e) => {
-          let msg: { type: string; id?: string; lat?: number; lng?: number; zoom?: number; s?: number; w?: number; n?: number; e?: number; far?: boolean; stage?: string; detail?: string; why?: string };
+          let msg: { type: string; data?: string; blank?: boolean; id?: string; lat?: number; lng?: number; zoom?: number; s?: number; w?: number; n?: number; e?: number; far?: boolean; stage?: string; detail?: string; why?: string };
           try { msg = JSON.parse(e.nativeEvent.data); } catch { return; }
           // How the page is getting on (useMapLoad): a word of any kind shows it is alive.
           if (msg.type === 'fail') { load.failed([msg.stage, msg.detail ?? msg.why].filter(Boolean).join(': ') || 'failed'); return; }
           if (msg.type === 'online') { load.online(); return; }
+          if (msg.type === 'lost') { lost(); return; }
+          if (msg.type === 'shot') { if (!msg.blank && typeof msg.data === 'string' && msg.data.startsWith('data:image/')) latest.current.onShot?.(msg.data); return; }
           load.heard(msg.type === 'boot' || msg.type === 'progress' || msg.type === 'up' || msg.type === 'painted' ? msg.type : 'other');
           if (msg.type === 'ready') {
             ready.current = true;
@@ -195,6 +243,8 @@ ${ENGINE_JS}
             const move = pendingMove.current;
             pendingMove.current = null;
             if (move) send(`window.__cs.fly(${move.to.lat},${move.to.lng},${move.zoom ?? 'null'},0,${Math.round(move.offsetY ?? 0)},${move.exact ? 'true' : 'false'})`);
+            // All of it is on the page now: its first drawing may be reported.
+            send('window.__cs.synced()');
           }
           // A frame later, so what the page drew is on the phone's screen too.
           else if (msg.type === 'painted') requestAnimationFrame(() => latest.current.onPainted?.());
