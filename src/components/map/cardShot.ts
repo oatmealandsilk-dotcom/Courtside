@@ -11,8 +11,10 @@ import { Image as ExpoImage } from 'expo-image';
  * takes its place underneath when it has drawn the same thing, so nothing on
  * screen changes. Kept on this phone only, never uploaded.
  *
- * Two kinds, each for one exact look (keyed by shotKey: who, theme, centre,
- * zoom, size, scale, what the card's lock says, Reduce Motion):
+ * Two kinds, each for one exact look (keyed by shotKey: who, theme, the map's
+ * look itself, centre, zoom, size, scale, what the card's lock says, Reduce
+ * Motion). Only ever for a card centred on a town the app knows (never on
+ * someone's own spot), and gone when Location goes off (forgetPlaces):
  * - 'streets': the map alone, no people, from the page's own canvas.
  * - 'card': the map with its pins, a photograph of the card's map. It is used
  *   only while the pins are exactly those the card is about to draw (the
@@ -24,15 +26,17 @@ import { Image as ExpoImage } from 'expo-image';
 export type ShotKind = 'streets' | 'card';
 export interface CardShot { uri: string; kind: ShotKind }
 /** Where the card was last centred, and the name it gave the place: shown first next time, until a fresh fix says otherwise. */
-export interface CardHint { lat: number; lng: number; name: string }
+export interface CardHint { lat: number; lng: number; name: string; at?: number }
 
 interface Entry { key: string; kind: ShotKind; hash?: string; name: string; at: number }
-interface Index { v: 1; entries: Entry[]; hints: Record<string, CardHint>; broken?: boolean }
+interface Index { v: 1; entries: Entry[]; hints: Record<string, CardHint>; broken?: boolean; last?: string }
 
 const STORE = 'courtside-mapcard-v1';
 const FOLDER = 'mapcard';
 /** As long as Find Players' own copy of its pins is used (MapCopy): past that, the people in a picture may be out of date. */
 const CARD_MAX_AGE_MS = 4 * 60 * 60_000;
+/** A picture of the streets alone, and where the card was: a week, so map data and look changes never linger. */
+export const PLACE_MAX_AGE_MS = 7 * 24 * 60 * 60_000;
 /** A few looks of each kind: the Community card and the feed's, in the last theme or two. */
 const KEEP = { streets: 4, card: 3 } as const;
 /** Smaller than this, a capture is taken to be blank (the map's drawing did not come out). */
@@ -44,6 +48,8 @@ let loading: Promise<void> | null = null;
 let loaded = false;
 /** Dropped before the kept index had been read: done again to what it reads. */
 let dropBeforeLoad: 'people' | 'all' | null = null;
+/** People whose places were forgotten before the kept index had been read. */
+const forgetBeforeLoad = new Set<string>();
 const listeners = new Set<() => void>();
 const tell = () => { version += 1; listeners.forEach((fn) => fn()); };
 const subscribe = (fn: () => void) => { listeners.add(fn); return () => { listeners.delete(fn); }; };
@@ -54,8 +60,8 @@ export function useCardShots(): number {
 }
 
 /** The key for one exact look of a card. */
-export function shotKey(k: { user: string; theme: string; lat: number; lng: number; zoom: number; w: number; h: number; scale: number; lock: string; still: boolean }): string {
-  return [k.user, k.theme, k.lat.toFixed(4), k.lng.toFixed(4), k.zoom, Math.round(k.w), Math.round(k.h), k.scale, k.lock, k.still ? 1 : 0].join('|');
+export function shotKey(k: { user: string; theme: string; look: string; lat: number; lng: number; zoom: number; w: number; h: number; scale: number; lock: string; still: boolean }): string {
+  return [k.user, k.theme, k.look, k.lat.toFixed(4), k.lng.toFixed(4), k.zoom, Math.round(k.w), Math.round(k.h), k.scale, k.lock, k.still ? 1 : 0].join('|');
 }
 
 /** A short fingerprint of some text (FNV-1a): the card's marker list, so a picture is used only for the same pins. */
@@ -77,6 +83,15 @@ function folder(): Directory {
 }
 function remove(name: string) {
   try { const f = fileFor(name); if (f.exists) f.delete(); } catch { /* already gone */ }
+}
+/** Any file in the folder the index does not know (a write the app was closed in the middle of), gone. */
+function sweep() {
+  try {
+    const dir = new Directory(Paths.cache, FOLDER);
+    if (!dir.exists) return;
+    const known = new Set(index.entries.map((e) => e.name));
+    dir.list().forEach((item) => { if (item instanceof File && !known.has(item.name)) { try { item.delete(); } catch { /* in use */ } } });
+  } catch { /* unreadable */ }
 }
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -100,21 +115,27 @@ export function loadCardShots(): Promise<void> {
     if (parsed.v !== 1 || !Array.isArray(parsed.entries)) return;
     const now = Date.now();
     const entries = parsed.entries.filter((e) => {
-      const keep = e && typeof e.key === 'string' && typeof e.name === 'string' && (e.kind === 'streets' || (e.kind === 'card' && now - e.at < CARD_MAX_AGE_MS));
+      const keep = e && typeof e.key === 'string' && typeof e.name === 'string' && ((e.kind === 'streets' && now - e.at < PLACE_MAX_AGE_MS) || (e.kind === 'card' && now - e.at < CARD_MAX_AGE_MS));
       if (!keep) { if (e?.name) remove(e.name); return false; }
       try { return fileFor(e.name).exists; } catch { return false; }
     });
     // Pictures kept this session already (saved before the read finished) come first.
     const fresh = index.entries;
-    index = { v: 1, entries: [...fresh, ...entries.filter((e) => !fresh.some((f) => f.name === e.name))], hints: { ...(parsed.hints ?? {}), ...index.hints }, broken: !!parsed.broken || index.broken };
-    if (entries.length !== parsed.entries.length) persist();
+    const hints: Record<string, CardHint> = {};
+    Object.entries(parsed.hints ?? {}).forEach(([who, h]) => { if (h && typeof h.at === 'number' && now - h.at < PLACE_MAX_AGE_MS) hints[who] = h; });
+    index = { v: 1, entries: [...fresh, ...entries.filter((e) => !fresh.some((f) => f.name === e.name))], hints: { ...hints, ...index.hints }, broken: !!parsed.broken || index.broken, last: index.last ?? parsed.last };
+    if (entries.length !== parsed.entries.length || Object.keys(hints).length !== Object.keys(parsed.hints ?? {}).length) persist();
   }).catch(() => undefined).then(() => {
     loaded = true;
     if (dropBeforeLoad === 'all') clearCardShots();
     else if (dropBeforeLoad === 'people') dropPeopleShots();
+    if (dropBeforeLoad !== 'all') forgetBeforeLoad.forEach((who) => forgetPlaces(who));
+    forgetBeforeLoad.clear();
     dropBeforeLoad = null;
+    sweep();
     tell();
-    const uris = index.entries.map((e) => fileFor(e.name).uri);
+    // Decoded ahead: only the look the card showed last (its picture with pins, and its streets), not every one kept.
+    const uris = index.entries.filter((e) => e.key === index.last).map((e) => fileFor(e.name).uri);
     if (uris.length) void ExpoImage.prefetch(uris, 'memory').catch(() => false);
   });
   return loading;
@@ -129,7 +150,7 @@ export function peekCardShot(key: string, hash: string): CardShot | null {
   const now = Date.now();
   const card = index.entries.find((e) => e.key === key && e.kind === 'card' && e.hash === hash && now - e.at < CARD_MAX_AGE_MS);
   if (card) return { uri: fileFor(card.name).uri, kind: 'card' };
-  const streets = index.entries.find((e) => e.key === key && e.kind === 'streets');
+  const streets = index.entries.find((e) => e.key === key && e.kind === 'streets' && now - e.at < PLACE_MAX_AGE_MS);
   return streets ? { uri: fileFor(streets.name).uri, kind: 'streets' } : null;
 }
 
@@ -156,7 +177,7 @@ function keep(key: string, kind: ShotKind, base64: string, hash?: string) {
   const entry: Entry = { key, kind, hash, name, at: Date.now() };
   const same = [entry, ...rest.filter((e) => e.kind === kind)];
   same.slice(KEEP[kind]).forEach((e) => remove(e.name));
-  index = { ...index, entries: [...same.slice(0, KEEP[kind]), ...rest.filter((e) => e.kind !== kind)] };
+  index = { ...index, entries: [...same.slice(0, KEEP[kind]), ...rest.filter((e) => e.kind !== kind)], last: key };
   persist();
   tell();
 }
@@ -200,21 +221,40 @@ export function dropPeopleShots() {
   tell();
 }
 
-/** Signing out: every picture and every remembered centre, gone. */
+/** Signing out: every picture and every remembered centre, gone (the whole folder, files the index never knew of too). */
 export function clearCardShots() {
   if (!loaded) dropBeforeLoad = 'all';
   index.entries.forEach((e) => remove(e.name));
+  try { const dir = new Directory(Paths.cache, FOLDER); if (dir.exists) dir.delete(); } catch { /* already gone */ }
   index = { v: 1, entries: [], hints: {}, broken: index.broken };
   persist();
   tell();
 }
 
-export function cardHint(user: string): CardHint | null {
-  return index.hints[user] ?? null;
+/**
+ * Location off, or nobody to see you: where this person's card was (its remembered centre) and every
+ * picture of their card, gone from this phone at once.
+ */
+export function forgetPlaces(user: string) {
+  if (!loaded) forgetBeforeLoad.add(user);
+  const mine = index.entries.filter((e) => e.key.startsWith(`${user}|`));
+  if (!mine.length && !index.hints[user]) return;
+  mine.forEach((e) => remove(e.name));
+  const hints = { ...index.hints };
+  delete hints[user];
+  index = { ...index, entries: index.entries.filter((e) => !e.key.startsWith(`${user}|`)), hints, last: index.last?.startsWith(`${user}|`) ? undefined : index.last };
+  persist();
+  tell();
 }
+
+export function cardHint(user: string): CardHint | null {
+  const h = index.hints[user];
+  return h && typeof h.at === 'number' && Date.now() - h.at < PLACE_MAX_AGE_MS ? h : null;
+}
+/** Only ever a known town's centre (the caller never passes someone's own spot). */
 export function setCardHint(user: string, hint: CardHint) {
   const was = index.hints[user];
-  if (was && was.lat === hint.lat && was.lng === hint.lng && was.name === hint.name) return;
-  index = { ...index, hints: { ...index.hints, [user]: hint } };
+  if (was && was.lat === hint.lat && was.lng === hint.lng && was.name === hint.name && typeof was.at === 'number' && Date.now() - was.at < PLACE_MAX_AGE_MS / 7) return;
+  index = { ...index, hints: { ...index.hints, [user]: { lat: hint.lat, lng: hint.lng, name: hint.name, at: Date.now() } } };
   persist();
 }

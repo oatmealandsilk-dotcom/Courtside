@@ -167,9 +167,12 @@ function faces(cb){var urls=[],seen={},els=[],i,bg,u;try{els=document.querySelec
 for(i=0;i<els.length;i++){bg=els[i].style&&els[i].style.backgroundImage;if(!bg||bg.indexOf('url(')<0)continue;u=bg.slice(bg.indexOf('(')+1,bg.lastIndexOf(')')).replace(/["']/g,'');if(u&&!seen[u]){seen[u]=1;urls.push(u)}}
 var left=urls.length,fin=false;function end(){if(fin)return;fin=true;requestAnimationFrame(function(){requestAnimationFrame(cb)})}
 if(!left){end();return}setTimeout(end,800);urls.forEach(function(x){var im=new Image();im.onload=im.onerror=function(){if(--left<=0)end()};im.src=x})}
-function settle(){if(SETTLING)return;SETTLING=true;faces(function(){SETTLING=false;post({type:'painted'})})}
+function settle(){if(SETTLING)return;SETTLING=true;faces(function(){SETTLING=false;post({type:'painted'});try{engine.calm(false)}catch(e){}})}
 var W=(${PAINT_WATCH_JS})(map,function(what,why){if(what==='painted'){settle();return}post({type:what,why:why})},{gate:function(){return SYNCED}});
-map.on('webglcontextlost',function(){post({type:'lost'})});
+// The phone took the map's drawing back. MapLibre draws again by itself once it is given back, so the full map
+// (your pan, zoom and pick) is started afresh only if it is not back within 3 s; the still card at once, as its picture covers it meanwhile.
+var LOSTT=0;map.on('webglcontextlost',function(){if(LOSTT)return;LOSTT=setTimeout(function(){LOSTT=0;post({type:'lost'})},${interactive ? 3000 : 0})});
+map.on('webglcontextrestored',function(){if(LOSTT){clearTimeout(LOSTT);LOSTT=0}try{map.triggerRepaint()}catch(e){}});
 function blank(c){try{var k=document.createElement('canvas');k.width=8;k.height=8;var g=k.getContext('2d');g.drawImage(c,0,0,8,8);var p=g.getImageData(0,0,8,8).data,lo=999,hi=0;for(var j=0;j<p.length;j+=4){var v=p[j]+p[j+1]+p[j+2];if(v<lo)lo=v;if(v>hi)hi=v}return hi-lo<6}catch(e){return false}}
 map.touchZoomRotate.disableRotation();
 function P(id,k,v){map.setPaintProperty(id,k+'-transition',{duration:0,delay:0});map.setPaintProperty(id,k,v)}
@@ -191,7 +194,7 @@ window.__cs={
   fly:function(lat,lng,z,ms,oy,exact){map.flyTo({center:[lng,lat],zoom:z==null?map.getZoom():exact?z:Math.max(map.getZoom(),z),duration:ms,offset:[0,oy||0]})},
   look:function(l){LOOK=l;document.body.style.background=(l.background&&l.background.fill)||'#F4EFE6';if(map.isStyleLoaded())look(l)},
   synced:function(){if(SYNCED)return;SYNCED=true;W.kick()},
-  rearm:function(){map.once('idle',settle)},
+  rearm:function(){try{engine.calm(true)}catch(e){}map.once('idle',settle)},
   shot:function(){try{var c=map.getCanvas();post({type:'shot',data:c.toDataURL('image/jpeg',0.92),blank:blank(c)})}catch(e){}}
 };
 }

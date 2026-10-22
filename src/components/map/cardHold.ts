@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type MutableRefObject } from 'react';
+import { Dimensions, type View } from 'react-native';
 
 import type { LatLng } from '@/features/players/positions';
 
@@ -14,6 +15,9 @@ import type { LatLng } from '@/features/players/positions';
  * few times a second, and is applied the moment the card is out of view.
  * Switching Location on or off, or asking for your location from the card, is
  * yours to see happen, so it applies at once as before.
+ *
+ * Scrolled off the screen counts as out of view too (useCardOnScreen), so a fix
+ * held while you read the list under the card lands while the card is away.
  *
  * `seen()`: whether the card is drawn (or showing its picture) and in view right now.
  */
@@ -36,4 +40,28 @@ export function useHeldCardPlace(expanded: boolean, at: LatLng | null | undefine
     return () => clearInterval(t);
   }, [expanded, same, live.locationOn, live.at?.lat, live.at?.lng]); // eslint-disable-line react-hooks/exhaustive-deps
   return expanded ? live : held;
+}
+
+/**
+ * Whether the card is within the screen right now (not scrolled away above or below, not slid off to
+ * the side), for the card's root view (`ref`). In a browser it is read there and then; on the phone it
+ * is measured as it is asked, and an answer older than 0.6 s counts as on screen, so a stale answer
+ * can only ever make the card more careful (a fade rather than a cut), never less.
+ */
+export function useCardOnScreen(): { ref: MutableRefObject<View | null>; onScreen: () => boolean } {
+  const ref = useRef<View | null>(null);
+  const last = useRef({ on: true, at: 0 });
+  const onScreen = useRef(() => {
+    const node = ref.current as unknown as { getBoundingClientRect?: () => DOMRect; measureInWindow?: (cb: (x: number, y: number, w: number, h: number) => void) => void } | null;
+    if (!node) return true;
+    const { width: W, height: H } = Dimensions.get('window');
+    const within = (x: number, y: number, w: number, h: number) => w > 0 && h > 0 && y + h > 0 && y < H && x + w > 0 && x < W;
+    if (typeof node.getBoundingClientRect === 'function') {
+      const r = node.getBoundingClientRect();
+      return within(r.left, r.top, r.width, r.height);
+    }
+    node.measureInWindow?.((x, y, w, h) => { last.current = { on: within(x, y, w, h), at: Date.now() }; });
+    return Date.now() - last.current.at < 600 ? last.current.on : true;
+  });
+  return { ref, onScreen: onScreen.current };
 }
