@@ -1622,6 +1622,9 @@ function withMapRings(users: User[], seen: Record<ID, LastSeen>, me: ID | null, 
   return changed ? next : users;
 }
 
+/** How long Find Players' own copy may stand in for the map's fresh load before it is taken back off. */
+const MAP_COPY_BRIDGE_MS = 8000;
+
 const isRefusal = (result: string): result is GroupRefusal | 'failed' => ['blocked', 'teen', 'full', 'not-admin', 'words', 'failed'].includes(result);
 
 // In a browser, WHOOP's tennis sign-in (and Fitbit's, Oura's or Polar's) comes
@@ -2855,22 +2858,66 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // What the saved copy put on screen, so the fresh load can take back off anything the server no longer has.
   const snapshotIds = React.useRef<Set<string> | null>(null);
+  // What Find Players' own copy (readMapCopy) put on screen, so it can be taken back off: the pins it
+  // added, the people it brought, the rings it drew and its New on CourtSide list (each only while it is
+  // still the very one the copy put there).
+  const mapCopy = React.useRef<{ me: ID; seen: Record<ID, LastSeen>; added: Set<ID>; ringed: Map<ID, { was: User; now: User }>; newList: { userId: ID; joinedAt: string }[] | null } | null>(null);
+  const mapCopyTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The account whose map load failed this session: a copy read after that is never put up.
+  const mapCopyFailed = React.useRef<ID | null>(null);
+  // loaded: the fresh pins are up (they replaced the copy's), so only rings no fresh pin backs go now; the
+  // copy's New on CourtSide list waits for its own load, and goes when the timer runs if that never came.
+  const dropMapCopy = useCallback((me: ID, loaded: boolean) => {
+    const c = mapCopy.current;
+    if (!c || c.me !== me) return;
+    const keepList = loaded && c.newList !== null;
+    if (keepList) mapCopy.current = { ...c, seen: {}, ringed: new Map() };
+    else {
+      if (mapCopyTimer.current) { clearTimeout(mapCopyTimer.current); mapCopyTimer.current = null; }
+      mapCopy.current = null;
+    }
+    setState((prev) => {
+      if (prev.currentUserId !== me) return prev;
+      const lastSeen = prev.lastSeenLoaded ? prev.lastSeen : Object.fromEntries(Object.entries(prev.lastSeen).filter(([id, r]) => c.seen[id] !== r));
+      const newGone = !keepList && c.newList !== null && prev.newOnCourtside === c.newList;
+      const listed = new Set(newGone ? [] : (prev.newOnCourtside ?? []).map((r) => r.userId));
+      const users = prev.users
+        .filter((u) => !c.added.has(u.id) || lastSeen[u.id] || listed.has(u.id))
+        .map((u) => { const r = c.ringed.get(u.id); return r && r.now === u && !lastSeen[u.id] ? r.was : u; });
+      const changed = users.length !== prev.users.length || users.some((u, i) => u !== prev.users[i]);
+      if (!changed && lastSeen === prev.lastSeen && !newGone) return prev;
+      return { ...prev, lastSeen, users: changed ? users : prev.users, newOnCourtside: newGone ? null : prev.newOnCourtside };
+    });
+  }, []);
   const showSnapshot = useCallback((me: ID, data: RemoteData) => {
     snapshotIds.current = idsIn(data);
     setState((prev) => (prev.remoteLoaded || (prev.currentUserId && prev.currentUserId !== me) ? prev : mergeRemote(prev, data, me, null, null, true)));
     // Find Players' own copy (data/snapshot's MapCopy): the map card's pins, the Open to hit rings and
     // New on CourtSide, at once, until the map's fresh load replaces them (Oct 21). Never over a fresh one.
+    // Nobody you blocked or who blocked you comes back from it (the server's map query is what kept them
+    // out), and it is only a bridge: if the map's fresh load fails, or has not landed a few seconds on,
+    // what came from it is taken back off (dropMapCopy) rather than left up for the session (Oct 21).
     void readMapCopy(me).then((copy) => {
       if (!copy) return;
       setState((prev) => {
-        if (prev.currentUserId !== me || prev.lastSeenLoaded) return prev;
+        if (prev.currentUserId !== me || prev.lastSeenLoaded || mapCopyFailed.current === me) return prev;
+        const out = new Set<ID>([...prev.blockedIds, ...prev.blockedMeIds]);
+        const fromCopy = Object.fromEntries(Object.entries(copy.lastSeen).filter(([id]) => !out.has(id) && !prev.lastSeen[id]));
         const have = new Set(prev.users.map((u) => u.id));
-        const users = [...prev.users, ...copy.users.filter((u) => !have.has(u.id))];
-        const lastSeen = { ...copy.lastSeen, ...prev.lastSeen };
-        return { ...prev, lastSeen, users: withMapRings(users, lastSeen, me), newOnCourtside: prev.newOnCourtside ?? copy.newOnCourtside, mapLive: prev.mapLive ?? copy.mapLive };
+        const added = copy.users.filter((u) => !have.has(u.id) && !out.has(u.id));
+        const lastSeen = { ...fromCopy, ...prev.lastSeen };
+        const before = [...prev.users, ...added];
+        const users = withMapRings(before, lastSeen, me);
+        const ringed = new Map<ID, { was: User; now: User }>();
+        users.forEach((u, i) => { if (u !== before[i] && i < prev.users.length) ringed.set(u.id, { was: before[i], now: u }); });
+        const newList = prev.newOnCourtside ? null : (copy.newOnCourtside ?? []).filter((r) => !out.has(r.userId));
+        mapCopy.current = { me, seen: fromCopy, added: new Set(added.map((u) => u.id)), ringed, newList };
+        return { ...prev, lastSeen, users, newOnCourtside: prev.newOnCourtside ?? newList, mapLive: prev.mapLive ?? copy.mapLive };
       });
+      if (mapCopyTimer.current) clearTimeout(mapCopyTimer.current);
+      mapCopyTimer.current = setTimeout(() => dropMapCopy(me, false), MAP_COPY_BRIDGE_MS);
     });
-  }, []);
+  }, [dropMapCopy]);
 
   const fetchAndMerge = useCallback(async (me: ID, email?: string | null) => {
     try {
@@ -3816,7 +3863,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
     // A failed load keeps what was there and is not "loaded": an error must
     // never read as nobody near you (the "You're early" card waits on this).
-    if (!rows) return false;
+    if (!rows) { if (me) { mapCopyFailed.current = me; dropMapCopy(me, false); } return false; }
     // How far each ring would like to go for a hit (migration 120) is asked after
     // the pins are up, never before; until it answers, a ring that has not
     // changed keeps the distance it had, so a card never blinks its line.
@@ -3831,9 +3878,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     else seenAround.current = loaded;
     const merged = { ...seenAround.current, ...seenInView.current };
     setState((prev) => ({ ...prev, lastSeen: merged, lastSeenLoaded: true, users: withMapRings(prev.users, merged, me, mapLive === true ? loaded : null) }));
+    if (me) { mapCopyFailed.current = null; dropMapCopy(me, true); }
     if (mapLive === true && me) void addOpenMiles(loaded, me);
     return true;
-  }, [addOpenMiles]);
+  }, [addOpenMiles, dropMapCopy]);
 
   const setMapVisibility = useCallback(async (v: MapVisibility): Promise<boolean> => {
     const me = stateRef.current.currentUserId;

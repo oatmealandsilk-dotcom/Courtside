@@ -107,7 +107,7 @@ export async function clearSnapshot(me: ID): Promise<void> {
  * community tab should load in "absolute peak"): the pins on the map card,
  * the Open to hit rings and New on CourtSide, so the page the app opens on
  * shows them at once instead of after the map's own load. Only what this
- * account was last shown, only for a day (a pin is someone's last shared
+ * account was last shown, only for four hours (a pin is someone's last shared
  * spot: a day-old one is more confusing than helpful), and the fresh load
  * replaces it as soon as it lands. Deleted with the main copy.
  */
@@ -120,7 +120,7 @@ export interface MapCopy {
 }
 const MAP_VERSION = 1;
 const mapKey = (me: ID) => `courtside-mapcopy-v${MAP_VERSION}:${me}`;
-const MAP_MAX_AGE_MS = 86_400_000;
+const MAP_MAX_AGE_MS = 4 * 3_600_000;
 /** Pins kept at most: the nearest-first answer rarely has more round a town. */
 const MAP_MAX_PINS = 150;
 
