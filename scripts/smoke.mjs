@@ -1123,6 +1123,17 @@ const STEPS = [
     expect: [{ label: 'Clip comments' }, { label: 'For you' }, { label: /^Find or start a group/ }],
   },
   {
+    // Oct 22 (owner: "You should be able to invite to a group too, also ppl should get notification
+    // for that"): the demo's invites wait at the top of the Groups sheet (the Feed's "+"), with Join / Not now.
+    name: 'group-invites-sheet',
+    title: 'Groups sheet: invites first',
+    async run(page) {
+      await page.tap({ label: /^Find or start a group, 2 invites/ });
+    },
+    expect: [{ text: 'Invites' }, { label: 'Join Silver Lake sunrise' }, { label: 'Not now, Silver Lake sunrise' }],
+    after: async (page) => { await page.tap({ label: 'Close' }); await page.gone({ label: 'Not now, Silver Lake sunrise' }); },
+  },
+  {
     name: 'clip-comments',
     title: 'A clip’s comments',
     async run(page) {
@@ -1395,6 +1406,24 @@ const STEPS = [
     expect: [{ text: 'Share your session' }, { text: 'Posted. Add it to your story?' }, { label: 'Done' }, { label: 'Share to Instagram Stories' }],
     // Back on the feed (looked for even under a note along the top, such as "How was the hit at …?").
     after: async (page) => { await page.tap({ label: 'Done' }); await page.gone({ text: 'Share your session' }); await page.waitFor({ label: 'For you', any: true }); },
+  },
+  {
+    // Oct 22: an invite to a group arrives as a notification ("Mira invited you to Silver Lake sunrise");
+    // Join on it puts you in the group, whose feed joins the Feed's top row. Late, since it adds a group.
+    name: 'group-invite-join',
+    title: 'Join a group from its invite',
+    async run(page) {
+      await page.tap({ label: 'Profile' });
+      await page.tap({ label: /^Notifications/ });
+      await page.waitFor({ label: /invited you to Silver Lake sunrise$/ });
+      await page.tap({ label: 'Join Silver Lake sunrise' });
+      await page.gone({ label: 'Join Silver Lake sunrise' });
+      await page.tap({ label: 'Go back' });
+      await page.tap({ label: 'Feed' });
+      // Its tab is in the top row (scrolled out of sight to the right, past the other two groups).
+      await page.waitUntil(() => page.eval(`!!document.querySelector('[aria-label="Silver Lake sunrise, group feed"]')`), 15000, 'the Silver Lake sunrise tab in the Feed’s top row');
+    },
+    expect: [{ label: 'For you', any: true }],
   },
   {
     // Oct 18 (owner: "Add the question, as long as it's for the benefit of the app and does not

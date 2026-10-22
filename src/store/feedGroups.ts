@@ -4,6 +4,7 @@ import { useCallback, useMemo } from 'react';
 import { isLocalMedia, remote, uploadMedia } from '@/data/remote';
 import { demoDiscoverGroups, demoGroups } from '@/data/mock/groups';
 import { demoGroupInvites } from '@/data/mock/groupInvites';
+import { demoNewPlayer } from '@/data/api';
 import type { Comment, DiscoverGroup, FeedGroup, FeedGroupCard, FeedGroupInvite, GroupInviteAnswer, GroupLook, ID, Notification, Post } from '@/data/types';
 import { plainLook, sameLook } from '@/features/groups/look';
 import * as haptics from '@/lib/haptics';
@@ -162,8 +163,8 @@ export function useFeedGroups<S extends FeedGroupsState & Reads>(
           feedGroups: demoGroups.map((g) => ({ ...g, members: [...g.members], requests: [...g.requests] })),
           feedGroupsOn: true,
           feedGroupsLooks: true,
-          // The demo's invites, each only while its notification is there (a brand-new player has none).
-          feedGroupInvites: demoGroupInvites().filter((i) => prev.notifications.some((n) => n.kind === 'group-invite' && n.targetId === i.groupId)),
+          // The demo's invites (a brand-new player, ?new=1, has none, as they have no notifications for them).
+          feedGroupInvites: demoNewPlayer() ? [] : demoGroupInvites(),
           feedGroupInvitesLive: true,
         }));
       }

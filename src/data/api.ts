@@ -151,7 +151,7 @@ function demoRecapNotification(): Notification[] {
  * to be logged. So Activities' first page, its "Near you" sessions and the
  * Connect Apple Health row can be seen, and connecting brings in the week.
  */
-function demoNewPlayer(): boolean {
+export function demoNewPlayer(): boolean {
   try {
     if (typeof window === 'undefined' || !window.location || !window.sessionStorage) return false;
     if (new URLSearchParams(window.location.search).get('new') === '1') window.sessionStorage.setItem('courtside-demo-new', '1');
