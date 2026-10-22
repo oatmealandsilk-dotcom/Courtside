@@ -18,8 +18,9 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
  * Start a group, any time after, under the same header. The group's link to
  * copy or share, and people to tick; each one picked gets an invite with
  * Join / Not now (migration 181; before it, the invite in your chat with
- * them). Any member can invite; how people get
- * in (Open or Ask to join) is still the group's own. Opened from a link
+ * them). Any member can invite, and whoever they invite joins straight
+ * away, Ask to join or not (migration 182); only someone an admin took out
+ * still needs an admin. Opened from a link
  * before your groups have loaded, it waits for them rather than saying
  * you're not in it; closing with people ticked asks whether to send.
  */
@@ -98,6 +99,8 @@ export default function GroupInvite() {
         </ScrollView>
         {group || off ? (
           <View style={styles.footer}>
+            {/* Ask to join is for strangers: anyone invited from here is let in by the invite itself (migration 182). */}
+            {group?.ask && feedGroupInvitesLive ? <Text style={styles.foot}>Anyone you invite joins straight away. No admin needs to say yes.</Text> : null}
             {group ? (
               <Submit
                 label={feedGroupInvitesLive ? `Invite ${picked.length}` : `Send ${picked.length} ${picked.length === 1 ? 'invite' : 'invites'}`}
@@ -126,5 +129,6 @@ const styleDefinitions = StyleSheet.create({
   body: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: spacing.xl },
   center: { alignItems: 'center', gap: spacing.md, paddingVertical: 60 },
   note: { ...typography.body, color: colors.textMuted, paddingVertical: spacing.xl, textAlign: 'center' },
+  foot: { ...typography.small, color: colors.textMuted, textAlign: 'center', paddingBottom: spacing.sm },
   footer: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, backgroundColor: colors.bg },
 });

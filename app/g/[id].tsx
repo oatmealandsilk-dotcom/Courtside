@@ -73,7 +73,7 @@ function GroupPage() {
   const answerInvite = (accept: boolean) => act(async () => {
     const out = await actions.answerFeedGroupInvite(id, accept);
     if (!out.ok) throw new Error(out.error);
-    if (out.outcome === 'requested') setNote('Sent to the admins. You’ll be in once one says yes.');
+    if (out.outcome === 'requested') setNote('Sent to the admins. You were taken out of this group, so an admin lets you back in.');
     toastForJoin(out.outcome, invite?.name ?? card?.name ?? 'the group');
     await readCard();
   });
