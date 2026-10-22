@@ -865,7 +865,9 @@ const STEPS = [
       await page.waitFor({ label: /^Like( clip|\. Hold to see who liked it)$/ }, 45000);
       await guestShowsOnlyAdults(page);
     },
-    expect: [{ label: 'Get the iPhone app' }, { label: 'Create a post' }, { label: 'Feed' }],
+    // The tester is an Android phone: the strip says the iPhone app is there and Android is coming,
+    // with no "Get the app" button (that is for iPhones and iPads only, Oct 22 sweep item 50).
+    expect: [{ text: 'iPhone app · Android coming soon' }, { label: 'Create a post' }, { label: 'Feed' }],
   },
   {
     name: 'guest-like',

@@ -1,7 +1,7 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import Animated, { Easing, FadeIn, ZoomIn, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
+import Animated, { Easing, FadeIn, FadeOut, ZoomIn, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
 import Svg, { Circle } from 'react-native-svg';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
@@ -26,7 +26,7 @@ export function SigningInAs({ name, handle, avatarUrl, seed }: { name: string; h
   const styles = useThemedStyles(styleDefinitions);
   const spin = useSpin();
   return (
-    <Animated.View entering={FadeIn.duration(180)} style={styles.root} accessibilityLiveRegion="polite" accessibilityLabel={`Signing in as ${name}`}>
+    <Animated.View entering={FadeIn.duration(180)} exiting={FadeOut.duration(200)} style={styles.root} accessibilityLiveRegion="polite" accessibilityLabel={`Signing in as ${name}`}>
       <Wash height={420} />
       <Animated.View entering={ZoomIn.duration(360).easing(Easing.out(Easing.cubic))} style={styles.center}>
         <View style={styles.ringBox}>
@@ -62,7 +62,7 @@ export function SigningInWith({ provider }: { provider: 'apple' | 'google' }) {
   const spin = useSpin();
   const label = provider === 'apple' ? 'Apple' : 'Google';
   return (
-    <Animated.View entering={FadeIn.duration(180)} style={styles.root} accessibilityLiveRegion="polite" accessibilityLabel={`Signing in with ${label}`}>
+    <Animated.View entering={FadeIn.duration(180)} exiting={FadeOut.duration(200)} style={styles.root} accessibilityLiveRegion="polite" accessibilityLabel={`Signing in with ${label}`}>
       <Wash height={420} />
       <Animated.View entering={ZoomIn.duration(360).easing(Easing.out(Easing.cubic))} style={styles.center}>
         <View style={styles.ringBox}>

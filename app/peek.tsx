@@ -1,8 +1,8 @@
 import { PRESS_DIM } from '@/theme/press';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import Animated, { FadeIn, FadeInDown, FadeOut } from 'react-native-reanimated';
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import Animated, { FadeIn, FadeInDown, FadeOut, LinearTransition } from 'react-native-reanimated';
 import { router, useLocalSearchParams } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -14,6 +14,7 @@ import { Button } from '@/components/ui';
 import { fetchPeekHits } from '@/data/api';
 import type { PeekHit } from '@/data/types';
 import { FORMAT_LABEL, hitShort, levelText } from '@/features/hits/format';
+import { DIM_IN, DIM_OUT, SHEET_IN, SHEET_OUT } from '@/features/guest/JoinSheet';
 import { forgetShareTarget, rememberReferrer, rememberShareTarget } from '@/features/invite/referral';
 import { formatSpotMiles } from '@/features/players/geo';
 import { getPosition } from '@/lib/geo';
@@ -33,6 +34,11 @@ function whenInWords(startsAt: string): string {
 }
 
 const spotsText = (n: number) => (n === 1 ? '1 spot left' : `${n} spots left`);
+
+// Cards fade in and out as a town or "Use my location" changes the list, and
+// everything under them glides to its new place (Oct 22 sweep, item 32).
+const CARD_OUT = FadeOut.duration(160);
+const GLIDE = LinearTransition.duration(260);
 
 /**
  * The peek (owner, Oct 17: "for the Web version if people are gonna click
@@ -65,16 +71,27 @@ export default function Peek() {
   const [near, setNear] = useState<{ lat: number; lng: number } | null>(null);
   const [locating, setLocating] = useState(false);
   const [locNote, setLocNote] = useState<string | null>(null);
-  const [hits, setHits] = useState<PeekHit[] | null | undefined>(undefined);
+  // The hits with the spot they were found from: a new spot keeps the list
+  // there until its own answer lands, rather than blanking it to a spinner,
+  // and the near/further split always matches the hits on screen.
+  const [got, setGot] = useState<{ hits: PeekHit[] | null; from: { lat: number; lng: number } | null } | undefined>(undefined);
+  const hits = got === undefined ? undefined : got.hits;
+  const from = got?.from ?? null;
   const [area, setArea] = useState<string | null>(null);
   const [asking, setAsking] = useState<PeekHit | null>(null);
 
   const load = useCallback((point: { lat: number; lng: number } | null) => {
     let live = true;
-    setHits(undefined);
-    fetchPeekHits(point, 30).then((got) => { if (live) setHits(got); }).catch(() => { if (live) setHits(null); });
+    fetchPeekHits(point, 30).then((found) => { if (live) setGot({ hits: found, from: point }); }).catch(() => { if (live) setGot({ hits: null, from: point }); });
     return () => { live = false; };
   }, []);
+  // Escape puts the "I'm in" sheet away, as it does the guest Join sheet.
+  useEffect(() => {
+    if (!asking || Platform.OS !== 'web') return undefined;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.preventDefault(); setAsking(null); void forgetShareTarget(); } };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [asking]);
   useEffect(() => load(near), [near, load]);
 
   const locate = async () => {
@@ -94,8 +111,8 @@ export default function Peek() {
     return [...count.entries()].sort((a, b) => b[1] - a[1]).map(([a]) => a).slice(0, 8);
   }, [hits]);
   const shown = useMemo(() => (hits ?? []).filter((h) => !area || h.court.area === area), [hits, area]);
-  const nearHits = near ? shown.filter((h) => h.km !== undefined && h.km <= NEAR_KM) : shown;
-  const farHits = near ? shown.filter((h) => h.km === undefined || h.km > NEAR_KM) : [];
+  const nearHits = from ? shown.filter((h) => h.km !== undefined && h.km <= NEAR_KM) : shown;
+  const farHits = from ? shown.filter((h) => h.km === undefined || h.km > NEAR_KM) : [];
 
   const signUp = async (hit: PeekHit | null, create: boolean) => {
     if (hit) {
@@ -113,7 +130,7 @@ export default function Peek() {
 
   const loading = hits === undefined;
   const nothing = !loading && hits !== null && hits.length === 0;
-  const noneNear = !loading && !!near && nearHits.length === 0 && farHits.length > 0;
+  const noneNear = !loading && !!from && nearHits.length === 0 && farHits.length > 0;
 
   return (
     <View style={styles.page}>
@@ -163,19 +180,19 @@ export default function Peek() {
               </ScrollView>
             ) : null}
           </View>
-          {locNote ? <Text style={styles.note}>{locNote}</Text> : null}
+          {locNote ? <Animated.Text entering={FadeIn.duration(220)} exiting={FadeOut.duration(160)} style={styles.note}>{locNote}</Animated.Text> : null}
 
           {loading ? (
             <View style={styles.loading}><CourtSpinner size={32} /></View>
           ) : hits === null ? (
-            <View style={[styles.card, styles.empty]}>
+            <Animated.View entering={FadeIn.duration(260)} exiting={CARD_OUT} style={[styles.card, styles.empty]}>
               <Ionicons name="cloud-offline-outline" size={26} color={colors.textMuted} />
               <Text style={styles.emptyTitle}>Couldn’t load the hits</Text>
               <Text style={styles.emptyBody}>Check your connection and try again.</Text>
               <Button label="Try again" variant="secondary" size="sm" onPress={() => load(near)} />
-            </View>
+            </Animated.View>
           ) : nothing || noneNear ? (
-            <Animated.View entering={FadeIn.duration(260)} style={[styles.card, styles.empty]}>
+            <Animated.View entering={FadeIn.duration(260)} exiting={CARD_OUT} layout={GLIDE} style={[styles.card, styles.empty]}>
               <View style={styles.emptyIcon}><HitGlyph size={24} color={colors.brand} /></View>
               <Text style={styles.emptyTitle}>No open hits near you yet</Text>
               <Text style={styles.emptyBody}>Be the first to post one. Players near you see it straight away.</Text>
@@ -185,16 +202,16 @@ export default function Peek() {
           ) : null}
 
           {!loading && nearHits.length ? (
-            <View style={styles.list}>
+            <Animated.View key="near" exiting={CARD_OUT} layout={GLIDE} style={styles.list}>
               {nearHits.map((h, i) => <HitCard key={h.id} hit={h} index={i} onJoin={() => setAsking(h)} />)}
-            </View>
+            </Animated.View>
           ) : null}
 
           {!loading && farHits.length ? (
-            <View style={styles.list}>
+            <Animated.View key="far" entering={FadeIn.duration(260)} exiting={CARD_OUT} layout={GLIDE} style={styles.list}>
               <Text style={styles.section}>{noneNear ? 'Nearest open hits' : 'Further away'}</Text>
               {farHits.map((h, i) => <HitCard key={h.id} hit={h} index={i} onJoin={() => setAsking(h)} />)}
-            </View>
+            </Animated.View>
           ) : null}
         </View>
       </ScrollView>
@@ -209,7 +226,8 @@ export default function Peek() {
         </View>
       </View>
 
-      {asking ? <JoinPrompt hit={asking} onClose={() => { setAsking(null); void forgetShareTarget(); }} onGo={(create) => { void signUp(asking, create); }} /> : null}
+      {/* Always there, so the sheet can drop away when it closes rather than vanish (item 32). */}
+      <JoinPrompt hit={asking} onClose={() => { setAsking(null); void forgetShareTarget(); }} onGo={(create) => { if (asking) void signUp(asking, create); }} />
     </View>
   );
 }
@@ -218,7 +236,7 @@ function HitCard({ hit, index, onJoin }: { hit: PeekHit; index: number; onJoin: 
   const styles = useThemedStyles(styleDefinitions);
   const where = [hit.court.area, hit.km !== undefined ? formatSpotMiles(hit.km / 1.609, true) : ''].filter(Boolean).join(' · ');
   return (
-    <Animated.View entering={FadeInDown.delay(Math.min(index, 6) * 50).duration(320)} style={styles.card}>
+    <Animated.View entering={FadeInDown.delay(Math.min(index, 6) * 50).duration(320)} exiting={CARD_OUT} layout={GLIDE} style={styles.card}>
       <View style={styles.cardTop}>
         <Text style={styles.when}>{hitShort(hit.startsAt)}</Text>
         <View style={styles.spots}><Text style={styles.spotsText}>{spotsText(hit.spotsLeft)}</Text></View>
@@ -243,15 +261,19 @@ function HitCard({ hit, index, onJoin }: { hit: PeekHit; index: number; onJoin: 
 }
 
 /** "Make a free account to join Sam's hit at 6pm": the one ask, over the list. */
-function JoinPrompt({ hit, onClose, onGo }: { hit: PeekHit; onClose: () => void; onGo: (create: boolean) => void }) {
+function JoinPrompt({ hit, onClose, onGo }: { hit: PeekHit | null; onClose: () => void; onGo: (create: boolean) => void }) {
   const styles = useThemedStyles(styleDefinitions);
   const insets = useSafeAreaInsets();
+  // The guest Join sheet's own rise and fall, the dim following it.
   return (
-    <View style={StyleSheet.absoluteFill}>
-      <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(160)} style={[StyleSheet.absoluteFill, styles.dim]}>
+    <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+      {hit ? (
+      <Animated.View key="dim" entering={DIM_IN} exiting={DIM_OUT} style={[StyleSheet.absoluteFill, styles.dim]}>
         <Pressable accessibilityRole="button" accessibilityLabel="Not now" style={StyleSheet.absoluteFill} onPress={onClose} />
       </Animated.View>
-      <Animated.View entering={FadeInDown.duration(280)} style={[styles.sheet, { paddingBottom: insets.bottom + spacing.lg }]} accessibilityViewIsModal>
+      ) : null}
+      {hit ? (
+      <Animated.View key="sheet" entering={SHEET_IN} exiting={SHEET_OUT} style={[styles.sheet, { paddingBottom: insets.bottom + spacing.lg }]} accessibilityViewIsModal>
         <View style={styles.sheetInner}>
           <View style={styles.sheetIcon}><HitGlyph size={22} color={colors.brand} /></View>
           <Text style={styles.sheetTitle}>{hit.hostFirst ? `Make a free account to join ${hit.hostFirst}’s hit ${whenInWords(hit.startsAt)}` : `Make a free account to join this hit ${whenInWords(hit.startsAt)}`}</Text>
@@ -264,6 +286,7 @@ function JoinPrompt({ hit, onClose, onGo }: { hit: PeekHit; onClose: () => void;
           </Pressable>
         </View>
       </Animated.View>
+      ) : null}
     </View>
   );
 }

@@ -1,7 +1,7 @@
 import { PRESS_DIM } from '@/theme/press';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { PanResponder, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
-import Animated, { FadeIn, FadeInLeft, FadeInRight, FadeOut, ReduceMotion } from 'react-native-reanimated';
+import Animated, { Easing, FadeIn, FadeInLeft, FadeInRight, FadeOut, LayoutAnimationConfig, ReduceMotion, interpolateColor, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
 
 import { BrandMark } from '@/components/BrandMark';
@@ -60,7 +60,31 @@ function Glow() {
  * A swipe moves between them and a touch holds one; with Reduce Motion the
  * first stays still and nothing moves on its own.
  */
-export function Welcome({ onCreate, onLogIn }: { onCreate: () => void; onLogIn: () => void }) {
+/**
+ * One page dot: the one you are on grows long and green, smoothly, while the
+ * moment beside it slides (Oct 22 sweep, item 31; they used to snap).
+ */
+function Dot({ on }: { on: boolean }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const reduced = useReducedMotion();
+  const p = useSharedValue(on ? 1 : 0);
+  useEffect(() => {
+    p.value = reduced ? (on ? 1 : 0) : withTiming(on ? 1 : 0, { duration: 260, easing: Easing.out(Easing.cubic) });
+  }, [on, reduced, p]);
+  const quiet = withAlpha(colors.text, 0.18);
+  const green = colors.brand;
+  const look = useAnimatedStyle(() => ({
+    width: 6 + 14 * p.value,
+    backgroundColor: interpolateColor(p.value, [0, 1], [quiet, green]),
+  }));
+  return <Animated.View style={[styles.dot, look]} />;
+}
+
+/**
+ * `still`: back from the form, the welcome shows as it was, without replaying
+ * its first-visit entrance (item 1); it fades in as a whole instead.
+ */
+export function Welcome({ onCreate, onLogIn, still = false }: { onCreate: () => void; onLogIn: () => void; still?: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
   useTheme();
   const { width } = useWindowDimensions();
@@ -156,7 +180,7 @@ export function Welcome({ onCreate, onLogIn }: { onCreate: () => void; onLogIn: 
     <View style={styles.dots}>
       {MOMENTS.map((m, i) => (
         <Pressable key={m.headline} onPress={() => go(i, i < index)} hitSlop={10} accessibilityRole="button" accessibilityLabel={`Show ${i + 1} of ${MOMENTS.length}`} accessibilityState={{ selected: i === index }}>
-          <View style={[styles.dot, { width: i === index ? 20 : 6, backgroundColor: i === index ? colors.brand : withAlpha(colors.text, 0.18) }]} />
+          <Dot on={i === index} />
         </Pressable>
       ))}
     </View>
@@ -178,13 +202,15 @@ export function Welcome({ onCreate, onLogIn }: { onCreate: () => void; onLogIn: 
         bounces={false}
         showsVerticalScrollIndicator={false}
       >
-        <View style={wide ? styles.wideColumn : styles.column}>
-          {lockup}
-          {stage}
-          {words}
-          {dots}
-          {actions}
-        </View>
+        <LayoutAnimationConfig skipEntering={still}>
+          <View style={wide ? styles.wideColumn : styles.column}>
+            {lockup}
+            {stage}
+            {words}
+            {dots}
+            {actions}
+          </View>
+        </LayoutAnimationConfig>
       </ScrollView>
     </View>
   );

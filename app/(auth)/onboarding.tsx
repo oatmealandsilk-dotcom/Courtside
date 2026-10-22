@@ -25,7 +25,7 @@ import * as haptics from '@/lib/haptics';
 import { useApp } from '@/store/AppContext';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { useGateSpace } from '@/lib/useGateSpace';
-import Reanimated from 'react-native-reanimated';
+import Reanimated, { FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated';
 import { KeyboardScrollContext, useKeyboardReveal } from '@/lib/keyboardScroll';
 import { KEYBOARD_ROOM, useKeyboardRoom } from '@/lib/keyboardRoom';
 import type {
@@ -77,6 +77,11 @@ const WINDOWS = [
  * A step whose boxes speak for themselves has no lead: a line that only lists
  * the boxes below it is one more thing to read.
  */
+// One step into the next (item 30): the old fades out quickly as the new fades in.
+const STEP_IN = FadeIn.duration(240);
+const STEP_OUT = FadeOut.duration(160);
+const STEP_GLIDE = LinearTransition.duration(240);
+
 const STEPS: { title: string; lead?: string; skip?: SetupStep }[] = [
   { title: 'About you' },
   { title: 'Your game' },
@@ -325,14 +330,18 @@ function OnboardingSteps() {
   /* ------------------------------ Animation ------------------------------ */
 
   const progress = useRef(new Animated.Value((position + 1) / order.length)).current;
-  const fade = useRef(new Animated.Value(1)).current;
   const scrollRef = keyboard.scroller;
   useEffect(() => {
     Animated.timing(progress, { toValue: (position + 1) / order.length, duration: 360, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
-    fade.setValue(0);
     scrollRef.current?.scrollTo({ y: 0, animated: false });
-    Animated.timing(fade, { toValue: 1, duration: 220, easing: Easing.out(Easing.quad), useNativeDriver: true }).start();
-  }, [step, progress, fade]);
+  }, [step, progress]);
+  // Continue and Back cross-fade the old step into the new one, title and all
+  // (Oct 22 sweep, item 30: the page blinked, the title changed at once, and
+  // only then did the new step fade up). The page's first step simply shows.
+  const [firstStep] = useState(step);
+  const stepped = useRef(false);
+  if (step !== firstStep) stepped.current = true;
+  const stepIn = stepped.current ? STEP_IN : undefined;
 
   const pick = <T,>(setter: (v: T) => void) => (value: T) => { haptics.tap(); setter(value); };
   const typeRating = (text: string) => {
@@ -507,13 +516,15 @@ function OnboardingSteps() {
           </View>
         )}
         <View style={styles.headRow}>
-          <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.title}>{ratingOnly ? 'Your rating' : STEPS[step].title}</Text>
+          <Reanimated.Text key={ratingOnly ? 'rating' : STEPS[step].title} entering={stepIn} exiting={STEP_OUT} maxFontSizeMultiplier={TextScale.TITLE} style={styles.title}>{ratingOnly ? 'Your rating' : STEPS[step].title}</Reanimated.Text>
           {ratingOnly || setupRun ? null : <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.stepLabel}>{position + 1} / {order.length}</Text>}
         </View>
         {ratingOnly ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.lead}>NTRP or UTR, whichever you know. It shows on your profile.</Text>
-          : STEPS[step].lead ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.lead}>{STEPS[step].lead}</Text> : null}
+          : STEPS[step].lead ? <Reanimated.Text key={STEPS[step].lead} entering={stepIn} exiting={STEP_OUT} maxFontSizeMultiplier={TextScale.CARD} style={styles.lead}>{STEPS[step].lead}</Reanimated.Text> : null}
       </View>
 
+      {/* A step with a lead line under its title (or without one) moves the page down (or up) smoothly. */}
+      <Reanimated.View layout={STEP_GLIDE} style={styles.bodyBox}>
       <ScrollView
         ref={scrollRef}
         onScroll={keyboard.onScroll}
@@ -526,7 +537,7 @@ function OnboardingSteps() {
         // The number pad has no return key: a drag down the page puts the keys away.
         keyboardDismissMode={Platform.OS === 'android' ? 'on-drag' : Platform.OS === 'ios' ? 'interactive' : undefined}
       >
-        <Animated.View style={{ gap: spacing.lg, opacity: fade }}>
+        <Reanimated.View key={step} entering={stepIn} exiting={STEP_OUT} style={{ gap: spacing.lg }}>
           {step === 0 ? (
             <>
               {ratingOnly ? null : <>
@@ -746,9 +757,10 @@ function OnboardingSteps() {
               </View>
             </>
           ) : null}
-        </Animated.View>
+        </Reanimated.View>
         {KEYBOARD_ROOM ? <Reanimated.View pointerEvents="none" style={keyboardRoom} /> : null}
       </ScrollView>
+      </Reanimated.View>
 
       {setupRun ? (
         // Setup's bottom, the same on every setup page: the main button full width, Back as a word under it.
@@ -832,6 +844,7 @@ const styleDefinitions = StyleSheet.create({
   stepLabel: { ...typography.small, color: colors.textFaint, fontVariant: ['tabular-nums'] },
   lead: { ...typography.small, color: colors.textMuted },
   // From the top, under its title (Oct 5): centred, a short step left a large empty gap above the form.
+  bodyBox: { flex: 1 },
   body: { flexGrow: 1, justifyContent: 'flex-start', paddingHorizontal: spacing.xl, paddingTop: spacing.lg, paddingBottom: spacing.lg, maxWidth: 560, width: '100%', alignSelf: 'center' },
   bodyTop: { justifyContent: 'flex-start', paddingTop: spacing.xl },
   group: { gap: spacing.sm },
