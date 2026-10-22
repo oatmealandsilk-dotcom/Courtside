@@ -251,33 +251,17 @@ export default function Thread() {
   }, []);
   // A voice note recording in the box: the emoji keyboard steps aside.
   const [recording, setRecording] = useState(false);
-  // The emoji keyboard takes the phone keyboard's place at the phone keyboard's
-  // height, so switching between them leaves the typing bar where it was.
-  const keyboardHeight = useRef(Platform.OS === 'web' ? 260 : 300);
   const listRef = useRef<FlatList<ThreadRow>>(null);
-  useEffect(() => {
-    if (Platform.OS === 'web') return;
-    const sub = Keyboard.addListener('keyboardDidShow', (e) => {
-      // An iPhone's keyboard height takes in the home-indicator strip; Android's
-      // already leaves out the navigation bar under it, so nothing comes off there.
-      keyboardHeight.current = Math.max(220, e.endCoordinates.height - (Platform.OS === 'ios' ? insets.bottom : 0));
-    });
-    return () => sub.remove();
-  }, [insets.bottom]);
   const [typingFocus, setTypingFocus] = useState(false);
   const focused = useIsFocused();
   // The room under the typing bar: a little above the home indicator with the
   // keyboard down, right on the keyboard with it up, riding on it frame by
   // frame on an iPhone. See keyboardLift.ts.
-  const emojiHeight = keyboardHeight.current + insets.bottom;
+  const emojiHeight = EMOJI_PANEL_HEIGHT + insets.bottom;
   const emojiRoom = emojiOpen ? emojiHeight : 0;
   const room = useKeyboardLift({ rest: Math.max(insets.bottom, 12) + 2, focused, typing: typingFocus, emojiRoom, emojiHeight });
   // Dragging the messages down puts the keyboard away (on an iPhone, following the finger).
-  const dragDown = useDragDownDismiss(
-    () => { composer.current?.blur(); Keyboard.dismiss(); setEmojiOpen(false); },
-    // On an iPhone the phone's own keyboard follows the finger by itself; the emoji keyboard is closed by the drag.
-    () => setEmojiOpen(false),
-  );
+  const dragDown = useDragDownDismiss(() => { composer.current?.blur(); Keyboard.dismiss(); setEmojiOpen(false); });
 
   const liveConversation = conversations.find((c) => c.id === id);
   // Someone took you out of this group (found out while it was open, or on
@@ -607,14 +591,13 @@ export default function Thread() {
   }, [rowCtx, byId, hiddenAt, group, currentUserId, blockedIds, shownIds, menuId, flash, lastRealId, readLine, typingNow, canWrite, leaving, leavingLast, lastAnyId, leavingLine]);
 
   // Android's Back closes what is open over the typing bar before it leaves
-  // the chat: the emoji keyboard, the "+" tray, then an edit or a reply (as
+  // the chat: the "+" tray, then an edit or a reply (as
   // Escape does on a computer). With none of them open, the chat closes.
   // Every hook stays above the "Conversation not found" page below: the chat
   // can go while this screen is open (you block them, leave the group) or
   // arrive after it opened (an alert tapped at launch), and React needs the
   // same hooks on every draw, or the whole app falls over.
   useAndroidBack(() => {
-    if (emojiOpen) { setEmojiOpen(false); return true; }
     if (composer.current?.plusIsOpen()) { composer.current.closePlus(); return true; }
     // The edit called off (endEditing's steps, written out: that is made further down).
     if (editing) { setEditing(null); composer.current?.setText(draftBeforeEdit.current ?? ''); draftBeforeEdit.current = null; return true; }
@@ -677,10 +660,18 @@ export default function Thread() {
   const statusLive = !typingLine && (!!atCourt || upToHit);
   // Every message of the chat is here (nothing older left to load): its start, with who it is with, can show above the first.
   const wholeHistory = noMoreOlder.current || thread.length < MESSAGE_PAGE;
-  // The emoji button swaps the phone keyboard for the emoji one and back.
+  /*
+   * The emoji button. On an iPhone or Android phone it brings up the phone's
+   * own keyboard, with its emoji key (owner, Oct 22: "clicking emoji should
+   * open the iPhone's emoji thing", the way Instagram and iMessage do); with
+   * the keyboard already up it changes nothing. In a browser, which has no
+   * emoji keyboard to call on, it swaps the app's own emoji keyboard in and
+   * out.
+   */
   const toggleEmoji = () => {
     composer.current?.closePlus();
-    if (emojiOpen) { room.holdUntilKeyboard(emojiRoom); setEmojiOpen(false); composer.current?.focus(); return; }
+    if (PHONE_EMOJI) { composer.current?.focus(); return; }
+    if (emojiOpen) { setEmojiOpen(false); composer.current?.focus(); return; }
     Keyboard.dismiss();
     setEmojiOpen(true);
   };
@@ -836,7 +827,7 @@ export default function Thread() {
   // Tapping into the words brings the phone keyboard back in the emoji keyboard's place.
   const boxFocused = (on: boolean) => {
     setTypingFocus(on);
-    if (on && emojiOpen && !desktopWeb) { room.holdUntilKeyboard(emojiRoom); setEmojiOpen(false); }
+    if (on && emojiOpen && !desktopWeb) setEmojiOpen(false);
   };
   live.current = {
     openMenu,
@@ -1178,10 +1169,10 @@ export default function Thread() {
       {/* The room under the bar: above the home indicator, or the keyboard's height while it is up. */}
       <Reanimated.View pointerEvents="none" style={room.spacer} />
       {(emojiOpen || emojiDrawn) && canWrite && !recording ? (
-        // Laid over the room under the bar, at the phone keyboard's height, so swapping keyboards leaves the bar where it was.
-        // With the phone keyboard down it slides up and away together with the bar (room.panel, Oct 22 sweep).
+        // In a browser only (a phone uses its own emoji keyboard): laid over the room under the bar, sliding
+        // up and away together with the bar (room.panel, Oct 22 sweep), or taking a phone browser's keyboard's place.
         <Reanimated.View pointerEvents={emojiOpen ? 'auto' : 'none'} style={[styles.emojiLayer, room.panel]}>
-          <EmojiKeyboard height={keyboardHeight.current} bottomInset={insets.bottom} onPick={(emoji) => composer.current?.insert(emoji)} onDelete={() => composer.current?.deleteBack()} />
+          <EmojiKeyboard height={EMOJI_PANEL_HEIGHT} bottomInset={insets.bottom} onPick={(emoji) => composer.current?.insert(emoji)} onDelete={() => composer.current?.deleteBack()} />
         </Reanimated.View>
       ) : null}
     </View>
@@ -2500,6 +2491,10 @@ function MessageMenu({ target, me, styles, canReply, canReact, pending, canDelet
 }
 
 const desktopWeb = Platform.OS === 'web' && isDesktopBrowser();
+/** On a phone the emoji button brings up the phone's own keyboard (and its emoji key); the app's emoji keyboard is for browsers. */
+const PHONE_EMOJI = Platform.OS !== 'web';
+/** The app's own emoji keyboard's height (browsers only), the bottom inset aside. */
+const EMOJI_PANEL_HEIGHT = 260;
 
 /**
  * The text with its last visible character taken off: an emoji can be several
