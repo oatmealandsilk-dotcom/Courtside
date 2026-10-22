@@ -2363,11 +2363,15 @@ function MessageMenu({ target, me, styles, canReply, canReact, pending, canDelet
   useEffect(() => {
     if (Platform.OS !== 'web') return;
     const arm = () => { armed.current = true; };
+    // A click with no press behind it (detail 0) comes from a screen reader or the keyboard, never a lifted finger.
+    const armClick = (e: MouseEvent) => { if (e.detail === 0) armed.current = true; };
     window.addEventListener('pointerdown', arm, true);
     window.addEventListener('keydown', arm, true);
+    window.addEventListener('click', armClick, true);
     return () => {
       window.removeEventListener('pointerdown', arm, true);
       window.removeEventListener('keydown', arm, true);
+      window.removeEventListener('click', armClick, true);
     };
   }, []);
   const settledMenu = () => armed.current && Date.now() - openedAt.current > 350;

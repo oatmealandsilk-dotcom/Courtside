@@ -217,8 +217,10 @@ export default function CoachStudio() {
   const openCount = openBookingCount(coach, coachingRequests, currentUserId);
   const waitingCount = waitingQuestionCount(coachQuestions, currentUserId);
   // Opens on whatever is waiting; with nothing waiting, on the page itself.
-  if (firstTab.current === null) firstTab.current = openCount ? 'bookings' : waitingCount ? 'questions' : 'page';
-  const shownTab = tab ?? firstTab.current;
+  const opensOn = openCount ? 'bookings' : waitingCount ? 'questions' : 'page';
+  // Picked only once everything has loaded, so bookings that arrive after the coach row still open their tab.
+  if (firstTab.current === null && !loading) firstTab.current = opensOn;
+  const shownTab = tab ?? firstTab.current ?? opensOn;
 
   // The service editor: in place of the card being edited, or under the list for a new one.
   const editing = !!draft && coach.services.some((s) => s.id === draft.id);
@@ -381,7 +383,7 @@ export default function CoachStudio() {
                 </Pressable>
               );
             })}
-            {coach.services.length ? null : <Text style={[styles.muted, styles.emptyRow]}>Nothing yet. Add a live lesson players can book.</Text>}
+            {coach.services.length ? null : <Text style={[styles.muted, styles.emptyRow]}>Nothing yet. Most coaches start with one video review and one written answer.</Text>}
             {draft && !editing ? <View style={styles.line}>{editor}</View> : null}
             {draft ? null : (
               <Pressable accessibilityRole="button" onPress={() => setDraft(blank())} style={({ pressed }) => [styles.add, styles.line, pressed && styles.rowPressed]}>

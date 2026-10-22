@@ -600,7 +600,7 @@ const styleDefinitions = StyleSheet.create({
   cautionTitle: { ...typography.smallStrong, color: colors.warning },
   caution: { ...typography.small, color: colors.text, lineHeight: 20 },
   week: { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: 2 },
-  dayCol: { width: 116, gap: 8, padding: spacing.md, borderRadius: 18, backgroundColor: colors.surface },
+  dayCol: { width: 92, gap: 8, padding: spacing.md, borderRadius: 18, backgroundColor: colors.surface },
   dayColOpen: { backgroundColor: colors.brandDim },
   dayColRest: { backgroundColor: colors.bgElevated },
   dayColLabel: { ...typography.smallStrong, color: colors.textMuted },
