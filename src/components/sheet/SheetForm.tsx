@@ -5,6 +5,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { Chip, BrandWash } from '@/components/ui';
+import { Collapse } from '@/components/ui/Collapse';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, lift, radius, spacing, typography } from '@/theme';
 import { TextScale } from '@/theme/textScale';
@@ -238,7 +239,28 @@ export function Fine({ children }: { children: React.ReactNode }) {
 }
 
 /** The body of a sheet's form: its padding and the rhythm between parts. */
-export const formBody = { padding: spacing.lg, paddingTop: spacing.md, gap: 20, paddingBottom: spacing.xxl } as const;
+const FORM_GAP = 20;
+export const formBody = { padding: spacing.lg, paddingTop: spacing.md, gap: FORM_GAP, paddingBottom: spacing.xxl } as const;
+
+/**
+ * A section of a form that comes and goes with another choice (Match adds
+ * Result, Fitness adds What kind, Oct 22 sweep): it opens and folds shut with
+ * a smooth height change and a fade, so the sections below and Save glide to
+ * their new place instead of jumping. It carries the form's gap inside its
+ * fold, so while shut it takes no room at all. `render` is only called while
+ * open; while folding shut it keeps showing what it last drew.
+ */
+export function FormFold({ open, render }: { open: boolean; render: () => React.ReactNode }) {
+  const last = useRef<React.ReactNode>(null);
+  if (open) last.current = render();
+  return (
+    <View style={{ marginTop: -FORM_GAP }}>
+      <Collapse open={open}>
+        {last.current ? <View style={{ paddingTop: FORM_GAP }}>{last.current}</View> : null}
+      </Collapse>
+    </View>
+  );
+}
 
 const styleDefinitions = StyleSheet.create({
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingBottom: spacing.xs },

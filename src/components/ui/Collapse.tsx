@@ -7,7 +7,8 @@ const CURVE = Easing.bezier(0.22, 0.61, 0.36, 1);
 /**
  * Opens and closes its contents with an eased height and fade, instead of
  * snapping into place. The contents stay mounted, hidden at zero height, so
- * their real height is known before the first open.
+ * their real height is known before the first open; one open from the start
+ * is drawn at its own height on the very first frame.
  *
  * It runs on the animation thread (Reanimated), so a busy moment in the app
  * (setup saving, the keyboard coming up) never makes it stutter.
@@ -18,7 +19,8 @@ export function Collapse({ open, children, unclip = false }: {
   /** Once fully open, stop clipping, so a card's soft shadow inside shows whole (Oct 22). */
   unclip?: boolean;
 }) {
-  const height = useSharedValue(0);
+  // -1 until measured: open from the start, it is simply its own height on the first frame (no pop in once measured).
+  const height = useSharedValue(-1);
   const progress = useSharedValue(open ? 1 : 0);
   const [settledOpen, setSettledOpen] = useState(open);
   useEffect(() => {
@@ -27,10 +29,10 @@ export function Collapse({ open, children, unclip = false }: {
       if (finished && open) runOnJS(setSettledOpen)(true);
     });
   }, [open, progress]);
-  const style = useAnimatedStyle(() => ({
-    height: height.value ? progress.value * height.value : 0,
-    opacity: progress.value,
-  }));
+  const style = useAnimatedStyle(() => {
+    if (height.value < 0) return progress.value >= 1 ? { opacity: 1 } : { height: 0, opacity: progress.value };
+    return { height: progress.value * height.value, opacity: progress.value };
+  });
   return (
     <Animated.View
       style={[{ overflow: unclip && settledOpen ? 'visible' : 'hidden' }, style]}
@@ -38,7 +40,8 @@ export function Collapse({ open, children, unclip = false }: {
       accessibilityElementsHidden={!open}
       importantForAccessibility={open ? 'auto' : 'no-hide-descendants'}
     >
-      <View style={{ position: 'absolute', left: 0, right: 0, top: 0 }} onLayout={(e) => { height.value = e.nativeEvent.layout.height; }}>
+      {/* In the flow at its own height (the box above clips it), so it is measured even while shut. */}
+      <View onLayout={(e) => { height.value = e.nativeEvent.layout.height; }}>
         {children}
       </View>
     </Animated.View>

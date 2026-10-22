@@ -6,7 +6,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { DragSheet } from '@/components/DragSheet';
-import { Chips, Section, SheetTitle, Submit, formBody } from '@/components/sheet/SheetForm';
+import { Chips, FormFold, Section, SheetTitle, Submit, formBody } from '@/components/sheet/SheetForm';
 import { WhoYouPlayed } from '@/components/WhoYouPlayed';
 import { KIND_LABEL, activityDay, activityTitle, activityWhen, dayWords, fromWho, loggedLabel, privateLine, sessionEyebrow } from '@/features/activity/format';
 import { showLogged } from '@/features/activity/useTrackerSession';
@@ -612,11 +612,12 @@ function LogSession() {
             <Chips value={kind} onChange={(k) => { if (k) setKind(k); }} options={kinds} />
           </Section>
           {/* Fitness can say what it was, the way a workout from the Watch does: "Run", "Gym". */}
-          {kind === 'fitness' && !fresh ? (
+          {/* Each section that comes with a kind folds open and shut as the kind changes, so Save glides (Oct 22). */}
+          <FormFold open={kind === 'fitness' && !fresh} render={() => (
             <Section title="What kind">
               <Chips clearable value={workout} onChange={setWorkout} options={WORKOUT_KINDS} />
             </Section>
-          ) : null}
+          )} />
           <Section title="How long">
             {/* From a tracker the length is simply the tracker's (Oct 3): one line, with Edit for a break (hours and minutes, then Done). */}
             {fresh ? (
@@ -633,7 +634,7 @@ function LogSession() {
               <LengthPicker minutes={minutes} onChange={setMinutes} />
             )}
           </Section>
-          {kind === 'match' ? (
+          <FormFold open={kind === 'match'} render={() => (
             <Section title="Result">
               {/* A score that says who won decides it; the chips are for a match with no score, or one level on sets. */}
               {decided === undefined ? (
@@ -641,13 +642,14 @@ function LogSession() {
               ) : null}
               <ScoreField value={score} onChange={setScore} />
             </Section>
-          ) : canScore(kind) ? (
-            // A practice or drills can be scored too (Oct 6, owner): optional, just the sets.
+          )} />
+          {/* A practice or drills can be scored too (Oct 6, owner): optional, just the sets. */}
+          <FormFold open={kind !== 'match' && canScore(kind)} render={() => (
             <Section title="Score (optional)">
               <ScoreField kind={kind} value={score} onChange={setScore} />
             </Section>
-          ) : null}
-          {canTagKind(kind) ? (
+          )} />
+          <FormFold open={canTagKind(kind)} render={() => (
             <Section title="Who was there">
               <WhoYouPlayed
                 kind={kind}
@@ -659,7 +661,7 @@ function LogSession() {
                 suggested={fromHit?.playerIds ?? []}
               />
             </Section>
-          ) : null}
+          )} />
           {/* A tracker's session already knows its day. */}
           {fresh ? null : (
             <Section title="When">
