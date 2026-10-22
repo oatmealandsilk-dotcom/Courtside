@@ -103,7 +103,9 @@ function SearchBox({ value, onChangeText }: { value: string; onChangeText: (s: s
 function useWhoLine(id: ID, total: number, me: ID | null) {
   const { users, followingIds } = useApp();
   const known = facesFor(id).filter((x) => x !== me && followingIds.includes(x));
-  const u = known.length ? users.find((x) => x.id === known[0]) : undefined;
+  // Not always the same friend on every row: the one picked is steady per group.
+  const pick = known.length ? known[[...id].reduce((n, c) => n + c.charCodeAt(0), 0) % known.length] : undefined;
+  const u = pick ? users.find((x) => x.id === pick) : undefined;
   if (!u) return members(total);
   const rest = total - 1;
   return rest > 0 ? `${firstName(u)} and ${plural(rest, 'other', 'others')}` : `${firstName(u)} is in it`;
