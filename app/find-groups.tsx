@@ -184,7 +184,7 @@ export default function FindGroups() {
         onPress: state === 'joined' ? () => go(`/g/${g.id}`) : state === 'requested' ? () => cancel(g) : () => join(g),
         a11y: state === 'joined' ? `You’re in ${g.name}. Open it`
           : state === 'requested' ? `You asked to join ${g.name}. Cancel the request`
-          : faded ? `${g.ask ? 'Request' : 'Join'}. ${FULL_LINE}`
+          : faded ? `${g.ask ? 'Ask' : 'Join'}. ${FULL_LINE}`
           : state === 'request' ? `Ask to join ${g.name}` : `Join ${g.name}`,
         report: () => reportGroup(actions.reportUser, { id: g.id, name: g.name, description: g.description }),
       };
@@ -194,9 +194,8 @@ export default function FindGroups() {
         closeSignal={closeSignal}
         onDismissed={done}
         peekFraction={0.86}
-        plainGround={look !== 'a'}
         contentHeight={(rows !== undefined || off) && fitH ? fitH : undefined}
-        header={<LookHeader look={look} joined={feedGroups.length} onClose={dismiss} />}
+        header={<LookHeader look={look} joined={feedGroups.length} onClose={dismiss} onManage={() => go('/groups')} />}
       >
         <ScrollView
           contentContainerStyle={[styles.body, look === 'b' && styles.bodyB, look === 'c' && styles.bodyC]}
@@ -333,8 +332,8 @@ export default function FindGroups() {
 
 const styleDefinitions = StyleSheet.create({
   body: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: spacing.xxl, gap: spacing.lg },
-  // Design preview looks (see FindGroupsLooks): B's grouped sections sit further apart; C's courts and list breathe.
-  bodyB: { gap: spacing.xl },
+  // Design preview looks (see FindGroupsLooks): B's sections sit a little further apart; C's courts and list breathe.
+  bodyB: { gap: spacing.lg + spacing.xs },
   bodyC: { gap: spacing.xl, paddingTop: spacing.md },
   note: { ...typography.small, color: colors.textMuted, lineHeight: 19, paddingVertical: spacing.md, paddingHorizontal: spacing.xs },
   loading: { paddingVertical: spacing.xl },
