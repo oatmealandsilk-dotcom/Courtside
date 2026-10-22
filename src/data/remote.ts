@@ -1722,7 +1722,7 @@ const toGroup = (row: GroupRow): FeedGroup => ({
 /** The server's word for why a group action said no (migration 67), or 'failed'. */
 const groupWord = (error: { code?: string; message: string }) =>
   missingFunction(error) ? 'not_ready'
-    : /adults_only|their_age|group_limit|their_limit|not_admin|not_found|name_needed|slow_down|bad_photo|bad_look|blocked_words|invite_limit|not_member/.exec(error.message)?.[0] ?? 'failed';
+    : /adults_only|their_age|group_limit|their_limit|not_admin|not_found|name_needed|slow_down|bad_photo|bad_look|blocked_words|invite_limit|not_member|suspended/.exec(error.message)?.[0] ?? 'failed';
 
 /**
  * Of these messages, the ones your Hidden words hid for you (migration 117).

@@ -26,12 +26,14 @@
 --       - anyone blocked either way with the inviter or with an admin of
 --         the group, or who blocked the inviter in the app;
 --       - a suspended account; someone already in the group; yourself.
---     Someone who muted the inviter still gets the invite (so the mute
---     is not revealed) but no notification and no phone alert.
+--     Someone who muted the inviter is still invited (the inviter sees
+--     "Invited", so the mute is not revealed) but sees nothing: no
+--     notification, no phone alert, and it stays out of their invites list.
 --   * Against spam: one invite per group and person; a waiting one is never
 --     sent again; after "Not now" the same group can invite them again only
---     after 30 days; at most 30 new invites a day per inviter. A suspended
---     account can't invite.
+--     after 30 days; at most 30 new invites a day per inviter (a call that
+--     would go past it invites nobody, and says so). A suspended account
+--     can't invite.
 --   * An invite lapses (leaves the list, and Join says it isn't open) when
 --     the inviter is no longer in the group, a block appears between them,
 --     a teen stops following the inviter, or 30 days pass unanswered.
@@ -39,8 +41,8 @@
 --
 -- What changes, by name:
 --   feed_group_invites (new table): one row per (group, person invited).
---     The app only reads it (your own invites, and the ones you sent);
---     every change goes through the functions below.
+--     The app can't read or change it directly: reads go through
+--     my_feed_group_invites(), every change through the functions below.
 --   invite_to_feed_group(g, people), answer_feed_group_invite(g, accept),
 --     my_feed_group_invites(): what the app calls. Nothing existing is
 --     replaced: my_feed_groups, join_feed_group and the rest stay as they are.
@@ -116,11 +118,11 @@ create index if not exists feed_group_invites_inviter_idx on public.feed_group_i
 create index if not exists feed_group_invites_user_idx on public.feed_group_invites (user_id);
 
 alter table public.feed_group_invites enable row level security;
+-- No direct reads or writes: the app reads through my_feed_group_invites()
+-- (so an inviter never sees a "Not now", or that an invite turned into a
+-- join request) and changes rows only through the functions below.
 revoke all on public.feed_group_invites from anon, authenticated;
-grant select on public.feed_group_invites to authenticated;
 drop policy if exists "your invites" on public.feed_group_invites;
-create policy "your invites" on public.feed_group_invites for select to authenticated
-  using (user_id = auth.uid() or invited_by = auth.uid());
 
 -- A suspended account sends no invites (as for join requests, migration 124).
 drop trigger if exists refuse_if_suspended on public.feed_group_invites;
@@ -176,7 +178,6 @@ begin
   for who in
     select x from (select x, min(o) as o from unnest((coalesce(people, '{}'))[1:20]) with ordinality as u(x, o) where x is not null group by x) d order by o
   loop
-    exit when cardinality(added) >= allowed;
     continue when who = me;
     continue when not exists (select 1 from public.profiles p where p.id = who and p.suspended_at is null);
     continue when exists (select 1 from public.feed_group_members where group_id = g and user_id = who);
@@ -196,6 +197,9 @@ begin
         where (i.declined_at is not null and i.declined_at <= now() - interval '30 days')
            or (i.declined_at is null and not public.feed_group_invite_open(i.group_id, i.user_id, i.invited_by, i.created_at, i.declined_at));
     continue when not found;
+    -- Past the day's 30: nobody in this call is invited (it all rolls back),
+    -- so the app's "Invited" never covers someone who wasn't.
+    if cardinality(added) >= allowed then raise exception 'invite_limit'; end if;
     added := added || who;
     -- Muted you: invited, but not told.
     continue when exists (select 1 from public.user_state s where s.user_id = who and me::text = any (coalesce(s.muted_ids, '{}')));
@@ -294,6 +298,7 @@ returns jsonb language sql stable security definer set search_path = public as $
       from public.feed_group_invites i join public.feed_groups g on g.id = i.group_id
       where i.user_id = me.id
         and public.feed_group_invite_open(i.group_id, i.user_id, i.invited_by, i.created_at, i.declined_at)
+        and not exists (select 1 from public.user_state s where s.user_id = me.id and i.invited_by::text = any (coalesce(s.muted_ids, '{}')))
         and not exists (select 1 from public.feed_group_members m where m.group_id = i.group_id and m.user_id = me.id)), '[]'::jsonb),
     'sent', coalesce((
       select jsonb_object_agg(s.group_id, s.ids)
@@ -342,13 +347,14 @@ notify pgrst, 'reload schema';
 -- (a) The table, with row security on (expect true, 0 or more):
 -- select relrowsecurity, (select count(*) from feed_group_invites) from pg_class where relname = 'feed_group_invites';
 --
--- (b) Who may call what (expect true, true, true, false, false, false):
+-- (b) Who may call what (expect true, true, true, false, false, false, false):
 -- select has_function_privilege('authenticated', 'public.invite_to_feed_group(uuid, uuid[])', 'execute'),
 --        has_function_privilege('authenticated', 'public.answer_feed_group_invite(uuid, boolean)', 'execute'),
 --        has_function_privilege('authenticated', 'public.my_feed_group_invites()', 'execute'),
 --        has_function_privilege('anon', 'public.invite_to_feed_group(uuid, uuid[])', 'execute'),
 --        has_function_privilege('authenticated', 'public.feed_group_invite_open(uuid, uuid, uuid, timestamptz, timestamptz)', 'execute'),
---        has_table_privilege('authenticated', 'public.feed_group_invites', 'insert');
+--        has_table_privilege('authenticated', 'public.feed_group_invites', 'insert'),
+--        has_table_privilege('authenticated', 'public.feed_group_invites', 'select');
 --
 -- (c) The phone-alert trigger skips group invites (expect one line containing 'group-invite'):
 -- select pg_get_triggerdef(oid) from pg_trigger where tgname = 'push_for_notification';

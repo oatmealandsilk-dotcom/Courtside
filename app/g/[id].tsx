@@ -9,7 +9,7 @@ import { CourtSpinner } from '@/components/CourtSpinner';
 import { MenuSheet } from '@/components/MenuSheet';
 import { Tappable } from '@/components/Tappable';
 import type { FeedGroupCard } from '@/data/types';
-import { inviterName, toastForJoin } from '@/features/groups/GroupInvitesSection';
+import { INVITE_FULL, inviterName, toastForJoin } from '@/features/groups/GroupInvitesSection';
 import { GroupTile } from '@/features/groups/GroupTile';
 import { openGroupFeed } from '@/features/groups/openGroupFeed';
 import { reportGroup } from '@/features/groups/reportGroup';
@@ -40,6 +40,7 @@ function GroupPage() {
   const group = feedGroups.find((g) => g.id === id);
   const invite = group ? undefined : feedGroupInvites.find((i) => i.groupId === id);
   const inviter = invite ? users.find((u) => u.id === invite.inviterId) : undefined;
+  const inviteFull = !!invite && feedGroups.length >= MAX_GROUPS;
   const [card, setCard] = useState<FeedGroupCard | null | undefined>(undefined);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
@@ -149,11 +150,18 @@ function GroupPage() {
             <Avatar name={inviter?.name ?? inviterName(invite, users)} seed={inviter?.avatarSeed ?? invite.inviterId} uri={inviter?.avatarUrl} size={28} />
             <Text style={styles.invitedText}>{inviterName(invite, users)} invited you</Text>
           </View>
+          {/* Join first, as in Groups and Notifications. In 3 groups already: Join dimmed and the cap said up front. */}
           <View style={styles.inviteButtons}>
+            <View style={styles.fill}><Button label="Join" onPress={() => answerInvite(true)} loading={busy} disabled={busy || inviteFull} full /></View>
             <View style={styles.fill}><Button label="Not now" variant="secondary" onPress={() => answerInvite(false)} disabled={busy} full /></View>
-            <View style={styles.fill}><Button label="Join" onPress={() => answerInvite(true)} loading={busy} disabled={busy} full /></View>
           </View>
-          <Text style={styles.joinNote}>A group’s feed shows everything its members post. You can be in up to {MAX_GROUPS} groups.</Text>
+          {inviteFull ? (
+            <Pressable accessibilityRole="link" accessibilityLabel={`${INVITE_FULL} Manage your groups`} onPress={() => router.push('/groups' as never)}>
+              <Text style={styles.joinNote}>{INVITE_FULL} <Text style={styles.manage}>Manage</Text></Text>
+            </Pressable>
+          ) : (
+            <Text style={styles.joinNote}>A group’s feed shows everything its members post. You can be in up to {MAX_GROUPS} groups.</Text>
+          )}
         </View>
       ) : (
         <View style={styles.joinBox}>
@@ -265,6 +273,7 @@ const styleDefinitions = StyleSheet.create({
   inviteButtons: { flexDirection: 'row', gap: spacing.sm },
   fill: { flex: 1 },
   joinNote: { ...typography.small, color: colors.textMuted, textAlign: 'center', lineHeight: 19, paddingHorizontal: spacing.lg },
+  manage: { ...typography.smallStrong, color: colors.brand },
   note: { ...typography.small, color: colors.textMuted, textAlign: 'center', marginTop: spacing.md },
   section: { ...typography.smallStrong, color: colors.textMuted, paddingHorizontal: spacing.xs, paddingTop: spacing.xl, paddingBottom: spacing.sm },
   // The grouped list of Settings: a shade off the page, rows on hairlines.

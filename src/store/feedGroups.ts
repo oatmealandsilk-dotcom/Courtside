@@ -137,6 +137,8 @@ export function groupSentence(word: string): string {
     // Invites (migration 181).
     case 'invite_limit': return 'You’ve sent a lot of invites today. Try again tomorrow.';
     case 'not_member': return 'Only people in the group can invite.';
+    // A suspended account (migrations 124, 181): the app's own words for it, never "try again".
+    case 'suspended': return 'Your account is suspended, so you can’t do that right now.';
     default: return 'That didn’t go through. Check your connection and try again.';
   }
 }

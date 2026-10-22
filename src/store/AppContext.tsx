@@ -9736,6 +9736,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     patch.questions = questions.length === state.questions.length && questions.every((q, i) => q === state.questions[i]) ? state.questions : questions;
     return patch;
   }, [state.reportedIds, state.blockedIds, state.posts, state.stories, state.hitRequests, state.questions, state.answers, state.comments, state.coachQuestions, state.coachReplies, state.tips, state.currentUserId, amAdminNow]);
+  // Invites to groups as every screen shows them (the Groups sheet, the dots on Feed's + and the
+  // Profile menu, a group's page, Notifications): never one from someone you blocked or muted, at
+  // once, not only after the next read (the server leaves both out too, migration 181).
+  const shownInvites = useMemo(() => {
+    const hide = new Set([...state.blockedIds, ...state.blockedMeIds, ...state.mutedIds]);
+    if (!hide.size || !state.feedGroupInvites.some((i) => hide.has(i.inviterId))) return state.feedGroupInvites;
+    return state.feedGroupInvites.filter((i) => !hide.has(i.inviterId));
+  }, [state.feedGroupInvites, state.blockedIds, state.blockedMeIds, state.mutedIds]);
   // ------------------------------------------------------------ guest mode
   // Signed out on the website (Oct 17, owner: "we still want people to be
   // able to read discussions etc, or even view videos ... it's just when you
@@ -9914,8 +9922,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const value = useMemo<AppContextValue>(
     () => (guestValue
       ? { ...state, ...guestValue, ready: state.ready && state.authResolved, currentUser: null, actions: guestActions, seeing, shownAtCourt, ageSaysAdult, isGuest: true, guestLoaded: !!guest }
-      : { ...state, ...unreported, ready: state.ready && state.authResolved, currentUser, actions, seeing, shownAtCourt, ageSaysAdult, isGuest: false, guestLoaded: false }),
-    [state, unreported, currentUser, actions, seeing, shownAtCourt, ageSaysAdult, guestValue, guestActions, guest],
+      : { ...state, ...unreported, feedGroupInvites: shownInvites, ready: state.ready && state.authResolved, currentUser, actions, seeing, shownAtCourt, ageSaysAdult, isGuest: false, guestLoaded: false }),
+    [state, unreported, shownInvites, currentUser, actions, seeing, shownAtCourt, ageSaysAdult, guestValue, guestActions, guest],
   );
 
   return <AppContext.Provider value={value}><UsersContext.Provider value={value.users}><ActionsContext.Provider value={value.actions}><MyIdContext.Provider value={value.currentUserId}>{children}</MyIdContext.Provider></ActionsContext.Provider></UsersContext.Provider></AppContext.Provider>;

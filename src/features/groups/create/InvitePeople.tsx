@@ -43,27 +43,30 @@ export const INVITE_MAX = 20;
 /**
  * Sends the invites for a group: real ones once the server has them
  * (migration 181), otherwise the group's card in a chat with each, as
- * before (never both, so nobody is told twice). How many were sent.
+ * before (never both, so nobody is told twice). Waits for the server, so
+ * the caller says "Invited" only once it really went: `ok` false comes
+ * with the server's sentence (too many today, say) and nobody was invited.
+ * Shows no toast itself; the haptic is the action's own.
  */
+export type SentInvites = { ok: boolean; count: number; error?: string };
 export function useSendGroupInvites() {
   const { feedGroupInvitesLive, actions } = useApp();
-  return useCallback((group: { id: ID; name: string }, people: ID[]): number => {
-    if (!people.length) return 0;
+  return useCallback(async (group: { id: ID; name: string }, people: ID[]): Promise<SentInvites> => {
+    if (!people.length) return { ok: true, count: 0 };
     if (!feedGroupInvitesLive) {
       actions.shareToChats({ userIds: people }, { kind: 'group', id: group.id, name: group.name });
-      return people.length;
+      haptics.reward();
+      return { ok: true, count: people.length };
     }
-    void actions.inviteToFeedGroup(group.id, people).then((out) => {
-      if (!out.ok && out.error) showToast({ title: out.error, icon: 'alert-circle-outline', long: true });
-    });
-    return people.length;
+    const out = await actions.inviteToFeedGroup(group.id, people);
+    return out.ok ? { ok: true, count: people.length } : { ok: false, count: 0, error: out.error ?? 'That didn’t go through. Check your connection and try again.' };
   }, [feedGroupInvitesLive, actions]);
 }
 
 /** "Only people Dev follows can invite Dev to a group." The rule only, never why. */
 const inviteLockNote = (who: { first: string; label: string }) => `Only people ${who.label} follows can invite ${who.first} to a group.`;
 
-type Why = 'member' | 'invited' | 'locked' | null;
+type Why = 'member' | 'asking' | 'invited' | 'locked' | null;
 
 export function InvitePeople({ groupId, groupName, picked, onPicked }: {
   groupId: ID; groupName: string; picked: ID[]; onPicked: React.Dispatch<React.SetStateAction<ID[]>>;
@@ -74,7 +77,10 @@ export function InvitePeople({ groupId, groupName, picked, onPicked }: {
   const [note, setNote] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const link = shareLink('group', groupId, currentUser?.handle);
-  const inGroup = new Set(feedGroups.find((g) => g.id === groupId)?.members.map((m) => m.id) ?? []);
+  const here = feedGroups.find((g) => g.id === groupId);
+  const inGroup = new Set(here?.members.map((m) => m.id) ?? []);
+  // Already asking to join (an admin sees the requests): Approve on the group's page lets them in, so not invited too.
+  const asking = new Set(here?.requests ?? []);
   const sentHere = new Set(feedGroupInvitesLive ? feedGroupSentInvites[groupId] ?? [] : []);
 
   // Suggested: people you follow who follow you back, then people who follow you; then the rest
@@ -112,13 +118,14 @@ export function InvitePeople({ groupId, groupName, picked, onPicked }: {
   // With real invites the group rule decides (a teen must follow you), as for adding to a chat group;
   // before them, the chat rule (the invite was a chat message).
   const why = (u: User): Why => (inGroup.has(u.id) ? 'member'
+    : asking.has(u.id) ? 'asking'
     : sentHere.has(u.id) ? 'invited'
     : !(feedGroupInvitesLive ? actions.canAddToGroup(u.id) : actions.canMessage(u.id)) ? 'locked' : null);
 
   const toggle = async (u: User) => {
     if (pickedNow.current.includes(u.id)) { haptics.untap(); onPicked((now) => now.filter((x) => x !== u.id)); setNote(null); return; }
     const w = why(u);
-    if (w === 'member' || w === 'invited') return;
+    if (w === 'member' || w === 'asking' || w === 'invited') return;
     // Locked, unless they have followed you since the app opened: ask before saying no.
     if (w === 'locked' && !(await actions.reachNow(u.id))) { setNote(feedGroupInvitesLive ? inviteLockNote(named(u, users)) : chatLockNote(named(u, users))); return; }
     // The picks as they are now, not as they were before the wait: two quick taps both count.
@@ -202,9 +209,9 @@ export function InvitePeople({ groupId, groupName, picked, onPicked }: {
               {list.map((u, i) => {
                 const on = picked.includes(u.id);
                 const w = on ? null : why(u);
-                const done = w === 'member' || w === 'invited';
-                const status = w === 'member' ? 'In the group' : w === 'invited' ? 'Invited' : w === 'locked' ? (feedGroupInvitesLive ? 'Can’t invite yet' : 'Can’t message yet') : `@${u.handle}`;
-                const said = w === 'member' ? 'already in the group' : w === 'invited' ? 'invited' : w === 'locked' ? (feedGroupInvitesLive ? 'can’t be invited yet' : 'can’t be messaged yet') : `@${u.handle}`;
+                const done = w === 'member' || w === 'asking' || w === 'invited';
+                const status = w === 'member' ? 'In the group' : w === 'asking' ? 'Asking to join' : w === 'invited' ? 'Invited' : w === 'locked' ? (feedGroupInvitesLive ? 'Can’t invite yet' : 'Can’t message yet') : `@${u.handle}`;
+                const said = w === 'member' ? 'already in the group' : w === 'asking' ? 'asking to join, approve them on the group’s page' : w === 'invited' ? 'invited' : w === 'locked' ? (feedGroupInvitesLive ? 'can’t be invited yet' : 'can’t be messaged yet') : `@${u.handle}`;
                 return (
                   <Pressable
                     key={u.id}
