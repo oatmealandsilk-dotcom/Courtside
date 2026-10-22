@@ -77,7 +77,7 @@ export function SigSessionPanel({ session, author, people, onPress, spoken }: {
         {session.kind === 'fitness' || session.workout ? null : <CourtGlyph size={10} color={colors.textMuted} />}
         <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={[typography.small, { color: colors.textMuted, flex: 1 }]}>{meta}</Text>
         {isMatch && session.won !== undefined ? (
-          <Text maxFontSizeMultiplier={TextScale.CARD} style={[typography.smallStrong, { color: session.won ? colors.brand : colors.textMuted }]}>{session.won ? 'Won' : 'Lost'}</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={[typography.smallStrong, { color: session.won ? colors.text : colors.textMuted }]}>{session.won ? 'Won' : 'Lost'}</Text>
         ) : null}
       </View>
       <View style={{ marginTop: spacing.md }}>
