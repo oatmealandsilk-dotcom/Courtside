@@ -185,11 +185,11 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   const textOn = colors.text;
   const textOff = colors.textMuted;
   const playersWord = useAnimatedStyle(() => {
-    const at = Math.max(0, Math.min(1, underline.base.value + underline.progress.value));
+    const at = Math.max(0, Math.min(1, lineBase.value + lineProgress.value));
     return { color: interpolateColor(at, [0, 1], [textOn, textOff]) };
   });
   const threadsWord = useAnimatedStyle(() => {
-    const at = Math.max(0, Math.min(1, underline.base.value + underline.progress.value));
+    const at = Math.max(0, Math.min(1, lineBase.value + lineProgress.value));
     return { color: interpolateColor(at, [0, 1], [textOff, textOn]) };
   });
   const [search, setSearch] = useState('');
@@ -884,7 +884,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   // On a computer the row and each section's words keep to the page's column; the sections still scroll across the whole window.
   const column = isPhone ? undefined : LAYOUT.soloColumn;
   return (
-    <Screen wash scroll={false} scrollsInside padded={false} unconstrained
+    <Screen memoryKey="discuss" wash scroll={false} scrollsInside padded={false} unconstrained
       title="Community"
       right={isGuest ? <GuestSignIn /> :
         // Bell, chats, search: the same order as Profile (bell, chats, then the page's own button), so both pages match.
