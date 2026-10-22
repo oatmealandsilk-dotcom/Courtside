@@ -159,7 +159,19 @@ export function SectionPager({ index, panes, onIndex, onLand, progress, depth = 
         runOnJS(setMoving)(false);
       });
     }
-    else { position.value = index; if (progress) progress.value = 0; if (landing) runOnUI(landing)(index); }
+    else {
+      // Off screen: same order as the glide. Unclip first and wait a frame so
+      // the taller row has committed, then jump, then shrink to the new pane.
+      setMoving(true);
+      const dest = index;
+      requestAnimationFrame(() => runOnUI(() => {
+        'worklet';
+        position.value = dest;
+        if (progress) progress.value = 0;
+        if (landing) landing(dest);
+        runOnJS(setMoving)(false);
+      })());
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [index, position]);
 
