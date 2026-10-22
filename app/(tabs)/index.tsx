@@ -1873,9 +1873,12 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, onSettled }: {
               // had on show and left for another tab keeps its window (as on main), so
               // coming back and flicking on lands on clips already in; any still
               // to fetch wait behind everything the feed on show wants.
-              const near = warming || (paused && !onShowOnce.current) ? ahead === 0 : distance <= WINDOW || (ahead > 0 && ahead <= AHEAD);
+              // On a phone a tab out of sight keeps only the page either side (a player each holds a
+              // decoder while paused, and a phone has only so many): fewer than main's four per feed.
+              // A feed covered by a page pushed over it (a post, a profile) waits behind the one on show.
+              const near = warming || (paused && !onShowOnce.current) ? ahead === 0 : paused && Platform.OS !== 'web' ? distance <= WINDOW : distance <= WINDOW || (ahead > 0 && ahead <= AHEAD);
               const warmOnly = warming || !!paused;
-              const preloadRank = (ahead < 0 ? 2.5 : ahead) + (paused ? 10 : 0);
+              const preloadRank = (ahead < 0 ? 2.5 : ahead) + (paused || (!focused && !warming && ahead !== 0) ? 10 : 0);
               const strip = index === suggestHost ? suggestStrip : null;
               // A session from a player near you, not followed yet: "Near you", with Follow.
               const nearUser = scope?.activities && item.type === 'post' && nearAuthors.has(item.post.authorId) && !followingIds.includes(item.post.authorId) ? usersById.get(item.post.authorId) : undefined;

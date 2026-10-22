@@ -17,6 +17,8 @@ import { connectionIsQuick } from '@/lib/netSpeed';
  *    on a slow connection (the last clips took over two seconds, lib/netSpeed)
  *    one: there two at once only made the one you land on later;
  *  - nothing new starts while the app is in the background;
+ *  - in a browser a feed out of sight (rank 10 and up) fetches only once the feed on show has been
+ *    still a while with its near clips in, and one still fetching gives way when a clip comes on screen;
  *  - a preload that has its opening in (`ready`) frees its turn for the next;
  *    one that never says so (a browser told to fetch only the metadata, a
  *    stalled fetch) frees it anyway after TURN_MS, so it never blocks the queue.
@@ -53,6 +55,17 @@ let screenInAt = 0;
 const TURN_MS = 4000;
 /** However much a turn is still fetching, it hands on after this: a far, heavy clip never holds up a nearer one for long (it keeps its player). */
 const TURN_MAX_MS = 12000;
+/**
+ * A browser's feed out of sight (a tab warmed or left behind For you, or covered by a page: rank 10 and
+ * up) fetches only once the feed on show has been still this long with everything near it in. A browser
+ * keeps pulling a clip once started, and a hidden tab's taking a share of the link as you flick made the
+ * clip you land on wait longer than on main. One still fetching when a new clip comes on screen is cut off.
+ */
+const BACK_STILL_MS = 5000;
+const BACK_RANK = 10;
+/** When a clip last came on screen or started playing there. */
+let movedOnAt = 0;
+let backTimer: ReturnType<typeof setTimeout> | null = null;
 
 type Entry = { rank: number; ready: boolean; since: number };
 const waiting = new Map<number, Entry>();
@@ -99,11 +112,28 @@ function settle() {
     const left = Math.min(...waits.filter((ms) => ms > 0));
     screenTimer = setTimeout(settle, left + 10);
   }
+  let changed = false;
+  const web = Platform.OS === 'web';
+  const stillFor = now - movedOnAt;
+  if (web && (screenBusy || stillFor < BACK_STILL_MS)) {
+    // A hidden feed's clip still fetching as a new one comes on screen gives the link back
+    // (its page keeps its cover; ClipPlayback.web drops the half-fetched file).
+    for (const id of [...fetching]) {
+      const e = waiting.get(id);
+      if (!e || e.rank < BACK_RANK || e.ready) continue;
+      fetching.delete(id); turnAt.delete(id); movedAt.delete(id); given.delete(id);
+      changed = true;
+    }
+  }
+  const nearIn = ![...waiting.values()].some((e) => e.rank < BACK_RANK && !e.ready);
+  const backOk = !web || (!screenBusy && !onScreen.size && stillFor >= BACK_STILL_MS && nearIn);
+  if (backTimer) { clearTimeout(backTimer); backTimer = null; }
+  if (web && !backOk && !screenBusy && stillFor < BACK_STILL_MS && [...waiting.values()].some((e) => e.rank >= BACK_RANK && !e.ready)) backTimer = setTimeout(settle, BACK_STILL_MS - stillFor + 10);
   const before = given.size;
   if (!away) {
     const room = screenBusy ? 0 : quick ? AT_ONCE : 1;
     const reach = quick || Platform.OS !== 'web' ? Infinity : SLOW_WEB_REACH;
-    const queue = [...waiting].filter(([id, e]) => !e.ready && !given.has(id) && e.rank <= reach).sort((a, b) => a[1].rank - b[1].rank || a[1].since - b[1].since);
+    const queue = [...waiting].filter(([id, e]) => !e.ready && !given.has(id) && e.rank <= reach && (e.rank < BACK_RANK || backOk)).sort((a, b) => a[1].rank - b[1].rank || a[1].since - b[1].since);
     for (const [id] of queue) {
       if (fetching.size >= room) break;
       fetching.add(id);
@@ -118,7 +148,7 @@ function settle() {
     turnTimer = setTimeout(settle, Math.max(0, left) + 10);
   }
   // Only a new turn changes what any clip may do (a turn handed back changes nothing on screen).
-  if (given.size !== before) for (const fn of [...listeners]) fn();
+  if (changed || given.size !== before) for (const fn of [...listeners]) fn();
 }
 
 AppState.addEventListener('change', (state) => {
@@ -145,6 +175,7 @@ export function usePreloadTurn(want: boolean, rank: number, playing: boolean, re
   const id = useRef(0);
   if (!id.current) id.current = nextId++;
   if (moving) moving.current = () => { if (fetching.has(id.current)) movedAt.set(id.current, Date.now()); };
+  const wasActive = useRef(false);
   const [, bump] = useState(0);
   useEffect(() => {
     const fn = () => bump((n) => n + 1);
@@ -154,6 +185,9 @@ export function usePreloadTurn(want: boolean, rank: number, playing: boolean, re
   useEffect(() => {
     const me = id.current;
     if (active) given.add(me);
+    // A clip coming on screen, preloaded or not, is the feed on show moving.
+    if (active && !wasActive.current) movedOnAt = Date.now();
+    wasActive.current = active;
     if (want && !active) {
       const had = waiting.get(me);
       waiting.set(me, { rank, ready, since: had?.since ?? Date.now() });
@@ -162,7 +196,7 @@ export function usePreloadTurn(want: boolean, rank: number, playing: boolean, re
     }
     // Out of the window altogether: its next visit queues afresh.
     if (!want && !active) given.delete(me);
-    if (active && !ready) { if (!onScreen.has(me)) onScreen.set(me, Date.now()); } else if (onScreen.delete(me) && active) screenInAt = Date.now();
+    if (active && !ready) { if (!onScreen.has(me)) onScreen.set(me, Date.now()); } else if (onScreen.delete(me) && active) screenInAt = movedOnAt = Date.now();
     schedule();
   }, [want, rank, active, ready]);
   useEffect(() => () => {

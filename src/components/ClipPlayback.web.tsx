@@ -148,6 +148,24 @@ function ClipPlaybackInner({ uri, poster, active: wanted, preload = false, prelo
   const fetchHint = active ? 'auto' : preload && turn ? (warmOnly || ready ? 'metadata' : 'auto') : 'none';
   // A new hint is a new fetch: it holds its turn again until it stops or has its frame.
   useEffect(() => { setIdle(false); }, [fetchHint]);
+  // A feed out of sight whose turn was taken back (a clip came on screen while it was still fetching,
+  // features/feed/preloadQueue) really stops: a browser carries on with a started file whatever the hint
+  // says, so its file is let go until its turn comes again. Only before its first frame: its page's
+  // cover is still up, so nothing changes on screen.
+  const cut = useRef(false);
+  useEffect(() => {
+    const el = video.current;
+    if (!el) return;
+    if (fetchHint === 'none' && !active && preloadRank >= 10 && el.networkState === 2 && el.readyState < 2) {
+      el.removeAttribute('src');
+      el.load();
+      cut.current = true;
+    } else if (fetchHint !== 'none' && cut.current) {
+      cut.current = false;
+      el.src = uri;
+    }
+  }, [fetchHint]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { cut.current = false; }, [uri]);
   const stopped = (el: HTMLVideoElement) => { if (!active && fetchHint !== 'none' && el.readyState >= 1) setIdle(true); };
   // Gone from the page (or given another clip): what it had fetched goes with it.
   useEffect(() => () => latestReady.current?.(false), [uri]);
