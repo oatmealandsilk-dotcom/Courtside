@@ -301,7 +301,7 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, {
         const dir = Math.abs(dy) > 0.3 ? (dy > 0 ? 1 : -1) : 0;
         if (dir !== 0 && dir !== barDir.current) { barDir.current = dir; glideBar(dir > 0); }
         // The Feed's top row moves with the feed: forward takes it out, back brings it in (a jump of half a page at once is code, not a finger).
-        if (rowRef.current && Math.abs(dy) < el.clientHeight / 2) followRow(rowRef.current, dy, offPage(el.scrollTop, el.clientHeight), rowDrag.current);
+        if (rowRef.current && Math.abs(dy) < el.clientHeight / 2) followRow(rowRef.current, dy, el.scrollTop, el.clientHeight, rowDrag.current);
       }
       lastFrac.current = frac;
       // Quiet for a beat after the last movement means the page has landed

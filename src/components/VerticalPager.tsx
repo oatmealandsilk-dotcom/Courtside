@@ -246,7 +246,7 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
         if (dir !== 0 && dir !== barDir.value) { barDir.value = dir; glideBar(dir > 0); }
         // The top row moves with the feed, frame by frame: forward takes it out, back brings it in.
         // Up in the pull strip it is always in. A jump of more than half a page in one frame is code, not a finger.
-        if (row) { if (y < top) showRow(row); else if (Math.abs(dy) < h / 2) followRow(row, dy, offPage(y - top, h), rowDrag.value); }
+        if (row) { if (y < top) showRow(row); else if (Math.abs(dy) < h / 2) followRow(row, dy, y - top, h, rowDrag.value); }
       }
       lastY.value = y;
       pageH.value = h;

@@ -25,14 +25,6 @@ const SETTLE_OUT = 180;
 const SETTLE_IN = 220;
 const EASE = Easing.bezier(0.22, 1, 0.36, 1);
 
-/**
- * Coming back a page, the row stays out of the way of the page sliding in under it
- * (the row has no backing, so words would pass under words, Oct 22 review): it is
- * held out while the feed is more than this far from a page's resting place, and
- * slides in over the last ROW_TRAVEL points with that page's own header. A short
- * pull back at rest (less than this) leaves it where it is.
- */
-export const ROW_FREE = 64;
 /** Within this many points of a page's resting place, the feed counts as resting on it (a hold may bring the row back). */
 export const AT_REST = 4;
 
@@ -58,18 +50,36 @@ export function dragFrom(row: SharedValue<number>, page: number): RowDrag {
 }
 
 /**
- * The feed moved `dy` points (forward is positive) and now sits `off` points from the
- * nearest page's resting place: the row moves with it. After the finger lifts, a
- * move against the drag (the page springing back where it started) does not count,
- * or a pull back would end with the row out and a nudge forward with it in.
+ * The feed moved `dy` points (forward is positive) and is now at `y` (from the first
+ * page's top; pages `h` tall): the row moves with it.
+ *
+ * Forward takes it out with the finger. Back is shaped by the pages, because the row
+ * has no backing and words would pass under words (Oct 22 review): the page being
+ * left slides down and the bottom of the page before it comes in under the row, so the
+ * row goes up and out as the feed leaves its resting place, stays out while the page
+ * before travels, and slides back in over the last ROW_TRAVEL points as that page
+ * settles, together with its name. A row already out stays out until then, so it
+ * never blinks in and out at the start of a pull back.
+ *
+ * After the finger lifts, a move against the drag (the page springing back where it
+ * started) does not count, or a pull back would end with the row out and a nudge
+ * forward with it in; settleRow decides those at rest.
  */
-export function followRow(row: SharedValue<number>, dy: number, off: number, drag?: RowDrag) {
+export function followRow(row: SharedValue<number>, dy: number, y: number, h: number, drag?: RowDrag) {
   'worklet';
   if (!dy) return;
-  const against = !!drag && drag.page >= 0 && drag.lifted && Math.sign(dy) !== Math.sign(drag.net);
-  let next = against ? row.value : Math.max(0, Math.min(1, row.value + dy / ROW_TRAVEL));
-  if (dy < 0) next = Math.max(next, Math.max(0, Math.min(1, (off - ROW_FREE) / ROW_TRAVEL)));
-  if (next !== row.value) row.value = next;
+  if (drag && drag.page >= 0 && drag.lifted && Math.sign(dy) !== Math.sign(drag.net)) return;
+  const v = row.value;
+  let next: number;
+  if (dy > 0) next = Math.min(1, v + dy / ROW_TRAVEL);
+  else {
+    // How far the page coming down is from its resting place, and how far the feed is from the nearest one.
+    const above = h > 0 ? ((y % h) + h) % h : 0;
+    const off = Math.min(above, h - above);
+    next = Math.max(Math.min(1, off / ROW_TRAVEL), Math.min(v, Math.min(1, above / ROW_TRAVEL)));
+  }
+  next = Math.max(0, next);
+  if (next !== v) row.value = next;
 }
 
 /** Bring the row back: a hold, a tap on the strip, the first page, a pull to refresh, a pause. */
