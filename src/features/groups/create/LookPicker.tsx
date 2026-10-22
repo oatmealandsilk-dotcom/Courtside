@@ -9,7 +9,11 @@ import { groupInitials } from '@/features/groups/GroupTile';
 import { GROUP_EMOJI, colorChoices, tileColors } from '@/features/groups/look';
 import { useGroupPhotoPick } from '@/features/groups/create/useGroupPhotoPick';
 import * as haptics from '@/lib/haptics';
-import { colors, font, lift, radius, spacing, typography } from '@/theme';
+import { colors, font, lift as liftDrawn, radius, spacing, typography } from '@/theme';
+import { CALM_SHEETS } from '@/design/sendToPreview';
+
+// The calm preview's sheets (?ss=b, web): flat grey wells, nothing floating on a shadow.
+const lift = CALM_SHEETS ? { boxShadow: 'none' } : liftDrawn;
 import { useThemedStyles } from '@/theme/ThemeProvider';
 
 /*
@@ -123,13 +127,13 @@ const styleDefinitions = StyleSheet.create({
   swatch: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: GAP },
   cell: {
-    ...lift, width: CELL, height: CELL, borderRadius: 14, backgroundColor: colors.surface,
-    alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: colors.surface,
+    ...lift, width: CELL, height: CELL, borderRadius: 14, backgroundColor: CALM_SHEETS ? colors.surfaceAlt : colors.surface,
+    alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: CALM_SHEETS ? colors.surfaceAlt : colors.surface,
   },
   cellOn: { boxShadow: 'none' },
   emoji: { fontSize: 22, lineHeight: 28, textAlign: 'center' },
   letters: { ...font('700'), fontSize: 14, letterSpacing: -0.2 },
-  card: { ...lift, borderRadius: 18, backgroundColor: colors.surface },
+  card: { ...lift, borderRadius: 18, backgroundColor: CALM_SHEETS ? colors.surfaceAlt : colors.surface },
   upload: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, height: 56, paddingHorizontal: spacing.md },
   uploadIcon: { width: 34, height: 34, borderRadius: 11, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
   uploadText: { ...typography.body, ...font('600'), color: colors.text, flex: 1 },

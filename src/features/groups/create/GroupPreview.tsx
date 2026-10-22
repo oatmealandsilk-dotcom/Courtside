@@ -4,7 +4,11 @@ import { StyleSheet, Text, View } from 'react-native';
 import type { GroupLook } from '@/data/types';
 import { GroupTile } from '@/features/groups/GroupTile';
 import { lookWords } from '@/features/groups/look';
-import { colors, font, lift, radius, spacing, typography } from '@/theme';
+import { colors, font, lift as liftDrawn, radius, spacing, typography } from '@/theme';
+import { CALM_SHEETS } from '@/design/sendToPreview';
+
+// The calm preview's sheets (?ss=b, web): flat grey wells, nothing floating on a shadow.
+const lift = CALM_SHEETS ? { boxShadow: 'none' } : liftDrawn;
 import { useThemedStyles } from '@/theme/ThemeProvider';
 
 /*
@@ -48,7 +52,7 @@ export function GroupPreview({ name, look, ask, listed, about, members = 1 }: {
 }
 
 const styleDefinitions = StyleSheet.create({
-  card: { ...lift, borderRadius: 20, backgroundColor: colors.surface, paddingHorizontal: spacing.md, paddingTop: 10, paddingBottom: spacing.md, gap: 8 },
+  card: { ...lift, borderRadius: 20, backgroundColor: CALM_SHEETS ? colors.surfaceAlt : colors.surface, paddingHorizontal: spacing.md, paddingTop: 10, paddingBottom: spacing.md, gap: 8 },
   caption: { ...typography.caption, fontSize: 10, letterSpacing: 0.8, color: colors.textFaint },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   words: { flex: 1, minWidth: 0, gap: 1 },

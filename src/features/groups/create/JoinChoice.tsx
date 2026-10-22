@@ -5,7 +5,11 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { Toggle } from '@/components/ui';
 import * as haptics from '@/lib/haptics';
-import { colors, font, lift, radius, spacing, typography } from '@/theme';
+import { colors, font, lift as liftDrawn, radius, spacing, typography } from '@/theme';
+import { CALM_SHEETS } from '@/design/sendToPreview';
+
+// The calm preview's sheets (?ss=b, web): flat grey wells, nothing floating on a shadow.
+const lift = CALM_SHEETS ? { boxShadow: 'none' } : liftDrawn;
 import { useThemedStyles } from '@/theme/ThemeProvider';
 
 /*
@@ -85,7 +89,7 @@ const styleDefinitions = StyleSheet.create({
   card: {
     ...lift, flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: 76,
     paddingVertical: spacing.md, paddingHorizontal: spacing.lg, borderRadius: 20,
-    backgroundColor: colors.surface, borderWidth: 1.5, borderColor: colors.surface,
+    backgroundColor: CALM_SHEETS ? colors.surfaceAlt : colors.surface, borderWidth: 1.5, borderColor: CALM_SHEETS ? colors.surfaceAlt : colors.surface,
   },
   cardOn: { borderColor: colors.brand },
   pressed: { opacity: PRESS_DIM },

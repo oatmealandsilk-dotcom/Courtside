@@ -4,7 +4,11 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { StepDots } from '@/features/groups/create/StepDots';
-import { colors, lift, spacing, typography } from '@/theme';
+import { colors, lift as liftDrawn, spacing, typography } from '@/theme';
+import { CALM_SHEETS } from '@/design/sendToPreview';
+
+// The calm preview's sheets (?ss=b, web): flat grey wells, nothing floating on a shadow.
+const lift = CALM_SHEETS ? { boxShadow: 'none' } : liftDrawn;
 import { useThemedStyles } from '@/theme/ThemeProvider';
 
 /*
@@ -46,11 +50,11 @@ export function FlowHeader({ title, line, onClose, onBack, step, closeDisabled }
 const styleDefinitions = StyleSheet.create({
   head: { paddingHorizontal: spacing.lg, paddingBottom: spacing.sm, gap: spacing.md },
   topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  round: { ...lift, width: 34, height: 34, borderRadius: 17, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' },
+  round: { ...lift, width: 34, height: 34, borderRadius: 17, backgroundColor: CALM_SHEETS ? colors.surfaceAlt : colors.surface, alignItems: 'center', justifyContent: 'center' },
   roundSpace: { width: 34, height: 34 },
   pressed: { opacity: PRESS_DIM },
   titles: { gap: 3 },
   // The same title as SheetTitle's, so the group sheets match every other sheet.
-  title: { ...typography.title, fontSize: 24, letterSpacing: -0.8, color: colors.text },
+  title: CALM_SHEETS ? { ...typography.heading, letterSpacing: -0.2, color: colors.text } : { ...typography.title, fontSize: 24, letterSpacing: -0.8, color: colors.text },
   line: { ...typography.small, color: colors.textMuted, lineHeight: 18 },
 });

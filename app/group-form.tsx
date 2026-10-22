@@ -23,7 +23,11 @@ import { show as showToast } from '@/lib/toast';
 import { useReducedMotion } from '@/lib/useReducedMotion';
 import { useApp } from '@/store/AppContext';
 import { ABOUT_MAX, MAX_GROUPS, NAME_MAX, NAME_MIN, tidyGroupName } from '@/store/feedGroups';
-import { colors, font, lift, spacing, typography } from '@/theme';
+import { colors, font, lift as liftDrawn, spacing, typography } from '@/theme';
+import { CALM_SHEETS } from '@/design/sendToPreview';
+
+// The calm preview's sheets (?ss=b, web): flat grey wells, nothing floating on a shadow.
+const lift = CALM_SHEETS ? { boxShadow: 'none' } : liftDrawn;
 import { useThemedStyles } from '@/theme/ThemeProvider';
 
 /*
@@ -505,7 +509,7 @@ const styleDefinitions = StyleSheet.create({
   nameWrap: { gap: 6 },
   nameBox: {
     ...lift, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 62, paddingLeft: spacing.lg, paddingRight: spacing.md,
-    borderRadius: 20, backgroundColor: colors.surface, borderWidth: 1.5, borderColor: colors.surface,
+    borderRadius: 20, backgroundColor: CALM_SHEETS ? colors.surfaceAlt : colors.surface, borderWidth: 1.5, borderColor: CALM_SHEETS ? colors.surfaceAlt : colors.surface,
   },
   nameBoxIssue: { borderColor: colors.danger },
   nameInput: { flex: 1, minWidth: 0, ...font('600'), fontSize: 21, letterSpacing: -0.5, color: colors.text, paddingVertical: 14, ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : {}) },

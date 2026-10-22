@@ -14,7 +14,11 @@ import { confirm } from '@/lib/confirm';
 import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
 import { MAX_GROUPS } from '@/store/feedGroups';
-import { colors, font, lift, radius, spacing, typography } from '@/theme';
+import { colors, font, lift as liftDrawn, radius, spacing, typography } from '@/theme';
+import { CALM_SHEETS } from '@/design/sendToPreview';
+
+// The calm preview's sheets (?ss=b, web): flat grey wells, nothing floating on a shadow.
+const lift = CALM_SHEETS ? { boxShadow: 'none' } : liftDrawn;
 import { useThemedStyles } from '@/theme/ThemeProvider';
 
 /*
@@ -280,7 +284,7 @@ const styleDefinitions = StyleSheet.create({
   note: { ...typography.small, color: colors.textMuted, lineHeight: 19, paddingVertical: spacing.md, paddingHorizontal: spacing.xs },
   loading: { paddingVertical: spacing.xl },
   // The grouped list of Settings and the Groups page: a shade off the sheet, rows on hairlines.
-  card: { ...lift, borderRadius: 20, backgroundColor: colors.surface, overflow: 'hidden' },
+  card: { ...lift, borderRadius: 20, backgroundColor: CALM_SHEETS ? colors.surfaceAlt : colors.surface, overflow: 'hidden' },
   pressed: { opacity: PRESS_DIM },
   dim: { opacity: 0.55 },
   create: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md, paddingHorizontal: spacing.lg, minHeight: 72 },
@@ -293,7 +297,7 @@ const styleDefinitions = StyleSheet.create({
   mine: { gap: spacing.sm, paddingHorizontal: 2, paddingVertical: 2 },
   mineChip: {
     ...lift, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, height: 40, paddingLeft: 6, paddingRight: spacing.md,
-    borderRadius: radius.pill, backgroundColor: colors.surface, maxWidth: 220,
+    borderRadius: radius.pill, backgroundColor: CALM_SHEETS ? colors.surfaceAlt : colors.surface, maxWidth: 220,
   },
   mineName: { ...typography.smallStrong, color: colors.text, flexShrink: 1 },
   dot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.brand },
