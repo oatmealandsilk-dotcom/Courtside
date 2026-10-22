@@ -55,6 +55,7 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
   onGone?: () => void;
   onBuffered?: () => void;
   onFailed?: () => void;
+  onFetched?: () => void;
   held?: boolean;
   surfaceType?: SurfaceType;
 }>(function ClipVideo({ uri, active: wanted = true, muted = true, paused = false, fit = 'cover', trimStart = 0, trimEnd, speed, volume, onProgress, onReady, onSize, onGone, onBuffered, onFailed, held = false, surfaceType }: {
@@ -74,6 +75,8 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
   onBuffered?: () => void;
   /** The file cannot load (it still reports ready, so nothing waits on it): the page keeps its poster up. */
   onFailed?: () => void;
+  /** A browser's "done fetching for now" (preload queue); a phone's player says onBuffered / onReady instead, so it is never called here. */
+  onFetched?: () => void;
   /**
    * The clip is on the comments stage: it counts as on top although the
    * comments page is over it, so it plays on, shrunk above the sheet.

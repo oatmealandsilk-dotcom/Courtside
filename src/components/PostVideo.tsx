@@ -64,18 +64,27 @@ export function PostVideo({ uri, poster, active, preload = false, preloadRank = 
   // In a feed, a video post off screen waits its turn for a player like a clip
   // does (ClipPlayback): nearest first, a few at a time, after the one on screen,
   // and a feed tab not on show builds none ahead. Until then just its poster.
-  // A browser's player here only ever fetches the metadata, so it needs no turn.
+  // In a browser too: told to fetch only the metadata, Chrome still pulls the first
+  // ~700 KB of each, so off screen it waits behind the clip on screen and the next
+  // like any clip, and its turn ends once the browser stops fetching (`suspend`).
+  // On screen in a browser it holds nothing back until you start it: a poster with
+  // its play button has nothing to protect, and an iPhone browser never fetches a
+  // "metadata" video's first frame, so it would hold the queue for nothing.
   const moving = useRef<(() => void) | null>(null);
-  const turn = usePreloadTurn(preload && Platform.OS !== 'web', preloadRank, active, ready, moving);
-  const built = active || full || (preload && (Platform.OS === 'web' || turn));
+  const web = Platform.OS === 'web';
+  const [fetched, setFetched] = useState(false);
+  const turn = usePreloadTurn(preload, preloadRank, active, !web ? ready : active ? ready || paused : fetched, moving);
+  const built = active || full || (preload && turn);
   // On a phone the player draws no poster of its own: a player built while its page is
   // already showing (its turn came as you landed) keeps the poster over it until its first
   // frame is in, and one that cannot load keeps it for good, so the picture never goes
   // blank and pops back. Once in, a stall mid-play is the spinner's, not the poster's.
   const [framed, setFramed] = useState(false);
   const [failed, setFailed] = useState(false);
-  useEffect(() => { if (!built) { setReady(false); setFramed(false); setFailed(false); } }, [built]);
-  const posterUp = !!poster && (!built || (Platform.OS !== 'web' && (!framed || failed)));
+  useEffect(() => { if (!built) { setReady(false); setFramed(false); setFailed(false); setFetched(false); } }, [built]);
+  // In a browser the picture stays over a player built as you land (its turn had not come) until
+  // the browser has the file's start, so its own poster never shows blank first.
+  const posterUp = !!poster && (!built || (web ? !framed && !fetched : !framed || failed));
   // The tutorial never starts under a video opened full screen.
   useHoldTour(full);
   // Full screen is black: light status-bar icons over it (on Android the Modal opens a frame later for that).
@@ -301,7 +310,7 @@ export function PostVideo({ uri, poster, active, preload = false, preloadRank = 
         {built ? (
         <ClipVideo ref={player} uri={uri} poster={poster} active={active && !ownCopy} muted={silent || muted || !active || ownCopy} paused={paused} fit="cover" trimStart={trimStart} trimEnd={trimEnd} speed={speed} volume={volume}
           onProgress={onProgress}
-          onReady={(ok) => { setReady(ok); if (ok) { setFramed(true); onReady?.(true); } }} onGone={() => onReady?.(false)} onSize={onSize} onBuffered={() => moving.current?.()} onFailed={() => setFailed(true)} />
+          onReady={(ok) => { setReady(ok); if (ok) { setFramed(true); onReady?.(true); } }} onGone={() => onReady?.(false)} onSize={onSize} onBuffered={() => moving.current?.()} onFetched={() => setFetched(true)} onFailed={() => setFailed(true)} />
         ) : null}
         {posterUp ? <ExpoImage source={{ uri: poster }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" /> : null}
       </View>

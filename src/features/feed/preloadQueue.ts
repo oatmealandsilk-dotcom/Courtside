@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { AppState } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import { connectionIsQuick } from '@/lib/netSpeed';
 
 /**
@@ -29,6 +29,12 @@ import { connectionIsQuick } from '@/lib/netSpeed';
 
 /** How many clips off screen may fetch at the same moment. */
 const AT_ONCE = 2;
+/**
+ * On a slow connection in a browser only the next page's clip preloads (as on main): there a
+ * browser keeps fetching a clip once started (the one on screen, the one just left), and a
+ * clip two or three ahead taking a share of the link made the one you land on next stall.
+ */
+const SLOW_WEB_REACH = 1;
 /**
  * The clip on screen holds the line this long at most: a slow or stuck one never holds the rest back for good.
  * On a slow connection longer: there a browser's clip on screen holds it until it can play through (not just
@@ -96,7 +102,8 @@ function settle() {
   const before = given.size;
   if (!away) {
     const room = screenBusy ? 0 : quick ? AT_ONCE : 1;
-    const queue = [...waiting].filter(([id, e]) => !e.ready && !given.has(id)).sort((a, b) => a[1].rank - b[1].rank || a[1].since - b[1].since);
+    const reach = quick || Platform.OS !== 'web' ? Infinity : SLOW_WEB_REACH;
+    const queue = [...waiting].filter(([id, e]) => !e.ready && !given.has(id) && e.rank <= reach).sort((a, b) => a[1].rank - b[1].rank || a[1].since - b[1].since);
     for (const [id] of queue) {
       if (fetching.size >= room) break;
       fetching.add(id);
