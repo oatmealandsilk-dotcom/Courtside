@@ -438,13 +438,9 @@ export function useFeedGroups<S extends FeedGroupsState & Reads>(
       if (!accept) { setState(settle); return { ok: true, outcome: 'declined' }; }
       if (stateRef.current.feedGroups.some((g) => g.id === id)) { setState(settle); return { ok: true, outcome: 'already' }; }
       if (stateRef.current.feedGroups.length >= MAX_GROUPS) { haptics.reject(); return { ok: false, word: 'group_limit', error: groupSentence('group_limit') }; }
+      // Anyone's invite lets you straight in, Ask to join or not (migration 182). The one
+      // exception there, someone an admin took out, never comes up here: the demo removes nobody.
       const g = demoGroup(id);
-      const inviterAdmin = !!g?.members.some((m) => m.id === inv.inviterId && m.admin);
-      if (inv.ask && !inviterAdmin) {
-        setState((prev) => ({ ...settle(prev), feedGroupsAsked: [...prev.feedGroupsAsked.filter((a) => a.id !== id), { id, name: inv.name, look: inv.look }] }));
-        haptics.commit();
-        return { ok: true, outcome: 'requested' };
-      }
       const base: FeedGroup = g ?? { id, name: inv.name, description: inv.description, ask: inv.ask, look: inv.look, createdAt: inv.createdAt, members: [], requests: [] };
       // The one who invited you is in it (the server only lets members invite).
       const members = [
