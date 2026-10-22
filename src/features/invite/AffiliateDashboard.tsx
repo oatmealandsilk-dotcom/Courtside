@@ -10,7 +10,7 @@ import { Avatar } from '@/components/ui';
 import type { AffiliateStats, Invitee } from '@/data/types';
 import { useReducedMotion } from '@/lib/useReducedMotion';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
-import { colors, font, lift, radius, spacing, typography } from '@/theme';
+import { colors, font, lift, radius, spacing, typography, buttonShape } from '@/theme';
 import { REWARDS, dollars, nextReward, notCountedReason, stepFill, wontCount } from './affiliate';
 
 const shortDate = (iso: string) => {
@@ -359,9 +359,9 @@ const styleDefinitions = StyleSheet.create({
   code: { height: 30, paddingHorizontal: 12, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center', maxWidth: '55%' },
   codeText: { ...typography.smallStrong, color: colors.text },
   actions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
-  primary: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 46, borderRadius: radius.pill, backgroundColor: colors.brand },
+  primary: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: buttonShape.height, borderRadius: buttonShape.radius, ...buttonShape.curve, backgroundColor: colors.brand },
   primaryText: { ...typography.bodyStrong, color: colors.brandInk },
-  secondary: { height: 46, paddingHorizontal: 20, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center' },
+  secondary: { height: buttonShape.height, paddingHorizontal: 20, borderRadius: buttonShape.radius, ...buttonShape.curve, borderWidth: 1, borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center' },
   secondaryText: { ...typography.bodyStrong, color: colors.text },
   tools: { marginTop: spacing.sm },
 

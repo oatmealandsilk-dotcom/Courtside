@@ -15,7 +15,7 @@ import { compactNumber } from '@/lib/format';
 import { goBack } from '@/lib/goBack';
 import * as haptics from '@/lib/haptics';
 import { useApp } from '@/store/AppContext';
-import { lightColors as brand, fontFamily, wordmarkFont } from '@/theme';
+import { lightColors as brand, fontFamily, wordmarkFont, buttonShape } from '@/theme';
 
 type Slide = { key: string; tint: string; big?: string; title: string; sub?: string; extra?: React.ReactNode; /** Replaces the number, title and line for a slide with its own layout. */ content?: React.ReactNode };
 const SLIDE_MS = 5200;
@@ -233,7 +233,7 @@ const styles = StyleSheet.create({
   people: { flexDirection: 'row', gap: 12, marginBottom: 20 },
   finale: { flex: 1, alignItems: 'center', justifyContent: 'flex-end', gap: 14, paddingHorizontal: 24 },
   cardFrame: { borderRadius: 18, overflow: 'hidden', boxShadow: '0px 10px 36px rgba(0, 0, 0, 0.45)' },
-  shareButton: { flexDirection: 'row', alignItems: 'center', gap: 8, height: 50, paddingHorizontal: 26, borderRadius: 999, backgroundColor: 'white', marginTop: 6 },
+  shareButton: { flexDirection: 'row', alignItems: 'center', gap: 8, height: 48, paddingHorizontal: 26, borderRadius: buttonShape.radius, ...buttonShape.curve, backgroundColor: 'white', marginTop: 6 },
   shareText: { fontFamily: fontFamily.semibold, fontWeight: '600', fontSize: 16, color: brand.text },
   note: { fontFamily: fontFamily.regular, fontSize: 13, color: 'rgba(255,255,255,0.7)', textAlign: 'center' },
   again: { fontFamily: fontFamily.semibold, fontWeight: '600', fontSize: 14, color: 'white', paddingVertical: 4 },

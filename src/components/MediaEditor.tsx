@@ -17,7 +17,7 @@ import * as haptics from '@/lib/haptics';
 import { useReducedMotion } from '@/lib/useReducedMotion';
 import type { MediaCrop } from '@/data/types';
 import { Wash } from '@/components/Wash';
-import { colors, radius, spacing, typography } from '@/theme';
+import { colors, radius, spacing, typography, buttonShape } from '@/theme';
 
 /** What leaves the editor: the media to post and how to play it. */
 export interface EditedMedia {
@@ -1280,7 +1280,7 @@ const styleDefinitions = StyleSheet.create({
   barTitle: { flexDirection: 'row', alignItems: 'center', gap: 7 },
   ball: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.brand },
   barTitleText: { ...typography.smallStrong, color: 'white' },
-  next: { paddingHorizontal: spacing.lg, paddingVertical: 8, borderRadius: radius.pill, backgroundColor: colors.brand },
+  next: { paddingHorizontal: spacing.lg, paddingVertical: 8, borderRadius: buttonShape.smallRadius, ...buttonShape.curve, backgroundColor: colors.brand },
   nextText: { ...typography.smallStrong, color: colors.brandInk },
   pressed: { transform: [{ scale: PRESS_SHRINK }] },
   stage: { flex: 1, backgroundColor: '#000', overflow: 'hidden' },

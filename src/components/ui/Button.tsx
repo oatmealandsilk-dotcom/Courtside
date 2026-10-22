@@ -60,7 +60,7 @@ export function Button({
       scaleTo={PRESS_SHRINK}
       hoverTo={1.04}
       accessibilityLabel={label}
-      hitSlop={size === 'sm' ? 4 : undefined}
+      hitSlop={size === 'sm' ? buttonShape.smallSlop : undefined}
       style={[
         styles.base,
         size === 'sm' && styles.small,

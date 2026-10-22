@@ -30,7 +30,7 @@ import { PollView } from '@/components/PollView';
 import { useRevealOnFocus } from '@/lib/keyboardScroll';
 import { useApp } from '@/store/AppContext';
 import type { Answer } from '@/data/types';
-import { colors, inkOn, radius, spacing, typography } from '@/theme';
+import { colors, inkOn, radius, spacing, typography, buttonShape } from '@/theme';
 import { isDesktopBrowser } from '@/lib/browserDevice';
 import { RemovedNote } from '@/features/moderation/RemovedNote';
 import { HiddenComments, HiddenReplyRow } from '@/components/HiddenComments';
@@ -267,7 +267,7 @@ function QuestionDetail() {
 const styleDefinitions = StyleSheet.create({
   questionCard: { gap: spacing.md, borderWidth: 0, borderRadius: 0, backgroundColor: 'transparent', paddingHorizontal: 0, paddingBottom: 24, borderBottomWidth: 1, borderBottomColor: colors.border },
   askerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  replyButton: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 36, paddingHorizontal: 14, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt },
+  replyButton: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: buttonShape.smallHeight, paddingHorizontal: 14, borderRadius: buttonShape.smallRadius, ...buttonShape.curve, backgroundColor: colors.surfaceAlt },
   // A soft rounded box to write in, the way messaging apps do it.
   composer: { gap: 6, paddingTop: 12, paddingBottom: 8, paddingHorizontal: 14, borderRadius: 20, backgroundColor: colors.surfaceAlt, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
   // No browser focus ring either: the cursor is the only sign the box is live.

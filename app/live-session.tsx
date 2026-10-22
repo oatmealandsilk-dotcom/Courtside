@@ -173,7 +173,7 @@ export default function LiveSessionPage() {
             onPress={finish}
             style={({ pressed }) => [styles.primary, pageIsDark() ? styles.primaryDark : null, pressed && styles.pressedScale]}
           >
-            <BrandWash />
+            <BrandWash radius={buttonShape.radius} curve />
             <Ionicons name={state === 'finished' ? 'create-outline' : 'stop'} size={18} color={colors.brandInk} />
             <Text style={styles.primaryText}>{state === 'finished' ? 'Log it' : 'Finish'}</Text>
           </Pressable>
@@ -236,9 +236,10 @@ const styleDefinitions = StyleSheet.create({
   tryPill: { flexShrink: 0, minWidth: 64, height: 32, paddingHorizontal: 14, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
   tryText: { ...typography.smallStrong, color: colors.text },
   controls: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.xs },
-  second: { ...lift, flex: 1, height: 58, borderRadius: radius.pill, backgroundColor: colors.surface, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  second: { ...lift, flex: 1, height: 58, borderRadius: buttonShape.radius, ...buttonShape.curve, backgroundColor: colors.surface, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   secondText: { ...typography.bodyStrong, fontSize: 16, color: colors.text },
-  primary: { flex: 1, height: 58, borderRadius: 14, ...buttonShape.curve, backgroundColor: colors.brand, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, overflow: 'hidden', boxShadow: '0px 8px 20px rgba(0, 0, 0, 0.16)' },
+  // 58pt rather than 48 on purpose: tapped mid-match, on court, often with a sweaty hand.
+  primary: { flex: 1, height: 58, borderRadius: buttonShape.radius, ...buttonShape.curve, backgroundColor: colors.brand, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, overflow: 'hidden', boxShadow: '0px 8px 20px rgba(0, 0, 0, 0.16)' },
   primaryDark: { boxShadow: '0px 8px 20px rgba(0, 0, 0, 0.4)' },
   primaryText: { ...typography.bodyStrong, fontSize: 16, color: colors.brandInk },
   pressed: { opacity: PRESS_DIM },

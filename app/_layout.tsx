@@ -24,7 +24,7 @@ import { AppShell } from '@/components/AppShell';
 import { ThemeProvider, useTheme } from '@/theme/ThemeProvider';
 import { Platform } from 'react-native';
 import { noteThemedStatusStyle } from '@/lib/statusBarStyle';
-import { colors, font, lightColors } from '@/theme';
+import { buttonShape, colors, font, lightColors } from '@/theme';
 import { BrandMark } from '@/components/BrandMark';
 import { installCrashReporting, reportError } from '@/lib/crashReporting';
 import { isDesktopBrowser } from '@/lib/browserDevice';
@@ -48,7 +48,7 @@ export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
       <BrandMark size={52} />
       <Text style={{ fontSize: 20, ...font('700'), color: colors.text, textAlign: 'center' }}>Something went wrong</Text>
       <Text style={{ fontSize: 15, color: colors.textMuted, textAlign: 'center', maxWidth: 320 }}>It has been reported, so we can fix it. Nothing you saved is lost.</Text>
-      <Pressable accessibilityRole="button" onPress={retry} style={{ marginTop: 8, paddingHorizontal: 22, paddingVertical: 12, borderRadius: 999, backgroundColor: colors.brand }}>
+      <Pressable accessibilityRole="button" onPress={retry} style={{ marginTop: 8, minHeight: buttonShape.height, justifyContent: 'center', paddingHorizontal: 22, borderRadius: buttonShape.radius, ...buttonShape.curve, backgroundColor: colors.brand }}>
         <Text style={{ color: colors.brandInk, ...font('700') }}>Try again</Text>
       </Pressable>
     </View>

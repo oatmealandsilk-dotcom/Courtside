@@ -21,7 +21,7 @@ import { useBelowBanner } from '@/features/messages/bannerSpace';
 import { requestScrollToTop } from '@/features/navigation/scrollToTop';
 import { goHome } from '@/lib/goBack';
 import { closed, onWithdraw, useToast, type ToastClosed, type ToastMessage } from '@/lib/toast';
-import { colors, font, spacing, typography } from '@/theme';
+import { colors, font, spacing, typography, buttonShape } from '@/theme';
 import { TextScale } from '@/theme/textScale';
 
 const SHOW_MS = 2800;
@@ -418,11 +418,11 @@ const styleDefinitions = StyleSheet.create({
   // Option A fits the title row's band (PILL_TOP): a little less padding, the same words and button.
   noteRowSlim: { paddingVertical: 4 },
   noteInfoSlim: { minHeight: 40 },
-  fillSlim: { minHeight: 32, borderRadius: 16 },
+  fillSlim: { minHeight: 32, borderRadius: buttonShape.smallRadius, ...buttonShape.curve },
   noteTitle: { ...typography.bodyStrong, fontSize: 14, color: colors.text, letterSpacing: -0.2 },
   noteBody: { ...typography.small, fontSize: 12, color: colors.textMuted, marginTop: 1 },
   hitBadge: { position: 'absolute', right: -3, bottom: -3, width: 18, height: 18, borderRadius: 9, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.surface },
-  fill: { minHeight: 34, paddingHorizontal: 14, borderRadius: 17, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
+  fill: { minHeight: 34, paddingHorizontal: 14, borderRadius: buttonShape.smallRadius, ...buttonShape.curve, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
   fillPressed: { opacity: 0.75 },
   fillLabel: { ...typography.smallStrong, color: colors.brandInk, letterSpacing: -0.1 },
   holdTrack: { position: 'absolute', left: 14, right: 14, bottom: 0, height: 2, borderRadius: 1, overflow: 'hidden' },

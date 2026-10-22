@@ -29,7 +29,7 @@ import { goBack } from '@/lib/goBack';
 import { duration } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
-import { colors, font, pageIsDark, radius, spacing, typography, withAlpha } from '@/theme';
+import { colors, font, pageIsDark, radius, spacing, typography, withAlpha, buttonShape } from '@/theme';
 
 /** Weeks shown at first; "Show earlier weeks" adds as many again. */
 const WEEKS = 8;
@@ -645,12 +645,12 @@ const styleDefinitions = StyleSheet.create({
   // As wide as Post it, its button at the right edge: the share buttons line up whatever is beside them.
   postSlot: { width: 76, alignItems: 'flex-end' },
   // Post it, Log it, Accept, Turn on: a white outline pill. The page's one filled green button is Log, at the top.
-  action: { height: 32, justifyContent: 'center', paddingHorizontal: 14, borderRadius: radius.pill, backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.borderStrong },
-  outline: { height: 32, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 14, borderRadius: radius.pill, backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.borderStrong },
+  action: { height: 32, justifyContent: 'center', paddingHorizontal: 14, borderRadius: buttonShape.smallRadius, ...buttonShape.curve, backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.borderStrong },
+  outline: { height: 32, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 14, borderRadius: buttonShape.smallRadius, ...buttonShape.curve, backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.borderStrong },
   actionText: { ...typography.smallStrong, color: colors.text },
   posted: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 4, paddingVertical: 6 },
   postedText: { ...typography.smallStrong, color: colors.textMuted },
-  log: { flexDirection: 'row', alignItems: 'center', gap: 2, paddingLeft: 10, paddingRight: 14, paddingVertical: 7, borderRadius: radius.pill, backgroundColor: colors.brand },
+  log: { flexDirection: 'row', alignItems: 'center', gap: 2, paddingLeft: 10, paddingRight: 14, paddingVertical: 7, borderRadius: buttonShape.smallRadius, ...buttonShape.curve, backgroundColor: colors.brand },
   logText: { ...typography.smallStrong, color: colors.brandInk },
   // To do: one compact row each, its buttons on the right.
   todoRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: 12 },

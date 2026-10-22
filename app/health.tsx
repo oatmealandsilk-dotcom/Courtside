@@ -289,7 +289,7 @@ export default function Health() {
                   // Every other workout too: their own yes, after the same explanation anyone new gets.
                   <Reanimated.View key="workouts-offer" entering={FadeIn.duration(220)} exiting={FadeOut.duration(140)} style={styles.offer}>
                     <Text style={styles.offerText}>Also pick up runs, rides and the gym?</Text>
-                    <Tappable accessibilityRole="button" accessibilityLabel={`Turn on every workout from ${i.label}: runs, rides, the gym and more`} disabled={loading} onPress={() => { haptics.tap(); if (i.provider === 'whoop') askWhoop(); else askApple('workouts'); }} style={styles.turnOn}>
+                    <Tappable accessibilityRole="button" accessibilityLabel={`Turn on every workout from ${i.label}: runs, rides, the gym and more`} disabled={loading} onPress={() => { haptics.tap(); if (i.provider === 'whoop') askWhoop(); else askApple('workouts'); }} hitSlop={buttonShape.smallSlop} style={styles.turnOn}>
                       <BrandWash radius={buttonShape.smallRadius} curve />
                       {offerBusy ? <ActivityIndicator size="small" color={colors.brandInk} /> : null}
                       <Text style={styles.turnOnText}>{offerBusy ? 'Turning on…' : 'Turn on'}</Text>
@@ -303,7 +303,7 @@ export default function Health() {
                 {/* WHOOP's (and each tracker's) own sign-in says what it shares; Apple Health is explained here first.
                     The app's own filled pill (with its soft wash) dips under the finger; while it
                     works, the pill itself says so rather than the row going quiet. */}
-                <Tappable accessibilityRole="button" accessibilityLabel={`Turn on ${what(i)} from ${i.label}`} disabled={loading} onPress={() => { haptics.tap(); if (i.provider === 'apple-health') askApple('tennis'); else run(i.provider, 'tennis'); }} style={styles.turnOn}>
+                <Tappable accessibilityRole="button" accessibilityLabel={`Turn on ${what(i)} from ${i.label}`} disabled={loading} onPress={() => { haptics.tap(); if (i.provider === 'apple-health') askApple('tennis'); else run(i.provider, 'tennis'); }} hitSlop={buttonShape.smallSlop} style={styles.turnOn}>
                   <BrandWash radius={buttonShape.smallRadius} curve />
                   {loading ? <ActivityIndicator size="small" color={colors.brandInk} /> : null}
                   <Text style={styles.turnOnText}>{loading ? 'Turning on…' : `Turn on ${what(i)}`}</Text>
@@ -319,7 +319,7 @@ export default function Health() {
           // Not something to press: a quiet label in the button's place.
           <View style={styles.badge}><Text style={styles.badgeText}>Via Apple Health</Text></View>
         ) : i.connected || loading ? null : (
-          <Pressable accessibilityRole="button" accessibilityLabel={`Connect ${i.label}`} accessibilityState={{ disabled: blocked }} disabled={blocked} onPress={() => (tennis && i.provider === 'apple-health' ? askApple('toggle') : run(i.provider, 'toggle'))} style={[styles.connect, blocked && styles.connectOff]}>
+          <Pressable accessibilityRole="button" accessibilityLabel={`Connect ${i.label}`} accessibilityState={{ disabled: blocked }} disabled={blocked} onPress={() => (tennis && i.provider === 'apple-health' ? askApple('toggle') : run(i.provider, 'toggle'))} hitSlop={buttonShape.smallSlop} style={[styles.connect, blocked && styles.connectOff]}>
             <Text style={[styles.connectText, blocked && styles.connectTextOff]}>{(i.provider === 'cronometer' || i.provider === 'myfitnesspal') && !appleHealthAvailable() ? 'Import' : 'Connect'}</Text>
           </Pressable>
         )}
@@ -413,7 +413,7 @@ const styleDefinitions = StyleSheet.create({
   smallGhost: { height: 32, paddingHorizontal: 8, justifyContent: 'center' },
   smallGhostText: { ...typography.smallStrong, color: colors.textMuted },
   turnOn: { flexDirection: 'row', alignItems: 'center', gap: 7, height: buttonShape.smallHeight, paddingHorizontal: 16, borderRadius: buttonShape.smallRadius, ...buttonShape.curve, backgroundColor: colors.brand, overflow: 'hidden' },
-  turnOnText: { ...typography.smallStrong, color: colors.brandInk },
+  turnOnText: { ...typography.smallStrong, fontSize: buttonShape.smallLabel, color: colors.brandInk },
   tennisCard: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.sm, padding: spacing.sm, paddingRight: spacing.xs, borderRadius: radius.md, backgroundColor: colors.bgElevated },
   tennisTick: { width: 24, height: 24, borderRadius: 12, marginLeft: 4, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
   tennisWords: { flex: 1, gap: 1 },
@@ -432,7 +432,7 @@ const styleDefinitions = StyleSheet.create({
   badgeText: { ...typography.caption, color: colors.textMuted },
   connect: { height: buttonShape.smallHeight, paddingHorizontal: 16, borderRadius: buttonShape.smallRadius, ...buttonShape.curve, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center', marginTop: 3 },
   connectOff: { backgroundColor: colors.surfaceAlt },
-  connectText: { ...typography.smallStrong, color: colors.brandInk },
+  connectText: { ...typography.smallStrong, fontSize: buttonShape.smallLabel, color: colors.brandInk },
   connectTextOff: { color: colors.textFaint },
   foot: { ...typography.small, color: colors.textFaint, lineHeight: 18, paddingTop: spacing.lg },
 });

@@ -9,7 +9,7 @@ import { sourceWord } from '@/features/activity/recent';
 import { formatDistance, isTennisActivity, workoutIcon } from '@/features/activity/workouts';
 import { duration } from '@/lib/format';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import { colors, font, lift, radius, spacing, typography } from '@/theme';
+import { colors, font, lift, radius, spacing, typography, buttonShape } from '@/theme';
 
 /** A row's top and bottom padding, and the height of its first line (the big number, and the button beside it). */
 const ROW_PAD = 14;
@@ -83,7 +83,7 @@ const styleDefinitions = StyleSheet.create({
   when: { fontSize: 14, lineHeight: 19, color: colors.textMuted, fontVariant: ['tabular-nums'] },
   actionSpot: { position: 'absolute', right: 0, top: ROW_PAD, height: HERO_LINE, justifyContent: 'center' },
   // Log it: the brand's filled pill, as on Your sessions' rows waiting to be logged.
-  action: { minWidth: 72, alignItems: 'center', paddingHorizontal: 14, paddingVertical: 7, borderRadius: radius.pill, backgroundColor: colors.brand },
+  action: { minWidth: 72, alignItems: 'center', paddingHorizontal: 14, paddingVertical: 7, borderRadius: buttonShape.smallRadius, ...buttonShape.curve, backgroundColor: colors.brand },
   actionText: { ...typography.smallStrong, color: colors.brandInk },
   done: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 4, paddingVertical: 6 },
   doneText: { ...typography.smallStrong, color: colors.textMuted },
