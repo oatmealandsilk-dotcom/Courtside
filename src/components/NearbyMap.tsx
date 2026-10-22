@@ -390,7 +390,13 @@ export function NearbyMap(props: NearbyMapProps) {
                 cachePolicy="memory"
                 style={StyleSheet.absoluteFill}
                 // On screen: the curtain may lift onto it, a card that already shows its streets.
-                onLoad={() => { setPhotoIn(true); painted?.(); }}
+                onLoad={() => {
+                  // Only taken while nobody can see the swap (under the curtain, or out of view): one that
+                  // arrives late, in view, is let go, and the sketch stays for its one slow fade.
+                  if (curtainState() !== 'up' && inViewNow()) { setCover({ uri: null, kind: 'sketch', hash: markerHash }); return; }
+                  setPhotoIn(true);
+                  painted?.();
+                }}
                 onError={() => setCover({ uri: null, kind: 'sketch', hash: markerHash })}
               />
             </Reanimated.View>

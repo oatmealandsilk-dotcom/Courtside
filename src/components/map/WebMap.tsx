@@ -76,6 +76,10 @@ function afterFaces(el: HTMLElement | null, done: () => void) {
   setTimeout(end, 800);
   urls.forEach((url) => { const im = new Image(); im.onload = im.onerror = () => { left -= 1; if (left <= 0) end(); }; im.src = url; });
 }
+/** For testers: ?mapcover=hold (or localStorage courtside-mapcover=hold) keeps the card's picture over its drawn map (see reveal), to compare the two. */
+const HOLD_COVER = (() => {
+  try { return typeof window !== 'undefined' && (/[?&]mapcover=hold\b/.test(window.location?.search ?? '') || window.localStorage.getItem('courtside-mapcover') === 'hold'); } catch { return false; }
+})();
 /** Whether a drawn map came out as one flat colour (a canvas that could not be read back). */
 function isBlank(canvas: HTMLCanvasElement): boolean {
   try {
@@ -448,6 +452,8 @@ export function NearbyMap(props: NearbyMapProps) {
   const reveal = () => {
     stopWait.current();
     painted();
+    // A check for testers only (?mapcover=hold): the picture stays over the drawn map, so the two can be compared.
+    if (HOLD_COVER && photoNow.current) { (window as unknown as { __mapCardPainted?: boolean }).__mapCardPainted = true; setCardShown(true); setCardSnap(true); return; }
     const curtain = curtainState();
     if ((photoNow.current && photoInNow.current) || curtain === 'up' || outOfView.current()) {
       setPhotoGone(true); setCardSnap(true); setLoaderGone(true); setCardShown(true);
@@ -568,10 +574,17 @@ export function NearbyMap(props: NearbyMapProps) {
             style={StyleSheet.absoluteFill}
           />
         ) : null}
-        <View aria-hidden={!cardShown} style={[StyleSheet.absoluteFill, !cardShown && styles.noTaps, { opacity: layerOn ? 1 : 0, transition: cardSnap || (photoUp && !cardShown && !inViewNow()) ? 'none' : `opacity ${MAP_REVEAL_MS}ms ${MAP_REVEAL_CSS}` } as object]}>
+        <View aria-hidden={!cardShown} style={[StyleSheet.absoluteFill, !cardShown && styles.noTaps, { opacity: layerOn ? 1 : 0, transition: cardSnap ? 'none' : `opacity ${MAP_REVEAL_MS}ms ${MAP_REVEAL_CSS}` } as object]}>
           {canvas}
           {/* The picture over all of the map until the copy inside the map itself (under the pins) has loaded. */}
-          {photo && !photoGone && !photoInMap ? <img src={photo} alt="" onLoad={() => { setPhotoIn(true); painted(); }} onError={() => setPhoto(null)} style={{ position: 'absolute', left: 0, top: 0, width: '100%', height: '100%', pointerEvents: 'none' }} /> : null}
+          {photo && !photoGone && !photoInMap ? <img src={photo} alt="" onLoad={() => {
+            // Only taken while nobody can see the swap (under the curtain, or out of view), and then simply
+            // there; one that arrives late, in view, is let go, and the loading look stays for its one slow fade.
+            if (curtainState() !== 'up' && !outOfView.current()) { setPhoto(null); return; }
+            setCardSnap(true);
+            setPhotoIn(true);
+            painted();
+          }} onError={() => setPhoto(null)} style={{ position: 'absolute', left: 0, top: 0, width: '100%', height: '100%', pointerEvents: 'none' }} /> : null}
           {/* A still card: the tap goes to the full map, not to the tiles. */}
           <Pressable accessibilityRole={onExpand ? 'button' : undefined} accessibilityLabel="Map of players, courts and hits near you" onPress={onExpand} disabled={!onExpand} style={StyleSheet.absoluteFill} />
           <PreviewOverlay cityName={cityName} count={onCardCount} placeCount={model.cardCourts.length} hitCount={hitCount !== undefined && model.cardFromYou ? hitCount : model.cardHits.length} weather={weather} locationOn={locationOn} locating={locating} onToggleLocation={onToggleLocation} lock={lock} inviting={inviting} />
