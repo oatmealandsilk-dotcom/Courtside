@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { answerKey, keptPlaces, localPlaces, mergePlaces, roughBias, searchMapPlaces, type FoundPlace } from '@/features/places/geocode';
 import type { LatLng } from '@/features/players/positions';
@@ -26,8 +26,12 @@ const WAIT_MS = 350;
  * Each answer is kept for the session, so going back a letter asks nothing;
  * a newer letter calls off the ask before it. The same on a phone and in a
  * browser: it is one plain web request.
+ *
+ * `hold` (Find Players, Oct 22 sweep): while the next letter's answer is on
+ * its way, the places already listed stay listed, instead of the list
+ * emptying to the built-in cities and filling again on every letter.
  */
-export function usePlaceSearch(text: string, near: LatLng | null, max = 5): PlaceSearch {
+export function usePlaceSearch(text: string, near: LatLng | null, max = 5, { hold = false }: { hold?: boolean } = {}): PlaceSearch {
   const typed = text.trim();
   // A handle ("@sam") is a player, never a place: it is not sent to the place search at all.
   const enough = plain(typed).replace(/\s/g, '').length >= 2 && !typed.startsWith('@');
@@ -50,7 +54,9 @@ export function usePlaceSearch(text: string, near: LatLng | null, max = 5): Plac
     return () => { clearTimeout(wait); control.abort(); };
   }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  return useMemo(() => {
+  // The places last listed with the world's answer in, for `hold`.
+  const lastAnswered = useRef<FoundPlace[] | null>(null);
+  const result = useMemo(() => {
     if (!key) return NOTHING;
     const kept = keptPlaces(typed, rough);
     const now = kept ? { key, places: kept, failed: false } : answer?.key === key ? answer : null;
@@ -58,4 +64,8 @@ export function usePlaceSearch(text: string, near: LatLng | null, max = 5): Plac
     const places = mergePlaces(now?.places ?? [], localPlaces(typed, rough)).slice(0, max);
     return { places, searching: !now, failed: !!now?.failed, done: !!now };
   }, [key, answer, typed, rough, max]);
+  if (!hold) return result;
+  if (!key) { lastAnswered.current = null; return result; }
+  if (result.done) { lastAnswered.current = result.places; return result; }
+  return lastAnswered.current ? { ...result, places: lastAnswered.current } : result;
 }

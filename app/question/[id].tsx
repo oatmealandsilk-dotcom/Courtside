@@ -23,6 +23,7 @@ import { VoteControls } from '@/components/VoteControls';
 import { topicMeta, topicTint } from '@/components/QuestionCard';
 import { openTopic } from '@/features/community/openTopic';
 import { Avatar, Card, Chip, EmptyState, Screen } from '@/components/ui';
+import { Fold } from '@/components/ui/Fold';
 import { JumpProvider, useJumpTo } from '@/components/JumpTo';
 import { relativeTime } from '@/lib/format';
 import { RichText } from '@/components/RichText';
@@ -56,6 +57,11 @@ function QuestionDetail() {
   const [looked, setLooked] = useState(false);
   useEffect(() => { if (ready) void loadThread(String(id)).finally(() => setLooked(true)); }, [loadThread, id, ready]);
   const jump = useJumpTo(at, looked);
+  // The order the replies were put in (most votes first), kept while you read: a vote never moves a
+  // reply under your thumb, as on Reddit. Worked out again when the thread has loaded and on a
+  // pull to refresh; a reply new since then goes at the end (Oct 22 sweep, item 9).
+  const [orderRound, setOrderRound] = useState(0);
+  const replyOrder = useRef<{ key: string; rank: Map<string, number> } | null>(null);
   const [draft, setDraft] = useState('');
   const [media, setMedia] = useState<ReplyAttachment | null>(null);
   const [replying, setReplying] = useState(false);
@@ -94,12 +100,18 @@ function QuestionDetail() {
   // One hidden by your Hidden words (migration 117) shows only to whoever wrote it;
   // you find it under "Hidden replies" at the end, as the asker.
   const hidden = hiddenAnswersOn(answers, question.id, currentUserId, question.authorId);
-  const thread = question.answerIds
+  const listed = question.answerIds
     .map((aid) => answers.find((a) => a.id === aid))
-    .filter((a): a is Answer => Boolean(a) && shownInList(a!, a!.authorId, currentUserId))
-    // Most votes first. No "accepted" answer pinned on top any more (Oct 12, owner: "I don't think this
-    // feature is needed" / "Takes away from engagement"): a thread never reads as closed.
-    .sort((a, b) => b.votes - a.votes);
+    .filter((a): a is Answer => Boolean(a) && shownInList(a!, a!.authorId, currentUserId));
+  // Most votes first. No "accepted" answer pinned on top any more (Oct 12, owner: "I don't think this
+  // feature is needed" / "Takes away from engagement"): a thread never reads as closed.
+  const orderKey = `${question.id}|${looked}|${orderRound}`;
+  if (replyOrder.current?.key !== orderKey) {
+    replyOrder.current = { key: orderKey, rank: new Map([...listed].sort((a, b) => b.votes - a.votes).map((a, i) => [a.id, i])) };
+  }
+  const rank = replyOrder.current.rank;
+  const placeOf = (a: Answer) => rank.get(a.id) ?? Number.MAX_SAFE_INTEGER;
+  const thread = listed.sort((a, b) => placeOf(a) - placeOf(b) || b.votes - a.votes);
 
 
   // Taken down by an admin (migration 108): only its author and admins can open it, and nobody can reply.
@@ -158,7 +170,7 @@ function QuestionDetail() {
   };
 
   return (
-    <SwipeSurface onSwipe={direction=>{if(direction===-1) { requestSection('/discuss', 'discussions'); goToTab('/discuss', true); }}} renderPreview={direction=>direction===-1 ? <Discuss previewSection="discussions"/> : null}><Screen title="Thread" compactTitle onBack={() => goBack()} scrollRef={jump.scrollRef} onRefresh={isDesktopBrowser() ? undefined : () => loadThread(String(id))} right={<View style={{ flexDirection: 'row', alignItems: 'center', gap: 18 }}>{pin ? <Pressable accessibilityRole="button" accessibilityLabel={pinnedNow ? 'Unpin the Question of the week' : 'Pin as Question of the week'} hitSlop={10} onPress={pin}><Ionicons name={pinnedNow ? 'pin' : 'pin-outline'} size={22} color={pinnedNow ? colors.brand : colors.text} /></Pressable> : null}{moderate ? <Pressable accessibilityRole="button" accessibilityLabel={removed ? 'Restore this thread' : 'Take down this thread'} hitSlop={10} onPress={moderate}><Ionicons name={removed ? 'eye-outline' : 'eye-off-outline'} size={23} color={removed ? colors.text : colors.danger} /></Pressable> : null}{question.authorId === currentUserId && !removed ? <Pressable accessibilityRole="button" accessibilityLabel="Edit this thread" hitSlop={10} onPress={() => router.push({ pathname: '/edit-post', params: { id: question.id, kind: 'question' } })}><Ionicons name="create-outline" size={23} color={colors.text} /></Pressable> : null}{removed ? null : <Pressable accessibilityRole="button" accessibilityLabel="Share this thread" hitSlop={10} onPress={() => router.push(`/share?kind=question&id=${question.id}`)}><Ionicons name="arrow-redo-outline" size={23} color={colors.text} /></Pressable>}{theirs && !removed ? <Pressable accessibilityRole="button" accessibilityLabel="Report this thread" hitSlop={10} onPress={report}><Ionicons name="flag-outline" size={22} color={colors.text} /></Pressable> : null}</View>}>
+    <SwipeSurface onSwipe={direction=>{if(direction===-1) { requestSection('/discuss', 'discussions'); goToTab('/discuss', true); }}} renderPreview={direction=>direction===-1 ? <Discuss previewSection="discussions"/> : null}><Screen title="Thread" compactTitle onBack={() => goBack()} scrollRef={jump.scrollRef} onRefresh={isDesktopBrowser() ? undefined : () => loadThread(String(id)).finally(() => setOrderRound((n) => n + 1))} right={<View style={{ flexDirection: 'row', alignItems: 'center', gap: 18 }}>{pin ? <Pressable accessibilityRole="button" accessibilityLabel={pinnedNow ? 'Unpin the Question of the week' : 'Pin as Question of the week'} hitSlop={10} onPress={pin}><Ionicons name={pinnedNow ? 'pin' : 'pin-outline'} size={22} color={pinnedNow ? colors.brand : colors.text} /></Pressable> : null}{moderate ? <Pressable accessibilityRole="button" accessibilityLabel={removed ? 'Restore this thread' : 'Take down this thread'} hitSlop={10} onPress={moderate}><Ionicons name={removed ? 'eye-outline' : 'eye-off-outline'} size={23} color={removed ? colors.text : colors.danger} /></Pressable> : null}{question.authorId === currentUserId && !removed ? <Pressable accessibilityRole="button" accessibilityLabel="Edit this thread" hitSlop={10} onPress={() => router.push({ pathname: '/edit-post', params: { id: question.id, kind: 'question' } })}><Ionicons name="create-outline" size={23} color={colors.text} /></Pressable> : null}{removed ? null : <Pressable accessibilityRole="button" accessibilityLabel="Share this thread" hitSlop={10} onPress={() => router.push(`/share?kind=question&id=${question.id}`)}><Ionicons name="arrow-redo-outline" size={23} color={colors.text} /></Pressable>}{theirs && !removed ? <Pressable accessibilityRole="button" accessibilityLabel="Report this thread" hitSlop={10} onPress={report}><Ionicons name="flag-outline" size={22} color={colors.text} /></Pressable> : null}</View>}>
       <Card style={styles.questionCard}>
         {removed ? <RemovedNote removed={removed} align="start" item={{ kind: 'question', id: question.id, authorId: question.authorId }} /> : null}
         {/* Who asked, up top and at full size — the way a reply shows its author. */}
@@ -202,7 +214,9 @@ function QuestionDetail() {
             <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.replyLabel}>Reply</Text>
           </Pressable>}
         </View>
-        {replying && !removed ? (
+        {/* The reply box unfolds under the Reply button and folds away on Cancel or Send, so the
+            replies below glide rather than jump (Oct 22 sweep, item 9). */}
+        <Fold open={replying && !removed} gap={spacing.md}>
           <View style={{ gap: 8 }}>
           <MentionSuggestions candidates={tag.rows} onPick={tag.pick} maxHeight={176} />
           <View style={styles.composer}>
@@ -220,7 +234,7 @@ function QuestionDetail() {
             </View>
           </View>
           </View>
-        ) : null}
+        </Fold>
       </Card>
 
       <View style={styles.section}>
