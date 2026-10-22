@@ -1,6 +1,6 @@
 import { PRESS_DIM } from '@/theme/press';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { Easing, FadeIn, FadeOut, LayoutAnimationConfig, LinearTransition, runOnJS, useAnimatedReaction, useSharedValue } from 'react-native-reanimated';
 import * as haptics from '@/lib/haptics';
@@ -181,6 +181,11 @@ export default function Inbox() {
   // like the settings. msg notifications, etc respond too slow"). A search always looks through them all.
   const arrived = useArrived();
   const shownThreads = arrived || search.trim() ? threads : threads.slice(0, FIRST_ROWS);
+  // The draw where the rest of the list mounts because the page has arrived: those rows were already
+  // there on opening, so they simply show (no burst of fades, mostly off screen).
+  const arrivedOnce = useRef(false);
+  const bulk = arrived && !arrivedOnce.current;
+  useEffect(() => { if (arrived) arrivedOnce.current = true; }, [arrived]);
 
   // Up to hit today: people you can message (or already talk to) who said so today, never someone blocked.
   const upToday = useMemo(() => {
@@ -367,7 +372,7 @@ export default function Inbox() {
               }] : []),
             ];
             return (
-              <Animated.View key={conversation.id} layout={ROW_GLIDE} entering={switched ? ROW_IN_SWITCH : ROW_IN} exiting={ROW_OUT}>
+              <Animated.View key={conversation.id} layout={ROW_GLIDE} entering={bulk && index >= FIRST_ROWS ? undefined : switched ? ROW_IN_SWITCH : ROW_IN} exiting={ROW_OUT}>
               <SwipeRow
                 actions={actionsUnder}
                 actionCount={canMute ? 2 : 1}

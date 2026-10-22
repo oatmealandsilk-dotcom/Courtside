@@ -41,7 +41,7 @@ export function RisingSheet({ visible, onClose, onBackdropPress, closeLabel = 'C
   const [mounted, setMounted] = useState(visible);
   const rise = useSharedValue(0);
   const dim = useSharedValue(0);
-  const height = useSharedValue(Dimensions.get('window').height * 0.6);
+  const height = useSharedValue(Dimensions.get('window').height);
   useEffect(() => {
     if (visible) {
       setMounted(true);

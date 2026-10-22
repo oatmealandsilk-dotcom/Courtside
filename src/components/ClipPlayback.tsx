@@ -148,14 +148,15 @@ function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, 
   // On iOS 26 the feed's disc is glass, and glass must never fade (Oct 17): it
   // grows in from its middle and shrinks away instead, never changing its
   // opacity, and its glass is only drawn while it is there at all.
-  // With Reduce Motion on it is the plain frosted disc and only fades: a
-  // grow and shrink is a zoom, and glass must not fade.
+  // With Reduce Motion on it only fades (a grow and shrink is a zoom): it is
+  // still glass at rest, and a plain fill only while it fades.
   const reduceMotion = useReducedMotion();
-  const glassDisc = !!discInk && liquidGlass && !reduceMotion;
+  const glassDisc = !!discInk && liquidGlass;
+  const growDisc = glassDisc && !reduceMotion;
   const discShown = useDerivedValue(() => disc.value * (pageChrome ? pageChrome.value : 1));
-  const discStyle = useAnimatedStyle(() => (glassDisc
+  const discStyle = useAnimatedStyle(() => (growDisc
     ? { opacity: 1, transform: [{ scale: discShown.value }] }
-    : { opacity: discShown.value, transform: [{ scale: 0.86 + 0.14 * disc.value }] }), [glassDisc]);
+    : { opacity: discShown.value, transform: [{ scale: 0.86 + 0.14 * disc.value }] }), [growDisc]);
   // Android draws the feed's videos on a texture, the one surface that can
   // shrink and move smoothly onto the comments stage (a slight battery cost).
   // A plain full-screen clip (a story, a hit) keeps the lighter surface: nothing clips or scales it.
@@ -223,7 +224,7 @@ function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, 
       {silent || bare ? null : (
         <Pressable accessibilityRole="button" accessibilityLabel={muted ? 'Unmute clip' : 'Mute clip'} hitSlop={12} onPress={() => { setMuted((v) => !v); if (!discPinned) showDisc(); }} style={[styles.soundHit, { top: insets.top + drop + (discInk ? 25 : 22) }]}>
           <Animated.View style={[styles.sound, discInk ? styles.soundThemed : null, glassDisc ? styles.soundLiquid : null, discStyle]}>
-            {glassDisc ? <GlassFill radius={18} tint={colors.brand} strength={0.22} present={discShown} /> : null}
+            {glassDisc ? <GlassFill radius={18} tint={colors.brand} strength={0.22} present={growDisc ? discShown : undefined} fade={growDisc ? undefined : discShown} /> : null}
             <Ionicons name={muted ? 'volume-mute' : 'volume-high'} size={17} color="white" />
           </Animated.View>
         </Pressable>

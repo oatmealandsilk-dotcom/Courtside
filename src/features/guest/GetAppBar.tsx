@@ -6,7 +6,7 @@ import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { BrandMark } from '@/components/BrandMark';
-import { isAppleMobileBrowser } from '@/lib/browserDevice';
+import { isAppleMobileBrowser, isDesktopBrowser } from '@/lib/browserDevice';
 import { buttonShape, colors, radius, spacing, typography } from '@/theme';
 import { IPHONE_APP_URL } from './joinAsk';
 import { noteAppTap } from './campaign';
@@ -24,7 +24,7 @@ const closedThisVisit = () => { try { return sessionStorage.getItem(KEY) === '1'
  *
  * Only an iPhone or iPad gets "Get the app" (Oct 22 sweep, item 50: the strip
  * showed on Android phones and computers, where the iPhone app can't be
- * installed). There it says what there is instead: "iPhone app · Android
+ * installed). A computer gets no strip at all; an Android phone is told what there is instead: "iPhone app · Android
  * coming soon", with no button. Closing it slides it shut, so the page under
  * it glides up instead of jumping 48 px (item 35).
  */
@@ -32,12 +32,14 @@ export function GetAppBar() {
   const styles = useThemedStyles(styleDefinitions);
   const [closed, setClosed] = useState(closedThisVisit);
   const [iphone] = useState(isAppleMobileBrowser);
+  // A computer gets no strip at all (item 50: "show it on iPhone/iPad only").
+  const [computer] = useState(() => !isAppleMobileBrowser() && isDesktopBrowser());
   // The strip's own height once drawn, and how far it has slid shut (0 open, 1 gone).
   const full = useSharedValue(0);
   const shut = useSharedValue(0);
   const fold = useAnimatedStyle(() => (full.value > 0 && shut.value > 0 ? { height: full.value * (1 - shut.value) } : {}));
   const slide = useAnimatedStyle(() => ({ transform: [{ translateY: -full.value * shut.value }] }));
-  if (closed) return null;
+  if (closed || computer) return null;
   const measure = (e: LayoutChangeEvent) => { if (shut.value === 0) full.value = e.nativeEvent.layout.height; };
   const close = () => {
     try { sessionStorage.setItem(KEY, '1'); } catch { /* private mode: closed for this page only */ }
