@@ -572,13 +572,18 @@ function Logged({ session: s, people, onOpen, openWord, hideNote = false, source
           <View style={[styles.heroLine, styles.heroLineShare]}>
             <Text style={styles.hero}>{duration(s.minutes)}</Text>
             {record ? <RecordPill /> : null}
+          </View>
+          {/* A score is the small ScoreBoard at the right of the words, under the row's buttons. */}
+          <View style={board ? styles.scoredLine : null}>
+            <View style={board ? styles.scoredWords : null}>
+              <LoggedTitle label={label} people={people} style={styles.title} faint={styles.waiting} numberOfLines={2} />
+              <Text style={styles.when}>
+                {day}
+                {placeOnDay ? <>{' · '}<Ionicons name="location-outline" size={13} color={colors.textFaint} />{` ${place}`}</> : null}
+              </Text>
+            </View>
             {board ? <View style={styles.board}><ScoreBoardCompact sets={s.sets!} youWon={s.won} ended={s.ended} /></View> : null}
           </View>
-          <LoggedTitle label={label} people={people} style={styles.title} faint={styles.waiting} numberOfLines={2} />
-          <Text style={styles.when}>
-            {day}
-            {placeOnDay ? <>{' · '}<Ionicons name="location-outline" size={13} color={colors.textFaint} />{` ${place}`}</> : null}
-          </Text>
           {place && !placeOnDay ? (
             <View style={styles.placeRow}>
               <Ionicons name="location-outline" size={13} color={colors.textFaint} />
@@ -631,8 +636,9 @@ const styleDefinitions = StyleSheet.create({
   icon: { width: 22, height: HERO_LINE, alignItems: 'center', justifyContent: 'center' },
   words: { flex: 1, minWidth: 0, gap: 2 },
   heroLine: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: HERO_LINE },
-  // The two small rows (38 high) sit in the 32-high line without pushing it taller.
-  board: { marginVertical: -3, marginLeft: 4 },
+  scoredLine: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  scoredWords: { flex: 1, minWidth: 0 },
+  board: { flexShrink: 0 },
   // The figure in the brand's green, as on the Share card.
   hero: { fontSize: 19, lineHeight: 24, ...font('600'), letterSpacing: -0.4, color: colors.brand, fontVariant: ['tabular-nums'], flexShrink: 0 },
   // Flyby's pill, lined up with the words (past the icon and the gap).
