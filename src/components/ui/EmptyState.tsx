@@ -2,6 +2,7 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import Reanimated, { Easing, FadeIn } from 'react-native-reanimated';
 
 import { MarkDraw } from '@/components/MarkDraw';
 import { Button } from './Button';
@@ -19,16 +20,19 @@ interface Props {
   action?: { label: string; onPress: () => void };
 }
 
+/** One soft arrival for every empty card, instead of popping in from a spinner or a list. */
+const ARRIVE = FadeIn.duration(240).easing(Easing.out(Easing.cubic));
+
 /** Nothing here yet: a quiet mark, a line on why, and air around it. */
 export function EmptyState({ icon, glyph, title, body, action }: Props) {
   const styles = useThemedStyles(styleDefinitions);
   return (
-    <View style={styles.wrap}>
+    <Reanimated.View entering={ARRIVE} style={styles.wrap}>
       {glyph ?? (icon ? <Ionicons name={icon} size={26} color={colors.textFaint} /> : <MarkDraw size={30} color={colors.borderStrong} play={false} />)}
       <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.title}>{title}</Text>
       {body ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.body}>{body}</Text> : null}
       {action ? <View style={styles.action}><Button label={action.label} variant="secondary" onPress={action.onPress} /></View> : null}
-    </View>
+    </Reanimated.View>
   );
 }
 

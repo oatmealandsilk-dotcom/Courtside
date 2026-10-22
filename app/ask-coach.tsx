@@ -1,6 +1,6 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef, useState } from 'react';
-import { Keyboard, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Keyboard, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import Reanimated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { goBack } from '@/lib/goBack';
@@ -69,6 +69,16 @@ export default function AskCoach() {
   const [footage, setFootage] = useState(false);
   const bodyBox = useRef<TextInput>(null);
   const grow = useSharedValue(hero ? 0 : 1);
+  // Opened any other way on a phone (a coach's page, "Ask again", the box
+  // half scrolled away), it rises from the bottom like a sheet and drops
+  // back down on close, as a browser already does. The screen has no stock
+  // animation (see the root layout), so without this it cut in and out.
+  const slide = !hero && !web;
+  const { height: screenH } = useWindowDimensions();
+  const rise = useSharedValue(slide ? 0 : 1);
+  useEffect(() => {
+    if (slide) rise.value = withTiming(1, { duration: 320, easing: Easing.bezier(0.2, 0.8, 0.2, 1) });
+  }, [slide, rise]);
   const home = useSharedValue({ x: 0, y: 0, w: 1, h: 1 });
   const start = useSharedValue({ x: 0, y: 0, w: 1, h: 1 });
   const [startRect, setStartRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
@@ -114,6 +124,7 @@ export default function AskCoach() {
   };
   useEffect(() => { if (!hero) { const t = setTimeout(focusTitle, 350); return () => clearTimeout(t); } }, [hero]);
   const card = useAnimatedStyle(() => {
+    if (slide) return { transform: [{ translateY: (1 - rise.value) * screenH }] };
     if (!hero || web) return {};
     const p = grow.value;
     const a = start.value, b = home.value;
@@ -129,8 +140,16 @@ export default function AskCoach() {
   });
   const content = useAnimatedStyle(() => ({ opacity: hero && !web ? Math.max(0, (grow.value - 0.45) / 0.55) : 1 }));
   const ghost = useAnimatedStyle(() => ({ opacity: hero && !web ? Math.max(0, 1 - grow.value * 2.5) : web ? 1 : 0 }));
-  const veil = useAnimatedStyle(() => ({ opacity: hero && !web ? grow.value : 1 }));
+  const veil = useAnimatedStyle(() => ({ opacity: slide ? 0 : hero && !web ? grow.value : 1 }));
+  const closing = useRef(false);
   const close = () => {
+    if (slide) {
+      if (closing.current) return;
+      closing.current = true;
+      Keyboard.dismiss();
+      rise.value = withTiming(0, { duration: 260, easing: Easing.bezier(0.4, 0, 0.6, 1) }, (done) => { if (done) runOnJS(goBack)(); });
+      return;
+    }
     if (!hero) { goBack(); return; }
     // Whichever box has the cursor, the keys go down as the page shrinks away.
     Keyboard.dismiss();

@@ -260,7 +260,9 @@ export default function CoachStudio() {
 
   return (
     <Screen title="Coach studio" compactTitle onBack={() => goBack()} scrollRef={scrollRef}>
+      {/* The green pill slides to the tab tapped (Oct 22 sweep), as Profile's and Community's do. */}
       <SegmentedControl
+        slide
         value={shownTab}
         onChange={setTab}
         segments={[

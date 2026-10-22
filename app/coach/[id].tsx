@@ -1,13 +1,14 @@
 import { PRESS_DIM } from '@/theme/press';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { PlayerName } from '@/components/PlayerName';
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { goBack } from '@/lib/goBack';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import Reanimated, { Easing, FadeIn, LayoutAnimationConfig } from 'react-native-reanimated';
 
-import { Avatar, Button, EmptyState, Field, Screen } from '@/components/ui';
+import { Avatar, Button, Collapse, EmptyState, Field, Screen } from '@/components/ui';
 import { MenuSheet, type MenuSheetItem } from '@/components/MenuSheet';
 import { Tappable } from '@/components/Tappable';
 import { CourtSpinner } from '@/components/CourtSpinner';
@@ -60,6 +61,10 @@ export default function CoachDetail() {
   const [reviewBody, setReviewBody] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
   const [posting, setPosting] = useState(false);
+  // The booking form folds shut around the service it was for, not an empty box (Oct 22 sweep).
+  const lastService = useRef<string | null>(null);
+  // Once the review form has shown, it stays mounted so posting can fold it shut.
+  const hadReviewForm = useRef(false);
   // Opened cold (a link, a notification, a reload): wait for the data before saying "not found".
   const loading = useStillLoading() && !loadError;
 
@@ -77,6 +82,8 @@ export default function CoachDetail() {
   const isOwner = currentUserId === coach.userId;
   const services = coach.services.filter((s) => isOwner || (s as { active?: boolean }).active !== false);
   const service = services.find((s) => s.id === selected);
+  if (service) lastService.current = service.id;
+  const formService = service ?? services.find((s) => s.id === lastService.current);
   const mine = coachingRequests
     .filter((r) => r.coachId === coach.id && r.userId === currentUserId && r.status !== 'awaiting-payment')
     .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
@@ -87,6 +94,7 @@ export default function CoachDetail() {
   const myReview = reviews.find((r) => r.authorId === currentUserId);
   const canReview = !isOwner && !!currentUserId && !myReview && mine.some((r) => r.status === 'answered');
   const bookable = !isOwner && coach.listed !== false && paidBooking && coach.payoutsReady !== false;
+  if (canReview) hadReviewForm.current = true;
   const message = async () => {
     const lock = await actions.messageLock(user.id);
     if (lock) { showToast({ title: lock, icon: 'lock-closed-outline', long: true }); return; }
@@ -172,6 +180,8 @@ export default function CoachDetail() {
         </Tappable>
       ) : undefined}
     >
+      {/* What is here on arrival just shows; what is added later (a review, a result) fades in. */}
+      <LayoutAnimationConfig skipEntering>
       {/* ------------------------------------------------------------ who */}
       <View style={styles.hero}>
         <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={72} />
@@ -249,16 +259,17 @@ export default function CoachDetail() {
       )}
       {!isOwner && paidBooking && coach.payoutsReady === false ? <Text style={styles.muted}>{first} can’t take bookings yet. Message them, or ask a free question on the Coaching tab.</Text> : null}
 
-      {service && bookable ? (
+      {formService && bookable ? (
+        <Collapse open={!!service}>
         <View style={styles.form}>
           <Field
-            label={service.kind === 'live-session' ? 'What do you want to work on? Suggest a few times that suit you.' : 'What do you want looked at?'}
+            label={formService.kind === 'live-session' ? 'What do you want to work on? Suggest a few times that suit you.' : 'What do you want looked at?'}
             value={question}
             onChangeText={setQuestion}
             multiline
             minHeight={110}
           />
-          {service.kind === 'video-review' || service.kind === 'written-qa' ? (
+          {formService.kind === 'video-review' || formService.kind === 'written-qa' ? (
             video ? (
               <View style={styles.attached}>
                 <Ionicons name="videocam" size={18} color={colors.brand} />
@@ -270,24 +281,25 @@ export default function CoachDetail() {
             ) : (
               <Pressable accessibilityRole="button" onPress={attach} style={({ pressed }) => [styles.attach, pressed && { opacity: PRESS_DIM }]}>
                 <Ionicons name="videocam-outline" size={18} color={colors.text} />
-                <Text style={styles.attachText}>{service.kind === 'video-review' ? 'Add your video' : 'Add a video (optional)'}</Text>
+                <Text style={styles.attachText}>{formService.kind === 'video-review' ? 'Add your video' : 'Add a video (optional)'}</Text>
               </Pressable>
             )
           ) : null}
           {error ? <Text style={styles.error}>{error}</Text> : null}
           {note ? <Text style={styles.muted}>{note}</Text> : null}
           <Button
-            label={busy ? (video ? 'Uploading your video…' : 'Opening payment…') : `Continue to payment · ${money(service.priceCents)}`}
+            label={busy ? (video ? 'Uploading your video…' : 'Opening payment…') : `Continue to payment · ${money(formService.priceCents)}`}
             onPress={book}
             loading={busy}
-            disabled={question.trim().length < 2 || (service.kind === 'video-review' && !video)}
+            disabled={question.trim().length < 2 || (formService.kind === 'video-review' && !video)}
             full
           />
           <Text style={styles.fine}>
-            You pay through Stripe; CourtSide never sees your card. If {first} has not answered within {turnaround(service.turnaroundHours)}, you can have your money back. Once {first} answers, the booking is complete; for any problem after that, write to support@courtsidebase.com. By paying you agree to the{' '}
+            You pay through Stripe; CourtSide never sees your card. If {first} has not answered within {turnaround(formService.turnaroundHours)}, you can have your money back. Once {first} answers, the booking is complete; for any problem after that, write to support@courtsidebase.com. By paying you agree to the{' '}
             <Text accessibilityRole="link" onPress={() => openLegal('terms')} style={styles.fineLink}>Terms of Use</Text>.
           </Text>
         </View>
+        </Collapse>
       ) : null}
 
       {/* ------------------------------------------------------ your bookings */}
@@ -320,7 +332,8 @@ export default function CoachDetail() {
           </Pressable>
         ) : null}
       </View>
-      {isOwner && addingResult ? (
+      {isOwner ? (
+        <Collapse open={addingResult}>
         <View style={styles.form}>
           <Field label="Player (first name or handle)" value={result.client} onChangeText={(v) => setResult((r) => ({ ...r, client: v }))} autoCapitalize="words" />
           <Field label="What you worked on" value={result.focus} onChangeText={(v) => setResult((r) => ({ ...r, focus: v }))} />
@@ -332,26 +345,28 @@ export default function CoachDetail() {
           <Field label="One line on how (optional)" value={result.note} onChangeText={(v) => setResult((r) => ({ ...r, note: v }))} />
           <Button label="Add to my page" onPress={saveResult} disabled={!canAddResult} full />
         </View>
+        </Collapse>
       ) : null}
       {results.length === 0 ? (
         <Text style={styles.muted}>{isOwner ? 'Show players what changed for the people you coach.' : 'None shared yet.'}</Text>
       ) : (
-        <View style={styles.group}>
+        <Reanimated.View entering={ARRIVE} style={styles.group}>
           {results.map((r, index) => (
-            <View key={r.id} style={[styles.row, index > 0 && styles.line]}>
+            <Reanimated.View key={r.id} entering={ARRIVE} style={[styles.row, index > 0 && styles.line]}>
               <View style={styles.rowWords}>
                 <Text style={styles.rowTitle}>{r.focus}</Text>
                 <Text style={styles.meta}>{r.clientName} · {r.weeks} {r.weeks === 1 ? 'week' : 'weeks'}{r.note ? ` · ${r.note}` : ''}</Text>
               </View>
               <Text style={styles.change}>{r.before} <Text style={styles.changeArrow}>→</Text> <Text style={styles.changeAfter}>{r.after}</Text></Text>
-            </View>
+            </Reanimated.View>
           ))}
-        </View>
+        </Reanimated.View>
       )}
 
       {/* ------------------------------------------------------------ reviews */}
       <Text style={styles.sectionTitle}>Reviews</Text>
-      {canReview ? (
+      {hadReviewForm.current ? (
+        <Collapse open={canReview}>
         <View style={styles.form}>
           <Text style={styles.formLead}>{first} answered you. How did it go?</Text>
           <View style={styles.starPick}>
@@ -364,17 +379,18 @@ export default function CoachDetail() {
           <Field value={reviewBody} onChangeText={setReviewBody} placeholder="Your review" multiline minHeight={70} />
           <Button label="Post review" disabled={!reviewStars || !reviewBody.trim()} loading={posting} onPress={postReview} full />
         </View>
+        </Collapse>
       ) : null}
       {reviews.length === 0 ? (
         <Text style={styles.muted}>No reviews yet. Only players {first} has answered can leave one.</Text>
       ) : (
-        <View style={styles.group}>
+        <Reanimated.View entering={ARRIVE} style={styles.group}>
           {reviews.map((r, index) => {
             const author = users.find((u) => u.id === r.authorId);
             // Someone else's review: hold its words to report it, as with a comment.
             const report = currentUserId && r.authorId !== currentUserId ? () => reportReview(r, author) : undefined;
             return (
-              <View key={r.id} style={[styles.review, index > 0 && styles.line]}>
+              <Reanimated.View key={r.id} entering={ARRIVE} style={[styles.review, index > 0 && styles.line]}>
                 <View style={styles.reviewHead}>
                   <Avatar name={author?.name ?? '?'} seed={author?.avatarSeed ?? r.id} uri={author?.avatarUrl} size={30} />
                   <View style={{ flex: 1, gap: 1 }}>
@@ -397,16 +413,20 @@ export default function CoachDetail() {
                     </Pressable>
                   ) : <Text style={styles.reviewBody}>{r.body}</Text>
                 ) : null}
-              </View>
+              </Reanimated.View>
             );
           })}
-        </View>
+        </Reanimated.View>
       )}
       {busy ? <ActivityIndicator style={{ marginTop: spacing.lg }} color={colors.textFaint} /> : null}
+      </LayoutAnimationConfig>
       <MenuSheet visible={menuOpen} onClose={() => setMenuOpen(false)} title={user.name} items={menu} />
     </Screen>
   );
 }
+
+/** A new review or result fades in where it lands (Oct 22 sweep); the ones there on arrival just show. */
+const ARRIVE = FadeIn.duration(240).easing(Easing.out(Easing.cubic));
 
 const styleDefinitions = StyleSheet.create({
   wait: { paddingVertical: 60, alignItems: 'center' },
