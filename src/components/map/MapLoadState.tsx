@@ -30,6 +30,14 @@ import { colors, radius, spacing, typography } from '@/theme';
 const SLOW_MS = 4000;
 /** How long the real map takes to fade in over the sketch, inside the card's frame (the frame itself never moves). */
 export const MAP_IN_MS = 300;
+/**
+ * The one reveal a still card ever makes in view (Oct 22, owner: "The map blips in 50% of the time"):
+ * only when there is no picture of it kept from before (a first open, a new theme, a new city), and
+ * never under a lifting curtain. Slow and even at both ends, so it reads as the map settling in, not a cut.
+ */
+export const MAP_REVEAL_MS = 400;
+/** The same easing in a browser (ease-in-out, quadratic), for a CSS transition. */
+export const MAP_REVEAL_CSS = 'cubic-bezier(0.45, 0, 0.55, 1)';
 
 /** The sketch itself, kept faint: the map's ground, two parks, a little water, two main roads and a few streets. Drawn once, never animated. */
 export function MapCardBase() {

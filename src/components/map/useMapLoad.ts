@@ -86,8 +86,21 @@ export function useMapLoad(where: string, active = true) {
     setStatus('loading');
     begin();
   };
-  /** The page was stopped by the phone (to free memory): made again, without counting as a failure. */
-  const reboot = () => begin();
+  /**
+   * The page was stopped by the phone (to free memory) or lost its drawing: a real fresh load, even after
+   * it had drawn, so the new page gets every clock, retry and "Tap to try again" a first load does.
+   */
+  const reboot = () => {
+    // Before it has drawn, the round of tries simply goes on (a page that keeps being stopped still runs out of time).
+    if (s.painted) {
+      s.painted = false;
+      s.gaveUp = false;
+      s.tries = 0;
+      s.since = Date.now();
+      setStatus('loading');
+    }
+    begin();
+  };
 
   // A try that has gone quiet is a failure (20 s before the map is up, 90 s after); before it is up, time runs
   // out once nothing is arriving, but never for a try that has only just started (it counts as a try then).
@@ -140,5 +153,7 @@ export function useMapLoad(where: string, active = true) {
 
   useEffect(() => () => { if (s.retry) clearTimeout(s.retry); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  return { status, attempt, heard, failed, restart, reboot, online };
+  /** How long since this try's page last said anything (ms): a page still talking is still on its way. */
+  const quiet = () => Date.now() - s.heard;
+  return { status, attempt, heard, failed, restart, reboot, online, quiet };
 }

@@ -9,6 +9,7 @@ import { MapCardFailed, MapCardLoading } from '@/components/map/MapLoadState';
 import { STYLE } from '@/components/map/look';
 import type { NearbyMapProps } from '@/components/NearbyMap.types';
 import { useStartMapHold } from '@/features/feed/warmup';
+import { loadCardShots } from '@/components/map/cardShot';
 import { Button } from '@/components/ui';
 import { colors, radius, spacing, typography } from '@/theme';
 
@@ -31,6 +32,8 @@ export function preloadNearbyMap() {
   // A failure here is left for the map to meet and handle (below) when it is drawn.
   loadMap().catch(() => undefined);
   warmTiles();
+  // The card's picture from last time (cardShot), read now so the card's first frame can be it.
+  void loadCardShots();
 }
 let tilesWarm = false;
 /**
@@ -75,7 +78,7 @@ const WebMap = lazy(() => loadMap().then((m) => {
 
 export function NearbyMap(props: NearbyMapProps) {
   return (
-    <Suspense fallback={<StandIn expanded={!!props.expanded} height={props.cardHeight} />}>
+    <Suspense fallback={<StandIn expanded={!!props.expanded} height={props.cardHeight} holdCurtain={props.holdCurtain !== false} />}>
       <WebMap {...props} />
     </Suspense>
   );
@@ -86,9 +89,9 @@ export function NearbyMap(props: NearbyMapProps) {
  * page, it holds the opening curtain too (see warmup), handing over to the
  * map itself; it looks just as the card does while its map loads after.
  */
-function StandIn({ expanded, height }: { expanded: boolean; height?: number }) {
+function StandIn({ expanded, height, holdCurtain }: { expanded: boolean; height?: number; holdCurtain: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
-  useStartMapHold(!expanded);
+  useStartMapHold(holdCurtain && !expanded);
   return (
     <View style={expanded ? styles.fill : [styles.card, height ? { height } : null]}>
       {expanded ? <CourtSpinner size={24} /> : <MapCardLoading />}

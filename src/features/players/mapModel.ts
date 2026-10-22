@@ -92,7 +92,7 @@ const ringCourt = (r: CourtRing): Court => ({ id: r.courtId, name: r.name ?? 'Te
  * `focusHit` opens the map with that hit's card up; `focusPlace` (a place
  * picked in Find Players' search) opens it on that place with its courts listed.
  */
-export function useMapModel(me: User, players: User[], fix?: LatLng | null, focus?: TaggedCourt | null, card = false, focusHit?: string | null, focusUser?: string | null, focusSpot?: LatLng | null, locationOn = false, focusPlace?: FoundPlace | null) {
+export function useMapModel(me: User, players: User[], fix?: LatLng | null, focus?: TaggedCourt | null, card = false, focusHit?: string | null, focusUser?: string | null, focusSpot?: LatLng | null, locationOn = false, focusPlace?: FoundPlace | null, cardHint?: { lat: number; lng: number; name: string } | null) {
   const { lastSeen, actions, hitRequests, users, followingIds, currentUserId, blockedIds, mutedIds, courtRings, seeing } = useApp();
   // One stable function (it never changes), so asking for rings never repeats because something else did.
   const { loadCourtRings } = actions;
@@ -122,16 +122,26 @@ export function useMapModel(me: User, players: User[], fix?: LatLng | null, focu
   // counting everyone in town, so the map feels as full as it is. The small
   // towns still show as the map's own labels. Far from any big city the app
   // knows, it is the town you are in.
-  const live = useMemo<{ at: LatLng; name: string } | null>(() => {
+  const live = useMemo<{ at: LatLng; name: string; exact?: boolean } | null>(() => {
     if (fixLat === undefined || fixLng === undefined) return null;
     const at = { lat: fixLat, lng: fixLng };
     const centre = liveCentre(at);
     if (centre !== at) return { at: centre, name: nearestPlace(fixLat, fixLng).name.split(',')[0] };
-    return { at, name: looked ?? 'you' };
+    return { at, name: looked ?? 'you', exact: true };
   }, [fixLat, fixLng, looked]);
-  const city = live ? live.at : profileCity;
-  const cityPending = live ? false : profilePending;
-  const cityName = live ? live.name : me.location.trim() ? me.location.split(',')[0] : 'you';
+  // The still card only: with Location on and no fix yet this time, the town it showed last time
+  // (cardShot's hint, kept on this phone), so it opens where it will most likely stay instead of on
+  // your profile's city and then moving. Only the card's centre and name: never your pin or your spot.
+  const hinted = card && !live && locationOn && cardHint ? cardHint : null;
+  const hintLat = hinted?.lat;
+  const hintLng = hinted?.lng;
+  const hintAt = useMemo(() => (hintLat !== undefined && hintLng !== undefined ? { lat: hintLat, lng: hintLng } : null), [hintLat, hintLng]);
+  const city = live ? live.at : hintAt ?? profileCity;
+  const cityPending = live || hinted ? false : profilePending;
+  // The card is centred on your own spot (far from any town the app knows), not a town's centre: nothing about
+  // where it is may be kept on the device (cardShot keeps pictures and the last centre only for a town).
+  const cityExact = !!live?.exact;
+  const cityName = live ? live.name : hinted ? hinted.name : me.location.trim() ? me.location.split(',')[0] : 'you';
   // Without a fix here (a computer that was never asked), your own last spot
   // from the phone is the next best thing to where you are.
   const mine = lastSeen[me.id];
@@ -451,7 +461,7 @@ export function useMapModel(me: User, players: User[], fix?: LatLng | null, focu
   const cardHits = useMemo(() => (cardFrom ? hits.filter((h) => milesBetween(cardFrom, h.at) <= NEAR_HIT_MILES) : []), [cardFrom, hits]);
   const cardFlags = useMemo(() => cardHits.slice(0, CARD_FLAGS), [cardHits]);
   return {
-    home, homeKnown, homeView, mePos, city, cityName, cityPending, inCity, start, ranked, inTown, filter, setFilter, query, setQuery, shown, tray, selected, select, loadPlayersIn,
+    home, homeKnown, homeView, mePos, city, cityName, cityPending, cityExact, inCity, start, ranked, inTown, filter, setFilter, query, setQuery, shown, tray, selected, select, loadPlayersIn,
     place, pickPlace, clearPlace, placeSearch, placeRows: placeCourts.rows, placeLoading: placeCourts.loading, placeFailed: placeCourts.failed, retryPlace: placeCourts.retry,
     courtsOn, toggleCourts, courts: card ? [] : pins, ringed, ringFor, courtsLoading, loadCourts, loadRings, selectedCourt, selectCourt,
     cardCourts, cardRinged, cardHits, cardFlags, cardFromYou, courtResults, pickCourt, hits, selectedHit, selectHit, nearestCourts,

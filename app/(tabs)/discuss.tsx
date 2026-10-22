@@ -611,11 +611,13 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
             </Pressable>
           ) : null}
         </View>
-        {currentUser && !search ? (pane === 'players'
+        {currentUser ? (pane === 'players'
           // Live while the tab is on show, beside Discussions too, so it is already drawn when it slides in.
-          ? <NearbyMap visible={!previewSection || section === 'players'} inView={mapInView} me={currentUser} players={players} at={detectedCoords} locationOn={location.locationOn} locating={location.locating} onToggleLocation={location.toggle} onOpen={id => router.push(`/user/${id}`)} onExpand={() => router.push('/map')} hitCount={openHits.length} inviting={early} />
+          // Kept (hidden, not taken down) while you search, so clearing the search finds it already drawn
+          // instead of building a new map in front of you (Oct 22, owner: "The map blips in").
+          ? <View style={search ? styles.mapHidden : null}><NearbyMap visible={(!previewSection || section === 'players') && !search} inView={mapInView} me={currentUser} players={players} at={detectedCoords} locationOn={location.locationOn} locating={location.locating} onToggleLocation={location.toggle} onOpen={id => router.push(`/user/${id}`)} onExpand={() => router.push('/map')} hitCount={openHits.length} inviting={early} /></View>
           // The same footprint, empty: keeps the list from jumping when the map mounts on arrival.
-          : <View style={styles.mapStandIn} />) : null}
+          : search ? null : <View style={styles.mapStandIn} />) : null}
         {/* Nobody sharing a spot within 30 miles: the way to fill the map,
             right under it, so its button shows without scrolling (Oct 5: it
             sat under the bar, below Open to hit). For a teen with no friend
@@ -1001,6 +1003,8 @@ const styleDefinitions = StyleSheet.create({
   searchCancel: { fontSize: 16, ...font('600'), color: colors.brand },
   searchIcon: { position: 'absolute', left: 16, zIndex: 1 },
   search: { ...typography.body, fontSize: 16, color: colors.text, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: radius.pill, paddingLeft: 42, paddingRight: spacing.lg, minHeight: 46, paddingVertical: 10, ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : {}) },
+  // The map card while a search is up: kept, out of the layout.
+  mapHidden: { display: 'none' },
   mapStandIn: { height: 330, borderRadius: radius.xl, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
   playersHead: { gap: 3, paddingTop: spacing.sm },
   playersTitle: { ...typography.title, color: colors.text },
