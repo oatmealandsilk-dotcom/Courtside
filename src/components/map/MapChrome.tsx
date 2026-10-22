@@ -139,8 +139,13 @@ export function MapTopBar({ onBack, query, onQuery, locationOn, locating, onTogg
   const say = city ? `Search ${city}` : 'Search a place or park';
   const short = city || 'Search places';
   const hint = focused ? 'Players, courts or places' : fieldW && sayW > fieldW ? short : say;
+  // One lit value for the button's green, its edge and its icon, so the icon never runs ahead of the fill (a spinner ending as Location comes on).
+  const locLit = useLit(!!locationOn);
+  const edgeOff = `${colors.borderStrong}55`;
+  const edgeOn = colors.brand;
+  const locEdge = useAnimatedStyle(() => ({ borderColor: interpolateColor(locLit.value, [0, 1], [edgeOff, edgeOn]) }));
   const locationIcon = locating ? <ActivityIndicator size="small" color={locationOn ? colors.brandInk : colors.text} /> : (
-    <TwoTone on={!!locationOn} off={<Ionicons name="navigate-outline" size={18} color={colors.text} />} lit={<Ionicons name="navigate" size={18} color={colors.brandInk} />} />
+    <TwoTone v={locLit} off={<Ionicons name="navigate-outline" size={18} color={colors.text} />} lit={<Ionicons name="navigate" size={18} color={colors.brandInk} />} />
   );
   // The list under the bar: courts, then places, or why there are none.
   const listUp = !!(found.length || placeRows.length || placeNote || searching);
@@ -205,8 +210,8 @@ export function MapTopBar({ onBack, query, onQuery, locationOn, locating, onTogg
           <TipPulse where="map" size={44} />
           <Pressable accessibilityRole="switch" accessibilityState={{ checked: !!locationOn }} accessibilityLabel={locationOn ? (locationMenu ? 'Location on. Who can see you' : 'Turn location off') : 'Turn location on'} onPress={onToggleLocation} style={({ pressed }) => [styles.barRoundHit, pressed && styles.barPressed]}>
             {/* The green fill fades in over the see-through one and out again (only the fill, never the glass: Oct 22 sweep). */}
-            <MapGlass radius={22} style={styles.barRound}>
-              <GreenFill on={!!locationOn} radius={22} />
+            <MapGlass radius={22} style={[styles.barRound, locEdge]}>
+              <GreenFill v={locLit} radius={22} />
               {locationIcon}
             </MapGlass>
           </Pressable>
@@ -266,7 +271,6 @@ function SearchList({ up, children }: { up: boolean; children: React.ReactNode }
   const h = useSharedValue(0);
   const open = useSharedValue(0);
   const natural = useRef(0);
-  const edges = 2 * StyleSheet.hairlineWidth;
   useEffect(() => {
     if (up) {
       setShown(true);
@@ -289,8 +293,8 @@ function SearchList({ up, children }: { up: boolean; children: React.ReactNode }
       <MapGlass dense radius={18} style={[styles.results, glass]}>
         <View
           onLayout={(e) => {
-            const next = Math.round((e.nativeEvent.layout.height + edges) * 2) / 2;
-            if (next <= edges || next === natural.current) return;
+            const next = Math.round(e.nativeEvent.layout.height * 2) / 2;
+            if (next <= 0 || next === natural.current) return;
             natural.current = next;
             if (!up) return;
             h.value = reduce ? next : withTiming(next, LIST_EASE);
@@ -298,6 +302,8 @@ function SearchList({ up, children }: { up: boolean; children: React.ReactNode }
         >
           {up ? children : kept.current}
         </View>
+        {/* The hairline edge drawn inside the glass (not its border), so the glide starts and ends at nothing rather than 2 points. */}
+        <View pointerEvents="none" style={styles.resultsEdge} />
       </MapGlass>
     </Animated.View>
   );
@@ -364,7 +370,8 @@ export function FilterChips({ filter, onFilter, courtsOn, onCourts, courtsLoadin
   useEffect(() => { if (filter !== active) { setActive(filter); moveTo(filter, true); } }, [filter]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => { if (pending.current) clearTimeout(pending.current); }, []);
   const pill = useAnimatedStyle(() => ({ transform: [{ translateX: x.value }], width: w.value }));
-  const courtsLit = useLitText(courtsOn);
+  const courtsV = useLit(courtsOn);
+  const courtsLit = useLitText(courtsV);
   const pick = (key: MapFilter) => {
     if (key === active) return;
     haptics.tap();
@@ -400,8 +407,8 @@ export function FilterChips({ filter, onFilter, courtsOn, onCourts, courtsLoadin
         <View style={styles.chipGap} />
         <Pressable accessibilityRole="switch" accessibilityState={{ checked: courtsOn }} accessibilityLabel="Show courts" hitSlop={CHIP_REACH} onPress={() => { haptics.tap(); onCourts(); }} style={styles.chip}>
           {/* The green fades in and out over 180 ms, in step with the filter pill sliding beside it. */}
-          <GreenFill on={courtsOn} radius={999} edge={1} />
-          {courtsLoading ? <ActivityIndicator size="small" color={courtsOn ? colors.brandInk : colors.text} /> : <TwoTone on={courtsOn} off={<CourtGlyph size={15} color={colors.text} />} lit={<CourtGlyph size={15} color={colors.brandInk} />} />}
+          <GreenFill v={courtsV} radius={999} edge={1} />
+          {courtsLoading ? <ActivityIndicator size="small" color={courtsOn ? colors.brandInk : colors.text} /> : <TwoTone v={courtsV} off={<CourtGlyph size={15} color={colors.text} />} lit={<CourtGlyph size={15} color={colors.brandInk} />} />}
           <Animated.Text maxFontSizeMultiplier={TextScale.TITLE} style={[styles.chipText, courtsLit]}>Courts</Animated.Text>
         </Pressable>
       </ScrollView>
@@ -420,8 +427,7 @@ function useLit(on: boolean) {
 }
 
 /** Words that turn from the page's colour to the colour on green as the fill comes in. */
-function useLitText(on: boolean) {
-  const v = useLit(on);
+function useLitText(v: SharedValue<number>) {
   const off = colors.text;
   const lit = colors.brandInk;
   return useAnimatedStyle(() => ({ color: interpolateColor(v.value, [0, 1], [off, lit]) }));
@@ -431,9 +437,8 @@ function useLitText(on: boolean) {
  * A control's green, laid over its see-through fill and faded in and out on its own: only this fill is ever
  * faded, never the see-through one under it (MapGlass) nor anything holding it.
  */
-function GreenFill({ on, radius: r, edge = 0 }: { on: boolean; radius: number; /** The control's border, which the green covers too (so its edge never switches on its own). */ edge?: number }) {
+function GreenFill({ v, radius: r, edge = 0 }: { v: SharedValue<number>; radius: number; /** The control's border, which the green covers too (so its edge never switches on its own). */ edge?: number }) {
   const styles = useThemedStyles(styleDefinitions);
-  const v = useLit(on);
   const look = useAnimatedStyle(() => ({ opacity: v.value }));
   return (
     <Animated.View pointerEvents="none" style={[styles.greenFill, { borderRadius: r, top: -edge, right: -edge, bottom: -edge, left: -edge }, look]}>
@@ -443,9 +448,8 @@ function GreenFill({ on, radius: r, edge = 0 }: { on: boolean; radius: number; /
 }
 
 /** An icon in its two colours, one fading into the other as the fill under it comes and goes. */
-function TwoTone({ on, off, lit }: { on: boolean; off: React.ReactNode; lit: React.ReactNode }) {
+function TwoTone({ v, off, lit }: { v: SharedValue<number>; off: React.ReactNode; lit: React.ReactNode }) {
   const styles = useThemedStyles(styleDefinitions);
-  const v = useLit(on);
   const offLook = useAnimatedStyle(() => ({ opacity: 1 - v.value }));
   const litLook = useAnimatedStyle(() => ({ opacity: v.value }));
   return (
@@ -624,24 +628,26 @@ export function PlayersPill({ items, query = '', filter = 'all', courts = [], lo
   }, [target]); // eslint-disable-line react-hooks/exhaustive-deps
   const glide = useAnimatedStyle(() => (w.value < 0 ? {} : { width: w.value }));
   const icon = <Ionicons name={n ? 'people' : 'people-outline'} size={15} color={colors.brand} />;
+  // The chevron rides the gliding edge (drawn at the glass's right, its room kept in the row), fading with whether there is a list.
+  const chevV = useLit(!!n);
+  const chevLook = useAnimatedStyle(() => ({ opacity: chevV.value }));
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={n ? 'Show the full list' : 'Show players'} onPress={() => { haptics.tap(); onOpen(); }} style={({ pressed }) => [styles.pillLift, pressed && styles.glassPressed]}>
       <MapGlass radius={21} style={[styles.pillEdge, glide]}>
-        <LayoutAnimationConfig skipEntering>
         {/* Laid out at the width it is going to, so the words never squeeze while the edge glides. */}
-        <View style={[styles.playersPill, target ? { width: target } : null]}>
+        <View style={[styles.playersPill, n ? styles.playersPillChev : null, target ? { width: target } : null]}>
           {icon}
-          <Animated.Text key={words} entering={FadeIn.duration(180)} exiting={FadeOut.duration(120)} maxFontSizeMultiplier={TextScale.CHROME} style={styles.playersPillText} numberOfLines={1}>{words}</Animated.Text>
-          {n ? <Animated.View entering={FadeIn.duration(180)} exiting={FadeOut.duration(120)}><Ionicons name="chevron-up" size={14} color={colors.textMuted} /></Animated.View> : null}
+          <CrossFade id={words} free style={styles.playersPillWords}>
+            <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.playersPillText} numberOfLines={1}>{words}</Text>
+          </CrossFade>
         </View>
-        </LayoutAnimationConfig>
+        <Animated.View pointerEvents="none" style={[styles.pillChev, chevLook]}><Ionicons name="chevron-up" size={14} color={colors.textMuted} /></Animated.View>
       </MapGlass>
       {/* The unseen copy, free of the room, to say how wide the pill wants to be (a point to spare, so a fraction never trails the words off). */}
       <View style={styles.pillMeasure} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" aria-hidden>
-        <View style={styles.playersPill} onLayout={(e) => setNatural(Math.ceil(e.nativeEvent.layout.width) + 1)}>
+        <View style={[styles.playersPill, n ? styles.playersPillChev : null]} onLayout={(e) => setNatural(Math.ceil(e.nativeEvent.layout.width) + 1)}>
           {icon}
           <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.playersPillText} numberOfLines={1}>{words}</Text>
-          {n ? <Ionicons name="chevron-up" size={14} color={colors.textMuted} /> : null}
         </View>
       </View>
     </Pressable>
@@ -703,9 +709,18 @@ export function PlayersSheet({ items, cityName, onSelect, query = '', filter = '
   const pick = (id: string) => { if (!stops.justDragged()) onSelect(id); };
   // Where the faces are scrolled to, as they go and where they come to rest (a fling's last move can fall between two scroll events).
   const keepAt = (e: NativeSyntheticEvent<NativeScrollEvent>) => { if (stripAt) stripAt.current = e.nativeEvent.contentOffset.x; };
+  // The faces as they stand, for the crossfade to fade out: no ref, handlers or gesture, at the place they were scrolled to.
+  const facesGhost = (
+    <View style={styles.trayGhost}>
+      <View style={[styles.trayRow, styles.trayGhostRow, { transform: [{ translateX: -(stripAt?.current ?? 0) }] }]}>
+        {items.map((p) => <TrayFace key={p.user.id} placed={p} onPress={() => {}} />)}
+      </View>
+    </View>
+  );
   const faces = (
     <ScrollView
-      ref={strip}
+      // Only ever set, never cleared: a faded-out copy going away must not empty it under the live row.
+      ref={(r) => { if (r) strip.current = r; }}
       horizontal
       showsHorizontalScrollIndicator={false}
       contentContainerStyle={styles.trayRow}
@@ -720,7 +735,9 @@ export function PlayersSheet({ items, cityName, onSelect, query = '', filter = '
   );
   // A chip or a search changing who is listed: the faces crossfade to the new set (Oct 22 sweep: swapped in one frame),
   // which starts again from its first face.
-  const faceSet = items.map((p) => p.user.id).join(',');
+  // Keyed on what a chip or a search changes, not on the ids: players arriving as the map pans, a live update or the
+  // distance sort reordering them update in place, and the row keeps its place.
+  const faceSet = `${filter}|${query.trim().toLowerCase()}`;
   const lastSet = useRef(faceSet);
   useEffect(() => {
     if (lastSet.current === faceSet) return;
@@ -730,6 +747,9 @@ export function PlayersSheet({ items, cityName, onSelect, query = '', filter = '
   // The height the faces were showing at, for the "No players" box to glide from as it takes their place.
   const lastBody = useRef(0);
   if (stops.restH > 0) lastBody.current = stops.restH;
+  // What it opens with is simply there; the faces or the empty box coming in later fade in.
+  const opened = useRef(false);
+  useEffect(() => { opened.current = true; }, []);
   const emptyKey = `${locked ?? ''}|${filter}|${query.trim() ? 'q' : ''}|${courts.length ? 'c' : ''}`;
   const list = (
     <Animated.ScrollView
@@ -773,7 +793,9 @@ export function PlayersSheet({ items, cityName, onSelect, query = '', filter = '
           )}
           <View style={styles.listTitleRow}>
             {/* "6 players near Raleigh" to "1 player…": the words crossfade rather than swap. */}
-            <Animated.Text key={listTitle(items, query, filter, courts, cityName)} entering={FadeIn.duration(180)} exiting={FadeOut.duration(120)} maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" style={styles.listTitle} numberOfLines={1}>{listTitle(items, query, filter, courts, cityName)}</Animated.Text>
+            <CrossFade id={listTitle(items, query, filter, courts, cityName)} style={styles.listTitleBox}>
+              <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" style={[styles.listTitle, styles.flexNone]} numberOfLines={1}>{listTitle(items, query, filter, courts, cityName)}</Text>
+            </CrossFade>
             {/* More players than fit across: See all opens them as the full list. */}
             {stops.canTall && !stops.up ? (
               <Pressable accessibilityRole="button" accessibilityLabel="See all players" hitSlop={8} onPress={() => { haptics.tap(); stops.expand(); }} style={({ pressed }) => [styles.seeAll, pressed && styles.closePressed]}>
@@ -804,15 +826,15 @@ export function PlayersSheet({ items, cityName, onSelect, query = '', filter = '
               importantForAccessibility={stops.up ? 'no-hide-descendants' : 'auto'}
               aria-hidden={stops.up}
             >
-              <Animated.View key={faceSet} entering={FadeIn.duration(200)} exiting={FadeOut.duration(140)}>
+              <CrossFade id={faceSet} ghost={facesGhost} appear={opened.current}>
                 {stops.stripGesture ? <GestureDetector gesture={stops.stripGesture}>{faces}</GestureDetector> : faces}
-              </Animated.View>
+              </CrossFade>
             </Animated.View>
           </Animated.View>
         </View>
       ) : (
         <EmptyBox from={lastBody.current} onHeight={stops.holdBody}>
-        <Animated.View key={emptyKey} entering={FadeIn.duration(200)} exiting={FadeOut.duration(140)} style={styles.listEmpty}>
+        <View style={styles.listEmpty}><CrossFade id={emptyKey} appear={opened.current}>
           {locked && (filter !== 'all' || !courts.length) ? (
             <View style={styles.lockBox}>
               <LockNote lock={locked} onUnlock={onUnlock} />
@@ -844,10 +866,67 @@ export function PlayersSheet({ items, cityName, onSelect, query = '', filter = '
               </ScrollView>
             </View>
           )}
-        </Animated.View>
+        </CrossFade></View>
         </EmptyBox>
       )}
       </LayoutAnimationConfig>
+    </Animated.View>
+  );
+}
+
+/** How long a crossfade's old copy takes to go, and its new one to come. */
+const SWAP_OUT_MS = 140;
+const SWAP_IN_MS = 200;
+
+/**
+ * What it shows, crossfading to new content each time `id` changes: the old copy stays drawn in place
+ * (absolutely, under the new, taking no touches) while it fades out, the new fading in over it, then the
+ * old is dropped. Both platforms draw it the same way, so it never depends on an exiting copy's position
+ * (Reanimated on the web placed it below the screen, or floating above the tray). `ghost` is what to keep
+ * fading out, when the live content holds things that must not be drawn twice (a ref, a gesture).
+ * `appear`: the first content fades in too, rather than simply being there.
+ */
+function CrossFade({ id, children, ghost, appear = false, free = false, style }: { id: string; children: React.ReactNode; ghost?: React.ReactNode; appear?: boolean; /** The old copy at its own width (one line of words), not the box's. */ free?: boolean; style?: object }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const [shown, setShown] = useState<{ id: string; old: { id: string; node: React.ReactNode }[] }>({ id, old: [] });
+  const last = useRef<React.ReactNode>(ghost ?? children);
+  if (shown.id !== id) {
+    // Derived during the render, so the new content's first frame already has the old one under it.
+    setShown({ id, old: [...shown.old.filter((o) => o.id !== id).slice(-1), { id: shown.id, node: last.current }] });
+  }
+  last.current = ghost ?? children;
+  const first = useRef(!appear);
+  useEffect(() => { first.current = false; }, []);
+  const drop = useCallback((gone: string) => setShown((now) => ({ ...now, old: now.old.filter((o) => o.id !== gone) })), []);
+  return (
+    <View style={style}>
+      {shown.old.map((o) => (
+        <SwapLayer key={o.id} leaving onGone={() => drop(o.id)} style={free ? styles.swapGhostFree : styles.swapGhost}>{o.node}</SwapLayer>
+      ))}
+      <SwapLayer key={id} first={first.current}>{children}</SwapLayer>
+    </View>
+  );
+}
+
+function SwapLayer({ leaving = false, first = false, onGone, style, children }: { leaving?: boolean; first?: boolean; onGone?: () => void; style?: object; children: React.ReactNode }) {
+  const v = useSharedValue(first ? 1 : 0);
+  const gone = useRef(onGone);
+  gone.current = onGone;
+  const done = useCallback(() => gone.current?.(), []);
+  useEffect(() => {
+    if (leaving) v.value = withTiming(0, { duration: SWAP_OUT_MS, easing: Easing.out(Easing.quad) }, (fin) => { 'worklet'; if (fin) runOnJS(done)(); });
+    else v.value = withTiming(1, { duration: SWAP_IN_MS, easing: Easing.out(Easing.quad) });
+  }, [leaving]); // eslint-disable-line react-hooks/exhaustive-deps
+  const look = useAnimatedStyle(() => ({ opacity: v.value }));
+  return (
+    <Animated.View
+      pointerEvents={leaving ? 'none' : 'auto'}
+      accessibilityElementsHidden={leaving}
+      importantForAccessibility={leaving ? 'no-hide-descendants' : 'auto'}
+      aria-hidden={leaving || undefined}
+      style={[style, look]}
+    >
+      {children}
     </Animated.View>
   );
 }
@@ -1631,6 +1710,10 @@ const styleDefinitions = StyleSheet.create({
   pillLift: { flexShrink: 1, maxWidth: '100%', borderRadius: 21, shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 4 },
   // "All 11 players": as tall as Back to me beside it, in the same glass.
   playersPill: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, minHeight: 42 },
+  // Room for the chevron (6 gap + 14 wide) beside the words.
+  playersPillChev: { paddingRight: 14 + 6 + 14 },
+  playersPillWords: { flexShrink: 1 },
+  pillChev: { position: 'absolute', right: 14, top: 0, bottom: 0, justifyContent: 'center' },
   // The pill's edge, on its see-through fill (which glides to the words' width).
   pillEdge: { maxWidth: '100%', borderWidth: StyleSheet.hairlineWidth, borderColor: `${colors.borderStrong}55` },
   // The pill's unseen copy: wide enough never to squeeze it, reaching off to the left (which never scrolls the page), taking no taps.
@@ -1816,7 +1899,14 @@ const styleDefinitions = StyleSheet.create({
   cityHits: { ...typography.caption, letterSpacing: 0, color: colors.textMuted, textShadowColor: colors.bg, textShadowRadius: 8, textShadowOffset: { width: 0, height: 0 } },
   // The map search's courts, under the bar: the bar's own glass, one row per place.
   resultsWrap: { paddingHorizontal: spacing.md },
-  results: { paddingHorizontal: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderColor: `${colors.borderStrong}55` },
+  results: { paddingHorizontal: spacing.md },
+  swapGhost: { position: 'absolute', top: 0, left: 0, right: 0 },
+  swapGhostFree: { position: 'absolute', top: 0, left: 0, width: 1000 },
+  trayGhost: { overflow: 'hidden' },
+  trayGhostRow: { flexDirection: 'row' },
+  listTitleBox: { flex: 1 },
+  flexNone: { flex: 0 },
+  resultsEdge: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, borderRadius: 18, borderWidth: StyleSheet.hairlineWidth, borderColor: `${colors.borderStrong}55` },
   resultRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: 9 },
   resultTile: { width: 30, height: 30, borderRadius: 9, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
   // A place in the map search's list: the court rows' tile, in the quiet surface colour, so places and courts read apart.
