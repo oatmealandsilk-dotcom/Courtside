@@ -3130,6 +3130,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         // Truly signed out (the session was ended, here or from another phone): this
         // iPhone's own "Workout detected" alerts stop too (build 15, workoutWatch).
         void stopWorkoutWatch();
+        // Nor are its map card's pictures, or where that card was, kept (cardShot), as on every other way out.
+        clearCardShots();
         setState((prev) => ({ ...prev, currentUserId: null, onboardingComplete: false, termsVersion: undefined, ...freshAccountSettings() }));
       }
     });

@@ -153,5 +153,7 @@ export function useMapLoad(where: string, active = true) {
 
   useEffect(() => () => { if (s.retry) clearTimeout(s.retry); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  return { status, attempt, heard, failed, restart, reboot, online };
+  /** How long since this try's page last said anything (ms): a page still talking is still on its way. */
+  const quiet = () => Date.now() - s.heard;
+  return { status, attempt, heard, failed, restart, reboot, online, quiet };
 }

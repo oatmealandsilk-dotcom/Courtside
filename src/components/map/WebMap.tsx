@@ -21,6 +21,7 @@ import { useOpenClock } from '@/features/players/useOpenClock';
 import { show as showToast } from '@/lib/toast';
 import { confirmUnfollow } from '@/lib/confirm';
 import { useApp } from '@/store/AppContext';
+import { isSupabaseConfigured } from '@/lib/supabase';
 import { levelBadge } from '@/lib/badges';
 import { useWeather } from '@/features/players/useWeather';
 import { colors, radius, spacing, typography } from '@/theme';
@@ -35,7 +36,7 @@ import { useMapLoad } from '@/components/map/useMapLoad';
 import { useIsFocused } from '@/lib/useIsFocused';
 import { curtainState, useStartMapHold } from '@/features/feed/warmup';
 import { useReducedMotion } from '@/lib/useReducedMotion';
-import { cardHint, hasCardShot, hashText, peekCardShot, saveStreetsShot, setCardHint, shotKey, useCardShots, type CardHint } from '@/components/map/cardShot';
+import { cardHint, hasCardShot, hashText, peekCardShot, saveStreetsShot, setCardHint, shotKey, useCardShots, forgetPlaces, type CardHint } from '@/components/map/cardShot';
 import { useCardOnScreen, useHeldCardPlace } from '@/components/map/cardHold';
 import Reanimated from 'react-native-reanimated';
 import { GestureDetector } from 'react-native-gesture-handler';
@@ -128,14 +129,19 @@ export function NearbyMap(props: NearbyMapProps) {
   // The full map runs without the floating tab bar on phones (AppShell's phoneOnlyHide, owner Oct 8), so
   // under a card only the home indicator is kept, in the card's own colour.
   const barInset = insets.bottom;
-  const { followingIds, actions, mapLive, mapVisibility, teenMap, lastSeen, liveSession, courtNow, locationEnabled } = useApp();
+  const { followingIds, actions, mapLive, mapVisibility, teenMap, lastSeen, liveSession, courtNow, locationEnabled, remoteLoaded } = useApp();
   // Who can see you on the map (migration 63): from your card and the location button, once there is a choice to make.
   const choosing = canChooseVisibility(mapLive, me, teenMap);
   // A teen (migration 78) is shared only with friends who follow them back, and with nobody until they say so.
   const teen = onTeenMap(me, teenMap);
   const hiddenMe = choosing && (mapVisibility === 'none' || (teen && mapVisibility == null));
   // Only me (or a teen who has not chosen): nothing of where the card is gets kept on this device, its town or its pictures (cardShot).
-  const keepNone = mapVisibility === 'none' || hiddenMe;
+  // Not known yet counts as Only me: on a cold open the card can paint before the account's settings arrive.
+  const noneKnown = mapVisibility === 'none' || hiddenMe;
+  const settingsUnknown = isSupabaseConfigured && (!remoteLoaded || (mapVisibility === undefined && mapLive !== false));
+  const keepNone = noneKnown || settingsUnknown;
+  // Anything kept before Only me (or the teen rule) was known goes as soon as it is.
+  useEffect(() => { if (noneKnown && !settingsUnknown) forgetPlaces(me.id); }, [noneKnown, settingsUnknown, me.id]);
   // Playing a live session, checked in at its court (Oct 6): your pin says "Playing now", the court glows. Not on Only me, which nobody sees.
   const playing = livePin(liveSession, courtNow, locationEnabled && !hiddenMe);
   // Since migration 98 you share to see: what keeps "Players nearby" from you
@@ -522,7 +528,7 @@ export function NearbyMap(props: NearbyMapProps) {
   }, [cityKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The map has drawn: the picture goes (the same streets under it, the same live pins over both), or
-  // the loading look fades off once, never while the curtain is lifting and never mid-swipe.
+  // the loading look fades off once (at once, even under a curtain still lifting, so it never lingers), never mid-swipe.
   const stopWait = useRef<() => void>(() => undefined);
   useEffect(() => () => stopWait.current(), []);
   const reveal = () => {
