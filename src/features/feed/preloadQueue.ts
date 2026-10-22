@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
+import { connectionIsQuick } from '@/lib/netSpeed';
 
 /**
  * Which feed clips off screen may fetch right now (Oct 22, owner: "pre loaded,
@@ -10,8 +11,11 @@ import { AppState } from 'react-native';
  * every one of them would download at once and the clip you are watching would
  * share the connection with four others. So:
  *  - the clip on screen always loads, and while it is still fetching its
- *    opening no new preload starts (it gets the whole connection);
- *  - at most two preloads fetch at a time, nearest first (`rank`: 1 = next);
+ *    opening no new preload starts: it gets the connection (one started
+ *    before carries on);
+ *  - otherwise at most two preloads fetch at a time, nearest first (`rank`: 1 = next);
+ *    on a slow connection (the last clips took over two seconds, lib/netSpeed)
+ *    one: there two at once only made the one you land on later;
  *  - nothing new starts while the app is in the background;
  *  - a preload that has its opening in (`ready`) frees its turn for the next.
  * A clip that got a turn keeps its player until its page leaves the window,
@@ -23,8 +27,11 @@ import { AppState } from 'react-native';
 
 /** How many clips off screen may fetch at the same moment. */
 const AT_ONCE = 2;
-/** The clip on screen holds the line this long at most: a slow or stuck one never blocks the rest for good. */
+/** The clip on screen holds the line this long at most: a slow or stuck one never holds the rest back for good. */
 const SCREEN_FIRST_MS = 4000;
+/** And once its first frame is in, this long more, so it starts playing before anything else asks. */
+const SCREEN_START_MS = 300;
+let screenInAt = 0;
 
 type Entry = { rank: number; ready: boolean; since: number };
 const waiting = new Map<number, Entry>();
@@ -53,22 +60,28 @@ function settle() {
     if (!e || e.ready) fetching.delete(id);
   }
   const now = Date.now();
-  const screenBusy = [...onScreen.values()].some((at) => now - at < SCREEN_FIRST_MS);
+  const starting = now - screenInAt < SCREEN_START_MS;
+  const screenBusy = starting || [...onScreen.values()].some((at) => now - at < SCREEN_FIRST_MS);
   if (screenTimer) { clearTimeout(screenTimer); screenTimer = null; }
   if (screenBusy) {
     // Look again once the on-screen clip's head start is over, in case it never reports in.
-    const oldest = Math.min(...onScreen.values());
-    screenTimer = setTimeout(settle, Math.max(50, SCREEN_FIRST_MS - (now - oldest) + 10));
+    const waits = [...onScreen.values()].map((at) => SCREEN_FIRST_MS - (now - at));
+    if (starting) waits.push(SCREEN_START_MS - (now - screenInAt));
+    const left = Math.min(...waits.filter((ms) => ms > 0));
+    screenTimer = setTimeout(settle, left + 10);
   }
-  if (!away && !screenBusy) {
+  const before = given.size;
+  if (!away) {
+    const room = screenBusy ? 0 : connectionIsQuick() ? AT_ONCE : 1;
     const queue = [...waiting].filter(([id, e]) => !e.ready && !given.has(id)).sort((a, b) => a[1].rank - b[1].rank || a[1].since - b[1].since);
     for (const [id] of queue) {
-      if (fetching.size >= AT_ONCE) break;
+      if (fetching.size >= room) break;
       fetching.add(id);
       given.add(id);
     }
   }
-  for (const fn of [...listeners]) fn();
+  // Only a new turn changes what any clip may do (a turn handed back changes nothing on screen).
+  if (given.size !== before) for (const fn of [...listeners]) fn();
 }
 
 AppState.addEventListener('change', (state) => {
@@ -81,11 +94,14 @@ AppState.addEventListener('change', (state) => {
  * One clip's place in the queue.
  * - `want`: its page is in the preload window and it is not the clip on screen.
  * - `rank`: how soon you may reach it (1 = the next page); lower goes first.
- * - `active`: it is the clip on screen (always loads, and counts as having had its turn).
+ * - `playing`: it is the clip on screen (always loads, and counts as having had its turn); rank 0 counts the same.
  * - `ready`: its opening is in (first frame / first seconds).
  * Returns whether its player may exist and fetch.
  */
-export function usePreloadTurn(want: boolean, rank: number, active: boolean, ready: boolean): boolean {
+export function usePreloadTurn(want: boolean, rank: number, playing: boolean, ready: boolean): boolean {
+  // The clip on screen, or the page on screen of the feed on show (rank 0) whose clip
+  // is about to start (the feed warming up, the splash lifting): first in line.
+  const active = playing || (want && rank <= 0);
   const id = useRef(0);
   if (!id.current) id.current = nextId++;
   const [, bump] = useState(0);
@@ -105,7 +121,7 @@ export function usePreloadTurn(want: boolean, rank: number, active: boolean, rea
     }
     // Out of the window altogether: its next visit queues afresh.
     if (!want && !active) given.delete(me);
-    if (active && !ready) { if (!onScreen.has(me)) onScreen.set(me, Date.now()); } else onScreen.delete(me);
+    if (active && !ready) { if (!onScreen.has(me)) onScreen.set(me, Date.now()); } else if (onScreen.delete(me) && active) screenInAt = Date.now();
     schedule();
   }, [want, rank, active, ready]);
   useEffect(() => () => {

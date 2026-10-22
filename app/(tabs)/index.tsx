@@ -1847,9 +1847,10 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, onSettled }: {
               // take turns, nearest first (preloadRank, features/feed/preloadQueue).
               // A browser's Feed still warming up out of sight fetches only the first
               // clip's opening. A feed tab not on show (kept, or warmed in the
-              // background, see GroupedFeed) keeps only its page on screen and the
-              // next, after everything the feed on show wants.
-              const near = warming ? ahead === 0 : paused ? ahead === 0 || ahead === 1 : distance <= WINDOW || (ahead > 0 && ahead <= AHEAD);
+              // background, see GroupedFeed) keeps only its page on screen, after
+              // everything the feed on show wants, and in a browser only its opening.
+              const near = warming || paused ? ahead === 0 : distance <= WINDOW || (ahead > 0 && ahead <= AHEAD);
+              const warmOnly = warming || !!paused;
               const preloadRank = (ahead < 0 ? 2.5 : ahead) + (paused ? 10 : 0);
               const strip = index === suggestHost ? suggestStrip : null;
               // A session from a player near you, not followed yet: "Near you", with Follow.
@@ -1891,7 +1892,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, onSettled }: {
                     <View accessibilityLabel={`${author.name}'s Instant`} style={styles.clipFrame}>
                       <View style={phone ? StyleSheet.absoluteFill : styles.clipPortrait}>
                         {story.videoUrl ? (
-                          <ClipPlayback uri={story.videoUrl} poster={story.thumbnailUrl} active={playing && active === index && warmed && playable} held={held && myStage?.key === hitKey} onStage={myStage?.key === hitKey} preload={near} preloadRank={preloadRank} warmOnly={warming} bare={immersive} onDoubleTap={() => likeHitByTap(story.id, hitLiked)} discInk={theme === 'us-open' ? '#FFFFFF' : colors.brand} discPinned={index === 0 && !scope} onReady={(ok) => markReady(story.id, ok)} />
+                          <ClipPlayback uri={story.videoUrl} poster={story.thumbnailUrl} active={playing && active === index && warmed && playable} held={held && myStage?.key === hitKey} onStage={myStage?.key === hitKey} preload={near} preloadRank={preloadRank} warmOnly={warmOnly} bare={immersive} onDoubleTap={() => likeHitByTap(story.id, hitLiked)} discInk={theme === 'us-open' ? '#FFFFFF' : colors.brand} discPinned={index === 0 && !scope} onReady={(ok) => markReady(story.id, ok)} />
                         ) : (
                           // Two quick taps like a hit, the way they like a clip.
                           <Pressable accessibilityRole="image" accessibilityLabel={`${author.name}'s Instant`} onPress={() => { const now = Date.now(); if (now - lastHitTap.current < 280) { lastHitTap.current = 0; likeHitByTap(story.id, hitLiked); } else lastHitTap.current = now; }} style={StyleSheet.absoluteFill}>
@@ -2061,7 +2062,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, onSettled }: {
                           active={playing && active === index && warmed && playable}
                           preload={near}
                           preloadRank={preloadRank}
-                          warmOnly={warming}
+                          warmOnly={warmOnly}
                           onDoubleTap={() => likeByTap(post.id, liked)}
                           trimStart={post.trimStart}
                           trimEnd={post.trimEnd}
@@ -2452,7 +2453,20 @@ function GroupedFeed() {
   // you wants (paused feeds rank last, features/feed/preloadQueue), so the first switch
   // to a tab is a fade onto a feed already there, and each keeps its own place after.
   const [forYouSettled, setForYouSettled] = useState(false);
-  const onForYouSettled = useCallback(() => setForYouSettled(true), []);
+  const lastSwipe = useRef(0);
+  const onFeedSwipe = useCallback(() => { lastSwipe.current = Date.now(); markFeedSwiped(); }, []);
+  // Said a couple of seconds after For you starts playing, and never mid-flick: the redraw it
+  // brings must not land on the first clip's start or under a finger.
+  const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onForYouSettled = useCallback(() => {
+    const check = () => {
+      if (Date.now() - lastSwipe.current < 3000) { settleTimer.current = setTimeout(check, 1000); return; }
+      settleTimer.current = null;
+      setForYouSettled(true);
+    };
+    if (!settleTimer.current) settleTimer.current = setTimeout(check, 2500);
+  }, []);
+  useEffect(() => () => { if (settleTimer.current) clearTimeout(settleTimer.current); }, []);
   const warmedTabs = useRef(new Set<string>());
   useEffect(() => {
     if (!forYouSettled || !currentUserId) return undefined;
@@ -2462,6 +2476,8 @@ function GroupedFeed() {
     let timer: ReturnType<typeof setTimeout> | null = null;
     let task: { cancel: () => void } | null = null;
     const step = () => {
+      // Never while you are flicking through For you: that is when its own clips need the connection.
+      if (Date.now() - lastSwipe.current < 3000) { timer = setTimeout(step, 1000); return; }
       task = InteractionManager.runAfterInteractions(() => {
         const key = queue.shift();
         if (stopped || !key) return;
@@ -2470,7 +2486,7 @@ function GroupedFeed() {
         if (queue.length) timer = setTimeout(step, 2000);
       });
     };
-    timer = setTimeout(step, 2500);
+    timer = setTimeout(step, 0);
     return () => { stopped = true; if (timer) clearTimeout(timer); task?.cancel(); };
   }, [forYouSettled, currentUserId, feedGroups]);
   useEffect(() => { setKept((k) => k.filter((key) => key === ACTIVITIES || feedGroups.some((g) => g.id === key))); }, [feedGroups]);
@@ -2484,12 +2500,12 @@ function GroupedFeed() {
   const waiting = feedGroups.some((g) => g.requests.length > 0 && g.members.some((m) => m.id === currentUserId && m.admin));
   return (
     <View style={{ flex: 1, alignSelf: 'stretch' }}>
-      <Home topRow paused={!!groupId} onChrome={forYouChrome} onSwipe={markFeedSwiped} onSettled={onForYouSettled} />
+      <Home topRow paused={!!groupId} onChrome={forYouChrome} onSwipe={onFeedSwipe} onSettled={onForYouSettled} />
       {/* Feeds already opened stay built (paused, see-through) and cross-fade in, so a switch
           is a fade rather than building a whole feed on the spot (Oct 4, owner: "way smoother"). */}
       {kept.map((key) => (
         <FeedLayer key={key} shown={key === groupId}>
-          <Home scope={key === ACTIVITIES ? { activities: true } : { groupId: key }} paused={key !== groupId} onChrome={key === groupId ? groupChrome : undefined} onSwipe={markFeedSwiped} />
+          <Home scope={key === ACTIVITIES ? { activities: true } : { groupId: key }} paused={key !== groupId} onChrome={key === groupId ? groupChrome : undefined} onSwipe={onFeedSwipe} />
         </FeedLayer>
       ))}
       <TipBubble tip="activities" shown={activitiesTip.shown} onClose={activitiesTip.close} pointer="up" style={{ top: insets.top + TOP_BAND_TOP + TOP_BAND_HEIGHT + 4, left: 16, right: 16 }} />

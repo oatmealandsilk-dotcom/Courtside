@@ -14,6 +14,7 @@ import { useIsFocused } from '@/lib/useIsFocused';
 import { forgetLeft, noteLeft, takeLeft } from '@/features/feed/clipResume';
 import { TopBandContext } from '@/features/feed/topBand';
 import { usePreloadTurn } from '@/features/feed/preloadQueue';
+import { noteClipLoad } from '@/lib/netSpeed';
 
 /** The feed's top shade (see TOP_SHADE) as a browser gradient. */
 const TOP_SHADE_CSS = `linear-gradient(${TOP_SHADE.colors.map((c, i) => `${c} ${TOP_SHADE.locations[i] * 100}%`).join(', ')})`;
@@ -97,6 +98,20 @@ function ClipPlaybackInner({ uri, poster, active: wanted, preload = false, prelo
   // In the preload window, its video fetches in turn: nearest first, two at a
   // time, after the clip on screen (features/feed/preloadQueue, as on a phone).
   const turn = usePreloadTurn(preload, preloadRank, active, ready || failed);
+  // How long its opening took, from the first byte asked for: the connection's speed (lib/netSpeed), as on a phone.
+  const loadAt = useRef(0);
+  const fetches = active || (preload && turn);
+  useEffect(() => { if (fetches && !loadAt.current) loadAt.current = Date.now(); }, [fetches]);
+  // The loading disc only for a wait you would notice: a clip preloaded to its first frame
+  // asks for its next seconds as it starts, a moment's 'waiting' that is no loading page.
+  const [spin, setSpin] = useState(false);
+  useEffect(() => {
+    if (ready || !active) { setSpin(false); return undefined; }
+    const t = setTimeout(() => setSpin(true), 300);
+    return () => clearTimeout(t);
+  }, [ready, active]);
+  // A clip waiting off screen with its first frame in steps back to 'metadata': the browser
+  // stops there, rather than pulling the whole file while the next ones wait their turn.
   // Gone from the page (or given another clip): what it had fetched goes with it.
   useEffect(() => () => latestReady.current?.(false), [uri]);
   // The sound disc eases in when the clip starts and fades out quickly; a
@@ -203,7 +218,7 @@ function ClipPlaybackInner({ uri, poster, active: wanted, preload = false, prelo
 
   return <div style={{ position: 'absolute', inset: 0, background: letterbox ? '#000' : undefined, display: 'flex', alignItems: 'center' }}>
     <div style={{ ...cropCss(crop), display: 'flex', alignItems: 'center' }}>
-      <video ref={video} src={uri} poster={poster} loop muted={muted || silent} playsInline preload={active || (preload && turn) ? (warmOnly && !active ? 'metadata' : 'auto') : 'none'} onError={fail} onLoadedData={() => setReady(true)} onCanPlay={() => setReady(true)} onWaiting={() => setReady(false)} onPlaying={() => setReady(true)} style={{ width: '100%', height: '100%', objectFit: letterbox ? 'contain' : fit, pointerEvents: 'none' }} />
+      <video ref={video} src={uri} poster={poster} loop muted={muted || silent} playsInline preload={active ? 'auto' : preload && turn ? (warmOnly || ready ? 'metadata' : 'auto') : 'none'} onError={fail} onLoadedData={() => { if (loadAt.current > 0) { noteClipLoad(Date.now() - loadAt.current); loadAt.current = -1; } setReady(true); }} onCanPlay={() => setReady(true)} onWaiting={() => setReady(false)} onPlaying={() => setReady(true)} style={{ width: '100%', height: '100%', objectFit: letterbox ? 'contain' : fit, pointerEvents: 'none' }} />
       {failed ? <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}><span style={{ padding: '8px 14px', borderRadius: 999, background: 'rgba(0,0,0,0.55)', color: 'white', font: '600 13px Inter_600SemiBold, system-ui, sans-serif' }}>This video didn’t load</span></div> : null}
     </div>
     {/* Over the picture, under the disc: the top shade darkens the video, never the disc. */}
@@ -246,7 +261,7 @@ function ClipPlaybackInner({ uri, poster, active: wanted, preload = false, prelo
     {bare ? null : <div aria-hidden="true" style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 2, background: 'rgba(255,255,255,0.25)' }}>
       <div ref={bar} style={{ height: 2, width: '0%', background: 'rgba(255,255,255,0.9)' }} />
     </div>}
-    {!ready && active ? <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}><CourtSpinner ink={discInk ?? 'white'} /></div> : null}
+    {spin ? <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}><CourtSpinner ink={discInk ?? 'white'} /></div> : null}
     {fast ? <div aria-live="polite" style={{ position: 'absolute', left: 0, right: 0, top: insets.top + drop + 24, display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>
       <span style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 999, background: 'rgba(0,0,0,0.55)', color: 'white', font: '700 14px Inter_700Bold, system-ui, sans-serif' }}><Ionicons name="play-forward" size={13} color="white" />2×</span>
     </div> : null}
