@@ -36,6 +36,8 @@ export interface SessionStory {
   postId?: ID;
   /** The sharer's invite link (app.courtsidebase.com/join?ref=handle): sent as words with the picture, never drawn on it. */
   invite?: string;
+  /** The sharer's name, for the ScoreBoard's top row. */
+  author?: string;
 }
 
 /** "Fri Oct 2", in the phone's own order, without commas. */
@@ -75,6 +77,7 @@ export function storyFromPost(post: Post, me: User | undefined): SessionStory | 
     eyebrow: storyEyebrow(post.session, dayOf(post.createdAt)),
     postId: post.id,
     invite: inviteFor(me),
+    author: me?.name,
   };
 }
 
@@ -92,5 +95,5 @@ export function storyFromLog(s: PracticeSession, me: User | undefined, activity?
   };
   // A session logged from a hit keeps where it was in its note: "At Alder Park".
   const at = s.note?.startsWith('At ') ? s.note.slice(3).split(' · ')[0] : undefined;
-  return { session, place: placeFor(me, at), eyebrow: storyEyebrow(session), invite: inviteFor(me) };
+  return { session, place: placeFor(me, at), eyebrow: storyEyebrow(session), invite: inviteFor(me), author: me?.name };
 }

@@ -198,6 +198,8 @@ export interface PracticeSession {
    * reads it from their side (a practice's stays yours alone).
    */
   sets?: MatchSet[];
+  /** How a match ended short of a result (MatchEnd); absent for a match played out. */
+  ended?: MatchEnd;
   /**
    * The court it was played at, by the map's id for it (migration 130,
    * column court_id): the court tagged on its post, "Played at…", or the hit
@@ -229,6 +231,14 @@ export interface PracticeSession {
  * puts them together.
  */
 export type MatchSet = [number, number, number?];
+
+/**
+ * A match that did not finish (the ScoreBoard, Oct 22): one side retired
+ * (side 0 the poster, 1 the other side), or play stopped (rain, light, the
+ * court's hour ran out). Its last set is drawn quiet, since nobody took it.
+ * Shown only for now: no column keeps it yet, so only the demo carries it.
+ */
+export type MatchEnd = { how: 'retired' | 'stopped'; side?: 0 | 1 };
 
 /**
  * Your record against one player (head_to_head, migration 91): only matches
@@ -484,6 +494,8 @@ export interface SessionDetail {
   won?: boolean;
   /** The session's score (a match's, or since Oct 6 a practice's or drills'), from the author's side, always as their log says it: only the server writes it (migration 91). */
   sets?: MatchSet[];
+  /** How a match ended short of a result (MatchEnd); absent for a match played out. */
+  ended?: MatchEnd;
   /**
    * The players on the session who accepted their tag (migration 62):
    * opponents first, then partners. Only the server writes it; whatever the

@@ -94,7 +94,7 @@ export function SessionStoryArt({ design, story, width, photo, hidden = [], onPh
   // One source object per photo: a new one each draw makes a browser load it again.
   const source = useMemo(() => (photo ? { uri: photo } : undefined), [photo]);
   const height = Math.round((width * 16) / 9);
-  const common = { session: story.session, eyebrow: story.eyebrow, place: story.place, hidden, brand: true, play: false, picture: true } as const;
+  const common = { session: story.session, author: story.author, eyebrow: story.eyebrow, place: story.place, hidden, brand: true, play: false, picture: true } as const;
 
   if (design === 'card') {
     return (
@@ -165,7 +165,7 @@ export function SessionStoryArt({ design, story, width, photo, hidden = [], onPh
     const cardW = Math.round(width * 0.84);
     return (
       <View collapsable={false} style={[styles.centre, { width, height }]}>
-        <SessionStamp session={story.session} eyebrow={story.eyebrow} place={story.place} hidden={hidden} width={cardW} clear />
+        <SessionStamp session={story.session} author={story.author} eyebrow={story.eyebrow} place={story.place} hidden={hidden} width={cardW} clear />
       </View>
     );
   }
@@ -176,7 +176,7 @@ export function SessionStoryArt({ design, story, width, photo, hidden = [], onPh
     return (
       <View collapsable={false} style={[styles.centre, { width, height }]}>
         <View style={[styles.sticker, { borderRadius: Math.round(20 * (cardW / 300)) }, d !== 1 && dropShadow(d)]}>
-          <SessionStamp session={story.session} eyebrow={story.eyebrow} place={story.place} hidden={hidden} width={cardW} />
+          <SessionStamp session={story.session} author={story.author} eyebrow={story.eyebrow} place={story.place} hidden={hidden} width={cardW} />
         </View>
       </View>
     );
@@ -196,11 +196,11 @@ export function SessionStoryArt({ design, story, width, photo, hidden = [], onPh
       {clear ? (
         // The Clear dot: the stamp with nothing filled straight on the photo, a little bigger so its words carry.
         <View style={[styles.corner, { left: Math.round(width * 0.06), bottom: Math.round(height * 0.17) }]}>
-          <SessionStamp session={story.session} eyebrow={story.eyebrow} place={story.place} hidden={hidden} width={Math.round(width * 0.68)} clear />
+          <SessionStamp session={story.session} author={story.author} eyebrow={story.eyebrow} place={story.place} hidden={hidden} width={Math.round(width * 0.68)} clear />
         </View>
       ) : (
         <View style={[styles.sticker, { left: Math.round(width * 0.06), bottom: Math.round(height * 0.17), borderRadius: Math.round(20 * (cardW / 300)) }]}>
-          <SessionStamp session={story.session} eyebrow={story.eyebrow} place={story.place} hidden={hidden} width={cardW} />
+          <SessionStamp session={story.session} author={story.author} eyebrow={story.eyebrow} place={story.place} hidden={hidden} width={cardW} />
         </View>
       )}
     </View>

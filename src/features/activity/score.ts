@@ -184,7 +184,7 @@ export const flipSets = (sets: MatchSet[]): MatchSet[] => sets.map(([a, b, point
  * as the same set. Read from the games alone: nothing more is saved for it,
  * so a 7-point match tiebreak (7-5) stays plain, the way a 7-5 final set is.
  */
-const matchTiebreakAt = (sets: MatchSet[], i: number): boolean => {
+export const matchTiebreakAt = (sets: MatchSet[], i: number): boolean => {
   const [a, b, points] = sets[i];
   if (i !== sets.length - 1 || i < 2 || points !== undefined) return false;
   if (sets.slice(0, i).filter(([x, y]) => x > y).length * 2 !== i) return false;

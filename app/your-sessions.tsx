@@ -10,6 +10,7 @@ import { FlybyPill } from '@/components/flyby/FlybyPill';
 import { WeekSummary } from '@/components/recap/RecapCard';
 import { PersonalRecords, RecordPill } from '@/components/records/PersonalRecords';
 import { cardLook, creamFill } from '@/components/session/SessionCard';
+import { ScoreBoardCompact } from '@/components/session/ScoreBoard';
 import { LoggedTitle, type PeopleLine } from '@/components/LoggedTitle';
 import { Avatar, EmptyState, Screen, ShirtWash } from '@/components/ui';
 import type { DetectedActivity, PracticeSession, SessionTag, User } from '@/data/types';
@@ -537,8 +538,10 @@ function Logged({ session: s, people, onOpen, openWord, hideNote = false, source
   flyby?: React.ReactNode;
 }) {
   const styles = useThemedStyles(styleDefinitions);
-  const label = far ? `${loggedLabel(s)} · ${far}` : loggedLabel(s);
-  const title = `${label}${people ? ` ${peopleText(people)}` : ''}`;
+  // A score is the small ScoreBoard beside the length (T1, Oct 22): the words leave it out, the screen reader keeps it.
+  const board = canScore(s.kind) && !!s.sets?.length;
+  const label = far ? `${loggedLabel(s, !board)} · ${far}` : loggedLabel(s, !board);
+  const title = `${far ? `${loggedLabel(s)} · ${far}` : loggedLabel(s)}${people ? ` ${peopleText(people)}` : ''}`;
   const shownNote = s.note && !hideNote ? s.note : '';
   const place = shownNote.startsWith('At ') ? shownNote.slice(3) : '';
   const note = place ? '' : shownNote;
@@ -569,6 +572,7 @@ function Logged({ session: s, people, onOpen, openWord, hideNote = false, source
           <View style={[styles.heroLine, styles.heroLineShare]}>
             <Text style={styles.hero}>{duration(s.minutes)}</Text>
             {record ? <RecordPill /> : null}
+            {board ? <View style={styles.board}><ScoreBoardCompact sets={s.sets!} youWon={s.won} ended={s.ended} /></View> : null}
           </View>
           <LoggedTitle label={label} people={people} style={styles.title} faint={styles.waiting} numberOfLines={2} />
           <Text style={styles.when}>
@@ -627,6 +631,8 @@ const styleDefinitions = StyleSheet.create({
   icon: { width: 22, height: HERO_LINE, alignItems: 'center', justifyContent: 'center' },
   words: { flex: 1, minWidth: 0, gap: 2 },
   heroLine: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: HERO_LINE },
+  // The two small rows (38 high) sit in the 32-high line without pushing it taller.
+  board: { marginVertical: -3, marginLeft: 4 },
   // The figure in the brand's green, as on the Share card.
   hero: { fontSize: 19, lineHeight: 24, ...font('600'), letterSpacing: -0.4, color: colors.brand, fontVariant: ['tabular-nums'], flexShrink: 0 },
   // Flyby's pill, lined up with the words (past the icon and the gap).

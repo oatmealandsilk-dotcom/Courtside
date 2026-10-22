@@ -28,6 +28,7 @@ import type { Post, QuestionTopic, User } from '@/data/types';
 import { RichText } from '@/components/RichText';
 import { SessionCard } from '@/components/session/SessionCard';
 import { SessionStrip } from '@/components/session/SessionStrip';
+import { ScoreBoard, matchSets } from '@/components/session/ScoreBoard';
 import { useApp } from '@/store/AppContext';
 import { shareLabel } from '@/features/share/sharePost';
 import { CourtGlyph } from '@/components/map/CourtGlyph';
@@ -221,7 +222,7 @@ function PostCardInner({
             if (w > 0 && (w !== slot.w || h !== slot.h)) setSlot({ w, h });
           }}
         >
-          {slot.w && slot.h ? <SessionCard session={post.session!} width={slot.w} height={Math.min(slot.h, Math.round(slot.w * SIDEWAYS))} play={play} hidden={blockedIds} onPress={openStats} /> : null}
+          {slot.w && slot.h ? <SessionCard session={post.session!} author={author.name} width={slot.w} height={Math.min(slot.h, Math.round(slot.w * SIDEWAYS))} play={play} hidden={blockedIds} onPress={openStats} /> : null}
         </View>
       ) : null}
       <Pressable onPress={onPress} style={styles.body}>
@@ -243,24 +244,9 @@ function PostCardInner({
         <TaggedLine post={post} />
 
         {post.match ? (
-          <View style={styles.detailBox}>
-            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.detailTitle}>
-              {post.match.won ? 'def.' : 'lost to'} {post.match.opponentName}
-            </Text>
-            <View style={styles.setRow}>
-              {post.match.sets.map((set, i) => (
-                <View
-                  key={`${set}-${i}`}
-                  style={[
-                    styles.setChip,
-                    { borderColor: post.match?.won ? colors.court : colors.border },
-                  ]}
-                >
-                  <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.setText}>{set}</Text>
-                </View>
-              ))}
-              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.surfaceText}>{post.match.surface}</Text>
-            </View>
+          // The ScoreBoard (T1, Oct 22): no card of its own in the post, only the court's soft wash.
+          <View style={styles.board}>
+            <ScoreBoard sets={matchSets(post.match)} you={author.name} them={post.match.opponentName} youWon={post.match.won} eyebrow={`Match${post.match.surface ? ` · ${post.match.surface}` : ''}`} />
           </View>
         ) : null}
 
@@ -268,7 +254,7 @@ function PostCardInner({
             a session with stats that is not the card opens them; "Minutes on court", or an old
             written plan, says what it was and how long, its drills listed under it. */}
         {sessionCard ? null : post.session && hasSessionStats(post.session) ? (
-          <SessionStrip session={post.session} hidden={blockedIds} onPress={openStats} flat />
+          <SessionStrip session={post.session} author={author.name} hidden={blockedIds} onPress={openStats} flat />
         ) : post.session ? (
           <View style={styles.planned}>
             <SessionStrip
@@ -407,22 +393,7 @@ const styleDefinitions = StyleSheet.create({
   kindGlyph: { width: 13, alignItems: 'center' },
   kindLabel: { ...typography.caption, fontSize: 12, letterSpacing: 0 },
   text: { ...typography.body, color: colors.text, lineHeight: 22 },
-  detailBox: {
-    backgroundColor: colors.bgElevated,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    gap: spacing.xs,
-  },
-  detailTitle: { ...typography.smallStrong, color: colors.text },
-  setRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' },
-  setChip: {
-    borderWidth: 1,
-    borderRadius: radius.sm,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 2,
-  },
-  setText: { ...typography.smallStrong, color: colors.text },
-  surfaceText: { ...typography.caption, color: colors.textFaint },
+  board: { marginTop: spacing.xs },
   drill: { ...typography.small, color: colors.textMuted, lineHeight: 20 },
   // A written plan's drills, under its session box.
   planned: { gap: spacing.xs },

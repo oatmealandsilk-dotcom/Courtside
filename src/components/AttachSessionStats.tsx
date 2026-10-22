@@ -87,7 +87,7 @@ export function AttachSessionStats({ pick, attached, onAttach, health, onHealth,
               <Ionicons name="close-circle" size={20} color={colors.textFaint} />
             </Pressable>
           </View>
-          <SessionStrip session={stats} hidden={blockedIds} />
+          <SessionStrip session={stats} author={users.find((u) => u.id === currentUserId)?.name} hidden={blockedIds} />
           <Text style={styles.note}>{hint}</Text>
           {numbers ? <HealthShareRow activity={numbers} choice={health} onChoice={onHealth} /> : null}
           {waitingNote ? (

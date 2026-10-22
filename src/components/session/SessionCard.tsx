@@ -10,7 +10,7 @@ import { useShareDensity } from '@/components/share/density';
 import { Avatar, BrandWash, ShirtWash } from '@/components/ui';
 import type { ID, SessionDetail } from '@/data/types';
 import { onCourtWord, resultWord, scoreLine, sessionEyebrow, sourceLabel, spokenDuration } from '@/features/activity/format';
-import { scoreScale, spokenScore } from '@/features/activity/score';
+import { spokenScore } from '@/features/activity/score';
 import { sessionPeople } from '@/features/activity/sessionTags';
 import { postZones, zoneColors } from '@/features/activity/zones';
 import { distanceFigure } from '@/features/activity/workouts';
@@ -18,6 +18,7 @@ import { useTheme, type ThemeName } from '@/theme/ThemeProvider';
 import { colors, font, pageIsDark, withAlpha } from '@/theme';
 import { Duration, Figure } from './Duration';
 import { Pop } from './Pop';
+import { ScoreBoard, boardSides, boxInks } from './ScoreBoard';
 import { ZoneBar } from './ZoneBar';
 
 /** Someone on the session as the card shows them; `pending` only ever on the author's own preview. */
@@ -212,8 +213,10 @@ export function CardWash({ look, radius, edge = true }: { look: CardLook; radius
  * from. `width` sets the scale: 358 is the full size, the composer's is
  * about two thirds of it. The feed's post draws it sideways (`height`).
  */
-export function SessionCard({ session, width, height, play = false, people, hidden = [], onPress, showSource = true, accessibilityHint, aspect = 4 / 5, radius, eyebrow, place, brand = false, scale = 1, inset, picture = false, clear = false }: {
+export function SessionCard({ session, width, height, play = false, people, hidden = [], onPress, showSource = true, accessibilityHint, aspect = 4 / 5, radius, eyebrow, place, brand = false, scale = 1, inset, picture = false, clear = false, author }: {
   session: SessionDetail;
+  /** Who posted it, for the ScoreBoard's top row ("You" when not given). */
+  author?: string;
   width: number;
   /**
    * Drawn sideways at this height, as wide as `width` (the feed's post,
@@ -324,7 +327,7 @@ export function SessionCard({ session, width, height, play = false, people, hidd
       play={play}
       top={shownTop}
       result={result}
-      score={score}
+      score={score ? { sets: session.sets!, ...boardSides(session, author ?? 'You', hidden) } : null}
       stats={stats}
       zones={zones}
       lead={lead}
@@ -351,8 +354,10 @@ export function SessionCard({ session, width, height, play = false, people, hidd
         <Duration minutes={session.minutes} size={96 * k} color={look.figure} unitColor={look.muted} play={play} delay={120} duration={700} textStyle={shade} />
         <Text style={{ ...font('500'), fontSize: small(14, 10), color: look.muted, marginTop: 2 * k, ...shade }} maxFontSizeMultiplier={1.2}>{onCourtWord(session)}</Text>
         {score ? (
-          // A long score (tiebreak points, Oct 10) a little smaller, so it all fits on its line.
-          <Text style={{ ...font('700'), fontSize: 26 * k * scoreScale(score, 20), letterSpacing: -0.4 * k, color: look.figure, fontVariant: ['tabular-nums'], marginTop: 8 * k, ...shade }} numberOfLines={1} maxFontSizeMultiplier={1.2}>{score}</Text>
+          // The ScoreBoard (T1, Oct 22) in the box's own lettering: the box already says Won or Lost.
+          <View style={{ alignSelf: 'stretch', marginTop: 10 * k }}>
+            <ScoreBoard sets={session.sets!} {...boardSides(session, author ?? 'You', hidden)} youWon={session.won} ended={session.ended} frame="bare" status={false} scale={0.8 * k} still={picture} inks={boxInks(look, shade)} />
+          </View>
         ) : null}
         {far ? (
           <View style={{ marginTop: 8 * k }}>
@@ -420,6 +425,9 @@ export function SessionCard({ session, width, height, play = false, people, hidd
   );
 }
 
+/** The ScoreBoard's size in the sideways box, against its full size. */
+const BOARD = 0.8;
+
 /** One number under the time on the sideways card, and its name. */
 type SidewaysStat = { key: string; value: number; part?: 'int' | 'dec1'; label: string };
 
@@ -441,7 +449,8 @@ function Sideways({ session, look, width, height, play, top, result, score, stat
   play: boolean;
   top: string;
   result: string | null;
-  score: string | null;
+  /** The score's sets and the two sides' names, for the ScoreBoard. */
+  score: { sets: SessionDetail['sets'] & {}; you: string; them: string } | null;
   stats: SidewaysStat[];
   zones: number[] | null;
   lead: CardPerson | undefined;
@@ -461,7 +470,7 @@ function Sideways({ session, look, width, height, play, top, result, score, stat
     + 12 * k
     + Math.round(64 * k * 1.08)
     + line(smallAt(k, 14, 10)) + 2 * k
-    + (score ? 6 * k + Math.round(22 * k * 1.25) : 0)
+    + (score ? 8 * k + 2 * Math.round(40 * BOARD * k) : 0)
     + (stats.length ? 14 * k + 1 + 10 * k + Math.round(26 * k * 1.1) + 2 * k + line(smallAt(k, 12, 10)) : 0)
     + (zones ? 12 * k + 8 * k : 0)
     + (foot ? 14 * k + (lead ? Math.max(Math.round(26 * k), line(smallAt(k, 14, 10))) : line(smallAt(k, 11, 9))) : 0);
@@ -491,8 +500,10 @@ function Sideways({ session, look, width, height, play, top, result, score, stat
         <Duration minutes={session.minutes} size={hero} color={look.figure} unitColor={look.muted} play={play} delay={120} duration={700} />
         <Text style={{ ...font('500'), fontSize: small(14, 10), lineHeight: line(small(14, 10)), color: look.muted, marginTop: 2 * k }} maxFontSizeMultiplier={1.2}>{onCourtWord(session)}</Text>
         {score ? (
-          // A long score a little smaller (Oct 10), on the same line height the card measured.
-          <Text style={{ ...font('700'), fontSize: 22 * k * scoreScale(score, 22), lineHeight: Math.round(22 * k * 1.25), letterSpacing: -0.4 * k, color: look.figure, fontVariant: ['tabular-nums'], marginTop: 6 * k }} numberOfLines={1} maxFontSizeMultiplier={1.2}>{score}</Text>
+          // The ScoreBoard (T1, Oct 22) in the box's own lettering, at the height the card measured.
+          <View style={{ alignSelf: 'stretch', marginTop: 8 * k }}>
+            <ScoreBoard sets={score.sets} you={score.you} them={score.them} youWon={session.won} ended={session.ended} frame="bare" status={false} scale={BOARD * k} inks={boxInks(look)} />
+          </View>
         ) : null}
         {stats.length ? (
           <View style={[styles.statRow, { gap: 10 * k, marginTop: 14 * k, paddingTop: 10 * k, borderTopColor: look.lines }]}>

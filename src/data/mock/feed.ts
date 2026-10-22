@@ -68,7 +68,7 @@ export const posts: Post[] = [
     body: 'Two points from the third set. The second is the best backhand I have hit all year.',
     mediaLabel: 'Third set · 0:24',
     session: {
-      focus: 'Match · Won', minutes: 72, drills: [], activityId: 'act-dev-2', source: 'whoop', kind: 'match', won: true, day: dayAgo(0),
+      focus: 'Match · Won', minutes: 72, drills: [], activityId: 'act-dev-2', source: 'whoop', kind: 'match', won: true, day: dayAgo(0), sets: [[6, 4], [3, 6], [7, 5]],
       maxHr: 176, avgHr: 150, zones: [8, 12, 22, 20, 10],
       with: [{ id: 'u-mira', handle: 'miraplays', name: 'Mira Okafor', role: 'opponent' }],
     },
@@ -88,8 +88,9 @@ export const posts: Post[] = [
     body: 'Lost this one, but look at that lob.',
     mediaLabel: 'Match point · 0:18',
     session: {
-      focus: 'Match · Lost', minutes: 65, drills: [], activityId: 'act-sam-1', source: 'whoop', kind: 'match', won: false, day: dayAgo(0),
-      with: [{ id: 'u-mira', handle: 'miraplays', name: 'Mira Okafor', role: 'opponent' }],
+      // Doubles (the ScoreBoard's "Sam / June" over "Mira / Dev", Oct 22), a second-set tiebreak.
+      focus: 'Match · Lost', minutes: 65, drills: [], activityId: 'act-sam-1', source: 'whoop', kind: 'match', won: false, day: dayAgo(0), sets: [[4, 6], [6, 7, 4]],
+      with: [{ id: 'u-mira', handle: 'miraplays', name: 'Mira Okafor', role: 'opponent' }, { id: 'u-dev', handle: 'devbackhand', name: 'Dev Sharma', role: 'opponent' }, { id: 'u-june', handle: 'junevolley', name: 'June Park', role: 'partner' }],
     },
     likedBy: ['u-dev'],
     commentIds: [],
@@ -109,7 +110,8 @@ export const posts: Post[] = [
     thumbnailUrl: DUSK_COURT,
     mediaLabel: 'Court at dusk',
     session: {
-      focus: 'Match · Won', minutes: 84, drills: [], activityId: 'act-dev-1', source: 'whoop', kind: 'match', won: true, day: dayAgo(0),
+      // The light went at 4-4 in the second: unfinished, no result (Oct 22).
+      focus: 'Match', minutes: 84, drills: [], activityId: 'act-dev-1', source: 'whoop', kind: 'match', day: dayAgo(0), sets: [[6, 4], [4, 4]], ended: { how: 'stopped' },
       maxHr: 171, avgHr: 141, zones: [14, 18, 25, 21, 6],
       with: [{ id: 'u-mira', handle: 'miraplays', name: 'Mira Okafor', role: 'opponent' }],
     },
@@ -143,7 +145,7 @@ export const posts: Post[] = [
     createdAt: isoDaysAgo(0, 5),
     body: 'Clay finally feels like home. Serve was there all night and Dev made me earn every point.',
     session: {
-      focus: 'Match · Won', minutes: 84, drills: [], activityId: 'act-mira-1', source: 'whoop', kind: 'match', won: true, day: dayAgo(0),
+      focus: 'Match · Won', minutes: 84, drills: [], activityId: 'act-mira-1', source: 'whoop', kind: 'match', won: true, day: dayAgo(0), sets: [[7, 6, 5], [3, 6], [10, 7]],
       maxHr: 171, avgHr: 141, zones: [14, 18, 25, 21, 6],
       with: [{ id: 'u-dev', handle: 'devbackhand', name: 'Dev Sharma', role: 'opponent' }],
     },
@@ -172,7 +174,7 @@ export const posts: Post[] = [
     createdAt: isoDaysAgo(7, -3),
     body: 'Finally closed one out against Mira. Third set, no tiebreak.',
     session: {
-      focus: 'Match · Won', minutes: 96, drills: [], activityId: 'act-demo-3', source: 'whoop', kind: 'match', won: true, day: dayAgo(7), sessionId: 'ses-demo-13',
+      focus: 'Match · Won', minutes: 96, drills: [], activityId: 'act-demo-3', source: 'whoop', kind: 'match', won: true, day: dayAgo(7), sessionId: 'ses-demo-13', sets: [[6, 3], [4, 6], [6, 4]],
       maxHr: 174, avgHr: 146, zones: [10, 16, 28, 30, 12],
       with: [{ id: 'u-mira', handle: 'miraplays', name: 'Mira Okafor', role: 'opponent' }],
     },
@@ -393,8 +395,9 @@ export const posts: Post[] = [
     authorId: 'u-sam',
     kind: 'note',
     createdAt: isoDaysAgo(1, 20),
-    body: 'Lost a close one. Their backhand down the line was on all night.',
-    session: { focus: 'Match · Lost', minutes: 75, drills: [], sessionId: 'ses-sam-1', kind: 'match', won: false, day: dayAgo(2) },
+    body: 'Had to stop at 1-2 in the second. Their backhand down the line was on all night.',
+    // Sam retired (the ScoreBoard's "ret.", Oct 22).
+    session: { focus: 'Match · Lost', minutes: 75, drills: [], sessionId: 'ses-sam-1', kind: 'match', won: false, day: dayAgo(2), sets: [[5, 7], [1, 2]], ended: { how: 'retired', side: 0 } },
     likedBy: ['u-dev'],
     commentIds: [],
     tags: [],

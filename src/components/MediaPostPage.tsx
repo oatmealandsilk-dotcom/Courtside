@@ -396,7 +396,7 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
         <View style={styles.under} onLayout={measured(setFoot, foot)}>
           {/* A session's stats (a tracker's numbers, or one from the author's log), straight under the picture; a tap opens them all. */}
           {post.session && hasSessionStats(post.session) ? (
-            <SessionStrip session={post.session} hidden={blockedIds} play={stripPlay} onPress={() => router.push({ pathname: '/session-stats', params: { kind: 'post', id: post.id } })} />
+            <SessionStrip session={post.session} author={author.name} hidden={blockedIds} play={stripPlay} onPress={() => router.push({ pathname: '/session-stats', params: { kind: 'post', id: post.id } })} />
           ) : null}
           {post.body ? (
             // A tap on the words opens the comments, the whole caption at their top, as on Instagram (Oct 12, owner).
