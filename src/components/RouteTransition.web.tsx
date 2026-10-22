@@ -62,6 +62,9 @@ export function RouteTransition({ children }: { children: React.ReactNode }) {
     const [beforePath, , beforeFrom] = before.split(':');
     if (SHEETS.has(pathname) || SHEETS.has(beforePath)) return;
     const tabToTab = TABS.has(pathname) && TABS.has(beforePath);
+    // Back to Community from another tab: its page never left (the map stays built, Oct 19), so it is
+    // simply there, with no fade up from 0.65 in front of what is already drawn (Oct 21).
+    if (tabToTab && pathname === '/discuss') return;
     const auth = (AUTH.has(pathname) && !from) || (AUTH.has(beforePath) && !beforeFrom);
     const slide = tabToTab || auth ? 0 : wentBack ? -24 : 36;
     // Like the phone (Oct 20 sweep: "pages fade in from blank and sign-in fades more slowly than

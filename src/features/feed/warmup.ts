@@ -1,4 +1,4 @@
-import { useEffect, useRef, useSyncExternalStore } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { makeMutable } from 'react-native-reanimated';
 
 import { OPENS_ON_FEED } from '@/features/navigation/startTab';
@@ -117,9 +117,12 @@ let down = !OPENS_ON_FEED;
 /** When the curtain must lift by, whatever it is waiting for (see WarmCurtain); 0 until it is first drawn. */
 let liftBy = 0;
 const downListeners = new Set<() => void>();
+/** When the curtain last went down (0: it never went up this launch). */
+let downAt = 0;
 export function setCurtainDown() {
   if (down) return;
   down = true;
+  downAt = Date.now();
   downListeners.forEach((fn) => fn());
 }
 /** The splash, handing over into the start page without a fade of its own: the curtain takes its place. */
@@ -153,3 +156,26 @@ export function curtainLiftBy(maxMs: number): number {
  * on the phone). Always 0 when no curtain is up.
  */
 export const launchSettle = makeMutable(0);
+
+/**
+ * The first moments after the app opens are the page's own (Oct 21): no
+ * note ("How was the hit?", "Still playing?") or tip drops in for
+ * OPEN_QUIET_MS after the curtain has gone, so the page arrives whole and
+ * nothing pops in over it while it is first being looked at.
+ */
+export const OPEN_QUIET_MS = 1500;
+/** Whether the curtain has gone and the quiet moment after it is over (straight away when no curtain went up). */
+export function useOpenSettled(): boolean {
+  const isDown = useCurtainDown();
+  const left = () => (downAt ? OPEN_QUIET_MS - (Date.now() - downAt) : 0);
+  const [settled, setSettled] = useState(() => isDown && left() <= 0);
+  useEffect(() => {
+    if (!isDown) { setSettled(false); return undefined; }
+    const wait = left();
+    if (wait <= 0) { setSettled(true); return undefined; }
+    setSettled(false);
+    const t = setTimeout(() => setSettled(true), wait);
+    return () => clearTimeout(t);
+  }, [isDown]);
+  return settled;
+}

@@ -7,7 +7,7 @@ import type { LiveSession } from '@/data/types';
 import { finishLive } from '@/features/activity/finishLive';
 import { elapsedMs, hoursWords, livePlace, stillPlayingAt } from '@/features/activity/liveSession';
 import { planStillPlaying } from '@/features/activity/stillPlaying';
-import { useCurtainDown } from '@/features/feed/warmup';
+import { useOpenSettled } from '@/features/feed/warmup';
 import { useTourBusy } from '@/features/tour/tourStore';
 import { duration } from '@/lib/format';
 import { isShowing as toastShowing, show as showToast, withdraw as withdrawToast } from '@/lib/toast';
@@ -38,7 +38,8 @@ export function StillPlaying({ enabled }: { enabled: boolean }) {
   const { liveSession, currentUserId, actions } = useApp();
   const pathname = usePathname();
   const touring = useTourBusy();
-  const curtainDown = useCurtainDown();
+  // The curtain gone, and the page's own first moment after it (OPEN_QUIET_MS) over.
+  const curtainDown = useOpenSettled();
   const mine = liveSession && liveSession.userId === currentUserId ? liveSession : null;
   const at = stillPlayingAt(mine);
   const where = mine ? livePlace(mine) : '';

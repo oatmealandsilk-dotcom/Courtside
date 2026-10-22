@@ -7,7 +7,7 @@ import { tennisFlags, type TennisFlags } from '@/features/activity/flags';
 import { pickSource } from '@/features/activity/recent';
 import { duration } from '@/lib/format';
 import { useFeedSwiped } from '@/features/feed/firstSwipe';
-import { useCurtainDown } from '@/features/feed/warmup';
+import { useOpenSettled } from '@/features/feed/warmup';
 import { dueHits, keepHitPrefill, markAsked, nextHitEnd, prefillFor, readAsked, shortPlace, trackerFor } from '@/features/hits/followUp';
 import { useTourBusy } from '@/features/tour/tourStore';
 import { isShowing as toastShowing, show as showToast, withdraw as withdrawToast } from '@/lib/toast';
@@ -55,7 +55,8 @@ export function HitFollowUp({ enabled }: { enabled: boolean }) {
   const pathname = usePathname();
   const touring = useTourBusy();
   const uploading = useAnyUploading();
-  const curtainDown = useCurtainDown();
+  // The curtain gone, and the page's own first moment after it (OPEN_QUIET_MS) over.
+  const curtainDown = useOpenSettled();
   // On the Feed it waits for the first swipe to land (then the usual settle), so
   // it never drops in while someone is reaching for the Feed's top row.
   const swiped = useFeedSwiped();

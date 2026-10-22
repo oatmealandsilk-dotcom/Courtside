@@ -31,7 +31,7 @@ const SLOW_MS = 4000;
 /** How long the real map takes to fade in over the sketch, inside the card's frame (the frame itself never moves). */
 export const MAP_IN_MS = 300;
 
-/** The sketch itself: the map's ground, a park, a little water, three main roads and a few streets. Drawn once, never animated. */
+/** The sketch itself, kept faint: the map's ground, two parks, a little water, two main roads and a few streets. Drawn once, never animated. */
 export function MapCardBase() {
   const { theme } = useTheme();
   const look = useMemo(() => lookFor(themes[theme]), [theme]);
@@ -46,14 +46,14 @@ export function MapCardBase() {
       <Svg width="100%" height="100%" viewBox="0 0 360 330" preserveAspectRatio="xMidYMid slice">
         <Rect x={0} y={0} width={360} height={330} fill={ground} />
         <Path d="M40 40 h120 v90 h-120 z M210 190 h110 v100 h-110 z" fill={built} />
-        <Path d="M232 46 q40 -8 70 10 q18 30 2 58 q-36 14 -70 -2 q-14 -32 -2 -66 z" fill={park} />
-        <Path d="M58 214 q30 -10 52 6 q8 24 -10 40 q-30 6 -46 -12 q-6 -18 4 -34 z" fill={park} />
-        <Path d="M-10 300 q110 -40 200 -10 t190 -30 v80 h-390 z" fill={water} opacity={0.85} />
+        <Path d="M232 46 q40 -8 70 10 q18 30 2 58 q-36 14 -70 -2 q-14 -32 -2 -66 z" fill={park} opacity={0.55} />
+        <Path d="M58 214 q30 -10 52 6 q8 24 -10 40 q-30 6 -46 -12 q-6 -18 4 -34 z" fill={park} opacity={0.55} />
+        <Path d="M-10 318 q110 -26 200 -8 t190 -22 v60 h-390 z" fill={water} opacity={0.45} />
         <Path d="M-10 168 C90 150 200 186 370 150" stroke={edge} strokeWidth={6} fill="none" strokeLinecap="round" />
         <Path d="M-10 168 C90 150 200 186 370 150" stroke={road} strokeWidth={4} fill="none" strokeLinecap="round" />
         <Path d="M178 -10 C170 90 196 200 186 340" stroke={edge} strokeWidth={5} fill="none" strokeLinecap="round" />
         <Path d="M178 -10 C170 90 196 200 186 340" stroke={road} strokeWidth={3.2} fill="none" strokeLinecap="round" />
-        <Path d="M-10 70 L370 96 M60 -10 L96 340 M290 -10 L262 340" stroke={road} strokeWidth={1.6} fill="none" opacity={0.9} />
+        <Path d="M-10 70 L370 96 M60 -10 L96 340 M290 -10 L262 340" stroke={road} strokeWidth={1.6} fill="none" opacity={0.8} />
       </Svg>
     </View>
   );

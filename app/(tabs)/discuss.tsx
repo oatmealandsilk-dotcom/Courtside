@@ -55,7 +55,7 @@ import { isOpenToHit as isOpenToHitNow } from '@/features/players/openToHit';
 import { plain } from '@/features/search/words';
 import { askedSection, reportSection, subscribeSectionRequest, takeAskedSection } from '@/features/navigation/swipeOrder';
 import { START_SECTION, START_TAB } from '@/features/navigation/startTab';
-import { setStartDrawn } from '@/features/feed/warmup';
+import { setStartDrawn, useOpenSettled } from '@/features/feed/warmup';
 import { FirstReveal } from '@/features/feed/FirstReveal';
 import { useApp } from '@/store/AppContext';
 import { useAndroidBack } from '@/lib/androidBack';
@@ -326,7 +326,9 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   // in (Oct 10, owner: "the buttons like the settings. msg notifications, etc respond too slow").
   const justPosted = useJustPosted();
   const hitTip = hitTipCard(shownHits.map((x) => x.hit), currentUserId, justPosted, { teen: !!currentUser && notKnownAdult(currentUser), followingIds });
-  const hitTipReady = !previewSection && section === 'players' && !tourOpen && !search;
+  // Never in the page's first moment after the app opens (OPEN_QUIET_MS): it arrives whole first.
+  const openSettled = useOpenSettled();
+  const hitTipReady = !previewSection && section === 'players' && !tourOpen && !search && openSettled;
   // With nothing open, name a court only when the nearest one reads as public and is close: never just because it is nearest.
   const promptCourt = nearCourts.nearest && looksPublic(nearCourts.nearest.c.name) && nearCourts.nearest.miles <= 5 ? nearCourts.nearest.c : null;
   // "Near you" is one thing on this tab and on the map: people who shared a
