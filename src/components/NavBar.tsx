@@ -8,7 +8,7 @@ import { Animated as RNAnimated } from 'react-native';
 import { BAR_TUCK, barCompact, DUCK } from '@/features/navigation/barShrink';
 import { useCurtainDown, useCurtainReady } from '@/features/feed/warmup';
 import { isStartTab } from '@/features/navigation/startTab';
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Easing, useSharedValue, withTiming } from 'react-native-reanimated';
 import { router, usePathname } from 'expo-router';
 import { closeCreateMenu, markCreateOpening, useCreateMenuState } from '@/features/compose/createMenu';
@@ -44,6 +44,11 @@ let barUp = false;
 let waitUntil = 0;
 /** The longest the bar waits for the page under the curtain on a fresh open. */
 const BAR_WAIT_MS = 7000;
+/** How far below its place the bar waits under the curtain, and how long its rise into place takes. */
+const BAR_HELD = 96;
+const RISE_MS = 480;
+/** If the rise never reports that it has finished, the bar is put in place this long after it set off anyway. */
+const RISE_GRACE_MS = 1000;
 
 /**
  * Minimal shape of what react-navigation hands a custom tabBar. Typed locally
@@ -148,21 +153,40 @@ export function NavBar({ state, navigation }: NavBarProps) {
   const curtainDown = useCurtainDown();
   const behindCurtain = !barUp && !warm && !curtainDown && isStartTab(pathname);
   if (behindCurtain && !waitUntil) waitUntil = Date.now() + BAR_WAIT_MS;
+  // Where the bar is on that first rise, and what holds it there (Oct 22, owner's iPhone: Community
+  // with no tab bar at all, after an open that left the app busy):
+  //   'held'   below the edge under the curtain, by the bar's own plain style; nothing is animating
+  //            it, so the animation thread never has a "below the edge" of its own to hand back later;
+  //   'rising' on its way up: the animation thread moves it, starting from the same place;
+  //   'up'     in place, by the bar's own plain style again (the rise reported done, or ran past its time).
+  // An iPhone could lose the rise's end value when the app was busy just after it, and the bar then
+  // fell back to where its style last said it was; that is now always "in place". Same view throughout:
+  // the bar and its glass are never built again, only its own style changes.
+  const [lift, setLift] = useState<'held' | 'rising' | 'up'>(behindCurtain ? 'held' : 'up');
   const entrance = useSharedValue(behindCurtain ? 1 : 0);
   useEffect(() => {
     const rise = () => {
       barUp = true;
-      entrance.value = withTiming(0, { duration: 480, easing: Easing.out(Easing.cubic) });
+      setLift((now) => (now === 'held' ? 'rising' : now));
     };
     if (!behindCurtain) { rise(); return; }
     const t = setTimeout(rise, Math.max(0, waitUntil - Date.now()));
     return () => clearTimeout(t);
-  }, [behindCurtain, entrance]);
+  }, [behindCurtain]);
+  // Started once the rise's style is on the bar (a child's own update runs before this), so it moves from its first frame.
+  useLayoutEffect(() => {
+    if (lift !== 'rising') return undefined;
+    entrance.value = withTiming(0, { duration: RISE_MS, easing: Easing.out(Easing.cubic) }, (finished) => {
+      if (finished) runOnJS(setLift)('up');
+    });
+    const t = setTimeout(() => setLift('up'), RISE_MS + RISE_GRACE_MS);
+    return () => clearTimeout(t);
+  }, [lift, entrance]);
   // Ducking tucks the pill a little toward the edge and lets the labels go,
   // leaving the icons centred: the page beneath never moves, because the bar
   // floats over it. Nothing is scaled. A scaled icon on iPhone is a resampled
   // picture of itself and goes soft; moved and faded, it stays sharp.
-  const duck = useAnimatedStyle(() => ({ transform: [{ translateY: entrance.value * 96 }] }));
+  const duck = useAnimatedStyle(() => ({ transform: [{ translateY: entrance.value * BAR_HELD }] }));
   // Half of a label's line and its gap, so the icon lands in the middle once the label has gone.
   // Moves land on the screen's real pixels (a third of a point on most
   // iPhones): sharp icons, but three times finer steps than whole points,
@@ -174,7 +198,7 @@ export function NavBar({ state, navigation }: NavBarProps) {
   }));
   if (isPhone) {
     return (
-      <Animated.View pointerEvents="box-none" importantForAccessibility={hideFromReader} style={[styles.float, { bottom: Math.max(insets.bottom, 12) }, duck]}>
+      <Animated.View pointerEvents="box-none" importantForAccessibility={hideFromReader} style={[styles.float, { bottom: Math.max(insets.bottom, 12) }, lift === 'up' ? null : styles.held, lift === 'held' ? null : duck]}>
         <Animated.View style={[styles.pillWrap, tuck]}>
           {/* The shadow lives on a rounded layer of its own: on the square wrapper its corners showed past the pill's ends. */}
           <View style={styles.pillShadow}>
@@ -372,6 +396,8 @@ const styleDefinitions = StyleSheet.create({
   // On a dark page the button's own colour as a shadow reads as a glow; a plain dark one just lifts it.
   // The bar floats: a glass pill a little above the bottom edge, the page running on beneath it.
   float: { position: 'absolute', left: 0, right: 0, alignItems: 'center', zIndex: 30 },
+  // Below the edge, waiting under the curtain (and the start of the rise): see `lift`.
+  held: { transform: [{ translateY: BAR_HELD }] },
   pillWrap: { width: '100%', paddingHorizontal: 14 },
   pillShadow: { borderRadius: TAB_BAR_H / 2, shadowColor: '#000', shadowOpacity: 0.14, shadowRadius: 18, shadowOffset: { width: 0, height: 8 }, elevation: 8 },
   pill: { height: TAB_BAR_H, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 6, borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255, 255, 255, 0.45)' },

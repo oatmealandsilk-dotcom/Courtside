@@ -1,5 +1,5 @@
 import { useTheme } from '@/theme/ThemeProvider';
-import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { AppState, Platform, View } from 'react-native';
 import { goBack, goHome, setRootNavigation } from '@/lib/goBack';
 import { router, useGlobalSearchParams, useNavigationContainerRef, usePathname, useSegments } from 'expo-router';
@@ -73,6 +73,10 @@ const ToastLayer = React.memo(Toast);
 const UploadLayer = React.memo(UploadBar);
 /** The pages that can take a clip's stage (see commentStage): its comments, and its session stats. */
 const STAGE_ROUTES = new Set(['/comments', '/session-stats']);
+/** The phone's tab bar in its place, said by its own style (see barSteady). */
+const BAR_IN_PLACE = { transform: [{ translateY: 0 }] };
+/** If a slide back into place never reports that it has finished, the bar is put in place this long after anyway. */
+const BAR_SETTLE_MAX_MS = 1500;
 // An emailed link that has expired or was used already (or a Google sign-in that failed) comes
 // back with error_description on the address. Kept for the sign-in page to say, whatever page the
 // link lands on: a new password's link lands on /account, and the sign-in detour below replaced
@@ -336,19 +340,44 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // the other pages that never have it still take it at once.
   const still = useReducedMotion();
   const [barKept, setBarKept] = useState(showNav);
+  // Whether the bar has reached its place: from then on its own (React) style says "in place" too,
+  // not only the animation thread (Oct 22, owner's iPhone: Community with no tab bar at all, after
+  // an open that left the app busy). An iPhone could lose a slide's end value when the app was busy
+  // just after it, and the bar then fell back to where its style first said it was: below the edge.
+  // Only its style changes; the bar and its glass are never built again.
+  const [barSteady, setBarSteady] = useState(showNav);
   const barAway = useSharedValue(showNav ? 0 : 1);
   const wantedBefore = useRef(barWanted);
-  useEffect(() => {
+  // Gone: drawn no more, and the next time it comes it starts from below the edge again.
+  const barGone = useCallback(() => { setBarKept(false); setBarSteady(false); }, []);
+  // Run as the page changes, not after it has drawn: a bar that has just appeared below the edge starts
+  // moving on the animation thread right behind it, so even a page that keeps the app busy for a while
+  // as it opens (a map being built) never leaves "below the edge" standing there long enough to be
+  // copied back as where the bar lives.
+  useLayoutEffect(() => {
     const arriving = barWanted && !wantedBefore.current;
     wantedBefore.current = barWanted;
     // First arrival after the splash or sign-in: NavBar's own rise does it, nothing on top.
-    if (showNav && arriving) { setBarKept(true); barAway.value = 0; return; }
-    if (showNav) { setBarKept(true); barAway.value = withTiming(0, { duration: 200, easing: Easing.out(Easing.cubic) }); return; }
-    if (!barWanted) { setBarKept(false); barAway.value = 1; return; }
+    if (showNav && arriving) { setBarKept(true); setBarSteady(true); barAway.value = 0; return; }
+    if (showNav) {
+      setBarKept(true);
+      const slideIn = { duration: 200, easing: Easing.out(Easing.cubic) };
+      // Already in place (or leaving from there, now coming back): its style says so already.
+      if (barSteady) { barAway.value = withTiming(0, slideIn); return; }
+      barAway.value = withTiming(0, slideIn, (done) => { if (done) runOnJS(setBarSteady)(true); });
+      return;
+    }
+    if (!barWanted) { barGone(); barAway.value = 1; return; }
     // A sheet rising from the bottom covers the bar's place itself: the bar goes at once, never fading over it.
-    if (SHEETS.has(pathname)) { setBarKept(false); barAway.value = 1; return; }
-    barAway.value = withTiming(1, { duration: 180, easing: Easing.out(Easing.cubic) }, (done) => { if (done) runOnJS(setBarKept)(false); });
-  }, [showNav, barWanted, barAway, pathname]);
+    if (SHEETS.has(pathname)) { barGone(); barAway.value = 1; return; }
+    barAway.value = withTiming(1, { duration: 180, easing: Easing.out(Easing.cubic) }, (done) => { if (done) runOnJS(barGone)(); });
+  }, [showNav, barWanted, barAway, pathname, barGone]);
+  // Showing, but the slide back never reported that it finished: in place anyway.
+  useEffect(() => {
+    if (!showNav || barSteady) return undefined;
+    const t = setTimeout(() => setBarSteady(true), BAR_SETTLE_MAX_MS);
+    return () => clearTimeout(t);
+  }, [showNav, barSteady]);
   // Slides only, never fades: the bar is glass, and on an iPhone glass under a fading parent
   // drew see-through and stayed that way (Oct 17, owner: "Why did this bottom thing turn
   // transparent? ... change it back"). It slides all the way below the screen's edge instead.
@@ -459,7 +488,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     {/* While the tour is up, TalkBack reads only the tour, not the page under the dim. */}
     <Reanimated.View importantForAccessibility={tourOpen ? 'no-hide-descendants' : 'auto'} style={[{ flex: 1, minWidth: 0, minHeight: 0 }, settle]}>{isGuest && Platform.OS === 'web' && !hideEverywhere && !onSplash && !guestOwnPage ? <GetAppBar /> : null}<RouteTransition>{children}</RouteTransition>{liveBarOn && !isPhone ? <LiveBar phone={false} /> : null}<ToastLayer /><UploadLayer /></Reanimated.View>
     {(showNav || (barKept && barWanted)) && isPhone ? (
-      <Reanimated.View pointerEvents={showNav ? 'box-none' : 'none'} style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }, barSlide]}>
+      <Reanimated.View pointerEvents={showNav ? 'box-none' : 'none'} style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }, barSlide, barSteady ? BAR_IN_PLACE : null]}>
       <Reanimated.View ref={((node: unknown) => { navLayer.current = node as HTMLElement | null; navFade.ref?.(node); }) as never} pointerEvents={barOnStage || !showNav ? 'none' : 'box-none'} style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }, barOnStage && { overflow: 'hidden' }, navFade.style]}>
         <Reanimated.View ref={navHold.ref as never} pointerEvents="box-none" style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }, navHold.style]}>{nav}</Reanimated.View>
       </Reanimated.View>
