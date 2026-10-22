@@ -33,9 +33,14 @@ import { SignOutCurtainHost } from '@/components/SignOutCurtain';
 import { ConfirmHost } from '@/components/ConfirmHost';
 import { arrivingHeight } from '@/components/sheetHandOver';
 import { useInstantUpdates } from '@/lib/instantUpdates';
+import { SHEET_LOOK } from '@/features/groups/sheetLook';
 
 // Any error the app does not catch itself is filed as a crash report.
 installCrashReporting();
+
+// Design preview (web only): the Groups sheet's ?gs= is read here, as the app
+// loads, before the first page change drops it from the address.
+void SHEET_LOOK;
 
 /**
  * If a screen breaks, this shows in its place instead of a blank or a red
