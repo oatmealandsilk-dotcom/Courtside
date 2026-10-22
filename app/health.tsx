@@ -2,7 +2,7 @@ import { PRESS_DIM } from '@/theme/press';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
-import Reanimated, { FadeIn, FadeOut, ZoomIn } from 'react-native-reanimated';
+import Reanimated, { FadeIn, FadeOut, LayoutAnimationConfig, LinearTransition, ZoomIn } from 'react-native-reanimated';
 import { goBack } from '@/lib/goBack';
 import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -229,7 +229,8 @@ export default function Health() {
     const offer = tennisCard && !!i.readsWorkouts && workouts(i.provider) && !i.readsAllWorkouts && !blocked;
     const offerBusy = loading && step === 'workouts';
     return (
-      <View key={i.provider} style={[styles.row, index > 0 && styles.rowLine]}>
+      // A row eases to its new height when its buttons or cards come and go (Oct 22 sweep).
+      <Reanimated.View key={i.provider} layout={GLIDE} style={[styles.row, index > 0 && styles.rowLine]}>
         <View style={[styles.disc, linked && styles.discOn]}>
           <Ionicons name={about.icon} size={20} color={linked ? colors.brandInk : colors.text} />
         </View>
@@ -244,17 +245,17 @@ export default function Health() {
               : i.connected && i.lastSyncedAt ? `Synced ${syncedWhen(i.lastSyncedAt)}.` : blocked ? (wrongPhone ? 'iPhone only.' : inExpoGo() ? 'Available in the App Store version of CourtSide.' : 'Coming in the next app update.') : about.how}
           </Text>
           {i.connected ? (
-            <View style={styles.actions}>
+            <Reanimated.View entering={FadeIn.duration(220)} exiting={FadeOut.duration(140)} style={styles.actions}>
               {/* Android cannot read Apple Health: syncing it is the iPhone's job. */}
               {wrongPhone && Platform.OS === 'android' ? null : (
-                <Pressable accessibilityRole="button" accessibilityLabel={`Sync ${i.label}`} disabled={loading} onPress={() => run(i.provider, 'sync')} style={styles.small}>
+                <Pressable accessibilityRole="button" accessibilityLabel={`Sync ${i.label}`} disabled={loading} onPress={() => run(i.provider, 'sync')} style={({ pressed }) => [styles.small, pressed && styles.pressedDim]}>
                   <Ionicons name="refresh" size={14} color={colors.text} /><Text style={styles.smallText}>{(i.provider === 'cronometer' || i.provider === 'myfitnesspal') && !appleHealthAvailable() ? 'Import again' : 'Sync now'}</Text>
                 </Pressable>
               )}
-              <Pressable accessibilityRole="button" accessibilityLabel={`Disconnect ${i.label}`} disabled={loading} onPress={() => disconnect(i.provider)} style={styles.smallGhost}>
+              <Pressable accessibilityRole="button" accessibilityLabel={`Disconnect ${i.label}`} disabled={loading} onPress={() => disconnect(i.provider)} style={({ pressed }) => [styles.smallGhost, pressed && styles.pressedDim]}>
                 <Text style={styles.smallGhostText}>Disconnect</Text>
               </Pressable>
-            </View>
+            </Reanimated.View>
           ) : null}
           {tennisCard ? (
             i.readsWorkouts ? (
@@ -319,11 +320,13 @@ export default function Health() {
           // Not something to press: a quiet label in the button's place.
           <View style={styles.badge}><Text style={styles.badgeText}>Via Apple Health</Text></View>
         ) : i.connected || loading ? null : (
-          <Pressable accessibilityRole="button" accessibilityLabel={`Connect ${i.label}`} accessibilityState={{ disabled: blocked }} disabled={blocked} onPress={() => (tennis && i.provider === 'apple-health' ? askApple('toggle') : run(i.provider, 'toggle'))} style={[styles.connect, blocked && styles.connectOff]}>
-            <Text style={[styles.connectText, blocked && styles.connectTextOff]}>{(i.provider === 'cronometer' || i.provider === 'myfitnesspal') && !appleHealthAvailable() ? 'Import' : 'Connect'}</Text>
-          </Pressable>
+          <Reanimated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(120)}>
+            <Pressable accessibilityRole="button" accessibilityLabel={`Connect ${i.label}`} accessibilityState={{ disabled: blocked }} disabled={blocked} onPress={() => (tennis && i.provider === 'apple-health' ? askApple('toggle') : run(i.provider, 'toggle'))} style={({ pressed }) => [styles.connect, blocked && styles.connectOff, pressed && !blocked && styles.pressedDim]}>
+              <Text style={[styles.connectText, blocked && styles.connectTextOff]}>{(i.provider === 'cronometer' || i.provider === 'myfitnesspal') && !appleHealthAvailable() ? 'Import' : 'Connect'}</Text>
+            </Pressable>
+          </Reanimated.View>
         )}
-      </View>
+      </Reanimated.View>
     );
   };
 
@@ -354,9 +357,12 @@ export default function Health() {
       ) : null}
 
       <Text style={styles.sectionTitle}>Your trackers</Text>
+      {/* Rows there on arrival just show; what changes afterwards fades and glides. */}
+      <LayoutAnimationConfig skipEntering>
       <View style={styles.list}>
         {trackerRows.map(row)}
       </View>
+      </LayoutAnimationConfig>
 
       {/* Food: the card that reads Cronometer or MyFitnessPal through Apple Health
           (it draws its own "Food" heading), then any food app rows it does not cover. */}
@@ -364,9 +370,11 @@ export default function Health() {
         <FoodSection userId={currentUserId} />
       </View>
       {foodRows.length ? (
+        <LayoutAnimationConfig skipEntering>
         <View style={[styles.list, styles.foodRows]}>
           {foodRows.map(row)}
         </View>
+        </LayoutAnimationConfig>
       ) : null}
 
       {/* Says what the server does: WHOOP's numbers go on disconnect only once its switch is on. Who else
@@ -385,6 +393,8 @@ export default function Health() {
     </Screen>
   );
 }
+
+const GLIDE = LinearTransition.duration(220);
 
 const styleDefinitions = StyleSheet.create({
   lead: { ...typography.small, color: colors.textMuted, lineHeight: 20, paddingBottom: spacing.lg },

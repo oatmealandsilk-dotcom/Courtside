@@ -7,6 +7,7 @@ import { CourtSpinner } from '@/components/CourtSpinner';
 import { router, useLocalSearchParams } from 'expo-router';
 import { goBack } from '@/lib/goBack';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import Reanimated, { Easing, FadeIn, LayoutAnimationConfig } from 'react-native-reanimated';
 
 import { Avatar, Chip, EmptyState, Screen, SegmentedControl, Toggle } from '@/components/ui';
 import { SectionPager } from '@/components/SectionPager';
@@ -331,8 +332,10 @@ function Train() {
             </View>
           ) : null}
 
+          {/* The talk so far just shows; each new line fades in (Oct 22 sweep). */}
+          <LayoutAnimationConfig skipEntering>
           {lines.map((m) => (
-            <View key={m.id} style={styles.lineWrap}>
+            <Reanimated.View key={m.id} entering={ARRIVE} style={styles.lineWrap}>
               <View style={[styles.bubble, m.role === 'user' ? styles.mine : styles.theirs]}>
                 <Text style={styles.bubbleText}>{m.body}</Text>
               </View>
@@ -353,9 +356,10 @@ function Train() {
                   <Text style={styles.reportText}>Report</Text>
                 </Pressable>
               ) : null}
-            </View>
+            </Reanimated.View>
           ))}
-          {thinking ? <View style={[styles.bubble, styles.theirs]}><ThinkingDots /></View> : null}
+          {thinking ? <Reanimated.View entering={ARRIVE} style={[styles.bubble, styles.theirs]}><ThinkingDots /></Reanimated.View> : null}
+          </LayoutAnimationConfig>
           {error ? <Text style={styles.error} accessibilityLiveRegion="polite">{error}</Text> : null}
 
           <TipComposer
@@ -443,7 +447,7 @@ function Train() {
                     accessibilityState={{ selected: open }}
                     accessibilityLabel={`${day.label}: ${day.restDay ? 'rest' : main?.title}`}
                     onPress={() => setOpenDay(open ? null : day.dayIndex)}
-                    style={[styles.dayCol, open && styles.dayColOpen, day.restDay && styles.dayColRest]}
+                    style={({ pressed }) => [styles.dayCol, open && styles.dayColOpen, day.restDay && styles.dayColRest, pressed && { opacity: PRESS_DIM }]}
                   >
                     <Text style={[styles.dayColLabel, open && { color: colors.brand }]}>{day.label.slice(0, 3)}</Text>
                     <BlockIcon icon={meta ? meta.icon : 'moon-outline'} size={18} color={meta ? colors[meta.tint] : colors.textFaint} />
@@ -454,7 +458,7 @@ function Train() {
               })}
             </ScrollView>
             {plan.days.filter((d) => d.dayIndex === openDay).map((day) => (
-              <View key={day.id} style={styles.dayCard}>
+              <Reanimated.View key={day.id} entering={ARRIVE} style={styles.dayCard}>
                 <View style={styles.dayHead}>
                   <Text style={styles.dayTitle}>{day.label}</Text>
                   <Text style={styles.dayMinutes}>{day.restDay ? 'Recovery day' : duration(day.blocks.reduce((sum, b) => sum + b.minutes, 0))}</Text>
@@ -474,7 +478,7 @@ function Train() {
                   );
                 })}
                 {day.restDay && !day.blocks.length ? <Text style={styles.blockDetail}>Nothing scheduled. Sleep, eat, walk.</Text> : null}
-              </View>
+              </Reanimated.View>
             ))}
             {openDay === null ? <Text style={styles.fine}>Tap a day to see the session.</Text> : null}
           </View>
@@ -493,6 +497,9 @@ function Train() {
     </Screen>
   );
 }
+
+/** A new chat line, the thinking bubble or an opened day fades in rather than popping. */
+const ARRIVE = FadeIn.duration(220).easing(Easing.out(Easing.cubic));
 
 /** One figure in the week's summary: no box, just the number and what it is. */
 function Stat({ label, value, hint, tint }: { label: string; value: string; hint: string; tint?: string }) {
