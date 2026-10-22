@@ -441,7 +441,8 @@ function LayerBody({ me }: { me: User }) {
         ) : null}
         {Platform.OS === 'ios' && touchable ? (
           <GestureDetector gesture={edgeGesture}>
-            <View style={styles.edge} />
+            {/* Below the top bar, so its Back button keeps the whole of its tap. */}
+            <View style={[styles.edge, { top: insets.top + 108 }]} />
           </GestureDetector>
         ) : null}
       </Reanimated.View>
