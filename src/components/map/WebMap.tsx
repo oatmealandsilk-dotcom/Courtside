@@ -126,7 +126,7 @@ export function NearbyMap(props: NearbyMapProps) {
   // Getting the map going, and again if its style never arrives (useMapLoad): each try is a new map.
   const load = useMapLoad(expanded ? 'full map' : 'map card', onScreen && props.visible !== false);
   // Anything else picked (a search result, a pin) takes the place of your own card.
-  useEffect(() => { if (model.selected || model.selectedCourt || model.selectedHit) setMeOpen(false); }, [model.selected, model.selectedCourt, model.selectedHit]);
+  useEffect(() => { if (model.selected || model.selectedCourt || model.selectedHit || model.place) setMeOpen(false); }, [model.selected, model.selectedCourt, model.selectedHit, model.place]);
   const { home, start } = model;
   // The full map opens where you are; the still card on your town (location on) or your profile's city.
   const view = expanded ? { center: start.center, zoom: start.zoom ?? START_ZOOM } : { center: model.city ?? start.center, zoom: CARD_ZOOM };

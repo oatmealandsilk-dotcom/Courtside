@@ -4,7 +4,7 @@ import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } 
 import { ActivityIndicator, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Gesture, GestureDetector, ScrollView as GestureScrollView } from 'react-native-gesture-handler';
-import Animated, { Easing, FadeIn, FadeOut, interpolateColor, runOnJS, useAnimatedReaction, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSpring, withTiming } from 'react-native-reanimated';
+import Animated, { Easing, FadeIn, FadeOut, interpolateColor, runOnJS, useAnimatedReaction, useAnimatedStyle, useSharedValue, withDelay, type SharedValue, withRepeat, withSpring, withTiming } from 'react-native-reanimated';
 import { useReducedMotion } from '@/lib/useReducedMotion';
 
 import { Avatar, BrandWash } from '@/components/ui';
@@ -269,6 +269,19 @@ const FILTERS: { key: MapFilter; label: string }[] = [
  * out under it rather than stopping short, and each chip takes a touch 44
  * points tall though it shows 32.
  */
+// A chip's words take the pill's colour exactly as far as the pill covers that chip, frame by frame, so a label never goes cream-on-cream (or dark-on-green) while the pill is still sliding.
+function ChipLabel({ label, x, w, spot, style }: { label: string; x: SharedValue<number>; w: SharedValue<number>; spot: { x: number; w: number }; style: any }) {
+  const off = colors.text;
+  const on = colors.brandInk;
+  const sx = spot.x;
+  const sw = Math.max(1, spot.w);
+  const tint = useAnimatedStyle(() => {
+    const cover = Math.max(0, Math.min(x.value + w.value, sx + sw) - Math.max(x.value, sx)) / sw;
+    return { color: interpolateColor(Math.min(1, cover), [0, 1], [off, on]) };
+  });
+  return <Animated.Text maxFontSizeMultiplier={TextScale.TITLE} style={[style, tint]}>{label}</Animated.Text>;
+}
+
 export function FilterChips({ filter, onFilter, courtsOn, onCourts, courtsLoading }: { filter: MapFilter; onFilter: (next: MapFilter) => void; courtsOn: boolean; onCourts: () => void; courtsLoading: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
   // Where each chip sits, so one filled pill can slide from the old choice to the new, the way a segmented control does.
@@ -319,7 +332,7 @@ export function FilterChips({ filter, onFilter, courtsOn, onCourts, courtsLoadin
             }}
             style={[styles.chip, measured ? styles.chipClear : active === f.key && styles.chipOn]}
           >
-            <Text maxFontSizeMultiplier={TextScale.TITLE} style={[styles.chipText, active === f.key && styles.chipTextOn]}>{f.label}</Text>
+            {measured && spots.current[f.key] ? <ChipLabel label={f.label} x={x} w={w} spot={spots.current[f.key]!} style={styles.chipText} /> : <Text maxFontSizeMultiplier={TextScale.TITLE} style={[styles.chipText, active === f.key && styles.chipTextOn]}>{f.label}</Text>}
           </Pressable>
         ))}
         {/* Courts is an on/off switch, not one of the choices: a hairline sets it apart, and it scrolls with the row so nothing is ever tucked behind it. */}
