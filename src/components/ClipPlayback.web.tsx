@@ -13,17 +13,12 @@ import type { MediaCrop } from '@/data/types';
 import { useIsFocused } from '@/lib/useIsFocused';
 import { forgetLeft, noteLeft, takeLeft } from '@/features/feed/clipResume';
 import { TopBandContext } from '@/features/feed/topBand';
-import { usePreloadTurn } from '@/features/feed/preloadQueue';
-import { noteClipLoad } from '@/lib/netSpeed';
 
 /** The feed's top shade (see TOP_SHADE) as a browser gradient. */
 const TOP_SHADE_CSS = `linear-gradient(${TOP_SHADE.colors.map((c, i) => `${c} ${TOP_SHADE.locations[i] * 100}%`).join(', ')})`;
 
-function ClipPlaybackInner({ uri, poster, active: wanted, preload = false, preloadRank = 1, warmOnly = false, onDoubleTap, fit = 'cover', trimStart = 0, trimEnd, speed, volume, silent = false, bare = false, discInk, discPinned = false, letterbox = false, onReady, crop, held = false, onStage = false, onPaused }: {
-  uri: string; poster?: string; active: boolean; preload?: boolean;
-  /** How soon the feed may reach it when preloading (1 = the next page); nearer clips fetch first (features/feed/preloadQueue). */
-  preloadRank?: number;
-  onDoubleTap?: () => void; fit?: 'cover' | 'contain'; trimStart?: number; trimEnd?: number; silent?: boolean;
+function ClipPlaybackInner({ uri, poster, active: wanted, preload = false, warmOnly = false, onDoubleTap, fit = 'cover', trimStart = 0, trimEnd, speed, volume, silent = false, bare = false, discInk, discPinned = false, letterbox = false, onReady, crop, held = false, onStage = false, onPaused }: {
+  uri: string; poster?: string; active: boolean; preload?: boolean; onDoubleTap?: () => void; fit?: 'cover' | 'contain'; trimStart?: number; trimEnd?: number; silent?: boolean;
   /** Built ahead on a page not opened yet (the Feed warming up out of sight): fetch only the clip's opening, not the whole file. */
   warmOnly?: boolean;
   /** The author's rate (1 is normal) and level (0–1), honoured at playback. */
@@ -103,78 +98,6 @@ function ClipPlaybackInner({ uri, poster, active: wanted, preload = false, prelo
   const fail = () => { setFailed(true); setReadyState(false); onReady?.(true); };
   const latestReady = useRef(onReady);
   latestReady.current = onReady;
-  // In the preload window, its video fetches in turn: nearest first, two at a
-  // time, after the clip on screen (features/feed/preloadQueue, as on a phone).
-  // Or once the browser has stopped fetching it of its own accord ('suspend'): Safari stops a
-  // 'metadata' clip there without ever reaching its first frame (and on an iPhone treats 'auto'
-  // the same), so waiting for the frame would hold a download turn for nothing.
-  const [idle, setIdle] = useState(false);
-  // On screen it holds back new preloads until it can play through (or has a few seconds in
-  // hand), not just until its first frame: on a slow link a preload started then took the
-  // bandwidth it needed and it stalled mid-play. A browser's idle only counts off screen
-  // (Safari can stop an 'auto' clip before its frame, and it keeps that hint on screen).
-  const [through, setThrough] = useState(false);
-  useEffect(() => { setThrough(false); }, [uri]);
-  const filled = (el: HTMLVideoElement) => {
-    if (through) return;
-    const length = el.duration;
-    if (!Number.isFinite(length) || length <= 0 || !el.buffered.length) return;
-    const end = el.buffered.end(el.buffered.length - 1);
-    if (end >= length - 0.1 || end >= el.currentTime + 3) setThrough(true);
-  };
-  const turn = usePreloadTurn(preload, preloadRank, active, active ? through || failed : ready || failed || idle);
-  // How long its opening took: the connection's speed (lib/netSpeed), as on a phone. Only a fetch that
-  // ran unbroken counts: the clock starts when it is asked for in full ('auto', or it comes on screen)
-  // before its first frame, and a reading is dropped when the fetch is let go, cut, eased to 'metadata'
-  // or stopped by the browser (Safari parks a clip off screen until it plays), so a wait in which
-  // nothing was fetched never reads as a slow connection.
-  const loadAt = useRef(0);
-  // The loading disc only for a wait you would notice: a clip preloaded to its first frame
-  // asks for its next seconds as it starts, a moment's 'waiting' that is no loading page.
-  // A clip that already showed its frame when it came on screen (a warmed tab's first clip
-  // re-seeking into the rest of its opening) waits a little longer before the disc.
-  const [spin, setSpin] = useState(false);
-  const framed = useRef({ had: false, at: 0 });
-  useEffect(() => {
-    if (active) framed.current = { had: (video.current?.readyState ?? 0) >= 2, at: Date.now() };
-  }, [active]);
-  useEffect(() => {
-    if (ready || !active) { setSpin(false); return undefined; }
-    const early = framed.current.had && Date.now() - framed.current.at < 3000;
-    const t = setTimeout(() => setSpin(true), early ? 800 : 300);
-    return () => clearTimeout(t);
-  }, [ready, active]);
-  // A clip waiting off screen with its first frame in steps back to 'metadata': Chrome
-  // stops there, rather than pulling the whole file while the next ones wait their turn
-  // (Safari only ever fetches more, never less, so there it is just a hint).
-  const fetchHint = active ? 'auto' : preload && turn ? (warmOnly || ready ? 'metadata' : 'auto') : 'none';
-  // A new hint is a new fetch: it holds its turn again until it stops or has its frame.
-  useEffect(() => { setIdle(false); }, [fetchHint]);
-  // A feed out of sight whose turn was taken back (a clip came on screen while it was still fetching,
-  // features/feed/preloadQueue) really stops: a browser carries on with a started file whatever the hint
-  // says, so its file is let go until its turn comes again. Only before its first frame: its page's
-  // cover is still up, so nothing changes on screen.
-  const cut = useRef(false);
-  useEffect(() => {
-    const el = video.current;
-    if (!el) return;
-    if (fetchHint === 'none' && !active && preloadRank >= 10 && el.networkState === 2 && el.readyState < 2) {
-      el.removeAttribute('src');
-      el.load();
-      cut.current = true;
-    } else if (fetchHint !== 'none' && cut.current) {
-      cut.current = false;
-      el.src = uri;
-    }
-  }, [fetchHint]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { cut.current = false; loadAt.current = 0; }, [uri]);
-  useEffect(() => {
-    const el = video.current;
-    // Paused on screen (a tap, or autoplay refused) it waits on the viewer, not the connection.
-    if (fetchHint !== 'auto' || (active && paused)) loadAt.current = 0;
-    else if (!loadAt.current && el && el.readyState < 2) loadAt.current = Date.now();
-  }, [fetchHint, active, paused, uri]);
-  const stopped = (el: HTMLVideoElement) => { if (!active && fetchHint !== 'none' && el.readyState >= 1) { loadAt.current = 0; setIdle(true); } };
   // Gone from the page (or given another clip): what it had fetched goes with it.
   useEffect(() => () => latestReady.current?.(false), [uri]);
   // The sound disc eases in when the clip starts and fades out quickly; a
@@ -281,7 +204,7 @@ function ClipPlaybackInner({ uri, poster, active: wanted, preload = false, prelo
 
   return <div style={{ position: 'absolute', inset: 0, background: letterbox ? '#000' : undefined, display: 'flex', alignItems: 'center' }}>
     <div style={{ ...cropCss(crop), display: 'flex', alignItems: 'center' }}>
-      <video ref={video} src={uri} poster={poster} loop muted={muted || silent} playsInline preload={fetchHint} onSuspend={(e) => stopped(e.currentTarget)} onCanPlayThrough={() => setThrough(true)} onProgress={(e) => filled(e.currentTarget)} onLoadedMetadata={(e) => { if (fetchHint === 'metadata') stopped(e.currentTarget); }} onError={fail} onLoadedData={() => { if (loadAt.current > 0) { noteClipLoad(Date.now() - loadAt.current); loadAt.current = 0; } setReady(true); }} onCanPlay={() => setReady(true)} onWaiting={() => setReady(false)} onPlaying={() => setReady(true)} style={{ width: '100%', height: '100%', objectFit: letterbox ? 'contain' : fit, pointerEvents: 'none' }} />
+      <video ref={video} src={uri} poster={poster} loop muted={muted || silent} playsInline preload={active || preload ? (warmOnly && !active ? 'metadata' : 'auto') : 'none'} onError={fail} onLoadedData={() => setReady(true)} onCanPlay={() => setReady(true)} onWaiting={() => setReady(false)} onPlaying={() => setReady(true)} style={{ width: '100%', height: '100%', objectFit: letterbox ? 'contain' : fit, pointerEvents: 'none' }} />
       {failed ? <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}><span style={{ padding: '8px 14px', borderRadius: 999, background: 'rgba(0,0,0,0.55)', color: 'white', font: `600 13px ${fontFamily.semibold}` }}>This video didn’t load</span></div> : null}
     </div>
     {/* Over the picture, under the disc: the top shade darkens the video, never the disc. */}
@@ -324,7 +247,7 @@ function ClipPlaybackInner({ uri, poster, active: wanted, preload = false, prelo
     {bare ? null : <div aria-hidden="true" style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 2, background: 'rgba(255,255,255,0.25)' }}>
       <div ref={bar} style={{ height: 2, width: '0%', background: 'rgba(255,255,255,0.9)' }} />
     </div>}
-    {spin ? <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}><CourtSpinner ink={discInk ?? 'white'} /></div> : null}
+    {!ready && active ? <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}><CourtSpinner ink={discInk ?? 'white'} /></div> : null}
     {fast ? <div aria-live="polite" style={{ position: 'absolute', left: 0, right: 0, top: insets.top + drop + 24, display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>
       <span style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 999, background: 'rgba(0,0,0,0.55)', color: 'white', font: `700 14px ${fontFamily.bold}` }}><Ionicons name="play-forward" size={13} color="white" />2×</span>
     </div> : null}

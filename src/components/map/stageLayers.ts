@@ -74,14 +74,13 @@ export const layerZ = (layer: StageLayer) => (layer.kind === 'tray' ? 1 : 2 + la
 export const takesOver = (layer: StageLayer) => layer.kind === 'tray' && !layer.first && layer.replaces?.kind === 'card';
 
 /**
- * How solid what only the bare map's buttons have is (the players pill, and
- * the credits over it), set by the stage under them. On the bare map that
- * may take over a closing card's buttons (above) it is unseen until the
- * stage knows whether it does: if so it fades in as they ride down (Back to
- * me and the zoom were there all along, on the card), done before they land;
- * if not it comes with the rest of them (Oct 11: it faded in on its own
- * either way, so on the phone their glass could be put up again while it
- * was still fading, and stay a flat white plate). Outside a stage, solid.
+ * How far grown in what only the bare map's buttons have is (the players
+ * pill, and the credits over it), 0 to 1, set by the stage under them. On
+ * the bare map that may take over a closing card's buttons (above) it grows
+ * in as they ride down (Back to me and the zoom were there all along, on the
+ * card), done before they land; if not it comes with the rest of them.
+ * Never a fade (Oct 22): the pill's fill (MapGlass) is the same in every
+ * frame. Outside a stage, full size.
  */
 export const CrownLead = createContext<SharedValue<number> | null>(null);
 

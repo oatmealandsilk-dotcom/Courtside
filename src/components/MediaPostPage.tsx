@@ -55,8 +55,6 @@ interface Props {
   /** Whether this page is the one on screen: the video plays only then. */
   active: boolean;
   preload?: boolean;
-  /** How soon the feed may reach it (1 = the next page): its video fetches in turn (features/feed/preloadQueue). */
-  preloadRank?: number;
   onDoubleTap: () => void;
   onToggleLike: () => void;
   onToggleSave: () => void;
@@ -130,7 +128,7 @@ const bandBlur = Platform.OS === 'ios' ? BAND_BLUR * 5 : BAND_BLUR;
 /** The buttons' one size: like, comment, send, save and more all read as a set. */
 const ICON = 26;
 
-function MediaPostPageInner({ post, author, liked, saved, active, preload = false, preloadRank = 1, onDoubleTap, onToggleLike, onToggleSave, onComment, onShare, onMore, topInset, bottomInset, burst, pop = 0, discInk, onReady }: Props) {
+function MediaPostPageInner({ post, author, liked, saved, active, preload = false, onDoubleTap, onToggleLike, onToggleSave, onComment, onShare, onMore, topInset, bottomInset, burst, pop = 0, discInk, onReady }: Props) {
   // Fills on the tap; the store's own redraw follows without changing anything on screen.
   const like = useOptimisticToggle(`p:${post.id}`, liked, onToggleLike, pop);
   const likes = post.likedBy.length + like.delta;
@@ -328,7 +326,7 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
         onTouchCancel={() => lockPageSwipe(false)}
       >
         {post.videoUrl ? (
-          <PostVideo uri={post.videoUrl} poster={post.thumbnailUrl} active={active} preload={preload} preloadRank={preloadRank} onDoubleTap={onDoubleTap} trimStart={post.trimStart} trimEnd={post.trimEnd} speed={post.speed} volume={post.volume} crop={post.crop} silent={post.muted} discInk={discInk} onReady={onReady} onSize={landscape ? onSize : undefined} />
+          <PostVideo uri={post.videoUrl} poster={post.thumbnailUrl} active={active} preload={preload} onDoubleTap={onDoubleTap} trimStart={post.trimStart} trimEnd={post.trimEnd} speed={post.speed} volume={post.volume} crop={post.crop} silent={post.muted} discInk={discInk} onReady={onReady} onSize={landscape ? onSize : undefined} />
         ) : photos.length > 1 && frameSize ? (
           // A carousel: swipe sideways through the photos. Each one taps the
           // way a single photo does: once for full screen, twice to like.
