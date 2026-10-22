@@ -175,7 +175,7 @@ function Grid({ sets, you, them, youWon, ended, headers, named, m, k, still = fa
                 <Text
                   maxFontSizeMultiplier={TextScale.CARD}
                   numberOfLines={1}
-                  style={[k.shade, { fontSize: m.name, letterSpacing: -0.15, flexShrink: 1 }, font(r.wonMatch ? '600' : '400'), { color: r.name ? (r.wonMatch ? k.name : k.nameLose) : k.lose }]}
+                  style={[k.shade, { fontSize: Math.max(12, m.name), letterSpacing: -0.15, flexShrink: 1 }, font(r.wonMatch ? '600' : '400'), { color: r.name ? (r.wonMatch ? k.name : k.nameLose) : k.lose }]}
                 >
                   {r.name || '—'}
                 </Text>
