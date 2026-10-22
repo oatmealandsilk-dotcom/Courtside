@@ -6,7 +6,7 @@ import { Tappable } from '@/components/Tappable';
 import type { FeedGroupCard, ID } from '@/data/types';
 import { GroupTile } from '@/features/groups/GroupTile';
 import { useApp } from '@/store/AppContext';
-import { colors, font, radius, spacing, typography } from '@/theme';
+import { colors, font, radius, spacing, typography, buttonShape } from '@/theme';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 
 /*
@@ -89,7 +89,7 @@ const styleDefinitions = StyleSheet.create({
   words: { flex: 1, minWidth: 0, gap: 2 },
   name: { ...typography.bodyStrong, color: colors.text },
   meta: { ...typography.small, color: colors.textMuted },
-  cta: { height: 34, borderRadius: radius.pill, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
+  cta: { height: buttonShape.smallHeight, borderRadius: buttonShape.smallRadius, ...buttonShape.curve, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
   ctaText: { ...typography.smallStrong, ...font('600'), color: colors.brand },
   dim: { opacity: 0.5 },
 });

@@ -16,7 +16,7 @@ import { confirm } from '@/lib/confirm';
 import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
 import { MAX_GROUPS } from '@/store/feedGroups';
-import { colors, font, lift, radius, spacing, typography } from '@/theme';
+import { colors, font, lift, radius, spacing, typography, buttonShape } from '@/theme';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 
 /*
@@ -364,7 +364,7 @@ const styleDefinitions = StyleSheet.create({
   meta: { ...typography.small, color: colors.textMuted },
   about: { ...typography.small, color: colors.textFaint, lineHeight: 18 },
   // Join is the one green thing to press; Request is the same in a softer green (it waits for a yes); Joined and Requested are quiet.
-  btn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, height: 32, minWidth: 84, paddingHorizontal: 14, borderRadius: radius.pill },
+  btn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, height: buttonShape.smallHeight, minWidth: 84, paddingHorizontal: 14, borderRadius: buttonShape.smallRadius, ...buttonShape.curve },
   btnJoin: { backgroundColor: colors.brand },
   btnRequest: { backgroundColor: colors.brandDim },
   btnQuiet: { backgroundColor: colors.surfaceAlt },

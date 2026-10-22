@@ -157,10 +157,10 @@ const styleDefinitions = StyleSheet.create({
   tileHead: { flexDirection: 'row', alignItems: 'center', gap: 5, height: 18 },
   tileLabel: { ...typography.small, ...font('500'), color: colors.textMuted, flexShrink: 1 },
   // The line keeps its height whatever the size, so two tiles side by side keep their numbers level.
-  tileValue: { ...font('600'), fontSize: 24, lineHeight: 30, letterSpacing: -0.7, color: colors.text, fontVariant: ['tabular-nums'] },
+  tileValue: { ...font('600'), fontSize: 24, lineHeight: 30, letterSpacing: -0.4, color: colors.text, fontVariant: ['tabular-nums'] },
   tileSub: { ...typography.small, color: colors.textMuted },
   streak: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: 10, paddingHorizontal: 14, paddingVertical: 12 },
-  streakValue: { ...font('600'), fontSize: 26, letterSpacing: -0.8, color: colors.text, fontVariant: ['tabular-nums'] },
+  streakValue: { ...font('600'), fontSize: 26, letterSpacing: -0.5, color: colors.text, fontVariant: ['tabular-nums'] },
   // The word after a big number ("days", "sessions"): small and quiet.
   // Its own short line height, so the smaller word never makes its line taller than a tile beside it.
   unit: { ...font('500'), fontSize: 14, lineHeight: 16, letterSpacing: 0, color: colors.textMuted },

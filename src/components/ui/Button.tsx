@@ -13,7 +13,7 @@ import {
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { Tappable } from '@/components/Tappable';
 import { BrandWash } from '@/components/ui/BrandWash';
-import { colors, pageIsDark, radius, spacing, typography } from '@/theme';
+import { buttonShape, colors, pageIsDark, spacing, typography } from '@/theme';
 import { TextScale, oneLine } from '@/theme/textScale';
 
 type Variant = 'primary' | 'secondary' | 'ghost' | 'danger';
@@ -29,8 +29,9 @@ interface Props {
   style?: StyleProp<ViewStyle>;
   full?: boolean;
   /**
-   * 'sm': a compact pill (40pt tall, a touch more to the finger) for a row
-   * of actions on a card, where full-size buttons wrap and weigh it down.
+   * 'sm': a compact button (34pt tall, a touch more to the finger), as
+   * Instagram's Edit profile and Follow, for a row of actions on a card or a
+   * profile, where full-size buttons wrap and weigh it down.
    */
   size?: 'md' | 'sm';
 }
@@ -59,7 +60,7 @@ export function Button({
       scaleTo={PRESS_SHRINK}
       hoverTo={1.04}
       accessibilityLabel={label}
-      hitSlop={size === 'sm' ? 4 : undefined}
+      hitSlop={size === 'sm' ? buttonShape.smallSlop : undefined}
       style={[
         styles.base,
         size === 'sm' && styles.small,
@@ -69,7 +70,7 @@ export function Button({
         style,
       ]}
     >
-      {variant === 'primary' ? <BrandWash /> : null}
+      {variant === 'primary' ? <BrandWash radius={size === 'sm' ? buttonShape.smallRadius : buttonShape.radius} curve /> : null}
       <View style={styles.inner}>
         {loading ? <CourtSpinner size={size === 'sm' ? 15 : 18} ink={palette.fg} /> : null}
         <Text {...(size === 'sm' ? oneLine(TextScale.TITLE, 0.8) : { maxFontSizeMultiplier: TextScale.TITLE })} style={[styles.label, size === 'sm' && styles.smallLabel, { color: palette.fg }]} numberOfLines={size === 'sm' ? 1 : undefined}>{label}</Text>
@@ -92,16 +93,20 @@ function paletteFor(variant: Variant): { bg: string; fg: string; border: string 
 }
 
 const styleDefinitions = StyleSheet.create({
+  // Instagram's shape (Oct 22): a rounded rectangle with Apple's smooth corner, 44pt tall.
   base: {
-    paddingVertical: 14,
+    minHeight: buttonShape.height,
+    paddingVertical: 10,
     paddingHorizontal: spacing.xl,
-    borderRadius: radius.pill,
+    borderRadius: buttonShape.radius,
+    ...buttonShape.curve,
     borderWidth: 1,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   full: { alignSelf: 'stretch' },
-  small: { paddingVertical: 0, minHeight: 40, justifyContent: 'center', paddingHorizontal: spacing.lg },
-  smallLabel: { ...typography.smallStrong, fontSize: 14 },
+  small: { paddingVertical: 0, minHeight: buttonShape.smallHeight, borderRadius: buttonShape.smallRadius, paddingHorizontal: spacing.lg },
+  smallLabel: { ...typography.smallStrong, fontSize: buttonShape.smallLabel },
   // The one shadow on the page: the primary action, in its own colour, soft.
   lift: { shadowColor: colors.brand, shadowOpacity: 0.28, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 3 },
   // On a dark page a shadow in the button's own colour turns into a halo; a plain dark one just lifts it.

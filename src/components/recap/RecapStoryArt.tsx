@@ -50,5 +50,5 @@ const styles = StyleSheet.create({
   wash: { position: 'absolute', left: 0, right: 0, top: 0, height: 280 },
   // Clear of Instagram's own strips (about the top 13% and the bottom 17%).
   inner: { position: 'absolute', left: 20, right: 20, top: 82, gap: 10 },
-  week: { ...font('600'), fontSize: 15, letterSpacing: -0.2, textAlign: 'center' },
+  week: { ...font('600'), fontSize: 15, letterSpacing: -0.1, textAlign: 'center' },
 });

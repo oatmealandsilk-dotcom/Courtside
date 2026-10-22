@@ -15,7 +15,7 @@ import { sessionPeople } from '@/features/activity/sessionTags';
 import { postZones, zoneColors } from '@/features/activity/zones';
 import { distanceFigure } from '@/features/activity/workouts';
 import { useTheme, type ThemeName } from '@/theme/ThemeProvider';
-import { colors, font, pageIsDark, withAlpha } from '@/theme';
+import { colors, font, pageIsDark, withAlpha, wordmarkFont } from '@/theme';
 import { Duration, Figure } from './Duration';
 import { Pop } from './Pop';
 import { ZoneBar } from './ZoneBar';
@@ -352,7 +352,7 @@ export function SessionCard({ session, width, height, play = false, people, hidd
         <Text style={{ ...font('500'), fontSize: small(14, 10), color: look.muted, marginTop: 2 * k, ...shade }} maxFontSizeMultiplier={1.2}>{onCourtWord(session)}</Text>
         {score ? (
           // A long score (tiebreak points, Oct 10) a little smaller, so it all fits on its line.
-          <Text style={{ ...font('700'), fontSize: 26 * k * scoreScale(score, 20), letterSpacing: -0.4 * k, color: look.figure, fontVariant: ['tabular-nums'], marginTop: 8 * k, ...shade }} numberOfLines={1} maxFontSizeMultiplier={1.2}>{score}</Text>
+          <Text style={{ ...font('700'), fontSize: 26 * k * scoreScale(score, 20), letterSpacing: -0.2 * k, color: look.figure, fontVariant: ['tabular-nums'], marginTop: 8 * k, ...shade }} numberOfLines={1} maxFontSizeMultiplier={1.2}>{score}</Text>
         ) : null}
         {far ? (
           <View style={{ marginTop: 8 * k }}>
@@ -405,7 +405,7 @@ export function SessionCard({ session, width, height, play = false, people, hidd
         <View style={[styles.brand, { gap: 6 * k, marginTop: 14 * k, paddingTop: 12 * k, borderTopColor: look.lines }, clear && { borderTopWidth: Math.max(1, 1.5 * k) }]}>
           {/* Clear: the Overlay's mark and wordmark, CourtSide's bright green with its soft dark shadow. */}
           {clear ? <ShadedMark size={Math.round(small(17, 12))} u={k * 0.5} color={colors.brandBright} halo="dark" /> : <BrandMark size={Math.round(small(17, 12))} color={look.figure} />}
-          <Text style={{ ...font('600'), fontSize: small(14, 10), letterSpacing: -0.35 * k, color: clear ? colors.brandBright : look.ink, ...(clear ? clearWordShade(k * 0.5) : null) }} maxFontSizeMultiplier={1}>CourtSide</Text>
+          <Text style={{ ...wordmarkFont('600'), fontSize: small(14, 10), letterSpacing: -0.35 * k, color: clear ? colors.brandBright : look.ink, ...(clear ? clearWordShade(k * 0.5) : null) }} maxFontSizeMultiplier={1}>CourtSide</Text>
           <View style={{ flex: 1 }} />
           <Text style={{ ...font('500'), fontSize: small(11, 9), color: look.faint, ...shade }} maxFontSizeMultiplier={1}>courtsidebase.com</Text>
         </View>
@@ -492,7 +492,7 @@ function Sideways({ session, look, width, height, play, top, result, score, stat
         <Text style={{ ...font('500'), fontSize: small(14, 10), lineHeight: line(small(14, 10)), color: look.muted, marginTop: 2 * k }} maxFontSizeMultiplier={1.2}>{onCourtWord(session)}</Text>
         {score ? (
           // A long score a little smaller (Oct 10), on the same line height the card measured.
-          <Text style={{ ...font('700'), fontSize: 22 * k * scoreScale(score, 22), lineHeight: Math.round(22 * k * 1.25), letterSpacing: -0.4 * k, color: look.figure, fontVariant: ['tabular-nums'], marginTop: 6 * k }} numberOfLines={1} maxFontSizeMultiplier={1.2}>{score}</Text>
+          <Text style={{ ...font('700'), fontSize: 22 * k * scoreScale(score, 22), lineHeight: Math.round(22 * k * 1.25), letterSpacing: -0.2 * k, color: look.figure, fontVariant: ['tabular-nums'], marginTop: 6 * k }} numberOfLines={1} maxFontSizeMultiplier={1.2}>{score}</Text>
         ) : null}
         {stats.length ? (
           <View style={[styles.statRow, { gap: 10 * k, marginTop: 14 * k, paddingTop: 10 * k, borderTopColor: look.lines }]}>

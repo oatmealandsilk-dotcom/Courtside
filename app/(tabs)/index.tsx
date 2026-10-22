@@ -4,7 +4,7 @@ import { useSuggestedPlayers } from '@/features/people/suggestions';
 import { ThreadReplies } from '@/components/ThreadReplies';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { AccessibilityInfo, Animated, AppState, Image, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions, type StyleProp, type ViewStyle } from 'react-native';
+import { AccessibilityInfo, Animated, AppState, Image, InteractionManager, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions, type StyleProp, type ViewStyle } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import { router, useFocusEffect, useIsFocused as useRouteFocused, useNavigation } from 'expo-router';
 import { FeedTopRow } from '@/features/groups/FeedTopRow';
@@ -77,7 +77,7 @@ import { isDesktopBrowser } from '@/lib/browserDevice';
 import { useSidePanel } from '@/features/feed/sidePanel';
 import { CLOSE_MS, PAUSE_AT_FULL, SIDE_MIN_WINDOW, STAGE_EASING, STAGE_ON_ANDROID, begin as beginStage, clear as clearStage, currentY, getStage, markEnding, markLost, place as placeStage, stageGeometry, stageKeyOf, stageTop, useStageSelect, type StageSubject } from '@/features/feed/commentStage';
 import { StageChromeContext, useStageMotion, useStagePageChrome } from '@/features/feed/useStageMotion';
-import { colors, radius, typography, spacing, font, lift } from '@/theme';
+import { colors, radius, typography, spacing, font, lift, wordmarkFont } from '@/theme';
 import { isTaggedIn } from '@/features/activity/sessionTags';
 import { useAndroidBack } from '@/lib/androidBack';
 import { TextScale } from '@/theme/textScale';
@@ -382,8 +382,10 @@ let barHolder: string | null = null;
 
 const useRouteFocusedInBrowser: () => boolean = Platform.OS === 'web' ? useRouteFocused : () => true;
 
-function Home({ scope, topRow, paused, onChrome, onSwipe }: {
+function Home({ scope, topRow, paused, onChrome, onSwipe, onSettled }: {
   previewSection?: string;
+  /** Told once, when this feed is on screen with its first page in and playing (GroupedFeed then warms the other tabs). */
+  onSettled?: () => void;
   /** Told when a finger's own swipe lands on a new page: given only on the Feed tab itself (For you and its group feeds), never on a one-person or one-court feed (post/[id] and the like). */
   onSwipe?: () => void;
   scope?: FeedScope;
@@ -542,6 +544,10 @@ function Home({ scope, topRow, paused, onChrome, onSwipe }: {
   // Whether Home has been the tab on screen at all yet this time round.
   const shownOnce = useRef(false);
   if (focused) shownOnce.current = true;
+  // Ever the feed on show (a tab you opened, not only one warmed behind For you): covered by
+  // another tab, it keeps the clips it had buffered, so coming back and flicking on never waits.
+  const onShowOnce = useRef(false);
+  if (focused && !paused) onShowOnce.current = true;
   // In a browser the Feed is built out of sight shortly after the app opens
   // (see the tabs' web layout). Until you first come to it, only the first
   // clip fetches, and only its opening: enough to start at once, without
@@ -1499,8 +1505,14 @@ function Home({ scope, topRow, paused, onChrome, onSwipe }: {
    * page mid-build, even swiping fast.
    */
   const WINDOW = 1;
-  /** How many pages ahead stay mounted and buffering, so the feed is never caught out. */
-  const AHEAD = 2;
+  /**
+   * How many pages ahead stay mounted and buffering, so the feed is never caught out:
+   * three, the way Instagram's Reels do, so a fast flick of two or three lands on a
+   * clip already in (Oct 22, owner: "scroll a couple fast without hitting a loading
+   * page"). Their clips fetch in turn, nearest first, two at a time, after the clip
+   * on screen (features/feed/preloadQueue).
+   */
+  const AHEAD = 3;
   /** How many of those the first clip (and a pull-to-refresh) waits for; the rest load in behind the feed. */
   const FIRST = 1;
 
@@ -1529,14 +1541,18 @@ function Home({ scope, topRow, paused, onChrome, onSwipe }: {
   // Whatever is on screen is shown within a few seconds, ready or not: a
   // picture that never arrives is the page's problem to explain, not a
   // reason to hold the reader on a placeholder.
+  // Only the feed on show: a tab warmed behind another may not have built its page's
+  // player yet (it waits its turn), and lifting that cover would show a poster that
+  // gives way to an empty frame the moment the tab is opened.
   useEffect(() => {
+    if (paused) return undefined;
     const item = feed[active];
     if (!item) return undefined;
     const id = item.type === 'post' ? item.post.id : item.type === 'question' ? item.question.id : item.type === 'hit' ? item.story.id : null;
     if (!id || readyIds.has(id)) return undefined;
     const timer = setTimeout(() => markReady(id, true), 6000);
     return () => clearTimeout(timer);
-  }, [active, feed, readyIds, markReady]);
+  }, [active, feed, readyIds, markReady, paused]);
   // A post whose video only ever existed on the phone that made it will never
   // report ready: its page is shown at once so it can at least be opened and
   // deleted, rather than sitting behind the placeholder for good.
@@ -1583,6 +1599,13 @@ function Home({ scope, topRow, paused, onChrome, onSwipe }: {
     const t = setTimeout(() => setPlayable(true), curtainDown ? 120 : 1500);
     return () => clearTimeout(t);
   }, [warmed, curtainDown, scope]);
+  // On screen, first page in and playing: the other feed tabs may now warm up behind it (GroupedFeed).
+  const settledSent = useRef(false);
+  useEffect(() => {
+    if (!onSettled || settledSent.current || !focused || paused || !warmed || !playable) return;
+    settledSent.current = true;
+    onSettled();
+  }, [onSettled, focused, paused, warmed, playable]);
   // Short posts in For you (owner, Oct 6: "for short post we put the find
   // players near you thing there"): Community's map card fills the room the
   // first one of a visit leaves, if it fits there and has players near you to
@@ -1611,21 +1634,41 @@ function Home({ scope, topRow, paused, onChrome, onSwipe }: {
     if (host?.type === 'post') findHost.current = { visit, id: host.post.id };
   }
   const findHostId = !scope && findShown && findHost.current.visit === visit && roomy.has(findHost.current.id) ? findHost.current.id : null;
-  // Photos and clip covers are fetched outright; a page reports itself ready when its picture lands.
+  // Pictures ahead of where you are, fetched before you get there (Oct 22, Instagram-style):
+  // clip covers for the next six pages, photos (every photo of a carousel) for the next four.
+  // Into the same cache the pages draw from (expo-image, memory and disk), once each. A
+  // photo page reports itself ready when its picture lands, so its cover lifts at once.
+  // A feed tab not on show (warmed behind For you, or covered) fetches only its page on
+  // screen: no data spent on tabs never opened; the rest comes the moment it is opened.
+  const prefetched = useRef(new Set<string>());
   useEffect(() => {
-    for (const item of feed.slice(0, AHEAD)) {
-      if (item.type === 'post' && !item.post.videoUrl) {
-        const uri = item.post.imageUrl ?? item.post.thumbnailUrl;
-        if (uri) Image.prefetch(uri).then(() => markReady(item.post.id, true)).catch(() => markReady(item.post.id, true));
-        // A carousel's second photo too, so the first swipe lands on a picture; the page never waits for it.
-        const second = item.post.imageUrls?.[1];
-        if (second) Image.prefetch(second).catch(() => undefined);
-      }
-      if (item.type === 'hit' && !item.story.videoUrl && item.story.imageUrl) {
-        Image.prefetch(item.story.imageUrl).then(() => markReady(item.story.id, true)).catch(() => markReady(item.story.id, true));
+    const fresh = (uri: string | undefined): uri is string => !!uri && !prefetched.current.has(uri) && !!prefetched.current.add(uri);
+    const fetchAhead = (uri: string | undefined, then?: () => void) => {
+      if (!fresh(uri)) return;
+      ExpoImage.prefetch(uri, 'memory-disk').catch(() => false).finally(() => then?.());
+    };
+    for (let ahead = 0; ahead <= (paused ? 0 : 6); ahead++) {
+      const item = feed[active + ahead];
+      if (!item) break;
+      const photos = ahead <= 4;
+      if (item.type === 'post') {
+        const post = item.post;
+        if (post.videoUrl) { fetchAhead(post.thumbnailUrl); continue; }
+        if (!photos) continue;
+        const uri = post.imageUrl ?? post.thumbnailUrl;
+        fetchAhead(uri, () => markReady(post.id, true));
+        // A carousel's other photos too, so a swipe across it lands on pictures; the page never waits for them.
+        for (const other of post.imageUrls ?? []) if (other !== uri) fetchAhead(other);
+      } else if (item.type === 'hit') {
+        const story = item.story;
+        if (story.videoUrl) fetchAhead(story.thumbnailUrl);
+        else if (photos) fetchAhead(story.imageUrl, () => markReady(story.id, true));
       }
     }
-  }, [feed, markReady]);
+    // The page behind too: a swipe back lands on its cover.
+    const behind = paused ? undefined : feed[active - 1];
+    if (behind?.type === 'post') fetchAhead(behind.post.thumbnailUrl ?? behind.post.imageUrl);
+  }, [feed, active, markReady, paused]);
 
   // Whether someone else's post may leave CourtSide as a picture is asked as it
   // comes on screen, so its ••• menu opens already knowing (openOutside.ts).
@@ -1633,19 +1676,6 @@ function Home({ scope, topRow, paused, onChrome, onSwipe }: {
     const item = feed[active];
     if (item?.type === 'post') warmOpenOutside(item.post, currentUserId);
   }, [active, feed, currentUserId]);
-
-  // Warm the covers on either side so a swipe never lands on a grey rectangle.
-  useEffect(() => {
-    if (Platform.OS !== 'web') return;
-    for (const offset of [1, -1, 2]) {
-      const item = feed[active + offset];
-      const url = item?.type === 'post' ? item.post.thumbnailUrl : undefined;
-      if (url) {
-        const img = new window.Image();
-        img.src = url;
-      }
-    }
-  }, [active, feed]);
 
   // Whatever is settled on screen counts as watched, once per session.
   const showing = feed[active];
@@ -1672,7 +1702,8 @@ function Home({ scope, topRow, paused, onChrome, onSwipe }: {
   const rowed = !!scope?.groupId || !!scope?.activities;
   const scopedBack = !!scope && !rowed;
   useEffect(() => {
-    if (!focused || !showing) return;
+    if (!focused || paused || !showing) return;
+    // Only the feed on show counts: a tab built and warmed off screen (paused) records nothing until it is opened.
     // An Instant seen here counts on its views, as in the full-screen viewer
     // (once per person; your own is left out of its count anyway).
     if (showing.type === 'hit') { if (showing.story.authorId !== currentUserId) actions.markStoryViewed(showing.story.id); return; }
@@ -1681,7 +1712,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe }: {
       showing.type === 'post' ? 'post' : 'question',
       showing.type === 'post' ? showing.post.id : showing.question.id,
     );
-  }, [focused, showing, actions, currentUserId]);
+  }, [focused, paused, showing, actions, currentUserId]);
 
   // The last page of the main feed: a small congratulations for getting
   // there this early, a way to post, and a way back to the top.
@@ -1806,7 +1837,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe }: {
           {/* Pull-to-refresh is for phones: the app and a phone's browser (`phone`, above). Asking
               isDesktopBrowser() alone took it off the iPhone app: the app has no browser to read,
               so the check answered "computer" there, and the pull strip was never built. */}
-          <VerticalPager ref={pager} key={visit} initialIndex={active} onIndex={setActive} onSwiped={onSwipe} onTopRow={topRow || rowed ? onTopRow : undefined} onRefresh={scope || !phone ? undefined : refreshFeed} pullTop={topRow ? TOP_BAND_TOP + (TOP_BAND_HEIGHT - 44) / 2 : 0} pullAlign={topRow ? 'left' : 'center'} pullHeader={scope ? undefined : <BrandMark size={topRow ? 22 : 40} />}>
+          <VerticalPager ref={pager} key={visit} initialIndex={active} onIndex={setActive} onSwiped={onSwipe} onTopRow={(topRow || rowed) && !paused ? onTopRow : undefined} onRefresh={scope || !phone ? undefined : refreshFeed} pullTop={topRow ? TOP_BAND_TOP + (TOP_BAND_HEIGHT - 44) / 2 : 0} pullAlign={topRow ? 'left' : 'center'} pullHeader={scope ? undefined : <BrandMark size={topRow ? 22 : 40} />}>
             {[...feed.map((item, index) => {
               const distance = Math.abs(index - active);
               const ahead = index - active;
@@ -1832,13 +1863,22 @@ function Home({ scope, topRow, paused, onChrome, onSwipe }: {
                 }
                 return <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.holdPage]}>{kind === 'mark' ? skeletonPost : skeletonClip}</View>;
               };
-              // On a phone, the page behind and two ahead keep their video buffered.
-              // In a browser (where every video decodes on the same machine as the
-              // scroll) only the page on screen and the next one do: the first clip
-              // buffers while the feed is still warming up instead of waiting for
-              // it, the one you are most likely to land on starts instantly, and
-              // scrolling stays smooth.
-              const near = Platform.OS === 'web' ? (ahead === 0 || ahead === 1) && (!warming || ahead === 0) : distance <= 1 || (ahead > 0 && ahead <= AHEAD);
+              // The page behind and three ahead keep their clip buffered (paused,
+              // silent, at its start), phone and browser alike; their downloads
+              // take turns, nearest first (preloadRank, features/feed/preloadQueue).
+              // A browser's Feed still warming up out of sight fetches only the first
+              // clip's opening. A feed tab warmed in the background and never opened
+              // (see GroupedFeed) keeps only its page on screen, after everything the
+              // feed on show wants, and in a browser only its opening. One you have
+              // had on show and left for another tab keeps its window (as on main), so
+              // coming back and flicking on lands on clips already in; any still
+              // to fetch wait behind everything the feed on show wants.
+              // On a phone a tab out of sight keeps only the page either side (a player each holds a
+              // decoder while paused, and a phone has only so many): fewer than main's four per feed.
+              // A feed covered by a page pushed over it (a post, a profile) waits behind the one on show.
+              const near = warming || (paused && !onShowOnce.current) ? ahead === 0 : paused && Platform.OS !== 'web' ? distance <= WINDOW : distance <= WINDOW || (ahead > 0 && ahead <= AHEAD);
+              const warmOnly = warming || !!paused;
+              const preloadRank = (ahead < 0 ? 2.5 : ahead) + (paused || (!focused && !warming && ahead !== 0) ? 10 : 0);
               const strip = index === suggestHost ? suggestStrip : null;
               // A session from a player near you, not followed yet: "Near you", with Follow.
               const nearUser = scope?.activities && item.type === 'post' && nearAuthors.has(item.post.authorId) && !followingIds.includes(item.post.authorId) ? usersById.get(item.post.authorId) : undefined;
@@ -1879,7 +1919,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe }: {
                     <View accessibilityLabel={`${author.name}'s Instant`} style={styles.clipFrame}>
                       <View style={phone ? StyleSheet.absoluteFill : styles.clipPortrait}>
                         {story.videoUrl ? (
-                          <ClipPlayback uri={story.videoUrl} poster={story.thumbnailUrl} active={playing && active === index && warmed && playable} held={held && myStage?.key === hitKey} onStage={myStage?.key === hitKey} preload={near} warmOnly={warming} bare={immersive} onDoubleTap={() => likeHitByTap(story.id, hitLiked)} discInk={theme === 'us-open' ? '#FFFFFF' : colors.brand} discPinned={index === 0 && !scope} onReady={(ok) => markReady(story.id, ok)} onPaused={rowBackOnPause} />
+                          <ClipPlayback uri={story.videoUrl} poster={story.thumbnailUrl} active={playing && active === index && warmed && playable} held={held && myStage?.key === hitKey} onStage={myStage?.key === hitKey} preload={near} preloadRank={preloadRank} warmOnly={warmOnly} bare={immersive} onDoubleTap={() => likeHitByTap(story.id, hitLiked)} discInk={theme === 'us-open' ? '#FFFFFF' : colors.brand} discPinned={index === 0 && !scope} onReady={(ok) => markReady(story.id, ok)} onPaused={paused ? undefined : rowBackOnPause} />
                         ) : (
                           // Two quick taps like a hit, the way they like a clip.
                           <Pressable accessibilityRole="image" accessibilityLabel={`${author.name}'s Instant`} onPress={() => { const now = Date.now(); if (now - lastHitTap.current < 280) { lastHitTap.current = 0; likeHitByTap(story.id, hitLiked); } else lastHitTap.current = now; }} style={StyleSheet.absoluteFill}>
@@ -1978,6 +2018,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe }: {
                       saved={isSaved}
                       active={playing && active === index && warmed && playable}
                       preload={near}
+                      preloadRank={preloadRank}
                       topInset={clearOfRemoved(post, insets.top + 66)}
                       // The same bottom edge as a written post's page (below), so every post's "Add a comment…" sits on one line.
                       bottomInset={barInset > 0 ? barInset + 8 : POST_BOTTOM}
@@ -2048,7 +2089,8 @@ function Home({ scope, topRow, paused, onChrome, onSwipe }: {
                           poster={post.thumbnailUrl}
                           active={playing && active === index && warmed && playable}
                           preload={near}
-                          warmOnly={warming}
+                          preloadRank={preloadRank}
+                          warmOnly={warmOnly}
                           onDoubleTap={() => likeByTap(post.id, liked)}
                           trimStart={post.trimStart}
                           trimEnd={post.trimEnd}
@@ -2062,7 +2104,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe }: {
                           onReady={(ok) => markReady(post.id, ok)}
                           held={held && myStage?.key === `p:${post.id}`}
                           onStage={myStage?.key === `p:${post.id}`}
-                          onPaused={rowBackOnPause}
+                          onPaused={paused ? undefined : rowBackOnPause}
                         />
                       </View>
                     </View>
@@ -2265,7 +2307,7 @@ const styleDefinitions = StyleSheet.create({
   // The mark sits at the far left of the gap, level with the greeting; the greeting and disc in the middle.
   pullGreetingText: { ...typography.bodyStrong, color: colors.text },
   wordmark: {
-    color: colors.brand, ...typography.title, fontSize: 23, ...font('600'), letterSpacing: -0.6,
+    color: colors.brand, ...typography.title, fontSize: 23, ...wordmarkFont('600'), letterSpacing: -0.6,
   },
   // Kept as a hook for anything the wordmark needs over video; the shadow that
   // used to live here was doing more harm than good.
@@ -2284,7 +2326,7 @@ const styleDefinitions = StyleSheet.create({
   removedStack: { position: 'absolute', left: 16, right: 16, alignItems: 'center', gap: 8, zIndex: 6 },
   removedPillRow: { alignSelf: 'stretch', paddingHorizontal: 48, alignItems: 'center' },
   holdPage: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg },
-  holdWord: { ...typography.display, fontSize: 34, ...font('600'), color: colors.brand, letterSpacing: -1.2 },
+  holdWord: { ...typography.display, fontSize: 34, ...wordmarkFont('600'), color: colors.brand, letterSpacing: -1.2 },
   bone: { height: 12, borderRadius: 6, backgroundColor: colors.border },
   holdPost: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, paddingHorizontal: 16, paddingBottom: 16 + BAR_OVERLAY_PX, alignItems: 'center' },
   boneFrame: { alignSelf: 'stretch', aspectRatio: 4 / 5, maxHeight: '58%', borderRadius: 16, backgroundColor: colors.border, alignItems: 'center', justifyContent: 'center' },
@@ -2414,7 +2456,16 @@ function FeedLayer({ shown, children }: { shown: boolean; children: React.ReactN
   const o = useSharedValue(0);
   useEffect(() => { o.value = withTiming(shown ? 1 : 0, { duration: 220, easing: Easing.out(Easing.quad) }); }, [shown, o]);
   const fade = useAnimatedStyle(() => ({ opacity: o.value }));
-  return <Reanimated.View pointerEvents={shown ? 'auto' : 'none'} style={[StyleSheet.absoluteFill, fade]}>{children}</Reanimated.View>;
+  // In a browser pointerEvents 'none' is only CSS on this layer, and any 'box-none' view inside
+  // turns touches back on for its children: a hidden tab's author row took For you's swipe.
+  // `inert` shuts the whole hidden tab out of touches and keyboard focus.
+  const layer = useRef<View>(null);
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const node = layer.current as unknown as HTMLElement | null;
+    if (node) node.inert = !shown;
+  }, [shown]);
+  return <Reanimated.View ref={layer} pointerEvents={shown ? 'auto' : 'none'} style={[StyleSheet.absoluteFill, fade]}>{children}</Reanimated.View>;
 }
 
 /** The top row's "Activities" word, held where a group's id would be. */
@@ -2430,9 +2481,52 @@ function GroupedFeed() {
   useEffect(() => { if (groupId && groupId !== ACTIVITIES && !feedGroups.some((g) => g.id === groupId)) setGroupId(null); }, [feedGroups, groupId]);
   // Opened from a group's page ("See the feed").
   useEffect(() => onOpenGroupFeed((id) => { tookGroupFeed(); setGroupId(id); }), []);
-  // The last three feeds opened, kept built.
+  // The feeds opened (and warmed, below), kept built: Activities and up to three groups.
   const [kept, setKept] = useState<string[]>([]);
-  useEffect(() => { if (groupId) setKept((k) => (k.includes(groupId) ? k : [...k.slice(-2), groupId])); }, [groupId]);
+  useEffect(() => { if (groupId) setKept((k) => (k.includes(groupId) ? k : [...k.slice(-3), groupId])); }, [groupId]);
+  // Instagram-style tabs (Oct 22, owner: "the videos and tabs on feed should be pre loaded"):
+  // once For you is on screen and playing, Activities and each group's feed are built
+  // behind it, one at a time, a couple of seconds apart and only when nothing is moving.
+  // Built, each asks for its first page and fetches its first clip after everything For
+  // you wants (paused feeds rank last, features/feed/preloadQueue), so the first switch
+  // to a tab is a fade onto a feed already there, and each keeps its own place after.
+  const [forYouSettled, setForYouSettled] = useState(false);
+  const lastSwipe = useRef(0);
+  const onFeedSwipe = useCallback(() => { lastSwipe.current = Date.now(); markFeedSwiped(); }, []);
+  // Said a couple of seconds after For you starts playing, and never mid-flick: the redraw it
+  // brings must not land on the first clip's start or under a finger.
+  const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onForYouSettled = useCallback(() => {
+    const check = () => {
+      if (Date.now() - lastSwipe.current < 3000) { settleTimer.current = setTimeout(check, 1000); return; }
+      settleTimer.current = null;
+      setForYouSettled(true);
+    };
+    if (!settleTimer.current) settleTimer.current = setTimeout(check, 2500);
+  }, []);
+  useEffect(() => () => { if (settleTimer.current) clearTimeout(settleTimer.current); }, []);
+  const warmedTabs = useRef(new Set<string>());
+  useEffect(() => {
+    if (!forYouSettled || !currentUserId) return undefined;
+    const queue = [ACTIVITIES, ...feedGroups.map((g) => g.id)].filter((key) => !warmedTabs.current.has(key));
+    if (!queue.length) return undefined;
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let task: { cancel: () => void } | null = null;
+    const step = () => {
+      // Never while you are flicking through For you: that is when its own clips need the connection.
+      if (Date.now() - lastSwipe.current < 3000) { timer = setTimeout(step, 1000); return; }
+      task = InteractionManager.runAfterInteractions(() => {
+        const key = queue.shift();
+        if (stopped || !key) return;
+        warmedTabs.current.add(key);
+        setKept((k) => (k.includes(key) ? k : [...k, key]));
+        if (queue.length) timer = setTimeout(step, 2000);
+      });
+    };
+    timer = setTimeout(step, 0);
+    return () => { stopped = true; if (timer) clearTimeout(timer); task?.cancel(); };
+  }, [forYouSettled, currentUserId, feedGroups]);
   useEffect(() => { setKept((k) => k.filter((key) => key === ACTIVITIES || feedGroups.some((g) => g.id === key))); }, [feedGroups]);
   const forYouChrome = useCallback((c: FeedChrome) => { if (!groupId) setChrome(c); }, [groupId]);
   const groupChrome = useCallback((c: FeedChrome) => setChrome(c), []);
@@ -2444,12 +2538,12 @@ function GroupedFeed() {
   const waiting = feedGroups.some((g) => g.requests.length > 0 && g.members.some((m) => m.id === currentUserId && m.admin));
   return (
     <View style={{ flex: 1, alignSelf: 'stretch' }}>
-      <Home topRow paused={!!groupId} onChrome={forYouChrome} onSwipe={markFeedSwiped} />
+      <Home topRow paused={!!groupId} onChrome={forYouChrome} onSwipe={onFeedSwipe} onSettled={onForYouSettled} />
       {/* Feeds already opened stay built (paused, see-through) and cross-fade in, so a switch
           is a fade rather than building a whole feed on the spot (Oct 4, owner: "way smoother"). */}
       {kept.map((key) => (
         <FeedLayer key={key} shown={key === groupId}>
-          <Home scope={key === ACTIVITIES ? { activities: true } : { groupId: key }} paused={key !== groupId} onChrome={key === groupId ? groupChrome : undefined} onSwipe={markFeedSwiped} />
+          <Home scope={key === ACTIVITIES ? { activities: true } : { groupId: key }} paused={key !== groupId} onChrome={key === groupId ? groupChrome : undefined} onSwipe={onFeedSwipe} />
         </FeedLayer>
       ))}
       <TipBubble tip="activities" shown={activitiesTip.shown} onClose={activitiesTip.close} pointer="up" style={{ top: insets.top + TOP_BAND_TOP + TOP_BAND_HEIGHT + 4, left: 16, right: 16 }} />

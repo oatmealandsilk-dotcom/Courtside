@@ -18,7 +18,7 @@ import { confirm } from '@/lib/confirm';
 import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
-import { colors, font, lift, pageIsDark, radius, spacing, typography } from '@/theme';
+import { buttonShape, colors, font, lift, pageIsDark, radius, spacing, typography } from '@/theme';
 
 // Why it didn't go through is said when it is tried, in the app's own note, so the row stays one line.
 const refusedNote = (why: string) => showToast({ title: 'Only you can see this session', body: why, icon: 'lock-closed-outline', long: true });
@@ -173,7 +173,7 @@ export default function LiveSessionPage() {
             onPress={finish}
             style={({ pressed }) => [styles.primary, pageIsDark() ? styles.primaryDark : null, pressed && styles.pressedScale]}
           >
-            <BrandWash />
+            <BrandWash radius={buttonShape.radius} curve />
             <Ionicons name={state === 'finished' ? 'create-outline' : 'stop'} size={18} color={colors.brandInk} />
             <Text style={styles.primaryText}>{state === 'finished' ? 'Log it' : 'Finish'}</Text>
           </Pressable>
@@ -212,7 +212,7 @@ const styleDefinitions = StyleSheet.create({
   eyebrowRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   eyebrow: { ...font('700'), fontSize: 11, letterSpacing: 1.1, color: colors.textMuted },
   eyebrowLive: { color: colors.open },
-  title: { ...typography.title, fontSize: 24, letterSpacing: -0.8, color: colors.text },
+  title: { ...typography.title, fontSize: 24, letterSpacing: -0.5, color: colors.text },
   close: { ...lift, width: 34, height: 34, borderRadius: 17, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' },
   body: { gap: spacing.lg },
   wait: { alignItems: 'center', justifyContent: 'center', paddingVertical: spacing.xxl },
@@ -222,7 +222,7 @@ const styleDefinitions = StyleSheet.create({
   boxTop: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 22 },
   boxEyebrow: { ...font('600'), fontSize: 11.5, letterSpacing: 1.1, flex: 1 },
   // A fixed size that fits the box up to '10:00:00' (sessions stop at 10 hours). Shrink-to-fit drew it as a dot on iPhone (Oct 7, owner).
-  clock: { ...font('600'), fontSize: 60, lineHeight: 68, letterSpacing: -2.5, fontVariant: ['tabular-nums'], marginTop: spacing.sm, alignSelf: 'stretch' },
+  clock: { ...font('600'), fontSize: 60, lineHeight: 68, letterSpacing: -1.5, fontVariant: ['tabular-nums'], marginTop: spacing.sm, alignSelf: 'stretch' },
   clockPaused: { opacity: 0.55 },
   // Clear of the faint court along the foot of the box.
   boxUnder: { ...font('500'), fontSize: 14, marginTop: -2, marginBottom: 34 },
@@ -236,9 +236,10 @@ const styleDefinitions = StyleSheet.create({
   tryPill: { flexShrink: 0, minWidth: 64, height: 32, paddingHorizontal: 14, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
   tryText: { ...typography.smallStrong, color: colors.text },
   controls: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.xs },
-  second: { ...lift, flex: 1, height: 58, borderRadius: radius.pill, backgroundColor: colors.surface, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  second: { ...lift, flex: 1, height: 58, borderRadius: buttonShape.radius, ...buttonShape.curve, backgroundColor: colors.surface, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   secondText: { ...typography.bodyStrong, fontSize: 16, color: colors.text },
-  primary: { flex: 1, height: 58, borderRadius: radius.pill, backgroundColor: colors.brand, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, overflow: 'hidden', boxShadow: '0px 8px 20px rgba(0, 0, 0, 0.16)' },
+  // 58pt rather than 48 on purpose: tapped mid-match, on court, often with a sweaty hand.
+  primary: { flex: 1, height: 58, borderRadius: buttonShape.radius, ...buttonShape.curve, backgroundColor: colors.brand, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, overflow: 'hidden', boxShadow: '0px 8px 20px rgba(0, 0, 0, 0.16)' },
   primaryDark: { boxShadow: '0px 8px 20px rgba(0, 0, 0, 0.4)' },
   primaryText: { ...typography.bodyStrong, fontSize: 16, color: colors.brandInk },
   pressed: { opacity: PRESS_DIM },

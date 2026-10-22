@@ -24,7 +24,7 @@ import { useWelcomeNote } from '@/features/welcome/welcomeNote';
 import { unreadChatCount } from '@/features/messages/groupRules';
 import { unseenCount } from '@/features/activity/found';
 import { useInstantsOn, withoutInstantRows } from '@/features/stories/instantsSwitch';
-import { TextScale, colors, pageIsDark, radius, spacing, typography, font, withAlpha } from '@/theme';
+import { TextScale, colors, pageIsDark, radius, spacing, typography, font, withAlpha, wordmarkFont } from '@/theme';
 import { useTourOpen, useTourTarget } from '@/features/tour/tourStore';
 
 /** The screen's pixels per point, read once: the bar's moves are rounded to whole pixels. */
@@ -397,7 +397,7 @@ const styleDefinitions = StyleSheet.create({
   },
   brandRow: { paddingHorizontal: spacing.md, paddingBottom: spacing.xxl },
   brandRowCompact: { paddingHorizontal: 0, alignItems: 'center' },
-  wordmark: { ...typography.title, fontSize: 23, color: colors.text, letterSpacing: -0.8 },
+  wordmark: { ...typography.title, ...wordmarkFont('500'), fontSize: 23, color: colors.text, letterSpacing: -0.8 },
   sidebarItems: { flex: 1, gap: spacing.xs },
   sidebarItem: {
     flexDirection: 'row',

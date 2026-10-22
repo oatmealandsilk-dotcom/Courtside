@@ -20,7 +20,7 @@ import { KIND_LABEL, PAID_KINDS, SPECIALTY_LABEL, turnaround, usePayments } from
 import { openBookingCount, studioSetup, waitingQuestionCount } from '@/features/coaching/studioSummary';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import { colors, font, radius, spacing, typography, lift } from '@/theme';
+import { colors, font, radius, spacing, typography, lift, buttonShape } from '@/theme';
 
 // New services are live lessons only: the one kind Apple lets the app take card payments for (see PAID_KINDS).
 // A service of another kind made before Oct 5 can still be opened and edited as it is.
@@ -504,7 +504,7 @@ function SaveButton({ state, onPress }: { state: SaveState; onPress: () => void 
       >
         {content(colors.textMuted, false)}
         <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.saveFill, fillStyle]}>
-          <BrandWash />
+          <BrandWash radius={buttonShape.radius} curve />
           {content(colors.brandInk, true)}
         </Animated.View>
       </Pressable>
@@ -550,8 +550,8 @@ const styleDefinitions = StyleSheet.create({
   optionText: { ...typography.smallStrong, color: colors.textMuted },
   optionTextOn: { color: colors.text },
   // Save
-  save: { height: 52, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', backgroundColor: colors.surfaceAlt },
-  saveFill: { backgroundColor: colors.brand, borderRadius: radius.pill, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
+  save: { height: 48, borderRadius: buttonShape.radius, ...buttonShape.curve, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', backgroundColor: colors.surfaceAlt },
+  saveFill: { backgroundColor: colors.brand, borderRadius: buttonShape.radius, ...buttonShape.curve, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
   saveInner: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   saveText: { ...typography.bodyStrong },
   // Services

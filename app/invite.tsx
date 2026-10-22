@@ -16,7 +16,7 @@ import { notKnownAdult } from '@/features/players/age';
 import * as haptics from '@/lib/haptics';
 import { shareOutside } from '@/lib/shareOutside';
 import { useApp } from '@/store/AppContext';
-import { colors, radius, spacing, typography } from '@/theme';
+import { colors, radius, spacing, typography, buttonShape } from '@/theme';
 
 const joinedOn = (iso: string) => {
   const at = new Date(iso);
@@ -250,9 +250,9 @@ const styleDefinitions = StyleSheet.create({
   linkBox: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, height: 44, borderRadius: radius.md, backgroundColor: colors.surfaceAlt },
   link: { ...typography.small, color: colors.text, flex: 1 },
   actions: { flexDirection: 'row', gap: spacing.sm },
-  primary: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 46, borderRadius: radius.pill, backgroundColor: colors.brand },
+  primary: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: buttonShape.height, borderRadius: buttonShape.radius, ...buttonShape.curve, backgroundColor: colors.brand },
   primaryText: { ...typography.bodyStrong, color: colors.brandInk },
-  secondary: { height: 46, paddingHorizontal: 20, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center' },
+  secondary: { height: buttonShape.height, paddingHorizontal: 20, borderRadius: buttonShape.radius, ...buttonShape.curve, borderWidth: 1, borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center' },
   secondaryText: { ...typography.bodyStrong, color: colors.text },
   more: { gap: 0 },
   poster: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 48 },

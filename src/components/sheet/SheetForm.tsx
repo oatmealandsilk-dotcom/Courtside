@@ -6,7 +6,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 
 import { Chip, BrandWash } from '@/components/ui';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import { colors, font, lift, radius, spacing, typography } from '@/theme';
+import { buttonShape, colors, font, lift, radius, spacing, typography } from '@/theme';
 import { TextScale } from '@/theme/textScale';
 
 /*
@@ -223,7 +223,7 @@ export function Submit({ label, onPress, disabled = false, busy = false, waiting
         </View>
       ) : (
         <>
-          {off ? null : <BrandWash />}
+          {off ? null : <BrandWash radius={buttonShape.radius} curve />}
           <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.submitText, off && styles.submitTextOff]}>{disabled && waiting ? waiting : label}</Text>
         </>
       )}
@@ -242,7 +242,7 @@ export const formBody = { padding: spacing.lg, paddingTop: spacing.md, gap: 20, 
 
 const styleDefinitions = StyleSheet.create({
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingBottom: spacing.xs },
-  title: { ...typography.title, fontSize: 24, letterSpacing: -0.8, color: colors.text },
+  title: { ...typography.title, fontSize: 24, letterSpacing: -0.5, color: colors.text },
   line: { ...typography.small, color: colors.textMuted },
   lineBrand: { color: colors.brand, ...font('600') },
   close: { ...lift, width: 34, height: 34, borderRadius: 17, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' },
@@ -281,19 +281,21 @@ const styleDefinitions = StyleSheet.create({
   tileFlex: { flex: 1 },
   tileOn: { backgroundColor: colors.text },
   tileTop: { fontSize: 12, ...font('500'), color: colors.textMuted },
-  tileMain: { fontSize: 20, ...font('600'), letterSpacing: -0.4, color: colors.text, fontVariant: ['tabular-nums'] },
+  tileMain: { fontSize: 20, ...font('600'), letterSpacing: -0.2, color: colors.text, fontVariant: ['tabular-nums'] },
   tileInk: { color: colors.bg },
   tileSoft: { borderWidth: 1.5, borderColor: 'transparent' },
   tileSoftOn: { backgroundColor: colors.brandDim, borderColor: colors.brand, boxShadow: 'none' },
   tileSoftTopOn: { color: colors.text, ...font('600') },
   fadeRight: { position: 'absolute', right: 0, top: 0, bottom: 0, width: FADE },
   fadeGone: { opacity: 0 },
-  submit: { minHeight: 54, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
+  // Instagram's shape (Oct 22): a rounded rectangle with Apple's smooth corner; a touch taller than a
+  // page's button, as the one thing a sheet or sign-in asks you to tap.
+  submit: { minHeight: 48, borderRadius: buttonShape.radius, ...buttonShape.curve, alignItems: 'center', justifyContent: 'center' },
   submitOn: { backgroundColor: colors.brand, boxShadow: '0px 8px 20px rgba(0, 0, 0, 0.16)' },
   submitOff: { backgroundColor: colors.surfaceAlt },
   submitBusy: { opacity: 0.92 },
   submitRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  submitText: { ...typography.bodyStrong, fontSize: 16, color: colors.brandInk },
+  submitText: { ...typography.bodyStrong, fontSize: buttonShape.label, color: colors.brandInk },
   submitTextOff: { color: colors.textMuted },
   fine: { ...typography.small, color: colors.textFaint, textAlign: 'center', marginTop: -spacing.md },
   tileInCard: { backgroundColor: colors.bg, boxShadow: 'none' },

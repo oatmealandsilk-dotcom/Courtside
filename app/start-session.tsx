@@ -378,7 +378,7 @@ function KindSwitch({ value, onChange }: { value: LiveSession['kind']; onChange:
 const styleDefinitions = StyleSheet.create({
   head: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingBottom: spacing.xs },
   headWords: { flex: 1, minWidth: 0, gap: 4 },
-  title: { ...typography.title, fontSize: 24, letterSpacing: -0.8, color: colors.text },
+  title: { ...typography.title, fontSize: 24, letterSpacing: -0.5, color: colors.text },
   lineRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   line: { ...typography.small, color: colors.textMuted, flexShrink: 1 },
   close: { ...lift, width: 34, height: 34, borderRadius: 17, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' },

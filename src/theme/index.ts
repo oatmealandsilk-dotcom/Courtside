@@ -137,40 +137,83 @@ export const radius = {
 } as const;
 
 /**
- * Inter, shipped inside the app. React Native picks a face by family name, so
- * each weight is its own family; `fontWeight` rides along for the web.
+ * The phone's own font (Oct 22, owner: "iPhone font plus Instagram"): SF Pro
+ * on an iPhone, the phone's own sans on Android, the system stack in a
+ * browser. A system font takes its weight from `fontWeight`, so one family
+ * name serves every weight. Only the CourtSide wordmark stays in Inter, which
+ * ships inside the app (`wordmarkFont`, and `black` for the share overlays).
  */
+const SYSTEM_WEB = '-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, "Segoe UI", Roboto, "Helvetica Neue", sans-serif';
+// iOS: 'system-ui' goes straight to SF by its system design (React Native's
+// font lookup treats 'System' as a custom family name and searches for it
+// first on every uncached lookup). Android: the phone's own sans (Roboto).
+const SYSTEM = Platform.OS === 'web' ? SYSTEM_WEB : Platform.OS === 'ios' ? 'system-ui' : 'sans-serif';
+// Inter Regular is not loaded (Oct 22): nothing but the wordmark is in Inter, and it is never regular.
+const INTER = { '500': 'Inter_500Medium', '600': 'Inter_600SemiBold', '700': 'Inter_700Bold', '900': 'Inter_800ExtraBold' } as const;
+
 export const fontFamily = {
-  regular: 'Inter_400Regular',
-  medium: 'Inter_500Medium',
-  semibold: 'Inter_600SemiBold',
-  bold: 'Inter_700Bold',
+  regular: SYSTEM,
+  medium: SYSTEM,
+  semibold: SYSTEM,
+  bold: SYSTEM,
   // The share overlays' wordmark only (Oct 9, owner: "too thin", then Black a tiny bit too thick).
-  black: 'Inter_800ExtraBold',
+  black: INTER['900'],
 } as const;
 
-/** A weight as a style: `{...font('500')}` where a literal fontWeight used to be. */
-export const font = (weight: '400' | '500' | '600' | '700' | '900') => {
-  const family = { '400': fontFamily.regular, '500': fontFamily.medium, '600': fontFamily.semibold, '700': fontFamily.bold, '900': fontFamily.black }[weight];
-  // A browser takes a list and falls back to the system's own sans should Inter
-  // ever be slow; a phone takes exactly one name and has Inter in the bundle.
-  return { fontFamily: Platform.OS === 'web' ? `${family}, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif` : family, fontWeight: weight };
+type Weight = '400' | '500' | '600' | '700' | '900';
+
+/** A weight as a style: `{...font('500')}` where a literal fontWeight used to be. 900 is the Inter wordmark. */
+export const font = (weight: Weight) => (weight === '900'
+  ? wordmarkFont('900')
+  // Roboto has no semibold: Android would round 600 up to Bold, so headings and
+  // button labels read heavier than SF Semibold on an iPhone. Medium matches it.
+  : { fontFamily: SYSTEM, fontWeight: Platform.OS === 'android' && weight === '600' ? '500' as Weight : weight });
+
+/**
+ * The CourtSide wordmark, which stays in Inter whatever the rest of the app is
+ * set in. A phone takes exactly one name and has Inter in the bundle; a
+ * browser falls back to the system's own sans should Inter ever be slow.
+ */
+export const wordmarkFont = (weight: Exclude<Weight, '400'>) => {
+  const family = INTER[weight];
+  return { fontFamily: Platform.OS === 'web' ? `${family}, ${SYSTEM_WEB}` : family, fontWeight: weight };
 };
 
 /**
  * Lighter than it was: display and title at medium rather than black, with
- * tracking that tightens as size grows. Weight still carries hierarchy; it
- * just does it with less shouting.
+ * tracking that tightens as size grows. SF Pro already tightens itself as it
+ * grows (its own optical tracking), so it takes about 60% of the tightening
+ * Inter needed.
  */
 export const typography = {
-  display: { ...font('500'), fontSize: 30, letterSpacing: -1.05 },
-  title: { ...font('500'), fontSize: 22, letterSpacing: -0.66 },
-  heading: { ...font('600'), fontSize: 17, letterSpacing: -0.3 },
+  display: { ...font('500'), fontSize: 30, letterSpacing: -0.6 },
+  title: { ...font('500'), fontSize: 22, letterSpacing: -0.4 },
+  heading: { ...font('600'), fontSize: 17, letterSpacing: -0.2 },
   body: { ...font('400'), fontSize: 15 },
-  bodyStrong: { ...font('600'), fontSize: 15, letterSpacing: -0.15 },
+  bodyStrong: { ...font('600'), fontSize: 15, letterSpacing: -0.1 },
   small: { ...font('400'), fontSize: 13 },
   smallStrong: { ...font('600'), fontSize: 13 },
-  caption: { ...font('600'), fontSize: 11, letterSpacing: 0.4 },
+  caption: { ...font('600'), fontSize: 11, letterSpacing: 0.1 },
+} as const;
+
+/**
+ * Buttons, Instagram's shape in CourtSide's colours (Oct 22): rounded
+ * rectangles with Apple's smooth corner, compact, sentence case. The fills,
+ * washes and shadows are the app's own and unchanged.
+ */
+export const buttonShape = {
+  /** A full-size button (sign-in, a sheet's Submit, a page's main action). */
+  radius: 12,
+  height: 44,
+  /** A compact one in a row of actions (Follow, Edit profile, Share, a card's actions). */
+  smallRadius: 9,
+  smallHeight: 34,
+  /** Added to a compact button's every side, so the finger still gets 44pt. */
+  smallSlop: 5,
+  label: 15,
+  smallLabel: 14,
+  /** Apple's continuous corner, ignored where a platform has none. */
+  curve: { borderCurve: 'continuous' } as const,
 } as const;
 
 /** Muted avatar tints — deterministic per seed, none of them loud. */

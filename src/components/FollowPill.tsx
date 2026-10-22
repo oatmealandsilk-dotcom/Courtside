@@ -7,7 +7,7 @@ import * as haptics from '@/lib/haptics';
 import { useTheme } from '@/theme/ThemeProvider';
 import { BrandWash } from '@/components/ui/BrandWash';
 import { useApp } from '@/store/AppContext';
-import { colors, readsOn, typography } from '@/theme';
+import { buttonShape, colors, readsOn, typography } from '@/theme';
 import { reduceMotionEnabled } from '@/lib/useReducedMotion';
 import { TextScale } from '@/theme/textScale';
 
@@ -55,7 +55,7 @@ export function FollowPill({ following, onPress, small = false, name, userId, wi
   return (
     <Pressable accessibilityRole="button" accessibilityState={{ selected: filled }} accessibilityLabel={`${following ? 'Following' : requested ? 'Requested' : 'Follow'}${name ? ` ${name}` : ''}`} onPress={press} hitSlop={6} style={wide ? styles.wide : undefined}>
       <Animated.View style={[styles.pill, small && styles.small, wide && styles.wide, pill]}>
-        <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, wash]}><BrandWash /></Animated.View>
+        <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, wash]}><BrandWash radius={buttonShape.smallRadius} curve /></Animated.View>
         {filled ? <Ionicons name="checkmark" size={14} color={colors.text} /> : null}
         <Animated.Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.text, small && styles.textSmall, label]}>{following ? 'Following' : requested ? 'Requested' : 'Follow'}</Animated.Text>
       </Animated.View>
@@ -193,8 +193,9 @@ const styles = StyleSheet.create({
   badge: { position: 'absolute', right: -6, bottom: -3, width: 13, height: 13, borderRadius: 6.5, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
   // One width whatever it says, like Instagram: Follow, Following and Requested never change
   // the pill's size, so nothing beside it shifts when you tap (Oct 2). Sized for "✓ Following".
-  pill: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, width: 116, paddingVertical: 9, paddingHorizontal: 10, borderRadius: 999, borderWidth: 1 },
-  small: { width: 104, paddingVertical: 7, paddingHorizontal: 8 },
+  // Instagram's shape (Oct 22): a compact rounded rectangle with Apple's smooth corner.
+  pill: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, width: 116, minHeight: buttonShape.smallHeight, paddingVertical: 6, paddingHorizontal: 10, borderRadius: buttonShape.smallRadius, ...buttonShape.curve, borderWidth: 1 },
+  small: { width: 104, minHeight: 32, paddingVertical: 5, paddingHorizontal: 8 },
   wide: { alignSelf: 'stretch', width: 'auto' },
   text: { ...typography.smallStrong, fontSize: 14 },
   textSmall: { fontSize: 13 },

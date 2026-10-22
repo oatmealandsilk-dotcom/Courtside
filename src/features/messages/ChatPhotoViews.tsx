@@ -416,7 +416,7 @@ const styleDefinitions = StyleSheet.create({
   tile: { position: 'absolute', overflow: 'hidden', backgroundColor: colors.surfaceAlt },
   tilePressed: { transform: [{ scale: PRESS_SHRINK }] },
   more: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.42)', alignItems: 'center', justifyContent: 'center' },
-  moreText: { ...font('600'), fontSize: 22, color: 'white', letterSpacing: -0.4 },
+  moreText: { ...font('600'), fontSize: 22, color: 'white', letterSpacing: -0.2 },
   veil: { backgroundColor: 'rgba(0,0,0,0.32)', alignItems: 'center', justifyContent: 'center' },
   failedMark: { position: 'absolute', top: 8, right: 8, width: 24, height: 24, borderRadius: 12, backgroundColor: colors.danger, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.bg },
   viewer: { flex: 1, backgroundColor: 'transparent' },

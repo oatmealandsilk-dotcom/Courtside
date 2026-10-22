@@ -4,7 +4,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import type { GroupLook } from '@/data/types';
 import { GroupTile } from '@/features/groups/GroupTile';
 import { lookWords } from '@/features/groups/look';
-import { colors, font, lift, radius, spacing, typography } from '@/theme';
+import { colors, font, lift, radius, spacing, typography, buttonShape } from '@/theme';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 
 /*
@@ -56,7 +56,7 @@ const styleDefinitions = StyleSheet.create({
   faint: { color: colors.textFaint },
   meta: { ...typography.small, color: colors.textMuted },
   about: { ...typography.small, color: colors.textFaint },
-  btn: { height: 30, minWidth: 70, paddingHorizontal: 12, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
+  btn: { height: 30, minWidth: 70, paddingHorizontal: 12, borderRadius: buttonShape.smallRadius, ...buttonShape.curve, alignItems: 'center', justifyContent: 'center' },
   btnJoin: { backgroundColor: colors.brand },
   btnAsk: { backgroundColor: colors.brandDim },
   btnText: { ...typography.smallStrong },

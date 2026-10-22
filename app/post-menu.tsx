@@ -12,7 +12,7 @@ import { useApp } from '@/store/AppContext';
 import { shareOutside } from '@/lib/shareOutside';
 import { downloadMedia } from '@/lib/downloadMedia';
 import { goBack } from '@/lib/goBack';
-import { colors, font, pageIsDark, radius, spacing, typography } from '@/theme';
+import { colors, font, pageIsDark, radius, spacing, typography, buttonShape } from '@/theme';
 import { shareLink } from '@/lib/shareLink';
 import { postShareText } from '@/features/share/shareText';
 import { REPORT_THANKS, blockQuestion, reportQuestion, useScopedConfirm } from '@/lib/confirm';
@@ -578,7 +578,7 @@ const styleDefinitions = StyleSheet.create({
   stickerClip: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, overflow: 'hidden', borderTopLeftRadius: 24, borderTopRightRadius: 24 },
   stickerStage: { position: 'absolute', left: 0, bottom: 0 },
   stickerCover: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: colors.bg, borderTopLeftRadius: 24, borderTopRightRadius: 24 },
-  label: { ...font('500'), fontSize: 16, letterSpacing: -0.2, color: colors.text },
+  label: { ...font('500'), fontSize: 16, letterSpacing: -0.1, color: colors.text },
   labelDanger: { color: colors.danger },
   note: { ...typography.small, color: colors.textMuted },
   removedBox: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 12, paddingHorizontal: spacing.md, marginBottom: spacing.sm, borderRadius: radius.md, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
@@ -588,9 +588,9 @@ const styleDefinitions = StyleSheet.create({
   panelText: { ...typography.body, ...font('500'), color: colors.text, textAlign: 'center', lineHeight: 21 },
   panelNote: { ...typography.small, color: colors.textMuted, textAlign: 'center', lineHeight: 18 },
   panelButtons: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
-  primary: { minHeight: 44, minWidth: 112, paddingHorizontal: spacing.xl, borderRadius: radius.pill, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
+  primary: { minHeight: 44, minWidth: 112, paddingHorizontal: spacing.xl, borderRadius: buttonShape.radius, ...buttonShape.curve, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
   primaryText: { ...typography.bodyStrong, color: colors.brandInk },
-  secondary: { minHeight: 44, minWidth: 112, paddingHorizontal: spacing.xl, borderRadius: radius.pill, backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center' },
+  secondary: { minHeight: 44, minWidth: 112, paddingHorizontal: spacing.xl, borderRadius: buttonShape.radius, ...buttonShape.curve, backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center' },
   secondaryText: { ...typography.bodyStrong, color: colors.text },
   pressedButton: { transform: [{ scale: PRESS_SHRINK }] },
   blockButton: { maxWidth: 220, borderColor: colors.danger },

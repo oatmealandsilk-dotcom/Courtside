@@ -199,16 +199,16 @@ function UserProfile() {
         ) : !isMe ? (
           <View style={styles.buttons}>
             <View style={{ flex: 1 }}>
-              <Button label={followLabel} variant={following || requested ? 'secondary' : 'primary'} onPress={following ? () => confirmUnfollow(user, () => actions.toggleFollow(user.id)) : () => actions.toggleFollow(user.id)} full />
+              <Button label={followLabel} variant={following || requested ? 'secondary' : 'primary'} onPress={following ? () => confirmUnfollow(user, () => actions.toggleFollow(user.id)) : () => actions.toggleFollow(user.id)} full size="sm" />
             </View>
             <View style={{ flex: 1 }}>
               {/* Locked, it asks the server again first (they may have followed you
                   since the app opened), then says why in a note that stays to be read. */}
-              <Button label="Message" variant="secondary" onPress={async () => { const lock = await actions.messageLock(user.id); if (lock) { showToast({ title: lock, icon: 'lock-closed-outline', long: true }); return; } router.push(`/messages/${actions.openConversationWith(user.id)}`); }} full />
+              <Button label="Message" variant="secondary" onPress={async () => { const lock = await actions.messageLock(user.id); if (lock) { showToast({ title: lock, icon: 'lock-closed-outline', long: true }); return; } router.push(`/messages/${actions.openConversationWith(user.id)}`); }} full size="sm" />
             </View>
           </View>
         ) : (
-          <View style={styles.buttons}><View style={{ flex: 1 }}><Button label="Edit profile" variant="secondary" onPress={() => router.push('/edit-profile')} full /></View></View>
+          <View style={styles.buttons}><View style={{ flex: 1 }}><Button label="Edit profile" variant="secondary" onPress={() => router.push('/edit-profile')} full size="sm" /></View></View>
         )}
         {coach && !blocked && !locked ? (
           <Button label="See coaching services" onPress={() => router.push(`/coach/${coach.id}`)} full />

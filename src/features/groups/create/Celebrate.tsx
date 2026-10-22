@@ -88,6 +88,6 @@ const styleDefinitions = StyleSheet.create({
     backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: colors.bg,
   },
   words: { alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.lg },
-  title: { ...typography.title, fontSize: 26, letterSpacing: -0.9, color: colors.text, textAlign: 'center' },
+  title: { ...typography.title, fontSize: 26, letterSpacing: -0.5, color: colors.text, textAlign: 'center' },
   line: { ...typography.body, color: colors.textMuted, textAlign: 'center' },
 });

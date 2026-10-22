@@ -9,7 +9,7 @@ import { Submit } from '@/components/sheet/SheetForm';
 import { useGateSpace } from '@/lib/useGateSpace';
 import { useReducedMotion } from '@/lib/useReducedMotion';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
-import { colors, font, pageIsDark, spacing, withAlpha } from '@/theme';
+import { colors, font, pageIsDark, spacing, withAlpha, wordmarkFont } from '@/theme';
 import { MOMENTS, MOMENT_H, MOMENT_W, Moment } from './Moments';
 
 /** From this width up (a desktop, a tablet) everything is one centred column, rather than the buttons sitting at the foot of a tall window. */
@@ -197,13 +197,13 @@ const styleDefinitions = StyleSheet.create({
   column: { flexGrow: 1 },
   wideColumn: { width: '100%', maxWidth: 420, alignSelf: 'center' },
   lockup: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
-  wordmark: { ...font('600'), fontSize: 24, lineHeight: 28, letterSpacing: -0.9, color: colors.brand },
+  wordmark: { ...wordmarkFont('600'), fontSize: 24, lineHeight: 28, letterSpacing: -0.9, color: colors.brand },
   // The stage takes the height the rest leaves (never under 260, so a small phone scrolls instead).
   stage: { flexGrow: 1, minHeight: 260, marginTop: spacing.xl },
   stageWide: { height: 470, marginTop: spacing.xxl },
   words: { marginTop: spacing.xl, paddingHorizontal: spacing.sm },
-  headline: { ...font('600'), fontSize: 28, lineHeight: 33, letterSpacing: -0.9, color: colors.text, textAlign: 'center' },
-  headlineWide: { fontSize: 32, lineHeight: 38, letterSpacing: -1.1 },
+  headline: { ...font('600'), fontSize: 28, lineHeight: 33, letterSpacing: -0.5, color: colors.text, textAlign: 'center' },
+  headlineWide: { fontSize: 32, lineHeight: 38, letterSpacing: -0.7 },
   sizer: { opacity: 0 },
   headlineShown: { position: 'absolute', left: spacing.sm, right: spacing.sm, top: 0 },
   dots: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6, marginTop: spacing.lg, height: 12 },

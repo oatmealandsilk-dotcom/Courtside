@@ -51,6 +51,21 @@ export interface SwipeSurfaceProps {
 }
 
 const SETTLE_MS = 300;
+
+/**
+ * react-native-web's own way to end the press under the finger (its responder
+ * system: the same module instance Pressable registers with). A swipe that has
+ * taken the finger ends it, so a card never keeps its pressed look (the shrink,
+ * the grey) for the length of the drag. Missing in some future version: nothing is ended.
+ */
+const endPresses: () => void = (() => {
+  try {
+    const mod = require('react-native-web/dist/modules/useResponderEvents/ResponderSystem') as { terminateResponder?: () => void };
+    return typeof mod.terminateResponder === 'function' ? mod.terminateResponder : () => undefined;
+  } catch {
+    return () => undefined;
+  }
+})();
 const EASE = 'cubic-bezier(.22,.61,.36,1)';
 
 /**
@@ -218,6 +233,9 @@ export function SwipeSurface({ children, onSwipe, onCommit, onDragTo, onProgress
         if (Math.abs(dx) < 10 || Math.abs(dx) < Math.abs(dy) * 1.6) return;
         point.horizontal = true;
         event.currentTarget.setPointerCapture(event.pointerId);
+        // The swipe has the finger now: whatever was pressed under it lets go
+        // (its pressed look ends here, and its tap is never fired).
+        endPresses();
       }
       event.preventDefault();
       const now = performance.now();

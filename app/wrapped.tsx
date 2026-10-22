@@ -15,7 +15,7 @@ import { compactNumber } from '@/lib/format';
 import { goBack } from '@/lib/goBack';
 import * as haptics from '@/lib/haptics';
 import { useApp } from '@/store/AppContext';
-import { lightColors as brand, fontFamily } from '@/theme';
+import { lightColors as brand, fontFamily, wordmarkFont, buttonShape } from '@/theme';
 
 type Slide = { key: string; tint: string; big?: string; title: string; sub?: string; extra?: React.ReactNode; /** Replaces the number, title and line for a slide with its own layout. */ content?: React.ReactNode };
 const SLIDE_MS = 5200;
@@ -213,27 +213,27 @@ const styles = StyleSheet.create({
   bar: { flex: 1, height: 3, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.3)', overflow: 'hidden' },
   barFill: { height: 3, backgroundColor: 'white' },
   topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 4 },
-  brandMark: { fontFamily: fontFamily.bold, fontWeight: '700', fontSize: 18, color: 'white', letterSpacing: -0.3 },
+  brandMark: { ...wordmarkFont('700'), fontSize: 18, color: 'white', letterSpacing: -0.3 },
   body: { flex: 1, justifyContent: 'center', paddingHorizontal: 28, gap: 6 },
-  big: { fontFamily: fontFamily.bold, fontWeight: '700', fontSize: 120, lineHeight: 124, letterSpacing: -5, color: 'white', fontVariant: ['tabular-nums'] },
-  title: { fontFamily: fontFamily.bold, fontWeight: '700', fontSize: 32, lineHeight: 36, letterSpacing: -0.8, color: 'white' },
-  sub: { fontFamily: fontFamily.medium, fontSize: 18, lineHeight: 25, color: 'rgba(255,255,255,0.78)', marginTop: 6, maxWidth: 420 },
+  big: { fontFamily: fontFamily.bold, fontWeight: '700', fontSize: 120, lineHeight: 124, letterSpacing: -3, color: 'white', fontVariant: ['tabular-nums'] },
+  title: { fontFamily: fontFamily.bold, fontWeight: '700', fontSize: 32, lineHeight: 36, letterSpacing: -0.5, color: 'white' },
+  sub: { fontFamily: fontFamily.medium, fontWeight: '500', fontSize: 18, lineHeight: 25, color: 'rgba(255,255,255,0.78)', marginTop: 6, maxWidth: 420 },
   topWrap: { gap: 14, maxWidth: 440 },
   eyebrow: { fontFamily: fontFamily.semibold, fontWeight: '600', fontSize: 17, color: 'rgba(255,255,255,0.78)' },
   quoteMark: { fontFamily: fontFamily.bold, fontWeight: '700', fontSize: 110, lineHeight: 96, height: 62, color: 'rgba(255,255,255,0.35)', marginTop: 8 },
-  quote: { fontFamily: fontFamily.bold, fontWeight: '700', fontSize: 31, lineHeight: 37, letterSpacing: -0.7, color: 'white' },
-  quoteLong: { fontSize: 25, lineHeight: 31, letterSpacing: -0.4 },
+  quote: { fontFamily: fontFamily.bold, fontWeight: '700', fontSize: 31, lineHeight: 37, letterSpacing: -0.4, color: 'white' },
+  quoteLong: { fontSize: 25, lineHeight: 31, letterSpacing: -0.2 },
   likeRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10, alignSelf: 'flex-start', paddingHorizontal: 16, height: 42, borderRadius: 21, backgroundColor: 'rgba(255,255,255,0.14)' },
   likeRowText: { fontFamily: fontFamily.semibold, fontWeight: '600', fontSize: 17, color: 'white' },
   print: { marginTop: 8, alignSelf: 'flex-start', padding: 7, borderRadius: 22, backgroundColor: 'white', transform: [{ rotate: '-3deg' }], boxShadow: '0px 18px 40px rgba(0, 0, 0, 0.45)' },
   printImage: { width: 220, height: 290, borderRadius: 16, backgroundColor: 'rgba(0,0,0,0.2)' },
   likePill: { position: 'absolute', right: -14, bottom: 22, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, height: 38, borderRadius: 19, backgroundColor: brand.clay, boxShadow: '0px 6px 16px rgba(0, 0, 0, 0.35)' },
   likePillText: { fontFamily: fontFamily.bold, fontWeight: '700', fontSize: 17, color: 'white', fontVariant: ['tabular-nums'] },
-  printCaption: { fontFamily: fontFamily.medium, fontSize: 17, lineHeight: 24, color: 'rgba(255,255,255,0.8)', marginTop: 10 },
+  printCaption: { fontFamily: fontFamily.medium, fontWeight: '500', fontSize: 17, lineHeight: 24, color: 'rgba(255,255,255,0.8)', marginTop: 10 },
   people: { flexDirection: 'row', gap: 12, marginBottom: 20 },
   finale: { flex: 1, alignItems: 'center', justifyContent: 'flex-end', gap: 14, paddingHorizontal: 24 },
   cardFrame: { borderRadius: 18, overflow: 'hidden', boxShadow: '0px 10px 36px rgba(0, 0, 0, 0.45)' },
-  shareButton: { flexDirection: 'row', alignItems: 'center', gap: 8, height: 50, paddingHorizontal: 26, borderRadius: 999, backgroundColor: 'white', marginTop: 6 },
+  shareButton: { flexDirection: 'row', alignItems: 'center', gap: 8, height: 48, paddingHorizontal: 26, borderRadius: buttonShape.radius, ...buttonShape.curve, backgroundColor: 'white', marginTop: 6 },
   shareText: { fontFamily: fontFamily.semibold, fontWeight: '600', fontSize: 16, color: brand.text },
   note: { fontFamily: fontFamily.regular, fontSize: 13, color: 'rgba(255,255,255,0.7)', textAlign: 'center' },
   again: { fontFamily: fontFamily.semibold, fontWeight: '600', fontSize: 14, color: 'white', paddingVertical: 4 },

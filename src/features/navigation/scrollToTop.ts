@@ -20,7 +20,7 @@ export function subscribeScrollToTop(fn: Listener) {
 }
 
 /** The tab a screen's memory key belongs to, so the screen knows when it is the one being asked. */
-export const TAB_FOR_KEY: Record<string, string> = { discuss: '/discuss', coaches: '/coaches', profile: '/profile', home: '/' };
+export const TAB_FOR_KEY: Record<string, string> = { discuss: '/discuss', 'discuss:players': '/discuss', 'discuss:discussions': '/discuss', coaches: '/coaches', profile: '/profile', home: '/' };
 
 /**
  * "Posted — tap to see it": the strip asks the feed to bring a fresh post of

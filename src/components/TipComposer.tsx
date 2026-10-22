@@ -4,7 +4,7 @@ import React, { useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { useRevealOnFocus } from '@/lib/keyboardScroll';
-import { colors, font, radius, spacing, typography, lift } from '@/theme';
+import { colors, font, radius, spacing, typography, lift, buttonShape } from '@/theme';
 
 /** Tips and the AI coach box stop here; a coach's answer to a booking passes its own, longer limit. */
 const MAX = 500;
@@ -89,7 +89,7 @@ const styleDefinitions = StyleSheet.create({
   input: { ...typography.body, color: colors.text, minHeight: 72, maxHeight: 180, paddingTop: 0, paddingBottom: 0, textAlignVertical: 'top' },
   foot: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: spacing.xs },
   left: { ...typography.caption, color: colors.textFaint },
-  send: { minWidth: 72, height: 34, paddingHorizontal: 16, borderRadius: radius.pill, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
+  send: { minWidth: 72, height: buttonShape.smallHeight, paddingHorizontal: 16, borderRadius: buttonShape.smallRadius, ...buttonShape.curve, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
   sendOff: { backgroundColor: colors.surfaceAlt },
   sendText: { fontSize: 14, ...font('600'), color: colors.brandInk },
   sendTextOff: { color: colors.textFaint },

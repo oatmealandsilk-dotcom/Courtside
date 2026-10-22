@@ -11,6 +11,8 @@ import { ClipVideo, type ClipVideoHandle } from './ClipVideo';
 import { CourtSpinner } from './CourtSpinner';
 import { ZoomableMedia, type HomeRect, type ZoomableMediaHandle } from './ZoomableMedia';
 import { VideoView } from 'expo-video';
+import { Image as ExpoImage } from 'expo-image';
+import { usePreloadTurn } from '@/features/feed/preloadQueue';
 import { isDesktopBrowser } from '@/lib/browserDevice';
 import { cropLayer } from '@/lib/crop';
 import type { MediaCrop } from '@/data/types';
@@ -38,8 +40,11 @@ function clock(seconds: number) {
  * middle, a time line with the time along the bottom, sound, and a corner
  * button for full screen. They fade away on their own. Two taps like it.
  */
-export function PostVideo({ uri, poster, active, preload = false, trimStart, trimEnd, speed, volume, silent = false, onDoubleTap, discInk, onReady, onSize, crop }: {
-  uri: string; poster?: string; active: boolean; preload?: boolean; trimStart?: number; trimEnd?: number; silent?: boolean;
+export function PostVideo({ uri, poster, active, preload = false, preloadRank = 1, trimStart, trimEnd, speed, volume, silent = false, onDoubleTap, discInk, onReady, onSize, crop }: {
+  uri: string; poster?: string; active: boolean; preload?: boolean;
+  /** How soon the feed may reach it (1 = the next page): off screen its player is built in turn (features/feed/preloadQueue). */
+  preloadRank?: number;
+  trimStart?: number; trimEnd?: number; silent?: boolean;
   /** The author's rate (1 is normal) and level (0–1), honoured at playback. */
   speed?: number; volume?: number;
   onDoubleTap?: () => void; discInk?: string;
@@ -56,6 +61,30 @@ export function PostVideo({ uri, poster, active, preload = false, trimStart, tri
   const [muted, setMuted] = useSoundMuted();
   const [ready, setReady] = useState(false);
   const [full, setFull] = useState(false);
+  // In a feed, a video post off screen waits its turn for a player like a clip
+  // does (ClipPlayback): nearest first, a few at a time, after the one on screen,
+  // and a feed tab not on show builds none ahead. Until then just its poster.
+  // In a browser too: told to fetch only the metadata, Chrome still pulls the first
+  // ~700 KB of each, so off screen it waits behind the clip on screen and the next
+  // like any clip, and its turn ends once the browser stops fetching (`suspend`).
+  // On screen in a browser it holds nothing back until you start it: a poster with
+  // its play button has nothing to protect, and an iPhone browser never fetches a
+  // "metadata" video's first frame, so it would hold the queue for nothing.
+  const moving = useRef<(() => void) | null>(null);
+  const web = Platform.OS === 'web';
+  const [fetched, setFetched] = useState(false);
+  const turn = usePreloadTurn(preload, preloadRank, active, !web ? ready : active ? ready || paused : fetched, moving);
+  const built = active || full || (preload && turn);
+  // On a phone the player draws no poster of its own: a player built while its page is
+  // already showing (its turn came as you landed) keeps the poster over it until its first
+  // frame is in, and one that cannot load keeps it for good, so the picture never goes
+  // blank and pops back. Once in, a stall mid-play is the spinner's, not the poster's.
+  const [framed, setFramed] = useState(false);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => { if (!built) { setReady(false); setFramed(false); setFailed(false); setFetched(false); } }, [built]);
+  // In a browser the picture stays over a player built as you land (its turn had not come) until
+  // the browser has the file's start, so its own poster never shows blank first.
+  const posterUp = !!poster && (!built || (web ? !framed && !fetched : !framed || failed));
   // The tutorial never starts under a video opened full screen.
   useHoldTour(full);
   // Full screen is black: light status-bar icons over it (on Android the Modal opens a frame later for that).
@@ -278,9 +307,12 @@ export function PostVideo({ uri, poster, active, preload = false, trimStart, tri
     <View ref={rootRef} style={[StyleSheet.absoluteFill, !full && idleCursor]} onPointerMove={desktopWeb ? nudge : undefined} onPointerLeave={desktopWeb ? hoverOut : undefined}>
       <View style={cropLayer(crop)}>
         {/* The page is told only "in" and, when the player is freed, "gone"; a stall mid-play is this player's own spinner. */}
+        {built ? (
         <ClipVideo ref={player} uri={uri} poster={poster} active={active && !ownCopy} muted={silent || muted || !active || ownCopy} paused={paused} fit="cover" trimStart={trimStart} trimEnd={trimEnd} speed={speed} volume={volume}
           onProgress={onProgress}
-          onReady={(ok) => { setReady(ok); if (ok) onReady?.(true); }} onGone={() => onReady?.(false)} onSize={onSize} />
+          onReady={(ok) => { setReady(ok); if (ok) { setFramed(true); onReady?.(true); } }} onGone={() => onReady?.(false)} onSize={onSize} onBuffered={() => moving.current?.()} onFetched={() => setFetched(true)} onFailed={() => setFailed(true)} />
+        ) : null}
+        {posterUp ? <ExpoImage source={{ uri: poster }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" /> : null}
       </View>
       <Pressable accessibilityRole="button" accessibilityLabel="Show video controls" onPress={(e) => tap(e.nativeEvent.locationX)} onLayout={(e) => { width.current = Math.max(1, e.nativeEvent.layout.width); }} style={[StyleSheet.absoluteFill, idleCursor]} />
       {!ready && active && !paused ? <View pointerEvents="none" style={styles.centre}><CourtSpinner ink={discInk ?? 'white'} /></View> : null}

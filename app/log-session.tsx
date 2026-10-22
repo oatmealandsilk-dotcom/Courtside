@@ -37,7 +37,7 @@ import { isSupabaseConfigured } from '@/lib/supabase';
 import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import { colors, font, lift, radius, spacing, typography } from '@/theme';
+import { colors, font, lift, radius, spacing, typography, buttonShape } from '@/theme';
 import { TextScale } from '@/theme/textScale';
 
 const KINDS: { value: PracticeSession['kind']; label: string }[] = [
@@ -722,7 +722,7 @@ const styleDefinitions = StyleSheet.create({
   hide: { alignSelf: 'center', paddingVertical: spacing.xs },
   hideText: { ...typography.smallStrong, color: colors.textMuted },
   // The quieter of the two buttons: Save's size and shape, outlined rather than filled.
-  second: { flexDirection: 'row', gap: 10, minHeight: 54, marginTop: -spacing.sm, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.borderStrong, backgroundColor: colors.surface },
+  second: { flexDirection: 'row', gap: 10, minHeight: 48, marginTop: -spacing.sm, borderRadius: buttonShape.radius, ...buttonShape.curve, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.borderStrong, backgroundColor: colors.surface },
   secondOff: { opacity: 0.5 },
   secondText: { ...typography.bodyStrong, fontSize: 16, color: colors.text },
   pressed: { opacity: PRESS_DIM },
@@ -733,7 +733,7 @@ const styleDefinitions = StyleSheet.create({
   pickIcon: { width: 22, height: 32, alignItems: 'center', justifyContent: 'center' },
   pickWords: { flex: 1, minWidth: 0, gap: 3 },
   pickHeroLine: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 32 },
-  pickHero: { fontSize: 21, lineHeight: 26, ...font('600'), letterSpacing: -0.5, color: colors.text, fontVariant: ['tabular-nums'] },
+  pickHero: { fontSize: 21, lineHeight: 26, ...font('600'), letterSpacing: -0.3, color: colors.text, fontVariant: ['tabular-nums'] },
   pickTag: { flexShrink: 1, paddingHorizontal: 7, paddingVertical: 2, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt },
   pickTagText: { fontSize: 11, lineHeight: 15, ...font('600'), letterSpacing: 0.2, color: colors.textMuted },
   pickTitle: { fontSize: 15, lineHeight: 20, ...font('500'), color: colors.text },

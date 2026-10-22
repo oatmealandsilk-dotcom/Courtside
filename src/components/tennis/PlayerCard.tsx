@@ -170,7 +170,7 @@ function Strip({ items, look, size, filled }: { items: StripItem[]; look: CardLo
         const divided = grid ? i % 2 === 1 : i > 0;
         return (
           <View key={item.key} style={[styles.cell, grid && styles.cellGrid, grid && i >= 2 && styles.cellLower, divided && { borderLeftWidth: StyleSheet.hairlineWidth, borderLeftColor: look.lines, paddingLeft: 12 }]}>
-            <Text numberOfLines={1} maxFontSizeMultiplier={1.25} style={[item.word ? { ...font('600'), fontSize: size - 4, lineHeight: Math.round(size * 1.15), letterSpacing: -0.4 } : { ...font('600'), fontSize: size, lineHeight: Math.round(size * 1.15), letterSpacing: -0.055 * size }, styles.tabular, { color: look.figure }]}>
+            <Text numberOfLines={1} maxFontSizeMultiplier={1.25} style={[item.word ? { ...font('600'), fontSize: size - 4, lineHeight: Math.round(size * 1.15), letterSpacing: -0.2 } : { ...font('600'), fontSize: size, lineHeight: Math.round(size * 1.15), letterSpacing: -0.055 * size }, styles.tabular, { color: look.figure }]}>
               {item.figure}
               {item.unit ? <Text style={[styles.unit, { fontSize: Math.round(size * 0.62) }]}>{` ${item.unit}`}</Text> : null}
             </Text>
@@ -193,10 +193,10 @@ const styles = StyleSheet.create({
   banner: { borderRadius: 16, paddingVertical: 14, paddingHorizontal: 16, overflow: 'hidden' },
   pressed: { transform: [{ scale: PRESS_SHRINK }] },
   headRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  bannerTitle: { ...font('600'), fontSize: 17, letterSpacing: -0.3 },
+  bannerTitle: { ...font('600'), fontSize: 17, letterSpacing: -0.2 },
   identity: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   identityWords: { flex: 1, minWidth: 0, gap: 2 },
-  name: { ...font('500'), fontSize: 22, lineHeight: 27, letterSpacing: -0.66 },
+  name: { ...font('500'), fontSize: 22, lineHeight: 27, letterSpacing: -0.4 },
   mark: { alignSelf: 'flex-start' },
   small: { ...font('400'), fontSize: 13, lineHeight: 19 },
   /*
@@ -209,8 +209,8 @@ const styles = StyleSheet.create({
   hero: { marginTop: 20 },
   bannerHero: { marginTop: 6 },
   // The rating, set big and tight; its line box trimmed so the words under it sit close.
-  figure: { ...font('600'), fontSize: 66, lineHeight: 66, letterSpacing: -3.6, marginVertical: -5, minWidth: 40 },
-  bannerFigure: { ...font('600'), fontSize: 42, lineHeight: 46, letterSpacing: -2.2, fontVariant: ['tabular-nums'] },
+  figure: { ...font('600'), fontSize: 66, lineHeight: 66, letterSpacing: -2.2, marginVertical: -5, minWidth: 40 },
+  bannerFigure: { ...font('600'), fontSize: 42, lineHeight: 46, letterSpacing: -1.3, fontVariant: ['tabular-nums'] },
   system: { ...font('600'), letterSpacing: 1.2 },
   heroSystem: { fontSize: 13, lineHeight: 16, marginTop: 1 },
   bannerSystem: { fontSize: 11, lineHeight: 14, letterSpacing: 1, marginTop: 5 },

@@ -2647,7 +2647,7 @@ const styleDefinitions = StyleSheet.create({
   headerUser: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 },
   headerWords: { flex: 1, minWidth: 0, gap: 0 },
   headerNameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, minWidth: 0 },
-  headerName: { ...font('600'), fontSize: 16, lineHeight: 20, letterSpacing: -0.2, color: colors.text },
+  headerName: { ...font('600'), fontSize: 16, lineHeight: 20, letterSpacing: -0.1, color: colors.text },
   headerNameShrink: { flexShrink: 1 },
   headerStatusRow: { flexDirection: 'row', alignItems: 'center', gap: 5, minWidth: 0 },
   headerStatus: { ...font('400'), fontSize: 12, lineHeight: 16, color: colors.textMuted, flexShrink: 1 },

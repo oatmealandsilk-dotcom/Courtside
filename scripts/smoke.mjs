@@ -972,6 +972,148 @@ const STEPS = [
     after: async (page) => { await page.tap({ text: 'Find Players' }); },
   },
   {
+    // Oct 22, owner: "It should be a fucking smooth swipe. Nothing framing in or out". Each section is its
+    // own scroller under a row that stays put: a tab tap and a finger's swipe between them move only the
+    // two pages sideways. Every frame is measured: the header, the section row and the bottom bar never
+    // move by even a pixel, neither section scrolls or changes height, the section beside the page is laid
+    // out the whole time (never display:none), and Find Players is back exactly where it was left.
+    name: 'community-swipe-still',
+    title: 'Community: a swipe and a tab tap move nothing but the sections',
+    async run(page) {
+      await page.waitForStill({ text: 'Find Players' });
+      const players = '[data-testid="pane-discuss:players"]';
+      const threads = '[data-testid="pane-discuss:discussions"]';
+      // Find Players well down its page (as far as it goes, up to 600), Discussions a little way down its own.
+      const left = await page.waitUntil(() => page.eval(`(() => {
+        const el = document.querySelector('${players}');
+        if (!el || el.scrollHeight - el.clientHeight < 100) return false;
+        el.scrollTop = Math.min(600, el.scrollHeight - el.clientHeight);
+        return Math.round(el.scrollTop) || false;
+      })()`), 15000, 'Find Players to scroll');
+      const threadsLeft = await page.eval(`(() => { const el = document.querySelector('${threads}'); el.scrollTop = Math.min(120, el.scrollHeight - el.clientHeight); return Math.round(el.scrollTop); })()`);
+      await sleep(900);
+      // At rest the section beside the page is hidden from view and from taps, never taken out of the layout.
+      const rest = await page.eval(`(() => {
+        const pane = document.querySelector('${threads}');
+        let n = pane; while (n && !(n.parentElement && n.parentElement.children.length === 2 && getComputedStyle(n).position === 'absolute')) n = n.parentElement;
+        return n ? getComputedStyle(n).visibility + ',' + (n.inert ? 'inert' : 'live') + ',' + getComputedStyle(n).display : 'missing';
+      })()`);
+      if (rest !== 'hidden,inert,flex') throw new Error(`Discussions at rest beside the page is "${rest}", not hidden, inert and laid out`);
+      // From here on, every frame is noted.
+      await page.eval(`(() => {
+        const rect = (el) => { if (!el) return null; const r = el.getBoundingClientRect(); return [r.left, r.top, r.width, r.height].map((n) => Math.round(n * 2) / 2).join(','); };
+        const title = [...document.querySelectorAll('div,span,h1')].find((el) => el.childElementCount === 0 && el.textContent === 'Community' && el.getBoundingClientRect().height > 0);
+        const row = document.querySelector('[role="tab"]')?.parentElement;
+        const bar = document.querySelector('[aria-label="Feed"]');
+        const panes = ['${players}', '${threads}'].map((s) => document.querySelector(s));
+        // Each section's own content: the column inside its scroller, and the blocks in it.
+        const bodies = panes.map((p) => p?.firstElementChild?.firstElementChild ?? null);
+        const look = (el) => { const cs = getComputedStyle(el); return cs.opacity + '|' + cs.transform + '|' + cs.display + '|' + cs.visibility; };
+        // Every element's look before anything moves: anything that later looks different is a change.
+        const before = new Map();
+        panes.forEach((p) => p && p.querySelectorAll('*').forEach((el) => before.set(el, look(el))));
+        const touched = new Set();
+        const changes = [];
+        const added = [];
+        const watch = new MutationObserver((list) => list.forEach((m) => {
+          if (m.type === 'attributes') touched.add(m.target);
+          else m.addedNodes.forEach((n) => { if (n.nodeType === 1) added.push((n.textContent || n.tagName).slice(0, 40)); });
+        }));
+        panes.forEach((p) => p && watch.observe(p, { attributes: true, attributeFilter: ['style', 'class'], childList: true, subtree: true }));
+        const canvas = panes[0]?.querySelector('canvas');
+        const frames = [];
+        window.__still = { frames, changes, added, on: true, watch };
+        const tick = () => {
+          if (!window.__still.on) return;
+          touched.forEach((el) => {
+            const was = before.get(el);
+            const now = look(el);
+            if (was !== undefined && was !== now) changes.push((el.getAttribute('aria-label') || el.textContent || el.tagName).slice(0, 40) + ': ' + was + ' -> ' + now);
+          });
+          touched.clear();
+          // What is drawn in the middle of the screen: some of a section's content, never a blank.
+          // (The section most in view, by where it sits; a visible element of it inside the screen's middle band.)
+          const shown = panes.filter(Boolean).sort((a, b) => Math.abs(a.getBoundingClientRect().left) - Math.abs(b.getBoundingClientRect().left))[0];
+          let drawn = false;
+          if (shown && getComputedStyle(shown).visibility === 'visible') {
+            for (const el of shown.querySelectorAll('div,span,img,canvas')) {
+              const r = el.getBoundingClientRect();
+              if (r.width > 0 && r.height > 0 && r.bottom > 250 && r.top < 650 && r.right > 0 && r.left < innerWidth && el.childElementCount === 0) { drawn = true; break; }
+            }
+          }
+          frames.push({
+            title: rect(title), row: rect(row), bar: rect(bar),
+            tops: panes.map((p) => (p ? Math.round(p.scrollTop) : -1)).join(','),
+            heights: panes.map((p) => (p ? p.scrollHeight : -1)).join(','),
+            // Each section's first content block, how far down the screen: a vertical jump shows here.
+            firstTop: bodies.map((b) => (b?.firstElementChild ? Math.round(b.firstElementChild.getBoundingClientRect().top * 2) / 2 : 'none')).join(','),
+            blocks: bodies.map((b) => (b ? [...b.children].map((c) => Math.round(c.getBoundingClientRect().height)).join('/') : 'none')).join(' ; '),
+            canvas: canvas ? canvas.width + 'x' + canvas.height : 'none',
+            drawn,
+            hidden: panes.map((p) => { let n = p; while (n && n !== document.body) { if (getComputedStyle(n).display === 'none') return 'none'; n = n.parentElement; } return 'ok'; }).join(','),
+            x: panes.map((p) => (p ? Math.round(p.getBoundingClientRect().left) : 0)).join(','),
+          });
+          requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+        return true;
+      })()`);
+      const drag = async (y, from, step, startHold = 16) => {
+        await page.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: from, y, radiusX: 2, radiusY: 2, force: 1, id: 1 }] });
+        await sleep(startHold);
+        for (let i = 1; i <= 14; i += 1) {
+          await page.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: from + i * step, y, radiusX: 2, radiusY: 2, force: 1, id: 1 }] });
+          await sleep(16);
+        }
+        await page.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+        await sleep(900);
+      };
+      // A tab tap to Discussions; a finger's swipe back to Find Players, begun on a thread's card;
+      // a tap to Discussions again and one back to Find Players.
+      const tabAt = async (text) => page.waitForStill({ text });
+      let tab = await tabAt('Discussions');
+      await page.tapAt(tab.x, tab.y);
+      await sleep(800);
+      const card = await page.eval(`(() => {
+        const pane = document.querySelector('${threads}');
+        const el = [...pane.querySelectorAll('[tabindex="0"]')].find((e) => { const r = e.getBoundingClientRect(); return r.top > 250 && r.top < 650 && r.width > 200 && r.left >= 0 && r.left < 60; });
+        if (!el) return null; const r = el.getBoundingClientRect(); return { y: Math.round(r.top + Math.min(40, r.height / 2)) };
+      })()`);
+      await drag(card ? card.y : 520, 40, 22);
+      tab = await tabAt('Discussions');
+      await page.tapAt(tab.x, tab.y);
+      await sleep(800);
+      tab = await tabAt('Find Players');
+      await page.tapAt(tab.x, tab.y);
+      await sleep(800);
+      const report = await page.eval(`(() => { window.__still.on = false; window.__still.watch.disconnect(); return JSON.stringify(window.__still); })()`);
+      const { frames, changes, added } = JSON.parse(report);
+      if (frames.length < 40) throw new Error(`only ${frames.length} frames were measured`);
+      const moves = new Set(frames.map((f) => f.x)).size;
+      for (const key of ['title', 'row', 'bar', 'tops', 'heights', 'firstTop', 'blocks', 'canvas']) {
+        const seen = [...new Set(frames.map((f) => f[key]))];
+        if (seen.length > 1) throw new Error(`${key} changed during the taps and the swipe (${seen.slice(0, 4).join(' | ')})`);
+        if (seen[0] == null) throw new Error(`could not find the ${key} to measure`);
+      }
+      if (frames.some((f) => f.hidden.includes('none'))) throw new Error('a section was taken out of the layout (display:none) during the swipe');
+      const blank = frames.filter((f) => !f.drawn).length;
+      if (blank) throw new Error(`${blank} frame(s) showed no section content mid-screen`);
+      if (changes.length) throw new Error(`${changes.length} element(s) in the sections changed look mid-move: ${changes.slice(0, 3).join(' ; ')}`);
+      if (added.length) throw new Error(`${added.length} element(s) were added to the sections mid-move: ${added.slice(0, 3).join(' ; ')}`);
+      if (moves < 20) throw new Error(`the sections only took ${moves} places across the moves: the tab taps did not slide`);
+      const back = await page.eval(`Math.round(document.querySelector('${players}').scrollTop)`);
+      if (Math.abs(back - left) > 1) throw new Error(`Find Players came back at ${back}, not where it was left (${left})`);
+      const threadsBack = await page.eval(`Math.round(document.querySelector('${threads}').scrollTop)`);
+      if (Math.abs(threadsBack - threadsLeft) > 1) throw new Error(`Discussions came back at ${threadsBack}, not where it was left (${threadsLeft})`);
+      log(`still: ${frames.length} frames, ${moves} section places, header/row/bar/scroll/blocks/canvas unchanged, ${changes.length} look changes`);
+      if (process.env.SMOKE_STILL_OUT) fs.writeFileSync(process.env.SMOKE_STILL_OUT, JSON.stringify({ frames: frames.length, moves, left, threadsLeft, back, threadsBack, changes, added, sample: frames.filter((_, i) => i % 10 === 0) }, null, 1));
+      // Back to their tops for the steps after.
+      await page.eval(`(() => { document.querySelector('${players}').scrollTop = 0; document.querySelector('${threads}').scrollTop = 0; return true; })()`);
+      await sleep(400);
+    },
+    expect: [{ text: 'Find Players' }, { text: 'Open hits' }],
+  },
+  {
     name: 'feed',
     title: 'Feed tab',
     async run(page) {
@@ -1218,7 +1360,7 @@ const STEPS = [
       await page.tap({ label: /^Session\. Start one now/ });
     },
     expect: [{ label: /^This week: / }, { label: /^Start a session/ }, { label: /^Log it: / }, { label: 'Log one yourself' }],
-    // Back on Community where + was pressed (still scrolled down, so its tab rather than "Find Players"). Then
+    // Back on Community where + was pressed (its section row now stays in view, but a label is the surer find). Then
     // once more, through a session's Log it (Oct 16: the sheet hands over and grows into its "Log it" page), and
     // that page's back slides it away again, nothing logged.
     after: async (page) => {

@@ -144,7 +144,7 @@ function WebCrop({ img, onDone, onCancel, onClose }: { img: HTMLImageElement; on
     if (drag.current?.id === e.pointerId) drag.current = null;
   };
 
-  const text: React.CSSProperties = { fontFamily: `${fontFamily.regular}, system-ui, sans-serif`, color: 'white', fontSize: 17 };
+  const text: React.CSSProperties = { fontFamily: fontFamily.regular, color: 'white', fontSize: 17 };
   const button: React.CSSProperties = { ...text, background: 'none', border: 'none', padding: '10px 6px', cursor: 'pointer' };
   return (
     <div
@@ -153,7 +153,7 @@ function WebCrop({ img, onDone, onCancel, onClose }: { img: HTMLImageElement; on
       aria-label="Move and scale the group's photo"
       style={{ position: 'fixed', inset: 0, zIndex: 10000, backgroundColor: '#000', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 22, touchAction: 'none' }}
     >
-      <div style={{ ...text, fontFamily: `${fontFamily.semibold}, system-ui, sans-serif`, position: 'absolute', top: 18, left: 0, right: 0, textAlign: 'center', zIndex: 2, pointerEvents: 'none' }}>Move and Scale</div>
+      <div style={{ ...text, fontFamily: fontFamily.semibold, fontWeight: 600, position: 'absolute', top: 18, left: 0, right: 0, textAlign: 'center', zIndex: 2, pointerEvents: 'none' }}>Move and Scale</div>
       <div
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
@@ -183,7 +183,7 @@ function WebCrop({ img, onDone, onCancel, onClose }: { img: HTMLImageElement; on
       />
       <div style={{ position: 'absolute', left: 0, right: 0, bottom: 18, display: 'flex', justifyContent: 'space-between', padding: '0 24px', zIndex: 2 }}>
         <button type="button" aria-label="Cancel" onClick={onCancel} style={button}>Cancel</button>
-        <button type="button" aria-label="Choose" onClick={choose} style={{ ...button, fontFamily: `${fontFamily.semibold}, system-ui, sans-serif` }}>Choose</button>
+        <button type="button" aria-label="Choose" onClick={choose} style={{ ...button, fontFamily: fontFamily.semibold, fontWeight: 600 }}>Choose</button>
       </div>
     </div>
   );

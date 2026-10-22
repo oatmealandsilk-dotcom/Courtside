@@ -79,8 +79,7 @@ export function GroupAvatar({ people, size, photoUrl, name }: { people: User[]; 
         {b.avatarUrl ? (
           <SvgImage href={{ uri: b.avatarUrl }} x={0} y={0} width={small} height={small} preserveAspectRatio="xMidYMid slice" clipPath={`url(#${clipId})`} />
         ) : (
-          // Android takes Inter Bold as its own family with no weight on top (a weight of 700 there falls back to the phone's own font; see textScale).
-          <SvgText x={at} y={at + type * 0.36} fontSize={type} fontWeight={Platform.OS === 'android' ? 'normal' : '700'} fontFamily={font('700').fontFamily} fill={colors.onMedia} textAnchor="middle">{letter}</SvgText>
+          <SvgText x={at} y={at + type * 0.36} fontSize={type} fontWeight="700" fontFamily={font('700').fontFamily} fill={colors.onMedia} textAnchor="middle">{letter}</SvgText>
         )}
       </Svg>
       <Avatar name={a.name} seed={a.avatarSeed} uri={a.avatarUrl} size={small} style={styles.front} />
