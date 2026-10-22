@@ -4,11 +4,11 @@ import { SectionPager } from '@/components/SectionPager';
 import { PULL_GAP } from '@/lib/pullRefresh';
 import Reanimated, { interpolateColor, runOnJS, useAnimatedReaction, useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 import { PaneScroller } from '@/components/ui/PaneScroller';
-import { isPageDragging, subscribePageDragging } from '@/features/navigation/swipeLock';
 import { LAYOUT, useResponsive } from '@/lib/useResponsive';
 import { useTabUnderline } from '@/features/navigation/useTabUnderline';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { slidePagesTo } from '@/features/navigation/pageSlide';
 import { Platform, ScrollView, TextInput, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { router } from 'expo-router';
 
@@ -120,6 +120,14 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   // Held locally only: pushing it into the address on every swipe made the
   // whole app re-render mid-gesture.
   const setSection = (value: string) => setLocalSection(asSection(value));
+  // A tab tapped in the row. In a phone-width browser it plays the swipe's own
+  // slide, the pages gliding sideways with the line, as the phone's pager does
+  // (the browser's pager otherwise flips at once); on a computer it flips.
+  const tapSection = (value: Section) => {
+    if (value === section) return;
+    if (Platform.OS === 'web' && isPhone && !previewSection) { slidePagesTo('/discuss', { pathname: '/discuss', section: value }); return; }
+    setSection(value);
+  };
   // Each section is a page of its own, with its own scroller and its own place
   // (Oct 4, owner: leaving the map halfway down no longer drops you halfway
   // down the threads), side by side under a row that stays put. A swipe or a
@@ -170,6 +178,10 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   const underline = useTabUnderline(sectionIndex, 2, tabWidth);
   // The two words take their colour from where the line is, so they change with it as it moves
   // rather than snapping on landing. The theme's own two tones only (every court theme).
+  // Any of Find Players in view: where the row actually is (under a finger, mid-glide), not the section
+  // picked, which only changes once a swipe has landed. Asked by the map card as its map finishes drawing.
+  const { base: lineBase, progress: lineProgress } = underline;
+  const mapInView = useCallback(() => lineBase.value + lineProgress.value < 0.99, [lineBase, lineProgress]);
   const textOn = colors.text;
   const textOff = colors.textMuted;
   const playersWord = useAnimatedStyle(() => {
@@ -344,21 +356,9 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   const openSettled = useOpenSettled();
   // Only once the page has rested a moment after any swipe (a section's or a tab's): a tip that
   // joins the list makes room for itself, and that must never land on the frames right after a swipe.
-  // (Off to the side, on Discussions, its card is not in view, so it waits: see useOnScreen.)
-  const [paneRested, setPaneRested] = useState(false);
-  useEffect(() => {
-    if (previewSection) return undefined;
-    let wait: ReturnType<typeof setTimeout> | undefined;
-    const check = () => {
-      clearTimeout(wait);
-      setPaneRested(false);
-      if (!isPageDragging()) wait = setTimeout(() => setPaneRested(true), 1200);
-    };
-    check();
-    const off = subscribePageDragging(check);
-    return () => { off(); clearTimeout(wait); };
-  }, [previewSection, section]);
-  const hitTipReady = !previewSection && paneRested && !tourOpen && !search && openSettled;
+  // The card carrying the tip waits for that itself (restKey, usePaneRested), so a swipe anywhere
+  // never redraws this whole tab. (Off to the side, on Discussions, its card is not in view, so it waits: see useOnScreen.)
+  const hitTipReady = !previewSection && !tourOpen && !search && openSettled;
   // With nothing open, name a court only when the nearest one reads as public and is close: never just because it is nearest.
   const promptCourt = nearCourts.nearest && looksPublic(nearCourts.nearest.c.name) && nearCourts.nearest.miles <= 5 ? nearCourts.nearest.c : null;
   // "Near you" is one thing on this tab and on the map: people who shared a
@@ -598,7 +598,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
         </View>
         {currentUser && !search ? (pane === 'players'
           // Live while the tab is on show, beside Discussions too, so it is already drawn when it slides in.
-          ? <NearbyMap visible={!previewSection || section === 'players'} inView={section === 'players'} me={currentUser} players={players} at={detectedCoords} locationOn={location.locationOn} locating={location.locating} onToggleLocation={location.toggle} onOpen={id => router.push(`/user/${id}`)} onExpand={() => router.push('/map')} hitCount={openHits.length} inviting={early} />
+          ? <NearbyMap visible={!previewSection || section === 'players'} inView={mapInView} me={currentUser} players={players} at={detectedCoords} locationOn={location.locationOn} locating={location.locating} onToggleLocation={location.toggle} onOpen={id => router.push(`/user/${id}`)} onExpand={() => router.push('/map')} hitCount={openHits.length} inviting={early} />
           // The same footprint, empty: keeps the list from jumping when the map mounts on arrival.
           : <View style={styles.mapStandIn} />) : null}
         {/* Nobody sharing a spot within 30 miles: the way to fill the map,
@@ -647,7 +647,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
                 />
               );
             })()}
-            {shownHits.map(({ hit, miles }) => <HitCard key={hit.id} hit={hit} miles={miles} {...(hitTip?.hitId === hit.id ? { tip: hitTip.tip, tipReady: hitTipReady, tipAt: '/discuss' } : {})} />)}
+            {shownHits.map(({ hit, miles }) => <HitCard key={hit.id} hit={hit} miles={miles} {...(hitTip?.hitId === hit.id ? { tip: hitTip.tip, tipReady: hitTipReady, tipAt: '/discuss', restKey: section } : {})} />)}
             {moreHits ? (
               <Pressable accessibilityRole="button" accessibilityState={{ expanded: moreHitsOpen }} onPress={() => setMoreHitsOpen((o) => !o)} hitSlop={6} style={({ pressed }) => [styles.further, pressed && { opacity: PRESS_DIM }]}>
                 <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.furtherText}>{moreHitsOpen ? 'Fewer open hits' : `More open hits (${moreHits})`}</Text>
@@ -909,7 +909,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
           either section scrolls or the two slide past each other. */}
       <View style={[styles.sectionsColumn, column ? { maxWidth: column } : null]}>
         <View style={styles.sections} onLayout={e => { setTabWidth(e.nativeEvent.layout.width / 2); }}>
-          {(['players', 'discussions'] as const).map(value => <Pressable key={value} accessibilityRole="tab" accessibilityState={{ selected: section === value }} onPress={() => setSection(value)} style={styles.section}><Reanimated.Text {...oneLine(TextScale.TITLE, 0.75)} style={[styles.sectionWord, value === 'players' ? playersWord : threadsWord]}>{value === 'discussions' ? 'Discussions' : 'Find Players'}</Reanimated.Text></Pressable>)}
+          {(['players', 'discussions'] as const).map(value => <Pressable key={value} accessibilityRole="tab" accessibilityState={{ selected: section === value }} onPress={() => tapSection(value)} style={styles.section}><Reanimated.Text {...oneLine(TextScale.TITLE, 0.75)} style={[styles.sectionWord, value === 'players' ? playersWord : threadsWord]}>{value === 'discussions' ? 'Discussions' : 'Find Players'}</Reanimated.Text></Pressable>)}
           {tabWidth > 0 && <Reanimated.View pointerEvents="none" style={[styles.sectionUnderline, { width: tabWidth }, underline.style]} />}
         </View>
       </View>

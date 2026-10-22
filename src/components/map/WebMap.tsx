@@ -118,11 +118,11 @@ export function NearbyMap(props: NearbyMapProps) {
   const [loaderGone, setLoaderGone] = useState(false);
   // Drawn while out of view (the section beside, the tab off screen): no fade to catch mid-swipe, it is just there.
   const [cardSnap, setCardSnap] = useState(false);
-  const outOfView = useRef(false);
+  const outOfView = useRef<() => boolean>(() => false);
   useEffect(() => { if (!cardShown) return undefined; const t = setTimeout(() => setLoaderGone(true), MAP_IN_MS + 30); return () => clearTimeout(t); }, [cardShown]);
   // Off screen, the map's load clocks wait (useMapLoad).
   const onScreen = useIsFocused();
-  outOfView.current = !onScreen || props.visible === false || props.inView === false;
+  outOfView.current = () => !onScreen || props.visible === false || props.inView?.() === false;
   // Getting the map going, and again if its style never arrives (useMapLoad): each try is a new map.
   const load = useMapLoad(expanded ? 'full map' : 'map card', onScreen && props.visible !== false);
   // Anything else picked (a search result, a pin) takes the place of your own card.
@@ -213,7 +213,7 @@ export function NearbyMap(props: NearbyMapProps) {
       if (what === 'up') { load.heard('up'); return; }
       // Streets arriving, or failed ones being fetched again: still alive.
       if (what !== 'painted') { load.heard('other'); return; }
-      requestAnimationFrame(() => { load.heard('painted'); if (!expanded) { painted(); if (outOfView.current) { setCardSnap(true); setLoaderGone(true); } setCardShown(true); } });
+      requestAnimationFrame(() => { load.heard('painted'); if (!expanded) { painted(); if (outOfView.current()) { setCardSnap(true); setLoaderGone(true); } setCardShown(true); } });
     });
     instance.touchZoomRotate.disableRotation();
     // The theme's colours go on as soon as the style's layers exist, before

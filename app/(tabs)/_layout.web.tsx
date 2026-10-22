@@ -8,7 +8,7 @@ import { Redirect, Tabs, router, usePathname, useGlobalSearchParams } from 'expo
 import { SwipeSurface } from '@/components/SwipeSurface';
 import { setPendingTab } from '@/features/navigation/pendingTab';
 import { TABS_SLIDE, listenForSlides, type PageSlide } from '@/features/navigation/pageSlide';
-import { requestSection, shownSection, swipeDestination } from '@/features/navigation/swipeOrder';
+import { askedSection, requestSection, shownSection, swipeDestination } from '@/features/navigation/swipeOrder';
 import { requestScrollToTop } from '@/features/navigation/scrollToTop';
 import { TabFocus } from '@/features/navigation/tabFocus';
 import { useResponsive } from '@/lib/useResponsive';
@@ -114,15 +114,27 @@ export default function TabsLayout() {
   // sight, never as you arrive (Oct 22, owner: "Nothing framing in or out"),
   // on Discussions, where a swipe from the Feed lands; the bar asks for Find
   // Players itself (askForCommunityMap).
+  // Only where there are swipes (a phone-width window) does it wait on Discussions: on a computer
+  // there is no swipe in from the Feed, and the browser's Back button should find the section left.
+  // (On a phone-width window, Back from the Feed does open Discussions, at its top: the price of
+  // never having the section change in plain view on a swipe in.)
   const lastTab = useRef(pathname);
+  const swipes = useRef(isPhone);
+  swipes.current = isPhone;
   useEffect(() => {
     if (!TAB_PATHS.includes(pathname)) return;
     if (lastTab.current === '/discuss' && pathname !== '/discuss') {
       requestScrollToTop('/discuss', true);
-      requestSection('/discuss', 'discussions');
+      if (swipes.current) requestSection('/discuss', 'discussions');
     }
     lastTab.current = pathname;
   }, [pathname]);
+  // Opened on another tab (a link straight to the Feed): Community was never left, so it is put
+  // on Discussions now, the section a swipe from the Feed brings in. Not when a page asked for one.
+  useEffect(() => {
+    if (swipes.current && TAB_PATHS.includes(pathname) && pathname !== '/discuss' && askedSection('/discuss') === undefined) requestSection('/discuss', 'discussions');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // A guest reads the tabs (guest mode, Oct 17); only the phone app sends signed-out to sign-in.
   if (ready && !currentUserId && !isGuest) return <Redirect href="/sign-in" />;
   return (

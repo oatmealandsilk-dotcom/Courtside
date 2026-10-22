@@ -216,6 +216,9 @@ export function SectionPager({ index, panes, onIndex, onLand, progress, depth = 
   // Where the finger came down on the screen itself, for the back-swipe edge.
   const startScreenX = useSharedValue(0);
   const startPosition = useSharedValue(0);
+  // A sideways drag taken while the page is held (`blocked`, a pull held open): kept from every
+  // pager above too, so it never turns the tab instead, and simply ignored. Nothing moves.
+  const frozen = useSharedValue(false);
   const landWorklet = onLand;
   const pan = useMemo(() => {
     // Let go (or taken away by the system): spring to a whole pane, never
@@ -253,6 +256,7 @@ export function SectionPager({ index, panes, onIndex, onLand, progress, depth = 
       armed.value = false;
       startY.value = t.y;
       startScreenX.value = t.absoluteX;
+      frozen.value = false;
     })
     .onTouchesMove((e, state) => {
       'worklet';
@@ -266,7 +270,14 @@ export function SectionPager({ index, panes, onIndex, onLand, progress, depth = 
       if (Math.abs(dx) > activationDistance(c.depth) && Math.abs(dx) > Math.abs(dy) * 1.4) {
         const at = Math.round(position.value);
         const handedOff = (c.delegateRight && dx > 0 && at <= 0) || (c.delegateLeft && dx < 0 && at >= c.last) || (c.edgeBack && dx > 0 && startScreenX.value < BACK_EDGE);
-        if (!c.enabled || locked.value || handedOff || claimedDepth.value > c.depth + 1 || (blocked && blocked.value)) state.fail();
+        if (!c.enabled || locked.value || handedOff || claimedDepth.value > c.depth + 1) state.fail();
+        else if (blocked && blocked.value) {
+          // Held: this pager takes the drag so the tab row above cannot (it stands down for a
+          // deeper claim), and moves nothing with it (see onStart and onUpdate).
+          frozen.value = true;
+          claimedDepth.value = c.depth + 1;
+          state.activate();
+        }
         else if (waitsForDeeper(c.depth) && !armed.value) armed.value = true;
         else { claimedDepth.value = c.depth + 1; state.activate(); }
       } else if (Math.abs(dy) > 12) {
@@ -275,6 +286,7 @@ export function SectionPager({ index, panes, onIndex, onLand, progress, depth = 
     })
     .onStart(() => {
       'worklet';
+      if (frozen.value) return;
       // Picking up mid-settle is allowed: the row follows the finger from where it is.
       startPosition.value = position.value;
       settled.value = false;
@@ -286,6 +298,7 @@ export function SectionPager({ index, panes, onIndex, onLand, progress, depth = 
     })
     .onUpdate((e) => {
       'worklet';
+      if (frozen.value) return;
       const c = config.value;
       let next = startPosition.value - e.translationX / strideValue.value;
       if (next < 0) next = next * 0.25;
@@ -299,6 +312,7 @@ export function SectionPager({ index, panes, onIndex, onLand, progress, depth = 
     .onFinalize((e) => {
       'worklet';
       if (claimedDepth.value === config.value.depth + 1) claimedDepth.value = 0;
+      frozen.value = false;
       // Cancelled mid-drag with no end: settle here all the same.
       if (!settled.value) settle(e.velocityX);
     });
