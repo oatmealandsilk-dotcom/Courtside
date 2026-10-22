@@ -11,7 +11,7 @@ import { MAP_CREDITS } from '@/components/map/credits';
 import { Screen } from '@/components/ui';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { openLegal } from '@/lib/legal';
-import { colors, radius, spacing, typography, font } from '@/theme';
+import { colors, radius, spacing, typography, font, wordmarkFont } from '@/theme';
 
 // The real version, from the app's own settings, so this never goes stale.
 const VERSION = Constants.expoConfig?.version ?? '0.1.0';
@@ -83,7 +83,7 @@ export default function About() {
 
 const styleDefinitions = StyleSheet.create({
   hero: { alignItems: 'center', gap: spacing.xs, paddingVertical: spacing.xl },
-  name: { fontSize: 26, ...font('700'), color: colors.text, letterSpacing: -0.5 },
+  name: { fontSize: 26, ...wordmarkFont('700'), color: colors.text, letterSpacing: -0.5 },
   version: { ...typography.small, color: colors.textFaint },
   body: { ...typography.body, color: colors.textMuted, lineHeight: 22, textAlign: 'center', paddingBottom: spacing.xl },
   sectionTitle: { ...typography.smallStrong, color: colors.textMuted, paddingTop: spacing.lg, paddingBottom: spacing.sm },

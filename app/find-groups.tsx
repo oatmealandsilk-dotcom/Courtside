@@ -13,7 +13,7 @@ import { confirm } from '@/lib/confirm';
 import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
 import { MAX_GROUPS } from '@/store/feedGroups';
-import { colors, font, lift, radius, readsOn, spacing, typography } from '@/theme';
+import { buttonShape, colors, font, lift, radius, readsOn, spacing, typography } from '@/theme';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import { TextScale } from '@/theme/textScale';
 
@@ -410,7 +410,7 @@ const styleDefinitions = StyleSheet.create({
   // Header: the left title and close disc, with one fact line under it.
   head: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xs, gap: 2 },
   headTop: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  title: { ...typography.title, ...font('600'), fontSize: 24, letterSpacing: -0.8, color: colors.text, flex: 1 },
+  title: { ...typography.title, ...font('600'), fontSize: 24, letterSpacing: -0.5, color: colors.text, flex: 1 },
   factRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: spacing.md },
   fact: { ...typography.small, color: colors.textMuted },
   manage: { ...typography.smallStrong, color: colors.brand },
@@ -447,7 +447,7 @@ const styleDefinitions = StyleSheet.create({
   // The group itself (its tile and words), which a hold reports.
   group: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
 
-  btn: { flexShrink: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 3, height: 30, minWidth: 64, paddingHorizontal: 14, borderRadius: radius.pill },
+  btn: { flexShrink: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 3, height: 30, minWidth: 64, paddingHorizontal: 14, borderRadius: buttonShape.smallRadius, ...buttonShape.curve },
   btnRing: { borderWidth: 1, borderColor: colors.brand },
   btnIn: { backgroundColor: colors.brand },
   btnText: { ...typography.smallStrong },

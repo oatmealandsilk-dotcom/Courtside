@@ -110,7 +110,7 @@ const styleDefinitions = StyleSheet.create({
   body: { flex: 1, minWidth: 0, height: '100%', flexDirection: 'row', alignItems: 'center', gap: 10, paddingLeft: 18 },
   dot: { width: 14, alignItems: 'center', justifyContent: 'center' },
   words: { flex: 1, minWidth: 0, gap: 1 },
-  clock: { ...font('700'), fontSize: 17, lineHeight: 21, letterSpacing: -0.3, color: colors.brandInk, fontVariant: ['tabular-nums'] },
+  clock: { ...font('700'), fontSize: 17, lineHeight: 21, letterSpacing: -0.2, color: colors.brandInk, fontVariant: ['tabular-nums'] },
   line: { ...font('500'), fontSize: 12, lineHeight: 15, color: `${colors.brandInk}D1` },
   round: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center', backgroundColor: `${colors.brandInk}29`, marginRight: 8 },
   finish: { height: 38, paddingHorizontal: 16, borderRadius: 19, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.brandInk },

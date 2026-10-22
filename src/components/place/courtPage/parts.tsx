@@ -1,3 +1,4 @@
+import { brandShadow } from '@/theme/fillMode';
 import { PRESS_DIM, PRESS_SHRINK } from '@/theme/press';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -13,7 +14,7 @@ import { playHere } from '@/features/players/courtLink';
 import { NOW_ICON, nowAgo, nowStatus, playingLine } from '@/features/players/courtSummary';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import { colors, font, pageIsDark, spacing, typography } from '@/theme';
+import { buttonShape, colors, font, pageIsDark, spacing, typography } from '@/theme';
 
 import type { CourtView } from './view';
 
@@ -81,8 +82,8 @@ export function PrimaryBar({ session, height = 50 }: { session: CourtView['sessi
   const styles = useThemedStyles(styleDefinitions);
   const look = sessionLook(session.state);
   return (
-    <Tappable accessibilityLabel={look.a11y} onPress={session.onPress} hoverTo={1.02} style={[styles.primary, { height, borderRadius: height / 2 }, pageIsDark() ? styles.liftDark : styles.lift]}>
-      <BrandWash radius={height / 2} />
+    <Tappable accessibilityLabel={look.a11y} onPress={session.onPress} hoverTo={1.02} style={[styles.primary, { height, borderRadius: buttonShape.radius }, pageIsDark() ? styles.liftDark : styles.lift]}>
+      <BrandWash radius={buttonShape.radius} curve />
       <View style={styles.primaryInner}>
         {look.icon === 'live' ? <LiveDot size={9} color={colors.brandInk} /> : <Ionicons name={look.icon} size={19} color={colors.brandInk} />}
         <Text style={styles.primaryLabel} numberOfLines={1}>{look.label}</Text>
@@ -262,12 +263,12 @@ const styleDefinitions = StyleSheet.create({
   headLinkText: { ...typography.smallStrong, fontSize: 14, color: colors.brand },
   sub: { ...typography.small, color: colors.textMuted, lineHeight: 18, flexShrink: 1 },
   // The primary.
-  primary: { alignSelf: 'stretch', backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center', overflow: 'visible' },
+  primary: { alignSelf: 'stretch', ...buttonShape.curve, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center', overflow: 'visible' },
   primaryInner: { flexDirection: 'row', alignItems: 'center', gap: 9, paddingHorizontal: spacing.xl },
   primaryLabel: { ...typography.bodyStrong, fontSize: 16, color: colors.brandInk },
   // The one shadow on the page: the primary action, in its own colour (plain dark on a dark page).
-  lift: { shadowColor: colors.brand, shadowOpacity: 0.28, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 3 },
-  liftDark: { shadowColor: '#000000', shadowOpacity: 0.35, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 3 },
+  lift: { ...brandShadow },
+  liftDark: { ...brandShadow },
   // The round actions.
   // A phone's full width; on a computer, a row no wider than a phone's, centred under the primary.
   acts: { flexDirection: 'row', alignItems: 'flex-start', alignSelf: 'center', width: '100%', maxWidth: 440 },

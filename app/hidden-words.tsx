@@ -13,7 +13,7 @@ import * as haptics from '@/lib/haptics';
 import { show as showToast } from '@/lib/toast';
 import { ageUnknown } from '@/features/players/age';
 import { useApp } from '@/store/AppContext';
-import { colors, radius, spacing, typography } from '@/theme';
+import { colors, radius, spacing, typography, buttonShape } from '@/theme';
 
 /**
  * Settings → Hidden words (migration 117), the way Instagram has it: hide
@@ -212,7 +212,7 @@ const styleDefinitions = StyleSheet.create({
   rowDetail: { ...typography.small, fontSize: 13, color: colors.textFaint, lineHeight: 18 },
   note: { ...typography.small, color: colors.textFaint, paddingHorizontal: spacing.sm, paddingTop: spacing.sm, lineHeight: 19 },
   addRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, paddingTop: spacing.md },
-  addButton: { height: 44, paddingHorizontal: 18, borderRadius: radius.pill, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
+  addButton: { height: 44, paddingHorizontal: 18, borderRadius: buttonShape.radius, ...buttonShape.curve, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
   addButtonOff: { opacity: 0.4 },
   addText: { ...typography.smallStrong, color: colors.brandInk },
   addNote: { ...typography.small, color: colors.textMuted, paddingHorizontal: spacing.lg, paddingTop: spacing.sm },

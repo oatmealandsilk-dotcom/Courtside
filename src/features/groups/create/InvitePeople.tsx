@@ -13,7 +13,7 @@ import { shareLink } from '@/lib/shareLink';
 import { show as showToast } from '@/lib/toast';
 import { shareOutside } from '@/lib/shareOutside';
 import { useApp } from '@/store/AppContext';
-import { colors, font, lift, radius, spacing, typography } from '@/theme';
+import { colors, font, lift, radius, spacing, typography, buttonShape } from '@/theme';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 
 /*
@@ -257,7 +257,7 @@ const styleDefinitions = StyleSheet.create({
   linkTitle: { ...typography.body, ...font('600'), color: colors.text },
   linkText: { ...typography.small, color: colors.textMuted },
   linkActions: { flexDirection: 'row', gap: spacing.sm },
-  linkBtn: { flex: 1, height: 40, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
+  linkBtn: { flex: 1, height: buttonShape.height, borderRadius: buttonShape.radius, ...buttonShape.curve, backgroundColor: colors.surfaceAlt, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
   linkBtnText: { ...typography.smallStrong, color: colors.text },
   headRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginTop: spacing.xs },
   section: { ...typography.smallStrong, color: colors.textMuted },

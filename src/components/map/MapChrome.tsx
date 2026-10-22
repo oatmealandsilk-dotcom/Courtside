@@ -1,3 +1,4 @@
+import { brandShadow } from '@/theme/fillMode';
 import { PRESS_DIM, PRESS_SHRINK } from '@/theme/press';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
@@ -41,7 +42,7 @@ import { openCourt, openCourtReel, playHere, postFromCourt, sendCourtToChat } fr
 import { Toggle } from '@/components/ui';
 import type { MapFilter, Placed } from '@/features/players/mapModel';
 import type { Weather } from '@/lib/weather';
-import { TextScale, colors, oneLine, font, pageIsDark, radius, spacing, typography, withAlpha } from '@/theme';
+import { buttonShape, TextScale, colors, oneLine, font, pageIsDark, radius, spacing, typography, withAlpha } from '@/theme';
 import { levelBadge } from '@/lib/badges';
 import { agoLabel, agoShort } from '@/components/map/markers';
 import { MAP_CREDITS } from '@/components/map/credits';
@@ -814,12 +815,12 @@ export function WhereCard({ locating, onLocation }: { locating?: boolean; onLoca
         <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.openNote}>Turn on location or add your city, and the map shows the players and courts near you.</Text>
       </View>
       <View style={[styles.personActions, { marginTop: spacing.xs }]}>
-        <Pressable accessibilityRole="button" onPress={onLocation} disabled={locating} style={styles.primary}>
-          <BrandWash />
+        <Pressable accessibilityRole="button" onPress={onLocation} disabled={locating} hitSlop={buttonShape.smallSlop} style={styles.primary}>
+          <BrandWash radius={buttonShape.smallRadius} curve />
           {locating ? <ActivityIndicator size="small" color={colors.brandInk} /> : <Ionicons name="navigate" size={16} color={colors.brandInk} />}
           <Text {...oneLine(TextScale.TITLE, 0.8)} style={styles.primaryText}>Use my location</Text>
         </Pressable>
-        <Pressable accessibilityRole="button" onPress={() => router.push('/edit-profile')} style={styles.secondary}>
+        <Pressable accessibilityRole="button" onPress={() => router.push('/edit-profile')} hitSlop={buttonShape.smallSlop} style={styles.secondary}>
           <Text {...oneLine(TextScale.TITLE, 0.8)} style={styles.secondaryText}>Add my city</Text>
         </Pressable>
       </View>
@@ -908,13 +909,13 @@ export function PlayerSheet({ placed, following, onClose, onProfile, onMessage, 
         <View style={styles.cardSlot}>
           {onAskToHit ? (
             <Tappable accessibilityLabel={`Ask ${user.name} to hit`} onPress={onAskToHit} scaleTo={0.97} hoverTo={1.02} style={[styles.cardPill, styles.cardPrimary, pageIsDark() ? styles.cardLiftDark : styles.cardLift]}>
-              <BrandWash />
+              <BrandWash radius={buttonShape.radius} curve />
               <HitGlyph size={CARD_PILL_ICON} color={colors.brandInk} />
               <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.cardPrimaryText} numberOfLines={1}>{primaryLabel}</Text>
             </Tappable>
           ) : (
             <Tappable accessibilityLabel={`Message ${user.name}`} onPress={onMessage} scaleTo={0.97} hoverTo={1.02} style={[styles.cardPill, styles.cardPrimary, pageIsDark() ? styles.cardLiftDark : styles.cardLift]}>
-              <BrandWash />
+              <BrandWash radius={buttonShape.radius} curve />
               <Ionicons name="paper-plane-outline" size={CARD_PILL_ICON} color={colors.brandInk} />
               <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.cardPrimaryText} numberOfLines={1}>{primaryLabel}</Text>
             </Tappable>
@@ -1019,7 +1020,7 @@ export function YouSheet({ me, open, teen = false, onToggle, onProfile, onClose,
         </Pressable>
       ) : null}
       <View style={styles.personActions}>
-        <Pressable accessibilityRole="link" accessibilityLabel="Your profile" onPress={onProfile} style={styles.secondary}>
+        <Pressable accessibilityRole="link" accessibilityLabel="Your profile" onPress={onProfile} hitSlop={buttonShape.smallSlop} style={styles.secondary}>
           <Text {...oneLine(TextScale.TITLE, 0.8)} style={styles.secondaryText}>Your profile</Text>
         </Pressable>
       </View>
@@ -1145,18 +1146,18 @@ export function CourtSheet({ court, miles, ringed = false, onClose }: { court: C
       </GHScrollView>
       <View style={styles.personActions}>
         {/* Three pills, a little tighter than the player card's, so they fit a 320pt phone. */}
-        <Pressable accessibilityRole="link" accessibilityLabel="Directions" onPress={() => directionsTo(court)} style={[styles.primary, styles.pillTight]}>
-          <BrandWash />
+        <Pressable accessibilityRole="link" accessibilityLabel="Directions" onPress={() => directionsTo(court)} hitSlop={buttonShape.smallSlop} style={[styles.primary, styles.pillTight]}>
+          <BrandWash radius={buttonShape.smallRadius} curve />
           <Ionicons name="navigate-outline" size={16} color={colors.brandInk} />
           <Text {...oneLine(TextScale.TITLE, 0.8)} style={styles.primaryText}>Directions</Text>
         </Pressable>
         {closed ? null : (
-          <Pressable accessibilityRole="button" accessibilityLabel={`Post a hit at ${court.name}`} onPress={() => playHere(place)} style={[styles.secondary, styles.pillTight]}>
+          <Pressable accessibilityRole="button" accessibilityLabel={`Post a hit at ${court.name}`} onPress={() => playHere(place)} hitSlop={buttonShape.smallSlop} style={[styles.secondary, styles.pillTight]}>
             <Text {...oneLine(TextScale.TITLE, 0.8)} style={styles.secondaryText}>Play here</Text>
           </Pressable>
         )}
         {mapCourt ? (
-          <Pressable accessibilityRole="button" accessibilityLabel={`Post a photo or clip from ${court.name}`} onPress={() => postFromCourt({ id: court.id, name: court.name, lat: court.lat, lng: court.lng })} style={[styles.secondary, styles.pillTight, styles.pillIcon]}>
+          <Pressable accessibilityRole="button" accessibilityLabel={`Post a photo or clip from ${court.name}`} onPress={() => postFromCourt({ id: court.id, name: court.name, lat: court.lat, lng: court.lng })} hitSlop={buttonShape.smallSlop} style={[styles.secondary, styles.pillTight, styles.pillIcon]}>
             <Ionicons name="videocam-outline" size={15} color={colors.text} />
             <Text {...oneLine(TextScale.TITLE, 0.8)} style={styles.secondaryText}>Post</Text>
           </Pressable>
@@ -1340,12 +1341,12 @@ export function CitylessCard({ onOpenMap }: { onOpenMap?: () => void }) {
       <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.citylessTitle}>Where do you play?</Text>
       <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.citylessBody}>Add your city to see the players near you.</Text>
       <View style={styles.citylessActions}>
-        <Pressable accessibilityRole="button" onPress={() => router.push('/edit-profile')} style={styles.primary}>
-          <BrandWash />
+        <Pressable accessibilityRole="button" onPress={() => router.push('/edit-profile')} hitSlop={buttonShape.smallSlop} style={styles.primary}>
+          <BrandWash radius={buttonShape.smallRadius} curve />
           <Text {...oneLine(TextScale.TITLE, 0.8)} style={styles.primaryText}>Add my city</Text>
         </Pressable>
         {onOpenMap ? (
-          <Pressable accessibilityRole="button" onPress={onOpenMap} style={styles.secondary}>
+          <Pressable accessibilityRole="button" onPress={onOpenMap} hitSlop={buttonShape.smallSlop} style={styles.secondary}>
             <Text {...oneLine(TextScale.TITLE, 0.8)} style={styles.secondaryText}>Open the map</Text>
           </Pressable>
         ) : null}
@@ -1560,11 +1561,11 @@ const styleDefinitions = StyleSheet.create({
   // Each pill starts at its own words' width and the two share what is left equally, so Ask to hit
   // never squeezes to "Ask to h…" beside a shorter Message. Follow drawing in hands its room to them.
   cardSlot: { flexGrow: 1, flexShrink: 1, flexBasis: 'auto', minWidth: 0 },
-  cardPill: { height: CARD_ROUND, borderRadius: radius.pill, borderWidth: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: CARD_PILL_GAP, paddingHorizontal: CARD_PILL_PAD },
+  cardPill: { height: CARD_ROUND, borderRadius: buttonShape.radius, ...buttonShape.curve, borderWidth: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: CARD_PILL_GAP, paddingHorizontal: CARD_PILL_PAD },
   cardPrimary: { backgroundColor: colors.brand, borderColor: colors.brand },
   // The page's one shadow (DESIGN.md, Lift): the primary in its own colour; plain dark on a dark page.
-  cardLift: { shadowColor: colors.brand, shadowOpacity: 0.28, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 3 },
-  cardLiftDark: { shadowColor: '#000000', shadowOpacity: 0.35, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 3 },
+  cardLift: { ...brandShadow },
+  cardLiftDark: { ...brandShadow },
   cardSecondary: { backgroundColor: colors.surfaceAlt, borderColor: colors.borderStrong },
   cardPrimaryText: { ...typography.smallStrong, fontSize: 14, color: colors.brandInk, flexShrink: 1 },
   cardSecondaryText: { ...typography.smallStrong, fontSize: 14, color: colors.text, flexShrink: 1 },
@@ -1572,10 +1573,10 @@ const styleDefinitions = StyleSheet.create({
   // Hidden, for measuring the pills' words: a width of its own, so nothing squeezes them.
   cardMeasure: { position: 'absolute', right: 0, top: 0, width: 240, alignItems: 'flex-end', opacity: 0 },
   personActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
-  primary: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 40, paddingHorizontal: 16, borderRadius: radius.pill, backgroundColor: colors.brand },
-  primaryText: { ...typography.smallStrong, color: colors.brandInk },
-  secondary: { minHeight: 40, paddingHorizontal: 16, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center' },
-  secondaryText: { ...typography.smallStrong, color: colors.text },
+  primary: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: buttonShape.smallHeight, paddingHorizontal: 16, borderRadius: buttonShape.smallRadius, ...buttonShape.curve, backgroundColor: colors.brand },
+  primaryText: { ...typography.smallStrong, fontSize: buttonShape.smallLabel, color: colors.brandInk },
+  secondary: { minHeight: buttonShape.smallHeight, paddingHorizontal: 16, borderRadius: buttonShape.smallRadius, ...buttonShape.curve, borderWidth: 1, borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center' },
+  secondaryText: { ...typography.smallStrong, fontSize: buttonShape.smallLabel, color: colors.text },
   pillTight: { paddingHorizontal: 12 },
   pillIcon: { flexDirection: 'row', gap: 5 },
   openRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 },
@@ -1623,7 +1624,7 @@ const styleDefinitions = StyleSheet.create({
   // Holds the words and their haze (CityHaze, drawn behind them). Oct 2, William: "more of a
   // rectangle with like a shadow fade" but "it shouldn't be clear that it is a rectangle".
   cityGlow: { alignItems: 'center', gap: 2, paddingHorizontal: 12, paddingVertical: 6 },
-  cityName: { ...typography.title, fontSize: 26, letterSpacing: -0.6, color: colors.text, textShadowColor: colors.bg, textShadowRadius: 10, textShadowOffset: { width: 0, height: 0 } },
+  cityName: { ...typography.title, fontSize: 26, letterSpacing: -0.4, color: colors.text, textShadowColor: colors.bg, textShadowRadius: 10, textShadowOffset: { width: 0, height: 0 } },
   cityCount: { ...typography.smallStrong, color: colors.textMuted, textShadowColor: colors.bg, textShadowRadius: 8, textShadowOffset: { width: 0, height: 0 } },
   cityCountOn: { color: colors.brand },
   cityHits: { ...typography.caption, letterSpacing: 0, color: colors.textMuted, textShadowColor: colors.bg, textShadowRadius: 8, textShadowOffset: { width: 0, height: 0 } },

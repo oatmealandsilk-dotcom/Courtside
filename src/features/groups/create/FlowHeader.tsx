@@ -51,6 +51,6 @@ const styleDefinitions = StyleSheet.create({
   pressed: { opacity: PRESS_DIM },
   titles: { gap: 3 },
   // The same title as SheetTitle's, so the group sheets match every other sheet.
-  title: { ...typography.title, fontSize: 24, letterSpacing: -0.8, color: colors.text },
+  title: { ...typography.title, fontSize: 24, letterSpacing: -0.5, color: colors.text },
   line: { ...typography.small, color: colors.textMuted, lineHeight: 18 },
 });

@@ -78,7 +78,7 @@ import { isDesktopBrowser } from '@/lib/browserDevice';
 import { useSidePanel } from '@/features/feed/sidePanel';
 import { CLOSE_MS, PAUSE_AT_FULL, SIDE_MIN_WINDOW, STAGE_EASING, STAGE_ON_ANDROID, begin as beginStage, clear as clearStage, currentY, getStage, markEnding, markLost, place as placeStage, stageGeometry, stageKeyOf, stageTop, useStageSelect, type StageSubject } from '@/features/feed/commentStage';
 import { StageChromeContext, useStageMotion, useStagePageChrome } from '@/features/feed/useStageMotion';
-import { colors, radius, typography, spacing, font, lift } from '@/theme';
+import { colors, radius, typography, spacing, font, lift, wordmarkFont } from '@/theme';
 import { isTaggedIn } from '@/features/activity/sessionTags';
 import { useAndroidBack } from '@/lib/androidBack';
 import { TextScale } from '@/theme/textScale';
@@ -2275,7 +2275,7 @@ const styleDefinitions = StyleSheet.create({
   // The mark sits at the far left of the gap, level with the greeting; the greeting and disc in the middle.
   pullGreetingText: { ...typography.bodyStrong, color: colors.text },
   wordmark: {
-    color: colors.brand, ...typography.title, fontSize: 23, ...font('600'), letterSpacing: -0.6,
+    color: colors.brand, ...typography.title, fontSize: 23, ...wordmarkFont('600'), letterSpacing: -0.6,
   },
   // Kept as a hook for anything the wordmark needs over video; the shadow that
   // used to live here was doing more harm than good.
@@ -2294,7 +2294,7 @@ const styleDefinitions = StyleSheet.create({
   removedStack: { position: 'absolute', left: 16, right: 16, alignItems: 'center', gap: 8, zIndex: 6 },
   removedPillRow: { alignSelf: 'stretch', paddingHorizontal: 48, alignItems: 'center' },
   holdPage: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg },
-  holdWord: { ...typography.display, fontSize: 34, ...font('600'), color: colors.brand, letterSpacing: -1.2 },
+  holdWord: { ...typography.display, fontSize: 34, ...wordmarkFont('600'), color: colors.brand, letterSpacing: -1.2 },
   bone: { height: 12, borderRadius: 6, backgroundColor: colors.border },
   holdPost: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, paddingHorizontal: 16, paddingBottom: 16 + BAR_OVERLAY_PX, alignItems: 'center' },
   boneFrame: { alignSelf: 'stretch', aspectRatio: 4 / 5, maxHeight: '58%', borderRadius: 16, backgroundColor: colors.border, alignItems: 'center', justifyContent: 'center' },

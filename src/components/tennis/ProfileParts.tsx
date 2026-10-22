@@ -377,7 +377,7 @@ const styleDefinitions = StyleSheet.create({
   outlineText: { ...typography.smallStrong, color: colors.text },
   dateTile: { width: 40, height: 44, borderRadius: 12, backgroundColor: colors.bgElevated, alignItems: 'center', justifyContent: 'center' },
   dateMonth: { ...font('600'), fontSize: 10, lineHeight: 12, letterSpacing: 0.5, color: colors.textMuted },
-  dateDay: { ...font('600'), fontSize: 17, lineHeight: 20, letterSpacing: -0.4, color: colors.text, fontVariant: ['tabular-nums'] },
+  dateDay: { ...font('600'), fontSize: 17, lineHeight: 20, letterSpacing: -0.2, color: colors.text, fontVariant: ['tabular-nums'] },
   grid: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -4, paddingTop: 6, paddingBottom: 4 },
   cell: { width: '25%', alignItems: 'center', gap: 6, paddingHorizontal: 4, paddingVertical: 8 },
   disc: { width: 52, height: 52, borderRadius: 26, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },

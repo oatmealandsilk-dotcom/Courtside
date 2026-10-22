@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, PixelRatio, Platform, StyleSheet, Text, View, useWindowDimensions, type TextLayoutEvent } from 'react-native';
 import Svg, { G, Path, Rect } from 'react-native-svg';
 
-import { font } from '@/theme';
+import { font, wordmarkFont } from '@/theme';
 import { LAUNCH_FADE_MS, launchHiddenAt, launchShowing, whenLaunchHidden } from '@/lib/launchSplash';
 import { BRAND, LINE as LINE_SHAPE, PICTURE } from '@/components/launchPicture';
 
@@ -206,7 +206,7 @@ export const LaunchMark = Platform.OS === 'android' ? AndroidLaunchMark : Pictur
 const styles = StyleSheet.create({
   centre: { alignItems: 'center', justifyContent: 'center' },
   // Just under the mark: laid out from the middle of the screen, so the mark itself never moves.
-  androidName: { position: 'absolute', top: '50%', left: 0, right: 0, textAlign: 'center', fontSize: 30, lineHeight: 36, letterSpacing: -0.9, ...font('700') },
+  androidName: { position: 'absolute', top: '50%', left: 0, right: 0, textAlign: 'center', fontSize: 30, lineHeight: 36, letterSpacing: -0.9, ...wordmarkFont('700') },
   androidLine: { position: 'absolute', bottom: '10.5%', left: 0, right: 0, textAlign: 'center', fontSize: 11.5, letterSpacing: 1, textTransform: 'uppercase', ...font('700') },
   line: { position: 'absolute', textAlign: 'center', ...font('700'), textTransform: 'uppercase' },
 });

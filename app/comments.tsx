@@ -1,3 +1,4 @@
+import { brandShadow } from '@/theme/fillMode';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { AccessibilityInfo, BackHandler, Keyboard, Platform, Pressable, StyleSheet, Text, View, type TextInput } from 'react-native';
@@ -589,5 +590,5 @@ const styleDefinitions = StyleSheet.create({
   // The same two round buttons as the message box: a quiet one for the photo (like the mic there), the green one to send.
   photoButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
   photoPressed: { backgroundColor: colors.surfaceAlt },
-  send: { width: 40, height: 40, borderRadius: radius.pill, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center', shadowColor: colors.brand, shadowOpacity: 0.28, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 3 },
+  send: { width: 40, height: 40, borderRadius: radius.pill, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center', ...brandShadow },
 });

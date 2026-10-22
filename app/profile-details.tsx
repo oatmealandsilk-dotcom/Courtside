@@ -1,3 +1,4 @@
+import { brandShadow } from '@/theme/fillMode';
 import { PRESS_DIM } from '@/theme/press';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View, type ScrollView } from 'react-native';
@@ -36,7 +37,7 @@ import * as haptics from '@/lib/haptics';
 import { useStillLoading } from '@/lib/useStillLoading';
 import { useApp } from '@/store/AppContext';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
-import { colors, font, pageIsDark, spacing, typography } from '@/theme';
+import { buttonShape, colors, font, pageIsDark, spacing, typography } from '@/theme';
 
 /**
  * The Tennis profile (Oct 5): a player's tennis in one place, yours or
@@ -131,7 +132,7 @@ function Mine({ user, offsetY, scrollRef }: { user: User; offsetY: SharedValue<n
       <View style={styles.buttons}>
         <View style={styles.primarySpot}>
           <Tappable accessibilityRole="button" accessibilityLabel="Log a session" onPress={() => router.push('/log-session')} scaleTo={0.97} hoverTo={1.02} style={[styles.primary, pageIsDark() ? styles.liftDark : styles.lift]}>
-            <BrandWash />
+            <BrandWash radius={buttonShape.radius} curve />
             <View style={styles.pillInner}>
               <Ionicons name="add" size={20} color={colors.brandInk} />
               <Text style={styles.primaryText}>Log a session</Text>
@@ -682,12 +683,12 @@ const styleDefinitions = StyleSheet.create({
   buttons: { flexDirection: 'row', gap: 10, marginTop: spacing.lg },
   pillInner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
   primarySpot: { flex: 1 },
-  primary: { height: 50, borderRadius: 999, backgroundColor: colors.brand, justifyContent: 'center', overflow: 'visible' },
+  primary: { height: buttonShape.height, borderRadius: buttonShape.radius, ...buttonShape.curve, backgroundColor: colors.brand, justifyContent: 'center', overflow: 'visible' },
   // The one shadow on the page: the primary action's, in its own colour (plain dark on a dark page).
-  lift: { shadowColor: colors.brand, shadowOpacity: 0.28, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 3 },
-  liftDark: { shadowColor: '#000000', shadowOpacity: 0.35, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 3 },
+  lift: { ...brandShadow },
+  liftDark: { ...brandShadow },
   primaryText: { ...typography.bodyStrong, color: colors.brandInk },
-  secondary: { height: 50, paddingHorizontal: 20, borderRadius: 999, backgroundColor: colors.surfaceAlt, borderWidth: 1, borderColor: colors.borderStrong, justifyContent: 'center' },
+  secondary: { height: buttonShape.height, paddingHorizontal: 20, borderRadius: buttonShape.radius, ...buttonShape.curve, backgroundColor: colors.surfaceAlt, borderWidth: 1, borderColor: colors.borderStrong, justifyContent: 'center' },
   secondaryText: { ...typography.bodyStrong, color: colors.text },
   // A tab's sections, each in its box, with room between them.
   tabBody: { gap: spacing.xxl, paddingTop: spacing.xl },
@@ -708,14 +709,14 @@ const styleDefinitions = StyleSheet.create({
   weekStats: { flexDirection: 'row', marginTop: spacing.lg, paddingTop: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   weekStat: { flex: 1, gap: 2 },
   weekDivide: { borderLeftWidth: StyleSheet.hairlineWidth, borderLeftColor: colors.border, paddingLeft: spacing.md },
-  weekFigure: { ...font('600'), fontSize: 20, lineHeight: 22, letterSpacing: -0.8, color: colors.text, fontVariant: ['tabular-nums'] },
+  weekFigure: { ...font('600'), fontSize: 20, lineHeight: 22, letterSpacing: -0.5, color: colors.text, fontVariant: ['tabular-nums'] },
   weekLabel: { fontSize: 12, lineHeight: 16, color: colors.textMuted },
   healthRow: { flexDirection: 'row', paddingTop: 14, paddingBottom: 14 },
   healthCell: { flex: 1, gap: 4 },
   healthDivide: { borderLeftWidth: StyleSheet.hairlineWidth, borderLeftColor: colors.border, paddingLeft: spacing.md },
   healthLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   // Health in the page's own ink, not the brand's: it is not a tennis score.
-  healthFigure: { ...font('600'), fontSize: 26, lineHeight: 31, letterSpacing: -1.2, color: colors.text, fontVariant: ['tabular-nums'] },
+  healthFigure: { ...font('600'), fontSize: 26, lineHeight: 31, letterSpacing: -0.7, color: colors.text, fontVariant: ['tabular-nums'] },
   healthUnit: { ...font('500'), fontSize: 14, letterSpacing: 0, color: colors.textMuted },
   healthLabel: { fontSize: 12, lineHeight: 16, color: colors.textMuted },
   eventName: { ...font('500'), fontSize: 16, lineHeight: 21, color: colors.text },
@@ -726,11 +727,11 @@ const styleDefinitions = StyleSheet.create({
   heroTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm, minHeight: 24 },
   eyebrow: { ...typography.caption, letterSpacing: 0.6, textTransform: 'uppercase', color: colors.textMuted },
   heroCount: { flexDirection: 'row', alignItems: 'baseline', gap: 8, marginTop: 6 },
-  heroFigure: { ...font('600'), fontSize: 44, lineHeight: 50, letterSpacing: -1.8, fontVariant: ['tabular-nums'] },
+  heroFigure: { ...font('600'), fontSize: 44, lineHeight: 50, letterSpacing: -1.1, fontVariant: ['tabular-nums'] },
   heroUnit: { ...typography.body, ...font('500'), color: colors.textMuted },
   heroFoot: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: 10, paddingTop: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   heroWords: { flex: 1, minWidth: 0, gap: 3 },
-  heroName: { ...font('600'), fontSize: 19, lineHeight: 24, letterSpacing: -0.4, color: colors.text },
+  heroName: { ...font('600'), fontSize: 19, lineHeight: 24, letterSpacing: -0.2, color: colors.text },
   eventMeta: { ...typography.small, lineHeight: 18, color: colors.textMuted },
   goal: { ...typography.body, lineHeight: 20, color: colors.text },
   goalDone: { color: colors.textMuted },

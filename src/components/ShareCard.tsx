@@ -5,7 +5,7 @@ import { BrandMark } from '@/components/BrandMark';
 
 import { Avatar } from '@/components/ui';
 import type { Post, User } from '@/data/types';
-import { lightColors as brand, fontFamily } from '@/theme';
+import { lightColors as brand, fontFamily, wordmarkFont } from '@/theme';
 import { TextScale } from '@/theme/textScale';
 
 /** One set's score as the author saw it: "7-6(5)" is 7 to 6, the loser's tie-break 5. */
@@ -30,7 +30,7 @@ function Scoreboard({ post, author, u }: { post: Post; author?: User; u: number 
           return (
             <View key={i} style={{ width: 26 * u, flexDirection: 'row', justifyContent: 'center', alignItems: 'flex-start' }}>
               <Text maxFontSizeMultiplier={TextScale.CHROME} style={{ fontFamily: tookSet ? fontFamily.bold : fontFamily.medium, fontWeight: tookSet ? '700' : '500', fontSize: 20 * u, lineHeight: 24 * u, color: tookSet ? 'white' : 'rgba(255,255,255,0.55)', fontVariant: ['tabular-nums'] }}>{score}</Text>
-              {s.tieBreak && !tookSet ? <Text maxFontSizeMultiplier={TextScale.CHROME} style={{ fontFamily: fontFamily.semibold, fontSize: 10 * u, lineHeight: 12 * u, color: 'rgba(255,255,255,0.55)' }}>{s.tieBreak}</Text> : null}
+              {s.tieBreak && !tookSet ? <Text maxFontSizeMultiplier={TextScale.CHROME} style={{ fontFamily: fontFamily.semibold, fontWeight: '600', fontSize: 10 * u, lineHeight: 12 * u, color: 'rgba(255,255,255,0.55)' }}>{s.tieBreak}</Text> : null}
             </View>
           );
         })}
@@ -43,7 +43,7 @@ function Scoreboard({ post, author, u }: { post: Post; author?: User; u: number 
         <View style={{ paddingHorizontal: 9 * u, height: 22 * u, borderRadius: 11 * u, justifyContent: 'center', backgroundColor: match.won ? brand.brand : 'rgba(255,255,255,0.16)' }}>
           <Text maxFontSizeMultiplier={TextScale.CHROME} style={{ fontFamily: fontFamily.bold, fontWeight: '700', fontSize: 12 * u, color: 'white' }}>{match.won ? 'Won' : 'Lost'}</Text>
         </View>
-        <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={{ flex: 1, fontFamily: fontFamily.medium, fontSize: 13 * u, color: 'rgba(255,255,255,0.7)' }}>vs {match.opponentName}{match.surface ? ` · ${match.surface[0].toUpperCase()}${match.surface.slice(1)} court` : ''}</Text>
+        <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={{ flex: 1, fontFamily: fontFamily.medium, fontWeight: '500', fontSize: 13 * u, color: 'rgba(255,255,255,0.7)' }}>vs {match.opponentName}{match.surface ? ` · ${match.surface[0].toUpperCase()}${match.surface.slice(1)} court` : ''}</Text>
       </View>
       {row(author?.name ?? 'Me', true)}
       {row(match.opponentName, false)}
@@ -95,7 +95,7 @@ export function ShareCard({ post, author, width }: { post: Post; author?: User; 
       {/* The lockup, quietly: the mark and the name the way the app and the waitlist set them now (Inter at 600, not the old heavy 800). */}
       <View style={{ position: 'absolute', top: 24 * u, left: 22 * u, flexDirection: 'row', alignItems: 'center', gap: 7 * u, opacity: 0.94 }}>
         <BrandMark size={Math.round(24 * u)} color="#FFFFFF" />
-        <Text maxFontSizeMultiplier={TextScale.CHROME} style={{ fontFamily: fontFamily.semibold, fontWeight: '600', fontSize: 18 * u, letterSpacing: -0.45 * u, color: 'white', textShadowColor: 'rgba(0,0,0,0.25)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 }}>CourtSide</Text>
+        <Text maxFontSizeMultiplier={TextScale.CHROME} style={{ ...wordmarkFont('600'), fontSize: 18 * u, letterSpacing: -0.45 * u, color: 'white', textShadowColor: 'rgba(0,0,0,0.25)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 }}>CourtSide</Text>
       </View>
       <View style={{ position: 'absolute', left: 22 * u, right: 22 * u, bottom: 24 * u, gap: 14 * u }}>
         {post.match?.sets?.length ? <Scoreboard post={post} author={author} u={u} /> : null}
@@ -107,7 +107,7 @@ export function ShareCard({ post, author, width }: { post: Post; author?: User; 
             {author?.handle ? <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={{ fontFamily: fontFamily.regular, fontSize: 12 * u, color: 'rgba(255,255,255,0.7)' }}>@{author.handle} on CourtSide</Text> : null}
           </View>
         </View>
-        <Text maxFontSizeMultiplier={TextScale.CHROME} style={{ fontFamily: fontFamily.medium, fontSize: 11 * u, letterSpacing: 0.2 * u, color: 'rgba(255,255,255,0.6)' }}>courtsidebase.com</Text>
+        <Text maxFontSizeMultiplier={TextScale.CHROME} style={{ fontFamily: fontFamily.medium, fontWeight: '500', fontSize: 11 * u, letterSpacing: 0.2 * u, color: 'rgba(255,255,255,0.6)' }}>courtsidebase.com</Text>
       </View>
     </View>
   );

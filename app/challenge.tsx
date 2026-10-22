@@ -12,7 +12,7 @@ import { goBack } from '@/lib/goBack';
 import { useTagPosting } from '@/lib/uploads';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import { colors, font, radius, spacing, typography } from '@/theme';
+import { colors, font, radius, spacing, typography, buttonShape } from '@/theme';
 
 /** Every entry in this week's challenge, in its standing, with a way to enter. */
 export default function ChallengeScreen() {
@@ -59,7 +59,7 @@ const styleDefinitions = StyleSheet.create({
   eyebrowText: { ...typography.smallStrong, color: colors.brand },
   lead: { ...typography.body, color: colors.textMuted, lineHeight: 22 },
   tag: { ...font('600'), color: colors.text },
-  primary: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 48, borderRadius: radius.pill, backgroundColor: colors.brand },
+  primary: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 48, borderRadius: buttonShape.radius, ...buttonShape.curve, backgroundColor: colors.brand },
   primaryBusy: { opacity: 0.6 },
   primaryText: { ...typography.bodyStrong, color: colors.brandInk },
 });

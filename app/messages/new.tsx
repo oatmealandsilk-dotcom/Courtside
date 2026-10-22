@@ -6,7 +6,8 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { BLOCKED_WORDS_NOTE } from '@/features/hiddenWords/hiddenWords';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
-import { Avatar, EmptyState, Screen } from '@/components/ui';
+import { Avatar, BrandWash, EmptyState, Screen } from '@/components/ui';
+import { brandBoxShadow, brandShadow } from '@/theme/fillMode';
 import { GROUP_CAP, GroupAvatar, chatLockNote, groupLockNote, groupName, isGroupChat, named, othersIn } from '@/features/messages/groups';
 import { LockBadge, LockNote } from '@/features/messages/LockNote';
 import type { User } from '@/data/types';
@@ -14,7 +15,7 @@ import { goBack } from '@/lib/goBack';
 import { useResponsive } from '@/lib/useResponsive';
 import { useApp, type GroupOutcome } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import { colors, font, lift, spacing, typography } from '@/theme';
+import { buttonShape, colors, font, lift, spacing, typography } from '@/theme';
 import { TextScale } from '@/theme/textScale';
 
 
@@ -199,6 +200,7 @@ export default function NewMessage() {
       ) : null}
       {picked.length ? (
         <Pressable accessibilityRole="button" accessibilityState={{ disabled: held, busy }} disabled={held} onPress={() => { void start(); }} style={({ pressed }) => [styles.start, picked.length > 1 && styles.startGroup, held && styles.startHeld, pressed && { opacity: 0.85, transform: [{ scale: 0.98 }] }]}>
+          <BrandWash radius={buttonShape.radius} curve />
           {/* Two or more ticked: the group is the point now, so the button says so with its people. */}
           {picked.length > 1 && !sameGroup ? <Ionicons name="people" size={19} color={colors.brandInk} /> : null}
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.startText}>{picked.length === 1 ? 'Chat' : sameGroup ? 'Open group' : busy ? 'Creating group…' : `Create group · ${picked.length + 1} people`}</Text>
@@ -348,8 +350,8 @@ const styleDefinitions = StyleSheet.create({
   locked: { opacity: 0.45 },
   footer: { position: 'absolute', left: 0, right: 0, bottom: 0, gap: spacing.sm, padding: spacing.lg, paddingBottom: spacing.xl, backgroundColor: colors.bg, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   groupName: { ...typography.body, fontSize: 16, color: colors.text, minHeight: 44, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12, backgroundColor: colors.bgElevated, outlineStyle: 'none' } as object,
-  start: { minHeight: 50, borderRadius: 25, backgroundColor: colors.brand, flexDirection: 'row', gap: spacing.sm, alignItems: 'center', justifyContent: 'center' },
-  startGroup: { boxShadow: '0px 6px 18px rgba(0, 0, 0, 0.16)' },
+  start: { minHeight: 48, borderRadius: buttonShape.radius, ...buttonShape.curve, ...brandShadow, backgroundColor: colors.brand, flexDirection: 'row', gap: spacing.sm, alignItems: 'center', justifyContent: 'center' },
+  startGroup: { boxShadow: brandBoxShadow },
   toPinned: { paddingBottom: spacing.xs },
   // The list under the pinned "To" runs edge to edge, as the rows draw their own room.
   phoneList: { marginHorizontal: -spacing.lg },

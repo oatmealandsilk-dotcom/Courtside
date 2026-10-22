@@ -3,7 +3,10 @@ import { Platform, StyleSheet, View } from 'react-native';
 import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
 
 import { useTheme } from '@/theme/ThemeProvider';
-import { colors } from '@/theme';
+import { buttonShape, colors } from '@/theme';
+
+/** Apple's smooth corner on a wash's clip and rim, to match a parent that has it. */
+const CURVE = buttonShape.curve;
 
 /** `t` of the way from one #RRGGBB colour to another. */
 function mix(a: string, b: string, t: number): string {
@@ -13,12 +16,14 @@ function mix(a: string, b: string, t: number): string {
 }
 
 /**
- * The page's wash, whispered inside a filled brand surface (a primary pill,
- * the create button, a chosen chip): a lighter tone of the fill pooling low
- * on the left and a soft beige high on the right, so a green button has the
- * same gentle depth as the page behind it instead of reading flat. Lay it
- * as the first child; it fills its parent and clips to `radius` itself, so
- * the parent keeps its lift shadow.
+ * The inside of a filled brand surface (a primary pill, the create button,
+ * a chosen chip). A button gets the soft fill (Oct 22, owner: "Do soft"):
+ * the solid fill with a barely-there lighter top edge, on the small plain
+ * shadow in theme/fillMode.ts. A surface that is not a plain button (a green
+ * session box, the stats pill, the activity sheet's round Start) passes
+ * `glow` and keeps the page's wash: a lighter tone of the fill pooling low
+ * on the left and a soft beige high on the right. Lay it as the first child;
+ * it fills its parent and clips to `radius` itself, so the parent keeps its lift.
  */
 /**
  * Each court's fade, tuned so it reads equally lively on its own colour: a
@@ -49,8 +54,16 @@ const ellipse = (cx: number, cy: number, rx: number, ry: number) => (Platform.OS
   ? { cx: 0, cy: 0, r: 1, gradientTransform: `translate(${cx} ${cy}) scale(${rx} ${ry})` }
   : { cx, cy, rx, ry });
 
-export const BrandWash = React.memo(function BrandWash({ radius = 999, strength = 1, base }: {
+export const BrandWash = React.memo(function BrandWash({ radius = 999, strength = 1, base, curve = false, glow = false }: {
   radius?: number;
+  /** Keep the wash (glow and sheen) on a surface that is not a plain button; buttons take the soft fill. */
+  glow?: boolean;
+  /**
+   * Clip with Apple's smooth corner, for a parent that has one (the
+   * Instagram-shaped buttons, buttonShape.curve); a circular clip under a
+   * smooth outline leaves a sliver of sheen at each corner on an iPhone.
+   */
+  curve?: boolean;
   /**
    * How much of the glow and sheen to draw, 0 to 1. A surface with small
    * words across all of it (the player card) takes a whisper of it, so the
@@ -67,8 +80,13 @@ export const BrandWash = React.memo(function BrandWash({ radius = 999, strength 
   const base0 = LOOKS[theme] ?? LOOKS.default;
   const look = strength === 1 ? base0 : { ...base0, glow: base0.glow * strength, sheenAt: base0.sheenAt * strength };
   const light = mix(base ?? colors.brand, look.toward, look.t);
+  if (!glow) {
+    return (
+      <View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderRadius: radius, borderTopWidth: 1, borderColor: 'rgba(255, 255, 255, 0.22)' }, curve && CURVE]} />
+    );
+  }
   return (
-    <View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderRadius: radius, overflow: 'hidden' }]}>
+    <View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderRadius: radius, overflow: 'hidden' }, curve && CURVE]}>
       <Svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
         <Defs>
           <RadialGradient id={`l${id}`} {...ellipse(4, 110, 120, 140)} gradientUnits="userSpaceOnUse">
@@ -84,7 +102,7 @@ export const BrandWash = React.memo(function BrandWash({ radius = 999, strength 
         <Rect x="0" y="0" width="100" height="100" fill={`url(#b${id})`} />
       </Svg>
       {/* A hairline of deeper amber just inside the edge, so the softer fill still holds its shape on the night blue. */}
-      {look.rim ? <View style={[StyleSheet.absoluteFill, { borderRadius: radius, borderWidth: 1, borderColor: look.rim }]} /> : null}
+      {look.rim ? <View style={[StyleSheet.absoluteFill, { borderRadius: radius, borderWidth: 1, borderColor: look.rim }, curve && CURVE]} /> : null}
     </View>
   );
 });
@@ -103,14 +121,14 @@ export const BrandWash = React.memo(function BrandWash({ radius = 999, strength 
  * sessions' row cards on a city court). Lay it as the first child, as
  * BrandWash.
  */
-export const ShirtWash = React.memo(function ShirtWash({ radius = 999, rim, lift = 0 }: { radius?: number; rim?: string | null; lift?: number }) {
+export const ShirtWash = React.memo(function ShirtWash({ radius = 999, rim, lift = 0, curve = false }: { radius?: number; rim?: string | null; lift?: number; curve?: boolean }) {
   const { theme } = useTheme();
   // The court's name in the ids, as above: iOS would not repaint a gradient kept under the same name.
   const id = `${useId().replace(/[^a-zA-Z0-9]/g, '')}shirt${theme.replace(/-/g, '')}${Math.round(lift * 100)}`;
   const top = lift ? mix(colors.cardGlowTop, colors.surface, lift) : colors.cardGlowTop;
   const bottom = lift ? mix(colors.cardGlowBottom, colors.surface, lift) : colors.cardGlowBottom;
   return (
-    <View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderRadius: radius, overflow: 'hidden' }]}>
+    <View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderRadius: radius, overflow: 'hidden' }, curve && CURVE]}>
       <Svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
         <Defs>
           <RadialGradient id={`s${id}`} {...ellipse(106, -6, 84, 76)} gradientUnits="userSpaceOnUse">
@@ -127,7 +145,7 @@ export const ShirtWash = React.memo(function ShirtWash({ radius = 999, rim, lift
         <Rect x="0" y="0" width="100" height="100" fill={`url(#s${id})`} />
         <Rect x="0" y="0" width="100" height="100" fill={`url(#p${id})`} />
       </Svg>
-      {rim ? <View style={[StyleSheet.absoluteFill, { borderRadius: radius, borderWidth: StyleSheet.hairlineWidth, borderColor: rim }]} /> : null}
+      {rim ? <View style={[StyleSheet.absoluteFill, { borderRadius: radius, borderWidth: StyleSheet.hairlineWidth, borderColor: rim }, curve && CURVE]} /> : null}
     </View>
   );
 });

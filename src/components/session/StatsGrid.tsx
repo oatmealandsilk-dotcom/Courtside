@@ -86,5 +86,5 @@ const styleDefinitions = StyleSheet.create({
   row: { flexDirection: 'row', gap: 14, paddingVertical: 12 },
   rowRule: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   cell: { flex: 1, gap: 5, minWidth: 0 },
-  text: { ...font('600'), fontSize: 28, lineHeight: 31, letterSpacing: -1.1, color: colors.text, fontVariant: ['tabular-nums'] },
+  text: { ...font('600'), fontSize: 28, lineHeight: 31, letterSpacing: -0.7, color: colors.text, fontVariant: ['tabular-nums'] },
 });

@@ -234,7 +234,7 @@ export default function AdminLinks() {
 
 const styleDefinitions = StyleSheet.create({
   lead: { ...typography.small, color: colors.textMuted, lineHeight: 20, paddingBottom: spacing.lg },
-  section: { ...typography.caption, color: colors.textFaint, textTransform: 'uppercase', paddingBottom: spacing.sm },
+  section: { ...typography.caption, letterSpacing: 0.3, color: colors.textFaint, textTransform: 'uppercase', paddingBottom: spacing.sm },
   error: { ...typography.small, color: colors.danger, paddingBottom: spacing.md },
   loading: { paddingVertical: spacing.xxl, alignItems: 'center' },
   list: { borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, overflow: 'hidden' },

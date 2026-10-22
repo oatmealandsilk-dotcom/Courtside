@@ -18,7 +18,7 @@ import { goBack } from '@/lib/goBack';
 import { publicRoute } from '@/features/share/publicRoute';
 import { useApp } from '@/store/AppContext';
 import { MAX_GROUPS } from '@/store/feedGroups';
-import { colors, font, lift, radius, spacing, typography } from '@/theme';
+import { colors, font, lift, radius, spacing, typography, buttonShape } from '@/theme';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 
 /*
@@ -299,7 +299,7 @@ const styleDefinitions = StyleSheet.create({
   pillYesText: { color: colors.brandInk },
   more: { padding: 4 },
   // Edit, in the header: plain words in the brand colour.
-  edit: { paddingHorizontal: 12, height: 32, borderRadius: radius.pill, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
+  edit: { paddingHorizontal: 12, height: buttonShape.smallHeight, borderRadius: buttonShape.smallRadius, ...buttonShape.curve, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
   editText: { ...typography.smallStrong, color: colors.brand },
   // Leave: one plain red row at the end, the way a chat group's info page closes.
   leave: { ...lift, marginTop: spacing.xl, height: 50, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface },

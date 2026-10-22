@@ -134,7 +134,7 @@ const styleDefinitions = StyleSheet.create({
   panel: { overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, boxShadow: '0px 6px 18px rgba(20, 30, 24, 0.14)' },
   flat: { boxShadow: 'none' },
   badge: { alignItems: 'center', justifyContent: 'center', backgroundColor: withAlpha(colors.brand, 0.12) },
-  title: { ...font('700'), color: colors.text, letterSpacing: -0.2 },
+  title: { ...font('700'), color: colors.text, letterSpacing: -0.1 },
   sub: { ...font('500'), color: colors.textMuted },
   columns: { alignItems: 'flex-start', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: withAlpha(colors.brand, 0.16) },
   col: { flex: 1, minWidth: 0 },

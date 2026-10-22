@@ -88,7 +88,7 @@ export function StatsPill({ session, hidden = [], onPress, scale = 1, active = f
       {/* The time and the rest sit together with no gap between them, so the
           first dot has the same space either side as the others ("1h 24m · Won · 171 bpm"). */}
       <View style={[styles.row, still ? styles.keep : styles.shrink]}>
-        <Text style={[text, font('700'), { letterSpacing: -0.3 * k }, styles.keep]} numberOfLines={1} maxFontSizeMultiplier={1.2}>{p.time}</Text>
+        <Text style={[text, font('700'), { letterSpacing: -0.2 * k }, styles.keep]} numberOfLines={1} maxFontSizeMultiplier={1.2}>{p.time}</Text>
         {words ? <Text style={[text, { color: 'rgba(255, 255, 255, 0.8)' }, still ? styles.keep : styles.shrink]} numberOfLines={1} ellipsizeMode="clip" maxFontSizeMultiplier={1.2}>{`\u00A0· ${words}`}</Text> : null}
       </View>
       <View style={[styles.divider, { height: 14 * k }]} />
@@ -114,10 +114,10 @@ export function StatsPill({ session, hidden = [], onPress, scale = 1, active = f
     // Frosted glass tinted the theme's colour, its wash faint over it, no shine (Oct 4, owner: option A in the theme's colour).
     ? liquidGlass
       // iOS 26: Apple's glass carrying the theme's colour, the wash faint inside it.
-      ? <View style={[shell, styles.tintEdge]}><GlassFill radius={15 * k} tint={colors.brand} strength={0.4} /><View style={[StyleSheet.absoluteFill, styles.faintWash]}><BrandWash radius={15 * k} /></View>{inner}</View>
+      ? <View style={[shell, styles.tintEdge]}><GlassFill radius={15 * k} tint={colors.brand} strength={0.4} /><View style={[StyleSheet.absoluteFill, styles.faintWash]}><BrandWash radius={15 * k} glow /></View>{inner}</View>
       : Platform.OS === 'ios'
-      ? <BlurView intensity={30} tint="dark" style={[shell, styles.tintEdge, { backgroundColor: withAlpha(colors.brand, 0.4) }]}><View style={[StyleSheet.absoluteFill, styles.faintWash]}><BrandWash radius={15 * k} /></View>{inner}</BlurView>
-      : <View style={[shell, styles.tintEdge, styles.webGlass, { backgroundColor: withAlpha(colors.brand, Platform.OS === 'web' ? 0.46 : 0.5) }]}><View style={[StyleSheet.absoluteFill, styles.faintWash]}><BrandWash radius={15 * k} /></View>{inner}</View>
+      ? <BlurView intensity={30} tint="dark" style={[shell, styles.tintEdge, { backgroundColor: withAlpha(colors.brand, 0.4) }]}><View style={[StyleSheet.absoluteFill, styles.faintWash]}><BrandWash radius={15 * k} glow /></View>{inner}</BlurView>
+      : <View style={[shell, styles.tintEdge, styles.webGlass, { backgroundColor: withAlpha(colors.brand, Platform.OS === 'web' ? 0.46 : 0.5) }]}><View style={[StyleSheet.absoluteFill, styles.faintWash]}><BrandWash radius={15 * k} glow /></View>{inner}</View>
     : Platform.OS === 'ios'
       ? <BlurView intensity={30} tint="dark" style={[shell, styles.iosFill]}>{inner}</BlurView>
       : <View style={[shell, styles.flatFill]}>{inner}</View>;

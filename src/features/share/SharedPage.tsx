@@ -18,7 +18,7 @@ import type { ShareKind, SharePerson, SharePreview, ShareTile } from '@/data/typ
 import { FORMAT_LABEL, hitWhen, levelText } from '@/features/hits/format';
 import { rememberReferrer, rememberShareTarget } from '@/features/invite/referral';
 import { useGateSpace } from '@/lib/useGateSpace';
-import { colors, font, lift, radius, spacing, typography } from '@/theme';
+import { colors, font, lift, radius, spacing, typography, wordmarkFont } from '@/theme';
 
 /**
  * What a link shared outside the app shows someone with no account: the
@@ -320,7 +320,7 @@ const styleDefinitions = StyleSheet.create({
   column: { width: '100%', maxWidth: 480, alignSelf: 'center', gap: spacing.lg },
   bar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: spacing.sm },
   brand: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  wordmark: { fontSize: 20, ...font('700'), color: colors.brand, letterSpacing: -0.6 },
+  wordmark: { fontSize: 20, ...wordmarkFont('700'), color: colors.brand, letterSpacing: -0.6 },
   signIn: { ...typography.bodyStrong, color: colors.brand },
   invited: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', paddingHorizontal: spacing.md, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: colors.brandDim },
   invitedText: { ...typography.smallStrong, color: colors.brand, flexShrink: 1 },
@@ -341,7 +341,7 @@ const styleDefinitions = StyleSheet.create({
   chipStrong: { backgroundColor: colors.brandDim, borderColor: colors.brandDim },
   chipStrongText: { color: colors.brand },
   eyebrowRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  eyebrow: { ...typography.caption, color: colors.brand, textTransform: 'uppercase' },
+  eyebrow: { ...typography.caption, letterSpacing: 0.3, color: colors.brand, textTransform: 'uppercase' },
   hitWhen: { ...typography.display, color: colors.text },
   placeRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: -spacing.xs },
   place: { ...typography.heading, color: colors.text, flexShrink: 1 },

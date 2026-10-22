@@ -214,7 +214,7 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
          </Pressable>
        </React.Fragment>)}
      </View>
-     <View style={styles.buttons}><View style={{ flex: 1 }}><Button label="Edit profile" variant="secondary" onPress={() => router.push('/edit-profile')} full/></View><View style={{ flex: 1 }}><Button label="Share" variant="secondary" onPress={share} full/></View></View>
+     <View style={styles.buttons}><View style={{ flex: 1 }}><Button label="Edit profile" variant="secondary" onPress={() => router.push('/edit-profile')} full size="sm"/></View><View style={{ flex: 1 }}><Button label="Share" variant="secondary" onPress={share} full size="sm"/></View></View>
      {!!shareError && <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta}>{shareError}</Text>}
    </View>
    {/* Your tennis, as the player card's banner: the whole of it opens the Tennis profile, your tennis hub. */}
@@ -332,7 +332,7 @@ function ProfileSkeleton({ name, avatarUrl, seed }: { name?: string; avatarUrl?:
        </View>
      </View>
      <View style={styles.followRow}><Blank w={64} /><Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.followDot}>·</Text><Blank w={64} /></View>
-     <View style={styles.buttons}><View style={{ flex: 1 }}><Button label="Edit profile" variant="secondary" disabled onPress={() => undefined} full/></View><View style={{ flex: 1 }}><Button label="Share" variant="secondary" disabled onPress={() => undefined} full/></View></View>
+     <View style={styles.buttons}><View style={{ flex: 1 }}><Button label="Edit profile" variant="secondary" disabled onPress={() => undefined} full size="sm"/></View><View style={{ flex: 1 }}><Button label="Share" variant="secondary" disabled onPress={() => undefined} full size="sm"/></View></View>
    </View>
    {/* The Tennis profile banner's shape: its heading, the rating, the line under it and three numbers. */}
    <View style={[styles.bannerBlank, { backgroundColor: look.fill, borderColor: look.border, borderWidth: look.dark ? 1 : 0 }]}>

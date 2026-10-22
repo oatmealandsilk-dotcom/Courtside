@@ -175,7 +175,7 @@ export function StartButton({ onStart, onStarted, onPhase, label = 'Start' }: {
           onPress={begin}
           style={[styles.start, { boxShadow: dark ? '0px 10px 24px rgba(0, 0, 0, 0.45)' : `0px 10px 24px ${withAlpha(colors.brand, 0.34)}` }]}
         >
-          <BrandWash />
+          <BrandWash glow />
           <View style={styles.window}>
             <Animated.Text style={[styles.word, startWord]} numberOfLines={1}>{label}</Animated.Text>
             <Animated.Text style={[styles.word, styles.clock, clockWord]} numberOfLines={1} maxFontSizeMultiplier={1.1}>
@@ -194,6 +194,6 @@ const styleDefinitions = StyleSheet.create({
   start: { width: START_SIZE, height: START_SIZE, borderRadius: START_SIZE / 2, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
   // The words' window: Start and the clock share it, each rolling through it, clipped at its edges like a stopwatch's digits.
   window: { width: START_SIZE - 10, height: 26, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
-  word: { ...font('600'), fontSize: 18, lineHeight: 24, letterSpacing: -0.3, color: colors.brandInk, textAlign: 'center' },
-  clock: { position: 'absolute', left: 0, right: 0, top: 1, fontSize: 16, lineHeight: 24, letterSpacing: -0.2, fontVariant: ['tabular-nums'] },
+  word: { ...font('600'), fontSize: 18, lineHeight: 24, letterSpacing: -0.2, color: colors.brandInk, textAlign: 'center' },
+  clock: { position: 'absolute', left: 0, right: 0, top: 1, fontSize: 16, lineHeight: 24, letterSpacing: -0.1, fontVariant: ['tabular-nums'] },
 });

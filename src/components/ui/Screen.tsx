@@ -716,7 +716,7 @@ const styleDefinitions = StyleSheet.create({
   title: { ...typography.display, color: colors.text },
   titleCompact: { ...typography.title, color: colors.text },
   // A long name that would wrap at the usual size: a step down, the same tight tracking, held to its lines.
-  titleCapped: { fontSize: 18, lineHeight: 23, letterSpacing: -0.4 },
+  titleCapped: { fontSize: 18, lineHeight: 23, letterSpacing: -0.2 },
   back: { paddingRight: spacing.xs, paddingVertical: spacing.xs },
   subtitle: { ...typography.small, color: colors.textMuted },
   padded: { paddingHorizontal: spacing.lg },

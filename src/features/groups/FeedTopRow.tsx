@@ -272,7 +272,7 @@ const styleDefinitions = StyleSheet.create({
   clip: { alignSelf: 'stretch', overflow: 'hidden', height: TOP_BAND_HEIGHT },
   words: { position: 'absolute', left: 0, top: 0, bottom: 0, right: PLUS_ZONE, overflow: 'hidden' },
   row: { position: 'absolute', left: 0, top: 0, flexDirection: 'row', alignItems: 'center', gap: GAP, height: TOP_BAND_HEIGHT },
-  word: { fontSize: 16, lineHeight: 22, ...font('600'), letterSpacing: -0.2, maxWidth: WORD_MAX, paddingVertical: 2 },
+  word: { fontSize: 16, lineHeight: 22, ...font('600'), letterSpacing: -0.1, maxWidth: WORD_MAX, paddingVertical: 2 },
   marker: { position: 'absolute', bottom: 3, width: 16, height: 2.5, borderRadius: 2 },
   markerEdge: { boxShadow: '0px 1px 3px rgba(0, 0, 0, 0.35)' },
   wordOn: { ...font('700') },

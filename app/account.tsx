@@ -388,7 +388,7 @@ const styleDefinitions = StyleSheet.create({
   // Top and bottom padding come from useGateSpace, clear of the status bar and the home bar.
   pageScroll: { flexGrow: 1, paddingHorizontal: spacing.xl, justifyContent: 'center' },
   column: { width: '100%', maxWidth: 420, alignSelf: 'center', gap: spacing.xxl },
-  pageTitle: { ...typography.display, fontSize: 32, letterSpacing: -1.1, color: colors.text },
+  pageTitle: { ...typography.display, fontSize: 32, letterSpacing: -0.7, color: colors.text },
   pageLine: { ...typography.body, fontSize: 16, lineHeight: 23, color: colors.textMuted },
   doneIcon: { width: 64, height: 64, borderRadius: 32, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
   notNow: { ...typography.smallStrong, fontSize: 14, color: colors.textMuted },

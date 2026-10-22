@@ -128,7 +128,7 @@ const styleDefinitions = StyleSheet.create({
   },
   cellOn: { boxShadow: 'none' },
   emoji: { fontSize: 22, lineHeight: 28, textAlign: 'center' },
-  letters: { ...font('700'), fontSize: 14, letterSpacing: -0.2 },
+  letters: { ...font('700'), fontSize: 14, letterSpacing: -0.1 },
   card: { ...lift, borderRadius: 18, backgroundColor: colors.surface },
   upload: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, height: 56, paddingHorizontal: spacing.md },
   uploadIcon: { width: 34, height: 34, borderRadius: 11, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },

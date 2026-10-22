@@ -1,3 +1,4 @@
+import { brandShadow } from '@/theme/fillMode';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { BrandMark } from './BrandMark';
 import React from 'react';
@@ -24,7 +25,7 @@ import { useWelcomeNote } from '@/features/welcome/welcomeNote';
 import { unreadChatCount } from '@/features/messages/groupRules';
 import { unseenCount } from '@/features/activity/found';
 import { useInstantsOn, withoutInstantRows } from '@/features/stories/instantsSwitch';
-import { TextScale, colors, pageIsDark, radius, spacing, typography, font, withAlpha } from '@/theme';
+import { TextScale, colors, pageIsDark, radius, spacing, typography, font, withAlpha, wordmarkFont } from '@/theme';
 import { useTourOpen, useTourTarget } from '@/features/tour/tourStore';
 
 /** The screen's pixels per point, read once: the bar's moves are rounded to whole pixels. */
@@ -182,7 +183,7 @@ export function NavBar({ state, navigation }: NavBarProps) {
               const active = item.route === activeRoute;
               return (
                 <React.Fragment key={item.route}>
-                {index === 2 && <View style={[styles.createSlot, styles.createAbove]}><Animated.View><Pressable ref={tourCreate} accessibilityRole="button" accessibilityLabel="Create a post" onPress={openCreate} style={[styles.createButton, pageIsDark() && styles.createButtonDark]}><BrandWash /><Ionicons name="add" size={28} color={colors.brandInk} /></Pressable></Animated.View></View>}
+                {index === 2 && <View style={[styles.createSlot, styles.createAbove]}><Animated.View><Pressable ref={tourCreate} accessibilityRole="button" accessibilityLabel="Create a post" onPress={openCreate} style={styles.createButton}><BrandWash /><Ionicons name="add" size={28} color={colors.brandInk} /></Pressable></Animated.View></View>}
                 <Pressable
                   ref={tourRef(item.route)}
                   onPress={() => navigation.navigate(item.route)}
@@ -367,9 +368,8 @@ const styleDefinitions = StyleSheet.create({
   // The Create box's dim, over the pill (its colour is the box's backdrop's, colors.overlay, read where it is drawn).
   veil: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1, borderRadius: TAB_BAR_H / 2, backgroundColor: colors.overlay },
   veilRim: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, borderRadius: TAB_BAR_H / 2, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.overlay },
-  createButton: { width: 46, height: 46, borderRadius: 23, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center', shadowColor: colors.brand, shadowOpacity: 0.28, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 3 },
+  createButton: { width: 46, height: 46, borderRadius: 23, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center', ...brandShadow },
   // On a dark page the button's own colour as a shadow reads as a glow; a plain dark one just lifts it.
-  createButtonDark: { shadowColor: '#000000', shadowOpacity: 0.4 },
   // The bar floats: a glass pill a little above the bottom edge, the page running on beneath it.
   float: { position: 'absolute', left: 0, right: 0, alignItems: 'center', zIndex: 30 },
   pillWrap: { width: '100%', paddingHorizontal: 14 },
@@ -397,7 +397,7 @@ const styleDefinitions = StyleSheet.create({
   },
   brandRow: { paddingHorizontal: spacing.md, paddingBottom: spacing.xxl },
   brandRowCompact: { paddingHorizontal: 0, alignItems: 'center' },
-  wordmark: { ...typography.title, fontSize: 23, color: colors.text, letterSpacing: -0.8 },
+  wordmark: { ...typography.title, ...wordmarkFont('500'), fontSize: 23, color: colors.text, letterSpacing: -0.8 },
   sidebarItems: { flex: 1, gap: spacing.xs },
   sidebarItem: {
     flexDirection: 'row',

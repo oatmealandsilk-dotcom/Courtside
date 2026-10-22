@@ -220,7 +220,7 @@ function wordHalo(halo: Halo, u: number): TextStyle {
 const styles = StyleSheet.create({
   centre: { alignItems: 'center', justifyContent: 'center' },
   overLabel: { color: '#FFFFFF', ...font('600'), textShadowColor: 'rgba(0,0,0,0.35)', textShadowRadius: 6 },
-  overValue: { color: '#FFFFFF', ...font('700'), letterSpacing: -0.5, textShadowColor: 'rgba(0,0,0,0.35)', textShadowRadius: 8 },
+  overValue: { color: '#FFFFFF', ...font('700'), letterSpacing: -0.3, textShadowColor: 'rgba(0,0,0,0.35)', textShadowRadius: 8 },
   overBrand: { flexDirection: 'row', alignItems: 'center' },
   // Inter ExtraBold: the logo was "too thin" over a photo, Black a tiny bit too thick (Oct 9, owner).
   overWord: { ...font('900') },

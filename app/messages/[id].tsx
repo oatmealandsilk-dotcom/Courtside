@@ -1,3 +1,4 @@
+import { brandShadow } from '@/theme/fillMode';
 import { PRESS_DIM } from '@/theme/press';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { TipBubble } from '@/components/TipBubble';
@@ -2673,7 +2674,7 @@ const styleDefinitions = StyleSheet.create({
   headerUser: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 },
   headerWords: { flex: 1, minWidth: 0, gap: 0 },
   headerNameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, minWidth: 0 },
-  headerName: { ...font('600'), fontSize: 16, lineHeight: 20, letterSpacing: -0.2, color: colors.text },
+  headerName: { ...font('600'), fontSize: 16, lineHeight: 20, letterSpacing: -0.1, color: colors.text },
   headerNameShrink: { flexShrink: 1 },
   headerStatusRow: { flexDirection: 'row', alignItems: 'center', gap: 5, minWidth: 0 },
   headerStatus: { ...font('400'), fontSize: 12, lineHeight: 16, color: colors.textMuted, flexShrink: 1 },
@@ -2934,10 +2935,10 @@ const styleDefinitions = StyleSheet.create({
     backgroundColor: colors.brand,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: colors.brand, shadowOpacity: 0.3, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 2,
+    ...brandShadow,
   },
   // On a dark court the button's own colour as a shadow reads as a glow; the page's own dark shade just lifts it.
-  sendCircleDark: { shadowColor: colors.overlay, shadowOpacity: 0.9 },
+  sendCircleDark: { ...brandShadow },
   recording: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, height: 44, paddingRight: 6, overflow: 'hidden' },
   recLead: { width: 10 },
   recDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.danger },
