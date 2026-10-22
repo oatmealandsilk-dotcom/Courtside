@@ -15,10 +15,16 @@ import { useReducedMotion } from '@/lib/useReducedMotion';
  * the page's side margin (`bleed`), and a slow drag turns the page once it
  * is more than half way.
  */
-export function SectionPager({ index, panes, onIndex, progress, delegateLeft = false, delegateRight = false, slideChannel, fill = false, slideOnTap = false, bleed = 0, keepMounted = false }: {
+export function SectionPager({ index, panes, onIndex, onLand, progress, delegateLeft = false, delegateRight = false, slideChannel, fill = false, slideOnTap = false, bleed = 0, keepMounted = false }: {
   index: number;
   panes: React.ReactNode[];
   onIndex: (next: number) => void;
+  /**
+   * Run once a pane is drawn as the page, before the browser paints it, so a
+   * page that shares one scroller between its panes (Community) moves it to
+   * that pane's own spot without a frame at the wrong place. See the phone's pager.
+   */
+  onLand?: (dest: number) => void;
   progress?: SharedValue<number>;
   depth?: 1 | 2;
   delegateLeft?: boolean;
@@ -95,10 +101,20 @@ export function SectionPager({ index, panes, onIndex, progress, delegateLeft = f
   useLayoutEffect(() => { seek.current(); }, [slideOnTap, index, reduced]);
   // Each pane a page of its own, clipped to itself, with the margin inside.
   const page = (pane: React.ReactNode) => <View style={{ flex: fill ? 1 : undefined, paddingHorizontal: bleed, overflow: 'hidden' }}>{pane}</View>;
-  // keepMounted: the panes built so far. One not built yet is built for its
-  // first swipe the old way (as the swipe's preview), and kept from landing on.
+  // keepMounted: every pane is built from the start (hidden while another is
+  // on show), so the first swipe to one never builds a second copy as the
+  // swipe's preview, only to build the kept one again on landing.
   const built = useRef(new Set<number>());
-  if (keepMounted) built.current.add(drawn);
+  if (keepMounted) panes.forEach((_pane, i) => built.current.add(i));
+  // The page is moved to the landed pane's own spot before it is painted.
+  const landRef = useRef(onLand);
+  landRef.current = onLand;
+  const landedOn = useRef(drawn);
+  useLayoutEffect(() => {
+    if (landedOn.current === drawn) return;
+    landedOn.current = drawn;
+    landRef.current?.(drawn);
+  }, [drawn]);
   // The kept pane a swipe is showing beside the page, from its first move
   // until the surface is still again (null: none, every other pane hidden).
   const [beside, setBeside] = useState<number | null>(null);

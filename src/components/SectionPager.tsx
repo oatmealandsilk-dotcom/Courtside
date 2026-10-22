@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, useWindowDimensions } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Animated, { Easing, runOnJS, useAnimatedReaction, useAnimatedStyle, useSharedValue, withSpring, withTiming, type SharedValue } from 'react-native-reanimated';
+import Animated, { Easing, runOnJS, runOnUI, useAnimatedReaction, useAnimatedStyle, useSharedValue, withSpring, withTiming, type SharedValue } from 'react-native-reanimated';
 
 import { PAGE_GUTTER, activationDistance, claimedDepth, waitsForDeeper } from '@/features/navigation/gestureClaim';
 import { isPageSwipeLocked, setPageDragging, subscribePageSwipeLock } from '@/features/navigation/swipeLock';
@@ -46,10 +46,18 @@ const SETTLE = { stiffness: 420, damping: 41, mass: 1, overshootClamping: true }
  * handed up to the tab row when `delegateLeft` / `delegateRight` say so,
  * otherwise the row gives a little and springs back.
  */
-export function SectionPager({ index, panes, onIndex, progress, depth = 1, delegateLeft = false, delegateRight = false, fill = false, edgeBack = false, bleed = 0 }: {
+export function SectionPager({ index, panes, onIndex, onLand, progress, depth = 1, delegateLeft = false, delegateRight = false, fill = false, edgeBack = false, bleed = 0 }: {
   index: number;
   panes: React.ReactNode[];
   onIndex: (next: number) => void;
+  /**
+   * A worklet run on the animation thread the moment the row comes to rest on
+   * a pane, before anything else changes: a page that shares one scroller
+   * between its panes moves it there in the same frame (Community), so the
+   * pane that came in never jumps on landing. Run for every pane change, a
+   * swipe's, a tapped tab's and one asked for while off screen. Keep it stable.
+   */
+  onLand?: (dest: number) => void;
   /** Written as the finger moves: -1..1 toward the next pane, for an underline to follow. */
   progress?: SharedValue<number>;
   depth?: 1 | 2;
@@ -139,12 +147,19 @@ export function SectionPager({ index, panes, onIndex, progress, depth = 1, deleg
     // From here the underline glides by itself (useTabUnderline).
     driving.value = false;
     base.value = index;
-    if (Math.abs(position.value - index) <= 0.01) return;
+    const landing = onLand;
+    if (Math.abs(position.value - index) <= 0.01) { if (landing) runOnUI(landing)(index); return; }
     if (tabActive) {
       setMoving(true);
-      position.value = withTiming(index, { duration: 240, easing: EASE }, (finished) => { if (finished) runOnJS(setMoving)(false); });
+      const dest = index;
+      position.value = withTiming(dest, { duration: 240, easing: EASE }, (finished) => {
+        if (!finished) return;
+        // Moved first, then the clip shrinks to the new pane (setMoving), so the page never clamps.
+        if (landing) landing(dest);
+        runOnJS(setMoving)(false);
+      });
     }
-    else { position.value = index; if (progress) progress.value = 0; }
+    else { position.value = index; if (progress) progress.value = 0; if (landing) runOnUI(landing)(index); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [index, position]);
 
@@ -166,6 +181,7 @@ export function SectionPager({ index, panes, onIndex, progress, depth = 1, deleg
   // Where the finger came down on the screen itself, for the back-swipe edge.
   const startScreenX = useSharedValue(0);
   const startPosition = useSharedValue(0);
+  const landWorklet = onLand;
   const pan = useMemo(() => {
     // Let go (or taken away by the system): spring to a whole pane, never
     // left part way. A flick goes on one pane the way it was flung; anything
@@ -183,7 +199,12 @@ export function SectionPager({ index, panes, onIndex, progress, depth = 1, deleg
       const from = Math.round(startPosition.value);
       dest = Math.max(0, Math.min(c.last, Math.max(from - 1, Math.min(from + 1, dest))));
       position.value = withSpring(dest, { ...SETTLE, velocity: -velocityX / strideValue.value }, (finished) => {
-        if (finished) runOnJS(land)(dest);
+        if (!finished) return;
+        // The page is moved to the pane's own spot in this same frame; only
+        // then does the clip take the new pane's height (land), so the page
+        // is never clamped to a shorter pane first.
+        if (landWorklet) landWorklet(dest);
+        runOnJS(land)(dest);
       });
     };
     return Gesture.Pan()

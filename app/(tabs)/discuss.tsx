@@ -2,7 +2,7 @@ import { PRESS_DIM } from '@/theme/press';
 import { asTabRoute } from '@/features/navigation/tabFocus';
 import { SectionPager } from '@/components/SectionPager';
 import { PULL_GAP } from '@/lib/pullRefresh';
-import Reanimated, { runOnJS, useAnimatedReaction, useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
+import Reanimated, { runOnJS, scrollTo, useAnimatedReaction, useAnimatedRef, useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 import { useTabUnderline } from '@/features/navigation/useTabUnderline';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -130,17 +130,31 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   const spotPlayers = useSharedValue(pageTop);
   const spotThreads = useSharedValue(pageTop);
   const onShow = useSharedValue(section === 'players' ? 0 : 1);
-  const shownSection = useRef(section);
-  useEffect(() => {
-    const was = shownSection.current;
-    if (was === section) return;
-    (was === 'players' ? spotPlayers : spotThreads).value = Math.max(pageTop, offsetY.value);
-    shownSection.current = section;
-    onShow.value = section === 'players' ? 0 : 1;
-    pageRef.current?.scrollTo({ y: (section === 'players' ? spotPlayers : spotThreads).value, animated: false });
-  }, [section, offsetY, spotPlayers, spotThreads, onShow, pageTop]);
-  const playersHold = useAnimatedStyle(() => ({ transform: [{ translateY: onShow.value === 0 ? 0 : Math.max(0, offsetY.value - spotPlayers.value) }] }));
-  const threadsHold = useAnimatedStyle(() => ({ transform: [{ translateY: onShow.value === 1 ? 0 : Math.max(0, offsetY.value - spotThreads.value) }] }));
+  // The page's scroller, moved from the animation thread on the frame a swipe
+  // lands, and a flag that tells it that move is not a scroll (no bar tuck).
+  const pageList = useAnimatedRef<Reanimated.ScrollView>();
+  const quietScroll = useSharedValue(false);
+  // Run by the pager the moment it rests on a pane (see SectionPager's onLand):
+  // the spot of the section left is kept, and the page goes to the new one's
+  // spot in the same frame its hold comes off, so it lands exactly where the
+  // swipe showed it, with no jump after. It used to happen a few frames later,
+  // after the page had been clipped to the new pane and clamped (Oct 22 video).
+  const landOn = useCallback((dest: number) => {
+    'worklet';
+    if (onShow.value === dest) return;
+    (onShow.value === 0 ? spotPlayers : spotThreads).value = Math.max(pageTop, offsetY.value);
+    onShow.value = dest;
+    const to = (dest === 0 ? spotPlayers : spotThreads).value;
+    if (Math.abs(to - offsetY.value) < 0.5) return;
+    quietScroll.value = true;
+    scrollTo(pageList, 0, to, false);
+  }, [onShow, spotPlayers, spotThreads, offsetY, pageTop, quietScroll, pageList]);
+  // The pane not on show is shifted by the difference between the page and its
+  // own spot, up as well as down, so it slides in exactly where it was left.
+  // (Only ever down, it showed Find Players at its top mid-swipe and then
+  // dropped the page half way down on landing.)
+  const playersHold = useAnimatedStyle(() => ({ transform: [{ translateY: onShow.value === 0 ? 0 : offsetY.value - spotPlayers.value }] }));
+  const threadsHold = useAnimatedStyle(() => ({ transform: [{ translateY: onShow.value === 1 ? 0 : offsetY.value - spotThreads.value }] }));
   // The real tab takes each ask as it hears it, so an old one can't come back
   // if the tab is rebuilt later. A picture of the tab sliding in (previewSection)
   // leaves the ask for the real one.
@@ -850,7 +864,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
       </>);
 
   return (
-    <Screen memoryKey="discuss" scrollRef={pageRef} offsetY={offsetY} wash noteBelow={sectionsHeight} onRefresh={previewSection === undefined && !isDesktopBrowser() ? () => { void actions.loadPinnedQuestion(); return actions.refresh(); } : undefined}
+    <Screen memoryKey="discuss" scrollRef={pageRef} listRef={pageList} quietScroll={quietScroll} offsetY={offsetY} wash noteBelow={sectionsHeight} onRefresh={previewSection === undefined && !isDesktopBrowser() ? () => { void actions.loadPinnedQuestion(); return actions.refresh(); } : undefined}
       title="Community"
       right={isGuest ? <GuestSignIn /> :
         // Bell, chats, search: the same order as Profile (bell, chats, then the page's own button), so both pages match.
@@ -893,6 +907,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
         // The tutorial's slide from the map to the threads plays here, as this pager's own swipe.
         slideChannel={previewSection ? undefined : '/discuss'}
         onIndex={(i) => setSection(i === 0 ? 'players' : 'discussions')}
+        onLand={landOn}
       />
     </Screen>
   );

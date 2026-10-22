@@ -12,7 +12,7 @@ import { KeyboardScrollContext, afterKeyboard, visibleAboveKeyboard, type Measur
 import { KEYBOARD_ROOM, useKeyboardRoom } from '@/lib/keyboardRoom';
 import { TAB_FOR_KEY, subscribeScrollToTop } from '@/features/navigation/scrollToTop';
 import { barCompact } from '@/features/navigation/barShrink';
-import Reanimated, { type SharedValue, cancelAnimation, runOnJS, runOnUI, scrollTo, useAnimatedReaction, useAnimatedRef, useAnimatedScrollHandler, useSharedValue, useAnimatedStyle, withSpring } from 'react-native-reanimated';
+import Reanimated, { type AnimatedRef, type SharedValue, cancelAnimation, runOnJS, runOnUI, scrollTo, useAnimatedReaction, useAnimatedRef, useAnimatedScrollHandler, useSharedValue, useAnimatedStyle, withSpring } from 'react-native-reanimated';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { LAYOUT, useResponsive } from '@/lib/useResponsive';
@@ -85,6 +85,17 @@ interface Props {
   /** Kept up to date with how far down the page is, for a caller that remembers a spot per section. */
   offsetY?: SharedValue<number>;
   /**
+   * The scroller again, for a caller that moves it from the animation thread
+   * (Community switching sections on the frame a swipe lands).
+   */
+  listRef?: AnimatedRef<Reanimated.ScrollView>;
+  /**
+   * Set just before the caller moves the page by code (a section switch): the
+   * move that follows is not a scroll, so it never tucks the tab bar, and it
+   * is remembered as where the page now is.
+   */
+  quietScroll?: SharedValue<boolean>;
+  /**
    * Pull down past the top to run this; a small "Updated" note confirms it.
    * Giving back `false` means it did not work, and then there is no note.
    */
@@ -151,6 +162,8 @@ const ScreenBody = React.memo(function ScreenBody({
   memoryKey,
   scrollRef,
   offsetY,
+  listRef,
+  quietScroll,
   onRefresh,
   wash = true,
   bar = true,
@@ -403,6 +416,8 @@ const ScreenBody = React.memo(function ScreenBody({
       // The first report is just where the page already sat (a tab switch
       // restoring its place): nothing to react to.
       if (lastY.value < 0) { lastY.value = y; return; }
+      // A move made by code (a section switch) is not a scroll: the bar stays as it is.
+      if (quietScroll?.value) { quietScroll.value = false; lastY.value = y; runOnJS(remember)(y); return; }
       const dy = y - lastY.value;
       lastY.value = y;
       // Only a real move counts, in either direction; the bar carries on from wherever it is.
@@ -607,7 +622,7 @@ const ScreenBody = React.memo(function ScreenBody({
           onLayout={Platform.OS === 'web' ? (e) => { washFrame.current.y = e.nativeEvent.layout.y; } : undefined}
         >
         <Reanimated.ScrollView
-          ref={(node: unknown) => { list(node as never); scroller.current = node as unknown as ScrollView | null; if (scrollRef) scrollRef.current = node as unknown as ScrollView | null; }}
+          ref={(node: unknown) => { list(node as never); listRef?.(node as never); scroller.current = node as unknown as ScrollView | null; if (scrollRef) scrollRef.current = node as unknown as ScrollView | null; }}
           style={styles.flex}
           contentContainerStyle={[styles.scrollContent, verticalOnlyTouch, strip > 0 && viewH > 0 ? { minHeight: viewH + strip } : null]}
           onLayout={(e) => { const h = Math.round(e.nativeEvent.layout.height); if (h > 0 && h !== viewH) setViewH(h); }}
