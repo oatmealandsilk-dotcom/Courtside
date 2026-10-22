@@ -1,5 +1,5 @@
 import React, { useId } from 'react';
-import { Platform, StyleSheet, View } from 'react-native';
+import { Platform, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import Svg, { ClipPath, Defs, Image as SvgImage, Path, Text as SvgText } from 'react-native-svg';
 
@@ -48,11 +48,15 @@ export {
  * of a colour that might not match. It keeps its first initial, in the part
  * that shows. With one other person left it is just their face, and with
  * nobody else a plain people mark.
+ *
+ * `quiet` (the Send to sheet only): the faces take Avatar's quiet tones, and
+ * two people are Instagram's group face, two equal faces corner to corner with
+ * the front one ringed in the page colour.
  */
-export function GroupAvatar({ people, size, photoUrl, name }: { people: User[]; size: number; photoUrl?: string; name?: string }) {
+export function GroupAvatar({ people, size, photoUrl, name, quiet = false }: { people: User[]; size: number; photoUrl?: string; name?: string; quiet?: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
   const clipId = `gbite${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
-  if (photoUrl) return <Avatar name={name ?? 'Group'} seed={photoUrl} uri={photoUrl} size={size} />;
+  if (photoUrl) return <Avatar name={name ?? 'Group'} seed={photoUrl} uri={photoUrl} size={size} quiet={quiet} />;
   const [a, b] = people;
   if (!a) {
     return (
@@ -61,7 +65,30 @@ export function GroupAvatar({ people, size, photoUrl, name }: { people: User[]; 
       </View>
     );
   }
-  if (!b) return <Avatar name={a.name} seed={a.avatarSeed} uri={a.avatarUrl} size={size} />;
+  if (!b) return <Avatar name={a.name} seed={a.avatarSeed} uri={a.avatarUrl} size={size} quiet={quiet} />;
+  if (quiet) {
+    const small = Math.round(size * 0.68);
+    const ringW = 2;
+    const type = Math.round(small * 0.36);
+    // The back face's first letter sits up and to the left of its middle, in the part that shows.
+    const at = small / 2 - small * 0.08;
+    const box = type * 1.4;
+    return (
+      <View style={{ width: size, height: size }} accessible={false}>
+        <View style={styles.back}>
+          <Avatar name={b.name} seed={b.avatarSeed} uri={b.avatarUrl} size={small} plain quiet />
+          {b.avatarUrl ? null : (
+            <View style={{ position: 'absolute', left: at - box / 2, top: at - box / 2, width: box, height: box, alignItems: 'center', justifyContent: 'center' }}>
+              <Text maxFontSizeMultiplier={1} style={{ ...font('500'), fontSize: type, color: colors.text }}>{b.name.trim()[0]?.toUpperCase() ?? ''}</Text>
+            </View>
+          )}
+        </View>
+        <View style={[styles.front, { width: small, height: small, borderRadius: small / 2, padding: ringW, backgroundColor: colors.bg }]}>
+          <Avatar name={a.name} seed={a.avatarSeed} uri={a.avatarUrl} size={small - ringW * 2} quiet />
+        </View>
+      </View>
+    );
+  }
   const small = Math.round(size * 0.66);
   const room = Math.max(1.5, size / 22);
   const shape = bitten(small / 2, size - small / 2, small / 2 + room);
