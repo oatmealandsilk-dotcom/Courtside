@@ -88,7 +88,7 @@ type Near = FeedGroup & { near: boolean };
 const allDiscoverGroups: Near[] = [
   { ...wakeWed, near: true },
   { ...millbrook, near: true },
-  { id: 'g-satmixed', name: 'Sat mixed · Wake Forest', look: { color: 'hard' }, description: 'Mixed doubles, new partner every set.', ask: false, near: true, createdAt: isoHoursAgo(24 * 18), members: crew('u-priya', 3, 9), requests: [] },
+  { id: 'g-satmixed', name: 'Wake Forest Sat mixed', look: { color: 'hard' }, description: 'Mixed doubles, new partner every set.', ask: false, near: true, createdAt: isoHoursAgo(24 * 18), members: crew('u-priya', 3, 9), requests: [] },
   { id: 'g-pullen', name: 'Pullen early hitters', look: { color: 'gold', ...photo('pullen') }, description: 'Rallies before work, some sets on Fridays.', ask: false, near: false, createdAt: isoHoursAgo(24 * 35), members: crew('u-marcus', 9, 8), requests: [] },
   { id: 'g-ncsu', name: 'NC State club tennis alumni', look: { color: 'red', ...photo('ncsu') }, description: 'Played club at State? Sunday singles and doubles.', ask: true, near: false, createdAt: isoHoursAgo(24 * 90), members: crew('u-theo', 0, 31), requests: [] },
   { id: 'g-lakelynn', name: 'Lake Lynn singles', look: { color: 'grass' }, description: 'Looking for a regular singles partner? Say when you can play.', ask: false, near: false, createdAt: isoHoursAgo(24 * 5), members: crew('u-omar', 14, 6), requests: [] },

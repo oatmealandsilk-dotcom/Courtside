@@ -252,7 +252,7 @@ function HitBadge() {
   const styles = useThemedStyles(styleDefinitions);
   return (
     <View style={styles.hitBadge}>
-      <HitGlyph size={10} color={colors.brandInk} />
+      <HitGlyph size={8} color={colors.brandInk} />
     </View>
   );
 }
@@ -310,7 +310,7 @@ function HitNote({ toast, hide }: { toast: ToastMessage; hide: (how?: ToastClose
             style={[styles.noteInfo, styles.noteInfoSlim]}
           >
             <View>
-              <Avatar name={person.name} seed={person.seed} uri={person.uri} size={32} />
+              <Avatar name={person.name} seed={person.seed} uri={person.uri} size={34} />
               <HitBadge />
             </View>
             <View style={styles.words}>
@@ -421,7 +421,8 @@ const styleDefinitions = StyleSheet.create({
   fillSlim: { minHeight: 32, borderRadius: buttonShape.smallRadius, ...buttonShape.curve },
   noteTitle: { ...typography.bodyStrong, fontSize: 14, color: colors.text, letterSpacing: -0.1 },
   noteBody: { ...typography.small, fontSize: 12, color: colors.textMuted, marginTop: 1 },
-  hitBadge: { position: 'absolute', right: -3, bottom: -3, width: 18, height: 18, borderRadius: 9, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.surface },
+  // Small and out past the corner, so it never sits on the second initial ("MO" for Mira, Oct 22).
+  hitBadge: { position: 'absolute', right: -6, bottom: -6, width: 16, height: 16, borderRadius: 8, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.surface },
   fill: { minHeight: 34, paddingHorizontal: 14, borderRadius: buttonShape.smallRadius, ...buttonShape.curve, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
   fillPressed: { opacity: 0.75 },
   fillLabel: { ...typography.smallStrong, color: colors.brandInk, letterSpacing: -0.1 },
