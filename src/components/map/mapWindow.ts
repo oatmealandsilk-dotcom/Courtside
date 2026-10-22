@@ -52,7 +52,7 @@ export const CLOSE_BEZIER: [number, number, number, number] = [0.2, 0.1, 0.15, 1
 /** Into the open, the pins change from the card's quiet ones to the full map's, and it takes touches: this far open (about 0.14 s in, the zoom well under way). */
 export const FULL_AT = 0.85;
 /** Into a close, the pins go back to the card's (the window most of the way down), their fades done before the hand-over. */
-export const PINS_CARD_AT_MS = 150;
+export const PINS_CARD_AT_MS = 90;
 /** A swipe's speed handed on to the close, at most this much of the way a second (more would overshoot a no-bounce spring). */
 export const MAX_FLING = 8;
 

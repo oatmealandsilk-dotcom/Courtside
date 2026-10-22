@@ -33,6 +33,8 @@ const MOUNT_ANYWAY_MS = 4000;
 const STALE_MS = 5 * 60 * 1000;
 /** After the phone asks for memory back, the window waits this long before it is made again. */
 const MEMORY_REST_MS = 30 * 1000;
+/** How long a pin takes to fade in or out (MAP_PIN_CSS's cs-out and cs-in, with a frame to spare). */
+const PIN_FADE_MS = 280;
 
 /**
  * The full map as a window over the tabs (mapWindow explains the idea). Made
@@ -174,9 +176,13 @@ function LayerBody({ me }: { me: User }) {
   const clearTimers = () => { timers.current.forEach(clearTimeout); timers.current = []; };
   const closeStarted = useRef(0);
   // Most of the way open: the full map's pins (one build, mid-zoom) and touches, in one go.
+  const fullNow = useRef(false);
   const goFull = useCallback(() => {
     const st = layerState();
     if (st !== 'opening' && st !== 'open') return;
+    // Once per open (the frame-by-frame look and the timer both ask): no extra redraws.
+    if (fullNow.current) return;
+    fullNow.current = true;
     setMode('full');
     setTouchable(true);
     handle.current?.setInteractive(true);
@@ -206,8 +212,10 @@ function LayerBody({ me }: { me: User }) {
       setMode('card');
       setLayerState('ready');
     };
-    // Only while the camera is still easing into the card's view (it is timed to land with the window): at most 150 ms.
-    const left = Math.min(150, Math.max(0, CAMERA_CLOSE_MS - (Date.now() - closeStarted.current)));
+    // Only while the camera is still easing into the card's view (it is timed to land with the window), or the full map's
+    // pins are still fading into the card's: at most 150 ms.
+    const since = Date.now() - closeStarted.current;
+    const left = Math.min(150, Math.max(0, CAMERA_CLOSE_MS - since, PINS_CARD_AT_MS + PIN_FADE_MS - since));
     if (left > 0 && !dismissed) setTimeout(finish, left); else finish();
   }, []);
 
@@ -218,15 +226,22 @@ function LayerBody({ me }: { me: User }) {
     const wasClosing = layerState() === 'closing';
     const r = { x: rect.x - origin.current.x, y: rect.y - origin.current.y, w: rect.w, h: rect.h };
     clearTimers();
+    fullNow.current = false;
     // One redraw: the state and which card it opens from.
     setLayerState('opening');
     setSource(src);
     const cur = parkedNow.current;
     if (!wasClosing && cur && (cur.center.lat !== c.center.lat || cur.center.lng !== c.center.lng)) h.jump(c.center, CARD_ZOOM);
     const t = h.openTarget();
-    h.ease(t.center, t.zoom, CAMERA_OPEN_MS, OPEN_BEZIER);
-    // Place names come in under the card's own words as they fade (the city's name hands over in place).
-    h.labels(true, 260, 40);
+    // The zoom starts with the window's first step, never a frame before it (frame one is exactly the card). In a browser the
+    // window's spring takes its first step on the next frame; the phone's map is a frame or two away anyway.
+    const zoom = () => {
+      if (layerState() !== 'opening') return;
+      h.ease(t.center, t.zoom, CAMERA_OPEN_MS, OPEN_BEZIER);
+      // Place names come in under the card's own words as they fade (the city's name hands over in place).
+      h.labels(true, 260, 40);
+    };
+    if (Platform.OS === 'web') requestAnimationFrame(zoom); else zoom();
     // Should the frame-by-frame look miss it, touches come anyway.
     timers.current.push(setTimeout(goFull, 300));
     if (Platform.OS === 'web') {
@@ -257,6 +272,7 @@ function LayerBody({ me }: { me: User }) {
     setLayerState('closing');
     setSettled(false);
     setTouchable(false);
+    fullNow.current = false;
     const h = handle.current;
     h?.setInteractive(false);
     h?.labels(false, 200, 0);
@@ -270,7 +286,9 @@ function LayerBody({ me }: { me: User }) {
     timers.current.push(setTimeout(() => { if (layerState() === 'closing') setMode('card'); }, PINS_CARD_AT_MS));
     // The card cannot move while the window is over it, so the close starts now, toward where the card was when it opened.
     const known = cardRect.w.value > 0 && cardRect.h.value > 0;
-    if (known && c) h?.ease(c.center, CARD_ZOOM, CAMERA_CLOSE_MS, CLOSE_BEZIER);
+    // With the window's first step (in a browser, the next frame), as on the way open.
+    const shrink = () => { if (c && layerState() === 'closing') h?.ease(c.center, CARD_ZOOM, CAMERA_CLOSE_MS, CLOSE_BEZIER); };
+    if (known) { if (Platform.OS === 'web' && !fling?.moving) requestAnimationFrame(shrink); else shrink(); }
     const v = Math.max(0, fling?.v ?? 0);
     const onY = fling?.axis !== 'x';
     if (known && !fling?.moving) runOnUI(startClose)(v, onY);
@@ -280,7 +298,7 @@ function LayerBody({ me }: { me: User }) {
       const r = rect ? { x: rect.x - origin.current.x, y: rect.y - origin.current.y, w: rect.w, h: rect.h } : null;
       const seen = !!r && r.y + r.h > 0 && r.y < box.h.value && r.x + r.w > 0 && r.x < box.w.value;
       if (r && seen) {
-        if (!known) { h?.ease(c!.center, CARD_ZOOM, CAMERA_CLOSE_MS, CLOSE_BEZIER); }
+        if (!known) shrink();
         runOnUI((x: number, y: number, w: number, hh: number, start: boolean, fv: number, axisY: boolean) => {
           'worklet';
           const off = Math.abs(cardRect.x.value - x) + Math.abs(cardRect.y.value - y) + Math.abs(cardRect.w.value - w) + Math.abs(cardRect.h.value - hh);
@@ -439,13 +457,13 @@ function LayerBody({ me }: { me: User }) {
     return { width: f.W, height: f.H, transform: [{ translateX: f.w / 2 - f.W / 2 }, { translateY: f.h / 2 - f.H / 2 }, { scale: s }] };
   });
   // The card's own words, drawn over the map's middle as it leaves the card (so the city's name stays over the city) and
-  // fading out smoothly over the first half of the open, about six frames at 60 Hz, as the map's own place names come in.
+  // fading out smoothly (at most a quarter a frame) as the map's own place names come in under them.
   const replicaStyle = useAnimatedStyle(() => {
     const f = frame(LAYER);
     const p = openness(LAYER);
     const s = cardScale.value || 1;
     const w = cardRect.w.value / s, h = cardRect.h.value / s;
-    const t = Math.min(1, p / 0.55);
+    const t = Math.min(1, p / 0.9);
     return {
       opacity: 1 - t * t * (3 - 2 * t),
       width: w,
@@ -463,8 +481,15 @@ function LayerBody({ me }: { me: User }) {
     mode, parked, settled, handle, back, reset, topStyle, bottomStyle, topGesture, onPainted, onWarm, onReboot,
   }), [mode, parked, settled, topStyle, bottomStyle, topGesture, onPainted, onWarm, onReboot]);
 
+  // In a browser, "none" on the window does not stop the map's own canvas under it taking a tap (it says "auto" itself):
+  // until the window takes touches, the whole of it is inert, so a tap mid-close reaches the card and opens it again.
+  const windowRef = useRef<View | null>(null);
+  useEffect(() => {
+    const node = windowRef.current as unknown as { inert?: boolean } | null;
+    if (web && node) node.inert = !touchable;
+  }, [touchable, web]);
   const windowView = (
-    <Reanimated.View pointerEvents={touchable ? 'box-none' : 'none'} style={[styles.window, windowStyle]}>
+    <Reanimated.View ref={windowRef} pointerEvents={touchable ? 'box-none' : 'none'} style={[styles.window, windowStyle]}>
       <Reanimated.View pointerEvents="box-none" style={[styles.content, contentStyle]}>
         <NearbyMap
           expanded
