@@ -32,7 +32,7 @@ const PRACTICE: SessionDetail = { focus: 'Practice', minutes: 95, drills: ['Cros
 function Specimen({ title, children }: { title: string; children: React.ReactNode }) {
   const styles = useThemedStyles(styleDefinitions);
   return (
-    <View style={styles.block}>
+    <View testID="sig-spec" style={styles.block}>
       <Text style={styles.label}>{title}</Text>
       {children}
     </View>
