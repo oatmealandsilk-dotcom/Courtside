@@ -14,6 +14,9 @@ import { MOMENTS, MOMENT_H, MOMENT_W, Moment } from './Moments';
 
 /** From this width up (a desktop, a tablet) everything is one centred column, rather than the buttons sitting at the foot of a tall window. */
 const WIDE = 768;
+/** The moment last shown, so coming back from the form lands on it again. */
+let lastIndex = 0;
+
 /** How long each moment stays before the next. */
 const HOLD_MS = 3400;
 
@@ -92,7 +95,9 @@ export function Welcome({ onCreate, onLogIn, still = false }: { onCreate: () => 
   const wide = width >= WIDE;
   const reduced = useReducedMotion();
 
-  const [index, setIndex] = useState(0);
+  // Back from the form, the moment they left on.
+  const [index, setIndex] = useState(() => (still ? lastIndex : 0));
+  lastIndex = index;
   const [back, setBack] = useState(false);
   const [held, setHeld] = useState(false);
   // Bumped by a swipe or a dot, so the wait for the next moment starts again from there.
@@ -158,9 +163,12 @@ export function Welcome({ onCreate, onLogIn, still = false }: { onCreate: () => 
       {room ? (
         // Laid over the stage rather than in it, so the box's own size never pushes the stage taller than its room.
         <View pointerEvents="none" style={{ position: 'absolute', left: (room.width - MOMENT_W) / 2, top: (room.height - MOMENT_H) / 2, width: MOMENT_W, height: MOMENT_H, transform: [{ scale }] }}>
-          <Animated.View key={index} entering={entering} exiting={leaving} style={StyleSheet.absoluteFill}>
-            <Moment index={index} />
-          </Animated.View>
+          {/* Drawn once the stage is measured: back from the form, that first moment shows as it was (its faces don't pop in again). */}
+          <LayoutAnimationConfig skipEntering={still}>
+            <Animated.View key={index} entering={entering} exiting={leaving} style={StyleSheet.absoluteFill}>
+              <Moment index={index} />
+            </Animated.View>
+          </LayoutAnimationConfig>
         </View>
       ) : null}
     </View>
