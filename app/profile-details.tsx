@@ -14,6 +14,7 @@ import { Duration } from '@/components/session/Duration';
 import { PlayerCard, Swatch, upcoming } from '@/components/tennis/PlayerCard';
 import { AddRow, Box, Chip, DateTile, EmptyRow, MedalGrid, NextMedal, Row, SectionHead, Summary, Tile } from '@/components/tennis/ProfileParts';
 import { PIN_GAP, ProfileTabs } from '@/components/tennis/ProfileTabs';
+import { SectionPager } from '@/components/SectionPager';
 import { WeekBars } from '@/components/tennis/WeekBars';
 import { Tappable } from '@/components/Tappable';
 import { BrandWash, EmptyState, Screen } from '@/components/ui';
@@ -24,7 +25,8 @@ import { firstName, peopleText, peopleWords } from '@/features/activity/sessionT
 import { canScore } from '@/features/activity/score';
 import { useTennisFlags } from '@/features/activity/useTennisFlags';
 import { isTennisActivity, workoutIcon } from '@/features/activity/workouts';
-import { type ProfileTab, useProfileTab } from '@/features/players/profileTab';
+import { PROFILE_TABS, type ProfileTab, useProfileTab } from '@/features/players/profileTab';
+import { useTabUnderline } from '@/features/navigation/useTabUnderline';
 import { dayLabel, dayNumbers, daysUntil, eventDate, newestFirst, shortDate, shortLength, surfaceSlot, tournamentName, weekDays, weekNumbers, weekdayDate } from '@/features/players/tennisProfile';
 import { localDay } from '@/features/practice/stats';
 import { wrappedYear } from '@/features/wrapped/yearInTennis';
@@ -116,6 +118,9 @@ export default function TennisProfile() {
 function Mine({ user, offsetY, scrollRef }: { user: User; offsetY: SharedValue<number>; scrollRef: React.MutableRefObject<ScrollView | null> }) {
   const styles = useThemedStyles(styleDefinitions);
   const { tab, choose, ready } = useProfileTab(user.id);
+  const tabIndex = Math.max(0, PROFILE_TABS.findIndex((t) => t.value === tab));
+  const [stride, setStride] = useState(0);
+  const line = useTabUnderline(tabIndex, PROFILE_TABS.length, stride);
   // Where the tabs sit on the page, once laid out.
   const tabsAt = useRef<number | null>(null);
   const pick = (next: ProfileTab) => {
@@ -145,8 +150,20 @@ function Mine({ user, offsetY, scrollRef }: { user: User; offsetY: SharedValue<n
           </View>
         </Tappable>
       </View>
-      <ProfileTabs value={ready ? tab : null} onChange={pick} offsetY={offsetY} onPlaced={(y) => { tabsAt.current = y; }} />
-      {!ready ? null : tab === 'activity' ? <ActivityTab user={user} /> : tab === 'health' ? <HealthTab user={user} /> : <GameTab user={user} />}
+      <ProfileTabs value={ready ? tab : null} onChange={pick} offsetY={offsetY} onPlaced={(y) => { tabsAt.current = y; }} pillStyle={line.style} onStride={setStride} />
+      {/* Activity, Health and Game side by side, as Profile's sections: a swipe slides between
+          them and a tap glides, the raised pill riding along (Oct 22), instead of the page swapping in one frame. */}
+      {!ready ? null : (
+        <SectionPager
+          index={tabIndex}
+          panes={[<ActivityTab key="activity" user={user} />, <HealthTab key="health" user={user} />, <GameTab key="game" user={user} />]}
+          progress={line.progress}
+          onIndex={(i) => choose(PROFILE_TABS[i].value)}
+          edgeBack
+          slideOnTap
+          bleed={spacing.lg}
+        />
+      )}
     </>
   );
 }
