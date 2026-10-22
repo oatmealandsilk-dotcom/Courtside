@@ -288,7 +288,8 @@ export default function CoachQuestionDetail() {
         </View>
       ) : null}
 
-      {removed ? null : iAmCoach ? (
+      {/* A coach does not answer their own question (nor is pitched to apply on it). */}
+      {removed || (iAmCoach && mine) ? null : iAmCoach ? (
         <View style={styles.composer}>
           <Field
             label="Your answer"

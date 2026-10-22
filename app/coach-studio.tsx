@@ -5,6 +5,7 @@ import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import Animated, { useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { useReducedMotion } from '@/lib/useReducedMotion';
+import { useStillLoading } from '@/lib/useStillLoading';
 
 import { Button, Chip, EmptyState, Field, Screen, Toggle, SegmentedControl } from '@/components/ui';
 import { BrandWash } from '@/components/ui/BrandWash';
@@ -56,7 +57,9 @@ const yearsNumber = (text: string) => Math.max(0, Math.min(70, Number(text) || 0
 export default function CoachStudio() {
   const styles = useThemedStyles(styleDefinitions);
   const { stripe: cameBack } = useLocalSearchParams<{ stripe?: string }>();
-  const { coaches, coachingRequests, coachQuestions, currentUserId, currentUser, actions } = useApp();
+  const { coaches, coachingRequests, coachQuestions, currentUserId, currentUser, actions, error: loadError } = useApp();
+  // Opened cold (back from Stripe, a link): wait for the account before pitching the application.
+  const loading = useStillLoading() && !loadError;
   const payments = usePayments();
   const coach = coaches.find((c) => c.userId === currentUserId);
 
@@ -79,6 +82,8 @@ export default function CoachStudio() {
 
   // One place for a coach: what is waiting (paid bookings, free questions) and their page.
   const [tab, setTab] = useState<'bookings' | 'questions' | 'page' | null>(null);
+  // The tab it opens on is picked once, so handling the last waiting item does not switch tabs underneath.
+  const firstTab = useRef<'bookings' | 'questions' | 'page' | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   // What went wrong, said under the part it went wrong in.
@@ -122,8 +127,12 @@ export default function CoachStudio() {
     return (
       // The same scroller as the studio below: this page can draw first, before the coach has loaded, and the scroller is kept.
       <Screen title="Coach studio" compactTitle onBack={() => goBack()} scrollRef={scrollRef}>
-        <EmptyState icon="ribbon-outline" title="For approved coaches" body="Coaches on CourtSide are checked by hand. Apply, and once you are approved your studio opens here." />
-        {!currentUser?.isCoach ? <Button label="Apply to coach" onPress={() => router.push('/coach-apply')} full /> : null}
+        {loading ? <View style={styles.wait}><CourtSpinner size={28} /></View> : (
+          <>
+            <EmptyState icon="ribbon-outline" title="For approved coaches" body="Coaches on CourtSide are checked by hand. Apply, and once you are approved your studio opens here." />
+            {!currentUser?.isCoach ? <Button label="Apply to coach" onPress={() => router.push('/coach-apply')} full /> : null}
+          </>
+        )}
       </Screen>
     );
   }
@@ -206,9 +215,10 @@ export default function CoachStudio() {
   const errorFor = (key: string) => (error?.key === key ? <Text style={styles.error}>{error.message}</Text> : null);
 
   const openCount = openBookingCount(coach, coachingRequests, currentUserId);
-  const waitingCount = waitingQuestionCount(coachQuestions);
+  const waitingCount = waitingQuestionCount(coachQuestions, currentUserId);
   // Opens on whatever is waiting; with nothing waiting, on the page itself.
-  const shownTab = tab ?? (openCount ? 'bookings' : waitingCount ? 'questions' : 'page');
+  if (firstTab.current === null) firstTab.current = openCount ? 'bookings' : waitingCount ? 'questions' : 'page';
+  const shownTab = tab ?? firstTab.current;
 
   // The service editor: in place of the card being edited, or under the list for a new one.
   const editing = !!draft && coach.services.some((s) => s.id === draft.id);
@@ -228,7 +238,7 @@ export default function CoachStudio() {
             : `You receive ${money(keeps)}. CourtSide keeps ${payments.feePercent}%, which covers Stripe’s card fee.`}
         </Text>
       </View>
-      <Text style={styles.label}>Answered within</Text>
+      <Text style={styles.label}>{draft.kind === 'live-session' ? 'Replies within' : 'Answered within'}</Text>
       <Options value={draft.turnaroundHours} options={TURNAROUNDS} onChange={(h) => setDraft({ ...draft, turnaroundHours: h })} label={draft.kind === 'live-session' ? 'Replies within' : 'Answered within'} />
       <View style={styles.toggleRow}>
         <View style={styles.rowWords}>
@@ -371,7 +381,7 @@ export default function CoachStudio() {
                 </Pressable>
               );
             })}
-            {coach.services.length ? null : <Text style={[styles.muted, styles.emptyRow]}>Nothing yet. Most coaches start with one video review and one written answer.</Text>}
+            {coach.services.length ? null : <Text style={[styles.muted, styles.emptyRow]}>Nothing yet. Add a live lesson players can book.</Text>}
             {draft && !editing ? <View style={styles.line}>{editor}</View> : null}
             {draft ? null : (
               <Pressable accessibilityRole="button" onPress={() => setDraft(blank())} style={({ pressed }) => [styles.add, styles.line, pressed && styles.rowPressed]}>
@@ -513,6 +523,7 @@ function SaveButton({ state, onPress }: { state: SaveState; onPress: () => void 
 }
 
 const styleDefinitions = StyleSheet.create({
+  wait: { paddingVertical: 60, alignItems: 'center' },
   card: { ...lift, borderRadius: 20, backgroundColor: colors.surface, overflow: 'hidden' },
   cardTitle: { ...typography.heading, color: colors.text },
   line: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },

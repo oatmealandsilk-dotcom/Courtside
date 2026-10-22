@@ -23,9 +23,10 @@ export default function CoachInbox() {
 /** Free questions from players, unanswered first: this page and the studio's Questions tab. */
 export function QuestionsPanel() {
   const styles = useThemedStyles(styleDefinitions);
-  const { coachQuestions, users } = useApp();
+  const { coachQuestions, users, currentUserId } = useApp();
+  // A coach's own question is not work for them.
   const list = [...coachQuestions]
-    .filter((q) => !q.resolved && !q.removed)
+    .filter((q) => q.authorId !== currentUserId && !q.resolved && !q.removed)
     .sort((a, b) => (a.replyIds.length - b.replyIds.length) || Date.parse(b.createdAt) - Date.parse(a.createdAt));
   return (
     <>

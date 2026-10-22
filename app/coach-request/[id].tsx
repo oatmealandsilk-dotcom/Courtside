@@ -24,7 +24,7 @@ import { colors, font, radius, spacing, typography } from '@/theme';
 export default function Booking() {
   const styles = useThemedStyles(styleDefinitions);
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { coachingRequests, coaches, users, currentUserId, currentUser, ready, actions } = useApp();
+  const { coachingRequests, coaches, users, coachReviews, currentUserId, currentUser, ready, actions } = useApp();
   const [looked, setLooked] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -147,7 +147,8 @@ export default function Booking() {
         </Pressable>
       ) : null}
       {error ? <Text style={styles.error}>{error}</Text> : null}
-      {!asCoach && request.status === 'answered' && coach ? (
+      {/* Once you have reviewed this coach there is nothing left to do on their page. */}
+      {!asCoach && request.status === 'answered' && coach && !coachReviews.some((r) => r.coachId === coach.id && r.authorId === currentUserId) ? (
         <Button label={`Review ${otherFirst}`} variant="secondary" onPress={() => router.push(`/coach/${coach.id}`)} full />
       ) : null}
     </Screen>

@@ -1,5 +1,6 @@
 import { PRESS_DIM } from '@/theme/press';
 import { useThemedStyles } from '@/theme/ThemeProvider';
+import { TextScale } from '@/theme/textScale';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { CourtSpinner } from '@/components/CourtSpinner';
@@ -110,6 +111,7 @@ function planKey(p: PlayerProfile, signal: ReturnType<typeof healthSignal>) {
  * coach turns on for everyone once its key is added on the server.
  */
 export default function AiCoachRoute() {
+  const introStyles = useThemedStyles(introDefinitions);
   const on = useAiCoachOn();
   const consent = useAiCoachConsent();
   const { currentUser } = useApp();
@@ -155,6 +157,7 @@ export default function AiCoachRoute() {
  * checks it too, and Coach memory has the way to take it back.
  */
 function AiCoachConsent({ onAgree }: { onAgree: () => Promise<boolean> }) {
+  const introStyles = useThemedStyles(introDefinitions);
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
   const agree = async () => {
@@ -195,7 +198,7 @@ function AiCoachConsent({ onAgree }: { onAgree: () => Promise<boolean> }) {
   );
 }
 
-const introStyles = StyleSheet.create({
+const introDefinitions = StyleSheet.create({
   list: { alignSelf: 'stretch', gap: spacing.sm },
   item: { flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-start' },
   itemText: { ...typography.body, color: colors.text, flex: 1, lineHeight: 22 },
@@ -444,7 +447,7 @@ function Train() {
                   >
                     <Text style={[styles.dayColLabel, open && { color: colors.brand }]}>{day.label.slice(0, 3)}</Text>
                     <BlockIcon icon={meta ? meta.icon : 'moon-outline'} size={18} color={meta ? colors[meta.tint] : colors.textFaint} />
-                    <Text numberOfLines={2} style={styles.dayColTitle}>{day.restDay ? 'Rest' : main?.title}</Text>
+                    <Text numberOfLines={2} maxFontSizeMultiplier={TextScale.TITLE} style={styles.dayColTitle}>{day.restDay ? 'Rest' : main?.title}</Text>
                     <Text style={styles.dayColMinutes}>{day.restDay ? '—' : duration(dayMinutes)}</Text>
                   </Pressable>
                 );
@@ -597,7 +600,7 @@ const styleDefinitions = StyleSheet.create({
   cautionTitle: { ...typography.smallStrong, color: colors.warning },
   caution: { ...typography.small, color: colors.text, lineHeight: 20 },
   week: { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: 2 },
-  dayCol: { width: 92, gap: 8, padding: spacing.md, borderRadius: 18, backgroundColor: colors.surface },
+  dayCol: { width: 116, gap: 8, padding: spacing.md, borderRadius: 18, backgroundColor: colors.surface },
   dayColOpen: { backgroundColor: colors.brandDim },
   dayColRest: { backgroundColor: colors.bgElevated },
   dayColLabel: { ...typography.smallStrong, color: colors.textMuted },
