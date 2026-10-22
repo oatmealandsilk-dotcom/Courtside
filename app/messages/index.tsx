@@ -9,6 +9,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { GroupAvatar, MAX_PINNED_CHATS, eventText, findDirectChat, groupName, hasGroupControls, isGroupChat, isMuted, leaveGroupMessage, messageSummary, othersIn } from '@/features/messages/groups';
 import { ChatSheet, type SheetOption } from '@/features/messages/ChatSheet';
 import { SwipeRow } from '@/features/messages/SwipeRow';
+import { PageSwipeBack } from '@/components/PageSwipeBack';
 import { MUTE_CHOICES, muteUntil } from '@/features/messages/mute';
 import { useLinkPreview } from '@/features/messages/linkPreview';
 import { isOpenToHit } from '@/features/players/openToHit';
@@ -52,10 +53,11 @@ interface Thread {
  * get a section of their own (Snapchat's filter), and stay out of the other
  * two: a group is nobody's coach.
  *
- * Each row slides, as iMessage's, WhatsApp's and Telegram's do: to the left
- * for Mute and Delete, to the right (pulled and let go) to mark it read or
- * unread. Holding a row offers the same and Pin (up to three chats sit at the
- * top) and, for a group, Leave. A muted chat keeps its place but goes quiet:
+ * Each row slides to the left for Mute and Delete, as iMessage's, WhatsApp's
+ * and Telegram's do. A drag to the right, from anywhere on the page, pulls
+ * the whole inbox with the finger and goes back (PageSwipeBack, Oct 22).
+ * Holding a row offers Mark as read / unread, Mute, Delete and Pin (up to
+ * three chats sit at the top) and, for a group, Leave. A muted chat keeps its place but goes quiet:
  * a small bell-off after the time, and a grey dot instead of a green one.
  *
  * Above the chats, the people you can message who are up to hit today, a
@@ -240,6 +242,7 @@ export default function Inbox() {
     ];
 
   return (
+    <PageSwipeBack onBack={() => goBack()}>
     <Screen
       onRefresh={isDesktopBrowser() ? undefined : actions.refresh}
       title="Messages"
@@ -334,18 +337,11 @@ export default function Inbox() {
                 run: () => confirm({ title: 'Leave this group?', message: leaveGroupMessage(conversation, hitRequests, currentUserId), confirmLabel: 'Leave', destructive: true, onConfirm: () => actions.leaveGroup(conversation.id) }),
               }] : []),
             ];
-            const mark = (
-              <View style={styles.markDisc}>
-                <Ionicons name={unread ? 'checkmark-done' : 'mail-unread'} size={20} color={colors.brandInk} />
-              </View>
-            );
             return (
               <SwipeRow
                 key={conversation.id}
                 actions={actionsUnder}
                 actionCount={canMute ? 2 : 1}
-                mark={mark}
-                onMark={() => actions.markChatUnread(conversation.id, !unread)}
                 open={openRow === conversation.id}
                 // Any swipe closes whichever row was open before.
                 onOpen={(o) => setOpenRow(o ? conversation.id : null)}
@@ -372,6 +368,7 @@ export default function Inbox() {
         onClose={() => setHeld(null)}
       />
     </Screen>
+    </PageSwipeBack>
   );
 }
 
@@ -470,6 +467,4 @@ const styleDefinitions = StyleSheet.create({
   actionQuiet: { backgroundColor: colors.surfaceAlt },
   actionDanger: { backgroundColor: colors.danger },
   actionText: { ...typography.smallStrong, fontSize: 12, color: colors.text },
-  // Under a row slid to the right: read or unread.
-  markDisc: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.brand },
 });

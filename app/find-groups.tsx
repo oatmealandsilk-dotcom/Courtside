@@ -1,13 +1,11 @@
 import { PRESS_DIM } from '@/theme/press';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { DragSheet } from '@/components/DragSheet';
-import { SearchField } from '@/components/SearchField';
-import { SheetTitle } from '@/components/sheet/SheetForm';
-import type { DiscoverGroup, ID } from '@/data/types';
+import type { DiscoverGroup, FeedGroup, ID } from '@/data/types';
 import { GroupInvitesSection } from '@/features/groups/GroupInvitesSection';
 import { GroupTile } from '@/features/groups/GroupTile';
 import { reportGroup } from '@/features/groups/reportGroup';
@@ -15,26 +13,46 @@ import { confirm } from '@/lib/confirm';
 import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
 import { MAX_GROUPS } from '@/store/feedGroups';
-import { colors, font, lift, radius, spacing, typography } from '@/theme';
-import { useThemedStyles } from '@/theme/ThemeProvider';
+import { colors, font, lift, radius, readsOn, spacing, typography } from '@/theme';
+import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
+import { TextScale } from '@/theme/textScale';
 
 /*
  * The "+" on the Feed's top row: a window over the feed, not a new page.
- * At the top, "Create a group" (it opens the short Start a group sheet). Under
- * it, the groups you are in, as small chips, and then groups anyone can find
- * (migration 70, discover_groups): near you first, then the most popular.
- * Each says how many are in it and what it is about, never who; an open one
- * has Join, an ask-first one has Request, and the button turns into Joined
- * or Requested once tapped. Nobody is in more than 3 groups: once you are,
- * the buttons fade and say why when tapped. Groups are for everyone, teens
- * included (migration 149). The Groups page (from Profile, or "Manage" here) stays as it was.
+ * "Three courts" (Oct 22, owner: "c is probably best for now"):
+ *   - the title, with "1 of 3 joined" (or "Join up to 3") and Manage under it;
+ *   - your groups as three slots across the top, one per group you can be in:
+ *     a joined one shows its tile and name (and "1 asking" when you run it and
+ *     someone wants in); a free one offers "Start a group", the next "Find one";
+ *   - then groups anyone can find (migration 70, discover_groups), near you
+ *     first, then the most popular, as open rows: tile, name, "N members ·
+ *     Open/Ask to join", and a button outlined in the theme's colour that
+ *     fills once you're in. A search icon by the first list's title (or the
+ *     "Find one" slot) opens a search box in place of the slots.
+ * Nobody is in more than 3 groups: once you are, the buttons say "Full" and
+ * explain why when tapped. Groups are for everyone, teens included (migration
+ * 149). The Groups page (from Profile, or "Manage" here) stays as it was.
  * Holding a group's row reports it (App Review 1.2), as holding a comment
  * does; a group you reported leaves the list. Invites waiting for your
  * answer (migration 181) come first of all, with Join / Not now.
  */
 
 const FULL_LINE = `You’re in ${MAX_GROUPS} groups, the most anyone can be in. Leave one to join another.`;
-const FULL_START_LINE = `You’re in ${MAX_GROUPS} groups, the most anyone can be in. Leave one to start another.`;
+const FULL_NOTE = 'That’s the most. Leave one to join another.';
+const EMPTY_LINE = 'No open groups near you yet. Start one and invite your crew.';
+const TILE = 40;
+const SLOT_TILE = 56;
+// The buttons are 30 high; this makes each at least 44pt to tap.
+const BTN_SLOP = { top: 7, bottom: 7, left: 6, right: 6 };
+
+type Listed = DiscoverGroup & { member: boolean; requested: boolean };
+type RowState = 'join' | 'request' | 'joined' | 'requested';
+
+const isAdmin = (g: FeedGroup, me: ID | null) => g.members.some((m) => m.id === me && m.admin);
+const askingCount = (g: FeedGroup, me: ID | null) => (isAdmin(g, me) ? g.requests.length : 0);
+const members = (n: number) => `${n} ${n === 1 ? 'member' : 'members'}`;
+/** The theme's brand where it reads on `fill` (4.5:1), else the palette's own text colour. */
+const brandOn = (fill: string) => (readsOn(colors.brand, fill) ? colors.brand : colors.text);
 
 export default function FindGroups() {
   const styles = useThemedStyles(styleDefinitions);
@@ -54,11 +72,13 @@ export default function FindGroups() {
   const full = feedGroups.length >= MAX_GROUPS;
   useEffect(() => { if (currentUserId) void actions.loadFeedGroups(); }, [currentUserId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // The groups you were already in when this opened are in "Your groups", not the list.
+  // The groups you were already in when this opened are in the slots, not the list.
   // One you join from here stays in the list, saying Joined.
   const minedAtOpen = useRef(new Set(feedGroups.map((g) => g.id)));
 
   const [search, setSearch] = useState('');
+  // The search box is open (from "Find one" or the search icon), typed in or not.
+  const [finding, setFinding] = useState(false);
   // On a phone the sheet opens only as tall as what is in it (once the list is in), so a short one has no empty half.
   // (No fitContent: the computer's centred box keeps its fixed height, so the search box doesn't jump as results change.)
   const [contentH, setContentH] = useState(0);
@@ -74,7 +94,7 @@ export default function FindGroups() {
   }, [search, off]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Where you stand with each group: the app's own copy of your groups and requests wins over the list's.
-  const listed = useMemo(() => (rows ?? [])
+  const listed = useMemo<Listed[]>(() => (rows ?? [])
     .filter((r) => !minedAtOpen.current.has(r.id) && !reportedIds.includes(r.id))
     // A group you are invited to is in Invites, at the top (not twice); a search lists it like any other.
     .filter((r) => !!search.trim() || !feedGroupInvites.some((i) => i.groupId === r.id))
@@ -95,6 +115,10 @@ export default function FindGroups() {
   const fitH = searching ? Math.max(restH.current, contentH) : contentH;
   const near = searching ? [] : listed.filter((r) => r.near);
   const rest = searching ? listed : listed.filter((r) => !r.near);
+  // Search is offered only when there is something to search (a list came back, or a search is typed).
+  const canFind = searching || listed.length > 0;
+  const searchOpen = finding || searching;
+  const stopFinding = () => { setSearch(''); setFinding(false); };
 
   const [busy, setBusy] = useState<ID | null>(null);
   const join = (g: DiscoverGroup) => {
@@ -114,68 +138,63 @@ export default function FindGroups() {
     onConfirm: () => { void actions.leaveFeedGroup(g.id).catch(() => undefined); },
   });
 
-  // The Start a group sheet takes this one's place. Already in 3, it says so there,
-  // with a way to your groups, before anything is filled in.
+  // The Start a group sheet takes this one's place.
   const create = () => router.replace('/group-form');
 
-  const renderRow = (g: DiscoverGroup & { member: boolean; requested: boolean }, i: number) => {
-    const members = `${g.memberCount} ${g.memberCount === 1 ? 'member' : 'members'}`;
-    const working = busy === g.id;
-    const state = g.member ? 'joined' : g.requested ? 'requested' : g.ask ? 'request' : 'join';
-    const label = working ? (g.ask ? 'Asking…' : 'Joining…')
-      : state === 'joined' ? 'Joined' : state === 'requested' ? 'Requested' : state === 'request' ? 'Request' : 'Join';
-    const faded = full && (state === 'join' || state === 'request');
-    const onPress = state === 'joined' ? () => go(`/g/${g.id}`) : state === 'requested' ? () => cancel(g) : () => join(g);
-    const a11y = state === 'joined' ? `You’re in ${g.name}. Open it`
-      : state === 'requested' ? `You asked to join ${g.name}. Cancel the request`
-      : faded ? `${label}. ${FULL_LINE}`
-      : state === 'request' ? `Ask to join ${g.name}` : `Join ${g.name}`;
+  const renderRow = (g: Listed, i: number) => {
+    const state: RowState = g.member ? 'joined' : g.requested ? 'requested' : g.ask ? 'request' : 'join';
     // Hold the group (not its button) to report it; a screen reader offers Report on it instead.
     const report = () => reportGroup(actions.reportUser, { id: g.id, name: g.name, description: g.description });
     return (
-      <View key={g.id} style={[styles.row, i > 0 && styles.line]}>
-        <Pressable
-          accessibilityHint="Hold to report"
-          accessibilityActions={[{ name: 'longpress', label: 'Report group' }]}
-          onAccessibilityAction={(e) => { if (e.nativeEvent.actionName === 'longpress') report(); }}
-          onLongPress={report}
-          delayLongPress={400}
-          style={({ pressed }) => [styles.group, pressed && styles.pressed]}
-        >
-          <GroupTile name={g.name} look={g.look} size={44} />
-          <View style={styles.words}>
-            <Text style={styles.name} numberOfLines={1}>{g.name}</Text>
-            <Text style={styles.meta} numberOfLines={1}>{members}{g.ask ? ' · Ask to join' : ' · Open'}</Text>
-            {g.description ? <Text style={styles.about} numberOfLines={2}>{g.description}</Text> : null}
-          </View>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={a11y}
-          disabled={working}
-          hitSlop={6}
-          onPress={onPress}
-          style={({ pressed }) => [
-            styles.btn,
-            state === 'join' ? styles.btnJoin : state === 'request' ? styles.btnRequest : styles.btnQuiet,
-            faded && styles.btnFaded,
-            pressed && styles.btnPressed,
-          ]}
-        >
-          {working ? <ActivityIndicator size="small" color={state === 'join' ? colors.brandInk : colors.brand} />
-            : state === 'joined' ? <Ionicons name="checkmark" size={14} color={colors.textMuted} />
-            : null}
-          {!working ? (
-            <Text style={[styles.btnText, state === 'join' ? styles.btnTextJoin : state === 'request' ? styles.btnTextRequest : styles.btnTextQuiet]}>{label}</Text>
-          ) : null}
-        </Pressable>
-      </View>
+      <React.Fragment key={g.id}>
+        {i > 0 ? <View style={styles.hair} /> : null}
+        <View style={styles.row}>
+          <Pressable
+            accessibilityHint="Hold to report"
+            accessibilityActions={[{ name: 'longpress', label: 'Report group' }]}
+            onAccessibilityAction={(e) => { if (e.nativeEvent.actionName === 'longpress') report(); }}
+            onLongPress={report}
+            delayLongPress={400}
+            style={({ pressed }) => [styles.group, pressed && styles.pressed]}
+          >
+            <GroupTile name={g.name} look={g.look} size={TILE} />
+            <View style={styles.words}>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.name} numberOfLines={1}>{g.name}</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta} numberOfLines={1}>{members(g.memberCount)} · {g.ask ? 'Ask to join' : 'Open'}</Text>
+            </View>
+          </Pressable>
+          <RowButton
+            g={g}
+            state={state}
+            working={busy === g.id}
+            full={full}
+            onPress={state === 'joined' ? () => go(`/g/${g.id}`) : state === 'requested' ? () => cancel(g) : () => join(g)}
+          />
+        </View>
+      </React.Fragment>
     );
   };
 
-  const asking = (id: ID) => {
-    const g = feedGroups.find((x) => x.id === id);
-    return !!g && g.requests.length > 0 && g.members.some((m) => m.id === currentUserId && m.admin);
+  const list = () => {
+    if (rows === undefined) return <ActivityIndicator style={styles.loading} color={colors.textFaint} />;
+    if (rows === null) return <Text style={styles.note}>Finding groups isn’t switched on yet. You can still start one, or join with an invite link.</Text>;
+    const parts: { title: string; rows: Listed[] }[] = [];
+    if (near.length) parts.push({ title: 'Near you', rows: near });
+    if (rest.length) parts.push({ title: searching ? 'Groups' : 'Popular', rows: rest });
+    if (!parts.length) return <Text style={styles.note}>{searching ? `No group called “${search.trim()}”.` : EMPTY_LINE}</Text>;
+    return parts.map((part, pi) => (
+      <View key={part.title}>
+        <View style={styles.listHead}>
+          <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.listTitle} accessibilityRole="header">{part.title}</Text>
+          {pi === 0 && canFind && !searchOpen ? (
+            <Pressable accessibilityRole="button" accessibilityLabel="Search groups" hitSlop={4} onPress={() => setFinding(true)} style={({ pressed }) => [styles.findIcon, pressed && styles.pressed]}>
+              <Ionicons name="search" size={18} color={colors.textMuted} />
+            </Pressable>
+          ) : null}
+        </View>
+        {part.rows.map(renderRow)}
+      </View>
+    ));
   };
 
   return (
@@ -184,7 +203,7 @@ export default function FindGroups() {
       onDismissed={done}
       peekFraction={0.86}
       contentHeight={(rows !== undefined || off) && fitH ? fitH : undefined}
-      header={<SheetTitle title="Groups" line="A feed only the group sees" onClose={dismiss} />}
+      header={<Header joined={feedGroups.length} off={off} onClose={dismiss} onManage={() => go('/groups')} />}
     >
       <ScrollView
         contentContainerStyle={styles.body}
@@ -196,84 +215,27 @@ export default function FindGroups() {
           <Text style={styles.note}>Groups aren’t switched on yet. Check back soon.</Text>
         ) : (
           <>
-            {!searching ? <GroupInvitesSection onOpen={go} /> : null}
-
-            <SearchField value={search} onChangeText={setSearch} placeholder="Search groups" accessibilityLabel="Search groups" />
-
-            {!searching ? (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={full ? `Create a group. ${FULL_START_LINE}` : 'Create a group'}
-                onPress={create}
-                style={({ pressed }) => [styles.card, styles.create, pressed && styles.pressed]}
-              >
-                <View style={[styles.createIcon, full && styles.btnFaded]}><Ionicons name="add" size={24} color={colors.brandInk} /></View>
-                <View style={styles.words}>
-                  <Text style={[styles.createTitle, full && styles.dim]}>Create a group</Text>
-                  <Text style={styles.meta} numberOfLines={2}>{full ? FULL_START_LINE : 'Your crew, your club, your team. You’re the admin.'}</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
-              </Pressable>
-            ) : null}
-
-            {!searching && feedGroups.length ? (
-              <View style={styles.part}>
-                <View style={styles.partHead}>
-                  <Text style={styles.section}>Your groups · {feedGroups.length} of {MAX_GROUPS}</Text>
-                  <Pressable accessibilityRole="link" accessibilityLabel="Manage your groups" hitSlop={8} onPress={() => go('/groups')}>
-                    <Text style={styles.link}>Manage</Text>
-                  </Pressable>
-                </View>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.mine}>
-                  {feedGroups.map((g) => (
-                    <Pressable
-                      key={g.id}
-                      accessibilityRole="link"
-                      accessibilityLabel={`${g.name}${asking(g.id) ? ', someone is asking to join' : ''}`}
-                      onPress={() => go(`/g/${g.id}`)}
-                      style={({ pressed }) => [styles.mineChip, pressed && styles.pressed]}
-                    >
-                      <GroupTile name={g.name} look={g.look} size={28} />
-                      <Text style={styles.mineName} numberOfLines={1}>{g.name}</Text>
-                      {asking(g.id) ? <View style={styles.dot} /> : null}
-                    </Pressable>
-                  ))}
-                </ScrollView>
-              </View>
-            ) : null}
-
-            {rows === undefined ? (
-              <ActivityIndicator style={styles.loading} color={colors.textFaint} />
-            ) : rows === null ? (
-              <Text style={styles.note}>Finding groups isn’t switched on yet. You can still start one, or join with an invite link.</Text>
+            {/* Invites waiting for you (migration 181) sit above your groups, before the slots. */}
+            {!searchOpen ? <GroupInvitesSection onOpen={go} /> : null}
+            {!searchOpen ? (
+              <Slots
+                groups={feedGroups}
+                me={currentUserId}
+                full={full}
+                canFind={canFind}
+                onOpen={(g) => go(`/g/${g.id}`)}
+                onCreate={create}
+                onFind={() => setFinding(true)}
+              />
             ) : (
-              <>
-                {near.length ? (
-                  <View style={styles.part}>
-                    <Text style={styles.section}>Groups near you</Text>
-                    <View style={styles.card}>{near.map(renderRow)}</View>
-                  </View>
-                ) : null}
-                {rest.length ? (
-                  <View style={styles.part}>
-                    <Text style={styles.section}>{searching ? 'Groups' : 'Popular'}</Text>
-                    <View style={styles.card}>{rest.map(renderRow)}</View>
-                  </View>
-                ) : null}
-                {!near.length && !rest.length ? (
-                  // Nothing to join: a quiet word in the middle, under the one thing to do here (Create a group, above).
-                  <View style={styles.empty}>
-                    <View style={styles.emptyDisc}>
-                      <Ionicons name={searching ? 'search-outline' : 'people-outline'} size={26} color={colors.brand} />
-                    </View>
-                    <Text style={styles.emptyTitle}>{searching ? `No group matches “${search.trim()}”` : 'No groups to join yet'}</Text>
-                    <Text style={styles.emptyLine}>
-                      {searching ? 'Try another word, or start it yourself.' : 'Open groups near you show up here. Start one for your crew and they can find it.'}
-                    </Text>
-                  </View>
-                ) : null}
-              </>
+              <View style={styles.findRow}>
+                <SearchBox value={search} onChangeText={setSearch} />
+                <Pressable accessibilityRole="button" accessibilityLabel="Stop searching" hitSlop={{ top: 14, bottom: 14, left: 10, right: 10 }} onPress={stopFinding} style={({ pressed }) => pressed && styles.pressed}>
+                  <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.cancel}>Cancel</Text>
+                </Pressable>
+              </View>
             )}
+            {list()}
           </>
         )}
       </ScrollView>
@@ -281,49 +243,212 @@ export default function FindGroups() {
   );
 }
 
+/** The title, a fact line ("1 of 3 joined" or "Join up to 3") with Manage, and the close disc. */
+function Header({ joined, off, onClose, onManage }: { joined: number; off: boolean; onClose: () => void; onManage: () => void }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const { dark } = useTheme();
+  return (
+    <View style={styles.head}>
+      <View style={styles.headTop}>
+        <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.title} accessibilityRole="header">Groups</Text>
+        <Pressable accessibilityRole="button" accessibilityLabel="Close" hitSlop={8} onPress={onClose} style={({ pressed }) => [styles.closeDisc, dark && styles.closeDiscDark, pressed && styles.pressed]}>
+          <Ionicons name="close" size={18} color={colors.textMuted} />
+        </Pressable>
+      </View>
+      {/* With groups switched off there is nothing to count. */}
+      {!off ? <View style={styles.factRow}>
+        <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.fact}>{joined ? `${joined} of ${MAX_GROUPS} joined` : `Join up to ${MAX_GROUPS}`}</Text>
+        {joined ? (
+          <Pressable accessibilityRole="link" accessibilityLabel="Manage your groups" hitSlop={{ top: 14, bottom: 14, left: 12, right: 12 }} onPress={onManage} style={({ pressed }) => pressed && styles.pressed}>
+            <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.manage}>Manage</Text>
+          </Pressable>
+        ) : null}
+      </View> : null}
+    </View>
+  );
+}
+
+/**
+ * Your groups as three slots, one per group you can be in. The first free one
+ * starts a group; the next finds one (when there is anything to find); any
+ * other free one is just its outline, so the three still read as three.
+ */
+function Slots({ groups, me, full, canFind, onOpen, onCreate, onFind }: {
+  groups: FeedGroup[];
+  me: ID | null;
+  full: boolean;
+  canFind: boolean;
+  onOpen: (g: FeedGroup) => void;
+  onCreate: () => void;
+  onFind: () => void;
+}) {
+  const styles = useThemedStyles(styleDefinitions);
+  const slots = Array.from({ length: MAX_GROUPS }, (_, i) => groups[i] ?? null);
+  const firstFree = slots.findIndex((s) => !s);
+  return (
+    <View style={styles.courts}>
+      <View style={styles.slots}>
+        {slots.map((g, i) => {
+          if (g) {
+            const n = askingCount(g, me);
+            const role = isAdmin(g, me) ? 'Admin' : members(g.members.length);
+            return (
+              <Pressable key={g.id} accessibilityRole="link" accessibilityLabel={`${g.name}, ${role}${n ? `, ${n} asking to join` : ''}`} onPress={() => onOpen(g)} style={({ pressed }) => [styles.slot, pressed && styles.pressed]}>
+                <View>
+                  <GroupTile name={g.name} look={g.look} size={SLOT_TILE} />
+                  {n ? <View style={styles.dot} /> : null}
+                </View>
+                <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.slotName} numberOfLines={2}>{g.name}</Text>
+                <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.meta, n ? [styles.strong, { color: brandOn(colors.bg) }] : null]} numberOfLines={1}>
+                  {n ? `${n} asking` : role}
+                </Text>
+              </Pressable>
+            );
+          }
+          if (i === firstFree) {
+            return (
+              <Pressable key={`free-${i}`} accessibilityRole="button" accessibilityLabel="Create a group" onPress={onCreate} style={({ pressed }) => [styles.slot, pressed && styles.pressed]}>
+                <View style={styles.free}><Ionicons name="add" size={24} color={colors.brand} /></View>
+                <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.slotName} numberOfLines={2}>Start a group</Text>
+              </Pressable>
+            );
+          }
+          if (i === firstFree + 1 && canFind) {
+            return (
+              <Pressable key={`free-${i}`} accessibilityRole="button" accessibilityLabel="Find a group to join" onPress={onFind} style={({ pressed }) => [styles.slot, pressed && styles.pressed]}>
+                <View style={styles.free}><Ionicons name="search" size={20} color={colors.textMuted} /></View>
+                <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.slotName} numberOfLines={2}>Find one</Text>
+              </Pressable>
+            );
+          }
+          return (
+            <View key={`free-${i}`} style={styles.slot} accessible={false} importantForAccessibility="no-hide-descendants">
+              <View style={[styles.free, styles.freeQuiet]} />
+            </View>
+          );
+        })}
+      </View>
+      {full ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta}>{FULL_NOTE}</Text> : null}
+    </View>
+  );
+}
+
+/** A light search box: the sheet's card fill and a thin outline. It opens with the keyboard up. */
+function SearchBox({ value, onChangeText }: { value: string; onChangeText: (s: string) => void }) {
+  const styles = useThemedStyles(styleDefinitions);
+  return (
+    <View style={styles.search}>
+      <Ionicons name="search" size={16} color={colors.textFaint} />
+      <TextInput
+        maxFontSizeMultiplier={TextScale.TITLE}
+        value={value}
+        onChangeText={onChangeText}
+        autoFocus
+        placeholder="Search groups"
+        placeholderTextColor={colors.textFaint}
+        selectionColor={colors.brand}
+        autoCapitalize="none"
+        autoCorrect={false}
+        returnKeyType="search"
+        accessibilityLabel="Search groups"
+        style={styles.searchInput}
+      />
+      {value ? (
+        <Pressable accessibilityRole="button" accessibilityLabel="Clear search" hitSlop={14} onPress={() => onChangeText('')}>
+          <Ionicons name="close-circle" size={17} color={colors.textFaint} />
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
+
+/*
+ * Join or Ask: a thin ring in the theme's colour. Joined: filled, with a tick.
+ * Requested: plain grey words. In 3 groups already, an open one says "Full"
+ * in faint grey, and a tap explains why.
+ */
+function RowButton({ g, state, working, full, onPress }: { g: Listed; state: RowState; working: boolean; full: boolean; onPress: () => void }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const open = state === 'join' || state === 'request';
+  const shut = full && open;
+  const active = open && !shut;
+  const joined = state === 'joined';
+  const label = working ? (g.ask ? 'Asking…' : 'Joining…')
+    : shut ? 'Full'
+    : joined ? 'Joined' : state === 'requested' ? 'Requested' : state === 'request' ? 'Ask' : 'Join';
+  const ink = shut ? colors.textFaint : active ? brandOn(colors.bg) : joined ? colors.brandInk : colors.textMuted;
+  const a11y = joined ? `You’re in ${g.name}. Open it`
+    : state === 'requested' ? `You asked to join ${g.name}. Cancel the request`
+    : shut ? `${g.ask ? 'Ask to join' : 'Join'} ${g.name}. ${FULL_LINE}`
+    : state === 'request' ? `Ask to join ${g.name}` : `Join ${g.name}`;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={a11y}
+      disabled={working}
+      hitSlop={BTN_SLOP}
+      onPress={onPress}
+      style={({ pressed }) => [styles.btn, active && styles.btnRing, joined && styles.btnIn, pressed && styles.pressed]}
+    >
+      {working ? <ActivityIndicator size="small" color={ink} />
+        : joined ? <Ionicons name="checkmark" size={14} color={ink} /> : null}
+      {!working ? <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.btnText, { color: ink }]}>{label}</Text> : null}
+    </Pressable>
+  );
+}
+
 const styleDefinitions = StyleSheet.create({
-  body: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: spacing.xxl, gap: spacing.lg },
-  note: { ...typography.small, color: colors.textMuted, lineHeight: 19, paddingVertical: spacing.md, paddingHorizontal: spacing.xs },
+  body: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.xxl, gap: spacing.xl },
+  note: { ...typography.body, color: colors.textMuted, lineHeight: 21 },
   loading: { paddingVertical: spacing.xl },
-  // The grouped list of Settings and the Groups page: a shade off the sheet, rows on hairlines.
-  card: { ...lift, borderRadius: 20, backgroundColor: colors.surface, overflow: 'hidden' },
   pressed: { opacity: PRESS_DIM },
-  dim: { opacity: 0.55 },
-  create: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md, paddingHorizontal: spacing.lg, minHeight: 72 },
-  createIcon: { width: 44, height: 44, borderRadius: 13, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
-  createTitle: { ...typography.bodyStrong, color: colors.brand },
-  part: { gap: spacing.sm },
-  partHead: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', paddingRight: spacing.xs },
-  section: { ...typography.smallStrong, color: colors.textMuted, paddingHorizontal: spacing.xs },
-  link: { ...typography.smallStrong, color: colors.brand },
-  mine: { gap: spacing.sm, paddingHorizontal: 2, paddingVertical: 2 },
-  mineChip: {
-    ...lift, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, height: 40, paddingLeft: 6, paddingRight: spacing.md,
-    borderRadius: radius.pill, backgroundColor: colors.surface, maxWidth: 220,
+  strong: { ...font('600') },
+  words: { flex: 1, minWidth: 0, gap: 2 },
+  name: { ...typography.bodyStrong, color: colors.text },
+  meta: { ...typography.small, color: colors.textMuted },
+
+  // Header: the left title and close disc, with one fact line under it.
+  head: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xs, gap: 2 },
+  headTop: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  title: { ...typography.title, ...font('600'), fontSize: 24, letterSpacing: -0.8, color: colors.text, flex: 1 },
+  factRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: spacing.md },
+  fact: { ...typography.small, color: colors.textMuted },
+  manage: { ...typography.smallStrong, color: colors.brand },
+  closeDisc: { ...lift, width: 34, height: 34, borderRadius: 17, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' },
+  closeDiscDark: { backgroundColor: colors.surfaceAlt },
+
+  // Your three slots.
+  courts: { gap: spacing.md },
+  slots: { flexDirection: 'row', gap: spacing.md },
+  slot: { flex: 1, minWidth: 0, alignItems: 'flex-start', gap: 4 },
+  slotName: { ...typography.smallStrong, color: colors.text, marginTop: 4 },
+  free: { width: SLOT_TILE, height: SLOT_TILE, borderRadius: 17, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center' },
+  freeQuiet: { borderColor: colors.border },
+  dot: { position: 'absolute', top: -3, right: -3, width: 12, height: 12, borderRadius: 6, backgroundColor: colors.brand, borderWidth: 2, borderColor: colors.bg },
+
+  // Search, in place of the slots.
+  findRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  cancel: { ...typography.smallStrong, color: colors.textMuted },
+  search: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, height: 40, paddingHorizontal: spacing.md,
+    borderRadius: radius.md, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border,
   },
-  mineName: { ...typography.smallStrong, color: colors.text, flexShrink: 1 },
-  dot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.brand },
-  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md, paddingHorizontal: spacing.lg, minHeight: 72 },
-  line: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  searchInput: {
+    flex: 1, ...typography.body, fontSize: 16, color: colors.text, paddingVertical: 0, height: '100%',
+    ...(Platform.OS === 'web' ? { outlineStyle: 'none' } : null),
+  } as object,
+
+  // The open list: a heading, then rows on hairlines with no card behind them.
+  listHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 44, marginBottom: spacing.xs },
+  listTitle: { ...typography.heading, color: colors.text },
+  findIcon: { width: 44, height: 44, marginRight: -12, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  hair: { height: 1, backgroundColor: colors.border, marginLeft: TILE + spacing.md },
+  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: 60, paddingVertical: spacing.sm },
   // The group itself (its tile and words), which a hold reports.
   group: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  words: { flex: 1, minWidth: 0, gap: 2 },
-  name: { ...typography.body, ...font('600'), color: colors.text },
-  meta: { ...typography.small, color: colors.textMuted },
-  about: { ...typography.small, color: colors.textFaint, lineHeight: 18 },
-  // Join is the one green thing to press; Request is the same in a softer green (it waits for a yes); Joined and Requested are quiet.
-  btn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, height: 32, minWidth: 84, paddingHorizontal: 14, borderRadius: radius.pill },
-  btnJoin: { backgroundColor: colors.brand },
-  btnRequest: { backgroundColor: colors.brandDim },
-  btnQuiet: { backgroundColor: colors.surfaceAlt },
-  btnFaded: { opacity: 0.45 },
-  btnPressed: { opacity: PRESS_DIM },
+
+  btn: { flexShrink: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 3, height: 30, minWidth: 64, paddingHorizontal: 14, borderRadius: radius.pill },
+  btnRing: { borderWidth: 1, borderColor: colors.brand },
+  btnIn: { backgroundColor: colors.brand },
   btnText: { ...typography.smallStrong },
-  btnTextJoin: { color: colors.brandInk },
-  btnTextRequest: { color: colors.brand },
-  btnTextQuiet: { color: colors.textMuted },
-  empty: { alignItems: 'center', gap: spacing.xs, paddingTop: spacing.lg, paddingBottom: spacing.sm, paddingHorizontal: spacing.xl },
-  emptyDisc: { width: 56, height: 56, borderRadius: 28, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.sm },
-  emptyTitle: { ...typography.bodyStrong, color: colors.text, textAlign: 'center' },
-  emptyLine: { ...typography.small, color: colors.textMuted, lineHeight: 19, textAlign: 'center', maxWidth: 280 },
 });
