@@ -4,6 +4,7 @@ import Animated, { Easing, cancelAnimation, runOnJS, useAnimatedStyle, useShared
 import { useReducedMotion } from '@/lib/useReducedMotion';
 
 import { sheetFling } from '@/components/map/sheetFling';
+import { CardGlide, glides } from '@/components/map/glide';
 import { CrownFade, CrownLead, layerZ, takesOver, useStageLayers, type Crown, type StageKind, type StageLayer } from '@/components/map/stageLayers';
 import { SHEET_CLOSE_CURVE, SHEET_CLOSE_MS, SHEET_SPRING } from '@/theme/motion';
 
@@ -228,7 +229,8 @@ function Layer({ layer, out, crown: crownFor, onGone, handoffs }: { layer: Stage
             </CrownLead.Provider>
           </Animated.View>
         ) : null}
-        {layer.node}
+        {/* A card growing as what it shows loads glides to its new height, its buttons riding with it (CardGlide); the players list moves its own. */}
+        <CardGlide on={glides(layer)}>{layer.node}</CardGlide>
       </View>
     </Animated.View>
   );

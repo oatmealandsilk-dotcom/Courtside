@@ -5,6 +5,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { Avatar, Button, EmptyState, Screen } from '@/components/ui';
+import { Fold } from '@/components/ui/Fold';
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { MenuSheet } from '@/components/MenuSheet';
 import { Tappable } from '@/components/Tappable';
@@ -134,7 +135,10 @@ function GroupPage() {
         <Text style={styles.headMeta}>{members} · {ask ? 'Ask to join' : 'Open'}</Text>
       </View>
 
-      {group ? (
+      {/* Joined here: Feed / Post / Invite, the members and Leave unfold as the Join box folds away, rather
+          than the whole lower page appearing at once (Oct 22 sweep, item 33). A member opening the page
+          finds them simply there, as before. */}
+      <Fold open={!!group}>
         <View style={styles.actions}>
           {([
             { icon: 'play-circle-outline', label: 'Feed', hint: `Open ${title}’s feed`, onPress: () => openGroupFeed(id) },
@@ -147,7 +151,9 @@ function GroupPage() {
             </Pressable>
           ))}
         </View>
-      ) : invite && !asked ? (
+      </Fold>
+      <Fold open={!group}>
+      {invite && !asked ? (
         <View style={styles.joinBox}>
           <View style={styles.invitedRow}>
             <Avatar name={inviter?.name ?? inviterName(invite, users)} seed={inviter?.avatarSeed ?? invite.inviterId} uri={inviter?.avatarUrl} size={28} />
@@ -174,6 +180,7 @@ function GroupPage() {
           <Text style={styles.joinNote}>A group’s feed shows everything its members post. You can be in up to {MAX_GROUPS} groups.</Text>
         </View>
       )}
+      </Fold>
       {note ? <Text style={styles.note} accessibilityLiveRegion="polite">{note}</Text> : null}
 
       {group && admin && group.requests.length ? (
@@ -205,6 +212,7 @@ function GroupPage() {
         </>
       ) : null}
 
+      <Fold open={!!group}>
       {group ? (
         <>
           <Text style={styles.section}>Members · {group.members.length}</Text>
@@ -250,6 +258,7 @@ function GroupPage() {
           </Pressable>
         </>
       ) : null}
+      </Fold>
       <MenuSheet visible={menuOpen} onClose={() => setMenuOpen(false)} title={title} items={[{ icon: 'flag-outline', label: 'Report group', danger: true, onPress: report }]} />
     </Screen>
   );

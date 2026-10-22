@@ -3,7 +3,7 @@ import { useSoundMuted } from '@/features/feed/sound';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import * as haptics from '@/lib/haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, { Easing, useAnimatedStyle, useDerivedValue, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { GlassFill, liquidGlass } from '@/components/ui/Glass';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -19,6 +19,20 @@ import { onSpaceBar } from '@/features/feed/keyboard';
 import { STAGE_ON_ANDROID } from '@/features/feed/commentStage';
 import { StageChromeContext } from '@/features/feed/useStageMotion';
 import { TopBandContext } from '@/features/feed/topBand';
+
+/**
+ * The play badge and the "2×" pill: a quick zoom and fade in (160 ms) and out
+ * (120 ms) rather than blinking (Oct 22 sweep, item 24). Neither is glass.
+ * Always built, so the way out can play; the same motion as the browser's.
+ */
+function Pop({ on, children }: { on: boolean; children: React.ReactNode }) {
+  const v = useSharedValue(on ? 1 : 0);
+  useEffect(() => {
+    v.value = withTiming(on ? 1 : 0, on ? { duration: 160, easing: Easing.out(Easing.quad) } : { duration: 120, easing: Easing.in(Easing.quad) });
+  }, [on, v]);
+  const look = useAnimatedStyle(() => ({ opacity: v.value, transform: [{ scale: 0.8 + 0.2 * v.value }] }));
+  return <Animated.View pointerEvents="none" style={look}>{children}</Animated.View>;
+}
 
 /**
  * A clip in the feed on a phone: plays itself when it is the page on screen,
@@ -131,10 +145,17 @@ function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, 
   // A feed disc also fades with the words as its own page goes onto the
   // comments stage, a pinned one too (worked out by the page: StagePage).
   const pageChrome = useContext(StageChromeContext);
-  const discStyle = useAnimatedStyle(() => ({
-    opacity: disc.value * (pageChrome ? pageChrome.value : 1),
-    transform: [{ scale: 0.86 + 0.14 * disc.value }],
-  }));
+  // On iOS 26 the feed's disc is glass, and glass must never fade (Oct 17): it
+  // grows in from its middle and shrinks away instead, never changing its
+  // opacity, and its glass is only drawn while it is there at all.
+  // With Reduce Motion on it is the plain frosted disc and only fades: a
+  // grow and shrink is a zoom, and glass must not fade.
+  const reduceMotion = useReducedMotion();
+  const glassDisc = !!discInk && liquidGlass && !reduceMotion;
+  const discShown = useDerivedValue(() => disc.value * (pageChrome ? pageChrome.value : 1));
+  const discStyle = useAnimatedStyle(() => (glassDisc
+    ? { opacity: 1, transform: [{ scale: discShown.value }] }
+    : { opacity: discShown.value, transform: [{ scale: 0.86 + 0.14 * disc.value }] }), [glassDisc]);
   // Android draws the feed's videos on a texture, the one surface that can
   // shrink and move smoothly onto the comments stage (a slight battery cost).
   // A plain full-screen clip (a story, a hit) keeps the lighter surface: nothing clips or scales it.
@@ -171,11 +192,11 @@ function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, 
       {/* Over the picture, under the disc: the top shade darkens the video, never the disc. */}
       {discInk && !bare ? <LinearGradient pointerEvents="none" colors={TOP_SHADE.colors} locations={TOP_SHADE.locations} style={[styles.topShade, { height: insets.top + TOP_SHADE.below }]} /> : null}
       {!ready && active ? <View pointerEvents="none" style={styles.centre}><CourtSpinner ink={discInk ?? 'white'} /></View> : null}
-      {fast ? (
-        <View pointerEvents="none" style={[styles.fastWrap, { top: insets.top + drop + 24 }]}>
+      <View pointerEvents="none" style={[styles.fastWrap, { top: insets.top + drop + 24 }]}>
+        <Pop on={fast}>
           <View style={styles.fastPill}><Ionicons name="play-forward" size={13} color="white" /><Text style={styles.fastText}>2×</Text></View>
-        </View>
-      ) : null}
+        </Pop>
+      </View>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={paused ? 'Play clip' : 'Pause clip'}
@@ -193,16 +214,16 @@ function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, 
         }}
         style={StyleSheet.absoluteFill}
       >
-        {paused ? (
-          <View style={styles.centre}>
+        <View pointerEvents="none" style={styles.centre}>
+          <Pop on={paused}>
             <View style={styles.playBadge}><Ionicons name="play" size={30} color="white" /></View>
-          </View>
-        ) : null}
+          </Pop>
+        </View>
       </Pressable>
       {silent || bare ? null : (
         <Pressable accessibilityRole="button" accessibilityLabel={muted ? 'Unmute clip' : 'Mute clip'} hitSlop={12} onPress={() => { setMuted((v) => !v); if (!discPinned) showDisc(); }} style={[styles.soundHit, { top: insets.top + drop + (discInk ? 25 : 22) }]}>
-          <Animated.View style={[styles.sound, discInk ? styles.soundThemed : null, discInk && liquidGlass ? styles.soundLiquid : null, discStyle]}>
-            {discInk ? <GlassFill radius={18} tint={colors.brand} strength={0.22} /> : null}
+          <Animated.View style={[styles.sound, discInk ? styles.soundThemed : null, glassDisc ? styles.soundLiquid : null, discStyle]}>
+            {glassDisc ? <GlassFill radius={18} tint={colors.brand} strength={0.22} present={discShown} /> : null}
             <Ionicons name={muted ? 'volume-mute' : 'volume-high'} size={17} color="white" />
           </Animated.View>
         </Pressable>

@@ -45,7 +45,7 @@ export const LevelPill = React.memo(function LevelPill({ profile, small = false,
       accessibilityLabel={badge.label}
       style={[styles.pill, small && styles.small, onMedia ? [styles.frost, liquidGlass && styles.frostLiquid] : { backgroundColor: tintFill(tone) }, style]}
     >
-      {onMedia ? <GlassFill radius={10} tint={tone} strength={0.18} /> : null}
+      {onMedia ? <GlassFill radius={10} tint={tone} strength={0.18} fill="rgba(16, 18, 17, 0.38)" /> : null}
       {system ? <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.system, small && styles.systemSmall, { color: onMedia ? tone : ink }, onMedia && styles.systemOnMedia]}>{system}</Text> : null}
       <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.value, small && styles.valueSmall, { color: ink }]}>{value}</Text>
     </View>

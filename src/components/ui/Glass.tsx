@@ -1,6 +1,7 @@
 import { useTheme } from '@/theme/ThemeProvider';
-import React from 'react';
+import React, { createContext, useContext, useMemo, useState } from 'react';
 import { Platform, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { runOnJS, useAnimatedReaction, type SharedValue } from 'react-native-reanimated';
 import { BlurView } from 'expo-blur';
 import { GlassView, isLiquidGlassAvailable } from 'expo-glass-effect';
 
@@ -57,14 +58,80 @@ export function Glass({ children, style, radius = 999, interactive = false, tint
 }
 
 /**
+ * The fades a piece of glass sits under (1 shown, 0 gone): a clip's words
+ * fading as its comments open or a pinch takes them away, a group's feed
+ * cross-fading in. iOS glass and blur under a parent whose opacity is below 1
+ * can turn see-through and stay that way (Oct 17), so while any of these is
+ * part-way, glass under them stands down for a plain fill of about its look,
+ * and comes back once everything over it is whole again (Oct 22 sweep, item 5).
+ */
+const GlassFadeContext = createContext<SharedValue<number>[]>([]);
+
+/** Everything inside fades with `value`: the glass in it steps aside for a plain fill while it does. */
+export function GlassFadeScope({ value, children }: { value: SharedValue<number> | null | undefined; children: React.ReactNode }) {
+  const outer = useContext(GlassFadeContext);
+  const list = useMemo(() => (value ? [...outer, value] : outer), [outer, value]);
+  return <GlassFadeContext.Provider value={list}>{children}</GlassFadeContext.Provider>;
+}
+
+/**
+ * Whether glass may draw here now: every fade over it (and `extra`, one of
+ * its own) is whole. Only an iPhone asks; elsewhere there is no glass to break.
+ */
+export function useGlassSteady(extra?: SharedValue<number> | null): boolean {
+  const fades = useContext(GlassFadeContext);
+  const all = useMemo(() => (extra ? [...fades, extra] : fades), [fades, extra]);
+  const ios = Platform.OS === 'ios';
+  const [steady, setSteady] = useState(() => !ios || wholeNow(all));
+  useAnimatedReaction(() => {
+    if (!ios) return true;
+    let p = 1;
+    for (const v of all) p *= v.value;
+    return p > 0.995;
+  }, (now, was) => {
+    if (now !== was) runOnJS(setSteady)(now);
+  }, [all, ios]);
+  return steady;
+}
+
+function wholeNow(all: SharedValue<number>[]) {
+  let p = 1;
+  for (const v of all) p *= v.value;
+  return p > 0.995;
+}
+
+/** Whether a control shown by growing is there at all (any size above nothing). */
+function usePresent(present: SharedValue<number> | undefined): boolean {
+  const [on, setOn] = useState(() => !present || present.value > 0.01);
+  useAnimatedReaction(() => (present ? present.value > 0.01 : true), (now, was) => {
+    if (now !== was) runOnJS(setOn)(now);
+  }, [present]);
+  return on;
+}
+
+/**
  * A control's own glass, filling it from behind, for buttons that float over
  * a clip (sound, back, the stats pill): on iOS 26 Apple's glass, dark and
  * carrying a hint of the theme's colour, so it refracts the video and still
  * reads as CourtSide; elsewhere nothing, and the control keeps its own
  * see-through fill (Oct 4, owner: "make it our theme, our own").
+ *
+ * While a fade over it is part-way (GlassFadeScope, or `fade`), the glass is a
+ * plain `fill` instead, so it fades like everything else and never goes
+ * see-through. `present`: a control shown by growing rather than fading (the
+ * sound disc); shrunk away to nothing, its glass is not drawn at all.
  */
-export function GlassFill({ radius, tint, strength = 0.35 }: { radius: number; tint: string; strength?: number }) {
-  if (!liquidGlass) return null;
+export function GlassFill({ radius, tint, strength = 0.35, fill = 'rgba(16,18,17,0.34)', fade, present }: {
+  radius: number; tint: string; strength?: number;
+  /** What stands in for the glass while it fades: the control's own see-through fill elsewhere. */
+  fill?: string;
+  fade?: SharedValue<number> | null;
+  present?: SharedValue<number>;
+}) {
+  const steady = useGlassSteady(fade);
+  const shown = usePresent(present);
+  if (!liquidGlass || !shown) return null;
+  if (!steady) return <View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderRadius: radius, overflow: 'hidden', backgroundColor: fill }]} />;
   const hex = Math.round(Math.max(0, Math.min(1, strength)) * 255).toString(16).padStart(2, '0');
   return <GlassView pointerEvents="none" glassEffectStyle="clear" tintColor={`${tint.slice(0, 7)}${hex}`} colorScheme="dark" style={[StyleSheet.absoluteFill, { borderRadius: radius, overflow: 'hidden' }]} />;
 }

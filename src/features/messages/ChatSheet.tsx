@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
-import { Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { RisingSheet } from '@/components/RisingSheet';
 import { useModalOpenWhile } from '@/lib/modalOpen';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -60,46 +61,41 @@ export function ChatSheet({ visible, title, options, onClose }: {
     };
   }, [visible]);
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      {/* The backdrop is a plain surface, not a button: a button here would
-          wrap the sheet's buttons, which the web refuses to nest. */}
-      <Pressable accessibilityLabel="Close" onPress={() => { if (armed.current) onClose(); }} style={styles.backdrop}>
-        {/* A tap on the sheet's own blank space stays on the sheet instead of closing it. */}
-        <View pointerEvents={visible ? 'auto' : 'none'} style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, spacing.lg) + spacing.md }]} onStartShouldSetResponder={() => true}>
-          <View style={styles.grabber} />
-          {shown.title ? <Text style={styles.title} numberOfLines={1}>{shown.title}</Text> : null}
-          {shown.options.map((option, index) => (
-            <Pressable
-              key={option.key}
-              accessibilityRole="button"
-              accessibilityState={{ disabled: !!option.disabled }}
-              disabled={option.disabled}
-              onPress={() => { if (!armed.current) return; onClose(); option.onPress(); }}
-              style={({ pressed }) => [styles.row, index > 0 && styles.rule, pressed && styles.pressed, option.disabled && styles.off]}
-            >
-              {option.icon ? <Ionicons name={option.icon} size={21} color={option.danger ? colors.danger : colors.text} /> : null}
-              <View style={styles.words}>
-                <Text style={[styles.label, option.danger && { color: colors.danger }]}>{option.label}</Text>
-                {option.detail ? <Text style={styles.detail}>{option.detail}</Text> : null}
-              </View>
-            </Pressable>
-          ))}
-        </View>
-      </Pressable>
-    </Modal>
+    // Rises from the bottom and drops away on close; Mute's durations glide the sheet's height (RisingSheet, Oct 22).
+    <RisingSheet
+      visible={visible}
+      onClose={onClose}
+      onBackdropPress={() => { if (armed.current) onClose(); }}
+      sheetStyle={[styles.sheet, { paddingBottom: Math.max(insets.bottom, spacing.lg) + spacing.md }]}
+    >
+      <View style={styles.grabber} />
+      {shown.title ? <Text style={styles.title} numberOfLines={1}>{shown.title}</Text> : null}
+      {shown.options.map((option, index) => (
+        <Pressable
+          key={option.key}
+          accessibilityRole="button"
+          accessibilityState={{ disabled: !!option.disabled }}
+          disabled={option.disabled}
+          onPress={() => { if (!armed.current) return; onClose(); option.onPress(); }}
+          style={({ pressed }) => [styles.row, index > 0 && styles.rule, pressed && styles.pressed, option.disabled && styles.off]}
+        >
+          {option.icon ? <Ionicons name={option.icon} size={21} color={option.danger ? colors.danger : colors.text} /> : null}
+          <View style={styles.words}>
+            <Text style={[styles.label, option.danger && { color: colors.danger }]}>{option.label}</Text>
+            {option.detail ? <Text style={styles.detail}>{option.detail}</Text> : null}
+          </View>
+        </Pressable>
+      ))}
+    </RisingSheet>
   );
 }
 
 const styleDefinitions = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: colors.overlay, justifyContent: 'flex-end' },
   sheet: {
     backgroundColor: colors.bg,
     borderTopLeftRadius: radius.xl,
     borderTopRightRadius: radius.xl,
     paddingTop: spacing.sm,
-    maxWidth: 520,
-    width: '100%',
-    alignSelf: 'center',
   },
   grabber: { width: 36, height: 4, borderRadius: 2, backgroundColor: colors.borderStrong, alignSelf: 'center', marginBottom: spacing.md },
   title: { ...typography.caption, color: colors.textFaint, textAlign: 'center', paddingHorizontal: spacing.xl, paddingBottom: spacing.sm },

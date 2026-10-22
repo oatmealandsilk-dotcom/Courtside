@@ -42,7 +42,7 @@ export function BookingsPanel() {
 
   return (
     <>
-      <SegmentedControl segments={[{ value: 'open', label: open.length ? `Open · ${open.length}` : 'Open' }, { value: 'done', label: 'Done' }]} value={tab} onChange={setTab} />
+      <SegmentedControl segments={[{ value: 'open', label: open.length ? `Open · ${open.length}` : 'Open' }, { value: 'done', label: 'Done' }]} value={tab} onChange={setTab} slide />
       {earned ? <Text style={styles.earned}>{money(earned)} earned from answered bookings.</Text> : null}
       {list.length === 0 ? (
         <EmptyState icon="file-tray-outline" title={tab === 'open' ? 'Nothing waiting' : 'Nothing here yet'} body={tab === 'open' ? 'New bookings arrive here, with a notification.' : 'Answered and refunded bookings collect here.'} />

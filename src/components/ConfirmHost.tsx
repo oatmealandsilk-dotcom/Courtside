@@ -135,8 +135,29 @@ export function ConfirmHost() {
     const began = touchAt.current || Date.now();
     touchAt.current = 0;
     if (began - openedAt.current < SETTLE_MS) return;
+    if (!armed.current) return;
     answer(choice, own);
   };
+
+  // In a browser, lifting the finger from the long press that asked (a held session row's Remove?)
+  // lands a click on whatever the card put under it, well after it settled: only a new touch, click
+  // or key counts, as in ChatSheet. Escape still cancels at once.
+  const armed = useRef(Platform.OS !== 'web');
+  useEffect(() => {
+    if (Platform.OS !== 'web' || !request) return undefined;
+    armed.current = false;
+    const arm = () => { armed.current = true; };
+    // A click with no press behind it (detail 0) comes from a screen reader or the keyboard, never a lifted finger.
+    const armClick = (e: MouseEvent) => { if (e.detail === 0) armed.current = true; };
+    window.addEventListener('pointerdown', arm, true);
+    window.addEventListener('keydown', arm, true);
+    window.addEventListener('click', armClick, true);
+    return () => {
+      window.removeEventListener('pointerdown', arm, true);
+      window.removeEventListener('keydown', arm, true);
+      window.removeEventListener('click', armClick, true);
+    };
+  }, [request]);
 
   // Each new question: in it comes, felt as well as seen, with the focus put where it belongs.
   useEffect(() => {

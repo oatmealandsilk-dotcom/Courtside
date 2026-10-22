@@ -10,21 +10,30 @@ export interface KeyboardLiftOptions {
   /** The chat's own box has the keyboard: whatever keyboard is up is this one, and the bar rides on it. */
   typing: boolean;
   /**
-   * How tall the emoji keyboard is while it is open in the phone keyboard's
-   * place (0 when closed). It is part of the page, laid over the bottom of
+   * How tall the app's emoji keyboard is while it is open (0 when closed).
+   * Browsers only: a phone uses its own emoji keyboard, so the phone's
+   * version leaves this be. It is part of the page, laid over the bottom of
    * it, so the room under the bar is at least this.
    */
   emojiRoom: number;
+  /**
+   * How tall the emoji keyboard would be if opened now, known from the start,
+   * so the panel's very first frame already sits below the edge rather than
+   * at full height over the resting bar.
+   */
+  emojiHeight: number;
 }
 
 export interface KeyboardLift {
   /** The room's style: an empty box under the bar this tall (worked out on the animation thread on an iPhone). */
   spacer: ViewStyle | ReturnType<typeof useAnimatedStyle<ViewStyle>>;
   /**
-   * Switching from the emoji keyboard back to typing: the bar stays this high
-   * until the phone keyboard has come up to it, so it does not drop and rise.
+   * The emoji keyboard's style (browsers only): with no keyboard up it slides up and
+   * back down together with the bar (Oct 22 sweep: "the emoji panel and the
+   * typing bar leap about 300 pt in one frame"), instead of appearing at full
+   * height in one frame.
    */
-  holdUntilKeyboard: (height: number) => void;
+  panel: ReturnType<typeof useAnimatedStyle<ViewStyle>>;
 }
 
 /** A drag down the messages putting the keyboard away: props for the list, and a hook into its scrolling. */

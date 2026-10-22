@@ -865,7 +865,9 @@ const STEPS = [
       await page.waitFor({ label: /^Like( clip|\. Hold to see who liked it)$/ }, 45000);
       await guestShowsOnlyAdults(page);
     },
-    expect: [{ label: 'Get the iPhone app' }, { label: 'Create a post' }, { label: 'Feed' }],
+    // The tester is an Android phone: the strip says the iPhone app is there and Android is coming,
+    // with no "Get the app" button (that is for iPhones and iPads only, Oct 22 sweep item 50).
+    expect: [{ text: 'iPhone app · Android coming soon' }, { label: 'Create a post' }, { label: 'Feed' }],
   },
   {
     name: 'guest-like',
@@ -1385,6 +1387,10 @@ const STEPS = [
       await page.tap({ label: 'Send message' });
       // Sent: it shows in the chat (a tip may lie over it, which is fine).
       await page.waitFor({ text: 'Smoke test: hello from the auto-tester', any: true });
+      // In a browser the emoji button opens the app's own emoji keyboard (a phone uses its own), and closes it again.
+      await page.tap({ label: 'Add an emoji' });
+      await page.waitFor({ label: /^Add \p{Extended_Pictographic}/u });
+      await page.tap({ label: 'Show the keyboard' });
     },
     expect: [{ label: 'Message text' }, { label: 'Chat details' }],
     after: async (page) => {

@@ -371,6 +371,15 @@ export function useListStops({ rows, room, windowH, windowW, openTall, onTall, o
   const onContentSizeChange = useCallback((_w: number, ch: number) => setContentH(Math.round(ch)), []);
   const onStripSize = useCallback((_w: number, sh: number) => { if (sh > 0) setTrayH(Math.round(sh)); }, []);
   const onSheetLayout = useCallback((e: LayoutChangeEvent) => setWidth(Math.round(e.nativeEvent.layout.width)), []);
+  // With nobody listed, the body stands at the height of what says so (MapChrome's empty box, which glides itself),
+  // so the faces coming back grow from there rather than from nothing (Oct 22 sweep: the tray jumped between the two).
+  const holdBody = useCallback((height: number) => {
+    if (listedV.value || height <= 0) return;
+    cancelAnimation(h);
+    h.value = height;
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  /** The height the faces (or the full list) rest at, for the empty box to glide from as it takes their place. */
+  const restH = listed ? (up ? top : floor) : 0;
 
   return {
     up,
@@ -385,6 +394,8 @@ export function useListStops({ rows, room, windowH, windowW, openTall, onTall, o
     onContentSizeChange,
     onStripSize,
     onSheetLayout,
+    holdBody,
+    restH,
     body,
     justDragged,
     sheetStyle,
