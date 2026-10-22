@@ -90,6 +90,10 @@ export default function SigSpecimens() {
           <Specimen title="Long names, three sets, a loss">
             <Post words="Three hours of the best tennis I've played this season, and I still lost it in the third. Next time." session={LONG} author="Alexandra Montgomery-Rivera" people={[P('s2', 'Bartholomew Okonkwo-Fitzgerald', 'opponent'), P('s3', 'June Park', 'partner')]} />
           </Specimen>
+        </>
+      ) : null}
+      {show('more') ? (
+        <>
           <Specimen title="Practice with five people">
             <Post words="Club drills night." session={PRACTICE} author="Alex Rivera" people={[P('s4', 'Mira Okafor', 'partner'), P('s5', 'Dev Sharma', 'partner'), P('s6', 'Sam Ortiz', 'partner'), P('s7', 'June Park', 'partner')]} />
           </Specimen>
