@@ -257,8 +257,10 @@ function ClipPlaybackInner({ uri, poster, active: wanted, preload = false, warmO
   </div>;
 }
 
-/** The play badge's and the 2× pill's look, shown or not: a quick zoom and fade (160 ms in, 120 ms out). */
+/** The play badge's and the 2× pill's look, shown or not: a quick zoom and fade (160 ms in, 120 ms out); with Reduce Motion on, the fade alone. */
 function pop(on: boolean): React.CSSProperties {
+  const still = typeof window !== 'undefined' && !!window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (still) return { opacity: on ? 1 : 0, transition: on ? 'opacity 160ms ease-out' : 'opacity 120ms ease-in' };
   return {
     opacity: on ? 1 : 0,
     transform: on ? 'scale(1)' : 'scale(0.8)',

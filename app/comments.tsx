@@ -7,7 +7,7 @@ import { StatusBar } from 'expo-status-bar';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image as ExpoImage } from 'expo-image';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Animated, { FadeInDown, FadeOut, LayoutAnimationConfig, LinearTransition, ZoomIn, ZoomOut, scrollTo, useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming, type AnimatedRef, type SharedValue } from 'react-native-reanimated';
+import Animated, { FadeInDown, runOnJS, FadeOut, LayoutAnimationConfig, LinearTransition, ZoomIn, ZoomOut, scrollTo, useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming, type AnimatedRef, type SharedValue } from 'react-native-reanimated';
 
 import { CommentThread, threadOf, threadsOf, useReplyDraft } from '@/components/CommentThread';
 import { JumpProvider } from '@/components/JumpTo';
@@ -422,29 +422,33 @@ export default function CommentsSheet() {
           <View ref={composer} style={styles.composer}>
             {/* A guest (guest mode, Oct 17) reads the comments; the box asks them to join instead of typing. */}
             {isGuest ? <Pressable accessibilityRole="button" accessibilityLabel="Add a comment" onPress={() => openJoinSheet('comment')} style={[StyleSheet.absoluteFill, { zIndex: 5 }]} /> : null}
-            {replyingTo ? (
-              <Animated.View entering={FadeInDown.duration(160)} exiting={FadeOut.duration(140)} layout={COMPOSER_GLIDE} style={styles.replying}>
-                <Text style={styles.replyingText} numberOfLines={1}>
-                  Replying to {replyingTo.self ? 'your comment' : <Text style={styles.replyingHandle}>@{replyingTo.handle}</Text>}
-                </Text>
-                <Pressable accessibilityRole="button" accessibilityLabel="Stop replying" hitSlop={10} onPress={stopReplying}>
-                  <Ionicons name="close" size={16} color={colors.textMuted} />
-                </Pressable>
-              </Animated.View>
-            ) : null}
-            {!staged ? <Animated.View layout={COMPOSER_GLIDE} style={styles.quick}>{quickRow}</Animated.View> : typing ? (
+            <Collapse show={!!replyingTo} gap={spacing.sm} pullTop={spacing.sm} style={styles.replyingWrap}>
+              {replyingTo ? (
+                <View style={styles.replying}>
+                  <Text style={styles.replyingText} numberOfLines={1}>
+                    Replying to {replyingTo.self ? 'your comment' : <Text style={styles.replyingHandle}>@{replyingTo.handle}</Text>}
+                  </Text>
+                  <Pressable accessibilityRole="button" accessibilityLabel="Stop replying" hitSlop={10} onPress={stopReplying}>
+                    <Ionicons name="close" size={16} color={colors.textMuted} />
+                  </Pressable>
+                </View>
+              ) : null}
+            </Collapse>
+            {!staged ? <Animated.View style={styles.quick}>{quickRow}</Animated.View> : typing ? (
               <Animated.View entering={FadeInDown.duration(160)} exiting={FadeOut.duration(120)} layout={COMPOSER_GLIDE} style={styles.quick}>{quickRow}</Animated.View>
             ) : null}
-            {photo ? (
-              <Animated.View entering={FadeInDown.duration(180)} exiting={FadeOut.duration(160)} style={styles.attached}>
-                <ExpoImage source={{ uri: photo }} style={StyleSheet.absoluteFill} contentFit="cover" />
-                <Pressable accessibilityRole="button" accessibilityLabel="Remove the photo" onPress={() => setPhoto(null)} style={styles.attachedRemoveTarget}>
-                  <View style={styles.attachedRemove}>
-                    <Ionicons name="close" size={13} color="#fff" />
-                  </View>
-                </Pressable>
-              </Animated.View>
-            ) : null}
+            <Collapse show={!!photo} gap={spacing.sm}>
+              {photo ? (
+                <View style={styles.attached}>
+                  <ExpoImage source={{ uri: photo }} style={StyleSheet.absoluteFill} contentFit="cover" />
+                  <Pressable accessibilityRole="button" accessibilityLabel="Remove the photo" onPress={() => setPhoto(null)} style={styles.attachedRemoveTarget}>
+                    <View style={styles.attachedRemove}>
+                      <Ionicons name="close" size={13} color="#fff" />
+                    </View>
+                  </Pressable>
+                </View>
+              ) : null}
+            </Collapse>
             <View style={styles.inputRow}>
               <Avatar name={me?.name ?? 'You'} seed={me?.avatarSeed ?? currentUserId ?? 'me'} uri={me?.avatarUrl} size={34} style={styles.me} />
               <View style={{ flex: 1 }}>
@@ -492,6 +496,40 @@ export default function CommentsSheet() {
  * pulled down and away from anywhere, as on Instagram; anywhere else it is
  * the list's own scroll. The list is held at its top while the sheet moves.
  */
+/**
+ * One of the box's extras (Replying to, the attached photo) opening and
+ * closing as a glide: its measured height grows from 0 (or shrinks to it)
+ * with a fade, the box's top edge following it, and it stays drawn until it
+ * has closed. `gap` is the box's own gap, given back while closed; `pullTop`
+ * is a negative top margin it has while open (the strip sits flush with the
+ * box's top edge). Oct 22 sweep, item 17.
+ */
+function Collapse({ show, gap, pullTop = 0, style, children }: { show: boolean; gap: number; pullTop?: number; style?: object; children: React.ReactNode }) {
+  const [mounted, setMounted] = useState(show);
+  const last = useRef<React.ReactNode>(children);
+  if (show) last.current = children;
+  const open = useSharedValue(show ? 1 : 0);
+  const height = useSharedValue(0);
+  useEffect(() => {
+    if (show) setMounted(true);
+    open.value = withTiming(show ? 1 : 0, { duration: 180 }, (done) => {
+      if (done && !show) runOnJS(setMounted)(false);
+    });
+  }, [show, open]);
+  const look = useAnimatedStyle(() => ({
+    height: height.value * open.value,
+    opacity: open.value,
+    marginTop: -pullTop * open.value,
+    marginBottom: -gap * (1 - open.value),
+  }));
+  if (!mounted && !show) return null;
+  return (
+    <Animated.View style={[{ overflow: 'hidden' }, style, look]} pointerEvents={show ? 'auto' : 'none'}>
+      <View onLayout={(e) => { height.value = e.nativeEvent.layout.height; }}>{last.current}</View>
+    </Animated.View>
+  );
+}
+
 function CommentList({ listRef, pull, scrollYValue, contentContainerStyle, children }: {
   listRef: AnimatedRef<Animated.ScrollView>;
   pull: boolean;
@@ -570,7 +608,8 @@ const styleDefinitions = StyleSheet.create({
   empty: { ...typography.small, color: colors.textFaint, paddingVertical: spacing.lg, textAlign: 'center' },
   composer: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: 10, gap: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, backgroundColor: colors.bg },
   // A slim strip across the top of the box while replying, the × on the right.
-  replying: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm, marginHorizontal: -spacing.lg, marginTop: -spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: 8, backgroundColor: colors.surfaceAlt },
+  replyingWrap: { marginHorizontal: -spacing.lg },
+  replying: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: 8, backgroundColor: colors.surfaceAlt },
   replyingText: { ...typography.small, color: colors.textMuted, flex: 1 },
   replyingHandle: { ...typography.smallStrong, color: colors.text },
   // Each emoji is a full-height target sharing the row's width; the row gives back the extra height around it.

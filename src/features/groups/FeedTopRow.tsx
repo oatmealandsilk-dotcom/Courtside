@@ -132,6 +132,7 @@ export function FeedTopRow({ groups, selected, onSelect, onPlus, onPicture, hidd
   }), [plainInk]);
   const markerLook = useAnimatedStyle(() => ({ backgroundColor: interpolateColor(pic.value, [0, 1], [plainInk, '#FFFFFF']) }), [plainInk]);
   // The "+" is an icon: the two inks cross-fade (nothing in the row is glass).
+  const markerEdgeLook = useAnimatedStyle(() => ({ opacity: pic.value }));
   const plusPlain = useAnimatedStyle(() => ({ opacity: 1 - pic.value }));
   const plusOnPicture = useAnimatedStyle(() => ({ opacity: pic.value }));
   // Pinched in: out with the clip's words over their 180 ms, and back the same way.
@@ -273,7 +274,9 @@ export function FeedTopRow({ groups, selected, onSelect, onPlus, onPicture, hidd
           </Pressable>
         </Animated.View>
         {/* The camera's marker: a short bar that stays in the middle while the words pass over it. */}
-        <Animated.View pointerEvents="none" style={[styles.marker, { left: viewW / 2 - 8 }, onPicture ? styles.markerEdge : null, markerLook]} />
+        {/* Its dark edge sits on an underlay that fades with the colour, never switched in one frame (Oct 22 sweep, item 16). */}
+        <Animated.View pointerEvents="none" style={[styles.marker, styles.markerEdge, { left: viewW / 2 - 8 }, markerEdgeLook]} />
+        <Animated.View pointerEvents="none" style={[styles.marker, { left: viewW / 2 - 8 }, markerLook]} />
       </View>
     </Animated.View>
     </Animated.View>
@@ -307,7 +310,7 @@ const styleDefinitions = StyleSheet.create({
   row: { position: 'absolute', left: 0, top: 0, flexDirection: 'row', alignItems: 'center', gap: GAP, height: TOP_BAND_HEIGHT },
   word: { fontSize: 16, lineHeight: 22, ...font('600'), letterSpacing: -0.2, maxWidth: WORD_MAX, paddingVertical: 2 },
   marker: { position: 'absolute', bottom: 3, width: 16, height: 2.5, borderRadius: 2 },
-  markerEdge: { boxShadow: '0px 1px 3px rgba(0, 0, 0, 0.35)' },
+  markerEdge: { backgroundColor: '#FFFFFF', boxShadow: '0px 1px 3px rgba(0, 0, 0, 0.35)' },
   wordOn: { ...font('700') },
   dot: { fontSize: 14, lineHeight: 22, opacity: 0.3 },
   plusSpot: { position: 'absolute', left: 0, top: (TOP_BAND_HEIGHT - PLUS) / 2, width: PLUS, height: PLUS },
