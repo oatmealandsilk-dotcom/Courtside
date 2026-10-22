@@ -1682,7 +1682,8 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, onSettled }: {
   const rowed = !!scope?.groupId || !!scope?.activities;
   const scopedBack = !!scope && !rowed;
   useEffect(() => {
-    if (!focused || !showing) return;
+    if (!focused || paused || !showing) return;
+    // Only the feed on show counts: a tab built and warmed off screen (paused) records nothing until it is opened.
     // An Instant seen here counts on its views, as in the full-screen viewer
     // (once per person; your own is left out of its count anyway).
     if (showing.type === 'hit') { if (showing.story.authorId !== currentUserId) actions.markStoryViewed(showing.story.id); return; }
@@ -1691,7 +1692,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, onSettled }: {
       showing.type === 'post' ? 'post' : 'question',
       showing.type === 'post' ? showing.post.id : showing.question.id,
     );
-  }, [focused, showing, actions, currentUserId]);
+  }, [focused, paused, showing, actions, currentUserId]);
 
   // The last page of the main feed: a small congratulations for getting
   // there this early, a way to post, and a way back to the top.

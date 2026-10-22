@@ -17,7 +17,9 @@ import { connectionIsQuick } from '@/lib/netSpeed';
  *    on a slow connection (the last clips took over two seconds, lib/netSpeed)
  *    one: there two at once only made the one you land on later;
  *  - nothing new starts while the app is in the background;
- *  - a preload that has its opening in (`ready`) frees its turn for the next.
+ *  - a preload that has its opening in (`ready`) frees its turn for the next;
+ *    one that never says so (a browser told to fetch only the metadata, a
+ *    stalled fetch) frees it anyway after TURN_MS, so it never blocks the queue.
  * A clip that got a turn keeps its player until its page leaves the window,
  * so a half-fetched clip is never thrown away and started again.
  *
@@ -32,11 +34,16 @@ const SCREEN_FIRST_MS = 4000;
 /** And once its first frame is in, this long more, so it starts playing before anything else asks. */
 const SCREEN_START_MS = 300;
 let screenInAt = 0;
+/** A preload holds its fetching turn this long at most, then the next may start (it keeps its player). */
+const TURN_MS = 4000;
 
 type Entry = { rank: number; ready: boolean; since: number };
 const waiting = new Map<number, Entry>();
 /** Holding a turn and still fetching: these count against AT_ONCE. */
 const fetching = new Set<number>();
+/** When each clip in `fetching` got its turn. */
+const turnAt = new Map<number, number>();
+let turnTimer: ReturnType<typeof setTimeout> | null = null;
 /** Ever given a turn (or played on screen): keeps its player while it stays in the window. */
 const given = new Set<number>();
 /** Clips on screen still fetching their opening, with when they started. */
@@ -55,11 +62,11 @@ function schedule() {
 }
 
 function settle() {
+  const now = Date.now();
   for (const id of [...fetching]) {
     const e = waiting.get(id);
-    if (!e || e.ready) fetching.delete(id);
+    if (!e || e.ready || now - (turnAt.get(id) ?? now) >= TURN_MS) { fetching.delete(id); turnAt.delete(id); }
   }
-  const now = Date.now();
   const starting = now - screenInAt < SCREEN_START_MS;
   const screenBusy = starting || [...onScreen.values()].some((at) => now - at < SCREEN_FIRST_MS);
   if (screenTimer) { clearTimeout(screenTimer); screenTimer = null; }
@@ -77,8 +84,15 @@ function settle() {
     for (const [id] of queue) {
       if (fetching.size >= room) break;
       fetching.add(id);
+      turnAt.set(id, now);
       given.add(id);
     }
+  }
+  // Look again when the oldest turn runs out, in case that clip never reports ready.
+  if (turnTimer) { clearTimeout(turnTimer); turnTimer = null; }
+  if (fetching.size) {
+    const left = Math.min(...[...fetching].map((id) => TURN_MS - (now - (turnAt.get(id) ?? now))));
+    turnTimer = setTimeout(settle, Math.max(0, left) + 10);
   }
   // Only a new turn changes what any clip may do (a turn handed back changes nothing on screen).
   if (given.size !== before) for (const fn of [...listeners]) fn();
@@ -126,7 +140,7 @@ export function usePreloadTurn(want: boolean, rank: number, playing: boolean, re
   }, [want, rank, active, ready]);
   useEffect(() => () => {
     const me = id.current;
-    waiting.delete(me); given.delete(me); fetching.delete(me); onScreen.delete(me);
+    waiting.delete(me); given.delete(me); fetching.delete(me); turnAt.delete(me); onScreen.delete(me);
     schedule();
   }, []);
   return active || given.has(id.current);
