@@ -1,12 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
-import Animated, { Easing, interpolate, runOnJS, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
+import Animated, { Easing, interpolate, runOnJS, useAnimatedReaction, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { GLYPH_EDGE } from '@/components/ReelCaption';
 import * as haptics from '@/lib/haptics';
 import { TOP_BAND_HEIGHT, TOP_BAND_TOP } from '@/features/feed/topBand';
+import { showRow } from '@/features/feed/topRowScroll';
 import { colors, font } from '@/theme';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import { TextScale } from '@/theme/textScale';
@@ -63,17 +64,17 @@ interface Props {
   /** A dot on the "+": someone is asking to join a group you run. */
   waiting?: boolean;
   /**
-   * Swiped on to the next clip: the row slips up and out of the way so the
-   * clip plays full screen, the way Reels' top row does (Oct 22, owner). It
-   * comes back on a hold, a slow drag, a scroll back up, a pause (see Home).
+   * How far the row is away, 0 shown to 1 gone: the feed on show moves it with
+   * its own scroll, the way Instagram's header goes and comes (Oct 22, owner;
+   * features/feed/topRowScroll). A tap on the strip where it lives brings it back.
    */
-  tucked?: boolean;
+  row?: SharedValue<number>;
 }
 
-/** How far the row slips up when it tucks away, and how long the slip takes each way. */
-const TUCK_LIFT = 14;
-const TUCK_OUT = 180;
-const TUCK_IN = 200;
+/** How far the row rides up as it goes: past its own top, into the clock's strip, gone by the time it gets there. */
+const AWAY_LIFT = TOP_BAND_TOP + TOP_BAND_HEIGHT - 10;
+/** The strip that brings the row back when tapped: the clock's band and the row's, short of a clip's sound disc just under it. */
+const TAP_BAND = TOP_BAND_TOP + TOP_BAND_HEIGHT - 4;
 
 /**
  * VoiceOver or TalkBack is on: the row then never tucks, so its words can always be reached and tapped.
@@ -92,7 +93,7 @@ function useScreenReader() {
   return on;
 }
 
-export function FeedTopRow({ groups, selected, onSelect, onPlus, onPicture, hidden, waiting, tucked = false }: Props) {
+export function FeedTopRow({ groups, selected, onSelect, onPlus, onPicture, hidden, waiting, row }: Props) {
   const styles = useThemedStyles(styleDefinitions);
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
@@ -157,22 +158,40 @@ export function FeedTopRow({ groups, selected, onSelect, onPlus, onPicture, hidd
   const shown = useRef(false);
   useEffect(() => { if (viewW && layout) shown.current = true; });
   const ready = viewW && (layout || shown.current) ? 1 : 0;
-  // Tucked away on a clip: a short slip up and fade, quick out and a touch slower back
-  // (Reels). With Reduce Motion it only fades. Nothing in the row is glass, so fading it is safe.
+  // Away with the scroll: it rides up and fades with the finger, frame by frame, and settles in
+  // or out when the feed comes to rest (features/feed/topRowScroll). With Reduce Motion it only
+  // fades. VoiceOver keeps it in, as does one of its words holding the focus. Nothing in the row
+  // is glass, so fading it is safe.
   const reduceMotion = useReducedMotion();
   const screenReader = useScreenReader();
   const [focusIn, setFocusIn] = useState(false);
-  const away = tucked && !screenReader && !focusIn;
-  const tuck = useSharedValue(away ? 1 : 0);
-  useEffect(() => {
-    tuck.value = withTiming(away ? 1 : 0, { duration: away ? TUCK_OUT : TUCK_IN, easing: Easing.out(Easing.quad) });
-  }, [away, tuck]);
-  const tuckStyle = useAnimatedStyle(() => ({
-    opacity: hidden ? 0 : 1 - tuck.value,
-    transform: [{ translateY: reduceMotion ? 0 : -TUCK_LIFT * tuck.value }],
-  }), [hidden, reduceMotion]);
+  const held = screenReader || focusIn;
+  const fallback = useSharedValue(0);
+  const away = row ?? fallback;
+  useEffect(() => { if (held) showRow(away); }, [held, away]);
+  // Untouchable while it is more out than in, and then the strip it lives in brings it back on a tap.
+  const [gone, setGone] = useState(false);
+  useAnimatedReaction(() => away.value > 0.5, (now, before) => { if (now !== before) runOnJS(setGone)(now); }, [away]);
+  const outOfWay = gone && !held;
+  const awayStyle = useAnimatedStyle(() => {
+    const p = held ? 0 : away.value;
+    return {
+      // Gone a little before it reaches the clock, so its words never sit over the time.
+      opacity: hidden ? 0 : interpolate(p, [0, 0.85], [1, 0], 'clamp'),
+      transform: [{ translateY: reduceMotion ? 0 : -AWAY_LIFT * p }],
+    };
+  }, [hidden, reduceMotion, held]);
   return (
-    <Animated.View pointerEvents={hidden || away ? 'none' : 'box-none'} style={[styles.layer, { top: insets.top + TOP_BAND_TOP }, tuckStyle]}>
+    <>
+    {outOfWay && !hidden ? (
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Show the feed's tabs"
+        onPress={() => showRow(away)}
+        style={[styles.tapBand, { height: insets.top + TAP_BAND }]}
+      />
+    ) : null}
+    <Animated.View pointerEvents={hidden || outOfWay ? 'none' : 'box-none'} style={[styles.layer, { top: insets.top + TOP_BAND_TOP }, awayStyle]}>
       <View style={styles.clip} onLayout={(e) => setViewW(e.nativeEvent.layout.width)} pointerEvents="box-none">
         {/* The words, cut off just short of the "+" at its stop. While the "+" rides at the row's end, no word reaches the cut. */}
         <View style={styles.words} pointerEvents="box-none">
@@ -216,6 +235,7 @@ export function FeedTopRow({ groups, selected, onSelect, onPlus, onPicture, hidd
         <View pointerEvents="none" style={[styles.marker, { backgroundColor: ink, left: viewW / 2 - 8 }, edge ? styles.markerEdge : null]} />
       </View>
     </Animated.View>
+    </>
   );
 }
 
@@ -235,6 +255,7 @@ function Word({ name, at, shift, viewW, style }: { name: string; at: { x: number
 }
 
 const styleDefinitions = StyleSheet.create({
+  tapBand: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 8 },
   layer: { position: 'absolute', left: 0, right: 0, height: TOP_BAND_HEIGHT, zIndex: 8, alignItems: 'center', justifyContent: 'center' },
   clip: { alignSelf: 'stretch', overflow: 'hidden', height: TOP_BAND_HEIGHT },
   words: { position: 'absolute', left: 0, top: 0, bottom: 0, right: PLUS_ZONE, overflow: 'hidden' },
