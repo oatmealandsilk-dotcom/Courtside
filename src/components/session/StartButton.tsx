@@ -3,6 +3,7 @@ import { AccessibilityInfo, Pressable, StyleSheet, View } from 'react-native';
 import Animated, { Easing, cancelAnimation, interpolate, runOnJS, useAnimatedProps, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import Svg, { Circle, G } from 'react-native-svg';
 
+import { brandBoxShadow } from '@/theme/fillMode';
 import { BrandWash } from '@/components/ui';
 import { clockText, useLiveNow } from '@/features/activity/liveSession';
 import * as haptics from '@/lib/haptics';
@@ -173,7 +174,7 @@ export function StartButton({ onStart, onStarted, onPhase, label = 'Start' }: {
           onPressIn={pressIn}
           onPressOut={pressOut}
           onPress={begin}
-          style={[styles.start, { boxShadow: dark ? '0px 10px 24px rgba(0, 0, 0, 0.45)' : `0px 10px 24px ${withAlpha(colors.brand, 0.34)}` }]}
+          style={[styles.start, { boxShadow: brandBoxShadow(dark ? '0px 10px 24px rgba(0, 0, 0, 0.45)' : `0px 10px 24px ${withAlpha(colors.brand, 0.34)}`) }]}
         >
           <BrandWash />
           <View style={styles.window}>

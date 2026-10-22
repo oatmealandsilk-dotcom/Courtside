@@ -1,3 +1,4 @@
+import { brandShadow } from '@/theme/fillMode';
 import { PRESS_DIM, PRESS_SHRINK } from '@/theme/press';
 import { asTabRoute } from '@/features/navigation/tabFocus';
 import { useThemedStyles } from '@/theme/ThemeProvider';
@@ -293,7 +294,7 @@ const styleDefinitions = StyleSheet.create({
   },
   askFieldPressed: { transform: [{ scale: PRESS_SHRINK }] },
   askPlaceholder: { ...typography.body, fontSize: 16, color: colors.textFaint, flex: 1 },
-  askGo: { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center', shadowColor: colors.brand, shadowOpacity: 0.28, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 3 },
+  askGo: { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center', ...brandShadow({ shadowColor: colors.brand, shadowOpacity: 0.28, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 3 }) },
   // Everything else is rows on hairlines, not boxes.
   list: { marginTop: spacing.sm },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: 14, paddingHorizontal: spacing.lg },

@@ -1,3 +1,4 @@
+import { brandShadow } from '@/theme/fillMode';
 import { PRESS_DIM, PRESS_SHRINK } from '@/theme/press';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
@@ -1571,8 +1572,8 @@ const styleDefinitions = StyleSheet.create({
   cardPill: { height: CARD_ROUND, borderRadius: buttonShape.radius, ...buttonShape.curve, borderWidth: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: CARD_PILL_GAP, paddingHorizontal: CARD_PILL_PAD },
   cardPrimary: { backgroundColor: colors.brand, borderColor: colors.brand },
   // The page's one shadow (DESIGN.md, Lift): the primary in its own colour; plain dark on a dark page.
-  cardLift: { shadowColor: colors.brand, shadowOpacity: 0.28, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 3 },
-  cardLiftDark: { shadowColor: '#000000', shadowOpacity: 0.35, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 3 },
+  cardLift: { ...brandShadow({ shadowColor: colors.brand, shadowOpacity: 0.28, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 3 }) },
+  cardLiftDark: { ...brandShadow({ shadowColor: '#000000', shadowOpacity: 0.35, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 3 }) },
   cardSecondary: { backgroundColor: colors.surfaceAlt, borderColor: colors.borderStrong },
   cardPrimaryText: { ...typography.smallStrong, fontSize: 14, color: colors.brandInk, flexShrink: 1 },
   cardSecondaryText: { ...typography.smallStrong, fontSize: 14, color: colors.text, flexShrink: 1 },

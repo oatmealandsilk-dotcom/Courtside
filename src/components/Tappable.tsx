@@ -1,7 +1,8 @@
 import React, { useRef } from 'react';
-import { Animated, Platform, Pressable, type StyleProp, type ViewStyle } from 'react-native';
+import { Animated, Platform, Pressable, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 
 import { PRESS_DIM, PRESS_SHRINK } from '@/theme/press';
+import { buttonShape } from '@/theme';
 
 interface Props {
   children: React.ReactNode;
@@ -29,6 +30,8 @@ interface Props {
   accessibilityRole?: 'button' | 'link';
   accessibilityLabel?: string;
   accessibilityState?: { selected?: boolean; disabled?: boolean };
+  /** A filled button that darkens a touch while held (the flat fill preview): its corner radius. */
+  pressShade?: number;
 }
 
 /**
@@ -58,9 +61,15 @@ export function Tappable({
   accessibilityRole = 'button',
   accessibilityLabel,
   accessibilityState,
+  pressShade,
 }: Props) {
   const scale = useRef(new Animated.Value(1)).current;
   const fade = useRef(new Animated.Value(1)).current;
+  const shade = useRef(new Animated.Value(0)).current;
+  const darken = (on: boolean) => {
+    if (pressShade === undefined) return;
+    Animated.timing(shade, { toValue: on ? 1 : 0, duration: on ? 0 : 160, useNativeDriver: true }).start();
+  };
 
   // Quick: the dip is a short straight run, the release a fast spring, so a
   // tap reads as instant rather than as an animation you watch.
@@ -87,13 +96,18 @@ export function Tappable({
       accessibilityRole={accessibilityRole}
       accessibilityLabel={accessibilityLabel}
       accessibilityState={{ ...accessibilityState, disabled }}
-      onPressIn={() => { if (disabled) return; spring(scaleTo); if (immediate) onPress?.(); }}
-      onPressOut={() => !disabled && spring(1)}
+      onPressIn={() => { if (disabled) return; spring(scaleTo); darken(true); if (immediate) onPress?.(); }}
+      onPressOut={() => { if (disabled) return; spring(1); darken(false); }}
       // react-native-web maps these to mouse enter/leave; native ignores them.
       onHoverIn={() => Platform.OS === 'web' && !disabled && spring(hoverTo)}
       onHoverOut={() => Platform.OS === 'web' && !disabled && spring(1)}
     >
-      <Animated.View style={[style, dim ? { opacity: fade, transform: [{ scale }] } : { transform: [{ scale }] }]}>{children}</Animated.View>
+      <Animated.View style={[style, dim ? { opacity: fade, transform: [{ scale }] } : { transform: [{ scale }] }]}>
+        {children}
+        {pressShade !== undefined ? (
+          <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderRadius: pressShade, backgroundColor: 'rgba(0, 0, 0, 0.1)', opacity: shade }, buttonShape.curve]} />
+        ) : null}
+      </Animated.View>
     </Pressable>
   );
 }

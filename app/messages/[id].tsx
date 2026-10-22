@@ -1,3 +1,4 @@
+import { brandShadow } from '@/theme/fillMode';
 import { PRESS_DIM } from '@/theme/press';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { TipBubble } from '@/components/TipBubble';
@@ -2908,10 +2909,10 @@ const styleDefinitions = StyleSheet.create({
     backgroundColor: colors.brand,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: colors.brand, shadowOpacity: 0.3, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 2,
+    ...brandShadow({ shadowColor: colors.brand, shadowOpacity: 0.3, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 2 }),
   },
   // On a dark court the button's own colour as a shadow reads as a glow; the page's own dark shade just lifts it.
-  sendCircleDark: { shadowColor: colors.overlay, shadowOpacity: 0.9 },
+  sendCircleDark: { ...brandShadow({ shadowColor: colors.overlay, shadowOpacity: 0.9 }) },
   recording: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, height: 44, paddingRight: 6, overflow: 'hidden' },
   recLead: { width: 10 },
   recDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.danger },

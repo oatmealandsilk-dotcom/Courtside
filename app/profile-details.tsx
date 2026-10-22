@@ -1,3 +1,4 @@
+import { brandShadow } from '@/theme/fillMode';
 import { PRESS_DIM } from '@/theme/press';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View, type ScrollView } from 'react-native';
@@ -684,8 +685,8 @@ const styleDefinitions = StyleSheet.create({
   primarySpot: { flex: 1 },
   primary: { height: buttonShape.height, borderRadius: buttonShape.radius, ...buttonShape.curve, backgroundColor: colors.brand, justifyContent: 'center', overflow: 'visible' },
   // The one shadow on the page: the primary action's, in its own colour (plain dark on a dark page).
-  lift: { shadowColor: colors.brand, shadowOpacity: 0.28, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 3 },
-  liftDark: { shadowColor: '#000000', shadowOpacity: 0.35, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 3 },
+  lift: { ...brandShadow({ shadowColor: colors.brand, shadowOpacity: 0.28, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 3 }) },
+  liftDark: { ...brandShadow({ shadowColor: '#000000', shadowOpacity: 0.35, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 3 }) },
   primaryText: { ...typography.bodyStrong, color: colors.brandInk },
   secondary: { height: buttonShape.height, paddingHorizontal: 20, borderRadius: buttonShape.radius, ...buttonShape.curve, backgroundColor: colors.surfaceAlt, borderWidth: 1, borderColor: colors.borderStrong, justifyContent: 'center' },
   secondaryText: { ...typography.bodyStrong, color: colors.text },

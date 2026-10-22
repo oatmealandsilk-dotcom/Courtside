@@ -1,3 +1,4 @@
+import { brandShadow } from '@/theme/fillMode';
 import { PRESS_DIM, PRESS_SHRINK } from '@/theme/press';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -266,8 +267,8 @@ const styleDefinitions = StyleSheet.create({
   primaryInner: { flexDirection: 'row', alignItems: 'center', gap: 9, paddingHorizontal: spacing.xl },
   primaryLabel: { ...typography.bodyStrong, fontSize: 16, color: colors.brandInk },
   // The one shadow on the page: the primary action, in its own colour (plain dark on a dark page).
-  lift: { shadowColor: colors.brand, shadowOpacity: 0.28, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 3 },
-  liftDark: { shadowColor: '#000000', shadowOpacity: 0.35, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 3 },
+  lift: { ...brandShadow({ shadowColor: colors.brand, shadowOpacity: 0.28, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 3 }) },
+  liftDark: { ...brandShadow({ shadowColor: '#000000', shadowOpacity: 0.35, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 3 }) },
   // The round actions.
   // A phone's full width; on a computer, a row no wider than a phone's, centred under the primary.
   acts: { flexDirection: 'row', alignItems: 'flex-start', alignSelf: 'center', width: '100%', maxWidth: 440 },

@@ -1,3 +1,4 @@
+import { brandShadow } from '@/theme/fillMode';
 import { PRESS_SHRINK } from '@/theme/press';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -39,7 +40,7 @@ const styleDefinitions = StyleSheet.create({
   fieldPressed: { transform: [{ scale: PRESS_SHRINK }] },
   text: { ...typography.body, fontSize: 16, color: colors.textMuted, flex: 1 },
   // The small lift, in the arrow's own colour (DESIGN.md: round brand buttons).
-  go: { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center', shadowColor: colors.brand, shadowOpacity: 0.28, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 3 },
+  go: { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center', ...brandShadow({ shadowColor: colors.brand, shadowOpacity: 0.28, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 3 }) },
   // Under the field, the way Coaching's note sits under its box.
   note: { ...typography.small, color: colors.textMuted, lineHeight: 18, paddingLeft: 2 },
 });

@@ -4,6 +4,7 @@ import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
 
 import { useTheme } from '@/theme/ThemeProvider';
 import { buttonShape, colors } from '@/theme';
+import { fillMode } from '@/theme/fillMode';
 
 /** Apple's smooth corner on a wash's clip and rim, to match a parent that has it. */
 const CURVE = buttonShape.curve;
@@ -76,6 +77,13 @@ export const BrandWash = React.memo(function BrandWash({ radius = 999, strength 
   const base0 = LOOKS[theme] ?? LOOKS.default;
   const look = strength === 1 ? base0 : { ...base0, glow: base0.glow * strength, sheenAt: base0.sheenAt * strength };
   const light = mix(base ?? colors.brand, look.toward, look.t);
+  // Flat: the fill alone. Soft: the fill with a barely-there lighter top edge (fillMode.ts).
+  if (fillMode === 'flat') return null;
+  if (fillMode === 'soft') {
+    return (
+      <View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderRadius: radius, borderTopWidth: 1, borderColor: 'rgba(255, 255, 255, 0.22)' }, curve && CURVE]} />
+    );
+  }
   return (
     <View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderRadius: radius, overflow: 'hidden' }, curve && CURVE]}>
       <Svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
@@ -118,6 +126,10 @@ export const ShirtWash = React.memo(function ShirtWash({ radius = 999, rim, lift
   const id = `${useId().replace(/[^a-zA-Z0-9]/g, '')}shirt${theme.replace(/-/g, '')}${Math.round(lift * 100)}`;
   const top = lift ? mix(colors.cardGlowTop, colors.surface, lift) : colors.cardGlowTop;
   const bottom = lift ? mix(colors.cardGlowBottom, colors.surface, lift) : colors.cardGlowBottom;
+  // Flat and soft (fillMode.ts): no fade, the box's own fill and its rim only.
+  if (fillMode !== 'sheen') {
+    return rim ? <View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderRadius: radius, borderWidth: StyleSheet.hairlineWidth, borderColor: rim }, curve && CURVE]} /> : null;
+  }
   return (
     <View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderRadius: radius, overflow: 'hidden' }, curve && CURVE]}>
       <Svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
