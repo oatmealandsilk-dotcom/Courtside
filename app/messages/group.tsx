@@ -145,7 +145,7 @@ export default function ChatDetails() {
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.label}>Mute messages</Text>
           {muted ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta}>{mutedLabel(conversation.mutedUntil)}</Text> : null}
         </View>
-        <Toggle value={muted} onChange={(on) => (on ? setAskMute(true) : actions.muteChat(conversation.id, null))} accessibilityLabel="Mute messages" />
+        <Toggle value={muted || askMute} onChange={(on) => (on ? setAskMute(true) : actions.muteChat(conversation.id, null))} accessibilityLabel="Mute messages" />
       </View>
       <View style={[styles.row, styles.line]}>
         <View style={[styles.lead, !receiptsEverywhere && styles.off]}><Ionicons name="checkmark-done-outline" size={20} color={colors.text} /></View>

@@ -1650,36 +1650,40 @@ const MessageRow = memo(function MessageRow({ item, ctx, original, originalBlock
     // off, or over), the card says so.
     const hit = ctx.hitRequests.find((h) => h.id === message.sharedId && !h.cancelled);
     const left = hit ? Math.max(0, hit.spots - joinedCount(hit)) : 0;
+    // Held, the menu draws a copy lifted and bright above the dimmed chat, so this one steps out of sight.
+    const hitCard = (onLongPress?: () => void) => (
+      <Tappable
+        accessibilityRole="link"
+        accessibilityLabel={`${hit ? `Looking for a hit, ${hitWhen(hit.startsAt)}, ${hit.place.name}` : 'This hit is over'}, sent ${sentAt}`}
+        scaleTo={0.97}
+        onLongPress={onLongPress}
+        onPress={() => (hit ? router.push(`/hit-request/${hit.id}`) : undefined)}
+        style={[styles.sharedCard, styles.courtCard]}
+      >
+        <View style={styles.sharedHead}>
+          <HitGlyph size={16} color={hit ? colors.brand : colors.textFaint} />
+          <Text style={[styles.sharedKind, !hit && styles.sharedKindOver]}>{hit ? 'Looking for a hit' : 'Hit'}</Text>
+        </View>
+        {hit ? (
+          <>
+            <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={styles.courtName}>{hitWhen(hit.startsAt)}</Text>
+            <Text maxFontSizeMultiplier={TextScale.BODY} numberOfLines={2} style={styles.sharedBody}>{hit.place.name} · {left ? `${left} ${left === 1 ? 'spot' : 'spots'} left` : 'Full'}</Text>
+          </>
+        ) : (
+          // Gone (played or called off): a quiet card that says so, not a live-looking one.
+          <>
+            <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={[styles.courtName, styles.overTitle]}>This hit is over</Text>
+            <Text maxFontSizeMultiplier={TextScale.BODY} style={styles.overBody}>It was played or called off.</Text>
+          </>
+        )}
+      </Tappable>
+    );
     body = (
       <Row {...rowProps}>
-        <HoldArea hover={hover} onHold={(rect) => openMenu({ message, mine, rect })} style={styles.sharedCardArea}>
+        <HoldArea hover={hover} onHold={(rect) => openMenu({ message, mine, rect, copy: hitCard() })} style={[styles.sharedCardArea, held && styles.heldAway]}>
           {(hold) => (
             <>
-              <Tappable
-                accessibilityRole="link"
-                accessibilityLabel={`${hit ? `Looking for a hit, ${hitWhen(hit.startsAt)}, ${hit.place.name}` : 'This hit is over'}, sent ${sentAt}`}
-                scaleTo={0.97}
-                onLongPress={hold}
-                onPress={() => (hit ? router.push(`/hit-request/${hit.id}`) : undefined)}
-                style={[styles.sharedCard, styles.courtCard]}
-              >
-                <View style={styles.sharedHead}>
-                  <HitGlyph size={16} color={hit ? colors.brand : colors.textFaint} />
-                  <Text style={[styles.sharedKind, !hit && styles.sharedKindOver]}>{hit ? 'Looking for a hit' : 'Hit'}</Text>
-                </View>
-                {hit ? (
-                  <>
-                    <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={styles.courtName}>{hitWhen(hit.startsAt)}</Text>
-                    <Text maxFontSizeMultiplier={TextScale.BODY} numberOfLines={2} style={styles.sharedBody}>{hit.place.name} · {left ? `${left} ${left === 1 ? 'spot' : 'spots'} left` : 'Full'}</Text>
-                  </>
-                ) : (
-                  // Gone (played or called off): a quiet card that says so, not a live-looking one.
-                  <>
-                    <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={[styles.courtName, styles.overTitle]}>This hit is over</Text>
-                    <Text maxFontSizeMultiplier={TextScale.BODY} style={styles.overBody}>It was played or called off.</Text>
-                  </>
-                )}
-              </Tappable>
+              {hitCard(hold)}
               {failedMark}
             </>
           )}
@@ -1695,7 +1699,7 @@ const MessageRow = memo(function MessageRow({ item, ctx, original, originalBlock
       <>
         {quoteAbove}
         <Row {...rowProps}>
-          <HoldArea hover={hover} onHold={(rect) => openMenu({ message, mine, rect })} style={styles.sharedCardArea}>
+          <HoldArea hover={hover} onHold={(rect) => openMenu({ message, mine, rect, copy: <GroupInviteCard groupId={invite.id} name={invite.name} sentAt={sentAt} onLongPress={() => {}} /> })} style={[styles.sharedCardArea, held && styles.heldAway]}>
             {(hold) => <GroupInviteCard groupId={invite.id} name={invite.name} sentAt={sentAt} onLongPress={hold} />}
           </HoldArea>
           {notSent}
@@ -1706,7 +1710,7 @@ const MessageRow = memo(function MessageRow({ item, ctx, original, originalBlock
   } else if (message.kind !== 'text' && message.sharedId) {
     body = (
       <Row {...rowProps}>
-        <HoldArea hover={hover} onHold={(rect) => openMenu({ message, mine, rect })} style={styles.sharedCardArea}>
+        <HoldArea hover={hover} onHold={(rect) => openMenu({ message, mine, rect, copy: <SharedCard message={message} posts={ctx.posts} questions={ctx.questions} users={ctx.users} sentAt={sentAt} onLongPress={() => {}} onMissingPost={() => {}} styles={styles} /> })} style={[styles.sharedCardArea, held && styles.heldAway]}>
           {(hold) => (
             <>
               <SharedCard message={message} posts={ctx.posts} questions={ctx.questions} users={ctx.users} sentAt={sentAt} onLongPress={hold} onMissingPost={ctx.call.loadPost} styles={styles} />
@@ -1821,12 +1825,16 @@ function Row({ mine, gap, leading, styles, time, onReply, flash, children }: Row
 function Reactions({ message, me, mine, styles, onOpen, inline = false }: { message: Message; me: string | null; mine: boolean; styles: Styles; onOpen: (m: Message) => void; inline?: boolean }) {
   const reactions = message.reactions ?? {};
   const tally = Object.values(reactions).reduce<Record<string, number>>((acc, emoji) => { acc[emoji] = (acc[emoji] ?? 0) + 1; return acc; }, {});
+  // Which emoji were already here: only one that lands while this is on screen springs in
+  // (never every chip when a chat opens, or a row scrolled back into view).
+  const seen = useRef<Set<string> | null>(null);
+  useEffect(() => { seen.current = new Set(Object.keys(tally)); });
   if (!Object.keys(tally).length) return null;
   const mark = me ? reactions[me] : undefined;
   return (
     <View style={inline ? [styles.reactionsInline, mine ? styles.mineAlign : styles.theirsAlign] : [styles.reactions, mine ? styles.reactionsMine : styles.reactionsTheirs]}>
       {Object.entries(tally).map(([emoji, count]) => (
-        <ReactionChip key={emoji} emoji={emoji} count={count} mine={mark === emoji} onPress={() => onOpen(message)} style={[styles.chip, mark === emoji && styles.chipMine]} />
+        <ReactionChip key={emoji} fresh={seen.current !== null && !seen.current.has(emoji)} emoji={emoji} count={count} mine={mark === emoji} onPress={() => onOpen(message)} style={[styles.chip, mark === emoji && styles.chipMine]} />
       ))}
     </View>
   );
@@ -2349,8 +2357,20 @@ function MessageMenu({ target, me, styles, canReply, canReact, pending, canDelet
   const mark = me ? message.reactions?.[me] : undefined;
   // In a browser, letting go of a long press lands a click on whatever the menu put under the finger
   // ("Copy link", often): nothing in the menu answers until a moment after it opened.
+  // The time alone was too short for a normal hold, so it also waits for a new touch, click or key.
   const openedAt = useRef(Date.now());
-  const settledMenu = () => Date.now() - openedAt.current > 350;
+  const armed = useRef(Platform.OS !== 'web');
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const arm = () => { armed.current = true; };
+    window.addEventListener('pointerdown', arm, true);
+    window.addEventListener('keydown', arm, true);
+    return () => {
+      window.removeEventListener('pointerdown', arm, true);
+      window.removeEventListener('keydown', arm, true);
+    };
+  }, []);
+  const settledMenu = () => armed.current && Date.now() - openedAt.current > 350;
   const close = () => { if (settledMenu()) leave(onClose); };
   const pick = (run: () => void) => { if (!settledMenu()) return; leave(() => { onClose(); run(); }); };
   return (
@@ -2570,14 +2590,16 @@ function DayLine({ iso, styles }: { iso: string; styles: any }) {
   );
 }
 
-/** A reaction that springs in when it lands, then sits still. A tap shows who reacted. */
-function ReactionChip({ emoji, count, mine, onPress, style }: {
-  emoji: string; count: number; mine: boolean; onPress: () => void; style: any;
+/** A reaction that springs in when it lands (`fresh`; still under Reduce Motion), then sits still. A tap shows who reacted. */
+function ReactionChip({ emoji, count, mine, fresh, onPress, style }: {
+  emoji: string; count: number; mine: boolean; fresh: boolean; onPress: () => void; style: any;
 }) {
-  const scale = useRef(new Animated.Value(0)).current;
+  const still = useReducedMotion();
+  const springs = fresh && !still;
+  const scale = useRef(new Animated.Value(springs ? 0 : 1)).current;
   useEffect(() => {
-    Animated.spring(scale, { toValue: 1, useNativeDriver: Platform.OS !== 'web', speed: 20, bounciness: 12 }).start();
-  }, [scale]);
+    if (springs) Animated.spring(scale, { toValue: 1, useNativeDriver: Platform.OS !== 'web', speed: 20, bounciness: 12 }).start();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <Animated.View style={{ transform: [{ scale }] }}>
       <Pressable onPress={onPress} accessibilityRole="button" hitSlop={4}

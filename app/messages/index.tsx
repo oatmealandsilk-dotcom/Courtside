@@ -2,6 +2,7 @@ import { PRESS_DIM } from '@/theme/press';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { runOnJS, useAnimatedReaction, useSharedValue } from 'react-native-reanimated';
 import { router, useLocalSearchParams } from 'expo-router';
 import { goBack } from '@/lib/goBack';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -76,6 +77,13 @@ export default function Inbox() {
   const [held, setHeld] = useState<{ conversation: Conversation; name: string; step: 'menu' | 'mute' } | null>(null);
   // The one row slid open to its actions.
   const [openRow, setOpenRow] = useState<string | null>(null);
+  // A row slid open closes once the list scrolls, as in Mail and Messages.
+  const inboxY = useSharedValue(0);
+  const rowOpen = useSharedValue(false);
+  useEffect(() => { rowOpen.value = openRow !== null; }, [openRow, rowOpen]);
+  useAnimatedReaction(() => inboxY.value, (y, prev) => {
+    if (prev != null && Math.abs(y - prev) > 2 && rowOpen.value) { rowOpen.value = false; runOnJS(setOpenRow)(null); }
+  }, []);
   // "typing…" in a row while someone types in that chat (Oct 4, owner). Heard
   // straight from their phone; it holds while they have a message on the go and goes when they send.
   const [typingIn, setTypingIn] = useState<Record<string, { userId: string; at: number }>>({});
@@ -244,6 +252,7 @@ export default function Inbox() {
   return (
     <PageSwipeBack onBack={() => goBack()}>
     <Screen
+      offsetY={inboxY}
       onRefresh={isDesktopBrowser() ? undefined : actions.refresh}
       title="Messages"
       wash
@@ -260,7 +269,7 @@ export default function Inbox() {
         </Pressable>
       }
     >
-      <SearchField value={search} onChangeText={setSearch} placeholder="Search" accessibilityLabel="Search messages" style={styles.searchWrap} />
+      <SearchField value={search} onChangeText={(t) => { setOpenRow(null); setSearch(t); }} placeholder="Search" accessibilityLabel="Search messages" style={styles.searchWrap} />
       {upToday.length && !search.trim() ? (
         // Instagram has notes here; CourtSide has who is up to hit today. A tap opens the chat with them.
         <View style={styles.upToday}>
@@ -279,7 +288,7 @@ export default function Inbox() {
       ) : null}
       <View style={styles.sections}>
         {sections.map((seg) => (
-          <Chip key={seg.value} label={seg.label} selected={section === seg.value} tint={colors.text} ink={colors.brandInk} onPress={() => setSection(seg.value)} />
+          <Chip key={seg.value} label={seg.label} selected={section === seg.value} tint={colors.text} ink={colors.brandInk} onPress={() => { setOpenRow(null); setSection(seg.value); }} />
         ))}
       </View>
 

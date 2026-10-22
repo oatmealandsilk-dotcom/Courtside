@@ -1,5 +1,5 @@
-import React from 'react';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useModalOpenWhile } from '@/lib/modalOpen';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -37,22 +37,40 @@ export function ChatSheet({ visible, title, options, onClose }: {
   const styles = useThemedStyles(styleDefinitions);
   const insets = useSafeAreaInsets();
   useModalOpenWhile(visible);
+  // While it fades out it keeps what it showed, rather than emptying to a bare strip.
+  const last = useRef({ title, options });
+  if (visible) last.current = { title, options };
+  const shown = visible ? { title, options } : last.current;
+  // In a browser, lifting the finger from the long press that opened it lands a
+  // click on whatever the sheet put under it: only a new touch, click or key counts.
+  const armed = useRef(Platform.OS !== 'web');
+  useEffect(() => {
+    if (!visible || Platform.OS !== 'web') return;
+    armed.current = false;
+    const arm = () => { armed.current = true; };
+    window.addEventListener('pointerdown', arm, true);
+    window.addEventListener('keydown', arm, true);
+    return () => {
+      window.removeEventListener('pointerdown', arm, true);
+      window.removeEventListener('keydown', arm, true);
+    };
+  }, [visible]);
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       {/* The backdrop is a plain surface, not a button: a button here would
           wrap the sheet's buttons, which the web refuses to nest. */}
-      <Pressable accessibilityLabel="Close" onPress={onClose} style={styles.backdrop}>
+      <Pressable accessibilityLabel="Close" onPress={() => { if (armed.current) onClose(); }} style={styles.backdrop}>
         {/* A tap on the sheet's own blank space stays on the sheet instead of closing it. */}
-        <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, spacing.lg) + spacing.md }]} onStartShouldSetResponder={() => true}>
+        <View pointerEvents={visible ? 'auto' : 'none'} style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, spacing.lg) + spacing.md }]} onStartShouldSetResponder={() => true}>
           <View style={styles.grabber} />
-          {title ? <Text style={styles.title} numberOfLines={1}>{title}</Text> : null}
-          {options.map((option, index) => (
+          {shown.title ? <Text style={styles.title} numberOfLines={1}>{shown.title}</Text> : null}
+          {shown.options.map((option, index) => (
             <Pressable
               key={option.key}
               accessibilityRole="button"
               accessibilityState={{ disabled: !!option.disabled }}
               disabled={option.disabled}
-              onPress={() => { onClose(); option.onPress(); }}
+              onPress={() => { if (!armed.current) return; onClose(); option.onPress(); }}
               style={({ pressed }) => [styles.row, index > 0 && styles.rule, pressed && styles.pressed, option.disabled && styles.off]}
             >
               {option.icon ? <Ionicons name={option.icon} size={21} color={option.danger ? colors.danger : colors.text} /> : null}
