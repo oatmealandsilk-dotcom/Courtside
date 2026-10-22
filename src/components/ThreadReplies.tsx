@@ -2,7 +2,7 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import { PlayerName } from '@/components/PlayerName';
 import { StreakFlame } from '@/components/StreakFlame';
 import { shownStreak, streakWords } from '@/features/practice/streakFlame';
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { confirm, confirmDelete, confirmReport } from '@/lib/confirm';
 import { RemovedNote } from '@/features/moderation/RemovedNote';
 import { afterReport } from '@/features/moderation/reportThanks';
@@ -70,6 +70,8 @@ export function ThreadReply({ answer, thread, askerId, depth = 0, preview = fals
   const lineRef = useRef<TextInput>(null);
   // The whole reply box (words, attach, Cancel, Send) is what is brought into view, so Send never sits under the tab bar.
   const boxRef = useRef<View>(null);
+  // A browser focuses the box as it first appears, before its onFocus is listened to, so the web brings it into view here.
+  useEffect(() => { if (replying && Platform.OS === 'web') reveal(boxRef.current); }, [replying]);
   const responder = users.find(user => user.id === answer.authorId);
   // The reply a thread was opened at (a reported one, from Reports): it is scrolled to and lights up for a moment.
   const mark = useJumpTarget(answer.id);
