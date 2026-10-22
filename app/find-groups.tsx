@@ -9,6 +9,8 @@ import { SearchField } from '@/components/SearchField';
 import { SheetTitle } from '@/components/sheet/SheetForm';
 import type { DiscoverGroup, ID } from '@/data/types';
 import { GroupTile } from '@/features/groups/GroupTile';
+import { LookBody, LookHeader, type Listed, type RowAct } from '@/features/groups/FindGroupsLooks';
+import { SHEET_LOOK } from '@/features/groups/sheetLook';
 import { reportGroup } from '@/features/groups/reportGroup';
 import { confirm } from '@/lib/confirm';
 import { show as showToast } from '@/lib/toast';
@@ -169,6 +171,60 @@ export default function FindGroups() {
     );
   };
 
+  // Design preview (web only, ?gs=a|b|c): the same sheet and the same actions in another look.
+  if (SHEET_LOOK !== 'now') {
+    const look = SHEET_LOOK;
+    const act = (g: Listed): RowAct => {
+      const state = g.member ? 'joined' : g.requested ? 'requested' : g.ask ? 'request' : 'join';
+      const faded = full && (state === 'join' || state === 'request');
+      return {
+        state,
+        working: busy === g.id,
+        faded,
+        onPress: state === 'joined' ? () => go(`/g/${g.id}`) : state === 'requested' ? () => cancel(g) : () => join(g),
+        a11y: state === 'joined' ? `You’re in ${g.name}. Open it`
+          : state === 'requested' ? `You asked to join ${g.name}. Cancel the request`
+          : faded ? `${g.ask ? 'Request' : 'Join'}. ${FULL_LINE}`
+          : state === 'request' ? `Ask to join ${g.name}` : `Join ${g.name}`,
+        report: () => reportGroup(actions.reportUser, { id: g.id, name: g.name, description: g.description }),
+      };
+    };
+    return (
+      <DragSheet
+        closeSignal={closeSignal}
+        onDismissed={done}
+        peekFraction={0.86}
+        plainGround={look !== 'a'}
+        contentHeight={(rows !== undefined || off) && fitH ? fitH : undefined}
+        header={<LookHeader look={look} joined={feedGroups.length} onClose={dismiss} />}
+      >
+        <ScrollView
+          contentContainerStyle={[styles.body, look === 'b' && styles.bodyB, look === 'c' && styles.bodyC]}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          onContentSizeChange={(_, h) => { const r = Math.ceil(h); if (r !== contentH) setContentH(r); }}
+        >
+          <LookBody
+            look={look}
+            feedGroups={feedGroups}
+            currentUserId={currentUserId}
+            full={full}
+            search={search}
+            setSearch={setSearch}
+            searching={searching}
+            rows={rows}
+            near={near}
+            rest={rest}
+            act={act}
+            go={go}
+            create={create}
+            off={off}
+          />
+        </ScrollView>
+      </DragSheet>
+    );
+  }
+
   const asking = (id: ID) => {
     const g = feedGroups.find((x) => x.id === id);
     return !!g && g.requests.length > 0 && g.members.some((m) => m.id === currentUserId && m.admin);
@@ -277,6 +333,9 @@ export default function FindGroups() {
 
 const styleDefinitions = StyleSheet.create({
   body: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: spacing.xxl, gap: spacing.lg },
+  // Design preview looks (see FindGroupsLooks): B's grouped sections sit further apart; C's courts and list breathe.
+  bodyB: { gap: spacing.xl },
+  bodyC: { gap: spacing.xl, paddingTop: spacing.md },
   note: { ...typography.small, color: colors.textMuted, lineHeight: 19, paddingVertical: spacing.md, paddingHorizontal: spacing.xs },
   loading: { paddingVertical: spacing.xl },
   // The grouped list of Settings and the Groups page: a shade off the sheet, rows on hairlines.

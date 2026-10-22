@@ -53,6 +53,8 @@ export function DragSheet(props: {
   onDismissed: () => void;
   /** How tall the sheet opens at first, as a fraction of the screen. */
   peekFraction?: number;
+  /** No warm glow behind it, just the page colour (a design preview for the Groups sheet). */
+  plainGround?: boolean;
   /** Bump this number to close the sheet from outside (a Close button, a finished send). */
   closeSignal?: number;
   /** On a computer the sheet is a box sized to its contents (see the .web twin); a phone ignores it. */
@@ -110,6 +112,7 @@ function PlainSheet({
   beforeClose,
   ownBack = false,
   handOverSignal = 0,
+  plainGround = false,
 }: {
   header: React.ReactNode;
   children: React.ReactNode;
@@ -121,6 +124,7 @@ function PlainSheet({
   beforeClose?: () => boolean;
   ownBack?: boolean;
   handOverSignal?: number;
+  plainGround?: boolean;
 }) {
   const styles = useThemedStyles(styleDefinitions);
   const { height: windowHeight } = useWindowDimensions();
@@ -327,8 +331,8 @@ function PlainSheet({
       <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: colors.overlay }, backdropStyle]} />
       <Pressable accessibilityRole="button" accessibilityLabel="Close" style={StyleSheet.absoluteFill} onPress={() => userDismiss()} />
       <Animated.View style={[styles.sheet, sheetStyle]}>
-        {/* The same warm glow the pages open with, so a sheet reads as part of the app. */}
-        <Wash height={300} strength={0.85} />
+        {/* The same warm glow the pages open with, so a sheet reads as part of the app (unless plainGround). */}
+        {plainGround ? null : <Wash height={300} strength={0.85} />}
         <GestureDetector gesture={pan}>
           <View style={styles.handle} onLayout={(e) => { const h = Math.ceil(e.nativeEvent.layout.height); if (h !== headH) setHeadH(h); }}>
             <View style={styles.grabber} />
