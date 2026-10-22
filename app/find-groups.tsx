@@ -199,7 +199,7 @@ export default function FindGroups() {
       onDismissed={done}
       peekFraction={0.86}
       contentHeight={(rows !== undefined || off) && fitH ? fitH : undefined}
-      header={<Header joined={feedGroups.length} onClose={dismiss} onManage={() => go('/groups')} />}
+      header={<Header joined={feedGroups.length} off={off} onClose={dismiss} onManage={() => go('/groups')} />}
     >
       <ScrollView
         contentContainerStyle={styles.body}
@@ -239,7 +239,7 @@ export default function FindGroups() {
 }
 
 /** The title, a fact line ("1 of 3 joined" or "Join up to 3") with Manage, and the close disc. */
-function Header({ joined, onClose, onManage }: { joined: number; onClose: () => void; onManage: () => void }) {
+function Header({ joined, off, onClose, onManage }: { joined: number; off: boolean; onClose: () => void; onManage: () => void }) {
   const styles = useThemedStyles(styleDefinitions);
   const { dark } = useTheme();
   return (
@@ -250,14 +250,15 @@ function Header({ joined, onClose, onManage }: { joined: number; onClose: () => 
           <Ionicons name="close" size={18} color={colors.textMuted} />
         </Pressable>
       </View>
-      <View style={styles.factRow}>
+      {/* With groups switched off there is nothing to count. */}
+      {!off ? <View style={styles.factRow}>
         <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.fact}>{joined ? `${joined} of ${MAX_GROUPS} joined` : `Join up to ${MAX_GROUPS}`}</Text>
         {joined ? (
           <Pressable accessibilityRole="link" accessibilityLabel="Manage your groups" hitSlop={12} onPress={onManage} style={({ pressed }) => pressed && styles.pressed}>
             <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.manage}>Manage</Text>
           </Pressable>
         ) : null}
-      </View>
+      </View> : null}
     </View>
   );
 }
