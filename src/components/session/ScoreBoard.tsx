@@ -39,7 +39,7 @@ export function spokenBoard(sets: MatchSet[], youWon?: boolean): string {
 const SIZES = {
   card: { games: 30, mtb: 20, tb: 11, row: 42, col: 22, mtbCol: 26, slot: 10, gap: 14, name: 15 },
   page: { games: 22, mtb: 17, tb: 10, row: 34, col: 18, mtbCol: 22, slot: 9, gap: 12, name: 15 },
-  mini: { games: 15, mtb: 12, tb: 8, row: 19, col: 11, mtbCol: 15, slot: 6, gap: 7, name: 0 },
+  mini: { games: 15, mtb: 12, tb: 8, row: 19, col: 11, mtbCol: 19, slot: 6, gap: 7, name: 0 },
 } as const;
 
 export function ScoreBoard({ sets, you, them, youWon, size = 'card', headers = false }: {

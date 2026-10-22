@@ -19,3 +19,14 @@ const read = (): boolean => {
 };
 
 export const SIG: boolean = read();
+
+/*
+ * For the design board's capture script only, and only with the preview on:
+ * opens a page inside the running app (a full page load would sign the demo
+ * account out).
+ */
+if (SIG && typeof window !== 'undefined') {
+  (window as unknown as { __sigGo?: (path: string) => void }).__sigGo = (path: string) => {
+    void import('expo-router').then(({ router }) => router.push(path as never));
+  };
+}
