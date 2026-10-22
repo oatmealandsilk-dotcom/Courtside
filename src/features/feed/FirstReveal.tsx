@@ -1,4 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useState } from 'react';
+import { StyleSheet } from 'react-native';
 import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
 
 import { curtainHasLifted, isCurtainDown, useCurtainReady } from '@/features/feed/warmup';
@@ -53,22 +54,34 @@ export function FirstReveal({ order, children }: { order: number; children: Reac
     const t = setTimeout(() => setOverdue(true), HOLD_MAX_MS);
     return () => clearTimeout(t);
   }, [hold, lifting]);
-  // Arrived: from here on the section is drawn with no style of the animation's at all.
-  const [arrived, setArrived] = useState(false);
-  const started = useRef(false);
+  // Three steps, so the animation thread only ever holds a value while it is moving:
+  // 'held' under the curtain is a plain style (an animated "hidden" left still for a
+  // second gets copied into the view's own style on an iPhone, and can then outlast
+  // the rise); 'rising' puts the animated style on, at the same place, and starts it;
+  // 'up' is the section with no style at all.
+  const [phase, setPhase] = useState<'held' | 'rising' | 'up'>(hold ? 'held' : 'up');
   const still = useReducedMotion();
-  const shown = useSharedValue(hold ? 0 : 1);
+  const shown = useSharedValue(0);
   useEffect(() => {
-    if (!hold || !(lifting || overdue) || started.current) return;
-    started.current = true;
+    if (phase !== 'held' || !(lifting || overdue)) return;
     played = true;
-    shown.value = withDelay(
-      Math.min(order, LAST_STEP) * STEP_MS,
-      withTiming(1, { duration: RISE_MS, easing: Easing.out(Easing.cubic) }, (finished) => { if (finished) runOnJS(setArrived)(true); }),
-    );
-  }, [hold, lifting, overdue, order, shown]);
+    setPhase('rising');
+  }, [phase, lifting, overdue]);
+  useLayoutEffect(() => {
+    if (phase !== 'rising') return undefined;
+    const delay = Math.min(order, LAST_STEP) * STEP_MS;
+    shown.value = withDelay(delay, withTiming(1, { duration: RISE_MS, easing: Easing.out(Easing.cubic) }, (finished) => { if (finished) runOnJS(setPhase)('up'); }));
+    // Its end never heard (a long busy moment on the phone): it is up all the same.
+    const t = setTimeout(() => setPhase('up'), delay + RISE_MS + 1000);
+    return () => clearTimeout(t);
+  }, [phase, order, shown]);
   const style = useAnimatedStyle(() => ({ opacity: shown.value, transform: [{ translateY: still ? 0 : (1 - shown.value) * RISE }] }));
   if (!hold) return <>{children}</>;
-  // The same view throughout (its children are never built again), only its style let go once it has arrived.
-  return <Animated.View style={arrived ? undefined : style}>{children}</Animated.View>;
+  // The same view throughout (its children are never built again); only its style changes.
+  return <Animated.View style={phase === 'held' ? (still ? styles.heldStill : styles.held) : phase === 'rising' ? style : undefined}>{children}</Animated.View>;
 }
+
+const styles = StyleSheet.create({
+  held: { opacity: 0, transform: [{ translateY: RISE }] },
+  heldStill: { opacity: 0 },
+});
