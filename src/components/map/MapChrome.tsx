@@ -823,7 +823,7 @@ export function WhereCard({ locating, onLocation }: { locating?: boolean; onLoca
       </View>
       <View style={[styles.personActions, { marginTop: spacing.xs }]}>
         <Pressable accessibilityRole="button" onPress={onLocation} disabled={locating} style={styles.primary}>
-          <BrandWash radius={buttonShape.smallRadius} />
+          <BrandWash radius={buttonShape.smallRadius} curve />
           {locating ? <ActivityIndicator size="small" color={colors.brandInk} /> : <Ionicons name="navigate" size={16} color={colors.brandInk} />}
           <Text {...oneLine(TextScale.TITLE, 0.8)} style={styles.primaryText}>Use my location</Text>
         </Pressable>
@@ -916,13 +916,13 @@ export function PlayerSheet({ placed, following, onClose, onProfile, onMessage, 
         <View style={styles.cardSlot}>
           {onAskToHit ? (
             <Tappable accessibilityLabel={`Ask ${user.name} to hit`} onPress={onAskToHit} scaleTo={0.97} hoverTo={1.02} style={[styles.cardPill, styles.cardPrimary, pageIsDark() ? styles.cardLiftDark : styles.cardLift]}>
-              <BrandWash radius={buttonShape.radius} />
+              <BrandWash radius={buttonShape.radius} curve />
               <HitGlyph size={CARD_PILL_ICON} color={colors.brandInk} />
               <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.cardPrimaryText} numberOfLines={1}>{primaryLabel}</Text>
             </Tappable>
           ) : (
             <Tappable accessibilityLabel={`Message ${user.name}`} onPress={onMessage} scaleTo={0.97} hoverTo={1.02} style={[styles.cardPill, styles.cardPrimary, pageIsDark() ? styles.cardLiftDark : styles.cardLift]}>
-              <BrandWash radius={buttonShape.radius} />
+              <BrandWash radius={buttonShape.radius} curve />
               <Ionicons name="paper-plane-outline" size={CARD_PILL_ICON} color={colors.brandInk} />
               <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.cardPrimaryText} numberOfLines={1}>{primaryLabel}</Text>
             </Tappable>
@@ -1154,7 +1154,7 @@ export function CourtSheet({ court, miles, ringed = false, onClose }: { court: C
       <View style={styles.personActions}>
         {/* Three pills, a little tighter than the player card's, so they fit a 320pt phone. */}
         <Pressable accessibilityRole="link" accessibilityLabel="Directions" onPress={() => directionsTo(court)} style={[styles.primary, styles.pillTight]}>
-          <BrandWash radius={buttonShape.smallRadius} />
+          <BrandWash radius={buttonShape.smallRadius} curve />
           <Ionicons name="navigate-outline" size={16} color={colors.brandInk} />
           <Text {...oneLine(TextScale.TITLE, 0.8)} style={styles.primaryText}>Directions</Text>
         </Pressable>
@@ -1349,7 +1349,7 @@ export function CitylessCard({ onOpenMap }: { onOpenMap?: () => void }) {
       <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.citylessBody}>Add your city to see the players near you.</Text>
       <View style={styles.citylessActions}>
         <Pressable accessibilityRole="button" onPress={() => router.push('/edit-profile')} style={styles.primary}>
-          <BrandWash radius={buttonShape.smallRadius} />
+          <BrandWash radius={buttonShape.smallRadius} curve />
           <Text {...oneLine(TextScale.TITLE, 0.8)} style={styles.primaryText}>Add my city</Text>
         </Pressable>
         {onOpenMap ? (

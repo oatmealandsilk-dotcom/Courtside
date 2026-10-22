@@ -55,7 +55,7 @@ export function FollowPill({ following, onPress, small = false, name, userId, wi
   return (
     <Pressable accessibilityRole="button" accessibilityState={{ selected: filled }} accessibilityLabel={`${following ? 'Following' : requested ? 'Requested' : 'Follow'}${name ? ` ${name}` : ''}`} onPress={press} hitSlop={6} style={wide ? styles.wide : undefined}>
       <Animated.View style={[styles.pill, small && styles.small, wide && styles.wide, pill]}>
-        <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, wash]}><BrandWash radius={buttonShape.smallRadius} /></Animated.View>
+        <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, wash]}><BrandWash radius={buttonShape.smallRadius} curve /></Animated.View>
         {filled ? <Ionicons name="checkmark" size={14} color={colors.text} /> : null}
         <Animated.Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.text, small && styles.textSmall, label]}>{following ? 'Following' : requested ? 'Requested' : 'Follow'}</Animated.Text>
       </Animated.View>

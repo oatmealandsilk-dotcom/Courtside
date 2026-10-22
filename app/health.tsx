@@ -290,7 +290,7 @@ export default function Health() {
                   <Reanimated.View key="workouts-offer" entering={FadeIn.duration(220)} exiting={FadeOut.duration(140)} style={styles.offer}>
                     <Text style={styles.offerText}>Also pick up runs, rides and the gym?</Text>
                     <Tappable accessibilityRole="button" accessibilityLabel={`Turn on every workout from ${i.label}: runs, rides, the gym and more`} disabled={loading} onPress={() => { haptics.tap(); if (i.provider === 'whoop') askWhoop(); else askApple('workouts'); }} style={styles.turnOn}>
-                      <BrandWash radius={buttonShape.smallRadius} />
+                      <BrandWash radius={buttonShape.smallRadius} curve />
                       {offerBusy ? <ActivityIndicator size="small" color={colors.brandInk} /> : null}
                       <Text style={styles.turnOnText}>{offerBusy ? 'Turning on…' : 'Turn on'}</Text>
                     </Tappable>
@@ -304,7 +304,7 @@ export default function Health() {
                     The app's own filled pill (with its soft wash) dips under the finger; while it
                     works, the pill itself says so rather than the row going quiet. */}
                 <Tappable accessibilityRole="button" accessibilityLabel={`Turn on ${what(i)} from ${i.label}`} disabled={loading} onPress={() => { haptics.tap(); if (i.provider === 'apple-health') askApple('tennis'); else run(i.provider, 'tennis'); }} style={styles.turnOn}>
-                  <BrandWash radius={buttonShape.smallRadius} />
+                  <BrandWash radius={buttonShape.smallRadius} curve />
                   {loading ? <ActivityIndicator size="small" color={colors.brandInk} /> : null}
                   <Text style={styles.turnOnText}>{loading ? 'Turning on…' : `Turn on ${what(i)}`}</Text>
                 </Tappable>

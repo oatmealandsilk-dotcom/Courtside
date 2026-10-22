@@ -70,7 +70,7 @@ export function Button({
         style,
       ]}
     >
-      {variant === 'primary' ? <BrandWash radius={size === 'sm' ? buttonShape.smallRadius : buttonShape.radius} /> : null}
+      {variant === 'primary' ? <BrandWash radius={size === 'sm' ? buttonShape.smallRadius : buttonShape.radius} curve /> : null}
       <View style={styles.inner}>
         {loading ? <CourtSpinner size={size === 'sm' ? 15 : 18} ink={palette.fg} /> : null}
         <Text {...(size === 'sm' ? oneLine(TextScale.TITLE, 0.8) : { maxFontSizeMultiplier: TextScale.TITLE })} style={[styles.label, size === 'sm' && styles.smallLabel, { color: palette.fg }]} numberOfLines={size === 'sm' ? 1 : undefined}>{label}</Text>

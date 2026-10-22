@@ -144,8 +144,12 @@ export const radius = {
  * ships inside the app (`wordmarkFont`, and `black` for the share overlays).
  */
 const SYSTEM_WEB = '-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, "Segoe UI", Roboto, "Helvetica Neue", sans-serif';
-const SYSTEM = Platform.OS === 'web' ? SYSTEM_WEB : Platform.OS === 'ios' ? 'System' : 'sans-serif';
-const INTER = { '400': 'Inter_400Regular', '500': 'Inter_500Medium', '600': 'Inter_600SemiBold', '700': 'Inter_700Bold', '900': 'Inter_800ExtraBold' } as const;
+// iOS: 'system-ui' goes straight to SF by its system design (React Native's
+// font lookup treats 'System' as a custom family name and searches for it
+// first on every uncached lookup). Android: the phone's own sans (Roboto).
+const SYSTEM = Platform.OS === 'web' ? SYSTEM_WEB : Platform.OS === 'ios' ? 'system-ui' : 'sans-serif';
+// Inter Regular is not loaded (Oct 22): nothing but the wordmark is in Inter, and it is never regular.
+const INTER = { '500': 'Inter_500Medium', '600': 'Inter_600SemiBold', '700': 'Inter_700Bold', '900': 'Inter_800ExtraBold' } as const;
 
 export const fontFamily = {
   regular: SYSTEM,
@@ -159,14 +163,18 @@ export const fontFamily = {
 type Weight = '400' | '500' | '600' | '700' | '900';
 
 /** A weight as a style: `{...font('500')}` where a literal fontWeight used to be. 900 is the Inter wordmark. */
-export const font = (weight: Weight) => (weight === '900' ? wordmarkFont('900') : { fontFamily: SYSTEM, fontWeight: weight });
+export const font = (weight: Weight) => (weight === '900'
+  ? wordmarkFont('900')
+  // Roboto has no semibold: Android would round 600 up to Bold, so headings and
+  // button labels read heavier than SF Semibold on an iPhone. Medium matches it.
+  : { fontFamily: SYSTEM, fontWeight: Platform.OS === 'android' && weight === '600' ? '500' as Weight : weight });
 
 /**
  * The CourtSide wordmark, which stays in Inter whatever the rest of the app is
  * set in. A phone takes exactly one name and has Inter in the bundle; a
  * browser falls back to the system's own sans should Inter ever be slow.
  */
-export const wordmarkFont = (weight: Weight) => {
+export const wordmarkFont = (weight: Exclude<Weight, '400'>) => {
   const family = INTER[weight];
   return { fontFamily: Platform.OS === 'web' ? `${family}, ${SYSTEM_WEB}` : family, fontWeight: weight };
 };
@@ -185,7 +193,7 @@ export const typography = {
   bodyStrong: { ...font('600'), fontSize: 15, letterSpacing: -0.1 },
   small: { ...font('400'), fontSize: 13 },
   smallStrong: { ...font('600'), fontSize: 13 },
-  caption: { ...font('600'), fontSize: 11, letterSpacing: 0.3 },
+  caption: { ...font('600'), fontSize: 11, letterSpacing: 0.1 },
 } as const;
 
 /**

@@ -131,7 +131,7 @@ function Mine({ user, offsetY, scrollRef }: { user: User; offsetY: SharedValue<n
       <View style={styles.buttons}>
         <View style={styles.primarySpot}>
           <Tappable accessibilityRole="button" accessibilityLabel="Log a session" onPress={() => router.push('/log-session')} scaleTo={0.97} hoverTo={1.02} style={[styles.primary, pageIsDark() ? styles.liftDark : styles.lift]}>
-            <BrandWash radius={buttonShape.radius} />
+            <BrandWash radius={buttonShape.radius} curve />
             <View style={styles.pillInner}>
               <Ionicons name="add" size={20} color={colors.brandInk} />
               <Text style={styles.primaryText}>Log a session</Text>

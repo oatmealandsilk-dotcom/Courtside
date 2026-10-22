@@ -145,7 +145,7 @@ export function FoodSection({ userId }: { userId: string | null }) {
             </View>
           </View>
           <Tappable accessibilityRole="button" accessibilityLabel="Connect food through Apple Health" disabled={busy} scaleTo={0.97} onPress={() => { haptics.tap(); void connect(); }} style={styles.primary}>
-            <BrandWash radius={buttonShape.radius} />
+            <BrandWash radius={buttonShape.radius} curve />
             {busy ? <ActivityIndicator size="small" color={colors.brandInk} /> : <Ionicons name="heart-outline" size={16} color={colors.brandInk} />}
             <Text style={styles.primaryText}>{busy ? 'Opening Apple Health…' : 'Allow in Apple Health'}</Text>
           </Tappable>
@@ -256,7 +256,7 @@ const styleDefinitions = StyleSheet.create({
   pressedDim: { opacity: PRESS_DIM },
   loading: { height: 120, alignItems: 'center', justifyContent: 'center' },
   todayRow: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.md },
-  kicker: { ...typography.caption, color: colors.textMuted, textTransform: 'uppercase' },
+  kicker: { ...typography.caption, letterSpacing: 0.3, color: colors.textMuted, textTransform: 'uppercase' },
   big: { ...typography.display, color: colors.text, fontVariant: ['tabular-nums'] },
   unit: { ...typography.small, color: colors.textMuted, letterSpacing: 0 },
   source: { ...typography.small, color: colors.textFaint, paddingBottom: 6, maxWidth: '45%' },

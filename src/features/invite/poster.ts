@@ -33,6 +33,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Helveti
 @media screen { :root { --u: 0.9vw; } body { padding: 5vw; } }
 .page { position: relative; width: calc(var(--u) * 100); height: calc(var(--u) * 129); display: flex; flex-direction: column; overflow: hidden; }
 .court { position: absolute; right: 0; top: 0; width: calc(var(--u) * 38); opacity: 0.5; }
+.mark, .tab b { font-family: Inter, -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Helvetica, Arial, sans-serif; }
 .mark { position: relative; font-weight: 700; font-size: calc(var(--u) * 3.9); letter-spacing: -0.02em; color: ${c.brand}; }
 h1 { position: relative; margin-top: calc(var(--u) * 17); font-size: calc(var(--u) * ${headline}); line-height: 0.98; letter-spacing: -0.04em; font-weight: 700; max-width: calc(var(--u) * 84); }
 h1 em { font-style: normal; color: ${c.brand}; }

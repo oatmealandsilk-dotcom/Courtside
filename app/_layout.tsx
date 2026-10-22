@@ -14,7 +14,6 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 // Each weight from its own folder: the package's front door brings in all
 // eighteen Inter files (6 MB in the iPhone app), and only these four are used.
 import { useFonts } from '@expo-google-fonts/inter/useFonts';
-import { Inter_400Regular } from '@expo-google-fonts/inter/400Regular';
 import { Inter_500Medium } from '@expo-google-fonts/inter/500Medium';
 import { Inter_600SemiBold } from '@expo-google-fonts/inter/600SemiBold';
 import { Inter_700Bold } from '@expo-google-fonts/inter/700Bold';
@@ -63,7 +62,7 @@ export default function RootLayout() {
   useInstantUpdates();
   // Inter ships in the bundle, so on a phone this resolves before the splash
   // has gone; in a browser it is one small fetch, kept after that.
-  const [fontsReady] = useFonts({ Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, Inter_800ExtraBold, ...Ionicons.font });
+  const [fontsReady] = useFonts({ Inter_500Medium, Inter_600SemiBold, Inter_700Bold, Inter_800ExtraBold, ...Ionicons.font });
   // While the fonts load, the launch picture's cream (not the theme's colour), so nothing changes colour under the logo.
   if (!fontsReady) return <View style={{ flex: 1, backgroundColor: lightColors.bg }} />;
   return (

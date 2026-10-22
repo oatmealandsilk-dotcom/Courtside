@@ -147,7 +147,7 @@ const styleDefinitions = StyleSheet.create({
   searchInput: { flex: 1, minWidth: 0, ...typography.body, fontSize: 16, color: colors.text, minHeight: 40, paddingVertical: 8, outlineStyle: 'none' } as object,
   body: { paddingHorizontal: spacing.sm, paddingBottom: spacing.xxl },
   loading: { paddingVertical: 48, alignItems: 'center' },
-  section: { ...typography.caption, color: colors.textFaint, textTransform: 'uppercase', paddingHorizontal: spacing.sm, paddingTop: spacing.sm, paddingBottom: spacing.xs },
+  section: { ...typography.caption, letterSpacing: 0.3, color: colors.textFaint, textTransform: 'uppercase', paddingHorizontal: spacing.sm, paddingTop: spacing.sm, paddingBottom: spacing.xs },
   // Rows like New message's list: a mark, two lines, a soft highlight under a finger or the mouse.
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: 10, paddingHorizontal: spacing.sm, borderRadius: radius.md },
   rowOn: { backgroundColor: colors.surfaceAlt },

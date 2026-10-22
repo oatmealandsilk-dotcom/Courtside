@@ -332,7 +332,7 @@ const styleDefinitions = StyleSheet.create({
   chipStrong: { backgroundColor: colors.brandDim, borderColor: colors.brandDim },
   chipStrongText: { color: colors.brand },
   eyebrowRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  eyebrow: { ...typography.caption, color: colors.brand, textTransform: 'uppercase' },
+  eyebrow: { ...typography.caption, letterSpacing: 0.3, color: colors.brand, textTransform: 'uppercase' },
   hitWhen: { ...typography.display, color: colors.text },
   placeRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: -spacing.xs },
   place: { ...typography.heading, color: colors.text, flexShrink: 1 },

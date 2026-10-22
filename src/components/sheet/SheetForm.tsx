@@ -223,7 +223,7 @@ export function Submit({ label, onPress, disabled = false, busy = false, waiting
         </View>
       ) : (
         <>
-          {off ? null : <BrandWash radius={buttonShape.radius} />}
+          {off ? null : <BrandWash radius={buttonShape.radius} curve />}
           <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.submitText, off && styles.submitTextOff]}>{disabled && waiting ? waiting : label}</Text>
         </>
       )}

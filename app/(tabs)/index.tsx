@@ -2326,7 +2326,7 @@ const styleDefinitions = StyleSheet.create({
   removedStack: { position: 'absolute', left: 16, right: 16, alignItems: 'center', gap: 8, zIndex: 6 },
   removedPillRow: { alignSelf: 'stretch', paddingHorizontal: 48, alignItems: 'center' },
   holdPage: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg },
-  holdWord: { ...typography.display, fontSize: 34, ...font('600'), color: colors.brand, letterSpacing: -1.2 },
+  holdWord: { ...typography.display, fontSize: 34, ...wordmarkFont('600'), color: colors.brand, letterSpacing: -1.2 },
   bone: { height: 12, borderRadius: 6, backgroundColor: colors.border },
   holdPost: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, paddingHorizontal: 16, paddingBottom: 16 + BAR_OVERLAY_PX, alignItems: 'center' },
   boneFrame: { alignSelf: 'stretch', aspectRatio: 4 / 5, maxHeight: '58%', borderRadius: 16, backgroundColor: colors.border, alignItems: 'center', justifyContent: 'center' },
