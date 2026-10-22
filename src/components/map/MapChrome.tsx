@@ -514,12 +514,12 @@ export function MapButtons({ onRecentre, onZoomIn, onZoomOut, lead }: { onRecent
     <View style={styles.buttons} onLayout={(e) => setButtonsW(Math.ceil(e.nativeEvent.layout.width))}>
       {onZoomIn && onZoomOut ? (
         <View style={styles.zoom}>
-          <Pressable accessibilityRole="button" accessibilityLabel="Zoom in" onPress={onZoomIn} style={styles.zoomButton}><Ionicons name="add" size={18} color={colors.text} /></Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel="Zoom in" onPress={onZoomIn} style={({ pressed }) => [styles.zoomButton, pressed && styles.closePressed]}><Ionicons name="add" size={18} color={colors.text} /></Pressable>
           <View style={styles.zoomRule} />
-          <Pressable accessibilityRole="button" accessibilityLabel="Zoom out" onPress={onZoomOut} style={styles.zoomButton}><Ionicons name="remove" size={18} color={colors.text} /></Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel="Zoom out" onPress={onZoomOut} style={({ pressed }) => [styles.zoomButton, pressed && styles.closePressed]}><Ionicons name="remove" size={18} color={colors.text} /></Pressable>
         </View>
       ) : null}
-      <Pressable accessibilityRole="button" accessibilityLabel="Back to me" onPress={onRecentre} style={styles.roundHit}>
+      <Pressable accessibilityRole="button" accessibilityLabel="Back to me" onPress={() => { haptics.tap(); onRecentre(); }} style={({ pressed }) => [styles.roundHit, pressed && styles.barPressed]}>
         <MapGlass radius={21} style={styles.roundGlass}><Ionicons name="locate-outline" size={18} color={colors.brand} /></MapGlass>
       </Pressable>
     </View>
@@ -707,7 +707,7 @@ export function PlayersSheet({ items, cityName, onSelect, query = '', filter = '
     restored.current = true;
     if (stripAt?.current) strip.current?.scrollTo({ x: stripAt.current, animated: false });
   };
-  const pick = (id: string) => { if (!stops.justDragged()) onSelect(id); };
+  const pick = (id: string) => { if (!stops.justDragged()) { haptics.tap(); onSelect(id); } };
   // Where the faces are scrolled to, as they go and where they come to rest (a fling's last move can fall between two scroll events).
   const keepAt = (e: NativeSyntheticEvent<NativeScrollEvent>) => { if (stripAt) stripAt.current = e.nativeEvent.contentOffset.x; };
   // The faces as they stand, for the crossfade to fade out: no ref, handlers or gesture, at the place they were scrolled to.
@@ -1075,12 +1075,12 @@ export function WhereCard({ locating, onLocation }: { locating?: boolean; onLoca
         <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.openNote}>Turn on location or add your city, and the map shows the players and courts near you.</Text>
       </View>
       <View style={[styles.personActions, { marginTop: spacing.xs }]}>
-        <Pressable accessibilityRole="button" onPress={onLocation} disabled={locating} hitSlop={buttonShape.smallSlop} style={styles.primary}>
+        <Pressable accessibilityRole="button" onPress={onLocation} disabled={locating} hitSlop={buttonShape.smallSlop} style={({ pressed }) => [styles.primary, pressed && styles.glassPressed]}>
           <BrandWash radius={buttonShape.smallRadius} curve />
           {locating ? <ActivityIndicator size="small" color={colors.brandInk} /> : <Ionicons name="navigate" size={16} color={colors.brandInk} />}
           <Text {...oneLine(TextScale.TITLE, 0.8)} style={styles.primaryText}>Use my location</Text>
         </Pressable>
-        <Pressable accessibilityRole="button" onPress={() => router.push('/edit-profile')} hitSlop={buttonShape.smallSlop} style={styles.secondary}>
+        <Pressable accessibilityRole="button" onPress={() => router.push('/edit-profile')} hitSlop={buttonShape.smallSlop} style={({ pressed }) => [styles.secondary, pressed && styles.glassPressed]}>
           <Text {...oneLine(TextScale.TITLE, 0.8)} style={styles.secondaryText}>Add my city</Text>
         </Pressable>
       </View>
@@ -1255,7 +1255,7 @@ export function YouSheet({ me, open, teen = false, onToggle, onProfile, onClose,
           </View>
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.personMeta} numberOfLines={1}>@{me.handle}{me.location ? ` · ${me.location}` : ''}</Text>
         </View>
-        <Pressable accessibilityRole="button" accessibilityLabel="Close" hitSlop={10} onPress={onClose} style={styles.close}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Close" hitSlop={10} onPress={onClose} style={({ pressed }) => [styles.close, pressed && styles.closePressed]}>
           <Ionicons name="close" size={18} color={colors.textMuted} />
         </Pressable>
       </View>
@@ -1280,7 +1280,7 @@ export function YouSheet({ me, open, teen = false, onToggle, onProfile, onClose,
         </Pressable>
       ) : null}
       <View style={styles.personActions}>
-        <Pressable accessibilityRole="link" accessibilityLabel="Your profile" onPress={onProfile} hitSlop={buttonShape.smallSlop} style={styles.secondary}>
+        <Pressable accessibilityRole="link" accessibilityLabel="Your profile" onPress={onProfile} hitSlop={buttonShape.smallSlop} style={({ pressed }) => [styles.secondary, pressed && styles.glassPressed]}>
           <Text {...oneLine(TextScale.TITLE, 0.8)} style={styles.secondaryText}>Your profile</Text>
         </Pressable>
       </View>
@@ -1358,10 +1358,10 @@ export function CourtSheet({ court, miles, ringed = false, onClose }: { court: C
         </Pressable>
         {/* The heart and Send sit beside Close, the way a maps app's place card puts Save and Share there. */}
         {extras ? <FollowHeart court={{ id: court.id, name: court.name, lat: court.lat, lng: court.lng, access }} style={styles.close} size={16} /> : null}
-        <Pressable accessibilityRole="button" accessibilityLabel={`Send ${court.name} to a chat`} hitSlop={8} onPress={() => sendCourtToChat(place)} style={styles.close}>
+        <Pressable accessibilityRole="button" accessibilityLabel={`Send ${court.name} to a chat`} hitSlop={8} onPress={() => sendCourtToChat(place)} style={({ pressed }) => [styles.close, pressed && styles.closePressed]}>
           <Ionicons name="paper-plane-outline" size={16} color={colors.textMuted} />
         </Pressable>
-        <Pressable accessibilityRole="button" accessibilityLabel="Close" hitSlop={10} onPress={onClose} style={styles.close}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Close" hitSlop={10} onPress={onClose} style={({ pressed }) => [styles.close, pressed && styles.closePressed]}>
           <Ionicons name="close" size={18} color={colors.textMuted} />
         </Pressable>
       </View>
@@ -1406,18 +1406,18 @@ export function CourtSheet({ court, miles, ringed = false, onClose }: { court: C
       </GHScrollView>
       <View style={styles.personActions}>
         {/* Three pills, a little tighter than the player card's, so they fit a 320pt phone. */}
-        <Pressable accessibilityRole="link" accessibilityLabel="Directions" onPress={() => directionsTo(court)} hitSlop={buttonShape.smallSlop} style={[styles.primary, styles.pillTight]}>
+        <Pressable accessibilityRole="link" accessibilityLabel="Directions" onPress={() => directionsTo(court)} hitSlop={buttonShape.smallSlop} style={({ pressed }) => [styles.primary, styles.pillTight, pressed && styles.glassPressed]}>
           <BrandWash radius={buttonShape.smallRadius} curve />
           <Ionicons name="navigate-outline" size={16} color={colors.brandInk} />
           <Text {...oneLine(TextScale.TITLE, 0.8)} style={styles.primaryText}>Directions</Text>
         </Pressable>
         {closed ? null : (
-          <Pressable accessibilityRole="button" accessibilityLabel={`Post a hit at ${court.name}`} onPress={() => playHere(place)} hitSlop={buttonShape.smallSlop} style={[styles.secondary, styles.pillTight]}>
+          <Pressable accessibilityRole="button" accessibilityLabel={`Post a hit at ${court.name}`} onPress={() => playHere(place)} hitSlop={buttonShape.smallSlop} style={({ pressed }) => [styles.secondary, styles.pillTight, pressed && styles.glassPressed]}>
             <Text {...oneLine(TextScale.TITLE, 0.8)} style={styles.secondaryText}>Play here</Text>
           </Pressable>
         )}
         {mapCourt ? (
-          <Pressable accessibilityRole="button" accessibilityLabel={`Post a photo or clip from ${court.name}`} onPress={() => postFromCourt({ id: court.id, name: court.name, lat: court.lat, lng: court.lng })} hitSlop={buttonShape.smallSlop} style={[styles.secondary, styles.pillTight, styles.pillIcon]}>
+          <Pressable accessibilityRole="button" accessibilityLabel={`Post a photo or clip from ${court.name}`} onPress={() => postFromCourt({ id: court.id, name: court.name, lat: court.lat, lng: court.lng })} hitSlop={buttonShape.smallSlop} style={({ pressed }) => [styles.secondary, styles.pillTight, styles.pillIcon, pressed && styles.glassPressed]}>
             <Ionicons name="videocam-outline" size={15} color={colors.text} />
             <Text {...oneLine(TextScale.TITLE, 0.8)} style={styles.secondaryText}>Post</Text>
           </Pressable>
@@ -1463,7 +1463,7 @@ export function PlaceSheet({ place, rows, loading, failed, onPickCourt, onRetry,
           <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" style={styles.personName} numberOfLines={1}>{title}</Text>
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.personMeta} numberOfLines={1}>{rows.length ? `${rows.length} ${rows.length === 1 ? 'place' : 'places'} · ${how}` : place.sub || how}</Text>
         </View>
-        <Pressable accessibilityRole="button" accessibilityLabel="Close" hitSlop={10} onPress={onClose} style={styles.close}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Close" hitSlop={10} onPress={onClose} style={({ pressed }) => [styles.close, pressed && styles.closePressed]}>
           <Ionicons name="close" size={18} color={colors.textMuted} />
         </Pressable>
       </View>
@@ -1518,7 +1518,7 @@ export function HitSheet({ hit, miles, onClose }: { hit: HitRequest; miles?: num
       <View style={styles.grabber} />
       <View style={styles.sheetHead}>
         <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.sheetTitle}>Open hit</Text>
-        <Pressable accessibilityRole="button" accessibilityLabel="Close" hitSlop={10} onPress={onClose} style={styles.close}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Close" hitSlop={10} onPress={onClose} style={({ pressed }) => [styles.close, pressed && styles.closePressed]}>
           <Ionicons name="close" size={18} color={colors.textMuted} />
         </Pressable>
       </View>
@@ -1601,12 +1601,12 @@ export function CitylessCard({ onOpenMap }: { onOpenMap?: () => void }) {
       <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.citylessTitle}>Where do you play?</Text>
       <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.citylessBody}>Add your city to see the players near you.</Text>
       <View style={styles.citylessActions}>
-        <Pressable accessibilityRole="button" onPress={() => router.push('/edit-profile')} hitSlop={buttonShape.smallSlop} style={styles.primary}>
+        <Pressable accessibilityRole="button" onPress={() => router.push('/edit-profile')} hitSlop={buttonShape.smallSlop} style={({ pressed }) => [styles.primary, pressed && styles.glassPressed]}>
           <BrandWash radius={buttonShape.smallRadius} curve />
           <Text {...oneLine(TextScale.TITLE, 0.8)} style={styles.primaryText}>Add my city</Text>
         </Pressable>
         {onOpenMap ? (
-          <Pressable accessibilityRole="button" onPress={onOpenMap} hitSlop={buttonShape.smallSlop} style={styles.secondary}>
+          <Pressable accessibilityRole="button" onPress={onOpenMap} hitSlop={buttonShape.smallSlop} style={({ pressed }) => [styles.secondary, pressed && styles.glassPressed]}>
             <Text {...oneLine(TextScale.TITLE, 0.8)} style={styles.secondaryText}>Open the map</Text>
           </Pressable>
         ) : null}

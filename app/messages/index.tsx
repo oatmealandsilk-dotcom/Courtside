@@ -2,7 +2,8 @@ import { PRESS_DIM } from '@/theme/press';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { runOnJS, useAnimatedReaction, useSharedValue } from 'react-native-reanimated';
+import Animated, { Easing, FadeIn, FadeOut, LayoutAnimationConfig, LinearTransition, runOnJS, useAnimatedReaction, useSharedValue } from 'react-native-reanimated';
+import * as haptics from '@/lib/haptics';
 import { router, useLocalSearchParams } from 'expo-router';
 import { goBack } from '@/lib/goBack';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -32,6 +33,18 @@ import { TextScale } from '@/theme/textScale';
 type Section = 'all' | 'groups' | 'coaches' | 'clients';
 /** Chats drawn with the page, a screenful and a half; the rest once it has slid in (see useArrived). */
 const FIRST_ROWS = 14;
+/*
+ * How the chats move (Oct 22 sweep: "deleting, pinning, a new message moving a
+ * chat to the top, and switching All/Groups/Coaches all snap the list"): a
+ * chat that changes place glides there, one that leaves fades out, one that
+ * comes in fades up. Only transforms and the row's own fill move; no glass.
+ */
+const ROW_GLIDE = LinearTransition.duration(260).easing(Easing.bezier(0.25, 0.8, 0.25, 1));
+const ROW_IN = FadeIn.duration(200);
+// A section switch: the chats that come in wait until those staying have mostly glided into place, so two are never drawn on one spot.
+const ROW_IN_SWITCH = FadeIn.duration(180).delay(140);
+// Quick, so a leaving chat is gone before the one gliding up reaches its spot.
+const ROW_OUT = FadeOut.duration(110);
 
 interface Thread {
   conversation: Conversation;
@@ -73,6 +86,10 @@ export default function Inbox() {
   // Opened from the Coaching tab's chats button: straight onto Coaches (or Clients, for a coach).
   const { section: askedSection } = useLocalSearchParams<{ section?: string }>();
   const [section, setSection] = useState<Section>(askedSection === 'coaches' || askedSection === 'clients' ? askedSection : 'all');
+  // The draw right after a section switch (see ROW_IN_SWITCH).
+  const drawnSection = React.useRef(section);
+  const switched = drawnSection.current !== section;
+  useEffect(() => { drawnSection.current = section; }, [section]);
   // The row being held, and which of its two lists is showing.
   const [held, setHeld] = useState<{ conversation: Conversation; name: string; step: 'menu' | 'mute' } | null>(null);
   // The one row slid open to its actions.
@@ -264,6 +281,7 @@ export default function Inbox() {
           accessibilityRole="button"
           accessibilityLabel="Start a new message"
           hitSlop={8}
+          style={({ pressed }) => pressed && { opacity: PRESS_DIM }}
         >
           <Ionicons name="create-outline" size={23} color={colors.text} />
         </Pressable>
@@ -295,6 +313,8 @@ export default function Inbox() {
       {threads.length === 0 ? (
         <EmptyState icon="chatbubble-ellipses-outline" title={emptyCopy.title} body={emptyCopy.body} action={{ label: 'New message', onPress: () => router.push('/messages/new') }} />
       ) : (
+        // The rows there when the page opens are simply there; only later changes move.
+        <LayoutAnimationConfig skipEntering>
         <View style={styles.list}>
           {shownThreads.map((t, index) => {
             const { conversation, muted, unread, name } = t;
@@ -347,8 +367,8 @@ export default function Inbox() {
               }] : []),
             ];
             return (
+              <Animated.View key={conversation.id} layout={ROW_GLIDE} entering={switched ? ROW_IN_SWITCH : ROW_IN} exiting={ROW_OUT}>
               <SwipeRow
-                key={conversation.id}
                 actions={actionsUnder}
                 actionCount={canMute ? 2 : 1}
                 open={openRow === conversation.id}
@@ -362,13 +382,15 @@ export default function Inbox() {
                   line={(said) => preview(t.group, t.last, said)}
                   typing={typing}
                   onOpen={() => { if (openRow) { setOpenRow(null); return; } router.push(`/messages/${conversation.id}`); }}
-                  onHold={() => { setOpenRow(null); setHeld({ conversation, name, step: 'menu' }); }}
+                  onHold={() => { haptics.tap(); setOpenRow(null); setHeld({ conversation, name, step: 'menu' }); }}
                   rowActions={rowActions}
                 />
               </SwipeRow>
+              </Animated.View>
             );
           })}
         </View>
+        </LayoutAnimationConfig>
       )}
       <ChatSheet
         visible={!!held}

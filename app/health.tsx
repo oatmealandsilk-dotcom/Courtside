@@ -1,4 +1,4 @@
-import { PRESS_DIM } from '@/theme/press';
+import { PRESS_DIM, PRESS_SHRINK } from '@/theme/press';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -247,11 +247,11 @@ export default function Health() {
             <View style={styles.actions}>
               {/* Android cannot read Apple Health: syncing it is the iPhone's job. */}
               {wrongPhone && Platform.OS === 'android' ? null : (
-                <Pressable accessibilityRole="button" accessibilityLabel={`Sync ${i.label}`} disabled={loading} onPress={() => run(i.provider, 'sync')} style={styles.small}>
+                <Pressable accessibilityRole="button" accessibilityLabel={`Sync ${i.label}`} disabled={loading} onPress={() => run(i.provider, 'sync')} style={({ pressed }) => [styles.small, pressed && styles.pressedShrink]}>
                   <Ionicons name="refresh" size={14} color={colors.text} /><Text style={styles.smallText}>{(i.provider === 'cronometer' || i.provider === 'myfitnesspal') && !appleHealthAvailable() ? 'Import again' : 'Sync now'}</Text>
                 </Pressable>
               )}
-              <Pressable accessibilityRole="button" accessibilityLabel={`Disconnect ${i.label}`} disabled={loading} onPress={() => disconnect(i.provider)} style={styles.smallGhost}>
+              <Pressable accessibilityRole="button" accessibilityLabel={`Disconnect ${i.label}`} disabled={loading} onPress={() => disconnect(i.provider)} style={({ pressed }) => [styles.smallGhost, pressed && styles.pressedShrink]}>
                 <Text style={styles.smallGhostText}>Disconnect</Text>
               </Pressable>
             </View>
@@ -319,7 +319,7 @@ export default function Health() {
           // Not something to press: a quiet label in the button's place.
           <View style={styles.badge}><Text style={styles.badgeText}>Via Apple Health</Text></View>
         ) : i.connected || loading ? null : (
-          <Pressable accessibilityRole="button" accessibilityLabel={`Connect ${i.label}`} accessibilityState={{ disabled: blocked }} disabled={blocked} onPress={() => (tennis && i.provider === 'apple-health' ? askApple('toggle') : run(i.provider, 'toggle'))} hitSlop={buttonShape.smallSlop} style={[styles.connect, blocked && styles.connectOff]}>
+          <Pressable accessibilityRole="button" accessibilityLabel={`Connect ${i.label}`} accessibilityState={{ disabled: blocked }} disabled={blocked} onPress={() => (tennis && i.provider === 'apple-health' ? askApple('toggle') : run(i.provider, 'toggle'))} hitSlop={buttonShape.smallSlop} style={({ pressed }) => [styles.connect, blocked && styles.connectOff, pressed && styles.pressedShrink]}>
             <Text style={[styles.connectText, blocked && styles.connectTextOff]}>{(i.provider === 'cronometer' || i.provider === 'myfitnesspal') && !appleHealthAvailable() ? 'Import' : 'Connect'}</Text>
           </Pressable>
         )}
@@ -425,6 +425,8 @@ const styleDefinitions = StyleSheet.create({
   offer: { gap: spacing.sm, marginTop: spacing.sm, alignItems: 'flex-start' },
   offerText: { ...typography.small, color: colors.textMuted },
   pressedDim: { opacity: PRESS_DIM },
+  // A pill button held: it shrinks slightly (theme/press).
+  pressedShrink: { transform: [{ scale: PRESS_SHRINK }] },
   sectionTitle: { ...typography.smallStrong, color: colors.textMuted, paddingHorizontal: spacing.sm, paddingBottom: spacing.sm },
   sectionGap: { paddingTop: spacing.xl },
   foodRows: { marginTop: spacing.md },

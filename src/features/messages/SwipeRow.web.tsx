@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
 
+import * as haptics from '@/lib/haptics';
 import { ACTION_W, ROW_SLOP, rowTravel } from './rowSwipe';
 
 const SETTLE = 'transform 260ms cubic-bezier(.2,.8,.25,1)';
@@ -46,9 +47,12 @@ export function SwipeRow({ actions, actionCount, open, onOpen, children }: {
     if (!el) return undefined;
     let drag: { id: number; x: number; y: number; from: number; taken: boolean } | null = null;
     let wheel: { travel: number; timer?: ReturnType<typeof setTimeout> } | null = null;
+    // Where the row was when the drag began: coming open from shut gives one light tick (Oct 22 sweep).
+    let startedAt = 0;
     const finish = (velocityLeft: boolean) => {
       const x = at.current;
       const openIt = x < -latest.current.width / 2 || (velocityLeft && x < -20);
+      if (openIt && startedAt > -latest.current.width + 1) haptics.tap();
       place(openIt ? -latest.current.width : 0, true);
       latest.current.onOpen(openIt);
     };
@@ -56,6 +60,7 @@ export function SwipeRow({ actions, actionCount, open, onOpen, children }: {
       swallowClick.current = false;
       if (!e.isPrimary || (e.pointerType === 'mouse' && e.button !== 0)) return;
       drag = { id: e.pointerId, x: e.clientX, y: e.clientY, from: at.current, taken: false };
+      startedAt = at.current;
     };
     const move = (e: PointerEvent) => {
       if (!drag || drag.id !== e.pointerId) return;
@@ -97,6 +102,7 @@ export function SwipeRow({ actions, actionCount, open, onOpen, children }: {
         // Toward the right on a closed row: nothing to uncover.
         if (dx < 0 && at.current === 0) return;
         wheel = { travel: at.current };
+        startedAt = at.current;
       }
       e.preventDefault();
       wheel.travel -= dx;

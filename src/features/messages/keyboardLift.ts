@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Platform } from 'react-native';
-import { useAnimatedKeyboard, useAnimatedReaction, useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
+import { useAnimatedKeyboard, useAnimatedReaction, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+
+import { EMOJI_SLIDE } from './emojiSlide';
 
 import type { DragDismiss, KeyboardLift, KeyboardLiftOptions } from './keyboardLiftTypes';
 
@@ -25,11 +27,13 @@ export type { DragDismiss, KeyboardLift, KeyboardLiftOptions } from './keyboardL
  */
 
 /** On a phone (iPhone and Android): the keyboard's own position, every frame. */
-function useNativeLift({ rest, focused, typing, emojiRoom }: KeyboardLiftOptions): KeyboardLift {
+function useNativeLift({ rest, focused, typing, emojiRoom, emojiHeight }: KeyboardLiftOptions): KeyboardLift {
   const keyboard = useAnimatedKeyboard();
   const restRoom = useSharedValue(rest);
   const front = useSharedValue(focused);
   const emoji = useSharedValue(emojiRoom);
+  // The emoji keyboard's full height, kept while it slides away.
+  const emojiFull = useSharedValue(emojiRoom || emojiHeight);
   // Off the page in front, the room only ever shrinks (a sheet's own keyboard
   // must not lift the bar under the sheet); it follows the keyboard again
   // once the chat is in front with the keyboard down.
@@ -38,7 +42,11 @@ function useNativeLift({ rest, focused, typing, emojiRoom }: KeyboardLiftOptions
   const floor = useSharedValue(0);
   const room = useSharedValue(rest);
   useEffect(() => { restRoom.value = rest; }, [rest, restRoom]);
-  useEffect(() => { emoji.value = emojiRoom; }, [emojiRoom, emoji]);
+  useEffect(() => {
+    if (emojiRoom > 0) emojiFull.value = emojiRoom;
+    // Taking the phone keyboard's place, the bar stays put; with nothing up, the panel and the bar slide together.
+    emoji.value = keyboard.height.value > 1 ? emojiRoom : withTiming(emojiRoom, EMOJI_SLIDE);
+  }, [emojiRoom, emoji, emojiFull, keyboard]);
   useEffect(() => {
     front.value = focused;
     if (!focused) follow.value = false;
@@ -57,12 +65,13 @@ function useNativeLift({ rest, focused, typing, emojiRoom }: KeyboardLiftOptions
     },
   );
   const spacer = useAnimatedStyle(() => ({ height: room.value }));
+  const panel = useAnimatedStyle(() => ({ transform: [{ translateY: Math.max(0, emojiFull.value - emoji.value) }] }));
   const holdUntilKeyboard = useCallback((height: number) => {
     floor.value = height;
     // A keyboard that never comes up (a hardware keyboard) lets go after a moment.
     setTimeout(() => { floor.value = 0; }, 700);
   }, [floor]);
-  return { spacer, holdUntilKeyboard };
+  return { spacer, panel, holdUntilKeyboard };
 }
 
 /** The room under the bar (see above). The browser has its own version (keyboardLift.web.ts). */
