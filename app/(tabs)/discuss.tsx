@@ -615,7 +615,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
           // Live while the tab is on show, beside Discussions too, so it is already drawn when it slides in.
           // Kept (hidden, not taken down) while you search, so clearing the search finds it already drawn
           // instead of building a new map in front of you (Oct 22, owner: "The map blips in").
-          ? <View style={search ? styles.mapHidden : null}><NearbyMap visible={(!previewSection || section === 'players') && !search} inView={mapInView} me={currentUser} players={players} at={detectedCoords} locationOn={location.locationOn} locating={location.locating} onToggleLocation={location.toggle} onOpen={id => router.push(`/user/${id}`)} layerSource="community" onExpand={() => router.push('/map')} hitCount={openHits.length} inviting={early} /></View>
+          ? <View style={search ? styles.mapHidden : null}><NearbyMap visible={(!previewSection || section === 'players') && !search} inView={mapInView} me={currentUser} players={players} at={detectedCoords} locationOn={location.locationOn} locating={location.locating} onToggleLocation={location.toggle} onOpen={id => router.push(`/user/${id}`)} onExpand={() => router.push('/map')} hitCount={openHits.length} inviting={early} /></View>
           // The same footprint, empty: keeps the list from jumping when the map mounts on arrival.
           : search ? null : <View style={styles.mapStandIn} />) : null}
         {/* Nobody sharing a spot within 30 miles: the way to fill the map,

@@ -1,46 +1,6 @@
 import type { TaggedCourt, User } from '@/data/types';
 import type { FoundPlace } from '@/features/places/geocode';
 import type { LatLng } from '@/features/players/positions';
-import type { useAnimatedStyle } from 'react-native-reanimated';
-import type { GestureType } from 'react-native-gesture-handler';
-import type { CanvasMarker } from '@/components/map/pinEngine';
-import type { LayerSource } from '@/components/map/mapWindow';
-
-/** What the map window (MapLayer) can tell its map to do. */
-export interface LayerMapHandle {
-  ease: (to: LatLng, zoom: number, ms: number, bezier: [number, number, number, number]) => void;
-  jump: (to: LatLng, zoom: number) => void;
-  labels: (on: boolean, ms: number, delay: number) => void;
-  setInteractive: (on: boolean) => void;
-  warm: (to: LatLng, zoom: number, back: LatLng, backZoom: number) => void;
-  /** Where the map opens to: where you are (or your city), at a city's zoom. */
-  openTarget: () => { center: LatLng; zoom: number };
-}
-
-/** The full map inside the map window (mapWindow): shut, it is the still card's picture; open, the full map. */
-export interface LayerMapControl {
-  /** 'card': the still card's own pins (quiet); 'full': the full map's. */
-  mode: 'card' | 'full';
-  /** The card it parks on while shut. */
-  parked: { center: LatLng; markers: CanvasMarker[] } | null;
-  /** Open and settled: a location fix may move it, sheets and prompts may come. */
-  settled: boolean;
-  /** Filled in by the map. */
-  handle: { current: LayerMapHandle | null };
-  /** Android's Back inside the open map: puts away whatever is up, true when it did. */
-  back: { current: (() => boolean) | null };
-  /** The top bar and the buttons along the bottom settle into place as the window opens (a move, never a fade). */
-  topStyle?: ReturnType<typeof useAnimatedStyle>;
-  bottomStyle?: ReturnType<typeof useAnimatedStyle>;
-  /** A swipe down on the top bar closes the window (native). */
-  topGesture?: GestureType;
-  onPainted?: () => void;
-  onWarm?: () => void;
-  /** The phone stopped the map's page (it starts again by itself): not ready to open until it has drawn again. */
-  onReboot?: () => void;
-  /** Puts away whatever is up on the map (a card, the list, your sheet, a search), all at once: the window has closed. */
-  reset: { current: (() => void) | null };
-}
 
 export interface NearbyMapProps {
   me: User; players: User[]; onOpen: (id: string) => void;
@@ -97,10 +57,6 @@ export interface NearbyMapProps {
    * in view, even part way, fades its cover off as usual.
    */
   inView?: () => boolean;
-  /** The still card opens the map window (mapWindow) from where it is, as this card ('community' or 'feed'). */
-  layerSource?: LayerSource;
-  /** This is the map inside the map window. */
-  layer?: LayerMapControl;
   /**
    * The still card holds the opening curtain until it shows its map (useStartMapHold). Off for a copy
    * of the card that is not what the app opens on (the feed's FeedFindPlayers), so it never slows it.

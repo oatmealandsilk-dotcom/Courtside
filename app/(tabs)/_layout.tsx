@@ -5,8 +5,6 @@ import { Redirect, Tabs, usePathname } from 'expo-router';
 import { TabsPager } from '@/components/TabsPager';
 import { useTheme } from '@/theme/ThemeProvider';
 import { useApp } from '@/store/AppContext';
-import { MapLayer } from '@/components/map/MapLayer';
-import { layerUp, useLayerState } from '@/components/map/mapWindow';
 
 /**
  * On the phone the four tabs are one sliding row (see TabsPager). The Tabs
@@ -35,18 +33,11 @@ export default function TabsLayout() {
     </View>
   ), []);
   const row = useMemo(() => <TabsPager pathname={pathname} />, [pathname]);
-  // The full map as a window over the tabs (mapWindow): made once, opened from the map card.
-  const mapLayer = useMemo(() => <MapLayer />, []);
-  // While it is open, the tabs under it are hidden from a screen reader.
-  const mapUp = layerUp(useLayerState());
   if (ready && !currentUserId) return <Redirect href="/sign-in" />;
   return (
     <View style={{ flex: 1 }}>
-      <View style={{ flex: 1 }} accessibilityElementsHidden={mapUp} importantForAccessibility={mapUp ? 'no-hide-descendants' : 'auto'}>
-        {row}
-      </View>
+      {row}
       {hidden}
-      {mapLayer}
     </View>
   );
 }
