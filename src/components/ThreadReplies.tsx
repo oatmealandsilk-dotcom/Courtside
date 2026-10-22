@@ -9,6 +9,7 @@ import { afterReport } from '@/features/moderation/reportThanks';
 import * as haptics from '@/lib/haptics';
 import { MentionSuggestions } from '@/components/MentionSuggestions';
 import { useMentionDraft } from '@/features/mentions/useMentionDraft';
+import { openJoinSheet } from '@/features/guest/joinAsk';
 import { Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -39,7 +40,7 @@ export function ThreadReply({ answer, thread, askerId, depth = 0, preview = fals
   /** The thread was taken down (migration 108): nobody can reply anywhere in it, so no Reply buttons. */ closed?: boolean;
 }) {
   const styles = useThemedStyles(styleDefinitions);
-  const { users, currentUserId, currentUser, actions } = useApp();
+  const { users, currentUserId, currentUser, actions, isGuest } = useApp();
   const [replying, setReplying] = useState(false);
   const [draft, setDraft] = useState('');
   const [media, setMedia] = useState<ReplyAttachment | null>(null);
@@ -49,6 +50,8 @@ export function ThreadReply({ answer, thread, askerId, depth = 0, preview = fals
   latest.current = { draft, media };
   const post = () => {
     if (!canSend) return;
+    // A guest keeps their words: join first (guest mode), nothing is cleared.
+    if (isGuest) { openJoinSheet('reply'); return; }
     const text = draft.trim();
     const attached = media;
     // Refused for its words (migration 117): the toast says why, and the reply
@@ -137,7 +140,7 @@ export function ThreadReply({ answer, thread, askerId, depth = 0, preview = fals
         {!preview && <View style={styles.replyActions}>
           <Pressable accessibilityRole="button" accessibilityLabel={`Collapse reply by ${name}`} onPress={()=>{ setCollapsed(true); setReplying(false); }} hitSlop={8} style={styles.collapse}><Ionicons name="remove-circle-outline" size={20} color={colors.textMuted}/></Pressable>
           <VoteControls item={answer} userId={currentUserId} onVote={direction => actions.voteAnswer(answer.id, direction)}/>
-          {answer.removed || closed ? null : <Pressable accessibilityRole="button" accessibilityLabel={`Reply to ${responder?.name ?? 'player'}`} onPress={() => setReplying(true)} style={styles.replyButton}>
+          {answer.removed || closed ? null : <Pressable accessibilityRole="button" accessibilityLabel={`Reply to ${responder?.name ?? 'player'}`} onPress={() => { if (isGuest) { openJoinSheet('reply'); return; } setReplying(true); }} style={styles.replyButton}>
             <Ionicons name="chatbubble-outline" size={16} color={colors.textMuted}/><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.time}>Reply</Text>
           </Pressable>}
         </View>}

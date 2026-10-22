@@ -71,6 +71,22 @@ export function ThreadSkeleton() {
   );
 }
 
+/** A list of threads: a few cards, each a name, a two-line title and a meta line. */
+export function QuestionListSkeleton({ rows = 3 }: { rows?: number }) {
+  const styles = useThemedStyles(styleDefinitions);
+  return (
+    <Breathing style={{ gap: spacing.md }}>
+      {Array.from({ length: rows }, (_, i) => (
+        <View key={i} style={styles.card}>
+          <View style={styles.row}><Bone w={26} h={26} r={13} /><Bone w="30%" h={12} /></View>
+          <View style={{ gap: 7 }}><Bone w="90%" h={16} r={8} /><Bone w={`${55 + (i % 2) * 15}%`} h={16} r={8} /></View>
+          <View style={styles.row}><Bone w={60} h={11} /><Bone w={44} h={11} /></View>
+        </View>
+      ))}
+    </Breathing>
+  );
+}
+
 /** A list of people: picture and two lines each. */
 export function PeopleSkeleton({ rows = 7 }: { rows?: number }) {
   const styles = useThemedStyles(styleDefinitions);
@@ -92,4 +108,5 @@ const styleDefinitions = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 2, justifyContent: 'space-between' },
   divider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
+  card: { gap: 12, padding: spacing.lg, borderRadius: 20, backgroundColor: colors.surface },
 });

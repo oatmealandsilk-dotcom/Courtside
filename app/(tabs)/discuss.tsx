@@ -26,6 +26,7 @@ import { QuestionCard, TOPIC_META } from '@/components/QuestionCard';
 import { QUESTION_OF_WEEK_MS } from '@/data/api';
 import { HitCard } from '@/components/HitCard';
 import { Avatar, Chip, EmptyState, Screen } from '@/components/ui';
+import { QuestionListSkeleton } from '@/components/Skeleton';
 import { Highlighted } from '@/components/CourtSearch';
 import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { CourtsNear, useNearCourts } from '@/components/place/CourtsNear';
@@ -242,8 +243,10 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   // is. A town typed here still finds places and courts (below). The map
   // keeps its own list above, and its own server rules.
   const { findable } = useFindable();
-  const foundPlayers = search
-    ? users.filter((u) => findable(u) && `${u.name} ${u.handle}`.toLowerCase().includes(search.toLowerCase()))
+  // Handles are kept without their '@', so '@miraplays' looks for 'miraplays'.
+  const who = search.trim().replace(/^@/, '').toLowerCase();
+  const foundPlayers = who
+    ? users.filter((u) => findable(u) && `${u.name} ${u.handle}`.toLowerCase().includes(who))
     : [];
   // A topic asked for before this tab was built is kept for it, the same as the section.
   const [topic, setTopic] = useState<QuestionTopic | 'all'>(() => asTopic(previewSection ? undefined : askedSection('/discuss#topic')));
@@ -470,7 +473,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
     else actions.toggleFollow(id);
   };
   // Typing two letters or more finds courts too, above the players.
-  const courtMatches = useCourtSearch(search, youAt, nearCourts.all, 4);
+  const courtMatches = useCourtSearch(search.trim().startsWith('@') ? '' : search, youAt, nearCourts.all, 4);
   // And places (a city, a neighbourhood, an address, a park), leaning toward
   // your town (only ever a rough area is sent): a tap opens the full map
   // there, with that place's courts listed best first.
@@ -486,6 +489,8 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   };
   const searchWords = useMemo(() => plain(search).split(' ').filter(Boolean), [search]);
   const [sortOpen, setSortOpen] = useState(false);
+  // The sort menu never stays open over the other page.
+  useEffect(() => { setSortOpen(false); }, [section]);
   // Android's Back on the page the app opens on: out of a search first (the
   // keyboard goes on the first Back by itself, the search on the next, as
   // Cancel does), then the sort menu, then from Discussions to Find Players.
@@ -538,19 +543,29 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   // filtered those) come a page at a time from the server: a topic's own newest threads when it is
   // picked, and older ones as they scroll to the end. Signed in, every thread is already here.
   const [guestMore, setGuestMore] = useState<Partial<Record<QuestionTopic | 'all', boolean>>>({});
+  // A topic whose first page never came (offline, say): 'Try again', not 'be the first to ask'.
+  const [guestFailed, setGuestFailed] = useState<Partial<Record<QuestionTopic | 'all', boolean>>>({});
+  const [guestRetry, setGuestRetry] = useState(0);
   useEffect(() => {
     if (!isGuest || !guestLoaded) return;
     let on = true;
-    void actions.loadThreads(topic, false).then((more) => { if (on) setGuestMore((m) => ({ ...m, [topic]: more })); });
+    void actions.loadThreads(topic, false).then((more) => {
+      if (!on) return;
+      if (more === null) { setGuestFailed((m) => ({ ...m, [topic]: true })); return; }
+      setGuestFailed((m) => ({ ...m, [topic]: undefined }));
+      setGuestMore((m) => ({ ...m, [topic]: more }));
+    });
     return () => { on = false; };
-  }, [isGuest, guestLoaded, topic, actions]);
+  }, [isGuest, guestLoaded, topic, actions, guestRetry]);
+  // Still asking the server for this topic's threads: their outline, never a flash of 'No questions here'.
+  const guestWaiting = isGuest && (!guestLoaded || guestMore[topic] === undefined) && !guestFailed[topic];
   const serverHasMore = isGuest && !!guestMore[topic];
   const showMore = () => {
     if (visible.length > slice.length) { setShownCount((n) => n + 25); return; }
     if (!serverHasMore) return;
     const asked = topic;
     void actions.loadThreads(asked, true).then((more) => {
-      setGuestMore((m) => ({ ...m, [asked]: more }));
+      setGuestMore((m) => ({ ...m, [asked]: !!more }));
       setShownCount((n) => n + 25);
     });
   };
@@ -776,6 +791,8 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
           </View>
         ) : null}
       </View> : <>
+      {/* A tap anywhere outside the open sort menu closes it (under the controls, over the threads). */}
+      {sortOpen ? <Pressable accessibilityLabel="Close sort menu" onPress={() => setSortOpen(false)} style={[StyleSheet.absoluteFill, { zIndex: 4, elevation: 4 }]} /> : null}
       <View style={styles.controls}>
         <ScrollView ref={topicStrip} nativeID="topic-filter-strip" horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.topicRow}>
           {TOPICS.map((t) => (
@@ -786,7 +803,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
                 selected={topic === t}
                 tint={colors.text}
                 ink={colors.brandInk}
-                onPress={() => setTopic(t)}
+                onPress={() => { setTopic(t); setSortOpen(false); }}
                 small
               />
             </View>
@@ -830,6 +847,15 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
           title="All caught up"
           body="Every question here has a reply."
           action={{ label: 'Show all', onPress: () => setSort('new') }}
+        />
+      ) : visible.length === 0 && !pinned && guestWaiting ? (
+        <QuestionListSkeleton />
+      ) : visible.length === 0 && !pinned && isGuest && guestFailed[topic] ? (
+        <EmptyState
+          icon="cloud-offline-outline"
+          title="Couldn’t load threads"
+          body="Check your connection and try again."
+          action={{ label: 'Try again', onPress: () => { setGuestFailed((m) => ({ ...m, [topic]: undefined })); setGuestRetry((n) => n + 1); } }}
         />
       ) : visible.length === 0 && !pinned ? (
         <EmptyState

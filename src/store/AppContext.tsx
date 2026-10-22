@@ -1148,7 +1148,7 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions, LiveSessionAct
    * is first picked, or (`older`) the next page back. Resolves with whether
    * there are more to come. Signed in, every thread came with the app: false.
    */
-  loadThreads: (topic: QuestionTopic | 'all', older: boolean) => Promise<boolean>;
+  loadThreads: (topic: QuestionTopic | 'all', older: boolean) => Promise<boolean | null>;
   /** The next page of older feed posts. Resolves with the ones that were added. */
   loadMorePosts: () => Promise<Post[]>;
   /** One player's own posts, loaded when their profile is opened. */
@@ -6285,7 +6285,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     });
   }, []);
   // Signed in, the first load already brought the threads (the newest 300): nothing more to page in.
-  const loadThreads = useCallback(async () => false, []);
+  const loadThreads = useCallback(async (): Promise<boolean | null> => false, []);
   // Opening a thread: all of its replies, not only the newest that came with the app.
   const loadThread = useCallback(async (questionId: ID) => {
     if (!live(stateRef.current.currentUserId, questionId)) return;
@@ -9885,7 +9885,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         pages[topic] = page;
         const got = await fetchGuestThreads(topic === 'all' ? null : topic, was ? page.at : null).catch(() => null);
         page.busy = false;
-        if (!got) { if (!was) delete pages[topic]; return page.more; }
+        // A topic's first page that never came: null, so the page says so (and can try again).
+        if (!got) { if (!was) { delete pages[topic]; return null; } return page.more; }
         page.more = got.moreThreads ?? false;
         page.at = oldestAt(got.questions) ?? page.at;
         addGuest({ ...got, more: undefined });
