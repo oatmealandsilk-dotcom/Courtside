@@ -30,10 +30,13 @@ import { CARD_BOX, FULL_MAP_BOX, PIN_ENGINE_JS, type PinEngine, type PinEngineFa
 import { mapMarkers } from '@/components/map/pinList';
 import { livePin } from '@/features/activity/liveSession';
 import { PAINT_WATCH_JS } from '@/components/map/engineLoader';
-import { MAP_IN_MS, MapCardFailed, MapCardLoading, MapLoadPill } from '@/components/map/MapLoadState';
+import { MAP_REVEAL_CSS, MAP_REVEAL_MS, MapCardFailed, MapCardLoading, MapLoadPill } from '@/components/map/MapLoadState';
 import { useMapLoad } from '@/components/map/useMapLoad';
 import { useIsFocused } from '@/lib/useIsFocused';
-import { useStartMapHold } from '@/features/feed/warmup';
+import { curtainState, useStartMapHold, whenCurtainDown } from '@/features/feed/warmup';
+import { useReducedMotion } from '@/lib/useReducedMotion';
+import { cardHint, hasCardShot, peekCardShot, saveStreetsShot, setCardHint, shotKey, useCardShots, type CardHint } from '@/components/map/cardShot';
+import { useHeldCardPlace } from '@/components/map/cardHold';
 
 // The court pictures in chats (CourtMapThumb) fetch their drawing through
 // this file too. With two separate files each fetching the map engine, the
@@ -53,6 +56,42 @@ const makePins = new Function(`return ${PIN_ENGINE_JS}`)() as PinEngineFactory;
 const watchPaint = new Function(`return ${PAINT_WATCH_JS}`)() as (map: maplibregl.Map, tell: (what: 'up' | 'painted' | 'fail' | 'tiles' | 'retry', why?: string) => void) => { stop: () => void };
 /** Close enough to read street names, when the map goes to someone. */
 const CLOSE_ZOOM = 13.5;
+
+/**
+ * Once every face on the pins in `el` has loaded (or 0.8 s at most), and two frames on: what the
+ * still card reports as drawn is then exactly what stays on screen (as the phone's page does).
+ */
+function afterFaces(el: HTMLElement | null, done: () => void) {
+  const urls = new Set<string>();
+  el?.querySelectorAll<HTMLElement>('.maplibregl-marker, .maplibregl-marker *').forEach((node) => {
+    const bg = node.style?.backgroundImage;
+    if (!bg || !bg.includes('url(')) return;
+    const url = bg.slice(bg.indexOf('(') + 1, bg.lastIndexOf(')')).replace(/["']/g, '');
+    if (url) urls.add(url);
+  });
+  let left = urls.size;
+  let over = false;
+  const end = () => { if (over) return; over = true; requestAnimationFrame(() => requestAnimationFrame(done)); };
+  if (!left) { end(); return; }
+  setTimeout(end, 800);
+  urls.forEach((url) => { const im = new Image(); im.onload = im.onerror = () => { left -= 1; if (left <= 0) end(); }; im.src = url; });
+}
+/** Whether a drawn map came out as one flat colour (a canvas that could not be read back). */
+function isBlank(canvas: HTMLCanvasElement): boolean {
+  try {
+    const small = document.createElement('canvas');
+    small.width = 8; small.height = 8;
+    const g = small.getContext('2d');
+    if (!g) return false;
+    g.drawImage(canvas, 0, 0, 8, 8);
+    const px = g.getImageData(0, 0, 8, 8).data;
+    let lo = 999, hi = 0;
+    for (let i = 0; i < px.length; i += 4) { const v = px[i] + px[i + 1] + px[i + 2]; if (v < lo) lo = v; if (v > hi) hi = v; }
+    return hi - lo < 6;
+  } catch {
+    return false;
+  }
+}
 // MapLibre does its heavy lifting in a background worker script. The bundler
 // cannot find that file on its own, so a copy ships in public/ and the map is
 // pointed at it — under the site's base path on GitHub Pages.
@@ -70,7 +109,7 @@ maplibregl.setWorkerUrl(`${BASE}/maplibre/maplibre-gl-worker.mjs`);
  * everyone side by side, Snap Map's way (Oct 9), pulled up into the full list.
  */
 export function NearbyMap(props: NearbyMapProps) {
-  const { me, players, onOpen, onExpand, expanded = false, onBack, at, locationOn, locating = false, onToggleLocation, focusCourt, focusHit, focusUser, focusSpot, focusPlace, holdPins = false, hitCount, inviting = false, cardHeight } = props;
+  const { me, players, onOpen, onExpand, expanded = false, onBack, at, locationOn, locating = false, onToggleLocation, focusCourt, focusHit, focusUser, focusSpot, focusPlace, holdPins = false, hitCount, inviting = false, cardHeight, holdCurtain = true } = props;
   const styles = useThemedStyles(styleDefinitions);
   const { theme, night } = useTheme();
   const insets = useSafeAreaInsets();
@@ -106,23 +145,38 @@ export function NearbyMap(props: NearbyMapProps) {
   // Your ring (and your card's switch) go out by themselves at the time you picked.
   useOpenClock([me.openToHitUntil]);
   const openToHit = isOpenToHit(me);
-  const model = useMapModel(me, players, at, focusCourt, !expanded, focusHit, focusUser, focusSpot, !!locationOn, focusPlace);
-  // The still card on the start page holds the opening curtain until its streets are drawn (see warmup).
-  const painted = useStartMapHold(!expanded && (!!model.city || model.cityPending));
   // The still card fades in whole once its map has drawn (Oct 4, owner). Until
   // then it shows only its loading look, however long that takes, and if the
   // map never comes after every retry, only "Map didn't load · Tap to try
   // again" (Oct 5, owner): never the city and its players over a blank map.
+  // Since Oct 22 (owner: "The map blips in 50% of the time … can we just pre load the map?") a picture
+  // of how the card last drew stands in for the loading look when there is one for exactly this look
+  // (cardShot): the card already shows its streets, the live pins on them, and the map drawing the
+  // same under it changes nothing on screen.
   const [cardShown, setCardShown] = useState(false);
   // The loading look underneath goes once the map's fade-in has finished.
   const [loaderGone, setLoaderGone] = useState(false);
   // Drawn while out of view (the section beside, the tab off screen): no fade to catch mid-swipe, it is just there.
   const [cardSnap, setCardSnap] = useState(false);
   const outOfView = useRef<() => boolean>(() => false);
-  useEffect(() => { if (!cardShown) return undefined; const t = setTimeout(() => setLoaderGone(true), MAP_IN_MS + 30); return () => clearTimeout(t); }, [cardShown]);
+  useEffect(() => { if (!cardShown) return undefined; const t = setTimeout(() => setLoaderGone(true), MAP_REVEAL_MS + 30); return () => clearTimeout(t); }, [cardShown]);
   // Off screen, the map's load clocks wait (useMapLoad).
   const onScreen = useIsFocused();
   outOfView.current = () => !onScreen || props.visible === false || props.inView?.() === false;
+  /** Whether the card is in view right now: the curtain not over it, its tab and section on show, the page not in the background. */
+  const inViewNow = () => curtainState() !== 'up' && !outOfView.current() && (typeof document === 'undefined' || document.visibilityState !== 'hidden');
+  // The card's picture: loaded and on screen; and gone, once the map under it has drawn.
+  const [photoIn, setPhotoIn] = useState(false);
+  const [photoGone, setPhotoGone] = useState(false);
+  // Where the card is centred stays put while it is seen (cardHold): a fix landing then waits until it is out of view.
+  const place = useHeldCardPlace(expanded, at, !!locationOn, locating, () => (cardShown || photoIn) && inViewNow());
+  // The town the card showed last time, with Location on and no fix yet (mapModel): read until it has shown something.
+  const shotsVersion = useCardShots();
+  const hint = useRef<CardHint | null>(null);
+  if (!expanded && !cardShown && !photoIn) hint.current = cardHint(me.id);
+  const model = useMapModel(me, players, place.at, focusCourt, !expanded, focusHit, focusUser, focusSpot, place.locationOn, focusPlace, hint.current);
+  // The still card on the start page holds the opening curtain until it shows its map (see warmup); the feed's copy never does.
+  const painted = useStartMapHold(holdCurtain && !expanded && (!!model.city || model.cityPending));
   // Getting the map going, and again if its style never arrives (useMapLoad): each try is a new map.
   const load = useMapLoad(expanded ? 'full map' : 'map card', onScreen && props.visible !== false);
   // Anything else picked (a search result, a pin) takes the place of your own card.
@@ -133,6 +187,26 @@ export function NearbyMap(props: NearbyMapProps) {
   // The still card's "N players around" counts only the faces on it (onCard, as on the phone), so the number and the map agree.
   const { width: windowW } = useWindowDimensions();
   const [cardW, setCardW] = useState(0);
+  // The card's picture for exactly this look (cardShot): who, theme, centre, size, lock, Reduce Motion.
+  const still = useReducedMotion();
+  const pixelScale = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
+  const shotKeyNow = !expanded && model.city ? shotKey({ user: me.id, theme, lat: model.city.lat, lng: model.city.lng, zoom: CARD_ZOOM, w: cardW || Math.round(windowW - 2 * spacing.lg), h: cardHeight ?? HEIGHT, scale: pixelScale, lock: lock ?? 'open', still }) : '';
+  const keyNow = useRef(shotKeyNow);
+  keyNow.current = shotKeyNow;
+  const [photo, setPhoto] = useState<string | null>(() => peekCardShot(shotKeyNow, '')?.uri ?? null);
+  const photoNow = useRef(photo);
+  photoNow.current = photo;
+  const photoInNow = useRef(photoIn);
+  photoInNow.current = photoIn;
+  // A picture for the look now (the city settled, the pictures read), swapped only while nobody can see the card.
+  useEffect(() => {
+    if (expanded || cardShown) return;
+    const next = peekCardShot(shotKeyNow, '')?.uri ?? null;
+    if (next === photo || inViewNow()) return;
+    setPhotoIn(false);
+    setPhotoGone(false);
+    setPhoto(next);
+  }, [shotKeyNow, shotsVersion, cardShown]); // eslint-disable-line react-hooks/exhaustive-deps
   const cardCenter = model.city ?? start.center;
   const cardPlayers = model.inCity;
   const onCardCount = useMemo(
@@ -146,6 +220,8 @@ export function NearbyMap(props: NearbyMapProps) {
   const weather = useWeather(home);
   const cityName = model.cityName;
   const host = useRef<HTMLDivElement | null>(null);
+  const built = useRef(false);
+  const inMapPhoto = useRef<HTMLImageElement | null>(null);
   const map = useRef<maplibregl.Map | null>(null);
   // Which map the marks are on: a new one (a new look, or your location arriving
   // and the map starting again there) counts up, so every mark is drawn onto it afresh.
@@ -181,6 +257,9 @@ export function NearbyMap(props: NearbyMapProps) {
     const el = host.current;
     if (!el) return;
     const opening = (expanded && camera.current) || { center: [view.center.lng, view.center.lat] as [number, number], zoom: view.zoom };
+    // A card made again (a new theme, its city back) out of sight is covered again, so it is never seen drawing.
+    if (!expanded && built.current && outOfView.current()) { setCardSnap(true); setCardShown(false); setLoaderGone(false); setPhotoGone(false); }
+    built.current = true;
     // Opened on a court: its pin lands in the clear above its card, not under it (as when a court is picked).
     const liftOpening = expanded && !camera.current && !!focusCourt;
     let instance: maplibregl.Map;
@@ -200,6 +279,8 @@ export function NearbyMap(props: NearbyMapProps) {
         // Its own size watcher shrinks and redraws the map whenever a page covers it (a zero size):
         // the one below does the same job and skips that (sweep, Oct 18).
         trackResize: false,
+        // The still card keeps its drawing readable, for its picture (cardShot), and lays its labels down without a fade.
+        ...(expanded ? {} : { canvasContextAttributes: { preserveDrawingBuffer: true }, fadeDuration: 0 }),
       });
     } catch (error) {
       load.failed(`start: ${error instanceof Error ? error.message : String(error)}`);
@@ -213,7 +294,7 @@ export function NearbyMap(props: NearbyMapProps) {
       if (what === 'up') { load.heard('up'); return; }
       // Streets arriving, or failed ones being fetched again: still alive.
       if (what !== 'painted') { load.heard('other'); return; }
-      requestAnimationFrame(() => { load.heard('painted'); if (!expanded) { painted(); if (outOfView.current()) { setCardSnap(true); setLoaderGone(true); } setCardShown(true); } });
+      requestAnimationFrame(() => { load.heard('painted'); if (!expanded) afterFaces(el, () => revealRef.current()); });
     });
     instance.touchZoomRotate.disableRotation();
     // The theme's colours go on as soon as the style's layers exist, before
@@ -332,6 +413,7 @@ export function NearbyMap(props: NearbyMapProps) {
       watch.stop();
       instance.remove();
       map.current = null;
+      inMapPhoto.current = null;
     };
   }, [expanded, theme, !expanded && !model.city, load.attempt]); // eslint-disable-line react-hooks/exhaustive-deps
   // Given up on: the opening curtain stops waiting for the card's map, and the card says so.
@@ -347,8 +429,74 @@ export function NearbyMap(props: NearbyMapProps) {
     if (expanded && model.homeKnown && !focusCourt && !focusHit && !focusSpot && !model.place && !model.selected) map.current?.flyTo({ center: [home.lng, home.lat], zoom: START_ZOOM, duration: 600 });
   }, [home]); // eslint-disable-line react-hooks/exhaustive-deps
   // The still card follows a change of city on the profile.
+  // Out of view once it has drawn (the only time a held move lands, cardHold), it is covered again and
+  // shown once the new place has drawn; in view (Location just switched on from the card), it simply goes there.
   const cityKey = model.city ? `${model.city.lat},${model.city.lng}` : '';
-  useEffect(() => { if (!expanded && model.city) map.current?.jumpTo({ center: [model.city.lng, model.city.lat], zoom: CARD_ZOOM }); }, [cityKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const m = map.current;
+    if (expanded || !model.city || !m) return;
+    const again = cardShown && !inViewNow();
+    if (again) { stopWait.current(); setCardSnap(true); setCardShown(false); setLoaderGone(false); setPhotoGone(false); setPhotoIn(false); }
+    m.jumpTo({ center: [model.city.lng, model.city.lat], zoom: CARD_ZOOM });
+    if (again) m.once('idle', () => afterFaces(host.current, () => revealRef.current()));
+  }, [cityKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // The map has drawn: the picture goes (the same streets under it, the same live pins over both), or
+  // the loading look fades off once, never while the curtain is lifting and never mid-swipe.
+  const stopWait = useRef<() => void>(() => undefined);
+  useEffect(() => () => stopWait.current(), []);
+  const reveal = () => {
+    stopWait.current();
+    painted();
+    const curtain = curtainState();
+    if ((photoNow.current && photoInNow.current) || curtain === 'up' || outOfView.current()) {
+      setPhotoGone(true); setCardSnap(true); setLoaderGone(true); setCardShown(true);
+      return;
+    }
+    const fade = () => { setPhotoGone(true); setCardSnap(false); setCardShown(true); };
+    if (curtain === 'lifting') stopWait.current = whenCurtainDown(fade);
+    else fade();
+  };
+  const revealRef = useRef(reveal);
+  revealRef.current = reveal;
+  // The picture inside the map itself, straight over its drawing and under its pins (the pins stay
+  // live, exactly where the map puts them); taken out in one frame once the map under it has drawn.
+  const [photoInMap, setPhotoInMap] = useState(false);
+  useEffect(() => {
+    const m = map.current;
+    if (expanded || !m) return;
+    const old = inMapPhoto.current;
+    if (!photo || photoGone) { old?.remove(); inMapPhoto.current = null; setPhotoInMap(false); return; }
+    if (old && old.dataset.src === photo) return;
+    old?.remove();
+    const img = document.createElement('img');
+    img.alt = '';
+    img.dataset.src = photo;
+    img.style.cssText = 'position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;';
+    img.onload = () => { if (inMapPhoto.current === img) setPhotoInMap(true); };
+    img.src = photo;
+    m.getCanvas().insertAdjacentElement('afterend', img);
+    inMapPhoto.current = img;
+    setPhotoInMap(false);
+  }, [photo, photoGone, mapGen]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Keeping the picture fresh: once the card has drawn and been still a moment in view, the map alone (no pins: they are page elements).
+  useEffect(() => {
+    if (expanded || !cardShown || !loaderGone || !shotKeyNow || hasCardShot(shotKeyNow, 'streets')) return undefined;
+    let tries = 0;
+    const t = setInterval(() => {
+      tries += 1;
+      if (tries > 8) { clearInterval(t); return; }
+      const m = map.current;
+      if (!m || !inViewNow() || curtainState() !== 'down' || m.isMoving() || !m.loaded()) return;
+      clearInterval(t);
+      try { const c = m.getCanvas(); if (!isBlank(c)) saveStreetsShot(shotKeyNow, c.toDataURL('image/jpeg', 0.92)); } catch { /* not readable */ }
+    }, 1200);
+    return () => clearInterval(t);
+  }, [expanded, cardShown, loaderGone, shotKeyNow, mapGen]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Where the card was, for next time (mapModel's hint): only a centre from a real fix.
+  useEffect(() => {
+    if (!expanded && cardShown && place.locationOn && place.at && model.city) setCardHint(me.id, { lat: model.city.lat, lng: model.city.lng, name: model.cityName });
+  }, [expanded, cardShown, cityKey, model.cityName]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Pins: the same list the phone's map draws (pinList), handed to the engine, which keeps
   // each pin between changes and gathers, splits and fades them (pinEngine).
@@ -402,10 +550,15 @@ export function NearbyMap(props: NearbyMapProps) {
   }
   if (!expanded) {
     const failed = load.status === 'failed' && !cardShown;
+    // The picture is up (loaded, not yet handed over to the drawn map): the card shows from the first frame.
+    const photoUp = !!photo && photoIn && !photoGone && !failed;
+    const layerOn = cardShown || photoUp;
     return (
       <View style={[styles.card, cardHeight ? { height: cardHeight } : null]} onLayout={(e) => { const w = Math.round(e.nativeEvent.layout.width); if (w > 0 && w !== cardW) setCardW(w); }}>
         {/* Under the map, until it has drawn and faded in over it. Given up on, a tap tries again; still loading, it opens the full map. */}
-        {!loaderGone ? (failed ? <MapCardFailed /> : <MapCardLoading />) : null}
+        {!loaderGone ? <MapCardLoading /> : null}
+        {/* Given up on: "Map didn't load", fading in over the loading look. */}
+        {!loaderGone ? <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.failCover, { opacity: failed ? 1 : 0, transition: `opacity ${MAP_REVEAL_MS}ms ${MAP_REVEAL_CSS}` } as object]}>{failed ? <MapCardFailed /> : null}</View> : null}
         {!cardShown ? (
           <Pressable
             accessibilityRole={failed || onExpand ? 'button' : undefined}
@@ -415,8 +568,10 @@ export function NearbyMap(props: NearbyMapProps) {
             style={StyleSheet.absoluteFill}
           />
         ) : null}
-        <View aria-hidden={!cardShown} style={[StyleSheet.absoluteFill, !cardShown && styles.noTaps, { opacity: cardShown ? 1 : 0, transition: cardSnap ? 'none' : `opacity ${MAP_IN_MS}ms cubic-bezier(0.33, 1, 0.68, 1)` } as object]}>
+        <View aria-hidden={!cardShown} style={[StyleSheet.absoluteFill, !cardShown && styles.noTaps, { opacity: layerOn ? 1 : 0, transition: cardSnap || (photoUp && !cardShown && !inViewNow()) ? 'none' : `opacity ${MAP_REVEAL_MS}ms ${MAP_REVEAL_CSS}` } as object]}>
           {canvas}
+          {/* The picture over all of the map until the copy inside the map itself (under the pins) has loaded. */}
+          {photo && !photoGone && !photoInMap ? <img src={photo} alt="" onLoad={() => { setPhotoIn(true); painted(); }} onError={() => setPhoto(null)} style={{ position: 'absolute', left: 0, top: 0, width: '100%', height: '100%', pointerEvents: 'none' }} /> : null}
           {/* A still card: the tap goes to the full map, not to the tiles. */}
           <Pressable accessibilityRole={onExpand ? 'button' : undefined} accessibilityLabel="Map of players, courts and hits near you" onPress={onExpand} disabled={!onExpand} style={StyleSheet.absoluteFill} />
           <PreviewOverlay cityName={cityName} count={onCardCount} placeCount={model.cardCourts.length} hitCount={hitCount !== undefined && model.cardFromYou ? hitCount : model.cardHits.length} weather={weather} locationOn={locationOn} locating={locating} onToggleLocation={onToggleLocation} lock={lock} inviting={inviting} />
@@ -506,6 +661,8 @@ const styleDefinitions = StyleSheet.create({
   card: { height: HEIGHT, borderRadius: radius.xl, overflow: 'hidden', backgroundColor: colors.bgElevated, borderWidth: 1, borderColor: colors.border },
   // The map still on its way: taps go to the card under it (a compiled style: react-native-web ignores an inline pointerEvents).
   noTaps: { pointerEvents: 'none' },
+  // "Map didn't load" over the loading look, in the card's own colour.
+  failCover: { backgroundColor: colors.bgElevated },
   fill: { flex: 1, backgroundColor: colors.bgElevated, overflow: 'hidden' },
   top: { position: 'absolute', left: 0, right: 0, top: 0, gap: 2, zIndex: 10 },
   // The map's buttons, riding on whatever is up along the bottom.
