@@ -1,6 +1,6 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View } from 'react-native';
-import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 
 const CURVE = Easing.bezier(0.22, 0.61, 0.36, 1);
 
@@ -12,11 +12,20 @@ const CURVE = Easing.bezier(0.22, 0.61, 0.36, 1);
  * It runs on the animation thread (Reanimated), so a busy moment in the app
  * (setup saving, the keyboard coming up) never makes it stutter.
  */
-export function Collapse({ open, children }: { open: boolean; children: React.ReactNode }) {
+export function Collapse({ open, children, unclip = false }: {
+  open: boolean;
+  children: React.ReactNode;
+  /** Once fully open, stop clipping, so a card's soft shadow inside shows whole (Oct 22). */
+  unclip?: boolean;
+}) {
   const height = useSharedValue(0);
   const progress = useSharedValue(open ? 1 : 0);
+  const [settledOpen, setSettledOpen] = useState(open);
   useEffect(() => {
-    progress.value = withTiming(open ? 1 : 0, { duration: open ? 260 : 200, easing: CURVE });
+    if (!open) setSettledOpen(false);
+    progress.value = withTiming(open ? 1 : 0, { duration: open ? 260 : 200, easing: CURVE }, (finished) => {
+      if (finished && open) runOnJS(setSettledOpen)(true);
+    });
   }, [open, progress]);
   const style = useAnimatedStyle(() => ({
     height: height.value ? progress.value * height.value : 0,
@@ -24,7 +33,7 @@ export function Collapse({ open, children }: { open: boolean; children: React.Re
   }));
   return (
     <Animated.View
-      style={[{ overflow: 'hidden' }, style]}
+      style={[{ overflow: unclip && settledOpen ? 'visible' : 'hidden' }, style]}
       pointerEvents={open ? 'auto' : 'none'}
       accessibilityElementsHidden={!open}
       importantForAccessibility={open ? 'auto' : 'no-hide-descendants'}

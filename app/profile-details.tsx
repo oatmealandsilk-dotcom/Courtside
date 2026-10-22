@@ -164,7 +164,7 @@ function ActivityTab({ user }: { user: User }) {
       ) : null}
       <ThisWeek user={user} />
       {/* Your weekly streaks with hitting partners (sweep R12): only when you have one going. */}
-      <PartnerStreaksBox />
+      <PartnerStreaksBox gap={spacing.xxl} />
       <Waiting user={user} />
       <Recent user={user} />
     </View>
