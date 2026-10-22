@@ -123,10 +123,12 @@ function ClipPlaybackInner({ uri, poster, active: wanted, preload = false, prelo
     if (end >= length - 0.1 || end >= el.currentTime + 3) setThrough(true);
   };
   const turn = usePreloadTurn(preload, preloadRank, active, active ? through || failed : ready || failed || idle);
-  // How long its opening took, from the first byte asked for: the connection's speed (lib/netSpeed), as on a phone.
+  // How long its opening took: the connection's speed (lib/netSpeed), as on a phone. Only a fetch that
+  // ran unbroken counts: the clock starts when it is asked for in full ('auto', or it comes on screen)
+  // before its first frame, and a reading is dropped when the fetch is let go, cut, eased to 'metadata'
+  // or stopped by the browser (Safari parks a clip off screen until it plays), so a wait in which
+  // nothing was fetched never reads as a slow connection.
   const loadAt = useRef(0);
-  const fetches = active || (preload && turn);
-  useEffect(() => { if (fetches && !loadAt.current) loadAt.current = Date.now(); }, [fetches]);
   // The loading disc only for a wait you would notice: a clip preloaded to its first frame
   // asks for its next seconds as it starts, a moment's 'waiting' that is no loading page.
   // A clip that already showed its frame when it came on screen (a warmed tab's first clip
@@ -165,8 +167,14 @@ function ClipPlaybackInner({ uri, poster, active: wanted, preload = false, prelo
       el.src = uri;
     }
   }, [fetchHint]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { cut.current = false; }, [uri]);
-  const stopped = (el: HTMLVideoElement) => { if (!active && fetchHint !== 'none' && el.readyState >= 1) setIdle(true); };
+  useEffect(() => { cut.current = false; loadAt.current = 0; }, [uri]);
+  useEffect(() => {
+    const el = video.current;
+    // Paused on screen (a tap, or autoplay refused) it waits on the viewer, not the connection.
+    if (fetchHint !== 'auto' || (active && paused)) loadAt.current = 0;
+    else if (!loadAt.current && el && el.readyState < 2) loadAt.current = Date.now();
+  }, [fetchHint, active, paused, uri]);
+  const stopped = (el: HTMLVideoElement) => { if (!active && fetchHint !== 'none' && el.readyState >= 1) { loadAt.current = 0; setIdle(true); } };
   // Gone from the page (or given another clip): what it had fetched goes with it.
   useEffect(() => () => latestReady.current?.(false), [uri]);
   // The sound disc eases in when the clip starts and fades out quickly; a
@@ -273,7 +281,7 @@ function ClipPlaybackInner({ uri, poster, active: wanted, preload = false, prelo
 
   return <div style={{ position: 'absolute', inset: 0, background: letterbox ? '#000' : undefined, display: 'flex', alignItems: 'center' }}>
     <div style={{ ...cropCss(crop), display: 'flex', alignItems: 'center' }}>
-      <video ref={video} src={uri} poster={poster} loop muted={muted || silent} playsInline preload={fetchHint} onSuspend={(e) => stopped(e.currentTarget)} onCanPlayThrough={() => setThrough(true)} onProgress={(e) => filled(e.currentTarget)} onLoadedMetadata={(e) => { if (fetchHint === 'metadata') stopped(e.currentTarget); }} onError={fail} onLoadedData={() => { if (loadAt.current > 0) { noteClipLoad(Date.now() - loadAt.current); loadAt.current = -1; } setReady(true); }} onCanPlay={() => setReady(true)} onWaiting={() => setReady(false)} onPlaying={() => setReady(true)} style={{ width: '100%', height: '100%', objectFit: letterbox ? 'contain' : fit, pointerEvents: 'none' }} />
+      <video ref={video} src={uri} poster={poster} loop muted={muted || silent} playsInline preload={fetchHint} onSuspend={(e) => stopped(e.currentTarget)} onCanPlayThrough={() => setThrough(true)} onProgress={(e) => filled(e.currentTarget)} onLoadedMetadata={(e) => { if (fetchHint === 'metadata') stopped(e.currentTarget); }} onError={fail} onLoadedData={() => { if (loadAt.current > 0) { noteClipLoad(Date.now() - loadAt.current); loadAt.current = 0; } setReady(true); }} onCanPlay={() => setReady(true)} onWaiting={() => setReady(false)} onPlaying={() => setReady(true)} style={{ width: '100%', height: '100%', objectFit: letterbox ? 'contain' : fit, pointerEvents: 'none' }} />
       {failed ? <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}><span style={{ padding: '8px 14px', borderRadius: 999, background: 'rgba(0,0,0,0.55)', color: 'white', font: '600 13px Inter_600SemiBold, system-ui, sans-serif' }}>This video didn’t load</span></div> : null}
     </div>
     {/* Over the picture, under the disc: the top shade darkens the video, never the disc. */}
