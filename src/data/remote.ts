@@ -24,7 +24,7 @@ import { blankVideoLocation } from '@/lib/videoLocation';
 import { noteStep } from '@/lib/crashReporting';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
-import type { Answer, FriendStreak, ChatEvent, ChatPhoto, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, DetectedActivity, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, HiddenWords, HiddenWordsKind, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, CourtNote, LastSeen, MapPlace, MapVisibility, TaggedCourt, Question, Removed, RemovedItem, ReviewRequest, ReviewStatus, Story, SurfacePreference, TakedownKind, TakedownReason, Tip, TournamentEntry, User, PublicStreak, CoachApplication, CourtAccess, CourtAccessSource, CourtDayPart, CourtFacts, CourtFollowCount, CourtNow, CourtKings, CourtRegulars, CourtReview, CourtRightNow, CourtRing, FlybyPerson, FollowedCourt, SessionTag, SessionTagRefusal, SessionTagRole, FeedGroup, FeedGroupCard, DiscoverGroup, GroupLook, Invitee, AffiliateStats, ContactMatch, HeadToHead, PartnerStreak, MatchSet, SessionWith, FoundVia } from './types';
+import type { Answer, FriendStreak, ChatEvent, ChatPhoto, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, DetectedActivity, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, HiddenWords, HiddenWordsKind, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, CourtNote, LastSeen, MapPlace, MapVisibility, TaggedCourt, Question, Removed, RemovedItem, ReviewRequest, ReviewStatus, Story, SurfacePreference, TakedownKind, TakedownReason, Tip, TournamentEntry, User, PublicStreak, CoachApplication, CourtAccess, CourtAccessSource, CourtDayPart, CourtFacts, CourtFollowCount, CourtNow, CourtKings, CourtRegulars, CourtReview, CourtRightNow, CourtRing, FlybyPerson, FollowedCourt, SessionTag, SessionTagRefusal, SessionTagRole, FeedGroup, FeedGroupCard, FeedGroupInvite, GroupInviteAnswer, DiscoverGroup, GroupLook, Invitee, AffiliateStats, ContactMatch, HeadToHead, PartnerStreak, MatchSet, SessionWith, FoundVia } from './types';
 import { canScore, splitTiebreaks, validSets, withTiebreaks } from '@/features/activity/score';
 import { keptAvgHr, keptKcal } from '@/features/activity/manualStats';
 import { TERMS_VERSION } from '@/lib/legal';
@@ -1722,7 +1722,7 @@ const toGroup = (row: GroupRow): FeedGroup => ({
 /** The server's word for why a group action said no (migration 67), or 'failed'. */
 const groupWord = (error: { code?: string; message: string }) =>
   missingFunction(error) ? 'not_ready'
-    : /adults_only|their_age|group_limit|their_limit|not_admin|not_found|name_needed|slow_down|bad_photo|bad_look|blocked_words/.exec(error.message)?.[0] ?? 'failed';
+    : /adults_only|their_age|group_limit|their_limit|not_admin|not_found|name_needed|slow_down|bad_photo|bad_look|blocked_words|invite_limit|not_member|suspended/.exec(error.message)?.[0] ?? 'failed';
 
 /**
  * Of these messages, the ones your Hidden words hid for you (migration 117).
@@ -3921,6 +3921,37 @@ export const remote = {
     if (!data) return null;
     const c = data as { id: ID; name: string; description: string | null; ask: boolean; members: number; member: boolean; requested: boolean } & LookRow;
     return { id: c.id, name: c.name, description: c.description ?? undefined, ask: c.ask, look: lookFrom(c), memberCount: Number(c.members) || 0, member: c.member, requested: c.requested };
+  },
+  /**
+   * Invites waiting for your answer, and the people you invited who have not
+   * answered yet (by group), from migration 181. `live` false on a database
+   * without invites yet: the app then sends the group's link in a chat, as
+   * before. Null when it could not be asked.
+   */
+  async myFeedGroupInvites(): Promise<{ invites: FeedGroupInvite[]; sent: Record<ID, ID[]>; live: boolean } | null> {
+    const { data, error } = await need().rpc('my_feed_group_invites');
+    if (error) { if (missingFunction(error)) return { invites: [], sent: {}, live: false }; fail('group invites')(error); return null; }
+    const raw = (data ?? {}) as { invites?: ({ groupId: ID; name: string; description: string | null; ask: boolean; members: number; invitedBy: ID; inviterName?: string | null; createdAt: string } & LookRow)[]; sent?: Record<ID, ID[]> };
+    return {
+      invites: (raw.invites ?? []).map((r) => ({
+        groupId: r.groupId, name: r.name, description: r.description ?? undefined, ask: !!r.ask, look: lookFrom(r),
+        memberCount: Number(r.members) || 0, inviterId: r.invitedBy, inviterName: r.inviterName ?? undefined, createdAt: r.createdAt,
+      })),
+      sent: raw.sent ?? {},
+      live: true,
+    };
+  },
+  /** Invites these people to a group you are in; the ones invited this time. Throws with the server's word ('not_member', 'invite_limit', 'not_found'). */
+  async inviteToFeedGroup(id: ID, people: ID[]): Promise<ID[]> {
+    const { data, error } = await need().rpc('invite_to_feed_group', { g: id, people: people.filter((p) => UUID_RE.test(p)) });
+    if (error) throw new Error(groupWord(error));
+    return (data ?? []) as ID[];
+  },
+  /** Join or Not now on an invite. Throws with the server's word ('group_limit', 'not_found', 'slow_down'). */
+  async answerFeedGroupInvite(id: ID, accept: boolean): Promise<GroupInviteAnswer> {
+    const { data, error } = await need().rpc('answer_feed_group_invite', { g: id, accept });
+    if (error) throw new Error(groupWord(error));
+    return data as GroupInviteAnswer;
   },
   /** Joins, or asks to. Throws with the server's word ('group_limit', 'not_found', 'slow_down'). */
   async joinFeedGroup(id: ID): Promise<'joined' | 'requested' | 'already'> {

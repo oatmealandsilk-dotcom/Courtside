@@ -95,6 +95,8 @@ export function DragSheet(props: {
    * close has begun. The comments stage ignores it.
    */
   handOverSignal?: number;
+  /** No warm glow behind the header: a flat sheet in the page colour (the Send to sheet only). Opt-in; the comments stage ignores it. */
+  plain?: boolean;
 }) {
   return props.stage ? <StageSheet {...props} geo={props.stage} /> : <PlainSheet {...props} />;
 }
@@ -110,6 +112,7 @@ function PlainSheet({
   beforeClose,
   ownBack = false,
   handOverSignal = 0,
+  plain = false,
 }: {
   header: React.ReactNode;
   children: React.ReactNode;
@@ -121,6 +124,7 @@ function PlainSheet({
   beforeClose?: () => boolean;
   ownBack?: boolean;
   handOverSignal?: number;
+  plain?: boolean;
 }) {
   const styles = useThemedStyles(styleDefinitions);
   const { height: windowHeight } = useWindowDimensions();
@@ -328,7 +332,7 @@ function PlainSheet({
       <Pressable accessibilityRole="button" accessibilityLabel="Close" style={StyleSheet.absoluteFill} onPress={() => userDismiss()} />
       <Animated.View style={[styles.sheet, sheetStyle]}>
         {/* The same warm glow the pages open with, so a sheet reads as part of the app. */}
-        <Wash height={300} strength={0.85} />
+        {plain ? null : <Wash height={300} strength={0.85} />}
         <GestureDetector gesture={pan}>
           <View style={styles.handle} onLayout={(e) => { const h = Math.ceil(e.nativeEvent.layout.height); if (h !== headH) setHeadH(h); }}>
             <View style={styles.grabber} />

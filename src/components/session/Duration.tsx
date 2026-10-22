@@ -38,7 +38,11 @@ export function Duration({ minutes, size, color, unitColor, play = false, delay 
   const unit = Math.round(size * (unitScale ?? 0.4));
   const unitLine = Math.round(unit * 1.25);
   const figure = { ...font('600'), fontSize: size, lineHeight: Math.round(size * 1.08), letterSpacing: -0.055 * size, color, ...(Platform.OS === 'web' ? { fontVariant: ['tabular-nums' as const] } : {}) };
-  const unitStyle = { ...font('500'), fontSize: unit, lineHeight: unitLine, color: unitColor, marginBottom: unitScale == null ? Math.round(size * 0.1) : lift(size, Math.round(size * 1.08), unit, unitLine), marginLeft: Math.max(1, Math.round(size * 0.03)), ...textStyle };
+  const unitStyle = { ...font('500'), fontSize: unit, lineHeight: unitLine, color: unitColor, marginBottom: unitScale == null ? Math.round(size * 0.1) : lift(size, Math.round(size * 1.08), unit, unitLine), marginLeft: unitScale == null ? Math.max(1, Math.round(size * 0.03)) : Math.max(2, Math.round(size * 0.1)), ...textStyle };
+  // Units on the baseline ("3h 31m" in a post's stats) read as words, so each pair gets a word's space
+  // before the next figure; the headline's tiny raised units keep their tight set.
+  // A small one in a list's right column keeps a narrower space, so it never crowds its label.
+  const between = unitScale == null ? Math.round(size * 0.12) : size >= 17 ? Math.round(size * 0.3) : Math.round(size * 0.2);
   return (
     <View style={[styles.row, style]} accessible accessibilityRole="text" accessibilityLabel={spokenDuration(minutes)}>
       {parts.map((p, i) => (
@@ -54,7 +58,7 @@ export function Duration({ minutes, size, color, unitColor, play = false, delay 
             play={play}
             delay={delay}
             duration={parts.length === 1 ? duration : Math.max(duration, 1100)}
-            style={[figure, i > 0 ? { marginLeft: Math.round(size * 0.12) } : null, textStyle]}
+            style={[figure, i > 0 ? { marginLeft: between } : null, textStyle]}
             maxFontSizeMultiplier={maxGrow}
           />
           <Text style={unitStyle} maxFontSizeMultiplier={maxGrow}>{p.u}</Text>

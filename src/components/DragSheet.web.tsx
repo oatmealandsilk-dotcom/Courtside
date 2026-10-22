@@ -71,6 +71,7 @@ export function DragSheet({
   active = true,
   beforeClose,
   handOverSignal = 0,
+  plain = false,
 }: {
   header: React.ReactNode;
   children: React.ReactNode;
@@ -96,14 +97,16 @@ export function DragSheet({
   beforeClose?: () => boolean;
   /** Bump to hand over to the next page's sheet instead of sliding away (see the native twin and sheetHandOver). */
   handOverSignal?: number;
+  /** No warm glow behind the header (the Send to sheet only; see the native twin). The side panel and the stage ignore it. */
+  plain?: boolean;
 }) {
   // On a computer a bottom sheet stretched across a wide window looks lost;
   // there it is a centred box instead, the way Instagram's dialogs are.
   const dialog = typeof window !== 'undefined' && isDesktopBrowser() && window.innerWidth >= 700;
   if (dialog && side && window.innerWidth >= SIDE_MIN_WINDOW) return <SidePanel header={header} onDismissed={onDismissed} closeSignal={closeSignal} onSettled={onSettled} active={active} beforeClose={beforeClose}>{children}</SidePanel>;
-  if (dialog) return <DialogBox header={header} onDismissed={onDismissed} closeSignal={closeSignal} fitContent={fitContent} onSettled={onSettled} active={active} beforeClose={beforeClose} handOverSignal={handOverSignal}>{children}</DialogBox>;
+  if (dialog) return <DialogBox header={header} onDismissed={onDismissed} closeSignal={closeSignal} fitContent={fitContent} onSettled={onSettled} active={active} beforeClose={beforeClose} handOverSignal={handOverSignal} plain={plain}>{children}</DialogBox>;
   if (stage) return <StageSheet header={header} onDismissed={onDismissed} closeSignal={closeSignal} onSettled={onSettled} geo={stage} stageOverlay={stageOverlay} active={active}>{children}</StageSheet>;
-  return <Sheet header={header} onDismissed={onDismissed} peekFraction={peekFraction} closeSignal={closeSignal} onSettled={onSettled} active={active} contentHeight={contentHeight} beforeClose={beforeClose} handOverSignal={handOverSignal}>{children}</Sheet>;
+  return <Sheet header={header} onDismissed={onDismissed} peekFraction={peekFraction} closeSignal={closeSignal} onSettled={onSettled} active={active} contentHeight={contentHeight} beforeClose={beforeClose} handOverSignal={handOverSignal} plain={plain}>{children}</Sheet>;
 }
 
 /** The latest beforeClose, and whether a close the person started may go ahead now. */
@@ -199,7 +202,7 @@ function SidePanel({ header, children, onDismissed, closeSignal, onSettled, acti
 }
 
 /** The centred box a sheet becomes on a computer: fades and settles in, dims and blurs what is behind. */
-function DialogBox({ header, children, onDismissed, closeSignal, fitContent, onSettled, active, beforeClose, handOverSignal = 0 }: { header: React.ReactNode; children: React.ReactNode; onDismissed: () => void; closeSignal: number; fitContent: boolean; onSettled?: () => void; active: boolean; beforeClose?: () => boolean; handOverSignal?: number }) {
+function DialogBox({ header, children, onDismissed, closeSignal, fitContent, onSettled, active, beforeClose, handOverSignal = 0, plain = false }: { header: React.ReactNode; children: React.ReactNode; onDismissed: () => void; closeSignal: number; fitContent: boolean; onSettled?: () => void; active: boolean; beforeClose?: () => boolean; handOverSignal?: number; plain?: boolean }) {
   useTheme();
   const mayClose = useMayClose(beforeClose);
   const box = useRef<HTMLDivElement>(null);
@@ -269,7 +272,7 @@ function DialogBox({ header, children, onDismissed, closeSignal, fitContent, onS
           display: 'flex', flexDirection: 'column',
         }}
       >
-        <Wash height={300} strength={0.85} />
+        {plain ? null : <Wash height={300} strength={0.85} />}
         <div style={{ position: 'relative', paddingTop: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>{header}</div>
         <div style={{ position: 'relative', flex: fitContent ? '0 1 auto' : 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: fitContent ? 'auto' : undefined }}>{children}</div>
       </div>
@@ -289,6 +292,7 @@ function Sheet({
   contentHeight,
   beforeClose,
   handOverSignal = 0,
+  plain = false,
 }: {
   header: React.ReactNode;
   children: React.ReactNode;
@@ -300,6 +304,7 @@ function Sheet({
   contentHeight?: number;
   beforeClose?: () => boolean;
   handOverSignal?: number;
+  plain?: boolean;
 }) {
   // Hears a theme change, so its own colours never lag the page's.
   useTheme();
@@ -484,7 +489,7 @@ function Sheet({
           height: 0,
         }}
       >
-        <Wash height={300} strength={0.85} />
+        {plain ? null : <Wash height={300} strength={0.85} />}
         <div
           ref={head}
           onPointerDown={onPointerDown}

@@ -29,6 +29,7 @@ export const darkColors: Palette = {
   cardFigure: '#6FB483', cardInk: '#6FB483', cardMuted: '#A6B1AB',
   launchLine: '#8A948F',
   checker: '#26292A', checkerAlt: '#323637',
+  avatarTint1: '#2E3A34', avatarTint2: '#3A3530', avatarTint3: '#3B3034', avatarTint4: '#2D3640', avatarTint5: '#35313D', avatarTint6: '#363A2E',
 };
 
 /**
@@ -54,6 +55,7 @@ const cleanColors: Palette = {
   cardFigure: '#FFFFFF', cardInk: '#FFFFFF', cardMuted: '#FFFFFF',
   launchLine: '#5F6871',
   checker: '#26292A', checkerAlt: '#323637',
+  avatarTint1: '#E3EAE4', avatarTint2: '#EDE6DA', avatarTint3: '#F0E0DA', avatarTint4: '#DDE5EC', avatarTint5: '#E6E0EA', avatarTint6: '#E8E8E0',
 };
 
 /**
@@ -79,6 +81,7 @@ const aoColors: Palette = {
   cardFigure: '#0B2A47', cardInk: '#0E2F4F', cardMuted: '#143858',
   launchLine: '#496273',
   checker: '#26292A', checkerAlt: '#323637',
+  avatarTint1: '#D3E3EF', avatarTint2: '#E4DED2', avatarTint3: '#EBD8D4', avatarTint4: '#D5E5DD', avatarTint5: '#DDD9EA', avatarTint6: '#E3E6D3',
 };
 
 /**
@@ -103,6 +106,7 @@ const rolandGarrosColors: Palette = {
   cardFigure: '#FAF8F0', cardInk: '#FAF8F0', cardMuted: '#F6EFE6',
   launchLine: '#6D5745',
   checker: '#26292A', checkerAlt: '#323637',
+  avatarTint1: '#EBD9CB', avatarTint2: '#E2DDCC', avatarTint3: '#D9DFD5', avatarTint4: '#DDD8E2', avatarTint5: '#EFD5CF', avatarTint6: '#D7DEE3',
 };
 
 /**
@@ -126,6 +130,7 @@ const wimbledonColors: Palette = {
   cardFigure: '#FAF8F0', cardInk: '#FAF8F0', cardMuted: '#F0F1E7',
   launchLine: '#586552',
   checker: '#26292A', checkerAlt: '#323637',
+  avatarTint1: '#D9E6CF', avatarTint2: '#E6E0CC', avatarTint3: '#E9D8D7', avatarTint4: '#D3E0E4', avatarTint5: '#DED9E6', avatarTint6: '#E4E5D0',
 };
 
 /**
@@ -151,6 +156,7 @@ const usOpenColors: Palette = {
   cardFigure: '#F5D460', cardInk: '#F5D460', cardMuted: '#CBD8E6',
   launchLine: '#A9B9CA',
   checker: '#26292A', checkerAlt: '#323637',
+  avatarTint1: '#2C4560', avatarTint2: '#3A3F55', avatarTint3: '#45394C', avatarTint4: '#2F4A49', avatarTint5: '#4A4433', avatarTint6: '#3D4A5E',
 };
 
 export type ThemeName = 'default' | 'clean' | 'night' | 'ao' | 'roland-garros' | 'wimbledon' | 'us-open';

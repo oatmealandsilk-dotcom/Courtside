@@ -21,6 +21,18 @@ export function tintFor(seed: string): string {
   return palette[hash % palette.length];
 }
 
+/**
+ * The Send to sheet's face colour: one of the court's six quiet tones
+ * (avatarTint1-6), by the same seed, so a grid of initials reads as different
+ * people without any loud accent. Only that sheet uses it (Avatar `quiet`).
+ */
+export function quietTintFor(seed: string): string {
+  const palette = [colors.avatarTint1, colors.avatarTint2, colors.avatarTint3, colors.avatarTint4, colors.avatarTint5, colors.avatarTint6];
+  let hash = 0;
+  for (let i = 0; i < seed.length; i += 1) hash = (hash * 31 + seed.charCodeAt(i)) % 100000;
+  return palette[hash % palette.length];
+}
+
 interface Props {
   uri?: string;
   name: string;
@@ -31,6 +43,12 @@ interface Props {
   ring?: boolean;
   /** No initials: just the tint (the face behind another in a group's picture, where letters would be cut off). */
   plain?: boolean;
+  /**
+   * A face with no photo takes a quiet tone (quietTintFor) with its initials
+   * in the page's ink at a regular weight, the way Instagram's are. Opt-in:
+   * only the Send to sheet asks for it; every other face keeps its accent.
+   */
+  quiet?: boolean;
 }
 
 /**
@@ -40,12 +58,12 @@ interface Props {
  */
 const COACH_GREEN = '#4C9A5A';
 
-export const Avatar = React.memo(function Avatar({ uri, name, seed, size = 40, style, ring = false, plain = false }: Props) {
+export const Avatar = React.memo(function Avatar({ uri, name, seed, size = 40, style, ring = false, plain = false, quiet = false }: Props) {
   const styles = useThemedStyles(styleDefinitions);
   // Only the people list, not the whole app: a like or a message elsewhere does not redraw every face on screen.
   const users = useUsers();
   const photo = uri ?? users.find(user => user.avatarSeed === seed || user.id === seed)?.avatarUrl;
-  const tint = tintFor(seed);
+  const tint = quiet ? quietTintFor(seed) : tintFor(seed);
   // The fill the initials actually sit on: a caller's own background (the profile's brand disc,
   // the player card's deeper shade) wins over the seed's tint, so the ink is chosen against that.
   const drawn = StyleSheet.flatten(style)?.backgroundColor;
@@ -65,7 +83,7 @@ export const Avatar = React.memo(function Avatar({ uri, name, seed, size = 40, s
       ]}
     >
       {/* White initials where white reads on the fill, else black: white alone fell to 1.5:1 on New York's yellow. */}
-      {plain ? null : <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.label, { fontSize: size * 0.38, color: inkOn(fill) }]}>{initials(name)}</Text>}
+      {plain ? null : <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.label, quiet && typeof drawn !== 'string' ? { fontSize: size * 0.36, color: colors.text, ...font('500') } : { fontSize: size * 0.38, color: inkOn(fill) }]}>{initials(name)}</Text>}
       {photo && <ExpoImage source={{uri:photo}} accessibilityLabel={`${name} profile photo`} contentFit="cover" recyclingKey={photo} style={{position:"absolute",width:size,height:size,borderRadius:size/2}}/>}
       {ring ? (
         <View

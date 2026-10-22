@@ -12,6 +12,7 @@ import { onOpenGroupFeed, tookGroupFeed } from '@/features/groups/openGroupFeed'
 import { GroupTile } from '@/features/groups/GroupTile';
 import { inGroupFeed } from '@/features/groups/groupFeed';
 import { TOP_BAND_DROP, TOP_BAND_HEIGHT, TOP_BAND_TOP, TopBandContext } from '@/features/feed/topBand';
+import { showRow } from '@/features/feed/topRowScroll';
 import { GlassFill, liquidGlass } from '@/components/ui/Glass';
 import { TipBubble } from '@/components/TipBubble';
 import { useTip } from '@/features/tips/tips';
@@ -215,7 +216,7 @@ export type FeedScope =
   | { groupId: string; start?: undefined; ids?: undefined; userId?: undefined; set?: undefined; activities?: undefined };
 
 /** What the Feed's top row needs to know from the feed under it: whether a picture fills the top, and whether the chrome is put away. */
-export interface FeedChrome { picture: boolean; hidden: boolean; /** Swiped on to the next clip: the row slips out of the way, Reels-style (Oct 22). */ tucked?: boolean }
+export interface FeedChrome { picture: boolean; hidden: boolean }
 
 /**
  * Only a post shared with everyone is dealt into For you; one shared to a
@@ -382,7 +383,7 @@ let barHolder: string | null = null;
 
 const useRouteFocusedInBrowser: () => boolean = Platform.OS === 'web' ? useRouteFocused : () => true;
 
-function Home({ scope, topRow, paused, onChrome, onSwipe }: {
+function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
   previewSection?: string;
   /** Told when a finger's own swipe lands on a new page: given only on the Feed tab itself (For you and its group feeds), never on a one-person or one-court feed (post/[id] and the like). */
   onSwipe?: () => void;
@@ -392,6 +393,8 @@ function Home({ scope, topRow, paused, onChrome, onSwipe }: {
   /** Another feed (a group's) is over this one: nothing plays. */
   paused?: boolean;
   onChrome?: (chrome: FeedChrome) => void;
+  /** How far the Feed's top row is away (0 shown, 1 gone): this feed's scroll moves it while it is the one on show (features/feed/topRowScroll). */
+  row?: SharedValue<number>;
 } = {}) {
   const styles = useThemedStyles(styleDefinitions);
   // The US Open ground is navy; the green wordmark sinks into it, white does not.
@@ -480,13 +483,15 @@ function Home({ scope, topRow, paused, onChrome, onSwipe }: {
   useEffect(() => { setImmersive(false); immersion.value = 0; punch.value = 1; }, [active, immersion, punch]);
   const [visit, setVisit] = useState(0);
   const focused = useIsFocused();
-  // The top row's Reels-style tuck (Oct 22, owner): a swipe that lands on the next clip
-  // puts it away; a hold, a slow drag, any scroll back up, a tap to pause, a pull to refresh,
-  // coming back to the Feed or switching its words bring it back. See lib/topRowHint.
-  const [rowAway, setRowAway] = useState(false);
-  const onTopRow = useCallback((show: boolean) => setRowAway(!show), []);
-  const rowBackOnPause = useCallback((p: boolean) => { if (p) setRowAway(false); }, []);
-  useEffect(() => { if (focused && !paused) setRowAway(false); }, [focused, paused]);
+  // The top row follows this feed's scroll while it is the feed on show, the way Instagram's
+  // header does (Oct 22, owner): forward takes it out with the finger, back brings it in. A hold,
+  // a tap to pause, a pull to refresh, the first page, coming back to the Feed or switching its
+  // words bring it back. See features/feed/topRowScroll.
+  const liveRow = paused ? undefined : row;
+  const liveRowRef = useRef(liveRow);
+  liveRowRef.current = liveRow;
+  const rowBackOnPause = useCallback((p: boolean) => { if (p) showRow(liveRowRef.current); }, []);
+  useEffect(() => { if (focused) showRow(liveRow); }, [focused, liveRow]);
   // The comments stage (see commentStage): which page, if any, is on it.
   // `owner` tells this Home from another one under or over it (a scoped feed).
   const owner = useRef(`home:${Math.random().toString(36).slice(2)}`).current;
@@ -1041,7 +1046,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe }: {
   const activeRef = useRef(active);
   activeRef.current = active;
   const refreshFeed = useCallback(async () => {
-    setRowAway(false);
+    showRow(liveRowRef.current);
     // This resolves only once the fresh load has been drawn (the store waits
     // for that itself), so the ranking below reads the new posts. Waiting here
     // for "any change at all" used to give up early — a message or a like
@@ -1663,9 +1668,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe }: {
   const topOnPicture = showing?.type === 'hit'
     ? !!(showing.story.imageUrl || showing.story.videoUrl)
     : showing?.type === 'post' && showing.post.kind === 'clip' && !!(showing.post.videoUrl || showing.post.thumbnailUrl || showing.post.imageUrl);
-  // Only over a clip or an Instant past the first page: on the first page, a written post, a photo or Activities it stays.
-  const rowTucked = rowAway && active > 0 && activeOnPicture && !scope?.activities;
-  useEffect(() => { onChrome?.({ picture: topOnPicture, hidden: chromeHidden, tucked: rowTucked }); }, [onChrome, topOnPicture, chromeHidden, rowTucked]);
+  useEffect(() => { onChrome?.({ picture: topOnPicture, hidden: chromeHidden }); }, [onChrome, topOnPicture, chromeHidden]);
   // A group's feed calls its posts after the group, where For you's say "For you".
   const groupName = scope?.groupId ? app.feedGroups.find((g) => g.id === scope.groupId)?.name : undefined;
   // A group's feed and Activities sit under the Feed's top row; any other scope has a back button.
@@ -1806,7 +1809,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe }: {
           {/* Pull-to-refresh is for phones: the app and a phone's browser (`phone`, above). Asking
               isDesktopBrowser() alone took it off the iPhone app: the app has no browser to read,
               so the check answered "computer" there, and the pull strip was never built. */}
-          <VerticalPager ref={pager} key={visit} initialIndex={active} onIndex={setActive} onSwiped={onSwipe} onTopRow={topRow || rowed ? onTopRow : undefined} onRefresh={scope || !phone ? undefined : refreshFeed} pullTop={topRow ? TOP_BAND_TOP + (TOP_BAND_HEIGHT - 44) / 2 : 0} pullAlign={topRow ? 'left' : 'center'} pullHeader={scope ? undefined : <BrandMark size={topRow ? 22 : 40} />}>
+          <VerticalPager ref={pager} key={visit} initialIndex={active} onIndex={setActive} onSwiped={onSwipe} row={topRow || rowed ? liveRow : undefined} onRefresh={scope || !phone ? undefined : refreshFeed} pullTop={topRow ? TOP_BAND_TOP + (TOP_BAND_HEIGHT - 44) / 2 : 0} pullAlign={topRow ? 'left' : 'center'} pullHeader={scope ? undefined : <BrandMark size={topRow ? 22 : 40} />}>
             {[...feed.map((item, index) => {
               const distance = Math.abs(index - active);
               const ahead = index - active;
@@ -2422,9 +2425,13 @@ const ACTIVITIES = 'activities';
 
 function GroupedFeed() {
   const app = useApp();
-  const { feedGroups, currentUserId, actions } = app;
+  const { feedGroups, feedGroupInvites, currentUserId, actions } = app;
   const [groupId, setGroupId] = useState<string | null>(null);
   const [chrome, setChrome] = useState<FeedChrome>({ picture: false, hidden: false });
+  // How far the top row is away (0 shown, 1 gone), moved by the scroll of whichever feed is on show.
+  const row = useSharedValue(0);
+  // Switching feeds always shows the row.
+  useEffect(() => { showRow(row); }, [groupId, row]);
   useEffect(() => { if (currentUserId) void actions.loadFeedGroups(); }, [currentUserId]); // eslint-disable-line react-hooks/exhaustive-deps
   // A group you left (or were taken out of) goes back to For you.
   useEffect(() => { if (groupId && groupId !== ACTIVITIES && !feedGroups.some((g) => g.id === groupId)) setGroupId(null); }, [feedGroups, groupId]);
@@ -2444,12 +2451,12 @@ function GroupedFeed() {
   const waiting = feedGroups.some((g) => g.requests.length > 0 && g.members.some((m) => m.id === currentUserId && m.admin));
   return (
     <View style={{ flex: 1, alignSelf: 'stretch' }}>
-      <Home topRow paused={!!groupId} onChrome={forYouChrome} onSwipe={markFeedSwiped} />
+      <Home topRow paused={!!groupId} onChrome={forYouChrome} onSwipe={markFeedSwiped} row={row} />
       {/* Feeds already opened stay built (paused, see-through) and cross-fade in, so a switch
           is a fade rather than building a whole feed on the spot (Oct 4, owner: "way smoother"). */}
       {kept.map((key) => (
         <FeedLayer key={key} shown={key === groupId}>
-          <Home scope={key === ACTIVITIES ? { activities: true } : { groupId: key }} paused={key !== groupId} onChrome={key === groupId ? groupChrome : undefined} onSwipe={markFeedSwiped} />
+          <Home scope={key === ACTIVITIES ? { activities: true } : { groupId: key }} paused={key !== groupId} onChrome={key === groupId ? groupChrome : undefined} onSwipe={markFeedSwiped} row={row} />
         </FeedLayer>
       ))}
       <TipBubble tip="activities" shown={activitiesTip.shown} onClose={activitiesTip.close} pointer="up" style={{ top: insets.top + TOP_BAND_TOP + TOP_BAND_HEIGHT + 4, left: 16, right: 16 }} />
@@ -2461,8 +2468,9 @@ function GroupedFeed() {
           onPlus={() => router.push('/find-groups')}
           onPicture={chrome.picture}
           hidden={chrome.hidden}
-          tucked={!!chrome.tucked}
+          row={row}
           waiting={waiting}
+          invites={feedGroupInvites.length}
         />
       ) : null}
     </View>

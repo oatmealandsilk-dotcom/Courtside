@@ -1,13 +1,15 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { LinearGradient } from 'expo-linear-gradient';
 
 import { DragSheet } from '@/components/DragSheet';
 import { HitGlyph } from '@/components/HitGlyph';
-import { shareOutside } from '@/lib/shareOutside';
-import { Avatar, Button, Field } from '@/components/ui';
+import { copyLink, shareOutside, shareToWhatsApp } from '@/lib/shareOutside';
+import { Avatar, Button, quietTintFor } from '@/components/ui';
+import { initials } from '@/lib/format';
 import type { ShareItem, User } from '@/data/types';
 import { isLocalMedia } from '@/data/remote';
 import { GroupAvatar, groupName, isDirectChat, isGroupChat, othersIn } from '@/features/messages/groups';
@@ -16,21 +18,26 @@ import * as haptics from '@/lib/haptics';
 import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
 import { colors, font, radius, spacing, typography } from '@/theme';
+import { TextScale, oneLine } from '@/theme/textScale';
 import { courtLink, shareLink } from '@/lib/shareLink';
 import { courtShareText, hitShareText, postShareText, profileShareText, questionShareText } from '@/features/share/shareText';
 import { isMapCourtId } from '@/features/places/courtName';
 
 /**
- * Instagram's Send sheet. Your recent chats come first, groups included (two
- * faces for a group, or its photo), then people; search finds people by name
- * or @handle and groups by their name or anyone in them. Tick as many as you
- * like, add a note, and one Send puts the item in every chat picked: each
- * group gets it in the group, each person in your one-to-one chat with them.
+ * Instagram's Send sheet, CourtSide's way (Oct 22, owner picked B): a
+ * "Send to" title with a round close, one quiet line saying what is being
+ * sent, a search, and one grid of faces three across (your recent chats
+ * first, groups and hit chats included, then people) with a tick on each
+ * pick. Search finds people by name or @handle and groups by their name or
+ * anyone in them. Nobody picked: a row of round ways out of the app (Copy
+ * link, WhatsApp, More = the phone's own share sheet). Someone picked: a
+ * message box and Send, which puts the item in every chat picked: each group
+ * gets it in the group, each person in your one-to-one chat with them.
  *
  * It sends a post, a thread, a profile, a "Looking for a hit", a court
  * (`?kind=court&name=&lat=&lng=`) or, from a held message, the message itself
- * (`?kind=message&id=`, which reads "Forward to"). "Share outside CourtSide"
- * falls back to the phone's own share sheet.
+ * (`?kind=message&id=`, which reads "Forward to", with no ways out: a
+ * message is private).
  */
 
 /**
@@ -42,9 +49,11 @@ const MAX_PICKS = 15;
 /** How many of each list show before you search. */
 const RECENT_SHOWN = 16;
 const PEOPLE_SHOWN = 40;
-/** Faces this big, in tiles at least this wide: four across a phone, five in a computer's box. */
-const FACE = 56;
-const TILE_MIN = 84;
+/** Faces this big, always three across. */
+const FACE = 64;
+/** The message box: one line (40 high) growing to four as you type. */
+const NOTE_MIN = 40;
+const NOTE_MAX = 104;
 
 type Kind = 'post' | 'question' | 'profile' | 'hit-request' | 'court' | 'message';
 const KINDS: Kind[] = ['post', 'question', 'profile', 'hit-request', 'court', 'message'];
@@ -83,8 +92,9 @@ export default function ShareSheet() {
   // The note is checked for refused words before anything goes (a quick second tap would ask twice).
   const [checking, setChecking] = useState(false);
   const [fallbackNote, setFallbackNote] = useState('');
-  const { width: windowWidth } = useWindowDimensions();
+  const { width: windowWidth, fontScale } = useWindowDimensions();
   const [gridWidth, setGridWidth] = useState(0);
+  const [noteHeight, setNoteHeight] = useState(0);
 
   // The card itself (rise, dim, drag handle) is DragSheet's; this only asks it to close.
   const [closeSignal, setCloseSignal] = useState(0);
@@ -267,21 +277,73 @@ export default function ShareSheet() {
     }, 350);
   };
 
+
   const outside = sending?.outside;
   const shareOut = async () => {
     if (!outside) return;
     try { setFallbackNote((await shareOutside(outside.title, outside.url)) ?? ''); }
     catch { setFallbackNote(`Share this link: ${outside.url}`); }
   };
+  const copy = async () => {
+    if (!outside) return;
+    if (await copyLink(outside.url)) { haptics.tap(); showToast({ title: 'Link copied', icon: 'link-outline' }); }
+    else setFallbackNote(`Share this link: ${outside.url}`);
+  };
+  const whatsApp = () => {
+    if (!outside) return;
+    shareToWhatsApp(`${outside.title} ${outside.url}`).catch(() => setFallbackNote(`Share this link: ${outside.url}`));
+  };
+  const outsideActions: { key: string; label: string; icon: keyof typeof Ionicons.glyphMap; run: () => void }[] = outside ? [
+    { key: 'copy', label: 'Copy link', icon: 'link-outline', run: () => { void copy(); } },
+    { key: 'wa', label: 'WhatsApp', icon: 'logo-whatsapp', run: whatsApp },
+    { key: 'more', label: 'More', icon: 'ellipsis-horizontal', run: () => { void shareOut(); } },
+  ] : [];
 
-  // Tiles across: as many as fit at TILE_MIN wide (four on a phone), never fewer than three or more than five.
+  // Three across, whatever the width (a phone, or a computer's box).
   const width = gridWidth || Math.min(windowWidth, 520) - spacing.lg * 2;
-  const columns = Math.max(3, Math.min(5, Math.floor(width / TILE_MIN)));
-  const tileWidth = Math.floor(width / columns);
+  const tileWidth = Math.floor(width / 3);
+
+  /** What is being sent, as a small rounded picture: the post's own, the person's face, or an icon in a grey well. */
+  const thumb = (): React.ReactNode => {
+    const glyph = (icon: React.ReactNode) => <View style={styles.thumb}>{icon}</View>;
+    const icon = (name: keyof typeof Ionicons.glyphMap) => glyph(<Ionicons name={name} size={20} color={colors.textMuted} />);
+    if (!sending) return icon('alert-circle-outline');
+    if (kind === 'profile') {
+      const u = users.find((x) => x.id === id);
+      if (!u) return icon('person-outline');
+      return u.avatarUrl
+        ? <Image source={{ uri: u.avatarUrl }} style={styles.thumb} />
+        : <View style={[styles.thumb, { backgroundColor: quietTintFor(u.avatarSeed) }]}><Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.thumbInk}>{initials(u.name)}</Text></View>;
+    }
+    if (kind === 'post') {
+      const post = posts.find((x) => x.id === id);
+      const pic = post?.thumbnailUrl ?? post?.imageUrl;
+      return pic ? <Image source={{ uri: pic }} style={styles.thumb} /> : icon(post?.kind === 'clip' ? 'play-circle-outline' : 'image-outline');
+    }
+    if (kind === 'question') return icon('chatbubbles-outline');
+    if (kind === 'court') return icon('location-outline');
+    if (kind === 'hit-request') return glyph(<HitGlyph size={20} color={colors.textMuted} />);
+    return icon('arrow-redo-outline');
+  };
+  /** The one plain line beside it: "Mira's clip", "Sam Lee's profile", "A hit at Albert Park, Sat 9am". */
+  const itemLine = (): string => {
+    if (!sending) return kind === 'message' ? 'That message can’t be forwarded' : 'This item is no longer available';
+    const whose = (name?: string) => (name ? `${name}’s` : 'A');
+    if (kind === 'profile') return id === currentUserId ? 'Your profile' : `${whose(users.find((x) => x.id === id)?.name)} profile`;
+    if (kind === 'post') {
+      const post = posts.find((x) => x.id === id);
+      const by = post?.authorId === currentUserId ? 'Your' : whose(users.find((u) => u.id === post?.authorId)?.name.split(' ')[0]);
+      return `${by} ${post?.kind === 'clip' ? 'clip' : 'post'}`;
+    }
+    if (kind === 'hit-request') { const h = hitRequests.find((x) => x.id === id); return h ? `A hit at ${h.place.name}, ${hitWhen(h.startsAt)}` : 'A hit'; }
+    return sending.label;
+  };
 
   const tile = (target: Target) => {
     const on = selected.includes(target.key);
     const group = !!target.people;
+    // A hit's chat is named "Hit · <court>": the tile says just the court, and a small hit mark sits where the tick goes.
+    const hitAt = group ? /^Hit · (.+)$/.exec(target.name)?.[1] : undefined;
     return (
       <Pressable
         key={target.key}
@@ -289,129 +351,176 @@ export default function ShareSheet() {
         accessibilityState={{ checked: on }}
         accessibilityLabel={target.locked ? `${target.name}. Only people they follow can message them` : group ? `${target.name}, group` : target.name}
         onPress={() => toggle(target)}
-        style={(state) => [styles.tile, { width: tileWidth }, ((state as { hovered?: boolean }).hovered || state.pressed) && styles.tilePressed, target.locked && styles.tileLocked]}
+        style={[styles.tile, { width: tileWidth }, target.locked && styles.tileLocked]}
       >
-        <View>
-          {group
-            ? <GroupAvatar people={target.people ?? []} size={FACE} photoUrl={target.photoUrl} name={target.name} />
-            : <Avatar name={target.name} seed={target.user?.avatarSeed ?? target.key} uri={target.user?.avatarUrl} size={FACE} />}
-          {on ? (
-            <View style={styles.tick}><Ionicons name="checkmark" size={13} color={colors.brandInk} /></View>
-          ) : target.locked ? (
-            <View style={[styles.tick, styles.tickLocked]}><Ionicons name="lock-closed" size={10} color={colors.textMuted} /></View>
-          ) : null}
-        </View>
-        <Text numberOfLines={2} style={[styles.tileName, on && styles.tileNameOn]}>{target.name}</Text>
+        {({ pressed }) => (
+          <>
+            <View style={pressed ? styles.pressed : null}>
+              {group
+                ? <GroupAvatar people={target.people ?? []} size={FACE} photoUrl={target.photoUrl} name={target.name} quiet />
+                : <Avatar name={target.name} seed={target.user?.avatarSeed ?? target.key} uri={target.user?.avatarUrl} size={FACE} quiet />}
+              {on ? (
+                <View style={styles.tick}><Ionicons name="checkmark" size={13} color={colors.brandInk} /></View>
+              ) : target.locked ? (
+                <View style={[styles.tick, styles.tickQuiet]}><Ionicons name="lock-closed" size={10} color={colors.textMuted} /></View>
+              ) : hitAt ? (
+                <View style={[styles.tick, styles.tickQuiet]}><HitGlyph size={12} color={colors.text} /></View>
+              ) : null}
+            </View>
+            <Text numberOfLines={1} ellipsizeMode="tail" maxFontSizeMultiplier={TextScale.TITLE} style={[styles.name, on && styles.nameOn]}>{hitAt ?? target.name}</Text>
+          </>
+        )}
       </Pressable>
     );
   };
 
   const nothingFound = !!term && !recentShown.length && !peopleShown.length;
+  // Nobody to send to at all (a new account, or a group-only post in a group of one).
+  const nobody = !term && !recentShown.length && !peopleShown.length;
   const many = selected.length > 1;
+  const noteMax = NOTE_MAX * Math.min(fontScale || 1, TextScale.TITLE);
+
+  // Nothing picked: ways out of the app. Someone picked: a message and Send (Instagram never shows a dead Send).
+  const bottom = selected.length ? (
+    <View style={styles.bar}>
+      <TextInput
+        value={note}
+        onChangeText={setNote}
+        placeholder="Write a message…"
+        placeholderTextColor={colors.textFaint}
+        selectionColor={colors.brand}
+        multiline
+        maxFontSizeMultiplier={TextScale.TITLE}
+        accessibilityLabel="Message"
+        onContentSizeChange={(e) => setNoteHeight(e.nativeEvent.contentSize.height)}
+        style={[styles.note, { height: Math.min(noteMax, Math.max(NOTE_MIN, Math.ceil(noteHeight))) }]}
+      />
+      {/* Several picked: each gets its own copy in its own chat; nobody is put in a group together.
+          Once sent it stays lit, not greyed like a button that can't be pressed; send() ignores a second tap. */}
+      <Button
+        label={sent ? 'Sent' : many ? `Send separately · ${selected.length}` : 'Send'}
+        onPress={() => { void send(); }}
+        loading={checking}
+        disabled={!sending}
+        full
+      />
+    </View>
+  ) : outsideActions.length ? (
+    <View style={styles.bar}>
+      <View style={styles.actions}>
+        {outsideActions.map((a) => (
+          <Pressable key={a.key} onPress={a.run} accessibilityRole="button" accessibilityLabel={a.label} style={styles.action}>
+            {({ pressed }) => (
+              <>
+                <View style={[styles.actionDisc, pressed && styles.pressed]}>
+                  <Ionicons name={a.icon} size={24} color={colors.text} />
+                </View>
+                <Text {...oneLine(TextScale.TITLE, 0.8)} style={styles.actionLabel}>{a.label}</Text>
+              </>
+            )}
+          </Pressable>
+        ))}
+      </View>
+      {fallbackNote ? <Text selectable style={styles.fallback}>{fallbackNote}</Text> : null}
+    </View>
+  ) : null;
 
   return (
     <DragSheet
       closeSignal={closeSignal}
       onDismissed={() => router.back()}
       peekFraction={0.72}
+      plain
       header={
         <View style={styles.headerRow}>
-          <Text style={styles.heading}>{kind === 'message' ? 'Forward to' : 'Send to'}</Text>
-          <Pressable onPress={dismiss} accessibilityRole="button" accessibilityLabel="Close" hitSlop={10}>
-            <Ionicons name="close" size={22} color={colors.textMuted} />
+          <Text maxFontSizeMultiplier={TextScale.TITLE} accessibilityRole="header" style={styles.heading}>{kind === 'message' ? 'Forward to' : 'Send to'}</Text>
+          <Pressable onPress={dismiss} accessibilityRole="button" accessibilityLabel="Close" hitSlop={10} style={({ pressed }) => [styles.close, pressed && styles.pressed]}>
+            <Ionicons name="close" size={16} color={colors.textMuted} />
           </Pressable>
         </View>
       }
     >
       <View style={styles.sheet}>
-        <View style={styles.itemPreview}>
-          {sending ? sending.icon : <Ionicons name="alert-circle-outline" size={20} color={colors.textMuted} />}
-          <Text numberOfLines={2} style={styles.itemText}>
-            {sending ? sending.label : kind === 'message' ? 'That message can’t be forwarded' : 'This item is no longer available'}
-          </Text>
+        <View style={styles.itemRow} accessible accessibilityLabel={`Sending: ${itemLine()}`}>
+          {thumb()}
+          <Text numberOfLines={1} maxFontSizeMultiplier={TextScale.CARD} style={styles.itemLine}>{itemLine()}</Text>
         </View>
 
-        <Field value={search} onChangeText={setSearch} placeholder="Search" autoCapitalize="none" autoCorrect={false} />
-
-        <ScrollView style={styles.list} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.listBody}>
-          <View onLayout={(e) => { const w = Math.floor(e.nativeEvent.layout.width); if (w > 0 && w !== gridWidth) setGridWidth(w); }}>
-            {recentShown.length ? (
-              <>
-                <Text style={styles.label}>{term ? 'Chats' : 'Recent chats'}</Text>
-                <View style={styles.grid}>{recentShown.map(tile)}</View>
-              </>
-            ) : null}
-            {peopleShown.length ? (
-              <>
-                <Text style={styles.label}>People</Text>
-                <View style={styles.grid}>{peopleShown.map(tile)}</View>
-              </>
-            ) : null}
-            {nothingFound ? <Text style={styles.empty}>No one matches “{search.trim()}”.</Text> : null}
-          </View>
-        </ScrollView>
-
-        {selected.length ? (
-          <Field value={note} onChangeText={setNote} placeholder="Write a message…" />
-        ) : null}
-
-        <View style={styles.footer}>
-          {/* Several picked: each gets its own copy in its own chat; nobody is put in a group together. */}
-          {/* Once sent it stays lit, not greyed like a button that can't be pressed;
-              send() itself ignores a second tap. */}
-          <Button
-            label={sent ? 'Sent' : many ? `Send separately · ${selected.length}` : 'Send'}
-            onPress={() => { void send(); }}
-            loading={checking}
-            disabled={!selected.length || !sending}
-            full
+        <View style={styles.search}>
+          <Ionicons name="search" size={16} color={colors.textFaint} />
+          <TextInput
+            value={search}
+            onChangeText={setSearch}
+            placeholder="Search"
+            placeholderTextColor={colors.textFaint}
+            selectionColor={colors.brand}
+            autoCapitalize="none"
+            autoCorrect={false}
+            maxFontSizeMultiplier={TextScale.TITLE}
+            accessibilityLabel="Search"
+            style={styles.searchInput}
           />
-          {outside ? (
-            <Pressable onPress={shareOut} accessibilityRole="button" style={styles.externalRow}>
-              <Ionicons name="share-outline" size={18} color={colors.textMuted} />
-              <Text style={styles.external}>Share outside CourtSide</Text>
-            </Pressable>
-          ) : null}
-          {fallbackNote ? <Text selectable style={styles.empty}>{fallbackNote}</Text> : null}
         </View>
+
+        {/* One list, recent chats first and then people. The last row melts into the page under a
+            short fade (a gradient drawn over the list, nothing faded on a parent), never sliced. */}
+        <View style={styles.list}>
+          <ScrollView style={styles.fill} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.listBody}>
+            <View onLayout={(e) => { const w = Math.floor(e.nativeEvent.layout.width); if (w > 0 && w !== gridWidth) setGridWidth(w); }}>
+              <View style={styles.grid}>{[...recentShown, ...peopleShown].map(tile)}</View>
+              {nothingFound ? <Text style={styles.empty}>No one matches “{search.trim()}”</Text> : null}
+              {nobody ? <Text style={styles.empty}>{members ? 'No one else is in this group yet' : 'No one to send to yet'}</Text> : null}
+            </View>
+          </ScrollView>
+          <LinearGradient pointerEvents="none" colors={[`${colors.bg}00`, colors.bg]} style={styles.fade} />
+        </View>
+
+        {bottom}
       </View>
     </DragSheet>
   );
 }
 
 const styleDefinitions = StyleSheet.create({
-  sheet: { flex: 1, padding: spacing.lg, paddingTop: spacing.sm, paddingBottom: spacing.xxl, gap: spacing.md },
-  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
-  heading: { ...typography.title, color: colors.text },
-  itemPreview: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    padding: spacing.md,
-    borderRadius: radius.md,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  itemText: { ...typography.small, color: colors.textMuted, flex: 1, lineHeight: 19 },
-  // Fills whatever the sheet has between the search and the Send button.
+  sheet: { flex: 1, paddingBottom: spacing.xl },
+  headerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingBottom: spacing.xs },
+  heading: { ...typography.heading, letterSpacing: -0.2, color: colors.text, flex: 1 },
+  close: { width: 30, height: 30, borderRadius: 15, backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
+  itemRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.xs },
+  itemLine: { ...typography.body, color: colors.textMuted, flex: 1 },
+  thumb: { width: 40, height: 40, borderRadius: radius.sm, backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  thumbInk: { ...font('500'), fontSize: 14, color: colors.text },
+  search: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 36, borderRadius: 10, backgroundColor: colors.surfaceAlt, paddingHorizontal: 10, marginTop: spacing.sm, marginHorizontal: spacing.lg, marginBottom: spacing.xs },
+  searchInput: { flex: 1, minHeight: 36, color: colors.text, ...typography.body, paddingVertical: 0, paddingHorizontal: 0, ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : {}) },
+  // Fills whatever the sheet has between the search and the bottom row.
   list: { flex: 1, minHeight: 120 },
-  listBody: { paddingBottom: spacing.sm },
-  label: { ...typography.smallStrong, color: colors.textMuted, paddingTop: spacing.sm, paddingBottom: spacing.xs },
+  fill: { flex: 1 },
+  listBody: { paddingHorizontal: spacing.lg, paddingTop: spacing.xs, paddingBottom: spacing.lg },
+  fade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 16 },
   grid: { flexDirection: 'row', flexWrap: 'wrap' },
-  tile: { alignItems: 'center', gap: 6, paddingVertical: spacing.sm, paddingHorizontal: 4, borderRadius: radius.lg },
-  tilePressed: { backgroundColor: colors.surfaceAlt },
+  // Face 64, 6 below it, a one-line name: rows about 94 apart, as Instagram's are.
+  tile: { alignItems: 'center', gap: 6, paddingVertical: spacing.xs, paddingHorizontal: 4 },
   tileLocked: { opacity: 0.45 },
-  // The tick sits on the face's lower right, ringed in the page colour so it reads on any face.
+  pressed: { transform: [{ scale: 0.96 }] },
+  // The tick sits on the face's lower right, ringed in the page colour so it reads on a photo too.
   tick: {
     position: 'absolute', right: -2, bottom: -2, width: 22, height: 22, borderRadius: 11,
     backgroundColor: colors.brand, borderWidth: 2, borderColor: colors.bg, alignItems: 'center', justifyContent: 'center',
   },
-  tickLocked: { backgroundColor: colors.surfaceAlt },
-  tileName: { ...typography.small, fontSize: 12, lineHeight: 15, color: colors.text, textAlign: 'center' },
-  tileNameOn: { ...font('600') },
-  empty: { ...typography.small, color: colors.textFaint, paddingVertical: spacing.md },
-  footer: { gap: spacing.md },
-  externalRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
-  external: { ...typography.smallStrong, color: colors.textMuted },
+  tickQuiet: { backgroundColor: colors.surfaceAlt },
+  name: { ...typography.small, lineHeight: 16, color: colors.text, textAlign: 'center', alignSelf: 'stretch' },
+  nameOn: { ...font('600') },
+  empty: { ...typography.small, color: colors.textFaint, textAlign: 'center', paddingTop: spacing.xl },
+  fallback: { ...typography.small, color: colors.textFaint, textAlign: 'center' },
+  bar: { paddingTop: spacing.sm, paddingHorizontal: spacing.lg, gap: spacing.md },
+  note: {
+    ...typography.body, color: colors.text, backgroundColor: colors.surfaceAlt, borderRadius: 20,
+    paddingHorizontal: 16, paddingTop: 10, paddingBottom: 10, textAlignVertical: 'center',
+    ...(Platform.OS === 'web' ? ({ outlineStyle: 'none', resize: 'none' } as object) : {}),
+  },
+  // Each way out takes an equal share of the row, so the three fill it edge to edge.
+  actions: { flexDirection: 'row' },
+  action: { flex: 1, alignItems: 'center', gap: 6 },
+  actionDisc: { width: 52, height: 52, borderRadius: 26, backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
+  actionLabel: { ...typography.small, fontSize: 12, color: colors.textMuted },
 });
