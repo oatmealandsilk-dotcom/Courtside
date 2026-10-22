@@ -2,11 +2,14 @@ import { PRESS_DIM } from '@/theme/press';
 import { asTabRoute } from '@/features/navigation/tabFocus';
 import { SectionPager } from '@/components/SectionPager';
 import { PULL_GAP } from '@/lib/pullRefresh';
-import Reanimated, { runOnJS, scrollTo, useAnimatedReaction, useAnimatedRef, useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
+import Reanimated, { interpolateColor, runOnJS, useAnimatedReaction, useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
+import { PaneScroller } from '@/components/ui/PaneScroller';
+import { isPageDragging, subscribePageDragging } from '@/features/navigation/swipeLock';
+import { LAYOUT, useResponsive } from '@/lib/useResponsive';
 import { useTabUnderline } from '@/features/navigation/useTabUnderline';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Easing, Platform, ScrollView, TextInput, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Platform, ScrollView, TextInput, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { router } from 'expo-router';
 
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -117,44 +120,29 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   // Held locally only: pushing it into the address on every swipe made the
   // whole app re-render mid-gesture.
   const setSection = (value: string) => setLocalSection(asSection(value));
-  // Each section keeps its own place on the page (Oct 4, owner): leaving the map
-  // halfway down no longer drops you halfway down the threads. One you have not
-  // opened yet starts at the top.
-  const pageRef = useRef<ScrollView | null>(null);
-  const offsetY = useSharedValue(0);
-  // The pane not on show is held at its own spot while it slides in (shifted by
-  // the difference), so the swipe shows it where you left it and nothing snaps after.
-  // The page's top is below 0 by the pull-to-refresh strip (Screen hides it there); scrolling
-  // to 0 opened the strip and set a refresh going (Oct 4).
-  const pageTop = Platform.OS !== 'web' && previewSection === undefined ? PULL_GAP : 0;
-  const spotPlayers = useSharedValue(pageTop);
-  const spotThreads = useSharedValue(pageTop);
-  const onShow = useSharedValue(section === 'players' ? 0 : 1);
-  // The page's scroller, moved from the animation thread on the frame a swipe
-  // lands, and a flag that tells it that move is not a scroll (no bar tuck).
-  const pageList = useAnimatedRef<Reanimated.ScrollView>();
-  const quietScroll = useSharedValue(false);
-  // Run by the pager the moment it rests on a pane (see SectionPager's onLand):
-  // the spot of the section left is kept, and the page goes to the new one's
-  // spot in the same frame its hold comes off, so it lands exactly where the
-  // swipe showed it, with no jump after. It used to happen a few frames later,
-  // after the page had been clipped to the new pane and clamped (Oct 22 video).
-  const landOn = useCallback((dest: number) => {
-    'worklet';
-    if (onShow.value === dest) return;
-    (onShow.value === 0 ? spotPlayers : spotThreads).value = Math.max(pageTop, offsetY.value);
-    onShow.value = dest;
-    const to = (dest === 0 ? spotPlayers : spotThreads).value;
-    if (Math.abs(to - offsetY.value) < 0.5) return;
-    quietScroll.value = true;
-    scrollTo(pageList, 0, to, false);
-  }, [onShow, spotPlayers, spotThreads, offsetY, pageTop, quietScroll, pageList]);
-  // The pane not on show is shifted by the difference between the page and its
-  // own spot, up as well as down, so it slides in exactly where it was left.
-  // (Only ever down, it showed Find Players at its top mid-swipe and then
-  // dropped the page half way down on landing.)
-  const playersHold = useAnimatedStyle(() => ({ transform: [{ translateY: onShow.value === 0 ? 0 : offsetY.value - spotPlayers.value }] }));
-  const threadsHold = useAnimatedStyle(() => ({ transform: [{ translateY: onShow.value === 1 ? 0 : offsetY.value - spotThreads.value }] }));
+  // Each section is a page of its own, with its own scroller and its own place
+  // (Oct 4, owner: leaving the map halfway down no longer drops you halfway
+  // down the threads), side by side under a row that stays put. A swipe or a
+  // tab tap moves only the two pages sideways and the line under the row:
+  // nothing is held, moved or clipped on landing (Oct 22, owner: "It should be
+  // a smooth swipe. Nothing framing in or out").
+  const playersRef = useRef<ScrollView | null>(null);
+  const threadsRef = useRef<ScrollView | null>(null);
+  const playersY = useSharedValue(0);
+  const threadsY = useSharedValue(0);
+  // Whether each section sits in its pull strip (a pull held open): no section swipe starts then.
+  const playersStrip = useSharedValue(false);
+  const threadsStrip = useSharedValue(false);
+  const shownIndex = useSharedValue(section === 'players' ? 0 : 1);
+  const swipeBlocked = useSharedValue(false);
+  useAnimatedReaction(() => (shownIndex.value === 0 ? playersStrip.value : threadsStrip.value), (held) => { swipeBlocked.value = held; });
+  // Pull down on either section to refresh (never in a picture of this tab, nor on a computer).
+  const { loadPinnedQuestion, refresh: refreshApp } = actions;
+  const refreshPage = useCallback(() => { void loadPinnedQuestion(); return refreshApp(); }, [loadPinnedQuestion, refreshApp]);
+  const refresh = previewSection === undefined && !isDesktopBrowser() ? refreshPage : undefined;
+  // The page's top is below 0 by the pull strip on the phone; scrolling to 0 opened the strip and set a refresh going (Oct 4).
+  const pageTop = Platform.OS !== 'web' && refresh ? PULL_GAP : 0;
+  const { isPhone } = useResponsive();
   // The real tab takes each ask as it hears it, so an old one can't come back
   // if the tab is rebuilt later. A picture of the tab sliding in (previewSection)
   // leaves the ask for the real one.
@@ -167,6 +155,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
     return off;
   }, [previewSection]);
   if (!previewSection) reportSection('/discuss', section);
+  useEffect(() => { shownIndex.value = section === 'players' ? 0 : 1; }, [section, shownIndex]);
   // The app opens here: the splash curtain stays up over a fresh open until
   // this page has drawn once, then fades (see warmup). A frame after it is
   // built, so the curtain lifts onto the page and never onto a blank.
@@ -178,9 +167,19 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   // The underline under Find Players / Discussions follows the finger.
   const sectionIndex = section === 'players' ? 0 : 1;
   const [tabWidth, setTabWidth] = useState(0);
-  // How tall the Find Players / Discussions switch is, so the "Updated" note after a pull sits just under it.
-  const [sectionsHeight, setSectionsHeight] = useState(0);
   const underline = useTabUnderline(sectionIndex, 2, tabWidth);
+  // The two words take their colour from where the line is, so they change with it as it moves
+  // rather than snapping on landing. The theme's own two tones only (every court theme).
+  const textOn = colors.text;
+  const textOff = colors.textMuted;
+  const playersWord = useAnimatedStyle(() => {
+    const at = Math.max(0, Math.min(1, underline.base.value + underline.progress.value));
+    return { color: interpolateColor(at, [0, 1], [textOn, textOff]) };
+  });
+  const threadsWord = useAnimatedStyle(() => {
+    const at = Math.max(0, Math.min(1, underline.base.value + underline.progress.value));
+    return { color: interpolateColor(at, [0, 1], [textOff, textOn]) };
+  });
   const [search, setSearch] = useState('');
   const [searching, setSearching] = useState(false);
   const searchInput = useRef<TextInput | null>(null);
@@ -191,7 +190,8 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
     setSearch('');
     searchInput.current?.blur();
     setSearching(false);
-    pageRef.current?.scrollTo({ y: 0, animated: true });
+    // To the top of the page, never into the pull strip above it (that started a refresh).
+    playersRef.current?.scrollTo({ y: pageTop, animated: true });
   };
   const location = useLocationToggle();
   // One function for the row's "Turn on" (location.toggle is itself stable), so UpToday is not redrawn with every render here.
@@ -342,7 +342,23 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   const hitTip = hitTipCard(shownHits.map((x) => x.hit), currentUserId, justPosted, { teen: !!currentUser && notKnownAdult(currentUser), followingIds });
   // Never in the page's first moment after the app opens (OPEN_QUIET_MS): it arrives whole first.
   const openSettled = useOpenSettled();
-  const hitTipReady = !previewSection && section === 'players' && !tourOpen && !search && openSettled;
+  // Only once the page has rested a moment after any swipe (a section's or a tab's): a tip that
+  // joins the list makes room for itself, and that must never land on the frames right after a swipe.
+  // (Off to the side, on Discussions, its card is not in view, so it waits: see useOnScreen.)
+  const [paneRested, setPaneRested] = useState(false);
+  useEffect(() => {
+    if (previewSection) return undefined;
+    let wait: ReturnType<typeof setTimeout> | undefined;
+    const check = () => {
+      clearTimeout(wait);
+      setPaneRested(false);
+      if (!isPageDragging()) wait = setTimeout(() => setPaneRested(true), 1200);
+    };
+    check();
+    const off = subscribePageDragging(check);
+    return () => { off(); clearTimeout(wait); };
+  }, [previewSection, section]);
+  const hitTipReady = !previewSection && paneRested && !tourOpen && !search && openSettled;
   // With nothing open, name a court only when the nearest one reads as public and is close: never just because it is nearest.
   const promptCourt = nearCourts.nearest && looksPublic(nearCourts.nearest.c.name) && nearCourts.nearest.miles <= 5 ? nearCourts.nearest.c : null;
   // "Near you" is one thing on this tab and on the map: people who shared a
@@ -550,7 +566,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   useEffect(() => { watchEnd.value = isGuest; }, [isGuest, watchEnd]);
   const onNearEnd = () => nearEndRef.current();
   useAnimatedReaction(
-    () => (watchEnd.value ? Math.floor(offsetY.value / 240) : -1),
+    () => (watchEnd.value ? Math.floor(threadsY.value / 240) : -1),
     (now, before) => { if (now >= 0 && now !== before) runOnJS(onNearEnd)(); },
   );
   // The sort row goes with an empty topic: so does its menu, if it was open.
@@ -558,8 +574,9 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
 
   // Where to play: the courts you follow, with what is new at each, then the others in town, each a tap from its page.
   // Each with its place in the first showing's stagger (FirstReveal), which depends on what comes first.
-  const yourCourts = (order: number) => <YourCourts from={youAt} revealOrder={order} />;
-  const courtsBlock = (order: number) => <CourtsNear center={youAt} revealOrder={order} />;
+  // Keyed, so open hits coming or going moves them in the list rather than building them again.
+  const yourCourts = (order: number) => <YourCourts key="your-courts" from={youAt} revealOrder={order} />;
+  const courtsBlock = (order: number) => <CourtsNear key="courts-near" center={youAt} revealOrder={order} />;
   // A guest (guest mode, Oct 17): open hits and courts near them, never the players map or people.
   const content = (pane:string) => (pane === 'players' && isGuest ? <GuestFindPlayers /> : pane === 'players' ? <View style={{ gap: 16 }}>
         {/* Cancel beside the box while you search, the way iPhone search boxes do: one tap clears it, puts the keyboard away and brings the map back (Oct 5, owner: "there should be an easier way to exit here"). */}
@@ -580,7 +597,8 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
           ) : null}
         </View>
         {currentUser && !search ? (pane === 'players'
-          ? <NearbyMap visible={section === 'players'} me={currentUser} players={players} at={detectedCoords} locationOn={location.locationOn} locating={location.locating} onToggleLocation={location.toggle} onOpen={id => router.push(`/user/${id}`)} onExpand={() => router.push('/map')} hitCount={openHits.length} inviting={early} />
+          // Live while the tab is on show, beside Discussions too, so it is already drawn when it slides in.
+          ? <NearbyMap visible={!previewSection || section === 'players'} inView={section === 'players'} me={currentUser} players={players} at={detectedCoords} locationOn={location.locationOn} locating={location.locating} onToggleLocation={location.toggle} onOpen={id => router.push(`/user/${id}`)} onExpand={() => router.push('/map')} hitCount={openHits.length} inviting={early} />
           // The same footprint, empty: keeps the list from jumping when the map mounts on arrival.
           : <View style={styles.mapStandIn} />) : null}
         {/* Nobody sharing a spot within 30 miles: the way to fill the map,
@@ -863,8 +881,10 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
       )}
       </>);
 
+  // On a computer the row and each section's words keep to the page's column; the sections still scroll across the whole window.
+  const column = isPhone ? undefined : LAYOUT.soloColumn;
   return (
-    <Screen memoryKey="discuss" scrollRef={pageRef} listRef={pageList} quietScroll={quietScroll} offsetY={offsetY} wash noteBelow={sectionsHeight} onRefresh={previewSection === undefined && !isDesktopBrowser() ? () => { void actions.loadPinnedQuestion(); return actions.refresh(); } : undefined}
+    <Screen wash scroll={false} scrollsInside padded={false} unconstrained
       title="Community"
       right={isGuest ? <GuestSignIn /> :
         // Bell, chats, search: the same order as Profile (bell, chats, then the page's own button), so both pages match.
@@ -885,29 +905,36 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
         </View>
       }
     >
-      <View style={styles.sections} onLayout={e => { setTabWidth(e.nativeEvent.layout.width / 2); setSectionsHeight(e.nativeEvent.layout.height); }}>
-        {(['players', 'discussions'] as const).map(value => <Pressable key={value} accessibilityRole="tab" accessibilityState={{ selected: section === value }} onPress={() => setSection(value)} style={styles.section}><Text {...oneLine(TextScale.TITLE, 0.75)} style={{ ...typography.bodyStrong, fontSize: 16, color: section === value ? colors.text : colors.textMuted }}>{value === 'discussions' ? 'Discussions' : 'Find Players'}</Text></Pressable>)}
-        {tabWidth > 0 && <Reanimated.View pointerEvents="none" style={[styles.sectionUnderline, { width: tabWidth }, underline.style]} />}
+      {/* Under the header and out of every scroller, so it stays exactly where it is while
+          either section scrolls or the two slide past each other. */}
+      <View style={[styles.sectionsColumn, column ? { maxWidth: column } : null]}>
+        <View style={styles.sections} onLayout={e => { setTabWidth(e.nativeEvent.layout.width / 2); }}>
+          {(['players', 'discussions'] as const).map(value => <Pressable key={value} accessibilityRole="tab" accessibilityState={{ selected: section === value }} onPress={() => setSection(value)} style={styles.section}><Reanimated.Text {...oneLine(TextScale.TITLE, 0.75)} style={[styles.sectionWord, value === 'players' ? playersWord : threadsWord]}>{value === 'discussions' ? 'Discussions' : 'Find Players'}</Reanimated.Text></Pressable>)}
+          {tabWidth > 0 && <Reanimated.View pointerEvents="none" style={[styles.sectionUnderline, { width: tabWidth }, underline.style]} />}
+        </View>
       </View>
-      {/* Find Players on the left, Discussions on the right. Community is the
-          strip's first tab, so a swipe right from Find Players only gives a
-          little at the edge; a swipe left from Discussions goes on to Home. */}
+      {/* Find Players on the left, Discussions on the right, each its own page. Community is the
+          strip's first tab, so a swipe right from Find Players only gives a little at the edge; a
+          swipe left from Discussions goes on to Home. */}
       <SectionPager
+        fill
+        // Both stay built and drawn, in a browser too: Find Players' map is never torn down and
+        // made again on a trip to Discussions and back (owner, Oct 19: "push 2").
+        keepMounted
         index={sectionIndex}
-        panes={[<Reanimated.View key="players" style={playersHold}>{content('players')}</Reanimated.View>, <Reanimated.View key="discussions" style={threadsHold}>{content('discussions')}</Reanimated.View>]}
+        panes={[
+          <PaneScroller key="players" memoryKey="discuss:players" active={section === 'players'} scrollRef={playersRef} offsetY={playersY} inStrip={playersStrip} onRefresh={refresh} column={column}>{content('players')}</PaneScroller>,
+          <PaneScroller key="discussions" memoryKey="discuss:discussions" active={section === 'discussions'} scrollRef={threadsRef} offsetY={threadsY} inStrip={threadsStrip} onRefresh={refresh} column={column}>{content('discussions')}</PaneScroller>,
+        ]}
         progress={underline.progress}
         depth={1}
         delegateLeft
         delegateRight
-        // Out to the screen's edges, so a pane slides off the edge of the screen.
-        bleed={spacing.lg}
-        // In a browser too, Find Players stays built while Discussions is on show, so its map is
-        // there at once on the way back instead of loading again (owner, Oct 19: "push 2").
-        keepMounted
+        // A pull held open on the section on show: the page stays put until it lets go.
+        blocked={swipeBlocked}
         // The tutorial's slide from the map to the threads plays here, as this pager's own swipe.
         slideChannel={previewSection ? undefined : '/discuss'}
         onIndex={(i) => setSection(i === 0 ? 'players' : 'discussions')}
-        onLand={landOn}
       />
     </Screen>
   );
@@ -933,7 +960,10 @@ const styleDefinitions = StyleSheet.create({
   sortItemLine: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   sortItemTitle: { ...typography.smallStrong, color: colors.text },
   sortItemBody: { ...typography.caption, letterSpacing: 0, color: colors.textMuted },
-  sections: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: colors.border, marginBottom: 16 },
+  // The row's frame: the page's side margins, and on a computer the page's column.
+  sectionsColumn: { alignSelf: 'center', width: '100%', paddingHorizontal: spacing.lg },
+  sections: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: colors.border },
+  sectionWord: { ...typography.bodyStrong, fontSize: 16 },
   more: { alignSelf: 'center', paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border, marginTop: spacing.md },
   moreText: { ...typography.smallStrong, color: colors.text },
   section: { flex: 1, alignItems: 'center', paddingVertical: 18 },

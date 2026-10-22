@@ -49,5 +49,6 @@ export function useTabUnderline(index: number, count: number, tabWidth: number) 
     const at = Math.max(0, Math.min(count - 1, base.value + progress.value));
     return { transform: [{ translateX: at * tabWidth }] };
   });
-  return { progress, style };
+  // `base` too, for anything else that follows the line (the tab words' colour): drawn at base + progress.
+  return { progress, base, style };
 }

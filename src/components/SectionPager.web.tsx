@@ -144,7 +144,7 @@ export function SectionPager({ index, panes, onIndex, onLand, progress, delegate
     });
   });
   const filledPanes = () => (
-    <View style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+    <View style={{ flex: 1, position: 'relative' }}>
       {panes.map((pane, i) => {
         const off = i - drawn;
         const seen = i === drawn || beside === i;
