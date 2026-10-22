@@ -2,7 +2,7 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import { PlayerName } from '@/components/PlayerName';
 import { StreakFlame } from '@/components/StreakFlame';
 import { shownStreak, streakWords } from '@/features/practice/streakFlame';
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { confirm, confirmDelete, confirmReport } from '@/lib/confirm';
 import { RemovedNote } from '@/features/moderation/RemovedNote';
 import { afterReport } from '@/features/moderation/reportThanks';
@@ -68,6 +68,10 @@ export function ThreadReply({ answer, thread, askerId, depth = 0, preview = fals
   const [collapsed, setCollapsed] = useState(false);
   const reveal = useRevealOnFocus();
   const lineRef = useRef<TextInput>(null);
+  // The whole reply box (words, attach, Cancel, Send) is what is brought into view, so Send never sits under the tab bar.
+  const boxRef = useRef<View>(null);
+  // A browser focuses the box as it first appears, before its onFocus is listened to, so the web brings it into view here.
+  useEffect(() => { if (replying && Platform.OS === 'web') reveal(boxRef.current); }, [replying]);
   const responder = users.find(user => user.id === answer.authorId);
   // The reply a thread was opened at (a reported one, from Reports): it is scrolled to and lights up for a moment.
   const mark = useJumpTarget(answer.id);
@@ -99,18 +103,29 @@ export function ThreadReply({ answer, thread, askerId, depth = 0, preview = fals
   const hold = askModerate ?? askDelete;
   const children = thread.filter(child => child.parentAnswerId === answer.id)
     .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  // Folded away, Reddit-style: how many replies sit under it (all levels), shown beside the ⊕ that opens it again.
+  const hiddenCount = (id: string): number => thread.filter(a => a.parentAnswerId === id).reduce((n, a) => n + 1 + hiddenCount(a.id), 0);
+  const name = responder?.name ?? 'player';
+  const expand = () => setCollapsed(false);
   return <View>
     <View style={styles.answerCard} ref={mark?.ref} onLayout={mark?.onLayout} collapsable={mark ? false : undefined}>
       {mark ? <JumpFlash lit={mark.lit} inset={8} /> : null}
       {!collapsed && children.length > 0 && <View pointerEvents="none" style={styles.avatarRail}/>}
-      <Pressable accessibilityRole="button" accessibilityLabel={`${collapsed ? 'Expand' : 'Collapse'} reply by ${responder?.name ?? 'player'}${streakWords(streak)}`}
-        onPress={() => setCollapsed(value => !value)} onLongPress={hold} style={styles.answerHead}>
+      {/* Folded: a tap anywhere on its top line opens it again. Open: the top line no longer folds it (too easy to hit
+          by mistake, with nothing on screen to bring it back), only the ⊖ under it does. */}
+      <Pressable accessibilityRole={collapsed ? 'button' : undefined} accessibilityLabel={collapsed ? `Expand reply by ${name}${streakWords(streak)}` : undefined}
+        accessibilityState={collapsed ? { expanded: false } : undefined}
+        onPress={collapsed ? expand : undefined} onLongPress={hold} style={styles.answerHead}>
         <Avatar name={responder?.name ?? '?'} seed={responder?.avatarSeed ?? answer.authorId} uri={responder?.avatarUrl} size={30}/>
         <PlayerName userId={responder?.id} style={styles.answerName}>{responder?.name ?? 'Unknown'}</PlayerName>
         <StreakFlame days={streak} size="small" style={styles.flame} />
         <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.time}>{relativeTime(answer.createdAt)}</Text>
         {askerId && answer.authorId === askerId ? <View style={styles.op}><Text maxFontSizeMultiplier={TextScale.BODY} style={styles.opText}>OP</Text></View> : null}
         {answer.fromCoach && <Ionicons name="shield-checkmark" size={14} color={colors.brand}/>}
+        {collapsed ? <Pressable accessibilityRole="button" accessibilityLabel={`Expand reply by ${name}`} onPress={expand} hitSlop={12} style={styles.expand}>
+          <Ionicons name="add-circle-outline" size={20} color={colors.textMuted}/>
+          {hiddenCount(answer.id) > 0 ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.time}>+{hiddenCount(answer.id)}</Text> : null}
+        </Pressable> : null}
       </Pressable>
       {!collapsed && <>
         {answer.body ? (hold
@@ -120,16 +135,16 @@ export function ThreadReply({ answer, thread, askerId, depth = 0, preview = fals
         {/* Taken down by an admin: only its author and admins get it, and see why. */}
         {answer.removed ? <View style={{ paddingLeft: 42 }}><RemovedNote removed={answer.removed} quiet item={{ kind: 'answer', id: answer.id, authorId: answer.authorId }} /></View> : null}
         {!preview && <View style={styles.replyActions}>
-          <Pressable accessibilityRole="button" accessibilityLabel={`Collapse reply by ${responder?.name ?? 'player'}`} onPress={()=>setCollapsed(true)} style={styles.collapse}><Ionicons name="remove-circle-outline" size={20} color={colors.textMuted}/></Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel={`Collapse reply by ${name}`} onPress={()=>{ setCollapsed(true); setReplying(false); }} hitSlop={8} style={styles.collapse}><Ionicons name="remove-circle-outline" size={20} color={colors.textMuted}/></Pressable>
           <VoteControls item={answer} userId={currentUserId} onVote={direction => actions.voteAnswer(answer.id, direction)}/>
           {answer.removed || closed ? null : <Pressable accessibilityRole="button" accessibilityLabel={`Reply to ${responder?.name ?? 'player'}`} onPress={() => setReplying(true)} style={styles.replyButton}>
             <Ionicons name="chatbubble-outline" size={16} color={colors.textMuted}/><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.time}>Reply</Text>
           </Pressable>}
         </View>}
-        {replying && !closed && !answer.removed && <View style={styles.inlineComposer}>
+        {replying && !closed && !answer.removed && <View ref={boxRef} style={styles.inlineComposer}>
           <MentionSuggestions candidates={tag.rows} onPick={tag.pick} maxHeight={176} />
           <View style={styles.composer}>
-            <TextInput maxFontSizeMultiplier={TextScale.BODY} ref={lineRef} autoFocus keyboardType={Platform.OS === 'ios' ? 'twitter' : undefined} onFocus={() => reveal(lineRef.current)} accessibilityLabel={`Reply to ${responder?.name ?? 'player'}`} placeholder={`Reply to ${responder?.name?.split(' ')[0] ?? 'this'}… (@ to tag)`} placeholderTextColor={colors.textFaint} multiline maxLength={10000} value={draft} onChangeText={setDraft} onSelectionChange={tag.onSelectionChange} style={styles.replyInput}
+            <TextInput maxFontSizeMultiplier={TextScale.BODY} ref={lineRef} autoFocus keyboardType={Platform.OS === 'ios' ? 'twitter' : undefined} onFocus={() => reveal(boxRef.current ?? lineRef.current)} accessibilityLabel={`Reply to ${responder?.name ?? 'player'}`} placeholder={`Reply to ${responder?.name?.split(' ')[0] ?? 'this'}… (@ to tag)`} placeholderTextColor={colors.textFaint} multiline maxLength={10000} value={draft} onChangeText={setDraft} onSelectionChange={tag.onSelectionChange} style={styles.replyInput}
               // Enter sends on a computer; the web toolkit needs blurOnSubmit to do that in a multiline box.
               blurOnSubmit={Platform.OS === 'web' ? true : undefined}
               onSubmitEditing={Platform.OS === 'web' ? post : undefined}/>
@@ -200,6 +215,8 @@ const styleDefinitions = StyleSheet.create({
   // Lined up with the reply's text under the name, not the avatar.
   acceptedText: { ...typography.caption, color: colors.court, paddingLeft: 42 },
   answerHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  // The ⊕ on a folded reply, at the end of its top line.
+  expand: { marginLeft: 'auto', flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 28 },
   answerMeta: { flex: 1, gap: 2 },
   answerNameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   answerName: { ...typography.smallStrong, color: colors.text },
