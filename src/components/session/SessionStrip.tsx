@@ -34,10 +34,12 @@ import { ZoneGlyph } from './ZoneGlyph';
  * lines where the session has no log behind it (a written plan) or the
  * page already names the person (the tag).
  */
-export function SessionStrip({ session, hidden = [], play = false, scale = 1, onPress, title: titleAs, sub, flat = false, author }: {
+export function SessionStrip({ session, hidden = [], play = false, scale = 1, onPress, title: titleAs, sub, flat = false, author, people }: {
   session: SessionDetail;
   /** Who posted it, for the ScoreBoard's top row ("You" when not given). */
   author?: string;
+  /** The composer's preview: the players picked, named on the board before they accept. */
+  people?: { name: string; role: 'opponent' | 'partner' }[];
   hidden?: ID[];
   play?: boolean;
   scale?: number;
@@ -122,7 +124,7 @@ export function SessionStrip({ session, hidden = [], play = false, scale = 1, on
       </View>
       {scored ? (
         <View style={{ marginTop: -2 * k }}>
-          <ScoreBoard sets={session.sets!} {...boardSides(session, author ?? 'You', hidden)} youWon={session.won} ended={session.ended} frame="bare" status={false} scale={0.8 * k} inks={boxInks(look)} />
+          <ScoreBoard sets={session.sets!} {...boardSides(session, author ?? 'You', hidden, people)} youWon={session.won} ended={session.ended} frame="bare" status={false} scale={0.8 * k} inks={boxInks(look)} />
         </View>
       ) : null}
       {stats.length ? (

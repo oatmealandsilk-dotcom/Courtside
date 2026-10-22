@@ -15,9 +15,19 @@ import { TextScale } from '@/theme/textScale';
  */
 function Scoreboard({ post, author, u }: { post: Post; author?: User; u: number }) {
   const match = post.match!;
+  const sets = matchSets(match);
+  // Sets that don't read as a score: the result and the words as written, rather than no score at all.
+  if (!sets.length) {
+    return (
+      <Text maxFontSizeMultiplier={TextScale.CHROME} style={{ fontFamily: fontFamily.semibold, fontSize: 15 * u, color: 'white' }}>
+        {match.won ? 'Won' : 'Lost'} vs {match.opponentName}
+        <Text style={{ fontFamily: fontFamily.medium, color: 'rgba(255,255,255,0.75)' }}>{` · ${match.sets.join(' ')}`}</Text>
+      </Text>
+    );
+  }
   return (
     <ScoreSticker
-      sets={matchSets(match)}
+      sets={sets}
       you={author?.name ?? 'Me'}
       them={match.opponentName}
       youWon={match.won}

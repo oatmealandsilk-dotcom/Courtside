@@ -389,7 +389,7 @@ function SessionRow({ session: s, first, me, sessionTags, users, onRemove }: { s
   // A score is the small ScoreBoard beside the length (T1, Oct 22), so the title leaves it out.
   const board = canScore(s.kind) && !!s.sets?.length;
   return (
-    <Row first={first} minHeight={60} lead={<Tile>{icon}</Tile>} title={loggedLabel(s, !board)} sub={sub}
+    <Row first={first} minHeight={60} lead={<Tile>{icon}</Tile>} title={loggedLabel(s, !board)} sub={sub} subLines={board ? 2 : 1}
       right={(
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
           {board ? <ScoreBoardCompact sets={s.sets!} youWon={s.won} ended={s.ended} /> : null}

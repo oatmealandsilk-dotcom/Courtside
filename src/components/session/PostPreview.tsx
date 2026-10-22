@@ -13,6 +13,7 @@ import type { ID, MediaCrop, SessionDetail, User } from '@/data/types';
 import { postZones, zoneColors } from '@/features/activity/zones';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, radius, spacing, typography } from '@/theme';
+import type { CardPerson } from './SessionCard';
 import { SessionStrip } from './SessionStrip';
 import { ZoneBar } from './ZoneBar';
 
@@ -32,12 +33,14 @@ export type PreviewMedia = { kind: 'photo' | 'video'; uri?: string; thumbnailUrl
  * its own); a tap on a photo opens the editor. The scissors open the editor
  * (trim, crop, cover) and the × takes the photo or clip off.
  */
-export function PostPreview({ media, orientation, edit, session, author, caption, captionIsDefault, location, hidden, onEdit, onRemove }: {
+export function PostPreview({ media, orientation, edit, session, people, author, caption, captionIsDefault, location, hidden, onEdit, onRemove }: {
   media: PreviewMedia;
   orientation: 'portrait' | 'landscape';
   edit: { trimStart?: number; trimEnd?: number; muted?: boolean; volume?: number; speed?: number; crop?: MediaCrop };
   session: SessionDetail | null;
   author?: Pick<User, 'name' | 'handle' | 'avatarSeed' | 'avatarUrl'>;
+  /** The players picked, for the board's names before anyone has accepted. */
+  people?: CardPerson[];
   /** What the post will say: what is typed, or the words it gets when nothing is. */
   caption: string;
   captionIsDefault: boolean;
@@ -102,7 +105,7 @@ export function PostPreview({ media, orientation, edit, session, author, caption
           </Pressable>
         </View>
       </View>
-      {session ? <SessionStrip session={session} hidden={hidden} scale={0.9} /> : null}
+      {session ? <SessionStrip session={session} hidden={hidden} scale={0.9} author={author?.name} people={people} /> : null}
       {caption ? (
         <Text style={styles.caption} numberOfLines={2}>
           {author ? <Text style={styles.captionName}>{author.handle} </Text> : null}

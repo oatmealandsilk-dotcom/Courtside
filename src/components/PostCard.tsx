@@ -35,7 +35,7 @@ import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { hasSessionStats } from '@/features/activity/format';
 import { requestSection } from '@/features/navigation/swipeOrder';
 import { goToTab } from '@/features/navigation/startTab';
-import { colors, radius, spacing, typography } from '@/theme';
+import { colors, font, radius, spacing, typography } from '@/theme';
 import { tagsNotInCaption } from '@/features/feed/tags';
 import { TextScale } from '@/theme/textScale';
 
@@ -246,7 +246,15 @@ function PostCardInner({
         {post.match ? (
           // The ScoreBoard (T1, Oct 22): no card of its own in the post, only the court's soft wash.
           <View style={styles.board}>
-            <ScoreBoard sets={matchSets(post.match)} you={author.name} them={post.match.opponentName} youWon={post.match.won} eyebrow={`Match${post.match.surface ? ` · ${post.match.surface}` : ''}`} />
+            {matchSets(post.match).length ? (
+              <ScoreBoard sets={matchSets(post.match)} you={author.name} them={post.match.opponentName} youWon={post.match.won} eyebrow={`Match${post.match.surface ? ` · ${post.match.surface}` : ''}`} />
+            ) : (
+              // Sets that don't read as a score ("6-4 2-1 ret"): the result and the words as written, never nothing.
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.boardFallback}>
+                <Text style={styles.boardFallbackWho}>{post.match.won ? 'def.' : 'lost to'} {post.match.opponentName}</Text>
+                {[post.match.sets.join(' '), post.match.surface].filter(Boolean).map((t) => ` · ${t}`).join('')}
+              </Text>
+            )}
           </View>
         ) : null}
 
@@ -394,6 +402,8 @@ const styleDefinitions = StyleSheet.create({
   kindLabel: { ...typography.caption, fontSize: 12, letterSpacing: 0 },
   text: { ...typography.body, color: colors.text, lineHeight: 22 },
   board: { marginTop: spacing.xs },
+  boardFallback: { ...typography.small, color: colors.textMuted },
+  boardFallbackWho: { ...font('600'), color: colors.text },
   drill: { ...typography.small, color: colors.textMuted, lineHeight: 20 },
   // A written plan's drills, under its session box.
   planned: { gap: spacing.xs },

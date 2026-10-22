@@ -314,6 +314,8 @@ export function sessionFromLogged(s: PracticeSession, share: HealthShareKey[] = 
     ...(s.kind === 'match' && s.won !== undefined ? { won: s.won } : {}),
     // The score goes too, on any tennis session (Oct 6); the server puts the log's own on the post either way (migration 91).
     ...(canScore(s.kind) && s.sets?.length ? { sets: s.sets } : {}),
+    // A retired or unfinished match keeps saying so when it is shared or posted.
+    ...(s.kind === 'match' && s.ended ? { ended: s.ended } : {}),
     // Typed-in numbers (Oct 8), only those chosen; the list goes whenever the log has any, so the server knows the choice.
     ...(typed ? { share: share.filter((k) => (k === 'hr' && !!s.avgHr) || (k === 'kcal' && !!s.kcal)) } : {}),
     ...(typed && share.includes('hr') && s.avgHr ? { avgHr: s.avgHr } : {}),

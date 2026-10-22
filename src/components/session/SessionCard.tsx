@@ -327,7 +327,7 @@ export function SessionCard({ session, width, height, play = false, people, hidd
       play={play}
       top={shownTop}
       result={result}
-      score={score ? { sets: session.sets!, ...boardSides(session, author ?? 'You', hidden) } : null}
+      score={score ? { sets: session.sets!, ...boardSides(session, author ?? 'You', hidden, people) } : null}
       stats={stats}
       zones={zones}
       lead={lead}
@@ -356,7 +356,7 @@ export function SessionCard({ session, width, height, play = false, people, hidd
         {score ? (
           // The ScoreBoard (T1, Oct 22) in the box's own lettering: the box already says Won or Lost.
           <View style={{ alignSelf: 'stretch', marginTop: 10 * k }}>
-            <ScoreBoard sets={session.sets!} {...boardSides(session, author ?? 'You', hidden)} youWon={session.won} ended={session.ended} frame="bare" status={false} scale={0.8 * k} still={picture} inks={boxInks(look, shade)} />
+            <ScoreBoard sets={session.sets!} {...boardSides(session, author ?? 'You', hidden, people)} youWon={session.won} ended={session.ended} frame="bare" status={false} scale={0.8 * k} still={picture} inks={boxInks(look, shade)} />
           </View>
         ) : null}
         {far ? (

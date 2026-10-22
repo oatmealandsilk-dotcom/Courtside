@@ -73,10 +73,15 @@ export function pageInks(theme: ThemeName): BoardInks {
   };
 }
 
-/** Inside a session box: the box's own lettering (its figure ink for the winner), so a filled court (Paris, London, Clean) keeps its contrast. */
+/**
+ * Inside a session box: the box's own lettering (its figure ink for the
+ * winner), so a filled court (Paris, London, Clean) keeps its contrast. The
+ * loser takes three quarters of the box's ink (half fell under 3:1 on cream
+ * and on the filled courts; three quarters is 3.4:1 or more on every box).
+ */
 export function boxInks(look: { figure: string; ink: string; muted: string; faint: string; eyebrow: string }, shade?: TextStyle): BoardInks {
   return {
-    win: look.figure, winThem: look.ink, name: look.ink, nameLose: look.muted, lose: withAlpha(look.ink, 0.5), muted: look.muted,
+    win: look.figure, winThem: look.ink, name: look.ink, nameLose: look.muted, lose: withAlpha(look.ink, 0.75), muted: look.muted,
     rule: withAlpha(look.figure, 0.3), dash: withAlpha(look.figure, 0.7), net: withAlpha(look.figure, 0.42),
     tick: look.figure, eyebrow: look.eyebrow, shade,
   };
@@ -100,8 +105,11 @@ const firstName = (name: string) => name.trim().split(/\s+/)[0] || name;
  * first names, "Alex / June" over "Mira / Dev". A practice with a score has
  * the people it was with under you.
  */
-export function boardSides(s: SessionDetail, author: string, hidden: ID[] = []): { you: string; them: string } {
-  const { opponents, partners } = sessionPeople(s, hidden);
+export function boardSides(s: SessionDetail, author: string, hidden: ID[] = [], people?: { name: string; role: 'opponent' | 'partner' }[]): { you: string; them: string } {
+  // The composer's preview names the players picked (people), before anyone has accepted.
+  const { opponents, partners } = people
+    ? (s.kind === 'match' ? { opponents: people.filter((p) => p.role === 'opponent'), partners: people.filter((p) => p.role !== 'opponent') } : { opponents: [], partners: people })
+    : sessionPeople(s, hidden);
   if (s.kind !== 'match') {
     const all = [...opponents, ...partners];
     return { you: author, them: all.length > 1 ? all.map((p) => firstName(p.name)).join(' / ') : all[0]?.name ?? '' };
@@ -130,11 +138,20 @@ type GridProps = { sets: MatchSet[]; you: string; them: string; youWon?: boolean
 
 /** Names, then one column per set, court lines between them and the net between the rows. */
 function Grid({ sets, you, them, youWon, ended, headers, named, m, k, still = false }: GridProps) {
+  // The small words (set numbers, 'ret.') follow the board's size, so a board drawn to fit keeps its proportions.
+  const hs = m.row / (named ? FULL.row : MINI.row);
   const open = (i: number) => !!ended && i === sets.length - 1;
   const took = (i: number, side: 0 | 1) => !open(i) && sets[i][side] > sets[i][side === 0 ? 1 : 0];
   const mtb = (i: number) => matchTiebreakAt(sets, i);
   const hasTb = (i: number) => sets[i][2] != null;
-  const colNum = (i: number) => (mtb(i) ? m.mtbCol : m.col);
+  // A column is as wide as its widest number ("10" in a long set or a pro set), never narrower than the board's own.
+  const digits = (n: number | undefined) => String(n ?? '').length;
+  const colNum = (i: number) => {
+    const base = mtb(i) ? m.mtbCol : m.col;
+    const size = mtb(i) ? m.mtb : m.games;
+    return Math.max(base, Math.ceil(Math.max(digits(sets[i][0]), digits(sets[i][1])) * 0.62 * size));
+  };
+  const slotW = (i: number) => Math.max(m.slot, Math.ceil(digits(sets[i][2]) * 0.62 * m.tb) + 1);
   const endW = ended?.how === 'retired' ? (named ? 30 : 22) * (m.row / (named ? FULL.row : MINI.row)) : 0;
   const rows: { name: string; side: 0 | 1; wonMatch: boolean }[] = [
     { name: you, side: 0, wonMatch: youWon === true },
@@ -157,10 +174,10 @@ function Grid({ sets, you, them, youWon, ended, headers, named, m, k, still = fa
   return (
     <View>
       {headers && named ? (
-        <View style={{ flexDirection: 'row', height: 18, alignItems: 'flex-end', paddingBottom: 2 }}>
+        <View style={{ flexDirection: 'row', height: 18 * hs, alignItems: 'flex-end', paddingBottom: 2 * hs }}>
           <View style={{ flex: 1 }} />
           {sets.map((_, i) => column(i, (
-            <Text maxFontSizeMultiplier={FIGURE_CAP} style={[typography.caption, TAB, k.shade, { width: colNum(i) + (hasTb(i) ? m.slot : 0), paddingRight: hasTb(i) ? m.slot : 0, textAlign: 'right', color: k.lose }]}>
+            <Text maxFontSizeMultiplier={FIGURE_CAP} style={[typography.caption, TAB, k.shade, { fontSize: typography.caption.fontSize * hs, width: colNum(i) + (hasTb(i) ? slotW(i) : 0), paddingRight: hasTb(i) ? slotW(i) : 0, textAlign: 'right', color: k.lose }]}>
               {mtb(i) ? 'TB' : String(i + 1)}
             </Text>
           ), true))}
@@ -173,7 +190,7 @@ function Grid({ sets, you, them, youWon, ended, headers, named, m, k, still = fa
             {rows.map((r) => (
               <View key={r.side} style={[styles.nameRow, { height: m.row }]}>
                 <Text
-                  maxFontSizeMultiplier={TextScale.CARD}
+                  maxFontSizeMultiplier={still ? TextScale.CHROME : TextScale.CARD}
                   numberOfLines={1}
                   style={[k.shade, { fontSize: Math.max(12, m.name), letterSpacing: -0.15, flexShrink: 1 }, font(r.wonMatch ? '600' : '400'), { color: r.name ? (r.wonMatch ? k.name : k.nameLose) : k.lose }]}
                 >
@@ -192,6 +209,7 @@ function Grid({ sets, you, them, youWon, ended, headers, named, m, k, still = fa
             <View key={r.side} style={[styles.cell, { height: m.row }]}>
               <Text
                 maxFontSizeMultiplier={FIGURE_CAP}
+                numberOfLines={1}
                 style={[k.shade, TAB, { width: colNum(i), textAlign: 'right', fontSize: size, lineHeight: lh, letterSpacing: named ? (size >= 28 ? -0.7 : -0.3) : 0 }, font(won ? '600' : '400'), { color: won ? (r.side === 0 ? k.win : k.winThem) : open(i) ? k.muted : k.lose }]}
               >
                 {s[r.side]}
@@ -199,7 +217,7 @@ function Grid({ sets, you, them, youWon, ended, headers, named, m, k, still = fa
               {hasTb(i) ? (
                 <Text
                   maxFontSizeMultiplier={FIGURE_CAP}
-                  style={[k.shade, TAB, { width: m.slot, paddingLeft: 1, alignSelf: 'flex-start', marginTop: Math.max(0, Math.round((m.row - lh) / 2)) + 1, fontSize: m.tb, lineHeight: Math.round(m.tb + 2) }, font('500'), { color: k.muted }]}
+                  style={[k.shade, TAB, { width: slotW(i), paddingLeft: 1, alignSelf: 'flex-start', marginTop: Math.max(0, Math.round((m.row - lh) / 2)) + 1, fontSize: m.tb, lineHeight: Math.round(m.tb + 2) }, font('500'), { color: k.muted }]}
                 >
                   {won ? '' : s[2]}
                 </Text>
@@ -211,7 +229,7 @@ function Grid({ sets, you, them, youWon, ended, headers, named, m, k, still = fa
           <View style={{ width: endW, marginLeft: 6 }}>
             {rows.map((r) => (
               <View key={r.side} style={[styles.cell, { height: m.row }]}>
-                <Text maxFontSizeMultiplier={FIGURE_CAP} style={[k.shade, { fontSize: named ? 11 : 9, lineHeight: named ? 14 : 11 }, font('500'), { color: k.muted }]}>{ended?.side === r.side ? 'ret.' : ''}</Text>
+                <Text maxFontSizeMultiplier={FIGURE_CAP} style={[k.shade, { fontSize: (named ? 11 : 9) * hs, lineHeight: (named ? 14 : 11) * hs }, font('500'), { color: k.muted }]}>{ended?.side === r.side ? 'ret.' : ''}</Text>
               </View>
             ))}
           </View>
@@ -257,10 +275,19 @@ export type ScoreBoardProps = {
 export function ScoreBoard({ sets, you, them = '', youWon, ended, frame = 'open', status = true, eyebrow = 'Match', headers = false, scale = 1, inks, wordmark = false, still = false }: ScoreBoardProps) {
   const { theme } = useTheme();
   if (!sets.length) return null;
-  const k = inks ?? pageInks(theme);
+  // In a box: New York's figure ink is its yellow, but the board's winner and tick there are white (the T1 sheet),
+  // as pageInks has them; Clean's quiet ink (70% white) is too faint for the small tiebreak points and "ret.".
+  const k = !inks ? pageInks(theme)
+    : theme === 'us-open' ? { ...inks, win: colors.text, tick: colors.text }
+    : theme === 'clean' ? { ...inks, muted: withAlpha(inks.name, 0.92) }
+    : inks;
   const word = boardStatus(youWon, ended);
   const card = frame === 'card';
-  const radius = card ? 16 : 12;
+  // A picture (the sticker) scales everything with it, and its words never grow with the phone's text size.
+  const sc = card ? scale : 1;
+  const radius = (card ? 16 : 12) * sc;
+  const wordCap = card ? TextScale.CHROME : TextScale.CARD;
+  const cap = { fontSize: typography.caption.fontSize * sc };
   const dark = pageIsDark();
   const fill = theme === 'default' ? colors.cardFill : dark ? colors.surface : colors.bgElevated;
   const lift = theme === 'default' ? 0 : dark ? 0.5 : 0.72;
@@ -268,22 +295,22 @@ export function ScoreBoard({ sets, you, them = '', youWon, ended, frame = 'open'
     <View
       accessible
       accessibilityLabel={spokenBoard(sets, youWon, ended)}
-      style={[frame === 'open' ? styles.open : card ? styles.card : null, card && { backgroundColor: fill }]}
+      style={[frame === 'open' ? styles.open : card ? styles.card : null, card && { backgroundColor: fill, borderRadius: radius, paddingHorizontal: 14 * sc, paddingTop: 12 * sc, paddingBottom: 12 * sc }]}
     >
       {/* Clean has no shirt to wash with: its card keeps just a hairline. */}
       {frame === 'bare' ? null : theme !== 'clean' ? <ShirtWash radius={radius} rim={card ? (theme === 'default' ? withAlpha(colors.cardFigure, 0.2) : colors.border) : null} lift={lift} />
         : card ? <View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderRadius: radius, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border }]} /> : null}
       {status ? (
         <View style={styles.eyebrow}>
-          <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={[typography.caption, k.shade, { color: k.eyebrow, flex: 1, textTransform: 'uppercase' }]}>{eyebrow}</Text>
-          {word ? <Text maxFontSizeMultiplier={TextScale.CARD} style={[typography.caption, font('600'), k.shade, { color: k.eyebrow }]}>{word}</Text> : null}
+          <Text maxFontSizeMultiplier={wordCap} numberOfLines={1} style={[typography.caption, cap, k.shade, { color: k.eyebrow, flex: 1, textTransform: 'uppercase' }]}>{eyebrow}</Text>
+          {word ? <Text maxFontSizeMultiplier={wordCap} style={[typography.caption, cap, font('600'), k.shade, { color: k.eyebrow }]}>{word}</Text> : null}
         </View>
       ) : null}
       <Grid sets={sets} you={you} them={them} youWon={youWon} ended={ended} headers={headers} named m={scaled(FULL, scale)} k={k} still={still} />
       {wordmark ? (
-        <View style={styles.wordRow}>
-          <BrandMark size={14} color={k.tick} />
-          <Text maxFontSizeMultiplier={TextScale.CHROME} style={[font('900'), { fontSize: 14, letterSpacing: -0.3, color: k.tick }]}>CourtSide</Text>
+        <View style={[styles.wordRow, { gap: 4 * sc, marginTop: 10 * sc }]}>
+          <BrandMark size={14 * sc} color={k.tick} />
+          <Text maxFontSizeMultiplier={TextScale.CHROME} style={[font('900'), { fontSize: 14 * sc, letterSpacing: -0.3 * sc, color: k.tick }]}>CourtSide</Text>
         </View>
       ) : null}
     </View>
