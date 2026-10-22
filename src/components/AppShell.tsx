@@ -268,18 +268,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // light Feed, which you had never been on).
   const selected = useRef(-1);
   // Whether any page has said which tab it belongs to yet. Until one has (a
-  // link opened cold), a Community page with no tab under it (a court, the
-  // map, who else was there, your alerts) lights Community, not Home (Oct 5:
+  // link opened cold), a Community page with no tab under it (a court, a
+  // player's profile, the map, who else was there, your alerts) lights Community, not Home (Oct 5:
   // a court opened from a link lit Feed). Opened from a tab, it keeps that tab.
   const placed = useRef(false);
   // The Tennis profile is Profile's only when it is your own; someone else's keeps the tab it was opened from.
   const { userId: shownUserId } = useGlobalSearchParams<{ userId?: string }>();
   const ownTennisProfile = shown === '/profile-details' && (!shownUserId || shownUserId === currentUserId);
   if (shown === paths.index) { selected.current = TAB_ORDER.indexOf(paths.index); placed.current = true; }
-  else if (shown === paths.discuss || shown.startsWith('/question/') || shown.startsWith('/user/')) { selected.current = TAB_ORDER.indexOf(paths.discuss); placed.current = true; }
+  else if (shown === paths.discuss || shown.startsWith('/question/')) { selected.current = TAB_ORDER.indexOf(paths.discuss); placed.current = true; }
   else if (shown === paths.coaches || shown.startsWith('/coach/') || shown.startsWith('/coach-') || shown === '/ai-coach' || shown === '/booking-done') { selected.current = TAB_ORDER.indexOf(paths.coaches); placed.current = true; }
   else if (shown === paths.profile || ownTennisProfile || ['/settings', '/edit-profile', '/change-handle', '/your-sessions', '/workouts', '/weekly-recap'].includes(shown)) { selected.current = TAB_ORDER.indexOf(paths.profile); placed.current = true; }
-  else if (!placed.current && (shown.startsWith('/court/') || ['/map', '/flyby', '/notifications', '/open-to-hit'].includes(shown))) selected.current = TAB_ORDER.indexOf(paths.discuss);
+  else if (!placed.current && (shown.startsWith('/court/') || shown.startsWith('/user/') || ['/map', '/flyby', '/notifications', '/open-to-hit'].includes(shown))) selected.current = TAB_ORDER.indexOf(paths.discuss);
   // Pages with their own bottom controls (a composer, an editor, a thread's
   // message box) run without the phone's floating bar. On a computer the
   // menu sits at the side, out of their way, so it stays, the way

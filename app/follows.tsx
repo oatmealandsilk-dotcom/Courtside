@@ -79,6 +79,9 @@ export default function Follows() {
       <View>
         {list.length === 0 && !loaded ? (
           <View style={styles.loading}><ActivityIndicator color={colors.textMuted} /></View>
+        ) : list.length === 0 && search.trim() !== '' && idsOf[tab].length > 0 ? (
+          // A search that matches nobody says so, not that the list itself is empty.
+          <EmptyState icon="search-outline" title={`No one matches “${search.trim()}”`} />
         ) : list.length === 0 ? (
           // Your own empty list says how to change that; someone else's simply says it is empty.
           userId === currentUserId ? (
