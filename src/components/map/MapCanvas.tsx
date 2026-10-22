@@ -155,7 +155,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas({
   const html = useMemo(() => `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <style>html,body,#m{margin:0;height:100%;background:${look.background?.fill ?? '#F4EFE6'};overflow:hidden}.maplibregl-ctrl{display:none}.maplibregl-canvas{outline:none}${MAP_PIN_CSS.replace(/\n/g, '')}</style></head>
 <body><div id="m"></div><script>
-var LOOK=${lookNow.current};var APPLIED=null;var INIT=${markersNow.current};var SYNCED=false,SETTLING=false;
+var LOOK=${lookNow.current};var APPLIED=null;var INIT=${markersNow.current};var SYNCED=false,SETTLING=false,MOVES=0;
 document.body.classList.toggle('cs-still',${stillNow.current ? 'true' : 'false'});
 var post=function(o){window.ReactNativeWebView&&window.ReactNativeWebView.postMessage(JSON.stringify(o))};
 function start(){
@@ -167,7 +167,8 @@ function faces(cb){var urls=[],seen={},els=[],i,bg,u;try{els=document.querySelec
 for(i=0;i<els.length;i++){bg=els[i].style&&els[i].style.backgroundImage;if(!bg||bg.indexOf('url(')<0)continue;u=bg.slice(bg.indexOf('(')+1,bg.lastIndexOf(')')).replace(/["']/g,'');if(u&&!seen[u]){seen[u]=1;urls.push(u)}}
 var left=urls.length,fin=false;function end(){if(fin)return;fin=true;requestAnimationFrame(function(){requestAnimationFrame(cb)})}
 if(!left){end();return}setTimeout(end,800);urls.forEach(function(x){var im=new Image();im.onload=im.onerror=function(){if(--left<=0)end()};im.src=x})}
-function settle(){if(SETTLING)return;SETTLING=true;faces(function(){SETTLING=false;post({type:'painted'});try{engine.calm(false)}catch(e){}})}
+// A move while it settles (a new place) means what drew is not what stays: it settles again once the new place has drawn.
+function settle(){if(SETTLING)return;SETTLING=true;var m0=MOVES;faces(function(){SETTLING=false;if(MOVES!==m0){map.once('idle',settle);return}post({type:'painted'});try{engine.calm(false)}catch(e){}})}
 var W=(${PAINT_WATCH_JS})(map,function(what,why){if(what==='painted'){settle();return}post({type:what,why:why})},{gate:function(){return SYNCED}});
 // The phone took the map's drawing back. MapLibre draws again by itself once it is given back, so the full map
 // (your pan, zoom and pick) is started afresh only if it is not back within 3 s; the still card at once, as its picture covers it meanwhile.
@@ -191,7 +192,7 @@ var engine=(${PIN_ENGINE_JS})(map,maplibregl,{tap:function(id){post({type:'tap',
 window.__cs={
   set:function(p){engine.set(p)},
   hold:function(on){engine.hold(on)},
-  fly:function(lat,lng,z,ms,oy,exact){map.flyTo({center:[lng,lat],zoom:z==null?map.getZoom():exact?z:Math.max(map.getZoom(),z),duration:ms,offset:[0,oy||0]})},
+  fly:function(lat,lng,z,ms,oy,exact){MOVES++;map.flyTo({center:[lng,lat],zoom:z==null?map.getZoom():exact?z:Math.max(map.getZoom(),z),duration:ms,offset:[0,oy||0]})},
   look:function(l){LOOK=l;document.body.style.background=(l.background&&l.background.fill)||'#F4EFE6';if(map.isStyleLoaded())look(l)},
   synced:function(){if(SYNCED)return;SYNCED=true;W.kick()},
   rearm:function(){try{engine.calm(true)}catch(e){}map.once('idle',settle)},

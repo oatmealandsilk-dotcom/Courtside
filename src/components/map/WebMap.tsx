@@ -265,6 +265,10 @@ export function NearbyMap(props: NearbyMapProps) {
   // The card's pins as they are now, for a map made afresh to have them from its first frame.
   const pinsNow = useRef<{ items: ReturnType<typeof mapMarkers>; tpl: ReturnType<typeof clusterTemplates> } | null>(null);
   const map = useRef<maplibregl.Map | null>(null);
+  // Whether this map has said it drew once; and which showing of it a reveal on its way is for (a move before it
+  // lands starts a new one, so a card is never shown on a place whose streets have not drawn yet).
+  const paintedOnce = useRef(false);
+  const revealGen = useRef(0);
   // Which map the marks are on: a new one (a new look, or your location arriving
   // and the map starting again there) counts up, so every mark is drawn onto it afresh.
   const [mapGen, setMapGen] = useState(0);
@@ -302,6 +306,8 @@ export function NearbyMap(props: NearbyMapProps) {
     // A card made again (a new theme, its city back) out of sight is covered again, so it is never seen drawing.
     if (!expanded && built.current && outOfView.current()) { setCardSnap(true); setCardShown(false); setLoaderGone(false); setPhotoGone(false); }
     built.current = true;
+    paintedOnce.current = false;
+    revealGen.current += 1;
     // Opened on a court: its pin lands in the clear above its card, not under it (as when a court is picked).
     const liftOpening = expanded && !camera.current && !!focusCourt;
     let instance: maplibregl.Map;
@@ -336,7 +342,9 @@ export function NearbyMap(props: NearbyMapProps) {
       if (what === 'up') { load.heard('up'); return; }
       // Streets arriving, or failed ones being fetched again: still alive.
       if (what !== 'painted') { load.heard('other'); return; }
-      requestAnimationFrame(() => { load.heard('painted'); if (!expanded) afterFaces(el, () => revealRef.current()); });
+      paintedOnce.current = true;
+      const gen = revealGen.current;
+      requestAnimationFrame(() => { load.heard('painted'); if (!expanded) afterFaces(el, () => { if (gen === revealGen.current) revealRef.current(); }); });
     });
     instance.touchZoomRotate.disableRotation();
     // The theme's colours go on as soon as the style's layers exist, before
@@ -485,8 +493,12 @@ export function NearbyMap(props: NearbyMapProps) {
     if (expanded || !model.city || !m) return;
     const again = cardShown && !inViewNow();
     if (again) { stopWait.current(); pinsOn.current?.calm(true); setCardSnap(true); setCardShown(false); setLoaderGone(false); setPhotoGone(false); setPhotoIn(false); }
+    // Not shown yet (or covered again): any reveal on its way was for the old place, and the card waits for the new one's streets.
+    const fresh = again || !cardShown;
+    if (fresh) revealGen.current += 1;
+    const gen = revealGen.current;
     m.jumpTo({ center: [model.city.lng, model.city.lat], zoom: CARD_ZOOM });
-    if (again) m.once('idle', () => afterFaces(host.current, () => revealRef.current()));
+    if (fresh && paintedOnce.current) m.once('idle', () => afterFaces(host.current, () => { if (gen === revealGen.current) revealRef.current(); }));
   }, [cityKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The map has drawn: the picture goes (the same streets under it, the same live pins over both), or
