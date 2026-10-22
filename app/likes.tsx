@@ -1,13 +1,14 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { goBack } from '@/lib/goBack';
 
 import { LevelPill } from '@/components/LevelPill';
+import { FollowPill } from '@/components/FollowPill';
 import { StreakFlame } from '@/components/StreakFlame';
 import { shownStreak } from '@/features/practice/streakFlame';
-import { Avatar, Button, EmptyState, Field, Screen } from '@/components/ui';
+import { Avatar, EmptyState, Field, Screen } from '@/components/ui';
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { PeopleSkeleton } from '@/components/Skeleton';
 import { useApp } from '@/store/AppContext';
@@ -40,6 +41,11 @@ export default function Likes() {
     void actions.loadPost(params.id).finally(() => setLooked(true));
   }, [ready, item, looked, params.id, isHit, actions]);
 
+  // Who leads is decided once, when the screen opens: a row tapped to Follow stays where it is,
+  // instead of jumping to the top under the finger (and the next tap landing on someone else).
+  const ledBy = useRef<string[] | null>(null);
+  if (ready && ledBy.current === null) ledBy.current = followingIds;
+  const lead = ledBy.current ?? followingIds;
   const people = useMemo(() => {
     if (!item) return [];
     // Likes are stored oldest first; the newest go on top, and within that the people you follow lead.
@@ -47,9 +53,9 @@ export default function Likes() {
     const source = played ? ('session' in item ? (item.session?.with ?? []).map((w) => w.id) : [])
       : tagged ? ('taggedUserIds' in item ? item.taggedUserIds ?? [] : []) : [...item.likedBy].reverse();
     const newestFirst = source.filter((id) => !blockedIds.includes(id));
-    const ordered = [...newestFirst.filter((id) => followingIds.includes(id) || id === currentUserId), ...newestFirst.filter((id) => !followingIds.includes(id) && id !== currentUserId)];
+    const ordered = [...newestFirst.filter((id) => lead.includes(id) || id === currentUserId), ...newestFirst.filter((id) => !lead.includes(id) && id !== currentUserId)];
     return ordered.map((id) => users.find((u) => u.id === id)).filter((u): u is NonNullable<typeof u> => Boolean(u));
-  }, [item, users, followingIds, blockedIds, currentUserId, tagged]);
+  }, [item, users, lead, blockedIds, currentUserId, tagged, played]);
 
   const wanted = search.trim().toLowerCase().replace(/^@/, '');
   const shown = wanted ? people.filter((u) => `${u.name} ${u.handle}`.toLowerCase().includes(wanted)) : people;
@@ -93,7 +99,9 @@ export default function Likes() {
                     </View>
                   </View>
                   {isMe ? <Text style={styles.you}>You</Text> : (
-                    <Button label={following ? 'Following' : 'Follow'} variant={following ? 'secondary' : 'primary'} onPress={following ? () => confirmUnfollow(user, () => actions.toggleFollow(user.id)) : () => actions.toggleFollow(user.id)} />
+                    // The pill knows about an ask sent to a private account: it reads Requested, not Follow
+                    // (a plain Button stayed "Follow" after the tap, so following looked broken).
+                    <FollowPill following={following} userId={user.id} name={user.name} onPress={following ? () => confirmUnfollow(user, () => actions.toggleFollow(user.id)) : () => actions.toggleFollow(user.id)} />
                   )}
                 </Pressable>
               );

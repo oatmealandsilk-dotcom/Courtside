@@ -11,6 +11,7 @@ import { canReadContacts, readContacts, type PhoneContact } from '@/features/con
 import { inviteLink } from '@/features/invite/referral';
 import { goBack } from '@/lib/goBack';
 import * as haptics from '@/lib/haptics';
+import { FollowPill } from '@/components/FollowPill';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, radius, spacing, typography } from '@/theme';
@@ -137,9 +138,8 @@ export default function FindContacts() {
                     <Text style={styles.meta} numberOfLines={1}>@{match.handle}{contactName ? ` · ${contactName} in your contacts` : ''}</Text>
                   </View>
                 </Pressable>
-                <Pressable accessibilityRole="button" accessibilityLabel={on ? `Following ${match.handle}` : `Follow ${match.handle}`} onPress={() => actions.toggleFollow(match.id)} style={[styles.pill, on ? styles.pillOff : styles.pillOn]}>
-                  <Text style={[styles.pillText, on ? styles.pillTextOff : styles.pillTextOn]}>{on ? 'Following' : 'Follow'}</Text>
-                </Pressable>
+                {/* The pill knows about an ask sent to a private account: it reads Requested, not Follow. */}
+                <FollowPill small following={on} userId={match.id} name={match.name || match.handle} onPress={() => actions.toggleFollow(match.id)} />
               </View>
             );
           })}
