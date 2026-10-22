@@ -13,6 +13,11 @@
 --     invite from a member who isn't an admin still only files a request to
 --     the admins (so a member can't undo an admin's removal); an admin's
 --     invite lets them back in and clears the removal, as before.
+--   * An invite sent before someone was taken out counts as a member's, even
+--     an admin's: only an admin's invite sent after the removal lets them
+--     back in. And once someone is in a group, their invites to it are gone
+--     (whichever way they joined), so an old invite can't come back to life
+--     after a removal, and an admin's new invite is never stuck behind it.
 --   * Everything else is as 181 left it: an invite is open only while its
 --     inviter is still in the group, no block stands between them (or with
 --     an admin), a teen still follows the inviter, and it is under 30 days
@@ -21,7 +26,9 @@
 --     is refused ('suspended') in any group: in 181 only the request's
 --     own check stopped it, and that request is no longer filed.
 --
--- What changes, by name: answer_feed_group_invite(g, accept) only. Its
+-- What changes, by name: answer_feed_group_invite(g, accept), plus a new
+-- trigger feed_group_member_clears_invites on feed_group_members (and a
+-- one-off clear of invites to people already in that group). The function's
 -- name, inputs and answers ('joined', 'requested', 'already', 'declined')
 -- are the same, so the app needs no change to keep working.
 --
@@ -101,11 +108,13 @@ begin
   end if;
   if public.feed_group_count(me) >= public.feed_group_cap() then raise exception 'group_limit'; end if;
 
-  -- An admin took you out: a member's invite can't undo that, so it is the
-  -- usual request to the admins (as join_feed_group). Ask to join no longer
-  -- matters here: anyone in the group can let you in by inviting you.
-  if exists (select 1 from public.feed_group_removals where group_id = g and user_id = me)
-     and not public.is_feed_group_admin(g, inv.invited_by) then
+  -- An admin took you out: a member's invite can't undo that, nor can any
+  -- invite sent before the removal, so it is the usual request to the
+  -- admins (as join_feed_group). Ask to join no longer matters here: anyone
+  -- in the group can let you in by inviting you.
+  if exists (select 1 from public.feed_group_removals r
+             where r.group_id = g and r.user_id = me
+               and (r.removed_at >= inv.created_at or not public.is_feed_group_admin(g, inv.invited_by))) then
     if not exists (select 1 from public.feed_group_requests where group_id = g and user_id = me)
        and (select count(*) from public.feed_group_requests where user_id = me) >= 10 then
       raise exception 'slow_down';
@@ -126,7 +135,27 @@ end $$;
 revoke all on function public.answer_feed_group_invite(uuid, boolean) from public, anon;
 grant execute on function public.answer_feed_group_invite(uuid, boolean) to authenticated;
 
--- ------------------------------------------------------------------ 2. afterwards
+-- ------------------------------------------------------------------ 2. joined = invites gone
+-- However someone gets in (Join on an open group, an approved request, an
+-- invite), their invites to that group go, so none waits to be used after
+-- they are later taken out.
+create or replace function public.feed_group_member_clears_invites()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  delete from public.feed_group_invites where group_id = new.group_id and user_id = new.user_id;
+  return new;
+end $$;
+revoke all on function public.feed_group_member_clears_invites() from public, anon, authenticated;
+drop trigger if exists feed_group_member_clears_invites on public.feed_group_members;
+create trigger feed_group_member_clears_invites after insert on public.feed_group_members
+  for each row execute function public.feed_group_member_clears_invites();
+
+-- Invites already sitting there for people who are in that group.
+delete from public.feed_group_invites i
+ using public.feed_group_members m
+ where m.group_id = i.group_id and m.user_id = i.user_id;
+
+-- ------------------------------------------------------------------ 3. afterwards
 do $$
 begin
   if to_regprocedure('public.answer_feed_group_invite(uuid, boolean)') is null
@@ -136,13 +165,18 @@ begin
      or has_function_privilege('anon', 'public.answer_feed_group_invite(uuid, boolean)', 'execute') then
     raise exception 'Migration 182 did not finish: answer_feed_group_invite is not as this file makes it.';
   end if;
+  if position('removed_at >= inv.created_at' in (select prosrc from pg_proc where oid = 'public.answer_feed_group_invite(uuid, boolean)'::regprocedure)) = 0
+     or not exists (select 1 from pg_trigger t where t.tgrelid = 'public.feed_group_members'::regclass and t.tgname = 'feed_group_member_clears_invites' and not t.tgisinternal)
+     or exists (select 1 from public.feed_group_invites i join public.feed_group_members m on m.group_id = i.group_id and m.user_id = i.user_id) then
+    raise exception 'Migration 182 did not finish: old invites are not cleared as this file makes them.';
+  end if;
 end $$;
 
 commit;
 
 notify pgrst, 'reload schema';
 
--- ------------------------------------------------------------------ 3. checks to run afterwards
+-- ------------------------------------------------------------------ 4. checks to run afterwards
 -- Read-only. Paste into the SQL editor (remove the leading "-- ").
 --
 -- (a) The new Join is in place, and only signed-in people can call it
@@ -151,3 +185,7 @@ notify pgrst, 'reload schema';
 --        has_function_privilege('authenticated', 'public.answer_feed_group_invite(uuid, boolean)', 'execute'),
 --        has_function_privilege('anon', 'public.answer_feed_group_invite(uuid, boolean)', 'execute')
 -- from pg_proc where oid = 'public.answer_feed_group_invite(uuid, boolean)'::regprocedure;
+--
+-- (b) Nobody has an invite to a group they are already in (expect 0):
+-- select count(*) from public.feed_group_invites i
+--   join public.feed_group_members m on m.group_id = i.group_id and m.user_id = i.user_id;
