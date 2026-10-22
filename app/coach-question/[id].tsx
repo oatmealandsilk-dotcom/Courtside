@@ -6,6 +6,8 @@ import { RisingSheet } from '@/components/RisingSheet';
 import { router, useLocalSearchParams } from 'expo-router';
 import { goBack } from '@/lib/goBack';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import Reanimated, { Easing, FadeIn, FadeOut, LayoutAnimationConfig } from 'react-native-reanimated';
+import { GlideHeight } from '@/components/ui/GlideHeight';
 
 import { MediaPlaceholder } from '@/components/MediaPlaceholder';
 import { ClipVideo } from '@/components/ClipVideo';
@@ -157,6 +159,8 @@ export default function CoachQuestionDetail() {
         </Tappable>
       ) : undefined}
     >
+      {/* What is here on arrival just shows; a new answer fades in and the box below glides (Oct 22 sweep). */}
+      <LayoutAnimationConfig skipEntering>
       <View style={styles.head}>
         {removed ? <RemovedNote removed={removed} align="start" item={{ kind: 'coach-question', id: question.id, authorId: question.authorId }} /> : null}
         <View style={styles.authorRow}>
@@ -180,6 +184,7 @@ export default function CoachQuestionDetail() {
         ) : null}
 
         <View style={styles.statusRow}>
+          <Reanimated.View key={question.resolved ? 'answered' : 'open'} entering={FADE} style={styles.statusRow}>
           <Ionicons
             name={question.resolved ? 'checkmark-circle' : 'time-outline'}
             size={16}
@@ -193,25 +198,29 @@ export default function CoachQuestionDetail() {
                 // Only a reply your Hidden words hid: a coach did reply, it is under Hidden replies.
                 : hiddenReplies.length ? 'A coach replied' : 'Waiting on a coach'}
           </Text>
+          </Reanimated.View>
           {question.authorId === currentUserId && replies.length ? (
             <Pressable accessibilityRole="button" accessibilityLabel={question.resolved ? 'Reopen the question' : 'This answered it'} onPress={() => actions.resolveCoachQuestion(question.id)} hitSlop={8} style={{ marginLeft: 'auto' }}>
-              <Text style={[styles.meta, { color: colors.brand, ...font('700') }]}>{question.resolved ? 'Reopen' : 'This answered it'}</Text>
+              <Reanimated.Text key={question.resolved ? 'reopen' : 'resolve'} entering={FADE} style={[styles.meta, { color: colors.brand, ...font('700') }]}>{question.resolved ? 'Reopen' : 'This answered it'}</Reanimated.Text>
             </Pressable>
           ) : null}
         </View>
       </View>
 
-      <Text style={styles.sectionTitle}>
+      <Reanimated.Text key={replies.length || hiddenReplies.length ? 'some' : 'none'} entering={FADE} style={styles.sectionTitle}>
         {replies.length || hiddenReplies.length ? 'Coach replies' : 'No replies yet'}
-      </Text>
+      </Reanimated.Text>
 
+      {/* The replies change their real height (never a scale), so the answer box below glides
+          when one arrives, and the box itself never trails behind a growing answer field. */}
+      <GlideHeight>
       {replies.map((reply) => {
         const coachUser = users.find((u) => u.id === reply.coachUserId);
         const coach = coaches.find((c) => c.userId === reply.coachUserId);
         const helpful = Boolean(currentUserId && reply.helpfulBy.includes(currentUserId));
         const mark = jump.target(reply.id);
         return (
-          <View key={reply.id} style={styles.reply} ref={mark?.ref} onLayout={mark?.onLayout} collapsable={mark ? false : undefined}>
+          <Reanimated.View key={reply.id} entering={FADE} style={styles.reply} ref={mark?.ref} onLayout={mark?.onLayout} collapsable={mark ? false : undefined}>
             {mark ? <JumpFlash lit={mark.lit} inset={8} /> : null}
             <Pressable
               accessibilityRole="link"
@@ -270,15 +279,15 @@ export default function CoachQuestionDetail() {
                 </Pressable>
               ) : null}
             </View>
-          </View>
+          </Reanimated.View>
         );
       })}
 
       {!replies.length && !hiddenReplies.length ? (
-        <Text style={styles.waiting}>
+        <Reanimated.Text exiting={FadeOut.duration(160)} style={styles.waiting}>
           {/* Only the asker is told when a coach replies; anyone else reading is not promised a notification. */}
           {mine ? 'Coaches usually reply within a day. You will get a notification when they do.' : 'Coaches usually reply within a day.'}
-        </Text>
+        </Reanimated.Text>
       ) : null}
 
       {hiddenReplies.length ? (
@@ -288,6 +297,7 @@ export default function CoachQuestionDetail() {
           </HiddenComments>
         </View>
       ) : null}
+      </GlideHeight>
 
       {/* A coach does not answer their own question (nor is pitched to apply on it). */}
       {removed || (iAmCoach && mine) ? null : iAmCoach ? (
@@ -317,6 +327,8 @@ export default function CoachQuestionDetail() {
           <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
         </Pressable>
       )}
+
+      </LayoutAnimationConfig>
 
       {/* The question's menu, the same sheet a profile's "…" opens: Delete for the asker, Report for anyone else. */}
       <RisingSheet visible={menuOpen} onClose={() => setMenuOpen(false)} closeLabel="Close menu" sheetStyle={[styles.sheet, { paddingBottom: menuBottom }]}>
@@ -355,6 +367,9 @@ export default function CoachQuestionDetail() {
     </Screen>
   );
 }
+
+/** A new answer or a changed line fades in; what sits below it glides to its new place (GlideHeight). */
+const FADE = FadeIn.duration(240).easing(Easing.bezier(0.33, 1, 0.68, 1));
 
 const styleDefinitions = StyleSheet.create({
   head: { gap: spacing.md, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },

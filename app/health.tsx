@@ -1,8 +1,8 @@
 import { PRESS_DIM, PRESS_SHRINK } from '@/theme/press';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
-import Reanimated, { FadeIn, FadeOut, ZoomIn } from 'react-native-reanimated';
+import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import Reanimated, { FadeIn, FadeOut, LayoutAnimationConfig, LinearTransition, ZoomIn } from 'react-native-reanimated';
 import { goBack } from '@/lib/goBack';
 import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -10,6 +10,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { Tappable } from '@/components/Tappable';
 import { BrandWash } from '@/components/ui/BrandWash';
+import { GlideHeight } from '@/components/ui/GlideHeight';
 import * as haptics from '@/lib/haptics';
 import { Screen } from '@/components/ui';
 import { appleHealthAvailable, inExpoGo } from '@/features/health/appleHealth';
@@ -229,11 +230,12 @@ export default function Health() {
     const offer = tennisCard && !!i.readsWorkouts && workouts(i.provider) && !i.readsAllWorkouts && !blocked;
     const offerBusy = loading && step === 'workouts';
     return (
-      <View key={i.provider} style={[styles.row, index > 0 && styles.rowLine]}>
+      // A row eases to its new height when its buttons or cards come and go (Oct 22 sweep).
+      <Reanimated.View key={i.provider} layout={ROW_GLIDE} style={[styles.row, index > 0 && styles.rowLine]}>
         <View style={[styles.disc, linked && styles.discOn]}>
           <Ionicons name={about.icon} size={20} color={linked ? colors.brandInk : colors.text} />
         </View>
-        <View style={styles.words}>
+        <Words style={styles.wordsBox} contentStyle={styles.wordsInner}>
           <View style={styles.nameRow}>
             <Text style={styles.name}>{NAME[i.provider] ?? i.label}</Text>
             {linked ? <View style={styles.dot} /> : null}
@@ -244,7 +246,7 @@ export default function Health() {
               : i.connected && i.lastSyncedAt ? `Synced ${syncedWhen(i.lastSyncedAt)}.` : blocked ? (wrongPhone ? 'iPhone only.' : inExpoGo() ? 'Available in the App Store version of CourtSide.' : 'Coming in the next app update.') : about.how}
           </Text>
           {i.connected ? (
-            <View style={styles.actions}>
+            <Reanimated.View entering={FadeIn.duration(220)} exiting={FadeOut.duration(140)} style={styles.actions}>
               {/* Android cannot read Apple Health: syncing it is the iPhone's job. */}
               {wrongPhone && Platform.OS === 'android' ? null : (
                 <Pressable accessibilityRole="button" accessibilityLabel={`Sync ${i.label}`} disabled={loading} onPress={() => run(i.provider, 'sync')} style={({ pressed }) => [styles.small, pressed && styles.pressedShrink]}>
@@ -254,7 +256,7 @@ export default function Health() {
               <Pressable accessibilityRole="button" accessibilityLabel={`Disconnect ${i.label}`} disabled={loading} onPress={() => disconnect(i.provider)} style={({ pressed }) => [styles.smallGhost, pressed && styles.pressedShrink]}>
                 <Text style={styles.smallGhostText}>Disconnect</Text>
               </Pressable>
-            </View>
+            </Reanimated.View>
           ) : null}
           {tennisCard ? (
             i.readsWorkouts ? (
@@ -311,7 +313,7 @@ export default function Health() {
               </Reanimated.View>
             )
           ) : null}
-        </View>
+        </Words>
         {/* The tennis pill shows its own "Turning on…"; a second spinner beside it would be one too many. */}
         {loading && !(tennisCard && !i.readsWorkouts) && !offerBusy ? (
           <CourtSpinner size={26} />
@@ -319,11 +321,13 @@ export default function Health() {
           // Not something to press: a quiet label in the button's place.
           <View style={styles.badge}><Text style={styles.badgeText}>Via Apple Health</Text></View>
         ) : i.connected || loading ? null : (
-          <Pressable accessibilityRole="button" accessibilityLabel={`Connect ${i.label}`} accessibilityState={{ disabled: blocked }} disabled={blocked} onPress={() => (tennis && i.provider === 'apple-health' ? askApple('toggle') : run(i.provider, 'toggle'))} hitSlop={buttonShape.smallSlop} style={({ pressed }) => [styles.connect, blocked && styles.connectOff, pressed && styles.pressedShrink]}>
-            <Text style={[styles.connectText, blocked && styles.connectTextOff]}>{(i.provider === 'cronometer' || i.provider === 'myfitnesspal') && !appleHealthAvailable() ? 'Import' : 'Connect'}</Text>
-          </Pressable>
+          <Reanimated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(120)}>
+            <Pressable accessibilityRole="button" accessibilityLabel={`Connect ${i.label}`} accessibilityState={{ disabled: blocked }} disabled={blocked} onPress={() => (tennis && i.provider === 'apple-health' ? askApple('toggle') : run(i.provider, 'toggle'))} hitSlop={buttonShape.smallSlop} style={({ pressed }) => [styles.connect, blocked && styles.connectOff, pressed && styles.pressedShrink]}>
+              <Text style={[styles.connectText, blocked && styles.connectTextOff]}>{(i.provider === 'cronometer' || i.provider === 'myfitnesspal') && !appleHealthAvailable() ? 'Import' : 'Connect'}</Text>
+            </Pressable>
+          </Reanimated.View>
         )}
-      </View>
+      </Reanimated.View>
     );
   };
 
@@ -354,9 +358,12 @@ export default function Health() {
       ) : null}
 
       <Text style={styles.sectionTitle}>Your trackers</Text>
+      {/* Rows there on arrival just show; what changes afterwards fades and glides. */}
+      <LayoutAnimationConfig skipEntering>
       <View style={styles.list}>
         {trackerRows.map(row)}
       </View>
+      </LayoutAnimationConfig>
 
       {/* Food: the card that reads Cronometer or MyFitnessPal through Apple Health
           (it draws its own "Food" heading), then any food app rows it does not cover. */}
@@ -364,9 +371,11 @@ export default function Health() {
         <FoodSection userId={currentUserId} />
       </View>
       {foodRows.length ? (
+        <LayoutAnimationConfig skipEntering>
         <View style={[styles.list, styles.foodRows]}>
           {foodRows.map(row)}
         </View>
+        </LayoutAnimationConfig>
       ) : null}
 
       {/* Says what the server does: WHOOP's numbers go on disconnect only once its switch is on. Who else
@@ -386,6 +395,18 @@ export default function Health() {
   );
 }
 
+/*
+ * A row eases to its new height when its buttons or cards come and go. On a phone the
+ * row itself glides (a layout transition). In a browser Reanimated does that by
+ * scaling the row, which stretches its words, so there the words column changes its
+ * real height instead (GlideHeight) and the row follows.
+ */
+const ROW_GLIDE = Platform.OS === 'web' ? undefined : LinearTransition.duration(220);
+function Words({ style, contentStyle, children }: { style: StyleProp<ViewStyle>; contentStyle: StyleProp<ViewStyle>; children: React.ReactNode }) {
+  if (Platform.OS === 'web') return <GlideHeight style={style} contentStyle={contentStyle} duration={220}>{children}</GlideHeight>;
+  return <View style={[style, contentStyle]}>{children}</View>;
+}
+
 const styleDefinitions = StyleSheet.create({
   lead: { ...typography.small, color: colors.textMuted, lineHeight: 20, paddingBottom: spacing.lg },
   today: { gap: spacing.md, paddingBottom: spacing.xl },
@@ -401,7 +422,8 @@ const styleDefinitions = StyleSheet.create({
   rowLine: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   disc: { width: 42, height: 42, borderRadius: 21, backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
   discOn: { backgroundColor: colors.brand },
-  words: { flex: 1, gap: 3 },
+  wordsBox: { flex: 1 },
+  wordsInner: { gap: 3 },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   name: { ...typography.bodyStrong, color: colors.text },
   dot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.brand },
