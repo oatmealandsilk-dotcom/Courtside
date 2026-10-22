@@ -225,7 +225,7 @@ export default function FindGroups() {
             ) : (
               <View style={styles.findRow}>
                 <SearchBox value={search} onChangeText={setSearch} />
-                <Pressable accessibilityRole="button" accessibilityLabel="Stop searching" hitSlop={10} onPress={stopFinding} style={({ pressed }) => pressed && styles.pressed}>
+                <Pressable accessibilityRole="button" accessibilityLabel="Stop searching" hitSlop={{ top: 14, bottom: 14, left: 10, right: 10 }} onPress={stopFinding} style={({ pressed }) => pressed && styles.pressed}>
                   <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.cancel}>Cancel</Text>
                 </Pressable>
               </View>
@@ -254,7 +254,7 @@ function Header({ joined, off, onClose, onManage }: { joined: number; off: boole
       {!off ? <View style={styles.factRow}>
         <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.fact}>{joined ? `${joined} of ${MAX_GROUPS} joined` : `Join up to ${MAX_GROUPS}`}</Text>
         {joined ? (
-          <Pressable accessibilityRole="link" accessibilityLabel="Manage your groups" hitSlop={12} onPress={onManage} style={({ pressed }) => pressed && styles.pressed}>
+          <Pressable accessibilityRole="link" accessibilityLabel="Manage your groups" hitSlop={{ top: 14, bottom: 14, left: 12, right: 12 }} onPress={onManage} style={({ pressed }) => pressed && styles.pressed}>
             <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.manage}>Manage</Text>
           </Pressable>
         ) : null}
@@ -349,7 +349,7 @@ function SearchBox({ value, onChangeText }: { value: string; onChangeText: (s: s
         style={styles.searchInput}
       />
       {value ? (
-        <Pressable accessibilityRole="button" accessibilityLabel="Clear search" hitSlop={12} onPress={() => onChangeText('')}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Clear search" hitSlop={14} onPress={() => onChangeText('')}>
           <Ionicons name="close-circle" size={17} color={colors.textFaint} />
         </Pressable>
       ) : null}
