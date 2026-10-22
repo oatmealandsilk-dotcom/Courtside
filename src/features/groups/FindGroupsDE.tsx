@@ -96,13 +96,13 @@ function SearchBox({ value, onChangeText }: { value: string; onChangeText: (s: s
 }
 
 /** Up to `max` faces of who is in it, then "Mira, Dev and 9 others", then this week's hits. */
-function People({ ids, total, me, size, max, ringOn, hits }: { ids: ID[]; total: number; me: ID | null; size: number; max: number; ringOn: string; hits?: number }) {
+function People({ ids, total, me, size, max, ringOn, hits, names = 2 }: { ids: ID[]; total: number; me: ID | null; size: number; max: number; ringOn: string; hits?: number; names?: number }) {
   const styles = useThemedStyles(styleDefinitions);
   const { users } = useApp();
   const others = ids.filter((id) => id !== me);
   const meIn = !!me && ids.includes(me);
   const shown = others.slice(0, max).map((id) => users.find((u) => u.id === id)).filter((u): u is User => !!u);
-  const named = shown.slice(0, 2);
+  const named = shown.slice(0, names);
   const rest = total - (meIn ? 1 : 0) - named.length;
   const words = !named.length ? members(total)
     : rest > 0 ? `${named.map(firstName).join(', ')} and ${plural(rest, 'other', 'others')}`
@@ -151,7 +151,7 @@ function MineRow({ g, me, go, last }: { g: FeedGroup; me: ID | null; go: (href: 
         ) : (
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta} numberOfLines={1}>{factsOr(g.id, g.description, g.members.length)}</Text>
         )}
-        <People ids={ids} total={g.members.length} me={me} size={20} max={3} ringOn={colors.bg} hits={factsFor(g.id)?.hitsThisWeek} />
+        <People ids={ids} total={g.members.length} me={me} size={20} max={3} ringOn={colors.bg} />
       </View>
       <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
       {!last ? <View style={[styles.hair, { left: PAD + MINE_FACE + spacing.md }]} /> : null}
@@ -237,7 +237,7 @@ function DRow({ g, a, me, last }: { g: Listed; a: RowAct; me: ID | null; last: b
         <View style={styles.words}>
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.name} numberOfLines={1}>{g.name}</Text>
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta} numberOfLines={1}>{factsOr(g.id, g.description, g.memberCount)}</Text>
-          <People ids={facesFor(g.id)} total={g.memberCount} me={me} size={20} max={3} ringOn={colors.bg} hits={factsFor(g.id)?.hitsThisWeek} />
+          <People ids={facesFor(g.id)} total={g.memberCount} me={me} size={20} max={3} ringOn={colors.bg} names={1} />
         </View>
       </ReportArea>
       <GreyButton g={g} a={a} />
@@ -268,7 +268,7 @@ function ECard({ g, a, me }: { g: Listed; a: RowAct; me: ID | null }) {
         </View>
         {g.description ? <Text maxFontSizeMultiplier={TextScale.BODY} style={styles.about} numberOfLines={2}>{g.description}</Text> : null}
         <View style={styles.cardPeople}>
-          <People ids={facesFor(g.id)} total={g.memberCount} me={me} size={22} max={4} ringOn={colors.surface} hits={factsFor(g.id)?.hitsThisWeek} />
+          <People ids={facesFor(g.id)} total={g.memberCount} me={me} size={22} max={4} ringOn={colors.surface} />
         </View>
       </View>
     </ReportArea>
