@@ -9,6 +9,7 @@ import { setPageScrolling } from '@/features/navigation/swipeLock';
 import * as haptics from '@/lib/haptics';
 import { PULL_DISARM, PULL_DISC, PULL_GAP, PULL_LAND_SLACK, PULL_LINE, PULL_MIN_SPIN, PULL_RETURN, pullFetch, pullRowLift, pullRowOpacity } from '@/lib/pullRefresh';
 import { colors } from '@/theme';
+import { useTopRowHint } from '@/lib/topRowHint';
 
 /**
  * Full-height pages that snap one at a time. The active page changes once a
@@ -48,7 +49,7 @@ function pageKey(child: React.ReactNode, index: number) {
 /** The ring round the logo in the Feed's corner. */
 export const CORNER_RING = 44;
 
-export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.ReactNode[]; onIndex: (index: number) => void; /** The page the scroll came to rest on. */ onSettled?: (index: number) => void; initialIndex?: number; /** A finger's swipe landed on a new page (never a jump made in code: back to the top, a restored place). */ onSwiped?: (index: number) => void; /** Pulling down past the first page fetches what is new. */ onRefresh?: () => Promise<void>; /** Shown in the gap the pull opens, beside the disc. */ pullHeader?: React.ReactNode; /** How far below the clock the pull row sits (clear of a band laid over the top). */ pullTop?: number; /** 'left': the logo and disc in the top-left corner, beside the Feed's words (Oct 4). */ pullAlign?: 'center' | 'left' }>(function VerticalPager({ children, onIndex, onSettled, onSwiped, initialIndex = 0, onRefresh, pullHeader, pullTop = 0, pullAlign = 'center' }, ref) {
+export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.ReactNode[]; onIndex: (index: number) => void; /** The page the scroll came to rest on. */ onSettled?: (index: number) => void; initialIndex?: number; /** A finger's swipe landed on a new page (never a jump made in code: back to the top, a restored place). */ onSwiped?: (index: number) => void; /** Pulling down past the first page fetches what is new. */ onRefresh?: () => Promise<void>; /** Shown in the gap the pull opens, beside the disc. */ pullHeader?: React.ReactNode; /** How far below the clock the pull row sits (clear of a band laid over the top). */ pullTop?: number; /** 'left': the logo and disc in the top-left corner, beside the Feed's words (Oct 4). */ pullAlign?: 'center' | 'left'; /** The Feed's top row, Reels-style: false once a swipe lands on the next page, true on a hold, a slow drag or any move back up (see lib/topRowHint). */ onTopRow?: (show: boolean) => void }>(function VerticalPager({ children, onIndex, onSettled, onSwiped, initialIndex = 0, onRefresh, pullHeader, pullTop = 0, pullAlign = 'center', onTopRow }, ref) {
   // Hears a theme change, so its own colours never lag the page's.
   useTheme();
   const [height, setHeight] = useState(0);
@@ -166,6 +167,8 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
   // it or a neighbour (snapOffsets below), so a hard flick moves one page.
   const [around, setAround] = useState(initialIndex);
   setAroundRef.current = setAround;
+  // The top row's hint: a hold or slow drag brings it back, a forward swipe's landing tucks it.
+  const hint = useTopRowHint(onTopRow);
   const settled = useCallback((y: number) => {
     swiping.value = false;
     const from = last.current;
@@ -173,8 +176,8 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
     setAround(pageOf(y));
     onSettled?.(last.current);
     // Only a finger's own swipe that ends on another page counts as a swipe (onSwiped).
-    if (fingerMoved.current) { fingerMoved.current = false; if (last.current !== from) onSwiped?.(last.current); }
-  }, [changed, pageOf, onSettled, onSwiped]);
+    if (fingerMoved.current) { fingerMoved.current = false; if (last.current !== from) { onSwiped?.(last.current); hint.landed(last.current > from); } }
+  }, [changed, pageOf, onSettled, onSwiped, hint]);
   const dragFrom = useCallback((y: number) => setAround(pageOf(y)), [pageOf]);
   settledRef.current = settled;
   const dragEnded = useCallback((y: number) => {
@@ -189,6 +192,8 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
   // (moving on tucks it, coming back lifts it), and only a change of page
   // crosses to the JavaScript side.
   const lastY = useSharedValue(-1);
+  // Any move back up, however small, brings the top row back (Reels).
+  const showRow = useCallback(() => hint.show(), [hint]);
   // Which way the bar was last sent this swipe (1 tucked, -1 up, 0 not yet); cleared as each swipe begins.
   const barDir = useSharedValue(0);
   const lastIndex = useSharedValue(initialIndex);
@@ -218,7 +223,7 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
         // On to the next clip tucks the bar, back up lifts it: one glide per
         // swipe and direction (barDir), however fast the finger went.
         const dir = Math.abs(dy) > 0.3 && y >= top ? (dy > 0 ? 1 : -1) : 0;
-        if (dir !== 0 && dir !== barDir.value) { barDir.value = dir; glideBar(dir > 0); }
+        if (dir !== 0 && dir !== barDir.value) { barDir.value = dir; glideBar(dir > 0); if (dir < 0) runOnJS(showRow)(); }
       }
       lastY.value = y;
       const index = Math.max(0, Math.min(count - 1, Math.round((y - top) / h)));
@@ -305,7 +310,7 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
   useEffect(() => () => setPageScrolling(false), []);
 
   return (
-    <View style={{ flex: 1 }} onLayout={(e) => {
+    <View style={{ flex: 1 }} onTouchStart={(e) => hint.down(e.nativeEvent.pageY)} onTouchMove={(e) => hint.move(e.nativeEvent.pageY)} onTouchEnd={hint.up} onTouchCancel={hint.up} onLayout={(e) => {
       // A page is the room, exactly: the bar floats over the page rather
       // than taking room from it, so nothing about the bar can leave a gap.
       const room = e.nativeEvent.layout.height;
