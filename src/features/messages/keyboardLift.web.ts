@@ -15,7 +15,7 @@ export type { DragDismiss, KeyboardLift, KeyboardLiftOptions } from './keyboardL
  * above the bottom edge.
  */
 
-export function useKeyboardLift({ rest, emojiRoom }: KeyboardLiftOptions): KeyboardLift {
+export function useKeyboardLift({ rest, emojiRoom, emojiHeight }: KeyboardLiftOptions): KeyboardLift {
   const [covered, setCovered] = useState(0);
   useEffect(() => {
     if (typeof window === 'undefined' || !window.visualViewport) return undefined;
@@ -29,7 +29,7 @@ export function useKeyboardLift({ rest, emojiRoom }: KeyboardLiftOptions): Keybo
   // The emoji keyboard slides up with the bar, and back down, rather than appearing in one frame (Oct 22 sweep);
   // over a phone browser's own keyboard it simply takes its place.
   const emoji = useSharedValue(emojiRoom);
-  const emojiFull = useSharedValue(emojiRoom);
+  const emojiFull = useSharedValue(emojiRoom || emojiHeight);
   const restAt = useSharedValue(rest);
   const coveredAt = useSharedValue(covered);
   useEffect(() => { restAt.value = rest; coveredAt.value = covered; }, [rest, covered, restAt, coveredAt]);

@@ -15,6 +15,12 @@ export interface KeyboardLiftOptions {
    * it, so the room under the bar is at least this.
    */
   emojiRoom: number;
+  /**
+   * How tall the emoji keyboard would be if opened now, known from the start,
+   * so the panel's very first frame already sits below the edge rather than
+   * at full height over the resting bar.
+   */
+  emojiHeight: number;
 }
 
 export interface KeyboardLift {

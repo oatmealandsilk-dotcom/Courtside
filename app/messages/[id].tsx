@@ -265,8 +265,9 @@ export default function Thread() {
   // The room under the typing bar: a little above the home indicator with the
   // keyboard down, right on the keyboard with it up, riding on it frame by
   // frame on an iPhone. See keyboardLift.ts.
-  const emojiRoom = emojiOpen ? keyboardHeight.current + insets.bottom : 0;
-  const room = useKeyboardLift({ rest: Math.max(insets.bottom, 12) + 2, focused, typing: typingFocus, emojiRoom });
+  const emojiHeight = keyboardHeight.current + insets.bottom;
+  const emojiRoom = emojiOpen ? emojiHeight : 0;
+  const room = useKeyboardLift({ rest: Math.max(insets.bottom, 12) + 2, focused, typing: typingFocus, emojiRoom, emojiHeight });
   // Dragging the messages down puts the keyboard away (on an iPhone, following the finger).
   const dragDown = useDragDownDismiss(
     () => { composer.current?.blur(); Keyboard.dismiss(); setEmojiOpen(false); },
@@ -380,7 +381,9 @@ export default function Thread() {
   }, [typing]);
   const lastMessage = thread[thread.length - 1];
   // Your newest message's photos still going up: its line says "Sending…", not "Sent".
-  const lastReal = useMemo(() => [...thread].reverse().find((m) => m.kind !== 'system'), [thread]);
+  // A message folding away (unsend, delete for you) no longer counts as the newest: the receipt moves up as it folds, not after.
+  const lastReal = useMemo(() => [...thread].reverse().find((m) => m.kind !== 'system' && !leaving.has(m.id)), [thread, leaving]);
+  const lastAny = useMemo(() => [...thread].reverse().find((m) => m.kind !== 'system'), [thread]);
   const lastSending = useSendProgress(lastReal?.id ?? '') !== null;
   useEffect(() => {
     if (!lastMessage) return;
@@ -436,10 +439,15 @@ export default function Thread() {
   const readers = useMemo(() => (group ? people.filter((u) => sharesReceipts(u, { receiptsOffIds: receiptsOff }) && !blockedIds.includes(u.id)) : []), [group, people, blockedIds, receiptsOff]);
   // The rows, each kept as the same object while nothing about it changes, so its row is not drawn again.
   const rowCache = useRef(new Map<string, ThreadRow>());
-  const rows = useMemo(
-    () => keepRows(rowCache.current, buildRows(thread, { me: currentUserId, group, blockedIds, shownIds, readers })),
-    [thread, currentUserId, group, blockedIds, shownIds, readers],
-  );
+  // While messages fold away, every other row is already worked out without them (runs, corners, faces), so
+  // nothing moves again once they are gone; the leaving rows keep their own look as they fold.
+  const rows = useMemo(() => {
+    const opts = { me: currentUserId, group, blockedIds, shownIds, readers };
+    const all = buildRows(thread, opts);
+    if (!leaving.size) return keepRows(rowCache.current, all);
+    const live = new Map(buildRows(thread.filter((m) => !leaving.has(m.id)), opts).map((r) => [r.key, r]));
+    return keepRows(rowCache.current, all.map((r) => (leaving.has(r.message.id) ? r : live.get(r.key) ?? r)));
+  }, [thread, currentUserId, group, blockedIds, shownIds, readers, leaving]);
   // The list is upside down: its first row is the newest message.
   const data = useMemo(() => [...rows].reverse(), [rows]);
   const dataRef = useRef(data);
@@ -539,11 +547,16 @@ export default function Thread() {
   // the server has it, then "Seen" or "Sent" in a one-to-one chat (Seen only
   // when they let read receipts show). In a group, faces show who has read
   // up to where; "Sent" until anyone has.
-  const readLine = !typers.length && lastReal && lastReal.senderId === currentUserId && !lastReal.failed
-    ? lastSending || lastReal.sending ? 'Sending…' : group
-      ? (rows.some((r) => r.seenBy?.length && r.message.id === lastReal.id) ? null : 'Sent')
-      : other && sharesReceipts(other, conversation) && lastReal.readAtBy?.[other.id] ? 'Seen' : 'Sent'
-    : null;
+  const readLineOf = (m: Message | undefined) => (!typers.length && m && m.senderId === currentUserId && !m.failed
+    ? (m.id === lastReal?.id && lastSending) || m.sending ? 'Sending…' : group
+      ? (rows.some((r) => r.seenBy?.length && r.message.id === m.id) ? null : 'Sent')
+      : other && sharesReceipts(other, conversation) && m.readAtBy?.[other.id] ? 'Seen' : 'Sent'
+    : null);
+  const readLine = readLineOf(lastReal);
+  // The newest message folding away keeps its own line as it goes; the one before it grows its line over the same fold.
+  const lastAnyId = lastAny?.id;
+  const leavingLast = !!lastAnyId && lastAnyId !== lastReal?.id && leaving.has(lastAnyId);
+  const leavingLine = leavingLast ? readLineOf(lastAny) : null;
 
   // The calls the rows and the box make, made once (see Calls).
   const live = useRef<Calls | null>(null);
@@ -580,13 +593,14 @@ export default function Thread() {
         senderBlocked={m.senderId !== currentUserId && blockedIds.includes(m.senderId)}
         held={menuId === m.id}
         flashKey={flash?.id === m.id ? flash.n : undefined}
-        readLine={m.id === lastRealId ? readLine : null}
+        readLine={m.id === lastRealId ? readLine : leavingLast && m.id === lastAnyId ? leavingLine : null}
+        readGrow={leavingLast && m.id === lastRealId}
         seenHidden={!!item.seenBy?.length && typingNow}
         canWrite={canWrite}
       />
       </LeaveRow>
     );
-  }, [rowCtx, byId, hiddenAt, group, currentUserId, blockedIds, shownIds, menuId, flash, lastRealId, readLine, typingNow, canWrite, leaving]);
+  }, [rowCtx, byId, hiddenAt, group, currentUserId, blockedIds, shownIds, menuId, flash, lastRealId, readLine, typingNow, canWrite, leaving, leavingLast, lastAnyId, leavingLine]);
 
   // Android's Back closes what is open over the typing bar before it leaves
   // the chat: the emoji keyboard, the "+" tray, then an edit or a reply (as
@@ -1458,7 +1472,7 @@ const noop = () => {};
  * read line), an event line, or a folded run. Drawn again only when one of
  * its own values changes (see Thread's renderRow).
  */
-const MessageRow = memo(function MessageRow({ item, ctx, original, originalBlocked, originalHidden = false, senderBlocked = false, held, flashKey, readLine, seenHidden, canWrite }: {
+const MessageRow = memo(function MessageRow({ item, ctx, original, originalBlocked, originalHidden = false, senderBlocked = false, held, flashKey, readLine, readGrow = false, seenHidden, canWrite }: {
   item: ThreadRow;
   ctx: RowCtx;
   /** The message it answers, when it is here (undefined: gone, or not loaded yet). */
@@ -1474,6 +1488,8 @@ const MessageRow = memo(function MessageRow({ item, ctx, original, originalBlock
   flashKey?: number;
   /** Under your newest message: "Sending…", "Sent" or "Seen". */
   readLine: string | null;
+  /** The message under it is folding away: its line grows in over the fold rather than arriving after it. */
+  readGrow?: boolean;
   /** Someone is typing: the seen faces give way to the dots. */
   seenHidden: boolean;
   canWrite: boolean;
@@ -1764,11 +1780,12 @@ const MessageRow = memo(function MessageRow({ item, ctx, original, originalBlock
   }
 
   // Under your newest message, at its right edge: "Sending…", "Sent" or "Seen". In a group, the faces of who has read up to here.
-  const readUnder = readLine ? (
+  const readLineView = readLine ? (
     <Reanimated.View entering={arrive !== 'none' ? FadeIn.delay(110).duration(260).easing(Easing.out(Easing.cubic)) : undefined}>
       <Slide mine><Text accessibilityLiveRegion="polite" style={styles.readLine}>{readLine}</Text></Slide>
     </Reanimated.View>
   ) : null;
+  const readUnder = readLineView && readGrow ? <GrowRoom from="top" growIn>{readLineView}</GrowRoom> : readLineView;
   const seen = item.seenBy?.length && !seenHidden ? (
     <Slide mine={mine}>
       <SeenFaces people={item.seenBy.map((uid) => ctx.faceOf(uid)).filter((u): u is User => !!u)} align="right" />

@@ -41,7 +41,10 @@ const FIRST_ROWS = 14;
  */
 const ROW_GLIDE = LinearTransition.duration(260).easing(Easing.bezier(0.25, 0.8, 0.25, 1));
 const ROW_IN = FadeIn.duration(200);
-const ROW_OUT = FadeOut.duration(170);
+// A section switch: the chats that come in wait until those staying have mostly glided into place, so two are never drawn on one spot.
+const ROW_IN_SWITCH = FadeIn.duration(180).delay(140);
+// Quick, so a leaving chat is gone before the one gliding up reaches its spot.
+const ROW_OUT = FadeOut.duration(110);
 
 interface Thread {
   conversation: Conversation;
@@ -83,6 +86,10 @@ export default function Inbox() {
   // Opened from the Coaching tab's chats button: straight onto Coaches (or Clients, for a coach).
   const { section: askedSection } = useLocalSearchParams<{ section?: string }>();
   const [section, setSection] = useState<Section>(askedSection === 'coaches' || askedSection === 'clients' ? askedSection : 'all');
+  // The draw right after a section switch (see ROW_IN_SWITCH).
+  const drawnSection = React.useRef(section);
+  const switched = drawnSection.current !== section;
+  useEffect(() => { drawnSection.current = section; }, [section]);
   // The row being held, and which of its two lists is showing.
   const [held, setHeld] = useState<{ conversation: Conversation; name: string; step: 'menu' | 'mute' } | null>(null);
   // The one row slid open to its actions.
@@ -360,7 +367,7 @@ export default function Inbox() {
               }] : []),
             ];
             return (
-              <Animated.View key={conversation.id} layout={ROW_GLIDE} entering={ROW_IN} exiting={ROW_OUT}>
+              <Animated.View key={conversation.id} layout={ROW_GLIDE} entering={switched ? ROW_IN_SWITCH : ROW_IN} exiting={ROW_OUT}>
               <SwipeRow
                 actions={actionsUnder}
                 actionCount={canMute ? 2 : 1}

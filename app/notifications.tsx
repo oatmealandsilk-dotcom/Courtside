@@ -608,7 +608,7 @@ export default function Notifications() {
         // and the rest close up smoothly (Oct 22 sweep).
         <LayoutAnimationConfig skipEntering>
         <View style={styles.list}>
-          {shownGroups.map((group, index) => {
+          {shownGroups.flatMap((group, index) => {
             const icon = ICON[group.kind] ?? { name: 'notifications', tint: 'brand' };
             const [first, ...rest] = group.actorIds;
             // A tracker's session this row is about, when the app holds it (never for a row of several found at once).
@@ -637,9 +637,15 @@ export default function Notifications() {
             const groupInvite = inviteFor(group);
             const verb = verbFor(group);
 
-            return (
+            // The heading is its own piece, keyed by its words: when the row under it goes, the next row
+            // takes it over without it fading out and jumping back in.
+            return [
+              heading ? (
+                <Animated.View key={`heading:${heading}`} layout={ROW_GLIDE} exiting={ROW_OUT}>
+                  <Text style={[styles.heading, index > 0 && { marginTop: spacing.lg }]}>{heading}</Text>
+                </Animated.View>
+              ) : null,
               <Animated.View key={group.key} layout={ROW_GLIDE} exiting={ROW_OUT}>
-              {heading ? <Text style={[styles.heading, index > 0 && { marginTop: spacing.lg }]}>{heading}</Text> : null}
               <Pressable
                 accessibilityRole={dead ? 'text' : 'link'}
                 accessibilityLabel={`${who} ${verb}`}
@@ -804,8 +810,8 @@ export default function Notifications() {
                   </View>
                 ) : group.unread ? <View style={styles.dot} /> : null}
               </Pressable>
-              </Animated.View>
-            );
+              </Animated.View>,
+            ];
           })}
         </View>
         </LayoutAnimationConfig>

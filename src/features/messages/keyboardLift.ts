@@ -27,13 +27,13 @@ export type { DragDismiss, KeyboardLift, KeyboardLiftOptions } from './keyboardL
  */
 
 /** On a phone (iPhone and Android): the keyboard's own position, every frame. */
-function useNativeLift({ rest, focused, typing, emojiRoom }: KeyboardLiftOptions): KeyboardLift {
+function useNativeLift({ rest, focused, typing, emojiRoom, emojiHeight }: KeyboardLiftOptions): KeyboardLift {
   const keyboard = useAnimatedKeyboard();
   const restRoom = useSharedValue(rest);
   const front = useSharedValue(focused);
   const emoji = useSharedValue(emojiRoom);
   // The emoji keyboard's full height, kept while it slides away.
-  const emojiFull = useSharedValue(emojiRoom);
+  const emojiFull = useSharedValue(emojiRoom || emojiHeight);
   // Off the page in front, the room only ever shrinks (a sheet's own keyboard
   // must not lift the bar under the sheet); it follows the keyboard again
   // once the chat is in front with the keyboard down.

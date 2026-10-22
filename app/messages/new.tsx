@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type ViewStyle } from 'react-native';
-import Reanimated, { Easing, FadeIn, FadeOut, LinearTransition, SlideInDown, SlideOutDown, ZoomIn, ZoomOut, useAnimatedKeyboard, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
+import Reanimated, { Easing, FadeIn, FadeOut, LinearTransition, ZoomIn, ZoomOut, useAnimatedKeyboard, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { BLOCKED_WORDS_NOTE } from '@/features/hiddenWords/hiddenWords';
@@ -11,6 +11,7 @@ import { GROUP_CAP, GroupAvatar, chatLockNote, groupLockNote, groupName, isGroup
 import { LockBadge, LockNote } from '@/features/messages/LockNote';
 import { GrowRoom } from '@/features/messages/ChatBits';
 import { PRESS_DIM, PRESS_SHRINK } from '@/theme/press';
+import { useReducedMotion } from '@/lib/useReducedMotion';
 import type { User } from '@/data/types';
 import { goBack } from '@/lib/goBack';
 import { useResponsive } from '@/lib/useResponsive';
@@ -42,8 +43,10 @@ const useFooterLift: (less: number) => ViewStyle = Platform.OS === 'web'
  * slides up from the bottom edge and back down, a chip grows in softly and
  * the others make room, and a tick fills from its middle.
  */
-const FOOTER_IN = SlideInDown.duration(300).easing(Easing.out(Easing.cubic));
-const FOOTER_OUT = SlideOutDown.duration(220).easing(Easing.in(Easing.quad));
+// The footer travels its own height (not the window's, as the slide presets do: on a computer that was
+// off screen for nearly all of it and then popped in), on a shared value so web and phone move alike.
+const FOOTER_IN_MS = 260;
+const FOOTER_OUT_MS = 220;
 const CHIP_IN = ZoomIn.duration(180).easing(Easing.out(Easing.cubic));
 const CHIP_OUT = ZoomOut.duration(130);
 const CHIP_GLIDE = LinearTransition.duration(200).easing(Easing.bezier(0.25, 0.8, 0.25, 1));
@@ -221,30 +224,73 @@ export default function NewMessage() {
   const blockersText = blockers.length ? groupLockNote(namesOf(blockers), true) : null;
   const notes = [blockersText, note && note.text !== blockersText ? note.text : null].filter((t): t is string => !!t);
   const held = !!blockers.length || busy;
-  const footer = (phone: boolean) => (picked.length || notes.length ? (
-    <Reanimated.View entering={FOOTER_IN} exiting={FOOTER_OUT} style={[styles.footer, phone && { paddingBottom: footerBottom }, phone && footerLift]}>
-      {notes.map((text) => (
-        <LockNote key={text} text={text} tone={note?.alert && text === note.text ? 'alert' : 'lock'} onClose={text === note?.text ? () => setNote(null) : undefined} />
-      ))}
-      {picked.length > 1 ? (
-        <Reanimated.View entering={FadeIn.duration(180)} exiting={FadeOut.duration(120)}>
-          <TextInput maxFontSizeMultiplier={TextScale.TITLE} value={title} onChangeText={(v) => setTitle(v.slice(0, 60))} placeholder="Group name (optional)" placeholderTextColor={colors.textFaint} style={styles.groupName} accessibilityLabel="Group name" />
-        </Reanimated.View>
-      ) : null}
-      {picked.length ? (
-        <Pressable accessibilityRole="button" accessibilityState={{ disabled: held, busy }} disabled={held} onPress={() => { void start(); }} style={({ pressed }) => [styles.start, picked.length > 1 && styles.startGroup, held && styles.startHeld, pressed && { transform: [{ scale: PRESS_SHRINK }] }]}>
-          {/* Two or more ticked: the group is the point now, so the button says so with its people. */}
-          {picked.length > 1 && !sameGroup ? <Ionicons name="people" size={19} color={colors.brandInk} /> : null}
-          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.startText}>{picked.length === 1 ? 'Chat' : sameGroup ? 'Open group' : busy ? 'Creating group…' : `Create group · ${picked.length + 1} people`}</Text>
-        </Pressable>
-      ) : null}
-    </Reanimated.View>
-  ) : null);
+  // The footer slides up from under the screen's edge by its own height, and is kept drawn while it slides
+  // back down, showing what it last said (the way the chat's emoji keyboard is kept, emojiDrawn).
+  const footerShown = !!(picked.length || notes.length);
+  const lastFooter = useRef({ picked, notes, held, busy, sameGroup: !!sameGroup });
+  if (footerShown) lastFooter.current = { picked, notes, held, busy, sameGroup: !!sameGroup };
+  const [footerDrawn, setFooterDrawn] = useState(footerShown);
+  const footerH = useRef(120);
+  const footerY = useSharedValue(footerShown ? 0 : 120);
+  const footerFade = useSharedValue(footerShown ? 1 : 0);
+  const footerStill = useReducedMotion();
+  useEffect(() => {
+    if (footerShown) {
+      setFooterDrawn(true);
+      // Reduce Motion: it only fades.
+      if (footerStill) { footerY.value = 0; footerFade.value = withTiming(1, { duration: 180 }); return undefined; }
+      footerFade.value = 1;
+      footerY.value = withTiming(0, { duration: FOOTER_IN_MS, easing: Easing.out(Easing.cubic) });
+      return undefined;
+    }
+    if (footerStill) footerFade.value = withTiming(0, { duration: 160 });
+    else footerY.value = withTiming(footerH.current + 4, { duration: FOOTER_OUT_MS, easing: Easing.in(Easing.quad) });
+    const t = setTimeout(() => setFooterDrawn(false), (footerStill ? 160 : FOOTER_OUT_MS) + 40);
+    return () => clearTimeout(t);
+  }, [footerShown, footerStill, footerY, footerFade]);
+  const footerSlide = useAnimatedStyle(() => ({ opacity: footerFade.value, transform: [{ translateY: footerY.value }] }));
+  const footer = (phone: boolean) => {
+    if (!footerShown && !footerDrawn) return null;
+    const f = footerShown ? { picked, notes, held, busy, sameGroup: !!sameGroup } : lastFooter.current;
+    return (
+      <Reanimated.View
+        pointerEvents={footerShown ? 'auto' : 'none'}
+        onLayout={(e) => {
+          const h = e.nativeEvent.layout.height;
+          if (h) footerH.current = h;
+        }}
+        style={[styles.footer, phone && { paddingBottom: footerBottom }, phone && footerLift, footerSlide]}
+      >
+        {f.notes.map((text) => (
+          <LockNote key={text} text={text} tone={note?.alert && text === note.text ? 'alert' : 'lock'} onClose={text === note?.text ? () => setNote(null) : undefined} />
+        ))}
+        {/* The group name's room opens and closes with it, so the footer's top edge glides rather than jumps. */}
+        <View style={styles.groupNameRoom}>
+          <GrowRoom from="top">
+            {f.picked.length > 1 ? (
+              <Reanimated.View entering={FadeIn.duration(180)} exiting={FadeOut.duration(120)} style={styles.groupNameWrap}>
+                <TextInput maxFontSizeMultiplier={TextScale.TITLE} value={title} onChangeText={(v) => setTitle(v.slice(0, 60))} placeholder="Group name (optional)" placeholderTextColor={colors.textFaint} style={styles.groupName} accessibilityLabel="Group name" />
+              </Reanimated.View>
+            ) : null}
+          </GrowRoom>
+        </View>
+        {f.picked.length ? (
+          <Pressable accessibilityRole="button" accessibilityState={{ disabled: f.held, busy: f.busy }} disabled={f.held} onPress={() => { void start(); }} style={({ pressed }) => [styles.start, f.picked.length > 1 && styles.startGroup, f.held && styles.startHeld, pressed && { transform: [{ scale: PRESS_SHRINK }] }]}>
+            {/* Two or more ticked: the group is the point now, so the button says so with its people. */}
+            {f.picked.length > 1 && !f.sameGroup ? <Ionicons name="people" size={19} color={colors.brandInk} /> : null}
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.startText}>{f.picked.length === 1 ? 'Chat' : f.sameGroup ? 'Open group' : f.busy ? 'Creating group…' : `Create group · ${f.picked.length + 1} people`}</Text>
+          </Pressable>
+        ) : null}
+      </Reanimated.View>
+    );
+  };
 
   const list = (
     <>
+      {/* Your groups step aside once someone is ticked: they fade while their room closes, and the people glide up. */}
+      <GrowRoom from="top">
       {groups.length ? (
-        <>
+        <Reanimated.View entering={FadeIn.duration(180)} exiting={FadeOut.duration(130)}>
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.label}>Groups</Text>
           {groups.map(({ conversation, name, people }) => (
             <Pressable
@@ -265,8 +311,9 @@ export default function NewMessage() {
               <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
             </Pressable>
           ))}
-        </>
+        </Reanimated.View>
       ) : null}
+      </GrowRoom>
       {matches.length ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.label}>{groups.length ? (term ? 'People' : 'Suggested') : term ? 'Results' : 'Suggested'}</Text> : null}
       {matches.map((user) => {
         const on = picked.includes(user.id);
@@ -383,6 +430,9 @@ const styleDefinitions = StyleSheet.create({
   // Someone you can't pick right now, dimmed the way the Send-to sheet's locked tiles are.
   locked: { opacity: 0.45 },
   footer: { position: 'absolute', left: 0, right: 0, bottom: 0, gap: spacing.sm, padding: spacing.lg, paddingBottom: spacing.xl, backgroundColor: colors.bg, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  // The group name's room: the footer's gap under it comes off while it is shut, and goes inside it while open.
+  groupNameRoom: { marginBottom: -spacing.sm },
+  groupNameWrap: { paddingBottom: spacing.sm },
   groupName: { ...typography.body, fontSize: 16, color: colors.text, minHeight: 44, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12, backgroundColor: colors.bgElevated, outlineStyle: 'none' } as object,
   start: { minHeight: 50, borderRadius: 25, backgroundColor: colors.brand, flexDirection: 'row', gap: spacing.sm, alignItems: 'center', justifyContent: 'center' },
   startGroup: { boxShadow: '0px 6px 18px rgba(0, 0, 0, 0.16)' },

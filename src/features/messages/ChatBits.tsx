@@ -109,6 +109,7 @@ export function ReplyBar({ to, who, onClose }: { to: Message; who: string; onClo
 /** How long a message takes to leave (unsend, delete for you), and the curve its neighbours close up on. */
 export const LEAVE_MS = 230;
 const GLIDE = Easing.bezier(0.25, 0.8, 0.25, 1);
+const FOLD = Easing.bezier(0.4, 0, 0.2, 1);
 
 /**
  * Room that grows and shrinks with what is in it instead of jumping (Oct 22
@@ -118,10 +119,11 @@ const GLIDE = Easing.bezier(0.25, 0.8, 0.25, 1);
  * around them eases to it, so the messages above glide up and back down.
  * The first size it is given is simply taken.
  */
-export function GrowRoom({ children, from = 'bottom' }: { children: React.ReactNode; from?: 'top' | 'bottom' }) {
+export function GrowRoom({ children, from = 'bottom', growIn = false }: { children: React.ReactNode; from?: 'top' | 'bottom'; growIn?: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
   const still = useReducedMotion();
-  const h = useSharedValue(-1);
+  // growIn: it opens from nothing on the fold's own clock (a receipt moving up as the message under it leaves).
+  const h = useSharedValue(growIn ? 0 : -1);
   const look = useAnimatedStyle(() => ({ height: Math.max(0, h.value) }));
   return (
     <Reanimated.View style={[styles.growRoom, look]}>
@@ -129,7 +131,7 @@ export function GrowRoom({ children, from = 'bottom' }: { children: React.ReactN
         style={[styles.growInner, from === 'top' ? styles.growTop : styles.growBottom]}
         onLayout={(e) => {
           const next = e.nativeEvent.layout.height;
-          h.value = h.value < 0 || still ? next : withTiming(next, { duration: 240, easing: GLIDE });
+          h.value = h.value < 0 || still ? next : withTiming(next, growIn ? { duration: LEAVE_MS, easing: FOLD } : { duration: 240, easing: GLIDE });
         }}
       >
         {children}
@@ -153,7 +155,7 @@ export function LeaveRow({ leaving, children }: { leaving: boolean; children: Re
     box.current?.measure((_x, _y, _w, height) => {
       if (!height) return;
       h.value = height;
-      p.value = withTiming(0, { duration: still ? 120 : LEAVE_MS, easing: Easing.bezier(0.4, 0, 0.2, 1) });
+      p.value = withTiming(0, { duration: still ? 120 : LEAVE_MS, easing: FOLD });
     });
   }, [leaving, still, h, p]);
   const look = useAnimatedStyle(() => (h.value < 0 ? {} : {
