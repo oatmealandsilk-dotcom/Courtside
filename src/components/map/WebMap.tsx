@@ -359,11 +359,11 @@ export function NearbyMap(props: NearbyMapProps) {
   const lastHome = useRef(home);
   useEffect(() => {
     if (lastHome.current.lat === home.lat && lastHome.current.lng === home.lng) return;
-    lastHome.current = home;
-    // The map window: only once it is open and settled; shut, it stays on the card.
+    // The map window: only once it is open and settled (a fix landing mid-open never lurches it, and is flown to once it settles).
     if (layer && !layer.settled) return;
+    lastHome.current = home;
     if (expanded && model.homeKnown && !focusCourt && !focusHit && !focusSpot && !model.place && !model.selected) map.current?.flyTo({ center: [home.lng, home.lat], zoom: START_ZOOM, duration: 600 });
-  }, [home]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [home, layer?.settled]); // eslint-disable-line react-hooks/exhaustive-deps
   // The still card follows a change of city on the profile.
   const cityKey = model.city ? `${model.city.lat},${model.city.lng}` : '';
   useEffect(() => { if (!expanded && model.city) map.current?.jumpTo({ center: [model.city.lng, model.city.lat], zoom: CARD_ZOOM }); }, [cityKey]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -398,7 +398,6 @@ export function NearbyMap(props: NearbyMapProps) {
       ease: (to, z, ms, b) => map.current?.easeTo({ center: [to.lng, to.lat], zoom: z, duration: ms, easing: bezierFn(b[0], b[1], b[2], b[3]), essential: true }),
       jump: (to, z) => { const m = map.current; if (!m) return; m.stop(); m.jumpTo({ center: [to.lng, to.lat], zoom: z }); },
       labels: (on, ms, delay) => { labelsOn.current = on; if (map.current) labelsFn(map.current, on, ms, delay); },
-      pinMode: (quiet) => { pinQuiet.current = quiet; pinsOn.current?.mode(quiet, quiet ? CARD_BOX : FULL_MAP_BOX); host.current?.classList.toggle('cs-quiet', quiet); },
       setInteractive: (on) => { interOn.current = on; if (map.current) interactFn(map.current, on, false); },
       warm: (to, z, back, bz) => {
         const m = map.current;
@@ -406,10 +405,18 @@ export function NearbyMap(props: NearbyMapProps) {
         m.jumpTo({ center: [to.lng, to.lat], zoom: z });
         m.once('idle', () => { m.jumpTo({ center: [back.lng, back.lat], zoom: bz }); m.once('idle', () => layerNow.current?.onWarm?.()); });
       },
-      openTarget: () => ({ center: start.center, zoom: start.zoom ?? START_ZOOM }),
+      // Opening goes to where you are now, so that spot counts as flown to (no second move once it settles).
+      openTarget: () => { lastHome.current = home; return { center: start.center, zoom: start.zoom ?? START_ZOOM }; },
     };
   }
-  useEffect(() => { pinsOn.current?.set({ items: markers, tpl }); }, [markers, tpl, mapGen]);
+  // The map window's pins say whether they are the card's quiet ones, so the switch is one build with the new list.
+  const quietNow = layer ? layer.mode === 'card' && !!layer.parked : undefined;
+  if (quietNow !== undefined) pinQuiet.current = quietNow;
+  useEffect(() => {
+    pinsOn.current?.set(quietNow === undefined ? { items: markers, tpl } : { items: markers, tpl, quiet: quietNow, box: quietNow ? CARD_BOX : FULL_MAP_BOX });
+  }, [markers, tpl, mapGen, quietNow]);
+  // The window has closed: next time it opens fresh, as the map page used to.
+  if (layer) layer.reset.current = () => { setMeOpen(false); model.select(null); model.selectCourt(null); model.selectHit(null); model.clearPlace(); setListOpen(false); model.setQuery(''); };
 
   // Picking someone, a court, a hit, or typing a city takes the map there.
   // (Again on a map made afresh, as when your location lands: a player opened from "Who's up today" stays in view.)

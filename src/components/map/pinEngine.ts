@@ -151,11 +151,10 @@ export interface ClusterTemplates {
 }
 
 export interface PinEngine {
-  set: (payload: { items: CanvasMarker[]; tpl: ClusterTemplates }) => void;
+  /** `quiet` (with its `box`): the map window's pins switching between the still card's and the full map's, in the same build. */
+  set: (payload: { items: CanvasMarker[]; tpl: ClusterTemplates; quiet?: boolean; box?: PinEngineOptions['box'] }) => void;
   /** Holds the first wave back (a sheet is over the map), or lets it go. */
   hold: (on: boolean) => void;
-  /** Quiet (the still card's pins: no buttons, no names) or the full map's, switched in place (the map window, mapLayer). */
-  mode: (quiet: boolean, box?: PinEngineOptions['box']) => void;
   destroy: () => void;
 }
 
@@ -606,12 +605,13 @@ return function(map,ml,o){
   function soon(){requestAnimationFrame(function(){requestAnimationFrame(start)})}
   if(map.loaded&&map.loaded())soon();else{map.once('idle',soon);setTimeout(start,2500)}
   return {
-    set:function(p){var list=(p&&p.items)||[];if(p&&p.tpl)tpl=p.tpl;items={};list.forEach(function(it){items[it.id]=it});build();
+    set:function(p){var list=(p&&p.items)||[];if(p&&p.tpl)tpl=p.tpl;items={};list.forEach(function(it){items[it.id]=it});
+      // The map window: the quiet (card) or full pins come with their own list, so the change is one build, and a pin in both keeps its place.
+      if(p&&p.quiet!=null&&!!p.quiet!==!!o.quiet){o.quiet=!!p.quiet;FULL=!o.quiet;if(p.box)B=p.box;try{map.getContainer().classList.toggle('cs-quiet',o.quiet)}catch(e){}}
+      build();
       if(fan){var n=0;fan.m.forEach(function(id){if(items[id])n++});if(n<(fan.lead?1:2))fan=null}
       if(ready&&lvl<0)lvl=levelNow();render(null)},
     hold:function(on){var was=held;held=!!on;if(was&&!held)render(null)},
-    // The map window (mapWindow): the still card's quiet pins while it is shut, the full map's as it opens; pins that stay keep their place.
-    mode:function(q,bx){if(!!q===!!o.quiet)return;o.quiet=!!q;FULL=!q;if(bx)B=bx;build();if(ready&&lvl<0)lvl=levelNow();render(null)},
     destroy:function(){dead=true;if(raf)cancelAnimationFrame(raf);if(cullT)clearTimeout(cullT);map.off('zoom',onZoom);map.off('click',onClick);map.off('move',onMove);map.off('moveend',onEnd);for(var id in ms){clearTimeout(ms[id].leaving);ms[id].m.remove()}ms={}}
   };
 };

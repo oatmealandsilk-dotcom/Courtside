@@ -11,7 +11,6 @@ export interface LayerMapHandle {
   ease: (to: LatLng, zoom: number, ms: number, bezier: [number, number, number, number]) => void;
   jump: (to: LatLng, zoom: number) => void;
   labels: (on: boolean, ms: number, delay: number) => void;
-  pinMode: (quiet: boolean) => void;
   setInteractive: (on: boolean) => void;
   warm: (to: LatLng, zoom: number, back: LatLng, backZoom: number) => void;
   /** Where the map opens to: where you are (or your city), at a city's zoom. */
@@ -20,7 +19,7 @@ export interface LayerMapHandle {
 
 /** The full map inside the map window (mapWindow): shut, it is the still card's picture; open, the full map. */
 export interface LayerMapControl {
-  /** 'card': the still card's pins and view; 'full': the full map's pins. */
+  /** 'card': the still card's own pins (quiet); 'full': the full map's. */
   mode: 'card' | 'full';
   /** The card it parks on while shut. */
   parked: { center: LatLng; markers: CanvasMarker[] } | null;
@@ -37,6 +36,10 @@ export interface LayerMapControl {
   topGesture?: GestureType;
   onPainted?: () => void;
   onWarm?: () => void;
+  /** The phone stopped the map's page (it starts again by itself): not ready to open until it has drawn again. */
+  onReboot?: () => void;
+  /** Puts away whatever is up on the map (a card, the list, your sheet, a search), all at once: the window has closed. */
+  reset: { current: (() => void) | null };
 }
 
 export interface NearbyMapProps {

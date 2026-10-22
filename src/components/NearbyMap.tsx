@@ -161,12 +161,12 @@ export function NearbyMap(props: NearbyMapProps) {
   const lastHome = useRef(home);
   useEffect(() => {
     if (lastHome.current.lat === home.lat && lastHome.current.lng === home.lng) return;
-    lastHome.current = home;
-    // The map window: only once it is open and settled (a fix landing mid-open never lurches it); shut, it stays on the card.
+    // The map window: only once it is open and settled (a fix landing mid-open never lurches it, and is flown to once it settles).
     if (layer && !layer.settled) return;
+    lastHome.current = home;
     // Opened on a tagged court or a hit, or looking at a place searched for, the map stays there; the still card stays on your city.
     if (expanded && model.homeKnown && !focusCourt && !focusHit && !focusSpot && !model.place && !model.selected) canvas.current?.flyTo(home, CITY_ZOOM, 600);
-  }, [home]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [home, layer?.settled]); // eslint-disable-line react-hooks/exhaustive-deps
   // The still card follows a change of city on the profile.
   const cityKey = model.city ? `${model.city.lat},${model.city.lng}` : '';
   useEffect(() => { if (!expanded && model.city) canvas.current?.flyTo(model.city, CARD_ZOOM, 0); }, [cityKey]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -211,10 +211,10 @@ export function NearbyMap(props: NearbyMapProps) {
       ease: (to, z, ms, b) => canvas.current?.ease(to, z, ms, b),
       jump: (to, z) => canvas.current?.jump(to, z),
       labels: (on, ms, delay) => canvas.current?.labels(on, ms, delay),
-      pinMode: (quiet) => canvas.current?.pinMode(quiet),
       setInteractive: (on) => canvas.current?.setInteractive(on),
       warm: (to, z, back, bz) => canvas.current?.warm(to, z, back, bz),
-      openTarget: () => ({ center: start.center, zoom: start.zoom ?? CITY_ZOOM }),
+      // Opening goes to where you are now, so that spot counts as flown to (no second move once it settles).
+      openTarget: () => { lastHome.current = home; return { center: start.center, zoom: start.zoom ?? CITY_ZOOM }; },
     };
   }
 
@@ -228,6 +228,8 @@ export function NearbyMap(props: NearbyMapProps) {
       interactive={expanded}
       layer={!!layer}
       onWarm={layer?.onWarm}
+      onReboot={layer?.onReboot}
+      pinsQuiet={layer ? layer.mode === 'card' && !!layer.parked : undefined}
       markers={markers}
       tpl={tpl}
       // The full map's first pins come in as one wave (once any sheet over it has gone); a tap on "+N" zooms in clear of the bars and the cards.
@@ -269,7 +271,11 @@ export function NearbyMap(props: NearbyMapProps) {
     return false;
   };
   // In the map window, its own Back handler asks this first (MapLayer).
-  if (layer) layer.back.current = backInside;
+  if (layer) {
+    layer.back.current = backInside;
+    // The window has closed: next time it opens fresh, as the map page used to.
+    layer.reset.current = () => { setMeOpen(false); model.select(null); model.selectCourt(null); model.selectHit(null); model.clearPlace(); setListOpen(false); model.setQuery(''); };
+  }
   useAndroidBack(backInside, expanded && !layer);
 
   if (!expanded && !model.city) {

@@ -121,7 +121,9 @@ export function mapMarkers({ model, expanded, me, shown, selectedId, selectedCou
       ...widths,
       id: `p:${p.user.id}`, lat: p.at.lat, lng: p.at.lng,
       html: playerPinHtml(p.user, { size, on, label: expanded, seenAt: p.seenAt, atCourt: !!p.court }),
-      cls: playerPinClass(p.user), anchor: expanded ? 'top' : 'center', offsetY: expanded ? -discSize(size) / 2 : 0,
+      // Hung by its top on the card too (its pin is just the face there, so it sits the same): the map window's switch from the card's
+      // pins to the full map's then keeps each face's own pin and only adds the name, rather than making every pin again.
+      cls: playerPinClass(p.user), anchor: 'top', offsetY: -discSize(size) / 2,
       z: on ? 5 : isOpenToHit(p.user) ? 4 : 3, k: 'p', r: playerRank(p, now), sel: on, ds: discSize(size), g: 'p',
       // Checked in at a court: only players at one court ring round it (pinEngine). Their face alone, for a face-stack.
       at: !expanded ? undefined : p.court ? `c:${p.court.id}` : p.rough ? undefined : courtUnder(p.at), fh: expanded ? pileFaceHtml(p.user) : undefined,

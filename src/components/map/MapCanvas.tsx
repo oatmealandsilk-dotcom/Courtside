@@ -30,8 +30,6 @@ export interface MapCanvasHandle {
   jump: (to: LatLng, zoom: number) => void;
   /** The place names the card leaves off: faded on or off. */
   labels: (on: boolean, ms: number, delay: number) => void;
-  /** The pins: the still card's quiet ones, or the full map's. */
-  pinMode: (quiet: boolean) => void;
   /** Drag and pinch on or off. */
   setInteractive: (on: boolean) => void;
   /** Visits `to` and comes back to `back` while nobody is looking, so the streets there are already fetched (onWarm when done). */
@@ -77,6 +75,10 @@ interface Props {
   layer?: boolean;
   /** `warm` is done. */
   onWarm?: () => void;
+  /** The map window's pins: the still card's quiet ones (true) or the full map's (false), switched with `markers`. */
+  pinsQuiet?: boolean;
+  /** The phone stopped the web view (it starts again by itself): the map window is not ready until it has drawn again. */
+  onReboot?: () => void;
 }
 
 /**
@@ -94,15 +96,17 @@ interface Props {
  * Tap to try again (retry). If iOS or Android stops the web view to free
  * memory, it is started again by itself (Oct 5).
  */
-export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas({ center, zoom, look, interactive, markers, tpl, popIn = false, holdPins = false, pad, onTap, onMapTap, onMove, onPainted, onStatus, farBelow, onFar, style, active = true, layer = false, onWarm }, ref) {
+export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas({ center, zoom, look, interactive, markers, tpl, popIn = false, holdPins = false, pad, onTap, onMapTap, onMove, onPainted, onStatus, farBelow, onFar, style, active = true, layer = false, onWarm, pinsQuiet, onReboot }, ref) {
   const styles = useThemedStyles(styleDefinitions);
   const web = useRef<WebView | null>(null);
   const ready = useRef(false);
   // Getting the page going, and again if it fails (useMapLoad): each try is a new web view.
   const load = useMapLoad(interactive ? 'full map' : 'map card', active);
-  useEffect(() => { ready.current = false; }, [load.attempt]);
-  const latest = useRef({ onTap, onMapTap, onMove, onPainted, onFar, onStatus, onWarm });
-  latest.current = { onTap, onMapTap, onMove, onPainted, onFar, onStatus, onWarm };
+  // Each new try is a new page: the map window is not ready again until it has drawn (onReboot).
+  const firstAttempt = useRef(load.attempt);
+  useEffect(() => { ready.current = false; if (load.attempt !== firstAttempt.current) latest.current.onReboot?.(); }, [load.attempt]); // eslint-disable-line react-hooks/exhaustive-deps
+  const latest = useRef({ onTap, onMapTap, onMove, onPainted, onFar, onStatus, onWarm, onReboot });
+  latest.current = { onTap, onMapTap, onMove, onPainted, onFar, onStatus, onWarm, onReboot };
   useEffect(() => { latest.current.onStatus?.(load.status); }, [load.status]);
   const send = (js: string) => { if (ready.current) web.current?.injectJavaScript(`${js};true;`); };
   // The page takes a moment to start. A move asked for before then (your
@@ -122,13 +126,16 @@ export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas({
       send(`window.__cs.jump(${to.lat},${to.lng},${z})`);
     },
     labels: (on, ms, delay) => send(`window.__cs.labels(${on ? 'true' : 'false'},${Math.round(ms)},${Math.round(delay)})`),
-    pinMode: (quiet) => send(`window.__cs.mode(${quiet ? 'true' : 'false'})`),
     setInteractive: (on) => send(`window.__cs.inter(${on ? 'true' : 'false'})`),
     warm: (to, z, back, bz) => send(`window.__cs.warm(${to.lat},${to.lng},${z},${back.lat},${back.lng},${bz})`),
   }), []); // eslint-disable-line react-hooks/exhaustive-deps
   // Written out only when the pins change, not on every draw of the page around the map (Oct 10,
   // owner: "the buttons like the settings. msg notifications, etc respond too slow").
-  const markerJson = useMemo(() => JSON.stringify({ items: markers, tpl }), [markers, tpl]);
+  // The map window's pins say whether they are the card's quiet ones (pinsQuiet), so the switch is one build with the new list.
+  const markerJson = useMemo(
+    () => JSON.stringify(pinsQuiet === undefined ? { items: markers, tpl } : { items: markers, tpl, quiet: pinsQuiet, box: pinsQuiet ? CARD_BOX : FULL_MAP_BOX }),
+    [markers, tpl, pinsQuiet],
+  );
   const markersNow = useRef(markerJson);
   markersNow.current = markerJson;
   useEffect(() => { send(`window.__cs.set(${markerJson})`); }, [markerJson]);
@@ -185,7 +192,6 @@ window.__cs={
   jump:function(lat,lng,z){map.stop();map.jumpTo({center:[lng,lat],zoom:z})},
   labels:function(on,ms,dl){LBL_ON=on;LABELS(map,on,ms,dl)},
   inter:function(on){INTER(map,on,true)},
-  mode:function(q){engine.mode(q,q?${JSON.stringify(CARD_BOX)}:${JSON.stringify(FULL_MAP_BOX)});box.classList.toggle('cs-quiet',q)},
   warm:function(lat,lng,z,blat,blng,bz){map.jumpTo({center:[lng,lat],zoom:z});map.once('idle',function(){map.jumpTo({center:[blng,blat],zoom:bz});map.once('idle',function(){post({type:'warm'})})})},
   look:function(l){LOOK=l;document.body.style.background=(l.background&&l.background.fill)||'#F4EFE6';if(map.isStyleLoaded())look(l)}
 };
@@ -214,8 +220,8 @@ ${ENGINE_JS}
         allowsInlineMediaPlayback
         setBuiltInZoomControls={false}
         // The phone stopped the page to free memory (the map and the video feed both use a lot): start it again.
-        onContentProcessDidTerminate={() => { ready.current = false; load.reboot(); }}
-        onRenderProcessGone={() => { ready.current = false; load.reboot(); }}
+        onContentProcessDidTerminate={() => { ready.current = false; load.reboot(); latest.current.onReboot?.(); }}
+        onRenderProcessGone={() => { ready.current = false; load.reboot(); latest.current.onReboot?.(); }}
         onMessage={(e) => {
           let msg: { type: string; id?: string; lat?: number; lng?: number; zoom?: number; s?: number; w?: number; n?: number; e?: number; far?: boolean; stage?: string; detail?: string; why?: string };
           try { msg = JSON.parse(e.nativeEvent.data); } catch { return; }

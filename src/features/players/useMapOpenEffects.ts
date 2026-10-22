@@ -21,6 +21,9 @@ export function useMapOpenEffects(location: ReturnType<typeof useLocationToggle>
   const asked = useRef(false);
   const { mustChoose, chooseFirst } = location;
   const [asking, setAsking] = useState(false);
+  // Each open asks afresh (the map window stays made between opens, as the map page did not): dismissed without a
+  // choice, it is asked again next time; once chosen, mustChoose and locationAsked keep it from asking.
+  useEffect(() => { if (!settled) asked.current = false; }, [settled]);
   useEffect(() => {
     if (!settled) return;
     // Only once it is known whether there is a choice to make: who you are, and whether the database has it.
