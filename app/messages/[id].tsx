@@ -83,8 +83,11 @@ import { afterMenu, confirm, confirmAfterMenu, confirmBlock, confirmReport } fro
 import { REPORT_THANKS } from '@/features/moderation/reportThanks';
 import * as haptics from '@/lib/haptics';
 import type { HitRequest, ID, Message, Post, Question, User } from '@/data/types';
-import Reanimated, { Easing, FadeIn, FadeInDown, FadeInUp, FadeOut, ZoomIn, cancelAnimation, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming, type SharedValue } from 'react-native-reanimated';
+import Reanimated, { Easing, FadeIn, FadeInDown, FadeInUp, FadeOut, ZoomIn, cancelAnimation, runOnJS, useAnimatedProps, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming, type SharedValue } from 'react-native-reanimated';
 import { BlurView } from 'expo-blur';
+
+/** The held message's blur, its strength moved on the animation thread (see the hold menu). */
+const AnimatedBlurView = Reanimated.createAnimatedComponent(BlurView);
 import { colors, lift, pageIsDark, radius, spacing, typography, font, withAlpha } from '@/theme';
 import { TextScale } from '@/theme/textScale';
 
@@ -2311,6 +2314,7 @@ function MessageMenu({ target, me, styles, canReply, canReact, pending, canDelet
     p.value = withTiming(0, { duration: 130, easing: Easing.in(Easing.quad) }, (done) => { if (done) runOnJS(after)(); });
   };
   const dimLook = useAnimatedStyle(() => ({ opacity: Math.min(1, p.value) }));
+  const blurProps = useAnimatedProps(() => ({ intensity: 14 * Math.max(0, Math.min(1, p.value)) }));
   const liftLook = useAnimatedStyle(() => ({ transform: [{ scale: lift.value }] }));
   const barLook = useAnimatedStyle(() => ({ opacity: Math.min(1, p.value * 1.4), transform: [{ translateY: (1 - p.value) * 10 }, { scale: 0.55 + 0.45 * p.value }] }));
   const cardLook = useAnimatedStyle(() => ({ opacity: Math.min(1, p.value * 1.4), transform: [{ translateY: (1 - p.value) * -8 }, { scale: 0.82 + 0.18 * p.value }] }));
@@ -2381,8 +2385,10 @@ function MessageMenu({ target, me, styles, canReply, canReact, pending, canDelet
   return (
     <Modal visible transparent animationType="none" statusBarTranslucent onRequestClose={() => leave(onClose)}>
       <View style={StyleSheet.absoluteFill}>
+        {/* The blur comes and goes by its own strength, never under a fade: blur under a fading parent
+            can turn see-through on the iPhone (Oct 17; Oct 22 sweep, item 5). Only the dim fades. */}
+        {Platform.OS === 'ios' ? <AnimatedBlurView pointerEvents="none" animatedProps={blurProps} tint="dark" style={StyleSheet.absoluteFill} /> : null}
         <Reanimated.View pointerEvents="none" style={[StyleSheet.absoluteFill, dimLook]}>
-          {Platform.OS === 'ios' ? <BlurView intensity={14} tint="dark" style={StyleSheet.absoluteFill} /> : null}
           <View style={[StyleSheet.absoluteFill, styles.menuBackdrop]} />
         </Reanimated.View>
         <Pressable accessibilityRole="button" accessibilityLabel="Close menu" onPress={close} style={StyleSheet.absoluteFill} />
