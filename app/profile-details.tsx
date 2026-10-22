@@ -30,6 +30,8 @@ import { useTabUnderline } from '@/features/navigation/useTabUnderline';
 import { dayLabel, dayNumbers, daysUntil, eventDate, newestFirst, shortDate, shortLength, surfaceSlot, tournamentName, weekDays, weekNumbers, weekdayDate } from '@/features/players/tennisProfile';
 import { localDay } from '@/features/practice/stats';
 import { wrappedYear } from '@/features/wrapped/yearInTennis';
+import { lastWeekStart } from '@/features/recap/recap';
+import { warmRecapAway } from '@/features/recap/recapAway';
 import { evaluateAchievements, surfaceLabel } from '@/lib/badges';
 import { confirm } from '@/lib/confirm';
 import { relativeTime } from '@/lib/format';
@@ -172,6 +174,8 @@ function Mine({ user, offsetY, scrollRef }: { user: User; offsetY: SharedValue<n
 function ActivityTab({ user }: { user: User }) {
   const styles = useThemedStyles(styleDefinitions);
   const year = wrappedYear();
+  // Read ahead for Your sessions (opened from here), so its summary is there on its first frame.
+  useEffect(() => { warmRecapAway(user.id, lastWeekStart()); }, [user.id]);
   return (
     <View style={styles.tabBody}>
       {year ? (
