@@ -1,5 +1,5 @@
 import { PRESS_DIM } from '@/theme/press';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { useModalOpenWhile } from '@/lib/modalOpen';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -252,7 +252,11 @@ export function ReactionsSheet({ message, users, me, onRemove, onClose }: {
   message: Message | null; users: User[]; me: ID | null; onRemove: (emoji: string) => void; onClose: () => void;
 }) {
   const styles = useThemedStyles(styleDefinitions);
-  const entries = Object.entries(message?.reactions ?? {})
+  // While it fades out it keeps the last message's reactions, never "All 0".
+  const lastMsg = useRef(message);
+  if (message) lastMsg.current = message;
+  const shownMsg = message ?? lastMsg.current;
+  const entries = Object.entries(shownMsg?.reactions ?? {})
     .map(([uid, emoji]) => ({ uid, emoji, user: users.find((u) => u.id === uid) }))
     .sort((a, b) => (a.uid === me ? -1 : b.uid === me ? 1 : 0));
   const counts = entries.reduce<Record<string, number>>((acc, e) => { acc[e.emoji] = (acc[e.emoji] ?? 0) + 1; return acc; }, {});
@@ -270,7 +274,7 @@ export function ReactionsSheet({ message, users, me, onRemove, onClose }: {
               key={uid}
               accessibilityRole={yours ? 'button' : undefined}
               accessibilityLabel={yours ? `Your reaction, ${emoji}. Tap to remove` : `${user?.name ?? 'Someone'} reacted ${emoji}`}
-              disabled={!yours}
+              disabled={!yours || !message}
               onPress={() => { onClose(); onRemove(emoji); }}
               style={({ pressed }) => [styles.person, i > 0 && styles.rule, pressed && styles.pressed]}
             >
@@ -319,15 +323,20 @@ export function MessageInfoSheet({ message, readers, sender, mine, onClose }: {
   sender?: User; mine: boolean; onClose: () => void;
 }) {
   const styles = useThemedStyles(styleDefinitions);
-  if (!message) return <Sheet visible={false} onClose={onClose}>{null}</Sheet>;
+  // While it fades out it keeps what it showed, rather than emptying to a bare grabber.
+  const last = useRef<{ message: Message; readers: typeof readers; sender?: User; mine: boolean } | null>(null);
+  if (message) last.current = { message, readers, sender, mine };
+  if (!last.current) return <Sheet visible={false} onClose={onClose}>{null}</Sheet>;
+  const shownMsg = last.current.message;
+  ({ readers, sender, mine } = last.current);
   const seen = readers.filter((r) => r.at && !r.off);
   const unseen = readers.filter((r) => !r.at && !r.off);
   const quiet = readers.filter((r) => r.off);
   return (
-    <Sheet visible title="Message info" onClose={onClose}>
+    <Sheet visible={!!message} title="Message info" onClose={onClose}>
       <View style={styles.infoBlock}>
-        <InfoLine styles={styles} icon="time-outline" label={mine ? 'Sent' : `From ${sender?.name ?? 'someone'}`} value={chatStamp(message.createdAt)} />
-        {message.editedAt ? <InfoLine styles={styles} icon="create-outline" label="Edited" value={chatStamp(message.editedAt)} /> : null}
+        <InfoLine styles={styles} icon="time-outline" label={mine ? 'Sent' : `From ${sender?.name ?? 'someone'}`} value={chatStamp(shownMsg.createdAt)} />
+        {shownMsg.editedAt ? <InfoLine styles={styles} icon="create-outline" label="Edited" value={chatStamp(shownMsg.editedAt)} /> : null}
       </View>
       {mine && readers.length ? (
         <ScrollView style={{ maxHeight: 320 }}>

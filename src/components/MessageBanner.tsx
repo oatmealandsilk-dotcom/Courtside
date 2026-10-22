@@ -208,10 +208,11 @@ export function MessageBanner({ enabled }: { enabled: boolean }) {
   // Starting to write: a banner already down goes, off the page's buttons; the rest wait.
   useEffect(() => { if (writing && onScreen.current) dismiss(); }, [writing, dismiss]);
 
-  // In from above the screen on a phone; on a computer it drops a few points into its corner.
+  // In from above the screen, by moving only: never a fade, as it is glass (no opacity on any
+  // parent of a Glass, Oct 17). Far enough up that its shadow is off the screen too.
   const y = useSharedValue(0);
+  /** Only a clock for the flick's exit; it draws nothing. */
   const shown = useSharedValue(0);
-  const away = isPhone ? -(insets.top + 120) : -14;
   /** When the banner on show first dropped in, for MAX_MS. */
   const shownAt = useRef(0);
   /** A flick has already sent it on its way, from the gesture itself. */
@@ -222,6 +223,7 @@ export function MessageBanner({ enabled }: { enabled: boolean }) {
   // How far down it reaches, so the toast and the posting strip sit under it rather than behind it.
   const top = isPhone ? 6 : spacing.lg;
   const [cardHeight, setCardHeight] = useState(0);
+  const away = -(insets.top + top + Math.max(cardHeight, 100) + 40);
   const reaching = !!view && !q.leaving && cardHeight > 0;
   useEffect(() => { setBannerReach(reaching ? top + cardHeight : 0); }, [reaching, top, cardHeight]);
   useEffect(() => () => setBannerReach(0), []);
@@ -233,15 +235,11 @@ export function MessageBanner({ enabled }: { enabled: boolean }) {
     if (!onScreen.current) {
       onScreen.current = true;
       shownAt.current = Date.now();
-      if (reduced) {
-        y.value = 0;
-        shown.value = 0;
-        shown.value = withTiming(1, { duration: 200, reduceMotion: NEVER });
-      } else {
+      // Reduce Motion: simply there, in place (a fade would show the page through the glass).
+      if (reduced) y.value = 0;
+      else {
         y.value = away;
-        shown.value = 0;
         y.value = withSpring(0, SPRING);
-        shown.value = withTiming(1, { duration: 180, easing: Easing.out(Easing.quad), reduceMotion: NEVER });
       }
       haptics.arrive();
     }
@@ -268,13 +266,10 @@ export function MessageBanner({ enabled }: { enabled: boolean }) {
     // Never drawn (it was no longer wanted before it showed): nothing to animate.
     if (!onScreen.current) { next(); return; }
     const done = () => { 'worklet'; runOnJS(next)(); };
-    // A flick already sent it up at the finger's own speed: only its fade is waited for.
-    if (wasFlung) shown.value = withTiming(0, { duration: 160, reduceMotion: NEVER }, done);
-    else if (reduced) shown.value = withTiming(0, { duration: 180, reduceMotion: NEVER }, done);
-    else {
-      y.value = withTiming(away, { duration: 240, easing: Easing.in(Easing.cubic), reduceMotion: NEVER });
-      shown.value = withTiming(0, { duration: 240, easing: Easing.in(Easing.quad), reduceMotion: NEVER }, done);
-    }
+    // A flick already sent it up at the finger's own speed: its slide is just waited out.
+    if (wasFlung) { shown.value = 1; shown.value = withTiming(0, { duration: 160, reduceMotion: NEVER }, done); }
+    else if (reduced) { y.value = away; next(); }
+    else y.value = withTiming(away, { duration: 240, easing: Easing.in(Easing.cubic), reduceMotion: NEVER }, done);
   }, [q.leaving]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The demo's messages wait until a banner could show (past the splash and the tutorial).
@@ -296,13 +291,13 @@ export function MessageBanner({ enabled }: { enabled: boolean }) {
         // It carries on at the flick's own speed, started right here on the
         // animation thread, so it never stops dead under the finger first.
         if (!reduced) y.value = withSpring(away, { velocity: Math.min(e.velocityY, -800), stiffness: 300, damping: 30, overshootClamping: true, reduceMotion: NEVER });
-        shown.value = withTiming(0, { duration: 220, easing: Easing.in(Easing.quad), reduceMotion: NEVER });
+        else y.value = away;
         runOnJS(fling)();
       } else y.value = withSpring(0, SPRING);
     })
-    .onFinalize(() => { runOnJS(letGo)('finger'); }), [hold, letGo, fling, y, shown, away, reduced]);
+    .onFinalize(() => { runOnJS(letGo)('finger'); }), [hold, letGo, fling, y, away, reduced]);
 
-  const style = useAnimatedStyle(() => ({ opacity: shown.value, transform: [{ translateY: y.value }] }));
+  const style = useAnimatedStyle(() => ({ transform: [{ translateY: y.value }] }));
 
   /** Who, what and how it looks, for one banner. */
   function describe(news: News): { title: string; body: string; count: number; label: string; face: Face; href: string } {
@@ -374,7 +369,7 @@ export function MessageBanner({ enabled }: { enabled: boolean }) {
         style={[isPhone ? styles.cardPhone : styles.cardWide, style]}
       >
         <View style={styles.shadow}>
-          <Glass radius={22} tint={colors.surface} style={styles.card}>
+          <Glass behind radius={22} tint={colors.surface} style={[styles.card, styles.solid]}>
             <View style={styles.row}>
               <Pressable
                 accessibilityRole="button"
@@ -466,6 +461,8 @@ const styleDefinitions = StyleSheet.create({
   cardWide: { width: 360 },
   // The shadow on a rounded layer of its own, so it follows the card's corners. Floating, so neutral (DESIGN.md: overlay shadows).
   shadow: { borderRadius: 22, shadowColor: '#000', shadowOpacity: 0.14, shadowRadius: 18, shadowOffset: { width: 0, height: 8 }, elevation: 8 },
+  // A solid ground under the glass, as on the toast (Oct 21): the page never shows through the words.
+  solid: { backgroundColor: colors.surface },
   card: { borderWidth: StyleSheet.hairlineWidth, borderColor: `${colors.borderStrong}55` },
   row: { flexDirection: 'row', alignItems: 'center' },
   info: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md, paddingLeft: spacing.md, paddingRight: spacing.lg, minHeight: 64 },
