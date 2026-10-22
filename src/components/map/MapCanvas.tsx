@@ -33,6 +33,8 @@ export interface MapCanvasHandle {
   shoot: () => void;
   /** Whether this try's page has its map up (its style loaded), drawn or not. */
   isUp: () => boolean;
+  /** How long since this try's page last said anything (ms). */
+  quiet: () => number;
 }
 
 interface Props {
@@ -126,6 +128,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas({
     },
     shoot: () => send('window.__cs.shot()'),
     isUp: () => ready.current,
+    quiet: () => load.quiet(),
   }), []); // eslint-disable-line react-hooks/exhaustive-deps
   // Written out only when the pins change, not on every draw of the page around the map (Oct 10,
   // owner: "the buttons like the settings. msg notifications, etc respond too slow").

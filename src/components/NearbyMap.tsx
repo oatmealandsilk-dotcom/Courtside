@@ -12,7 +12,7 @@ import { CardStage } from '@/components/map/CardStage';
 import { warmMapEngine } from '@/components/map/engineCopy';
 import { MapCanvas, type CanvasMarker, type MapCanvasHandle, type MapLoadStatus } from '@/components/map/MapCanvas';
 import { MAP_REVEAL_MS, MapCardFailed, MapCardLoading, MapLoadPill } from '@/components/map/MapLoadState';
-import { cardCaptureBroken, cardHint, hasCardShot, hashText, loadCardShots, peekCardShot, saveCardShot, saveStreetsShot, setCardHint, shotKey, useCardShots, type CardHint } from '@/components/map/cardShot';
+import { cardCaptureBroken, cardHint, hasCardShot, hashText, loadCardShots, peekCardShot, saveCardShot, saveStreetsShot, setCardHint, shotKey, useCardShots, forgetPlaces, type CardHint } from '@/components/map/cardShot';
 import { useCardOnScreen, useHeldCardPlace } from '@/components/map/cardHold';
 import { CARD_HEIGHT, CARD_ZOOM, onCard } from '@/components/map/cardFit';
 import { STYLE, cardLook, lookFor } from '@/components/map/look';
@@ -32,6 +32,7 @@ import { useWeather } from '@/features/players/useWeather';
 import { show as showToast } from '@/lib/toast';
 import { confirmUnfollow } from '@/lib/confirm';
 import { useApp } from '@/store/AppContext';
+import { isSupabaseConfigured } from '@/lib/supabase';
 import { curtainState, useStartMapHold } from '@/features/feed/warmup';
 import { useReducedMotion } from '@/lib/useReducedMotion';
 import { useAndroidBack } from '@/lib/androidBack';
@@ -82,14 +83,19 @@ export function NearbyMap(props: NearbyMapProps) {
   // The full map runs without the floating tab bar on phones (AppShell's phoneOnlyHide, owner Oct 8), so
   // under a card only the home indicator is kept, in the card's own colour.
   const barInset = insets.bottom;
-  const { followingIds, actions, mapLive, mapVisibility, teenMap, lastSeen, liveSession, courtNow, locationEnabled } = useApp();
+  const { followingIds, actions, mapLive, mapVisibility, teenMap, lastSeen, liveSession, courtNow, locationEnabled, remoteLoaded } = useApp();
   // Who can see you on the map (migration 63): from your card and the location button, once there is a choice to make.
   const choosing = canChooseVisibility(mapLive, me, teenMap);
   // A teen (migration 78) is shared only with friends who follow them back, and with nobody until they say so.
   const teen = onTeenMap(me, teenMap);
   const hiddenMe = choosing && (mapVisibility === 'none' || (teen && mapVisibility == null));
   // Only me (or a teen who has not chosen): nothing of where the card is gets kept on this device, its town or its pictures (cardShot).
-  const keepNone = mapVisibility === 'none' || hiddenMe;
+  // Not known yet counts as Only me: on a cold open the card can paint before the account's settings arrive.
+  const noneKnown = mapVisibility === 'none' || hiddenMe;
+  const settingsUnknown = isSupabaseConfigured && (!remoteLoaded || (mapVisibility === undefined && mapLive !== false));
+  const keepNone = noneKnown || settingsUnknown;
+  // Anything kept before Only me (or the teen rule) was known goes as soon as it is.
+  useEffect(() => { if (noneKnown && !settingsUnknown) forgetPlaces(me.id); }, [noneKnown, settingsUnknown, me.id]);
   // Playing a live session, checked in at its court (Oct 6): your pin says "Playing now", the court glows. Not on Only me, which nobody sees.
   const playing = livePin(liveSession, courtNow, locationEnabled && !hiddenMe);
   // Since migration 98 you share to see: what keeps "Players nearby" from you
@@ -142,7 +148,7 @@ export function NearbyMap(props: NearbyMapProps) {
   // Until its map has drawn, the card is covered: by a picture of how it last drew, when there is
   // one for exactly this look (cardShot), so it already shows its streets and the live map takes
   // over underneath with nothing changing; otherwise by its loading sketch, which fades off once,
-  // slowly, never under a lifting curtain and never part way through a swipe. If the map never
+  // slowly (starting at once even under a curtain still lifting, so it never lingers), never part way through a swipe. If the map never
   // comes after every retry, only "Map didn't load · Tap to try again" (Oct 5, owner).
   // The cover is over the map rather than the map being see-through: the map's web view keeps
   // drawing at full strength underneath (a phone may hold back a web view it cannot see).
@@ -183,7 +189,7 @@ export function NearbyMap(props: NearbyMapProps) {
   const cityKey = model.city ? `${model.city.lat},${model.city.lng}` : '';
   const jumpGuard = useRef<ReturnType<typeof setTimeout> | null>(null);
   const coverAgainRef = useRef<(lost?: boolean) => void>(() => undefined);
-  const showCardRef = useRef<() => void>(() => undefined);
+  const showCardRef = useRef<(drawn?: boolean) => void>(() => undefined);
   useEffect(() => {
     if (expanded || !model.city) return;
     if (cardUp && !inViewNow()) {
@@ -191,7 +197,7 @@ export function NearbyMap(props: NearbyMapProps) {
       canvas.current?.jump(model.city, CARD_ZOOM);
       // Never left covered: a page that does not say it has drawn the new place within 8 s is shown as it is.
       if (jumpGuard.current) clearTimeout(jumpGuard.current);
-      jumpGuard.current = setTimeout(() => { jumpGuard.current = null; showCardRef.current(); }, 8000);
+      jumpGuard.current = setTimeout(() => { jumpGuard.current = null; showCardRef.current(false); }, 8000);
       return;
     }
     canvas.current?.flyTo(model.city, CARD_ZOOM, 0);
@@ -265,22 +271,31 @@ export function NearbyMap(props: NearbyMapProps) {
   const lostNow = useRef(false);
   // A lost page is never left covered: one that has not drawn within 8 s is shown as it is (its map is up,
   // the streets on their way) or, with no map at all yet, says "Map didn't load · Tap to try again".
+  // A page still talking (loading slowly) is given more time, up to 45 s, before it is called a failure;
+  // the load's own clocks (useMapLoad) can say so sooner.
   const [lostFailed, setLostFailed] = useState(false);
   const lostGuard = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (lostGuard.current) clearTimeout(lostGuard.current); }, []);
+  // Whether the card on show was drawn (onPainted), not just shown by a guard on a half-drawn page:
+  // only a drawn card is photographed (cardShot), and a guard-shown one can still say it failed.
+  const [drawn, setDrawn] = useState(false);
   coverAgainRef.current = (lost = false) => {
     stopWait.current();
     if (lostGuard.current) { clearTimeout(lostGuard.current); lostGuard.current = null; }
     setLostFailed(false);
     if (lost) {
-      lostGuard.current = setTimeout(() => {
+      const from = Date.now();
+      const check = () => {
         lostGuard.current = null;
-        if (canvas.current?.isUp()) showCardRef.current();
-        else setLostFailed(true);
-      }, 8000);
+        if (canvas.current?.isUp()) { showCardRef.current(false); return; }
+        if ((canvas.current?.quiet() ?? Infinity) < 5000 && Date.now() - from < 45000) { lostGuard.current = setTimeout(check, 4000); return; }
+        setLostFailed(true);
+      };
+      lostGuard.current = setTimeout(check, 8000);
     }
     lostNow.current = lost;
     setLostCover(lost);
+    setDrawn(false);
     setCardUp(false);
     setCoverGone(false);
     coverIn.value = 1;
@@ -290,12 +305,20 @@ export function NearbyMap(props: NearbyMapProps) {
   const stopWait = useRef<() => void>(() => undefined);
   useEffect(() => () => stopWait.current(), []);
   /** The map has drawn: the cover goes, as quietly as it can. */
-  const showCard = () => {
+  const showCard = (real = true) => {
+    // Already shown by a guard, and now it has really drawn: nothing to reveal, it just counts as drawn.
+    if (cardUp && real) {
+      if (jumpGuard.current) { clearTimeout(jumpGuard.current); jumpGuard.current = null; }
+      setDrawn(true);
+      setLostFailed(false);
+      return;
+    }
     if (jumpGuard.current) { clearTimeout(jumpGuard.current); jumpGuard.current = null; }
     if (lostGuard.current) { clearTimeout(lostGuard.current); lostGuard.current = null; }
     setLostFailed(false);
     lostNow.current = false;
     setLostCover(false);
+    setDrawn(real);
     setCardUp(true);
     stopWait.current();
     const curtain = curtainState();
@@ -316,7 +339,7 @@ export function NearbyMap(props: NearbyMapProps) {
   };
   showCardRef.current = showCard;
   // Given up on: "Map didn't load" fades in over the cover (and back off for a retry), at once out of sight.
-  const failed = !expanded && (mapStatus === 'failed' || lostFailed) && !cardUp;
+  const failed = !expanded && (mapStatus === 'failed' || lostFailed) && (!cardUp || !drawn);
   const failIn = useSharedValue(0);
   const failFade = useAnimatedStyle(() => ({ opacity: failIn.value }));
   // After "Tap to try again" its words stay until it has faded off, so nothing goes in one frame.
@@ -334,7 +357,7 @@ export function NearbyMap(props: NearbyMapProps) {
   const mapBox = useRef<View | null>(null);
   const shotFor = useRef<string | null>(null);
   useEffect(() => {
-    if (expanded || keepNone || !cardUp || !coverGone || !key) return undefined;
+    if (expanded || keepNone || !cardUp || !drawn || !coverGone || !key) return undefined;
     let tries = 0;
     const t = setInterval(() => {
       tries += 1;
@@ -349,7 +372,7 @@ export function NearbyMap(props: NearbyMapProps) {
         .catch(() => undefined);
     }, 1200);
     return () => clearInterval(t);
-  }, [expanded, keepNone, cardUp, coverGone, key, markerHash]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [expanded, keepNone, cardUp, drawn, coverGone, key, markerHash]); // eslint-disable-line react-hooks/exhaustive-deps
   // Where the card was, for next time (mapModel's hint): only a centre from a real fix.
   useEffect(() => {
     if (!expanded && !keepNone && cardUp && place.locationOn && place.at && model.city && !model.cityExact) setCardHint(me.id, { lat: model.city.lat, lng: model.city.lng, name: cityName });
@@ -367,7 +390,7 @@ export function NearbyMap(props: NearbyMapProps) {
       tpl={tpl}
       // The full map's first pins come in as one wave (once any sheet over it has gone); a tap on "+N" zooms in clear of the bars and the cards.
       popIn={expanded}
-      onPainted={expanded ? undefined : showCard}
+      onPainted={expanded ? undefined : () => showCard()}
       onShot={expanded ? undefined : (data) => { const k = shotFor.current; shotFor.current = null; if (k && k === keyNow.current && !keepNoneNow.current) saveStreetsShot(k, data); }}
       // The phone stopped the page (or took back its drawing) while the app was away: covered again before anyone looks.
       onLost={expanded ? undefined : () => { if (cardUp) coverAgainRef.current(true); }}
