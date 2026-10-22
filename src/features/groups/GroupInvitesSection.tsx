@@ -17,8 +17,9 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
  * self-contained block: the Groups sheet (the Feed's "+") puts it first, the
  * Groups page above "Your groups". Each row is the group's face, who invited
  * you, and Join / Not now. Join gets you in ("You're in Silver Lake
- * sunrise"), or asks the admins for you when the one who invited you can't
- * let you in themselves; Not now clears it and tells nobody. Already in 3
+ * sunrise"), Ask to join or not (migration 182: whoever invited you let you
+ * in); only someone an admin took out, invited by a member who isn't an
+ * admin, is asked about to the admins instead; Not now clears it and tells nobody. Already in 3
  * groups, Join is dimmed from the start (as Create a group is) and the cap
  * is said under each row, with a way to your groups; Not now still works. Tapping the
  * group opens its page, where the same Join waits. Nothing at all when there
@@ -35,7 +36,7 @@ export const INVITE_FULL = `You’re in ${MAX_GROUPS} groups, the most anyone ca
 
 /** What a finished Join says, as a toast. */
 export function toastForJoin(outcome: string, name: string) {
-  if (outcome === 'requested') showToast({ title: 'Sent to the admins', body: `You’ll be in ${name} once one says yes.`, icon: 'hourglass-outline' });
+  if (outcome === 'requested') showToast({ title: 'Sent to the admins', body: `You were taken out of ${name}, so an admin lets you back in.`, icon: 'hourglass-outline' });
   else if (outcome === 'joined' || outcome === 'already') showToast({ title: `You’re in ${name}`, body: 'Its feed is on your Feed’s top row.', icon: 'checkmark-circle-outline' });
 }
 
