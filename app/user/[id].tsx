@@ -1,7 +1,8 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef, useState } from 'react';
 import { show as showToast } from '@/lib/toast';
-import { Image, Modal, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { RisingSheet } from '@/components/RisingSheet';
 import { router, useLocalSearchParams } from 'expo-router';
 import { goBack } from '@/lib/goBack';
 import { requestSection } from '@/features/navigation/swipeOrder';
@@ -253,27 +254,21 @@ function UserProfile() {
         </>
       )}
 
-      <Modal visible={menuOpen} transparent animationType="fade" onRequestClose={() => setMenuOpen(false)}>
-        {/* The backdrop is a plain surface, not a button: a button here would
-            wrap the menu's buttons, which the web refuses to nest. */}
-        <Pressable accessibilityLabel="Close menu" onPress={() => setMenuOpen(false)} style={styles.backdrop}>
-          <View style={[styles.sheet, { paddingBottom: menuBottom }]}>
-            <View style={styles.grabber} />
-            <Text style={styles.sheetTitle}>{user.name}</Text>
-            {menu.map((item, index) => (
-              <Pressable
-                key={item.label}
-                accessibilityRole="button"
-                onPress={() => { setMenuOpen(false); item.onPress(); }}
-                style={({ pressed }) => [styles.menuRow, index > 0 && styles.menuBorder, pressed && { backgroundColor: colors.surfaceAlt }]}
-              >
-                <Ionicons name={item.icon} size={21} color={item.danger ? colors.danger : colors.text} />
-                <Text style={[styles.menuLabel, item.danger && { color: colors.danger }]}>{item.label}</Text>
-              </Pressable>
-            ))}
-          </View>
-        </Pressable>
-      </Modal>
+      <RisingSheet visible={menuOpen} onClose={() => setMenuOpen(false)} closeLabel="Close menu" sheetStyle={[styles.sheet, { paddingBottom: menuBottom }]}>
+          <View style={styles.grabber} />
+          <Text style={styles.sheetTitle}>{user.name}</Text>
+          {menu.map((item, index) => (
+            <Pressable
+              key={item.label}
+              accessibilityRole="button"
+              onPress={() => { setMenuOpen(false); item.onPress(); }}
+              style={({ pressed }) => [styles.menuRow, index > 0 && styles.menuBorder, pressed && { backgroundColor: colors.surfaceAlt }]}
+            >
+              <Ionicons name={item.icon} size={21} color={item.danger ? colors.danger : colors.text} />
+              <Text style={[styles.menuLabel, item.danger && { color: colors.danger }]}>{item.label}</Text>
+            </Pressable>
+          ))}
+      </RisingSheet>
     </Screen>
   );
 }
@@ -312,7 +307,6 @@ const styleDefinitions = StyleSheet.create({
   tilePlayFlat: { textShadowColor: 'transparent', textShadowRadius: 0 },
   tileViews: { position: 'absolute', left: 6, bottom: 5, flexDirection: 'row', alignItems: 'center', gap: 3 },
   tileViewsText: { fontSize: 12, ...font('600'), color: '#FFFFFF', textShadowColor: 'rgba(0,0,0,0.6)', textShadowRadius: 3 },
-  backdrop: { flex: 1, backgroundColor: colors.overlay, justifyContent: 'flex-end' },
   sheet: {
     backgroundColor: colors.bg,
     borderTopLeftRadius: radius.xl,

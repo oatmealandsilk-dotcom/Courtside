@@ -8,6 +8,7 @@ import Reanimated, { Easing, FadeIn, FadeOut, ZoomIn, ZoomOut, runOnJS, useAnima
 
 import { Avatar } from '@/components/ui';
 import { EmojiKeyboard } from '@/components/EmojiKeyboard';
+import { RisingSheet } from '@/components/RisingSheet';
 import type { ID, Message, User } from '@/data/types';
 import { chatStamp } from '@/lib/format';
 import { useReducedMotion } from '@/lib/useReducedMotion';
@@ -232,15 +233,12 @@ function Sheet({ visible, title, onClose, children }: { visible: boolean; title?
   const insets = useSafeAreaInsets();
   useModalOpenWhile(visible);
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable accessibilityLabel="Close" onPress={onClose} style={styles.backdrop}>
-        <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, spacing.lg) + spacing.sm }]} onStartShouldSetResponder={() => true}>
-          <View style={styles.grabber} />
-          {title ? <Text style={styles.sheetTitle} numberOfLines={1}>{title}</Text> : null}
-          {children}
-        </View>
-      </Pressable>
-    </Modal>
+    // Rises from the bottom and drops away on close, like every "•••" sheet (RisingSheet, Oct 22).
+    <RisingSheet visible={visible} onClose={onClose} sheetStyle={[styles.sheet, { paddingBottom: Math.max(insets.bottom, spacing.lg) + spacing.sm }]}>
+      <View style={styles.grabber} />
+      {title ? <Text style={styles.sheetTitle} numberOfLines={1}>{title}</Text> : null}
+      {children}
+    </RisingSheet>
   );
 }
 
@@ -418,7 +416,6 @@ const styleDefinitions = StyleSheet.create({
   faceRing: { borderRadius: 10, borderWidth: 1.5, borderColor: colors.bg },
   faceOverlap: { marginLeft: -4 },
   facesMore: { ...font('500'), fontSize: 11, color: colors.textFaint, marginLeft: 4 },
-  backdrop: { flex: 1, backgroundColor: colors.overlay, justifyContent: 'flex-end' },
   backdropClear: { flex: 1, backgroundColor: colors.overlay, justifyContent: 'flex-end' },
   sheet: { backgroundColor: colors.bg, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, paddingTop: spacing.sm, maxWidth: 520, width: '100%', alignSelf: 'center' },
   emojiSheet: { backgroundColor: colors.bg, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, paddingTop: spacing.sm, maxWidth: 520, width: '100%', alignSelf: 'center', overflow: 'hidden' },
