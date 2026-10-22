@@ -972,6 +972,77 @@ const STEPS = [
     after: async (page) => { await page.tap({ text: 'Find Players' }); },
   },
   {
+    // Oct 22, owner: "It should be a fucking smooth swipe. Nothing framing in or out". Each section is its
+    // own scroller under a row that stays put: a tab tap and a finger's swipe between them move only the
+    // two pages sideways. Every frame is measured: the header, the section row and the bottom bar never
+    // move by even a pixel, neither section scrolls or changes height, the section beside the page is laid
+    // out the whole time (never display:none), and Find Players is back exactly where it was left.
+    name: 'community-swipe-still',
+    title: 'Community: a swipe and a tab tap move nothing but the sections',
+    async run(page) {
+      await page.waitForStill({ text: 'Find Players' });
+      const players = '[data-testid="pane-discuss:players"]';
+      const threads = '[data-testid="pane-discuss:discussions"]';
+      // Find Players well down its page (as far as it goes, up to 600), then a moment for the bar to settle.
+      const left = await page.waitUntil(() => page.eval(`(() => {
+        const el = document.querySelector('${players}');
+        if (!el || el.scrollHeight - el.clientHeight < 100) return false;
+        el.scrollTop = Math.min(600, el.scrollHeight - el.clientHeight);
+        return Math.round(el.scrollTop) || false;
+      })()`), 15000, 'Find Players to scroll');
+      await sleep(900);
+      // From here on, every frame is noted.
+      await page.eval(`(() => {
+        const rect = (el) => { if (!el) return null; const r = el.getBoundingClientRect(); return [r.left, r.top, r.width, r.height].map((n) => Math.round(n * 2) / 2).join(','); };
+        const title = [...document.querySelectorAll('div,span,h1')].find((el) => el.childElementCount === 0 && el.textContent === 'Community' && el.getBoundingClientRect().height > 0);
+        const row = document.querySelector('[role="tab"]')?.parentElement;
+        const bar = document.querySelector('[aria-label="Feed"]');
+        const panes = ['${players}', '${threads}'].map((s) => document.querySelector(s));
+        const frames = [];
+        window.__still = { frames, on: true };
+        const tick = () => {
+          if (!window.__still.on) return;
+          frames.push({
+            title: rect(title), row: rect(row), bar: rect(bar),
+            tops: panes.map((p) => (p ? Math.round(p.scrollTop) : -1)).join(','),
+            heights: panes.map((p) => (p ? p.scrollHeight : -1)).join(','),
+            hidden: panes.map((p) => { let n = p; while (n && n !== document.body) { if (getComputedStyle(n).display === 'none') return 'none'; n = n.parentElement; } return 'ok'; }).join(','),
+          });
+          requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+        return true;
+      })()`);
+      // A tab tap to Discussions, then a finger's swipe back to Find Players.
+      const tab = await page.waitForStill({ text: 'Discussions' });
+      await page.tapAt(tab.x, tab.y);
+      await sleep(700);
+      const y = 520;
+      await page.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: 60, y, radiusX: 2, radiusY: 2, force: 1, id: 1 }] });
+      for (let i = 1; i <= 14; i += 1) {
+        await sleep(16);
+        await page.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: 60 + i * 20, y, radiusX: 2, radiusY: 2, force: 1, id: 1 }] });
+      }
+      await page.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+      await sleep(900);
+      const report = await page.eval(`(() => { window.__still.on = false; return JSON.stringify(window.__still.frames); })()`);
+      const frames = JSON.parse(report);
+      if (frames.length < 20) throw new Error(`only ${frames.length} frames were measured`);
+      for (const key of ['title', 'row', 'bar', 'tops', 'heights']) {
+        const seen = [...new Set(frames.map((f) => f[key]))];
+        if (seen.length > 1) throw new Error(`${key} changed during the tap and swipe (${seen.slice(0, 4).join(' | ')})`);
+        if (seen[0] == null) throw new Error(`could not find the ${key} to measure`);
+      }
+      if (frames.some((f) => f.hidden.includes('none'))) throw new Error('a section was taken out of the layout (display:none) during the swipe');
+      const back = await page.eval(`Math.round(document.querySelector('${players}').scrollTop)`);
+      if (Math.abs(back - left) > 1) throw new Error(`Find Players came back at ${back}, not where it was left (${left})`);
+      // Back to its top for the steps after.
+      await page.eval(`(() => { document.querySelector('${players}').scrollTop = 0; return true; })()`);
+      await sleep(400);
+    },
+    expect: [{ text: 'Find Players' }, { text: 'Open hits' }],
+  },
+  {
     name: 'feed',
     title: 'Feed tab',
     async run(page) {
@@ -1218,7 +1289,7 @@ const STEPS = [
       await page.tap({ label: /^Session\. Start one now/ });
     },
     expect: [{ label: /^This week: / }, { label: /^Start a session/ }, { label: /^Log it: / }, { label: 'Log one yourself' }],
-    // Back on Community where + was pressed (still scrolled down, so its tab rather than "Find Players"). Then
+    // Back on Community where + was pressed (its section row now stays in view, but a label is the surer find). Then
     // once more, through a session's Log it (Oct 16: the sheet hands over and grows into its "Log it" page), and
     // that page's back slides it away again, nothing logged.
     after: async (page) => {

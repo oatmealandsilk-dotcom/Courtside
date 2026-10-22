@@ -351,6 +351,8 @@ export function PaneScroller({ memoryKey, active, onRefresh, scrollRef, offsetY,
         <Reanimated.ScrollView
           ref={(node: unknown) => { list(node as never); scroller.current = node as unknown as ScrollView | null; if (scrollRef) scrollRef.current = node as unknown as ScrollView | null; }}
           style={styles.flex}
+          // The auto-tester finds each section's scroller by this (scripts/smoke.mjs, community-swipe-still).
+          testID={`pane-${memoryKey}`}
           contentContainerStyle={[styles.content, verticalOnlyTouch, strip > 0 && viewH > 0 ? { minHeight: viewH + strip } : null]}
           onLayout={(e) => { const h = Math.round(e.nativeEvent.layout.height); if (h > 0 && h !== viewH) setViewH(h); }}
           scrollEnabled={!swiping}
