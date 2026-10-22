@@ -41,7 +41,8 @@ export function Duration({ minutes, size, color, unitColor, play = false, delay 
   const unitStyle = { ...font('500'), fontSize: unit, lineHeight: unitLine, color: unitColor, marginBottom: unitScale == null ? Math.round(size * 0.1) : lift(size, Math.round(size * 1.08), unit, unitLine), marginLeft: unitScale == null ? Math.max(1, Math.round(size * 0.03)) : Math.max(2, Math.round(size * 0.1)), ...textStyle };
   // Units on the baseline ("3h 31m" in a post's stats) read as words, so each pair gets a word's space
   // before the next figure; the headline's tiny raised units keep their tight set.
-  const between = unitScale == null ? Math.round(size * 0.12) : Math.round(size * 0.3);
+  // A small one in a list's right column keeps a narrower space, so it never crowds its label.
+  const between = unitScale == null ? Math.round(size * 0.12) : size >= 17 ? Math.round(size * 0.3) : Math.round(size * 0.2);
   return (
     <View style={[styles.row, style]} accessible accessibilityRole="text" accessibilityLabel={spokenDuration(minutes)}>
       {parts.map((p, i) => (

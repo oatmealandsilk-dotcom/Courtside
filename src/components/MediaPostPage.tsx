@@ -40,7 +40,7 @@ import { postZones, zoneColors } from '@/features/activity/zones';
 import { hasSessionStats } from '@/features/activity/format';
 import { compactNumber, relativeTime } from '@/lib/format';
 import type { Post, User } from '@/data/types';
-import { colors, radius, spacing, typography } from '@/theme';
+import { colors, spacing, typography } from '@/theme';
 import { tagsNotInCaption } from '@/features/feed/tags';
 import { openPlayer } from '@/features/navigation/openPlayer';
 import { PhotoCarousel } from '@/components/PhotoCarousel';
@@ -113,6 +113,9 @@ const LANE_MIN = 400;
  * its shape. Any more and the whole photo shows (see frameSize).
  */
 const TRIM_SLACK = 0.03;
+/** The picture's corner: the same as a session's stats card just under it (SessionStrip). */
+const FRAME_RADIUS = 18;
+
 /** How soft the bands beside a photo standing whole in a wider frame are drawn, in points on screen. */
 const BAND_BLUR = 24;
 /**
@@ -164,7 +167,7 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
   const openFull = () => {
     const node = frameRef.current;
     if (!node) { setFull(true); return; }
-    node.measureInWindow((x, y, w, h) => { setHome(w > 0 && h > 0 ? { x, y, width: w, height: h, radius: radius.lg } : undefined); setFull(true); });
+    node.measureInWindow((x, y, w, h) => { setHome(w > 0 && h > 0 ? { x, y, width: w, height: h, radius: FRAME_RADIUS } : undefined); setFull(true); });
   };
   const closeFull = () => { if (zoom.current) zoom.current.close(); else setFull(false); };
   useEffect(() => { if (!post.videoUrl) { if (full) void allowTurning(); else void stayUpright(); } }, [full, post.videoUrl]);
@@ -479,7 +482,7 @@ const styleDefinitions = StyleSheet.create({
   // The bottom keeps clear of the bar at its full size (see VerticalPager).
   page: { flex: 1, backgroundColor: colors.bg, paddingHorizontal: spacing.md, paddingBottom: spacing.md + BAR_OVERLAY_PX, alignItems: 'center' },
   column: { flex: 1, width: '100%', gap: spacing.md },
-  frame: { borderRadius: radius.lg, overflow: 'hidden', backgroundColor: '#000' },
+  frame: { borderRadius: FRAME_RADIUS, overflow: 'hidden', backgroundColor: '#000' },
   // Instagram's tall post: 4:5 by default, so the picture is big without taking the page.
   frameTall: { alignSelf: 'center' },
   // A wide video: the same rounding as every picture in the feed, the video's own shape.
@@ -505,8 +508,9 @@ const styleDefinitions = StyleSheet.create({
   subRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: spacing.sm, rowGap: spacing.xs },
   sub: { ...typography.small, lineHeight: 17, color: colors.textFaint, flexShrink: 1 },
   // 18 points between glyphs, each button a full 44-point square (a browser has no hitSlop); the row
-  // is pulled out by the padding at its ends, and up and down, so it takes the room it always did.
-  actions: { flexDirection: 'row', alignItems: 'center', marginHorizontal: -9, marginVertical: -6 },
+  // is pulled out by the padding at its ends, and up and down, so the touch room adds no gap: caption,
+  // buttons and the comment line sit on one even step under the card.
+  actions: { flexDirection: 'row', alignItems: 'center', marginHorizontal: -9, marginVertical: -8 },
   action: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, minHeight: 44, minWidth: 44, paddingHorizontal: 9 },
   like: { flexDirection: 'row', alignItems: 'center' },
   actionBeforeCount: { paddingRight: 3 },

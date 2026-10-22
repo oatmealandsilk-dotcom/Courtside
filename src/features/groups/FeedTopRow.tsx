@@ -81,6 +81,16 @@ const TAP_BAND = TOP_BAND_TOP + TOP_BAND_HEIGHT - 4;
  * A browser cannot tell (react-native-web always answers yes), so there the row comes back whenever
  * one of its words gets the focus instead.
  */
+/**
+ * Focus from the keyboard (or a screen reader) keeps the row in; a tap that leaves a word
+ * focused in a browser does not, or the row would never leave again after picking a feed.
+ */
+function keyFocus(e: unknown) {
+  if (Platform.OS !== 'web') return true;
+  const target = (e as { target?: { matches?: (q: string) => boolean } } | undefined)?.target;
+  try { return !!target?.matches?.(':focus-visible'); } catch { return true; }
+}
+
 function useScreenReader() {
   const [on, setOn] = useState(false);
   useEffect(() => {
@@ -213,7 +223,7 @@ export function FeedTopRow({ groups, selected, onSelect, onPlus, onPicture, hidd
                     accessibilityState={{ selected: on }}
                     accessibilityLabel={w.id === 'activities' ? 'Activities' : w.id ? `${w.name}, group feed` : 'For you'}
                     hitSlop={{ top: 10, bottom: 10, left: 4, right: 4 }}
-                    onFocus={() => setFocusIn(true)}
+                    onFocus={(e) => { if (keyFocus(e)) setFocusIn(true); }}
                     onBlur={() => setFocusIn(false)}
                     onPress={() => { if (on) return; haptics.tap(); const id = w.id; glideTo(key, () => onSelect(id)); }}
                     onLayout={(e) => { const width = e.nativeEvent.layout.width; setWidths((m) => (m[key] === width ? m : { ...m, [key]: width })); }}
@@ -226,7 +236,7 @@ export function FeedTopRow({ groups, selected, onSelect, onPlus, onPicture, hidd
           </Animated.View>
         </View>
         <Animated.View style={[styles.plusSpot, plusSlide, { opacity: ready }]}>
-          <Pressable accessibilityRole="button" accessibilityLabel={waiting ? 'Find or start a group, someone is asking to join yours' : 'Find or start a group'} hitSlop={10} onFocus={() => setFocusIn(true)} onBlur={() => setFocusIn(false)} onPress={onPlus} style={styles.plusHit}>
+          <Pressable accessibilityRole="button" accessibilityLabel={waiting ? 'Find or start a group, someone is asking to join yours' : 'Find or start a group'} hitSlop={10} onFocus={(e) => { if (keyFocus(e)) setFocusIn(true); }} onBlur={() => setFocusIn(false)} onPress={onPlus} style={styles.plusHit}>
             <Ionicons name="add" size={22} color={ink} style={[{ opacity: 0.85 }, edge]} />
             {waiting ? <View style={styles.waiting} /> : null}
           </Pressable>

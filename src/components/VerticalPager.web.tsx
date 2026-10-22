@@ -10,7 +10,7 @@ import { PULL_DISARM, PULL_DISC, PULL_GAP, PULL_MIN_SPIN, PULL_RETURN, WEB_HOME_
 import { colors } from '@/theme';
 import { useTheme } from '@/theme/ThemeProvider';
 import { useTopRowHint } from '@/lib/topRowHint';
-import { followRow, settleRow, showRow } from '@/features/feed/topRowScroll';
+import { AT_REST, NO_DRAG, dragFrom, followRow, offPage, settleRow, showRow, type RowDrag } from '@/features/feed/topRowScroll';
 
 export interface VerticalPagerHandle { scrollToTop: () => void }
 
@@ -71,10 +71,16 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, {
   const sheetStyle = useAnimatedStyle(() => ({ transform: [{ translateY: gap.value }], borderTopLeftRadius: gap.value > 2 ? 22 : 0, borderTopRightRadius: gap.value > 2 ? 22 : 0 }));
   const rowStyle = useAnimatedStyle(() => ({ opacity: pullRowOpacity(gap.value), transform: [{ translateY: pullRowLift(gap.value) }] }));
   const cornerStyle = useAnimatedStyle(() => ({ opacity: pullRowOpacity(gap.value) }));
-  const pager = useRef<HTMLDivElement>(null);
   // The top row, the same as on the phone: a finger held still brings it back (lib/topRowHint); the scroll below moves it.
+  const pager = useRef<HTMLDivElement>(null);
   const rowRef = useRef(row); rowRef.current = row;
-  const hint = useTopRowHint(row ? () => showRow(rowRef.current) : undefined);
+  // Only with the feed resting on a page: held part way through a drag, the next page's name is right under it.
+  const hint = useTopRowHint(row ? () => {
+    const el = pager.current;
+    if (el && !gliding.current && offPage(el.scrollTop, el.clientHeight) < AT_REST) showRow(rowRef.current);
+  } : undefined);
+  // Where the finger's drag started (see features/feed/topRowScroll): a spring back to that page leaves the row as it was.
+  const rowDrag = useRef<RowDrag>(NO_DRAG);
   const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Position as a fraction of a page: the bar ducking changes this box's
   // height, which shifts the pixel position by itself; fractions stay put,
@@ -156,6 +162,7 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, {
       drag.current = null;
       stop();
       userMoved.current = true;
+      rowDrag.current = NO_DRAG;
       // Let the browser own trackpad movement, momentum and snap selection.
       // No preventDefault, finger-up timer, or synthetic scroll increments.
       el.style.scrollSnapType = 'y mandatory';
@@ -251,7 +258,7 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, {
           target=target.parentElement;
         }
         point.active=true;
-        if(!point.scroll)userMoved.current=true;
+        if(!point.scroll){userMoved.current=true;if(rowRef.current&&event.currentTarget.clientHeight)rowDrag.current=dragFrom(rowRef.current,Math.round(point.top/event.currentTarget.clientHeight));}
         event.currentTarget.setPointerCapture(event.pointerId);
         event.currentTarget.style.scrollSnapType='none';
       }
@@ -272,6 +279,7 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, {
       const distance = point.y - event.clientY;
       const speed = performance.now()-point.lastTime < 100 ? point.velocity : 0;
       const step = pagerStep(distance, speed, el.clientHeight);
+      if(rowDrag.current.page>=0)rowDrag.current={...rowDrag.current,net:distance,lifted:true};
       settle(el, (Math.round(point.top / el.clientHeight) + step) * el.clientHeight);
     }}
     onPointerCancel={event=>{
@@ -293,7 +301,7 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, {
         const dir = Math.abs(dy) > 0.3 ? (dy > 0 ? 1 : -1) : 0;
         if (dir !== 0 && dir !== barDir.current) { barDir.current = dir; glideBar(dir > 0); }
         // The Feed's top row moves with the feed: forward takes it out, back brings it in (a jump of half a page at once is code, not a finger).
-        if (rowRef.current && Math.abs(dy) < el.clientHeight / 2) followRow(rowRef.current, dy);
+        if (rowRef.current && Math.abs(dy) < el.clientHeight / 2) followRow(rowRef.current, dy, offPage(el.scrollTop, el.clientHeight), rowDrag.current);
       }
       lastFrac.current = frac;
       // Quiet for a beat after the last movement means the page has landed
@@ -305,8 +313,12 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, {
         if (drag.current?.active || gliding.current) return;
         barDir.current = 0;
         commit(el);
-        // At rest the row is all the way in or out, and always in on the first page.
-        settleRow(rowRef.current, el.scrollTop < el.clientHeight / 2);
+        // At rest the row is all the way in or out, and always in on the first page; back on
+        // the page a finger started from, it is as it was then (or in, if the finger pulled back).
+        const page = Math.round(el.scrollTop / el.clientHeight);
+        const back = rowDrag.current.page >= 0 && rowDrag.current.page === page ? rowDrag.current : null;
+        rowDrag.current = NO_DRAG;
+        settleRow(rowRef.current, page === 0, back);
         onSettled?.(Math.round(el.scrollTop / Math.max(1, el.clientHeight)));
       }, 160);
     }}

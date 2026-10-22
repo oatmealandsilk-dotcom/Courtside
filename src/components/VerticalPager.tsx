@@ -10,7 +10,7 @@ import * as haptics from '@/lib/haptics';
 import { PULL_DISARM, PULL_DISC, PULL_GAP, PULL_LAND_SLACK, PULL_LINE, PULL_MIN_SPIN, PULL_RETURN, pullFetch, pullRowLift, pullRowOpacity } from '@/lib/pullRefresh';
 import { colors } from '@/theme';
 import { useTopRowHint } from '@/lib/topRowHint';
-import { followRow, settleRow, showRow } from '@/features/feed/topRowScroll';
+import { AT_REST, NO_DRAG, dragFrom as rowDragFrom, followRow, offPage, settleRow, showRow, type RowDrag } from '@/features/feed/topRowScroll';
 
 /**
  * Full-height pages that snap one at a time. The active page changes once a
@@ -168,8 +168,24 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
   // it or a neighbour (snapOffsets below), so a hard flick moves one page.
   const [around, setAround] = useState(initialIndex);
   setAroundRef.current = setAround;
-  // The top row: a finger held still brings it back (lib/topRowHint); the scroll below moves it.
-  const hint = useTopRowHint(row ? () => showRow(row) : undefined);
+  // The top row: a finger held still brings it back (lib/topRowHint), but only with the feed
+  // resting on a page: held part way through a drag, the next page's name is right under it.
+  // The scroll below moves it.
+  const lastY = useSharedValue(-1);
+  const pageH = useSharedValue(1);
+  const rowDrag = useSharedValue<RowDrag>(NO_DRAG);
+  const holdRow = useCallback(() => {
+    if (!row) return;
+    runOnUI(() => {
+      'worklet';
+      if (lastY.value < 0 || offPage(lastY.value - top, pageH.value) < AT_REST) showRow(row);
+    })();
+  }, [row, top]); // eslint-disable-line react-hooks/exhaustive-deps
+  const hint = useTopRowHint(row ? holdRow : undefined);
+  // While the row is out, a tap on the clock must not throw the feed back to its first post
+  // (iOS's own "tap the status bar" scroll); the strip just under the clock brings the row back.
+  const [rowAway, setRowAway] = useState(false);
+  useAnimatedReaction(() => !!row && row.value > 0.5, (now, before) => { if (now !== before) runOnJS(setRowAway)(now); }, [row]);
   const settled = useCallback((y: number) => {
     swiping.value = false;
     const from = last.current;
@@ -178,9 +194,13 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
     onSettled?.(last.current);
     // Only a finger's own swipe that ends on another page counts as a swipe (onSwiped).
     if (fingerMoved.current) { fingerMoved.current = false; if (last.current !== from) onSwiped?.(last.current); }
-    // At rest the row is all the way in or out, and always in on the first page.
-    settleRow(row, last.current === 0);
-  }, [changed, pageOf, onSettled, onSwiped, row]);
+    // At rest the row is all the way in or out, and always in on the first page; back on
+    // the page a finger started from, it is as it was then (or in, if the finger pulled back).
+    const drag = rowDrag.value;
+    const back = drag.page >= 0 && drag.page === last.current ? drag : null;
+    if (drag.page >= 0 && !back) rowDrag.value = NO_DRAG;
+    settleRow(row, last.current === 0, back);
+  }, [changed, pageOf, onSettled, onSwiped, row, rowDrag]);
   const dragFrom = useCallback((y: number) => setAround(pageOf(y)), [pageOf]);
   settledRef.current = settled;
   const dragEnded = useCallback((y: number) => {
@@ -194,7 +214,6 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
   // Everything per frame stays on the UI thread: the bar follows the swipe
   // (moving on tucks it, coming back lifts it), and only a change of page
   // crosses to the JavaScript side.
-  const lastY = useSharedValue(-1);
   // Which way the bar was last sent this swipe (1 tucked, -1 up, 0 not yet); cleared as each swipe begins.
   const barDir = useSharedValue(0);
   const lastIndex = useSharedValue(initialIndex);
@@ -227,15 +246,17 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
         if (dir !== 0 && dir !== barDir.value) { barDir.value = dir; glideBar(dir > 0); }
         // The top row moves with the feed, frame by frame: forward takes it out, back brings it in.
         // Up in the pull strip it is always in. A jump of more than half a page in one frame is code, not a finger.
-        if (row) { if (y < top) showRow(row); else if (Math.abs(dy) < h / 2) followRow(row, dy); }
+        if (row) { if (y < top) showRow(row); else if (Math.abs(dy) < h / 2) followRow(row, dy, offPage(y - top, h), rowDrag.value); }
       }
       lastY.value = y;
+      pageH.value = h;
       const index = Math.max(0, Math.min(count - 1, Math.round((y - top) / h)));
       if (index !== lastIndex.value) { lastIndex.value = index; if (!swiping.value) runOnJS(changed)(index); }
     },
     onBeginDrag: (e) => {
       if (IOS) runOnJS(dragFrom)(e.contentOffset.y);
       barDir.value = 0;
+      if (row) rowDrag.value = rowDragFrom(row, Math.max(0, Math.round((e.contentOffset.y - top) / (pageH.value || 1))));
       dragging.value = true;
       swiping.value = true;
       // A second swipe within the last one's 140ms settle wait: drop that wait, or it would land
@@ -256,6 +277,8 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
       dragging.value = false;
       runOnJS(setPageScrolling)(false);
       const y = e.contentOffset.y;
+      const d = rowDrag.value;
+      if (d.page >= 0 && !d.lifted) rowDrag.value = { ...d, net: y - (top + d.page * pageH.value), lifted: true };
       if (top > 0 && !holding.value) {
         // Where the feed would coast to on its own, from its speed alone,
         // before the page stops have their say.
@@ -342,6 +365,7 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
           contentOffset={{ x: 0, y: top + startIndex.current * height }}
           decelerationRate="fast"
           showsVerticalScrollIndicator={false}
+          scrollsToTop={!rowAway}
           scrollEventThrottle={16}
           onScroll={onScroll}
           scrollEnabled={!scrollLocked}

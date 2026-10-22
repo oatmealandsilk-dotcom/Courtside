@@ -25,11 +25,50 @@ const SETTLE_OUT = 180;
 const SETTLE_IN = 220;
 const EASE = Easing.bezier(0.22, 1, 0.36, 1);
 
-/** The feed moved `dy` points (forward is positive): the row moves with it. */
-export function followRow(row: SharedValue<number>, dy: number) {
+/**
+ * Coming back a page, the row stays out of the way of the page sliding in under it
+ * (the row has no backing, so words would pass under words, Oct 22 review): it is
+ * held out while the feed is more than this far from a page's resting place, and
+ * slides in over the last ROW_TRAVEL points with that page's own header. A short
+ * pull back at rest (less than this) leaves it where it is.
+ */
+export const ROW_FREE = 64;
+/** Within this many points of a page's resting place, the feed counts as resting on it (a hold may bring the row back). */
+export const AT_REST = 4;
+
+/** How far (points) the feed is from the nearest page's resting place; `y` is measured from the first page's top. */
+export function offPage(y: number, h: number) {
+  'worklet';
+  if (h <= 0) return 0;
+  const r = ((y % h) + h) % h;
+  return Math.min(r, h - r);
+}
+
+/**
+ * What a finger's drag started from: the page, whether the row was in (0) or out (1),
+ * and once the finger is up, which way it moved overall (forward positive).
+ */
+export interface RowDrag { page: number; snap: number; net: number; lifted: boolean }
+export const NO_DRAG: RowDrag = { page: -1, snap: 0, net: 0, lifted: false };
+
+/** A finger went down on the feed resting on `page`. */
+export function dragFrom(row: SharedValue<number>, page: number): RowDrag {
+  'worklet';
+  return { page, snap: row.value >= 0.5 ? 1 : 0, net: 0, lifted: false };
+}
+
+/**
+ * The feed moved `dy` points (forward is positive) and now sits `off` points from the
+ * nearest page's resting place: the row moves with it. After the finger lifts, a
+ * move against the drag (the page springing back where it started) does not count,
+ * or a pull back would end with the row out and a nudge forward with it in.
+ */
+export function followRow(row: SharedValue<number>, dy: number, off: number, drag?: RowDrag) {
   'worklet';
   if (!dy) return;
-  const next = Math.max(0, Math.min(1, row.value + dy / ROW_TRAVEL));
+  const against = !!drag && drag.page >= 0 && drag.lifted && Math.sign(dy) !== Math.sign(drag.net);
+  let next = against ? row.value : Math.max(0, Math.min(1, row.value + dy / ROW_TRAVEL));
+  if (dy < 0) next = Math.max(next, Math.max(0, Math.min(1, (off - ROW_FREE) / ROW_TRAVEL)));
   if (next !== row.value) row.value = next;
 }
 
@@ -40,13 +79,17 @@ export function showRow(row: SharedValue<number> | undefined) {
   row.value = withTiming(0, { duration: SETTLE_IN, easing: EASE });
 }
 
-/** The feed has come to rest: the row finishes the way it was going, never left half out. */
-export function settleRow(row: SharedValue<number> | undefined, firstPage: boolean) {
+/**
+ * The feed has come to rest: the row finishes the way it was going, never left half out,
+ * and always in on the first page. Landed back on the page the finger started from,
+ * it is as it was then, or in if the finger pulled back.
+ */
+export function settleRow(row: SharedValue<number> | undefined, firstPage: boolean, back?: RowDrag | null) {
   'worklet';
   if (!row) return;
   if (firstPage) { showRow(row); return; }
   const v = row.value;
-  if (v === 0 || v === 1) return;
-  const to = v >= 0.5 ? 1 : 0;
+  const to = back ? (back.net < 0 ? 0 : back.snap) : v >= 0.5 ? 1 : 0;
+  if (v === to) return;
   row.value = withTiming(to, { duration: to ? SETTLE_OUT : SETTLE_IN, easing: EASE });
 }
