@@ -25,6 +25,8 @@ import { canShareMediaStory, shareMediaToStory, type StoryMediaKind } from '@/fe
 import { stageSize } from '@/features/share/storyImage';
 import { StoryOverlayCanvas } from '@/components/share/StoryOverlay';
 import { CourtSpinner } from '@/components/CourtSpinner';
+import { HeightGlide } from '@/components/ui/HeightGlide';
+import Reanimated, { FadeIn } from 'react-native-reanimated';
 import { useOpenOutside } from '@/features/share/openOutside';
 import { useAndroidBack } from '@/lib/androidBack';
 import { useDemotedPosts } from '@/features/feed/demoted';
@@ -506,13 +508,19 @@ export default function PostMenu() {
     </ScrollView>
   );
 
+  // Which panel the sheet shows; once it has changed, each new one fades in.
+  const bodyKey = !item ? 'gone' : done ? 'done' : working ? 'working' : 'list';
+  const firstBody = useRef(bodyKey);
+  const bodyChanged = useRef(false);
+  if (bodyKey !== firstBody.current) bodyChanged.current = true;
+
   return (
     <View style={styles.backdrop}>
       <SheetBackdrop leaving={leaving} />
       <Pressable accessibilityRole="button" accessibilityLabel="Close menu" onPressIn={close} style={StyleSheet.absoluteFill} />
       <Animated.View
         {...sheetPan.panHandlers}
-        onLayout={(e) => { const h = Math.ceil(e.nativeEvent.layout.height); if (h > 0) setSheetH(h + 24); }}
+        onLayout={(e) => { const h = Math.ceil(e.nativeEvent.layout.height); if (h > 0) setSheetH((was) => (Math.abs(was - (h + 24)) > 32 ? h + 24 : was)); }}
         style={[
           styles.sheet,
           // On a dark court the page behind is dimmed to almost the sheet's own colour: a step lighter keeps its edge.
@@ -545,7 +553,13 @@ export default function PostMenu() {
         <View {...grabberPan.panHandlers} style={styles.grabberStrip}>
           <View style={styles.grabber} />
         </View>
-        {body}
+        {/* Report → Thanks, or Story → "Getting your clip ready": the new panel fades in as the
+            sheet's top edge glides to its new height, instead of both changing in one frame (Oct 22). */}
+        <HeightGlide duration={260}>
+          <Reanimated.View key={bodyKey} entering={bodyChanged.current ? FadeIn.duration(200) : undefined}>
+            {body}
+          </Reanimated.View>
+        </HeightGlide>
       </Animated.View>
     </View>
   );
