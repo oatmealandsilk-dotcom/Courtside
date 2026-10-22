@@ -12,7 +12,7 @@ import { RECORD_ICON, RECORD_LABEL, recordValue } from '@/features/records/recor
 import { CardWash, type CardLook } from '@/components/session/SessionCard';
 import { duration } from '@/lib/format';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import { colors, font, lift, radius, spacing, typography, withAlpha } from '@/theme';
+import { colors, font, lift, radius, spacing, typography, withAlpha, wordmarkFont } from '@/theme';
 
 const DAY_LETTERS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
@@ -279,7 +279,7 @@ const styleDefinitions = StyleSheet.create({
   top: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   label: { ...typography.caption, fontSize: 12, letterSpacing: 1.4, color: colors.brand },
   mark: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  markText: { ...font('600'), fontSize: 13, color: colors.brand },
+  markText: { ...wordmarkFont('600'), fontSize: 13, color: colors.brand },
   bigRow: { flexDirection: 'row', alignItems: 'baseline', gap: 6, marginTop: spacing.sm },
   big: { ...font('600'), fontSize: 64, lineHeight: 70, letterSpacing: -2.5, color: colors.text, fontVariant: ['tabular-nums'] },
   bigSmall: { ...font('600'), fontSize: 30, letterSpacing: -1, color: colors.text, fontVariant: ['tabular-nums'] },

@@ -3,7 +3,7 @@ import { useSoundMuted } from '@/features/feed/sound';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import React, { useContext, useEffect, useRef, useState, memo } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors } from '@/theme';
+import { colors, fontFamily } from '@/theme';
 import { onSpaceBar } from '@/features/feed/keyboard';
 import { forgetHeld, holdUntilBack, pageAway } from '@/features/feed/pauseWhenHidden';
 import { CourtSpinner } from './CourtSpinner';
@@ -282,7 +282,7 @@ function ClipPlaybackInner({ uri, poster, active: wanted, preload = false, prelo
   return <div style={{ position: 'absolute', inset: 0, background: letterbox ? '#000' : undefined, display: 'flex', alignItems: 'center' }}>
     <div style={{ ...cropCss(crop), display: 'flex', alignItems: 'center' }}>
       <video ref={video} src={uri} poster={poster} loop muted={muted || silent} playsInline preload={fetchHint} onSuspend={(e) => stopped(e.currentTarget)} onCanPlayThrough={() => setThrough(true)} onProgress={(e) => filled(e.currentTarget)} onLoadedMetadata={(e) => { if (fetchHint === 'metadata') stopped(e.currentTarget); }} onError={fail} onLoadedData={() => { if (loadAt.current > 0) { noteClipLoad(Date.now() - loadAt.current); loadAt.current = 0; } setReady(true); }} onCanPlay={() => setReady(true)} onWaiting={() => setReady(false)} onPlaying={() => setReady(true)} style={{ width: '100%', height: '100%', objectFit: letterbox ? 'contain' : fit, pointerEvents: 'none' }} />
-      {failed ? <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}><span style={{ padding: '8px 14px', borderRadius: 999, background: 'rgba(0,0,0,0.55)', color: 'white', font: '600 13px Inter_600SemiBold, system-ui, sans-serif' }}>This video didn’t load</span></div> : null}
+      {failed ? <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}><span style={{ padding: '8px 14px', borderRadius: 999, background: 'rgba(0,0,0,0.55)', color: 'white', font: `600 13px ${fontFamily.semibold}` }}>This video didn’t load</span></div> : null}
     </div>
     {/* Over the picture, under the disc: the top shade darkens the video, never the disc. */}
     {discInk && !bare ? <div aria-hidden="true" style={{ position: 'absolute', left: 0, right: 0, top: 0, height: insets.top + TOP_SHADE.below, background: TOP_SHADE_CSS, pointerEvents: 'none' }} /> : null}
@@ -326,7 +326,7 @@ function ClipPlaybackInner({ uri, poster, active: wanted, preload = false, prelo
     </div>}
     {spin ? <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}><CourtSpinner ink={discInk ?? 'white'} /></div> : null}
     {fast ? <div aria-live="polite" style={{ position: 'absolute', left: 0, right: 0, top: insets.top + drop + 24, display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>
-      <span style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 999, background: 'rgba(0,0,0,0.55)', color: 'white', font: '700 14px Inter_700Bold, system-ui, sans-serif' }}><Ionicons name="play-forward" size={13} color="white" />2×</span>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 999, background: 'rgba(0,0,0,0.55)', color: 'white', font: `700 14px ${fontFamily.bold}` }}><Ionicons name="play-forward" size={13} color="white" />2×</span>
     </div> : null}
   </div>;
 }

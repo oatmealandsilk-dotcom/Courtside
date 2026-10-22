@@ -14,7 +14,7 @@ import { LAUNCH_FADE_MS, LAUNCH_MAX_MS, hideLaunch, launchShowing } from '@/lib/
 import { LaunchMark } from '@/components/LaunchMark';
 import { BrandMark } from '@/components/BrandMark';
 import { useApp } from '@/store/AppContext';
-import { colors, lightColors, spacing, typography, font } from '@/theme';
+import { colors, lightColors, spacing, typography, font, wordmarkFont } from '@/theme';
 import { Button } from '@/components/ui';
 import { leaveGently } from '@/components/SignOutCurtain';
 
@@ -234,7 +234,7 @@ const styleDefinitions = StyleSheet.create({
   brand: { alignItems: 'center', gap: 22 },
   failTitle: { ...typography.title, color: colors.text, textAlign: 'center' },
   failBody: { ...typography.body, color: colors.textMuted, textAlign: 'center', maxWidth: 320 },
-  wordmark: { fontSize: 30, ...font('700'), color: colors.brand, letterSpacing: -0.9 },
+  wordmark: { fontSize: 30, ...wordmarkFont('700'), color: colors.brand, letterSpacing: -0.9 },
   tagline: {
     position: 'absolute',
     bottom: 91, // where the launch image draws it too

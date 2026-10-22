@@ -15,7 +15,7 @@ import { sessionPeople } from '@/features/activity/sessionTags';
 import { postZones, zoneColors } from '@/features/activity/zones';
 import { distanceFigure } from '@/features/activity/workouts';
 import { useTheme, type ThemeName } from '@/theme/ThemeProvider';
-import { colors, font, pageIsDark, withAlpha } from '@/theme';
+import { colors, font, pageIsDark, withAlpha, wordmarkFont } from '@/theme';
 import { Duration, Figure } from './Duration';
 import { Pop } from './Pop';
 import { ZoneBar } from './ZoneBar';
@@ -405,7 +405,7 @@ export function SessionCard({ session, width, height, play = false, people, hidd
         <View style={[styles.brand, { gap: 6 * k, marginTop: 14 * k, paddingTop: 12 * k, borderTopColor: look.lines }, clear && { borderTopWidth: Math.max(1, 1.5 * k) }]}>
           {/* Clear: the Overlay's mark and wordmark, CourtSide's bright green with its soft dark shadow. */}
           {clear ? <ShadedMark size={Math.round(small(17, 12))} u={k * 0.5} color={colors.brandBright} halo="dark" /> : <BrandMark size={Math.round(small(17, 12))} color={look.figure} />}
-          <Text style={{ ...font('600'), fontSize: small(14, 10), letterSpacing: -0.35 * k, color: clear ? colors.brandBright : look.ink, ...(clear ? clearWordShade(k * 0.5) : null) }} maxFontSizeMultiplier={1}>CourtSide</Text>
+          <Text style={{ ...wordmarkFont('600'), fontSize: small(14, 10), letterSpacing: -0.35 * k, color: clear ? colors.brandBright : look.ink, ...(clear ? clearWordShade(k * 0.5) : null) }} maxFontSizeMultiplier={1}>CourtSide</Text>
           <View style={{ flex: 1 }} />
           <Text style={{ ...font('500'), fontSize: small(11, 9), color: look.faint, ...shade }} maxFontSizeMultiplier={1}>courtsidebase.com</Text>
         </View>

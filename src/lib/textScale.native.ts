@@ -20,12 +20,15 @@ const ANDROID = Platform.OS === 'android';
 /*
  * Android only (Oct 5), also set once here for every text and text box.
  *
- * Bold Inter. Each weight of Inter is a family of its own, loaded as the
- * family's normal face. Android then reads fontWeight 700 as "the bold face
- * of this family", finds none, and falls back to the phone's own font
- * (Roboto Bold): every bold title, badge and card was in the wrong typeface.
- * So a bold Inter on Android is drawn as the Inter Bold family itself, with
- * no weight on top. 400 to 600 were never affected.
+ * Bold Inter. Since Oct 22 the app is set in the phone's own font, which
+ * takes its weight from fontWeight like any system font; only the CourtSide
+ * wordmark is still Inter. Each weight of Inter is a family of its own,
+ * loaded as the family's normal face. Android reads fontWeight 700 as "the
+ * bold face of this family", finds none, and falls back to the phone's own
+ * font (Roboto Bold). So a bold Inter on Android is drawn as its own family
+ * with no weight on top (a lighter Inter asked to be bold becomes Inter
+ * Bold; Inter Bold and ExtraBold stay themselves). 400 to 600 were never
+ * affected, and the phone's own font is left alone.
  *
  * Font padding. Android adds extra room above and below each line of text
  * unless told not to, so a label sat a point or two lower in its pill than
@@ -49,7 +52,8 @@ function interBold(style: unknown): unknown {
   if (!style) return style;
   const flat = StyleSheet.flatten(style as TextStyle) as TextStyle | undefined;
   if (!flat || typeof flat.fontFamily !== 'string' || !flat.fontFamily.startsWith('Inter_') || !boldWeight(flat.fontWeight)) return style;
-  return [style, { fontFamily: BOLD_INTER, fontWeight: 'normal' }];
+  const ownBold = flat.fontFamily === BOLD_INTER || flat.fontFamily === 'Inter_800ExtraBold';
+  return [style, { fontFamily: ownBold ? flat.fontFamily : BOLD_INTER, fontWeight: 'normal' }];
 }
 
 type Props = Record<string, unknown>;

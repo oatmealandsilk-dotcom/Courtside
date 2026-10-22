@@ -77,7 +77,7 @@ import { isDesktopBrowser } from '@/lib/browserDevice';
 import { useSidePanel } from '@/features/feed/sidePanel';
 import { CLOSE_MS, PAUSE_AT_FULL, SIDE_MIN_WINDOW, STAGE_EASING, STAGE_ON_ANDROID, begin as beginStage, clear as clearStage, currentY, getStage, markEnding, markLost, place as placeStage, stageGeometry, stageKeyOf, stageTop, useStageSelect, type StageSubject } from '@/features/feed/commentStage';
 import { StageChromeContext, useStageMotion, useStagePageChrome } from '@/features/feed/useStageMotion';
-import { colors, radius, typography, spacing, font, lift } from '@/theme';
+import { colors, radius, typography, spacing, font, lift, wordmarkFont } from '@/theme';
 import { isTaggedIn } from '@/features/activity/sessionTags';
 import { useAndroidBack } from '@/lib/androidBack';
 import { TextScale } from '@/theme/textScale';
@@ -2307,7 +2307,7 @@ const styleDefinitions = StyleSheet.create({
   // The mark sits at the far left of the gap, level with the greeting; the greeting and disc in the middle.
   pullGreetingText: { ...typography.bodyStrong, color: colors.text },
   wordmark: {
-    color: colors.brand, ...typography.title, fontSize: 23, ...font('600'), letterSpacing: -0.6,
+    color: colors.brand, ...typography.title, fontSize: 23, ...wordmarkFont('600'), letterSpacing: -0.6,
   },
   // Kept as a hook for anything the wordmark needs over video; the shadow that
   // used to live here was doing more harm than good.

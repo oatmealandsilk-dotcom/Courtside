@@ -5,7 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import type { User } from '@/data/types';
 import type { YearInTennis } from '@/features/wrapped/yearInTennis';
 import { compactNumber } from '@/lib/format';
-import { lightColors as brand, fontFamily } from '@/theme';
+import { lightColors as brand, fontFamily, wordmarkFont } from '@/theme';
 
 /**
  * The year on one 9:16 card, for Instagram Stories: the four biggest numbers
@@ -29,7 +29,7 @@ export function WrappedCard({ year, me, width }: { year: YearInTennis; me?: User
       <View style={{ position: 'absolute', right: -10 * u, top: 140 * u, width: 200 * u, height: 200 * u, borderRadius: 100 * u, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.08)' }} />
       <View style={{ flex: 1, padding: 26 * u, justifyContent: 'space-between' }}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' }}>
-          <Text style={{ fontFamily: fontFamily.bold, fontWeight: '700', fontSize: 20 * u, color: 'white', letterSpacing: -0.3 * u }}>CourtSide</Text>
+          <Text style={{ ...wordmarkFont('700'), fontSize: 20 * u, color: 'white', letterSpacing: -0.3 * u }}>CourtSide</Text>
           <Text style={{ fontFamily: fontFamily.bold, fontWeight: '700', fontSize: 20 * u, color: 'rgba(255,255,255,0.7)', fontVariant: ['tabular-nums'] }}>{year.year}</Text>
         </View>
         <View style={{ gap: 26 * u }}>
@@ -38,7 +38,7 @@ export function WrappedCard({ year, me, width }: { year: YearInTennis; me?: User
             {figures.slice(0, 4).map(([n, label]) => (
               <View key={label} style={{ width: '50%', gap: 2 * u }}>
                 <Text style={{ fontFamily: fontFamily.bold, fontWeight: '700', fontSize: 44 * u, lineHeight: 50 * u, letterSpacing: -1.2 * u, color: 'white', fontVariant: ['tabular-nums'] }}>{n}</Text>
-                <Text style={{ fontFamily: fontFamily.medium, fontSize: 14 * u, color: 'rgba(255,255,255,0.72)' }}>{label}</Text>
+                <Text style={{ fontFamily: fontFamily.medium, fontWeight: '500', fontSize: 14 * u, color: 'rgba(255,255,255,0.72)' }}>{label}</Text>
               </View>
             ))}
           </View>
@@ -50,7 +50,7 @@ export function WrappedCard({ year, me, width }: { year: YearInTennis; me?: User
         </View>
         <View style={{ gap: 4 * u }}>
           {me?.handle ? <Text style={{ fontFamily: fontFamily.semibold, fontWeight: '600', fontSize: 14 * u, color: 'white' }}>@{me.handle}</Text> : null}
-          <Text style={{ fontFamily: fontFamily.medium, fontSize: 11 * u, color: 'rgba(255,255,255,0.6)' }}>app.courtsidebase.com</Text>
+          <Text style={{ fontFamily: fontFamily.medium, fontWeight: '500', fontSize: 11 * u, color: 'rgba(255,255,255,0.6)' }}>app.courtsidebase.com</Text>
         </View>
       </View>
     </View>

@@ -19,7 +19,7 @@ import { formatSpotMiles } from '@/features/players/geo';
 import { getPosition } from '@/lib/geo';
 import { useGateSpace } from '@/lib/useGateSpace';
 import { useApp } from '@/store/AppContext';
-import { colors, font, lift, radius, spacing, typography } from '@/theme';
+import { colors, font, lift, radius, spacing, typography, wordmarkFont } from '@/theme';
 
 /** Further than this, a hit is "further away", not "near you". */
 const NEAR_KM = 40;
@@ -274,7 +274,7 @@ const styleDefinitions = StyleSheet.create({
   column: { width: '100%', maxWidth: 520, alignSelf: 'center', gap: spacing.lg },
   bar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: spacing.sm },
   brand: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  wordmark: { fontSize: 20, ...font('700'), color: colors.brand, letterSpacing: -0.6 },
+  wordmark: { fontSize: 20, ...wordmarkFont('700'), color: colors.brand, letterSpacing: -0.6 },
   signIn: { ...typography.bodyStrong, color: colors.brand },
   hero: { gap: spacing.sm, paddingTop: spacing.sm },
   eyebrowRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },

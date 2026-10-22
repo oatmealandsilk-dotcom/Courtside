@@ -9,7 +9,7 @@ import { colors, surfaceColorFor } from '@/theme';
  * The pins, as HTML: MapLibre draws markers as DOM, in the browser and
  * inside the phone's web view alike, so one builder serves both.
  */
-const FONT = "font:600 11px Inter,system-ui,sans-serif";
+const FONT = "font:600 11px -apple-system,BlinkMacSystemFont,system-ui,sans-serif";
 
 /**
  * A picture address made safe to sit inside url('…') in a style attribute
