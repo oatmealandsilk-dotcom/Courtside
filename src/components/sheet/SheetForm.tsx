@@ -6,7 +6,12 @@ import { LinearGradient } from 'expo-linear-gradient';
 
 import { Chip, BrandWash } from '@/components/ui';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import { colors, font, lift, radius, spacing, typography } from '@/theme';
+import { colors, font, lift as liftDrawn, radius, spacing, typography } from '@/theme';
+import { CALM, CALM_SHEETS } from '@/design/sendToPreview';
+
+// The calm preview's sheets (?ss=b, web): wells in the page's grey, nothing floating on a shadow.
+const lift = CALM_SHEETS ? { boxShadow: 'none' } : liftDrawn;
+const well = CALM_SHEETS ? { backgroundColor: colors.surfaceAlt } : null;
 import { TextScale } from '@/theme/textScale';
 
 /*
@@ -27,7 +32,7 @@ export function SheetTitle({ title, line, lineTone = 'muted', lines = 1, onClose
         {line ? <Text style={[styles.line, lineTone === 'brand' && styles.lineBrand]} numberOfLines={lines}>{line}</Text> : null}
       </View>
       <Pressable accessibilityRole="button" accessibilityLabel="Close" hitSlop={8} onPress={onClose} style={({ pressed }) => [styles.close, pressed && { opacity: PRESS_DIM }]}>
-        <Ionicons name="close" size={18} color={colors.textMuted} />
+        <Ionicons name="close" size={CALM_SHEETS ? 15 : 18} color={colors.textMuted} />
       </Pressable>
     </View>
   );
@@ -242,10 +247,10 @@ export const formBody = { padding: spacing.lg, paddingTop: spacing.md, gap: 20, 
 
 const styleDefinitions = StyleSheet.create({
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingBottom: spacing.xs },
-  title: { ...typography.title, fontSize: 24, letterSpacing: -0.8, color: colors.text },
+  title: CALM_SHEETS ? { ...typography.heading, letterSpacing: -0.2, color: colors.text } : { ...typography.title, fontSize: 24, letterSpacing: -0.8, color: colors.text },
   line: { ...typography.small, color: colors.textMuted },
   lineBrand: { color: colors.brand, ...font('600') },
-  close: { ...lift, width: 34, height: 34, borderRadius: 17, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' },
+  close: CALM_SHEETS ? { width: 30, height: 30, borderRadius: 15, backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' } : { ...lift, width: 34, height: 34, borderRadius: 17, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' },
   section: { gap: spacing.sm },
   sectionHead: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.md },
   // Quiet labels: the choices under them carry the page, not the headings.
@@ -259,9 +264,9 @@ const styleDefinitions = StyleSheet.create({
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   chipsFill: { flexWrap: 'nowrap' },
   // The small switch's capsule: white on the soft shadow, like a stepper; only the chosen side is drawn inside it.
-  chipsTrack: { ...lift, flexWrap: 'nowrap', gap: 2, padding: 3, borderRadius: radius.pill, backgroundColor: colors.surface },
+  chipsTrack: { ...lift, flexWrap: 'nowrap', gap: 2, padding: 3, borderRadius: radius.pill, backgroundColor: colors.surface, ...well },
   // The soft pill: white on the page's shadow, with a ring on every pill (clear until chosen) so choosing never shifts the row.
-  pill: { ...lift, minHeight: 38, paddingHorizontal: 15, borderRadius: radius.pill, borderWidth: 1.5, borderColor: 'transparent', backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' },
+  pill: { ...lift, minHeight: 38, paddingHorizontal: 15, borderRadius: radius.pill, borderWidth: 1.5, borderColor: 'transparent', backgroundColor: colors.surface, ...well, alignItems: 'center', justifyContent: 'center' },
   pillSmall: { minHeight: 30, minWidth: 46, paddingHorizontal: 10, backgroundColor: 'transparent', boxShadow: 'none' },
   pillFill: { flex: 1, paddingHorizontal: spacing.sm },
   pillOn: { backgroundColor: colors.brandDim, borderColor: colors.brand, boxShadow: 'none' },
@@ -275,7 +280,7 @@ const styleDefinitions = StyleSheet.create({
   // from their heading, and from the next part, as every other choice on the sheet.
   shadowRoom: { marginVertical: -6 },
   tileRow: { flexDirection: 'row', gap: spacing.sm },
-  tile: { ...lift, minHeight: 64, borderRadius: 18, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', gap: 1 },
+  tile: { ...lift, minHeight: 64, borderRadius: 18, backgroundColor: colors.surface, ...well, alignItems: 'center', justifyContent: 'center', gap: 1 },
   // A day's tile: 58 wide, a little wider only for a longer word on top ("Yesterday").
   tileFixed: { minWidth: 58, paddingHorizontal: 8 },
   tileFlex: { flex: 1 },
@@ -289,7 +294,7 @@ const styleDefinitions = StyleSheet.create({
   fadeRight: { position: 'absolute', right: 0, top: 0, bottom: 0, width: FADE },
   fadeGone: { opacity: 0 },
   submit: { minHeight: 54, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
-  submitOn: { backgroundColor: colors.brand, boxShadow: '0px 8px 20px rgba(0, 0, 0, 0.16)' },
+  submitOn: { backgroundColor: colors.brand, boxShadow: CALM ? 'none' : '0px 8px 20px rgba(0, 0, 0, 0.16)' },
   submitOff: { backgroundColor: colors.surfaceAlt },
   submitBusy: { opacity: 0.92 },
   submitRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },

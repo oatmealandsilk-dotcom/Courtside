@@ -8,6 +8,7 @@ import { useMentionCandidates } from '@/features/mentions/useMentionCandidates';
 import { activeMention, applyMention } from '@/lib/mentions';
 import { useRevealOnFocus } from '@/lib/keyboardScroll';
 import { TextScale } from '@/theme/textScale';
+import { CALM_SHEETS } from '@/design/sendToPreview';
 
 interface Props {
   inputRef?: React.Ref<TextInput>;
@@ -224,8 +225,13 @@ const styleDefinitions = StyleSheet.create({
   hint: { ...typography.small, color: colors.textFaint },
   // A fixed height and no top/bottom padding: iPhone then centres the words and the grey example
   // text itself. With padding, the example sat a line low, half under the box (Oct 6, owner).
-  softLine: { ...lift, borderWidth: 0, borderRadius: radius.pill, height: 52, paddingVertical: 0, fontSize: 16 },
-  softArea: { ...lift, borderWidth: 0, borderRadius: 20, paddingVertical: 14, fontSize: 16, lineHeight: 22 },
+  // The calm preview's sheets (?ss=b, web): the soft box is a flat grey well, not a white pill on a shadow.
+  softLine: CALM_SHEETS
+    ? { borderWidth: 0, backgroundColor: colors.surfaceAlt, borderRadius: radius.md, height: 44, paddingVertical: 0, fontSize: 15 }
+    : { ...lift, borderWidth: 0, borderRadius: radius.pill, height: 52, paddingVertical: 0, fontSize: 16 },
+  softArea: CALM_SHEETS
+    ? { borderWidth: 0, backgroundColor: colors.surfaceAlt, borderRadius: radius.md, paddingVertical: 12, fontSize: 15, lineHeight: 21 }
+    : { ...lift, borderWidth: 0, borderRadius: 20, paddingVertical: 14, fontSize: 16, lineHeight: 22 },
   // The soft box's own grey example on an iPhone: the box's full height, its words centred in it,
   // in from the left as far as the typed words.
   example: { position: 'absolute', top: 0, bottom: 0, left: spacing.lg, right: spacing.lg, justifyContent: 'center' },

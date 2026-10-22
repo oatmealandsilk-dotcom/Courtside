@@ -8,6 +8,7 @@ import { useUsers } from '@/store/AppContext';
 import { initials } from '@/lib/format';
 import { colors, inkOn, radius, font } from '@/theme';
 import { TextScale } from '@/theme/textScale';
+import { SEND_TO_LOOK } from '@/design/sendToPreview';
 
 /**
  * A default picture takes one of the theme's own accents, chosen by the
@@ -45,7 +46,12 @@ export const Avatar = React.memo(function Avatar({ uri, name, seed, size = 40, s
   // Only the people list, not the whole app: a like or a message elsewhere does not redraw every face on screen.
   const users = useUsers();
   const photo = uri ?? users.find(user => user.avatarSeed === seed || user.id === seed)?.avatarUrl;
-  const tint = tintFor(seed);
+  // The calm preview (?ss=a|b, web): a face with no photo is one quiet tone, not a seed's loud accent.
+  // A: Instagram's grey (the well colour, a hairline, muted letters). B: the brand's own pale tint, letters in the brand.
+  const calm = SEND_TO_LOOK === 'now' ? null : SEND_TO_LOOK === 'a'
+    ? { fill: colors.surfaceAlt, ink: colors.textMuted, scale: 0.34, ring: colors.border }
+    : { fill: colors.brandDim, ink: colors.brand, scale: 0.36, ring: undefined };
+  const tint = calm ? calm.fill : tintFor(seed);
   // The fill the initials actually sit on: a caller's own background (the profile's brand disc,
   // the player card's deeper shade) wins over the seed's tint, so the ink is chosen against that.
   const drawn = StyleSheet.flatten(style)?.backgroundColor;
@@ -61,11 +67,12 @@ export const Avatar = React.memo(function Avatar({ uri, name, seed, size = 40, s
           borderRadius: radius.pill,
           backgroundColor: tint,
         },
+        calm?.ring && !photo ? { borderWidth: StyleSheet.hairlineWidth, borderColor: calm.ring } : null,
         style,
       ]}
     >
       {/* White initials where white reads on the fill, else black: white alone fell to 1.5:1 on New York's yellow. */}
-      {plain ? null : <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.label, { fontSize: size * 0.38, color: inkOn(fill) }]}>{initials(name)}</Text>}
+      {plain ? null : <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.label, calm && typeof drawn !== 'string' ? { fontSize: size * calm.scale, color: calm.ink, ...font('500') } : { fontSize: size * 0.38, color: inkOn(fill) }]}>{initials(name)}</Text>}
       {photo && <ExpoImage source={{uri:photo}} accessibilityLabel={`${name} profile photo`} contentFit="cover" recyclingKey={photo} style={{position:"absolute",width:size,height:size,borderRadius:size/2}}/>}
       {ring ? (
         <View

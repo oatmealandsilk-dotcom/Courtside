@@ -3,6 +3,7 @@ import React, { createContext, useContext, useEffect, useLayoutEffect, useRef } 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '@/theme';
 import { Wash } from '@/components/Wash';
+import { CALM } from '@/design/sendToPreview';
 import { isDesktopBrowser } from '@/lib/browserDevice';
 import { setSidePanel } from '@/features/feed/sidePanel';
 import { HAND_IN_FROM, HAND_IN_MS, HAND_LEAVE_MS, HAND_OUT_MS, arrivingHeight, handOverSheet, takeHandOver } from '@/components/sheetHandOver';
@@ -190,7 +191,7 @@ function SidePanel({ header, children, onDismissed, closeSignal, onSettled, acti
           display: 'flex', flexDirection: 'column',
         }}
       >
-        <Wash height={300} strength={0.85} />
+        {CALM ? null : <Wash height={300} strength={0.85} />}
         <div style={{ position: 'relative', paddingTop: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>{header}</div>
         <div style={{ position: 'relative', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>{children}</div>
       </div>
@@ -269,7 +270,7 @@ function DialogBox({ header, children, onDismissed, closeSignal, fitContent, onS
           display: 'flex', flexDirection: 'column',
         }}
       >
-        <Wash height={300} strength={0.85} />
+        {CALM ? null : <Wash height={300} strength={0.85} />}
         <div style={{ position: 'relative', paddingTop: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>{header}</div>
         <div style={{ position: 'relative', flex: fitContent ? '0 1 auto' : 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: fitContent ? 'auto' : undefined }}>{children}</div>
       </div>
@@ -484,7 +485,7 @@ function Sheet({
           height: 0,
         }}
       >
-        <Wash height={300} strength={0.85} />
+        {CALM ? null : <Wash height={300} strength={0.85} />}
         <div
           ref={head}
           onPointerDown={onPointerDown}
@@ -826,7 +827,7 @@ function StageSheet({
           height: 0,
         }}
       >
-        <Wash height={300} strength={0.85} />
+        {CALM ? null : <Wash height={300} strength={0.85} />}
         <div
           onPointerDown={onPointerDown(false)}
           onPointerMove={onPointerMove}

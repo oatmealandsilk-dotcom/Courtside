@@ -15,6 +15,7 @@ import { Tappable } from '@/components/Tappable';
 import { BrandWash } from '@/components/ui/BrandWash';
 import { colors, pageIsDark, radius, spacing, typography } from '@/theme';
 import { TextScale, oneLine } from '@/theme/textScale';
+import { CALM } from '@/design/sendToPreview';
 
 type Variant = 'primary' | 'secondary' | 'ghost' | 'danger';
 
@@ -50,6 +51,8 @@ export function Button({
   const palette = paletteFor(variant);
   const inactive = disabled || loading;
   const faded = inactive || dim;
+  // The calm preview (?ss=a|b, web): a primary that can't be pressed is a flat grey well, not a faded brand pill.
+  const calmOff = CALM && variant === 'primary' && (disabled || dim) && !loading;
 
   return (
     <Tappable
@@ -57,22 +60,22 @@ export function Button({
       onPress={onPress}
       // A wide button travelling as far as a small icon looks wobbly.
       scaleTo={PRESS_SHRINK}
-      hoverTo={1.04}
+      hoverTo={CALM ? 1 : 1.04}
       accessibilityLabel={label}
       hitSlop={size === 'sm' ? 4 : undefined}
       style={[
         styles.base,
         size === 'sm' && styles.small,
-        variant === 'primary' && !faded && (pageIsDark() ? styles.liftDark : styles.lift),
+        !CALM && variant === 'primary' && !faded && (pageIsDark() ? styles.liftDark : styles.lift),
         full && styles.full,
-        { backgroundColor: palette.bg, borderColor: palette.border, opacity: faded ? 0.5 : 1 },
+        calmOff ? { backgroundColor: colors.surfaceAlt, borderColor: 'transparent', opacity: 1 } : { backgroundColor: palette.bg, borderColor: palette.border, opacity: faded ? 0.5 : 1 },
         style,
       ]}
     >
       {variant === 'primary' ? <BrandWash /> : null}
       <View style={styles.inner}>
         {loading ? <CourtSpinner size={size === 'sm' ? 15 : 18} ink={palette.fg} /> : null}
-        <Text {...(size === 'sm' ? oneLine(TextScale.TITLE, 0.8) : { maxFontSizeMultiplier: TextScale.TITLE })} style={[styles.label, size === 'sm' && styles.smallLabel, { color: palette.fg }]} numberOfLines={size === 'sm' ? 1 : undefined}>{label}</Text>
+        <Text {...(size === 'sm' ? oneLine(TextScale.TITLE, 0.8) : { maxFontSizeMultiplier: TextScale.TITLE })} style={[styles.label, size === 'sm' && styles.smallLabel, { color: calmOff ? colors.textFaint : palette.fg }]} numberOfLines={size === 'sm' ? 1 : undefined}>{label}</Text>
       </View>
     </Tappable>
   );

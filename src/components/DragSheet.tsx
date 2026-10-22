@@ -8,6 +8,7 @@ import Animated, { Easing, ReduceMotion, runOnJS, useAnimatedKeyboard, useAnimat
 import { useReducedMotion } from '@/lib/useReducedMotion';
 import { colors, radius } from '@/theme';
 import { Wash } from '@/components/Wash';
+import { CALM } from '@/design/sendToPreview';
 import { CLOSE_MS, OPEN_SPRING, STAGE_EASING, getStage, setFull, stageDip, stageTop, subscribe as onStageChange, type StageGeo } from '@/features/feed/commentStage';
 import { useAndroidBack } from '@/lib/androidBack';
 import { HAND_IN_FROM, HAND_IN_MS, HAND_LEAVE_MS, HAND_OUT_MS, arrivingHeight, handOverSheet, takeHandOver } from '@/components/sheetHandOver';
@@ -328,7 +329,7 @@ function PlainSheet({
       <Pressable accessibilityRole="button" accessibilityLabel="Close" style={StyleSheet.absoluteFill} onPress={() => userDismiss()} />
       <Animated.View style={[styles.sheet, sheetStyle]}>
         {/* The same warm glow the pages open with, so a sheet reads as part of the app. */}
-        <Wash height={300} strength={0.85} />
+        {CALM ? null : <Wash height={300} strength={0.85} />}
         <GestureDetector gesture={pan}>
           <View style={styles.handle} onLayout={(e) => { const h = Math.ceil(e.nativeEvent.layout.height); if (h !== headH) setHeadH(h); }}>
             <View style={styles.grabber} />
@@ -590,7 +591,7 @@ function StageSheet({
         </GestureDetector>
         {stageOverlay}
         <Animated.View style={[styles.sheet, styles.stageSheet, sheetStyle]}>
-          <Wash height={300} strength={0.85} />
+          {CALM ? null : <Wash height={300} strength={0.85} />}
           <GestureDetector gesture={headerPan}>
             <View style={[styles.handle, styles.stageHandle]}>
               <View style={styles.grabber} />

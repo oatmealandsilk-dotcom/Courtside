@@ -4,6 +4,7 @@ import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
 
 import { useTheme } from '@/theme/ThemeProvider';
 import { colors } from '@/theme';
+import { CALM } from '@/design/sendToPreview';
 
 /** `t` of the way from one #RRGGBB colour to another. */
 function mix(a: string, b: string, t: number): string {
@@ -49,7 +50,7 @@ const ellipse = (cx: number, cy: number, rx: number, ry: number) => (Platform.OS
   ? { cx: 0, cy: 0, r: 1, gradientTransform: `translate(${cx} ${cy}) scale(${rx} ${ry})` }
   : { cx, cy, rx, ry });
 
-export const BrandWash = React.memo(function BrandWash({ radius = 999, strength = 1, base }: {
+const BrandWashDrawn = React.memo(function BrandWash({ radius = 999, strength = 1, base }: {
   radius?: number;
   /**
    * How much of the glow and sheen to draw, 0 to 1. A surface with small
@@ -88,6 +89,9 @@ export const BrandWash = React.memo(function BrandWash({ radius = 999, strength 
     </View>
   );
 });
+
+/** The gradient glow on a brand fill; the calm preview (?ss=a|b on the web) draws the fill flat instead. */
+export const BrandWash = (props: React.ComponentProps<typeof BrandWashDrawn>) => (CALM ? null : <BrandWashDrawn {...props} />);
 
 /**
  * The court's shirt fade, for a session box (Oct 5, the Classic shirt on the
