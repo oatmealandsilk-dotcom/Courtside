@@ -17,7 +17,7 @@ import { TopBandContext } from '@/features/feed/topBand';
 /** The feed's top shade (see TOP_SHADE) as a browser gradient. */
 const TOP_SHADE_CSS = `linear-gradient(${TOP_SHADE.colors.map((c, i) => `${c} ${TOP_SHADE.locations[i] * 100}%`).join(', ')})`;
 
-function ClipPlaybackInner({ uri, poster, active: wanted, preload = false, warmOnly = false, onDoubleTap, fit = 'cover', trimStart = 0, trimEnd, speed, volume, silent = false, bare = false, discInk, discPinned = false, letterbox = false, onReady, crop, held = false, onStage = false }: {
+function ClipPlaybackInner({ uri, poster, active: wanted, preload = false, warmOnly = false, onDoubleTap, fit = 'cover', trimStart = 0, trimEnd, speed, volume, silent = false, bare = false, discInk, discPinned = false, letterbox = false, onReady, crop, held = false, onStage = false, onPaused }: {
   uri: string; poster?: string; active: boolean; preload?: boolean; onDoubleTap?: () => void; fit?: 'cover' | 'contain'; trimStart?: number; trimEnd?: number; silent?: boolean;
   /** Built ahead on a page not opened yet (the Feed warming up out of sight): fetch only the clip's opening, not the whole file. */
   warmOnly?: boolean;
@@ -48,6 +48,8 @@ function ClipPlaybackInner({ uri, poster, active: wanted, preload = false, warmO
   held?: boolean;
   /** Its page is on the comments stage, held or not (a page opened over the comments holds it still): a pause the viewer chose stays. */
   onStage?: boolean;
+  /** The viewer paused (true) or played (false) this clip with a tap: the Feed's top row comes back on a pause, as on Reels. */
+  onPaused?: (paused: boolean) => void;
 }) {
   // Hears a theme change, so its own colours never lag the page's.
   useTheme();
@@ -71,6 +73,12 @@ function ClipPlaybackInner({ uri, poster, active: wanted, preload = false, warmO
   // Whether it is the clip playing on screen right now, for a refusal that arrives after it has gone.
   const onScreen = useRef(false);
   const [paused, setPaused] = useState(false);
+  const onPausedRef = useRef(onPaused);
+  onPausedRef.current = onPaused;
+  const pausedNow = useRef(paused);
+  pausedNow.current = paused;
+  // A pause the viewer chose (a tap, the space bar), never one the browser forced (autoplay refused).
+  const togglePause = () => { const next = !pausedNow.current; pausedNow.current = next; setPaused(next); onPausedRef.current?.(next); };
   // Hold the right side of a clip and it plays at double speed until you let
   // go, the way Instagram's Reels do. A drag (the feed scrolling) cancels it.
   const [fast, setFast] = useState(false);
@@ -174,7 +182,7 @@ function ClipPlaybackInner({ uri, poster, active: wanted, preload = false, warmO
   // opened over the comments stage, a pause the viewer chose is kept.
   useEffect(() => { if (!active && !onStage) setPaused(false); }, [active, onStage]);
   // Space bar on a computer: play / pause the clip on screen.
-  useEffect(() => { if (!active) return; return onSpaceBar(() => setPaused((p) => !p)); }, [active]);
+  useEffect(() => { if (!active) return; return onSpaceBar(togglePause); }, [active]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // A trimmed clip loops over the part its author kept; the bottom line
   // follows along, eased over each report so it glides rather than steps.
@@ -222,7 +230,7 @@ function ClipPlaybackInner({ uri, poster, active: wanted, preload = false, warmO
       if (onDoubleTap && now - lastTap.current < 280) { lastTap.current = 0; if (pending.current) { clearTimeout(pending.current); pending.current = null; } onDoubleTap(); return; }
       lastTap.current = now;
       if (pending.current) clearTimeout(pending.current);
-      pending.current = setTimeout(() => { pending.current = null; setPaused((v) => !v); }, onDoubleTap ? 280 : 0);
+      pending.current = setTimeout(() => { pending.current = null; togglePause(); }, onDoubleTap ? 280 : 0);
     }} style={{ position: 'absolute', inset: 0, width: '100%', background: 'transparent', border: 0, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       {paused && ready ? <span style={{ width: 64, height: 64, borderRadius: 32, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', paddingLeft: 4 }}><Ionicons name="play" size={30} color="white" /></span> : null}
     </button>

@@ -9,6 +9,7 @@ import * as haptics from '@/lib/haptics';
 import { PULL_DISARM, PULL_DISC, PULL_GAP, PULL_MIN_SPIN, PULL_RETURN, WEB_HOME_PULL_LINE, fingerFor, pullFetch, pullRowLift, pullRowOpacity, rubberBand } from '@/lib/pullRefresh';
 import { colors } from '@/theme';
 import { useTheme } from '@/theme/ThemeProvider';
+import { useTopRowHint } from '@/lib/topRowHint';
 
 export interface VerticalPagerHandle { scrollToTop: () => void }
 
@@ -35,7 +36,9 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, {
   pullHeader?: React.ReactNode;
   pullTop?: number;
   pullAlign?: 'center' | 'left';
-}>(function VerticalPager({ children, onIndex, onSettled, onSwiped, initialIndex = 0, onRefresh, pullHeader, pullTop = 0, pullAlign = 'center' }, ref) {
+  /** The Feed's top row, Reels-style: false once a swipe lands on the next page, true on a hold, a slow drag or any move back up (see lib/topRowHint). */
+  onTopRow?: (show: boolean) => void;
+}>(function VerticalPager({ children, onIndex, onSettled, onSwiped, initialIndex = 0, onRefresh, pullHeader, pullTop = 0, pullAlign = 'center', onTopRow }, ref) {
   // The scrollbar is part of the design too: reading the theme here is what
   // redraws it when the palette changes.
   useTheme();
@@ -68,6 +71,8 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, {
   const rowStyle = useAnimatedStyle(() => ({ opacity: pullRowOpacity(gap.value), transform: [{ translateY: pullRowLift(gap.value) }] }));
   const cornerStyle = useAnimatedStyle(() => ({ opacity: pullRowOpacity(gap.value) }));
   const pager = useRef<HTMLDivElement>(null);
+  // The top row's hint, the same as on the phone: a hold or slow drag brings it back, a forward swipe's landing tucks it.
+  const hint = useTopRowHint(onTopRow);
   const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Position as a fraction of a page: the bar ducking changes this box's
   // height, which shifts the pixel position by itself; fractions stay put,
@@ -98,9 +103,10 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, {
     const byUser = userMoved.current;
     userMoved.current = false;
     if (index === reported.current) return;
+    const from = reported.current;
     reported.current = index;
     onIndexRef.current(index);
-    if (byUser) onSwipedRef.current?.(index);
+    if (byUser) { onSwipedRef.current?.(index); hint.landed(index > from); }
   };
   const onIndexRef = useRef(onIndex); onIndexRef.current = onIndex;
   const onSwipedRef = useRef(onSwiped); onSwipedRef.current = onSwiped;
@@ -225,11 +231,13 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, {
       if(event.button!==0 || !event.isPrimary || (event.target as HTMLElement).closest('input,textarea,select')) return;
       stop();
       suppressClick.current=false;
+      hint.down(event.clientY);
       drag.current={x:event.clientX,y:event.clientY,top:event.currentTarget.scrollTop,active:false,target:event.target as HTMLElement,lastY:event.clientY,lastTime:performance.now(),velocity:0};
     }}
     onPointerMove={event=>{
       const point=drag.current;
       if(!point)return;
+      hint.move(event.clientY);
       const dy=event.clientY-point.y;
       if(!point.active){
         if(Math.abs(event.clientX-point.x)>Math.abs(dy)+10){drag.current=null;return;}
@@ -254,6 +262,7 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, {
       else event.currentTarget.scrollTop=point.top-Math.max(-event.currentTarget.clientHeight,Math.min(event.currentTarget.clientHeight,dy));
     }}
     onPointerUp={event=>{
+      hint.up();
       const point=drag.current;drag.current=null;
       if(!point?.active)return;
       suppressClick.current=true;
@@ -265,6 +274,7 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, {
       settle(el, (Math.round(point.top / el.clientHeight) + step) * el.clientHeight);
     }}
     onPointerCancel={event=>{
+      hint.up();
       const point=drag.current;drag.current=null;
       if(point?.active && !point.scroll)settle(event.currentTarget,point.top);
     }}
@@ -281,6 +291,8 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, {
         // One glide per swipe and direction, as on the phone (see glideBar).
         const dir = Math.abs(dy) > 0.3 ? (dy > 0 ? 1 : -1) : 0;
         if (dir !== 0 && dir !== barDir.current) { barDir.current = dir; glideBar(dir > 0); }
+        // Any move back up, however small, brings the Feed's top row back (Reels).
+        if (dir < 0) hint.show();
       }
       lastFrac.current = frac;
       // Quiet for a beat after the last movement means the page has landed

@@ -25,7 +25,7 @@ import { TopBandContext } from '@/features/feed/topBand';
  * one tap pauses, two likes, a small disc top-right toggles the sound, and a
  * hairline along the bottom shows how far through it is.
  */
-function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, fit = 'cover', trimStart, trimEnd, speed, volume, silent = false, bare = false, discInk, discPinned = false, letterbox = false, onReady, crop, held = false, onStage = false }: {
+function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, fit = 'cover', trimStart, trimEnd, speed, volume, silent = false, bare = false, discInk, discPinned = false, letterbox = false, onReady, crop, held = false, onStage = false, onPaused }: {
   uri: string; poster?: string; active: boolean; preload?: boolean; onDoubleTap?: () => void; fit?: 'cover' | 'contain';
   trimStart?: number; trimEnd?: number;
   /** The browser's Feed warming up out of sight (ClipPlayback.web). A phone builds its feed from the start, so it never is. */
@@ -59,12 +59,20 @@ function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, 
   held?: boolean;
   /** Its page is on the comments stage, held or not (a page opened over the comments holds it still): a pause the viewer chose stays. */
   onStage?: boolean;
+  /** The viewer paused (true) or played (false) this clip with a tap: the Feed's top row comes back on a pause, as on Reels. */
+  onPaused?: (paused: boolean) => void;
 }) {
   const insets = useSafeAreaInsets();
   // Under the Feed's top row the disc steps down out of its band (features/feed/topBand).
   const drop = useContext(TopBandContext);
   const styles = useThemedStyles(styleDefinitions);
   const [paused, setPaused] = useState(false);
+  const onPausedRef = useRef(onPaused);
+  onPausedRef.current = onPaused;
+  const pausedNow = useRef(paused);
+  pausedNow.current = paused;
+  // A pause the viewer chose (a tap, the space bar), never one the browser forced (autoplay refused).
+  const togglePause = () => { const next = !pausedNow.current; pausedNow.current = next; setPaused(next); onPausedRef.current?.(next); };
   // Hold the right side of a clip and it plays at double speed until you let
   // go, the way Instagram's Reels do. A hold anywhere else does nothing.
   const [fast, setFast] = useState(false);
@@ -84,7 +92,7 @@ function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, 
   // opened over the comments stage, a pause the viewer chose is kept.
   useEffect(() => { if (!active && !onStage) setPaused(false); }, [active, onStage]);
   // Space bar on a computer: play / pause the clip on screen.
-  useEffect(() => { if (!active) return; return onSpaceBar(() => setPaused((p) => !p)); }, [active]);
+  useEffect(() => { if (!active) return; return onSpaceBar(togglePause); }, [active]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => { if (pending.current) clearTimeout(pending.current); }, []);
 
   // The progress line glides between the player's reports rather than
@@ -138,7 +146,7 @@ function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, 
     }
     lastTap.current = now;
     if (pending.current) clearTimeout(pending.current);
-    pending.current = setTimeout(() => { pending.current = null; setPaused((v) => !v); }, onDoubleTap ? 280 : 0);
+    pending.current = setTimeout(() => { pending.current = null; togglePause(); }, onDoubleTap ? 280 : 0);
   };
 
   // Pages either side stay mounted so their first frame is ready to go.

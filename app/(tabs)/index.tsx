@@ -215,7 +215,7 @@ export type FeedScope =
   | { groupId: string; start?: undefined; ids?: undefined; userId?: undefined; set?: undefined; activities?: undefined };
 
 /** What the Feed's top row needs to know from the feed under it: whether a picture fills the top, and whether the chrome is put away. */
-export interface FeedChrome { picture: boolean; hidden: boolean }
+export interface FeedChrome { picture: boolean; hidden: boolean; /** Swiped on to the next clip: the row slips out of the way, Reels-style (Oct 22). */ tucked?: boolean }
 
 /**
  * Only a post shared with everyone is dealt into For you; one shared to a
@@ -480,6 +480,13 @@ function Home({ scope, topRow, paused, onChrome, onSwipe }: {
   useEffect(() => { setImmersive(false); immersion.value = 0; punch.value = 1; }, [active, immersion, punch]);
   const [visit, setVisit] = useState(0);
   const focused = useIsFocused();
+  // The top row's Reels-style tuck (Oct 22, owner): a swipe that lands on the next clip
+  // puts it away; a hold, a slow drag, any scroll back up, a tap to pause, a pull to refresh,
+  // coming back to the Feed or switching its words bring it back. See lib/topRowHint.
+  const [rowAway, setRowAway] = useState(false);
+  const onTopRow = useCallback((show: boolean) => setRowAway(!show), []);
+  const rowBackOnPause = useCallback((p: boolean) => { if (p) setRowAway(false); }, []);
+  useEffect(() => { if (focused && !paused) setRowAway(false); }, [focused, paused]);
   // The comments stage (see commentStage): which page, if any, is on it.
   // `owner` tells this Home from another one under or over it (a scoped feed).
   const owner = useRef(`home:${Math.random().toString(36).slice(2)}`).current;
@@ -1034,6 +1041,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe }: {
   const activeRef = useRef(active);
   activeRef.current = active;
   const refreshFeed = useCallback(async () => {
+    setRowAway(false);
     // This resolves only once the fresh load has been drawn (the store waits
     // for that itself), so the ranking below reads the new posts. Waiting here
     // for "any change at all" used to give up early — a message or a like
@@ -1655,7 +1663,9 @@ function Home({ scope, topRow, paused, onChrome, onSwipe }: {
   const topOnPicture = showing?.type === 'hit'
     ? !!(showing.story.imageUrl || showing.story.videoUrl)
     : showing?.type === 'post' && showing.post.kind === 'clip' && !!(showing.post.videoUrl || showing.post.thumbnailUrl || showing.post.imageUrl);
-  useEffect(() => { onChrome?.({ picture: topOnPicture, hidden: chromeHidden }); }, [onChrome, topOnPicture, chromeHidden]);
+  // Only over a clip or an Instant past the first page: on the first page, a written post, a photo or Activities it stays.
+  const rowTucked = rowAway && active > 0 && activeOnPicture && !scope?.activities;
+  useEffect(() => { onChrome?.({ picture: topOnPicture, hidden: chromeHidden, tucked: rowTucked }); }, [onChrome, topOnPicture, chromeHidden, rowTucked]);
   // A group's feed calls its posts after the group, where For you's say "For you".
   const groupName = scope?.groupId ? app.feedGroups.find((g) => g.id === scope.groupId)?.name : undefined;
   // A group's feed and Activities sit under the Feed's top row; any other scope has a back button.
@@ -1796,7 +1806,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe }: {
           {/* Pull-to-refresh is for phones: the app and a phone's browser (`phone`, above). Asking
               isDesktopBrowser() alone took it off the iPhone app: the app has no browser to read,
               so the check answered "computer" there, and the pull strip was never built. */}
-          <VerticalPager ref={pager} key={visit} initialIndex={active} onIndex={setActive} onSwiped={onSwipe} onRefresh={scope || !phone ? undefined : refreshFeed} pullTop={topRow ? TOP_BAND_TOP + (TOP_BAND_HEIGHT - 44) / 2 : 0} pullAlign={topRow ? 'left' : 'center'} pullHeader={scope ? undefined : <BrandMark size={topRow ? 22 : 40} />}>
+          <VerticalPager ref={pager} key={visit} initialIndex={active} onIndex={setActive} onSwiped={onSwipe} onTopRow={topRow || rowed ? onTopRow : undefined} onRefresh={scope || !phone ? undefined : refreshFeed} pullTop={topRow ? TOP_BAND_TOP + (TOP_BAND_HEIGHT - 44) / 2 : 0} pullAlign={topRow ? 'left' : 'center'} pullHeader={scope ? undefined : <BrandMark size={topRow ? 22 : 40} />}>
             {[...feed.map((item, index) => {
               const distance = Math.abs(index - active);
               const ahead = index - active;
@@ -1869,7 +1879,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe }: {
                     <View accessibilityLabel={`${author.name}'s Instant`} style={styles.clipFrame}>
                       <View style={phone ? StyleSheet.absoluteFill : styles.clipPortrait}>
                         {story.videoUrl ? (
-                          <ClipPlayback uri={story.videoUrl} poster={story.thumbnailUrl} active={playing && active === index && warmed && playable} held={held && myStage?.key === hitKey} onStage={myStage?.key === hitKey} preload={near} warmOnly={warming} bare={immersive} onDoubleTap={() => likeHitByTap(story.id, hitLiked)} discInk={theme === 'us-open' ? '#FFFFFF' : colors.brand} discPinned={index === 0 && !scope} onReady={(ok) => markReady(story.id, ok)} />
+                          <ClipPlayback uri={story.videoUrl} poster={story.thumbnailUrl} active={playing && active === index && warmed && playable} held={held && myStage?.key === hitKey} onStage={myStage?.key === hitKey} preload={near} warmOnly={warming} bare={immersive} onDoubleTap={() => likeHitByTap(story.id, hitLiked)} discInk={theme === 'us-open' ? '#FFFFFF' : colors.brand} discPinned={index === 0 && !scope} onReady={(ok) => markReady(story.id, ok)} onPaused={rowBackOnPause} />
                         ) : (
                           // Two quick taps like a hit, the way they like a clip.
                           <Pressable accessibilityRole="image" accessibilityLabel={`${author.name}'s Instant`} onPress={() => { const now = Date.now(); if (now - lastHitTap.current < 280) { lastHitTap.current = 0; likeHitByTap(story.id, hitLiked); } else lastHitTap.current = now; }} style={StyleSheet.absoluteFill}>
@@ -2052,6 +2062,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe }: {
                           onReady={(ok) => markReady(post.id, ok)}
                           held={held && myStage?.key === `p:${post.id}`}
                           onStage={myStage?.key === `p:${post.id}`}
+                          onPaused={rowBackOnPause}
                         />
                       </View>
                     </View>
@@ -2450,6 +2461,7 @@ function GroupedFeed() {
           onPlus={() => router.push('/find-groups')}
           onPicture={chrome.picture}
           hidden={chrome.hidden}
+          tucked={!!chrome.tucked}
           waiting={waiting}
         />
       ) : null}
