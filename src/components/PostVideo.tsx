@@ -68,7 +68,14 @@ export function PostVideo({ uri, poster, active, preload = false, preloadRank = 
   const moving = useRef<(() => void) | null>(null);
   const turn = usePreloadTurn(preload && Platform.OS !== 'web', preloadRank, active, ready, moving);
   const built = active || full || (preload && (Platform.OS === 'web' || turn));
-  useEffect(() => { if (!built) setReady(false); }, [built]);
+  // On a phone the player draws no poster of its own: a player built while its page is
+  // already showing (its turn came as you landed) keeps the poster over it until its first
+  // frame is in, and one that cannot load keeps it for good, so the picture never goes
+  // blank and pops back. Once in, a stall mid-play is the spinner's, not the poster's.
+  const [framed, setFramed] = useState(false);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => { if (!built) { setReady(false); setFramed(false); setFailed(false); } }, [built]);
+  const posterUp = !!poster && (!built || (Platform.OS !== 'web' && (!framed || failed)));
   // The tutorial never starts under a video opened full screen.
   useHoldTour(full);
   // Full screen is black: light status-bar icons over it (on Android the Modal opens a frame later for that).
@@ -291,11 +298,12 @@ export function PostVideo({ uri, poster, active, preload = false, preloadRank = 
     <View ref={rootRef} style={[StyleSheet.absoluteFill, !full && idleCursor]} onPointerMove={desktopWeb ? nudge : undefined} onPointerLeave={desktopWeb ? hoverOut : undefined}>
       <View style={cropLayer(crop)}>
         {/* The page is told only "in" and, when the player is freed, "gone"; a stall mid-play is this player's own spinner. */}
-        {!built ? (poster ? <ExpoImage source={{ uri: poster }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" /> : null) : (
+        {built ? (
         <ClipVideo ref={player} uri={uri} poster={poster} active={active && !ownCopy} muted={silent || muted || !active || ownCopy} paused={paused} fit="cover" trimStart={trimStart} trimEnd={trimEnd} speed={speed} volume={volume}
           onProgress={onProgress}
-          onReady={(ok) => { setReady(ok); if (ok) onReady?.(true); }} onGone={() => onReady?.(false)} onSize={onSize} onBuffered={() => moving.current?.()} />
-        )}
+          onReady={(ok) => { setReady(ok); if (ok) { setFramed(true); onReady?.(true); } }} onGone={() => onReady?.(false)} onSize={onSize} onBuffered={() => moving.current?.()} onFailed={() => setFailed(true)} />
+        ) : null}
+        {posterUp ? <ExpoImage source={{ uri: poster }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" /> : null}
       </View>
       <Pressable accessibilityRole="button" accessibilityLabel="Show video controls" onPress={(e) => tap(e.nativeEvent.locationX)} onLayout={(e) => { width.current = Math.max(1, e.nativeEvent.layout.width); }} style={[StyleSheet.absoluteFill, idleCursor]} />
       {!ready && active && !paused ? <View pointerEvents="none" style={styles.centre}><CourtSpinner ink={discInk ?? 'white'} /></View> : null}

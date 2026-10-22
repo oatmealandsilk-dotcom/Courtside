@@ -29,8 +29,13 @@ import { connectionIsQuick } from '@/lib/netSpeed';
 
 /** How many clips off screen may fetch at the same moment. */
 const AT_ONCE = 2;
-/** The clip on screen holds the line this long at most: a slow or stuck one never holds the rest back for good. */
+/**
+ * The clip on screen holds the line this long at most: a slow or stuck one never holds the rest back for good.
+ * On a slow connection longer: there a browser's clip on screen holds it until it can play through (not just
+ * its first frame), so a preload never takes the bandwidth it needs and it stalls mid-play.
+ */
 const SCREEN_FIRST_MS = 4000;
+const SCREEN_FIRST_SLOW_MS = 10000;
 /** And once its first frame is in, this long more, so it starts playing before anything else asks. */
 const SCREEN_START_MS = 300;
 let screenInAt = 0;
@@ -40,6 +45,8 @@ let screenInAt = 0;
  * on a slow link that is still coming in keeps its turn, and the next does not start alongside it.
  */
 const TURN_MS = 4000;
+/** However much a turn is still fetching, it hands on after this: a far, heavy clip never holds up a nearer one for long (it keeps its player). */
+const TURN_MAX_MS = 12000;
 
 type Entry = { rank: number; ready: boolean; since: number };
 const waiting = new Map<number, Entry>();
@@ -72,21 +79,23 @@ function settle() {
   const now = Date.now();
   for (const id of [...fetching]) {
     const e = waiting.get(id);
-    if (!e || e.ready || now - lastHeard(id, now) >= TURN_MS) { fetching.delete(id); turnAt.delete(id); movedAt.delete(id); }
+    if (!e || e.ready || now - lastHeard(id, now) >= TURN_MS || now - (turnAt.get(id) ?? now) >= TURN_MAX_MS) { fetching.delete(id); turnAt.delete(id); movedAt.delete(id); }
   }
+  const quick = connectionIsQuick();
+  const screenCap = quick ? SCREEN_FIRST_MS : SCREEN_FIRST_SLOW_MS;
   const starting = now - screenInAt < SCREEN_START_MS;
-  const screenBusy = starting || [...onScreen.values()].some((at) => now - at < SCREEN_FIRST_MS);
+  const screenBusy = starting || [...onScreen.values()].some((at) => now - at < screenCap);
   if (screenTimer) { clearTimeout(screenTimer); screenTimer = null; }
   if (screenBusy) {
     // Look again once the on-screen clip's head start is over, in case it never reports in.
-    const waits = [...onScreen.values()].map((at) => SCREEN_FIRST_MS - (now - at));
+    const waits = [...onScreen.values()].map((at) => screenCap - (now - at));
     if (starting) waits.push(SCREEN_START_MS - (now - screenInAt));
     const left = Math.min(...waits.filter((ms) => ms > 0));
     screenTimer = setTimeout(settle, left + 10);
   }
   const before = given.size;
   if (!away) {
-    const room = screenBusy ? 0 : connectionIsQuick() ? AT_ONCE : 1;
+    const room = screenBusy ? 0 : quick ? AT_ONCE : 1;
     const queue = [...waiting].filter(([id, e]) => !e.ready && !given.has(id)).sort((a, b) => a[1].rank - b[1].rank || a[1].since - b[1].since);
     for (const [id] of queue) {
       if (fetching.size >= room) break;
@@ -98,7 +107,7 @@ function settle() {
   // Look again when the oldest turn runs out, in case that clip never reports ready.
   if (turnTimer) { clearTimeout(turnTimer); turnTimer = null; }
   if (fetching.size) {
-    const left = Math.min(...[...fetching].map((id) => TURN_MS - (now - lastHeard(id, now))));
+    const left = Math.min(...[...fetching].map((id) => Math.min(TURN_MS - (now - lastHeard(id, now)), TURN_MAX_MS - (now - (turnAt.get(id) ?? now)))));
     turnTimer = setTimeout(settle, Math.max(0, left) + 10);
   }
   // Only a new turn changes what any clip may do (a turn handed back changes nothing on screen).
@@ -116,7 +125,8 @@ AppState.addEventListener('change', (state) => {
  * - `want`: its page is in the preload window and it is not the clip on screen.
  * - `rank`: how soon you may reach it (1 = the next page); lower goes first.
  * - `playing`: it is the clip on screen (always loads, and counts as having had its turn); rank 0 counts the same.
- * - `ready`: its opening is in (first frame / first seconds).
+ * - `ready`: its opening is in (first frame / first seconds); for the clip on screen in a
+ *   browser, that it can play through (until then it holds back new preloads).
  * - `moving`, if given, is filled with a call the clip makes whenever more of it has come
  *   in: its turn then lasts while it is still fetching, not a fixed TURN_MS.
  * Returns whether its player may exist and fetch.

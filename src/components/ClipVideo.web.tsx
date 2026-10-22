@@ -17,6 +17,8 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
   onGone?: () => void;
   /** The phone's preload-queue signal; a browser's player here fetches only the metadata, so it never needs one. */
   onBuffered?: () => void;
+  /** The phone's "cannot load" signal; a browser's video keeps its own poster up then. */
+  onFailed?: () => void;
   /** On the comments stage: it plays on although the comments page is over it (see the phone's ClipVideo). */
   held?: boolean;
   /** The phone's Android drawing mode; a browser has no such choice. */

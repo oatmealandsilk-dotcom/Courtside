@@ -1541,14 +1541,18 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, onSettled }: {
   // Whatever is on screen is shown within a few seconds, ready or not: a
   // picture that never arrives is the page's problem to explain, not a
   // reason to hold the reader on a placeholder.
+  // Only the feed on show: a tab warmed behind another may not have built its page's
+  // player yet (it waits its turn), and lifting that cover would show a poster that
+  // gives way to an empty frame the moment the tab is opened.
   useEffect(() => {
+    if (paused) return undefined;
     const item = feed[active];
     if (!item) return undefined;
     const id = item.type === 'post' ? item.post.id : item.type === 'question' ? item.question.id : item.type === 'hit' ? item.story.id : null;
     if (!id || readyIds.has(id)) return undefined;
     const timer = setTimeout(() => markReady(id, true), 6000);
     return () => clearTimeout(timer);
-  }, [active, feed, readyIds, markReady]);
+  }, [active, feed, readyIds, markReady, paused]);
   // A post whose video only ever existed on the phone that made it will never
   // report ready: its page is shown at once so it can at least be opened and
   // deleted, rather than sitting behind the placeholder for good.
@@ -2449,7 +2453,16 @@ function FeedLayer({ shown, children }: { shown: boolean; children: React.ReactN
   const o = useSharedValue(0);
   useEffect(() => { o.value = withTiming(shown ? 1 : 0, { duration: 220, easing: Easing.out(Easing.quad) }); }, [shown, o]);
   const fade = useAnimatedStyle(() => ({ opacity: o.value }));
-  return <Reanimated.View pointerEvents={shown ? 'auto' : 'none'} style={[StyleSheet.absoluteFill, fade]}>{children}</Reanimated.View>;
+  // In a browser pointerEvents 'none' is only CSS on this layer, and any 'box-none' view inside
+  // turns touches back on for its children: a hidden tab's author row took For you's swipe.
+  // `inert` shuts the whole hidden tab out of touches and keyboard focus.
+  const layer = useRef<View>(null);
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const node = layer.current as unknown as HTMLElement | null;
+    if (node) node.inert = !shown;
+  }, [shown]);
+  return <Reanimated.View ref={layer} pointerEvents={shown ? 'auto' : 'none'} style={[StyleSheet.absoluteFill, fade]}>{children}</Reanimated.View>;
 }
 
 /** The top row's "Activities" word, held where a group's id would be. */
