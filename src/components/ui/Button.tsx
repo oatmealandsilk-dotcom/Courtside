@@ -1,4 +1,4 @@
-import { brandShadow, fillMode } from '@/theme/fillMode';
+import { brandShadow } from '@/theme/fillMode';
 import { PRESS_SHRINK } from '@/theme/press';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React from 'react';
@@ -62,7 +62,6 @@ export function Button({
       hoverTo={1.04}
       accessibilityLabel={label}
       hitSlop={size === 'sm' ? buttonShape.smallSlop : undefined}
-      pressShade={variant === 'primary' && fillMode === 'flat' ? (size === 'sm' ? buttonShape.smallRadius : buttonShape.radius) : undefined}
       style={[
         styles.base,
         size === 'sm' && styles.small,
@@ -109,10 +108,9 @@ const styleDefinitions = StyleSheet.create({
   full: { alignSelf: 'stretch' },
   small: { paddingVertical: 0, minHeight: buttonShape.smallHeight, borderRadius: buttonShape.smallRadius, paddingHorizontal: spacing.lg },
   smallLabel: { ...typography.smallStrong, fontSize: buttonShape.smallLabel },
-  // The one shadow on the page: the primary action, in its own colour, soft.
-  lift: { ...brandShadow({ shadowColor: colors.brand, shadowOpacity: 0.28, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 3 }) },
-  // On a dark page a shadow in the button's own colour turns into a halo; a plain dark one just lifts it.
-  liftDark: { ...brandShadow({ shadowColor: '#000000', shadowOpacity: 0.35, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 3 }) },
+  // The one shadow on the page: the primary action sits on a small plain one (fillMode.ts).
+  lift: { ...brandShadow },
+  liftDark: { ...brandShadow },
   inner: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   label: { ...typography.bodyStrong },
 });

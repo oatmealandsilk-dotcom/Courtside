@@ -4,7 +4,6 @@ import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
 
 import { useTheme } from '@/theme/ThemeProvider';
 import { buttonShape, colors } from '@/theme';
-import { fillMode } from '@/theme/fillMode';
 
 /** Apple's smooth corner on a wash's clip and rim, to match a parent that has it. */
 const CURVE = buttonShape.curve;
@@ -17,12 +16,14 @@ function mix(a: string, b: string, t: number): string {
 }
 
 /**
- * The page's wash, whispered inside a filled brand surface (a primary pill,
- * the create button, a chosen chip): a lighter tone of the fill pooling low
- * on the left and a soft beige high on the right, so a green button has the
- * same gentle depth as the page behind it instead of reading flat. Lay it
- * as the first child; it fills its parent and clips to `radius` itself, so
- * the parent keeps its lift shadow.
+ * The inside of a filled brand surface (a primary pill, the create button,
+ * a chosen chip). A button gets the soft fill (Oct 22, owner: "Do soft"):
+ * the solid fill with a barely-there lighter top edge, on the small plain
+ * shadow in theme/fillMode.ts. A surface that is not a plain button (a green
+ * session box, the stats pill, the activity sheet's round Start) passes
+ * `glow` and keeps the page's wash: a lighter tone of the fill pooling low
+ * on the left and a soft beige high on the right. Lay it as the first child;
+ * it fills its parent and clips to `radius` itself, so the parent keeps its lift.
  */
 /**
  * Each court's fade, tuned so it reads equally lively on its own colour: a
@@ -53,8 +54,10 @@ const ellipse = (cx: number, cy: number, rx: number, ry: number) => (Platform.OS
   ? { cx: 0, cy: 0, r: 1, gradientTransform: `translate(${cx} ${cy}) scale(${rx} ${ry})` }
   : { cx, cy, rx, ry });
 
-export const BrandWash = React.memo(function BrandWash({ radius = 999, strength = 1, base, curve = false }: {
+export const BrandWash = React.memo(function BrandWash({ radius = 999, strength = 1, base, curve = false, glow = false }: {
   radius?: number;
+  /** Keep the wash (glow and sheen) on a surface that is not a plain button; buttons take the soft fill. */
+  glow?: boolean;
   /**
    * Clip with Apple's smooth corner, for a parent that has one (the
    * Instagram-shaped buttons, buttonShape.curve); a circular clip under a
@@ -77,9 +80,7 @@ export const BrandWash = React.memo(function BrandWash({ radius = 999, strength 
   const base0 = LOOKS[theme] ?? LOOKS.default;
   const look = strength === 1 ? base0 : { ...base0, glow: base0.glow * strength, sheenAt: base0.sheenAt * strength };
   const light = mix(base ?? colors.brand, look.toward, look.t);
-  // Flat: the fill alone. Soft: the fill with a barely-there lighter top edge (fillMode.ts).
-  if (fillMode === 'flat') return null;
-  if (fillMode === 'soft') {
+  if (!glow) {
     return (
       <View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderRadius: radius, borderTopWidth: 1, borderColor: 'rgba(255, 255, 255, 0.22)' }, curve && CURVE]} />
     );
@@ -126,10 +127,6 @@ export const ShirtWash = React.memo(function ShirtWash({ radius = 999, rim, lift
   const id = `${useId().replace(/[^a-zA-Z0-9]/g, '')}shirt${theme.replace(/-/g, '')}${Math.round(lift * 100)}`;
   const top = lift ? mix(colors.cardGlowTop, colors.surface, lift) : colors.cardGlowTop;
   const bottom = lift ? mix(colors.cardGlowBottom, colors.surface, lift) : colors.cardGlowBottom;
-  // Flat and soft (fillMode.ts): no fade, the box's own fill and its rim only.
-  if (fillMode !== 'sheen') {
-    return rim ? <View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderRadius: radius, borderWidth: StyleSheet.hairlineWidth, borderColor: rim }, curve && CURVE]} /> : null;
-  }
   return (
     <View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderRadius: radius, overflow: 'hidden' }, curve && CURVE]}>
       <Svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">

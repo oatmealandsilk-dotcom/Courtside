@@ -199,7 +199,7 @@ export const clearWordShade = (u: number): TextStyle => ({ textShadowColor: 'rgb
  * edge to edge), or the brand's wash in the plain green box.
  */
 export function CardWash({ look, radius, edge = true }: { look: CardLook; radius: number; edge?: boolean }) {
-  if (look.wash === 'brand') return <BrandWash radius={radius} />;
+  if (look.wash === 'brand') return <BrandWash radius={radius} glow />;
   return <ShirtWash radius={radius} rim={edge ? look.rim : null} />;
 }
 

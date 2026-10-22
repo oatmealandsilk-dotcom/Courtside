@@ -74,7 +74,7 @@ export function StartHero({ court, onPress }: { court: { name: string; why: stri
           <Text style={[styles.clock, { color: look.ink }]} maxFontSizeMultiplier={1.2}>0:00:00</Text>
           <Text maxFontSizeMultiplier={TextScale.TITLE} style={[styles.heroNote, { color: look.muted }]} numberOfLines={1}>The clock runs from Start to Finish.</Text>
         </View>
-        <View style={[styles.go, { boxShadow: brandBoxShadow(`0px 6px 16px ${withAlpha(colors.brand, 0.28)}`) }]}>
+        <View style={[styles.go, { boxShadow: brandBoxShadow }]}>
           <BrandWash radius={30} />
           <Ionicons name="play" size={26} color={colors.brandInk} style={styles.goIcon} />
         </View>

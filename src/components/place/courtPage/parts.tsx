@@ -267,8 +267,8 @@ const styleDefinitions = StyleSheet.create({
   primaryInner: { flexDirection: 'row', alignItems: 'center', gap: 9, paddingHorizontal: spacing.xl },
   primaryLabel: { ...typography.bodyStrong, fontSize: 16, color: colors.brandInk },
   // The one shadow on the page: the primary action, in its own colour (plain dark on a dark page).
-  lift: { ...brandShadow({ shadowColor: colors.brand, shadowOpacity: 0.28, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 3 }) },
-  liftDark: { ...brandShadow({ shadowColor: '#000000', shadowOpacity: 0.35, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 3 }) },
+  lift: { ...brandShadow },
+  liftDark: { ...brandShadow },
   // The round actions.
   // A phone's full width; on a computer, a row no wider than a phone's, centred under the primary.
   acts: { flexDirection: 'row', alignItems: 'flex-start', alignSelf: 'center', width: '100%', maxWidth: 440 },
