@@ -12,7 +12,7 @@ import Profile from '../../app/(tabs)/profile';
 import { TabFocus } from '@/features/navigation/tabFocus';
 import { activationDistance, claimedDepth, waitsForDeeper } from '@/features/navigation/gestureClaim';
 import { setPendingTab } from '@/features/navigation/pendingTab';
-import { requestSection } from '@/features/navigation/swipeOrder';
+import { askedSection, requestSection } from '@/features/navigation/swipeOrder';
 import { isPageSwipeLocked, setPageDragging, subscribePageSwipeLock } from '@/features/navigation/swipeLock';
 import { useResponsive } from '@/lib/useResponsive';
 
@@ -72,10 +72,13 @@ export function TabsPager({ pathname }: { pathname: string }) {
   useEffect(() => {
     if (target === activeRef.current) return;
     const from = activeRef.current;
-    activeRef.current = target;
+    moveTo(target);
     setActive(target);
-    arrived(target, from);
-    if (Math.abs(target - from) <= 1) { position.value = withTiming(target, { duration: 260, easing: EASE }); return; }
+    if (Math.abs(target - from) <= 1) {
+      // Community, if it was left, is put back once the row is at rest (atRest).
+      position.value = withTiming(target, { duration: 260, easing: EASE }, (finished) => { if (finished) runOnJS(atRest)(); });
+      return;
+    }
     const dir = target > from ? 1 : -1;
     jumpTab.value = target;
     jumpOffset.value = (from + dir - target) * (width || 1);
@@ -86,6 +89,7 @@ export function TabsPager({ pathname }: { pathname: string }) {
       jumpTab.value = -1;
       jumpOffset.value = 0;
       if (!finished) position.value = target;
+      else runOnJS(atRest)();
     });
   }, [target, position, width, jumpTab, jumpOffset]);
 
@@ -97,15 +101,14 @@ export function TabsPager({ pathname }: { pathname: string }) {
     // Discussions.
     const from = activeRef.current;
     if (index === from) return;
-    // The section strips line up with the tab strip. Community is leftmost,
-    // so a swipe only ever reaches it from Home, its right-hand neighbour, and
-    // lands on Discussions, the section next to Home. Profile opens on Posts.
-    if (TAB_PATHS[index] === '/discuss') requestSection('/discuss', 'discussions');
+    // Profile opens on Posts. (Community's section is set when it is left,
+    // not here: asked mid-drag, it changed under the finger while its edge
+    // was already sliding in.)
     if (TAB_PATHS[index] === '/profile') requestSection('/profile', 'Posts');
   };
   const land = (index: number) => {
-    arrived(index, activeRef.current);
-    activeRef.current = index;
+    moveTo(index);
+    atRest();
     setActive(index);
     setPendingTab(TAB_PATHS[index]);
     if (TAB_PATHS[index] !== pathnameRef.current) router.navigate(TAB_PATHS[index]);
@@ -116,9 +119,34 @@ export function TabsPager({ pathname }: { pathname: string }) {
   // (all four tabs stay mounted, so it used to sit wherever you last left it,
   // and the threads were above you). Coming back from a thread you opened
   // does not count: that never changes the tab, so your place is kept.
-  const arrived = (index: number, from: number) => {
-    if (index !== from && TAB_PATHS[index] === '/discuss') requestScrollToTop('/discuss', true);
+  // It is put back as it is LEFT, once the row is at rest and Community is
+  // off screen, not as you arrive (Oct 22, owner: "Nothing framing in or
+  // out"): arriving, it slid in at its old place and then jumped to the top.
+  // A swipe from the Feed reaches it on Discussions, the section next door,
+  // so that is the section it waits on; the bar asks for Find Players itself
+  // (askForCommunityMap) before it glides there.
+  // Community left and not yet put back. Set whenever the row's tab moves off it, by any way
+  // (a bar tap, a link, a finger), and only cleared once the row has come to rest off Community:
+  // a glide cut short (a second tap, a finger picking the row up) leaves it set for the next rest,
+  // so the reset is never lost (audit, Oct 22). Coming back first clears it: nothing was left.
+  const communityLeft = useRef(false);
+  const moveTo = (index: number) => {
+    if (TAB_PATHS[activeRef.current] === '/discuss' && TAB_PATHS[index] !== '/discuss') communityLeft.current = true;
+    if (TAB_PATHS[index] === '/discuss') communityLeft.current = false;
+    activeRef.current = index;
   };
+  function atRest() {
+    if (!communityLeft.current || TAB_PATHS[activeRef.current] === '/discuss') return;
+    communityLeft.current = false;
+    requestScrollToTop('/discuss', true);
+    requestSection('/discuss', 'discussions');
+  }
+  // Opened on another tab (a link straight to the Feed, a notification): Community was never left,
+  // so it still sits on Find Players. It is put on Discussions now, out of sight, so a swipe from
+  // the Feed brings in the section next door. Not when a page already asked for one.
+  useEffect(() => {
+    if (TAB_PATHS[activeRef.current] !== '/discuss' && askedSection('/discuss') === undefined) requestSection('/discuss', 'discussions');
+  }, []);
 
   // Shared values, not plain variables: the animation thread only ever sees a
   // frozen copy of a plain variable, so nothing set on touch-down would survive.

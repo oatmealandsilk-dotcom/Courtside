@@ -125,6 +125,12 @@ export function NearbyMap(props: NearbyMapProps) {
   const cardIn = useSharedValue(0);
   const showCard = () => {
     setCardUp(true);
+    // Drawn while out of view (the section beside, the tab off screen): no fade to catch mid-swipe, it is just there.
+    if (!onScreen || props.visible === false || props.inView?.() === false) {
+      cardIn.value = 1;
+      setLoaderGone(true);
+      return;
+    }
     cardIn.value = withTiming(1, { duration: MAP_IN_MS, easing: Easing.out(Easing.cubic) }, (done) => { if (done) runOnJS(setLoaderGone)(true); });
   };
   const coverFade = useAnimatedStyle(() => ({ opacity: 1 - cardIn.value }));

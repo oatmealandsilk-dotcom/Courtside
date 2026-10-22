@@ -1,5 +1,5 @@
 import { PRESS_DIM, PRESS_SHRINK } from '@/theme/press';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -14,7 +14,7 @@ import { canSeeAtCourt, courtSeeing } from '@/features/places/useCourtPosts';
 import { openCourt } from '@/features/players/courtLink';
 import { biggerFirst, courtRows, fetchCourts, isClosedCourt, peekCourts, peekSavedCourts, type Court, type CourtRow } from '@/features/players/courts';
 import { FirstReveal } from '@/features/feed/FirstReveal';
-import { formatMiles } from '@/features/players/geo';
+import { formatMiles, milesBetween } from '@/features/players/geo';
 import { IN_TOWN_MILES } from '@/features/players/mapModel';
 import type { LatLng } from '@/features/players/positions';
 import { useApp } from '@/store/AppContext';
@@ -44,19 +44,30 @@ export function useNearCourts(center: LatLng | null): { rows: CourtRow[]; neares
   const [list, setList] = useState<Court[]>(() => (center ? peekCourts(center) ?? [] : []));
   // Nothing known yet for here, and the answer still on its way (the strip holds its place meanwhile).
   const [loading, setLoading] = useState(() => !!center && !peekCourts(center));
+  // Whether this spot's own answer (kept or fresh) is in yet: until it is, the rows already shown stay (below).
+  const [answered, setAnswered] = useState(() => !center || !!peekCourts(center));
   useEffect(() => {
-    if (lat === undefined || lng === undefined) { setList([]); setLoading(false); return undefined; }
+    if (lat === undefined || lng === undefined) { setList([]); setLoading(false); setAnswered(true); return undefined; }
     const at = { lat, lng };
     let on = true;
     let fresh = false;
     const kept = peekCourts(at);
-    if (kept) { setList(kept); setLoading(false); }
-    // The courts kept from the last open, the moment they are read, until the fresh ones come.
-    else void peekSavedCourts(at).then((got) => { if (on && !fresh && got) { setList(got); setLoading(false); } });
-    fetchCourts(at).then((got) => { fresh = true; if (on) setList(got); }).catch(() => undefined).finally(() => { if (on) setLoading(false); });
+    if (kept) { setList(kept); setLoading(false); setAnswered(true); }
+    else {
+      setAnswered(false);
+      // The courts kept from the last open, the moment they are read, until the fresh ones come.
+      void peekSavedCourts(at).then((got) => { if (on && !fresh && got) { setList(got); setLoading(false); setAnswered(true); } });
+    }
+    fetchCourts(at).then((got) => { fresh = true; if (on) setList(got); }).catch(() => undefined).finally(() => { if (on) { setLoading(false); setAnswered(true); } });
     return () => { on = false; };
   }, [lat, lng]);
-  return useMemo(() => {
+  // The rows last shown. A move of the spot (a fix arriving, a new city) keeps them up until the
+  // new spot's own courts are in, rather than the strip emptying and coming back (Oct 22, owner:
+  // "Nothing framing in or out").
+  // Only for a move within the same town: after a move to another city the last city's courts
+  // are never listed as near (see `named`), so the strip holds its place empty instead.
+  const lastRows = useRef<{ rows: CourtRow[]; at: LatLng | null }>({ rows: [], at: null });
+  const result = useMemo(() => {
     if (lat === undefined || lng === undefined) return { rows: [], nearest: null, all: list, loading: false };
     // Members-only and private courts are never suggested: not listed, and never "the nearest" named for a first hit.
     // Only courts in town: after a move to another city, the last city's list (kept while the new one loads, or if it fails) is never listed as near.
@@ -64,6 +75,14 @@ export function useNearCourts(center: LatLng | null): { rows: CourtRow[]; neares
     const rows = [...biggerFirst(named.filter((r) => looksPublic(r.c.name))), ...biggerFirst(named.filter((r) => !looksPublic(r.c.name)))].slice(0, MOST);
     return { rows, nearest: named[0] ?? null, all: list, loading };
   }, [list, lat, lng, loading]);
+  const here = lat === undefined || lng === undefined ? null : { lat, lng };
+  if (result.rows.length) lastRows.current = { rows: result.rows, at: here };
+  else if (!answered && here && lastRows.current.at && lastRows.current.rows.length && milesBetween(lastRows.current.at, here) <= IN_TOWN_MILES) {
+    // Measured again from here, so every distance still says how far from you.
+    const rows = lastRows.current.rows.map((r) => ({ ...r, miles: milesBetween(here, r.c) })).filter((r) => r.miles <= IN_TOWN_MILES);
+    if (rows.length) return { ...result, rows, loading: false };
+  }
+  return result;
 }
 
 /**
@@ -108,8 +127,12 @@ export function CourtsNear({ center, revealOrder }: { center: LatLng | null; /**
           {[0, 1, 2].map((i) => (
             <View key={i} style={styles.card}>
               <View style={styles.top}><View style={styles.tile} /></View>
-              <View style={[styles.heldLine, { width: '82%' }]} />
-              <View style={[styles.heldLine, styles.heldMeta]} />
+              {/* The real card's room for its words (WordsRoom), under the quiet bars: the same height at every text size, so nothing moves when the courts come. */}
+              <View>
+                <WordsRoom />
+                <View style={[styles.heldLine, styles.heldOver, { width: '82%' }]} />
+                <View style={[styles.heldLine, styles.heldOver, styles.heldMeta, styles.heldMetaAt]} />
+              </View>
             </View>
           ))}
         </View>
@@ -142,8 +165,15 @@ export function CourtsNear({ center, revealOrder }: { center: LatLng | null; /**
                 {badge?.hit ? <View style={[styles.badge, styles.badgeHit, styles.badgeRow]}><HitGlyph size={11} color={colors.brand} /><Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.badgeText, styles.badgeHitText]} numberOfLines={1}>{badge.hit}</Text></View>
                   : badge?.posts ? <View style={styles.badge}><Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.badgeText} numberOfLines={1}>{badge.posts}</Text></View> : null}
               </View>
-              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.name} numberOfLines={2}>{labelOf(c)}</Text>
-              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta} numberOfLines={1}>{meta}</Text>
+              {/* The name keeps two lines' room at every text size, the very rule the held cards use, so a
+                  strip of short names is never shorter than the strip it takes the place of. */}
+              <View>
+                <WordsRoom />
+                <View style={styles.wordsOver}>
+                  <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.name} numberOfLines={2}>{labelOf(c)}</Text>
+                  <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta} numberOfLines={1}>{meta}</Text>
+                </View>
+              </View>
             </Pressable>
           );
         })}
@@ -155,6 +185,23 @@ export function CourtsNear({ center, revealOrder }: { center: LatLng | null; /**
     </View>
   );
   return revealOrder === undefined ? strip : <FirstReveal order={revealOrder}>{strip}</FirstReveal>;
+}
+
+/**
+ * The room a court card's words take, unseen: two lines of name and one of
+ * distance at the phone's text size. Both the held cards and the real ones
+ * stand on it, so the strip is the same height before and after the courts
+ * come, whatever the names (Oct 22: a strip of one-line names was 20pt
+ * shorter, and everything under it jumped up).
+ */
+function WordsRoom() {
+  const styles = useThemedStyles(styleDefinitions);
+  return (
+    <View style={styles.wordsRoom} aria-hidden accessibilityElementsHidden importantForAccessibility="no-hide-descendants" pointerEvents="none">
+      <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.name, styles.unseen]} numberOfLines={2}>{'Courts\nnear you'}</Text>
+      <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.meta, styles.unseen]} numberOfLines={1}>1 mi</Text>
+    </View>
+  );
 }
 
 const styleDefinitions = StyleSheet.create({
@@ -186,4 +233,12 @@ const styleDefinitions = StyleSheet.create({
   heldRow: { flexDirection: 'row', overflow: 'hidden' },
   heldLine: { height: 14, marginVertical: 3, borderRadius: 7, backgroundColor: colors.bgElevated },
   heldMeta: { width: '48%', height: 12 },
+  // Over the unseen words, from their top.
+  heldOver: { position: 'absolute', top: 0, left: 0 },
+  // The distance's bar, where the distance's line starts: under two name lines (20 each) and the gap.
+  heldMetaAt: { top: 44 },
+  // The card's words over their room, from its top.
+  wordsOver: { position: 'absolute', top: 0, left: 0, right: 0, gap: 4 },
+  wordsRoom: { gap: 4 },
+  unseen: { opacity: 0 },
 });

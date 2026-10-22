@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
 
-import { isCurtainDown, useCurtainReady } from '@/features/feed/warmup';
+import { curtainHasLifted, isCurtainDown, useCurtainReady } from '@/features/feed/warmup';
 import { useReducedMotion } from '@/lib/useReducedMotion';
 
 /**
@@ -26,7 +26,9 @@ let played = false;
 
 export function FirstReveal({ order, children }: { order: number; children: React.ReactNode }) {
   // Decided once, when the section is built: hidden only under a curtain that has not gone yet.
-  const [hold] = useState(() => !played && !isCurtainDown());
+  // Once the curtain has come down the first showing is over, played or not: a section built
+  // afterwards (one beside the page, a pane reached by a swipe) is simply there, never staggered in.
+  const [hold] = useState(() => !played && !isCurtainDown() && !curtainHasLifted());
   const lifting = useCurtainReady();
   const still = useReducedMotion();
   const shown = useSharedValue(hold ? 0 : 1);

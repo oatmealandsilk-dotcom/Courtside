@@ -1,4 +1,5 @@
 import { PRESS_DIM, PRESS_SHRINK } from '@/theme/press';
+import { usePaneRested } from '@/features/navigation/usePaneRested';
 import React, { useRef, useState, type RefObject } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
@@ -71,8 +72,12 @@ import { TextScale } from '@/theme/textScale';
  * `tipAt`: the page's address, for a list that leaves "its page on show" to
  * the tip (see useShownAt), so the page opening others is not redrawn.
  */
-export function HitCard({ hit, miles, linked = true, tip, tipReady = false, tipAt }: { hit: HitRequest; miles?: number; linked?: boolean; tip?: HitTip; tipReady?: boolean; tipAt?: string }) {
+export function HitCard({ hit, miles, linked = true, tip, tipReady: listReady = false, tipAt, restKey }: { hit: HitRequest; miles?: number; linked?: boolean; tip?: HitTip; tipReady?: boolean; tipAt?: string;
+  /** Given: the tip also waits for the page to rest after any swipe, and after this changes (usePaneRested). */
+  restKey?: string }) {
   const styles = useThemedStyles(styleDefinitions);
+  const rested = usePaneRested(!!tip && restKey !== undefined, restKey);
+  const tipReady = listReady && (restKey === undefined || rested);
   const { users, currentUserId, actions } = useApp();
   const [busy, setBusy] = useState(false);
   const cardRef = useRef<View>(null);

@@ -19,18 +19,10 @@ import { LAYOUT, useResponsive } from '@/lib/useResponsive';
 import { Wash } from '@/components/Wash';
 import { PAGE_WASH, PageWashContext, type PageWashFrame } from './pageWash';
 import { useBarInset } from '@/features/navigation/barInset';
+// Where each page that names itself was left (see scrollMemory).
+import { scrollMemory } from './scrollMemory';
 import { TextScale, colors, oneLine, spacing, typography } from '@/theme';
 
-/**
- * How far down each tab was left, kept outside React so it survives the
- * screen being unmounted and rebuilt — which is exactly what happens when you
- * swipe to another tab and back. Only a page that names itself (memoryKey:
- * the tabs) keeps its place here. Any other page (Settings, a thread, a
- * player) opens at its top each time it is opened (Oct 8, owner: Settings
- * opened at the bottom, wherever it was last left); back on it from a page
- * opened over it, it is still where you left it, as it stays drawn underneath.
- */
-const scrollMemory = new Map<string, number>();
 
 // Pull-to-refresh on the phone, the same way the Home feed does it (the
 // numbers are shared, in lib/pullRefresh): a blank strip the height of the
@@ -130,6 +122,12 @@ interface Props {
    * so the note never covers it.
    */
   noteBelow?: number;
+  /**
+   * On a computer, the page's body is not put in the centred column here:
+   * the caller lays out its own (Community, whose sections scroll across the
+   * whole window, each keeping its words in the column).
+   */
+  unconstrained?: boolean;
 }
 
 /**
@@ -170,6 +168,7 @@ const ScreenBody = React.memo(function ScreenBody({
   scrollsInside = false,
   bleedTop = false,
   noteBelow = 0,
+  unconstrained = false,
 }: Props & { routeKey: string }) {
   // The floating tab bar covers this much of the bottom; a page's last line stays above it.
   const barInset = useBarInset();
@@ -591,7 +590,7 @@ const ScreenBody = React.memo(function ScreenBody({
     </View>
   );
 
-  const body = constrain(
+  const body = (unconstrained ? (node: ReactNode) => node : constrain)(
     showRail ? (
       <View style={styles.withRail}>
         <View style={[styles.column, { maxWidth: columnWidth }]}>{main}</View>
@@ -610,7 +609,8 @@ const ScreenBody = React.memo(function ScreenBody({
       style={[styles.root, { paddingTop: bled ? 0 : isPhone ? insets.top : wideNative ? Math.max(insets.top, spacing.sm) : spacing.sm }]}
       // A scrolling page moves the box itself; a fixed page lifts everything.
       behavior={Platform.OS === 'ios' && !scroll ? 'padding' : undefined}
-      enabled={Platform.OS === 'ios' && !scroll}
+      // A page whose sections scroll themselves (scrollsInside) has them clear the keys, the way a scrolling page does.
+      enabled={Platform.OS === 'ios' && !scroll && !scrollsInside}
       onLayout={(e) => { avoiderFrame.current = e.nativeEvent.layout; }}
     >
       {wash ? <Reanimated.View pointerEvents="none" style={[StyleSheet.absoluteFill, washStyle]}><Wash height={PAGE_WASH.height} strength={PAGE_WASH.strength} /></Reanimated.View> : null}
@@ -677,7 +677,8 @@ const ScreenBody = React.memo(function ScreenBody({
       ) : (
         <View style={styles.flex}>
           {body}
-          {KEYBOARD_ROOM ? <Reanimated.View pointerEvents="none" style={keyboardRoom} /> : null}
+          {/* Sections that scroll themselves keep the keyboard's room at their own ends (PaneScroller). */}
+          {KEYBOARD_ROOM && !scrollsInside ? <Reanimated.View pointerEvents="none" style={keyboardRoom} /> : null}
           {updatedNote}
         </View>
       )}

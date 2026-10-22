@@ -21,10 +21,13 @@ export function useOnScreen(ref: RefObject<View | null>, active: boolean): boole
     const check = () => {
       const node = ref.current;
       if (!node || typeof node.measureInWindow !== 'function') return;
-      node.measureInWindow((_x, y, _w, h) => {
+      node.measureInWindow((x, y, w, h) => {
         if (!on || !h) return;
         const foot = y + h;
-        if (foot > TOP && foot < Dimensions.get('window').height - BOTTOM) setSeen(true);
+        const win = Dimensions.get('window');
+        // Across as well as down: a thing on a section off to the side (one a swipe away) is not in view.
+        if (x < -1 || x + w > win.width + 1) return;
+        if (foot > TOP && foot < win.height - BOTTOM) setSeen(true);
       });
     };
     check();

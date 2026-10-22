@@ -4,7 +4,7 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { Easing, runOnJS, runOnUI, useAnimatedReaction, useAnimatedStyle, useSharedValue, withSpring, withTiming, type SharedValue } from 'react-native-reanimated';
 
 import { PAGE_GUTTER, activationDistance, claimedDepth, waitsForDeeper } from '@/features/navigation/gestureClaim';
-import { isPageSwipeLocked, setPageDragging, subscribePageSwipeLock } from '@/features/navigation/swipeLock';
+import { isPageSwipeLocked, sectionPan, setPageDragging, subscribePageSwipeLock } from '@/features/navigation/swipeLock';
 import { useResponsive } from '@/lib/useResponsive';
 import { useTabActive } from '@/features/navigation/tabFocus';
 
@@ -46,7 +46,7 @@ const SETTLE = { stiffness: 420, damping: 41, mass: 1, overshootClamping: true }
  * handed up to the tab row when `delegateLeft` / `delegateRight` say so,
  * otherwise the row gives a little and springs back.
  */
-export function SectionPager({ index, panes, onIndex, onLand, progress, depth = 1, delegateLeft = false, delegateRight = false, fill = false, edgeBack = false, bleed = 0 }: {
+export function SectionPager({ index, panes, onIndex, onLand, progress, depth = 1, delegateLeft = false, delegateRight = false, fill = false, edgeBack = false, bleed = 0, blocked }: {
   index: number;
   panes: React.ReactNode[];
   onIndex: (next: number) => void;
@@ -96,6 +96,11 @@ export function SectionPager({ index, panes, onIndex, onLand, progress, depth = 
    * already keeps every pane built.
    */
   keepMounted?: boolean;
+  /**
+   * While true, no swipe starts (Community: the section on show has a pull
+   * held open, and turning the page then would leave its disc behind).
+   */
+  blocked?: SharedValue<boolean>;
 }) {
   const { isPhone } = useResponsive();
   const count = panes.length;
@@ -118,8 +123,8 @@ export function SectionPager({ index, panes, onIndex, onLand, progress, depth = 
   const [moving, setMoving] = useState(false);
   const noteHeight = (i: number, h: number) => setHeights((was) => (was[i] === h ? was : Object.assign([...was], { [i]: h })));
   const locked = useSharedValue(false);
-  const config = useSharedValue({ enabled: isPhone, delegateLeft, delegateRight, depth, last, edgeBack });
-  useEffect(() => { config.value = { enabled: isPhone, delegateLeft, delegateRight, depth, last, edgeBack }; }, [isPhone, delegateLeft, delegateRight, depth, last, edgeBack, config]);
+  const config = useSharedValue({ enabled: isPhone, delegateLeft, delegateRight, depth, last, edgeBack, fill });
+  useEffect(() => { config.value = { enabled: isPhone, delegateLeft, delegateRight, depth, last, edgeBack, fill }; }, [isPhone, delegateLeft, delegateRight, depth, last, edgeBack, fill, config]);
   useEffect(() => {
     locked.value = isPageSwipeLocked();
     return subscribePageSwipeLock(() => { locked.value = isPageSwipeLocked(); });
@@ -149,6 +154,24 @@ export function SectionPager({ index, panes, onIndex, onLand, progress, depth = 
     base.value = index;
     const landing = onLand;
     if (Math.abs(position.value - index) <= 0.01) { if (landing) runOnUI(landing)(index); return; }
+    if (fill) {
+      // Each pane is a full-height scroller of its own: nothing to unclip or
+      // re-measure, so no render here. On screen the row glides; off screen
+      // it is simply there, at once, on the animation thread (no frame's
+      // wait, so a tab arriving never shows the old pane at its edge).
+      const dest = index;
+      if (tabActive) {
+        position.value = withTiming(dest, { duration: 240, easing: EASE }, (finished) => { if (finished && landing) landing(dest); });
+      } else {
+        runOnUI(() => {
+          'worklet';
+          position.value = dest;
+          if (progress) progress.value = 0;
+          if (landing) landing(dest);
+        })();
+      }
+      return;
+    }
     if (tabActive) {
       setMoving(true);
       const dest = index;
@@ -182,7 +205,7 @@ export function SectionPager({ index, panes, onIndex, onLand, progress, depth = 
     base.value = dest;
     shownRef.current = dest;
     setShown(dest);
-    setMoving(false);
+    if (!fill) setMoving(false);
     latest.current(dest);
   };
 
@@ -193,6 +216,9 @@ export function SectionPager({ index, panes, onIndex, onLand, progress, depth = 
   // Where the finger came down on the screen itself, for the back-swipe edge.
   const startScreenX = useSharedValue(0);
   const startPosition = useSharedValue(0);
+  // A sideways drag taken while the page is held (`blocked`, a pull held open): kept from every
+  // pager above too, so it never turns the tab instead, and simply ignored. Nothing moves.
+  const frozen = useSharedValue(false);
   const landWorklet = onLand;
   const pan = useMemo(() => {
     // Let go (or taken away by the system): spring to a whole pane, never
@@ -201,6 +227,7 @@ export function SectionPager({ index, panes, onIndex, onLand, progress, depth = 
     const settle = (velocityX: number) => {
       'worklet';
       settled.value = true;
+      sectionPan.value = false;
       runOnJS(setPageDragging)(false);
       const c = config.value;
       const at = position.value;
@@ -229,6 +256,7 @@ export function SectionPager({ index, panes, onIndex, onLand, progress, depth = 
       armed.value = false;
       startY.value = t.y;
       startScreenX.value = t.absoluteX;
+      frozen.value = false;
     })
     .onTouchesMove((e, state) => {
       'worklet';
@@ -243,6 +271,13 @@ export function SectionPager({ index, panes, onIndex, onLand, progress, depth = 
         const at = Math.round(position.value);
         const handedOff = (c.delegateRight && dx > 0 && at <= 0) || (c.delegateLeft && dx < 0 && at >= c.last) || (c.edgeBack && dx > 0 && startScreenX.value < BACK_EDGE);
         if (!c.enabled || locked.value || handedOff || claimedDepth.value > c.depth + 1) state.fail();
+        else if (blocked && blocked.value) {
+          // Held: this pager takes the drag so the tab row above cannot (it stands down for a
+          // deeper claim), and moves nothing with it (see onStart and onUpdate).
+          frozen.value = true;
+          claimedDepth.value = c.depth + 1;
+          state.activate();
+        }
         else if (waitsForDeeper(c.depth) && !armed.value) armed.value = true;
         else { claimedDepth.value = c.depth + 1; state.activate(); }
       } else if (Math.abs(dy) > 12) {
@@ -251,15 +286,19 @@ export function SectionPager({ index, panes, onIndex, onLand, progress, depth = 
     })
     .onStart(() => {
       'worklet';
+      if (frozen.value) return;
       // Picking up mid-settle is allowed: the row follows the finger from where it is.
       startPosition.value = position.value;
       settled.value = false;
       driving.value = true;
+      sectionPan.value = true;
       runOnJS(setPageDragging)(true);
-      runOnJS(setMoving)(true);
+      // A pane that is a scroller of its own (fill) needs no unclipping: no render at the start of a swipe.
+      if (!config.value.fill) runOnJS(setMoving)(true);
     })
     .onUpdate((e) => {
       'worklet';
+      if (frozen.value) return;
       const c = config.value;
       let next = startPosition.value - e.translationX / strideValue.value;
       if (next < 0) next = next * 0.25;
@@ -273,6 +312,7 @@ export function SectionPager({ index, panes, onIndex, onLand, progress, depth = 
     .onFinalize((e) => {
       'worklet';
       if (claimedDepth.value === config.value.depth + 1) claimedDepth.value = 0;
+      frozen.value = false;
       // Cancelled mid-drag with no end: settle here all the same.
       if (!settled.value) settle(e.velocityX);
     });
