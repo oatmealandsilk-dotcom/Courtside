@@ -80,7 +80,9 @@ const WINDOWS = [
 // One step into the next (item 30): the old fades out quickly as the new fades in.
 const STEP_IN = FadeIn.duration(240);
 const STEP_OUT = FadeOut.duration(160);
-const STEP_GLIDE = LinearTransition.duration(240);
+// Not on the web: there a glide is a translate plus a scale, and this box's
+// height changes with the lead line, so the whole step would stretch.
+const STEP_GLIDE = Platform.OS === 'web' ? undefined : LinearTransition.duration(240);
 
 const STEPS: { title: string; lead?: string; skip?: SetupStep }[] = [
   { title: 'About you' },

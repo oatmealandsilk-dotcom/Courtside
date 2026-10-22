@@ -6,7 +6,7 @@ import { OldEnoughCheck } from '@/components/OldEnoughCheck';
 import { blockDevice, carryBirthDate, dropCarriedBirthDate, isDeviceBlocked, toBirthDate, yearsOld } from '@/features/age/ageCheck';
 import { readableInk } from '@/lib/badges';
 import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import Animated, { FadeIn, FadeInDown, FadeOut, LinearTransition } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeInDown, FadeOut, LinearTransition, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { Submit } from '@/components/sheet/SheetForm';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -18,7 +18,7 @@ import { Avatar, Button, Field } from '@/components/ui';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { auth as remoteAuth, remote, type HandleStatus } from '@/data/remote';
 import { BLOCKED_WORDS_NOTE } from '@/features/hiddenWords/hiddenWords';
-import { SigningInAs, SigningInWith } from '@/components/SigningInAs';
+import { Lingering, SigningInAs, SigningInWith } from '@/components/SigningInAs';
 import { useLeave } from '@/components/LeaveCurtain';
 import { peekReferrer, peekShareTarget } from '@/features/invite/referral';
 import { useApp } from '@/store/AppContext';
@@ -41,7 +41,15 @@ const PAGE_OUT = FadeOut.duration(220);
 // Sign in ⇄ sign up (item 29): the extra boxes fade, and everything under them glides.
 const BOXES_IN = FadeIn.duration(240);
 const BOXES_OUT = FadeOut.duration(150);
-const GLIDE = LinearTransition.duration(260);
+// On the web, Reanimated plays a layout transition as a translate plus a
+// scale, so a box whose height changes would squash its fields and text for
+// the length of the glide. There the boxes' own fades carry the change instead.
+const GLIDE = Platform.OS === 'web' ? undefined : LinearTransition.duration(260);
+// On the web a leaving layer is copied, and the welcome's own fade-ins restart
+// at nothing inside the copy, so it would cut to blank. There it stays mounted
+// and fades out itself (welcomeFade below).
+const WEB = Platform.OS === 'web';
+const WELCOME_OUT_MS = 220;
 
 /** A username made from a name: "Alex Reed" → "alexreed" (accents off, letters and numbers only, 20 at most); too short to use, nothing. */
 function suggestedHandle(name: string): string {
@@ -366,9 +374,18 @@ export default function SignIn() {
   // Back from the inbox panel: the form fades back in (on the page's first draw it simply shows, with the page).
   const [leftInbox, setLeftInbox] = useState(false);
   const backToForm = () => { setLeftInbox(true); setSent(null); setError(null); };
+  // The welcome fading out on the web (see WEB above): kept on screen, untouchable, until its fade ends.
+  const [leaving, setLeaving] = useState(false);
+  const welcomeFade = useSharedValue(1);
+  const welcomeFadeStyle = useAnimatedStyle(() => ({ opacity: welcomeFade.value }));
+  useEffect(() => {
+    if (!leaving) return undefined;
+    const done = setTimeout(() => setLeaving(false), WELCOME_OUT_MS + 40);
+    return () => clearTimeout(done);
+  }, [leaving]);
   // Back to the welcome: it fades in as it is, without replaying its first-visit entrance.
   const [cameBack, setCameBack] = useState(false);
-  const backToWelcome = () => { setCameBack(true); setStarted(false); setError(null); setProviderError(null); };
+  const backToWelcome = () => { welcomeFade.value = 1; setLeaving(false); setCameBack(true); setStarted(false); setError(null); setProviderError(null); };
   // "Use another account" or "New here?" from the saved accounts goes back to them.
   const backToAccounts = () => { setUseAnother(false); setMode('sign-in'); setError(null); setProviderError(null); };
   // The form's back arrow: to the saved accounts, from "another account" or
@@ -388,7 +405,10 @@ export default function SignIn() {
   });
   // Autofill hints for Android's password manager (an iPhone keeps its own way; see Field).
   const fill = (hint: NonNullable<React.ComponentProps<typeof Field>['autoComplete']>) => (Platform.OS === 'android' ? hint : undefined);
-  const begin = (next: Mode) => { setMode(next); setStarted(true); setError(null); setProviderError(null); };
+  const begin = (next: Mode) => {
+    if (WEB) { welcomeFade.value = withTiming(0, { duration: WELCOME_OUT_MS }); setLeaving(true); }
+    setMode(next); setStarted(true); setError(null); setProviderError(null);
+  };
   const title = chooser ? 'Welcome back' : mode === 'sign-up' ? 'Create your account' : 'Sign in';
   // Came from "I'm in" on the peek (Oct 17): the form says what it is for, "Make a free account to join Sam's hit at 6pm".
   const [joining] = useState(() => { const t = peekShareTarget(); return t?.joinHit && t.label ? t.label : null; });
@@ -398,11 +418,18 @@ export default function SignIn() {
   // Each is a layer of its own, so one fades out while the other fades in.
   return (
     <View style={styles.root}>
-      {welcome ? (
-        <Animated.View key="welcome" entering={cameBack ? PAGE_IN : undefined} exiting={PAGE_OUT} style={StyleSheet.absoluteFill}>
+      {welcome || (WEB && leaving) ? (
+        <Animated.View
+          key="welcome"
+          entering={cameBack ? PAGE_IN : undefined}
+          exiting={WEB ? undefined : PAGE_OUT}
+          pointerEvents={welcome ? 'auto' : 'none'}
+          style={[StyleSheet.absoluteFill, WEB ? welcomeFadeStyle : null]}
+        >
           <Welcome onCreate={() => begin('sign-up')} onLogIn={() => begin('sign-in')} still={cameBack} />
         </Animated.View>
-      ) : (
+      ) : null}
+      {welcome ? null : (
     <Animated.View key="form" entering={PAGE_IN} exiting={PAGE_OUT} style={StyleSheet.absoluteFill}>
     <KeyboardScrollContext.Provider value={keyboard.reveal}>
       <Wash height={420} strength={0.85} />
@@ -651,8 +678,8 @@ export default function SignIn() {
     </KeyboardScrollContext.Provider>
     </Animated.View>
       )}
-      {via ? <SigningInWith provider={via} /> : null}
-      {switchingAccount ? <SigningInAs name={switchingAccount.name} handle={switchingAccount.handle} avatarUrl={switchingAccount.avatarUrl} seed={switchingAccount.id} /> : null}
+      <Lingering value={via}>{(p) => <SigningInWith provider={p} />}</Lingering>
+      <Lingering value={switchingAccount}>{(a) => <SigningInAs name={a.name} handle={a.handle} avatarUrl={a.avatarUrl} seed={a.id} />}</Lingering>
       {curtain}
     </View>
   );

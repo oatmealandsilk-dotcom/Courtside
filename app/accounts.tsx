@@ -6,7 +6,7 @@ import { goBack } from '@/lib/goBack';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { Avatar, Screen } from '@/components/ui';
-import { SigningInAs } from '@/components/SigningInAs';
+import { Lingering, SigningInAs } from '@/components/SigningInAs';
 import { useLeave } from '@/components/LeaveCurtain';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing, typography } from '@/theme';
@@ -79,7 +79,7 @@ export default function Accounts() {
       {error ? <Text style={styles.error}>{error}</Text> : null}
       <Text style={styles.note}>Removing a login here only forgets it on this device. Logging out of all devices, in the account center, forgets it everywhere.</Text>
     </Screen>
-    {switchingTo ? <SigningInAs name={switchingTo.name} handle={switchingTo.handle} avatarUrl={switchingTo.avatarUrl} seed={switchingTo.id} /> : null}
+    <Lingering value={switchingTo}>{(a) => <SigningInAs name={a.name} handle={a.handle} avatarUrl={a.avatarUrl} seed={a.id} />}</Lingering>
     {curtain}
     </>
   );

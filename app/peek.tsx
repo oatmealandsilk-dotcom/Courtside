@@ -39,6 +39,13 @@ const spotsText = (n: number) => (n === 1 ? '1 spot left' : `${n} spots left`);
 // everything under them glides to its new place (Oct 22 sweep, item 32).
 const CARD_OUT = FadeOut.duration(160);
 const GLIDE = LinearTransition.duration(260);
+// On the web Reanimated plays a layout glide as a translate plus a scale, so a
+// list whose height changes would stretch its cards; and a leaving list is
+// copied with every card's fade-in restarting. There the lists change in place
+// and each card fades and glides on its own (its size never changes).
+const WEB = Platform.OS === 'web';
+const LIST_GLIDE = WEB ? undefined : GLIDE;
+const LIST_OUT = WEB ? undefined : CARD_OUT;
 
 /**
  * The peek (owner, Oct 17: "for the Web version if people are gonna click
@@ -80,9 +87,12 @@ export default function Peek() {
   const [area, setArea] = useState<string | null>(null);
   const [asking, setAsking] = useState<PeekHit | null>(null);
 
+  // "Try again" on the couldn't-load card shows it is working until the answer lands.
+  const [retrying, setRetrying] = useState(false);
   const load = useCallback((point: { lat: number; lng: number } | null) => {
     let live = true;
-    fetchPeekHits(point, 30).then((found) => { if (live) setGot({ hits: found, from: point }); }).catch(() => { if (live) setGot({ hits: null, from: point }); });
+    const land = (next: { hits: PeekHit[] | null; from: { lat: number; lng: number } | null }) => { if (!live) return; setGot(next); setRetrying(false); };
+    fetchPeekHits(point, 30).then((found) => land({ hits: found, from: point })).catch(() => land({ hits: null, from: point }));
     return () => { live = false; };
   }, []);
   // Escape puts the "I'm in" sheet away, as it does the guest Join sheet.
@@ -189,10 +199,10 @@ export default function Peek() {
               <Ionicons name="cloud-offline-outline" size={26} color={colors.textMuted} />
               <Text style={styles.emptyTitle}>Couldn’t load the hits</Text>
               <Text style={styles.emptyBody}>Check your connection and try again.</Text>
-              <Button label="Try again" variant="secondary" size="sm" onPress={() => load(near)} />
+              <Button label="Try again" variant="secondary" size="sm" loading={retrying} onPress={() => { if (retrying) return; setRetrying(true); load(near); }} />
             </Animated.View>
           ) : nothing || noneNear ? (
-            <Animated.View entering={FadeIn.duration(260)} exiting={CARD_OUT} layout={GLIDE} style={[styles.card, styles.empty]}>
+            <Animated.View entering={FadeIn.duration(260)} exiting={CARD_OUT} layout={LIST_GLIDE} style={[styles.card, styles.empty]}>
               <View style={styles.emptyIcon}><HitGlyph size={24} color={colors.brand} /></View>
               <Text style={styles.emptyTitle}>No open hits near you yet</Text>
               <Text style={styles.emptyBody}>Be the first to post one. Players near you see it straight away.</Text>
@@ -202,13 +212,13 @@ export default function Peek() {
           ) : null}
 
           {!loading && nearHits.length ? (
-            <Animated.View key="near" exiting={CARD_OUT} layout={GLIDE} style={styles.list}>
+            <Animated.View key="near" exiting={LIST_OUT} layout={LIST_GLIDE} style={styles.list}>
               {nearHits.map((h, i) => <HitCard key={h.id} hit={h} index={i} onJoin={() => setAsking(h)} />)}
             </Animated.View>
           ) : null}
 
           {!loading && farHits.length ? (
-            <Animated.View key="far" entering={FadeIn.duration(260)} exiting={CARD_OUT} layout={GLIDE} style={styles.list}>
+            <Animated.View key="far" entering={FadeIn.duration(260)} exiting={LIST_OUT} layout={LIST_GLIDE} style={styles.list}>
               <Text style={styles.section}>{noneNear ? 'Nearest open hits' : 'Further away'}</Text>
               {farHits.map((h, i) => <HitCard key={h.id} hit={h} index={i} onJoin={() => setAsking(h)} />)}
             </Animated.View>
