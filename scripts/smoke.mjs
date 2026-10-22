@@ -1387,6 +1387,10 @@ const STEPS = [
       await page.tap({ label: 'Send message' });
       // Sent: it shows in the chat (a tip may lie over it, which is fine).
       await page.waitFor({ text: 'Smoke test: hello from the auto-tester', any: true });
+      // In a browser the emoji button opens the app's own emoji keyboard (a phone uses its own), and closes it again.
+      await page.tap({ label: 'Add an emoji' });
+      await page.waitFor({ label: /^Add \p{Extended_Pictographic}/u });
+      await page.tap({ label: 'Show the keyboard' });
     },
     expect: [{ label: 'Message text' }, { label: 'Chat details' }],
     after: async (page) => {
