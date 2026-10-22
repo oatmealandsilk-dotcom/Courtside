@@ -52,6 +52,12 @@ export default function TabsLayout() {
   useTheme();
   const pathname = usePathname();
   const params = useGlobalSearchParams<{ section?: string }>();
+  // A link or bookmark naming a Community section (/discuss?section=discussions)
+  // opens on it: asked once, before Discuss builds and reads askedSection.
+  useState(() => {
+    const s = typeof params.section === 'string' ? params.section : undefined;
+    if (pathname === '/discuss' && (s === 'players' || s === 'discussions')) requestSection('/discuss', s);
+  });
   // A page turn the tutorial asks for (see pageSlide) plays on this same
   // surface, with the page it is heading for as the one sliding in: it may
   // be further along than the next stop (the Feed to the map), the way the

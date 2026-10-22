@@ -138,9 +138,11 @@ export default function SignIn() {
 
   // Coming back from Google, the session can land a moment after this screen
   // draws; leave as soon as it does instead of sitting on an empty form.
+  // Through the same curtain as submit/pick/apple, so the page settles out
+  // instead of cutting (leave() is idempotent: one fade, one navigation).
   useEffect(() => {
-    if (currentUserId) router.replace('/');
-  }, [currentUserId]);
+    if (currentUserId) leave(() => router.replace('/'));
+  }, [currentUserId, leave]);
 
   // Supabase reports a failed Google sign-in in the address bar, as
   // #error_description=…; the splash then forwards here with the bar

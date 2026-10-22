@@ -2,6 +2,7 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
+import Animated, { FadeIn } from 'react-native-reanimated';
 import { router, useLocalSearchParams } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
@@ -37,12 +38,19 @@ export function SharedPage({ kind, id }: { kind: ShareKind; id: string }) {
   const [preview, setPreview] = useState<SharePreview | null | undefined>(undefined);
 
   // The "shared this with you" line only names someone the server vouches for.
+  // The page holds its spinner until that answer is in too, then the line
+  // fades in above the card instead of popping in and pushing it down.
   const [sharer, setSharer] = useState<SharePerson | null>(null);
+  const [refDone, setRefDone] = useState(!params.ref);
   useEffect(() => {
-    if (!params.ref) return;
+    if (!params.ref) { setRefDone(true); return; }
     let live = true;
+    setRefDone(false);
     void rememberReferrer(String(params.ref));
-    fetchShareReferrer(String(params.ref)).then((who) => { if (live) setSharer(who); }).catch(() => undefined);
+    fetchShareReferrer(String(params.ref))
+      .then((who) => { if (live) setSharer(who); })
+      .catch(() => undefined)
+      .finally(() => { if (live) setRefDone(true); });
     return () => { live = false; };
   }, [params.ref]);
   useEffect(() => {
@@ -61,6 +69,7 @@ export function SharedPage({ kind, id }: { kind: ShareKind; id: string }) {
     : kind === 'group' ? `/g/${id}`
     : `/court/${id}?name=${encodeURIComponent(courtName)}&lat=${encodeURIComponent(String(params.lat ?? ''))}&lng=${encodeURIComponent(String(params.lng ?? ''))}`;
 
+  const waiting = preview === undefined || !refDone;
   const open = !!preview?.open;
   const author = preview?.author;
   const city = cityOf(author?.location);
@@ -95,14 +104,14 @@ export function SharedPage({ kind, id }: { kind: ShareKind; id: string }) {
             </Pressable>
           </View>
 
-          {sharer ? (
-            <View style={styles.invited}>
+          {sharer && !waiting ? (
+            <Animated.View entering={FadeIn.duration(240)} style={styles.invited}>
               <Ionicons name="paper-plane-outline" size={13} color={colors.brand} />
               <Text style={styles.invitedText} numberOfLines={1}>@{sharer.handle} shared this with you</Text>
-            </View>
+            </Animated.View>
           ) : null}
 
-          {preview === undefined ? (
+          {waiting ? (
             <View style={styles.loading}><CourtSpinner size={32} /></View>
           ) : !open || !preview ? (
             <Locked group={kind === 'group'} />
@@ -118,7 +127,7 @@ export function SharedPage({ kind, id }: { kind: ShareKind; id: string }) {
             <CourtCard name={courtName} preview={preview} />
           ) : <Locked />}
 
-          {preview === undefined ? null : (
+          {waiting ? null : (
             <View style={styles.join}>
               <Text style={styles.pitch}>{pitch}</Text>
               <Button label={cta} full onPress={() => { void go(true); }} />

@@ -37,7 +37,10 @@ function GroupPage() {
   const styles = useThemedStyles(styleDefinitions);
   const { id } = useLocalSearchParams<{ id: string }>();
   const { feedGroups, feedGroupsAsked, feedGroupInvites, users, currentUserId, actions } = useApp();
-  const group = feedGroups.find((g) => g.id === id);
+  // While leaving, keep the member page as it was until we slide back
+  // (the group drops out of feedGroups before the server answers).
+  const [leaving, setLeaving] = useState<typeof feedGroups[number] | null>(null);
+  const group = feedGroups.find((g) => g.id === id) ?? leaving ?? undefined;
   const invite = group ? undefined : feedGroupInvites.find((i) => i.groupId === id);
   const inviter = invite ? users.find((u) => u.id === invite.inviterId) : undefined;
   const inviteFull = !!invite && feedGroups.length >= MAX_GROUPS;
@@ -82,7 +85,7 @@ function GroupPage() {
     message: group?.ask ? 'You’ll need the admin’s yes to come back.' : 'You can join again with the link.',
     confirmLabel: 'Leave',
     destructive: true,
-    onConfirm: () => { void act(() => actions.leaveFeedGroup(id)).then(() => goBack('/groups')); },
+    onConfirm: () => { setLeaving(group ?? null); void act(() => actions.leaveFeedGroup(id)).then(() => goBack('/groups')); },
   });
 
   if (!group && card === undefined && cardFailed) {
