@@ -112,9 +112,6 @@ function RootStack() {
       {/* Edit Profile always slides away to the right, however you leave it (Oct 5, owner: it sometimes just vanished
           when a tab was tapped, and slid when Back or Save was used). */}
       <Stack.Screen name="edit-profile" options={{ animation: 'slide_from_right' }} />
-      {/* The Messages inbox goes back from a drag to the right anywhere on it, not just from the edge (Oct 22, owner:
-          "make it so the whole screen pulls and you can exit the screen that way"); its rows let go of a rightward drag. */}
-      <Stack.Screen name="messages/index" options={{ fullScreenGestureEnabled: true }} />
       {/* Every see-through sheet below (transparentModal) is also listed in SEE_THROUGH in src/lib/goBack.ts, so the Feed keeps the bottom bar as it was under it. */}
       {/* The Create box brings its own entrance (see compose.tsx); the page itself just fades. A sheet handing over to a
           session's "Log it" page (the Session sheet, Oct 16) has its dim and surface up already, so then the page shows at

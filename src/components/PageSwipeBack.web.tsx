@@ -45,6 +45,14 @@ export function PageSwipeBack({ children, onBack }: { children: React.ReactNode;
     };
     const touchOf = (e: TouchEvent, id: number) => Array.from(e.changedTouches).find((t) => t.identifier === id);
     const start = (e: TouchEvent) => {
+      if (drag) {
+        const held = drag.id;
+        // A second finger mid-drag changes nothing: the first one still has the page.
+        if (Array.from(e.touches).some((t) => t.identifier === held)) return;
+        // The first finger's lift never reached the page: let go of its drag first.
+        if (drag.taken) { taking.current = false; setPageDragging(false); place(0, 240); }
+        drag = null;
+      }
       if (leaving || e.touches.length !== 1 || isPageSwipeLocked()) { drag = null; return; }
       const t = e.touches[0];
       if (scrollsSideways(e.target as HTMLElement | null, el)) { drag = null; return; }
@@ -77,7 +85,9 @@ export function PageSwipeBack({ children, onBack }: { children: React.ReactNode;
     };
     const end = (e: TouchEvent) => {
       if (!drag || !touchOf(e, drag.id)) return;
-      const { taken, dx, v } = drag;
+      const { taken, dx } = drag;
+      // A speed counts only if the finger was still moving at the end (held still, then lifted, is not a flick).
+      const v = e.timeStamp - drag.t < 100 ? drag.v : 0;
       drag = null;
       if (!taken) return;
       taking.current = false;
