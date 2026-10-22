@@ -11,7 +11,8 @@ import { Avatar } from '@/components/ui';
 import type { DetectedActivity, ID, MatchSet, Post, PracticeSession, SessionTag, User } from '@/data/types';
 import { resultWord, scoreLine, sessionEyebrow, sourceLabel } from '@/features/activity/format';
 import { loggedNumbers } from '@/features/activity/healthShare';
-import { flipSets, scoreScale, spokenScore } from '@/features/activity/score';
+import { flipSets } from '@/features/activity/score';
+import { ScoreBoard, boardSides } from './ScoreBoard';
 import { isActive, sessionPeople, tagsOnSession } from '@/features/activity/sessionTags';
 import { overUsual } from '@/features/activity/usual';
 import { cleanZones, hardMinutes, postZones } from '@/features/activity/zones';
@@ -196,7 +197,10 @@ export function SessionSheet({ post, me, users, sessions, sessionTags, activitie
       </View>
       {score ? (
         // A long score (tiebreak points, Oct 10) a little smaller, so it all fits on its line.
-        <Text style={[styles.score, { fontSize: 26 * scoreScale(score, 22) }]} accessibilityLabel={`Score ${spokenScore(s.sets)}`} numberOfLines={1} maxFontSizeMultiplier={1.2}>{score}</Text>
+        // The ScoreBoard (T1, Oct 22): on the court's soft wash, no card of its own; the pill above says the result.
+        <View style={styles.board}>
+          <ScoreBoard sets={s.sets!} {...boardSides(s, users.find((u) => u.id === post.authorId)?.name ?? '', hidden)} youWon={s.won} ended={s.ended} frame="open" status={false} headers />
+        </View>
       ) : null}
       {over ? (
         <View style={styles.usual} accessible accessibilityLabel={`${over} minutes over your usual. Only you see this.`}>
@@ -301,7 +305,7 @@ const styleDefinitions = StyleSheet.create({
   won: { backgroundColor: colors.brand },
   lost: { borderWidth: 1, borderColor: colors.borderStrong },
   resultText: { ...font('700'), fontSize: 14 },
-  score: { ...font('700'), fontSize: 26, letterSpacing: -0.6, color: colors.text, fontVariant: ['tabular-nums'], marginTop: -6 },
+  board: { marginTop: -6 },
   usual: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999, backgroundColor: colors.brandDim, marginTop: -4 },
   usualText: { ...font('600'), fontSize: 12, color: colors.brand },
   // "Share your session": the brand's own filled pill, full width, a 44-point target.

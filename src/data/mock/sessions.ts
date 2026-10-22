@@ -43,7 +43,8 @@ export const demoSessions: PracticeSession[] = [
   // Two tiebreaks (Oct 10): the first set's, 7-6(5), and a match tiebreak instead of a third set, so the demo shows "7–6(5) 3–6 (10–7)".
   { id: 'ses-demo-1', userId: CURRENT_USER_ID, day: dayAgo(1), minutes: 90, kind: 'match', won: true, sets: [[7, 6, 5], [3, 6], [10, 7]], note: 'At Alder Park', courtId: at(1), createdAt: loggedAt(1, 20) },
   { id: 'ses-demo-2', userId: CURRENT_USER_ID, day: dayAgo(2), minutes: 62, kind: 'practice', activityId: 'act-demo-2', createdAt: loggedAt(2, 19) },
-  { id: 'ses-demo-10', userId: CURRENT_USER_ID, day: dayAgo(3), minutes: 75, kind: 'match', won: true, sets: [[6, 3], [7, 5]], note: 'At Alder Park', courtId: at(1), createdAt: loggedAt(3, 19) },
+  // Mira retired at 3-1 in the second (the ScoreBoard's "ret.", Oct 22).
+  { id: 'ses-demo-10', userId: CURRENT_USER_ID, day: dayAgo(3), minutes: 75, kind: 'match', won: true, sets: [[6, 3], [3, 1]], ended: { how: 'retired', side: 1 }, note: 'At Alder Park', courtId: at(1), createdAt: loggedAt(3, 19) },
   { id: 'ses-demo-3', userId: CURRENT_USER_ID, day: dayAgo(4), minutes: 45, kind: 'drills', createdAt: loggedAt(4, 8) },
   // Mira's practice, from her tag: accepted with "Add to my sessions".
   { id: 'ses-demo-11', userId: CURRENT_USER_ID, day: dayAgo(5), minutes: 60, kind: 'practice', opponent: 'Mira', fromSessionId: 'ses-mira-1', createdAt: isoDaysAgo(4, 2) },
@@ -51,13 +52,14 @@ export const demoSessions: PracticeSession[] = [
   // A week ago from WHOOP (act-demo-3), a match won against Mira: on your post p-demo-whoop.
   { id: 'ses-demo-13', userId: CURRENT_USER_ID, day: dayAgo(7), minutes: 96, kind: 'match', won: true, activityId: 'act-demo-3', createdAt: loggedAt(7, 20) },
   { id: 'ses-demo-5', userId: CURRENT_USER_ID, day: dayAgo(8), minutes: 50, kind: 'fitness', createdAt: loggedAt(8, 7) },
-  { id: 'ses-demo-6', userId: CURRENT_USER_ID, day: dayAgo(9), minutes: 120, kind: 'match', won: false, sets: [[4, 6], [6, 7]], createdAt: loggedAt(9, 12) },
+  { id: 'ses-demo-6', userId: CURRENT_USER_ID, day: dayAgo(9), minutes: 120, kind: 'match', won: false, sets: [[4, 6], [6, 7, 4]], createdAt: loggedAt(9, 12) },
   // The partner streaks' practices (sweep R12), dated by the week, not by days ago.
   { id: 'ses-demo-14', userId: CURRENT_USER_ID, day: calDay(W_MIRA_0), minutes: 60, kind: 'practice', note: 'With Mira', createdAt: W_MIRA_0 ? loggedAt(W_MIRA_0, 18) : isoDaysAgo(0) },
   { id: 'ses-demo-15', userId: CURRENT_USER_ID, day: calDay(W_DEV_1), minutes: 75, kind: 'practice', note: 'With Dev', createdAt: loggedAt(W_DEV_1, 18) },
   { id: 'ses-demo-7', userId: CURRENT_USER_ID, day: calDay(W_BOTH_2), minutes: 60, kind: 'practice', createdAt: loggedAt(W_BOTH_2, 18) },
   { id: 'ses-demo-8', userId: CURRENT_USER_ID, day: calDay(W_MIRA_3), minutes: 90, kind: 'practice', createdAt: loggedAt(W_MIRA_3, 18) },
-  { id: 'ses-demo-9', userId: CURRENT_USER_ID, day: dayAgo(20), minutes: 60, kind: 'match', won: true, opponent: 'Priya', createdAt: loggedAt(20, 11) },
+  // Rain stopped it at 2-3 in the second: unfinished, no result (the ScoreBoard, Oct 22).
+  { id: 'ses-demo-9', userId: CURRENT_USER_ID, day: dayAgo(20), minutes: 60, kind: 'match', sets: [[6, 4], [2, 3]], ended: { how: 'stopped' }, opponent: 'Priya', createdAt: loggedAt(20, 11) },
 ];
 
 /**
@@ -66,7 +68,7 @@ export const demoSessions: PracticeSession[] = [
  */
 export const demoSessionTags: SessionTag[] = [
   { id: 'stag-demo-1', sessionId: 'ses-demo-1', taggerId: CURRENT_USER_ID, taggedId: 'u-mira', role: 'opponent', status: 'accepted', createdAt: loggedAt(1, 20), respondedAt: isoDaysAgo(0, 11), kind: 'match', day: dayAgo(1), minutes: 90, won: true, sets: [[7, 6, 5], [3, 6], [10, 7]] },
-  { id: 'stag-demo-10', sessionId: 'ses-demo-10', taggerId: CURRENT_USER_ID, taggedId: 'u-mira', role: 'opponent', status: 'accepted', createdAt: loggedAt(3, 19), respondedAt: isoDaysAgo(2, 4), kind: 'match', day: dayAgo(3), minutes: 75, won: true, sets: [[6, 3], [7, 5]] },
+  { id: 'stag-demo-10', sessionId: 'ses-demo-10', taggerId: CURRENT_USER_ID, taggedId: 'u-mira', role: 'opponent', status: 'accepted', createdAt: loggedAt(3, 19), respondedAt: isoDaysAgo(2, 4), kind: 'match', day: dayAgo(3), minutes: 75, won: true, sets: [[6, 3], [3, 1]] },
   { id: 'stag-demo-13', sessionId: 'ses-demo-13', taggerId: CURRENT_USER_ID, taggedId: 'u-mira', role: 'opponent', status: 'accepted', createdAt: loggedAt(7, 20), respondedAt: isoDaysAgo(6, 4), kind: 'match', day: dayAgo(7), minutes: 96, won: true },
   // Partner streaks (sweep R12): Mira on a practice every week for four weeks running, this
   // week's included (the 4-week celebration); Dev on two in a row, this week still open. Dated
@@ -76,7 +78,7 @@ export const demoSessionTags: SessionTag[] = [
   { id: 'stag-demo-8', sessionId: 'ses-demo-8', taggerId: CURRENT_USER_ID, taggedId: 'u-mira', role: 'partner', status: 'accepted', createdAt: loggedAt(W_MIRA_3, 18), respondedAt: isoDaysAgo(W_MIRA_3 - 1, 4), kind: 'practice', day: calDay(W_MIRA_3), minutes: 90 },
   { id: 'stag-demo-15', sessionId: 'ses-demo-15', taggerId: CURRENT_USER_ID, taggedId: 'u-dev', role: 'partner', status: 'accepted', createdAt: loggedAt(W_DEV_1, 18), respondedAt: isoDaysAgo(W_DEV_1 - 1, 4), kind: 'practice', day: calDay(W_DEV_1), minutes: 75 },
   { id: 'stag-demo-7d', sessionId: 'ses-demo-7', taggerId: CURRENT_USER_ID, taggedId: 'u-dev', role: 'partner', status: 'accepted', createdAt: loggedAt(W_BOTH_2, 18), respondedAt: isoDaysAgo(W_BOTH_2 - 1, 3), kind: 'practice', day: calDay(W_BOTH_2), minutes: 60 },
-  { id: 'stag-demo-6', sessionId: 'ses-demo-6', taggerId: CURRENT_USER_ID, taggedId: 'u-june', role: 'opponent', status: 'pending', createdAt: loggedAt(9, 12), kind: 'match', day: dayAgo(9), minutes: 120, won: false, sets: [[4, 6], [6, 7]] },
+  { id: 'stag-demo-6', sessionId: 'ses-demo-6', taggerId: CURRENT_USER_ID, taggedId: 'u-june', role: 'opponent', status: 'pending', createdAt: loggedAt(9, 12), kind: 'match', day: dayAgo(9), minutes: 120, won: false, sets: [[4, 6], [6, 7, 4]] },
   // Sam lost to you two days ago: Sam's session, so the result is from your side.
   { id: 'stag-demo-sam', sessionId: 'ses-sam-1', taggerId: 'u-sam', taggedId: CURRENT_USER_ID, role: 'opponent', status: 'pending', createdAt: isoDaysAgo(0, 2), kind: 'match', day: dayAgo(2), minutes: 75, won: true },
   { id: 'stag-demo-mira', sessionId: 'ses-mira-1', taggerId: 'u-mira', taggedId: CURRENT_USER_ID, role: 'partner', status: 'accepted', mirroredSessionId: 'ses-demo-11', createdAt: isoDaysAgo(4, 5), respondedAt: isoDaysAgo(4, 2), kind: 'practice', day: dayAgo(5), minutes: 60 },

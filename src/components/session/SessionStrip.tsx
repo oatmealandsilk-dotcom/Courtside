@@ -6,12 +6,14 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { router } from 'expo-router';
 
 import type { ID, SessionDetail } from '@/data/types';
-import { resultWithScore, sourceLabel, spokenDuration, whatWord } from '@/features/activity/format';
+import { resultWord, scoreLine, sourceLabel, spokenDuration, whatWord } from '@/features/activity/format';
 import { distanceFigure, formatDistance } from '@/features/activity/workouts';
 import { sessionPeople } from '@/features/activity/sessionTags';
 import { colors, font, withAlpha } from '@/theme';
 import { Duration, Figure } from './Duration';
 import { CardWash, cardLook } from './SessionCard';
+import { spokenScore } from '@/features/activity/score';
+import { ScoreBoard, boardSides, boxInks } from './ScoreBoard';
 import { ZoneGlyph } from './ZoneGlyph';
 
 /**
@@ -32,8 +34,12 @@ import { ZoneGlyph } from './ZoneGlyph';
  * lines where the session has no log behind it (a written plan) or the
  * page already names the person (the tag).
  */
-export function SessionStrip({ session, hidden = [], play = false, scale = 1, onPress, title: titleAs, sub, flat = false }: {
+export function SessionStrip({ session, hidden = [], play = false, scale = 1, onPress, title: titleAs, sub, flat = false, author, people }: {
   session: SessionDetail;
+  /** Who posted it, for the ScoreBoard's top row ("You" when not given). */
+  author?: string;
+  /** The composer's preview: the players picked, named on the board before they accept. */
+  people?: { name: string; role: 'opponent' | 'partner' }[];
   hidden?: ID[];
   play?: boolean;
   scale?: number;
@@ -57,8 +63,9 @@ export function SessionStrip({ session, hidden = [], play = false, scale = 1, on
   // column the panel has no room for. Tennis never has one.
   const far = session.workout ? distanceFigure(session.distanceM) : null;
   const shared = [hr || avg != null, strain != null, kcal != null].filter(Boolean).length;
-  // "Match · Won 6–4 3–6 10–7" when the log has a score (migration 91).
-  const result = resultWithScore(session);
+  // "Match · Won"; the score itself is the ScoreBoard under it (T1, Oct 22).
+  const result = resultWord(session);
+  const scored = !!scoreLine(session);
   const what = [whatWord(session), result].filter(Boolean).join(' · ');
   const title = titleAs ?? (far ? `${what} · ${formatDistance(session.distanceM)}` : what);
   const { opponents, partners } = sessionPeople(session, hidden);
@@ -67,7 +74,7 @@ export function SessionStrip({ session, hidden = [], play = false, scale = 1, on
   const vs = lead ? (opponents.length ? 'vs' : 'with') : '';
   const tracker = !!session.activityId;
   const source = tracker ? sourceLabel(session.source ?? 'apple-health') : null;
-  const spoken = [`${spokenDuration(session.minutes)}, ${(titleAs ?? what).toLowerCase()}`, far ? `${far.value} miles` : null, avg ? `average heart rate ${avg}` : null, hr ? `max ${session.maxHr}` : null, kcal ? `${kcal} calories` : null, sub ?? (lead ? `${vs} @${lead.handle}` : null), sub ? null : source].filter(Boolean).join(', ');
+  const spoken = [`${spokenDuration(session.minutes)}, ${(titleAs ?? what).toLowerCase()}`, scored ? `score ${spokenScore(session.sets)}` : null, far ? `${far.value} miles` : null, avg ? `average heart rate ${avg}` : null, hr ? `max ${session.maxHr}` : null, kcal ? `${kcal} calories` : null, sub ?? (lead ? `${vs} @${lead.handle}` : null), sub ? null : source].filter(Boolean).join(', ');
   const small = { fontSize: 13 * k, lineHeight: Math.round(17 * k) };
   // The session card's own look (Oct 4, owner: "looks a bit flat"): the court's shirt, its fade and its lettering (Oct 6),
   // the cream with green numbers on the CourtSide court (Oct 5).
@@ -115,6 +122,11 @@ export function SessionStrip({ session, hidden = [], play = false, scale = 1, on
         {stats.length ? null : time}
         {onPress ? <Ionicons name="chevron-forward" size={15 * k} color={look.muted} /> : null}
       </View>
+      {scored ? (
+        <View style={{ marginTop: -2 * k }}>
+          <ScoreBoard sets={session.sets!} {...boardSides(session, author ?? 'You', hidden, people)} youWon={session.won} ended={session.ended} frame="bare" status={false} scale={0.8 * k} inks={boxInks(look)} />
+        </View>
+      ) : null}
       {stats.length ? (
         <View style={[styles.row, styles.columns, { paddingTop: 12 * k, borderTopColor: look.lines }]}>
           {[{ key: 'time', label: 'Time', node: time }, ...stats].map((st, i) => (

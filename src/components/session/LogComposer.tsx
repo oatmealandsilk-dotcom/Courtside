@@ -71,7 +71,7 @@ export function LogComposerTop({ session, people, hidden, waiting, media, prepar
   if (media) {
     return (
       <View>
-        <PostPreview media={media} session={session} hidden={hidden} onEdit={onEdit} onRemove={onRemove} {...preview} />
+        <PostPreview media={media} session={session} hidden={hidden} people={people} onEdit={onEdit} onRemove={onRemove} {...preview} />
         {error ? <Text style={styles.error}>{error}</Text> : null}
       </View>
     );
@@ -80,7 +80,7 @@ export function LogComposerTop({ session, people, hidden, waiting, media, prepar
     <View>
       <View style={styles.top}>
         {session ? (
-          <SessionCard key={replay} session={session} width={size.cardW} play={play} people={people} hidden={hidden} />
+          <SessionCard key={replay} session={session} width={size.cardW} play={play} people={people} hidden={hidden} author={preview.author?.name} />
         ) : (
           <View style={[styles.waitCard, { width: size.cardW, height: size.cardH, borderRadius: 20 * (size.cardW / 358), backgroundColor: colors.surfaceAlt }]} accessible accessibilityLabel={waiting ? 'Getting your session' : 'No session'}>
             {waiting ? <CourtSpinner size={34} /> : null}

@@ -260,8 +260,10 @@ export const KIND_LABEL: Record<PracticeSession['kind'], string> = { practice: '
  * session logged from a run); with a score, "Match · Won 6–4 3–6 10–7"
  * (migration 91) or "Practice · 6–4 6–3" (Oct 6).
  */
-export function loggedLabel(s: Pick<PracticeSession, 'kind' | 'won' | 'sets'> & { workout?: string }): string {
-  const score = canScore(s.kind) ? scoreText(s.sets) : '';
+export function loggedLabel(s: Pick<PracticeSession, 'kind' | 'won' | 'sets' | 'ended'> & { workout?: string }, withScore = true): string {
+  // Without the score where a ScoreBoard beside the words draws it (Oct 22).
+  const score = withScore && canScore(s.kind) ? scoreText(s.sets) : '';
+  if (s.kind === 'match' && s.ended?.how === 'stopped') return `Match · Unfinished${score ? ` ${score}` : ''}`;
   if (s.kind === 'match' && s.won !== undefined) return `Match · ${s.won ? 'Won' : 'Lost'}${score ? ` ${score}` : ''}`;
   if (score) return `${KIND_LABEL[s.kind]} · ${score}`;
   if (s.kind === 'fitness' && s.workout) return workoutName(s.workout);
@@ -312,6 +314,8 @@ export function sessionFromLogged(s: PracticeSession, share: HealthShareKey[] = 
     ...(s.kind === 'match' && s.won !== undefined ? { won: s.won } : {}),
     // The score goes too, on any tennis session (Oct 6); the server puts the log's own on the post either way (migration 91).
     ...(canScore(s.kind) && s.sets?.length ? { sets: s.sets } : {}),
+    // A retired or unfinished match keeps saying so when it is shared or posted.
+    ...(s.kind === 'match' && s.ended ? { ended: s.ended } : {}),
     // Typed-in numbers (Oct 8), only those chosen; the list goes whenever the log has any, so the server knows the choice.
     ...(typed ? { share: share.filter((k) => (k === 'hr' && !!s.avgHr) || (k === 'kcal' && !!s.kcal)) } : {}),
     ...(typed && share.includes('hr') && s.avgHr ? { avgHr: s.avgHr } : {}),
@@ -349,13 +353,14 @@ export const kindWord = (s: Pick<SessionDetail, 'kind'>) => (s.kind ? KIND_LABEL
 export const whatWord = (s: Pick<SessionDetail, 'kind' | 'workout'>, fallback?: string) => (s.workout ? workoutName(s.workout) : s.kind ? KIND_LABEL[s.kind] : fallback ?? 'Tennis');
 
 /** "Won", "Lost", or null when it was not a match with a result. */
-export const resultWord = (s: Pick<SessionDetail, 'kind' | 'won'>) => (s.kind === 'match' && s.won !== undefined ? (s.won ? 'Won' : 'Lost') : null);
+export const resultWord = (s: Pick<SessionDetail, 'kind' | 'won' | 'ended'>) =>
+  (s.kind === 'match' && s.ended?.how === 'stopped' ? 'Unfinished' : s.kind === 'match' && s.won !== undefined ? (s.won ? 'Won' : 'Lost') : null);
 
 /** A tennis session's score, "6–4 3–6 10–7", or null when it has none (migration 91; a practice's or drills' too since Oct 6). Never a workout's. */
 export const scoreLine = (s: Pick<SessionDetail, 'kind' | 'sets'>): string | null => (canScore(s.kind) && s.sets?.length ? scoreText(s.sets) : null);
 
 /** "Won 6–4 3–6 10–7", "Won", "6–4 6–3" (a score with no winner given, or a practice's), or null. */
-export function resultWithScore(s: Pick<SessionDetail, 'kind' | 'won' | 'sets'>): string | null {
+export function resultWithScore(s: Pick<SessionDetail, 'kind' | 'won' | 'sets' | 'ended'>): string | null {
   const words = [resultWord(s), scoreLine(s)].filter(Boolean).join(' ');
   return words || null;
 }

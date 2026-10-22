@@ -20,6 +20,7 @@ import { Tappable } from '@/components/Tappable';
 import { BrandWash, EmptyState, Screen } from '@/components/ui';
 import type { PracticeSession, TournamentEntry, User } from '@/data/types';
 import { KIND_LABEL, activityDay, loggedLabel, spokenDuration } from '@/features/activity/format';
+import { ScoreBoardCompact } from '@/components/session/ScoreBoard';
 import { pickSource, sourceOn, sourceWord } from '@/features/activity/recent';
 import { firstName, peopleText, peopleWords } from '@/features/activity/sessionTags';
 import { canScore } from '@/features/activity/score';
@@ -386,9 +387,16 @@ function SessionRow({ session: s, first, me, sessionTags, users, onRemove }: { s
   const icon = s.kind === 'match' ? <Ionicons name="trophy-outline" size={18} color={colors.textMuted} />
     : s.kind === 'practice' ? <CourtGlyph size={15} color={colors.textMuted} />
     : <Ionicons name={s.kind === 'fitness' && s.workout ? workoutIcon(s.workout) : 'barbell-outline'} size={18} color={colors.textMuted} />;
+  // A score is the small ScoreBoard beside the length (T1, Oct 22), so the title leaves it out.
+  const board = canScore(s.kind) && !!s.sets?.length;
   return (
-    <Row first={first} minHeight={60} lead={<Tile>{icon}</Tile>} title={loggedLabel(s)} sub={sub}
-      right={<Duration minutes={s.minutes} size={15} color={colors.text} unitColor={colors.textMuted} unitScale={0.8} />}
+    <Row first={first} minHeight={60} lead={<Tile>{icon}</Tile>} title={loggedLabel(s, !board)} sub={sub} subLines={board ? 2 : 1}
+      right={(
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          {board ? <ScoreBoardCompact sets={s.sets!} youWon={s.won} ended={s.ended} /> : null}
+          <Duration minutes={s.minutes} size={15} color={colors.text} unitColor={colors.textMuted} unitScale={0.8} />
+        </View>
+      )}
       onPress={onOpen}
       onLongPress={{ label: 'Remove', run: onRemove }}
       accessibilityLabel={`${loggedLabel(s)}${sub ? `, ${sub}` : ''}, ${shortLength(s.minutes)}${onOpen ? '. Open' : ''}`}
