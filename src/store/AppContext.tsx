@@ -25,6 +25,7 @@ import { setGuestStatus } from '@/features/guest/guestStatus';
 import { noteCampaignSignup } from '@/features/guest/campaign';
 import * as demoApi from '@/data/api';
 import { BLOCKED_WORDS_NOTE, CHAT_PHOTO_UNREADABLE, REVIEW_NOTE_MAX, auth as remoteAuth, fetchRemote, isLocalMedia, onWordsRefused, queueFeedSignal, remote, uploadChatPhoto, uploadMedia, emptyProfile, type GroupRefusal, type AdminReport, type ModerationResult, type ReviewAskResult, type ReportedChat, type ReportedItem, type ReportedItemKind, type ReportEvidence, type FeedSignal, type SiteFeedback, type WaitlistEntry, type BetaInviteStatus, type FirstDayStats, type FirstMove, type NewPlayer, type PinnedQuestion, type HandleStatus, type InviteCodeResult, type MyInviter, type RemoteData, type UserState, standInName } from '@/data/remote';
+import { clearCardShots, dropPeopleShots, forgetPlaces } from '@/components/map/cardShot';
 import { clearSnapshot, markSnapshotOpened, markSnapshotOpening, readMapCopy, readSnapshot, saveMapCopy, saveSnapshot, snapshotFailedBefore } from '@/data/snapshot';
 import { forgetAccount, listSavedAccounts, rememberAccount, type SavedAccount } from '@/features/accounts/savedAccounts';
 import { isAuthRetryableFetchError } from '@supabase/supabase-js';
@@ -3579,6 +3580,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // Nothing of this account stays on the device for the next person.
     const leaving = stateRef.current.currentUserId;
     if (leaving) void clearSnapshot(leaving);
+    // Nor the pictures of its map card, or where that card was (cardShot).
+    clearCardShots();
     // Nor the cards of the links in its chats.
     void forgetLinkPreviews();
     // A computer can be shared: in a browser, Log out also forgets this login
@@ -3888,7 +3891,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [addOpenMiles, dropMapCopy]);
 
   const setMapVisibility = useCallback(async (v: MapVisibility): Promise<boolean> => {
+    // Who sees you changes: kept pictures of the map card with people on them go (cardShot);
+    // on Only me, where your card was and every picture of it go from this device too.
+    dropPeopleShots();
     const me = stateRef.current.currentUserId;
+    if (v === 'none' && me) forgetPlaces(me);
     const was = stateRef.current.mapVisibility;
     haptics.tap();
     setState((prev) => ({ ...prev, mapVisibility: v }));
@@ -7934,9 +7941,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
     if (!enabled) {
       remember(false);
+      // Location off: kept pictures of the map card with people on them go (cardShot).
+      dropPeopleShots();
       // Location off means off: the spot others saw goes too, and with it any "I'm playing here" (the server drops both).
-      // Your own pin goes from this phone's map at once as well.
+      // Your own pin goes from this phone's map at once as well, and where your card was, with its pictures.
       const self = stateRef.current.currentUserId;
+      if (self) forgetPlaces(self);
       if (self) { delete seenAround.current[self]; delete seenInView.current[self]; }
       setState((prev) => ({
         ...prev, locationEnabled: false, locationAsked: true, detectedLocation: null, detectedCoords: null,
@@ -8318,6 +8328,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
    * there, and their messages fold away on your side.
    */
   const toggleBlock = useCallback((userId: ID, quiet?: boolean) => {
+    // Who may be seen on the map changes: kept pictures of the map card with people on them go (cardShot).
+    dropPeopleShots();
     // Blocking has already been asked about, so only unblocking offers Undo,
     // which blocks again (unblocking put nothing back that blocking took).
     const me = stateRef.current.currentUserId;

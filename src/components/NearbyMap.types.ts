@@ -101,4 +101,9 @@ export interface NearbyMapProps {
   layerSource?: LayerSource;
   /** This is the map inside the map window. */
   layer?: LayerMapControl;
+  /**
+   * The still card holds the opening curtain until it shows its map (useStartMapHold). Off for a copy
+   * of the card that is not what the app opens on (the feed's FeedFindPlayers), so it never slows it.
+   */
+  holdCurtain?: boolean;
 }

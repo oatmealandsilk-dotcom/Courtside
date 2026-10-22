@@ -83,6 +83,8 @@ export function FeedFindPlayers({ room }: { room: number }) {
       <Text style={styles.title} numberOfLines={1} maxFontSizeMultiplier={1.2}>Find players near you</Text>
       <NearbyMap
         cardHeight={cardHeight}
+        // Not what the app opens on: it never holds the opening curtain.
+        holdCurtain={false}
         me={currentUser}
         players={players}
         at={detectedCoords}

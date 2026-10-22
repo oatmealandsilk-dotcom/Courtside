@@ -1,6 +1,8 @@
 import { themes, useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { AppState, PixelRatio, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { Image as PhotoImage } from 'expo-image';
+import { captureRef } from 'react-native-view-shot';
 import Reanimated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -11,10 +13,12 @@ import { ChipsNoteLine, CitylessCard, CourtSheet, CourtsZoomNote, FilterChips, H
 import { CardStage } from '@/components/map/CardStage';
 import { warmMapEngine } from '@/components/map/engineCopy';
 import { MapCanvas, type CanvasMarker, type MapCanvasHandle, type MapLoadStatus } from '@/components/map/MapCanvas';
-import { MAP_IN_MS, MapCardFailed, MapCardLoading, MapLoadPill } from '@/components/map/MapLoadState';
+import { MAP_REVEAL_MS, MapCardFailed, MapCardLoading, MapLoadPill } from '@/components/map/MapLoadState';
+import { cardCaptureBroken, cardHint, hasCardShot, hashText, loadCardShots, peekCardShot, saveCardShot, saveStreetsShot, setCardHint, shotKey, useCardShots, type CardHint } from '@/components/map/cardShot';
+import { useCardOnScreen, useHeldCardPlace } from '@/components/map/cardHold';
 import { CARD_HEIGHT, CARD_ZOOM, onCard } from '@/components/map/cardFit';
-import { cardLook, lookFor } from '@/components/map/look';
-import { clusterTemplates, courtLift, youLift } from '@/components/map/markers';
+import { STYLE, cardLook, lookFor } from '@/components/map/look';
+import { MAP_PIN_CSS, clusterTemplates, courtLift, youLift } from '@/components/map/markers';
 import { mapMarkers } from '@/components/map/pinList';
 import { livePin } from '@/features/activity/liveSession';
 import type { NearbyMapProps } from '@/components/NearbyMap.types';
@@ -30,7 +34,8 @@ import { useWeather } from '@/features/players/useWeather';
 import { show as showToast } from '@/lib/toast';
 import { confirmUnfollow } from '@/lib/confirm';
 import { useApp } from '@/store/AppContext';
-import { useStartMapHold } from '@/features/feed/warmup';
+import { curtainState, useStartMapHold, whenCurtainDown } from '@/features/feed/warmup';
+import { useReducedMotion } from '@/lib/useReducedMotion';
 import { useAndroidBack } from '@/lib/androidBack';
 import { useIsFocused } from '@/lib/useIsFocused';
 import { colors, radius, spacing } from '@/theme';
@@ -49,7 +54,7 @@ export type { NearbyMapProps };
  * and kept in a file (engineCopy), so each map's web view starts with it
  * already in place instead of downloading it after the page is on screen.
  */
-export function preloadNearbyMap() { void warmMapEngine(); }
+export function preloadNearbyMap() { void warmMapEngine(); void loadCardShots(); }
 /** In the browser: once the map engine asked for is in. On the phone there is nothing to wait for. */
 export function nearbyMapSettled(): Promise<void> { return Promise.resolve(); }
 
@@ -69,7 +74,7 @@ export function nearbyMapSettled(): Promise<void> { return Promise.resolve(); }
  * by side, Snap Map's way (Oct 9), pulled up into the full list.
  */
 export function NearbyMap(props: NearbyMapProps) {
-  const { me, players, onOpen, onExpand, expanded = false, onBack, at, locationOn, locating = false, onToggleLocation, focusCourt, focusHit, focusUser, focusSpot, focusPlace, holdPins = false, hitCount, inviting = false, cardHeight, layer, layerSource } = props;
+  const { me, players, onOpen, onExpand, expanded = false, onBack, at, locationOn, locating = false, onToggleLocation, focusCourt, focusHit, focusUser, focusSpot, focusPlace, holdPins = false, hitCount, inviting = false, cardHeight, holdCurtain = true, layer, layerSource } = props;
   const styles = useThemedStyles(styleDefinitions);
   const { theme } = useTheme();
   // The still card takes the place names off: it sets your city's name in the middle itself.
@@ -108,34 +113,43 @@ export function NearbyMap(props: NearbyMapProps) {
   // Your ring (and your card's switch) go out by themselves at the time you picked.
   useOpenClock([me.openToHitUntil]);
   const openToHit = isOpenToHit(me);
-  const model = useMapModel(me, players, at, focusCourt, !expanded, focusHit, focusUser, focusSpot, !!locationOn, focusPlace);
-  // The still card on the start page holds the opening curtain until its streets are drawn (see warmup).
-  const painted = useStartMapHold(!expanded && (!!model.city || model.cityPending));
-  // The still card fades in whole once its map has drawn (Oct 4, owner): the
-  // city's name and the map arrive together instead of the words first and
-  // the map popping in behind. Until then, however long that takes, the card
-  // shows only its loading look, and if the map never comes after every
-  // retry, only "Map didn't load · Tap to try again" (Oct 5, owner: the city
-  // and its players over a blank map looked unprofessional).
-  // The loading look is a cover over the map rather than the map being see-through: the
-  // map's web view keeps drawing at full strength underneath (a phone may hold back
-  // a web view it cannot see), and the cover fades off it as it used to fade in.
-  const [mapStatus, setMapStatus] = useState<MapLoadStatus>('loading');
-  // The map has drawn: it takes taps; and, once the cover has faded, the cover is gone.
+  // The still card (Oct 22, owner: "The map blips in 50% of the time … can we just pre load the map?").
+  // Its map has drawn, with the app's pins and look on it: it takes taps, and its cover can go.
   const [cardUp, setCardUp] = useState(false);
-  const [loaderGone, setLoaderGone] = useState(false);
-  const cardIn = useSharedValue(0);
-  const showCard = () => {
-    setCardUp(true);
-    // Drawn while out of view (the section beside, the tab off screen): no fade to catch mid-swipe, it is just there.
-    if (!onScreen || props.visible === false || props.inView?.() === false) {
-      cardIn.value = 1;
-      setLoaderGone(true);
-      return;
-    }
-    cardIn.value = withTiming(1, { duration: MAP_IN_MS, easing: Easing.out(Easing.cubic) }, (done) => { if (done) runOnJS(setLoaderGone)(true); });
-  };
-  const coverFade = useAnimatedStyle(() => ({ opacity: 1 - cardIn.value }));
+  // The picture covering it (cardShot) has loaded and is on screen.
+  const [photoIn, setPhotoIn] = useState(false);
+  // Off screen, the map's load clocks wait (useMapLoad).
+  const onScreen = useIsFocused();
+  // Scrolled off the screen (reading the list under it) counts as out of view too.
+  const spot = useCardOnScreen();
+  /** Whether the card is in view right now: the curtain not over it, its tab and section on show, on the screen, the app in front. */
+  const inViewNow = () => curtainState() !== 'up' && onScreen && props.visible !== false && props.inView?.() !== false && AppState.currentState === 'active' && spot.onScreen();
+  // Where the card is centred stays put while it is seen (cardHold): a fix landing then waits until it is out of view.
+  const place = useHeldCardPlace(expanded, at, !!locationOn, locating, () => (cardUp || photoIn) && inViewNow());
+  // The town the card showed last time, with Location on and no fix yet (mapModel): read until it has shown something.
+  const shotsVersion = useCardShots();
+  const hint = useRef<CardHint | null>(null);
+  if (!expanded && !cardUp && !photoIn) hint.current = cardHint(me.id);
+  const model = useMapModel(me, players, place.at, focusCourt, !expanded, focusHit, focusUser, focusSpot, place.locationOn, focusPlace, hint.current);
+  // A fix held back while the card is seen (cardHold): what the card says comes from the place it shows, not the new fix,
+  // so the card and the place it shows never disagree (its open hits, and the "You're early" line under it, wait too).
+  const holding = !expanded && (place.locationOn !== !!locationOn || place.at?.lat !== at?.lat || place.at?.lng !== at?.lng);
+  const invitingShown = useRef(inviting);
+  if (!holding) invitingShown.current = inviting;
+  // The still card on the start page holds the opening curtain until it shows its map (see warmup); the
+  // feed's copy of the card never does (it is not what the app opens on).
+  const painted = useStartMapHold(holdCurtain && !expanded && (!!model.city || model.cityPending));
+  // Until its map has drawn, the card is covered: by a picture of how it last drew, when there is
+  // one for exactly this look (cardShot), so it already shows its streets and the live map takes
+  // over underneath with nothing changing; otherwise by its loading sketch, which fades off once,
+  // slowly, never under a lifting curtain and never part way through a swipe. If the map never
+  // comes after every retry, only "Map didn't load · Tap to try again" (Oct 5, owner).
+  // The cover is over the map rather than the map being see-through: the map's web view keeps
+  // drawing at full strength underneath (a phone may hold back a web view it cannot see).
+  const [mapStatus, setMapStatus] = useState<MapLoadStatus>('loading');
+  const [coverGone, setCoverGone] = useState(false);
+  const coverIn = useSharedValue(1);
+  const coverFade = useAnimatedStyle(() => ({ opacity: coverIn.value }));
   // Anything else picked (a search result, a pin) takes the place of your own card.
   useEffect(() => { if (model.selected || model.selectedCourt || model.selectedHit) setMeOpen(false); }, [model.selected, model.selectedCourt, model.selectedHit]);
   const { home, start } = model;
@@ -155,8 +169,6 @@ export function NearbyMap(props: NearbyMapProps) {
   const weather = useWeather(home);
   const cityName = model.cityName;
   const canvas = useRef<MapCanvasHandle | null>(null);
-  // Off screen, the map's load clocks wait (useMapLoad).
-  const onScreen = useIsFocused();
   // A fix arriving after the map is up moves the map to it.
   const lastHome = useRef(home);
   useEffect(() => {
@@ -168,8 +180,26 @@ export function NearbyMap(props: NearbyMapProps) {
     if (expanded && model.homeKnown && !focusCourt && !focusHit && !focusSpot && !model.place && !model.selected) canvas.current?.flyTo(home, CITY_ZOOM, 600);
   }, [home, layer?.settled]); // eslint-disable-line react-hooks/exhaustive-deps
   // The still card follows a change of city on the profile.
+  // Out of view once it has drawn (the only time a held move lands, cardHold), the card is covered again
+  // and the map jumps; the cover goes once the new place has drawn. In view (Location just switched on
+  // from the card), the map simply goes there, as you asked.
   const cityKey = model.city ? `${model.city.lat},${model.city.lng}` : '';
-  useEffect(() => { if (!expanded && model.city) canvas.current?.flyTo(model.city, CARD_ZOOM, 0); }, [cityKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const jumpGuard = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const coverAgainRef = useRef<(lost?: boolean) => void>(() => undefined);
+  const showCardRef = useRef<() => void>(() => undefined);
+  useEffect(() => {
+    if (expanded || !model.city) return;
+    if (cardUp && !inViewNow()) {
+      coverAgainRef.current();
+      canvas.current?.jump(model.city, CARD_ZOOM);
+      // Never left covered: a page that does not say it has drawn the new place within 8 s is shown as it is.
+      if (jumpGuard.current) clearTimeout(jumpGuard.current);
+      jumpGuard.current = setTimeout(() => { jumpGuard.current = null; showCardRef.current(); }, 8000);
+      return;
+    }
+    canvas.current?.flyTo(model.city, CARD_ZOOM, 0);
+  }, [cityKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => { if (jumpGuard.current) clearTimeout(jumpGuard.current); }, []);
   // Picking someone, a court, a hit, or typing a city takes the map there.
   // Keyed on who or what is picked, not the object: it is rebuilt on every data change, which must not pull the map back.
   useEffect(() => { if (model.selected) canvas.current?.flyTo(model.selected.at, CLOSE_ZOOM); }, [model.selected?.user.id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -201,15 +231,15 @@ export function NearbyMap(props: NearbyMapProps) {
   const tpl = useMemo(() => clusterTemplates(), [theme]); // eslint-disable-line react-hooks/exhaustive-deps
   // The still card's words over the map, also copied into the map window as it opens from here.
   const overlay = useMemo(
-    () => ({ cityName, count: onCardCount, placeCount: model.cardCourts.length, hitCount: hitCount !== undefined && model.cardFromYou ? hitCount : model.cardHits.length, weather, locationOn, locating, lock, inviting }),
-    [cityName, onCardCount, model.cardCourts.length, hitCount, model.cardFromYou, model.cardHits.length, weather, locationOn, locating, lock, inviting],
+    () => ({ cityName, count: onCardCount, placeCount: model.cardCourts.length, hitCount: hitCount !== undefined && model.cardFromYou && !holding ? hitCount : model.cardHits.length, weather, locationOn, locating, lock, inviting: invitingShown.current }),
+    [cityName, onCardCount, model.cardCourts.length, hitCount, model.cardFromYou, model.cardHits.length, weather, locationOn, locating, lock, holding, invitingShown.current], // eslint-disable-line react-hooks/exhaustive-deps
   );
   const layerCard = useLayerCard(expanded ? undefined : layerSource, { center: cardCenter, markers, overlay, painted: cardUp });
   // The map window: what it may tell this map to do.
   if (layer) {
     layer.handle.current = {
       ease: (to, z, ms, b) => canvas.current?.ease(to, z, ms, b),
-      jump: (to, z) => canvas.current?.jump(to, z),
+      jump: (to, z) => canvas.current?.snap(to, z),
       labels: (on, ms, delay) => canvas.current?.labels(on, ms, delay),
       setInteractive: (on) => canvas.current?.setInteractive(on),
       warm: (to, z, back, bz) => canvas.current?.warm(to, z, back, bz),
@@ -217,6 +247,118 @@ export function NearbyMap(props: NearbyMapProps) {
       openTarget: () => { lastHome.current = home; return { center: start.center, zoom: start.zoom ?? CITY_ZOOM }; },
     };
   }
+
+  // The card's picture (cardShot): for exactly this look (who, theme, centre, size, lock, Reduce Motion);
+  // one with its pins only while they are exactly the ones about to be drawn (the marker list's hash).
+  const still = useReducedMotion();
+  const scale = PixelRatio.get();
+  const cardWidth = cardW || Math.round(windowW - 2 * spacing.lg);
+  // The map's look itself is in the key, so a picture is never shown over a map that draws differently now (an update).
+  const lookSig = useMemo(() => hashText(JSON.stringify(cardLook(lookFor(themes[theme]))) + STYLE + MAP_PIN_CSS), [theme]);
+  // Never for a card centred on your own spot (far from any town the app knows): nothing of where you are is kept.
+  const key = !expanded && model.city && !model.cityExact ? shotKey({ user: me.id, theme, look: lookSig, lat: model.city.lat, lng: model.city.lng, zoom: CARD_ZOOM, w: cardWidth, h: cardHeight ?? HEIGHT, scale, lock: lock ?? 'open', still }) : '';
+  const markerHash = useMemo(() => (expanded ? '' : hashText(JSON.stringify({ items: markers, tpl }))), [expanded, markers, tpl]);
+  const keyNow = useRef(key);
+  keyNow.current = key;
+  const hashNow = useRef(markerHash);
+  hashNow.current = markerHash;
+  const pickCover = (): Cover => {
+    const shot = expanded ? null : peekCardShot(key, markerHash);
+    return shot ? { uri: shot.uri, kind: shot.kind, hash: markerHash } : { uri: null, kind: 'sketch', hash: markerHash };
+  };
+  const [cover, setCover] = useState<Cover>(pickCover);
+  // A better cover for the look now (the city settled, the pins in, the pictures read), swapped only
+  // while nobody can see the card: what is on screen never changes under someone's eyes.
+  useEffect(() => {
+    if (expanded || cardUp) return;
+    const next = pickCover();
+    if (next.uri === cover.uri && next.kind === cover.kind) return;
+    if (inViewNow()) return;
+    setPhotoIn(false);
+    setCover(next);
+  }, [key, markerHash, shotsVersion, cardUp]); // eslint-disable-line react-hooks/exhaustive-deps
+  /**
+   * The map is going again (a fresh page, a new place): covered again at once. A new place, only ever while
+   * out of sight. A page the phone stopped or whose drawing it took back (`lost`) may be noticed with the card
+   * in view: the surface under it is blank already, so its picture goes straight over it, never the sketch.
+   */
+  const [lostCover, setLostCover] = useState(false);
+  const lostNow = useRef(false);
+  coverAgainRef.current = (lost = false) => {
+    stopWait.current();
+    lostNow.current = lost;
+    setLostCover(lost);
+    setCardUp(false);
+    setCoverGone(false);
+    coverIn.value = 1;
+    setPhotoIn(false);
+    setCover(pickCover());
+  };
+  const stopWait = useRef<() => void>(() => undefined);
+  useEffect(() => () => stopWait.current(), []);
+  /** The map has drawn: the cover goes, as quietly as it can. */
+  const showCard = () => {
+    if (jumpGuard.current) { clearTimeout(jumpGuard.current); jumpGuard.current = null; }
+    lostNow.current = false;
+    setLostCover(false);
+    setCardUp(true);
+    stopWait.current();
+    const curtain = curtainState();
+    // A picture of exactly this card: the map under it is the same, so it just goes.
+    const same = cover.kind === 'card' && photoIn && cover.hash === hashNow.current;
+    // Nobody looking (the curtain still over it, the section or tab off to the side, the app away): no fade to catch, it is just there.
+    if (same || curtain === 'up' || !onScreen || props.visible === false || props.inView?.() === false || AppState.currentState !== 'active') {
+      coverIn.value = 0;
+      setCoverGone(true);
+      painted?.();
+      return;
+    }
+    painted?.();
+    const fade = () => { coverIn.value = withTiming(0, { duration: MAP_REVEAL_MS, easing: Easing.inOut(Easing.quad) }, (done) => { if (done) runOnJS(setCoverGone)(true); }); };
+    // The curtain fading: the cover waits until it has gone, then fades once, never both at once.
+    if (curtain === 'lifting') stopWait.current = whenCurtainDown(fade);
+    else fade();
+  };
+  showCardRef.current = showCard;
+  // Given up on: "Map didn't load" fades in over the cover (and back off for a retry), at once out of sight.
+  const failed = !expanded && mapStatus === 'failed' && !cardUp;
+  const failIn = useSharedValue(0);
+  const failFade = useAnimatedStyle(() => ({ opacity: failIn.value }));
+  // After "Tap to try again" its words stay until it has faded off, so nothing goes in one frame.
+  const [failShown, setFailShown] = useState(false);
+  useEffect(() => {
+    if (expanded) return;
+    const to = failed ? 1 : 0;
+    if (failed) setFailShown(true);
+    const off = () => { if (!failed) setFailShown(false); };
+    if (inViewNow()) failIn.value = withTiming(to, { duration: MAP_REVEAL_MS, easing: Easing.inOut(Easing.quad) }, (done) => { if (done) runOnJS(off)(); });
+    else { failIn.value = to; off(); }
+  }, [failed]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Keeping the card's picture fresh: once it has drawn and been still a moment in view, the map alone
+  // (from the page) and the card with its pins (a photograph of the map, never of what is over it).
+  const mapBox = useRef<View | null>(null);
+  const shotFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (expanded || !cardUp || !coverGone || !key) return undefined;
+    let tries = 0;
+    const t = setInterval(() => {
+      tries += 1;
+      if (tries > 8) { clearInterval(t); return; }
+      if (!inViewNow() || curtainState() !== 'down') return;
+      if (!hasCardShot(key, 'streets')) { shotFor.current = key; canvas.current?.shoot(); return; }
+      clearInterval(t);
+      if (cardCaptureBroken() || hasCardShot(key, 'card', markerHash) || !mapBox.current) return;
+      const k = key, h = markerHash;
+      captureRef(mapBox.current, { format: 'jpg', quality: 0.92, result: 'base64' })
+        .then((b64) => { if (k === keyNow.current && h === hashNow.current) saveCardShot(k, h, b64); })
+        .catch(() => undefined);
+    }, 1200);
+    return () => clearInterval(t);
+  }, [expanded, cardUp, coverGone, key, markerHash]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Where the card was, for next time (mapModel's hint): only a centre from a real fix.
+  useEffect(() => {
+    if (!expanded && cardUp && place.locationOn && place.at && model.city && !model.cityExact) setCardHint(me.id, { lat: model.city.lat, lng: model.city.lng, name: cityName });
+  }, [expanded, cardUp, cityKey, cityName]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const mapView = (
     <MapCanvas
@@ -235,7 +377,10 @@ export function NearbyMap(props: NearbyMapProps) {
       // The full map's first pins come in as one wave (once any sheet over it has gone); a tap on "+N" zooms in clear of the bars and the cards.
       // Not in the map window: its pins are already there as it opens.
       popIn={expanded && !layer}
-      onPainted={layer ? layer.onPainted : expanded ? undefined : () => { painted?.(); showCard(); }}
+      onPainted={layer ? layer.onPainted : expanded ? undefined : showCard}
+      onShot={expanded ? undefined : (data) => { const k = shotFor.current; shotFor.current = null; if (k && k === keyNow.current) saveStreetsShot(k, data); }}
+      // The phone stopped the page (or took back its drawing) while the app was away: covered again before anyone looks.
+      onLost={expanded ? undefined : () => { if (cardUp) coverAgainRef.current(true); }}
       // Given up on: the opening curtain stops waiting for it, and the card (or the full map's pill) says so.
       onStatus={(status) => { setMapStatus(status); if (!expanded && status === 'failed') painted?.(); }}
       holdPins={expanded && !layer && holdPins}
@@ -284,7 +429,6 @@ export function NearbyMap(props: NearbyMapProps) {
   }
   if (!expanded) {
     // Given up on, the card is one button that tries again; otherwise it opens the full map.
-    const failed = mapStatus === 'failed' && !cardUp;
     return (
       // Sinks a touch under the finger; the tap opens the map window from right here (mapWindow).
       <View ref={layerCard.outer} collapsable={false}>
@@ -297,20 +441,48 @@ export function NearbyMap(props: NearbyMapProps) {
         onPress={failed ? () => canvas.current?.retry() : () => layerCard.open(onExpand)}
         disabled={!failed && !onExpand}
         onLayout={(e) => { const w = Math.round(e.nativeEvent.layout.width); if (w > 0 && w !== cardW) setCardW(w); }}
+        ref={spot.ref}
         style={[styles.card, cardHeight ? { height: cardHeight } : null]}
       >
         {/* Not yet drawn: covered, not tappable, and not read out (the city and its players come with the map). */}
-        <Reanimated.View pointerEvents={cardUp ? 'auto' : 'none'} accessibilityElementsHidden={!cardUp} importantForAccessibility={cardUp ? 'auto' : 'no-hide-descendants'} style={StyleSheet.absoluteFill}>
-          {mapView}
+        <View pointerEvents={cardUp ? 'auto' : 'none'} accessibilityElementsHidden={!cardUp} importantForAccessibility={cardUp ? 'auto' : 'no-hide-descendants'} style={StyleSheet.absoluteFill}>
+          {/* The map alone, photographed for the card's picture (never what lies over it). */}
+          <View ref={mapBox} collapsable={false} style={StyleSheet.absoluteFill}>{mapView}</View>
+          {/* Over the map until it has drawn: the card's picture (cardShot), under the city's name and counts, which are live. */}
+          {!coverGone && cover.uri ? (
+            <Reanimated.View pointerEvents="none" style={[StyleSheet.absoluteFill, coverFade]}>
+              <PhotoImage
+                source={{ uri: cover.uri }}
+                contentFit="fill"
+                transition={0}
+                cachePolicy="memory"
+                style={StyleSheet.absoluteFill}
+                // On screen: the curtain may lift onto it, a card that already shows its streets.
+                onLoad={() => {
+                  // Only taken while nobody can see the swap (under the curtain, or out of view): one that
+                  // arrives late, in view, is let go, and the sketch stays for its one slow fade.
+                  // Back over a blank surface (the page was lost), it is taken in view too: blank to picture, not map to sketch.
+                  if (curtainState() !== 'up' && inViewNow() && !lostNow.current) { setCover({ uri: null, kind: 'sketch', hash: markerHash }); return; }
+                  setPhotoIn(true);
+                  painted?.();
+                }}
+                onError={() => setCover({ uri: null, kind: 'sketch', hash: markerHash })}
+              />
+            </Reanimated.View>
+          ) : null}
           <PreviewOverlay {...overlay} onToggleLocation={onToggleLocation} />
           <MapCredit align="right" style={{ position: 'absolute', right: 10, bottom: 10 }} />
-        </Reanimated.View>
-        {/* Over the map until it has drawn, then fading off it. */}
-        {!loaderGone ? (
+        </View>
+        {/* No picture (or not loaded yet): the loading sketch over all of it, the city's name and counts too (they come with the map), fading off it once. */}
+        {!coverGone && (!cover.uri || !photoIn) && !(lostCover && cover.uri) ? (
           <Reanimated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.cover, coverFade]}>
-            {failed ? <MapCardFailed /> : <MapCardLoading />}
+            <MapCardLoading />
           </Reanimated.View>
         ) : null}
+        {/* Given up on: one quiet message over everything, which the card's tap tries again. */}
+        <Reanimated.View pointerEvents="none" style={[StyleSheet.absoluteFill, failFade]}>
+          {failed || failShown ? <View style={[StyleSheet.absoluteFill, styles.cover]}><MapCardFailed /></View> : null}
+        </Reanimated.View>
       </Pressable>
       </Reanimated.View>
       </View>
@@ -395,6 +567,8 @@ export function NearbyMap(props: NearbyMapProps) {
     </View>
   );
 }
+
+type Cover = { uri: string | null; kind: 'card' | 'streets' | 'sketch'; hash: string };
 
 const styleDefinitions = StyleSheet.create({
   card: { height: HEIGHT, borderRadius: radius.xl, overflow: 'hidden', backgroundColor: colors.bgElevated, borderWidth: 1, borderColor: colors.border },

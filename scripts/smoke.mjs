@@ -1022,6 +1022,24 @@ const STEPS = [
     },
   },
   {
+    // Oct 22, owner: "The map blips in". A search hides the map card rather than taking it down, so
+    // clearing the search finds the very same map, already drawn, not a new one drawing in front of you.
+    name: 'community-search-keeps-map',
+    title: 'Community: a search keeps the map card',
+    async run(page) {
+      const marked = await page.eval(`(() => { const c = document.querySelector('canvas.maplibregl-canvas'); if (!c) return false; c.dataset.smokeKept = '1'; return true; })()`);
+      await page.tap({ label: 'Search players, courts or places' });
+      await page.type('zz');
+      await page.tap({ label: 'Cancel search' });
+      await page.waitFor({ label: 'Map of players, courts and hits near you' });
+      // The card shows its map, its picture or its own "didn't load": never an empty box.
+      const shown = await page.eval(`(() => { const c = document.querySelector('canvas.maplibregl-canvas'); return { canvas: !!c, kept: !!(c && c.dataset.smokeKept === '1'), failed: document.body.innerText.includes('Map didn’t load') }; })()`);
+      if (!shown.canvas && !shown.failed) throw new Error('after a search, the map card has neither its map nor "Map didn’t load"');
+      if (marked && !shown.kept) throw new Error('clearing the search built a new map instead of keeping the one already drawn');
+    },
+    expect: [{ text: 'Open to hit' }],
+  },
+  {
     name: 'community-discussions',
     title: 'Community: Discussions',
     async run(page) {

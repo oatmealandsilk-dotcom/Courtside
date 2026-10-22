@@ -155,6 +155,8 @@ export interface PinEngine {
   set: (payload: { items: CanvasMarker[]; tpl: ClusterTemplates; quiet?: boolean; box?: PinEngineOptions['box'] }) => void;
   /** Holds the first wave back (a sheet is over the map), or lets it go. */
   hold: (on: boolean) => void;
+  /** The still card: while calm (from the start), new pins appear with no fade; off once the card has been shown. */
+  calm: (on: boolean) => void;
   destroy: () => void;
 }
 
@@ -219,6 +221,9 @@ return function(map,ml,o){
   var FULL=!o.quiet;
   // The first wave: when it started (0: not yet), and whether it is over.
   var wave0=0,waveDone=!o.popIn,waveMax=1;
+  // The still card, until it has been shown (calm(false)): its pins are simply there, with no fade or drop in, so the
+  // card under its cover (or its picture) already has every pin at full strength when it is first seen (Oct 22).
+  var calm=!!o.quiet;
   function still(){try{return document.body.classList.contains('cs-still')}catch(e){return false}}
   // Levels come every half step of zoom (lvl counts half steps: 23 is zoom 11.5), so a pin is never gathered for more than a little way past the point it needs.
   function levelNow(){return Math.max(ZMIN*2,Math.min(ZMAX*2,Math.floor(map.getZoom()*2+1e-6)))}
@@ -568,6 +573,7 @@ return function(map,ml,o){
       fresh=fresh.filter(function(f){return !f.k.waved});
     }
     if(wave0&&t-wave0>=WAVE_MS)waveDone=true;
+    if(calm)return;
     fresh.forEach(function(f){enter(f.k,why&&f.gathered&&!st?'cs-pop':'cs-in',why&&f.gathered?90:0)});
   }
   // A gathered pin, tapped: zoom in just far enough that it is one pin no longer. It splits, fans out in its ring, or (the "+N"
@@ -603,15 +609,17 @@ return function(map,ml,o){
   // The first pins wait for the map's first full drawing (and a frame more), so the wave is seen rather than lost under the tiles coming in.
   function start(){if(ready||dead)return;ready=true;lvl=levelNow();render(null)}
   function soon(){requestAnimationFrame(function(){requestAnimationFrame(start)})}
-  if(map.loaded&&map.loaded())soon();else{map.once('idle',soon);setTimeout(start,2500)}
+  // The still card's pins go on at once, before the streets have drawn (they are placed from the camera alone), so they are on it before anyone sees it.
+  if(o.quiet)start();else if(map.loaded&&map.loaded())soon();else{map.once('idle',soon);setTimeout(start,2500)}
   return {
     set:function(p){var list=(p&&p.items)||[];if(p&&p.tpl)tpl=p.tpl;items={};list.forEach(function(it){items[it.id]=it});
       // The map window: the quiet (card) or full pins come with their own list, so the change is one build, and a pin in both keeps its place.
-      if(p&&p.quiet!=null&&!!p.quiet!==!!o.quiet){o.quiet=!!p.quiet;FULL=!o.quiet;if(p.box)B=p.box;try{map.getContainer().classList.toggle('cs-quiet',o.quiet)}catch(e){}}
+      if(p&&p.quiet!=null&&!!p.quiet!==!!o.quiet){o.quiet=!!p.quiet;FULL=!o.quiet;calm=false;if(p.box)B=p.box;try{map.getContainer().classList.toggle('cs-quiet',o.quiet)}catch(e){}}
       build();
       if(fan){var n=0;fan.m.forEach(function(id){if(items[id])n++});if(n<(fan.lead?1:2))fan=null}
       if(ready&&lvl<0)lvl=levelNow();render(null)},
     hold:function(on){var was=held;held=!!on;if(was&&!held)render(null)},
+    calm:function(on){calm=!!on&&!!o.quiet},
     destroy:function(){dead=true;if(raf)cancelAnimationFrame(raf);if(cullT)clearTimeout(cullT);map.off('zoom',onZoom);map.off('click',onClick);map.off('move',onMove);map.off('moveend',onEnd);for(var id in ms){clearTimeout(ms[id].leaving);ms[id].m.remove()}ms={}}
   };
 };
