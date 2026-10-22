@@ -1,6 +1,7 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Image, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import { router, useLocalSearchParams } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
@@ -19,6 +20,8 @@ import { colors, font, radius, spacing, typography } from '@/theme';
 import { courtLink, shareLink } from '@/lib/shareLink';
 import { courtShareText, hitShareText, postShareText, profileShareText, questionShareText } from '@/features/share/shareText';
 import { isMapCourtId } from '@/features/places/courtName';
+import { SheetTitle } from '@/components/sheet/SheetForm';
+import { SEND_TO_LOOK } from '@/design/sendToPreview';
 
 /**
  * Instagram's Send sheet. Your recent chats come first, groups included (two
@@ -45,6 +48,9 @@ const PEOPLE_SHOWN = 40;
 /** Faces this big, in tiles at least this wide: four across a phone, five in a computer's box. */
 const FACE = 56;
 const TILE_MIN = 84;
+/** The Instagram preview (?ss=a): bigger faces, three across a phone. */
+const FACE_A = 64;
+const TILE_MIN_A = 112;
 
 type Kind = 'post' | 'question' | 'profile' | 'hit-request' | 'court' | 'message';
 const KINDS: Kind[] = ['post', 'question', 'profile', 'hit-request', 'court', 'message'];
@@ -70,6 +76,7 @@ interface Target {
 
 export default function ShareSheet() {
   const styles = useThemedStyles(styleDefinitions);
+  const calm = useThemedStyles(calmDefinitions);
   const params = useLocalSearchParams<{ kind?: string; id?: string; name?: string; lat?: string; lng?: string }>();
   // Anything unknown is read as a post, the way every older link to this sheet meant it.
   const kind: Kind = KINDS.includes(params.kind as Kind) ? (params.kind as Kind) : 'post';
@@ -309,6 +316,199 @@ export default function ShareSheet() {
   const nothingFound = !!term && !recentShown.length && !peopleShown.length;
   const many = selected.length > 1;
 
+  if (SEND_TO_LOOK !== 'now') {
+    // ── The calm preview (?ss=a|b, web only; phones never get here) ──
+    const look = SEND_TO_LOOK;
+    const face = look === 'a' ? FACE_A : FACE;
+    const cols = Math.max(3, Math.min(5, Math.floor(width / (look === 'a' ? TILE_MIN_A : TILE_MIN))));
+    const tileW = Math.floor(width / cols);
+    const tickSize = look === 'a' ? 24 : 22;
+
+    // What is being sent, small: a face, a picture, or its icon on a quiet well.
+    const visual = (): React.ReactNode => {
+      const well = (icon: React.ReactNode) => <View style={[calm.thing, look === 'b' && calm.thingRound]}>{icon}</View>;
+      const glyph = (name: keyof typeof Ionicons.glyphMap) => well(<Ionicons name={name} size={20} color={colors.textMuted} />);
+      if (!sending) return glyph('alert-circle-outline');
+      if (kind === 'profile') { const u = users.find((x) => x.id === id); return u ? <Avatar name={u.name} seed={u.avatarSeed} uri={u.avatarUrl} size={40} /> : glyph('person-outline'); }
+      if (kind === 'post') {
+        const post = posts.find((x) => x.id === id);
+        const pic = post?.thumbnailUrl ?? post?.imageUrl;
+        return pic ? <Image source={{ uri: pic }} style={calm.thing} /> : glyph(post?.kind === 'clip' ? 'play-circle-outline' : 'image-outline');
+      }
+      if (kind === 'question') return glyph('chatbubbles-outline');
+      if (kind === 'court') return glyph('location-outline');
+      if (kind === 'hit-request') return well(<HitGlyph size={20} color={colors.textMuted} />);
+      return glyph('arrow-redo-outline');
+    };
+    // B's row: what it is, and a quiet second line saying whose, or what kind.
+    const lines = (): [string, string] => {
+      if (!sending) return [kind === 'message' ? 'That message can’t be forwarded' : 'This item is no longer available', ''];
+      if (kind === 'profile') { const u = users.find((x) => x.id === id); return [u?.name ?? sending.label, u ? `@${u.handle}` : 'Profile']; }
+      if (kind === 'post') {
+        const post = posts.find((x) => x.id === id);
+        const by = users.find((u) => u.id === post?.authorId)?.name.split(' ')[0];
+        return [sending.label, `${post?.kind === 'clip' ? 'Clip' : 'Post'}${by ? ` by ${by}` : ''}`];
+      }
+      if (kind === 'question') return [sending.label, 'Thread'];
+      if (kind === 'court') return [sending.label, 'Court'];
+      if (kind === 'hit-request') { const h = hitRequests.find((x) => x.id === id); return ['Looking for a hit', h ? `${hitWhen(h.startsAt)} · ${h.place.name}` : '']; }
+      return [sending.label, 'Message'];
+    };
+
+    const copyLink = async () => {
+      if (!outside) return;
+      try { await Clipboard.setStringAsync(outside.url); haptics.tap(); showToast({ title: 'Link copied', icon: 'link-outline' }); }
+      catch { setFallbackNote(`Share this link: ${outside.url}`); }
+    };
+    const text = outside ? encodeURIComponent(`${outside.title} ${outside.url}`) : '';
+    const outsideActions: { key: string; label: string; icon: keyof typeof Ionicons.glyphMap; run: () => void }[] = outside ? [
+      { key: 'copy', label: 'Copy link', icon: 'link-outline', run: () => { void copyLink(); } },
+      // A phone's own Messages app; a browser has none to open.
+      ...(Platform.OS === 'web' ? [] : [{ key: 'sms', label: 'Messages', icon: 'chatbubble-outline' as const, run: () => { void Linking.openURL(`sms:&body=${text}`).catch(() => undefined); } }]),
+      // A web link, so no app scheme to declare and no new build.
+      { key: 'wa', label: 'WhatsApp', icon: 'logo-whatsapp', run: () => { void Linking.openURL(`https://wa.me/?text=${text}`).catch(() => undefined); } },
+      { key: 'share', label: 'Share…', icon: 'share-outline', run: () => { void shareOut(); } },
+    ] : [];
+
+    const calmTile = (target: Target) => {
+      const on = selected.includes(target.key);
+      const group = !!target.people;
+      return (
+        <Pressable
+          key={target.key}
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: on }}
+          accessibilityLabel={target.locked ? `${target.name}. Only people they follow can message them` : group ? `${target.name}, group` : target.name}
+          onPress={() => toggle(target)}
+          style={[calm.tile, { width: tileW }, target.locked && styles.tileLocked]}
+        >
+          {({ pressed }) => (
+            <>
+              <View style={pressed ? calm.pressed : null}>
+                {group
+                  ? <GroupAvatar people={target.people ?? []} size={face} photoUrl={target.photoUrl} name={target.name} />
+                  : <Avatar name={target.name} seed={target.user?.avatarSeed ?? target.key} uri={target.user?.avatarUrl} size={face} />}
+                {on ? (
+                  <View style={[calm.tick, { width: tickSize, height: tickSize, borderRadius: tickSize / 2 }]}><Ionicons name="checkmark" size={look === 'a' ? 14 : 13} color={colors.brandInk} /></View>
+                ) : target.locked ? (
+                  <View style={[calm.tick, calm.tickLocked]}><Ionicons name="lock-closed" size={10} color={colors.textMuted} /></View>
+                ) : null}
+              </View>
+              <Text numberOfLines={2} style={[calm.name, on && calm.nameOn]}>{target.name}</Text>
+            </>
+          )}
+        </Pressable>
+      );
+    };
+
+    const searchBox = (
+      <View style={calm.search}>
+        <Ionicons name="search" size={16} color={colors.textFaint} />
+        <TextInput
+          value={search}
+          onChangeText={setSearch}
+          placeholder="Search"
+          placeholderTextColor={colors.textFaint}
+          selectionColor={colors.brand}
+          autoCapitalize="none"
+          autoCorrect={false}
+          accessibilityLabel="Search"
+          style={calm.searchInput}
+        />
+      </View>
+    );
+
+    const [main, sub] = lines();
+    const grid = (
+      <ScrollView style={styles.list} keyboardShouldPersistTaps="handled" contentContainerStyle={calm.listBody}>
+        <View onLayout={(e) => { const w = Math.floor(e.nativeEvent.layout.width); if (w > 0 && w !== gridWidth) setGridWidth(w); }}>
+          {look === 'a' ? (
+            <View style={styles.grid}>{[...recentShown, ...peopleShown].map(calmTile)}</View>
+          ) : (
+            <>
+              {recentShown.length ? (<><Text style={calm.label}>{term ? 'Chats' : 'Recent'}</Text><View style={styles.grid}>{recentShown.map(calmTile)}</View></>) : null}
+              {peopleShown.length ? (<><Text style={calm.label}>People</Text><View style={styles.grid}>{peopleShown.map(calmTile)}</View></>) : null}
+            </>
+          )}
+          {nothingFound ? <Text style={calm.empty}>No one matches “{search.trim()}”</Text> : null}
+        </View>
+      </ScrollView>
+    );
+
+    // Nothing picked: ways out of the app. Someone picked: a message and Send (Instagram never shows a dead Send).
+    const bottom = selected.length ? (
+      <View style={calm.bar}>
+        <View style={calm.noteRow}>
+          {look === 'a' ? visual() : null}
+          <View style={{ flex: 1 }}>
+            <Field value={note} onChangeText={setNote} placeholder={look === 'a' ? 'Write a message…' : 'Add a message…'} well />
+          </View>
+        </View>
+        <Button
+          label={sent ? 'Sent' : many ? (look === 'a' ? 'Send separately' : `Send separately · ${selected.length}`) : 'Send'}
+          onPress={() => { void send(); }}
+          loading={checking}
+          disabled={!sending}
+          full
+          style={calm.send}
+        />
+      </View>
+    ) : outsideActions.length ? (
+      <View style={calm.bar}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[calm.actions, look === 'b' && calm.actionsCentred]} style={look === 'b' ? { alignSelf: 'center' } : undefined}>
+          {outsideActions.map((a) => (
+            <Pressable key={a.key} onPress={a.run} accessibilityRole="button" accessibilityLabel={a.label} style={[calm.action, look === 'b' && calm.actionB]}>
+              {({ pressed }) => (
+                <>
+                  <View style={[calm.actionDisc, look === 'b' && calm.actionDiscB, pressed && calm.pressed]}>
+                    <Ionicons name={a.icon} size={look === 'a' ? 24 : 22} color={colors.text} />
+                  </View>
+                  <Text numberOfLines={1} style={calm.actionLabel}>{a.label}</Text>
+                </>
+              )}
+            </Pressable>
+          ))}
+        </ScrollView>
+        {fallbackNote ? <Text selectable style={calm.empty}>{fallbackNote}</Text> : null}
+      </View>
+    ) : null;
+
+    return (
+      <DragSheet
+        closeSignal={closeSignal}
+        onDismissed={() => router.back()}
+        peekFraction={0.72}
+        header={look === 'a' ? (
+          <View style={calm.searchRow}>
+            <View style={{ flex: 1 }}>{searchBox}</View>
+            <Pressable onPress={dismiss} accessibilityRole="button" accessibilityLabel="Close" hitSlop={8} style={calm.closeA}>
+              <Ionicons name="close" size={20} color={colors.textMuted} />
+            </Pressable>
+          </View>
+        ) : (
+          <SheetTitle title={kind === 'message' ? 'Forward to' : 'Send to'} onClose={dismiss} />
+        )}
+      >
+        <View style={calm.sheet}>
+          {look === 'b' ? (
+            <>
+              <View style={calm.itemRow}>
+                {visual()}
+                <View style={{ flex: 1, gap: 1 }}>
+                  <Text numberOfLines={1} style={calm.itemMain}>{main}</Text>
+                  {sub ? <Text numberOfLines={1} style={calm.itemSub}>{sub}</Text> : null}
+                </View>
+              </View>
+              <View style={calm.searchB}>{searchBox}</View>
+            </>
+          ) : null}
+          {grid}
+          {bottom}
+        </View>
+      </DragSheet>
+    );
+  }
+
   return (
     <DragSheet
       closeSignal={closeSignal}
@@ -414,4 +614,41 @@ const styleDefinitions = StyleSheet.create({
   footer: { gap: spacing.md },
   externalRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
   external: { ...typography.smallStrong, color: colors.textMuted },
+});
+
+/** The calm Send-to preview's own styles (?ss=a|b, web only). */
+const calmDefinitions = StyleSheet.create({
+  sheet: { flex: 1, paddingBottom: spacing.xl },
+  searchRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
+  closeA: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+  search: { flexDirection: 'row', alignItems: 'center', gap: 8, height: 36, borderRadius: 10, backgroundColor: colors.surfaceAlt, paddingHorizontal: 10 },
+  searchB: { marginTop: spacing.md, marginHorizontal: spacing.lg },
+  searchInput: { flex: 1, height: 36, color: colors.text, ...typography.body, padding: 0, ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : {}) },
+  itemRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: 56, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
+  itemMain: { ...typography.bodyStrong, color: colors.text },
+  itemSub: { ...typography.small, color: colors.textMuted },
+  thing: { width: 40, height: 40, borderRadius: radius.sm, backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  thingRound: { borderRadius: 20 },
+  listBody: { paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
+  label: { ...typography.smallStrong, color: colors.textMuted, paddingTop: spacing.lg, paddingBottom: spacing.sm },
+  tile: { alignItems: 'center', gap: 6, paddingVertical: spacing.md, paddingHorizontal: 4 },
+  pressed: { transform: [{ scale: 0.96 }] },
+  tick: {
+    position: 'absolute', right: -2, bottom: -2, width: 22, height: 22, borderRadius: 11,
+    backgroundColor: colors.brand, borderWidth: 2, borderColor: colors.bg, alignItems: 'center', justifyContent: 'center',
+  },
+  tickLocked: { backgroundColor: colors.surfaceAlt },
+  name: { ...typography.small, fontSize: 13, lineHeight: 16, minHeight: 32, color: colors.text, textAlign: 'center' },
+  nameOn: { ...font('600') },
+  empty: { ...typography.small, color: colors.textFaint, textAlign: 'center', paddingTop: spacing.xl },
+  bar: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, paddingTop: spacing.md, paddingHorizontal: spacing.lg, gap: spacing.md },
+  noteRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  send: { borderRadius: radius.md, paddingVertical: 0, minHeight: 44, justifyContent: 'center' },
+  actions: { gap: spacing.sm },
+  actionsCentred: { gap: spacing.lg },
+  action: { width: 72, alignItems: 'center', gap: 6 },
+  actionB: { width: 64 },
+  actionDisc: { width: 52, height: 52, borderRadius: 26, backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
+  actionDiscB: { width: 48, height: 48, borderRadius: 24 },
+  actionLabel: { ...typography.small, fontSize: 12, color: colors.textMuted },
 });

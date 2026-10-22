@@ -28,7 +28,7 @@ export function SheetTitle({ title, line, lineTone = 'muted', lines = 1, onClose
   return (
     <View style={styles.titleRow}>
       <View style={{ flex: 1, gap: 3 }}>
-        <Text maxFontSizeMultiplier={TextScale.TITLE} style={[styles.title, titleSize ? { fontSize: titleSize, letterSpacing: -0.03 * titleSize } : null]}>{title}</Text>
+        <Text maxFontSizeMultiplier={TextScale.TITLE} style={[styles.title, titleSize && !CALM_SHEETS ? { fontSize: titleSize, letterSpacing: -0.03 * titleSize } : null]}>{title}</Text>
         {line ? <Text style={[styles.line, lineTone === 'brand' && styles.lineBrand]} numberOfLines={lines}>{line}</Text> : null}
       </View>
       <Pressable accessibilityRole="button" accessibilityLabel="Close" hitSlop={8} onPress={onClose} style={({ pressed }) => [styles.close, pressed && { opacity: PRESS_DIM }]}>
