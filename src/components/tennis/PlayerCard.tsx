@@ -6,6 +6,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { BrandMark } from '@/components/BrandMark';
 import { Avatar } from '@/components/ui';
 import { CardWash, cardLook, type CardLook } from '@/components/session/SessionCard';
+import { SIG } from '@/features/signature/look';
 import { CountUp } from '@/components/session/CountUp';
 import type { SurfacePreference, User } from '@/data/types';
 import { mixHex } from '@/features/activity/zones';
@@ -42,7 +43,9 @@ export function PlayerCard({ user, variant, onPress }: {
   onPress?: () => void;
 }) {
   const { theme } = useTheme();
-  const look = cardLook(theme);
+  // Design preview (?sig=1, web only): the profile's banner as a plain surface, no court-shirt fill or glow.
+  const look0 = cardLook(theme);
+  const look: CardLook = SIG && variant === 'banner' ? { ...look0, dark: false, filled: false, fill: colors.surface, border: colors.border, rim: null, figure: colors.text, ink: colors.text, muted: colors.textMuted, faint: colors.textFaint, eyebrow: colors.textMuted } : look0;
   const reduced = useReducedMotion();
   const week = usePerWeek(user);
   const key = `${variant}:${user.id}`;
@@ -61,8 +64,8 @@ export function PlayerCard({ user, variant, onPress }: {
     const items: StripItem[] = next ? [...stripItems(user, 2, week), nextItem(next)] : stripItems(user, 3, week);
     const spoken = `${user.name}'s tennis profile. ${system} ${ratingText(p)}. ${playStyleLabel[p.playStyle]}, ${surfaceWord[p.preferredSurface]}. ${items.map((i) => i.spoken).join(', ')}`;
     return (
-      <Pressable accessibilityRole="link" accessibilityLabel={spoken} onPress={onPress} style={({ pressed }) => [styles.banner, { backgroundColor: look.fill, borderColor: look.border }, look.dark && styles.bordered, pressed && styles.pressed]}>
-        <CardWash look={look} radius={16} />
+      <Pressable accessibilityRole="link" accessibilityLabel={spoken} onPress={onPress} style={({ pressed }) => [styles.banner, { backgroundColor: look.fill, borderColor: look.border }, (look.dark || SIG) && styles.bordered, pressed && styles.pressed]}>
+        {SIG ? null : <CardWash look={look} radius={16} />}
         <View style={styles.headRow}>
           <Text style={[styles.bannerTitle, { color: look.ink }]}>Tennis profile</Text>
           <Ionicons name="chevron-forward" size={15} color={look.muted} />

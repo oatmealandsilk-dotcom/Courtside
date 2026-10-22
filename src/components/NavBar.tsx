@@ -13,6 +13,7 @@ import { router, usePathname } from 'expo-router';
 import { closeCreateMenu, markCreateOpening, useCreateMenuState } from '@/features/compose/createMenu';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { BrandWash } from '@/components/ui/BrandWash';
+import { SIG } from '@/features/signature/look';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { LAYOUT, useResponsive } from '@/lib/useResponsive';
@@ -182,7 +183,7 @@ export function NavBar({ state, navigation }: NavBarProps) {
               const active = item.route === activeRoute;
               return (
                 <React.Fragment key={item.route}>
-                {index === 2 && <View style={[styles.createSlot, styles.createAbove]}><Animated.View><Pressable ref={tourCreate} accessibilityRole="button" accessibilityLabel="Create a post" onPress={openCreate} style={[styles.createButton, pageIsDark() && styles.createButtonDark]}><BrandWash /><Ionicons name="add" size={28} color={colors.brandInk} /></Pressable></Animated.View></View>}
+                {index === 2 && <View style={[styles.createSlot, styles.createAbove]}><Animated.View><Pressable ref={tourCreate} accessibilityRole="button" accessibilityLabel="Create a post" onPress={openCreate} style={[styles.createButton, pageIsDark() && styles.createButtonDark, SIG && styles.createFlat]}><BrandWash /><Ionicons name="add" size={28} color={colors.brandInk} /></Pressable></Animated.View></View>}
                 <Pressable
                   ref={tourRef(item.route)}
                   onPress={() => navigation.navigate(item.route)}
@@ -370,6 +371,8 @@ const styleDefinitions = StyleSheet.create({
   createButton: { width: 46, height: 46, borderRadius: 23, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center', shadowColor: colors.brand, shadowOpacity: 0.28, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 3 },
   // On a dark page the button's own colour as a shadow reads as a glow; a plain dark one just lifts it.
   createButtonDark: { shadowColor: '#000000', shadowOpacity: 0.4 },
+  // Design preview (?sig=1, web only): flat, no lift.
+  createFlat: { shadowOpacity: 0, elevation: 0 },
   // The bar floats: a glass pill a little above the bottom edge, the page running on beneath it.
   float: { position: 'absolute', left: 0, right: 0, alignItems: 'center', zIndex: 30 },
   pillWrap: { width: '100%', paddingHorizontal: 14 },

@@ -26,11 +26,11 @@ export function EmptyState({ icon, glyph, title, body, action }: Props) {
   const styles = useThemedStyles(styleDefinitions);
   // Design preview (?sig=1, web only): a court drawing itself in, in place of a stock icon. A lock keeps its icon (it means privacy, not emptiness).
   if (SIG) {
-    const art = glyph ?? (icon && icon.startsWith('lock') ? <Ionicons name={icon} size={26} color={colors.textFaint} /> : icon && icon.startsWith('sparkles') ? <CoachGlyph size={30} color={colors.textFaint} /> : <CourtDraw />);
+    const art = glyph ?? (icon && icon.startsWith('lock') ? <Ionicons name={icon} size={26} color={colors.textFaint} /> : icon && icon.startsWith('sparkles') ? <CoachGlyph size={30} color={colors.textFaint} /> : <CourtDraw width={88} />);
     return (
       <View style={[styles.wrap, { gap: spacing.md }]}>
         {art}
-        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.title}>{title}</Text>
+        <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.title, { maxWidth: 260 }]}>{title}</Text>
         {body ? <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.body, { maxWidth: 260 }]}>{body}</Text> : null}
         {action ? <View style={styles.action}><Button label={action.label} variant="secondary" onPress={action.onPress} /></View> : null}
       </View>

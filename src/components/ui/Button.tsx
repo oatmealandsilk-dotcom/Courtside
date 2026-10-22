@@ -13,6 +13,7 @@ import {
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { Tappable } from '@/components/Tappable';
 import { BrandWash } from '@/components/ui/BrandWash';
+import { SIG } from '@/features/signature/look';
 import { colors, pageIsDark, radius, spacing, typography } from '@/theme';
 import { TextScale, oneLine } from '@/theme/textScale';
 
@@ -63,7 +64,8 @@ export function Button({
       style={[
         styles.base,
         size === 'sm' && styles.small,
-        variant === 'primary' && !faded && (pageIsDark() ? styles.liftDark : styles.lift),
+        // Design preview (?sig=1, web only): flat, no lift.
+        variant === 'primary' && !faded && !SIG && (pageIsDark() ? styles.liftDark : styles.lift),
         full && styles.full,
         { backgroundColor: palette.bg, borderColor: palette.border, opacity: faded ? 0.5 : 1 },
         style,

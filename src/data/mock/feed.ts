@@ -158,7 +158,7 @@ export const posts: Post[] = [
     kind: 'note',
     createdAt: isoDaysAgo(1, 3),
     body: 'An hour of serve and volley patterns. Legs are done.',
-    session: { focus: 'Practice', minutes: 62, drills: [], activityId: 'act-june-1', source: 'apple-watch', kind: 'practice', day: dayAgo(1), maxHr: 158, avgHr: 132, with: [{ id: 'u-mira', handle: 'miraplays', name: 'Mira Okafor', role: 'partner' }] },
+    session: { focus: 'Practice', minutes: 62, drills: ['Serve', 'Volley'], activityId: 'act-june-1', source: 'apple-watch', kind: 'practice', day: dayAgo(1), maxHr: 158, avgHr: 132, with: [{ id: 'u-mira', handle: 'miraplays', name: 'Mira Okafor', role: 'partner' }, { id: 'u-dev', handle: 'devbackhand', name: 'Dev Sharma', role: 'partner' }, { id: 'u-tomas', handle: 'tomascoach', name: 'Tomás Herrera', role: 'partner' }, { id: 'u-marcus', handle: 'marcusrallies', name: 'Marcus Lee', role: 'partner' }] },
     likedBy: ['u-mira'],
     commentIds: [],
     tags: [],

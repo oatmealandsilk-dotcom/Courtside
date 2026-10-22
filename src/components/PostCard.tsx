@@ -38,6 +38,7 @@ import { colors, radius, spacing, typography } from '@/theme';
 import { tagsNotInCaption } from '@/features/feed/tags';
 import { TextScale } from '@/theme/textScale';
 import { SIG } from '@/features/signature/look';
+import { levelBadge } from '@/lib/badges';
 
 interface Props {
   /** Opens the comments; without it the comment button behaves like a tap on the card. */
@@ -197,7 +198,8 @@ function PostCardInner({
           {/* Where, on its own line under the name, as Instagram sets it: the whole place, a tap opens the court. */}
           <PlaceLine court={post.court} location={post.location} />
         </View>
-        <LevelPill profile={author.profile} small />
+        {/* Design preview (?sig=1, web only): the level as plain words on a session post, so the court's colour stays the score's alone. */}
+        {SIG && sessionCard ? <Text maxFontSizeMultiplier={TextScale.CARD} style={[typography.small, { color: colors.textMuted }]}>{levelBadge(author.profile).label}</Text> : <LevelPill profile={author.profile} small />}
       </Pressable>
 
       {post.imageUrl ? <ExpoImage accessibilityLabel={post.mediaLabel ?? "Post photo"} source={{uri:post.imageUrl}} style={styles.photo} contentFit="cover" cachePolicy="memory-disk"/> : null}
@@ -208,8 +210,9 @@ function PostCardInner({
         </View>
       ) : post.kind === 'clip' ? <MediaPlaceholder label={post.mediaLabel ?? 'Clip'} seed={post.id} portrait /> : null}
       {sessionCard && SIG ? (
-        // Design preview (?sig=1, web only): the session box in its fixed order, at its own height.
+        // Design preview (?sig=1, web only): the post's words as the session's title, then the box in its fixed order, at its own height.
         <View style={styles.sigSlot}>
+          {post.body ? <RichText numberOfLines={clamp} style={[styles.text, styles.sigTitle]}>{post.body}</RichText> : null}
           <SessionCard session={post.session!} width={0} height={0} author={author.name} hidden={blockedIds} onPress={openStats} />
         </View>
       ) : sessionCard ? (
@@ -244,7 +247,7 @@ function PostCardInner({
           <Ionicons name="chevron-forward" size={11} color={meta.tint} />
         </Tappable>}
 
-        <RichText numberOfLines={clamp} style={styles.text}>{post.body}</RichText>
+        {SIG && sessionCard ? null : <RichText numberOfLines={clamp} style={styles.text}>{post.body}</RichText>}
         {/* Who with, right under the words, out of the name's lines. */}
         <TaggedLine post={post} />
 
@@ -399,7 +402,8 @@ const styleDefinitions = StyleSheet.create({
   video: { width: '100%', borderRadius: radius.lg, overflow: 'hidden', backgroundColor: '#000' },
   cardSlot: { width: '100%', alignItems: 'center', justifyContent: 'center', flexShrink: 6, minHeight: 0, overflow: 'hidden' },
   cardWait: { aspectRatio: 1 / SIDEWAYS },
-  sigSlot: { width: '100%', flexShrink: 0 },
+  sigSlot: { width: '100%', flexShrink: 0, gap: spacing.md },
+  sigTitle: { marginTop: 0 },
   kindRow: {
     flexDirection: 'row',
     alignItems: 'center',

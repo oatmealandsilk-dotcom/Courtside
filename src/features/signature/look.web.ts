@@ -1,7 +1,7 @@
 /*
  * Design preview (Oct 22, owner: "How do we make our ui look unique"), web
  * only: ?sig=1 turns on the three signature moves (the ScoreBoard, the
- * session card's fixed order with its StatStrip, court lines instead of
+ * session card's fixed order under its title, court lines instead of
  * glow), read once when the app loads and kept for the tab's session
  * (?sig=0 goes back). Without it every screen is exactly today's. The phone
  * twin (look.ts) is always today's.

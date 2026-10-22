@@ -1723,11 +1723,12 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, onSettled }: {
   // Activities' own last page (Oct 4, owner): a soft card to land on rather than a hard stop.
   const caughtUp = (
     <View key="caught-up" style={styles.endPage}>
-      <View style={styles.endCard}>
+      {/* Design preview (?sig=1, web only): no card, tile or glow; a court drawing itself in, centred, the words under it. */}
+      <View style={SIG ? styles.sigEnd : styles.endCard}>
         {SIG ? null : <Wash height={300} strength={0.65} fade={colors.surface} />}
         {SIG ? <CourtDraw /> : <View style={styles.endTile}><MarkDraw size={30} /></View>}
-        <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.endTitle}>{SIG ? "That's the last ball. You're all caught up." : "You're all caught up."}</Text>
-        <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.endBody}>That's every session from you and the people you follow. Log your next one after you play.</Text>
+        <Text maxFontSizeMultiplier={TextScale.TITLE} style={[styles.endTitle, SIG && styles.sigEndWords]}>{SIG ? "You're all caught up" : "You're all caught up."}</Text>
+        <Text maxFontSizeMultiplier={TextScale.TITLE} style={[styles.endBody, SIG && styles.sigEndWords]}>{SIG ? "That's every session from you and the people you follow. The next one starts on court." : "That's every session from you and the people you follow. Log your next one after you play."}</Text>
         {/* And the way to do it, right here (Oct 6, owner: "it should say log an activity … or it could say both"). */}
         <View style={styles.endActions}>
           <Button label="Log an activity" onPress={() => router.push('/log-session')} full />
@@ -1759,12 +1760,12 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, onSettled }: {
     const label = below.some((i) => i.type === 'post') ? 'Earlier posts' : 'More from the community';
     return (
       <View key={CAUGHT_UP} style={styles.endPage}>
-        <View style={styles.endCard}>
+        <View style={SIG ? styles.sigEnd : styles.endCard}>
           {SIG ? null : <Wash height={300} strength={0.65} fade={colors.surface} />}
           {SIG ? <CourtDraw /> : <View style={styles.endTile}><Ionicons name="checkmark" size={30} color={colors.brand} /></View>}
-          <View style={styles.caughtWords}>
-            <Text maxFontSizeMultiplier={TextScale.TITLE} accessibilityRole="header" style={styles.endTitle}>You're all caught up</Text>
-            <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.endBody}>{`You've seen all new posts from ${pastDays(caughtUpDays)}.`}</Text>
+          <View style={[styles.caughtWords, SIG && { alignItems: 'center' }]}>
+            <Text maxFontSizeMultiplier={TextScale.TITLE} accessibilityRole="header" style={[styles.endTitle, SIG && styles.sigEndWords]}>You're all caught up</Text>
+            <Text maxFontSizeMultiplier={TextScale.TITLE} style={[styles.endBody, SIG && styles.sigEndWords]}>{`You've seen all new posts from ${pastDays(caughtUpDays)}.`}</Text>
           </View>
           {last ? (
             <View style={styles.endActions}>
@@ -2429,6 +2430,8 @@ const styleDefinitions = StyleSheet.create({
   endPage: { flex: 1, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center', padding: spacing.lg },
   // Centred in its page on every screen size (it sat to the left on a wide computer window).
   endCard: { ...lift, alignSelf: 'center', maxWidth: 520, width: '100%', gap: spacing.lg, padding: spacing.xl, borderRadius: 20, backgroundColor: colors.surface, overflow: 'hidden' },
+  sigEnd: { alignSelf: 'center', alignItems: 'center', maxWidth: 300, width: '100%', gap: spacing.md, padding: spacing.xl },
+  sigEndWords: { textAlign: 'center', maxWidth: 260 },
   endTile: { width: 56, height: 56, borderRadius: radius.lg, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
   endTitle: { ...typography.title, color: colors.text },
   endBody: { ...typography.small, color: colors.textMuted, lineHeight: 19 },

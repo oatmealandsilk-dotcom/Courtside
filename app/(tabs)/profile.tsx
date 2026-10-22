@@ -21,6 +21,8 @@ import { useTabUnderline } from '@/features/navigation/useTabUnderline';
 import { Tappable } from '@/components/Tappable';
 import { reportSection, requestSection, subscribeSectionRequest, swipeDestination } from '@/features/navigation/swipeOrder';
 import { LevelPill } from '@/components/LevelPill';
+import { SIG } from '@/features/signature/look';
+import { levelBadge } from '@/lib/badges';
 import { StreakFlame } from '@/components/StreakFlame';
 import { shownStreak } from '@/features/practice/streakFlame';
 import { useApp } from '@/store/AppContext';
@@ -202,7 +204,10 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
          {/* The flame after your name is what everyone else sees there (3 days or more). A screen reader hears it once, from the streak pill under it. */}
          <View style={styles.nameLine}><PlayerName userId={user.id} style={styles.name}>{user.name}</PlayerName><StreakFlame days={shownStreak(user, currentUserId)} size="large" silent/></View>
          {/* The streak opens your sessions (only you see them); Log beside it opens the log sheet, two taps from here to a logged session. */}
-         <View style={styles.nameRow}><LevelPill profile={profile}/>{user.stats.currentStreakDays >= 2 ? <Pressable accessibilityRole="link" accessibilityLabel={`${user.stats.currentStreakDays}-day streak. See your sessions`} hitSlop={6} onPress={() => router.push('/your-sessions')} style={({ pressed }) => [styles.streak, pressed && styles.pillPressed]}><Ionicons name="flame" size={12} color={colors.clay}/><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.streakText}>{user.stats.currentStreakDays}-day streak</Text></Pressable> : null}<Pressable accessibilityRole="button" accessibilityLabel="Log a session" hitSlop={6} onPress={() => router.push('/log-session')} style={({ pressed }) => [styles.logPill, pressed && styles.pillPressed]}><Ionicons name="add" size={13} color={colors.textMuted}/><Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.logPillText}>Log</Text></Pressable></View>
+         {SIG ? (
+         // Design preview (?sig=1, web only): the level, streak and Log as one quiet line of words, no pills.
+         <View style={styles.nameRow}><Text maxFontSizeMultiplier={TextScale.CARD} style={[typography.small, { color: colors.textMuted }]}>{levelBadge(profile).label}{user.stats.currentStreakDays >= 2 ? <Text accessibilityRole="link" onPress={() => router.push('/your-sessions')} style={{ color: colors.textMuted }}>{`  ·  ${user.stats.currentStreakDays}-day streak`}</Text> : null}{'  ·  '}<Text accessibilityRole="button" accessibilityLabel="Log a session" onPress={() => router.push('/log-session')} style={{ color: colors.text, fontWeight: '600' }}>Log</Text></Text></View>
+         ) : <View style={styles.nameRow}><LevelPill profile={profile}/>{user.stats.currentStreakDays >= 2 ? <Pressable accessibilityRole="link" accessibilityLabel={`${user.stats.currentStreakDays}-day streak. See your sessions`} hitSlop={6} onPress={() => router.push('/your-sessions')} style={({ pressed }) => [styles.streak, pressed && styles.pillPressed]}><Ionicons name="flame" size={12} color={colors.clay}/><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.streakText}>{user.stats.currentStreakDays}-day streak</Text></Pressable> : null}<Pressable accessibilityRole="button" accessibilityLabel="Log a session" hitSlop={6} onPress={() => router.push('/log-session')} style={({ pressed }) => [styles.logPill, pressed && styles.pillPressed]}><Ionicons name="add" size={13} color={colors.textMuted}/><Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.logPillText}>Log</Text></Pressable></View>}
        </View>
      </View>
      {!!user.bio && <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.bio}>{user.bio}</Text>}

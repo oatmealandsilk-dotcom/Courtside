@@ -388,16 +388,16 @@ function SessionRow({ session: s, first, me, sessionTags, users, onRemove }: { s
     : s.kind === 'practice' ? <CourtGlyph size={15} color={colors.textMuted} />
     : <Ionicons name={s.kind === 'fitness' && s.workout ? workoutIcon(s.workout) : 'barbell-outline'} size={18} color={colors.textMuted} />;
   return (
-    <Row first={first} minHeight={60} lead={<Tile>{icon}</Tile>}
-      // Design preview (?sig=1, web only): the score as a ScoreBoard line under the kind, so it never wraps.
-      title={SIG && s.sets?.length ? KIND_LABEL[s.kind] : loggedLabel(s)}
-      sub={SIG && s.sets?.length ? (
-        <View style={{ gap: 2 }}>
-          <ScoreBoard size="row" sets={s.sets} you="" them="" youWon={s.kind === 'match' ? s.won : undefined} />
-          {sub ? <Text maxFontSizeMultiplier={1.3} numberOfLines={1} style={[typography.small, { color: colors.textMuted }]}>{sub}</Text> : null}
-        </View>
-      ) : sub}
-      right={<Duration minutes={s.minutes} size={15} color={colors.text} unitColor={colors.textMuted} unitScale={0.8} />}
+    <Row first={first} minHeight={60}
+      // Design preview (?sig=1, web only): a plain line glyph instead of a tinted tile, and a scored
+      // session's score as a small two-row ScoreBoard on the right, the result as a word.
+      lead={SIG ? <Ionicons name={s.kind === 'match' ? 'trophy-outline' : s.kind === 'practice' ? 'tennisball-outline' : s.kind === 'fitness' && s.workout ? workoutIcon(s.workout) : 'barbell-outline'} size={16} color={colors.textFaint} /> : <Tile>{icon}</Tile>}
+      leadWidth={SIG ? 28 : undefined}
+      title={SIG && s.sets?.length ? `${KIND_LABEL[s.kind]} · ${shortLength(s.minutes)}` : loggedLabel(s)}
+      sub={SIG && s.sets?.length ? [s.kind === 'match' && s.won !== undefined ? (s.won ? 'Won' : 'Lost') : '', sub].filter(Boolean).join(' · ') : sub}
+      right={SIG && s.sets?.length
+        ? <ScoreBoard size="mini" sets={s.sets} you="" youWon={s.kind === 'match' ? s.won : undefined} />
+        : <Duration minutes={s.minutes} size={15} color={colors.text} unitColor={colors.textMuted} unitScale={0.8} />}
       onPress={onOpen}
       onLongPress={{ label: 'Remove', run: onRemove }}
       accessibilityLabel={`${loggedLabel(s)}${sub ? `, ${sub}` : ''}, ${shortLength(s.minutes)}${onOpen ? '. Open' : ''}`}
