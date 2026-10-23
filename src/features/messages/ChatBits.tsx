@@ -131,8 +131,10 @@ export function GrowRoom({ children, from = 'bottom', growIn = false }: { childr
   const room = useRestLength('height', growIn ? 0 : null);
   return (
     <Reanimated.View style={[styles.growRoom, room.style]}>
+      {/* Until its first size is known the contents sit in the room as usual, so a room that opens with
+          something in it is drawn at its full height from the first frame (never 0, then a jump). */}
       <View
-        style={[styles.growInner, from === 'top' ? styles.growTop : styles.growBottom]}
+        style={room.rest == null && !growIn ? null : [styles.growInner, from === 'top' ? styles.growTop : styles.growBottom]}
         onLayout={(e) => {
           const next = e.nativeEvent.layout.height;
           if (room.target.current == null || still) { room.jump(next); return; }

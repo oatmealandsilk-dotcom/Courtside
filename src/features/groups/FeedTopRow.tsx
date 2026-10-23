@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, Platform, Pressable, StyleSheet, View } from 'react-native';
-import Animated, { Easing, interpolate, interpolateColor, runOnJS, useAnimatedReaction, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
+import Animated, { Easing, interpolate, interpolateColor, runOnJS, runOnUI, useAnimatedReaction, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -217,8 +217,16 @@ export function FeedTopRow({ groups, selected, onSelect, onPlus, onPicture, hidd
   useEffect(() => {
     if (homeMid === null || !viewW) return;
     const to = viewW / 2 - homeMid;
-    // The first placement lands at once, and the row is rebuilt there, so its first frame holds it.
-    if (!placed.current) { placed.current = true; target.current = to; shift.value = withTiming(to, { duration: 0 }, (done) => { 'worklet'; if (done) runOnJS(bumpSafe)(); }); return; }
+    // The first placement lands at once (a plain write, as on main: an animation, even of 0 ms, lands a
+    // frame later and the row would show a frame off centre), and once the animation thread holds it
+    // the row is rebuilt there, so its first frame holds it.
+    if (!placed.current) {
+      placed.current = true;
+      target.current = to;
+      shift.value = to;
+      runOnUI(() => { 'worklet'; runOnJS(bumpSafe)(); })();
+      return;
+    }
     // Already heading there (the tap began it): leave the glide running untouched.
     if (Math.abs(target.current - to) < 0.5) return;
     target.current = to;

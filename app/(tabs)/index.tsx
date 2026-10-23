@@ -2447,23 +2447,31 @@ function FeedLayer({ shown, children }: { shown: boolean; children: React.ReactN
   const o = useSharedValue(1);
   const visV = useSharedValue(0);
   const hidden = useCallback(() => { if (!shownRef.current) { visRef.current = 0; setVis(0); } }, []);
+  // React shows it only once the fade's 0 has landed on the animation thread: shown in the same
+  // pass as a write from here, an iPhone could draw the whole feed at full strength for a frame
+  // (the inner view's first-frame opacity is 1) before blanking it and fading it in.
+  const reveal = useCallback(() => {
+    if (!shownRef.current) return;
+    visRef.current = 1;
+    setVis(1);
+    o.value = withTiming(1, { duration: 220, easing: Easing.out(Easing.quad) });
+  }, [o]);
   useEffect(() => {
     const ease = { duration: 220, easing: Easing.out(Easing.quad) };
     if (shown) {
-      // From hidden, the fade starts at 0 behind React's 0, then React shows it.
-      if (!visRef.current) o.value = 0;
-      visRef.current = 1;
-      setVis(1);
-      o.value = withTiming(1, ease);
+      if (visRef.current) { o.value = withTiming(1, ease); return; }
+      // From hidden: the fade goes to 0 behind React's 0 first, then React shows it and it fades in.
+      o.value = withTiming(0, { duration: 0 }, (done) => { 'worklet'; if (done) runOnJS(reveal)(); });
     } else {
       o.value = withTiming(0, ease, (done) => { 'worklet'; if (done) runOnJS(hidden)(); });
     }
-  }, [shown, o, hidden]);
-  // Hidden by React now: the fade inside goes back to its rest (1) behind it.
+  }, [shown, o, hidden, reveal]);
+  // Hidden by React now: the fade inside goes back to its rest (1) behind it (unless it has been
+  // chosen again meanwhile, and is on its way in from 0).
   useEffect(() => {
     visV.value = vis;
     if (vis) return;
-    const id = requestAnimationFrame(() => { if (!visRef.current) o.value = 1; });
+    const id = requestAnimationFrame(() => { if (!visRef.current && !shownRef.current) o.value = 1; });
     return () => cancelAnimationFrame(id);
   }, [vis, visV, o]);
   const fade = useAnimatedStyle(() => ({ opacity: o.value }));

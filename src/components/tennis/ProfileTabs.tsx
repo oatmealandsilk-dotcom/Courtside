@@ -69,10 +69,14 @@ export function ProfileTabs({ value, onChange, offsetY, onPlaced, pill, onStride
   // On a phone the pill is built afresh each time it lands on a tab, so its first frame is that tab
   // and a settled place Reanimated drops unsynced can never put it back under Activity (Oct 23).
   const [pillKey, pillLanded] = useRestKey();
+  // Only the two shared values go to the worklet: the caller's `pill` object is new each render (and
+  // may carry an animated-style handle), which would restart the reaction and be sent across every time.
+  const pBase = pill?.base;
+  const pProgress = pill?.progress;
   useAnimatedReaction(() => {
-    if (!pill) return -1;
-    const at = pill.base.value + pill.progress.value;
-    return pill.progress.value === 0 && Math.abs(at - Math.round(at)) < 0.001 ? Math.round(at) : -1;
+    if (!pBase || !pProgress) return -1;
+    const at = pBase.value + pProgress.value;
+    return pProgress.value === 0 && Math.abs(at - Math.round(at)) < 0.001 ? Math.round(at) : -1;
   }, (n, was) => { if (n >= 0 && was !== null && n !== was) runOnJS(pillLanded)(); });
   // Where the bar sits in the page; far below until it has been laid out, so it never starts pinned.
   const top = useSharedValue(1e9);
@@ -122,7 +126,7 @@ export function ProfileTabs({ value, onChange, offsetY, onPlaced, pill, onStride
         }}
       >
         {sliding ? (
-          <SlidingPill key={`${tabW}:${pillKey}`} base={pill!.base} progress={pill!.progress} stride={tabW + TAB_GAP} style={[styles.pill, { width: tabW }, dark ? [styles.tabOnDark, { borderColor: withAlpha(colors.borderStrong, 0.55) }] : styles.tabOn]} />
+          <SlidingPill key={`${tabW}:${pillKey}`} base={pBase!} progress={pProgress!} stride={tabW + TAB_GAP} style={[styles.pill, { width: tabW }, dark ? [styles.tabOnDark, { borderColor: withAlpha(colors.borderStrong, 0.55) }] : styles.tabOn]} />
         ) : null}
         {PROFILE_TABS.map((t) => {
           const on = t.value === value;
