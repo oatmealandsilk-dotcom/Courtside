@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef } from 'react';
-import { Dimensions, Platform, StyleSheet, View } from 'react-native';
+import { Dimensions, Keyboard, Platform, StyleSheet, View } from 'react-native';
 import { Gesture, GestureDetector, State } from 'react-native-gesture-handler';
 import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
 import { useNavigation } from 'expo-router';
@@ -21,6 +21,22 @@ const EDGE = 28;
 const COMMIT_AT = 0.35;
 /** A flick this fast (points per second) toward the right goes back however short. */
 const FLICK = 450;
+/**
+ * How far the page itself moves under the finger, at most. Before iOS 26 the
+ * page below a pushed page is taken off screen, so dragging further would
+ * only uncover a plain background; once the drag goes back, the stack's own
+ * slide takes the page off with the real page below showing.
+ */
+const PULL = 60;
+
+interface PageSwipeBackProps {
+  children: React.ReactNode;
+  onBack: () => void;
+  /** While true (a row slid open, the hold menu up) the page leaves every drag alone. */
+  standDown?: SharedValue<boolean>;
+  /** A rightward drag the page left alone because of `standDown`: shut the open row, say. */
+  onStandDown?: () => void;
+}
 
 /**
  * A page that goes back when dragged to the right from anywhere on it, not
@@ -38,16 +54,18 @@ const FLICK = 450;
  * drags and would steal a row's swipe to Mute/Delete, so it stays off. Only a
  * drag that is clearly sideways and to the right is taken; leftward ones stay
  * the rows', up-and-down ones the list's, and one that starts at the left
- * edge stays the system's edge swipe. The page follows the finger (a
- * transform, never its opacity, so the glass over it stays glass); let go
- * past a third of the way, or with a flick, and it slides off and goes back;
- * sooner, and it eases back into place. While `standDown` is true (a row is
- * slid open) the page leaves every drag to the rows. Android keeps its own
+ * edge stays the system's edge swipe. The page leans with the finger, up to
+ * PULL (a transform, never its opacity, so the glass over it stays glass);
+ * let go past a third of the way, or with a flick, and it goes back with the
+ * stack's own slide, the page below showing; sooner, and it eases back into
+ * place. While `standDown` is true (a row slid open, the hold menu up) the
+ * page leaves every drag alone, and a rightward one calls `onStandDown`.
+ * The keyboard goes down as the drag starts. Android keeps its own
  * back gesture: nothing changes there either.
  */
-export function PageSwipeBack({ children, onBack, standDown }: { children: React.ReactNode; onBack: () => void; standDown?: SharedValue<boolean> }) {
+export function PageSwipeBack({ children, onBack, standDown, onStandDown }: PageSwipeBackProps) {
   if (!OLD_IOS) return <>{children}</>;
-  return <DragBack onBack={onBack} standDown={standDown}>{children}</DragBack>;
+  return <DragBack onBack={onBack} standDown={standDown} onStandDown={onStandDown}>{children}</DragBack>;
 }
 
 /**
@@ -59,7 +77,7 @@ export const pageSwipeStrip = OLD_IOS
   ? { onTouchStart: () => lockPageSwipe(true), onTouchEnd: () => lockPageSwipe(false), onTouchCancel: () => lockPageSwipe(false) }
   : {};
 
-function DragBack({ children, onBack, standDown }: { children: React.ReactNode; onBack: () => void; standDown?: SharedValue<boolean> }) {
+function DragBack({ children, onBack, standDown, onStandDown }: PageSwipeBackProps) {
   const navigation = useNavigation();
   const x = useSharedValue(0);
   const width = useSharedValue(Dimensions.get('window').width);
@@ -75,10 +93,9 @@ function DragBack({ children, onBack, standDown }: { children: React.ReactNode; 
     return subscribePageSwipeLock(() => { locked.value = isPageSwipeLocked(); });
   }, [locked]);
 
-  const latest = useRef(onBack);
-  latest.current = onBack;
+  const latest = useRef({ onBack, onStandDown });
+  latest.current = { onBack, onStandDown };
   const dragging = useRef(false);
-  const left = useRef(false);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   useEffect(() => () => {
     timers.current.forEach(clearTimeout);
@@ -86,29 +103,23 @@ function DragBack({ children, onBack, standDown }: { children: React.ReactNode; 
   }, []);
 
   const pan = useMemo(() => {
-    const began = () => { dragging.current = true; setPageDragging(true); };
-    const go = () => {
-      if (left.current) return;
-      left.current = true;
-      latest.current();
-      // Still here (nowhere it could go): the page comes back.
-      timers.current.push(setTimeout(() => {
-        // Gone from the stack already, only not yet unmounted: stays off.
-        if (!navigation.isFocused()) return;
-        left.current = false;
-        leaving.value = false;
-        x.value = withTiming(0, { duration: 240, easing: Easing.bezier(0.2, 0.8, 0.25, 1) });
-      }, 600));
+    const began = () => {
+      dragging.current = true;
+      setPageDragging(true);
+      // The keyboard lives in its own window and would stay put while the page moves: down it goes now, as with the system's swipe.
+      Keyboard.dismiss();
     };
-    const letGo = (commit: boolean, ms: number) => {
+    const stoodDown = () => latest.current.onStandDown?.();
+    const letGo = (commit: boolean) => {
       dragging.current = false;
       setPageDragging(false);
       if (!commit) return;
-      left.current = false;
-      // The page has already slid off with the finger: the stack's own slide would only repeat it.
-      navigation.setOptions({ animation: 'none' });
-      // Whatever happens to the slide, the page is not left half gone.
-      timers.current.push(setTimeout(go, ms + 200));
+      // The stack's own slide takes the page off, with the page below showing under it.
+      latest.current.onBack();
+      // Still here (nowhere it could go): ready for the next drag.
+      timers.current.push(setTimeout(() => {
+        if (navigation.isFocused()) leaving.value = false;
+      }, 600));
     };
     return Gesture.Pan()
       .manualActivation(true)
@@ -131,8 +142,12 @@ function DragBack({ children, onBack, standDown }: { children: React.ReactNode; 
         const dx = t.absoluteX - sx.value;
         const dy = t.absoluteY - sy.value;
         if (dx > SLOP && dx > Math.abs(dy) * 1.4) {
-          if (fromEdge.value || leaving.value || locked.value || stand.value) state.fail();
-          else state.activate();
+          if (fromEdge.value || leaving.value || locked.value) state.fail();
+          else if (stand.value) {
+            // A row is slid open (or the hold menu is up): not a way back, but it does shut the open row, as iOS does.
+            state.fail();
+            runOnJS(stoodDown)();
+          } else state.activate();
         } else if (Math.abs(dy) > SLOP || dx < -SLOP) {
           state.fail();
         }
@@ -143,22 +158,18 @@ function DragBack({ children, onBack, standDown }: { children: React.ReactNode; 
       })
       .onUpdate((e) => {
         'worklet';
-        x.value = Math.max(0, e.translationX);
+        // Follows the finger at first, then less and less, never past PULL.
+        const t = Math.max(0, e.translationX);
+        x.value = PULL * (1 - Math.exp(-t / PULL));
       })
       .onEnd((e, success) => {
         'worklet';
-        const at = x.value;
-        const w = width.value;
-        const commit = success && (at > w * COMMIT_AT || (e.velocityX > FLICK && at > 30));
-        if (commit) {
-          leaving.value = true;
-          const ms = Math.max(140, Math.min(260, (w - at) / Math.max(e.velocityX / 1000, 1.4)));
-          runOnJS(letGo)(true, ms);
-          x.value = withTiming(w, { duration: ms, easing: Easing.bezier(0.2, 0.8, 0.25, 1) }, () => { runOnJS(go)(); });
-        } else {
-          runOnJS(letGo)(false, 0);
-          x.value = withTiming(0, { duration: 240, easing: Easing.bezier(0.2, 0.8, 0.25, 1) });
-        }
+        const travel = Math.max(0, e.translationX);
+        const commit = success && (travel > width.value * COMMIT_AT || (e.velocityX > FLICK && travel > 30));
+        if (commit) leaving.value = true;
+        runOnJS(letGo)(commit);
+        // Back into place; on a commit, while the stack slides the page off (an ease like its own, so the two never pull against each other).
+        x.value = withTiming(0, { duration: commit ? 320 : 240, easing: Easing.bezier(0.2, 0.8, 0.25, 1) });
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

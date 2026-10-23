@@ -24,7 +24,7 @@ const EASE = 'cubic-bezier(.2,.8,.25,1)';
  * (sliding an open row shut) is the row's. Only the page moves (a transform,
  * never its opacity), so the glass over it stays glass.
  */
-export function PageSwipeBack({ children, onBack }: { children: React.ReactNode; onBack: () => void; standDown?: SharedValue<boolean> }) {
+export function PageSwipeBack({ children, onBack }: { children: React.ReactNode; onBack: () => void; standDown?: SharedValue<boolean>; onStandDown?: () => void }) {
   const wrap = useRef<View>(null);
   const taking = useRef(false);
   const latest = useRef(onBack);

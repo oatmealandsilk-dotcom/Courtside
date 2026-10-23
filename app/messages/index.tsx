@@ -82,6 +82,9 @@ export default function Inbox() {
   const inboxY = useSharedValue(0);
   const rowOpen = useSharedValue(false);
   useEffect(() => { rowOpen.value = openRow !== null; }, [openRow, rowOpen]);
+  // The page's own back drag (older iPhones) stands down while a row is open or the hold menu is up.
+  const pageStand = useSharedValue(false);
+  useEffect(() => { pageStand.value = openRow !== null || held !== null; }, [openRow, held, pageStand]);
   useAnimatedReaction(() => inboxY.value, (y, prev) => {
     if (prev != null && Math.abs(y - prev) > 2 && rowOpen.value) { rowOpen.value = false; runOnJS(setOpenRow)(null); }
   }, []);
@@ -251,7 +254,7 @@ export default function Inbox() {
     ];
 
   return (
-    <PageSwipeBack onBack={() => goBack()} standDown={rowOpen}>
+    <PageSwipeBack onBack={() => goBack()} standDown={pageStand} onStandDown={() => setOpenRow(null)}>
     <Screen
       offsetY={inboxY}
       onRefresh={isDesktopBrowser() ? undefined : actions.refresh}
