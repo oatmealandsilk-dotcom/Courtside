@@ -51,7 +51,7 @@ export const ThemeSwitcher = forwardRef<ThemeSwitcherHandle, { app: React.RefObj
             // The photograph of the old page sits on top and fades away over the new one.
             doc.documentElement.animate(
               { opacity: [1, 0] },
-              { duration: CROSSFADE_MS, easing: 'cubic-bezier(0.45, 0, 0.55, 1)', fill: 'forwards', pseudoElement: '::view-transition-old(root)' },
+              { duration: CROSSFADE_MS, easing: 'cubic-bezier(0.45, 0, 0.55, 1)', pseudoElement: '::view-transition-old(root)' },
             );
             return;
           }
