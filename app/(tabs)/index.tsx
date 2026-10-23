@@ -1526,6 +1526,8 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
   const WINDOW = 1;
   /** How many pages ahead stay mounted and buffering, so the feed is never caught out. */
   const AHEAD = 2;
+  /** One page further still, built only when the link is free for it (see `lookahead` below). */
+  const EXTRA = 3;
   /** How many of those the first clip (and a pull-to-refresh) waits for; the rest load in behind the feed. */
   const FIRST = 1;
 
@@ -1541,13 +1543,29 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
   const [goneIds, setGoneIds] = useState<Set<string>>(() => new Set());
   // `ok` true: the page's picture is in (a picture that failed counts as done
   // too: nothing waits on it, and its cover lifts). False: its video player was freed.
-  const markReady = useCallback((id: string, ok: boolean) => {
+  // Pages shown by the six-second fallback below rather than by their picture arriving: they are
+  // on show, but the lookahead (further down) waits for the real thing before it fetches further.
+  const [forcedIds, setForcedIds] = useState<ReadonlySet<string>>(() => new Set());
+  const markReady = useCallback((id: string, ok: boolean, forced = false) => {
     if (ok) {
+      setForcedIds((prev) => {
+        if (forced) return prev.has(id) ? prev : new Set(prev).add(id);
+        if (!prev.has(id)) return prev;
+        const next = new Set(prev); next.delete(id); return next;
+      });
       setReadyIds((prev) => (prev.has(id) ? prev : new Set(prev).add(id)));
       setGoneIds((prev) => { if (!prev.has(id)) return prev; const next = new Set(prev); next.delete(id); return next; });
     } else {
       setGoneIds((prev) => (prev.has(id) ? prev : new Set(prev).add(id)));
     }
+  }, []);
+  // A browser's clips with three seconds in hand (their `ready` is only the first frame): the one
+  // on screen, playing with that much ahead of it, and those waiting off screen with that much in.
+  const [steadyId, setSteadyId] = useState<string | null>(null);
+  const [steadyIds, setSteadyIds] = useState<ReadonlySet<string>>(() => new Set());
+  const markSteady = useCallback((id: string, onScreen: boolean) => {
+    if (onScreen) setSteadyId(id);
+    else setSteadyIds((prev) => (prev.has(id) ? prev : new Set(prev).add(id)));
   }, []);
   /** The page's picture is in right now, in the player that is actually built. */
   const inNow = (id: string) => readyIds.has(id) && !goneIds.has(id);
@@ -1559,7 +1577,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
     if (!item) return undefined;
     const id = item.type === 'post' ? item.post.id : item.type === 'question' ? item.question.id : item.type === 'hit' ? item.story.id : null;
     if (!id || readyIds.has(id)) return undefined;
-    const timer = setTimeout(() => markReady(id, true), 6000);
+    const timer = setTimeout(() => markReady(id, true, true), 6000);
     return () => clearTimeout(timer);
   }, [active, feed, readyIds, markReady]);
   // A post whose video only ever existed on the phone that made it will never
@@ -1651,6 +1669,76 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
       }
     }
   }, [feed, markReady]);
+
+  // Instagram-style lookahead (Oct 23, owner: "if I swipe fast through 3 reels it has to load
+  // again"). What the feed built before stays exactly as it was and never waits on anything: the
+  // page behind and the next two get their players the moment they come in reach. On top of
+  // that, the third page ahead is built with its player (paused, silent, buffering at its start)
+  // once the clip on screen is going and the next two are in, on a quick connection, with this
+  // feed on show (a group tab behind For you never builds ahead). On a phone a clip is "in" when
+  // its opening seconds are (the same point the clip on screen starts at), so the extra fetch
+  // only ever uses a link the nearer clips are done with, and a slow link never sees it. In a
+  // browser, where only the next clip fetched before, the second page ahead fetches too, and the
+  // third, each on the same terms (see lookaheadOk). A page that got its fetch keeps it while it
+  // stays in reach, so nothing is built twice.
+  const lookaheadOk = (upTo: number) => {
+    if (!playing || !warmed || !playable || warming || !connectionIsQuick()) return false;
+    let clipOnScreen = false;
+    for (let k = 0; k <= upTo; k += 1) {
+      const item = feed[active + k];
+      const id = item?.type === 'hit' ? (item.story.videoUrl || item.story.imageUrl ? item.story.id : null)
+        : item?.type === 'post' && reachable(item.post) && (item.post.videoUrl || (item.post.kind !== 'clip' && item.post.imageUrl)) ? item.post.id : null;
+      if (!id) continue;
+      // Shown by the fallback only (still fetching its opening seconds): the link is not free yet.
+      if (!inNow(id) || forcedIds.has(id)) return false;
+      // In a browser "in" is only the first frame: there the clip on screen must also be playing
+      // with three seconds in hand, as a phone's has when it starts (a link with nothing to spare
+      // never gets there), and while it needs the link the ones ahead must have three seconds in
+      // too. With no clip on screen (a written post, a tip), their first frames will do.
+      const video = item?.type === 'hit' ? !!item.story.videoUrl : item?.type === 'post' && !!item.post.videoUrl;
+      if (!video || Platform.OS !== 'web') continue;
+      if (k === 0) { if (steadyId !== id) return false; clipOnScreen = true; }
+      else if (clipOnScreen && steadyId !== id && !steadyIds.has(id)) return false;
+    }
+    return true;
+  };
+  const lookahead = useRef<ReadonlySet<string>>(new Set());
+  {
+    const keep = new Set<string>();
+    // The third page ahead is kept only while this feed is on show: a Home that goes out of sight
+    // (a group tab over For you, a screen pushed on top) frees that extra player and builds it
+    // again from the gate below once it is back, so hidden feeds hold no more than before.
+    const reach = playing ? EXTRA : AHEAD;
+    for (let k = -WINDOW; k <= reach; k += 1) { const item = feed[active + k]; if (item && lookahead.current.has(keyOf(item))) keep.add(keyOf(item)); }
+    // On a phone every built page has its player: one step back keeps the page that moves out
+    // to third ahead as it is (it has its seconds in) instead of freeing it, while on show.
+    if (Platform.OS !== 'web') for (let k = -WINDOW; k <= AHEAD; k += 1) { const item = feed[active + k]; if (item) keep.add(keyOf(item)); }
+    const third = feed[active + EXTRA];
+    if (third && !keep.has(keyOf(third)) && lookaheadOk(2)) keep.add(keyOf(third));
+    const second = feed[active + 2];
+    if (Platform.OS === 'web' && second && !keep.has(keyOf(second)) && lookaheadOk(1)) keep.add(keyOf(second));
+    if (keep.size !== lookahead.current.size || [...keep].some((key) => !lookahead.current.has(key))) lookahead.current = keep;
+  }
+  /** Whether the page at `index` is built: the window, plus a third page ahead that got its lookahead. */
+  const inReach = (index: number) => {
+    const ahead = index - active;
+    if (ahead >= -WINDOW && ahead <= AHEAD) return true;
+    const item = feed[index];
+    return ahead === EXTRA && !!item && lookahead.current.has(keyOf(item));
+  };
+  // The covers of the pages just past the built ones, once the lookahead is on (a phone; a browser warms its own below).
+  const coversFetched = useRef(new Set<string>());
+  const coversOn = Platform.OS !== 'web' && lookahead.current.size > 0 && lookaheadOk(2);
+  useEffect(() => {
+    if (!coversOn) return;
+    const urls: string[] = [];
+    for (let k = EXTRA; k <= EXTRA + 1; k += 1) {
+      const item = feed[active + k];
+      const url = item?.type === 'post' ? (item.post.thumbnailUrl ?? item.post.imageUrl) : item?.type === 'hit' ? (item.story.thumbnailUrl ?? item.story.imageUrl) : undefined;
+      if (url && !coversFetched.current.has(url)) { coversFetched.current.add(url); urls.push(url); }
+    }
+    if (urls.length) ExpoImage.prefetch(urls, 'memory-disk').catch(() => undefined);
+  }, [coversOn, active, feed]);
 
   // Whether someone else's post may leave CourtSide as a picture is asked as it
   // comes on screen, so its ••• menu opens already knowing (openOutside.ts).
@@ -1834,8 +1922,8 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
               const distance = Math.abs(index - active);
               const ahead = index - active;
               const pageKey = item.type === 'post' ? item.post.id : item.type === 'question' ? item.question.id : item.type === 'hit' ? item.story.id : item.type;
-              // Two pages behind and seven ahead stay built; the rest hold their slot.
-              if (ahead < -WINDOW || ahead > AHEAD) {
+              // The page behind and the next two stay built (a third once it has its lookahead); the rest hold their slot.
+              if (!inReach(index)) {
                 // A page not built yet holds its slot with the brand on it, so a
                 // fast scroll lands on the mark (a post) or the name (a clip or thread).
                 return <View key={pageKey} style={styles.holdPage}>{item.type === 'post' && item.post.kind !== 'clip' ? skeletonPost : skeletonClip}</View>;
@@ -1862,7 +1950,10 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
               // buffers while the feed is still warming up instead of waiting for
               // it, the one you are most likely to land on starts instantly, and
               // scrolling stays smooth.
-              const near = Platform.OS === 'web' ? (ahead === 0 || ahead === 1) && (!warming || ahead === 0) : distance <= 1 || (ahead > 0 && ahead <= AHEAD);
+              // On top of that, a page that got its lookahead (above) fetches too, like the others: the
+              // third page ahead, and in a browser the second.
+              const extra = ahead >= 2 && lookahead.current.has(keyOf(item));
+              const near = Platform.OS === 'web' ? ((ahead === 0 || ahead === 1) && (!warming || ahead === 0)) || extra : distance <= 1 || (ahead > 0 && ahead <= AHEAD) || extra;
               const strip = index === suggestHost ? suggestStrip : null;
               // A session from a player near you, not followed yet: "Near you", with Follow.
               const nearUser = scope?.activities && item.type === 'post' && nearAuthors.has(item.post.authorId) && !followingIds.includes(item.post.authorId) ? usersById.get(item.post.authorId) : undefined;
@@ -1903,7 +1994,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
                     <View accessibilityLabel={`${author.name}'s Instant`} style={styles.clipFrame}>
                       <View style={phone ? StyleSheet.absoluteFill : styles.clipPortrait}>
                         {story.videoUrl ? (
-                          <ClipPlayback uri={story.videoUrl} poster={story.thumbnailUrl} active={playing && active === index && warmed && playable} held={held && myStage?.key === hitKey} onStage={myStage?.key === hitKey} preload={near} warmOnly={warming} bare={immersive} onDoubleTap={() => likeHitByTap(story.id, hitLiked)} discInk={theme === 'us-open' ? '#FFFFFF' : colors.brand} discPinned={index === 0 && !scope} onReady={(ok) => markReady(story.id, ok)} onPaused={rowBackOnPause} />
+                          <ClipPlayback uri={story.videoUrl} poster={story.thumbnailUrl} active={playing && active === index && warmed && playable} held={held && myStage?.key === hitKey} onStage={myStage?.key === hitKey} preload={near} next={Platform.OS === 'web' && playing && ahead === 1} warmOnly={warming} bare={immersive} onDoubleTap={() => likeHitByTap(story.id, hitLiked)} discInk={theme === 'us-open' ? '#FFFFFF' : colors.brand} discPinned={index === 0 && !scope} onReady={(ok) => markReady(story.id, ok)} onSteady={(onScreen) => markSteady(story.id, onScreen)} onPaused={rowBackOnPause} />
                         ) : (
                           // Two quick taps like a hit, the way they like a clip.
                           <Pressable accessibilityRole="image" accessibilityLabel={`${author.name}'s Instant`} onPress={() => { const now = Date.now(); if (now - lastHitTap.current < 280) { lastHitTap.current = 0; likeHitByTap(story.id, hitLiked); } else lastHitTap.current = now; }} style={StyleSheet.absoluteFill}>
@@ -2072,6 +2163,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
                           poster={post.thumbnailUrl}
                           active={playing && active === index && warmed && playable}
                           preload={near}
+                          next={Platform.OS === 'web' && playing && ahead === 1}
                           warmOnly={warming}
                           onDoubleTap={() => likeByTap(post.id, liked)}
                           trimStart={post.trimStart}
@@ -2084,6 +2176,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
                           discInk={theme === 'us-open' ? '#FFFFFF' : colors.brand}
                           discPinned={index === 0 && !scope}
                           onReady={(ok) => markReady(post.id, ok)}
+                          onSteady={(onScreen) => markSteady(post.id, onScreen)}
                           held={held && myStage?.key === `p:${post.id}`}
                           onStage={myStage?.key === `p:${post.id}`}
                           onPaused={rowBackOnPause}
@@ -2199,7 +2292,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
               const key = item?.type === 'post' ? item.post.id : item?.type === 'hit' ? item.story.id : 'first';
               const pageKey = item ? keyOf(item) : 'first';
               // Only a built page (the one on screen and those either side) can go onto the stage.
-              const built = index - active >= -WINDOW && index - active <= AHEAD;
+              const built = inReach(index);
               const markStyle = [styles.wordmarkOverlay, { top: insets.top + 24 }, media && picture && styles.clipMarkOverlay];
               /* A tap on the mark tucks it away for this page only. Over a clip or hit it is the
                  small mark at the top left, part of the picture; on a post, the wordmark. */
