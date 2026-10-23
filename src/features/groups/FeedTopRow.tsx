@@ -182,13 +182,13 @@ export function FeedTopRow({ groups, selected, onSelect, onPlus, onPicture, hidd
   useEffect(() => { if (viewW && layout) shown.current = true; });
   const ready = viewW && (layout || shown.current) ? 1 : 0;
   const plusReady = viewW && layout ? 1 : 0;
-  // Whether the "+" shows is handed to the animation thread together with its new place, so it
-  // never appears for a frame at the new place with the old stop (a group arriving on an iPhone).
+  // Whether the "+" shows stays a plain React prop on purpose (opacity: plusReady below): kept out
+  // of the animated style, a settled value Reanimated drops before syncing can never hide the "+".
+  // Only its slide and stop live on the animation thread.
   const plusAtNow = useSharedValue(0);
   const plusStopNow = useSharedValue(0);
-  const plusShown = useSharedValue(0);
-  useLayoutEffect(() => { plusAtNow.value = plusAt; plusStopNow.value = plusStop; plusShown.value = plusReady; }, [plusAt, plusStop, plusReady, plusAtNow, plusStopNow, plusShown]);
-  const plusSlide = useAnimatedStyle(() => ({ opacity: plusShown.value, transform: [{ translateX: Math.min(shift.value, plusStopNow.value - plusAtNow.value) }] }));
+  useLayoutEffect(() => { plusAtNow.value = plusAt; plusStopNow.value = plusStop; }, [plusAt, plusStop, plusAtNow, plusStopNow]);
+  const plusSlide = useAnimatedStyle(() => ({ transform: [{ translateX: Math.min(shift.value, plusStopNow.value - plusAtNow.value) }] }));
   // Away with the scroll: it rides up and fades with the finger, frame by frame, and settles in
   // or out when the feed comes to rest (features/feed/topRowScroll). With Reduce Motion it only
   // fades. VoiceOver keeps it in, as does one of its words holding the focus. Nothing in the row
@@ -256,7 +256,7 @@ export function FeedTopRow({ groups, selected, onSelect, onPlus, onPicture, hidd
             })}
           </Animated.View>
         </View>
-        <Animated.View style={[styles.plusSpot, { left: plusAt }, plusSlide]}>
+        <Animated.View style={[styles.plusSpot, { left: plusAt, opacity: plusReady }, plusSlide]}>
           <Pressable accessibilityRole="button" accessibilityLabel={`Find or start a group${invites ? `, ${invites} ${invites === 1 ? 'invite' : 'invites'}` : ''}${waiting ? ', someone is asking to join yours' : ''}`} hitSlop={10} onFocus={(e) => { if (keyFocus(e)) setFocusIn(true); }} onBlur={() => setFocusIn(false)} onPress={onPlus} style={styles.plusHit}>
             <Ionicons name="add" size={22} color={ink} style={[{ opacity: 0.85 }, edge]} />
             {waiting || invites ? <View style={styles.waiting} /> : null}
