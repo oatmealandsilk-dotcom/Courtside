@@ -144,9 +144,10 @@ export function MapTopBar({ onBack, query, onQuery, locationOn, locating, onTogg
   // One lit value for the button's green, its edge and its icon, so the icon never runs ahead of the fill (a spinner ending as Location comes on).
   const locLit = useLit(!!locationOn);
   const locV = locLit.v;
-  const edgeOff = `${colors.borderStrong}55`;
-  const edgeOn = colors.brand;
-  const locEdge = useAnimatedStyle(() => ({ borderColor: interpolateColor(locV.value, [0, 1], [edgeOff, edgeOn]) }));
+  // The edge's two colours for the animation thread, kept to the theme now (the button is rebuilt in a new one).
+  const edgeOff = useInk(`${colors.borderStrong}55`, locLit.bump);
+  const edgeOn = useInk(colors.brand, locLit.bump);
+  const locEdge = useAnimatedStyle(() => ({ borderColor: interpolateColor(locV.value, [0, 1], [edgeOff.value, edgeOn.value]) }));
   const locationIcon = locating ? <ActivityIndicator size="small" color={locationOn ? colors.brandInk : colors.text} /> : (
     <TwoTone v={locLit.v} off={<Ionicons name="navigate-outline" size={18} color={colors.text} />} lit={<Ionicons name="navigate" size={18} color={colors.brandInk} />} />
   );
@@ -386,7 +387,7 @@ export function FilterChips({ filter, onFilter, courtsOn, onCourts, courtsLoadin
   useEffect(() => () => { if (pending.current) clearTimeout(pending.current); }, []);
   const pill = useAnimatedStyle(() => ({ transform: [{ translateX: x.value }], width: w.value }));
   const courtsV = useLit(courtsOn);
-  const courtsLit = useLitText(courtsV.v);
+  const courtsLit = useLitText(courtsV.v, courtsV.bump);
   const pick = (key: MapFilter) => {
     if (key === active) return;
     haptics.tap();
@@ -447,14 +448,33 @@ function useLit(on: boolean) {
     if (first.current) { first.current = false; return; }
     v.value = withTiming(on ? 1 : 0, { duration: FILL_MS, easing: Easing.out(Easing.quad) }, (done) => { 'worklet'; if (done) runOnJS(bump)(); });
   }, [on]); // eslint-disable-line react-hooks/exhaustive-deps
-  return { v, key };
+  return { v, key, bump };
+}
+
+/**
+ * A theme colour for the animation thread, as a shared value kept to the theme now, so a view built
+ * afresh at rest starts in the theme chosen now, never the one first drawn in. `changed` (the view's
+ * rebuild) runs a frame after a theme change, once the new colour has reached the animation thread.
+ */
+function useInk(c: string, changed?: () => void) {
+  const v = useSharedValue(c);
+  const was = useRef(c);
+  useEffect(() => {
+    if (was.current === c) return;
+    was.current = c;
+    v.value = c;
+    if (!changed) return;
+    const id = requestAnimationFrame(changed);
+    return () => cancelAnimationFrame(id);
+  }, [c]); // eslint-disable-line react-hooks/exhaustive-deps
+  return v;
 }
 
 /** Words that turn from the page's colour to the colour on green as the fill comes in. */
-function useLitText(v: SharedValue<number>) {
-  const off = colors.text;
-  const lit = colors.brandInk;
-  return useAnimatedStyle(() => ({ color: interpolateColor(v.value, [0, 1], [off, lit]) }));
+function useLitText(v: SharedValue<number>, rebuild?: () => void) {
+  const off = useInk(colors.text, rebuild);
+  const lit = useInk(colors.brandInk, rebuild);
+  return useAnimatedStyle(() => ({ color: interpolateColor(v.value, [0, 1], [off.value, lit.value]) }));
 }
 
 /**

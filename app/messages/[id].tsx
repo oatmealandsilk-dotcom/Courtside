@@ -1509,6 +1509,11 @@ const MessageRow = memo(function MessageRow({ item, ctx, original, originalBlock
   const { message } = item;
   // Whether it comes in moving: settled the first time it is drawn.
   const [arrive] = useState(() => ctx.arrivalOf(message));
+  // Once its read line has grown in (the message under it leaving), the line stays in that room while it
+  // shows, so it is never rebuilt when the leaving message is gone (its fade-in would play a second time).
+  const grew = useRef(false);
+  if (!readLine) grew.current = false;
+  else if (readGrow) grew.current = true;
   const mine = message.senderId === me;
   const stamp = item.stamp ? <DayLine iso={message.createdAt} styles={styles} /> : null;
   // An event line ("Mira added Dev", "You named the group…"): a quiet
@@ -1796,7 +1801,7 @@ const MessageRow = memo(function MessageRow({ item, ctx, original, originalBlock
       <Slide mine><Text accessibilityLiveRegion="polite" style={styles.readLine}>{readLine}</Text></Slide>
     </Reanimated.View>
   ) : null;
-  const readUnder = readLineView && readGrow ? <GrowRoom from="top" growIn>{readLineView}</GrowRoom> : readLineView;
+  const readUnder = readLineView && grew.current ? <GrowRoom from="top" growIn>{readLineView}</GrowRoom> : readLineView;
   const seen = item.seenBy?.length && !seenHidden ? (
     <Slide mine={mine}>
       <SeenFaces people={item.seenBy.map((uid) => ctx.faceOf(uid)).filter((u): u is User => !!u)} align="right" />
@@ -2315,6 +2320,16 @@ function HoverBar({ tools, onMore }: { tools: HoverTools; onMore: () => void }) 
 }
 
 /**
+ * The hold menu's blur, its own component so each rebuild at rest (a new key)
+ * works out its first-frame strength from where the menu is now (full), never
+ * from the menu's first frame (none) (Oct 23).
+ */
+function MenuBlur({ p }: { p: SharedValue<number> }) {
+  const props = useAnimatedProps(() => ({ intensity: 14 * Math.max(0, Math.min(1, p.value)) }));
+  return <AnimatedBlurView pointerEvents="none" animatedProps={props} tint="dark" style={StyleSheet.absoluteFill} />;
+}
+
+/**
  * What a held message offers, the way iMessage and Instagram show it: the
  * chat dims, the message stays lifted where it was, the reactions sit above
  * it (with a "+" for any emoji) and the actions below. Reply comes first.
@@ -2367,7 +2382,6 @@ function MessageMenu({ target, me, styles, canReply, canReact, pending, canDelet
     p.value = withTiming(0, { duration: 130, easing: Easing.in(Easing.quad) }, (done) => { if (done) runOnJS(after)(); });
   };
   const dimLook = useAnimatedStyle(() => ({ opacity: Math.min(1, p.value) }));
-  const blurProps = useAnimatedProps(() => ({ intensity: 14 * Math.max(0, Math.min(1, p.value)) }));
   const liftLook = useAnimatedStyle(() => ({ transform: [{ scale: lift.value }] }));
   const barLook = useAnimatedStyle(() => ({ opacity: Math.min(1, p.value * 1.4), transform: [{ translateY: (1 - p.value) * 10 }, { scale: 0.55 + 0.45 * p.value }] }));
   const cardLook = useAnimatedStyle(() => ({ opacity: Math.min(1, p.value * 1.4), transform: [{ translateY: (1 - p.value) * -8 }, { scale: 0.82 + 0.18 * p.value }] }));
@@ -2442,7 +2456,7 @@ function MessageMenu({ target, me, styles, canReply, canReact, pending, canDelet
       <View style={StyleSheet.absoluteFill}>
         {/* The blur comes and goes by its own strength, never under a fade: blur under a fading parent
             can turn see-through on the iPhone (Oct 17; Oct 22 sweep, item 5). Only the dim fades. */}
-        {Platform.OS === 'ios' ? <AnimatedBlurView key={blurKey} pointerEvents="none" animatedProps={blurProps} tint="dark" style={StyleSheet.absoluteFill} /> : null}
+        {Platform.OS === 'ios' ? <MenuBlur key={blurKey} p={p} /> : null}
         <Reanimated.View pointerEvents="none" style={[StyleSheet.absoluteFill, dimLook, menuAtRest && MENU_DIM_REST]}>
           <View style={[StyleSheet.absoluteFill, styles.menuBackdrop]} />
         </Reanimated.View>

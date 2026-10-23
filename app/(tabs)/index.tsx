@@ -2433,13 +2433,47 @@ function FeedTab({ scope, previewSection }: { previewSection?: string; scope?: F
   return <GroupedFeed />;
 }
 
-/** One kept feed over For you: fades in when chosen, out (and untouchable) when not. */
+/**
+ * One kept feed over For you: fades in when chosen, out (and untouchable) when not.
+ * Whether it shows at rest is React's (the outer view's plain opacity); the
+ * animated fade inside always rests at 1, so a settled value Reanimated drops
+ * unsynced on a phone can never leave a chosen feed invisible (Oct 23).
+ */
 function FeedLayer({ shown, children }: { shown: boolean; children: React.ReactNode }) {
-  const o = useSharedValue(0);
-  useEffect(() => { o.value = withTiming(shown ? 1 : 0, { duration: 220, easing: Easing.out(Easing.quad) }); }, [shown, o]);
+  const [vis, setVis] = useState(0);
+  const visRef = useRef(0);
+  const shownRef = useRef(shown);
+  shownRef.current = shown;
+  const o = useSharedValue(1);
+  const visV = useSharedValue(0);
+  const hidden = useCallback(() => { if (!shownRef.current) { visRef.current = 0; setVis(0); } }, []);
+  useEffect(() => {
+    const ease = { duration: 220, easing: Easing.out(Easing.quad) };
+    if (shown) {
+      // From hidden, the fade starts at 0 behind React's 0, then React shows it.
+      if (!visRef.current) o.value = 0;
+      visRef.current = 1;
+      setVis(1);
+      o.value = withTiming(1, ease);
+    } else {
+      o.value = withTiming(0, ease, (done) => { 'worklet'; if (done) runOnJS(hidden)(); });
+    }
+  }, [shown, o, hidden]);
+  // Hidden by React now: the fade inside goes back to its rest (1) behind it.
+  useEffect(() => {
+    visV.value = vis;
+    if (vis) return;
+    const id = requestAnimationFrame(() => { if (!visRef.current) o.value = 1; });
+    return () => cancelAnimationFrame(id);
+  }, [vis, visV, o]);
   const fade = useAnimatedStyle(() => ({ opacity: o.value }));
+  const glassFade = useDerivedValue(() => visV.value * o.value);
   // Its clips' glass (the sound disc, the level pill, See stats) is a plain fill while it cross-fades (Oct 22 sweep, item 5).
-  return <Reanimated.View pointerEvents={shown ? 'auto' : 'none'} style={[StyleSheet.absoluteFill, fade]}><GlassFadeScope value={o}>{children}</GlassFadeScope></Reanimated.View>;
+  return (
+    <View pointerEvents={shown ? 'auto' : 'none'} style={[StyleSheet.absoluteFill, { opacity: vis }]}>
+      <Reanimated.View style={[StyleSheet.absoluteFill, fade]}><GlassFadeScope value={glassFade}>{children}</GlassFadeScope></Reanimated.View>
+    </View>
+  );
 }
 
 /** The top row's "Activities" word, held where a group's id would be. */

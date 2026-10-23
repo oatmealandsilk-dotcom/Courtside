@@ -179,7 +179,7 @@ function MineTabs({ user, tab, choose, offsetY, scrollRef }: { user: User; tab: 
   const pane = (key: string, body: React.ReactNode) => <View key={key} style={{ minHeight }}>{body}</View>;
   return (
     <>
-      <ProfileTabs value={tab} onChange={pick} offsetY={offsetY} onPlaced={(y, h) => { tabsAt.current = y; setTabsH(h); }} pillStyle={line.style} onStride={setStride} />
+      <ProfileTabs value={tab} onChange={pick} offsetY={offsetY} onPlaced={(y, h) => { tabsAt.current = y; setTabsH(h); }} pill={line} onStride={setStride} />
       {/* Activity, Health and Game side by side, as Profile's sections: a swipe slides between
           them and a tap glides, the raised pill riding along (Oct 22), instead of the page swapping in one frame.
           A swipe lands like a tap: the new tab starts right under the pinned tabs (in a browser before the

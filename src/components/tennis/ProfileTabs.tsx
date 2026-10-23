@@ -1,9 +1,10 @@
 import { PRESS_DIM } from '@/theme/press';
 import React, { useCallback, useContext, useRef, useState } from 'react';
-import { Platform, Pressable, StyleSheet, Text, View, type ViewStyle } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import Reanimated, { type SharedValue, runOnJS, useAnimatedReaction, useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 
 import { Wash } from '@/components/Wash';
+import { useRestKey } from '@/components/ui/restMotion';
 import { PAGE_WASH, PageWashContext } from '@/components/ui/pageWash';
 import { PROFILE_TABS, type ProfileTab } from '@/features/players/profileTab';
 import { useThemedStyles } from '@/theme/ThemeProvider';
@@ -46,25 +47,33 @@ const rect = (node: unknown): DOMRect | null => {
  * is null until the remembered tab has been read, so no tab shows chosen and
  * then jumps.
  */
-export function ProfileTabs({ value, onChange, offsetY, onPlaced, pillStyle, onStride }: {
+export function ProfileTabs({ value, onChange, offsetY, onPlaced, pill, onStride }: {
   value: ProfileTab | null;
   onChange: (next: ProfileTab) => void;
   offsetY: SharedValue<number>;
   /** Where the bar sits in the page, and its height. */
   onPlaced?: (y: number, height: number) => void;
   /**
-   * The raised pill's place (useTabUnderline's style), for a page whose
+   * The raised pill's place (useTabUnderline's base and progress), for a page whose
    * sections slide (Oct 22): the pill then rides with a swipe and glides on a
    * tap instead of jumping to the tab. Without it the chosen tab is raised in place.
    */
-  pillStyle?: ReturnType<typeof useAnimatedStyle>;
-  /** One tab along (a tab's width and the gap after it), once laid out, for pillStyle. */
+  pill?: { base: SharedValue<number>; progress: SharedValue<number> };
+  /** One tab along (a tab's width and the gap after it), once laid out. */
   onStride?: (stride: number) => void;
 }) {
   const styles = useThemedStyles(styleDefinitions);
   const dark = pageIsDark();
   const [tabW, setTabW] = useState(0);
-  const sliding = !!pillStyle && tabW > 0 && value !== null;
+  const sliding = !!pill && tabW > 0 && value !== null;
+  // On a phone the pill is built afresh each time it lands on a tab, so its first frame is that tab
+  // and a settled place Reanimated drops unsynced can never put it back under Activity (Oct 23).
+  const [pillKey, pillLanded] = useRestKey();
+  useAnimatedReaction(() => {
+    if (!pill) return -1;
+    const at = pill.base.value + pill.progress.value;
+    return pill.progress.value === 0 && Math.abs(at - Math.round(at)) < 0.001 ? Math.round(at) : -1;
+  }, (n, was) => { if (n >= 0 && was !== null && n !== was) runOnJS(pillLanded)(); });
   // Where the bar sits in the page; far below until it has been laid out, so it never starts pinned.
   const top = useSharedValue(1e9);
   const pin = useAnimatedStyle(() => (WEB ? {} : { transform: [{ translateY: Math.max(0, offsetY.value - (top.value - PIN_GAP)) }] }));
@@ -113,7 +122,7 @@ export function ProfileTabs({ value, onChange, offsetY, onPlaced, pillStyle, onS
         }}
       >
         {sliding ? (
-          <Reanimated.View pointerEvents="none" style={[styles.pill, { width: tabW }, dark ? [styles.tabOnDark, { borderColor: withAlpha(colors.borderStrong, 0.55) }] : styles.tabOn, pillStyle]} />
+          <SlidingPill key={`${tabW}:${pillKey}`} base={pill!.base} progress={pill!.progress} stride={tabW + TAB_GAP} style={[styles.pill, { width: tabW }, dark ? [styles.tabOnDark, { borderColor: withAlpha(colors.borderStrong, 0.55) }] : styles.tabOn]} />
         ) : null}
         {PROFILE_TABS.map((t) => {
           const on = t.value === value;
@@ -134,6 +143,16 @@ export function ProfileTabs({ value, onChange, offsetY, onPlaced, pillStyle, onS
       </View>
     </Reanimated.View>
   );
+}
+
+/**
+ * The raised pill under the tabs' words. Its own component, rebuilt (a new key) for a new tab width
+ * and at each landing, so its first frame always reads the width and the tab it is at now.
+ */
+function SlidingPill({ base, progress, stride, style }: { base: SharedValue<number>; progress: SharedValue<number>; stride: number; style: StyleProp<ViewStyle> }) {
+  const end = PROFILE_TABS.length - 1;
+  const at = useAnimatedStyle(() => ({ transform: [{ translateX: Math.max(0, Math.min(end, base.value + progress.value)) * stride }] }));
+  return <Reanimated.View pointerEvents="none" style={[style, at]} />;
 }
 
 const styleDefinitions = StyleSheet.create({

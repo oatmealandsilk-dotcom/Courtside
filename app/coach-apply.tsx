@@ -5,7 +5,8 @@ import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as DocumentPicker from 'expo-document-picker';
-import Reanimated, { Easing as REasing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Reanimated, { Easing as REasing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import { useRestKey } from '@/components/ui/restMotion';
 
 import { goBack } from '@/lib/goBack';
 import { useAndroidBack } from '@/lib/androidBack';
@@ -393,9 +394,12 @@ function LinkCheck({ url, styles }: { url: string; styles: ReturnType<typeof use
 /** The fold's arrow: turns a quarter from pointing on to pointing down, rather than swapping. */
 function TurningArrow({ open }: { open: boolean }) {
   const turn = useSharedValue(open ? 1 : 0);
-  useEffect(() => { turn.value = withTiming(open ? 1 : 0, { duration: 220, easing: REasing.bezier(0.22, 0.61, 0.36, 1) }); }, [open, turn]);
+  // Built afresh each time it lands (on a phone), so its first frame is the way it points now and a
+  // settled turn an iPhone drops unsynced can never point it back on a later re-render.
+  const [restKey, landed] = useRestKey();
+  useEffect(() => { turn.value = withTiming(open ? 1 : 0, { duration: 220, easing: REasing.bezier(0.22, 0.61, 0.36, 1) }, (done) => { 'worklet'; if (done) runOnJS(landed)(); }); }, [open, turn, landed]);
   const style = useAnimatedStyle(() => ({ transform: [{ rotate: `${turn.value * 90}deg` }] }));
-  return <Reanimated.View style={style}><Ionicons name="chevron-forward" size={16} color={colors.brand} /></Reanimated.View>;
+  return <Reanimated.View key={restKey} style={style}><Ionicons name="chevron-forward" size={16} color={colors.brand} /></Reanimated.View>;
 }
 
 const styleDefinitions = StyleSheet.create({

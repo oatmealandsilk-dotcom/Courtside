@@ -1,4 +1,4 @@
-import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, Platform, Pressable, StyleSheet, View } from 'react-native';
 import Animated, { Easing, interpolate, interpolateColor, runOnJS, useAnimatedReaction, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -131,15 +131,18 @@ export function FeedTopRow({ groups, selected, onSelect, onPlus, onPicture, hidd
   // over 180 ms rather than flipping them (Oct 22 sweep, item 16).
   const plainInk = theme === 'us-open' ? '#FFFFFF' : colors.text;
   const pic = useSharedValue(onPicture ? 1 : 0);
+  // The plain ink in a shared value, so a view built afresh at rest (below) starts in the theme
+  // chosen now, never the one the row was first drawn in.
+  const ink = useSharedValue(plainInk);
   useEffect(() => { pic.value = withTiming(onPicture ? 1 : 0, { duration: 180, easing: Easing.out(Easing.quad) }); }, [onPicture, pic]);
   const inkLook = useAnimatedStyle(() => ({
-    color: interpolateColor(pic.value, [0, 1], [plainInk, '#FFFFFF']),
+    color: interpolateColor(pic.value, [0, 1], [ink.value, '#FFFFFF']),
     // The edge's shape always set alongside (a browser writes all three as one text-shadow).
     textShadowColor: interpolateColor(pic.value, [0, 1], [EDGE_NONE, GLYPH_EDGE.textShadowColor]),
     textShadowOffset: GLYPH_EDGE.textShadowOffset,
     textShadowRadius: GLYPH_EDGE.textShadowRadius,
-  }), [plainInk]);
-  const markerLook = useAnimatedStyle(() => ({ backgroundColor: interpolateColor(pic.value, [0, 1], [plainInk, '#FFFFFF']) }), [plainInk]);
+  }));
+  const markerLook = useAnimatedStyle(() => ({ backgroundColor: interpolateColor(pic.value, [0, 1], [ink.value, '#FFFFFF']) }));
   // The "+" is an icon: the two inks cross-fade (nothing in the row is glass).
   const markerEdgeLook = useAnimatedStyle(() => ({ opacity: pic.value }));
   const plusPlain = useAnimatedStyle(() => ({ opacity: 1 - pic.value }));
@@ -156,6 +159,33 @@ export function FeedTopRow({ groups, selected, onSelect, onPlus, onPicture, hidd
   // words in the wrong ink, or the "+" without its white on a later re-render. Nothing it holds is lost:
   // where it sits and what is measured live here, in FeedTopRow.
   const [rowKey, bumpRow] = useRestKey();
+  // Never rebuilt under a finger on one of its words or the "+": the press would be dropped
+  // (and its tap lost). A rebuild asked for meanwhile waits until the finger lifts.
+  // (A press that never reported its end, its word gone mid-press, stops holding it back after 4 s.)
+  const pressing = useRef(0);
+  const pending = useRef(false);
+  const bumpSafe = useCallback(() => {
+    if (pressing.current && Date.now() - pressing.current < 4000) { pending.current = true; return; }
+    pressing.current = 0;
+    pending.current = false;
+    bumpRow();
+  }, [bumpRow]);
+  const pressIn = useCallback(() => { pressing.current = Date.now(); }, []);
+  const pressOut = useCallback(() => {
+    pressing.current = 0;
+    // After the press's own onPress has run.
+    if (pending.current) { pending.current = false; setTimeout(bumpSafe, 0); }
+  }, [bumpSafe]);
+  // A new theme: the ink changes, and the row is rebuilt in it.
+  const inkWas = useRef(plainInk);
+  useEffect(() => {
+    if (inkWas.current === plainInk) return;
+    inkWas.current = plainInk;
+    ink.value = plainInk;
+    // A frame on, once the new ink has reached the animation thread.
+    const id = requestAnimationFrame(() => bumpSafe());
+    return () => cancelAnimationFrame(id);
+  }, [plainInk, ink, bumpSafe]);
   // Activities sits left of For you (Oct 4): sessions with stats, as Strava's feed.
   const words = [{ id: 'activities' as string | null, name: 'Activities' }, { id: null as string | null, name: 'For you' }, ...groups];
   // The camera's mode picker (Oct 4, owner): the word on show always sits in
@@ -187,12 +217,13 @@ export function FeedTopRow({ groups, selected, onSelect, onPlus, onPicture, hidd
   useEffect(() => {
     if (homeMid === null || !viewW) return;
     const to = viewW / 2 - homeMid;
-    if (!placed.current) { placed.current = true; target.current = to; shift.value = to; return; }
+    // The first placement lands at once, and the row is rebuilt there, so its first frame holds it.
+    if (!placed.current) { placed.current = true; target.current = to; shift.value = withTiming(to, { duration: 0 }, (done) => { 'worklet'; if (done) runOnJS(bumpSafe)(); }); return; }
     // Already heading there (the tap began it): leave the glide running untouched.
     if (Math.abs(target.current - to) < 0.5) return;
     target.current = to;
     // One smooth glide, Apple's ease-out, no bounce: a spring re-aimed mid-flight read as a jolt.
-    shift.value = withTiming(to, { duration: 380, easing: Easing.bezier(0.22, 1, 0.36, 1) }, (done) => { 'worklet'; if (done) runOnJS(bumpRow)(); });
+    shift.value = withTiming(to, { duration: 380, easing: Easing.bezier(0.22, 1, 0.36, 1) }, (done) => { 'worklet'; if (done) runOnJS(bumpSafe)(); });
   }, [homeMid, viewW, shift]); // eslint-disable-line react-hooks/exhaustive-deps
   // The glide starts on the tap itself; the feed underneath switches a frame later,
   // so its heavy first draw never holds the row back.
@@ -202,7 +233,7 @@ export function FeedTopRow({ groups, selected, onSelect, onPlus, onPicture, hidd
     const at = layout?.at.get(key);
     if (!at || !viewW) { then(); return; }
     target.current = viewW / 2 - (at.x + at.w / 2);
-    shift.value = withTiming(target.current, { duration: 320, easing: Easing.bezier(0.22, 1, 0.36, 1) }, (done) => { if (done) { runOnJS(then)(); runOnJS(bumpRow)(); } });
+    shift.value = withTiming(target.current, { duration: 320, easing: Easing.bezier(0.22, 1, 0.36, 1) }, (done) => { if (done) { runOnJS(then)(); runOnJS(bumpSafe)(); } });
   };
   const slide = useAnimatedStyle(() => ({ transform: [{ translateX: shift.value }] }));
   // The "+" sits at the row's end (its `left`, laid out like any view, so a group arriving moves it
@@ -236,7 +267,9 @@ export function FeedTopRow({ groups, selected, onSelect, onPlus, onPicture, hidd
   const held = screenReader || focusIn;
   const fallback = useSharedValue(0);
   const away = row ?? fallback;
-  useEffect(() => { if (held) showRow(away); }, [held, away]);
+  // `held` for the animation thread, so a rebuilt row's first frame reads it as it is now.
+  const heldV = useSharedValue(held ? 1 : 0);
+  useEffect(() => { heldV.value = held ? 1 : 0; if (held) showRow(away); }, [held, away, heldV]);
   // Untouchable while it is more out than in, and then the strip it lives in brings it back on a tap.
   const [gone, setGone] = useState(false);
   useAnimatedReaction(() => away.value > 0.5, (now, before) => { if (now !== before) runOnJS(setGone)(now); }, [away]);
@@ -250,20 +283,21 @@ export function FeedTopRow({ groups, selected, onSelect, onPlus, onPicture, hidd
     const i = at(pic.value);
     const n = at(pinch.value);
     const a = at(held ? 0 : away.value);
-    return c && i && n && a ? `${i}${n}${c}` : '';
+    // Scrolled away or back in is a resting look too: built afresh there, its first frame is where it rests.
+    return c && i && n && a ? `${i}${n}${c}${a}` : '';
   }, (now, before) => {
     if (!now) return;
     if (before === null || !lastRest.value) { lastRest.value = now; return; }
-    if (now !== lastRest.value) { lastRest.value = now; runOnJS(bumpRow)(); }
+    if (now !== lastRest.value) { lastRest.value = now; runOnJS(bumpSafe)(); }
   }, [held, away]);
   const awayStyle = useAnimatedStyle(() => {
-    const p = held ? 0 : away.value;
+    const p = heldV.value ? 0 : away.value;
     return {
       // Gone a little before it reaches the clock, so its words never sit over the time.
       opacity: (1 - pinch.value) * interpolate(p, [0, 0.85], [1, 0], 'clamp'),
       transform: [{ translateY: reduceMotion ? 0 : -AWAY_LIFT * p }],
     };
-  }, [reduceMotion, held]);
+  }, [reduceMotion]);
   return (
     <>
     {outOfWay && !hidden ? (
@@ -299,6 +333,8 @@ export function FeedTopRow({ groups, selected, onSelect, onPlus, onPicture, hidd
                     hitSlop={{ top: 10, bottom: 10, left: 4, right: 4 }}
                     onFocus={(e) => { if (keyFocus(e)) setFocusIn(true); }}
                     onBlur={() => setFocusIn(false)}
+                    onPressIn={pressIn}
+                    onPressOut={pressOut}
                     onPress={() => { if (on) return; haptics.tap(); const id = w.id; glideTo(key, () => onSelect(id)); }}
                     onLayout={(e) => { const width = e.nativeEvent.layout.width; setWidths((m) => (m[key] === width ? m : { ...m, [key]: width })); }}
                   >
@@ -310,7 +346,7 @@ export function FeedTopRow({ groups, selected, onSelect, onPlus, onPicture, hidd
           </Animated.View>
         </View>
         <Animated.View style={[styles.plusSpot, { left: plusAt, opacity: plusReady }, plusSlide]}>
-          <Pressable accessibilityRole="button" accessibilityLabel={`Find or start a group${invites ? `, ${invites} ${invites === 1 ? 'invite' : 'invites'}` : ''}${waiting ? ', someone is asking to join yours' : ''}`} hitSlop={10} onFocus={(e) => { if (keyFocus(e)) setFocusIn(true); }} onBlur={() => setFocusIn(false)} onPress={onPlus} style={styles.plusHit}>
+          <Pressable accessibilityRole="button" accessibilityLabel={`Find or start a group${invites ? `, ${invites} ${invites === 1 ? 'invite' : 'invites'}` : ''}${waiting ? ', someone is asking to join yours' : ''}`} hitSlop={10} onFocus={(e) => { if (keyFocus(e)) setFocusIn(true); }} onBlur={() => setFocusIn(false)} onPressIn={pressIn} onPressOut={pressOut} onPress={onPlus} style={styles.plusHit}>
             <Animated.View style={plusPlain}><Ionicons name="add" size={22} color={plainInk} style={{ opacity: 0.85 }} /></Animated.View>
             <Animated.View style={[styles.plusOver, plusOnPicture]}><Ionicons name="add" size={22} color="#FFFFFF" style={[{ opacity: 0.85 }, GLYPH_EDGE]} /></Animated.View>
             {waiting || invites ? <View style={styles.waiting} /> : null}

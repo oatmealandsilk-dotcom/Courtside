@@ -1035,6 +1035,8 @@ function SearchCancel({ shown, onPress }: { shown: boolean; onPress: () => void 
   const still = useReducedMotion();
   const progress = useSharedValue(shown ? 1 : 0);
   const width = useSharedValue(0);
+  // Where it is headed (1 in, 0 out), for the animation thread: a rebuilt copy's first frame reads it as it is now.
+  const goal = useSharedValue(shown ? 1 : 0);
   // Built afresh each time it lands in or out, on a phone, so an iPhone that drops a settled animation
   // value can never shrink Cancel away while the search is open (or bring it back once closed) on a
   // later re-render. Its width is kept here (a shared value), so the new copy starts at the right size.
@@ -1042,11 +1044,12 @@ function SearchCancel({ shown, onPress }: { shown: boolean; onPress: () => void 
   const first = useRef(true);
   useEffect(() => {
     if (first.current) { first.current = false; return; }
+    goal.value = shown ? 1 : 0;
     progress.value = withTiming(shown ? 1 : 0, { duration: shown ? 240 : 200, easing: SETTLE }, (done) => { 'worklet'; if (done) runOnJS(landed)(); });
-  }, [shown, progress, landed]);
+  }, [shown, progress, goal, landed]);
   const style = useAnimatedStyle(() => ({
     // With Reduce Motion on, the room changes at once and only the word fades.
-    width: still ? (shown ? width.value : 0) : width.value * progress.value,
+    width: still ? (goal.value ? width.value : 0) : width.value * progress.value,
     opacity: progress.value,
   }));
   return (
