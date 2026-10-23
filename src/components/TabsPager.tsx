@@ -15,6 +15,7 @@ import { setPendingTab } from '@/features/navigation/pendingTab';
 import { askedSection, requestSection } from '@/features/navigation/swipeOrder';
 import { isPageSwipeLocked, setPageDragging, subscribePageSwipeLock } from '@/features/navigation/swipeLock';
 import { useResponsive } from '@/lib/useResponsive';
+import { SwipeArea } from '@/features/navigation/swipePress';
 
 /**
  * The strip, left to right: Community (where the app opens, Find Players
@@ -250,11 +251,14 @@ export function TabsPager({ pathname }: { pathname: string }) {
     <GestureDetector gesture={pan}>
       <View style={{ flex: 1, overflow: 'hidden' }}>
         <Animated.View style={[{ flex: 1, flexDirection: 'row', width: width * TAB_PATHS.length }, row]}>
-          {panes.map((pane, i) => (
-            <TabSlot key={TAB_PATHS[i]} index={i} width={width} jumpTab={jumpTab} jumpOffset={jumpOffset}>
-              <TabFocus active={active === i}>{pane}</TabFocus>
-            </TabSlot>
-          ))}
+          {/* A press on a tab waits a beat before it shows, so a finger that is swiping never dips a card (swipePress). */}
+          <SwipeArea on={isPhone}>
+            {panes.map((pane, i) => (
+              <TabSlot key={TAB_PATHS[i]} index={i} width={width} jumpTab={jumpTab} jumpOffset={jumpOffset}>
+                <TabFocus active={active === i}>{pane}</TabFocus>
+              </TabSlot>
+            ))}
+          </SwipeArea>
         </Animated.View>
       </View>
     </GestureDetector>

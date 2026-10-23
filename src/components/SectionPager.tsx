@@ -7,6 +7,7 @@ import { PAGE_GUTTER, activationDistance, claimedDepth, waitsForDeeper } from '@
 import { isPageSwipeLocked, sectionPan, setPageDragging, subscribePageSwipeLock } from '@/features/navigation/swipeLock';
 import { useResponsive } from '@/lib/useResponsive';
 import { useTabActive } from '@/features/navigation/tabFocus';
+import { SwipeArea } from '@/features/navigation/swipePress';
 
 const EASE = Easing.bezier(0.22, 0.61, 0.36, 1);
 /** How far in from the left edge a touch counts as the phone's own back swipe (iOS takes about this much). */
@@ -333,7 +334,8 @@ export function SectionPager({ index, panes, onIndex, onLand, progress, depth = 
             // is clipped to its own page, so nothing in one (a row that runs
             // out to the margin) is ever drawn over its neighbour.
             <View key={i} style={{ width, marginRight: i < last ? PAGE_GUTTER : 0, paddingHorizontal: bleed, overflow: 'hidden' }} pointerEvents={i === shown ? 'auto' : 'none'} onLayout={fill ? undefined : (e) => noteHeight(i, e.nativeEvent.layout.height)}>
-              {pane}
+              {/* A press in a pane waits a beat before it shows, so a finger that is swiping never dips a card (swipePress). */}
+              <SwipeArea on={isPhone}>{pane}</SwipeArea>
             </View>
           ))}
         </Animated.View>

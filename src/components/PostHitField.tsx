@@ -1,7 +1,8 @@
 import { brandShadow } from '@/theme/fillMode';
 import { PRESS_SHRINK } from '@/theme/press';
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { SwipePressable } from '@/components/SwipePressable';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { HitGlyph } from '@/components/HitGlyph';
@@ -20,11 +21,11 @@ export function PostHitField({ label, accessibilityLabel, onPress, note }: { lab
   const styles = useThemedStyles(styleDefinitions);
   return (
     <View style={styles.wrap}>
-      <Pressable accessibilityRole="button" accessibilityLabel={accessibilityLabel} onPress={onPress} style={({ pressed }) => [styles.field, pressed && styles.fieldPressed]}>
+      <SwipePressable accessibilityRole="button" accessibilityLabel={accessibilityLabel} onPress={onPress} style={({ pressed }) => [styles.field, pressed && styles.fieldPressed]}>
         <HitGlyph size={22} color={colors.brand} />
         <Text style={styles.text} numberOfLines={1}>{label}</Text>
         <View style={styles.go}><Ionicons name="arrow-forward" size={16} color={colors.brandInk} /></View>
-      </Pressable>
+      </SwipePressable>
       {note ? <Text style={styles.note}>{note}</Text> : null}
     </View>
   );

@@ -2,7 +2,8 @@ import { PRESS_DIM } from '@/theme/press';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { PlayerName } from '@/components/PlayerName';
 import React, { memo } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { SwipePressable } from '@/components/SwipePressable';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { VoteControls } from './VoteControls';
@@ -97,9 +98,9 @@ function QuestionCardInner({
       <View style={styles.metaRow}>
         {/* The topic is a tag ringed in its own colour: a tap shows every thread under it.
             Its words are the page's quiet ink: the topic colours alone fell short of 4.5:1 on several courts. */}
-        <Pressable accessibilityRole="button" accessibilityLabel={`${meta.label} threads`} onPress={() => openTopic(question.topic)} hitSlop={6} style={({ pressed }) => [styles.tag, { borderColor: topicTint(question.topic) }, pressed && { opacity: PRESS_DIM }]}>
+        <SwipePressable accessibilityRole="button" accessibilityLabel={`${meta.label} threads`} onPress={() => openTopic(question.topic)} hitSlop={6} style={({ pressed }) => [styles.tag, { borderColor: topicTint(question.topic) }, pressed && { opacity: PRESS_DIM }]}>
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.tagText}>{meta.label}</Text>
-        </Pressable>
+        </SwipePressable>
       </View>
 
       <View style={styles.footer}>

@@ -1,6 +1,7 @@
 import { PRESS_SHRINK } from '@/theme/press';
 import React, { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { SwipePressable } from '@/components/SwipePressable';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { BrandMark } from '@/components/BrandMark';
@@ -61,7 +62,7 @@ export function PlayerCard({ user, variant, onPress }: {
     const items: StripItem[] = next ? [...stripItems(user, 2, week), nextItem(next)] : stripItems(user, 3, week);
     const spoken = `${user.name}'s tennis profile. ${system} ${ratingText(p)}. ${playStyleLabel[p.playStyle]}, ${surfaceWord[p.preferredSurface]}. ${items.map((i) => i.spoken).join(', ')}`;
     return (
-      <Pressable accessibilityRole="link" accessibilityLabel={spoken} onPress={onPress} style={({ pressed }) => [styles.banner, { backgroundColor: look.fill, borderColor: look.border }, look.dark && styles.bordered, pressed && styles.pressed]}>
+      <SwipePressable accessibilityRole="link" accessibilityLabel={spoken} onPress={onPress} style={({ pressed }) => [styles.banner, { backgroundColor: look.fill, borderColor: look.border }, look.dark && styles.bordered, pressed && styles.pressed]}>
         <CardWash look={look} radius={16} />
         <View style={styles.headRow}>
           <Text style={[styles.bannerTitle, { color: look.ink }]}>Tennis profile</Text>
@@ -77,7 +78,7 @@ export function PlayerCard({ user, variant, onPress }: {
           <Text numberOfLines={1} style={[styles.small, styles.shrink, { color: look.muted }]}>{surfaceWord[p.preferredSurface]}</Text>
         </View>
         {items.length ? <Strip items={items} look={look} size={20} filled={filled} /> : null}
-      </Pressable>
+      </SwipePressable>
     );
   }
 

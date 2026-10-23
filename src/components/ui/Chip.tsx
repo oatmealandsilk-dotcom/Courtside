@@ -1,6 +1,7 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { SwipePressable } from '@/components/SwipePressable';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { colors, radius, spacing, typography } from '@/theme';
@@ -43,7 +44,7 @@ export function Chip({ label, selected = false, onPress, tint, ink, small = fals
   // A small chip is well under a finger's 44 points: a wider reach than it looks
   // (no visual change), and a screen reader hears which one is on.
   return (
-    <Pressable
+    <SwipePressable
       onPress={onPress}
       accessibilityRole="button"
       accessibilityState={{ selected }}
@@ -51,7 +52,7 @@ export function Chip({ label, selected = false, onPress, tint, ink, small = fals
       style={({ pressed }) => (pressed ? { opacity: 0.7 } : undefined)}
     >
       {body}
-    </Pressable>
+    </SwipePressable>
   );
 }
 

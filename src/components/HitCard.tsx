@@ -1,7 +1,8 @@
 import { PRESS_DIM, PRESS_SHRINK } from '@/theme/press';
 import { usePaneRested } from '@/features/navigation/usePaneRested';
 import React, { useRef, useState, type RefObject } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { SwipePressable } from '@/components/SwipePressable';
 import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
@@ -139,41 +140,41 @@ export function HitCard({ hit, miles, linked = true, tip, tipReady: listReady = 
     },
   });
   return (
-    <Pressable ref={cardRef} accessible={linked} accessibilityRole={linked ? 'link' : undefined} disabled={!linked} onPress={linked ? () => router.push(`/hit-request/${hit.id}`) : undefined} style={({ pressed }) => [styles.card, pressed && { opacity: PRESS_DIM }]}>
+    <SwipePressable ref={cardRef} accessible={linked} accessibilityRole={linked ? 'link' : undefined} disabled={!linked} onPress={linked ? () => router.push(`/hit-request/${hit.id}`) : undefined} style={({ pressed }) => [styles.card, pressed && { opacity: PRESS_DIM }]}>
       {/* Who, with the paper plane and the flag beside the name; when, under it, across the
           card's full width, so "Tomorrow 9:00 AM" stays on one line on a small phone and the
           name is never cut to "Sam Ortiz is lookin…" (Oct 5). The section says it is a hit.
           The two icons are bare (Oct 7), in faint ink with no disc behind them, so the time is
           what the eye lands on; a press still shows the disc. */}
       <View style={styles.head}>
-        <Pressable accessibilityRole={openPoster ? 'link' : undefined} accessibilityLabel={openPoster ? `Open ${author!.name}'s profile` : undefined} disabled={!openPoster} onPress={(e) => { e.stopPropagation?.(); openPoster?.(); }}>
+        <SwipePressable accessibilityRole={openPoster ? 'link' : undefined} accessibilityLabel={openPoster ? `Open ${author!.name}'s profile` : undefined} disabled={!openPoster} onPress={(e) => { e.stopPropagation?.(); openPoster?.(); }}>
           <Avatar name={author?.name ?? '?'} seed={author?.avatarSeed ?? hit.id} uri={author?.avatarUrl} size={40} />
-        </Pressable>
+        </SwipePressable>
         <View style={styles.headWords}>
           <View style={styles.whoRow}>
-            <Pressable accessibilityRole={openPoster ? 'link' : undefined} accessibilityLabel={openPoster ? `${author!.name} is looking for a hit. Open profile` : undefined} disabled={!openPoster} onPress={(e) => { e.stopPropagation?.(); openPoster?.(); }} style={styles.whoPress}>
+            <SwipePressable accessibilityRole={openPoster ? 'link' : undefined} accessibilityLabel={openPoster ? `${author!.name} is looking for a hit. Open profile` : undefined} disabled={!openPoster} onPress={(e) => { e.stopPropagation?.(); openPoster?.(); }} style={styles.whoPress}>
               <Text style={[styles.who, mine && styles.whoMine]} numberOfLines={1}>{mine ? 'Your hit' : author?.name ?? 'A player'}</Text>
-            </Pressable>
+            </SwipePressable>
             <View style={styles.spacer} />
-            {open ? <Pressable accessibilityRole="button" accessibilityLabel="Send this hit to a chat" hitSlop={6} onPress={(e) => { e.stopPropagation?.(); router.push({ pathname: '/share', params: { kind: 'hit-request', id: hit.id } }); }} style={({ pressed }) => [styles.icon, pressed && styles.iconPressed]}>
+            {open ? <SwipePressable accessibilityRole="button" accessibilityLabel="Send this hit to a chat" hitSlop={6} onPress={(e) => { e.stopPropagation?.(); router.push({ pathname: '/share', params: { kind: 'hit-request', id: hit.id } }); }} style={({ pressed }) => [styles.icon, pressed && styles.iconPressed]}>
               <Ionicons name="paper-plane-outline" size={18} color={colors.textFaint} />
-            </Pressable> : null}
-            {theirs ? <Pressable accessibilityRole="button" accessibilityLabel="Report this hit" hitSlop={6} onPress={(e) => { e.stopPropagation?.(); report(); }} style={({ pressed }) => [styles.icon, pressed && styles.iconPressed]}>
+            </SwipePressable> : null}
+            {theirs ? <SwipePressable accessibilityRole="button" accessibilityLabel="Report this hit" hitSlop={6} onPress={(e) => { e.stopPropagation?.(); report(); }} style={({ pressed }) => [styles.icon, pressed && styles.iconPressed]}>
               <Ionicons name="flag-outline" size={17} color={colors.textFaint} />
-            </Pressable> : null}
+            </SwipePressable> : null}
           </View>
           <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.when, quiet && styles.whenQuiet]} numberOfLines={1}>{hitWhen(hit.startsAt)}</Text>
         </View>
       </View>
       <View style={styles.facts}>
         {/* Where: a line of its own that wraps, so "Country Club at Wakefield Plantation" is never cut short. */}
-        <Pressable accessibilityRole="link" accessibilityLabel={`${hit.place.name}${miles !== undefined ? `, ${formatMiles(miles)}` : ''}. See the court`} disabled={!canOpenCourt} onPress={(e) => { e.stopPropagation?.(); if (hit.place.lat !== undefined && hit.place.lng !== undefined) openCourt({ id: hit.place.id, name: hit.place.name, lat: hit.place.lat, lng: hit.place.lng }); }} style={({ pressed }) => [styles.place, pressed && canOpenCourt && { opacity: 0.6 }]}>
+        <SwipePressable accessibilityRole="link" accessibilityLabel={`${hit.place.name}${miles !== undefined ? `, ${formatMiles(miles)}` : ''}. See the court`} disabled={!canOpenCourt} onPress={(e) => { e.stopPropagation?.(); if (hit.place.lat !== undefined && hit.place.lng !== undefined) openCourt({ id: hit.place.id, name: hit.place.name, lat: hit.place.lat, lng: hit.place.lng }); }} style={({ pressed }) => [styles.place, pressed && canOpenCourt && { opacity: 0.6 }]}>
           <View style={styles.placeTile}><CourtGlyph size={12} color={colors.brand} /></View>
           {/* The distance is held to the name's last word by no-break spaces, so a long name
               wraps inside itself ("Country Club at Wakefield / Plantation · 2.6 mi") and never
               leaves a dot dangling at a line's end or the distance alone on the second line. */}
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.placeText} numberOfLines={2}>{hit.place.name}{miles !== undefined ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.placeMiles}>{` · ${formatMiles(miles).replace(/ /g, ' ')}`}</Text> : null}</Text>
-        </Pressable>
+        </SwipePressable>
         {/* What, then whether there is room, as a tag at the line's end: a grey "Full" once there is none. */}
         <View style={styles.metaRow}>
           <Text style={styles.details} numberOfLines={1}>
@@ -198,10 +199,10 @@ export function HitCard({ hit, miles, linked = true, tip, tipReady: listReady = 
             </View>
           ) : null}
           {mine && hit.audience === 'invite_first' && left > 0 ? (
-            <Pressable accessibilityRole="button" accessibilityLabel="Open to everyone now" onPress={(e) => { e.stopPropagation?.(); confirm({ title: 'Open to everyone now?', message: 'It goes on Find Players and the map for players nearby, not just the people you invited.', confirmLabel: 'Open it', onConfirm: () => { void actions.openHitNow(hit.id); } }); }} style={({ pressed }) => [styles.openNow, pressed && { opacity: PRESS_DIM }]}>
+            <SwipePressable accessibilityRole="button" accessibilityLabel="Open to everyone now" onPress={(e) => { e.stopPropagation?.(); confirm({ title: 'Open to everyone now?', message: 'It goes on Find Players and the map for players nearby, not just the people you invited.', confirmLabel: 'Open it', onConfirm: () => { void actions.openHitNow(hit.id); } }); }} style={({ pressed }) => [styles.openNow, pressed && { opacity: PRESS_DIM }]}>
               <Ionicons name="earth-outline" size={15} color={colors.text} />
               <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.openNowText}>Open to everyone now</Text>
-            </Pressable>
+            </SwipePressable>
           ) : null}
         </View>
       ) : null}
@@ -225,42 +226,42 @@ export function HitCard({ hit, miles, linked = true, tip, tipReady: listReady = 
         {mine ? (
           <View style={[styles.actions, twoLine && styles.actionsTwoLine]}>
             {hit.conversationId ? (
-              <Pressable accessibilityRole="button" hitSlop={buttonShape.smallSlop} accessibilityLabel="Chat with who’s in" onPress={(e) => { e.stopPropagation?.(); openChat(); }} style={({ pressed }) => [styles.button, styles.secondary, twoLine && styles.buttonWide, pressed && styles.buttonPressed]}>
+              <SwipePressable accessibilityRole="button" hitSlop={buttonShape.smallSlop} accessibilityLabel="Chat with who’s in" onPress={(e) => { e.stopPropagation?.(); openChat(); }} style={({ pressed }) => [styles.button, styles.secondary, twoLine && styles.buttonWide, pressed && styles.buttonPressed]}>
                 <Ionicons name="chatbubble-ellipses-outline" size={16} color={colors.text} />
                 <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.secondaryText}>Chat</Text>
-              </Pressable>
+              </SwipePressable>
             ) : null}
-            <Pressable accessibilityRole="button" hitSlop={buttonShape.smallSlop} onPress={(e) => { e.stopPropagation?.(); confirm({ title: 'Call off this hit?', message: total ? `It comes off Find Players, and ${total === 1 ? 'the player who’s in gets' : `the ${total} players who are in get`} a note.` : 'It comes off Find Players.', confirmLabel: 'Call it off', destructive: true, onConfirm: () => actions.cancelHit(hit.id) }); }} style={({ pressed }) => [styles.button, styles.quietButton, twoLine && styles.buttonWide, pressed && styles.buttonPressed]}>
+            <SwipePressable accessibilityRole="button" hitSlop={buttonShape.smallSlop} onPress={(e) => { e.stopPropagation?.(); confirm({ title: 'Call off this hit?', message: total ? `It comes off Find Players, and ${total === 1 ? 'the player who’s in gets' : `the ${total} players who are in get`} a note.` : 'It comes off Find Players.', confirmLabel: 'Call it off', destructive: true, onConfirm: () => actions.cancelHit(hit.id) }); }} style={({ pressed }) => [styles.button, styles.quietButton, twoLine && styles.buttonWide, pressed && styles.buttonPressed]}>
               <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.dangerText}>Call off</Text>
-            </Pressable>
+            </SwipePressable>
           </View>
         ) : canLeave ? (
           // In it: the chat, and the way out of it, sharing the line under who's in (the poster's own pair).
           <View style={[styles.actions, styles.actionsTwoLine]}>
             {hit.conversationId ? (
-              <Pressable accessibilityRole="button" hitSlop={buttonShape.smallSlop} accessibilityLabel="You’re in. Open the hit’s chat" onPress={(e) => { e.stopPropagation?.(); openChat(); }} style={({ pressed }) => [styles.button, styles.secondary, styles.buttonWide, pressed && styles.buttonPressed]}>
+              <SwipePressable accessibilityRole="button" hitSlop={buttonShape.smallSlop} accessibilityLabel="You’re in. Open the hit’s chat" onPress={(e) => { e.stopPropagation?.(); openChat(); }} style={({ pressed }) => [styles.button, styles.secondary, styles.buttonWide, pressed && styles.buttonPressed]}>
                 <Ionicons name="chatbubble-ellipses-outline" size={16} color={colors.text} />
                 <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.secondaryText}>Chat</Text>
-              </Pressable>
+              </SwipePressable>
             ) : null}
-            <Pressable accessibilityRole="button" hitSlop={buttonShape.smallSlop} accessibilityLabel={`Can’t make it. Free your spot in ${posterFirst}’s hit`} onPress={(e) => { e.stopPropagation?.(); cantMakeIt(); }} style={({ pressed }) => [styles.button, styles.quietButton, styles.buttonWide, pressed && styles.buttonPressed]}>
+            <SwipePressable accessibilityRole="button" hitSlop={buttonShape.smallSlop} accessibilityLabel={`Can’t make it. Free your spot in ${posterFirst}’s hit`} onPress={(e) => { e.stopPropagation?.(); cantMakeIt(); }} style={({ pressed }) => [styles.button, styles.quietButton, styles.buttonWide, pressed && styles.buttonPressed]}>
               <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.dangerText}>Can’t make it</Text>
-            </Pressable>
+            </SwipePressable>
           </View>
         ) : inIt ? (
           // In a hit already played: just its chat.
-          <Pressable accessibilityRole="button" hitSlop={buttonShape.smallSlop} accessibilityLabel="You’re in. Open the hit’s chat" onPress={(e) => { e.stopPropagation?.(); openChat(); }} style={({ pressed }) => [styles.button, styles.secondary, pressed && styles.buttonPressed]}>
+          <SwipePressable accessibilityRole="button" hitSlop={buttonShape.smallSlop} accessibilityLabel="You’re in. Open the hit’s chat" onPress={(e) => { e.stopPropagation?.(); openChat(); }} style={({ pressed }) => [styles.button, styles.secondary, pressed && styles.buttonPressed]}>
             <Ionicons name="chatbubble-ellipses-outline" size={16} color={colors.text} />
             <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.secondaryText}>Chat</Text>
-          </Pressable>
+          </SwipePressable>
         ) : full ? null : (
-          <Pressable accessibilityRole="button" hitSlop={buttonShape.smallSlop} disabled={busy} onPress={(e) => { e.stopPropagation?.(); void join(); }} style={({ pressed }) => [styles.button, styles.primary, busy && { opacity: 0.6 }, pressed && styles.buttonPressed]}>
+          <SwipePressable accessibilityRole="button" hitSlop={buttonShape.smallSlop} disabled={busy} onPress={(e) => { e.stopPropagation?.(); void join(); }} style={({ pressed }) => [styles.button, styles.primary, busy && { opacity: 0.6 }, pressed && styles.buttonPressed]}>
             <BrandWash radius={buttonShape.smallRadius} curve />
             <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.primaryText}>{busy ? 'Joining…' : 'I’m in'}</Text>
-          </Pressable>
+          </SwipePressable>
         )}
       </View>
-    </Pressable>
+    </SwipePressable>
   );
 }
 

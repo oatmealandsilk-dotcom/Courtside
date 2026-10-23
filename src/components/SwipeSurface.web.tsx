@@ -1,6 +1,7 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { withTiming, type SharedValue } from 'react-native-reanimated';
 import { useResponsive } from '@/lib/useResponsive';
+import { SwipeArea, dropPressLooks } from '@/features/navigation/swipePress';
 
 export interface SwipeSurfaceProps {
   children: React.ReactNode;
@@ -234,7 +235,9 @@ export function SwipeSurface({ children, onSwipe, onCommit, onDragTo, onProgress
         point.horizontal = true;
         event.currentTarget.setPointerCapture(event.pointerId);
         // The swipe has the finger now: whatever was pressed under it lets go
-        // (its pressed look ends here, and its tap is never fired).
+        // (its pressed look ends here, and its tap is never fired). A look that
+        // had already shown (a finger that rested first) is dropped with it.
+        dropPressLooks();
         endPresses();
       }
       event.preventDefault();
@@ -272,7 +275,10 @@ export function SwipeSurface({ children, onSwipe, onCommit, onDragTo, onProgress
     }}
     onPointerCancel={() => { if (start.current?.horizontal) settle(false, direction); start.current = null; }}
     onClickCapture={event => { if (suppressClick.current) { event.preventDefault(); event.stopPropagation(); suppressClick.current = false; } }}>
-    <div ref={content} style={{ display: 'flex', flexDirection: 'column', flex: fill ? 1 : undefined, minHeight: 0, width: '100%', willChange: dragging ? 'transform' : undefined }}>{children}</div>
+    <div ref={content} style={{ display: 'flex', flexDirection: 'column', flex: fill ? 1 : undefined, minHeight: 0, width: '100%', willChange: dragging ? 'transform' : undefined }}>
+      {/* A press on the page waits a beat before it shows, so a finger that is swiping never dips a card (swipePress). */}
+      <SwipeArea on={enabled}>{children}</SwipeArea>
+    </div>
     {preview && <div ref={previewEl} aria-hidden="true" style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', pointerEvents: 'none', willChange: 'transform',
       transform: `translate3d(calc(${direction * 100}% + ${direction * gap}px),0,0)` }}>{preview}</div>}
   </div>;
