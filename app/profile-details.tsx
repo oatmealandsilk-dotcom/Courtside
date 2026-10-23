@@ -1,7 +1,8 @@
 import { brandShadow } from '@/theme/fillMode';
 import { PRESS_DIM } from '@/theme/press';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View, type ScrollView } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View, useWindowDimensions, type ScrollView } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { type SharedValue, useSharedValue } from 'react-native-reanimated';
@@ -15,6 +16,7 @@ import { Duration } from '@/components/session/Duration';
 import { PlayerCard, Swatch, upcoming } from '@/components/tennis/PlayerCard';
 import { AddRow, Box, Chip, DateTile, EmptyRow, MedalGrid, NextMedal, Row, SectionHead, Summary, Tile } from '@/components/tennis/ProfileParts';
 import { PIN_GAP, ProfileTabs } from '@/components/tennis/ProfileTabs';
+import { SectionPager } from '@/components/SectionPager';
 import { WeekBars } from '@/components/tennis/WeekBars';
 import { Tappable } from '@/components/Tappable';
 import { BrandWash, EmptyState, Screen } from '@/components/ui';
@@ -26,10 +28,13 @@ import { firstName, peopleText, peopleWords } from '@/features/activity/sessionT
 import { canScore } from '@/features/activity/score';
 import { useTennisFlags } from '@/features/activity/useTennisFlags';
 import { isTennisActivity, workoutIcon } from '@/features/activity/workouts';
-import { type ProfileTab, useProfileTab } from '@/features/players/profileTab';
+import { PROFILE_TABS, type ProfileTab, useProfileTab } from '@/features/players/profileTab';
+import { useTabUnderline } from '@/features/navigation/useTabUnderline';
 import { dayLabel, dayNumbers, daysUntil, eventDate, newestFirst, shortDate, shortLength, surfaceSlot, tournamentName, weekDays, weekNumbers, weekdayDate } from '@/features/players/tennisProfile';
 import { localDay } from '@/features/practice/stats';
 import { wrappedYear } from '@/features/wrapped/yearInTennis';
+import { lastWeekStart } from '@/features/recap/recap';
+import { warmRecapAway } from '@/features/recap/recapAway';
 import { evaluateAchievements, surfaceLabel } from '@/lib/badges';
 import { confirm } from '@/lib/confirm';
 import { relativeTime } from '@/lib/format';
@@ -118,15 +123,6 @@ export default function TennisProfile() {
 function Mine({ user, offsetY, scrollRef }: { user: User; offsetY: SharedValue<number>; scrollRef: React.MutableRefObject<ScrollView | null> }) {
   const styles = useThemedStyles(styleDefinitions);
   const { tab, choose, ready } = useProfileTab(user.id);
-  // Where the tabs sit on the page, once laid out.
-  const tabsAt = useRef<number | null>(null);
-  const pick = (next: ProfileTab) => {
-    if (next === tab) return;
-    // Switched while the tabs ride pinned at the top: the new tab starts just under them, not part way down it.
-    const at = tabsAt.current;
-    if (at !== null && offsetY.value > at - PIN_GAP) scrollRef.current?.scrollTo({ y: Math.max(0, at - PIN_GAP), animated: false });
-    choose(next);
-  };
   return (
     <>
       <View style={styles.cardSpot}><PlayerCard user={user} variant="full" /></View>
@@ -147,8 +143,57 @@ function Mine({ user, offsetY, scrollRef }: { user: User; offsetY: SharedValue<n
           </View>
         </Tappable>
       </View>
-      <ProfileTabs value={ready ? tab : null} onChange={pick} offsetY={offsetY} onPlaced={(y) => { tabsAt.current = y; }} />
-      {!ready ? null : tab === 'activity' ? <ActivityTab user={user} /> : tab === 'health' ? <HealthTab user={user} /> : <GameTab user={user} />}
+      {/* Until the remembered tab is read, the bar shows no tab chosen. The tabs and their sections are
+          built once it is known, so the raised pill starts on that tab instead of sliding over from Activity. */}
+      {ready
+        ? <MineTabs user={user} tab={tab} choose={choose} offsetY={offsetY} scrollRef={scrollRef} />
+        : <ProfileTabs value={null} onChange={choose} offsetY={offsetY} />}
+    </>
+  );
+}
+
+/** The tabs and the open tab's sections, built once the remembered tab is known. */
+function MineTabs({ user, tab, choose, offsetY, scrollRef }: { user: User; tab: ProfileTab; choose: (next: ProfileTab) => void; offsetY: SharedValue<number>; scrollRef: React.MutableRefObject<ScrollView | null> }) {
+  const tabIndex = Math.max(0, PROFILE_TABS.findIndex((t) => t.value === tab));
+  const [stride, setStride] = useState(0);
+  // Starts at the remembered tab, so nothing glides on opening.
+  const line = useTabUnderline(tabIndex, PROFILE_TABS.length, stride);
+  // Where the tabs sit on the page, and how tall they are, once laid out.
+  const tabsAt = useRef<number | null>(null);
+  const [tabsH, setTabsH] = useState(0);
+  // Switched while the tabs ride pinned at the top: the new tab starts just under them, not part way down it.
+  const toTabs = () => {
+    const at = tabsAt.current;
+    if (at !== null && offsetY.value > at - PIN_GAP) scrollRef.current?.scrollTo({ y: Math.max(0, at - PIN_GAP), animated: false });
+  };
+  const pick = (next: ProfileTab) => {
+    if (next === tab) return;
+    toTabs();
+    choose(next);
+  };
+  // Each tab is at least a screen tall under the pinned tabs (as Instagram keeps its profile tabs), so a
+  // short one (Health) never shrinks the page under a pinned position and makes it jump on landing.
+  const { height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const minHeight = Math.max(0, height - insets.top - insets.bottom - PIN_GAP - tabsH - spacing.xxxl);
+  const pane = (key: string, body: React.ReactNode) => <View key={key} style={{ minHeight }}>{body}</View>;
+  return (
+    <>
+      <ProfileTabs value={tab} onChange={pick} offsetY={offsetY} onPlaced={(y, h) => { tabsAt.current = y; setTabsH(h); }} pill={line} onStride={setStride} />
+      {/* Activity, Health and Game side by side, as Profile's sections: a swipe slides between
+          them and a tap glides, the raised pill riding along (Oct 22), instead of the page swapping in one frame.
+          A swipe lands like a tap: the new tab starts right under the pinned tabs (in a browser before the
+          landed pane is painted; on a phone as it lands). */}
+      <SectionPager
+        index={tabIndex}
+        panes={[pane('activity', <ActivityTab user={user} />), pane('health', <HealthTab user={user} />), pane('game', <GameTab user={user} />)]}
+        progress={line.progress}
+        onIndex={(i) => { if (Platform.OS !== 'web') toTabs(); choose(PROFILE_TABS[i].value); }}
+        onLand={Platform.OS === 'web' ? toTabs : undefined}
+        edgeBack
+        slideOnTap
+        bleed={spacing.lg}
+      />
     </>
   );
 }
@@ -157,6 +202,8 @@ function Mine({ user, offsetY, scrollRef }: { user: User; offsetY: SharedValue<n
 function ActivityTab({ user }: { user: User }) {
   const styles = useThemedStyles(styleDefinitions);
   const year = wrappedYear();
+  // Read ahead for Your sessions (opened from here), so its summary is there on its first frame.
+  useEffect(() => { warmRecapAway(user.id, lastWeekStart()); }, [user.id]);
   return (
     <View style={styles.tabBody}>
       {year ? (
@@ -166,7 +213,7 @@ function ActivityTab({ user }: { user: User }) {
       ) : null}
       <ThisWeek user={user} />
       {/* Your weekly streaks with hitting partners (sweep R12): only when you have one going. */}
-      <PartnerStreaksBox />
+      <PartnerStreaksBox gap={spacing.xxl} />
       <Waiting user={user} />
       <Recent user={user} />
     </View>

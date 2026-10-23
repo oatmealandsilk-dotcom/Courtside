@@ -13,7 +13,7 @@ import { GroupTile } from '@/features/groups/GroupTile';
 import { inGroupFeed } from '@/features/groups/groupFeed';
 import { TOP_BAND_DROP, TOP_BAND_HEIGHT, TOP_BAND_TOP, TopBandContext } from '@/features/feed/topBand';
 import { showRow } from '@/features/feed/topRowScroll';
-import { GlassFill, liquidGlass } from '@/components/ui/Glass';
+import { GlassFadeScope, GlassFill, liquidGlass } from '@/components/ui/Glass';
 import { TipBubble } from '@/components/TipBubble';
 import { useTip } from '@/features/tips/tips';
 import { useIsFocused } from '@/lib/useIsFocused';
@@ -23,7 +23,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { PinchZone } from '@/components/PinchZone';
-import Reanimated, { Easing, ReduceMotion, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withSequence, withTiming, type SharedValue } from 'react-native-reanimated';
+import Reanimated, { Easing, FadeOut, ReduceMotion, runOnJS, useAnimatedStyle, useDerivedValue, useSharedValue, withDelay, withSequence, withTiming, type SharedValue } from 'react-native-reanimated';
 import * as haptics from '@/lib/haptics';
 
 import { Avatar, Button, EmptyState } from '@/components/ui';
@@ -77,7 +77,7 @@ import { isSupabaseConfigured } from '@/lib/supabase';
 import { isDesktopBrowser } from '@/lib/browserDevice';
 import { useSidePanel } from '@/features/feed/sidePanel';
 import { CLOSE_MS, PAUSE_AT_FULL, SIDE_MIN_WINDOW, STAGE_EASING, STAGE_ON_ANDROID, begin as beginStage, clear as clearStage, currentY, getStage, markEnding, markLost, place as placeStage, stageGeometry, stageKeyOf, stageTop, useStageSelect, type StageSubject } from '@/features/feed/commentStage';
-import { StageChromeContext, useStageMotion, useStagePageChrome } from '@/features/feed/useStageMotion';
+import { StageChromeContext, useStageMotion, useStageOwnerChrome, useStagePageChrome } from '@/features/feed/useStageMotion';
 import { colors, radius, typography, spacing, font, lift, wordmarkFont } from '@/theme';
 import { isTaggedIn } from '@/features/activity/sessionTags';
 import { useAndroidBack } from '@/lib/androidBack';
@@ -222,7 +222,7 @@ export type FeedScope =
   | { groupId: string; start?: undefined; ids?: undefined; userId?: undefined; set?: undefined; activities?: undefined };
 
 /** What the Feed's top row needs to know from the feed under it: whether a picture fills the top, and whether the chrome is put away. */
-export interface FeedChrome { picture: boolean; hidden: boolean }
+export interface FeedChrome { picture: boolean; hidden: boolean; /** Pinched in: the words are put away (the comments stage fades the row by itself). */ pinched: boolean }
 
 /**
  * Only a post shared with everyone is dealt into For you; one shared to a
@@ -325,6 +325,9 @@ function keyboardFocus(node: unknown): unknown {
   try { return el?.matches?.(':focus-visible') ? el : null; } catch { return null; }
 }
 
+/** A page's cover (its skeleton or poster) leaving once the picture is in. */
+const COVER_OUT = FadeOut.duration(180);
+
 /** The words, buttons and mark over a clip fade as it goes onto the comments stage; a browser finds them by this mark, inside the page on the stage only (useStageMotion.web). */
 const STAGE_CHROME = (Platform.OS === 'web' ? { dataSet: { stageChrome: '1' } } : {}) as object;
 
@@ -370,7 +373,9 @@ function ChromeLayer({ immersion, style, pointerEvents, children }: { immersion?
     const gone = immersion ? immersion.value : 0;
     return { opacity: (1 - gone) * (chrome ? chrome.value : 1), transform: [{ translateY: 14 * gone }] };
   });
-  return <Reanimated.View {...STAGE_CHROME} pointerEvents={pointerEvents} style={[style, fade]}>{children}</Reanimated.View>;
+  // The glass in it (the level pill, See stats) stands down for a plain fill while it fades (Oct 22 sweep, item 5).
+  const shown = useDerivedValue(() => (1 - (immersion ? immersion.value : 0)) * (chrome ? chrome.value : 1));
+  return <Reanimated.View {...STAGE_CHROME} pointerEvents={pointerEvents} style={[style, fade]}><GlassFadeScope value={shown}>{children}</GlassFadeScope></Reanimated.View>;
 }
 
 const stageStyles = StyleSheet.create({
@@ -486,7 +491,13 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
   const [hiddenMarks, setHiddenMarks] = useState<Set<string>>(() => new Set());
   const hideMark = (key: string) => setHiddenMarks((prev) => new Set(prev).add(key));
   const pictureStyle = useAnimatedStyle(() => ({ transform: [{ scale: punch.value }] }));
-  useEffect(() => { setImmersive(false); immersion.value = 0; punch.value = 1; }, [active, immersion, punch]);
+  // A swipe on after a pinch: the next page's words and buttons ease back over
+  // the pinch's own 180 ms rather than popping in all at once (Oct 22 sweep, item 25).
+  useEffect(() => {
+    setImmersive(false);
+    if (immersion.value > 0) immersion.value = withTiming(0, { duration: 180, easing: Easing.out(Easing.quad) });
+    punch.value = 1;
+  }, [active, immersion, punch]);
   const [visit, setVisit] = useState(0);
   const focused = useIsFocused();
   // The top row follows this feed's scroll while it is the feed on show, the way Instagram's
@@ -506,6 +517,8 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
   const myStage = useMemo(() => (stageLine ? getStage() : null), [stageLine]);
   // A scoped feed's back tile fades with the words when this feed's page goes onto the stage.
   const scopeBackFade = useStageMotion('chrome', { owner });
+  // The same fade as a value, so the tile's glass is a plain fill while it fades (Oct 22 sweep, item 5).
+  const scopeBackShown = useStageOwnerChrome(owner);
   // Whether this Home is the page on show, for a stage's checks that run later (a timer).
   const focusedNow = useRef(focused);
   focusedNow.current = focused;
@@ -1750,7 +1763,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
   const topOnPicture = showing?.type === 'hit'
     ? !!(showing.story.imageUrl || showing.story.videoUrl)
     : showing?.type === 'post' && showing.post.kind === 'clip' && !!(showing.post.videoUrl || showing.post.thumbnailUrl || showing.post.imageUrl);
-  useEffect(() => { onChrome?.({ picture: topOnPicture, hidden: chromeHidden }); }, [onChrome, topOnPicture, chromeHidden]);
+  useEffect(() => { onChrome?.({ picture: topOnPicture, hidden: chromeHidden, pinched: immersive }); }, [onChrome, topOnPicture, chromeHidden, immersive]);
   // A group's feed calls its posts after the group, where For you's say "For you".
   const groupName = scope?.groupId ? app.feedGroups.find((g) => g.id === scope.groupId)?.name : undefined;
   // A group's feed and Activities sit under the Feed's top row; any other scope has a back button.
@@ -1907,15 +1920,16 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
                 if (inNow(id)) { coverQuick.current.delete(id); return null; }
                 let quickCover = coverQuick.current.get(id);
                 if (quickCover === undefined) { quickCover = quick; coverQuick.current.set(id, quickCover); }
+                // Once the picture is in, the cover fades away over 180 ms rather than being cut (Oct 22 sweep, item 15).
                 if (kind === 'word' && quickCover && poster) {
                   return (
-                    <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: wide || !phone ? '#000' : colors.bg }]}>
+                    <Reanimated.View key="poster" exiting={COVER_OUT} pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: wide || !phone ? '#000' : colors.bg }]}>
                       <ExpoImage accessibilityIgnoresInvertColors source={{ uri: poster }} style={StyleSheet.absoluteFill} cachePolicy="memory-disk" contentFit={wide || !phone ? 'contain' : 'cover'} />
                       <View style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center' }]}><CourtSpinner ink="white" /></View>
-                    </View>
+                    </Reanimated.View>
                   );
                 }
-                return <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.holdPage]}>{kind === 'mark' ? skeletonPost : skeletonClip}</View>;
+                return <Reanimated.View key="skeleton" exiting={COVER_OUT} pointerEvents="none" style={[StyleSheet.absoluteFill, styles.holdPage]}>{kind === 'mark' ? skeletonPost : skeletonClip}</Reanimated.View>;
               };
               // On a phone, the page behind and two ahead keep their video buffered.
               // In a browser (where every video decodes on the same machine as the
@@ -2311,7 +2325,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
             // the mark's ink: a bare white arrow vanished on a bright sky or a white ceiling.
             <Reanimated.View ref={scopeBackFade.ref as never} pointerEvents="box-none" style={[styles.scopeBackLayer, scopeBackFade.style]}>
               <Pressable accessibilityRole="button" accessibilityLabel="Go back" hitSlop={10} onPress={() => goBack()} style={[styles.scopeBack, activeOnPicture && styles.scopeBackTile, activeOnPicture && liquidGlass && styles.scopeBackLiquid, { top: insets.top + (activeOnPicture ? 8 : 10) }]}>
-                {activeOnPicture ? <GlassFill radius={19} tint={colors.brand} strength={0.22} /> : null}
+                {activeOnPicture ? <GlassFill radius={19} tint={colors.brand} strength={0.22} fade={scopeBackShown} /> : null}
                 <Ionicons name="chevron-back" size={21} color={activeOnPicture ? '#FFFFFF' : colors.text} />
               </Pressable>
             </Reanimated.View>
@@ -2498,12 +2512,55 @@ function FeedTab({ scope, previewSection }: { previewSection?: string; scope?: F
   return <GroupedFeed />;
 }
 
-/** One kept feed over For you: fades in when chosen, out (and untouchable) when not. */
+/**
+ * One kept feed over For you: fades in when chosen, out (and untouchable) when not.
+ * Whether it shows at rest is React's (the outer view's plain opacity); the
+ * animated fade inside always rests at 1, so a settled value Reanimated drops
+ * unsynced on a phone can never leave a chosen feed invisible (Oct 23).
+ */
 function FeedLayer({ shown, children }: { shown: boolean; children: React.ReactNode }) {
-  const o = useSharedValue(0);
-  useEffect(() => { o.value = withTiming(shown ? 1 : 0, { duration: 220, easing: Easing.out(Easing.quad) }); }, [shown, o]);
+  const [vis, setVis] = useState(0);
+  const visRef = useRef(0);
+  const shownRef = useRef(shown);
+  shownRef.current = shown;
+  const o = useSharedValue(1);
+  const visV = useSharedValue(0);
+  const hidden = useCallback(() => { if (!shownRef.current) { visRef.current = 0; setVis(0); } }, []);
+  // React shows it only once the fade's 0 has landed on the animation thread: shown in the same
+  // pass as a write from here, an iPhone could draw the whole feed at full strength for a frame
+  // (the inner view's first-frame opacity is 1) before blanking it and fading it in.
+  const reveal = useCallback(() => {
+    if (!shownRef.current) return;
+    visRef.current = 1;
+    setVis(1);
+    o.value = withTiming(1, { duration: 220, easing: Easing.out(Easing.quad) });
+  }, [o]);
+  useEffect(() => {
+    const ease = { duration: 220, easing: Easing.out(Easing.quad) };
+    if (shown) {
+      if (visRef.current) { o.value = withTiming(1, ease); return; }
+      // From hidden: the fade goes to 0 behind React's 0 first, then React shows it and it fades in.
+      o.value = withTiming(0, { duration: 0 }, (done) => { 'worklet'; if (done) runOnJS(reveal)(); });
+    } else {
+      o.value = withTiming(0, ease, (done) => { 'worklet'; if (done) runOnJS(hidden)(); });
+    }
+  }, [shown, o, hidden, reveal]);
+  // Hidden by React now: the fade inside goes back to its rest (1) behind it (unless it has been
+  // chosen again meanwhile, and is on its way in from 0).
+  useEffect(() => {
+    visV.value = vis;
+    if (vis) return;
+    const id = requestAnimationFrame(() => { if (!visRef.current && !shownRef.current) o.value = 1; });
+    return () => cancelAnimationFrame(id);
+  }, [vis, visV, o]);
   const fade = useAnimatedStyle(() => ({ opacity: o.value }));
-  return <Reanimated.View pointerEvents={shown ? 'auto' : 'none'} style={[StyleSheet.absoluteFill, fade]}>{children}</Reanimated.View>;
+  const glassFade = useDerivedValue(() => visV.value * o.value);
+  // Its clips' glass (the sound disc, the level pill, See stats) is a plain fill while it cross-fades (Oct 22 sweep, item 5).
+  return (
+    <View pointerEvents={shown ? 'auto' : 'none'} style={[StyleSheet.absoluteFill, { opacity: vis }]}>
+      <Reanimated.View style={[StyleSheet.absoluteFill, fade]}><GlassFadeScope value={glassFade}>{children}</GlassFadeScope></Reanimated.View>
+    </View>
+  );
 }
 
 /** The top row's "Activities" word, held where a group's id would be. */
@@ -2513,7 +2570,7 @@ function GroupedFeed() {
   const app = useApp();
   const { feedGroups, feedGroupInvites, currentUserId, actions } = app;
   const [groupId, setGroupId] = useState<string | null>(null);
-  const [chrome, setChrome] = useState<FeedChrome>({ picture: false, hidden: false });
+  const [chrome, setChrome] = useState<FeedChrome>({ picture: false, hidden: false, pinched: false });
   // How far the top row is away (0 shown, 1 gone), moved by the scroll of whichever feed is on show.
   const row = useSharedValue(0);
   // Switching feeds always shows the row.
@@ -2554,6 +2611,7 @@ function GroupedFeed() {
           onPlus={() => router.push('/find-groups')}
           onPicture={chrome.picture}
           hidden={chrome.hidden}
+          pinched={chrome.pinched}
           row={row}
           waiting={waiting}
           invites={feedGroupInvites.length}

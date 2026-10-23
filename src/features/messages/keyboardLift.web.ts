@@ -1,5 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
+import { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+
+import { EMOJI_SLIDE } from './emojiSlide';
 import type { DragDismiss, KeyboardLift, KeyboardLiftOptions } from './keyboardLiftTypes';
 
 export type { DragDismiss, KeyboardLift, KeyboardLiftOptions } from './keyboardLiftTypes';
@@ -12,7 +15,7 @@ export type { DragDismiss, KeyboardLift, KeyboardLiftOptions } from './keyboardL
  * above the bottom edge.
  */
 
-export function useKeyboardLift({ rest, emojiRoom }: KeyboardLiftOptions): KeyboardLift {
+export function useKeyboardLift({ rest, emojiRoom, emojiHeight }: KeyboardLiftOptions): KeyboardLift {
   const [covered, setCovered] = useState(0);
   useEffect(() => {
     if (typeof window === 'undefined' || !window.visualViewport) return undefined;
@@ -22,18 +25,29 @@ export function useKeyboardLift({ rest, emojiRoom }: KeyboardLiftOptions): Keybo
     vv.addEventListener('scroll', update);
     return () => { vv.removeEventListener('resize', update); vv.removeEventListener('scroll', update); };
   }, []);
-  const holdUntilKeyboard = useCallback((_height: number) => undefined, []);
-  return { spacer: { height: Math.max(rest, covered, emojiRoom) }, holdUntilKeyboard };
+  // The emoji keyboard slides up with the bar, and back down, rather than appearing in one frame (Oct 22 sweep);
+  // over a phone browser's own keyboard it simply takes its place.
+  const emoji = useSharedValue(emojiRoom);
+  const emojiFull = useSharedValue(emojiRoom || emojiHeight);
+  const restAt = useSharedValue(rest);
+  const coveredAt = useSharedValue(covered);
+  useEffect(() => { restAt.value = rest; coveredAt.value = covered; }, [rest, covered, restAt, coveredAt]);
+  useEffect(() => {
+    if (emojiRoom > 0) emojiFull.value = emojiRoom;
+    emoji.value = coveredAt.value > 1 ? emojiRoom : withTiming(emojiRoom, EMOJI_SLIDE);
+  }, [emojiRoom, emoji, emojiFull, coveredAt]);
+  const spacer = useAnimatedStyle(() => ({ height: Math.max(restAt.value, coveredAt.value, emoji.value) }));
+  const panel = useAnimatedStyle(() => ({ transform: [{ translateY: Math.max(0, emojiFull.value - emoji.value) }] }));
+  return { spacer, panel };
 }
 
 /**
  * A finger dragging the messages down lets go of the box, so a phone
  * browser's keyboard goes away (a browser cannot make it follow the finger).
- * A drag up, or sideways for the times, leaves it be. (`_closePanel`, the
- * phone's way of closing only the emoji keyboard, is not needed: here the
- * drag lets go of everything, which closes it too.)
+ * A drag up, or sideways for the times, leaves it be. Letting go of the box
+ * closes the app's emoji keyboard too (`blur`).
  */
-export function useDragDownDismiss(blur: () => void, _closePanel: () => void = blur): DragDismiss {
+export function useDragDownDismiss(blur: () => void): DragDismiss {
   const from = useRef<{ x: number; y: number } | null>(null);
   const latest = useRef(blur);
   latest.current = blur;

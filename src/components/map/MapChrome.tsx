@@ -5,11 +5,12 @@ import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } 
 import { ActivityIndicator, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Gesture, GestureDetector, ScrollView as GestureScrollView } from 'react-native-gesture-handler';
-import Animated, { Easing, FadeIn, FadeOut, interpolateColor, runOnJS, useAnimatedReaction, useAnimatedStyle, useSharedValue, withDelay, type SharedValue, withRepeat, withSpring, withTiming } from 'react-native-reanimated';
+import Animated, { Easing, FadeIn, FadeOut, LayoutAnimationConfig, interpolateColor, runOnJS, useAnimatedReaction, useAnimatedStyle, useSharedValue, withDelay, type SharedValue, withRepeat, withSpring, withTiming } from 'react-native-reanimated';
 import { useReducedMotion } from '@/lib/useReducedMotion';
 
 import { Avatar, BrandWash } from '@/components/ui';
 import { MapGlass } from '@/components/map/MapGlass';
+import { useRestKey, useRestLength } from '@/components/ui/restMotion';
 import { FollowShrink } from '@/components/FollowPill';
 import { MenuSheet, type MenuSheetItem } from '@/components/MenuSheet';
 import { afterMenu } from '@/lib/confirm';
@@ -49,6 +50,7 @@ import { MAP_CREDITS } from '@/components/map/credits';
 import { AccessTag, CourtFactsLine, FollowHeart, NowTags, RegularsRow } from '@/components/place/CourtLife';
 import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { sheetFling } from '@/components/map/sheetFling';
+import { useGlideHeight } from '@/components/map/glide';
 import { CrownFade, CrownLead } from '@/components/map/stageLayers';
 import { LIST_PAD_BOTTOM, TRAY_FACE, TRAY_GAP, TRAY_ITEM_W, TRAY_PAD, listHeadroom, useListStops, type ListRoom } from '@/components/map/listStops';
 import { OpenRing } from '@/components/map/OpenRing';
@@ -139,12 +141,21 @@ export function MapTopBar({ onBack, query, onQuery, locationOn, locating, onTogg
   const say = city ? `Search ${city}` : 'Search a place or park';
   const short = city || 'Search places';
   const hint = focused ? 'Players, courts or places' : fieldW && sayW > fieldW ? short : say;
-  const locationIcon = locating ? <ActivityIndicator size="small" color={locationOn ? colors.brandInk : colors.text} /> : <Ionicons name={locationOn ? 'navigate' : 'navigate-outline'} size={18} color={locationOn ? colors.brandInk : colors.text} />;
+  // One lit value for the button's green, its edge and its icon, so the icon never runs ahead of the fill (a spinner ending as Location comes on).
+  const locLit = useLit(!!locationOn);
+  const locV = locLit.v;
+  // The edge's two colours for the animation thread, kept to the theme now (the button is rebuilt in a new one).
+  const edgeOff = useInk(`${colors.borderStrong}55`, locLit.bump);
+  const edgeOn = useInk(colors.brand, locLit.bump);
+  const locEdge = useAnimatedStyle(() => ({ borderColor: interpolateColor(locV.value, [0, 1], [edgeOff.value, edgeOn.value]) }));
+  const locationIcon = locating ? <ActivityIndicator size="small" color={locationOn ? colors.brandInk : colors.text} /> : (
+    <TwoTone v={locLit.v} off={<Ionicons name="navigate-outline" size={18} color={colors.text} />} lit={<Ionicons name="navigate" size={18} color={colors.brandInk} />} />
+  );
   // The list under the bar: courts, then places, or why there are none.
   const listUp = !!(found.length || placeRows.length || placeNote || searching);
   return (
     // Above the filter chips under it, so the location tip hangs over them.
-    <View style={{ gap: spacing.sm, zIndex: 5 }}>
+    <View style={{ zIndex: 5 }}>
     <View style={styles.topRow}>
       {onBack ? (
         <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={onBack} style={({ pressed }) => [styles.barRoundHit, pressed && styles.barPressed]}>
@@ -182,12 +193,15 @@ export function MapTopBar({ onBack, query, onQuery, locationOn, locating, onTogg
             />
           </View>
           {query ? (
-            <Pressable accessibilityRole="button" accessibilityLabel="Clear search" hitSlop={14} onPress={() => onQuery('')} style={styles.searchClear}>
-              <Ionicons name="close-circle" size={17} color={colors.textFaint} />
-            </Pressable>
+            // Faded in and out the way the weather it takes the place of is (never snapped in on the first letter).
+            <Animated.View key="clear" entering={FadeIn.duration(180)} exiting={FadeOut.duration(120)}>
+              <Pressable accessibilityRole="button" accessibilityLabel="Clear search" hitSlop={14} onPress={() => onQuery('')} style={styles.searchClear}>
+                <Ionicons name="close-circle" size={17} color={colors.textFaint} />
+              </Pressable>
+            </Animated.View>
           ) : weather && !focused ? (
             // Quiet, after a hairline: the sky and the temperature, the way a phone's weather reads.
-            <Animated.View entering={FadeIn.duration(180)} exiting={FadeOut.duration(120)} pointerEvents="none" style={styles.searchWeather}>
+            <Animated.View key="weather" entering={FadeIn.duration(180)} exiting={FadeOut.duration(120)} pointerEvents="none" style={styles.searchWeather}>
               <View style={styles.searchWeatherRule} />
               <Ionicons name={weather.icon as keyof typeof Ionicons.glyphMap} size={15} color={colors.textMuted} />
               <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.searchWeatherText} accessibilityLabel={`${weather.tempF} degrees, ${weather.label}`}>{weather.tempF}°</Text>
@@ -199,19 +213,18 @@ export function MapTopBar({ onBack, query, onQuery, locationOn, locating, onTogg
         <View>
           <TipPulse where="map" size={44} />
           <Pressable accessibilityRole="switch" accessibilityState={{ checked: !!locationOn }} accessibilityLabel={locationOn ? (locationMenu ? 'Location on. Who can see you' : 'Turn location off') : 'Turn location on'} onPress={onToggleLocation} style={({ pressed }) => [styles.barRoundHit, pressed && styles.barPressed]}>
-            {locationOn ? (
-              <View style={[styles.barRound, styles.barRoundOn]}><BrandWash radius={22} />{locationIcon}</View>
-            ) : (
-              <MapGlass radius={22} style={styles.barRound}>{locationIcon}</MapGlass>
-            )}
+            {/* The green fill fades in over the see-through one and out again (only the fill, never the glass: Oct 22 sweep). */}
+            <MapGlass key={locLit.key} radius={22} style={[styles.barRound, locEdge]}>
+              <GreenFill v={locLit.v} radius={22} />
+              {locationIcon}
+            </MapGlass>
           </Pressable>
           <HideTip where="map" style={{ top: 52, right: 0 }} />
         </View>
       ) : null}
     </View>
-    {listUp ? (
-      <Animated.View entering={FadeIn.duration(LIST_IN_MS)} style={styles.resultsWrap}>
-        <MapGlass dense radius={18} style={styles.results}>
+    {/* Fades in and out (a pick, the box cleared or emptied) as it grows and shrinks, the chips under it gliding with it, and glides to its new height as what is typed narrows it. */}
+    <SearchList up={listUp}>
           {found.map(({ c, miles }, i) => {
             const meta = [formatMiles(miles), c.count > 1 ? `${c.count} courts` : null, c.lit ? 'lights' : null].filter(Boolean).join(' · ');
             return (
@@ -241,15 +254,83 @@ export function MapTopBar({ onBack, query, onQuery, locationOn, locating, onTogg
               <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.placeNoteText}>{placeNote}</Text>
             </View>
           ) : null}
-        </MapGlass>
-      </Animated.View>
-    ) : null}
+    </SearchList>
     </View>
   );
 }
 
-/** The search's list fading in under the bar. */
+/**
+ * The search's list under the bar (Oct 22 sweep: it vanished in one frame). It grows open and fades in,
+ * glides to each new height as what is typed narrows it, and on a pick, or the box cleared or emptied,
+ * fades out as it shrinks away (still showing what it last listed, taking no taps), the filter chips
+ * under it riding up with it. Reduce Motion: it only fades.
+ */
+function SearchList({ up, children }: { up: boolean; children: React.ReactNode }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const reduce = useReducedMotion();
+  const [shown, setShown] = useState(up);
+  // While it closes, what it last listed.
+  const kept = useRef<React.ReactNode>(children);
+  if (up) kept.current = children;
+  const open = useSharedValue(0);
+  const natural = useRef(0);
+  // The glass's height: React holds it at rest (useRestLength), so an iPhone that drops a settled
+  // animation value can never put the list back to an older height on a later re-render.
+  const glass = useRestLength('height', 0);
+  const ease = useCallback((to: number, done: (finished?: boolean) => void) => withTiming(to, LIST_EASE, done), []);
+  // Open and still: see `resting` below.
+  const [opened, setOpened] = useState(false);
+  useEffect(() => {
+    if (up) {
+      setShown(true);
+      open.value = withTiming(1, { duration: LIST_IN_MS }, (done) => { if (done) runOnJS(setOpened)(true); });
+      if (natural.current) { if (reduce) glass.jump(natural.current); else glass.glide(natural.current, ease); }
+      return;
+    }
+    // Taken down once shut, and only then not at rest: the draw that starts the close keeps the plain open look.
+    const gone = () => { setShown(false); setOpened(false); };
+    if (reduce) { open.value = withTiming(0, { duration: LIST_OUT_MS }, (done) => { 'worklet'; if (done) runOnJS(gone)(); }); return; }
+    open.value = withTiming(0, { duration: LIST_OUT_MS });
+    glass.glide(0, ease, gone);
+  }, [up]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Unmounted, it starts from nothing the next time.
+  useEffect(() => { if (!shown) { natural.current = 0; glass.jump(0); } }, [shown]); // eslint-disable-line react-hooks/exhaustive-deps
+  const wrap = useAnimatedStyle(() => ({ opacity: open.value, marginTop: spacing.sm * open.value }));
+  if (!shown) return null;
+  // Open and still, on a phone: the list's open look is said by a plain style as well, so a phone that drops
+  // the settled animation values (Reanimated keeps the first frame's: clear) can never take an open list
+  // away on a later re-render. Kept while it closes (the close's own values win over it as they run).
+  const resting = Platform.OS !== 'web' && opened;
+  return (
+    <Animated.View style={[styles.resultsWrap, wrap, !up && styles.noTouch, resting && LIST_REST]}>
+      <MapGlass dense radius={18} style={[styles.results, glass.style]}>
+        <View
+          onLayout={(e) => {
+            const next = Math.round(e.nativeEvent.layout.height * 2) / 2;
+            if (next <= 0 || next === natural.current) return;
+            natural.current = next;
+            if (!up) return;
+            if (reduce) glass.jump(next); else glass.glide(next, ease);
+          }}
+        >
+          {up ? children : kept.current}
+        </View>
+        {/* The hairline edge drawn inside the glass (not its border), so the glide starts and ends at nothing rather than 2 points. */}
+        <View pointerEvents="none" style={styles.resultsEdge} />
+      </MapGlass>
+    </Animated.View>
+  );
+}
+
+/** The search's list open and still: after its animated style, so it wins at rest. */
+const LIST_REST = { opacity: 1, marginTop: spacing.sm };
+
+/** How the search's list grows, shrinks and glides between heights. */
+const LIST_EASE = { duration: 220, easing: Easing.bezier(0.2, 0.8, 0.2, 1) };
+
+/** The search's list fading in under the bar, and out again. */
 const LIST_IN_MS = 140;
+const LIST_OUT_MS = 160;
 
 // A chip's touch reaches 6 above and below it, inside the row's own room (a scroll view takes no touch outside itself).
 const CHIP_REACH = { top: 6, bottom: 6 };
@@ -305,6 +386,8 @@ export function FilterChips({ filter, onFilter, courtsOn, onCourts, courtsLoadin
   useEffect(() => { if (filter !== active) { setActive(filter); moveTo(filter, true); } }, [filter]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => { if (pending.current) clearTimeout(pending.current); }, []);
   const pill = useAnimatedStyle(() => ({ transform: [{ translateX: x.value }], width: w.value }));
+  const courtsV = useLit(courtsOn);
+  const courtsLit = useLitText(courtsV.v, courtsV.bump);
   const pick = (key: MapFilter) => {
     if (key === active) return;
     haptics.tap();
@@ -338,12 +421,85 @@ export function FilterChips({ filter, onFilter, courtsOn, onCourts, courtsLoadin
         ))}
         {/* Courts is an on/off switch, not one of the choices: a hairline sets it apart, and it scrolls with the row so nothing is ever tucked behind it. */}
         <View style={styles.chipGap} />
-        <Pressable accessibilityRole="switch" accessibilityState={{ checked: courtsOn }} accessibilityLabel="Show courts" hitSlop={CHIP_REACH} onPress={() => { haptics.tap(); onCourts(); }} style={[styles.chip, courtsOn && styles.chipOn]}>
-          {courtsOn ? <BrandWash /> : null}
-          {courtsLoading ? <ActivityIndicator size="small" color={courtsOn ? colors.brandInk : colors.text} /> : <CourtGlyph size={15} color={courtsOn ? colors.brandInk : colors.text} />}
-          <Text maxFontSizeMultiplier={TextScale.TITLE} style={[styles.chipText, courtsOn && styles.chipTextOn]}>Courts</Text>
+        <Pressable accessibilityRole="switch" accessibilityState={{ checked: courtsOn }} accessibilityLabel="Show courts" hitSlop={CHIP_REACH} onPress={() => { haptics.tap(); onCourts(); }} style={styles.chip}>
+          {/* The green fades in and out over 180 ms, in step with the filter pill sliding beside it. */}
+          <GreenFill key={`fill${courtsV.key}`} v={courtsV.v} radius={999} edge={1} />
+          {courtsLoading ? <ActivityIndicator size="small" color={courtsOn ? colors.brandInk : colors.text} /> : <TwoTone key={`icon${courtsV.key}`} v={courtsV.v} off={<CourtGlyph size={15} color={colors.text} />} lit={<CourtGlyph size={15} color={colors.brandInk} />} />}
+          <Animated.Text key={`words${courtsV.key}`} maxFontSizeMultiplier={TextScale.TITLE} style={[styles.chipText, courtsLit]}>Courts</Animated.Text>
         </Pressable>
       </ScrollView>
+    </View>
+  );
+}
+
+/** How long a control's green fill takes to come and go (Oct 22 sweep: it switched in one frame). */
+const FILL_MS = 180;
+
+/**
+ * 0 to 1 as a control turns on, and back: its green fill and its words follow it. `key` changes each
+ * time it lands (on a phone): the views it moves take it, so they are built afresh at rest and an
+ * iPhone that drops a settled animation value can never show the old look on a later re-render.
+ */
+function useLit(on: boolean) {
+  const v = useSharedValue(on ? 1 : 0);
+  const [key, bump] = useRestKey();
+  const first = useRef(true);
+  useEffect(() => {
+    if (first.current) { first.current = false; return; }
+    v.value = withTiming(on ? 1 : 0, { duration: FILL_MS, easing: Easing.out(Easing.quad) }, (done) => { 'worklet'; if (done) runOnJS(bump)(); });
+  }, [on]); // eslint-disable-line react-hooks/exhaustive-deps
+  return { v, key, bump };
+}
+
+/**
+ * A theme colour for the animation thread, as a shared value kept to the theme now, so a view built
+ * afresh at rest starts in the theme chosen now, never the one first drawn in. `changed` (the view's
+ * rebuild) runs a frame after a theme change, once the new colour has reached the animation thread.
+ */
+function useInk(c: string, changed?: () => void) {
+  const v = useSharedValue(c);
+  const was = useRef(c);
+  useEffect(() => {
+    if (was.current === c) return;
+    was.current = c;
+    v.value = c;
+    if (!changed) return;
+    const id = requestAnimationFrame(changed);
+    return () => cancelAnimationFrame(id);
+  }, [c]); // eslint-disable-line react-hooks/exhaustive-deps
+  return v;
+}
+
+/** Words that turn from the page's colour to the colour on green as the fill comes in. */
+function useLitText(v: SharedValue<number>, rebuild?: () => void) {
+  const off = useInk(colors.text, rebuild);
+  const lit = useInk(colors.brandInk, rebuild);
+  return useAnimatedStyle(() => ({ color: interpolateColor(v.value, [0, 1], [off.value, lit.value]) }));
+}
+
+/**
+ * A control's green, laid over its see-through fill and faded in and out on its own: only this fill is ever
+ * faded, never the see-through one under it (MapGlass) nor anything holding it.
+ */
+function GreenFill({ v, radius: r, edge = 0 }: { v: SharedValue<number>; radius: number; /** The control's border, which the green covers too (so its edge never switches on its own). */ edge?: number }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const look = useAnimatedStyle(() => ({ opacity: v.value }));
+  return (
+    <Animated.View pointerEvents="none" style={[styles.greenFill, { borderRadius: r, top: -edge, right: -edge, bottom: -edge, left: -edge }, look]}>
+      <BrandWash radius={r} />
+    </Animated.View>
+  );
+}
+
+/** An icon in its two colours, one fading into the other as the fill under it comes and goes. */
+function TwoTone({ v, off, lit }: { v: SharedValue<number>; off: React.ReactNode; lit: React.ReactNode }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const offLook = useAnimatedStyle(() => ({ opacity: 1 - v.value }));
+  const litLook = useAnimatedStyle(() => ({ opacity: v.value }));
+  return (
+    <View pointerEvents="none">
+      <Animated.View style={offLook}>{off}</Animated.View>
+      <Animated.View style={[styles.twoToneLit, litLook]}>{lit}</Animated.View>
     </View>
   );
 }
@@ -391,18 +547,22 @@ export function MapButtons({ onRecentre, onZoomIn, onZoomOut, lead }: { onRecent
   // the card. Never faded (Oct 22): the pill's see-through fill (MapGlass) is the same in every frame.
   const leadIn = useContext(CrownLead);
   const leadLook = useAnimatedStyle(() => ({ transform: [{ scale: leadIn ? LEAD_FROM + (1 - LEAD_FROM) * leadIn.value : 1 }] }));
+  // The room the players pill has: the row less its edges, the buttons and the gap between.
+  const [rowW, setRowW] = useState(0);
+  const [buttonsW, setButtonsW] = useState(0);
+  const pillRoom = rowW && buttonsW ? Math.max(0, rowW - 2 * spacing.md - buttonsW - spacing.sm) : 0;
   return (
-    <View pointerEvents="box-none" style={styles.buttonsRow}>
-    {lead ? <Animated.View pointerEvents="box-none" style={[styles.buttonsLead, leadLook]}><MapCredit />{lead}</Animated.View> : <MapCredit />}
-    <View style={styles.buttons}>
+    <View pointerEvents="box-none" style={styles.buttonsRow} onLayout={(e) => setRowW(Math.floor(e.nativeEvent.layout.width))}>
+    {lead ? <Animated.View pointerEvents="box-none" style={[styles.buttonsLead, leadLook]}><MapCredit /><PillRoom.Provider value={pillRoom}>{lead}</PillRoom.Provider></Animated.View> : <MapCredit />}
+    <View style={styles.buttons} onLayout={(e) => setButtonsW(Math.ceil(e.nativeEvent.layout.width))}>
       {onZoomIn && onZoomOut ? (
         <View style={styles.zoom}>
-          <Pressable accessibilityRole="button" accessibilityLabel="Zoom in" onPress={onZoomIn} style={styles.zoomButton}><Ionicons name="add" size={18} color={colors.text} /></Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel="Zoom in" onPress={onZoomIn} style={({ pressed }) => [styles.zoomButton, pressed && styles.closePressed]}><Ionicons name="add" size={18} color={colors.text} /></Pressable>
           <View style={styles.zoomRule} />
-          <Pressable accessibilityRole="button" accessibilityLabel="Zoom out" onPress={onZoomOut} style={styles.zoomButton}><Ionicons name="remove" size={18} color={colors.text} /></Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel="Zoom out" onPress={onZoomOut} style={({ pressed }) => [styles.zoomButton, pressed && styles.closePressed]}><Ionicons name="remove" size={18} color={colors.text} /></Pressable>
         </View>
       ) : null}
-      <Pressable accessibilityRole="button" accessibilityLabel="Back to me" onPress={onRecentre} style={styles.roundHit}>
+      <Pressable accessibilityRole="button" accessibilityLabel="Back to me" onPress={() => { haptics.tap(); onRecentre(); }} style={({ pressed }) => [styles.roundHit, pressed && styles.barPressed]}>
         <MapGlass radius={21} style={styles.roundGlass}><Ionicons name="locate-outline" size={18} color={colors.brand} /></MapGlass>
       </Pressable>
     </View>
@@ -421,7 +581,7 @@ export function MapCredit({ style, align = 'left' }: { style?: object; align?: '
   return (
     <View style={[styles.creditWrap, style]}>
       {open ? (
-        <Animated.View entering={FadeIn.duration(140)} style={[styles.creditCard, align === 'right' ? { right: 0 } : { left: 0 }]}>
+        <Animated.View entering={FadeIn.duration(140)} exiting={FadeOut.duration(120)} style={[styles.creditCard, align === 'right' ? { right: 0 } : { left: 0 }]}>
           {MAP_CREDITS.map((c) => (
             <Pressable key={c.url} accessibilityRole="link" accessibilityLabel={c.label} hitSlop={4} onPress={() => { setOpen(false); void Linking.openURL(c.url); }}>
               <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.creditText} numberOfLines={1}>{c.label}</Text>
@@ -496,16 +656,52 @@ export function PlayersPill({ items, query = '', filter = 'all', courts = [], lo
   const styles = useThemedStyles(styleDefinitions);
   const n = items.length;
   const words = n === 1 ? '1 player' : n ? `All ${n} players` : emptyLine(query, filter, courts, lockOf(lock, query, filter));
+  // Its words crossfade and its width glides to fit them (Oct 22 sweep: "6 players" to "No one sharing yet…" snapped).
+  // The width it wants is measured from an unseen copy at its own size, kept to the room beside Back to me.
+  const room = useContext(PillRoom);
+  const reduce = useReducedMotion();
+  const [natural, setNatural] = useState(0);
+  const target = natural && room !== 0 ? (room == null ? natural : Math.min(natural, room)) : 0;
+  // Its width rests as a plain style held by React (useRestLength), so an iPhone that drops a settled
+  // animation value can never put the pill back to an older width on a later re-render.
+  const pillW = useRestLength('width');
+  useEffect(() => {
+    if (!target) return;
+    // The edge's hairlines either side of the words.
+    const to = target + 2 * StyleSheet.hairlineWidth;
+    if (pillW.target.current == null || reduce) pillW.jump(to);
+    else if (to !== pillW.target.current) pillW.glide(to, (t, done) => withTiming(t, { duration: 240, easing: Easing.bezier(0.2, 0.8, 0.2, 1) }, done));
+  }, [target]); // eslint-disable-line react-hooks/exhaustive-deps
+  const icon = <Ionicons name={n ? 'people' : 'people-outline'} size={15} color={colors.brand} />;
+  // The chevron rides the gliding edge (drawn at the glass's right, its room kept in the row), fading with whether there is a list.
+  const chevV = useLit(!!n);
+  const chevOn = chevV.v;
+  const chevLook = useAnimatedStyle(() => ({ opacity: chevOn.value }));
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={n ? 'Show the full list' : 'Show players'} onPress={() => { haptics.tap(); onOpen(); }} style={({ pressed }) => [styles.pillLift, pressed && styles.glassPressed]}>
-      <MapGlass radius={21} style={styles.playersPill}>
-        <Ionicons name={n ? 'people' : 'people-outline'} size={15} color={colors.brand} />
-        <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.playersPillText} numberOfLines={1}>{words}</Text>
-        {n ? <Ionicons name="chevron-up" size={14} color={colors.textMuted} /> : null}
+      <MapGlass radius={21} style={[styles.pillEdge, pillW.style]}>
+        {/* Laid out at the width it is going to, so the words never squeeze while the edge glides. */}
+        <View style={[styles.playersPill, n ? styles.playersPillChev : null, target ? { width: target } : null]}>
+          {icon}
+          <CrossFade id={words} free style={styles.playersPillWords}>
+            <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.playersPillText} numberOfLines={1}>{words}</Text>
+          </CrossFade>
+        </View>
+        <Animated.View key={chevV.key} pointerEvents="none" style={[styles.pillChev, chevLook]}><Ionicons name="chevron-up" size={14} color={colors.textMuted} /></Animated.View>
       </MapGlass>
+      {/* The unseen copy, free of the room, to say how wide the pill wants to be (a point to spare, so a fraction never trails the words off). */}
+      <View style={styles.pillMeasure} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" aria-hidden>
+        <View style={[styles.playersPill, n ? styles.playersPillChev : null]} onLayout={(e) => setNatural(Math.ceil(e.nativeEvent.layout.width) + 1)}>
+          {icon}
+          <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.playersPillText} numberOfLines={1}>{words}</Text>
+        </View>
+      </View>
     </Pressable>
   );
 }
+
+/** How wide the players pill may grow beside Back to me (MapButtons measures it); 0 until known, null with no limit. */
+const PillRoom = React.createContext<number | null>(null);
 
 /**
  * The line under the chips, there only while zoomed out, with "Zoom in to
@@ -556,12 +752,21 @@ export function PlayersSheet({ items, cityName, onSelect, query = '', filter = '
     restored.current = true;
     if (stripAt?.current) strip.current?.scrollTo({ x: stripAt.current, animated: false });
   };
-  const pick = (id: string) => { if (!stops.justDragged()) onSelect(id); };
+  const pick = (id: string) => { if (!stops.justDragged()) { haptics.tap(); onSelect(id); } };
   // Where the faces are scrolled to, as they go and where they come to rest (a fling's last move can fall between two scroll events).
   const keepAt = (e: NativeSyntheticEvent<NativeScrollEvent>) => { if (stripAt) stripAt.current = e.nativeEvent.contentOffset.x; };
+  // The faces as they stand, for the crossfade to fade out: no ref, handlers or gesture, at the place they were scrolled to.
+  const facesGhost = (
+    <View style={styles.trayGhost}>
+      <View style={[styles.trayRow, styles.trayGhostRow, { transform: [{ translateX: -(stripAt?.current ?? 0) }] }]}>
+        {items.map((p) => <TrayFace key={p.user.id} placed={p} onPress={() => {}} />)}
+      </View>
+    </View>
+  );
   const faces = (
     <ScrollView
-      ref={strip}
+      // Only ever set, never cleared: a faded-out copy going away must not empty it under the live row.
+      ref={(r) => { if (r) strip.current = r; }}
       horizontal
       showsHorizontalScrollIndicator={false}
       contentContainerStyle={styles.trayRow}
@@ -574,6 +779,24 @@ export function PlayersSheet({ items, cityName, onSelect, query = '', filter = '
       {items.map((p) => <TrayFace key={p.user.id} placed={p} onPress={() => pick(p.user.id)} />)}
     </ScrollView>
   );
+  // A chip or a search changing who is listed: the faces crossfade to the new set (Oct 22 sweep: swapped in one frame),
+  // which starts again from its first face.
+  // Keyed on what a chip or a search changes, not on the ids: players arriving as the map pans, a live update or the
+  // distance sort reordering them update in place, and the row keeps its place.
+  const faceSet = `${filter}|${query.trim().toLowerCase()}`;
+  const lastSet = useRef(faceSet);
+  useEffect(() => {
+    if (lastSet.current === faceSet) return;
+    lastSet.current = faceSet;
+    if (stripAt) stripAt.current = 0;
+  }, [faceSet]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The height the faces were showing at, for the "No players" box to glide from as it takes their place.
+  const lastBody = useRef(0);
+  if (stops.restH > 0) lastBody.current = stops.restH;
+  // What it opens with is simply there; the faces or the empty box coming in later fade in.
+  const opened = useRef(false);
+  useEffect(() => { opened.current = true; }, []);
+  const emptyKey = `${locked ?? ''}|${filter}|${query.trim() ? 'q' : ''}|${courts.length ? 'c' : ''}`;
   const list = (
     <Animated.ScrollView
       ref={stops.listRef}
@@ -604,6 +827,8 @@ export function PlayersSheet({ items, cityName, onSelect, query = '', filter = '
   );
   return (
     <Animated.View style={[styles.listSheet, stops.sheetStyle]} onLayout={stops.onSheetLayout}>
+      {/* What it opens with is simply there (the sheet itself rises); only what changes after crossfades. */}
+      <LayoutAnimationConfig skipEntering>
       {/* The handle and the title: a drag up opens the full list, a drag down brings it back to the tray and then closes it. */}
       <GestureDetector gesture={stops.headGesture}>
         <View style={styles.listHead}>
@@ -613,7 +838,10 @@ export function PlayersSheet({ items, cityName, onSelect, query = '', filter = '
             <View style={styles.listGrabberHit}>{grabber}</View>
           )}
           <View style={styles.listTitleRow}>
-            <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" style={styles.listTitle} numberOfLines={1}>{listTitle(items, query, filter, courts, cityName)}</Text>
+            {/* "6 players near Raleigh" to "1 player…": the words crossfade rather than swap. */}
+            <CrossFade id={listTitle(items, query, filter, courts, cityName)} style={styles.listTitleBox}>
+              <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" style={[styles.listTitle, styles.flexNone]} numberOfLines={1}>{listTitle(items, query, filter, courts, cityName)}</Text>
+            </CrossFade>
             {/* More players than fit across: See all opens them as the full list. */}
             {stops.canTall && !stops.up ? (
               <Pressable accessibilityRole="button" accessibilityLabel="See all players" hitSlop={8} onPress={() => { haptics.tap(); stops.expand(); }} style={({ pressed }) => [styles.seeAll, pressed && styles.closePressed]}>
@@ -644,12 +872,15 @@ export function PlayersSheet({ items, cityName, onSelect, query = '', filter = '
               importantForAccessibility={stops.up ? 'no-hide-descendants' : 'auto'}
               aria-hidden={stops.up}
             >
-              {stops.stripGesture ? <GestureDetector gesture={stops.stripGesture}>{faces}</GestureDetector> : faces}
+              <CrossFade id={faceSet} ghost={facesGhost} appear={opened.current}>
+                {stops.stripGesture ? <GestureDetector gesture={stops.stripGesture}>{faces}</GestureDetector> : faces}
+              </CrossFade>
             </Animated.View>
           </Animated.View>
         </View>
       ) : (
-        <View style={styles.listEmpty}>
+        <EmptyBox from={lastBody.current} onHeight={stops.holdBody}>
+        <View style={styles.listEmpty}><CrossFade id={emptyKey} appear={opened.current}>
           {locked && (filter !== 'all' || !courts.length) ? (
             <View style={styles.lockBox}>
               <LockNote lock={locked} onUnlock={onUnlock} />
@@ -681,8 +912,89 @@ export function PlayersSheet({ items, cityName, onSelect, query = '', filter = '
               </ScrollView>
             </View>
           )}
-        </View>
+        </CrossFade></View>
+        </EmptyBox>
       )}
+      </LayoutAnimationConfig>
+    </Animated.View>
+  );
+}
+
+/** How long a crossfade's old copy takes to go, and its new one to come. */
+const SWAP_OUT_MS = 140;
+const SWAP_IN_MS = 200;
+/** A crossfade layer shown and still: after its animated style, so it wins at rest. */
+const SWAP_SHOWN = { opacity: 1 } as const;
+
+/**
+ * What it shows, crossfading to new content each time `id` changes: the old copy stays drawn in place
+ * (absolutely, under the new, taking no touches) while it fades out, the new fading in over it, then the
+ * old is dropped. Both platforms draw it the same way, so it never depends on an exiting copy's position
+ * (Reanimated on the web placed it below the screen, or floating above the tray). `ghost` is what to keep
+ * fading out, when the live content holds things that must not be drawn twice (a ref, a gesture).
+ * `appear`: the first content fades in too, rather than simply being there.
+ */
+function CrossFade({ id, children, ghost, appear = false, free = false, style }: { id: string; children: React.ReactNode; ghost?: React.ReactNode; appear?: boolean; /** The old copy at its own width (one line of words), not the box's. */ free?: boolean; style?: object }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const [shown, setShown] = useState<{ id: string; old: { id: string; node: React.ReactNode }[] }>({ id, old: [] });
+  const last = useRef<React.ReactNode>(ghost ?? children);
+  if (shown.id !== id) {
+    // Derived during the render, so the new content's first frame already has the old one under it.
+    setShown({ id, old: [...shown.old.filter((o) => o.id !== id).slice(-1), { id: shown.id, node: last.current }] });
+  }
+  last.current = ghost ?? children;
+  const first = useRef(!appear);
+  useEffect(() => { first.current = false; }, []);
+  const drop = useCallback((gone: string) => setShown((now) => ({ ...now, old: now.old.filter((o) => o.id !== gone) })), []);
+  return (
+    <View style={style}>
+      {shown.old.map((o) => (
+        <SwapLayer key={o.id} leaving onGone={() => drop(o.id)} style={free ? styles.swapGhostFree : styles.swapGhost}>{o.node}</SwapLayer>
+      ))}
+      <SwapLayer key={id} first={first.current}>{children}</SwapLayer>
+    </View>
+  );
+}
+
+function SwapLayer({ leaving = false, first = false, onGone, style, children }: { leaving?: boolean; first?: boolean; onGone?: () => void; style?: object; children: React.ReactNode }) {
+  // The old copy is a layer of its own, built as it starts to leave: it starts fully there and fades out.
+  const v = useSharedValue(first || leaving ? 1 : 0);
+  // Each layer comes to rest once (shown), then is only ever taken away: shown and still, on a phone, that
+  // is said by a plain style as well, so an iPhone that drops the settled animation value can never leave
+  // a layer clear (its first frame) on a later re-render.
+  const [shown, setShown] = useState(first);
+  const gone = useRef(onGone);
+  gone.current = onGone;
+  const done = useCallback(() => gone.current?.(), []);
+  useEffect(() => {
+    if (leaving) v.value = withTiming(0, { duration: SWAP_OUT_MS, easing: Easing.out(Easing.quad) }, (fin) => { 'worklet'; if (fin) runOnJS(done)(); });
+    else v.value = withTiming(1, { duration: SWAP_IN_MS, easing: Easing.out(Easing.quad) }, (fin) => { 'worklet'; if (fin) runOnJS(setShown)(true); });
+  }, [leaving]); // eslint-disable-line react-hooks/exhaustive-deps
+  const look = useAnimatedStyle(() => ({ opacity: v.value }));
+  return (
+    <Animated.View
+      pointerEvents={leaving ? 'none' : 'auto'}
+      accessibilityElementsHidden={leaving}
+      importantForAccessibility={leaving ? 'no-hide-descendants' : 'auto'}
+      aria-hidden={leaving || undefined}
+      style={[style, look, !leaving && shown && Platform.OS !== 'web' && SWAP_SHOWN]}
+    >
+      {children}
+    </Animated.View>
+  );
+}
+
+/**
+ * Where the players list says nobody is there (or why), gliding from the faces' height to its own and back
+ * as a chip or a search empties the list and fills it again, rather than jumping, the map's buttons on top
+ * riding with it (Oct 22 sweep).
+ */
+function EmptyBox({ from, onHeight, children }: { from: number; onHeight: (h: number) => void; children: React.ReactNode }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const glide = useGlideHeight({ seed: from });
+  return (
+    <Animated.View style={[styles.emptyBox, glide.style]}>
+      <View onLayout={(e) => { glide.onLayout(e); onHeight(Math.round(e.nativeEvent.layout.height)); }}>{children}</View>
     </Animated.View>
   );
 }
@@ -815,12 +1127,12 @@ export function WhereCard({ locating, onLocation }: { locating?: boolean; onLoca
         <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.openNote}>Turn on location or add your city, and the map shows the players and courts near you.</Text>
       </View>
       <View style={[styles.personActions, { marginTop: spacing.xs }]}>
-        <Pressable accessibilityRole="button" onPress={onLocation} disabled={locating} hitSlop={buttonShape.smallSlop} style={styles.primary}>
+        <Pressable accessibilityRole="button" onPress={onLocation} disabled={locating} hitSlop={buttonShape.smallSlop} style={({ pressed }) => [styles.primary, pressed && styles.glassPressed]}>
           <BrandWash radius={buttonShape.smallRadius} curve />
           {locating ? <ActivityIndicator size="small" color={colors.brandInk} /> : <Ionicons name="navigate" size={16} color={colors.brandInk} />}
           <Text {...oneLine(TextScale.TITLE, 0.8)} style={styles.primaryText}>Use my location</Text>
         </Pressable>
-        <Pressable accessibilityRole="button" onPress={() => router.push('/edit-profile')} hitSlop={buttonShape.smallSlop} style={styles.secondary}>
+        <Pressable accessibilityRole="button" onPress={() => router.push('/edit-profile')} hitSlop={buttonShape.smallSlop} style={({ pressed }) => [styles.secondary, pressed && styles.glassPressed]}>
           <Text {...oneLine(TextScale.TITLE, 0.8)} style={styles.secondaryText}>Add my city</Text>
         </Pressable>
       </View>
@@ -995,7 +1307,7 @@ export function YouSheet({ me, open, teen = false, onToggle, onProfile, onClose,
           </View>
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.personMeta} numberOfLines={1}>@{me.handle}{me.location ? ` · ${me.location}` : ''}</Text>
         </View>
-        <Pressable accessibilityRole="button" accessibilityLabel="Close" hitSlop={10} onPress={onClose} style={styles.close}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Close" hitSlop={10} onPress={onClose} style={({ pressed }) => [styles.close, pressed && styles.closePressed]}>
           <Ionicons name="close" size={18} color={colors.textMuted} />
         </Pressable>
       </View>
@@ -1020,7 +1332,7 @@ export function YouSheet({ me, open, teen = false, onToggle, onProfile, onClose,
         </Pressable>
       ) : null}
       <View style={styles.personActions}>
-        <Pressable accessibilityRole="link" accessibilityLabel="Your profile" onPress={onProfile} hitSlop={buttonShape.smallSlop} style={styles.secondary}>
+        <Pressable accessibilityRole="link" accessibilityLabel="Your profile" onPress={onProfile} hitSlop={buttonShape.smallSlop} style={({ pressed }) => [styles.secondary, pressed && styles.glassPressed]}>
           <Text {...oneLine(TextScale.TITLE, 0.8)} style={styles.secondaryText}>Your profile</Text>
         </Pressable>
       </View>
@@ -1098,10 +1410,10 @@ export function CourtSheet({ court, miles, ringed = false, onClose }: { court: C
         </Pressable>
         {/* The heart and Send sit beside Close, the way a maps app's place card puts Save and Share there. */}
         {extras ? <FollowHeart court={{ id: court.id, name: court.name, lat: court.lat, lng: court.lng, access }} style={styles.close} size={16} /> : null}
-        <Pressable accessibilityRole="button" accessibilityLabel={`Send ${court.name} to a chat`} hitSlop={8} onPress={() => sendCourtToChat(place)} style={styles.close}>
+        <Pressable accessibilityRole="button" accessibilityLabel={`Send ${court.name} to a chat`} hitSlop={8} onPress={() => sendCourtToChat(place)} style={({ pressed }) => [styles.close, pressed && styles.closePressed]}>
           <Ionicons name="paper-plane-outline" size={16} color={colors.textMuted} />
         </Pressable>
-        <Pressable accessibilityRole="button" accessibilityLabel="Close" hitSlop={10} onPress={onClose} style={styles.close}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Close" hitSlop={10} onPress={onClose} style={({ pressed }) => [styles.close, pressed && styles.closePressed]}>
           <Ionicons name="close" size={18} color={colors.textMuted} />
         </Pressable>
       </View>
@@ -1146,18 +1458,18 @@ export function CourtSheet({ court, miles, ringed = false, onClose }: { court: C
       </GHScrollView>
       <View style={styles.personActions}>
         {/* Three pills, a little tighter than the player card's, so they fit a 320pt phone. */}
-        <Pressable accessibilityRole="link" accessibilityLabel="Directions" onPress={() => directionsTo(court)} hitSlop={buttonShape.smallSlop} style={[styles.primary, styles.pillTight]}>
+        <Pressable accessibilityRole="link" accessibilityLabel="Directions" onPress={() => directionsTo(court)} hitSlop={buttonShape.smallSlop} style={({ pressed }) => [styles.primary, styles.pillTight, pressed && styles.glassPressed]}>
           <BrandWash radius={buttonShape.smallRadius} curve />
           <Ionicons name="navigate-outline" size={16} color={colors.brandInk} />
           <Text {...oneLine(TextScale.TITLE, 0.8)} style={styles.primaryText}>Directions</Text>
         </Pressable>
         {closed ? null : (
-          <Pressable accessibilityRole="button" accessibilityLabel={`Post a hit at ${court.name}`} onPress={() => playHere(place)} hitSlop={buttonShape.smallSlop} style={[styles.secondary, styles.pillTight]}>
+          <Pressable accessibilityRole="button" accessibilityLabel={`Post a hit at ${court.name}`} onPress={() => playHere(place)} hitSlop={buttonShape.smallSlop} style={({ pressed }) => [styles.secondary, styles.pillTight, pressed && styles.glassPressed]}>
             <Text {...oneLine(TextScale.TITLE, 0.8)} style={styles.secondaryText}>Play here</Text>
           </Pressable>
         )}
         {mapCourt ? (
-          <Pressable accessibilityRole="button" accessibilityLabel={`Post a photo or clip from ${court.name}`} onPress={() => postFromCourt({ id: court.id, name: court.name, lat: court.lat, lng: court.lng })} hitSlop={buttonShape.smallSlop} style={[styles.secondary, styles.pillTight, styles.pillIcon]}>
+          <Pressable accessibilityRole="button" accessibilityLabel={`Post a photo or clip from ${court.name}`} onPress={() => postFromCourt({ id: court.id, name: court.name, lat: court.lat, lng: court.lng })} hitSlop={buttonShape.smallSlop} style={({ pressed }) => [styles.secondary, styles.pillTight, styles.pillIcon, pressed && styles.glassPressed]}>
             <Ionicons name="videocam-outline" size={15} color={colors.text} />
             <Text {...oneLine(TextScale.TITLE, 0.8)} style={styles.secondaryText}>Post</Text>
           </Pressable>
@@ -1203,7 +1515,7 @@ export function PlaceSheet({ place, rows, loading, failed, onPickCourt, onRetry,
           <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" style={styles.personName} numberOfLines={1}>{title}</Text>
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.personMeta} numberOfLines={1}>{rows.length ? `${rows.length} ${rows.length === 1 ? 'place' : 'places'} · ${how}` : place.sub || how}</Text>
         </View>
-        <Pressable accessibilityRole="button" accessibilityLabel="Close" hitSlop={10} onPress={onClose} style={styles.close}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Close" hitSlop={10} onPress={onClose} style={({ pressed }) => [styles.close, pressed && styles.closePressed]}>
           <Ionicons name="close" size={18} color={colors.textMuted} />
         </Pressable>
       </View>
@@ -1258,7 +1570,7 @@ export function HitSheet({ hit, miles, onClose }: { hit: HitRequest; miles?: num
       <View style={styles.grabber} />
       <View style={styles.sheetHead}>
         <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.sheetTitle}>Open hit</Text>
-        <Pressable accessibilityRole="button" accessibilityLabel="Close" hitSlop={10} onPress={onClose} style={styles.close}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Close" hitSlop={10} onPress={onClose} style={({ pressed }) => [styles.close, pressed && styles.closePressed]}>
           <Ionicons name="close" size={18} color={colors.textMuted} />
         </Pressable>
       </View>
@@ -1341,12 +1653,12 @@ export function CitylessCard({ onOpenMap }: { onOpenMap?: () => void }) {
       <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.citylessTitle}>Where do you play?</Text>
       <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.citylessBody}>Add your city to see the players near you.</Text>
       <View style={styles.citylessActions}>
-        <Pressable accessibilityRole="button" onPress={() => router.push('/edit-profile')} hitSlop={buttonShape.smallSlop} style={styles.primary}>
+        <Pressable accessibilityRole="button" onPress={() => router.push('/edit-profile')} hitSlop={buttonShape.smallSlop} style={({ pressed }) => [styles.primary, pressed && styles.glassPressed]}>
           <BrandWash radius={buttonShape.smallRadius} curve />
           <Text {...oneLine(TextScale.TITLE, 0.8)} style={styles.primaryText}>Add my city</Text>
         </Pressable>
         {onOpenMap ? (
-          <Pressable accessibilityRole="button" onPress={onOpenMap} hitSlop={buttonShape.smallSlop} style={styles.secondary}>
+          <Pressable accessibilityRole="button" onPress={onOpenMap} hitSlop={buttonShape.smallSlop} style={({ pressed }) => [styles.secondary, pressed && styles.glassPressed]}>
             <Text {...oneLine(TextScale.TITLE, 0.8)} style={styles.secondaryText}>Open the map</Text>
           </Pressable>
         ) : null}
@@ -1430,6 +1742,8 @@ const styleDefinitions = StyleSheet.create({
   chip: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, minHeight: 32, borderRadius: radius.pill, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
   chipOn: { backgroundColor: colors.brand, borderColor: colors.brand },
   // Once measured, the chips go clear-backed at their own spots and the sliding pill carries the fill.
+  greenFill: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, overflow: 'hidden', backgroundColor: colors.brand, pointerEvents: 'none' },
+  twoToneLit: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, alignItems: 'center', justifyContent: 'center' },
   chipClear: { backgroundColor: 'transparent', borderColor: colors.border },
   chipPlate: { position: 'absolute', top: 6, height: 32, borderRadius: radius.pill, backgroundColor: colors.surface },
   chipPill: { position: 'absolute', left: 0, top: 6, height: 32, borderRadius: radius.pill, backgroundColor: colors.brand },
@@ -1448,12 +1762,19 @@ const styleDefinitions = StyleSheet.create({
   // A floating pill's shadow lives on a wrapper: the glass inside clips to its own round corners.
   pillLift: { flexShrink: 1, maxWidth: '100%', borderRadius: 21, shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 4 },
   // "All 11 players": as tall as Back to me beside it, in the same glass.
-  playersPill: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, minHeight: 42, borderWidth: StyleSheet.hairlineWidth, borderColor: `${colors.borderStrong}55` },
+  playersPill: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, minHeight: 42 },
+  // Room for the chevron (6 gap + 14 wide) beside the words.
+  playersPillChev: { paddingRight: 14 + 6 + 14 },
+  playersPillWords: { flexShrink: 1 },
+  pillChev: { position: 'absolute', right: 14, top: 0, bottom: 0, justifyContent: 'center' },
+  // The pill's edge, on its see-through fill (which glides to the words' width).
+  pillEdge: { maxWidth: '100%', borderWidth: StyleSheet.hairlineWidth, borderColor: `${colors.borderStrong}55` },
+  // The pill's unseen copy: wide enough never to squeeze it, reaching off to the left (which never scrolls the page), taking no taps.
+  pillMeasure: { position: 'absolute', right: 0, top: 0, width: 2000, flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'flex-start', opacity: 0, pointerEvents: 'none' },
   playersPillText: { ...typography.smallStrong, color: colors.text, flexShrink: 1 },
   // The map's top row (Oct 11): Back, the bar and Location, 44 tall, one glass, one soft lift each.
   barRoundHit: { width: 44, height: 44, borderRadius: 22, shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } },
   barRound: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: `${colors.borderStrong}55` },
-  barRoundOn: { borderRadius: 22, backgroundColor: colors.brand, borderColor: colors.brand },
   // Pressed, a button dims rather than shrinks (a shrunk icon goes soft on an iPhone, Oct 11).
   // Glass inside: pressed shrinks, never dims (a dim over glass can turn it see-through on iPhone, Oct 17).
   barPressed: { transform: [{ scale: 0.94 }] },
@@ -1518,6 +1839,7 @@ const styleDefinitions = StyleSheet.create({
   noTouch: { pointerEvents: 'none' },
   // Under the head when nobody is listed: the reason in a line, or the nearest courts side by side.
   listEmpty: { paddingTop: 2, paddingBottom: spacing.md },
+  emptyBox: { overflow: 'hidden' },
   list: { paddingHorizontal: spacing.lg, paddingBottom: LIST_PAD_BOTTOM },
   // A contacts list's row: LIST_ROW_H tall (more only if the words are set larger), the face 47 across with its ring's room.
   listRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: 60, paddingVertical: 6 },
@@ -1630,7 +1952,14 @@ const styleDefinitions = StyleSheet.create({
   cityHits: { ...typography.caption, letterSpacing: 0, color: colors.textMuted, textShadowColor: colors.bg, textShadowRadius: 8, textShadowOffset: { width: 0, height: 0 } },
   // The map search's courts, under the bar: the bar's own glass, one row per place.
   resultsWrap: { paddingHorizontal: spacing.md },
-  results: { paddingHorizontal: spacing.md, borderWidth: StyleSheet.hairlineWidth, borderColor: `${colors.borderStrong}55` },
+  results: { paddingHorizontal: spacing.md },
+  swapGhost: { position: 'absolute', top: 0, left: 0, right: 0 },
+  swapGhostFree: { position: 'absolute', top: 0, left: 0, width: 1000 },
+  trayGhost: { overflow: 'hidden' },
+  trayGhostRow: { flexDirection: 'row' },
+  listTitleBox: { flex: 1 },
+  flexNone: { flex: 0 },
+  resultsEdge: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, borderRadius: 18, borderWidth: StyleSheet.hairlineWidth, borderColor: `${colors.borderStrong}55` },
   resultRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: 9 },
   resultTile: { width: 30, height: 30, borderRadius: 9, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
   // A place in the map search's list: the court rows' tile, in the quiet surface colour, so places and courts read apart.

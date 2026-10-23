@@ -1,14 +1,15 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef, useState } from 'react';
-import { Keyboard, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Keyboard, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import Reanimated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Reanimated, { Easing, FadeIn, ReduceMotion, interpolateColor, runOnJS, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated';
 import { goBack } from '@/lib/goBack';
 import { useAndroidBack } from '@/lib/androidBack';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { MediaPicker, type PickedMedia } from '@/components/MediaPicker';
-import { Screen } from '@/components/ui';
+import { GlideHeight, Screen } from '@/components/ui';
+import { useRestKey } from '@/components/ui/restMotion';
 import { BLOCKED_WORDS_NOTE } from '@/features/hiddenWords/hiddenWords';
 import { clearUnsentCoachQuestion, peekUnsentCoachQuestion } from '@/features/coaching/unsentQuestion';
 import * as haptics from '@/lib/haptics';
@@ -69,6 +70,29 @@ export default function AskCoach() {
   const [footage, setFootage] = useState(false);
   const bodyBox = useRef<TextInput>(null);
   const grow = useSharedValue(hero ? 0 : 1);
+  // Opened any other way on a phone (a coach's page, "Ask again", the box
+  // half scrolled away), it rises from the bottom like a sheet and drops
+  // back down on close, as a browser already does. The screen has no stock
+  // animation (see the root layout), so without this it cut in and out.
+  const slide = !hero && !web;
+  const { height: screenH } = useWindowDimensions();
+  // Reduce Motion: no slide. The page stays put and a plain fill of the page colour
+  // fades off it (and back over it on close). Only that fill's opacity moves, never
+  // the card's or a parent's, so the glass header inside is never faded.
+  const still = useReducedMotion();
+  const rise = useSharedValue(slide && !still ? 0 : 1);
+  const cover = useSharedValue(slide && still ? 1 : 0);
+  // In place: the card's resting place (and the fill's being gone) is then said by plain styles as well,
+  // so a phone that drops the settled animation values (Reanimated keeps the first frame's: the card
+  // below the screen, the fill over it) can never take the page away on a later re-render.
+  const [risen, setRisen] = useState(false);
+  useEffect(() => {
+    if (!slide) return;
+    const done = (finished?: boolean) => { 'worklet'; if (finished) runOnJS(setRisen)(true); };
+    if (still) cover.value = withTiming(0, { duration: 200, easing: Easing.bezier(0.33, 1, 0.68, 1), reduceMotion: ReduceMotion.Never }, done);
+    else rise.value = withTiming(1, { duration: 320, easing: Easing.bezier(0.2, 0.8, 0.2, 1) }, done);
+  }, [slide, still, rise, cover]);
+  const coverStyle = useAnimatedStyle(() => ({ opacity: cover.value }));
   const home = useSharedValue({ x: 0, y: 0, w: 1, h: 1 });
   const start = useSharedValue({ x: 0, y: 0, w: 1, h: 1 });
   const [startRect, setStartRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
@@ -123,6 +147,7 @@ export default function AskCoach() {
   };
   useEffect(() => { if (!hero) { const t = setTimeout(focusTitle, 350); return () => clearTimeout(t); } }, [hero]);
   const card = useAnimatedStyle(() => {
+    if (slide) return { transform: [{ translateY: (1 - rise.value) * screenH }] };
     if (!hero || web) return {};
     const p = grow.value;
     const a = start.value, b = home.value;
@@ -138,8 +163,18 @@ export default function AskCoach() {
   });
   const content = useAnimatedStyle(() => ({ opacity: hero && !web ? Math.max(0, (grow.value - 0.45) / 0.55) : 1 }));
   const ghost = useAnimatedStyle(() => ({ opacity: hero && !web ? Math.max(0, 1 - grow.value * 2.5) : web ? 1 : 0 }));
-  const veil = useAnimatedStyle(() => ({ opacity: hero && !web ? grow.value : 1 }));
+  const veil = useAnimatedStyle(() => ({ opacity: slide ? 0 : hero && !web ? grow.value : 1 }));
+  const closing = useRef(false);
   const close = () => {
+    if (slide) {
+      if (closing.current) return;
+      closing.current = true;
+      Keyboard.dismiss();
+      const back = (done?: boolean) => { 'worklet'; if (done) runOnJS(goBack)(); };
+      if (still) cover.value = withTiming(1, { duration: 160, easing: Easing.bezier(0.4, 0, 1, 1), reduceMotion: ReduceMotion.Never }, back);
+      else rise.value = withTiming(0, { duration: 260, easing: Easing.bezier(0.4, 0, 0.6, 1) }, back);
+      return;
+    }
     if (!hero) { goBack(); return; }
     // Whichever box has the cursor, the keys go down as the page shrinks away.
     Keyboard.dismiss();
@@ -152,6 +187,21 @@ export default function AskCoach() {
   // Android's Back closes it the same way, shrinking back into the box it grew from.
   useAndroidBack(() => { close(); return true; });
   const canSubmit = title.trim().length > 10 && body.trim().length > 25;
+  // Post turns from grey to green (and back) over a moment, not in one frame (Oct 22 sweep).
+  const ready = useSharedValue(canSubmit ? 1 : 0);
+  // Built afresh each time it lands, on a phone, so an iPhone that drops a settled animation value can
+  // never show a ready Post as grey (or a grey one as ready) on a later re-render as you type.
+  const [postKey, postLanded] = useRestKey();
+  const readyFirst = useRef(true);
+  useEffect(() => {
+    if (readyFirst.current) { readyFirst.current = false; return; }
+    ready.value = withTiming(canSubmit ? 1 : 0, { duration: 200, easing: Easing.out(Easing.cubic) }, (done) => { 'worklet'; if (done) runOnJS(postLanded)(); });
+  }, [canSubmit, ready, postLanded]);
+  const offFill = colors.surfaceAlt, onFill = colors.brand, offInk = colors.textFaint, onInk = colors.brandInk;
+  const postFill = useAnimatedStyle(() => ({ backgroundColor: interpolateColor(ready.value, [0, 1], [offFill, onFill]) }));
+  const postInk = useAnimatedStyle(() => ({ color: interpolateColor(ready.value, [0, 1], [offInk, onInk]) }));
+  const arrowOn = useAnimatedStyle(() => ({ opacity: ready.value }));
+  const arrowOff = useAnimatedStyle(() => ({ opacity: 1 - ready.value }));
   // A quick second tap would post it twice.
   const sent = useRef(false);
   const submit = () => {
@@ -169,6 +219,8 @@ export default function AskCoach() {
       // Only a video goes with the question (coaches see clips, not photos), and its name only with it.
       const clip = media?.kind === 'video' ? media : null;
       const id = actions.askCoach({ title: title.trim(), body: body.trim(), specialty, videoUrl: clip?.uri, mediaLabel: clip?.label });
+      // The success tick a post gives, as the page hands over to the question.
+      haptics.reward();
       router.replace(`/coach-question/${id}`);
     });
   };
@@ -178,7 +230,7 @@ export default function AskCoach() {
     <View ref={root} onLayout={onRootLayout} style={StyleSheet.absoluteFill}>
     {/* Behind the growing card, the page dims into the new one. */}
     <Reanimated.View ref={veilRef} pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: colors.bg }, veil, hero && !placed && { opacity: 0 }]} />
-    <Reanimated.View ref={cardRef} style={[hero && !web ? null : StyleSheet.absoluteFill, { backgroundColor: colors.bg, overflow: 'hidden' }, card, !placed && { opacity: 0 }]}>
+    <Reanimated.View ref={cardRef} style={[hero && !web ? null : StyleSheet.absoluteFill, { backgroundColor: colors.bg, overflow: 'hidden' }, card, !placed && { opacity: 0 }, slide && risen && !still && RISEN]}>
     <Reanimated.View ref={contentRef} style={[{ flex: 1 }, content]}>
     <Screen title="Ask a coach" compactTitle scroll={false} padded={false} bar={false} onBack={close} headerWrapper={closesKeys}>
       {/* A tap on anything here that is not a box or a button closes the
@@ -232,10 +284,12 @@ export default function AskCoach() {
             style={styles.detail}
           />
           <View style={styles.rule} />
+          {/* "Add a clip" opens into the picker with a smooth height change, the picker fading in. */}
+          <GlideHeight>
           {footage || media ? (
-            <View style={styles.footage}>
+            <Reanimated.View entering={FadeIn.duration(220)} style={styles.footage}>
               <MediaPicker value={media} onChange={setMedia} noCover selection="video" label="Choose a clip" />
-            </View>
+            </Reanimated.View>
           ) : (
             <Pressable accessibilityRole="button" accessibilityLabel="Add a clip" onPress={() => setFootage(true)} style={styles.addRow}>
               <Ionicons name="videocam-outline" size={20} color={colors.text} />
@@ -243,18 +297,25 @@ export default function AskCoach() {
               <Text style={styles.addNote}>Optional</Text>
             </Pressable>
           )}
+          </GlideHeight>
         </View>
 
         <View style={styles.foot}>
           <Text style={styles.footNote}>{canSubmit ? 'Coaches see your level with it.' : title.trim().length <= 10 ? 'A few more words on what is wrong.' : 'A little more detail, so the answer can be specific.'}</Text>
-          <Pressable accessibilityRole="button" accessibilityLabel="Post to coaches" accessibilityState={{ disabled: !canSubmit }} disabled={!canSubmit} onPress={submit} style={({ pressed }) => [styles.post, !canSubmit && styles.postOff, pressed && canSubmit && { opacity: 0.85 }]}>
-            <Text style={[styles.postText, !canSubmit && styles.postTextOff]}>Post</Text>
-            <Ionicons name="arrow-forward" size={16} color={canSubmit ? colors.brandInk : colors.textFaint} />
+          <Pressable accessibilityRole="button" accessibilityLabel="Post to coaches" accessibilityState={{ disabled: !canSubmit }} disabled={!canSubmit} onPress={submit} style={({ pressed }) => [styles.postPress, pressed && canSubmit && { opacity: 0.85 }]}>
+            <Reanimated.View key={postKey} style={[styles.post, postFill]}>
+              <Reanimated.Text style={[styles.postText, postInk]}>Post</Reanimated.Text>
+              <View style={styles.arrow}>
+                <Reanimated.View style={[StyleSheet.absoluteFill, arrowOff]}><Ionicons name="arrow-forward" size={16} color={colors.textFaint} /></Reanimated.View>
+                <Reanimated.View style={[StyleSheet.absoluteFill, arrowOn]}><Ionicons name="arrow-forward" size={16} color={colors.brandInk} /></Reanimated.View>
+              </View>
+            </Reanimated.View>
           </Pressable>
         </View>
       </ScrollView>
     </Screen>
     </Reanimated.View>
+    {slide && still ? <Reanimated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: colors.bg }, coverStyle, risen && UNCOVERED]} /> : null}
     </Reanimated.View>
     {/* The box it grew from, fading as the page opens out of it. */}
     {hero && startRect ? (
@@ -265,6 +326,10 @@ export default function AskCoach() {
     </View>
   );
 }
+
+/** The card and the fill at rest once the page is in: after the animated styles, so they win at rest. */
+const RISEN = { transform: [{ translateY: 0 }] };
+const UNCOVERED = { opacity: 0 } as const;
 
 const styleDefinitions = StyleSheet.create({
   page: { paddingBottom: spacing.xxl },
@@ -289,8 +354,8 @@ const styleDefinitions = StyleSheet.create({
   addNote: { ...typography.small, color: colors.textFaint, marginLeft: 'auto' },
   foot: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingTop: spacing.lg },
   footNote: { ...typography.small, color: colors.textFaint, flex: 1, lineHeight: 18 },
-  post: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 44, paddingHorizontal: 20, borderRadius: buttonShape.radius, ...buttonShape.curve, backgroundColor: colors.brand },
-  postOff: { backgroundColor: colors.surfaceAlt },
-  postText: { ...typography.bodyStrong, color: colors.brandInk },
-  postTextOff: { color: colors.textFaint },
+  postPress: { borderRadius: buttonShape.radius, ...buttonShape.curve },
+  post: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 44, paddingHorizontal: 20, borderRadius: buttonShape.radius, ...buttonShape.curve },
+  postText: { ...typography.bodyStrong },
+  arrow: { width: 16, height: 16 },
 });

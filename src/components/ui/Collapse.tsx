@@ -1,37 +1,45 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { View } from 'react-native';
-import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 
-const CURVE = Easing.bezier(0.22, 0.61, 0.36, 1);
+import { Fold } from './Fold';
+
+/** With `unclip`, the room kept round the contents for a card's soft shadow (the `lift`: 2px down, 10px soft). */
+const SHADOW_ROOM = 12;
 
 /**
  * Opens and closes its contents with an eased height and fade, instead of
- * snapping into place. The contents stay mounted, hidden at zero height, so
- * their real height is known before the first open.
+ * snapping into place. One open from the start is simply there on the first
+ * frame.
+ *
+ * Built on Fold (Oct 23): its contents are built only while open (and while
+ * closing), so every opening is a fresh view whose only resting look is the
+ * open one, and at rest it is said by a plain style. An iPhone that drops a
+ * settled animation value can then never fold an open form shut while you
+ * type in it. Everything put in a Collapse is held by its page, so nothing is
+ * lost while it is shut.
  *
  * It runs on the animation thread (Reanimated), so a busy moment in the app
  * (setup saving, the keyboard coming up) never makes it stutter.
  */
-export function Collapse({ open, children }: { open: boolean; children: React.ReactNode }) {
-  const height = useSharedValue(0);
-  const progress = useSharedValue(open ? 1 : 0);
-  useEffect(() => {
-    progress.value = withTiming(open ? 1 : 0, { duration: open ? 260 : 200, easing: CURVE });
-  }, [open, progress]);
-  const style = useAnimatedStyle(() => ({
-    height: height.value ? progress.value * height.value : 0,
-    opacity: progress.value,
-  }));
+export function Collapse({ open, children, unclip = false }: {
+  open: boolean;
+  children: React.ReactNode;
+  /**
+   * Leave room round the contents for a card's soft shadow (Oct 22). The fold
+   * still clips while it moves, but the shadow sits inside it the whole time, so
+   * it never appears all at once when the open ends or is cut the moment a close
+   * starts. The room is taken back with negative margins, so the page's spacing
+   * is unchanged.
+   */
+  unclip?: boolean;
+}) {
+  const room = unclip ? SHADOW_ROOM : 0;
+  // Always there, as the old fold was (shut, at no height), so a parent's gap round it is unchanged.
   return (
-    <Animated.View
-      style={[{ overflow: 'hidden' }, style]}
-      pointerEvents={open ? 'auto' : 'none'}
-      accessibilityElementsHidden={!open}
-      importantForAccessibility={open ? 'auto' : 'no-hide-descendants'}
-    >
-      <View style={{ position: 'absolute', left: 0, right: 0, top: 0 }} onLayout={(e) => { height.value = e.nativeEvent.layout.height; }}>
-        {children}
-      </View>
-    </Animated.View>
+    <View>
+      <Fold open={open} room={room} duration={260} style={room ? { marginHorizontal: -room } : undefined}>
+        {room ? <View style={{ padding: room }}>{children}</View> : children}
+      </Fold>
+    </View>
   );
 }

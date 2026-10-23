@@ -8,6 +8,10 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { FlybyPill } from '@/components/flyby/FlybyPill';
 import { WeekSummary } from '@/components/recap/RecapCard';
+import Reanimated, { FadeIn } from 'react-native-reanimated';
+import { Collapse } from '@/components/ui/Collapse';
+import { FOLD_AWAY_MS, FoldAway } from '@/components/ui/FoldAway';
+import { HeightGlide } from '@/components/ui/HeightGlide';
 import { PersonalRecords, RecordPill } from '@/components/records/PersonalRecords';
 import { cardLook, creamFill } from '@/components/session/SessionCard';
 import { ScoreBoardCompact } from '@/components/session/ScoreBoard';
@@ -24,6 +28,7 @@ import { formatDistance, isTennisActivity, workoutIcon, WORKOUTS_ASK } from '@/f
 import { appleHealthAvailable } from '@/features/health/appleHealth';
 import { computeStats, localDay } from '@/features/practice/stats';
 import { lastWeekStart, showWeekCard, weekRange, weekRecap } from '@/features/recap/recap';
+import { putRecapAway as storeRecapAway, readRecapAway, recapAwayKnown } from '@/features/recap/recapAway';
 import { computeRecords, RECORD_ICON, recordSessionIds, weekStart } from '@/features/records/records';
 import { confirm } from '@/lib/confirm';
 import { goBack } from '@/lib/goBack';
@@ -116,6 +121,17 @@ export default function YourSessions() {
     [sessionTags, currentUserId, users],
   );
   const [weeks, setWeeks] = useState(WEEKS);
+  // Sessions on their way off the list: each folds shut (FoldAway) and is then removed (Oct 22).
+  const [leaving, setLeaving] = useState<Set<string>>(() => new Set());
+  const removeSession = (id: string) => {
+    setLeaving((was) => new Set(was).add(id));
+    setTimeout(() => {
+      actions.deleteSession(id);
+      // Then let go of it: gone from the list, or (a remove that failed and came back) shown again,
+      // instead of kept folded shut at no height until the page is left.
+      setLeaving((was) => { if (!was.has(id)) return was; const next = new Set(was); next.delete(id); return next; });
+    }, FOLD_AWAY_MS);
+  };
   // "Post it" waits until your posts with a session have been asked for
   // fresh (the app may hold only the newest few), so a session already on a
   // post never offers a second one. If they could not be read, the posts the
@@ -155,16 +171,18 @@ export default function YourSessions() {
 
   // "Your week" (the weekly recap, in the app): Monday to Wednesday, until put away for that week.
   const recap = useMemo(() => (currentUserId ? weekRecap(currentUserId, sessions, posts, stories, lastWeekStart()) : null), [currentUserId, sessions, posts, stories]);
-  const [recapAway, setRecapAway] = useState<boolean | null>(null);
+  // Known from an earlier visit or read ahead by the Tennis profile, it is there on the first frame (Oct 22):
+  // the summary no longer drops in and pushes the lists down.
+  const [recapAway, setRecapAway] = useState<boolean | null>(() => (currentUserId && recap ? recapAwayKnown(currentUserId, recap.week) : null));
   useEffect(() => {
     if (!currentUserId || !recap) return undefined;
     let on = true;
-    AsyncStorage.getItem(recapKey(currentUserId, recap.week)).then((v) => { if (on) setRecapAway(!!v); }).catch(() => { if (on) setRecapAway(false); });
+    void readRecapAway(currentUserId, recap.week).then((v) => { if (on) setRecapAway(v); });
     return () => { on = false; };
   }, [currentUserId, recap?.week]); // eslint-disable-line react-hooks/exhaustive-deps
   const putRecapAway = () => {
     setRecapAway(true);
-    if (currentUserId && recap) void AsyncStorage.setItem(recapKey(currentUserId, recap.week), '1').catch(() => undefined);
+    if (currentUserId && recap) storeRecapAway(currentUserId, recap.week);
   };
 
   // Flyby (Oct 5): today's and yesterday's sessions played at a court carry "3 others here today".
@@ -212,12 +230,23 @@ export default function YourSessions() {
   ) : null;
 
   const todo = taggedYou.length + waiting.length;
+  // Whether the summary missed the first frame: then (only then) it fades in when it comes.
+  const summaryLate = useRef(false);
+  const summaryNow = !!(groups.length && recap && thisWeek && (!recapUp || recapAway !== null));
+  useEffect(() => { if (!summaryNow) summaryLate.current = true; }, [summaryNow]);
+  // Put away, "Your week" gives way to This week: that one fades in too.
+  const summaryKey = showRecap ? 'recap' : 'week';
+  const firstSummary = useRef(summaryKey);
+  if (summaryKey !== firstSummary.current) summaryLate.current = true;
 
   return (
     <Screen title="Your sessions" subtitle="Only you see this." compactTitle onBack={() => goBack('/profile')} right={logButton}>
       {/* 1. One summary: the week's time on court, big, with your records folded into its foot. */}
+      {/* The first time ever (nothing read ahead yet) it still arrives a beat late: it fades in as the page below glides down. */}
+      <HeightGlide duration={260}>
       {groups.length && recap && thisWeek && (!recapUp || recapAway !== null) ? (
-        showRecap ? (
+        <Reanimated.View key={summaryKey} entering={summaryLate.current ? FadeIn.duration(220) : undefined}>
+        {showRecap ? (
           <WeekSummary recap={recap} look={look} label={`Last week · ${weekRange(recap.week)}`.toUpperCase()} onOpen={() => router.push({ pathname: '/weekly-recap', params: { week: recap.week } })} onClose={putRecapAway}>
             {recordsRow}
           </WeekSummary>
@@ -225,13 +254,18 @@ export default function YourSessions() {
           <WeekSummary recap={thisWeek} look={look} label="THIS WEEK" extra={streakNow > 1 ? `${streakNow}-day streak` : null}>
             {recordsRow}
           </WeekSummary>
-        )
+        )}
+        </Reanimated.View>
       ) : null}
-      {recordsShown && recordsOpen ? (
-        <View style={styles.recordsOpen}>
-          <PersonalRecords records={records} sessions={sessions} sessionTags={sessionTags} users={users} currentStreak={streakNow} privateNote={false} heading={false} />
-        </View>
-      ) : null}
+      </HeightGlide>
+      {/* Your records fold out under the summary with a smooth height change, and fold back (Oct 22). */}
+      <Collapse open={recordsShown && recordsOpen}>
+        {recordsShown ? (
+          <View style={styles.recordsOpen}>
+            <PersonalRecords records={records} sessions={sessions} sessionTags={sessionTags} users={users} currentStreak={streakNow} privateNote={false} heading={false} />
+          </View>
+        ) : null}
+      </Collapse>
       {!waiting.length && !groups.length && !taggedYou.length ? (
         <EmptyState
           icon="stopwatch-outline"
@@ -260,7 +294,8 @@ export default function YourSessions() {
       {groups.slice(0, weeks).map(({ start, list }) => {
         const onCourt = list.filter((s) => s.kind !== 'fitness').reduce((sum, s) => sum + s.minutes, 0);
         return (
-          <React.Fragment key={start}>
+          // A week whose last session is removed folds shut as a whole, heading and all.
+          <FoldAway key={start} gone={list.every((x) => leaving.has(x.id))}>
             <View style={styles.weekHead}>
               <Text style={[styles.sectionTitle, styles.weekName]}>{weekLabel(start)}</Text>
               {records.week?.from === start ? <View style={styles.bestWeek}><RecordPill label="Best week" /></View> : null}
@@ -294,8 +329,8 @@ export default function YourSessions() {
                 const source = s.fromSessionId ? (people ? '' : fromFirst ? `with ${fromFirst}` : 'Shared with you')
                   : pick.type === 'tracker' ? pickSource(pick) : s.activityId ? 'Tracker' : '';
                 return (
+                  <FoldAway key={s.id} gone={leaving.has(s.id)}>
                   <Logged
-                    key={s.id}
                     session={s}
                     people={people}
                     // A match or a practice opens who you played (a tag's copy, its tag); drills and fitness open their picture to share.
@@ -312,15 +347,16 @@ export default function YourSessions() {
                     postable={checked && !postId && s.day >= firstPostable}
                     onPost={() => router.push({ pathname: '/compose', params: pick.type === 'tracker' ? { activity: pick.activity.id } : { session: s.id } })}
                     onShare={share}
-                    onRemove={() => confirm({ title: 'Remove this session?', message: 'It comes off your streak and totals.', confirmLabel: 'Remove', destructive: true, onConfirm: () => actions.deleteSession(s.id) })}
+                    onRemove={() => confirm({ title: 'Remove this session?', message: 'It comes off your streak and totals.', confirmLabel: 'Remove', destructive: true, onConfirm: () => removeSession(s.id) })}
                     line={i > 0}
                     record={recordIds.has(s.id)}
                     flyby={flyby}
                   />
+                  </FoldAway>
                 );
               })}
             </SoftCard>
-          </React.Fragment>
+          </FoldAway>
         );
       })}
 
@@ -370,8 +406,6 @@ function SoftCard({ fill, style, children }: { fill: string; style?: object; chi
 
 /** "Not now" on the offer below, kept on this phone per account. */
 const offerKey = (me: string) => `courtside-workouts-offer:${me}`;
-/** "Your week" put away, kept on this phone per account and week. */
-const recapKey = (me: string, week: string) => `courtside-recap-away:${me}:${week}`;
 
 /**
  * The offer of every workout (migration 107) to someone who turned on tennis

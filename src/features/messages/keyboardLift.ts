@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { Platform } from 'react-native';
 import { useAnimatedKeyboard, useAnimatedReaction, useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 
@@ -24,21 +24,22 @@ export type { DragDismiss, KeyboardLift, KeyboardLiftOptions } from './keyboardL
  * whole of it from the bottom of the screen, the navigation bar included.
  */
 
-/** On a phone (iPhone and Android): the keyboard's own position, every frame. */
-function useNativeLift({ rest, focused, typing, emojiRoom }: KeyboardLiftOptions): KeyboardLift {
+/**
+ * On a phone (iPhone and Android): the keyboard's own position, every frame.
+ * A phone has no emoji panel of the app's own (Oct 22, "clicking emoji should
+ * open the iPhone's emoji thing"): the emoji button brings up the phone's own
+ * keyboard, with its emoji key, so the emoji options are not used here.
+ */
+function useNativeLift({ rest, focused, typing }: KeyboardLiftOptions): KeyboardLift {
   const keyboard = useAnimatedKeyboard();
   const restRoom = useSharedValue(rest);
   const front = useSharedValue(focused);
-  const emoji = useSharedValue(emojiRoom);
   // Off the page in front, the room only ever shrinks (a sheet's own keyboard
   // must not lift the bar under the sheet); it follows the keyboard again
   // once the chat is in front with the keyboard down.
   const follow = useSharedValue(focused);
-  // While switching from the emoji keyboard back to typing: the least room, until the keyboard reaches it.
-  const floor = useSharedValue(0);
   const room = useSharedValue(rest);
   useEffect(() => { restRoom.value = rest; }, [rest, restRoom]);
-  useEffect(() => { emoji.value = emojiRoom; }, [emojiRoom, emoji]);
   useEffect(() => {
     front.value = focused;
     if (!focused) follow.value = false;
@@ -46,23 +47,17 @@ function useNativeLift({ rest, focused, typing, emojiRoom }: KeyboardLiftOptions
   // Typing in the chat's own box: the keyboard is the chat's, whatever was up before.
   useEffect(() => { if (typing && focused) follow.value = true; }, [typing, focused, follow]);
   useAnimatedReaction(
-    () => [keyboard.height.value, restRoom.value, front.value ? 1 : 0, emoji.value, floor.value] as const,
-    ([height, restAt, inFront, emojiAt, held]) => {
+    () => [keyboard.height.value, restRoom.value, front.value ? 1 : 0] as const,
+    ([height, restAt, inFront]) => {
       if (!follow.value && inFront && height <= 0) follow.value = true;
-      if (held > 0 && height >= held - 1) floor.value = 0;
-      // The emoji keyboard lies over the bottom of the page at the keyboard's height, so
-      // swapping one keyboard for the other leaves the bar exactly where it was.
-      const want = Math.max(restAt, height, held, emojiAt);
+      const want = Math.max(restAt, height);
       room.value = follow.value ? want : Math.min(room.value, want);
     },
   );
   const spacer = useAnimatedStyle(() => ({ height: room.value }));
-  const holdUntilKeyboard = useCallback((height: number) => {
-    floor.value = height;
-    // A keyboard that never comes up (a hardware keyboard) lets go after a moment.
-    setTimeout(() => { floor.value = 0; }, 700);
-  }, [floor]);
-  return { spacer, holdUntilKeyboard };
+  // Nothing to slide: the app's emoji keyboard is never drawn on a phone.
+  const panel = useAnimatedStyle(() => ({}));
+  return { spacer, panel };
 }
 
 /** The room under the bar (see above). The browser has its own version (keyboardLift.web.ts). */
@@ -71,24 +66,18 @@ export const useKeyboardLift: (options: KeyboardLiftOptions) => KeyboardLift = u
 /**
  * A drag down the messages puts the keyboard away. On an iPhone the list
  * does it itself, the keyboard following the finger (keyboardDismissMode
- * "interactive"), and the bar rides on it (above); the app's own emoji
- * keyboard, which is not the phone's, is closed by the same drag here. On
- * Android a drag down lets go of the box: noticed from the finger itself
- * (a short chat, or one already at its top, does not scroll at all) and
- * from the list scrolling down; a drag up to read on, or sideways for the
- * times, does not.
- *
- * `blur` lets go of the box (and closes the emoji keyboard); `closePanel`
- * closes only the emoji keyboard (the iPhone's keyboard is left to follow
- * the finger).
+ * "interactive"), and the bar rides on it (above). On Android a drag down
+ * lets go of the box (`blur`): noticed from the finger itself (a short chat,
+ * or one already at its top, does not scroll at all) and from the list
+ * scrolling down; a drag up to read on, or sideways for the times, does not.
  */
-export function useDragDownDismiss(blur: () => void, closePanel: () => void = blur): DragDismiss {
+export function useDragDownDismiss(blur: () => void): DragDismiss {
   const from = useRef<number | null>(null);
   const touch = useRef<{ x: number; y: number } | null>(null);
-  const latest = useRef({ blur, closePanel });
-  latest.current = { blur, closePanel };
+  const latest = useRef(blur);
+  latest.current = blur;
   return useMemo<DragDismiss>(() => {
-    const done = () => (Platform.OS === 'ios' ? latest.current.closePanel() : latest.current.blur());
+    const done = () => { if (Platform.OS !== 'ios') latest.current(); };
     return {
       props: {
         keyboardDismissMode: Platform.OS === 'ios' ? 'interactive' : 'none',

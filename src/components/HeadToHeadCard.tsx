@@ -7,6 +7,7 @@ import type { HeadToHead, ID } from '@/data/types';
 import { dayWords } from '@/features/activity/format';
 import { recordLine, scoreText, spokenScore } from '@/features/activity/score';
 import { startRematch } from '@/features/hits/rematch';
+import { Collapse } from '@/components/ui/Collapse';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { buttonShape, colors, font, lift, radius, spacing, typography } from '@/theme';
@@ -31,13 +32,17 @@ export function HeadToHeadCard({ userId, name }: { userId: ID; name: string }) {
 
   const first = name.trim().split(/\s+/)[0] || name;
   const line = recordLine(record, first);
-  if (!record || !line) return null;
+  // Its record comes after the page has drawn: the card opens with a smooth height
+  // change rather than dropping in and shoving everything below it (Oct 22).
+  if (!record || !line) return <Collapse open={false} unclip>{null}</Collapse>;
   const last = record.last;
   const lastWords = last ? `Last: ${last.won ? 'Won' : 'Lost'} ${scoreText(last.sets)} · ${dayWords(last.day)}` : null;
   // Only someone you may message, as "Ask to hit" on the map (an adult, or a teen who follows you):
   // otherwise the form would open with nobody to invite (Oct 5, review).
   const canAsk = actions.canMessage(userId);
   return (
+    <Collapse open unclip>
+    <View style={styles.gap}>
     <View style={styles.card} accessible={false}>
       <View accessible accessibilityLabel={`Head to head with ${first}: ${line}.${last ? ` Last match, you ${last.won ? 'won' : 'lost'} ${spokenScore(last.sets)}, ${dayWords(last.day)}.` : ''}`} style={styles.words}>
         <Text style={styles.eyebrow}>Head to head</Text>
@@ -58,11 +63,15 @@ export function HeadToHeadCard({ userId, name }: { userId: ID; name: string }) {
         </Pressable>
       ) : null}
     </View>
+    </View>
+    </Collapse>
   );
 }
 
 const styleDefinitions = StyleSheet.create({
-  card: { ...lift, flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: 16, borderRadius: 20, backgroundColor: colors.surface, marginBottom: spacing.md },
+  card: { ...lift, flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: 16, borderRadius: 20, backgroundColor: colors.surface },
+  // The space under the card, inside the fold, so it opens and closes with it.
+  gap: { paddingBottom: spacing.md },
   words: { flex: 1, minWidth: 0, gap: 2 },
   eyebrow: { ...typography.smallStrong, color: colors.textMuted },
   record: { ...font('700'), fontSize: 20, letterSpacing: -0.2, color: colors.text, fontVariant: ['tabular-nums'] },
