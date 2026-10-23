@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { View, type StyleProp, type ViewStyle } from 'react-native';
+import { Platform, View, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 
 import { useReducedMotion } from '@/lib/useReducedMotion';
@@ -92,7 +92,9 @@ export function Fold({ open, children, appear = false, gap = 0, duration = 240, 
     }
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const lastHeight = useRef(-1);
   const onLayout = useCallback((e: { nativeEvent: { layout: { height: number } } }) => {
+    lastHeight.current = e.nativeEvent.layout.height;
     height.value = e.nativeEvent.layout.height;
     if (waiting.current) { waiting.current = false; run(1); }
   }, [height, run]);
@@ -112,9 +114,13 @@ export function Fold({ open, children, appear = false, gap = 0, duration = 240, 
   const lastShown = useRef(children);
   if (open) lastShown.current = children;
   if (!mounted && !open) return null;
+  // Open and still, on a phone: its open look is said by a plain style as well, so a phone that drops
+  // the settled animation values (Reanimated keeps the first frame's: shut and clear) can never fold
+  // an open box away on a later re-render.
+  const resting = Platform.OS !== 'web' && open && mounted && !busy && !opening;
   return (
     <Animated.View
-      style={[(busy || opening) && { overflow: 'hidden' }, style, animated]}
+      style={[(busy || opening) && { overflow: 'hidden' }, style, animated, resting && { opacity: 1, maxHeight: NO_LIMIT, marginTop: gap && lastHeight.current === 0 ? -gap : 0 }]}
       pointerEvents={open ? 'box-none' : 'none'}
       accessibilityElementsHidden={!open}
       importantForAccessibility={open ? 'auto' : 'no-hide-descendants'}
@@ -192,14 +198,17 @@ export function Pop({ open, children, style, origin = 'top right' }: {
   const still = useReducedMotion();
   const [mounted, setMounted] = useState(open);
   const progress = useSharedValue(0);
+  // Open and still: see `resting` below.
+  const [rested, setRested] = useState(false);
   const lastShown = useRef(children);
   if (open) lastShown.current = children;
   const gone = useCallback(() => setMounted(false), []);
   useEffect(() => {
     if (open) {
       setMounted(true);
-      progress.value = withTiming(1, { duration: 200, easing: CURVE });
+      progress.value = withTiming(1, { duration: 200, easing: CURVE }, (done) => { if (done) runOnJS(setRested)(true); });
     } else {
+      setRested(false);
       progress.value = withTiming(0, { duration: 140, easing: Easing.in(Easing.quad) }, (done) => { if (done) runOnJS(gone)(); });
     }
   }, [open, progress, gone]);
@@ -208,9 +217,14 @@ export function Pop({ open, children, style, origin = 'top right' }: {
     transform: [{ scale: still ? 1 : 0.92 + 0.08 * progress.value }, { translateY: still ? 0 : -4 * (1 - progress.value) }],
   }));
   if (!mounted && !open) return null;
+  // Open and still, on a phone: its open look is said by a plain style as well (as Fold's), so a dropped
+  // settled animation value can never leave an open menu invisible on a later re-render.
+  const resting = Platform.OS !== 'web' && open && rested;
   return (
-    <Animated.View style={[style, { transformOrigin: origin } as ViewStyle, animated]} pointerEvents={open ? 'auto' : 'none'}>
+    <Animated.View style={[style, { transformOrigin: origin } as ViewStyle, animated, resting && POP_REST]} pointerEvents={open ? 'auto' : 'none'}>
       {open ? children : lastShown.current}
     </Animated.View>
   );
 }
+
+const POP_REST = { opacity: 1, transform: [{ scale: 1 }, { translateY: 0 }] };

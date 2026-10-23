@@ -81,10 +81,15 @@ export default function AskCoach() {
   const still = useReducedMotion();
   const rise = useSharedValue(slide && !still ? 0 : 1);
   const cover = useSharedValue(slide && still ? 1 : 0);
+  // In place: the card's resting place (and the fill's being gone) is then said by plain styles as well,
+  // so a phone that drops the settled animation values (Reanimated keeps the first frame's: the card
+  // below the screen, the fill over it) can never take the page away on a later re-render.
+  const [risen, setRisen] = useState(false);
   useEffect(() => {
     if (!slide) return;
-    if (still) cover.value = withTiming(0, { duration: 200, easing: Easing.bezier(0.33, 1, 0.68, 1), reduceMotion: ReduceMotion.Never });
-    else rise.value = withTiming(1, { duration: 320, easing: Easing.bezier(0.2, 0.8, 0.2, 1) });
+    const done = (finished?: boolean) => { 'worklet'; if (finished) runOnJS(setRisen)(true); };
+    if (still) cover.value = withTiming(0, { duration: 200, easing: Easing.bezier(0.33, 1, 0.68, 1), reduceMotion: ReduceMotion.Never }, done);
+    else rise.value = withTiming(1, { duration: 320, easing: Easing.bezier(0.2, 0.8, 0.2, 1) }, done);
   }, [slide, still, rise, cover]);
   const coverStyle = useAnimatedStyle(() => ({ opacity: cover.value }));
   const home = useSharedValue({ x: 0, y: 0, w: 1, h: 1 });
@@ -217,7 +222,7 @@ export default function AskCoach() {
     <View ref={root} onLayout={onRootLayout} style={StyleSheet.absoluteFill}>
     {/* Behind the growing card, the page dims into the new one. */}
     <Reanimated.View ref={veilRef} pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: colors.bg }, veil, hero && !placed && { opacity: 0 }]} />
-    <Reanimated.View ref={cardRef} style={[hero && !web ? null : StyleSheet.absoluteFill, { backgroundColor: colors.bg, overflow: 'hidden' }, card, !placed && { opacity: 0 }]}>
+    <Reanimated.View ref={cardRef} style={[hero && !web ? null : StyleSheet.absoluteFill, { backgroundColor: colors.bg, overflow: 'hidden' }, card, !placed && { opacity: 0 }, slide && risen && !still && RISEN]}>
     <Reanimated.View ref={contentRef} style={[{ flex: 1 }, content]}>
     <Screen title="Ask a coach" compactTitle scroll={false} padded={false} bar={false} onBack={close} headerWrapper={closesKeys}>
       {/* A tap on anything here that is not a box or a button closes the
@@ -302,7 +307,7 @@ export default function AskCoach() {
       </ScrollView>
     </Screen>
     </Reanimated.View>
-    {slide && still ? <Reanimated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: colors.bg }, coverStyle]} /> : null}
+    {slide && still ? <Reanimated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: colors.bg }, coverStyle, risen && UNCOVERED]} /> : null}
     </Reanimated.View>
     {/* The box it grew from, fading as the page opens out of it. */}
     {hero && startRect ? (
@@ -313,6 +318,10 @@ export default function AskCoach() {
     </View>
   );
 }
+
+/** The card and the fill at rest once the page is in: after the animated styles, so they win at rest. */
+const RISEN = { transform: [{ translateY: 0 }] };
+const UNCOVERED = { opacity: 0 } as const;
 
 const styleDefinitions = StyleSheet.create({
   page: { paddingBottom: spacing.xxl },

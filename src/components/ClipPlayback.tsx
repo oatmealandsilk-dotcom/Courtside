@@ -3,7 +3,7 @@ import { useSoundMuted } from '@/features/feed/sound';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import * as haptics from '@/lib/haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Animated, { Easing, useAnimatedStyle, useDerivedValue, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, { Easing, runOnJS, useAnimatedStyle, useDerivedValue, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { GlassFill, liquidGlass } from '@/components/ui/Glass';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -23,16 +23,32 @@ import { TopBandContext } from '@/features/feed/topBand';
 /**
  * The play badge and the "2×" pill: a quick zoom and fade in (160 ms) and out
  * (120 ms) rather than blinking (Oct 22 sweep, item 24). Neither is glass.
- * Always built, so the way out can play; the same motion as the browser's.
+ * Kept built while the way out plays; the same motion as the browser's.
+ *
+ * Built afresh for each showing and gone once hidden, and shown and still it
+ * is also said by a plain style: a phone that drops the settled animation
+ * values (Reanimated keeps the first frame's, or an older showing's) can then
+ * never hide a badge that is up, or keep one up that has gone, on a later re-render.
  */
 function Pop({ on, children }: { on: boolean; children: React.ReactNode }) {
   const v = useSharedValue(on ? 1 : 0);
+  const [drawn, setDrawn] = useState(on);
+  const [still, setStill] = useState(on);
   useEffect(() => {
-    v.value = withTiming(on ? 1 : 0, on ? { duration: 160, easing: Easing.out(Easing.quad) } : { duration: 120, easing: Easing.in(Easing.quad) });
+    if (on) {
+      setDrawn(true);
+      v.value = withTiming(1, { duration: 160, easing: Easing.out(Easing.quad) }, (done) => { if (done) runOnJS(setStill)(true); });
+      return;
+    }
+    setStill(false);
+    v.value = withTiming(0, { duration: 120, easing: Easing.in(Easing.quad) }, (done) => { if (done) runOnJS(setDrawn)(false); });
   }, [on, v]);
   const look = useAnimatedStyle(() => ({ opacity: v.value, transform: [{ scale: 0.8 + 0.2 * v.value }] }));
-  return <Animated.View pointerEvents="none" style={look}>{children}</Animated.View>;
+  if (!drawn && !on) return null;
+  return <Animated.View pointerEvents="none" style={[look, on && still && POP_SHOWN]}>{children}</Animated.View>;
 }
+
+const POP_SHOWN = { opacity: 1, transform: [{ scale: 1 }] };
 
 /**
  * A clip in the feed on a phone: plays itself when it is the page on screen,

@@ -272,13 +272,16 @@ function SearchList({ up, children }: { up: boolean; children: React.ReactNode }
   const h = useSharedValue(0);
   const open = useSharedValue(0);
   const natural = useRef(0);
+  // Open and still: see `resting` below.
+  const [opened, setOpened] = useState(false);
   useEffect(() => {
     if (up) {
       setShown(true);
-      open.value = withTiming(1, { duration: LIST_IN_MS });
+      open.value = withTiming(1, { duration: LIST_IN_MS }, (done) => { if (done) runOnJS(setOpened)(true); });
       if (natural.current) h.value = reduce ? natural.current : withTiming(natural.current, LIST_EASE);
       return;
     }
+    setOpened(false);
     const gone = (done?: boolean) => { 'worklet'; if (done) runOnJS(setShown)(false); };
     if (reduce) { open.value = withTiming(0, { duration: LIST_OUT_MS }, gone); return; }
     open.value = withTiming(0, { duration: LIST_OUT_MS });
@@ -289,9 +292,13 @@ function SearchList({ up, children }: { up: boolean; children: React.ReactNode }
   const wrap = useAnimatedStyle(() => ({ opacity: open.value, marginTop: spacing.sm * open.value }));
   const glass = useAnimatedStyle(() => ({ height: h.value }));
   if (!shown) return null;
+  // Open and still, on a phone: the list's open look is said by plain styles as well, so a phone that drops
+  // the settled animation values (Reanimated keeps the first frame's: clear, no height) can never take an
+  // open list away on a later re-render.
+  const resting = Platform.OS !== 'web' && up && opened;
   return (
-    <Animated.View style={[styles.resultsWrap, wrap, !up && styles.noTouch]}>
-      <MapGlass dense radius={18} style={[styles.results, glass]}>
+    <Animated.View style={[styles.resultsWrap, wrap, !up && styles.noTouch, resting && LIST_REST]}>
+      <MapGlass dense radius={18} style={[styles.results, glass, resting && natural.current > 0 && { height: 'auto' }]}>
         <View
           onLayout={(e) => {
             const next = Math.round(e.nativeEvent.layout.height * 2) / 2;
@@ -309,6 +316,9 @@ function SearchList({ up, children }: { up: boolean; children: React.ReactNode }
     </Animated.View>
   );
 }
+
+/** The search's list open and still: after its animated style, so it wins at rest. */
+const LIST_REST = { opacity: 1, marginTop: spacing.sm };
 
 /** How the search's list grows, shrinks and glides between heights. */
 const LIST_EASE = { duration: 220, easing: Easing.bezier(0.2, 0.8, 0.2, 1) };

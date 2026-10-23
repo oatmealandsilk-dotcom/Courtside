@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 import { TextBox } from '@/components/ui/TextBox';
-import Reanimated, { Easing, FadeIn, FadeOut, LinearTransition, ZoomIn, ZoomOut, useAnimatedKeyboard, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
+import Reanimated, { Easing, FadeIn, FadeOut, LinearTransition, ZoomIn, runOnJS, ZoomOut, useAnimatedKeyboard, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { BLOCKED_WORDS_NOTE } from '@/features/hiddenWords/hiddenWords';
@@ -236,21 +236,29 @@ export default function NewMessage() {
   const footerY = useSharedValue(footerShown ? 0 : 120);
   const footerFade = useSharedValue(footerShown ? 1 : 0);
   const footerStill = useReducedMotion();
+  // Up and still: see `footerRest` below.
+  const [footerUp, setFooterUp] = useState(footerShown);
   useEffect(() => {
     if (footerShown) {
       setFooterDrawn(true);
+      const up = (done?: boolean) => { 'worklet'; if (done) runOnJS(setFooterUp)(true); };
       // Reduce Motion: it only fades.
-      if (footerStill) { footerY.value = 0; footerFade.value = withTiming(1, { duration: 180 }); return undefined; }
+      if (footerStill) { footerY.value = 0; footerFade.value = withTiming(1, { duration: 180 }, up); return undefined; }
       footerFade.value = 1;
-      footerY.value = withTiming(0, { duration: FOOTER_IN_MS, easing: Easing.out(Easing.cubic) });
+      footerY.value = withTiming(0, { duration: FOOTER_IN_MS, easing: Easing.out(Easing.cubic) }, up);
       return undefined;
     }
+    setFooterUp(false);
     if (footerStill) footerFade.value = withTiming(0, { duration: 160 });
     else footerY.value = withTiming(footerH.current + 4, { duration: FOOTER_OUT_MS, easing: Easing.in(Easing.quad) });
     const t = setTimeout(() => setFooterDrawn(false), (footerStill ? 160 : FOOTER_OUT_MS) + 40);
     return () => clearTimeout(t);
   }, [footerShown, footerStill, footerY, footerFade]);
   const footerSlide = useAnimatedStyle(() => ({ opacity: footerFade.value, transform: [{ translateY: footerY.value }] }));
+  // Up and still, on a phone: the footer's place is said by a plain style as well, so a phone that drops the
+  // settled animation values (Reanimated keeps the first frame's: below the edge, clear) can never take
+  // Chat / Create group away on a later re-render.
+  const footerRest = Platform.OS !== 'web' && footerShown && footerUp ? FOOTER_REST : null;
   const footer = (phone: boolean) => {
     if (!footerShown && !footerDrawn) return null;
     const f = footerShown ? { picked, notes, held, busy, sameGroup: !!sameGroup } : lastFooter.current;
@@ -261,7 +269,7 @@ export default function NewMessage() {
           const h = e.nativeEvent.layout.height;
           if (h) footerH.current = h;
         }}
-        style={[styles.footer, phone && { paddingBottom: footerBottom }, phone && footerLift, footerSlide]}
+        style={[styles.footer, phone && { paddingBottom: footerBottom }, phone && footerLift, footerSlide, footerRest]}
       >
         {f.notes.map((text) => (
           <LockNote key={text} text={text} tone={note?.alert && text === note.text ? 'alert' : 'lock'} onClose={text === note?.text ? () => setNote(null) : undefined} />
@@ -400,6 +408,9 @@ export default function NewMessage() {
     </View>
   );
 }
+
+/** The footer up and still: after its animated style, so it wins at rest. */
+const FOOTER_REST = { opacity: 1, transform: [{ translateY: 0 }] };
 
 const styleDefinitions = StyleSheet.create({
   // Dark and blurred behind the box, so the inbox recedes instead of reading as a second copy of the list.
