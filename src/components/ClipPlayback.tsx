@@ -36,8 +36,11 @@ function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, 
    * the same few seconds buffered.
    */
   fetchAhead?: 'frame' | 'opening';
-  /** A browser's clip on screen has started playing (ClipPlayback.web). On a phone `onReady` already means that. */
-  onPlaying?: () => void;
+  /**
+   * A browser's clip on screen is playing with a few seconds in hand (ClipPlayback.web). On a
+   * phone `onReady` already means that: a clip there starts once its first seconds are in.
+   */
+  onSteady?: () => void;
   /** The author's rate (1 is normal) and level (0–1), honoured at playback. */
   speed?: number; volume?: number;
   /** Posted without sound: plays muted and offers no way to unmute. */

@@ -1538,9 +1538,9 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
       setGoneIds((prev) => (prev.has(id) ? prev : new Set(prev).add(id)));
     }
   }, []);
-  // A browser's clip on screen that has actually started playing (its `ready` is only its first frame).
-  const [startedId, setStartedId] = useState<string | null>(null);
-  const markStarted = useCallback((id: string) => setStartedId(id), []);
+  // A browser's clip on screen that is playing with a few seconds in hand (its `ready` is only its first frame).
+  const [steadyId, setSteadyId] = useState<string | null>(null);
+  const markSteady = useCallback((id: string) => setSteadyId(id), []);
   /** The page's picture is in right now, in the player that is actually built. */
   const inNow = (id: string) => readyIds.has(id) && !goneIds.has(id);
   // Whatever is on screen is shown within a few seconds, ready or not: a
@@ -1663,9 +1663,10 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
         : item?.type === 'post' && reachable(item.post) && (item.post.videoUrl || (item.post.kind !== 'clip' && item.post.imageUrl)) ? item.post.id : null;
       if (!id) continue;
       if (!inNow(id)) return false;
-      // In a browser "in" is only the first frame: the clip on screen must also be playing.
+      // In a browser "in" is only the first frame: the clip on screen must also be playing with
+      // a few seconds in hand, as a phone's has when it starts (a link with nothing to spare never gets there).
       const video = item?.type === 'hit' ? !!item.story.videoUrl : item?.type === 'post' && !!item.post.videoUrl;
-      if (k === 0 && video && Platform.OS === 'web' && startedId !== id) return false;
+      if (k === 0 && video && Platform.OS === 'web' && steadyId !== id) return false;
     }
     return true;
   };
@@ -1957,7 +1958,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
                     <View accessibilityLabel={`${author.name}'s Instant`} style={styles.clipFrame}>
                       <View style={phone ? StyleSheet.absoluteFill : styles.clipPortrait}>
                         {story.videoUrl ? (
-                          <ClipPlayback uri={story.videoUrl} poster={story.thumbnailUrl} active={playing && active === index && warmed && playable} held={held && myStage?.key === hitKey} onStage={myStage?.key === hitKey} preload={near} fetchAhead={fetchAhead} warmOnly={warming} bare={immersive} onDoubleTap={() => likeHitByTap(story.id, hitLiked)} discInk={theme === 'us-open' ? '#FFFFFF' : colors.brand} discPinned={index === 0 && !scope} onReady={(ok) => markReady(story.id, ok)} onPlaying={() => markStarted(story.id)} onPaused={rowBackOnPause} />
+                          <ClipPlayback uri={story.videoUrl} poster={story.thumbnailUrl} active={playing && active === index && warmed && playable} held={held && myStage?.key === hitKey} onStage={myStage?.key === hitKey} preload={near} fetchAhead={fetchAhead} warmOnly={warming} bare={immersive} onDoubleTap={() => likeHitByTap(story.id, hitLiked)} discInk={theme === 'us-open' ? '#FFFFFF' : colors.brand} discPinned={index === 0 && !scope} onReady={(ok) => markReady(story.id, ok)} onSteady={() => markSteady(story.id)} onPaused={rowBackOnPause} />
                         ) : (
                           // Two quick taps like a hit, the way they like a clip.
                           <Pressable accessibilityRole="image" accessibilityLabel={`${author.name}'s Instant`} onPress={() => { const now = Date.now(); if (now - lastHitTap.current < 280) { lastHitTap.current = 0; likeHitByTap(story.id, hitLiked); } else lastHitTap.current = now; }} style={StyleSheet.absoluteFill}>
@@ -2139,7 +2140,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
                           discInk={theme === 'us-open' ? '#FFFFFF' : colors.brand}
                           discPinned={index === 0 && !scope}
                           onReady={(ok) => markReady(post.id, ok)}
-                          onPlaying={() => markStarted(post.id)}
+                          onSteady={() => markSteady(post.id)}
                           held={held && myStage?.key === `p:${post.id}`}
                           onStage={myStage?.key === `p:${post.id}`}
                           onPaused={rowBackOnPause}
