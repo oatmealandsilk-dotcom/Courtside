@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Dimensions, Modal, Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Dimensions, Modal, Platform, Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 
 import { HeightGlide } from '@/components/ui/HeightGlide';
@@ -40,6 +40,10 @@ export function RisingSheet({ visible, onClose, onBackdropPress, closeLabel = 'C
   useTheme();
   const reduce = useReducedMotion();
   const [mounted, setMounted] = useState(visible);
+  // Up and still: the sheet's and the dim's resting look is then said by plain styles as well
+  // (AT_REST below), so an iPhone that drops the settled animation values (Reanimated keeps the
+  // first frame's, off screen and clear) can never send an open sheet away on a later re-render.
+  const [up, setUp] = useState(false);
   const rise = useSharedValue(0);
   const dim = useSharedValue(0);
   const height = useSharedValue(Dimensions.get('window').height);
@@ -47,15 +51,20 @@ export function RisingSheet({ visible, onClose, onBackdropPress, closeLabel = 'C
     if (visible) {
       setMounted(true);
       dim.value = withTiming(1, { duration: SHEET_DIM_IN_MS });
-      rise.value = reduce ? withTiming(1, { duration: SHEET_DIM_IN_MS }) : withSpring(1, SHEET_SPRING);
+      const done = (finished?: boolean) => { 'worklet'; if (finished) runOnJS(setUp)(true); };
+      rise.value = reduce ? withTiming(1, { duration: SHEET_DIM_IN_MS }, done) : withSpring(1, SHEET_SPRING, done);
       return;
     }
+    setUp(false);
     dim.value = withTiming(0, { duration: SHEET_DIM_OUT_MS });
     rise.value = withTiming(0, { duration: SHEET_CLOSE_MS, easing: CLOSE_EASE }, (finished) => {
       if (finished) runOnJS(setMounted)(false);
     });
   }, [visible, reduce, rise, dim]);
   const dimStyle = useAnimatedStyle(() => ({ opacity: dim.value }));
+  // Phones only: Reanimated's settled-value handling is native-only, and in a browser a resting style
+  // dropped on close would be written for a frame before the close animation's first.
+  const atRest = up && visible && Platform.OS !== 'web';
   const sheetMotion = useAnimatedStyle(() => (reduce
     ? { opacity: rise.value }
     // Never above where it rests: the spring's faint settle would lift its bottom edge off the screen's.
@@ -64,14 +73,14 @@ export function RisingSheet({ visible, onClose, onBackdropPress, closeLabel = 'C
     <Modal visible={mounted} transparent animationType="none" onRequestClose={onClose}><SwipeArea on={false}>
       {/* A sheet opened from a tab presses at once: the tab's swipe press wait stops at the sheet (swipePress). */}
       <View style={styles.page}>
-        <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: colors.overlay }, dimStyle]} />
+        <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: colors.overlay }, dimStyle, atRest && DIM_AT_REST]} />
         {/* The dimmed page is its own surface beside the sheet, not around it: a
             button may not hold the sheet's buttons in a browser. */}
         <Pressable accessibilityLabel={closeLabel} onPress={onBackdropPress ?? onClose} style={StyleSheet.absoluteFill} />
         <Animated.View
           pointerEvents={visible ? 'auto' : 'none'}
           onLayout={(e) => { height.value = e.nativeEvent.layout.height; }}
-          style={[styles.sheet, sheetStyle, sheetMotion]}
+          style={[styles.sheet, sheetStyle, sheetMotion, atRest && (reduce ? FADE_AT_REST : SHEET_AT_REST)]}
         >
           <HeightGlide duration={220}>{children}</HeightGlide>
         </Animated.View>
@@ -79,6 +88,11 @@ export function RisingSheet({ visible, onClose, onBackdropPress, closeLabel = 'C
     </SwipeArea></Modal>
   );
 }
+
+/** Where the sheet and the dim rest once up: placed after the animated styles, so they win at rest. */
+const DIM_AT_REST = { opacity: 1 } as const;
+const SHEET_AT_REST = { transform: [{ translateY: 0 }] };
+const FADE_AT_REST = { opacity: 1 } as const;
 
 const styles = StyleSheet.create({
   page: { flex: 1, justifyContent: 'flex-end' },
