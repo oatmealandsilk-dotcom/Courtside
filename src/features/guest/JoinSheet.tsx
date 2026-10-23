@@ -32,10 +32,11 @@ import { noteAppTap } from './campaign';
 // curve, away over 220 ms, with the dim following the sheet on the same timing.
 const RISE = Easing.bezier(0.32, 0.72, 0, 1);
 const FALL = Easing.bezier(0.4, 0, 1, 1);
-const DIM_IN = FadeIn.duration(380).easing(RISE);
-const DIM_OUT = FadeOut.duration(220).easing(FALL);
-const SHEET_IN = SlideInDown.duration(380).easing(RISE);
-const SHEET_OUT = SlideOutDown.duration(220).easing(FALL);
+// Shared with the peek's "I'm in" sheet (app/peek.tsx), so both rise and fall alike.
+export const DIM_IN = FadeIn.duration(380).easing(RISE);
+export const DIM_OUT = FadeOut.duration(220).easing(FALL);
+export const SHEET_IN = SlideInDown.duration(380).easing(RISE);
+export const SHEET_OUT = SlideOutDown.duration(220).easing(FALL);
 
 export function JoinSheet() {
   const styles = useThemedStyles(styleDefinitions);

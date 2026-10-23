@@ -2,7 +2,10 @@ import { PRESS_DIM } from '@/theme/press';
 import { asTabRoute } from '@/features/navigation/tabFocus';
 import { SectionPager } from '@/components/SectionPager';
 import { PULL_GAP } from '@/lib/pullRefresh';
-import Reanimated, { interpolateColor, runOnJS, useAnimatedReaction, useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
+import Reanimated, { Easing, FadeIn, FadeOut, interpolateColor, runOnJS, useAnimatedReaction, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import { Fold, FoldList, Pop } from '@/components/ui/Fold';
+import * as haptics from '@/lib/haptics';
+import { useReducedMotion } from '@/lib/useReducedMotion';
 import { PaneScroller } from '@/components/ui/PaneScroller';
 import { LAYOUT, useResponsive } from '@/lib/useResponsive';
 import { useTabUnderline } from '@/features/navigation/useTabUnderline';
@@ -99,6 +102,10 @@ const FURTHER_MILES = 100;
 const NEW_DAYS = 14;
 /** New players shown before "Show more". */
 const NEW_SHOWN = 6;
+/** Keys for the folding lists (FoldList): a hit by its id, a player by theirs. */
+const hitKey = (x: { hit: { id: string } }) => x.hit.id;
+const userKey = (u: { id: string }) => u.id;
+const NO_HITS: never[] = [];
 const SORT_HINT = { new: 'Newest first', hot: 'Busiest right now', top: 'Most upvoted', unanswered: 'Nobody has replied yet' } as const;
 /** "Joined 3 days ago", for New on CourtSide. */
 const joinedLabel = (iso: string) => {
@@ -268,6 +275,32 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
 
   // How the list is ordered, the way Reddit offers it. New stays the default.
   const [sort, setSort] = useState<'new' | 'hot' | 'top' | 'unanswered'>('new');
+  // The topic and order the list below is drawn with. A new pick dips the list out for a moment and
+  // brings the new one up, rather than swapping every thread in one frame (Oct 22 sweep, item 12).
+  // The chip and the Sort button answer at once; only the list follows a beat later.
+  const [listView, setListView] = useState({ topic, sort });
+  const still = useReducedMotion();
+  const listShown = useSharedValue(1);
+  // The latest pick: the dip lands on whatever is picked when it ends, not what was picked when it began,
+  // so a quick B-then-back-to-A never leaves B's threads under the A chip.
+  const pick = useRef({ topic, sort });
+  pick.current = { topic, sort };
+  const applyPick = useCallback(() => setListView({ ...pick.current }), []);
+  useEffect(() => {
+    if (listView.topic === topic && listView.sort === sort) {
+      // Back to what is drawn while the list dips: call the dip off and bring the list back up.
+      listShown.value = withTiming(1, { duration: 200, easing: SETTLE });
+      return;
+    }
+    // Not on show (a picture of this tab, or Find Players in front): simply the new list.
+    if (previewSection || section !== 'discussions') { applyPick(); return; }
+    listShown.value = withTiming(0, { duration: 90, easing: Easing.in(Easing.quad) }, (done) => { if (done) runOnJS(applyPick)(); });
+  }, [topic, sort]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { listShown.value = withTiming(1, { duration: 200, easing: SETTLE }); }, [listView, listShown]);
+  const listStyle = useAnimatedStyle(() => ({
+    opacity: listShown.value,
+    transform: [{ translateY: still ? 0 : (1 - listShown.value) * 6 }],
+  }));
   // One spot for every distance on Find Players (Courts near you, which hits
   // are near and how far, Your courts, the court search): where you are
   // (this phone's fix with Location on, else the spot you last shared from
@@ -478,7 +511,8 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   // And places (a city, a neighbourhood, an address, a park), leaning toward
   // your town (only ever a rough area is sent): a tap opens the full map
   // there, with that place's courts listed best first.
-  const placeSearch = usePlaceSearch(search, youAt, 3);
+  // Held while the next letter's answer comes, so Places never empties and fills again on every letter (Oct 22 sweep, item 6).
+  const placeSearch = usePlaceSearch(search, youAt, 3, { hold: true });
   const placeMatches = useMemo(() => {
     // A place that is one of the courts listed is already there, as the court.
     const courtNames = new Set(courtMatches.map(({ c }) => plain(labelOf(c))));
@@ -507,20 +541,21 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
     // Nobody you have blocked or muted shows up here, the same as in the feed.
     // Nor does a thread an admin took down (migration 108): its author finds it from their notification.
     let list = questions.filter((q) => !q.removed && !blockedIds.includes(q.authorId) && !mutedIds.includes(q.authorId));
-    if (topic !== 'all') list = list.filter((q) => q.topic === topic);
+    const { topic: shownTopic, sort: shownSort } = listView;
+    if (shownTopic !== 'all') list = list.filter((q) => q.topic === shownTopic);
     // Whether the topic has any thread at all, before Unanswered narrows it.
     const any = list.length > 0;
 
     const newest = (a: typeof list[number], b: typeof list[number]) => Date.parse(b.createdAt) - Date.parse(a.createdAt);
-    if (sort === 'unanswered') list = list.filter((q) => q.answerIds.length === 0);
-    if (sort === 'top') list.sort((a, b) => b.votes - a.votes || b.answerIds.length - a.answerIds.length || newest(a, b));
-    else if (sort === 'hot') {
+    if (shownSort === 'unanswered') list = list.filter((q) => q.answerIds.length === 0);
+    if (shownSort === 'top') list.sort((a, b) => b.votes - a.votes || b.answerIds.length - a.answerIds.length || newest(a, b));
+    else if (shownSort === 'hot') {
       // Votes and replies, pulled down by age: a lively thread from today beats a quiet one from last month.
       const heat = (q: typeof list[number]) => (q.votes + 2 * q.answerIds.length + 1) / Math.pow((Date.now() - Date.parse(q.createdAt)) / 3_600_000 + 2, 1.5);
       list.sort((a, b) => heat(b) - heat(a));
     } else list.sort(newest);
     return { visible: list, anyInTopic: any };
-  }, [questions, topic, blockedIds, mutedIds, sort]);
+  }, [questions, listView, blockedIds, mutedIds]);
   // The Question of the week (Oct 20 sweep, R5: "0 new threads in 7 days ... Answering a set question is
   // far easier than starting a new one"): the thread an admin pinned sits on top, with a small "This week"
   // label, under All and under its own topic. Only for 7 days from the pin; nobody you blocked or muted.
@@ -534,9 +569,9 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
     const q = questions.find((x) => x.id === pinnedQuestion.id);
     if (!q || q.removed || blockedIds.includes(q.authorId) || mutedIds.includes(q.authorId)) return undefined;
     // It keeps to what the list is showing: under Unanswered, only while it has no replies (review fix).
-    if (sort === 'unanswered' && q.answerIds.length > 0) return undefined;
-    return topic === 'all' || q.topic === topic ? q : undefined;
-  }, [pinnedQuestion, questions, blockedIds, mutedIds, topic, sort]);
+    if (listView.sort === 'unanswered' && q.answerIds.length > 0) return undefined;
+    return listView.topic === 'all' || q.topic === listView.topic ? q : undefined;
+  }, [pinnedQuestion, questions, blockedIds, mutedIds, listView]);
   // A long list is drawn in slices: the first screenfuls at once, the rest on request.
   // The pinned thread is drawn once, on top, not again in its place in the list.
   const slice = visible.slice(0, shownCount).filter((q) => q.id !== pinned?.id);
@@ -592,7 +627,16 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   // Each with its place in the first showing's stagger (FirstReveal), which depends on what comes first.
   // Keyed, so open hits coming or going moves them in the list rather than building them again.
   const yourCourts = (order: number) => <YourCourts key="your-courts" from={youAt} revealOrder={order} />;
-  const courtsBlock = (order: number) => <CourtsNear key="courts-near" center={youAt} revealOrder={order} />;
+  const courtsBlock = (order: number) => <CourtsNear key="courts-near" center={youAt} revealOrder={order} foldGap={16} />;
+  // Your courts and Courts near you sit above Open hits in a quiet area and under them once there are
+  // hits. When that changes (the last hit called off, the first one posted), they fold shut in one place
+  // as they unfold in the other, rather than the whole page jumping (Oct 22 sweep, item 7).
+  // (A search takes them down at once, as it does the rest of the page, so nothing folds above the results.)
+  const courtsAt = (above: boolean) => (search ? null :
+    <Fold key={above ? 'courts-above' : 'courts-below'} open={above ? !openHits.length : !!openHits.length} gap={16}>
+      <View style={styles.courtsPair}>{yourCourts(above ? 1 : 2)}{courtsBlock(above ? 2 : 3)}</View>
+    </Fold>
+  );
   // A guest (guest mode, Oct 17): open hits and courts near them, never the players map or people.
   const content = (pane:string) => (pane === 'players' && isGuest ? <GuestFindPlayers /> : pane === 'players' ? <View style={{ gap: 16 }}>
         {/* Cancel beside the box while you search, the way iPhone search boxes do: one tap clears it, puts the keyboard away and brings the map back (Oct 5, owner: "there should be an easier way to exit here"). */}
@@ -600,17 +644,17 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
           <View style={styles.searchWrap}>
             <Ionicons name="search" size={17} color={colors.textFaint} style={styles.searchIcon} />
             <TextBox maxFontSizeMultiplier={TextScale.TITLE} ref={searchInput} accessibilityLabel="Search players, courts or places" placeholder={largeText ? 'Search players or courts' : 'Search players, courts or places'} placeholderTextColor={colors.textFaint} value={search} onChangeText={setSearch} onFocus={() => setSearching(true)} onBlur={() => setSearching(false)} returnKeyType="search" style={[styles.search, search ? styles.searchWithClear : null]} />
+            {/* The (x) fades in and out rather than snapping (Oct 22 sweep, item 46). */}
             {search ? (
-              <Pressable accessibilityRole="button" accessibilityLabel="Clear search" hitSlop={10} onPress={() => setSearch('')} style={styles.searchClear}>
-                <Ionicons name="close-circle" size={18} color={colors.textFaint} />
-              </Pressable>
+              <Reanimated.View entering={FadeIn.duration(160)} exiting={FadeOut.duration(120)} style={styles.searchClear}>
+                <Pressable accessibilityRole="button" accessibilityLabel="Clear search" hitSlop={10} onPress={() => setSearch('')}>
+                  <Ionicons name="close-circle" size={18} color={colors.textFaint} />
+                </Pressable>
+              </Reanimated.View>
             ) : null}
           </View>
-          {searching || search ? (
-            <Pressable accessibilityRole="button" accessibilityLabel="Cancel search" hitSlop={8} onPress={cancelSearch}>
-              <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.searchCancel}>Cancel</Text>
-            </Pressable>
-          ) : null}
+          {/* Cancel slides in beside the box as the box narrows, and out again (Oct 22 sweep, item 46: it popped in and the box jumped). */}
+          <SearchCancel shown={searching || !!search} onPress={cancelSearch} />
         </View>
         {currentUser ? (pane === 'players'
           // Live while the tab is on show, beside Discussions too, so it is already drawn when it slides in.
@@ -639,8 +683,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
         {/* A quiet area leads with where to play (your courts, then the others
             near you); once it has open hits, they come first, and Your courts
             follows them, since its "Hit today" badges repeat those cards. */}
-        {!search && !openHits.length ? yourCourts(1) : null}
-        {!search && !openHits.length ? courtsBlock(2) : null}
+        {courtsAt(true)}
         {/* Hits: someone wants a game, yours first, then near you. Posting one is right here. */}
         {!search ? (
           <FirstReveal order={openHits.length ? 1 : 3}><View style={styles.hits}>
@@ -666,7 +709,8 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
                 />
               );
             })()}
-            {shownHits.map(({ hit, miles }) => <HitCard key={hit.id} hit={hit} miles={miles} {...(hitTip?.hitId === hit.id ? { tip: hitTip.tip, tipReady: hitTipReady, tipAt: '/discuss', restKey: section } : {})} />)}
+            {/* Cards fold in and out (a hit posted or called off, More open hits) and the rest glide (Oct 22 sweep, item 7). */}
+            <FoldList items={shownHits} keyOf={hitKey} gap={spacing.md} render={({ hit, miles }) => <HitCard hit={hit} miles={miles} {...(hitTip?.hitId === hit.id ? { tip: hitTip.tip, tipReady: hitTipReady, tipAt: '/discuss', restKey: section } : {})} />} />
             {moreHits ? (
               <Pressable accessibilityRole="button" accessibilityState={{ expanded: moreHitsOpen }} onPress={() => setMoreHitsOpen((o) => !o)} hitSlop={6} style={({ pressed }) => [styles.further, pressed && { opacity: PRESS_DIM }]}>
                 <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.furtherText}>{moreHitsOpen ? 'Fewer open hits' : `More open hits (${moreHits})`}</Text>
@@ -679,15 +723,28 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
                   <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.furtherText}>Further away ({listedFurther.length})</Text>
                   <Ionicons name={furtherOpen ? 'chevron-up' : 'chevron-down'} size={14} color={colors.textMuted} />
                 </Pressable>
-                {furtherOpen ? listedFurther.map(({ hit, miles }) => <HitCard key={hit.id} hit={hit} miles={miles} />) : null}
+                <FoldList items={furtherOpen ? listedFurther : NO_HITS} keyOf={hitKey} gap={spacing.md} render={({ hit, miles }) => <HitCard hit={hit} miles={miles} />} />
               </>
             ) : null}
           </View></FirstReveal>
         ) : null}
-        {!search && openHits.length ? yourCourts(2) : null}
-        {!search && openHits.length ? courtsBlock(3) : null}
-        {/* Courts by name, above the players, once two letters are typed. */}
-        {search && courtMatches.length ? (
+        {courtsAt(false)}
+        {search && (foundPlayers.length || courtMatches.length || placeMatches.length) ? <View style={styles.playersHead}>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playersTitle}>Players</Text>
+          {/* Players first (Oct 22 sweep, item 6): they are known the moment you type, so nothing that arrives later lands above them. A court matched but no one did: one quiet line, not a big empty state under the court that was found. */}
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playersBody}>{foundPlayers.length ? `${foundPlayers.length} ${foundPlayers.length === 1 ? 'match' : 'matches'}` : `No players named “${search.trim()}”`}</Text>
+        </View> : null}
+        {search ? foundPlayers.map((user, index) => <Pressable key={user.id} accessibilityRole="link" onPress={() => router.push(`/user/${user.id}`)} style={({ pressed }) => [styles.player, pressed && styles.playerPressed]}>
+          <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={52} ring={user.isCoach} />
+          <View style={[styles.playerBody, index > 0 && styles.playerLine]}>
+            <View style={styles.playerTop}><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playerName} numberOfLines={1}>{user.name}</Text><LevelPill profile={user.profile} small /></View>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playerMeta} numberOfLines={1}>@{user.handle}</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={16} color={colors.textFaint} style={styles.playerChevron} />
+        </Pressable>) : null}
+        {/* Courts by name, under the players, once two letters are typed. Courts from further away come a beat
+            later: below the players, they only ever add rows under the one you were about to tap (Oct 22 sweep, item 6). */}
+        <Fold open={!!search && courtMatches.length > 0} appear gap={16}>
           <View>
             <View style={styles.playersHead}>
               <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playersTitle}>Courts</Text>
@@ -707,9 +764,10 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
               );
             })}
           </View>
-        ) : null}
-        {/* Places by name, under the courts: a city, an address or a park, each opening the map there. */}
-        {search.trim() && placeMatches.length ? (
+        </Fold>
+        {/* Places by name, last: a city, an address or a park, each opening the map there. The world's answer comes
+            a moment after typing stops, so it only ever unfolds at the end of the list (Oct 22 sweep, item 6). */}
+        <Fold open={!!search.trim() && placeMatches.length > 0} appear gap={16}>
           <View>
             <View style={styles.playersHead}>
               <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playersTitle}>Places</Text>
@@ -726,20 +784,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
               </Pressable>
             ))}
           </View>
-        ) : null}
-        {search && (foundPlayers.length || courtMatches.length || placeMatches.length) ? <View style={styles.playersHead}>
-          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playersTitle}>Players</Text>
-          {/* A court matched but no one did: one quiet line, not a big empty state under the court that was found. */}
-          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playersBody}>{foundPlayers.length ? `${foundPlayers.length} ${foundPlayers.length === 1 ? 'match' : 'matches'}` : `No players named “${search.trim()}”`}</Text>
-        </View> : null}
-        {search ? foundPlayers.map((user, index) => <Pressable key={user.id} accessibilityRole="link" onPress={() => router.push(`/user/${user.id}`)} style={({ pressed }) => [styles.player, pressed && styles.playerPressed]}>
-          <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={52} ring={user.isCoach} />
-          <View style={[styles.playerBody, index > 0 && styles.playerLine]}>
-            <View style={styles.playerTop}><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playerName} numberOfLines={1}>{user.name}</Text><LevelPill profile={user.profile} small /></View>
-            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playerMeta} numberOfLines={1}>@{user.handle}</Text>
-          </View>
-          <Ionicons name="chevron-forward" size={16} color={colors.textFaint} style={styles.playerChevron} />
-        </Pressable>) : null}
+        </Fold>
         {search && !foundPlayers.length && !courtMatches.length && !placeMatches.length && !placeSearch.searching ? <EmptyState title={`Nothing matches “${search.trim()}”`} body={placeSearch.failed ? 'Places can’t be searched right now. Try a player’s or a court’s name.' : 'No players, courts or places found. Try a name, a city or a park.'} /> : null}
         {/* Near you: who shared a spot within 30 miles, the same "near" as the map. */}
         {!search && nearPlayers.length ? (
@@ -763,19 +808,22 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
           </View>
         ) : null}
         {/* New on CourtSide: who joined in the last two weeks (adults, and people you already follow), with Follow in one tap. */}
-        {!search && newPlayers.length && newTucked ? (
+        {/* New players in other cities: the link folds away as the list unfolds in its place (Oct 22 sweep, item 7). */}
+        {search ? null : <Fold open={newPlayers.length > 0 && newTucked} gap={16}>
           <Pressable accessibilityRole="button" accessibilityState={{ expanded: false }} onPress={() => setElsewhereOpen(true)} hitSlop={6} style={({ pressed }) => [styles.further, pressed && { opacity: PRESS_DIM }]}>
             <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.furtherText}>New players in other cities</Text>
             <Ionicons name="chevron-down" size={14} color={colors.textMuted} />
           </Pressable>
-        ) : !search && newPlayers.length ? (
+        </Fold>}
+        {search ? null : <Fold open={newPlayers.length > 0 && !newTucked} gap={16}>
           <View>
             <View style={styles.playersHead}>
               <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playersTitle}>New on CourtSide</Text>
               <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playersBody}>{newElsewhere ? 'Joined in the last two weeks, in other cities' : 'Joined in the last two weeks'}</Text>
             </View>
-            {(newOpen ? newPlayers : newPlayers.slice(0, NEW_SHOWN)).map((user, index) => (
-              <Pressable key={user.id} accessibilityRole="link" accessibilityLabel={`${user.name}, ${joinedLabel(user.joinedAt).toLowerCase()}, open profile`} onPress={() => router.push(`/user/${user.id}`)} style={({ pressed }) => [styles.player, pressed && styles.playerPressed]}>
+            {/* Show all unfolds the rest, Fewer folds them away (Oct 22 sweep, item 7). */}
+            <FoldList items={newOpen ? newPlayers : newPlayers.slice(0, NEW_SHOWN)} keyOf={userKey} render={(user, index) => (
+              <Pressable accessibilityRole="link" accessibilityLabel={`${user.name}, ${joinedLabel(user.joinedAt).toLowerCase()}, open profile`} onPress={() => router.push(`/user/${user.id}`)} style={({ pressed }) => [styles.player, pressed && styles.playerPressed]}>
                 <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={52} ring={user.isCoach} />
                 <View style={[styles.playerBody, styles.playerFollowBody, index > 0 && styles.playerLine]}>
                   <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
@@ -785,7 +833,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
                   <FollowPill small following={followingIds.includes(user.id)} userId={user.id} onPress={() => followRow(user.id)} name={user.name.split(' ')[0]} />
                 </View>
               </Pressable>
-            ))}
+            )} />
             {newPlayers.length > NEW_SHOWN ? (
               <Pressable accessibilityRole="button" accessibilityState={{ expanded: newOpen }} onPress={() => setNewOpen((o) => !o)} hitSlop={6} style={({ pressed }) => [styles.further, pressed && { opacity: PRESS_DIM }]}>
                 <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.furtherText}>{newOpen ? 'Fewer' : `Show all (${newPlayers.length})`}</Text>
@@ -793,7 +841,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
               </Pressable>
             ) : null}
           </View>
-        ) : null}
+        </Fold>}
       </View> : <>
       {/* A tap anywhere outside the open sort menu closes it (under the controls, over the threads). */}
       {sortOpen ? <Pressable accessibilityLabel="Close sort menu" onPress={() => setSortOpen(false)} style={[StyleSheet.absoluteFill, { zIndex: 4, elevation: 4 }]} /> : null}
@@ -807,7 +855,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
                 selected={topic === t}
                 tint={colors.text}
                 ink={colors.brandInk}
-                onPress={() => { setTopic(t); setSortOpen(false); }}
+                onPress={() => { if (t !== topic) haptics.tick(); setTopic(t); setSortOpen(false); }}
                 small
               />
             </View>
@@ -826,10 +874,10 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
               <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.sortButtonText}>{SORT_LABEL[sort]}</Text>
               <Ionicons name={sortOpen ? 'chevron-up' : 'chevron-down'} size={13} color={colors.textMuted} />
             </Pressable>
-            {sortOpen ? (
-              <View style={styles.sortMenu}>
+            {/* It grows out of the Sort button and shrinks back into it (Oct 22 sweep, item 12). */}
+            <Pop open={sortOpen} style={styles.sortMenu}>
                 {(['new', 'hot', 'top', 'unanswered'] as const).map((key, i) => (
-                  <Pressable key={key} accessibilityRole="menuitem" accessibilityState={{ selected: sort === key }} onPress={() => { setSort(key); setSortOpen(false); }} style={({ pressed }) => [styles.sortItem, i > 0 && styles.sortItemLine, pressed && { backgroundColor: colors.bgElevated }]}>
+                  <Pressable key={key} accessibilityRole="menuitem" accessibilityState={{ selected: sort === key }} onPress={() => { if (key !== sort) haptics.tick(); setSort(key); setSortOpen(false); }} style={({ pressed }) => [styles.sortItem, i > 0 && styles.sortItemLine, pressed && { backgroundColor: colors.bgElevated }]}>
                     <View style={{ flex: 1, gap: 1 }}>
                       <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.sortItemTitle, sort === key && { color: colors.brand }]}>{SORT_LABEL[key]}</Text>
                       <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.sortItemBody}>{SORT_HINT[key]}</Text>
@@ -837,14 +885,14 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
                     {sort === key ? <Ionicons name="checkmark" size={16} color={colors.brand} /> : null}
                   </Pressable>
                 ))}
-              </View>
-            ) : null}
+            </Pop>
           </View>
         </View>
         ) : null}
       </View>
 
-      {visible.length === 0 && sort === 'unanswered' && anyInTopic ? (
+      <Reanimated.View style={listStyle}>
+      {visible.length === 0 && listView.sort === 'unanswered' && anyInTopic ? (
         // Sorted to Unanswered and every question here has a reply: the topic is not empty, so never "be the first".
         <EmptyState
           icon="checkmark-circle-outline"
@@ -903,12 +951,13 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
           ))}
           {/* The count sits once, above the list; the end of the list is just its end. */}
           {visible.length > slice.length || serverHasMore ? (
-            <Pressable ref={listEnd} accessibilityRole="button" onPress={showMore} style={styles.more}>
+            <Pressable ref={listEnd} accessibilityRole="button" onPress={showMore} style={({ pressed }) => [styles.more, pressed && { opacity: PRESS_DIM }]}>
               <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.moreText}>Show more threads</Text>
             </Pressable>
           ) : null}
         </View>
       )}
+      </Reanimated.View>
       </>);
 
   // On a computer the row and each section's words keep to the page's column; the sections still scroll across the whole window.
@@ -970,8 +1019,43 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   );
 }
 
+/** The app's ease-out for things settling into place (the same curve as Fold and Collapse). */
+const SETTLE = Easing.bezier(0.22, 0.61, 0.36, 1);
+
+/**
+ * "Cancel" beside the Find Players search box (Oct 22 sweep, item 46): it
+ * slides in from the right edge as the box narrows to make room, and back
+ * out as the box widens again, instead of popping in with the box jumping
+ * narrower in one frame. Always built, so its width is known before it is
+ * first needed; while away it takes no room, no taps and no screen reader.
+ */
+function SearchCancel({ shown, onPress }: { shown: boolean; onPress: () => void }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const still = useReducedMotion();
+  const progress = useSharedValue(shown ? 1 : 0);
+  const width = useSharedValue(0);
+  useEffect(() => {
+    progress.value = withTiming(shown ? 1 : 0, { duration: shown ? 240 : 200, easing: SETTLE });
+  }, [shown, progress]);
+  const style = useAnimatedStyle(() => ({
+    // With Reduce Motion on, the room changes at once and only the word fades.
+    width: still ? (shown ? width.value : 0) : width.value * progress.value,
+    opacity: progress.value,
+  }));
+  return (
+    <Reanimated.View style={[styles.cancelWrap, style]} pointerEvents={shown ? 'box-none' : 'none'} accessibilityElementsHidden={!shown} importantForAccessibility={shown ? 'auto' : 'no-hide-descendants'} aria-hidden={!shown}>
+      <View style={styles.cancelInner} pointerEvents="box-none">
+        <Pressable accessibilityRole="button" accessibilityLabel="Cancel search" hitSlop={8} onPress={onPress} focusable={shown} onLayout={(e) => { width.value = e.nativeEvent.layout.width; }} style={styles.cancelButton}>
+          <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.searchCancel} numberOfLines={1}>Cancel</Text>
+        </Pressable>
+      </View>
+    </Reanimated.View>
+  );
+}
+
 const styleDefinitions = StyleSheet.create({
   hits: { gap: spacing.md },
+  courtsPair: { gap: 16 },
   hitsHead: { gap: 3, paddingTop: spacing.sm },
   // One quiet line that opens more hits: the rest of the near ones, or those beyond 25 km.
   further: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start', paddingVertical: 4 },
@@ -998,7 +1082,12 @@ const styleDefinitions = StyleSheet.create({
   moreText: { ...typography.smallStrong, color: colors.text },
   section: { flex: 1, alignItems: 'center', paddingVertical: 18 },
   sectionUnderline: { position: 'absolute', left: 0, bottom: -1, height: 2, backgroundColor: colors.brand, borderRadius: 1 },
-  searchRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  // No gap: Cancel brings its own room in as it slides in (SearchCancel).
+  searchRow: { flexDirection: 'row', alignItems: 'center' },
+  cancelWrap: { alignSelf: 'stretch', overflow: 'hidden' },
+  // Wider than Cancel ever is, so its word is measured whole; the wrap shows only what has slid in.
+  cancelInner: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 200, justifyContent: 'center', alignItems: 'flex-start' },
+  cancelButton: { paddingLeft: spacing.md },
   searchWrap: { flex: 1, position: 'relative', justifyContent: 'center' },
   searchWithClear: { paddingRight: 40 },
   searchClear: { position: 'absolute', right: 14 },

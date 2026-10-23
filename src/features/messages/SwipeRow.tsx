@@ -3,6 +3,7 @@ import { StyleSheet, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 
+import * as haptics from '@/lib/haptics';
 import { ACTION_W, ROW_SLOP, rowTravel } from './rowSwipe';
 
 const SPRING = { stiffness: 420, damping: 38, mass: 0.9, overshootClamping: true };
@@ -29,7 +30,8 @@ export function SwipeRow({ actions, actionCount, open, onOpen, children }: {
   // Another row opened (or the list scrolled): this one closes.
   useEffect(() => { if (!open && x.value !== 0) x.value = withSpring(0, SPRING); }, [open, x]);
   const pan = useMemo(() => {
-    const opened = (o: boolean) => latest.current.onOpen(o);
+    // Coming open from shut: one light tick, as the actions show (Oct 22 sweep).
+    const opened = (o: boolean, was: boolean) => { if (o && !was) haptics.tap(); latest.current.onOpen(o); };
     return Gesture.Pan()
       .manualActivation(true)
       .onTouchesDown((e) => {
@@ -58,8 +60,9 @@ export function SwipeRow({ actions, actionCount, open, onOpen, children }: {
       .onEnd((e) => {
         'worklet';
         const openIt = x.value < -width / 2 || (e.velocityX < -500 && x.value < 0);
+        const was = from.value <= -width + 1;
         x.value = withSpring(openIt ? -width : 0, SPRING);
-        runOnJS(opened)(openIt);
+        runOnJS(opened)(openIt, was);
       });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [width]);

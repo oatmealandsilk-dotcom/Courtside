@@ -1,5 +1,5 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { requestSection } from '@/features/navigation/swipeOrder';
@@ -53,14 +53,24 @@ export default function Follows() {
     return () => { current = false; };
   }, [loadFollowsOf, userId]);
 
+  // Your own Following keeps someone you unfollow here in their place, now offering "Follow", until
+  // you leave the page (Oct 22, as Instagram does): the row no longer vanishes and the list no longer jumps.
+  const keptFollowing = useRef<string[] | null>(null);
+  const myFollowing = useMemo(() => {
+    const was = keptFollowing.current;
+    const next = was ? [...was, ...followingIds.filter((id) => !was.includes(id))] : [...followingIds];
+    keptFollowing.current = next;
+    return next;
+  }, [followingIds]);
+
   // Both lists at once: the two sit side by side and slide between (Oct 20 sweep, as Profile's sections do).
   const idsOf = useMemo(() => {
     const edges = followEdges.filter((e) => !blockedIds.includes(e.followerId) && !blockedIds.includes(e.followingId));
     return {
       followers: edges.filter((e) => e.followingId === userId).map((e) => e.followerId),
-      following: userId === currentUserId ? followingIds : edges.filter((e) => e.followerId === userId).map((e) => e.followingId),
+      following: userId === currentUserId ? myFollowing.filter((id) => !blockedIds.includes(id)) : edges.filter((e) => e.followerId === userId).map((e) => e.followingId),
     };
-  }, [followEdges, userId, currentUserId, followingIds, blockedIds]);
+  }, [followEdges, userId, currentUserId, myFollowing, blockedIds]);
 
   const listOf = (which: Tab) => idsOf[which]
     .map((id) => users.find((u) => u.id === id))

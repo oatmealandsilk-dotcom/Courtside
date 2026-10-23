@@ -1,3 +1,4 @@
+import { PRESS_DIM, PRESS_SHRINK } from '@/theme/press';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { PlayerName } from '@/components/PlayerName';
 import { StreakFlame } from '@/components/StreakFlame';
@@ -17,6 +18,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { VoteControls } from '@/components/VoteControls';
 import { TOPIC_META } from '@/components/QuestionCard';
 import { Avatar, Button, Card, Chip, EmptyState, Field, Screen } from '@/components/ui';
+import { Fold } from '@/components/ui/Fold';
 import { JumpFlash, useJumpTarget } from '@/components/JumpTo';
 import { relativeTime } from '@/lib/format';
 import { RichText } from '@/components/RichText';
@@ -69,6 +71,8 @@ export function ThreadReply({ answer, thread, askerId, depth = 0, preview = fals
     setReplying(false);
   };
   const [collapsed, setCollapsed] = useState(false);
+  // Folded all the way shut (not just folding): only then does the rail from the avatar go.
+  const [folded, setFolded] = useState(false);
   const reveal = useRevealOnFocus();
   const lineRef = useRef<TextInput>(null);
   // The whole reply box (words, attach, Cancel, Send) is what is brought into view, so Send never sits under the tab bar.
@@ -109,11 +113,11 @@ export function ThreadReply({ answer, thread, askerId, depth = 0, preview = fals
   // Folded away, Reddit-style: how many replies sit under it (all levels), shown beside the ⊕ that opens it again.
   const hiddenCount = (id: string): number => thread.filter(a => a.parentAnswerId === id).reduce((n, a) => n + 1 + hiddenCount(a.id), 0);
   const name = responder?.name ?? 'player';
-  const expand = () => setCollapsed(false);
+  const expand = () => { setCollapsed(false); setFolded(false); };
   return <View>
     <View style={styles.answerCard} ref={mark?.ref} onLayout={mark?.onLayout} collapsable={mark ? false : undefined}>
       {mark ? <JumpFlash lit={mark.lit} inset={8} /> : null}
-      {!collapsed && children.length > 0 && <View pointerEvents="none" style={styles.avatarRail}/>}
+      {!folded && children.length > 0 && <View pointerEvents="none" style={styles.avatarRail}/>}
       {/* Folded: a tap anywhere on its top line opens it again. Open: the top line no longer folds it (too easy to hit
           by mistake, with nothing on screen to bring it back), only the ⊖ under it does. */}
       <Pressable accessibilityRole={collapsed ? 'button' : undefined} accessibilityLabel={collapsed ? `Expand reply by ${name}${streakWords(streak)}` : undefined}
@@ -130,7 +134,9 @@ export function ThreadReply({ answer, thread, askerId, depth = 0, preview = fals
           {hiddenCount(answer.id) > 0 ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.time}>+{hiddenCount(answer.id)}</Text> : null}
         </Pressable> : null}
       </Pressable>
-      {!collapsed && <>
+      {/* (-) folds the reply and everything under it shut with a smooth height change, and (+) unfolds
+          it again, instead of snapping (Oct 22 sweep, item 9). */}
+      <Fold open={!collapsed} gap={12} onClosed={() => setFolded(true)}><View style={styles.answerBodyFold}>
         {answer.body ? (hold
           ? <Pressable accessibilityHint={askModerate ? (answer.removed ? 'Hold to restore it' : 'Hold to take it down') : mine ? 'Hold to delete' : 'Hold to report'} onLongPress={hold} delayLongPress={350}><RichText style={styles.replyBody}>{answer.body}</RichText></Pressable>
           : <RichText style={styles.replyBody}>{answer.body}</RichText>) : null}
@@ -140,11 +146,12 @@ export function ThreadReply({ answer, thread, askerId, depth = 0, preview = fals
         {!preview && <View style={styles.replyActions}>
           <Pressable accessibilityRole="button" accessibilityLabel={`Collapse reply by ${name}`} onPress={()=>{ setCollapsed(true); setReplying(false); }} hitSlop={8} style={styles.collapse}>{children.length > 0 ? <View pointerEvents="none" style={styles.collapseMask}/> : null}<Ionicons name="remove-circle-outline" size={20} color={colors.textMuted}/></Pressable>
           <VoteControls item={answer} userId={currentUserId} onVote={direction => actions.voteAnswer(answer.id, direction)}/>
-          {answer.removed || closed ? null : <Pressable accessibilityRole="button" accessibilityLabel={`Reply to ${responder?.name ?? 'player'}`} onPress={() => { if (isGuest) { openJoinSheet('reply'); return; } setReplying(true); }} style={styles.replyButton}>
+          {answer.removed || closed ? null : <Pressable accessibilityRole="button" accessibilityLabel={`Reply to ${responder?.name ?? 'player'}`} onPress={() => { if (isGuest) { openJoinSheet('reply'); return; } setReplying(true); }} style={({ pressed }) => [styles.replyButton, pressed && { opacity: PRESS_DIM }]}>
             <Ionicons name="chatbubble-outline" size={16} color={colors.textMuted}/><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.time}>Reply</Text>
           </Pressable>}
         </View>}
-        {replying && !closed && !answer.removed && <View ref={boxRef} style={styles.inlineComposer}>
+        {/* The reply box unfolds under its reply and folds away on Cancel or Send (Oct 22 sweep, item 9). */}
+        <Fold open={replying && !closed && !answer.removed} gap={12}><View ref={boxRef} style={styles.inlineComposer}>
           <MentionSuggestions candidates={tag.rows} onPick={tag.pick} maxHeight={176} />
           <View style={styles.composer}>
             <TextInput maxFontSizeMultiplier={TextScale.BODY} ref={lineRef} autoFocus keyboardType={Platform.OS === 'ios' ? 'twitter' : undefined} onFocus={() => reveal(boxRef.current ?? lineRef.current)} accessibilityLabel={`Reply to ${responder?.name ?? 'player'}`} placeholder={`Reply to ${responder?.name?.split(' ')[0] ?? 'this'}… (@ to tag)`} placeholderTextColor={colors.textFaint} multiline maxLength={10000} value={draft} onChangeText={setDraft} onSelectionChange={tag.onSelectionChange} style={styles.replyInput}
@@ -155,14 +162,14 @@ export function ThreadReply({ answer, thread, askerId, depth = 0, preview = fals
             <View style={styles.inlineActions}>
               <AttachButton onPick={setMedia} />
               <View style={{ flex: 1 }} />
-              <Pressable accessibilityRole="button" onPress={() => { setReplying(false); setDraft(''); setMedia(null); }} hitSlop={8}><Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.cancel}>Cancel</Text></Pressable>
-              <Pressable accessibilityRole="button" accessibilityLabel="Post reply" disabled={!canSend} onPress={post} style={[styles.send, !canSend && styles.sendOff]}><Ionicons name="arrow-up" size={18} color={colors.brandInk} /></Pressable>
+              <Pressable accessibilityRole="button" onPress={() => { setReplying(false); setDraft(''); setMedia(null); }} hitSlop={8} style={({ pressed }) => pressed && { opacity: PRESS_DIM }}><Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.cancel}>Cancel</Text></Pressable>
+              <Pressable accessibilityRole="button" accessibilityLabel="Post reply" disabled={!canSend} onPress={post} style={({ pressed }) => [styles.send, !canSend && styles.sendOff, pressed && { transform: [{ scale: PRESS_SHRINK }] }]}><Ionicons name="arrow-up" size={18} color={colors.brandInk} /></Pressable>
             </View>
           </View>
-        </View>}
-      </>}
+        </View></Fold>
+      </View></Fold>
     </View>
-    {!collapsed && children.map((child, index) => (
+    <Fold open={!collapsed}>{children.map((child, index) => (
       <View key={child.id} style={styles.nested}>
         {/* The parent rail passes earlier siblings and their descendants,
             ending at the last child's elbow, never at a grandchild. */}
@@ -170,7 +177,7 @@ export function ThreadReply({ answer, thread, askerId, depth = 0, preview = fals
         <View pointerEvents="none" style={styles.elbow}/>
         <ThreadReply answer={child} thread={thread} askerId={askerId} depth={depth + 1} preview={preview} closed={closed}/>
       </View>
-    ))}
+    ))}</Fold>
   </View>;
 }
 
@@ -208,6 +215,8 @@ const styleDefinitions = StyleSheet.create({
   collapseMask: {position:'absolute',left:8.5,top:0,width:3,height:28,backgroundColor:colors.bg},
   replyBody: { fontSize: 15, lineHeight: 23, color: colors.text, paddingLeft: 42 },
   inlineComposer: { gap: 8, paddingLeft: 42 },
+  // The reply's words, media and buttons: the card's own spacing, inside the fold.
+  answerBodyFold: { gap: 12 },
   // The same soft rounded box as the thread's own reply box.
   composer: { gap: 6, paddingTop: 12, paddingBottom: 8, paddingHorizontal: 14, borderRadius: 20, backgroundColor: colors.surfaceAlt, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
   // No browser focus ring either: the cursor is the only sign the box is live.
