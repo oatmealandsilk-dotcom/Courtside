@@ -181,7 +181,8 @@ function ClipPlaybackInner({ uri, poster, active: wanted, preload = false, warmO
     const el = video.current;
     if (!el) return;
     onScreen.current = active && !paused;
-    waitFrom.current = onScreen.current && el.readyState < 3 ? Date.now() : 0;
+    // Time away from the page is not load time: a landing while the page is away does not start the clock.
+    waitFrom.current = onScreen.current && !pageAway() && el.readyState < 3 ? Date.now() : 0;
     stallFrom.current = 0;
     steady.current = false;
     let place: (() => void) | null = null;
@@ -272,7 +273,7 @@ function ClipPlaybackInner({ uri, poster, active: wanted, preload = false, warmO
 
   return <div style={{ position: 'absolute', inset: 0, background: letterbox ? '#000' : undefined, display: 'flex', alignItems: 'center' }}>
     <div style={{ ...cropCss(crop), display: 'flex', alignItems: 'center' }}>
-      <video ref={video} src={uri} poster={poster} loop muted={muted || silent} playsInline preload={fetchHint} onError={fail} onLoadedData={() => setReady(true)} onCanPlay={() => setReady(true)} onWaiting={(e) => { stalled(e.currentTarget); setReady(false); }} onPlaying={(e) => { played(e.currentTarget); setReady(true); }} onProgress={(e) => steadyCheck(e.currentTarget)} onCanPlayThrough={(e) => steadyCheck(e.currentTarget)} onTimeUpdate={(e) => steadyCheck(e.currentTarget)} style={{ width: '100%', height: '100%', objectFit: letterbox ? 'contain' : fit, pointerEvents: 'none' }} />
+      <video ref={video} src={uri} poster={poster} loop muted={muted || silent} playsInline preload={fetchHint} onError={fail} onLoadedData={() => setReady(true)} onCanPlay={() => setReady(true)} onWaiting={(e) => { stalled(e.currentTarget); setReady(false); }} onPlaying={(e) => { played(e.currentTarget); setReady(true); }} onPause={(e) => { if (e.currentTarget.paused) { waitFrom.current = 0; stallFrom.current = 0; } }} onProgress={(e) => steadyCheck(e.currentTarget)} onCanPlayThrough={(e) => steadyCheck(e.currentTarget)} onTimeUpdate={(e) => steadyCheck(e.currentTarget)} style={{ width: '100%', height: '100%', objectFit: letterbox ? 'contain' : fit, pointerEvents: 'none' }} />
       {failed ? <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}><span style={{ padding: '8px 14px', borderRadius: 999, background: 'rgba(0,0,0,0.55)', color: 'white', font: `600 13px ${fontFamily.semibold}` }}>This video didn’t load</span></div> : null}
     </div>
     {/* Over the picture, under the disc: the top shade darkens the video, never the disc. */}
