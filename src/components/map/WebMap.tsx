@@ -592,7 +592,16 @@ export function NearbyMap(props: NearbyMapProps) {
   // What "+N" pins look like, in this theme's colours.
   const tpl = useMemo(() => clusterTemplates(), [theme, night]); // eslint-disable-line react-hooks/exhaustive-deps
   pinsNow.current = { items: markers, tpl };
-  useEffect(() => { pinsOn.current?.set({ items: markers, tpl }); }, [markers, tpl, mapGen]);
+  // On a theme change (the tab catching up out of sight, src/theme/catchUp.ts) the pins are restyled a
+  // frame after the redraw rather than straight after it, so the two never make one long frame.
+  const pinsTheme = useRef(theme);
+  useEffect(() => {
+    if (pinsTheme.current === theme) { pinsOn.current?.set({ items: markers, tpl }); return undefined; }
+    pinsTheme.current = theme;
+    let t: ReturnType<typeof setTimeout> | undefined;
+    const f = requestAnimationFrame(() => { t = setTimeout(() => { const now = pinsNow.current; if (now) pinsOn.current?.set(now); }, 0); });
+    return () => { cancelAnimationFrame(f); if (t) clearTimeout(t); };
+  }, [markers, tpl, mapGen]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Picking someone, a court, a hit, or typing a city takes the map there.
   // (Again on a map made afresh, as when your location lands: a player opened from "Who's up today" stays in view.)

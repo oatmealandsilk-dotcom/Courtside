@@ -1,5 +1,6 @@
 import { brandShadow } from '@/theme/fillMode';
-import { useThemedStyles } from '@/theme/ThemeProvider';
+import { remapFor, themes, useThemedStyles, type ThemeName } from '@/theme/ThemeProvider';
+import { activeFade, FadeCopy, FadeSpot, type FadeLayer } from '@/theme/ThemeFade';
 import { BrandMark } from './BrandMark';
 import React from 'react';
 import { PixelRatio, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -235,6 +236,12 @@ export function NavBar({ state, navigation }: NavBarProps) {
                 </React.Fragment>
               );
             })}
+            {/* A theme picked on the Theme page: the bar in the court being left, over the live bar, fading with
+                the page (ThemeFade). The glass under it re-tints at the tap and is hidden by this until the
+                fade has gone; nothing that holds the glass ever fades. */}
+            <FadeSpot store={activeFade} render={(layers) => layers.map((layer) => (
+              <BarCopy key={layer.key} op={layer.op} theme={layer.theme} activeRoute={activeRoute} profileAlerts={profileAlerts} />
+            ))} />
             <Animated.View pointerEvents={veilBlocks ? 'auto' : 'none'} style={[styles.veil, veilStyle]}>
               <Pressable accessible={false} importantForAccessibility="no" onPress={() => { closeCreateMenu(); }} style={StyleSheet.absoluteFill} />
             </Animated.View>
@@ -385,7 +392,56 @@ export function NavBar({ state, navigation }: NavBarProps) {
   );
 }
 
+/**
+ * The phone bar's inside in another court (the one a theme pick is leaving),
+ * laid over the live bar and fading to nothing with the Theme page's own
+ * copies. Its ground is that court's page colour, solid: the live glass under
+ * it has already taken the new court's tint, and the old glass over a page in
+ * its own colour reads as that colour. The row is laid out exactly as the
+ * live one (same padding, same slots), so each icon and word sits on its twin.
+ */
+const BarCopy = React.memo(function BarCopy({ op, theme, activeRoute, profileAlerts }: {
+  op: FadeLayer['op'];
+  theme: ThemeName;
+  activeRoute: string | undefined;
+  profileAlerts: number;
+}) {
+  const styles = remapFor(theme, styleDefinitions);
+  const c = themes[theme];
+  // The bar's own duck, read afresh here (the copy is drawn mid-way through the bar's life).
+  const settle = useAnimatedStyle(() => ({ transform: [{ translateY: Math.round(interpolate(barCompact.value, [0, 1], [0, 7]) * PX) / PX }] }));
+  const labelFade = useAnimatedStyle(() => ({ opacity: interpolate(barCompact.value, [0, 0.6], [1, 0], 'clamp') }));
+  const lit = (route: string) => (route === 'coaches' ? c.info : route === 'discuss' ? c.warning : c.brand);
+  return (
+    <FadeCopy op={op} style={[styles.pillCopy, { backgroundColor: c.bg }]} testID="theme-fade-bar">
+      {ITEMS.map((item, index) => {
+        const active = item.route === activeRoute;
+        return (
+          <React.Fragment key={item.route}>
+            {index === 2 && <View style={styles.createSlot}><View style={styles.createButton}><BrandWash /><Ionicons name="add" size={28} color={c.brandInk} /></View></View>}
+            <View style={styles.bottomItem}>
+              <Animated.View style={[styles.bottomInner, settle]}>
+                <View>
+                  <Ionicons name={active ? item.activeIcon : item.icon} size={23} color={active ? lit(item.route) : c.textMuted} />
+                  {item.route === 'profile' && profileAlerts > 0 ? (
+                    <View style={styles.bottomBadge}>
+                      <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.bottomBadgeText, { color: c.onDanger }]}>{profileAlerts > 9 ? '9+' : profileAlerts}</Text>
+                    </View>
+                  ) : null}
+                </View>
+                <Animated.Text numberOfLines={1} maxFontSizeMultiplier={TextScale.CHROME} style={[styles.bottomLabel, active && { color: lit(item.route) }, labelFade]}>{item.label}</Animated.Text>
+              </Animated.View>
+            </View>
+          </React.Fragment>
+        );
+      })}
+    </FadeCopy>
+  );
+});
+
 const styleDefinitions = StyleSheet.create({
+  // BarCopy's box: the pill's inside (within its hairline edge), laid out as the pill is, above the + (zIndex 2).
+  pillCopy: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 3, borderRadius: TAB_BAR_H / 2, overflow: 'hidden', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 6 },
   createSlot: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   // The + stands above the veil while the Create box is up (zIndex 2 over the veil's 1).
   createAbove: { zIndex: 2 },

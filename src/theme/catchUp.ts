@@ -111,7 +111,12 @@ export function tapped(name: ThemeName) {
   callOff();
   schedule(FADE_MS + SETTLE_MS);
   if (safetyTimer) clearTimeout(safetyTimer);
-  safetyTimer = setTimeout(() => { safetyTimer = null; catchUpNow('all'); }, SAFETY_MS);
+  // The safety net: the tab on show at once, the rest as background work (a tap or a scroll goes first).
+  safetyTimer = setTimeout(() => {
+    safetyTimer = null;
+    catchUpNow('active');
+    startTransition(() => catchUpNow('all'));
+  }, SAFETY_MS);
   watch(true);
 }
 
@@ -155,6 +160,8 @@ function pick(): GateEntry | null {
     else if (at < 0) rank = 100; // a copy drawn for a swipe's preview
     else if (anchor < 0) rank = 10 + at;
     else rank = Math.abs(at - anchor);
+    // Community, the most to redraw, goes last of the tabs out of sight (after a tie too).
+    if (g.pane === '/discuss' && rank >= 1) rank += 10;
     if (rank < bestRank) { best = g; bestRank = rank; }
   }
   return best;
@@ -163,16 +170,31 @@ function pick(): GateEntry | null {
 function step() {
   stepTimer = null;
   if (fading > 0) { schedule(RETRY_MS); return; }
-  const wait = Math.max(lastTap + FADE_MS + SETTLE_MS, lastNav + NAV_QUIET_MS) - now();
-  if (wait > 0) { schedule(wait); return; }
   if (inFlight) return; // it moves on once that one lands
   const next = pick();
   if (!next) { finish(); return; }
+  // On a phone the tab on show is never kept waiting for a slide: a page sliding in or out there is
+  // the phone's own animation, which a redraw cannot hold up, and an iPhone's edge swipe back reports
+  // only once it is over, so waiting could let it go under a finger already uncovering it.
+  const nativeActive = Platform.OS !== 'web' && isActive(next, nav?.currentTab() ?? null);
+  const wait = Math.max(lastTap + FADE_MS + SETTLE_MS, nativeActive ? -Infinity : lastNav + NAV_QUIET_MS) - now();
+  if (wait > 0) { schedule(wait); return; }
   inFlight = next;
   const first = released === 0;
   released++;
   if (first) next.set(live);
-  else startTransition(() => next.set(live));
+  else if (next.pane === '/discuss') {
+    // Community (the map, the most to redraw) on a quiet moment of its own, so its redraw never
+    // lands back to back with a frame that is already busy.
+    whenIdle(() => { if (inFlight === next && next.look !== live) startTransition(() => next.set(live)); });
+  } else startTransition(() => next.set(live));
+}
+
+/** Runs `fn` once the app has a quiet moment (at most a few frames on). */
+function whenIdle(fn: () => void) {
+  const idle = (globalThis as { requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => unknown }).requestIdleCallback;
+  if (typeof idle === 'function') idle.call(globalThis, fn, { timeout: 120 });
+  else setTimeout(fn, 0);
 }
 
 /** Everything is on the court picked: the watchers stand down. */
@@ -225,7 +247,12 @@ function watch(fresh = false) {
   unwatch?.();
   const stops: (() => void)[] = [];
   if (Platform.OS === 'android') {
-    const sub = BackHandler.addEventListener('hardwareBackPress', () => { catchUpNow('active'); return false; });
+    // As goBack: not from the Theme page itself (Settings, under it, changed with the tap), so that
+    // Back's slide never waits on the tab's redraw nor lands it during the fade.
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (!nav?.pageOnShow('theme')) catchUpNow('active');
+      return false;
+    });
     stops.push(() => sub.remove());
   }
   // The tab on show is let go as the tabs come back; the others carry on catching up out of sight.
@@ -235,7 +262,8 @@ function watch(fresh = false) {
       // Nothing out of sight lands under the slide: a catch-up under way waits until it has run.
       callOff();
       if (nav?.tabsOnShow()) catchUpNow('active');
-      schedule(NAV_QUIET_MS);
+      // step() works out the wait: the quiet for a slide (not for the tab on show, on a phone).
+      schedule(0);
     }));
   }
   unwatch = () => stops.forEach((s) => s());
@@ -248,8 +276,10 @@ export function installCatchUp(): () => void {
   installed = true;
   const stops: (() => void)[] = [];
   // The app leaving the screen: whatever is fading ends and every tab is let go, so it comes back done.
+  // Only 'background': an iPhone's 'inactive' (Control Centre, Notification Centre, the start of the
+  // swipe home) leaves the app on screen, where letting everything go at once was the stall itself.
   const app = AppState.addEventListener('change', (state) => {
-    if (state === 'active') return;
+    if (state !== 'background') return;
     enders.forEach((end) => end());
     catchUpNow('all');
   });

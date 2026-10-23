@@ -64,17 +64,47 @@ export function FadeSpot({ store, render }: { store: FadeStore; render: (layers:
   return <>{layers.length ? render(layers) : null}</>;
 }
 
+/*
+ * The Theme page's fade, for what floats over it (the tab bar, NavBar): the
+ * same copies, so the bar's old look fades with the page's instead of
+ * switching on the tap (Oct 23 review: the bar went dark in one frame under a
+ * still-light page). The page sets it as it opens and takes it away as it closes.
+ */
+let pageStore: FadeStore | null = null;
+const onShowListeners = new Set<() => void>();
+const tellOnShow = () => onShowListeners.forEach((listener) => listener());
+/** The fade of the Theme page open now (no copies when none is). */
+export const activeFade: FadeStore = {
+  get: () => pageStore?.get() ?? NO_LAYERS,
+  subscribe: (listener) => { onShowListeners.add(listener); return () => { onShowListeners.delete(listener); }; },
+};
+
 /** A page's fade: its store, and `begin(leaving)` to start a copy as a court is picked. */
 export function useThemeFade() {
   const [store] = useState(() => {
     let layers: readonly FadeLayer[] = NO_LAYERS;
     const listeners = new Set<() => void>();
-    return {
+    const own: FadeStore & { set: (next: readonly FadeLayer[]) => void } = {
       get: () => layers,
-      set: (next: readonly FadeLayer[]) => { layers = next; listeners.forEach((listener) => listener()); },
+      set: (next: readonly FadeLayer[]) => {
+        layers = next;
+        listeners.forEach((listener) => listener());
+        if (pageStore === own) tellOnShow();
+      },
       subscribe: (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; },
     };
+    return own;
   });
+  // What floats over the page fades with it (activeFade).
+  useEffect(() => {
+    pageStore = store;
+    tellOnShow();
+    return () => {
+      if (pageStore !== store) return;
+      pageStore = null;
+      tellOnShow();
+    };
+  }, [store]);
   // Bumped by each new copy (with the pick, in its redraw), so the copies start fading once drawn.
   const [started, setStarted] = useState(0);
   const begun = useRef(new Set<number>());
@@ -136,10 +166,12 @@ export function useThemeFade() {
     }
   }, [started, store, drop]);
 
-  // The app leaving the screen, or the page closing: every copy goes, and the tabs are told.
+  // The app leaving the screen, or the page closing: every copy goes, and the tabs are told. Only on
+  // 'background': on an iPhone 'inactive' is Control Centre or Notification Centre pulled over the
+  // app, which is still on screen with its fade running on; dropping the copies then was a snap.
   useEffect(() => {
     const stop = onEndFades(dropAll);
-    const app = AppState.addEventListener('change', (state) => { if (state !== 'active') dropAll(); });
+    const app = AppState.addEventListener('change', (state) => { if (state === 'background') dropAll(); });
     return () => {
       stop();
       app.remove();

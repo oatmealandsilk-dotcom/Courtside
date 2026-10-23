@@ -265,8 +265,11 @@ export function makeThemeSource(initial: ThemeName, scoped = false): ThemeSource
   const listeners = new Set<() => void>();
   return {
     get: () => current,
+    // Tells its parts even when the court is the same: a tab let go at once while its catch-up is
+    // still under way as background work holds `name` already, and its parts that have not drawn
+    // it yet must redraw now, in this same go, or the tab shows half old, half new until that
+    // background work lands. A part already showing the court does nothing (useTheme's check).
     set: (name: ThemeName) => {
-      if (name === current) return;
       current = name;
       listeners.forEach((listener) => listener());
     },
