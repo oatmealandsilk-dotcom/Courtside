@@ -30,6 +30,14 @@ function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, 
   trimStart?: number; trimEnd?: number;
   /** The browser's Feed warming up out of sight (ClipPlayback.web). A phone builds its feed from the start, so it never is. */
   warmOnly?: boolean;
+  /**
+   * A browser's lookahead page (ClipPlayback.web): how much of it to fetch. A phone ignores it:
+   * there a page is only built ahead once the feed has room for it, and every built player keeps
+   * the same few seconds buffered.
+   */
+  fetchAhead?: 'frame' | 'opening';
+  /** A browser's clip on screen has started playing (ClipPlayback.web). On a phone `onReady` already means that. */
+  onPlaying?: () => void;
   /** The author's rate (1 is normal) and level (0–1), honoured at playback. */
   speed?: number; volume?: number;
   /** Posted without sound: plays muted and offers no way to unmute. */
